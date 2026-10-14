@@ -1,0 +1,5 @@
+properties:
+  - id: P1
+    kind: invariant
+    expression: "Safe"
+    description: "Bounded FB loop terminates (i reaches 10); no watchdog by default"

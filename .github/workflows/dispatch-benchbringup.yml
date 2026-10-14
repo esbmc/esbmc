@@ -1,0 +1,53 @@
+name: Run a Benchmark
+on:
+  workflow_dispatch:
+    inputs:
+      timeout:
+        description: 'Timeout for each test case (in seconds)'
+        required: true
+        default: '300'
+      options:
+        description: 'Command-line flags to pass via ESBMC_OPTS'
+        required: false
+        default: '-I /__w/esbmc/esbmc/src/cpp/library'
+      benchmark:
+        description: 'Benchmark to run (e.g. any benchmark as in regression/<benchmark>)'
+        required: true
+        default: 'esbmc-cpp/cpp'
+      logdirectory:
+        description: 'Log directory'
+        required: true
+        default: 'benchmark_logs'
+
+jobs:
+  build-linux:
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+    name: Build ESBMC (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 720 # 12h
+    steps:
+      - name: Confirm the benchmark
+        run: echo ${{ github.event.inputs.benchmark }}
+      - uses: actions/checkout@v6
+      - name: Build ESBMC
+        env:
+          TEST_TIMEOUT: ${{ inputs.timeout }}
+          BENCHMARK_TO_RUN: ${{ inputs.benchmark }}
+          LOG_DIR: ${{ inputs.logdirectory }}
+        run: ./scripts/build.sh -b Release -r On
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-linux
+          path: ./build/src/esbmc/esbmc
+      - name: Run user-specified benchmark
+        continue-on-error: true
+        env:
+          ESBMC_OPTS: ${{ inputs.options }}
+          LOG_DIR: ${{ inputs.logdirectory }}
+        run: cd build/ && ctest -j4 --output-on-failure --progress .
+      - uses: actions/upload-artifact@v7
+        with:
+          name: benchmark-logs
+          path: ./build/regression/${{ inputs.logdirectory }}

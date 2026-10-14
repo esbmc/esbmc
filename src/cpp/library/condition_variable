@@ -1,0 +1,74 @@
+#ifndef STL_CONDITION_VARIABLE
+#define STL_CONDITION_VARIABLE
+
+#include <pthread.h>
+#include <mutex>
+#include "OM_compiler_defs.h"
+
+// Model of <condition_variable> (github #6319) over ESBMC's pthread condvar,
+// so a wait/notify pair gets the same semantics -- including the "caller must
+// hold the mutex" check in pthread_cond_wait -- that the C model implements.
+//
+// Not modelled: the timed waits (wait_for/wait_until and cv_status), which
+// ESBMC has no clock to block against, and condition_variable_any, which would
+// need a lock type the pthread condvar cannot take.
+
+#if __cplusplus >= 201103L
+
+namespace std
+{
+class condition_variable
+{
+  pthread_cond_t __c;
+
+  condition_variable(const condition_variable &);
+  condition_variable &operator=(const condition_variable &);
+
+public:
+  typedef pthread_cond_t *native_handle_type;
+
+  condition_variable()
+  {
+    pthread_cond_init(&__c, OM_NULLPTR);
+  }
+
+  ~condition_variable()
+  {
+    pthread_cond_destroy(&__c);
+  }
+
+  void notify_one() OM_NOEXCEPT
+  {
+    pthread_cond_signal(&__c);
+  }
+
+  void notify_all() OM_NOEXCEPT
+  {
+    pthread_cond_broadcast(&__c);
+  }
+
+  void wait(unique_lock<mutex> &lk)
+  {
+    pthread_cond_wait(&__c, lk.mutex()->native_handle());
+  }
+
+  // [thread.condition.condvar]/13: equivalent to `while (!pred()) wait(lk);`,
+  // which is also what makes a spurious wake-up harmless.
+  template <class Pred>
+  void wait(unique_lock<mutex> &lk, Pred pred)
+  {
+    while (!pred())
+      wait(lk);
+  }
+
+  native_handle_type native_handle()
+  {
+    return &__c;
+  }
+};
+
+} // namespace std
+
+#endif // __cplusplus >= 201103L
+
+#endif // STL_CONDITION_VARIABLE

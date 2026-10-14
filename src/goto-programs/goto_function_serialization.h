@@ -3,7 +3,7 @@
 
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/goto_program_serialization.h>
-#include <util/irep_serialization.h>
+#include <util/irep/irep_serialization.h>
 
 class goto_function_serializationt
 {
@@ -12,7 +12,7 @@ private:
 
 public:
   goto_function_serializationt(irep_serializationt::ireps_containert &ic)
-    : gpconverter(ic){};
+    : gpconverter(ic) {};
 
   void convert(std::istream &, irept &);
   void convert(const goto_functiont &, std::ostream &);

@@ -1,6 +1,4 @@
 # HumanEval/17
-## too slow for this case, the split need to be improved and the unwind needs to be 
-# changed to reasonable value in the test desc
 
 from typing import List
 
@@ -21,11 +19,10 @@ def parse_music(music_string: str) -> List[int]:
     note_map = {'o': 4, 'o|': 2, '.|': 1}
     return [note_map[x] for x in music_string.split(' ') if x]
 
-# Direct assertions for ESBMC verification
+# Direct assertion for ESBMC verification, matching the issue's repro. The
+# runtime str.split() + list-comprehension + dict-lookup path is expensive under
+# --smt-symex-guard, so a single representative case is checked; adding more
+# parse_music() calls in one run causes super-linear path blow-up.
 if __name__ == "__main__":
-    #assert parse_music('') == []
     assert parse_music('o o o o') == [4, 4, 4, 4]
-    # assert parse_music('.| .| .| .|') == [1, 1, 1, 1]
-    # assert parse_music('o| o| .| .| o o o o') == [2, 2, 1, 1, 4, 4, 4, 4]
-    # assert parse_music('o| .| o| .| o o| o o|') == [2, 1, 2, 1, 4, 2, 4, 2]
-    print("✅ HumanEval/17 - All assertions completed!")
+    print("✅ HumanEval/17")

@@ -1,0 +1,5 @@
+CORE
+main.c
+--loop-invariant-check --multi-property
+^\s+FAILED\s+\[main\.assertion\.1\]\s+line\s+10\s+assertion s == 3$
+^VERIFICATION FAILED$

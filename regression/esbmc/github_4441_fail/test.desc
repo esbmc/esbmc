@@ -1,0 +1,5 @@
+CORE
+main.c
+--memory-leak-check --no-reachable-memory-leak --no-assertions --incremental-bmc --k-step 2 --64
+^VERIFICATION FAILED$
+^\s*dereference failure: forgotten memory:

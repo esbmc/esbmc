@@ -1,0 +1,4 @@
+CORE
+cbmc_union.goto
+--binary
+^VERIFICATION SUCCESSFUL$

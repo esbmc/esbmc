@@ -1,0 +1,4 @@
+CORE
+main.c
+--fixedbv --ir --z3 --unwind 5 --no-unwinding-assertions
+^VERIFICATION FAILED$

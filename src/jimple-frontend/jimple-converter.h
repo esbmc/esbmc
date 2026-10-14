@@ -16,4 +16,4 @@ protected:
   const jimple_file &AST;
 };
 
-#endif //ESBMC_JIMPLE_CONVERTER_H
+#endif // ESBMC_JIMPLE_CONVERTER_H

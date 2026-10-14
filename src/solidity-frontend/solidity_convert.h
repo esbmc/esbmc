@@ -16,16 +16,16 @@
 #include <vector>
 #include <map>
 #include <queue>
-#include <util/context.h>
-#include <util/namespace.h>
-#include <util/std_types.h>
-#include <util/std_code.h>
-#include <util/string_constant.h>
+#include <util/symtab/context.h>
+#include <util/symtab/namespace.h>
+#include <util/irep/std_types.h>
+#include <util/irep/std_code.h>
+#include <util/expr/string_constant.h>
 #include <nlohmann/json.hpp>
 #include <solidity-frontend/solidity_grammar.h>
 #include <solidity-frontend/pattern_check.h>
-#include <util/symbolic_types.h>
-#include <util/expr_util.h>
+#include <util/expr/symbolic_types.h>
+#include <util/expr/expr_util.h>
 
 class solidity_convertert
 {
@@ -74,13 +74,118 @@ public:
     return SolidityGrammar::str_to_sol_type(t.get("#sol_type").as_string());
   }
 
+  // Set/get/test the Solidity array length carried on a typet via the
+  // #sol_array_size irep attribute. The size is stored in its decimal
+  // string form; an absent attribute reads back as the empty string.
+  static void set_sol_array_size(typet &t, const std::string &size)
+  {
+    t.set("#sol_array_size", size);
+  }
+  static std::string get_sol_array_size(const typet &t)
+  {
+    return t.get("#sol_array_size").as_string();
+  }
+  static bool has_sol_array_size(const typet &t)
+  {
+    return !t.get("#sol_array_size").empty();
+  }
+
+  // Set/get/test the Solidity fixed-bytes (bytesN) width carried on a typet
+  // via the #sol_bytesn_size irep attribute, stored in its decimal form. Two
+  // setter overloads mirror irept::set: integral widths use the long form,
+  // already-stringified widths (copied between types) use the irep_idt form.
+  static void set_sol_bytesn_size(typet &t, long size)
+  {
+    t.set("#sol_bytesn_size", size);
+  }
+  static void set_sol_bytesn_size(typet &t, const irep_idt &size)
+  {
+    t.set("#sol_bytesn_size", size);
+  }
+  static std::string get_sol_bytesn_size(const typet &t)
+  {
+    return t.get("#sol_bytesn_size").as_string();
+  }
+  static bool has_sol_bytesn_size(const typet &t)
+  {
+    return !t.get("#sol_bytesn_size").empty();
+  }
+
+  // The declaring contract of a contract type. No longer carried on the typet:
+  // see get_sol_contract below.
+  /// Derived rather than read back from `#sol_contract`: a contract type is a
+  /// pointer to the contract's own `tag-<name>` symbol type, and the converter
+  /// already knows every contract's name, so the name need not ride on the type
+  /// -- which matters because IREP2 has no field for it
+  /// (docs/roadmap/scope-solidity-irep2.md §8).
+  std::string get_sol_contract(const typet &t) const
+  {
+    const typet &sub = t.is_pointer() ? t.subtype() : t;
+    if (sub.id() != typet::t_symbol)
+      return "";
+
+    const std::string id = sub.identifier().as_string();
+    if (id.compare(0, prefix.size(), prefix) != 0)
+      return "";
+
+    const std::string cname = id.substr(prefix.size());
+    return linearizedBaseList.count(cname) ? cname : "";
+  }
+  bool has_sol_contract(const typet &t) const
+  {
+    return !get_sol_contract(t).empty();
+  }
+
+  // Set/get the Solidity "mapping-backed array" flag carried on a typet via
+  // the #sol_mapping_array irep attribute.
+  static void set_sol_mapping_array(typet &t, bool v)
+  {
+    t.set("#sol_mapping_array", v);
+  }
+  static bool get_sol_mapping_array(const typet &t)
+  {
+    return t.get_bool("#sol_mapping_array");
+  }
+
+  // Set/get the Solidity "state-variable dynamic array" flag carried on a
+  // typet via the #sol_dynarray_state irep attribute.
+  static void set_sol_dynarray_state(typet &t, bool v)
+  {
+    t.set("#sol_dynarray_state", v);
+  }
+  static bool get_sol_dynarray_state(const typet &t)
+  {
+    return t.get_bool("#sol_dynarray_state");
+  }
+
+  // Set/get the Solidity "state variable" flag carried on a typet via the
+  /// Whether a declared variable is a contract state variable. Held here, keyed
+  /// by the variable's symbol id, rather than on its `typet`: IREP2 has no
+  /// field for it, and a symbol's id survives every migration by construction,
+  /// so the frontend keeps what is Solidity-level and the shared representation
+  /// stays closed (docs/roadmap/scope-solidity-irep2.md §10).
+  std::unordered_set<irep_idt> sol_state_vars;
+
+  void set_sol_state_var(const irep_idt &symbol_id, bool v)
+  {
+    if (v)
+      sol_state_vars.insert(symbol_id);
+    else
+      sol_state_vars.erase(symbol_id);
+  }
+  bool get_sol_state_var(const irep_idt &symbol_id) const
+  {
+    return sol_state_vars.count(symbol_id) != 0;
+  }
+
   // json nodes that always empty
   // used as the return value for find_constructor_ref when
   // dealing with the implicit constructor call
-  // this is to avoid reference to stack memory associated with local variable returned
+  // this is to avoid reference to stack memory associated with local variable
+  // returned
   static const nlohmann::json empty_json;
-  //! Be careful of using 'current_contractName'. This might lead to trouble in inheritance.
-  //! If you are not sure, use 'get_current_contract_name' instead.
+  //! Be careful of using 'current_contractName'. This might lead to trouble in
+  //! inheritance. If you are not sure, use 'get_current_contract_name' instead.
   static std::string current_baseContractName;
 
   // json for Solidity AST. Use object for contract
@@ -295,10 +400,10 @@ protected:
   bool is_sol_builin_symbol(const std::string &cname, const std::string &name);
   nlohmann::json reorder_arguments(
     const nlohmann::json &expr,
-    const nlohmann::json &src_ast_json,
     const nlohmann::json &callee_expr_json);
 
-  // handle the non-contract definition, including struct/enum/error/event/abstract/...
+  // handle the non-contract definition, including
+  // struct/enum/error/event/abstract/...
   bool get_noncontract_defition(nlohmann::json &ast_node);
   bool
   get_noncontract_decl_ref(const nlohmann::json &ast_node, exprt &new_expr);
@@ -387,8 +492,8 @@ protected:
     struct_typet::componentt &comp);
   bool get_block(
     const nlohmann::json &expr,
-    exprt &
-      new_expr); // For Solidity's mutually inclusive: rule block and rule statement
+    exprt &new_expr); // For Solidity's mutually inclusive: rule block and rule
+                      // statement
   bool get_statement(const nlohmann::json &block, exprt &new_expr);
   bool get_expr(const nlohmann::json &expr, exprt &new_expr);
   bool get_expr(
@@ -777,7 +882,7 @@ protected:
     locationt &location);
   unsigned int
   get_line_number(const nlohmann::json &ast_node, bool final_position = false);
-  unsigned int add_offset(const std::string &src, unsigned int start_position);
+  size_t add_offset(const std::string &src, size_t start_position);
   std::string get_src_from_json(const nlohmann::json &ast_node);
 
   symbolt *move_symbol_to_context(symbolt &symbol);
@@ -1404,7 +1509,7 @@ protected:
   // dispatches only this public/external function (constructor + state
   // init still run). Empty means feature disabled.
   std::string focus_func;
-  //smart contract source file
+  // smart contract source file
   const std::string &contract_path;
 
   std::string absolute_path;
@@ -1446,10 +1551,13 @@ protected:
   // for tuple
   bool current_lhsDecl;
   bool current_rhsDecl;
-  // Use current level of BinOp type as the "anchor" type for numerical literal conversion:
-  // In order to remove the unnecessary implicit IntegralCast. We need type of current level of BinaryOperator.
-  // All numeric literals will be implicitly converted to this type. Pop it when finishing the current level of BinaryOperator.
-  // TODO: find a better way to deal with implicit type casting if it's not able to cope with complex rules
+  // Use current level of BinOp type as the "anchor" type for numerical literal
+  // conversion: In order to remove the unnecessary implicit IntegralCast. We
+  // need type of current level of BinaryOperator. All numeric literals will be
+  // implicitly converted to this type. Pop it when finishing the current level
+  // of BinaryOperator.
+  // TODO: find a better way to deal with implicit type casting if it's not able
+  // to cope with complex rules
   std::stack<const nlohmann::json *> current_BinOp_type;
   std::string current_functionName;
   // Mirror of the symbol-table id of the function currently being lowered
@@ -1582,7 +1690,8 @@ protected:
   // The prefix for the id of each class (Solidity-defined structs)
   std::string prefix = "tag-";
 
-  // The prefix for c2goto library struct types (C frontend uses "struct" in tag)
+  // The prefix for c2goto library struct types (C frontend uses "struct" in
+  // tag)
   std::string lib_prefix = "tag-struct ";
 
   // for auxiliary var name
@@ -1616,9 +1725,10 @@ protected:
   // bound setting
   bool is_bound;
 
-  // Check if a contract should use "new" expression semantics (dynamic allocation).
-  // In unbound mode with a single verification target, new-expressions are optimized
-  // away (treated as static instances) to reduce state space.
+  // Check if a contract should use "new" expression semantics (dynamic
+  // allocation). In unbound mode with a single verification target,
+  // new-expressions are optimized away (treated as static instances) to reduce
+  // state space.
   bool should_treat_as_new(const std::string &contract_name) const
   {
     if (!newContractSet.count(contract_name))
@@ -1718,7 +1828,8 @@ private:
 
   // RAII scope guards for global state variables.
   // Usage: ScopeGuard<T> guard(member, new_value);
-  // Restores original value on destruction (including early returns/exceptions).
+  // Restores original value on destruction (including early
+  // returns/exceptions).
   template <typename T>
   class ScopeGuard
   {
@@ -1764,7 +1875,7 @@ static inline void static_lifetime_init(const contextt &context, codet &dest)
 
   // call designated "initialization" functions
   context.foreach_operand_in_order([&dest](const symbolt &s) {
-    if (s.type.initialization() && s.type.is_code())
+    if (s.get_type().initialization() && s.get_type().is_code())
     {
       code_function_callt function_call;
       function_call.function() = symbol_expr(s);

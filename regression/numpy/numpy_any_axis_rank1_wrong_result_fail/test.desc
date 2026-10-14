@@ -1,0 +1,5 @@
+CORE
+main.py
+--incremental-bmc
+^VERIFICATION FAILED$
+^  assertion \(\(signed int\)\(a\[0\] || a\[1\] || a\[2\]\)\) == 0$

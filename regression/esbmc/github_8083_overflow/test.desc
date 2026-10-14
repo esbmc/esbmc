@@ -1,0 +1,5 @@
+CORE
+main.c
+--interval-analysis
+^VERIFICATION FAILED$
+^  assertion r == 5$

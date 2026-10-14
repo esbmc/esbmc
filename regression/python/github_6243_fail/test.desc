@@ -1,0 +1,6 @@
+CORE
+main.py
+--incremental-bmc
+VERIFICATION FAILED
+main.py line 9 column 0
+assertion

@@ -10,6 +10,15 @@
 // no-op statements carrying labels can be treated as no-op's (even though they
 // may carry key information such as error labels).
 // \return True, iff it is a no-op.
+bool is_no_op_program(const goto_programt &p)
+{
+  forall_goto_program_instructions (it, p)
+    if (!is_no_op(p, it))
+      return false;
+
+  return true;
+}
+
 bool is_no_op(
   const goto_programt &body,
   goto_programt::const_targett it,

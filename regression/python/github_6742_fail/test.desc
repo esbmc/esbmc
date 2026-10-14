@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 1
+^.*Unsupported function 'getcwd' is reached$
+^VERIFICATION FAILED$

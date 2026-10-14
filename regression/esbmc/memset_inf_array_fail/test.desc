@@ -1,0 +1,6 @@
+CORE
+main.c
+--unwind 8
+^Violated property:
+main.c line 21
+^VERIFICATION FAILED$

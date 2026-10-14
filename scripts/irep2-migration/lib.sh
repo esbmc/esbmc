@@ -1,0 +1,104 @@
+# shellcheck shell=bash
+# Shared helpers for the IREP2 goto-program migration differential harness.
+# Sourced by capture_goto_baseline.sh and diff_goto_baseline.sh.
+# See README.md for the rationale (tracking issue: esbmc/esbmc#4715).
+
+# Resolve the repository root from this script's location.
+irep2_repo_root() {
+  local here
+  here="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+  printf '%s\n' "$here"
+}
+
+# Absolutise a path that contains a slash (so it survives a later `cd`).
+# A bare command name (no slash) is left untouched to be resolved via PATH.
+irep2_abspath() {
+  case "$1" in
+    */*) printf '%s\n' "$(cd "$(dirname "$1")" && pwd)/$(basename "$1")" ;;
+    *)   printf '%s\n' "$1" ;;
+  esac
+}
+
+# Canonicalise `esbmc --goto-functions-only` output read from stdin.
+# Strips environment-specific and program-global noise while preserving
+# instruction kinds, operands, guards, goto targets and file/line locations.
+# $1 = repository root (collapsed to the literal token REPO_ROOT).
+irep2_canon() {
+  local repo="$1"
+  sed \
+    -e '/^ESBMC version /d' \
+    -e '/^GOTO program creation time:/d' \
+    -e '/^GOTO program processing time:/d' \
+    -e '/ time: [0-9.]*s$/d' \
+    -e '/^operational-model library (clib):/d' \
+    -e 's|0x[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]*|0xADDR|g' \
+    -e 's|^\([[:space:]]*//\) [0-9][0-9]* file |\1 file |' \
+    -e "s|${repo}|REPO_ROOT|g" \
+    -e 's|/var/folders/[^/ ]*/[^/ ]*/T/esbmc[._-][0-9A-Za-z-]*|HDR|g' \
+    -e 's|/tmp/esbmc[._-][0-9A-Za-z-]*|HDR|g'
+}
+
+# Produce the canonical goto dump for one test.desc into stdout. Returns 1 if
+# the descriptor is unusable (no source / missing file).
+# $1 = esbmc binary  $2 = path to a test.desc  $3 = repo root
+#
+# Argument construction mirrors regression/testing_tool.py exactly
+# (generate_run_argument_list): line 3 is word-split, each token resolved to
+# <test_dir>/<token> when that names an existing file else passed verbatim, then
+# the source is appended. We add --goto-functions-only so esbmc stops after
+# building the goto program. Goto-affecting flags (--data-races-check,
+# --k-induction, --no-pointer-check, ...) are thus honoured exactly as the
+# real suite passes them.
+# $4 (optional) is an extra flag added to the run, e.g. the hop-off under test,
+# matching irep2_symtab_dump. It used to be accepted and silently dropped, so an
+# A/B built on this helper compared the default path with itself and scored
+# every test SAME (scope-clang-c-irep2.md §134.1).
+irep2_goto_dump() {
+  local esbmc="$1" desc="$2" repo="$3" extra="${4:-}"
+  local dir src args tok
+  dir="$(dirname "$desc")"
+  src="$(sed -n '2p' "$desc" | tr -d '[:space:]')"
+  args="$(sed -n '3p' "$desc")"
+  [ -n "$src" ] && [ -f "$dir/$src" ] || return 1
+
+  local argv=()
+  for tok in $args; do
+    if [ -f "$dir/$tok" ]; then argv+=("$dir/$tok"); else argv+=("$tok"); fi
+  done
+
+  [ -n "$extra" ] && argv+=("$extra")
+
+  # esbmc's exit status is intentionally ignored: --goto-functions-only can exit
+  # non-zero on some inputs, but the (deterministic) dumped text is what we diff.
+  ( "$esbmc" ${argv[@]+"${argv[@]}"} --goto-functions-only "$dir/$src" 2>&1 \
+    || true ) | irep2_canon "$repo"
+}
+
+# Produce the canonical *symbol table* dump for one test.desc into stdout.
+# Same argument construction as irep2_goto_dump; returns 1 on an unusable desc.
+#
+# Prefer this over irep2_goto_dump when the question is what an adjust pass does.
+# The symbol table IS the adjuster's output; a goto program is two stages
+# downstream (goto_convert plus its native/round-trip routing), so a goto diff
+# mixes the adjuster's effect with everything after it. Diagnosing an adjuster
+# from goto dumps cost docs/roadmap/scope-clang-c-irep2.md three iterations and
+# one wrong published conclusion (§98 vs §100).
+# $4 (optional) is an extra flag added to the run, e.g. the hop-off under test.
+irep2_symtab_dump() {
+  local esbmc="$1" desc="$2" repo="$3" extra="${4:-}"
+  local dir src args tok
+  dir="$(dirname "$desc")"
+  src="$(sed -n '2p' "$desc" | tr -d '[:space:]')"
+  args="$(sed -n '3p' "$desc")"
+  [ -n "$src" ] && [ -f "$dir/$src" ] || return 1
+
+  local argv=()
+  for tok in $args; do
+    if [ -f "$dir/$tok" ]; then argv+=("$dir/$tok"); else argv+=("$tok"); fi
+  done
+
+  [ -n "$extra" ] && argv+=("$extra")
+
+  ( "$esbmc" ${argv[@]+"${argv[@]}"} --symbol-table-only "$dir/$src" 2>&1 \
+    || true ) | irep2_canon "$repo"
+}

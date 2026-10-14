@@ -1,0 +1,7 @@
+CORE
+main.c
+--incremental-bmc
+^VERIFICATION SUCCESSFUL$
+no definition for external symbol undefined_extern declared at file .*main\.c line 5
+\A(?!(?s:.)*external symbol defined_global)
+\A(?!(?s:.)*external symbol tentative_global)

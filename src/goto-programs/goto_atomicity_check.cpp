@@ -1,8 +1,8 @@
 #include <goto-programs/goto_atomicity_check.h>
 #include <irep2/irep2_expr.h>
 #include <irep2/irep2_utils.h>
-#include <util/migrate.h>
-#include <util/symbol_generator.h>
+#include <util/irep/migrate.h>
+#include <util/symtab/symbol_generator.h>
 
 class goto_atomicity_checkt
 {
@@ -61,7 +61,7 @@ bool goto_atomicity_checkt::is_global(const irep_idt &id) const
   const symbolt *sym = ns.lookup(id);
   if (!sym)
     return false;
-  return sym->static_lifetime || sym->type.is_dynamic_set();
+  return sym->static_lifetime || sym->get_type().is_dynamic_set();
 }
 
 unsigned goto_atomicity_checkt::count_globals(const expr2tc &expr) const
@@ -86,8 +86,7 @@ bool goto_atomicity_checkt::collect_globals(
     return false;
 
   auto snapshot = [&](const expr2tc &global_expr) {
-    typet old_type = migrate_type_back(global_expr->type);
-    symbolt &tmp = tmp_sym.new_symbol(context, old_type, "tmp$");
+    symbolt &tmp = tmp_sym.new_symbol(context, global_expr->type, "tmp$");
     tmp.static_lifetime = true;
 
     type2tc sym_type = global_expr->type;
@@ -237,7 +236,8 @@ void goto_atomicity_checkt::instrument_assign(
 
   if (need_atomic)
   {
-    // Advance past the newly inserted instructions to reach the original ASSIGN.
+    // Advance past the newly inserted instructions to reach the original
+    // ASSIGN.
     goto_programt::targett orig = it;
     std::advance(orig, n);
 

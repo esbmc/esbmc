@@ -1,0 +1,6 @@
+THOROUGH
+main.py
+--incremental-bmc
+^VERIFICATION FAILED$
+^Violated property:$
+^  array bounds violated: array `m' upper bound$

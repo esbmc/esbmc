@@ -1,0 +1,4 @@
+THOROUGH
+main.py
+--unwind 6 --no-pointer-check --no-bounds-check --fp2bv
+^VERIFICATION SUCCESSFUL$

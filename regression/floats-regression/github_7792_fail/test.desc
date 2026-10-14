@@ -1,0 +1,6 @@
+CORE
+main.c
+--32 --no-slice --multi-property
+^VERIFICATION FAILED$
+^  PASSED +\[main\.assertion\.\d+\] +line +\d+ +-0\.0f puns to 0x80000000$
+^  FAILED +\[main\.assertion\.\d+\] +line +\d+ +\+0\.0f does not pun to 0x80000000$

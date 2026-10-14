@@ -1,0 +1,5 @@
+CORE
+main.c
+--bitwuzla --enforce-contract add --function add --unwind 9
+^VERIFICATION FAILED$
+^.*not in assigns clause$

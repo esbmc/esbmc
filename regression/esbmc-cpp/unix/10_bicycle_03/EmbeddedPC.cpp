@@ -9,6 +9,7 @@
 
 #include <iostream>
 #include <cmath>
+#include <cstdlib>
 #include <sstream>
 
 #define VIAGEM_MSG "Distance traveled: "
@@ -139,7 +140,7 @@ void EmbeddedPC::wheelTurn()
 	struct timeval now;
 	gettimeofday(&now, NULL);
 
-	float time = std::abs(now.tv_usec - _lastWheelTurn.tv_usec)/1000000;
+	float time = std::abs((double)(now.tv_usec - _lastWheelTurn.tv_usec))/1000000;
 	__ESBMC_assume(time!=0);
 	// each wheel turn, 1m is moved
 	_dist += 1;

@@ -3,4 +3,4 @@ main.c
 --condition-coverage --no-cov-asserts
 ^Reached Conditions:  4
 ^Short Circuited Conditions:  2
-^VERIFICATION FAILED$
+^COVERAGE ANALYSIS COMPLETE$

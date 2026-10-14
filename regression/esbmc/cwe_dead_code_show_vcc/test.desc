@@ -1,0 +1,5 @@
+CORE
+main.c
+--dead-code-check --show-vcc
+^VERIFICATION CONDITIONS:$
+(?s)\A(?!.*\[Dead code\])

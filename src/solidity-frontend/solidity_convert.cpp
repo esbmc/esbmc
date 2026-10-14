@@ -8,15 +8,15 @@
 
 #include <solidity-frontend/solidity_convert.h>
 #include <solidity-frontend/typecast.h>
-#include <util/arith_tools.h>
-#include <util/bitvector.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/focus_function.h>
-#include <util/i2string.h>
-#include <util/mp_arith.h>
-#include <util/std_expr.h>
-#include <util/message.h>
+#include <util/arith/arith_tools.h>
+#include <util/arith/bitvector.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/config/focus_function.h>
+#include <util/base/i2string.h>
+#include <util/arith/mp_arith.h>
+#include <util/irep/std_expr.h>
+#include <util/message/message.h>
 #include <limits>
 #include <regex>
 #include <optional>
@@ -137,7 +137,7 @@ solidity_convertert::solidity_convertert(
 
   bool_t = bool_type();
   set_sol_type(bool_t, SolidityGrammar::SolType::BOOL);
-  bool_t.set("#cpp_type", "bool");
+  bool_t.cpp_type("bool");
 
   byte_dynamic_t = symbol_typet(lib_prefix + "BytesDynamic");
   set_sol_type(byte_dynamic_t, SolidityGrammar::SolType::BYTES_DYN);
@@ -197,9 +197,10 @@ bool solidity_convertert::convert()
   // merge the input files
   merge_multi_files();
 
-  // By now the context should have the symbols of all ESBMC's intrinsics and the dummy main
-  // We need to convert Solidity AST nodes to thstructe equivalent symbols and add them to the context
-  // check if the file is suitable for verification
+  // By now the context should have the symbols of all ESBMC's intrinsics and
+  // the dummy main We need to convert Solidity AST nodes to thstructe
+  // equivalent symbols and add them to the context check if the file is
+  // suitable for verification
   if (contract_precheck())
     return true;
 
@@ -292,7 +293,7 @@ bool solidity_convertert::convert()
     const std::string &focus_cnt = *tgt_cnt_set.begin();
 
     // --focus-function names a SET (comma- or space-separated); see
-    // util/focus_function.h for why the parsing lives there rather than here.
+    // util/config/focus_function.h for why the parsing lives there rather than here.
     // EVERY name is checked, and every name that matched nothing is reported in
     // ONE message. Reporting only the first would make a user with a
     // ten-function list fix one typo per run, and -- worse -- a list whose first
@@ -414,7 +415,8 @@ bool solidity_convertert::convert()
       (*itr)["nodeType"].get<std::string>() == "VariableDeclaration" &&
       (*itr)["mutability"].get<std::string>() == "constant")
     {
-      // for constant variable defined in the file level which is outside the contract definition
+      // for constant variable defined in the file level which is outside the
+      // contract definition
       exprt dump;
       if (get_var_decl(*itr, dump))
         return true;
@@ -444,7 +446,8 @@ bool solidity_convertert::convert()
 
   // add static instance
   // note that we populate the static instance in the end
-  // this is to ensure that we have populated other auxiliary static variables before them
+  // this is to ensure that we have populated other auxiliary static variables
+  // before them
   // Base contracts of the --contract target are registered but NOT
   // deployed.
   //
@@ -637,8 +640,9 @@ void solidity_convertert::merge_multi_files()
   }
 }
 
-// topological sort is to make sure the order of contract AST is correct(Avoid some counterinstuitive cases)
-// e.g. when contract A import B : contract A AST should be before contract B AST
+// topological sort is to make sure the order of contract AST is correct(Avoid
+// some counterinstuitive cases) e.g. when contract A import B : contract A AST
+// should be before contract B AST
 void solidity_convertert::topological_sort(
   std::unordered_map<std::string, std::unordered_set<std::string>> &graph,
   std::unordered_map<std::string, nlohmann::json> &path_to_json,
@@ -647,8 +651,8 @@ void solidity_convertert::topological_sort(
   sorted_files.clear();
   std::unordered_map<std::string, int> in_degree;
   std::queue<std::string> zero_in_degree_queue;
-  // Topological sorting function for sorting files according to import relationships
-  // Calculate the in-degree for each node
+  // Topological sorting function for sorting files according to import
+  // relationships Calculate the in-degree for each node
   for (const auto &pair : graph)
   {
     in_degree.try_emplace(pair.first, 0);
@@ -1118,7 +1122,8 @@ bool solidity_convertert::populate_auxiliary_vars()
   }
 
   // initial structureTypingMap based on the inheritanceMap,
-  // since the based contract's signature is always coverred by the inherited one
+  // since the based contract's signature is always coverred by the inherited
+  // one
   structureTypingMap = inheritanceMap;
 
   log_debug("solidity", "Matching function signautre");
@@ -1159,7 +1164,7 @@ bool solidity_convertert::populate_auxiliary_vars()
     s.static_lifetime = true; // static
     symbolt &_sym = *move_symbol_to_context(s);
     solidity_gen_typecast(ns, string, ct);
-    _sym.value = string;
+    _sym.set_value(string);
   }
 
   /* populate _bind_cname_list
@@ -1203,7 +1208,7 @@ bool solidity_convertert::populate_auxiliary_vars()
     ct.cmt_constant(true);
     array_typet arr_t(ct, size_expr);
     set_sol_type(arr_t, SolidityGrammar::SolType::ARRAY);
-    arr_t.set("#sol_array_size", std::to_string(length));
+    set_sol_array_size(arr_t, std::to_string(length));
 
     std::string aux_name, aux_id;
     aux_name = "$" + _cname + "_bind_cname_list";
@@ -1217,8 +1222,11 @@ bool solidity_convertert::populate_auxiliary_vars()
     s.static_lifetime = true;
     s.lvalue = true;
     symbolt &sym = *move_symbol_to_context(s);
-    sym.value = gen_zero(get_complete_type(_t, ns), true);
-    sym.value.zero_initializer(true);
+    {
+      exprt _v = gen_zero(get_complete_type(_t, ns), true);
+      _v.zero_initializer(true);
+      sym.set_value(std::move(_v));
+    }
 
     // f: initialize_bind_list
     std::string fname, fid;
@@ -1264,7 +1272,7 @@ bool solidity_convertert::populate_auxiliary_vars()
       fbody.copy_to_operands(ass_expr);
       ++i;
     }
-    fsym.value = fbody;
+    fsym.set_value(fbody);
   }
 
   // pupulate a function call _sol_init_()
@@ -1300,7 +1308,7 @@ bool solidity_convertert::populate_auxiliary_vars()
   is_init_sym.lvalue = true;
   is_init_sym.file_local = true;
   is_init_sym.static_lifetime = true;
-  is_init_sym.value = false_exprt();
+  is_init_sym.set_value(false_exprt());
   symbolt &final_is_init_sym = *move_symbol_to_context(is_init_sym);
 
   // 2. add body
@@ -1376,7 +1384,7 @@ bool solidity_convertert::populate_auxiliary_vars()
   init_func_body.move_to_operands(if_expr);
 
   // assign body to function symbol
-  final_init_func_sym.value = init_func_body;
+  final_init_func_sym.set_value(init_func_body);
 
   // for mapping
   extract_new_contracts();
@@ -1469,8 +1477,8 @@ bool solidity_convertert::build_enclosing_debit_helper()
     body.move_to_operands(if_expr);
   }
 
-  added_helper.value = body;
-  added_helper.type = helper_ft;
+  added_helper.set_value(body);
+  added_helper.set_type(helper_ft);
   return false;
 }
 
@@ -1519,7 +1527,8 @@ bool solidity_convertert::populate_low_level_functions(
 }
 
 /**
- * initialize the function signature set. Additionally, we merge inherited nodes.
+ * initialize the function signature set. Additionally, we merge inherited
+ * nodes.
  * @json: parsing contract json
  * @cname: parsing contract name
  */
@@ -1572,14 +1581,15 @@ bool solidity_convertert::populate_function_signature(
       is_payable = func_node["stateMutability"] == "payable";
       is_inherit = func_node.contains("is_inherited");
 
-      funcSignatures[cname].push_back(solidity_convertert::func_sig(
-        func_name,
-        func_id,
-        visibility,
-        type,
-        is_payable,
-        is_inherit,
-        is_library));
+      funcSignatures[cname].push_back(
+        solidity_convertert::func_sig(
+          func_name,
+          func_id,
+          visibility,
+          type,
+          is_payable,
+          is_inherit,
+          is_library));
     }
   }
 
@@ -1599,14 +1609,15 @@ bool solidity_convertert::populate_function_signature(
     type.return_type() = empty_typet();
     type.return_type().set("cpp_type", "void");
     is_inherit = false;
-    funcSignatures[cname].push_back(solidity_convertert::func_sig(
-      func_name,
-      func_id,
-      visibility,
-      type,
-      is_payable,
-      is_inherit,
-      is_library));
+    funcSignatures[cname].push_back(
+      solidity_convertert::func_sig(
+        func_name,
+        func_id,
+        visibility,
+        type,
+        is_payable,
+        is_inherit,
+        is_library));
   }
 
   return false;
@@ -1658,7 +1669,8 @@ bool solidity_convertert::convert_ast_nodes(
       return true;
   }
 
-  // After converting all AST nodes, current_functionDecl should be restored to nullptr.
+  // After converting all AST nodes, current_functionDecl should be restored to
+  // nullptr.
   assert(current_functionDecl == nullptr);
 
   return false;

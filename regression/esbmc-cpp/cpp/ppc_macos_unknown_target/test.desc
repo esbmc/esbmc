@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--ppc-macos
+unknown target triple
+^ERROR: PARSING ERROR$

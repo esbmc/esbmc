@@ -1,0 +1,6 @@
+CORE
+main.c
+--overflow-check
+^  PASSED       \[main\.assertion\.1\]\s+line 14  floating-point conversion out of range of unsignedbv on typecast$
+^  PASSED       \[main\.assertion\.3\]\s+line 19  floating-point conversion out of range of signedbv on typecast$
+^VERIFICATION SUCCESSFUL$

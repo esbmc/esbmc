@@ -1,0 +1,5 @@
+CORE
+main.c
+--clang-c-irep2-adjust-only --std c11
+^\s*FAILED\s+\[__c11_atomic_store\.null-pointer-dereference\.1\]\s+line 9\s+dereference failure: NULL pointer$
+^VERIFICATION FAILED$

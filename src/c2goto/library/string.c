@@ -7,6 +7,7 @@
 #undef strcat
 #undef strncat
 #undef strlen
+#undef strnlen
 #undef strcmp
 #undef strncmp
 #undef strchr
@@ -94,6 +95,15 @@ __ESBMC_HIDE:;
   return len;
 }
 
+size_t strnlen(const char *s, size_t maxlen)
+{
+__ESBMC_HIDE:;
+  size_t len = 0;
+  while (len < maxlen && s[len] != 0)
+    len++;
+  return len;
+}
+
 int strcmp(const char *p1, const char *p2)
 {
 __ESBMC_HIDE:;
@@ -115,6 +125,12 @@ __ESBMC_HIDE:;
 int strncmp(const char *s1, const char *s2, size_t n)
 {
 __ESBMC_HIDE:;
+  /* C11/C17 7.24.4.4: compare "not more than n characters". For n == 0 no
+   * characters are examined, so the result is 0 and neither pointer is read
+   * (a read here would be out of bounds at a one-past-the-end pointer). */
+  if (n == 0)
+    return 0;
+
   size_t i = 0;
   unsigned char ch1, ch2;
   do
@@ -257,6 +273,23 @@ __ESBMC_HIDE:;
   return str;
 }
 
+char *strsep(char **stringp, const char *delim)
+{
+__ESBMC_HIDE:;
+  char *begin = *stringp;
+  if (begin == NULL)
+    return NULL;
+  char *end = strpbrk(begin, delim);
+  if (end)
+  {
+    *end = '\0';
+    *stringp = end + 1;
+  }
+  else
+    *stringp = NULL;
+  return begin;
+}
+
 char *strdup(const char *str)
 {
 __ESBMC_HIDE:;
@@ -266,6 +299,25 @@ __ESBMC_HIDE:;
   if (cpy == ((void *)0))
     return 0;
   strcpy(cpy, str);
+  return cpy;
+}
+
+char *strndup(const char *str, size_t n)
+{
+__ESBMC_HIDE:;
+  size_t len = 0;
+  while (len < n && str[len] != '\0')
+    ++len;
+  char *cpy = (char *)malloc(len + 1);
+  if (cpy == ((void *)0))
+    return 0;
+  size_t i = 0;
+  while (i < n && str[i] != '\0')
+  {
+    cpy[i] = str[i];
+    ++i;
+  }
+  cpy[i] = '\0';
   return cpy;
 }
 
@@ -308,7 +360,7 @@ __ESBMC_HIDE:;
   return __ESBMC_memset(s, c, n);
 }
 
-void *memmove(void *dest, const void *src, size_t n)
+void *__memmove_impl(void *dest, const void *src, size_t n)
 {
 __ESBMC_HIDE:;
   char *cdest = dest;
@@ -334,7 +386,15 @@ __ESBMC_HIDE:;
   return dest;
 }
 
-int memcmp(const void *s1, const void *s2, size_t n)
+void *memmove(void *dest, const void *src, size_t n)
+{
+__ESBMC_HIDE:;
+  void *hax = &__memmove_impl;
+  (void)hax;
+  return __ESBMC_memmove(dest, src, n);
+}
+
+int __memcmp_impl(const void *s1, const void *s2, size_t n)
 {
 __ESBMC_HIDE:;
   int res = 0;
@@ -349,7 +409,15 @@ __ESBMC_HIDE:;
   return res;
 }
 
-void *memchr(const void *buf, int ch, size_t n)
+int memcmp(const void *s1, const void *s2, size_t n)
+{
+__ESBMC_HIDE:;
+  void *hax = &__memcmp_impl;
+  (void)hax;
+  return __ESBMC_memcmp(s1, s2, n);
+}
+
+void *__memchr_impl(const void *buf, int ch, size_t n)
 {
 __ESBMC_HIDE:;
   while (n && (*(unsigned char *)buf != (unsigned char)ch))
@@ -359,4 +427,12 @@ __ESBMC_HIDE:;
   }
 
   return (n ? (void *)buf : NULL);
+}
+
+void *memchr(const void *buf, int ch, size_t n)
+{
+__ESBMC_HIDE:;
+  void *hax = &__memchr_impl;
+  (void)hax;
+  return __ESBMC_memchr(buf, ch, n);
 }

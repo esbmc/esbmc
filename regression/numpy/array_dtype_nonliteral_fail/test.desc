@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: np\.array\(\.\.\., dtype=\.\.\.\) requires literal numeric elements$

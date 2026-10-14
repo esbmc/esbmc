@@ -3,8 +3,8 @@
 #include <mathsat_conv.h>
 #include <sstream>
 #include <string>
-#include <util/c_types.h>
-#include <util/expr_util.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
 
 static const char *mathsat_config =
   "preprocessor.toplevel_propagation = true\n"
@@ -36,7 +36,7 @@ void mathsat_convt::check_msat_error(msat_term &r) const
   }
 }
 
-smt_convt *create_new_mathsat_solver(
+smt_solver_baset *create_new_mathsat_solver(
   const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api [[maybe_unused]],
@@ -50,8 +50,8 @@ smt_convt *create_new_mathsat_solver(
 }
 
 mathsat_convt::mathsat_convt(const namespacet &ns, const optionst &options)
-  : smt_convt(ns, options),
-    array_iface(false, false),
+  : smt_solver_baset(ns, options),
+    array_iface(false, true),
     fp_convt(this),
     use_fp_api(false)
 {
@@ -67,14 +67,14 @@ mathsat_convt::~mathsat_convt()
 
 void mathsat_convt::push_ctx()
 {
-  smt_convt::push_ctx();
+  smt_solver_baset::push_ctx();
   msat_push_backtrack_point(env);
 }
 
 void mathsat_convt::pop_ctx()
 {
   msat_pop_backtrack_point(env);
-  smt_convt::pop_ctx();
+  smt_solver_baset::pop_ctx();
 }
 
 void mathsat_convt::assert_ast(smt_astt a)
@@ -83,7 +83,7 @@ void mathsat_convt::assert_ast(smt_astt a)
   msat_assert_formula(env, mast->a);
 }
 
-smt_convt::resultt mathsat_convt::dec_solve()
+smt_resultt mathsat_convt::dec_solve()
 {
   pre_solve();
 
@@ -94,20 +94,21 @@ smt_convt::resultt mathsat_convt::dec_solve()
   if (r == MSAT_UNSAT)
     return P_UNSATISFIABLE;
 
-  return smt_convt::P_ERROR;
+  return P_ERROR;
 }
 
-bool mathsat_convt::get_bool(smt_astt a)
+tvt mathsat_convt::get_bool(smt_astt a)
 {
   const mathsat_smt_ast *mast = to_solver_smt_ast<mathsat_smt_ast>(a);
   msat_term t = msat_get_model_value(env, mast->a);
   check_msat_error(t);
 
-  bool res;
+  // A default-constructed tvt holds an indeterminate value, not TV_UNKNOWN.
+  tvt res(tvt::TV_UNKNOWN);
   if (msat_term_is_true(env, t))
-    res = true;
+    res = tvt(true);
   else if (msat_term_is_false(env, t))
-    res = false;
+    res = tvt(false);
   else
   {
     log_error("Boolean model value is neither true or false");
@@ -788,6 +789,41 @@ mathsat_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   return new_ast(t, s);
 }
 
+smt_astt mathsat_convt::mk_smt_uninterpreted_function(
+  const std::string &name,
+  const std::vector<smt_astt> &args,
+  smt_sortt rangesort)
+{
+  // A nullary uninterpreted function is just a fixed constant; mk_smt_symbol
+  // already declares one by name, so repeated uses share it (congruence).
+  if (args.empty())
+    return mk_smt_symbol(name, rangesort);
+
+  // Declare the function by name (MathSAT interns declarations, so every
+  // application shares it and the solver enforces congruence natively).
+  std::vector<msat_type> domain;
+  domain.reserve(args.size());
+  for (smt_astt arg : args)
+    domain.push_back(to_solver_smt_sort<msat_type>(arg->sort)->s);
+
+  msat_type fun_type = msat_get_function_type(
+    env,
+    domain.data(),
+    domain.size(),
+    to_solver_smt_sort<msat_type>(rangesort)->s);
+  msat_decl d = msat_declare_function(env, name.c_str(), fun_type);
+  assert(!MSAT_ERROR_DECL(d) && "Invalid uninterpreted-function declaration");
+
+  std::vector<msat_term> apply_args;
+  apply_args.reserve(args.size());
+  for (smt_astt arg : args)
+    apply_args.push_back(to_solver_smt_ast<mathsat_smt_ast>(arg)->a);
+
+  msat_term t = msat_make_uf(env, d, apply_args.data());
+  check_msat_error(t);
+  return new_ast(t, rangesort);
+}
+
 smt_astt
 mathsat_convt::mk_extract(smt_astt a, unsigned int high, unsigned int low)
 {
@@ -885,11 +921,32 @@ smt_astt mathsat_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
 smt_astt
 mathsat_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 {
-  return default_convert_array_of(init_val, domain_width, this);
+  /* The generic fallback materialises the array with one store per index, which
+   * cannot terminate for an infinite domain -- so smt_convt used to drop the
+   * initializer and havoc the array instead, letting an ARRAY_OF(0) model array
+   * read back nondet (esbmc/esbmc#1197). MathSAT builds the constant array
+   * directly, at any domain width. */
+  if (init_val->sort->id == SMT_SORT_BOOL && !supports_bools_in_arrays)
+  {
+    smt_sortt bit = mk_int_bv_sort(1);
+    init_val =
+      mk_ite(init_val, mk_smt_bv(BigInt(1), bit), mk_smt_bv(BigInt(0), bit));
+  }
+
+  smt_sortt arrsort =
+    mk_array_sort(mk_int_bv_sort(domain_width), init_val->sort);
+
+  msat_term t = msat_make_array_const(
+    env,
+    to_solver_smt_sort<msat_type>(arrsort)->s,
+    to_solver_smt_ast<mathsat_smt_ast>(init_val)->a);
+  check_msat_error(t);
+
+  return new_ast(t, arrsort);
 }
 
 mathsat_smt_ast::mathsat_smt_ast(
-  smt_convt *ctx,
+  smt_solver_baset *ctx,
   msat_term _t,
   const smt_sort *_s)
   : solver_smt_ast<msat_term>(ctx, _t, _s)
@@ -965,10 +1022,24 @@ smt_astt mathsat_convt::mk_smt_fpbv_fma(
   return mk_from_bv_to_fp(fma, v1->sort);
 }
 
+smt_astt mathsat_convt::mk_smt_fpbv_rem(smt_astt lhs, smt_astt rhs)
+{
+  // MathSAT has no fp.rem, so convert to BVFP and call the fp_api, as
+  // mk_smt_fpbv_fma does.
+  bool old_use_fp_api = use_fp_api;
+  use_fp_api = true;
+
+  smt_astt rem =
+    fp_convt::mk_smt_fpbv_rem(mk_from_fp_to_bv(lhs), mk_from_fp_to_bv(rhs));
+
+  use_fp_api = old_use_fp_api;
+  return mk_from_bv_to_fp(rem, lhs->sort);
+}
+
 void mathsat_convt::print_model()
 {
   /* we use a model iterator to retrieve the model values for all the
-     * variables, and the necessary function instantiations */
+   * variables, and the necessary function instantiations */
   msat_model_iterator iter = msat_create_model_iterator(env);
   assert(!MSAT_ERROR_MODEL_ITERATOR(iter));
 

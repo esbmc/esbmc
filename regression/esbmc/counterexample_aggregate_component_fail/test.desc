@@ -1,0 +1,5 @@
+CORE
+main.c
+--no-slice
+^  harr\[0\] = \{ \.un=9, \.t=4 \}$
+^VERIFICATION FAILED$

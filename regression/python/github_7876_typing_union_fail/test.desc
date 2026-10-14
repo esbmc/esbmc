@@ -1,0 +1,5 @@
+CORE
+main.py
+--strict-types
+^VERIFICATION FAILED$
+FAILED .* line +11 +assertion

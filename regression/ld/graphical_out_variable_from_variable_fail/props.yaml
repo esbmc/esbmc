@@ -1,0 +1,7 @@
+properties:
+  # a is copied into flag, and flag drives q. Dropping the copy leaves flag at
+  # FALSE, so this would hold; the wire must be refused instead.
+  - id: P1
+    kind: invariant
+    expression: "!q"
+    description: "Deliberately false: a sets flag, which drives q"

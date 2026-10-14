@@ -1,0 +1,4 @@
+CORE
+cbmc_va_start.goto
+--binary
+^ERROR: CBMC adapter: variadic functions \(va_start/va_arg\) are not yet supported

@@ -19,8 +19,8 @@
  */
 
 #include <clang-c-frontend/typecast.h>
-#include <util/type.h>
-#include <util/expr_util.h>
+#include <util/irep/type.h>
+#include <util/expr/expr_util.h>
 #include "../testing-utils/util_irep.h"
 #include <sstream>
 #include <stddef.h>
@@ -86,7 +86,7 @@ void test_to_union(const int *Data, size_t Size)
     typet error_builtin;
     gen_builtin_type(error_builtin, bt_error);
     exprt error = gen_zero(error_builtin);
-    //Trigger exception
+    // Trigger exception
     gen_typecast_to_union(error, t);
     // This shouldn't be reached
     assert(0);

@@ -1,0 +1,432 @@
+#include <python-frontend/python_converter.h>
+#include <python-frontend/python_expr_builder.h>
+#include <python-frontend/symbol_id.h>
+#include <python-frontend/type/type_handler.h>
+#include <python-frontend/json_utils.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/lang/python_types.h>
+
+#include <map>
+
+using namespace python_expr;
+
+std::string python_converter::op_to_dunder(const std::string &op)
+{
+  static const std::map<std::string, std::string> dunder_map = {
+    {"Eq", "__eq__"},
+    {"NotEq", "__ne__"},
+    {"Lt", "__lt__"},
+    {"LtE", "__le__"},
+    {"Gt", "__gt__"},
+    {"GtE", "__ge__"},
+    {"Add", "__add__"},
+    {"Sub", "__sub__"},
+    {"Mult", "__mul__"},
+    {"Div", "__truediv__"},
+    {"FloorDiv", "__floordiv__"},
+    {"Mod", "__mod__"},
+  };
+  auto it = dunder_map.find(op);
+  return it != dunder_map.end() ? it->second : "";
+}
+
+std::string python_converter::op_to_rdunder(const std::string &op)
+{
+  static const std::map<std::string, std::string> rdunder_map = {
+    {"Add", "__radd__"},
+    {"Sub", "__rsub__"},
+    {"Mult", "__rmul__"},
+    {"Div", "__rtruediv__"},
+    {"FloorDiv", "__rfloordiv__"},
+    {"Mod", "__rmod__"},
+  };
+  auto it = rdunder_map.find(op);
+  return it != rdunder_map.end() ? it->second : "";
+}
+
+symbolt *python_converter::find_dunder_method(
+  const std::string &class_name,
+  const std::string &dunder_name)
+{
+  std::string tag = "tag-" + class_name;
+  const symbolt *type_sym = symbol_table_.find_symbol(tag);
+  if (!type_sym)
+    return nullptr;
+
+  std::string file = type_sym->location.get_file().as_string();
+  if (file.empty())
+    return nullptr;
+
+  symbol_id sid(file, class_name, dunder_name);
+  if (symbolt *sym = find_symbol(sid.to_string()))
+    return sym;
+
+  return find_function_in_base_classes(
+    class_name, sid.to_string(), dunder_name, false);
+}
+
+std::string
+python_converter::instance_class_name(const nlohmann::json &value_node)
+{
+  std::string class_name = type_handler_.get_var_classname(value_node);
+
+  // get_var_classname resolves Name nodes only, so a constructor temporary --
+  // len(C()) rather than len(c) -- found no class and the dunder dispatch was
+  // skipped: len then fell through to the builtin path, which measures the
+  // struct rather than calling __len__. The call itself names the class.
+  if (
+    class_name.empty() && value_node.value("_type", "") == "Call" &&
+    type_handler_.is_constructor_call(value_node))
+  {
+    const auto &func = value_node["func"];
+    if (func.is_object() && func.value("_type", "") == "Name")
+      class_name = func.value("id", "");
+  }
+
+  return class_name;
+}
+
+bool python_converter::has_dunder_method(
+  const nlohmann::json &value_node,
+  const std::string &dunder_name)
+{
+  const std::string class_name = instance_class_name(value_node);
+
+  if (class_name.empty())
+    return false;
+
+  return find_dunder_method(class_name, dunder_name) != nullptr;
+}
+
+nlohmann::json python_converter::build_dunder_call(
+  const nlohmann::json &object,
+  const std::string &dunder_name,
+  const nlohmann::json &args,
+  const nlohmann::json &source_node) const
+{
+  nlohmann::json call_node;
+  call_node["_type"] = "Call";
+  call_node["func"] = {
+    {"_type", "Attribute"}, {"value", object}, {"attr", dunder_name}};
+  call_node["args"] = args;
+  call_node["keywords"] = nlohmann::json::array();
+  if (source_node.contains("lineno"))
+    call_node["lineno"] = source_node["lineno"];
+  if (source_node.contains("col_offset"))
+    call_node["col_offset"] = source_node["col_offset"];
+  if (source_node.contains("end_lineno"))
+    call_node["end_lineno"] = source_node["end_lineno"];
+  if (source_node.contains("end_col_offset"))
+    call_node["end_col_offset"] = source_node["end_col_offset"];
+  return call_node;
+}
+
+// Internal Python model aggregates (tuple, dict, Optional) must not be treated
+// as user classes for dunder-operator dispatch. The kind is read from the
+// attribute stamped at type-creation time; see util/python_types.h.
+static bool is_excluded_struct_tag(const struct_typet &st)
+{
+  // tuple/dict/Optional model structs carry the python-aggregate kind stamped
+  // at type-creation time; see util/python_types.h.
+  if (is_python_internal_aggregate(st))
+    return true;
+  // list/object/slice model structs (`tag-struct __ESBMC_Py...`): under the
+  // object-model migration these are pointer-to-struct like a class instance,
+  // but they own their own operator paths and must not be routed through
+  // user-dunder dispatch. They are not stamped with the aggregate kind, so
+  // exclude them by tag here.
+  return st.tag().as_string().find("__ESBMC_Py") != std::string::npos;
+}
+
+static typet resolve_operand_type(
+  const exprt &operand,
+  const contextt &symbol_table,
+  const namespacet &ns)
+{
+  typet t = operand.type();
+  if (operand.is_symbol())
+  {
+    const symbolt *sym = symbol_table.find_symbol(operand.identifier());
+    if (sym)
+      t = sym->get_type();
+  }
+  if (t.id() == "symbol")
+    t = ns.follow(t);
+  // Object-model migration (#3067/#4773): a class instance is a `Class*`
+  // pointer. Dispatch dunder operators on the pointee struct so user methods
+  // (__eq__, __add__, ...) are still found; the call sites pass the pointer
+  // itself as the (already-by-reference) self/other argument.
+  if (t.is_pointer())
+  {
+    typet sub = t.subtype();
+    if (sub.id() == "symbol")
+      sub = ns.follow(sub);
+    if (sub.is_struct())
+      t = sub;
+  }
+  return t;
+}
+
+// self/other argument for a dunder call. A migrated instance is already a
+// `Class*` pointer, which is exactly the by-reference argument the method
+// expects; a by-value struct operand needs its address taken.
+static exprt dunder_ref_arg(const exprt &operand)
+{
+  if (operand.type().is_pointer())
+    return operand;
+  return gen_address_of(operand);
+}
+
+// The other argument of a dunder call. A number goes by value to a number
+// parameter, so `3 * V(2)` passes 3 to `__rmul__(self, k: int)`.
+static exprt
+dunder_other_arg(const exprt &operand, const code_typet &method_type)
+{
+  const auto &params = method_type.arguments();
+  if (params.size() < 2 || !is_number(operand.type()))
+    return dunder_ref_arg(operand);
+  const typet &param_type = params[1].type();
+  if (is_number(param_type))
+    return typecast_exprt(operand, param_type);
+  // An unannotated parameter is `Any`; a plain method call passes an int to it
+  // by value too. A float would be truncated, so it is not passed this way.
+  if (
+    param_type == any_type() &&
+    (operand.type().is_signedbv() || operand.type().is_unsignedbv()))
+    return typecast_exprt(operand, param_type);
+  return dunder_ref_arg(operand);
+}
+
+// Check whether the argument type matches the "other" parameter type.
+// In case the user annotates it with a concrete class type.
+static bool is_other_param_compatible(
+  const code_typet &method_type,
+  const typet &operand_type,
+  const namespacet &ns)
+{
+  const auto &params = method_type.arguments();
+  if (params.size() < 2)
+    return true;
+
+  typet param_type = params[1].type();
+  if (param_type.id() == "symbol")
+    param_type = ns.follow(param_type);
+
+  if (param_type.is_pointer())
+  {
+    typet subtype = param_type.subtype();
+    if (subtype.id() == "symbol")
+      subtype = ns.follow(subtype);
+
+    if (subtype.is_struct() && operand_type.is_struct())
+      return to_struct_type(subtype).tag() ==
+             to_struct_type(operand_type).tag();
+  }
+  return true;
+}
+
+std::string python_converter::class_name_of(const typet &t)
+{
+  // Read the class tag directly from a struct or an unresolved `tag-<Class>`
+  // symbol reference — do not require the struct to be built yet (function
+  // signatures are typed before some referenced classes are completed).
+  if (t.id() == "symbol")
+    return extract_class_name_from_tag(
+      to_symbol_type(t).get_identifier().as_string());
+  if (t.is_struct())
+    return extract_class_name_from_tag(to_struct_type(t).tag().as_string());
+  return {};
+}
+
+bool python_converter::is_user_class_struct_type(const typet &t)
+{
+  const std::string cls = class_name_of(t);
+  return !cls.empty() && json_utils::is_class(cls, *ast_json);
+}
+
+bool python_converter::is_heap_migrated_class_type(const typet &t)
+{
+  return is_user_class_struct_type(t) &&
+         class_name_of(t).rfind("__ESBMC", 0) != 0;
+}
+
+bool python_converter::is_user_class_pointer(const typet &t)
+{
+  return t.is_pointer() && is_user_class_struct_type(t.subtype());
+}
+
+bool python_converter::is_class_instance(const nlohmann::json &value_node)
+{
+  const std::string node_type = value_node.value("_type", "");
+  if (node_type == "Call")
+    return type_handler_.is_constructor_call(value_node);
+
+  if (node_type != "Name")
+    return false;
+
+  // The bound type decides, not the annotation's name: `a: List[int]` resolves
+  // to a class named List, but its struct is a model container that owns its
+  // own operator and length paths (#7085).
+  symbol_id sid(python_file(), current_classname(), current_function_name());
+  sid.set_object(value_node.value("id", ""));
+
+  symbolt *sym = find_symbol(sid.to_string());
+  if (!sym)
+    sym = find_symbol(sid.global_to_string());
+  if (!sym)
+    return false;
+
+  const typet &t = sym->get_type();
+  return is_user_class_pointer(t) || is_user_class_struct_type(t);
+}
+
+// move_symbol_to_context() only overwrites an existing symbol's type when
+// completing a forward declaration, so a variable rebound to a new value keeps
+// its stale type. Left alone, function_call_expr sizes the new instance from
+// that type and the constructor's field writes overrun it (#6243).
+//
+// The widening set is an ALLOWLIST, not a denylist of unsafe types: any
+// struct-shaped existing type (tuple, dict, a migrated class instance) is
+// excluded even when its class differs, because an earlier statement may
+// already have built an expression against that struct's layout (`x = t[0]`
+// after `t = (1, 2)`) and retyping in place corrupts it. Denylisting only
+// existing class pointers was tried first and missed that case.
+void python_converter::retype_placeholder_to_class(
+  symbolt &sym,
+  const typet &new_type)
+{
+  const typet &existing = sym.get_type();
+  const bool existing_is_safe_placeholder =
+    existing == none_type() ||
+    (existing.is_pointer() && existing.subtype().id() == "empty") ||
+    existing.is_signedbv() || existing.is_unsignedbv() ||
+    existing.is_floatbv() || existing.is_bool();
+
+  if (
+    is_user_class_pointer(new_type) && existing_is_safe_placeholder &&
+    existing != new_type)
+    sym.set_type(migrate_type(new_type));
+}
+
+exprt python_converter::dispatch_dunder_operator(
+  const std::string &op,
+  exprt &lhs,
+  exprt &rhs,
+  const locationt &loc)
+{
+  typet lhs_type = resolve_operand_type(lhs, symbol_table_, ns);
+  typet rhs_type = resolve_operand_type(rhs, symbol_table_, ns);
+
+  // Try lhs.__add__(rhs)
+  if (lhs_type.is_struct())
+  {
+    const struct_typet &lhs_struct = to_struct_type(lhs_type);
+    std::string lhs_tag = lhs_struct.tag().as_string();
+
+    if (!is_excluded_struct_tag(lhs_struct))
+    {
+      std::string dunder = op_to_dunder(op);
+      if (!dunder.empty())
+      {
+        std::string class_name = extract_class_name_from_tag(lhs_tag);
+        symbolt *method = find_dunder_method(class_name, dunder);
+        if (method)
+        {
+          const code_typet &method_type = to_code_type(method->get_type());
+          if (is_other_param_compatible(method_type, rhs_type, ns))
+          {
+            exprt call = build_call_expr(
+              *method,
+              method_type.return_type(),
+              {dunder_ref_arg(lhs), dunder_other_arg(rhs, method_type)});
+            call.location() = loc;
+            return call;
+          }
+        }
+      }
+    }
+  }
+
+  // fallback: try rhs.__radd__(lhs)
+  if (rhs_type.is_struct())
+  {
+    const struct_typet &rhs_struct = to_struct_type(rhs_type);
+    std::string rhs_tag = rhs_struct.tag().as_string();
+
+    if (!is_excluded_struct_tag(rhs_struct))
+    {
+      std::string rdunder = op_to_rdunder(op);
+      if (!rdunder.empty())
+      {
+        std::string class_name = extract_class_name_from_tag(rhs_tag);
+        symbolt *method = find_dunder_method(class_name, rdunder);
+        if (method)
+        {
+          const code_typet &method_type = to_code_type(method->get_type());
+          if (is_other_param_compatible(method_type, lhs_type, ns))
+          {
+            exprt call = build_call_expr(
+              *method,
+              method_type.return_type(),
+              {dunder_ref_arg(rhs), dunder_other_arg(lhs, method_type)});
+            call.location() = loc;
+            return call;
+          }
+        }
+      }
+    }
+  }
+
+  return nil_exprt();
+}
+
+exprt python_converter::dispatch_unary_dunder_operator(
+  const std::string &op,
+  exprt &operand,
+  const locationt &loc)
+{
+  // Resolve the operand to its (pointee) struct. Under the object-model
+  // migration (#3067/#4773) a class instance is a `Class*` pointer, so follow
+  // it to the struct exactly as the binary dispatch does — otherwise str(obj),
+  // abs(obj), -obj, … would not find the user dunder on a pointer instance.
+  typet operand_type = resolve_operand_type(operand, symbol_table_, ns);
+
+  if (!operand_type.is_struct())
+    return nil_exprt();
+
+  const struct_typet &struct_type = to_struct_type(operand_type);
+  std::string tag = struct_type.tag().as_string();
+
+  if (is_excluded_struct_tag(struct_type))
+    return nil_exprt();
+
+  static const std::map<std::string, std::string> unary_dunder_map = {
+    {"USub", "__neg__"},
+    {"UAdd", "__pos__"},
+    {"abs", "__abs__"},
+    {"bool", "__bool__"},
+    {"complex", "__complex__"},
+    {"float", "__float__"},
+    {"int", "__int__"},
+    {"index", "__index__"},
+    {"len", "__len__"},
+    {"str", "__str__"},
+  };
+  auto it = unary_dunder_map.find(op);
+  if (it == unary_dunder_map.end())
+    return nil_exprt();
+
+  std::string class_name = extract_class_name_from_tag(tag);
+  symbolt *method = find_dunder_method(class_name, it->second);
+  if (!method)
+    return nil_exprt();
+
+  const code_typet &method_type = to_code_type(method->get_type());
+  // A migrated instance is already a `Class*` self argument (pass through); a
+  // by-value struct operand needs its address taken.
+  exprt call = build_call_expr(
+    *method, method_type.return_type(), {dunder_ref_arg(operand)});
+  call.location() = loc;
+  return call;
+}

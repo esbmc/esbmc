@@ -1,0 +1,21 @@
+# ThreadSanitizer suppressions for ESBMC.
+#
+# Format: one rule per line, comments start with '#'.
+#   race:<function or source-path substring>
+#   deadlock:<...>   thread:<...>   called_from_lib:<lib>
+# See: https://github.com/google/sanitizers/wiki/ThreadSanitizerSuppressions
+#
+# This file backs the irep2 verification plan's Tier-C concurrency job
+# (docs/irep2-verification-plan.md §13). It starts empty of ESBMC-code rules on
+# purpose: the goal of the TSan job is to *discover* whether the atomic
+# refcount / CRC cache / writer-stamp scheme (src/irep2/irep2.h) races under
+# real workloads, so silencing irep2 up-front would defeat it. Add a rule here
+# only for a finding triaged as a false positive or as third-party-library
+# noise, and pair it with the tracking issue. Refs #223.
+#
+# `guard_seq` (src/irep2/guard_seq.h) intentionally uses a NON-atomic immer
+# refcount, justified by the single-threaded-symex / thread-confinement
+# assumption documented at guard_seq.h:34-43. If TSan ever reports a race on an
+# immer refcount reached through guard_seq, that is a real violation of the
+# confinement assumption (e.g. symex became parallel) and must NOT be
+# suppressed — it is exactly what this job exists to catch.

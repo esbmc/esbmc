@@ -4,7 +4,8 @@
 #include <string.h>
 #include "python_types.h"
 
-// Python character isalpha - handles ASCII letters only in a single-byte context.
+// Python character isalpha - handles ASCII letters only in a single-byte
+// context.
 _Bool __python_char_isalpha(int c)
 {
 __ESBMC_HIDE:;
@@ -26,7 +27,8 @@ __ESBMC_HIDE:;
   return max_len;
 }
 
-// Python string isalpha - handles ASCII and common two-byte UTF-8 Latin letters.
+// Python string isalpha - handles ASCII and common two-byte UTF-8 Latin
+// letters.
 _Bool __python_str_isalpha(const char *s)
 {
 __ESBMC_HIDE:;
@@ -107,6 +109,28 @@ __ESBMC_HIDE:;
   while (*s)
   {
     if (!isdigit((unsigned char)*s))
+      return 0;
+    s++;
+  }
+  return 1;
+}
+
+// Python string isalnum - true iff the string is non-empty and every
+// character is a letter (ASCII A-Z / a-z) or a digit (0-9). Matches
+// Python's CPython behaviour on the ASCII subset; broader Unicode
+// category coverage is deliberately out of scope (consistent with the
+// existing isalpha/isdigit/isspace models in this file).
+_Bool __python_str_isalnum(const char *s)
+{
+__ESBMC_HIDE:;
+  if (!s || !*s)
+    return 0;
+
+  while (*s)
+  {
+    unsigned char c = (unsigned char)*s;
+    if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+          (c >= '0' && c <= '9')))
       return 0;
     s++;
   }
@@ -417,6 +441,45 @@ __ESBMC_HIDE:;
   return has_cased;
 }
 
+// Python string isupper - true iff every cased character is uppercase
+// and there is at least one cased character. Mirrors __python_str_islower
+// with the cases swapped; UTF-8 continuation bytes after a 0xC2..0xDF
+// lead are treated as cased (best-effort Latin-1 supplement coverage).
+_Bool __python_str_isupper(const char *s)
+{
+__ESBMC_HIDE:;
+  if (!s || !*s)
+    return 0;
+
+  _Bool has_cased = 0;
+
+  while (*s)
+  {
+    unsigned char c = (unsigned char)*s;
+
+    if (c >= 'a' && c <= 'z')
+      return 0;
+
+    if (c >= 'A' && c <= 'Z')
+      has_cased = 1;
+
+    if (c >= 0xC2 && c <= 0xDF)
+    {
+      unsigned char next = (unsigned char)*(s + 1);
+      if (next >= 0x80 && next <= 0xBF)
+      {
+        has_cased = 1;
+        s += 2;
+        continue;
+      }
+    }
+
+    s++;
+  }
+
+  return has_cased;
+}
+
 // Python character lower - converts a single character to lowercase
 int __python_char_lower(int c)
 {
@@ -499,6 +562,169 @@ __ESBMC_HIDE:;
   buffer[j] = '\0';
 
   return buffer;
+}
+
+// Python string swapcase - returns a new string with ASCII lowercase
+// letters uppercased and uppercase letters lowercased; other bytes
+// pass through unchanged. Bounded to 255 chars on the receiver, like
+// __python_str_lower / _upper, to keep the symbolic loop tractable;
+// longer strings trip an explicit assertion rather than silently
+// truncating.
+char *__python_str_swapcase(const char *s)
+{
+__ESBMC_HIDE:;
+  if (!s)
+    return (char *)s;
+
+  char *buffer = __ESBMC_alloca(256);
+
+  size_t i = 0;
+  while (i < 255 && s[i])
+  {
+    char c = s[i];
+    if (c >= 'a' && c <= 'z')
+      buffer[i] = c - ('a' - 'A');
+    else if (c >= 'A' && c <= 'Z')
+      buffer[i] = c + ('a' - 'A');
+    else
+      buffer[i] = c;
+    i++;
+  }
+
+  if (s[i] != '\0')
+  {
+    __ESBMC_assert(
+      0, "String too long for swapcase() - exceeds 255 characters");
+  }
+
+  buffer[i] = '\0';
+
+  return buffer;
+}
+
+// Python string capitalize - returns a copy with the first ASCII letter
+// uppercased and every subsequent ASCII letter lowercased. Non-letter
+// characters pass through unchanged at their positions. Bounded to 255
+// chars on the receiver, like the lower/upper/swapcase models; longer
+// strings trip an explicit assertion rather than silently truncating.
+char *__python_str_capitalize(const char *s)
+{
+__ESBMC_HIDE:;
+  if (!s)
+    return (char *)s;
+
+  char *buffer = __ESBMC_alloca(256);
+
+  size_t i = 0;
+  while (i < 255 && s[i])
+  {
+    char c = s[i];
+    if (i == 0 && c >= 'a' && c <= 'z')
+      buffer[i] = c - ('a' - 'A');
+    else if (i > 0 && c >= 'A' && c <= 'Z')
+      buffer[i] = c + ('a' - 'A');
+    else
+      buffer[i] = c;
+    i++;
+  }
+
+  if (s[i] != '\0')
+  {
+    __ESBMC_assert(
+      0, "String too long for capitalize() - exceeds 255 characters");
+  }
+
+  buffer[i] = '\0';
+
+  return buffer;
+}
+
+// Python string title - returns a copy where the first ASCII letter of
+// each word is uppercased and every other letter is lowercased. A word
+// starts on any letter that is immediately preceded by a non-letter
+// (or by the start of the string); non-letter characters pass through
+// unchanged. Bounded to 255 chars on the receiver, same as the
+// lower/upper/swapcase/capitalize models.
+char *__python_str_title(const char *s)
+{
+__ESBMC_HIDE:;
+  if (!s)
+    return (char *)s;
+
+  char *buffer = __ESBMC_alloca(256);
+
+  _Bool prev_was_letter = 0;
+  size_t i = 0;
+  while (i < 255 && s[i])
+  {
+    char c = s[i];
+    _Bool is_lower = (c >= 'a' && c <= 'z');
+    _Bool is_upper = (c >= 'A' && c <= 'Z');
+
+    if (is_lower || is_upper)
+    {
+      if (!prev_was_letter)
+        buffer[i] = is_upper ? c : (char)(c - ('a' - 'A'));
+      else
+        buffer[i] = is_lower ? c : (char)(c + ('a' - 'A'));
+      prev_was_letter = 1;
+    }
+    else
+    {
+      buffer[i] = c;
+      prev_was_letter = 0;
+    }
+    i++;
+  }
+
+  if (s[i] != '\0')
+  {
+    __ESBMC_assert(0, "String too long for title() - exceeds 255 characters");
+  }
+
+  buffer[i] = '\0';
+
+  return buffer;
+}
+
+// Python string count - count non-overlapping occurrences of `sub` in `s`.
+// Matches the Python semantics: empty `sub` returns len(s) + 1 (counts
+// gaps including before-first and after-last). Bounded to 256 chars on
+// the receiver to keep the symbolic loop tractable for BMC; longer
+// strings trip an explicit assertion rather than silently truncating.
+size_t __python_str_count(const char *s, const char *sub)
+{
+__ESBMC_HIDE:;
+  if (!s || !sub)
+    return 0;
+
+  size_t s_len = __python_strnlen_bounded(s, 256);
+  size_t sub_len = __python_strnlen_bounded(sub, 256);
+
+  if (sub_len == 0)
+    return s_len + 1;
+
+  if (sub_len > s_len)
+    return 0;
+
+  size_t count = 0;
+  size_t i = 0;
+  while (i + sub_len <= s_len)
+  {
+    size_t j = 0;
+    while (j < sub_len && s[i + j] == sub[j])
+      j++;
+    if (j == sub_len)
+    {
+      count++;
+      i += sub_len;
+    }
+    else
+    {
+      i++;
+    }
+  }
+  return count;
 }
 
 int __python_str_find(const char *s1, const char *s2)
@@ -681,6 +907,14 @@ __ESBMC_HIDE:;
     return buffer;
   }
 
+  // The scan records its decision at every position it steps over, so the copy
+  // loop below can reuse it instead of re-running strncmp there; under
+  // symbolic execution the second scan unwinds in full just like the first.
+  // Marking in place rather than pre-zeroing keeps this to one loop: the copy
+  // loop treats everything at or past scan_end as a non-match, which covers
+  // both the tail this loop cannot reach and an early exit on count.
+  char *is_match = __ESBMC_alloca(len_s + 1);
+
   int remaining = count;
   size_t occurrences = 0;
   size_t i = 0;
@@ -688,6 +922,7 @@ __ESBMC_HIDE:;
   {
     if ((remaining != 0) && strncmp(s + i, old_sub, old_len) == 0)
     {
+      is_match[i] = 1;
       occurrences++;
       i += old_len;
       if (remaining > 0)
@@ -696,8 +931,10 @@ __ESBMC_HIDE:;
         break;
       continue;
     }
+    is_match[i] = 0;
     i++;
   }
+  size_t scan_end = i;
 
   long long diff = (long long)new_len - (long long)old_len;
   long long result_len_signed =
@@ -707,25 +944,15 @@ __ESBMC_HIDE:;
   size_t result_len = (size_t)result_len_signed;
   char *buffer = __ESBMC_alloca(result_len + 1);
 
-  remaining = count;
   i = 0;
   size_t pos = 0;
 
-  // Main replacement loop - use bounded iteration
+  // Both loops walk the same positions with the same skip rule, so the marks
+  // left above land exactly where this one would have matched.
   while (i < len_s)
   {
-    // Check if replacement is possible at current position
-    int do_replace = 0;
-    if (remaining != 0 && i + old_len <= len_s)
+    if (i < scan_end && is_match[i])
     {
-      // Use strncmp for comparison (ESBMC handles this better)
-      if (strncmp(s + i, old_sub, old_len) == 0)
-        do_replace = 1;
-    }
-
-    if (do_replace)
-    {
-      // Copy new_sub to buffer
       size_t k = 0;
       while (k < new_len)
       {
@@ -733,15 +960,10 @@ __ESBMC_HIDE:;
         pos++;
         k++;
       }
-      // Skip old_sub in source
       i = i + old_len;
-      // Decrement remaining replacements
-      if (remaining > 0)
-        remaining = remaining - 1;
     }
     else
     {
-      // Copy single character
       buffer[pos] = s[i];
       pos++;
       i++;
@@ -752,9 +974,54 @@ __ESBMC_HIDE:;
   return buffer;
 }
 
-// Python string split - splits a string by separator
-// Returns a Python list (represented as PyListObject*)
-// For ESBMC, we'll return a simple structure representing the split result
+// Whitespace predicate matching CPython str.split(None) and the constant-fold
+// path in python_list.cpp (space, tab, newline, vertical tab, form feed, CR).
+static _Bool __python_str_split_isspace(char c)
+{
+__ESBMC_HIDE:;
+  return c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' ||
+         c == '\r';
+}
+
+// Copy str[start, end) into a fresh NUL-terminated __ESBMC_alloca buffer and
+// append it as the next list element. Each token gets its own allocation (the
+// frontend reads element pointers independently); __ESBMC_alloca survives the
+// function return (see python_list.cpp), so the buffer stays valid.
+static void __python_str_split_emit(
+  PyObject *items,
+  size_t *count,
+  const char *str,
+  size_t start,
+  size_t end)
+{
+__ESBMC_HIDE:;
+  size_t tok_len = end - start;
+  char *buf = __ESBMC_alloca(tok_len + 1);
+  size_t k = 0;
+  while (k < tok_len)
+  {
+    buf[k] = str[start + k];
+    k++;
+  }
+  buf[tok_len] = '\0';
+  items[*count].value = buf;
+  items[*count].type_id = 0;
+  items[*count].size = tok_len + 1;
+  (*count)++;
+}
+
+// Python string split - splits a string by separator and returns a Python list
+// (PyListObject*) of the substring tokens. Mirrors CPython semantics and the
+// constant-fold path in python_list.cpp::build_split_list:
+//   - sep == "" (str.split() / sep=None): split on whitespace runs, drop empty
+//     tokens.
+//   - non-empty sep: split on each occurrence, keep empty tokens.
+//   - maxsplit >= 0 caps the number of splits; the remainder becomes the final
+//     token. maxsplit < 0 means unlimited.
+//
+// The string is traversed with a single monotonic scan (O(n)); each token is
+// copied into its own buffer. Keeping the scan linear (rather than re-searching
+// from each token start) matters under tight --unwind bounds.
 struct __ESBMC_PyListObj *
 __python_str_split(const char *str, const char *sep, long long maxsplit)
 {
@@ -765,63 +1032,96 @@ __ESBMC_HIDE:;
     return (PyListObject *)0;
 
   size_t len_sep = __python_strnlen_bounded(sep, 64);
-  size_t len_str = __python_strnlen_bounded(str, 256);
-  _Bool has_empty = 0;
+  size_t len_str = __python_strnlen_bounded(str, ESBMC_PY_STRNLEN_BOUND);
 
-  (void)maxsplit;
+  // At most len_str + 1 tokens (every character a separator boundary).
+  PyObject *items = __ESBMC_alloca((len_str + 1) * sizeof(PyObject));
+  PyListObject *list = __ESBMC_alloca(sizeof(PyListObject));
+  size_t count = 0;
 
-  if (len_sep == 1)
+  if (len_sep == 0)
   {
-    char sep_ch = sep[0];
-
-    if (len_str == 0)
+    // Whitespace split: collapse runs and drop empty tokens.
+    long long splits = 0;
+    size_t i = 0;
+    while (i < len_str)
     {
-      has_empty = 1;
-    }
-    else
-    {
-      if (str[0] == sep_ch || str[len_str - 1] == sep_ch)
-        has_empty = 1;
-
-      size_t i = 1;
-      while (i < len_str && !has_empty)
-      {
-        if (str[i] == sep_ch && str[i - 1] == sep_ch)
-          has_empty = 1;
+      while (i < len_str && __python_str_split_isspace(str[i]))
         i++;
-      }
-    }
-  }
+      if (i == len_str)
+        break;
 
-  if (has_empty)
-  {
-    const char *empty = "";
-    static PyObject empty_items[1];
-    static PyListObject empty_list;
-    empty_items[0].value = empty;
-    empty_items[0].type_id = 0;
-    empty_items[0].size = 1;
-    empty_list.type = NULL;
-    empty_list.items = empty_items;
-    empty_list.size = 1;
-    return &empty_list;
+      size_t start = i;
+      if (maxsplit >= 0 && splits >= maxsplit)
+      {
+        // Remainder is a single token kept verbatim. Leading whitespace was
+        // already skipped above; CPython keeps any trailing whitespace here
+        // (e.g. 'a  b  '.split(None, 1) == ['a', 'b  ']).
+        __python_str_split_emit(items, &count, str, start, len_str);
+        break;
+      }
+
+      while (i < len_str && !__python_str_split_isspace(str[i]))
+        i++;
+      __python_str_split_emit(items, &count, str, start, i);
+      splits++;
+    }
   }
   else
   {
-    const char *nonempty = "a";
-    static PyObject nonempty_items[1];
-    static PyListObject nonempty_list;
-    nonempty_items[0].value = nonempty;
-    nonempty_items[0].type_id = 0;
-    nonempty_items[0].size = 2;
-    nonempty_list.type = NULL;
-    nonempty_list.items = nonempty_items;
-    nonempty_list.size = 1;
-    return &nonempty_list;
+    // Explicit separator: one linear scan, keeping empty tokens.
+    long long splits = 0;
+    size_t start = 0;
+    size_t i = 0;
+    while (i + len_sep <= len_str)
+    {
+      if (maxsplit >= 0 && splits >= maxsplit)
+        break;
+
+      size_t j = 0;
+      while (j < len_sep && str[i + j] == sep[j])
+        j++;
+
+      if (j == len_sep)
+      {
+        __python_str_split_emit(items, &count, str, start, i);
+        i += len_sep;
+        start = i;
+        splits++;
+      }
+      else
+        i++;
+    }
+
+    // Final token: the remainder of the string.
+    __python_str_split_emit(items, &count, str, start, len_str);
   }
+
+  list->type = NULL;
+  list->items = items;
+  list->size = count;
+  return list;
 }
-// Python int() builtin - converts string to integer
-int __python_int(const char *s, int base)
+// Python int() builtin - converts string to integer.
+// Returns a 64-bit value: Python ints are modelled as 64-bit everywhere else
+// in the frontend (type_handler::get_typet("int")), so a 32-bit return here
+// makes the result symbol 32-bit and truncates a string pointer that is later
+// rebound through it (e.g. `a, b = s.split('-'); a = int(a)`). See issue #5159.
+/// Value of @p c as an alphanumeric digit (0-9, a-z, A-Z), or -1 when it is
+/// not one. The caller applies the base bound.
+static int __python_digit_value(unsigned char c)
+{
+__ESBMC_HIDE:;
+  if (c >= '0' && c <= '9')
+    return c - '0';
+  if (c >= 'a' && c <= 'z')
+    return c - 'a' + 10;
+  if (c >= 'A' && c <= 'Z')
+    return c - 'A' + 10;
+  return -1;
+}
+
+long long __python_int(const char *s, int base)
 {
 __ESBMC_HIDE:;
   if (!s)
@@ -853,6 +1153,8 @@ __ESBMC_HIDE:;
   {
     s++;
   }
+
+  const char *number_begin = s;
 
   if (base == 0)
   {
@@ -902,34 +1204,41 @@ __ESBMC_HIDE:;
     return 0;
   }
 
-  int result = 0;
+  const _Bool prefix_consumed = (s != number_begin);
+
+  long long result = 0;
   _Bool found_digit = 0;
 
   while (*s)
   {
-    int digit_value = -1;
     unsigned char c = (unsigned char)*s;
 
-    if (c >= '0' && c <= '9')
+    /* PEP 515: in the int() constructor a single underscore may separate
+     * digits and may follow a base specifier, but may not lead, trail, or
+     * double. */
+    if (c == '_')
     {
-      digit_value = c - '0';
-    }
-    else if (c >= 'a' && c <= 'z')
-    {
-      digit_value = c - 'a' + 10;
-    }
-    else if (c >= 'A' && c <= 'Z')
-    {
-      digit_value = c - 'A' + 10;
-    }
-    else if (
-      c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' || c == '\r')
-    {
+      const int next = __python_digit_value((unsigned char)*(s + 1));
+      if ((!found_digit && !prefix_consumed) || next < 0 || next >= base)
+      {
+        __ESBMC_assert(0, "invalid literal for int() - invalid character");
+        return 0;
+      }
       s++;
       continue;
     }
-    else
+
+    int digit_value = __python_digit_value(c);
+
+    if (digit_value < 0)
     {
+      if (
+        c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' ||
+        c == '\r')
+      {
+        s++;
+        continue;
+      }
       __ESBMC_assert(0, "invalid literal for int() - invalid character");
       return 0;
     }
@@ -947,7 +1256,7 @@ __ESBMC_HIDE:;
 
     found_digit = 1;
 
-    if (result > (INT_MAX / base))
+    if (result > (LLONG_MAX / base))
     {
       __ESBMC_assert(0, "int() conversion overflow");
       return 0;
@@ -974,6 +1283,124 @@ __ESBMC_HIDE:;
   }
 
   return sign * result;
+}
+
+/// Scan a run of decimal digits starting at s[*i], folding them into *value and
+/// advancing *i past the run. PEP 515 allows a single underscore between two
+/// digits of the run; a leading, trailing or doubled one is rejected. Returns
+/// the digit count, or -1 on a misplaced underscore.
+static int
+__python_scan_digit_run(const char *s, size_t len, size_t *i, double *value)
+{
+__ESBMC_HIDE:;
+  int digits = 0;
+
+  while (*i < len)
+  {
+    if (s[*i] == '_')
+    {
+      if (digits == 0 || *i + 1 >= len || s[*i + 1] < '0' || s[*i + 1] > '9')
+        return -1;
+      (*i)++;
+      continue;
+    }
+
+    if (s[*i] < '0' || s[*i] > '9')
+      break;
+
+    *value = *value * 10.0 + (double)(s[*i] - '0');
+    digits++;
+    (*i)++;
+  }
+
+  return digits;
+}
+
+// Shared core for float(str): validates `s` as a Python float literal and, when
+// valid, writes the parsed value to *out. Returns 1 on success, 0 otherwise.
+// The accepted grammar is a subset of CPython's float(): optional surrounding
+// ASCII whitespace, an optional sign, and a decimal mantissa with at least one
+// digit and at most one '.'. Scientific notation, inf and nan are handled by
+// the frontend's compile-time strtod paths (string literals and constant
+// symbols); this runtime model deliberately stays a single bounded scan over
+// the string so it remains cheap on nondeterministic inputs.
+static _Bool __python_parse_float(const char *s, double *out)
+{
+__ESBMC_HIDE:;
+  *out = 0.0;
+  if (!s)
+    return 0;
+
+  size_t len = __python_strnlen_bounded(s, ESBMC_PY_STRNLEN_BOUND);
+  size_t i = 0;
+
+  while (i < len && (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' ||
+                     s[i] == '\v' || s[i] == '\f' || s[i] == '\r'))
+    i++;
+
+  int sign = 1;
+  if (i < len && (s[i] == '+' || s[i] == '-'))
+  {
+    if (s[i] == '-')
+      sign = -1;
+    i++;
+  }
+
+  // Accumulate integer and fractional digits into a single mantissa and divide
+  // by 10^(fractional digit count) exactly once at the end. A single rounding
+  // step matches std::strtod for short decimal literals, so float("0.3") on a
+  // variable agrees with the compile-time strtod path; the alternative of
+  // accumulating with a repeatedly-scaled 0.1 weight compounds rounding error.
+  double value = 0.0;
+  double divisor = 1.0;
+
+  const int int_digits = __python_scan_digit_run(s, len, &i, &value);
+  if (int_digits < 0)
+    return 0;
+
+  int frac_digits = 0;
+  if (i < len && s[i] == '.')
+  {
+    i++;
+    frac_digits = __python_scan_digit_run(s, len, &i, &value);
+    if (frac_digits < 0)
+      return 0;
+    for (int k = 0; k < frac_digits; k++)
+      divisor *= 10.0;
+  }
+
+  if (int_digits == 0 && frac_digits == 0)
+    return 0;
+
+  while (i < len && (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' ||
+                     s[i] == '\v' || s[i] == '\f' || s[i] == '\r'))
+    i++;
+
+  if (i != len)
+    return 0;
+
+  *out = (double)sign * (value / divisor);
+  return 1;
+}
+
+// Python float() builtin - converts a string to a double. Returns 0.0 when the
+// string is not a valid float literal; callers gate the conversion on
+// __python_str_is_float() and raise ValueError on the invalid path.
+double __python_str_to_float(const char *s)
+{
+__ESBMC_HIDE:;
+  double value;
+  __python_parse_float(s, &value);
+  return value;
+}
+
+// Returns 1 iff `s` is a valid Python float literal accepted by
+// __python_str_to_float, else 0.
+_Bool __python_str_is_float(const char *s)
+{
+__ESBMC_HIDE:;
+  double value;
+  return __python_parse_float(s, &value);
 }
 
 // Python chr() builtin - converts Unicode code point to string
@@ -1026,6 +1453,96 @@ __ESBMC_HIDE:;
   return buffer;
 }
 
+// Python repr() of a str: quoted with ' unless the text holds ' and no ",
+// with \\, the quote, \t \n \r escaped and other control bytes as \xNN.
+// Which non-ASCII characters CPython escapes depends on the Unicode database,
+// so a byte above 0x7F leaves the result unconstrained (#7559).
+char *__python_str_repr(const char *s)
+{
+__ESBMC_HIDE:;
+  size_t len = strlen(s);
+  _Bool has_single = 0, has_double = 0, ascii = 1;
+  for (size_t i = 0; i < len; i++)
+  {
+    unsigned char c = (unsigned char)s[i];
+    if (c == '\'')
+      has_single = 1;
+    else if (c == '"')
+      has_double = 1;
+    else if (c > 0x7F)
+      ascii = 0;
+  }
+
+  // No escape takes more than 4 output bytes per input byte.
+  size_t cap = 4 * len + 3;
+  char *out = __ESBMC_alloca(cap);
+  if (!ascii)
+  {
+    out[cap - 1] = '\0';
+    return out;
+  }
+
+  const char quote = has_single && !has_double ? '"' : '\'';
+  const char *hex = "0123456789abcdef";
+  size_t j = 0;
+  out[j++] = quote;
+  for (size_t i = 0; i < len; i++)
+  {
+    unsigned char c = (unsigned char)s[i];
+    if (c == (unsigned char)quote || c == '\\')
+    {
+      out[j++] = '\\';
+      out[j++] = (char)c;
+    }
+    else if (c == '\t' || c == '\n' || c == '\r')
+    {
+      out[j++] = '\\';
+      out[j++] = c == '\t' ? 't' : c == '\n' ? 'n' : 'r';
+    }
+    else if (c < 0x20 || c == 0x7F)
+    {
+      out[j++] = '\\';
+      out[j++] = 'x';
+      out[j++] = hex[c >> 4];
+      out[j++] = hex[c & 0xF];
+    }
+    else
+      out[j++] = (char)c;
+  }
+  out[j++] = quote;
+  out[j] = '\0';
+  return out;
+}
+
+// Python ord() - the code point of the first character of `s`, decoded from
+// the UTF-8 that __python_chr produces. Byte-wise slicing can leave a lead
+// byte without its continuation bytes, so decoding stops at the first byte
+// that is not one; the NUL terminator never is, which keeps reads in bounds.
+int __python_ord(const char *s)
+{
+__ESBMC_HIDE:;
+  const unsigned char *u = (const unsigned char *)s;
+  if (u[0] < 0xC0)
+    return u[0];
+
+  // Unrolled rather than looped, so a small --unwind cannot cut it short.
+  const int len = u[0] < 0xE0 ? 2 : u[0] < 0xF0 ? 3 : 4;
+  int cp = u[0] & (0x7F >> len);
+  if ((u[1] & 0xC0) != 0x80)
+    return u[0];
+  cp = (cp << 6) | (u[1] & 0x3F);
+  if (len == 2)
+    return cp;
+  if ((u[2] & 0xC0) != 0x80)
+    return u[0];
+  cp = (cp << 6) | (u[2] & 0x3F);
+  if (len == 3)
+    return cp;
+  if ((u[3] & 0xC0) != 0x80)
+    return u[0];
+  return (cp << 6) | (u[3] & 0x3F);
+}
+
 // Python string concatenation - combines two strings
 char *__python_str_concat(const char *s1, const char *s2)
 {
@@ -1071,6 +1588,73 @@ __ESBMC_HIDE:;
   {
     __ESBMC_assert(
       0, "String concatenation overflow - result exceeds 511 characters");
+  }
+
+  buffer[pos] = '\0';
+  return buffer;
+}
+
+// Python str.join - concatenates the elements of `list` separated by `sep`.
+// Empty / NULL list returns "". NULL sep is treated as "". An int, float or
+// bool element is a TypeError, as in CPython. An element whose `value` is NULL
+// is silently skipped; CPython raises TypeError there too, but the rest of the
+// str.* OM family takes the same lenient stance. Mirrors the 511-byte
+// fixed-buffer pattern used by __python_str_concat: overflow is detected by
+// checking that the input was fully drained when an inner loop exits, not by
+// inspecting the final pos.
+char *__python_str_join(
+  const char *sep,
+  struct __ESBMC_PyListObj *list,
+  size_t int_type_id,
+  size_t float_type_id,
+  size_t bool_type_id)
+{
+__ESBMC_HIDE:;
+  char *buffer = __ESBMC_alloca(512);
+  buffer[0] = '\0';
+
+  if (!list || list->size == 0)
+    return buffer;
+
+  if (!sep)
+    sep = "";
+
+  size_t pos = 0;
+  size_t i = 0;
+  while (i < list->size)
+  {
+    if (i > 0)
+    {
+      size_t j = 0;
+      while (pos < 511 && sep[j])
+      {
+        buffer[pos] = sep[j];
+        pos++;
+        j++;
+      }
+      __ESBMC_assert(sep[j] == '\0', "join: result exceeds 511 characters");
+    }
+
+    size_t type_id = list->items[i].type_id;
+    __ESBMC_assert(
+      type_id != int_type_id && type_id != float_type_id &&
+        type_id != bool_type_id,
+      "TypeError: sequence item: expected str instance");
+
+    const char *s = (const char *)list->items[i].value;
+    if (s)
+    {
+      size_t k = 0;
+      while (pos < 511 && s[k])
+      {
+        buffer[pos] = s[k];
+        pos++;
+        k++;
+      }
+      __ESBMC_assert(s[k] == '\0', "join: result exceeds 511 characters");
+    }
+
+    i++;
   }
 
   buffer[pos] = '\0';
@@ -1174,5 +1758,270 @@ __ESBMC_HIDE:;
   }
 
   buffer[dst_idx] = '\0';
+  return buffer;
+}
+
+// Python int -> str. Matches str(int) for any 64-bit signed integer:
+// decimal digits, leading '-' for negatives, NUL-terminated.
+// Buffer fits the widest case: "-9223372036854775808" + NUL = 21 bytes.
+char *__python_int_to_str(long long v)
+{
+__ESBMC_HIDE:;
+  char *buffer = __ESBMC_alloca(21);
+
+  if (v == 0)
+  {
+    buffer[0] = '0';
+    buffer[1] = '\0';
+    return buffer;
+  }
+
+  // Use unsigned magnitude so INT64_MIN is representable without overflow.
+  int negative = v < 0;
+  unsigned long long mag =
+    negative ? -(unsigned long long)v : (unsigned long long)v;
+
+  // Write digits right-to-left into a 20-byte scratch (max 20 decimal digits).
+  char digits[20];
+  size_t n = 0;
+  while (mag > 0)
+  {
+    digits[n++] = (char)('0' + (mag % 10));
+    mag /= 10;
+  }
+
+  size_t pos = 0;
+  if (negative)
+    buffer[pos++] = '-';
+
+  while (n > 0)
+    buffer[pos++] = digits[--n];
+
+  buffer[pos] = '\0';
+  return buffer;
+}
+
+// Python bin(int) -> str. Matches the canonical "0b" prefix; emits "-0b…"
+// for negatives. Buffer holds the widest case: '-' + "0b" + 64 binary
+// digits + NUL = 68 bytes.
+char *__python_int_to_bin(long long v)
+{
+__ESBMC_HIDE:;
+  char *buffer = __ESBMC_alloca(68);
+
+  int negative = v < 0;
+  unsigned long long mag =
+    negative ? -(unsigned long long)v : (unsigned long long)v;
+
+  // Write binary digits right-to-left.
+  char digits[64];
+  size_t n = 0;
+  if (mag == 0)
+    digits[n++] = '0';
+  else
+    while (mag != 0)
+    {
+      digits[n++] = (char)('0' + (mag & 1U));
+      mag >>= 1U;
+    }
+
+  size_t pos = 0;
+  if (negative)
+    buffer[pos++] = '-';
+  buffer[pos++] = '0';
+  buffer[pos++] = 'b';
+
+  while (n > 0)
+    buffer[pos++] = digits[--n];
+
+  buffer[pos] = '\0';
+  return buffer;
+}
+
+// Python hex(int) -> str. "0x" prefix, lowercase digits (Python convention).
+// Buffer width: '-' + "0x" + 16 hex digits + NUL = 20 bytes.
+char *__python_int_to_hex(long long v)
+{
+__ESBMC_HIDE:;
+  char *buffer = __ESBMC_alloca(20);
+
+  int negative = v < 0;
+  unsigned long long mag =
+    negative ? -(unsigned long long)v : (unsigned long long)v;
+
+  char digits[16];
+  size_t n = 0;
+  if (mag == 0)
+    digits[n++] = '0';
+  else
+    while (mag != 0)
+    {
+      unsigned d = (unsigned)(mag & 0xFU);
+      digits[n++] = (char)(d < 10 ? '0' + d : 'a' + (d - 10));
+      mag >>= 4U;
+    }
+
+  size_t pos = 0;
+  if (negative)
+    buffer[pos++] = '-';
+  buffer[pos++] = '0';
+  buffer[pos++] = 'x';
+
+  while (n > 0)
+    buffer[pos++] = digits[--n];
+
+  buffer[pos] = '\0';
+  return buffer;
+}
+
+// Python oct(int) -> str. "0o" prefix. Buffer width: '-' + "0o" + 22 octal
+// digits + NUL = 26 bytes.
+char *__python_int_to_oct(long long v)
+{
+__ESBMC_HIDE:;
+  char *buffer = __ESBMC_alloca(26);
+
+  int negative = v < 0;
+  unsigned long long mag =
+    negative ? -(unsigned long long)v : (unsigned long long)v;
+
+  char digits[22];
+  size_t n = 0;
+  if (mag == 0)
+    digits[n++] = '0';
+  else
+    while (mag != 0)
+    {
+      digits[n++] = (char)('0' + (unsigned)(mag & 7U));
+      mag >>= 3U;
+    }
+
+  size_t pos = 0;
+  if (negative)
+    buffer[pos++] = '-';
+  buffer[pos++] = '0';
+  buffer[pos++] = 'o';
+
+  while (n > 0)
+    buffer[pos++] = digits[--n];
+
+  buffer[pos] = '\0';
+  return buffer;
+}
+
+// Python bool -> str. Returns "True" / "False" with the usual capitalisation.
+char *__python_bool_to_str(_Bool b)
+{
+__ESBMC_HIDE:;
+  char *buffer = __ESBMC_alloca(6);
+  if (b)
+  {
+    buffer[0] = 'T';
+    buffer[1] = 'r';
+    buffer[2] = 'u';
+    buffer[3] = 'e';
+    buffer[4] = '\0';
+  }
+  else
+  {
+    buffer[0] = 'F';
+    buffer[1] = 'a';
+    buffer[2] = 'l';
+    buffer[3] = 's';
+    buffer[4] = 'e';
+    buffer[5] = '\0';
+  }
+  return buffer;
+}
+
+// Python float -> str: CPython's repr, exact where it is rendered at all.
+char *__python_float_to_str(double v)
+{
+__ESBMC_HIDE:;
+  char *buffer = __ESBMC_alloca(64);
+
+  if (v != v)
+  {
+    buffer[0] = 'n';
+    buffer[1] = 'a';
+    buffer[2] = 'n';
+    buffer[3] = '\0';
+    return buffer;
+  }
+
+  size_t pos = 0;
+  if (__builtin_signbit(v))
+  {
+    buffer[pos++] = '-';
+    v = -v;
+  }
+
+  if (v > 1.7976931348623157e+308)
+  {
+    buffer[pos++] = 'i';
+    buffer[pos++] = 'n';
+    buffer[pos++] = 'f';
+    buffer[pos] = '\0';
+    return buffer;
+  }
+
+  // CPython prints the shortest string that reads back as v. Only two shapes
+  // are rendered, each provably that string; anything else (scientific
+  // notation, more than 6 fractional digits) is left unconstrained.
+  // An integral v below 2**53 prints all its digits: a shorter decimal would
+  // be a different, exactly representable integer.
+  unsigned long long ip;
+  unsigned long long frac_digits;
+  if (v < 9007199254740992.0 && v == (double)(unsigned long long)v)
+  {
+    ip = (unsigned long long)v;
+    frac_digits = 0;
+  }
+  // Below 2**32 half an ulp is under 5e-7, so at most one decimal with 6 or
+  // fewer fractional digits reads back as v, and it is the shortest. The
+  // read-back test is exact: ip * 10**6 + F stays below 2**53 and IEEE
+  // division rounds correctly, exactly as float() parses the string.
+  else if (v >= 1e-4 && v < 4294967296.0)
+  {
+    ip = (unsigned long long)v;
+    // A rounding carry to 10**6 leaves an integer, which fails the check.
+    frac_digits = (unsigned long long)((v - (double)ip) * 1000000.0 + 0.5);
+    if ((double)(ip * 1000000 + frac_digits) / 1000000.0 != v)
+      goto unrendered;
+  }
+  else
+    goto unrendered;
+
+  char digits[20];
+  size_t n = 0;
+  do
+  {
+    digits[n++] = (char)('0' + ip % 10);
+    ip /= 10;
+  } while (ip > 0);
+  while (n > 0)
+    buffer[pos++] = digits[--n];
+
+  buffer[pos++] = '.';
+  if (frac_digits == 0)
+    buffer[pos++] = '0';
+  else
+  {
+    unsigned long long scale = 100000;
+    while (frac_digits > 0)
+    {
+      buffer[pos++] = (char)('0' + frac_digits / scale);
+      frac_digits %= scale;
+      scale /= 10;
+    }
+  }
+  buffer[pos] = '\0';
+  return buffer;
+
+unrendered:
+  // Any string CPython could print: none is shorter than "0.0" or longer than
+  // the 24 characters of "-1.7976931348623157e+308".
+  __ESBMC_assume(buffer[0] != '\0' && buffer[1] != '\0' && buffer[2] != '\0');
+  buffer[24] = '\0';
   return buffer;
 }

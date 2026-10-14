@@ -1,0 +1,4 @@
+CORE
+guard.ld
+--ld-props props.yaml --ld-fault-injection --incremental-bmc --unwind 2
+^VERIFICATION FAILED$

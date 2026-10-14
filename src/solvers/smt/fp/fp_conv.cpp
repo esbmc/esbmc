@@ -1,29 +1,29 @@
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 
-static smt_astt extract_exponent(smt_convt *ctx, smt_astt fp)
+static smt_astt extract_exponent(smt_solver_baset *ctx, smt_astt fp)
 {
   std::size_t exp_top = fp->sort->get_data_width() - 2;
   std::size_t exp_bot = fp->sort->get_significand_width() - 2;
   return ctx->mk_extract(fp, exp_top, exp_bot + 1);
 }
 
-static smt_astt extract_significand(smt_convt *ctx, smt_astt fp)
+static smt_astt extract_significand(smt_solver_baset *ctx, smt_astt fp)
 {
   return ctx->mk_extract(fp, fp->sort->get_significand_width() - 2, 0);
 }
 
-static smt_astt extract_signbit(smt_convt *ctx, smt_astt fp)
+static smt_astt extract_signbit(smt_solver_baset *ctx, smt_astt fp)
 {
   return ctx->mk_extract(
     fp, fp->sort->get_data_width() - 1, fp->sort->get_data_width() - 1);
 }
 
-static smt_astt extract_exp_sig(smt_convt *ctx, smt_astt fp)
+static smt_astt extract_exp_sig(smt_solver_baset *ctx, smt_astt fp)
 {
   return ctx->mk_extract(fp, fp->sort->get_data_width() - 2, 0);
 }
 
-fp_convt::fp_convt(smt_convt *_ctx) : ctx(_ctx)
+fp_convt::fp_convt(smt_solver_baset *_ctx) : ctx(_ctx)
 {
 }
 
@@ -926,13 +926,15 @@ smt_astt
 fp_convt::mk_smt_typecast_ubv_to_fpbv(smt_astt x, smt_sortt to, smt_astt rm)
 {
   // This is a conversion from unsigned bitvector to float:
-  // ((_ to_fp_unsigned eb sb) RoundingMode (_ BitVec m) (_ FloatingPoint eb sb))
-  // Semantics:
-  //    Let b in[[(_ BitVec m)]] and let n be the unsigned integer represented by b.
+  // ((_ to_fp_unsigned eb sb) RoundingMode (_ BitVec m) (_ FloatingPoint eb
+  // sb)) Semantics:
+  //    Let b in[[(_ BitVec m)]] and let n be the unsigned integer represented
+  //    by b.
   //    [[(_ to_fp_unsigned eb sb)]](r, x) = +infinity if n is too large to be
   //    represented as a finite number of[[(_ FloatingPoint eb sb)]];
-  //    [[(_ to_fp_unsigned eb sb)]](r, x) = y otherwise, where y is the finite number
-  //    such that[[fp.to_real]](y) is closest to n according to rounding mode r.
+  //    [[(_ to_fp_unsigned eb sb)]](r, x) = y otherwise, where y is the finite
+  //    number such that[[fp.to_real]](y) is closest to n according to rounding
+  //    mode r.
 
   unsigned ebits = to->get_exponent_width();
   unsigned sbits = to->get_significand_width();
@@ -1030,13 +1032,15 @@ smt_astt
 fp_convt::mk_smt_typecast_sbv_to_fpbv(smt_astt x, smt_sortt to, smt_astt rm)
 {
   // This is a conversion from unsigned bitvector to float:
-  // ((_ to_fp_unsigned eb sb) RoundingMode (_ BitVec m) (_ FloatingPoint eb sb))
-  // Semantics:
-  //    Let b in[[(_ BitVec m)]] and let n be the unsigned integer represented by b.
+  // ((_ to_fp_unsigned eb sb) RoundingMode (_ BitVec m) (_ FloatingPoint eb
+  // sb)) Semantics:
+  //    Let b in[[(_ BitVec m)]] and let n be the unsigned integer represented
+  //    by b.
   //    [[(_ to_fp_unsigned eb sb)]](r, x) = +infinity if n is too large to be
   //    represented as a finite number of[[(_ FloatingPoint eb sb)]];
-  //    [[(_ to_fp_unsigned eb sb)]](r, x) = y otherwise, where y is the finite number
-  //    such that[[fp.to_real]](y) is closest to n according to rounding mode r.
+  //    [[(_ to_fp_unsigned eb sb)]](r, x) = y otherwise, where y is the finite
+  //    number such that[[fp.to_real]](y) is closest to n according to rounding
+  //    mode r.
 
   unsigned ebits = to->get_exponent_width();
   unsigned sbits = to->get_significand_width();
@@ -1146,7 +1150,7 @@ ieee_floatt fp_convt::get_fpbv(smt_astt a)
 }
 
 static void add_core(
-  smt_convt *ctx,
+  smt_solver_baset *ctx,
   unsigned sbits,
   unsigned ebits,
   smt_astt &c_sgn,
@@ -1551,6 +1555,150 @@ smt_astt fp_convt::mk_smt_fpbv_div(smt_astt x, smt_astt y, smt_astt rm)
   return ctx->mk_ite(c1, v1, result);
 }
 
+smt_astt fp_convt::mk_smt_fpbv_rem(smt_astt x, smt_astt y)
+{
+  assert(x->sort->get_data_width() == y->sort->get_data_width());
+  assert(x->sort->get_exponent_width() == y->sort->get_exponent_width());
+
+  unsigned ebits = x->sort->get_exponent_width();
+  unsigned sbits = x->sort->get_significand_width();
+
+  smt_astt nan = mk_smt_fpbv_nan(false, ebits, sbits);
+  smt_astt nzero = mk_nzero(ebits, sbits);
+  smt_astt pzero = mk_pzero(ebits, sbits);
+
+  smt_astt x_is_nan = mk_smt_fpbv_is_nan(x);
+  smt_astt x_is_zero = mk_smt_fpbv_is_zero(x);
+  smt_astt x_is_pos = mk_is_pos(x);
+  smt_astt x_is_inf = mk_smt_fpbv_is_inf(x);
+  smt_astt y_is_nan = mk_smt_fpbv_is_nan(y);
+  smt_astt y_is_zero = mk_smt_fpbv_is_zero(y);
+  smt_astt y_is_inf = mk_smt_fpbv_is_inf(y);
+
+  // (x is NaN) || (y is NaN) -> NaN
+  smt_astt c1 = ctx->mk_or(x_is_nan, y_is_nan);
+  smt_astt v1 = nan;
+
+  // (x is +-oo) -> NaN
+  smt_astt c2 = x_is_inf;
+  smt_astt v2 = nan;
+
+  // (y is +-oo) -> x
+  smt_astt c3 = y_is_inf;
+  smt_astt v3 = x;
+
+  // (y is 0) -> NaN
+  smt_astt c4 = y_is_zero;
+  smt_astt v4 = nan;
+
+  // (x is 0) -> x
+  smt_astt c5 = x_is_zero;
+  smt_astt v5 = pzero;
+
+  // exp(x) < exp(y) - 1 -> x, since then |x| < |y|/2 already.
+  smt_astt x_exp_raw = extract_exponent(ctx, x);
+  smt_astt y_exp_raw = extract_exponent(ctx, y);
+  smt_astt one_ebits = ctx->mk_smt_bv(BigInt(1), ebits);
+  smt_astt y_exp_m1 = ctx->mk_bvsub(y_exp_raw, one_ebits);
+  smt_astt xe_lt_yem1 = ctx->mk_bvult(x_exp_raw, y_exp_m1);
+  smt_astt ye_neq_zero =
+    ctx->mk_not(ctx->mk_eq(y_exp_raw, ctx->mk_smt_bv(BigInt(0), ebits)));
+  smt_astt c6 = ctx->mk_and(ye_neq_zero, xe_lt_yem1);
+  smt_astt v6 = x;
+
+  // else the actual remainder.
+  smt_astt a_sgn, a_sig, a_exp, a_lz, b_sgn, b_sig, b_exp, b_lz;
+  unpack(x, a_sgn, a_sig, a_exp, a_lz, true);
+  unpack(y, b_sgn, b_sig, b_exp, b_lz, true);
+
+  // The maximum exponent difference between two values of this format. The
+  // significands are aligned by shifting over that whole range, which is what
+  // makes this encoding exact -- and very wide (Z3's fpa2bv does the same).
+  const std::size_t max_exp_diff = (std::size_t{1} << ebits) - 3;
+
+  smt_astt a_exp_ext = ctx->mk_sign_ext(a_exp, 2);
+  smt_astt b_exp_ext = ctx->mk_sign_ext(b_exp, 2);
+  smt_astt a_lz_ext = ctx->mk_zero_ext(a_lz, 2);
+  smt_astt b_lz_ext = ctx->mk_zero_ext(b_lz, 2);
+
+  smt_astt exp_diff = ctx->mk_bvsub(
+    ctx->mk_bvsub(a_exp_ext, a_lz_ext), ctx->mk_bvsub(b_exp_ext, b_lz_ext));
+  smt_astt exp_diff_is_neg =
+    ctx->mk_bvsle(exp_diff, ctx->mk_smt_bv(BigInt(0), ebits + 2));
+
+  smt_astt zero3 = ctx->mk_smt_bv(BigInt(0), 3);
+  smt_astt a_sig_ext =
+    ctx->mk_concat(ctx->mk_zero_ext(a_sig, max_exp_diff), zero3);
+  smt_astt b_sig_ext =
+    ctx->mk_concat(ctx->mk_zero_ext(b_sig, max_exp_diff), zero3);
+
+  const std::size_t shift_ext = max_exp_diff + sbits - ebits + 1;
+  smt_astt lshift = ctx->mk_zero_ext(exp_diff, shift_ext);
+  smt_astt rshift = ctx->mk_zero_ext(ctx->mk_bvneg(exp_diff), shift_ext);
+  assert(
+    lshift->sort->get_data_width() == a_sig_ext->sort->get_data_width() &&
+    "remainder shift amount must match the extended significand width");
+
+  smt_astt shifted = ctx->mk_ite(
+    exp_diff_is_neg,
+    ctx->mk_bvashr(a_sig_ext, rshift),
+    ctx->mk_bvshl(a_sig_ext, lshift));
+  smt_astt huge_rem = ctx->mk_bvumod(shifted, b_sig_ext);
+  smt_astt huge_div = ctx->mk_bvudiv(shifted, b_sig_ext);
+  smt_astt huge_div_is_even =
+    ctx->mk_eq(ctx->mk_extract(huge_div, 0, 0), ctx->mk_smt_bv(BigInt(0), 1));
+
+  smt_astt rndd_sgn = a_sgn;
+  smt_astt rndd_exp = ctx->mk_bvsub(b_exp_ext, b_lz_ext);
+  smt_astt rndd_sig = ctx->mk_extract(huge_rem, sbits + 3, 0);
+  smt_astt rndd_sig_lz = mk_leading_zeros(rndd_sig, ebits + 2);
+
+  // The truncated remainder may land in [|y|/2, |y|), one |y| away from the
+  // round-to-nearest result; the leading-zero count of the raw remainder says
+  // whether its exponent reached exp(y) or exp(y)-1.
+  smt_astt rndd_exp_eq_y_exp =
+    ctx->mk_eq(rndd_sig_lz, ctx->mk_smt_bv(BigInt(1), ebits + 2));
+  smt_astt rndd_exp_eq_y_exp_m1 =
+    ctx->mk_eq(rndd_sig_lz, ctx->mk_smt_bv(BigInt(2), ebits + 2));
+
+  smt_astt y_sig_ext =
+    ctx->mk_concat(ctx->mk_zero_ext(b_sig, 2), ctx->mk_smt_bv(BigInt(0), 2));
+  smt_astt y_sig_le_rndd_sig = ctx->mk_bvsle(y_sig_ext, rndd_sig);
+  smt_astt y_sig_eq_rndd_sig = ctx->mk_eq(y_sig_ext, rndd_sig);
+
+  // A tie (remainder exactly |y|/2) goes to the even quotient.
+  smt_astt adj_cnd = ctx->mk_or(
+    ctx->mk_and(rndd_exp_eq_y_exp, y_sig_le_rndd_sig),
+    ctx->mk_or(
+      ctx->mk_and(
+        rndd_exp_eq_y_exp_m1,
+        ctx->mk_and(y_sig_le_rndd_sig, ctx->mk_not(y_sig_eq_rndd_sig))),
+      ctx->mk_and(
+        rndd_exp_eq_y_exp_m1,
+        ctx->mk_and(y_sig_eq_rndd_sig, ctx->mk_not(huge_div_is_even)))));
+
+  smt_astt rne_bv = mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_EVEN);
+  smt_astt rndd;
+  round(rne_bv, rndd_sgn, rndd_sig, rndd_exp, ebits, sbits, rndd);
+  smt_astt rounded_sub_y = mk_smt_fpbv_sub(rndd, y, rne_bv);
+  smt_astt rounded_add_y = mk_smt_fpbv_add(rndd, y, rne_bv);
+  smt_astt add_cnd = ctx->mk_not(ctx->mk_eq(rndd_sgn, b_sgn));
+  smt_astt adjusted = ctx->mk_ite(add_cnd, rounded_add_y, rounded_sub_y);
+  smt_astt v7 = ctx->mk_ite(adj_cnd, adjusted, rndd);
+
+  // And finally, we tie them together.
+  smt_astt result = ctx->mk_ite(c6, v6, v7);
+  result = ctx->mk_ite(c5, v5, result);
+  result = ctx->mk_ite(c4, v4, result);
+  result = ctx->mk_ite(c3, v3, result);
+  result = ctx->mk_ite(c2, v2, result);
+  result = ctx->mk_ite(c1, v1, result);
+
+  // A zero result carries the sign of x.
+  smt_astt zeros = ctx->mk_ite(x_is_pos, pzero, nzero);
+  return ctx->mk_ite(mk_smt_fpbv_is_zero(result), zeros, result);
+}
+
 smt_astt fp_convt::mk_smt_fpbv_eq(smt_astt lhs, smt_astt rhs)
 {
   // +0 and -0 should return true
@@ -1864,9 +2012,10 @@ void fp_convt::round(
   unsigned sbits,
   smt_astt &result)
 {
-  // Assumptions: sig is of the form f[-1:0] . f[1:sbits-1] [guard,round,sticky],
-  // i.e., it has 2 + (sbits-1) + 3 = sbits + 4 bits, where the first one is in sgn.
-  // Furthermore, note that sig is an unsigned bit-vector, while exp is signed.
+  // Assumptions: sig is of the form f[-1:0] . f[1:sbits-1]
+  // [guard,round,sticky], i.e., it has 2 + (sbits-1) + 3 = sbits + 4 bits,
+  // where the first one is in sgn. Furthermore, note that sig is an unsigned
+  // bit-vector, while exp is signed.
 
   assert(rm->sort->get_data_width() == 3);
   assert(sgn->sort->get_data_width() == 1);
@@ -2190,35 +2339,34 @@ smt_astt fp_convt::mk_ninf(unsigned ew, unsigned sw)
     mk_fpbv_sort(ew, sw - 1));
 }
 
+/* These four go through the local virtuals, not ctx->fp_api: a backend whose
+ * fp_api is a native-theory converter may run this lowering on a temporary
+ * fp_convt over bit-vector operands, and ctx->fp_api would hand those to the
+ * native predicates. For a bit-vector-only backend ctx->fp_api is this, so
+ * the dispatch is unchanged. */
 smt_astt fp_convt::mk_is_pzero(smt_astt op)
 {
-  return ctx->mk_and(
-    ctx->fp_api->mk_smt_fpbv_is_zero(op), ctx->fp_api->mk_is_pos(op));
+  return ctx->mk_and(mk_smt_fpbv_is_zero(op), mk_is_pos(op));
 }
 
 smt_astt fp_convt::mk_is_nzero(smt_astt op)
 {
-  return ctx->mk_and(
-    ctx->fp_api->mk_smt_fpbv_is_zero(op), ctx->fp_api->mk_is_neg(op));
+  return ctx->mk_and(mk_smt_fpbv_is_zero(op), mk_is_neg(op));
 }
 
 smt_astt fp_convt::mk_is_pinf(smt_astt op)
 {
-  return ctx->mk_and(
-    ctx->fp_api->mk_smt_fpbv_is_inf(op), ctx->fp_api->mk_is_pos(op));
+  return ctx->mk_and(mk_smt_fpbv_is_inf(op), mk_is_pos(op));
 }
 
 smt_astt fp_convt::mk_is_ninf(smt_astt op)
 {
-  return ctx->mk_and(
-    ctx->fp_api->mk_smt_fpbv_is_inf(op), ctx->fp_api->mk_is_neg(op));
+  return ctx->mk_and(mk_smt_fpbv_is_inf(op), mk_is_neg(op));
 }
 
 smt_astt fp_convt::mk_from_bv_to_fp(smt_astt op, smt_sortt to)
 {
-  // Tricky, we need to change the type
-  const_cast<smt_ast *>(op)->sort = to;
-  return op;
+  return op->with_sort(ctx, to);
 }
 
 smt_astt fp_convt::mk_from_fp_to_bv(smt_astt op)

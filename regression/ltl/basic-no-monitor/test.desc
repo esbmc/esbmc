@@ -1,0 +1,5 @@
+CORE
+test.c
+--ltl
+^VERIFICATION UNKNOWN$
+^WARNING: No LTL outcome seen; the property was not checked$

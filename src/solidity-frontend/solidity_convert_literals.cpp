@@ -7,13 +7,13 @@
 /// representation with appropriate typing.
 
 #include <solidity-frontend/solidity_convert.h>
-#include <util/arith_tools.h>
-#include <util/bitvector.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/ieee_float.h>
-#include <util/string_constant.h>
-#include <util/std_expr.h>
+#include <util/arith/arith_tools.h>
+#include <util/arith/bitvector.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/arith/ieee_float.h>
+#include <util/expr/string_constant.h>
+#include <util/irep/std_expr.h>
 
 // Integer literal
 bool solidity_convertert::convert_integer_literal(
@@ -162,7 +162,7 @@ bool solidity_convertert::convert_bool_literal(
 // TODO: Character literal
 /**
  * @brief Converts the string literal to a string_constt
- * 
+ *
  * @param the_value the value of the literal
  * @param dest return reference
  * @return true Only if the function fails
@@ -178,7 +178,8 @@ bool solidity_convertert::convert_string_literal(
       * size: constant
           * type: unsignedbv
               * width: 64
-          * value: 0000000000000000000000000000000000000000000000000000000000000101
+          * value:
+  0000000000000000000000000000000000000000000000000000000000000101
           * #cformat: 5
       * subtype: signedbv
           * width: 8
@@ -198,7 +199,7 @@ bool solidity_convertert::convert_string_literal(
 /**
  * convert hex-string to uint constant
  * @n: the bit width, default 256 (unsignedbv_typet(256))
-*/
+ */
 bool solidity_convertert::convert_hex_literal(
   std::string the_value,
   exprt &dest,
@@ -221,10 +222,12 @@ bool solidity_convertert::convert_hex_literal(
     integer2binary(hex_addr, bv_width(type)), integer2string(hex_addr), type);
 
   dest.swap(the_val);
-  dest.type().set("#sol_bytesn_size", the_value.length() / 2);
+  set_sol_bytesn_size(dest.type(), the_value.length() / 2);
   return false;
 }
 
 // TODO: Float literal.
-//    - Note: Currently Solidity does NOT support floating point data types or fp arithmetic.
-//      Everything is done in fixed-point arithmetic as of Solidity compiler v0.8.6.
+//    - Note: Currently Solidity does NOT support floating point data types or
+//    fp arithmetic.
+//      Everything is done in fixed-point arithmetic as of Solidity compiler
+//      v0.8.6.

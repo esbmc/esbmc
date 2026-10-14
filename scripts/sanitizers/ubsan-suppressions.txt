@@ -1,0 +1,21 @@
+# UndefinedBehaviorSanitizer suppressions for ESBMC.
+#
+# Format: one rule per line, comments start with '#'.
+#   <check-name>:<source-path-substring>
+# Common check names: signed-integer-overflow, unsigned-integer-overflow,
+# alignment, null, vla-bound, shift, integer-divide-by-zero, bool, enum,
+# float-cast-overflow, float-divide-by-zero, function, return,
+# vptr, implicit-conversion, nullability-arg, nullability-assign,
+# nullability-return.
+#
+# Keep each rule paired with the issue that tracks the underlying bug.
+# See: https://clang.llvm.org/docs/UndefinedBehaviorSanitizer.html#runtime-suppressions
+#
+# immer's HAMT node allocates its children inline past the declared struct --
+# a variable-length tail sized from the node's bitmap -- so every access to
+# that tail reports as reaching beyond the object. UBSan's object-size check
+# does not model tail allocation, which makes this a false positive of the
+# idiom rather than a defect, and the code is a vendored dependency we do not
+# own (build/_deps/immer-src). It was the *only* UBSan check to fire in the
+# bring-up run: 28044 reports, all of them this one, all in this one header.
+insufficient-object-size:immer/detail/hamts/node.hpp

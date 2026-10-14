@@ -1,0 +1,5 @@
+CORE
+main.c
+--bitwuzllob --bitwuzllob-prog always-sat-mallob.sh --bitwuzllob-model-prog dead-model.sh
+the local model solver is unavailable; cannot build a counterexample
+SMT solver failed

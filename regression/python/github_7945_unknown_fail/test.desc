@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: int\.from_bytes\(\) byteorder must be the constant .big. or .little.$

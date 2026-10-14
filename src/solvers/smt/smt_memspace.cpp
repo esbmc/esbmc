@@ -1,8 +1,10 @@
-#include <algorithm>
 #include <sstream>
-#include <solvers/smt/smt_conv.h>
+#include <utility>
+#include <solvers/smt/smt_solver.h>
 #include <util/message/format.h>
-#include <util/type_byte_size.h>
+#include <util/expr/type_byte_size.h>
+#include <util/lang/c_types.h>
+#include <util/base/prefix.h>
 
 /** @file smt_memspace.cpp
  *  Modelling the memory address space of C isn't something that is handled
@@ -29,41 +31,82 @@
  *  map a pointer to its integer representation, and back again.
  */
 
-smt_astt smt_convt::convert_ptr_cmp(
+smt_astt smt_solver_baset::convert_ptr_cmp(
   const expr2tc &side1,
   const expr2tc &side2,
   const expr2tc &templ_expr)
 {
   // Special handling for pointer comparisons (both ops are pointers; otherwise
-  // it's obviously broken).
+  // it's obviously broken). Only the relational operators are lowered here;
+  // pointer (in)equality is handled on the equality path of convert_ast, which
+  // compares the full (object, offset) representation directly, so it never
+  // reaches this function.
   assert(is_pointer_type(side1));
   assert(is_pointer_type(side2));
-  assert(dynamic_cast<const relation_data *>(templ_expr.get()));
+  assert(is_comp_expr(templ_expr));
 
-  /* Compare just the offsets. This is compatible with both C and CHERI-C,
-   * because we already asserted that they point to the same object (unless
-   * --no-pointer-relation-check was specified, in which case the user opted
-   * out of sanity anyway). */
-
-  /* Create a copy of the expression and replace both sides with the respective
-   * typecasted-to-unsigned versions of the offsets. The unsigned comparison is
-   * required because objects could be larger than half the address space, in
-   * which case offsets could flip sign. */
+  /* Compare the (object, offset) pairs lexicographically. Within one object
+   * this is the offset comparison C defines for related pointers, compatible
+   * with both C and CHERI-C. Across objects — reachable only when the
+   * same-object assertion is disabled — it yields an arbitrary but consistent
+   * total order, so the algebraic properties of the operator (e.g.
+   * antisymmetry of <=) still hold; comparing only the offsets would let
+   * p<=q and q<=p be satisfied simultaneously for distinct objects.
+   *
+   * The offsets are compared signed, as the rest of the model reads them:
+   * __ESBMC_POINTER_OFFSET, the bounds checks and pointer subtraction all
+   * treat a pointer below its object's base as a negative offset. Reading them
+   * unsigned here made p >= b hold for p = b - 1, so a reverse iteration never
+   * terminated (R36). An object larger than half the address space still
+   * mis-orders — pointer_struct's offset member is ptraddr_type2(), full
+   * unsigned width, so the signed annotation here is a reading convention and
+   * not a bound — but that costs an 8 EiB allocation, where the unsigned
+   * reading cost every below-base pointer (R37). */
   type2tc type = get_uint_type(config.ansi_c.address_width);
   type2tc stype = get_int_type(config.ansi_c.address_width);
-  expr2tc op = templ_expr;
-  relation_data &rel = static_cast<relation_data &>(*op);
-  rel.side_1 = typecast2tc(type, pointer_offset2tc(stype, side1));
-  rel.side_2 = typecast2tc(type, pointer_offset2tc(stype, side2));
+  expr2tc o1 = pointer_object2tc(type, side1);
+  expr2tc o2 = pointer_object2tc(type, side2);
+  expr2tc s1 = pointer_offset2tc(stype, side1);
+  expr2tc s2 = pointer_offset2tc(stype, side2);
+  expr2tc same_obj = equality2tc(o1, o2);
+
+  // Lexicographic step: the object ids decide the order; on a tie the offsets
+  // break it. The object comparison is always strict — equal objects fall
+  // through to the offset comparator, which carries the operator's own
+  // strictness (< vs <=). Encoding this once keeps the four operators
+  // consistent.
+  auto lex = [&](const expr2tc &obj_cmp, const expr2tc &off_cmp) {
+    return or2tc(obj_cmp, and2tc(same_obj, off_cmp));
+  };
+
+  expr2tc op;
+  switch (templ_expr->expr_id)
+  {
+  case expr2t::lessthan_id:
+    op = lex(lessthan2tc(o1, o2), lessthan2tc(s1, s2));
+    break;
+  case expr2t::greaterthan_id:
+    op = lex(greaterthan2tc(o1, o2), greaterthan2tc(s1, s2));
+    break;
+  case expr2t::lessthanequal_id:
+    op = lex(lessthan2tc(o1, o2), lessthanequal2tc(s1, s2));
+    break;
+  case expr2t::greaterthanequal_id:
+    op = lex(greaterthan2tc(o1, o2), greaterthanequal2tc(s1, s2));
+    break;
+  default:
+    // equality/notequal never reach here (see above).
+    std::unreachable();
+  }
   return convert_ast(op);
 }
 
-smt_astt
-smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
+smt_astt smt_solver_baset::convert_pointer_arith(
+  const expr2tc &expr,
+  const type2tc &type)
 {
-  const arith_2ops &expr_ref = static_cast<const arith_2ops &>(*expr);
-  const expr2tc &side1 = expr_ref.side_1;
-  const expr2tc &side2 = expr_ref.side_2;
+  const expr2tc &side1 = *expr->get_sub_expr(0);
+  const expr2tc &side2 = *expr->get_sub_expr(1);
 
   // So eight cases; one for each combination of two operands and the return
   // type, being pointer or nonpointer. So with P=pointer, N= notpointer,
@@ -109,9 +152,27 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
         return the_ptr->update(this, convert_ast(the_ptr_offs), 1);
       }
 
-      assert(side1->type == side2->type);
+      // C11 6.5.6p9: both operands of a pointer difference must point to
+      // elements of the same array object, so their element types are
+      // compatible and -- crucially for the division below -- have equal
+      // size. ESBMC's value-set/dereference machinery can nonetheless hand us
+      // two operands whose pointer subtypes are structurally distinct yet
+      // same-sized: classically a void* operand (subtype `empty`, for which
+      // sizeof==1 by the GCC extension) paired with the concrete `char`
+      // element type of the object it was resolved to. Sanity-check equal
+      // element *size* rather than identical pointer types so these legitimate
+      // cases are encoded instead of aborting; the divisor is still side1's
+      // element size, which equals side2's whenever the old structural check
+      // held. The size comparison is structural, so only assert it for
+      // constant (non-VLA) sizes -- two semantically-equal symbolic sizes can
+      // be different expression trees and must not abort a well-formed run.
       expr2tc type_size =
         type_byte_size_expr(to_pointer_type(side1->type).subtype, &ns);
+      expr2tc side2_size =
+        type_byte_size_expr(to_pointer_type(side2->type).subtype, &ns);
+      assert(
+        !is_constant_int2t(type_size) || !is_constant_int2t(side2_size) ||
+        type_size == side2_size);
       type_size = typecast2tc(the_ptr_offs->type, type_size); // diff is signed
       expr2tc ptr_diff = div2tc(the_ptr_offs->type, the_ptr_offs, type_size);
 
@@ -188,7 +249,7 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
   abort();
 }
 
-void smt_convt::renumber_symbol_address(
+void smt_solver_baset::renumber_symbol_address(
   const expr2tc &guard,
   const expr2tc &addr_symbol,
   const expr2tc &new_size)
@@ -198,7 +259,7 @@ void smt_convt::renumber_symbol_address(
 
   const typet *t = nullptr;
   if (const symbolt *s = ns.lookup(sym.thename))
-    t = &s->type;
+    t = &s->get_type();
 
   // Two different approaches if we do or don't have an address-of pointer
   // variable already.
@@ -210,7 +271,7 @@ void smt_convt::renumber_symbol_address(
     // object number, and nondeterministically pick the new value.
 
     unsigned int new_obj_num = pointer_logic.back().get_free_obj_num();
-    smt_astt output = init_pointer_obj(new_obj_num, new_size, t);
+    smt_astt output = init_pointer_obj(new_obj_num, new_size, t, true);
 
     // Now merge with the old value for all future address-of's
 
@@ -220,7 +281,7 @@ void smt_convt::renumber_symbol_address(
   {
     // Newly bumped pointer. Still needs a new number though.
     unsigned int obj_num = pointer_logic.back().get_free_obj_num();
-    smt_astt output = init_pointer_obj(obj_num, new_size, t);
+    smt_astt output = init_pointer_obj(obj_num, new_size, t, true);
 
     // Store in renumbered store.
     renumber_mapt::value_type v(str, output);
@@ -228,7 +289,7 @@ void smt_convt::renumber_symbol_address(
   }
 }
 
-smt_astt smt_convt::convert_identifier_pointer(
+smt_astt smt_solver_baset::convert_identifier_pointer(
   const expr2tc &expr,
   const std::string &symbol,
   const typet *type)
@@ -302,7 +363,10 @@ smt_astt smt_convt::convert_identifier_pointer(
       size = constant_int2tc(ptr_loc_type, BigInt(0x10000));
     }
 
-    smt_astt output = init_pointer_obj(obj_num, size, type);
+    const bool heap =
+      is_symbol2t(expr) &&
+      has_prefix(to_symbol2t(expr).thename.as_string(), "symex_dynamic::");
+    smt_astt output = init_pointer_obj(obj_num, size, type, heap);
     assert_ast(a->eq(this, output));
   }
 
@@ -313,10 +377,11 @@ smt_astt smt_convt::convert_identifier_pointer(
   return a;
 }
 
-smt_astt smt_convt::init_pointer_obj(
+smt_astt smt_solver_baset::init_pointer_obj(
   unsigned int obj_num,
   const expr2tc &size,
-  const typet *type)
+  const typet *type,
+  bool may_be_freed)
 {
   std::vector<expr2tc> membs;
   const struct_type2t &ptr_struct = to_struct_type(pointer_struct);
@@ -356,8 +421,16 @@ smt_astt smt_convt::init_pointer_obj(
   expr2tc end_value = add2tc(ptr_loc_type, start_sym, the_size);
   expr2tc endisequal = equality2tc(end_value, end_sym);
 
-  // Assert that start + size == end
-  assert_expr(endisequal);
+  /* Assert that start + size == end. The size is unguarded: a VLA declared on
+   * a path not taken still gets a layout, so a size no object can have (e.g. a
+   * negative bound, sign-extended) must not make every path infeasible
+   * (#8048). The bound is the largest size symex lets an object have. */
+  const BigInt max_size = options.get_bool_option("no-vla-size-check")
+                            ? max_layable_size()
+                            : max_object_size();
+  expr2tc size_fits =
+    lessthanequal2tc(the_size, constant_int2tc(ptr_loc_type, max_size));
+  assert_expr(implies2tc(size_fits, endisequal));
 
   // Even better, if we're operating in bitvector mode, it's possible that
   // The solver will try to be clever and arrange the pointer range to cross
@@ -366,26 +439,51 @@ smt_astt smt_convt::init_pointer_obj(
   expr2tc no_wraparound = greaterthanequal2tc(end_sym, start_sym);
   assert_expr(no_wraparound);
 
+  /* An object's address is a multiple of its type's alignment (C11 6.2.8,
+   * [basic.align]), so constrain the base address to it. This covers both an
+   * explicit alignas and the natural alignment every other object has; without
+   * the latter, `(uintptr_t)&x % alignof(T) == 0` is satisfiably false and
+   * yields a spurious counterexample. Types of alignment 1 constrain nothing.
+   */
   if (type)
   {
-    const irept &alignment = type->find("alignment");
-    if (alignment.is_not_nil())
+    /* dereferencet::check_alignment() reads a scalar access as aligned from its
+     * offset alone, so it assumes the base carries the access width; without
+     * the same assumption here the two disagree on whether one pointer can be
+     * misaligned (#6951). object_base_alignment() is that shared assumption --
+     * the deref check consults it too, so a packed object, whose base this
+     * leaves unconstrained, no longer reads as aligned there (#7707). */
+    const BigInt a = object_base_alignment(*type, size, ns);
+
+    if (a > 1)
     {
-      expr2tc alignment2;
-      migrate_expr(static_cast<const exprt &>(alignment), alignment2);
-      assert(is_constant_int2t(alignment2));
-      alignment2 = typecast2tc(ptr_loc_type, alignment2);
-      expr2tc zero = gen_zero(ptr_loc_type);
-      expr2tc mod = modulus2tc(ptr_loc_type, start_sym, alignment2);
-      expr2tc mod_is_zero = equality2tc(mod, zero);
-      assert_expr(mod_is_zero);
+      expr2tc mod =
+        modulus2tc(ptr_loc_type, start_sym, constant_int2tc(ptr_loc_type, a));
+      assert_expr(equality2tc(mod, gen_zero(ptr_loc_type)));
     }
+  }
+
+  // Kani's NonNull::dangling() is a small integer (#8207).
+  if (const BigInt floor = first_object_address(); floor > 0)
+    assert_expr(
+      greaterthanequal2tc(start_sym, constant_int2tc(ptr_loc_type, floor)));
+
+  /* SIG_DFL, SIG_ERR and SIG_IGN compare unequal to the address of any
+   * function (C11 7.14p3). glibc, Darwin and the UCRT spell them 0, -1 and 1;
+   * NULL already owns 0, so keep a function off the other two. */
+  if (type && type->is_code())
+  {
+    assert_expr(greaterthan2tc(start_sym, constant_int2tc(ptr_loc_type, 1)));
+    assert_expr(lessthan2tc(
+      end_sym,
+      constant_int2tc(
+        ptr_loc_type, BigInt::power2m1(ptr_loc_type->get_width()))));
   }
 
   // Generate address space layout constraints.
   finalize_pointer_chain(obj_num);
 
-  addr_space_data.back()[obj_num] = 0; // XXX -- nothing uses this data?
+  addr_space_data.back()[obj_num] = may_be_freed;
 
   membs.clear();
   membs.push_back(start_sym);
@@ -403,7 +501,7 @@ smt_astt smt_convt::init_pointer_obj(
   return ptr_val;
 }
 
-void smt_convt::finalize_pointer_chain(unsigned int objnum)
+void smt_solver_baset::finalize_pointer_chain(unsigned int objnum)
 {
   type2tc inttype = ptraddr_type2();
   unsigned int num_ptrs = addr_space_data.back().size();
@@ -436,43 +534,28 @@ void smt_convt::finalize_pointer_chain(unsigned int objnum)
 
     expr2tc e = no_overlap;
 
-    /* If a `__ESBMC_alloc` has already been seen, we use it to make the address
-     * space constraints on all objects except NULL (j == 0) and INVALID
-     * (j == 1) dependent on whether the object is still alive:
+    /* Only a heap object can be freed, so only its no-overlap constraint
+     * depends on whether it is still alive in `__ESBMC_alloc`:
      *   (__ESBMC_alloc[j] == true) => (i_end < j_start || i_start > j_end)
-     * In case the object j was free'd, it no longer restricts the addresses of
-     * the new object i.
+     * __ESBMC_alloc is never set for a stack or static object, so those stay
+     * disjoint from every other object unconditionally.
      *
      * XXXfbrausse: This is crucially relies on the fact that the current
      * version of the __ESBMC_alloc symbol stored in `current_valid_objects_sym`
      * is the one this new object i gets registered with.
      */
-    if (j && current_valid_objects_sym)
-    {
-      expr2tc alive =
-        index2tc(get_bool_type(), current_valid_objects_sym, gen_ulong(j));
-
-      // Tong: When a dynamic object gets registered/freed in __ESBMC_alloc by
-      // symex_malloc()/symex_free(), the alloc bit "alive" is assigned to 1/0.
-      // However, in dataraces check we introduce infinite array to store the address of
-      // shared objects, and if they are not dynamically managed by symex_malloc()/symex_free(),
-      // and it's alloc bit is always 0 by default.
-      // For now, we just modify the races check.
-
-      if (options.get_bool_option("data-races-check") && cur_dynamic)
-      {
-        expr2tc dynamic = index2tc(get_bool_type(), cur_dynamic, gen_ulong(j));
-        e = implies2tc((or2tc(not2tc(dynamic), alive)), e);
-      }
-      else
-        e = implies2tc(alive, e);
-    }
+    const auto obj_j = addr_space_data.back().find(j);
+    if (
+      current_valid_objects_sym && obj_j != addr_space_data.back().end() &&
+      obj_j->second)
+      e = implies2tc(
+        index2tc(get_bool_type(), current_valid_objects_sym, gen_ulong(j)), e);
 
     assert_expr(e);
   }
 }
 
-smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
+smt_astt smt_solver_baset::convert_addr_of(const expr2tc &expr)
 {
   const address_of2t &obj = to_address_of2t(expr);
 
@@ -498,7 +581,7 @@ smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
 
     const typet *t = nullptr;
     if (const symbolt *s = ns.lookup(symbol.thename))
-      t = &s->type;
+      t = &s->get_type();
 
     return convert_identifier_pointer(obj.ptr_obj, symbol.get_symbol_name(), t);
   }
@@ -548,8 +631,7 @@ smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
   {
     // Take the address of whatever's being cast. Either way, they all end up
     // being of a pointer_tuple type, so this should be fine.
-    expr2tc tmp = address_of2tc(type2tc(), to_typecast2t(obj.ptr_obj).from);
-    tmp->type = obj.type;
+    expr2tc tmp = address_of2tc(obj.type, to_typecast2t(obj.ptr_obj).from);
     return convert_ast(tmp);
   }
 
@@ -557,7 +639,7 @@ smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
   abort();
 }
 
-void smt_convt::init_addr_space_array()
+void smt_solver_baset::init_addr_space_array()
 {
   addr_space_sym_num.back() = 1;
 
@@ -620,11 +702,13 @@ void smt_convt::init_addr_space_array()
   assert_expr(
     equality2tc(symbol2tc(pointer_struct, "INVALID"), invalid_ptr_tuple));
 
-  addr_space_data.back()[0] = 0;
-  addr_space_data.back()[1] = 0;
+  addr_space_data.back()[0] = false;
+  addr_space_data.back()[1] = false;
 }
 
-void smt_convt::bump_addrspace_array(unsigned int idx, const expr2tc &val)
+void smt_solver_baset::bump_addrspace_array(
+  unsigned int idx,
+  const expr2tc &val)
 {
   expr2tc oldname = symbol2tc(
     addr_space_arr_type,
@@ -640,7 +724,7 @@ void smt_convt::bump_addrspace_array(unsigned int idx, const expr2tc &val)
   convert_assign(equality2tc(newname, store));
 }
 
-std::string smt_convt::get_cur_addrspace_ident()
+std::string smt_solver_baset::get_cur_addrspace_ident()
 {
   std::stringstream ss;
   ss << "__ESBMC_addrspace_arr_" << addr_space_sym_num.back();

@@ -55,7 +55,8 @@ __ESBMC_HIDE:;
   union __esbmc_cheri_cap128 u = {cap};
   cc128_cap_t comp;
   cc128_decompress_mem(u.pesbt, u.cursor, true /* tag */, &comp);
-  // __ESBMC_assert(u.comp.cr_bounds_valid, "__esbmc_cheri_base_get on capability with invalid bounds");
+  // __ESBMC_assert(u.comp.cr_bounds_valid, "__esbmc_cheri_base_get on
+  // capability with invalid bounds");
   return comp.cr_base;
 }
 
@@ -65,7 +66,8 @@ __ESBMC_HIDE:;
   union __esbmc_cheri_cap128 u = {cap};
   cc128_cap_t comp;
   cc128_decompress_mem(u.pesbt, u.cursor, true /* tag */, &comp);
-  // __ESBMC_assert(u.comp.cr_bounds_valid, "__esbmc_cheri_type_get on capability with invalid bounds");
+  // __ESBMC_assert(u.comp.cr_bounds_valid, "__esbmc_cheri_type_get on
+  // capability with invalid bounds");
   __SIZE_TYPE__ hwperms = cc128_get_perms(&comp);
   __SIZE_TYPE__ swperms = cc128_get_uperms(&comp);
   return hwperms | swperms << CC128_UPERMS_SHFT;
@@ -86,7 +88,8 @@ __ESBMC_HIDE:;
   union __esbmc_cheri_cap128 u = {cap};
   cc128_cap_t comp;
   cc128_decompress_mem(u.pesbt, u.cursor, true /* tag */, &comp);
-  // __ESBMC_assert(comp.cr_bounds_valid, "__esbmc_cheri_type_get on capability with invalid bounds");
+  // __ESBMC_assert(comp.cr_bounds_valid, "__esbmc_cheri_type_get on capability
+  // with invalid bounds");
   return cc128_get_otype(&comp);
 }
 
@@ -99,7 +102,8 @@ __ESBMC_HIDE:;
   return cc128_is_cap_sealed(&comp);
 }
 
-/* modelled after UCAM-CL-TR-951 semantics of CHERI-MIPS instruction CSetBounds */
+/* modelled after UCAM-CL-TR-951 semantics of CHERI-MIPS instruction CSetBounds
+ */
 void *__capability
 __esbmc_cheri_bounds_set(void *__capability cap, __SIZE_TYPE__ sz)
 {
@@ -117,7 +121,8 @@ __ESBMC_HIDE:;
   __PTRADDR_TYPE__ top = cheri_gettop(cap);
 #    endif
   __ESBMC_assert(cheri_gettag(cap), "tag-violation c2exception");
-  // __ESBMC_assert(!cc128_is_cap_sealed(&comp) /*cheri_getsealed(cap)*/, "seal-violation c2exception");
+  // __ESBMC_assert(!cc128_is_cap_sealed(&comp) /*cheri_getsealed(cap)*/,
+  // "seal-violation c2exception");
   __ESBMC_assert(base <= cursor, "length-violation c2exception");
   bool exact = cc128_setbounds(&comp, sz);
   (void)exact; /* ignore */
@@ -248,5 +253,75 @@ __attribute__((annotate("__ESBMC_inf_size"))) _Bool __ESBMC_alloc[1];
 
 __attribute__((annotate("__ESBMC_inf_size"))) _Bool __ESBMC_is_dynamic[1];
 
-__attribute__((annotate("__ESBMC_inf_size")))
-__SIZE_TYPE__ __ESBMC_alloc_size[1];
+__attribute__((
+  annotate("__ESBMC_inf_size"))) __SIZE_TYPE__ __ESBMC_alloc_size[1];
+
+/* CBMC memory primitives, mapped onto ESBMC's memory model (esbmc/esbmc#2457).
+ * Declared in esbmc_intrinsics.h; the semantics reproduced here are CBMC's
+ * doc/cprover-manual/memory-primitives.md. */
+
+__SIZE_TYPE__ __CPROVER_POINTER_OBJECT(const void *p)
+{
+  return __ESBMC_POINTER_OBJECT(p);
+}
+
+__PTRDIFF_TYPE__ __CPROVER_POINTER_OFFSET(const void *p)
+{
+  return __ESBMC_POINTER_OFFSET(p);
+}
+
+_Bool __CPROVER_same_object(const void *p, const void *q)
+{
+  return __ESBMC_same_object(p, q);
+}
+
+__SIZE_TYPE__ __CPROVER_OBJECT_SIZE(const void *p)
+{
+  return p == 0 ? 0 : __ESBMC_get_object_size(p);
+}
+
+_Bool __CPROVER_DYNAMIC_OBJECT(const void *p)
+{
+  return p != 0 && __ESBMC_is_dynamic[__ESBMC_POINTER_OBJECT(p)];
+}
+
+/* __ESBMC_alloc tracks dynamic allocation only: it stays false for a live
+ * static or automatic object, so liveness may only be read off it for objects
+ * __ESBMC_is_dynamic flags. */
+_Bool __CPROVER_LIVE_OBJECT(const void *p)
+{
+  if (p == 0)
+    return 0;
+  __UINTPTR_TYPE__ object = __ESBMC_POINTER_OBJECT(p);
+  return !__ESBMC_is_dynamic[object] || __ESBMC_alloc[object];
+}
+
+_Bool __CPROVER_WRITEABLE_OBJECT(const void *p)
+{
+  return __CPROVER_LIVE_OBJECT(p);
+}
+
+_Bool __CPROVER_r_ok(const void *p, __SIZE_TYPE__ size)
+{
+  if (!__CPROVER_LIVE_OBJECT(p))
+    return 0;
+  __PTRDIFF_TYPE__ offset = __ESBMC_POINTER_OFFSET(p);
+  if (offset < 0)
+    return 0;
+  __SIZE_TYPE__ object_size = __ESBMC_get_object_size(p);
+  if ((__SIZE_TYPE__)offset > object_size)
+    return 0;
+  return size <= object_size - (__SIZE_TYPE__)offset;
+}
+
+/* CBMC's memory is uniformly readable and writeable, so w_ok and rw_ok
+ * coincide with r_ok. */
+_Bool __CPROVER_w_ok(const void *p, __SIZE_TYPE__ size)
+{
+  return __CPROVER_r_ok(p, size);
+}
+
+_Bool __CPROVER_rw_ok(const void *p, __SIZE_TYPE__ size)
+{
+  return __CPROVER_r_ok(p, size);
+}

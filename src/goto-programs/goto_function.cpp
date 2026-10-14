@@ -1,12 +1,17 @@
 #include <cassert>
 #include <goto-programs/goto_convert_class.h>
 #include <goto-programs/goto_functions.h>
-#include <util/c_types.h>
-#include <util/cprover_prefix.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/location.h>
-#include <util/prefix.h>
+#include <util/lang/c_types.h>
+#include <util/symtab/cprover_prefix.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
+#include <util/irep/location.h>
+#include <util/base/prefix.h>
+
+// Defined here rather than beside the other goto_functionst statics in
+// bmc.cpp: symex writes this set, and not every symex client links bmc.cpp.
+std::set<std::string> goto_functionst::truncated_loops;
+std::mutex goto_functionst::truncated_loops_mutex;
 
 void goto_convertt::convert_function_call(
   const code_function_callt &function_call,
@@ -45,6 +50,8 @@ void goto_convertt::do_function_call(
     remove_sideeffects(*it, dest);
   }
 
+  const std::size_t size_before = dest.instructions.size();
+
   // split on the function
   if (
     new_function.id() == "dereference" ||
@@ -63,11 +70,41 @@ void goto_convertt::do_function_call(
   else if (new_function.id() == "NULL-object")
   {
   }
+  else if (new_function.id() == "typecast")
+  {
+    // A pointer-to-function value used directly as a callee. This shows up
+    // when an indirect call through a function-pointer variable/parameter is
+    // nested directly as an argument to another call, before the frontend has
+    // inserted the implicit dereference (e.g. Python's `outer(fp())`). Mirror
+    // clang_c_adjust_expr's handling of a pointer-typed callee: dereference the
+    // pointer-to-code value and dispatch through the dereference path.
+    if (
+      new_function.type().is_pointer() &&
+      new_function.type().subtype().is_code())
+    {
+      // dereference_exprt(op, tp) types the result as tp.subtype(), so passing
+      // the pointer type yields the pointed-to code type.
+      dereference_exprt deref(new_function, new_function.type());
+      deref.location() = new_function.location();
+      do_function_call_dereference(new_lhs, deref, new_arguments, dest);
+    }
+    else
+    {
+      throw "do_function_call: typecast callee is not a pointer-to-code "
+            "value (type id: " +
+        new_function.type().id_string() + ")";
+    }
+  }
   else
   {
-    log_error("unexpected function argument: {}", new_function.id_string());
-    abort();
+    throw "do_function_call: unexpected callee expression (id: " +
+      new_function.id_string() + ")";
   }
+
+  if (
+    dest.instructions.size() > size_before &&
+    dest.instructions.back().is_function_call())
+    record_exception_unwind(dest.instructions.back());
 }
 
 void goto_convertt::do_function_call_if(
@@ -210,13 +247,76 @@ void get_local_identifiers(
 {
   goto_function.body.get_decl_identifiers(dest);
 
-  const code_typet::argumentst &arguments = goto_function.type.arguments();
-
   // add parameters
-  for (const auto &param : arguments)
-  {
-    const irep_idt &identifier = param.get_identifier();
+  for (const irep_idt &identifier :
+       to_code_type(goto_function.type).argument_names)
     if (identifier != "")
       dest.insert(identifier);
+}
+
+/// Every function whose address `e` takes, restricted to names that are
+/// functions. A thread's start routine is reached no other way.
+static void collect_taken_functions(
+  const expr2tc &e,
+  const goto_functionst &goto_functions,
+  std::vector<irep_idt> &out)
+{
+  if (!e)
+    return;
+
+  if (is_address_of2t(e))
+  {
+    const expr2tc &obj = to_address_of2t(e).ptr_obj;
+    if (
+      is_symbol2t(obj) &&
+      goto_functions.function_map.count(to_symbol2t(obj).thename))
+      out.push_back(to_symbol2t(obj).thename);
   }
+
+  e->foreach_operand([&goto_functions, &out](const expr2tc &sub) {
+    collect_taken_functions(sub, goto_functions, out);
+  });
+}
+
+/// Whether the program can create a thread. Every route -- pthread_create,
+/// std::thread, a CUDA kernel launch, threading.Thread -- lowers to the
+/// __ESBMC_spawn_thread intrinsic, so reaching it is the creation point.
+/// Reachability and not presence: pthread_lib.c is linked into every program.
+/// An indirect call needs no special case: symex resolves one through the value
+/// set into a list of concrete symbols (get_function_list in
+/// symex_function.cpp), so it can only reach a function whose address is taken
+/// somewhere -- which is exactly what collect_taken_functions seeds the
+/// worklist with.
+bool spawns_threads(const goto_functionst &goto_functions)
+{
+  const irep_idt spawn_intrinsic("c:@F@__ESBMC_spawn_thread");
+
+  std::set<irep_idt> seen;
+  std::vector<irep_idt> work{goto_functions.main_id()};
+  while (!work.empty())
+  {
+    const irep_idt fn = work.back();
+    work.pop_back();
+    if (fn == spawn_intrinsic)
+      return true;
+    if (!seen.insert(fn).second)
+      continue;
+
+    const auto f = goto_functions.function_map.find(fn);
+    if (f == goto_functions.function_map.end() || !f->second.body_available)
+      continue;
+
+    forall_goto_program_instructions (it, f->second.body)
+    {
+      if (it->is_function_call())
+      {
+        const expr2tc &callee = to_code_function_call2t(it->code).function;
+        if (!is_nil_expr(callee) && is_symbol2t(callee))
+          work.push_back(to_symbol2t(callee).thename);
+      }
+      collect_taken_functions(it->code, goto_functions, work);
+      collect_taken_functions(it->guard, goto_functions, work);
+    }
+  }
+  return false;
 }

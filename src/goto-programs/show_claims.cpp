@@ -1,9 +1,7 @@
 #include <goto-programs/show_claims.h>
 #include <langapi/language_util.h>
-#include <util/i2string.h>
+#include <util/base/i2string.h>
 #include <util/message/format.h>
-#include <util/xml.h>
-#include <util/xml_irep.h>
 
 void show_claims(
   const namespacet &ns,

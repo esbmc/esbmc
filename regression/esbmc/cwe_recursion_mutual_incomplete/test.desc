@@ -1,0 +1,6 @@
+CORE
+main.c
+--unwind 8
+^VERIFICATION FAILED$
+^  recursion unwinding assertion$
+\A(?![\s\S]*CWE)[\s\S]*\Z

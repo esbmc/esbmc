@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--clang-cpp-irep2-adjust-only --std c++11
+^VERIFICATION FAILED$
+^  assertion copied\.value == 11$

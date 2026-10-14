@@ -1,0 +1,992 @@
+#pragma once
+
+#include <nlohmann/json.hpp>
+#include <python-frontend/python_converter.h>
+#include <python-frontend/symbol_id.h>
+#include <python-frontend/type/type_handler.h>
+#include <util/irep/expr.h>
+#include <map>
+#include <set>
+#include <unordered_map>
+
+enum class FunctionType
+{
+  Constructor,
+  ClassMethod,
+  InstanceMethod,
+  FreeFunction,
+};
+
+class symbol_id;
+class code_function_callt;
+class locationt;
+
+class function_call_expr
+{
+public:
+  /**
+   * Folds a CPython byteorder string bound to params[param_idx] of the
+   * int.from_bytes model, whose parameter is a bool, and leaves every other
+   * argument unchanged.
+   * Throws unless the argument is the constant "big" or "little": a literal,
+   * or a name `module` binds exactly once, at top level, to a literal.
+   */
+  static exprt fold_from_bytes_byteorder(
+    exprt arg,
+    const nlohmann::json &node,
+    const symbolt &func_symbol,
+    const code_typet::argumentst &params,
+    std::size_t param_idx,
+    const nlohmann::json &module);
+
+  function_call_expr(
+    const symbol_id &function_id,
+    const nlohmann::json &call,
+    python_converter &converter);
+
+  virtual ~function_call_expr() = default;
+
+  /*
+   * Converts the function from the AST into an exprt.
+   */
+  virtual exprt get();
+
+  const symbol_id &get_function_id() const
+  {
+    return function_id_;
+  }
+
+  /*
+   * Removes temporary $ctor_self$ parameters from constructor call arguments.
+   * Used when constructors are passed as arguments (e.g., foo(Positive(2))).
+   * The correct self parameter will be added by goto_sideeffects later.
+   */
+  static exprt::operandst
+  strip_ctor_self_parameters(const exprt::operandst &args);
+
+private:
+  friend class function_call_expr_test_access;
+
+  /// Fold a constant integer component of a tuple being sorted at convert
+  /// time; follows symbols, unary minus and widening typecasts.
+  bool eval_const_int(const exprt &e, BigInt &out) const;
+
+  /// Fold a constant str component of such a tuple (#6883).
+  bool eval_const_str(const exprt &e, std::string &out) const;
+
+  /*
+   * Build the receiver for a method called on a constructor temporary
+   * (`A().f()`), running A's __init__ when it has one.
+   */
+  exprt build_temporary_receiver(const nlohmann::json &ctor_call) const;
+
+  /*
+   * Check if the current function call is to math.comb() function
+   * Returns true if this is a call to math.comb
+   */
+  bool is_math_comb_call() const;
+
+  /*
+   * Handles math.comb() function calls with type checking.
+   * Validates that both arguments are integers (not floats).
+   * Returns TypeError exception if arguments are not integers.
+   * Otherwise delegates to the comb implementation function.
+   */
+  exprt handle_math_comb() const;
+
+  /*
+   * Validates that function call arguments match expected parameter types.
+   * Returns TypeError exception if type mismatch is detected, nil_exprt
+   * otherwise.
+   */
+  exprt check_argument_types(
+    const symbolt *func_symbol,
+    const nlohmann::json &args,
+    const nlohmann::json &keywords) const;
+
+  /// Whether `actual` satisfies `param`, counting every type the parameter's
+  /// annotation names -- a union's members are not all its declared type.
+  bool argument_matches_parameter(
+    const code_typet::argumentt &param,
+    const typet &actual) const;
+
+  // Helper methods for AttributeError detection
+  std::vector<std::string>
+  find_possible_class_types(const symbolt *obj_symbol) const;
+
+  bool method_exists_in_class_hierarchy(
+    const std::string &class_name,
+    const std::string &method_name) const;
+
+  exprt generate_attribute_error(
+    const std::string &method_name,
+    const std::vector<std::string> &possible_classes,
+    const typet &expected_type = typet()) const;
+
+  /**
+   * Determines whether a non-deterministic function is being invoked.
+   */
+  bool is_nondet_call() const;
+
+  bool is_introspection_call() const;
+
+  /// True for a bare `hash(x)` whose argument is not bytes-typed, i.e. not
+  /// the consensus spec's own `hash(data: bytes) -> Bytes32`.
+  bool is_generic_hash_call() const;
+
+  /// An opaque nondet int, standing in for Python's real hash() on a
+  /// non-bytes argument.
+  exprt handle_generic_hash();
+
+  /// The first abstract method the abc.ABC subclass that @p ctor_call
+  /// constructs leaves unimplemented, or "" when it constructs nothing
+  /// abstract.
+  std::string
+  unimplemented_abstract_method(const nlohmann::json &ctor_call) const;
+
+  bool is_abstract_instantiation() const;
+
+  /// The TypeError CPython raises on instantiating an abstract class.
+  exprt abstract_instantiation_error(const nlohmann::json &ctor_call) const;
+
+  static void collect_method_abstractness(
+    const python_converter &converter,
+    const std::string &class_name,
+    std::map<std::string, bool> &methods,
+    std::set<std::string> &visited,
+    bool &is_abc);
+
+  bool is_input_call() const;
+
+  bool is_print_call() const;
+
+  /* Processes Python print() statements by evaluating all arguments.
+   * @return nil_exprt since print has no return value
+   */
+  exprt handle_print() const;
+
+  // Create an expression that represents non-deterministic string input
+  exprt handle_input() const;
+
+  // Helper method for UTF-8 logic
+  int decode_utf8_codepoint(const std::string &utf8_str) const;
+
+  /*
+   * Creates an expression for a non-deterministic function call.
+   */
+  exprt build_nondet_call() const;
+
+  /*
+   * Creates a constant expression from function argument.
+   */
+  exprt build_constant_from_arg() const;
+
+  std::optional<BigInt>
+  try_fold_constant_arith_json(const nlohmann::json &node) const;
+
+  /*
+   * Folds bytes.fromhex("..") over a constant hex string into a byte array.
+   */
+  exprt handle_bytes_fromhex() const;
+
+  /*
+   * Sets the function_type_ attribute based on the call information.
+   */
+  void get_function_type();
+
+  /*
+   * The AST node of the named class, from the main module or, when the main
+   * module's body does not hold it, from the module that defines it (#7546).
+   */
+  nlohmann::json find_class_node(const std::string &name) const;
+  bool resolves_to_staticmethod(
+    const nlohmann::json &class_node,
+    const std::string &method) const;
+  const symbolt *
+  find_inherited_classmethod(const std::string &func_symbol_id) const;
+  std::optional<exprt>
+  build_post_init_forward_call(const std::string &func_symbol_id);
+
+  exprt forward_constant_return(const nlohmann::json &func_node) const;
+
+  /*
+   * Retrieves the object (caller) name from the AST.
+   */
+  std::string get_object_name() const;
+
+  /*
+   * Resolves the list symbol for a list method call.
+   * Handles both a plain name (e.g. mylist.append()) and a subscript of
+   * a nested list (e.g. nested[0].append()) by looking up the inner list
+   * symbol via the element-type registry.  Returns nullptr when not found.
+   * On return, `display_name` holds a human-readable identifier suitable
+   * for error messages (e.g. "mylist" or "nested[0]").
+   */
+  const symbolt *get_object_list_symbol(std::string &display_name) const;
+
+  /**
+   * @brief Resolve the list receiver of a method call to a symbol.
+   *
+   * A named receiver (`a.index(x)`) resolves through get_object_list_symbol. A
+   * list *literal* receiver (`[1, 2, 1].index(x)`) has no named symbol, so it
+   * is converted here and the temporary symbol its construction creates is
+   * returned. Without this the call fell through to the general-call handler,
+   * which folded `index()` to a constant 0 and verified false assertions.
+   *
+   * @param display_name Receiver name for diagnostics, when there is one.
+   * @return The receiver's symbol, or null when it is neither.
+   */
+  const symbolt *resolve_list_receiver_symbol(std::string &display_name) const;
+
+  /**
+   * @brief Fold a wholly literal list.count()/list.index() at conversion time.
+   *
+   * Keeps the result independent of --unwind: the list model searches with a
+   * loop, so a truncated one would silently mis-verify. Returns nothing when
+   * the receiver is not a list literal, when any operand is not itself a
+   * literal, or when index() would raise ValueError.
+   */
+  std::optional<exprt> fold_constant_list_query() const;
+  void materialize_list_symbol(const symbolt *sym) const;
+
+  /*
+   * Handles int-to-str conversions (e.g., str(65)) by generating
+   * the appropriate cast expression.
+   */
+  exprt handle_int_to_str(nlohmann::json &arg) const;
+
+  exprt handle_int_to_bytes() const;
+
+  /*
+   * Folds a zero-argument int method on a constant literal receiver
+   * (e.g. (255).bit_length(), (7).bit_count(), (5).conjugate()). A Name or
+   * BinOp receiver already routes through the int operational model; a bare
+   * literal receiver is not classified as an int instance, so fold it here.
+   */
+  exprt handle_int_literal_method() const;
+
+  /*
+   * Folds float.is_integer() on a constant literal receiver
+   * (e.g. (2.0).is_integer()). A Name receiver already routes through the
+   * float operational model; a bare literal is not classified as a float
+   * instance, so fold it here to a Python bool.
+   */
+  exprt handle_float_is_integer_literal() const;
+
+  /**
+   * @brief Fold (3.5).hex() on a constant float literal receiver to CPython's
+   *        hexadecimal string ("0x1.c000000000000p+1").
+   */
+  exprt handle_float_hex_literal() const;
+
+  /**
+   * @brief Fold float.fromhex("0x1.8p3") on a constant string to a double,
+   *        the inverse of float.hex().
+   */
+  exprt handle_float_fromhex() const;
+
+  /*
+   * Extracts a string representation from a symbol's constant value.
+   * Handles both character arrays (e.g., ['6', '5']) and single-character
+   * constants by decoding their binary-encoded bitvector representations.
+   */
+  std::optional<std::string>
+  extract_string_from_symbol(const symbolt *sym) const;
+
+  /*
+   * Looks up a Python variable's symbol using its identifier and the
+   * current filename to construct the full scoped symbol name.
+   */
+  const symbolt *lookup_python_symbol(const std::string &var_name) const;
+
+  exprt handle_isinstance() const;
+
+  /// isinstance(obj, type) for a str-typed `obj` that is not a known class
+  /// object: a type object and a string share the char-array model.
+  exprt isinstance_str_as_type(const exprt &obj_expr) const;
+
+  exprt handle_hasattr() const;
+
+  /// getattr(obj, "name"[, default]) with a literal name, lowered to the
+  /// attribute read or the default when every instance of obj's class is
+  /// known to have, or to lack, the attribute; refused otherwise.
+  bool is_getattr_call() const;
+  exprt handle_getattr();
+
+  /*
+   * hasattr()'s first argument when it names an imported module. A module is
+   * not a first-class value here, so it has no symbol of its own; resolve the
+   * attribute against the symbols the module contributed instead. Returns
+   * nullopt when the argument does not name an imported module.
+   */
+  std::optional<exprt> module_hasattr(
+    const nlohmann::json &obj_arg,
+    const std::string &attr_name) const;
+
+  /*
+   * Handles issubclass(cls, classinfo): resolves the class hierarchy from the
+   * AST at compile time. classinfo may be a single class or a tuple of classes.
+   */
+  exprt handle_issubclass() const;
+
+  /*
+   * Handles callable(obj): statically decides whether obj is callable
+   * (functions, classes, builtin type constructors, lambdas, or instances of
+   * a class defining __call__).
+   */
+  exprt handle_callable() const;
+
+  exprt handle_type_call() const;
+  std::string
+  exact_instance_class(const nlohmann::json &arg, const exprt &expr) const;
+
+  /*
+   * Whether a string symbol's stored constant is the only value it can hold
+   * at this call: it is assigned exactly once in scope. The stored value is
+   * only its last static assignment, so a rebound name must not be folded.
+   */
+  bool is_single_assignment_str_symbol(
+    const symbolt *sym,
+    const std::string &name) const;
+
+  /*
+   * Folds int() of a single-assignment string symbol (e.g. s = '65';
+   * int(s)). Returns std::nullopt when the string is not a valid literal, so
+   * the caller emits the runtime conversion that raises ValueError.
+   */
+  std::optional<exprt> handle_str_symbol_to_int(const symbolt *sym) const;
+
+  /*
+   * Folds float() of a single-assignment string symbol. Returns std::nullopt
+   * when the string does not parse as a float (see handle_str_symbol_to_int).
+   */
+  std::optional<exprt> handle_str_symbol_to_float(const symbolt *sym) const;
+
+  /*
+   * Handles float-to-str conversions (e.g., str(5.5)) by converting
+   * the float value into a string representation and generating
+   * the corresponding constant character array expression.
+   */
+  exprt handle_float_to_str(nlohmann::json &arg) const;
+
+  /*
+   * Handles complex-to-str conversions (e.g., str(complex(1,2)) → "(1+2j)").
+   * Formats constant complex values using Python's repr rules.
+   */
+  exprt handle_complex_to_str() const;
+
+  /*
+   * Handles string arguments (e.g., str("abc")) by converting them
+   * into character array expressions.
+   */
+  size_t handle_str(nlohmann::json &arg) const;
+
+  /*
+   * Handles float-to-int conversions (e.g., int(3.14)) by generating
+   * the appropriate cast expression.
+   */
+  void handle_float_to_int(nlohmann::json &arg) const;
+
+  /*
+   * Raises OverflowError (infinity) or ValueError (NaN) before int() truncates
+   * a float @p operand given without a @p base; returns the operand to convert.
+   */
+  exprt guard_nonfinite_float_to_int(exprt operand, const exprt &base) const;
+
+  /*
+   * Handles int-to-float conversions (e.g., float(3)) by generating
+   * the appropriate cast expression.
+   */
+  void handle_int_to_float(nlohmann::json &arg) const;
+
+  /*
+   * Handles chr(int) conversions by creating a single-character
+   * string expression from an integer.
+   */
+  exprt handle_chr(nlohmann::json &arg) const;
+
+  /*
+   * Handles hexadecimal string arguments (e.g., hex(255) -> "0xff")
+   * by building a constant expression representing the string.
+   */
+  exprt handle_hex(nlohmann::json &arg) const;
+
+  /*
+   * Handles octal string arguments (e.g., oct(8) -> "0o10")
+   * by building a constant expression representing the resulting
+   * string. Supports both positive and negative integers,
+   * following the Python 3 built-in `oct()` function semantics.
+   */
+  exprt handle_oct(nlohmann::json &arg) const;
+
+  /*
+   * Handles binary string arguments (e.g., bin(5) -> "0b101"), following
+   * the Python 3 built-in `bin()` semantics for positive and negative ints.
+   */
+  exprt handle_bin(nlohmann::json &arg) const;
+
+  /*
+   * Handles ascii(obj): like repr(obj) but escapes non-ASCII code points as
+   * \xNN / \uNNNN / \UNNNNNNNN, following Python 3 `ascii()` semantics.
+   */
+  exprt handle_ascii() const;
+
+  /*
+   * Handles the builtin format(value[, spec]) for a constant value with a bare
+   * presentation-type spec: the integer base specs ('d'/'x'/'X'/'o'/'b') and
+   * the default/empty spec (str(value)). Width/alignment/precision specs and
+   * non-constant values are not folded — they raise a clean error.
+   */
+  exprt handle_format() const;
+
+  /*
+   * Handles ord(str) conversions by extracting the Unicode code point
+   * (as an integer) from a single-character string expression.
+   */
+  exprt handle_ord(nlohmann::json &arg) const;
+
+  /*
+   * Rewrites the argument AST node into an integer Constant holding the given
+   * code point and returns the resulting int expression. Helper for handle_ord.
+   */
+  /// Code point of a constant char array -- what chr() folds to -- or nullopt
+  /// when @p e is not one. bytes are long_long_int arrays and are excluded, so
+  /// ord(b"\xc3") keeps its existing behaviour rather than becoming an error.
+  std::optional<int> folded_char_array_codepoint(const exprt &e) const;
+
+  exprt build_ord_constant(nlohmann::json &arg, int code_point) const;
+
+  /*
+   * Handles abs() function calls by computing the absolute value of the
+   * argument. The argument can be an integer, a floating-point number, or an
+   * object implementing the __abs__() method. The function returns an
+   * expression representing the absolute value.
+   */
+  exprt handle_abs(nlohmann::json &arg) const;
+
+  /*
+   * Handles round() function calls by rounding a numeric value.
+   * round(x) returns the nearest integer (as int).
+   * round(x, n) returns x rounded to n decimal places (as float).
+   */
+  exprt handle_round(nlohmann::json &arg) const;
+
+  /*
+   * Handles complex() constructor calls.
+   * Supported overloads:
+   * - complex() -> 0.0 + 0.0j
+   * - complex(x) -> float(x) + 0.0j
+   * - complex(x, y) -> float(x) + float(y)j
+   */
+  exprt handle_complex() const;
+
+  /*
+   * Checks if the current function call is a min() or max() built-in function.
+   * Returns true if the function name matches "min" or "max", false otherwise.
+   */
+  bool is_min_max_call() const;
+
+  /*
+   * Handles min() or max() function calls by generating conditional
+   * expressions. Accepts a single iterable/tuple argument or two or more
+   * positional arguments, building a comparison chain. For min(a, b),
+   * generates: a < b ? a : b For max(a, b), generates: a > b ? a : b Performs
+   * type compatibility checking with automatic int-to-float promotion.
+   */
+  exprt
+  handle_min_max(const std::string &func_name, irep_idt comparison_op) const;
+
+  // Tuple method detection and handling (count, index)
+  bool is_tuple_method_call() const;
+  exprt handle_tuple_method() const;
+
+  // Dict method detection and handling
+  bool is_dict_method_call() const;
+  exprt handle_dict_method() const;
+
+  // True when the Name receiver positively resolves to a non-dict object type
+  // (a class instance, identified by a struct tag other than
+  // "__python_dict__"). Used to stop dict-named methods (get/pop/keys/...) from
+  // shadowing a class's own same-named method (e.g. queue.Queue.get()).
+  bool receiver_is_non_dict_object() const;
+
+  // Dict class method detection (e.g. dict.fromkeys([1, 2, 3]))
+  bool is_dict_class_method_call() const;
+
+  // Set method detection and handling
+  bool is_set_method_call() const;
+  exprt handle_set_method() const;
+
+  // List method detection and handling
+  bool receiver_is_tracked_numpy_view(const std::string &recv_type) const;
+  bool receiver_is_binop_or_list_symbol() const;
+  bool is_list_method_call() const;
+  exprt handle_list_method() const;
+  exprt handle_list_append() const;
+  exprt handle_list_insert() const;
+  exprt handle_list_extend() const;
+  exprt handle_list_clear() const;
+  exprt handle_list_pop() const;
+  // deque front-end methods, modelled on the list backing store
+  // (collections.deque is a list in our model): popleft() == pop(0),
+  // appendleft(x) == insert(0, x).
+  exprt handle_list_popleft() const;
+  exprt handle_list_appendleft() const;
+  exprt handle_list_copy() const;
+  exprt handle_list_remove() const;
+  exprt handle_list_sort() const;
+  exprt handle_list_reverse() const;
+  exprt handle_list_count() const;
+  exprt handle_list_index() const;
+
+  // numpy ndarray.astype(dtype): runtime element-wise dtype cast.
+  bool is_numpy_astype_call() const;
+  exprt handle_numpy_astype() const;
+
+  /*
+   * Check if the current function call is to a regular expression module
+   * function Returns true if the function is match, search, or fullmatch from
+   * the re module
+   */
+  bool is_re_module_call() const;
+
+  /*
+   * Validate arguments for regular expression module functions
+   * Checks that pattern and string arguments are string types (array or pointer
+   * to char) Returns TypeError exception if validation fails, nil_exprt if
+   * validation passes
+   */
+  exprt validate_re_module_args() const;
+  void route_re_flags_call();
+
+  bool is_any_call() const;
+  bool is_all_call() const;
+
+  // Convert an IR expression to its Python truthiness value.
+  // Handles None, bool, int, float, complex, pointer types.
+  exprt compute_element_truthiness(const exprt &element) const;
+
+  enum class ReduceOp
+  {
+    Any,
+    All
+  };
+
+  /*
+   * Reduce a list or tuple literal by combining the truthiness of its
+   * elements. Used by both any() and all().
+   */
+  exprt reduce_iterable_literal_truthiness(
+    const nlohmann::json &iterable_arg,
+    ReduceOp op) const;
+
+  /*
+   * Reduce a tuple-typed expression (struct with tag-tuple* type) by
+   * combining the truthiness of its members. Used by both any() and
+   * all() when the argument is a Name bound to a tuple value rather
+   * than a tuple literal.
+   */
+  exprt
+  reduce_tuple_expr_truthiness(const exprt &tuple_expr, ReduceOp op) const;
+
+  // Combine two boolean truthiness expressions according to the reduction
+  // operator: any() folds with logical OR, all() with logical AND.
+  static exprt combine_truthiness(exprt acc, exprt next, ReduceOp op);
+
+  // Shared implementation for handle_any/handle_all.
+  exprt handle_any_all(ReduceOp op, const char *name);
+
+  /**
+   * Convert an integer to a string representation in a specific base
+   * Implements common logic for Python's hex(), oct(), and similar functions
+   */
+  exprt handle_base_conversion(
+    nlohmann::json &arg,
+    const std::string &func_name,
+    const std::string &prefix,
+    std::ios_base &(*base_formatter)(std::ios_base &)) const;
+
+  /**
+   * Check if a JSON argument represents a string value
+   * Handles various representations: type annotation, value type, and constants
+   */
+  bool is_string_arg(const nlohmann::json &arg) const;
+
+  /**
+   * Handles divmod() built-in function calls.
+   */
+  exprt handle_divmod() const;
+
+  /**
+   * Handles pow() built-in function calls.
+   * pow(base, exp)      == base ** exp
+   * pow(base, exp, mod) == (base ** exp) % mod  (integer operands only)
+   */
+  exprt handle_pow() const;
+
+  // Handler function type for dispatch table
+  using HandlerFunction = std::function<exprt()>;
+  using PredicateFunction = std::function<bool()>;
+
+  struct FunctionHandler
+  {
+    PredicateFunction predicate;
+    HandlerFunction handler;
+    const char *description; // For debugging/documentation
+  };
+
+  // Initialize dispatch table
+  std::vector<FunctionHandler> get_dispatch_table();
+
+  // --- get_dispatch_table() decomposition helpers ---
+  // The dispatch table pairs a predicate with a handler for each special
+  // function shape. The predicates and handlers below were lifted verbatim out
+  // of the inline lambdas in get_dispatch_table() so that the table itself
+  // reads as a flat list of {predicate, handler, name} entries. Extraction is
+  // purely mechanical: each helper is invoked from the same one-line lambda it
+  // replaced, so the predicates are still evaluated lazily and in the same
+  // order, and each handler still runs only when its predicate matched.
+  // Predicates only read state, so they are const; handlers may append to the
+  // current GOTO block or call non-const helpers, so they are non-const.
+
+  // int.to_bytes() with an int/int-typed/int-literal receiver.
+  bool is_int_to_bytes_call() const;
+  // Zero-arg int methods (bit_length/bit_count/conjugate) on a constant literal
+  // receiver that fits a signed 64-bit value.
+  bool is_int_literal_method_call() const;
+  // float.is_integer() on a constant float-literal receiver.
+  bool is_float_is_integer_literal_call() const;
+  // float.hex() on a constant float-literal receiver.
+  bool is_float_hex_literal_call() const;
+  // __iter__ on a builtin iterable (range/list/tuple/str/set/...).
+  bool is_iter_on_builtin_call() const;
+  // x.__str__() with no args on a builtin scalar (int/float/bool/str).
+  bool is_str_on_builtin_scalar_call() const;
+  // x.__str__() on a builtin scalar -> route to str(x).
+  exprt handle_str_on_builtin_scalar();
+  // math.isnan / math.isinf (spelled __ESBMC_isnan / __ESBMC_isinf).
+  exprt handle_isnan_isinf();
+  // cmath.log / cmath.log10.
+  bool is_cmath_log_call() const;
+  exprt handle_cmath_log_dispatch();
+  // cmath inverse functions (asin/atan/asinh/atanh/acos/acosh) fast path.
+  bool is_cmath_inverse_call() const;
+  exprt handle_cmath_inverse_fast_path();
+  // Real-valued math module functions (sin/cos/sqrt/exp/log/etc.).
+  bool is_math_function_dispatch_call() const;
+  exprt handle_math_function_dispatch();
+
+  // General function call handler
+  exprt handle_general_function_call();
+
+  /// The symbol of a method call's named receiver; null when it has no name.
+  symbolt *find_receiver_symbol(symbol_id &obj_symbol_id) const;
+
+  /// The value of a method call's receiver expression, passed as self.
+  exprt build_value_receiver(const symbolt &method) const;
+
+  // --- handle_general_function_call() decomposition helpers ---
+  // Each "try_"/optional-returning helper extracts a self-contained block of
+  // handle_general_function_call(). A returned value is the result the caller
+  // must return immediately; std::nullopt means "no match — fall through",
+  // preserving the original sequential control flow exactly.
+
+  /*
+   * sorted() fast-path: a single-arg sorted() over a concrete int/tuple list is
+   * materialized in the frontend, avoiding the runtime list sort/equality
+   * model. Honours reverse=<constant bool>; returns nullopt for any other
+   * shape.
+   */
+  std::optional<exprt> try_fold_sorted();
+  std::optional<exprt> try_materialize_numpy_tolist();
+  std::optional<exprt> try_reduce_numpy_descriptor_method();
+
+  // a.sort(): in-place ascending sort over a concrete 1-D ndarray. Unlike
+  // sum/mean/argmin/..., this mutates its receiver (np.sort(a) instead
+  // returns a new array), so it cannot be normalized into the
+  // dispatch_rewrite_methods free-function shape; it is handled here as its
+  // own method. Returns nullopt for anything but a `<array>.sort()` call, so
+  // an unrelated (e.g. list) receiver falls through to its own handler
+  // unchanged.
+  std::optional<exprt> try_numpy_inplace_sort();
+
+  // a.sort()'s own axis= keyword scan: a literal integer or throws. Split
+  // out of try_numpy_inplace_sort to keep that function's own decision
+  // count down.
+  long long extract_numpy_inplace_sort_axis() const;
+
+  // reject_numpy_view_mutating_method_call (called from
+  // try_numpy_inplace_sort) only covers a *copied* view; a transpose/
+  // reshape view is not a copy (writes to it are meaningful) but sort() has
+  // no support for writing through one yet. Split out to keep
+  // try_numpy_inplace_sort's own decision count down.
+  void reject_numpy_sort_write_through_view(
+    const nlohmann::json &receiver_node) const;
+
+  // One-line dispatch guard combining the two numpy method fast paths above
+  // so handle_general_function_call()'s own decision count does not grow
+  // with each one -- same reasoning as numpy_call_expr.cpp's
+  // get_arange_expr()/try_get_pointer_view_call_result().
+  std::optional<exprt> try_numpy_tolist_or_inplace_sort();
+
+  // axis= handling for any()/all(), covering both call shapes
+  // try_reduce_numpy_descriptor_method() resolves a receiver for. Returns
+  // nullopt (no axis given) so the caller falls through to its own
+  // flattened reduction unchanged. Split out to keep that function's own
+  // decision count down.
+  std::optional<exprt> try_reduce_any_all_along_axis(
+    const std::string &func_name,
+    const std::string &qualifier,
+    const std::pair<std::vector<std::size_t>, std::vector<exprt>> &materialized,
+    std::size_t positional_offset);
+
+  // The k-th output slot's inner run (a column when axis==0, a row when
+  // axis==1), combined via the same truthiness reduction the flattened path
+  // uses. Split out of try_reduce_any_all_along_axis for the same reason.
+  exprt reduce_any_all_axis_slice(
+    const std::vector<exprt> &elems,
+    const std::vector<std::size_t> &shape,
+    long long normalized_axis,
+    std::size_t k,
+    ReduceOp op) const;
+
+  // np.any(a_1d, axis=0)/np.all(a_1d, axis=0): the only valid axis for a
+  // 1-D array reduces the whole array to a single scalar (matching real
+  // numpy's 0-d result), not a 1-element array. Split out of
+  // try_reduce_any_all_along_axis for the same reason as
+  // reduce_any_all_axis_slice.
+  exprt
+  reduce_any_all_rank1(const std::vector<exprt> &elems, ReduceOp op) const;
+
+  // Validates the materialized receiver's rank (1-D or 2-D only) and rejects
+  // a zero-size array (no reduction identity for any/all). Split out of
+  // try_reduce_any_all_along_axis to keep that function's own decision
+  // count down.
+  static void validate_any_all_axis_shape(
+    const std::vector<std::size_t> &shape,
+    const std::string &func_name,
+    const std::string &qualifier);
+
+  // Who any()/all()'s array operand is, and how the rest of
+  // try_reduce_numpy_descriptor_method must read the call: the method
+  // form's own error-message qualifier ("numpy.ndarray.") and a
+  // positional_offset of 0 (any real argument arrives via keywords only), or
+  // the free-function form's ("numpy.") and an offset of 1 (the array is
+  // call_["args"][0], so exactly one positional argument is expected).
+  struct any_all_receiver
+  {
+    std::pair<std::vector<std::size_t>, std::vector<exprt>> materialized;
+    std::string qualifier;
+    std::size_t positional_offset;
+  };
+
+  // Resolves the receiver above, trying the method form first and the
+  // free-function form second. nullopt means neither call_["func"]["value"]
+  // nor (if present) call_["args"][0] is a materializable numpy descriptor,
+  // so the caller should decline entirely. Split out of
+  // try_reduce_numpy_descriptor_method to keep that function's own decision
+  // count down.
+  std::optional<any_all_receiver>
+  resolve_any_all_receiver(const std::string &func_name);
+
+  /// Internal keys-list symbol id behind a `<name>.keys()` argument.
+  std::string dict_keys_list_id_for_call(const nlohmann::json &arg) const;
+
+  std::optional<exprt> fold_sorted_int_list(
+    const std::string &list_id,
+    size_t map_size,
+    bool fast_path_reverse) const;
+  std::optional<exprt> fold_sorted_constant_tuples(
+    const std::string &list_id,
+    size_t map_size,
+    bool fast_path_reverse) const;
+  std::optional<exprt> fold_sorted_symbolic_tuples(
+    const std::string &list_id,
+    size_t map_size,
+    bool fast_path_reverse);
+
+  /*
+   * Folds the builtin round() on a Name receiver when it is not user-defined or
+   * user-imported. Returns nullopt to leave round() to the typed dispatch.
+   */
+  std::optional<exprt> try_handle_round(bool is_user_imported);
+
+  /*
+   * Inlines a call to a user function whose entire body is `return <param>`
+   * when that parameter resolves to an array/array-pointer type: arrays
+   * aren't a valid by-value return type yet, so the call is replaced with
+   * the caller's own argument expression for this exact identity pattern.
+   * Returns nullopt for any other function shape or non-array parameter.
+   */
+  std::optional<exprt> try_fold_identity_array_return();
+
+  /**
+   * Suffix selecting the models/random.py variant that matches a sequence
+   * argument's type: "_float" or "_str" for a list of those, "_chars" for a
+   * str, and "" for a list of ints and for any argument this cannot type,
+   * which keeps the base model it had before the dispatch existed.
+   *
+   * @param seq  the converted sequence argument.
+   * @param func_name  "choice" or "sample", used in the diagnostic.
+   * @return the suffix to append to the model function name.
+   * @throws std::runtime_error naming func_name for a tuple, which no model
+   *         parameter can take and on which the list model would raise a
+   *         spurious memory-safety claim; and from
+   *         element_type_registry::homogeneous_element_type for a list whose
+   *         elements mix incompatibly.
+   */
+  std::string
+  random_sequence_suffix(const exprt &seq, const std::string &func_name);
+
+  /**
+   * Selects an element of a tuple for random.choice(), inline.
+   *
+   * A model function cannot take a tuple, whose arity and member types vary
+   * per call site, so the choice is folded into a nested conditional over a
+   * nondet index instead.
+   *
+   * @param seq  the converted sequence argument.
+   * @return the selected element, or nullopt when @p seq is not a tuple.
+   * @throws std::runtime_error on an empty tuple, which has no element to
+   *         select, and on a tuple whose members differ in type, which one
+   *         conditional cannot carry.
+   */
+  std::optional<exprt> fold_random_choice_over_tuple(const exprt &seq);
+
+  exprt handle_bool_call(const nlohmann::json &arg, size_t arg_size) const;
+
+  /**
+   * Folds sum() over a numeric tuple into a chain of additions.
+   *
+   * The sum/sum_float models iterate a list representation a tuple struct does
+   * not have, so they would return garbage.
+   *
+   * @param is_user_imported  whether a user import shadows the builtin.
+   * @param is_numpy_model_call  whether the call is inside models/numpy.py.
+   * @return the folded sum, or nullopt when the call is not sum() over a
+   *         numeric tuple.
+   */
+  std::optional<exprt>
+  fold_sum_over_tuple(bool is_user_imported, bool is_numpy_model_call);
+
+  /*
+   * Typed-builtin dispatch for min/max/sum/sorted/reversed: appends the
+   * _float/_str/_default suffix to actual_func_name based on element type, and
+   * may early-return the inline comparison for a mixed int/float min/max list.
+   */
+  std::optional<exprt> apply_builtin_dispatch(
+    std::string &actual_func_name,
+    bool is_user_imported,
+    bool is_numpy_model_call);
+
+  /*
+   * Indirect call through a variable holding a function pointer, e.g.
+   * times3 = make_multiplier(3); times3(4). Returns nullopt when the Name does
+   * not resolve to a non-code variable symbol.
+   */
+  std::optional<exprt> try_indirect_variable_call();
+
+  /// Indirect call through a function pointer held in an instance field.
+  std::optional<exprt> try_indirect_member_call();
+  /// The functions field @p attr of @p class_name holds, when it is untyped
+  /// and no class in its MRO binds @p attr too.
+  const python_converter::attribute_functions *held_functions(
+    const std::string &class_name,
+    const std::string &attr,
+    const typet &field_type) const;
+  /// The one signature of the functions @p held, which this call must match.
+  code_typet
+  held_signature(const python_converter::attribute_functions &held) const;
+  /// A call through field @p member of @p recv, which holds @p held when not
+  /// typed as a function pointer.
+  exprt call_field(
+    const python_converter::attribute_functions *held,
+    const exprt &recv,
+    const exprt &member) const;
+
+  /*
+   * Resolves the callee when the direct symbol lookup failed: dataclass
+   * __post_init__ forward refs, base-class method resolution for
+   * constructors/instance methods, AttributeError generation, global-scope
+   * forward references, and the undefined-function fallback. On success either
+   * returns the expression to emit, or returns nullopt after binding
+   * func_symbol so the common call-building path continues.
+   */
+  std::optional<exprt> resolve_missing_function_symbol(
+    const symbolt *&func_symbol,
+    const std::string &func_symbol_id,
+    symbolt *obj_symbol,
+    const symbol_id &obj_symbol_id);
+
+  /*
+   * Builds the resolved code_function_callt in three phases, mirroring the
+   * original inline sequence:
+   *  - bind_call_receiver: prepends self/cls for ctor/instance/class methods
+   *    and returns the parameter offset for subsequent positional binding;
+   *  - build_positional_arguments: converts and appends positional args
+   *    (returns early for the __ESBMC_get_object_size/strlen list-size case,
+   *    or with the TypeError a surplus positional argument raises);
+   *  - finalize_call: forwards keyword args, fills defaults, and adds the
+   *    constructor temp-self, returning the final call (or an early result).
+   */
+  size_t bind_call_receiver(
+    code_function_callt &call,
+    symbolt *obj_symbol,
+    const symbolt *func_symbol,
+    const locationt &location);
+
+  /*
+   * Reconciles a converted call argument with its parameter's type: passes
+   * an already-tagged argument through, boxes a concrete numeric/string
+   * scalar into a tagged-object temporary, or throws otherwise.
+   */
+  /// Converts a bool()/int()/numeric-constructor argument to @p target.
+  exprt retype_or_typecast(exprt expr, const typet &target) const;
+
+  exprt coerce_tagged_argument(
+    exprt arg,
+    const typet &param_type,
+    const locationt &location) const;
+
+  typet dict_param_value_type(const symbolt *func, size_t idx) const;
+  std::optional<exprt> build_positional_arguments(
+    code_function_callt &call,
+    size_t param_offset,
+    const locationt &location,
+    const symbolt *func_symbol);
+  std::optional<exprt>
+  raise_positional_oversupply(const symbolt &func_symbol) const;
+  exprt finalize_call(
+    code_function_callt &call,
+    size_t param_offset,
+    const locationt &location,
+    const symbolt *func_symbol,
+    symbolt *obj_symbol);
+
+  const symbolt *cached_find_symbol(const std::string &id) const;
+
+protected:
+  // any/all's np.<f>(a, ...) free-function form is dispatched entirely
+  // through numpy_call_expr::get() (is_numpy_call() routes it there before
+  // this class's own table-driven dispatch ever runs), so that subclass
+  // needs to reach these directly rather than through is_any_call()'s
+  // table entry.
+  exprt handle_any();
+  exprt handle_all();
+
+  symbol_id function_id_;
+  const nlohmann::json &call_;
+  python_converter &converter_;
+  const type_handler &type_handler_;
+  FunctionType function_type_;
+
+  mutable std::unordered_map<std::string, const symbolt *> sym_cache_;
+};
+
+/// Convert a code_function_callt to a side_effect_expr_function_callt so it
+/// can be used as a value expression (e.g., as an operand of if_exprt).
+exprt to_value_expr(const exprt &arg, const namespacet &ns);
+
+/// True when the expression is a synthesized C++ throw used by the Python
+/// frontend to propagate exceptions through value positions.
+bool is_cpp_throw_expr(const exprt &e);

@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^\s+only the row.s first element was grafted$
+^VERIFICATION FAILED$

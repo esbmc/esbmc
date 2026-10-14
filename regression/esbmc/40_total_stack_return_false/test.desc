@@ -1,0 +1,5 @@
+CORE
+main.c
+--64 --total-stack-limit 95 --no-return-value-opt
+Total stack limit property was violated
+^VERIFICATION FAILED$

@@ -1,6 +1,6 @@
 #include <solidity-frontend/solidity_tod_harness.h>
 #include <solidity-frontend/solidity_tod_analysis.h>
-#include <util/message.h>
+#include <util/message/message.h>
 #include <map>
 #include <queue>
 #include <set>

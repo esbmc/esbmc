@@ -2,4 +2,4 @@ CORE
 main.c
 --multi-property
 ^VERIFICATION FAILED$
-3 failed
+^\*\* 3 of 20 properties failed, 17 passed$

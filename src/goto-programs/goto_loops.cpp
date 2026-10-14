@@ -1,6 +1,49 @@
 #include "irep2/irep2_utils.h"
 #include <goto-programs/goto_loops.h>
-#include <util/expr_util.h>
+#include <util/config/config.h>
+#include <util/expr/expr_util.h>
+
+// True iff `expr` denotes storage reached through a pointer: a dereference,
+// an index/member off pointer-reached storage, a pointer-typed symbol being
+// indexed, or a conditional l-value with such a branch. A named stack array
+// (array-typed symbol) returns false: a havoc can name it as a whole (#5224).
+static bool indexes_through_pointer(const expr2tc &expr)
+{
+  if (is_dereference2t(expr))
+    return true;
+  if (is_if2t(expr))
+    return indexes_through_pointer(to_if2t(expr).true_value) ||
+           indexes_through_pointer(to_if2t(expr).false_value);
+  if (is_index2t(expr))
+    return indexes_through_pointer(to_index2t(expr).source_value);
+  if (is_member2t(expr))
+    return indexes_through_pointer(to_member2t(expr).source_value);
+  // A cast base (e.g. `((unsigned char (*)[8])q)[i]`) keeps the underlying
+  // pointer/array reach; look through it so the gate is not bypassed.
+  if (is_typecast2t(expr))
+    return indexes_through_pointer(to_typecast2t(expr).from);
+  if (is_symbol2t(expr))
+    return is_pointer_type(expr->type);
+  return false;
+}
+
+// The pointer through which storage flagged by indexes_through_pointer is
+// reached (`(*dest)[i]` -> `dest`, `p[i]` -> `p`, `p->arr[i]` -> `p`), or nil
+// when no single pointer reaches it, as for a conditional l-value (#5230).
+static expr2tc extract_queried_pointer(const expr2tc &expr)
+{
+  if (is_dereference2t(expr))
+    return to_dereference2t(expr).value;
+  if (is_index2t(expr))
+    return extract_queried_pointer(to_index2t(expr).source_value);
+  if (is_member2t(expr))
+    return extract_queried_pointer(to_member2t(expr).source_value);
+  if (is_typecast2t(expr))
+    return extract_queried_pointer(to_typecast2t(expr).from);
+  if (is_symbol2t(expr) && is_pointer_type(expr->type))
+    return expr;
+  return expr2tc();
+}
 
 bool check_var_name(const expr2tc &expr)
 {
@@ -44,7 +87,7 @@ void goto_loopst::find_function_loops()
   for (goto_programt::instructionst::iterator it =
          goto_function.body.instructions.begin();
        it != goto_function.body.instructions.end();
-       it++)
+       ++it)
   {
     // We found a loop, let's record its instructions
     if (it->is_backwards_goto())
@@ -56,10 +99,23 @@ void goto_loopst::find_function_loops()
       // This means something like:
       // A: if(g) goto A;
       // Convert it into: assume(!g);
-      if (loop_head->location_number == loop_exit->location_number)
+      // Identity is the list node, not the location number: numbers go stale
+      // whenever a pass inserts instructions, and two distinct instructions
+      // sharing one would rewrite a real branch into assume(!g).
+      if (loop_head == loop_exit)
       {
-        simplify(loop_head->guard);
-        it->make_assumption(not2tc(loop_head->guard));
+        // For `A: goto A;` (unconditional self-loop) this rewrite produces
+        // assume(false), which erases an infinite empty loop. That is fine for
+        // reachability, but under --termination it masks the very
+        // non-termination the property checks (the loop never exits, so the
+        // program does not terminate). Leave the self-loop in place so the
+        // termination analysis / forward condition can observe it. Mirrors the
+        // identical guard in goto_loop_simplify.cpp. See issue #4426.
+        if (!config.options.get_bool_option("termination"))
+        {
+          simplify(loop_head->guard);
+          it->make_assumption(not2tc(loop_head->guard));
+        }
         continue;
       }
       create_function_loop(loop_head, loop_exit);
@@ -101,224 +157,404 @@ void goto_loopst::create_function_loop(
   it1->set_size(size + 1);
 }
 
-void goto_loopst::collect_addressof_targets(loopst &loop, const expr2tc &expr)
+/// True when a write target is storage reached through a pointer (`*p = ...`,
+/// `p->f = ...`, `p->e[i] = ...`, `((S *)v)->f = ...`): nothing named is
+/// written, so a havoc over named symbols cannot cover it. Writing the pointer
+/// variable itself (`p = ...`) names a symbol the havoc does cover.
+static bool writes_through_pointer(const expr2tc &lhs)
+{
+  return !is_nil_expr(lhs) && !is_symbol2t(lhs) && indexes_through_pointer(lhs);
+}
+
+// `*p` when `lhs` writes inside it: `*p` or a member chain `p->f.g`. An
+// element write (`p->a[i]`) can leave the declared type through a flexible
+// array member, so it is resolved through the pointer instead.
+static expr2tc written_pointee(const expr2tc &lhs)
+{
+  if (is_member2t(lhs))
+    return written_pointee(to_member2t(lhs).source_value);
+  // Symex cannot assign a whole array through a dereference.
+  if (
+    is_dereference2t(lhs) && is_symbol2t(to_dereference2t(lhs).value) &&
+    !is_array_type(lhs->type))
+    return lhs;
+  return expr2tc();
+}
+
+static void record_pointer_write(loopst &loop, const expr2tc &lhs)
+{
+  loop.set_writes_through_pointer();
+  const expr2tc pointee = written_pointee(lhs);
+  const expr2tc ptr = extract_queried_pointer(lhs);
+  if (!is_nil_expr(pointee))
+    loop.add_written_pointee(pointee);
+  else if (!is_nil_expr(ptr))
+    loop.add_written_pointer(ptr);
+  else
+    loop.set_unnamed_pointer_write();
+}
+
+// Bodyless intrinsics that symex runs, and the arguments they write through:
+// the memory intrinsics their first, the scanf family each one past the format.
+static std::vector<expr2tc>
+written_arguments(const irep_idt &function, const std::vector<expr2tc> &args)
+{
+  static const std::unordered_map<std::string, size_t> first_written{
+    {"c:@F@__ESBMC_memcpy", 0},
+    {"c:@F@__ESBMC_memmove", 0},
+    {"c:@F@__ESBMC_memset", 0},
+    {"c:@F@__ESBMC_init_object", 0},
+    {"c:@F@scanf", 1},
+    {"c:@F@sscanf", 2},
+    {"c:@F@fscanf", 2}};
+  const auto it = first_written.find(function.as_string());
+  if (it == first_written.end())
+    return {};
+  if (it->second == 0)
+    return {args.begin(), args.begin() + std::min<size_t>(args.size(), 1)};
+  std::vector<expr2tc> written;
+  for (size_t i = it->second; i < args.size(); i++)
+    if (is_pointer_type(args[i]->type))
+      written.push_back(args[i]);
+  return written;
+}
+
+/// A variable whose address the callee takes can be reassigned through that
+/// address, which collect_lhs_symbols does not see.
+void goto_loopst::collect_address_taken(
+  const expr2tc &e,
+  function_summaryt &out) const
+{
+  if (is_nil_expr(e))
+    return;
+  if (is_address_of2t(e))
+  {
+    expr2tc obj = to_address_of2t(e).ptr_obj;
+    while (is_member2t(obj) || is_index2t(obj) || is_typecast2t(obj))
+      obj = is_member2t(obj)  ? to_member2t(obj).source_value
+            : is_index2t(obj) ? to_index2t(obj).source_value
+                              : to_typecast2t(obj).from;
+    if (is_symbol2t(obj))
+      out.address_taken.insert(to_symbol2t(obj).thename);
+  }
+  e->foreach_operand(
+    [this, &out](const expr2tc &op) { collect_address_taken(op, out); });
+}
+
+void goto_loopst::function_summaryt::record_write(const expr2tc &lhs)
+{
+  const expr2tc ptr = extract_queried_pointer(lhs);
+  if (is_nil_expr(ptr))
+    unnamed_write = true;
+  else
+    written_pointers.insert(ptr);
+}
+
+static expr2tc replace_symbols(
+  const expr2tc &e,
+  const std::unordered_map<irep_idt, expr2tc, irep_id_hash> &by)
+{
+  if (is_nil_expr(e))
+    return e;
+  if (is_symbol2t(e))
+  {
+    auto it = by.find(to_symbol2t(e).thename);
+    if (it == by.end())
+      return e;
+    if (it->second->type == e->type)
+      return it->second;
+    return typecast2tc(e->type, it->second);
+  }
+  bool changed = false;
+  e->foreach_operand([&by, &changed](const expr2tc &op) {
+    changed = changed || (!is_nil_expr(op) && replace_symbols(op, by) != op);
+  });
+  if (!changed)
+    return e;
+  expr2tc copy = e;
+  copy->Foreach_operand([&by](expr2tc &op) { op = replace_symbols(op, by); });
+  return copy;
+}
+
+/// Restate the callee's written pointers in the caller's scope: a parameter
+/// the callee never reassigns holds the argument this call passes, which
+/// resolves more precisely than the parameter every call site shares.
+void goto_loopst::function_summaryt::bind_arguments(
+  const goto_functiont &callee,
+  const std::vector<expr2tc> &arguments)
+{
+  if (!is_code_type(callee.type))
+    return;
+  const code_type2t &type = to_code_type(callee.type);
+  std::unordered_set<irep_idt, irep_id_hash> reassigned = address_taken;
+  for (const expr2tc &v : modified)
+    if (is_symbol2t(v))
+      reassigned.insert(to_symbol2t(v).thename);
+
+  // check_var_name filters the modified set, and an assignment through the
+  // parameter's own address never enters it, so both are ruled out here.
+  std::unordered_map<irep_idt, expr2tc, irep_id_hash> actual;
+  const std::size_t n = std::min(
+    {type.arguments.size(), type.argument_names.size(), arguments.size()});
+  for (std::size_t i = 0; i < n; ++i)
+    if (
+      !is_nil_expr(arguments[i]) && !type.argument_names[i].empty() &&
+      !reassigned.count(type.argument_names[i]) &&
+      check_var_name(symbol2tc(type.arguments[i], type.argument_names[i])))
+      actual.emplace(type.argument_names[i], arguments[i]);
+  if (actual.empty())
+    return;
+
+  loopst::loop_varst bound;
+  for (const expr2tc &ptr : written_pointers)
+    bound.insert(replace_symbols(ptr, actual));
+  written_pointers = std::move(bound);
+}
+
+void goto_loopst::collect_loop_symbols(
+  const expr2tc &expr,
+  loopst::loop_varst &out) const
 {
   if (is_nil_expr(expr))
     return;
 
-  if (is_address_of2t(expr))
+  expr->foreach_operand(
+    [this, &out](const expr2tc &e) { collect_loop_symbols(e, out); });
+
+  if (is_symbol2t(expr) && check_var_name(expr))
+    out.insert(expr);
+}
+
+// Walk an assignment LHS, classifying each leaf symbol as modified or
+// merely read. See add_loop_var for the rationale; this is the same
+// distinction applied to the function-summary path.
+void goto_loopst::collect_lhs_symbols(
+  const expr2tc &expr,
+  function_summaryt &out) const
+{
+  if (is_nil_expr(expr))
+    return;
+
+  if (is_dereference2t(expr))
   {
-    // Walk to the base symbol, peeling member/index/typecast/bitcast
-    // layers. Anything underneath address_of that resolves to a named
-    // storage location is what the callee may write through.
-    expr2tc target = to_address_of2t(expr).ptr_obj;
-    while (true)
-    {
-      if (is_member2t(target))
-        target = to_member2t(target).source_value;
-      else if (is_index2t(target))
-        target = to_index2t(target).source_value;
-      else if (is_typecast2t(target))
-        target = to_typecast2t(target).from;
-      else if (is_bitcast2t(target))
-        target = to_bitcast2t(target).from;
-      else
-        break;
-    }
-    if (is_symbol2t(target) && check_var_name(target))
-      loop.add_modified_var_to_loop(target);
+    collect_loop_symbols(to_dereference2t(expr).value, out.unmodified);
+    return;
+  }
+  if (is_index2t(expr))
+  {
+    const index2t &idx = to_index2t(expr);
+    // An array-element write into pointer-reached memory cannot be havoc'd
+    // by the inductive step, making its hypothesis unsound (#5224).
+    if (indexes_through_pointer(idx.source_value))
+      out.modifies_pointer_array = true;
+    collect_lhs_symbols(idx.source_value, out);
+    collect_loop_symbols(idx.index, out.unmodified);
     return;
   }
 
-  // Recurse into sub-expressions — an actual may be a composite like
-  // `(cond ? &obj1 : &obj2)` or `&s.field`.
-  expr->foreach_operand([this, &loop](const expr2tc &sub) {
-    collect_addressof_targets(loop, sub);
-  });
+  expr->foreach_operand(
+    [this, &out](const expr2tc &e) { collect_lhs_symbols(e, out); });
+
+  if (is_symbol2t(expr) && check_var_name(expr))
+    out.modified.insert(expr);
 }
 
-static bool expr_contains_dereference(const expr2tc &e)
+void goto_loopst::merge_summary(
+  const function_summaryt &from,
+  function_summaryt &out)
 {
-  if (is_nil_expr(e))
-    return false;
-  if (is_dereference2t(e))
+  out.modified.insert(from.modified.begin(), from.modified.end());
+  out.unmodified.insert(from.unmodified.begin(), from.unmodified.end());
+  out.modifies_pointer_array |= from.modifies_pointer_array;
+  out.writes_through_pointer |= from.writes_through_pointer;
+  out.pointer_write_unresolvable |= from.pointer_write_unresolvable;
+  out.written_pointers.insert(
+    from.written_pointers.begin(), from.written_pointers.end());
+  out.unnamed_write |= from.unnamed_write;
+  out.address_taken.insert(
+    from.address_taken.begin(), from.address_taken.end());
+}
+
+/// The caller havocs what a call's pointer arguments point to, which covers a
+/// write through a parameter the callee never reassigns, and nothing else: not
+/// a global pointer, nor a pointer loaded through the parameter.
+static bool is_unassigned_parameter(
+  expr2tc ptr,
+  const std::vector<irep_idt> &params,
+  const loopst::loop_varst &modified)
+{
+  while (!is_nil_expr(ptr) && is_typecast2t(ptr))
+    ptr = to_typecast2t(ptr).from;
+  return !is_nil_expr(ptr) && is_symbol2t(ptr) &&
+         std::find(params.begin(), params.end(), to_symbol2t(ptr).thename) !=
+           params.end() &&
+         !modified.count(ptr);
+}
+
+void goto_loopst::note_pointer_write(
+  const expr2tc &target,
+  function_summaryt &local,
+  std::vector<expr2tc> &written_ptrs)
+{
+  if (!writes_through_pointer(target))
+    return;
+  local.writes_through_pointer = true;
+  local.record_write(target);
+  written_ptrs.push_back(extract_queried_pointer(target));
+}
+
+bool goto_loopst::summarise_call(
+  const code_function_call2t &call,
+  std::vector<irep_idt> &in_progress,
+  function_summaryt &local,
+  std::vector<expr2tc> &written_ptrs)
+{
+  if (is_dereference2t(call.function))
+  {
+    local.writes_through_pointer = true;
+    local.pointer_write_unresolvable = true;
     return true;
-  bool found = false;
-  e->foreach_operand([&found](const expr2tc &sub) {
-    if (!found && expr_contains_dereference(sub))
-      found = true;
-  });
-  return found;
-}
-
-// Walk a (possibly composite) lvalue/rvalue expression down to the symbol
-// that is being indirected through.  Peels typecast/bitcast/index/member/
-// dereference/pointer-arithmetic layers.  Used by the param-derivation
-// pass to identify the storage root of a deref-target or the source root
-// of an assignment.  Returns nil if no plain symbol root exists (e.g. for
-// constants, address_of of a struct literal, or unsupported shapes).
-static expr2tc resolve_storage_base(const expr2tc &e)
-{
-  expr2tc cur = e;
-  while (cur)
-  {
-    if (is_dereference2t(cur))
-      cur = to_dereference2t(cur).value;
-    else if (is_index2t(cur))
-      cur = to_index2t(cur).source_value;
-    else if (is_member2t(cur))
-      cur = to_member2t(cur).source_value;
-    else if (is_typecast2t(cur))
-      cur = to_typecast2t(cur).from;
-    else if (is_bitcast2t(cur))
-      cur = to_bitcast2t(cur).from;
-    else if (is_add2t(cur))
-    {
-      // Pointer arithmetic — keep the side that is symbol-rooted.
-      const add2t &a = to_add2t(cur);
-      bool s1 = is_symbol2t(a.side_1) || is_typecast2t(a.side_1) ||
-                is_bitcast2t(a.side_1) || is_index2t(a.side_1) ||
-                is_member2t(a.side_1) || is_dereference2t(a.side_1) ||
-                is_add2t(a.side_1) || is_sub2t(a.side_1);
-      bool s2 = is_symbol2t(a.side_2) || is_typecast2t(a.side_2) ||
-                is_bitcast2t(a.side_2) || is_index2t(a.side_2) ||
-                is_member2t(a.side_2) || is_dereference2t(a.side_2) ||
-                is_add2t(a.side_2) || is_sub2t(a.side_2);
-      if (s1 && !s2)
-        cur = a.side_1;
-      else if (s2 && !s1)
-        cur = a.side_2;
-      else if (s1)
-        cur = a.side_1;
-      else
-        break;
-    }
-    else if (is_sub2t(cur))
-      cur = to_sub2t(cur).side_1;
-    else if (is_address_of2t(cur))
-      cur = to_address_of2t(cur).ptr_obj;
-    else
-      break;
   }
-  return cur;
-}
 
-bool goto_loopst::callee_writes_through_pointer(
-  const irep_idt &callee,
-  std::unordered_set<irep_idt, irep_id_hash> &visited)
-{
-  // Recursion guard.
-  if (!visited.insert(callee).second)
+  note_pointer_write(call.ret, local, written_ptrs);
+  collect_loop_symbols(call.ret, local.modified);
+
+  const irep_idt &callee = to_symbol2t(call.function).thename;
+  for (const expr2tc &arg : written_arguments(callee, call.operands))
+  {
+    local.writes_through_pointer = true;
+    local.modifies_pointer_array = true;
+    local.written_pointers.insert(arg);
+    written_ptrs.push_back(arg);
+  }
+  // Cycle cut: matches the legacy "do nothing on recursion" behaviour. The
+  // result is incomplete so it is not cached — the missing recursive
+  // contributions are call-site dependent.
+  if (
+    std::find(in_progress.begin(), in_progress.end(), callee) !=
+    in_progress.end())
     return false;
 
-  auto it = goto_functions.function_map.find(callee);
-  if (it == goto_functions.function_map.end() || !it->second.body_available)
-    return false;
+  function_summaryt callee_summary;
+  const bool complete =
+    compute_function_summary(callee, in_progress, callee_summary);
+  if (callee_summary.writes_through_pointer)
+    for (const expr2tc &arg : call.operands)
+      if (!is_nil_expr(arg) && is_pointer_type(arg->type))
+        written_ptrs.push_back(arg);
+  callee_summary.bind_arguments(
+    goto_functions.function_map.at(callee), call.operands);
+  merge_summary(callee_summary, local);
+  return complete;
+}
 
-  // Build the running set of pointer symbols whose storage is reachable
-  // from a parameter of this function.  Only writes through such pointers
-  // can affect caller-visible memory (and therefore propagate up to the
-  // k-induction modified-vars set).  Writes through locally-allocated
-  // pointers — e.g. `block` in `_ESBMC_alloc_array`'s `block = calloc(...)`
-  // followed by `block[0] = count` — must be excluded; otherwise the
-  // address-of-arg propagation incorrectly havocs caller-side aux arrays
-  // that are only READ through the call.
-  std::unordered_set<irep_idt, irep_id_hash> param_derived;
-  for (const auto &arg : it->second.type.arguments())
+bool goto_loopst::compute_function_summary(
+  const irep_idt &fname,
+  std::vector<irep_idt> &in_progress,
+  function_summaryt &out)
+{
+  auto cached = function_summary_cache.find(fname);
+  if (cached != function_summary_cache.end())
   {
-    irep_idt id = arg.get_identifier();
-    if (id != irep_idt())
-      param_derived.insert(id);
+    merge_summary(cached->second, out);
+    return true;
   }
 
-  for (const auto &insn : it->second.body.instructions)
+  auto it = goto_functions.function_map.find(fname);
+  if (it == goto_functions.function_map.end())
   {
-    if (insn.is_assign() && is_code_assign2t(insn.code))
+    log_error("failed to find `{}' in function_map", id2string(fname));
+    abort();
+  }
+  if (!it->second.body_available)
+  {
+    function_summary_cache[fname] = function_summaryt{};
+    return true;
+  }
+
+  in_progress.push_back(fname);
+  bool complete = true;
+  function_summaryt local;
+  std::vector<expr2tc> written_ptrs;
+
+  for (const auto &instr : it->second.body.instructions)
+  {
+    collect_address_taken(instr.code, local);
+    collect_address_taken(instr.guard, local);
+    if (instr.is_assign())
     {
-      const code_assign2t &a = to_code_assign2t(insn.code);
-
-      // Strip outer typecast/bitcast on the lhs to find the lhs root.
-      expr2tc lhs_root = a.target;
-      while (lhs_root)
-      {
-        if (is_typecast2t(lhs_root))
-          lhs_root = to_typecast2t(lhs_root).from;
-        else if (is_bitcast2t(lhs_root))
-          lhs_root = to_bitcast2t(lhs_root).from;
-        else
-          break;
-      }
-
-      // Case 1: deref-target (array/pointer write).  Caller-affecting
-      // iff the indirected pointer is param-derived.
-      if (expr_contains_dereference(a.target))
-      {
-        expr2tc base = resolve_storage_base(a.target);
-        if (
-          base && is_symbol2t(base) &&
-          param_derived.count(to_symbol2t(base).thename))
-          return true;
-        // Otherwise: writes through a local allocation; doesn't propagate.
-        continue;
-      }
-
-      // Case 2: plain symbol assignment.  Update param_derived membership
-      // of the lhs based on whether the rhs's storage root is param-
-      // derived.
-      if (is_symbol2t(lhs_root))
-      {
-        irep_idt lhs_name = to_symbol2t(lhs_root).thename;
-        expr2tc rhs_root = resolve_storage_base(a.source);
-        bool rhs_pd = false;
-        if (rhs_root && is_symbol2t(rhs_root))
-        {
-          if (param_derived.count(to_symbol2t(rhs_root).thename))
-            rhs_pd = true;
-        }
-        if (rhs_pd)
-          param_derived.insert(lhs_name);
-        else
-          param_derived.erase(lhs_name);
-      }
+      const expr2tc &target = to_code_assign2t(instr.code).target;
+      note_pointer_write(target, local, written_ptrs);
+      collect_lhs_symbols(target, local);
     }
-    else if (insn.is_function_call() && is_code_function_call2t(insn.code))
+    else if (instr.is_function_call())
     {
-      const code_function_call2t &nested =
-        to_code_function_call2t(insn.code);
-
-      // The result of a function call is a fresh value (heap allocation,
-      // computed result, etc.) — clear any prior param-derived status.
-      if (!is_nil_expr(nested.ret) && is_symbol2t(nested.ret))
-        param_derived.erase(to_symbol2t(nested.ret).thename);
-
-      // For callees we recurse into, ask whether THEIR body writes through
-      // their own parameters — if it does, that means they may write
-      // through the actuals we passed.  But it only matters if at least one
-      // of those actuals is a param-derived pointer of this function;
-      // otherwise the inner call's deref-writes touch only OUR locally-
-      // allocated storage, which doesn't escape.
-      if (is_dereference2t(nested.function) || !is_symbol2t(nested.function))
-        continue;
-      if (!callee_writes_through_pointer(
-            to_symbol2t(nested.function).thename, visited))
-        continue;
-      bool any_actual_param_derived = false;
-      for (const expr2tc &actual : nested.operands)
-      {
-        expr2tc base = resolve_storage_base(actual);
-        if (
-          base && is_symbol2t(base) &&
-          param_derived.count(to_symbol2t(base).thename))
-        {
-          any_actual_param_derived = true;
-          break;
-        }
-      }
-      if (any_actual_param_derived)
-        return true;
+      if (!summarise_call(
+            to_code_function_call2t(instr.code),
+            in_progress,
+            local,
+            written_ptrs))
+        complete = false;
+    }
+    else if (instr.is_goto() || instr.is_assert() || instr.is_assume())
+    {
+      collect_loop_symbols(instr.guard, local.unmodified);
     }
   }
-  return false;
+
+  in_progress.pop_back();
+
+  const std::vector<irep_idt> &params =
+    to_code_type(it->second.type).argument_names;
+  local.pointer_write_unresolvable |= !std::all_of(
+    written_ptrs.begin(), written_ptrs.end(), [&](const expr2tc &ptr) {
+      return is_unassigned_parameter(ptr, params, local.modified);
+    });
+
+  // Fold local into out regardless of completeness.
+  merge_summary(local, out);
+
+  if (complete)
+    function_summary_cache[fname] = std::move(local);
+  return complete;
+}
+
+/// A callee writing through its own parameter names storage the caller cannot:
+/// the parameter is out of scope at the call. The call's own pointer arguments
+/// are what it was handed, so record those and let the havoc reach the pointee
+/// through them. Recording an argument the callee never writes only widens the
+/// abstraction, which stays sound (issue #7478).
+static void
+record_callee_pointer_writes(loopst &loop, const code_function_call2t &call)
+{
+  loop.set_writes_through_pointer();
+
+  for (const expr2tc &arg : call.operands)
+    if (!is_nil_expr(arg) && is_pointer_type(arg->type))
+      loop.add_pointer_array_write_ptr(arg);
+}
+
+void goto_loopst::apply_callee_summary(
+  loopst &loop,
+  const function_summaryt &summary,
+  const code_function_call2t &call)
+{
+  for (const auto &v : summary.modified)
+    loop.add_modified_var_to_loop(v);
+  for (const auto &v : summary.unmodified)
+    loop.add_unmodified_var_to_loop(v);
+  if (summary.writes_through_pointer)
+    record_callee_pointer_writes(loop, call);
+  if (summary.pointer_write_unresolvable)
+    loop.set_pointer_array_write_unresolvable();
+  for (const auto &ptr : summary.written_pointers)
+    loop.add_written_pointer(ptr);
+  if (summary.unnamed_write)
+    loop.set_unnamed_pointer_write();
+  // Havocking through the call's arguments cannot cover an element the
+  // callee writes past them (#5230).
+  if (summary.modifies_pointer_array)
+    loop.set_pointer_array_write_unresolvable();
 }
 
 void goto_loopst::get_modified_variables(
@@ -329,86 +565,60 @@ void goto_loopst::get_modified_variables(
   if (instruction->is_assign())
   {
     const code_assign2t &assign = to_code_assign2t(instruction->code);
+    if (writes_through_pointer(assign.target))
+      record_pointer_write(*loop, assign.target);
     add_loop_var(*loop, assign.target, true);
   }
   else if (instruction->is_function_call())
   {
-    // Functions are a bit tricky
     code_function_call2t &function_call =
       to_code_function_call2t(instruction->code);
 
-    // Don't do function pointers
+    // A call through a function pointer hides the callee's writes from the
+    // summary, so a pointer write inside it would leave the loop looking
+    // havoc-covered when it is not (issue #7478).
     if (is_dereference2t(function_call.function))
-      return;
-
-    // First, add its return
-    add_loop_var(*loop, function_call.ret, true);
-
-    // Extend the modified-variable set to cover caller-side storage that
-    // may be written through pointer-typed arguments. Without this, the
-    // k-induction havoc preamble omits variables like `obj` in the common
-    // pattern `dispatch(&obj)` / `obj.method(...)` where the callee writes
-    // through the formal pointer parameter. The plain syntactic recursion
-    // below only registers the callee-local pointer (e.g. `p`), never the
-    // caller's object. Gate the extension on the callee actually
-    // containing an indirect write (an ASSIGN whose lhs mentions a
-    // dereference); otherwise a purely read-only helper would over-
-    // approximate unnecessarily and kill provability of k-induction
-    // invariants that don't involve the pointed-to object.
-    if (is_symbol2t(function_call.function))
     {
-      std::unordered_set<irep_idt, irep_id_hash> visited;
-      if (callee_writes_through_pointer(
-            to_symbol2t(function_call.function).thename, visited))
-      {
-        for (const expr2tc &arg : function_call.operands)
-          collect_addressof_targets(*loop, arg);
-      }
+      loop->set_writes_through_pointer();
+      loop->set_pointer_array_write_unresolvable();
+      loop->set_unnamed_pointer_write();
+      return;
     }
 
-    // The run over the function body and get the modified variables there
-    irep_idt &identifier = to_symbol2t(function_call.function).thename;
+    // First, add its return
+    if (writes_through_pointer(function_call.ret))
+      record_pointer_write(*loop, function_call.ret);
+    add_loop_var(*loop, function_call.ret, true);
 
-    // This means recursion, do nothing
+    const irep_idt &identifier = to_symbol2t(function_call.function).thename;
+    for (const expr2tc &arg :
+         written_arguments(identifier, function_call.operands))
+    {
+      loop->set_writes_through_pointer();
+      loop->set_pointer_array_write_unresolvable();
+      loop->add_written_pointer(arg);
+    }
+
+    // This means recursion, do nothing — matches legacy behaviour.
     if (
       std::find(function_names.begin(), function_names.end(), identifier) !=
       function_names.end())
       return;
 
-    // We didn't entered this function yet, so add it to the list
-    function_names.push_back(identifier);
-
-    // find code in function map
-    goto_functionst::function_mapt::iterator it =
-      goto_functions.function_map.find(identifier);
-
-    if (it == goto_functions.function_map.end())
-    {
-      log_error("failed to find `{}' in function_map", id2string(identifier));
-      abort();
-    }
-
-    // Avoid iterating over functions that don't have a body
-    if (!it->second.body_available)
-      return;
-
-    for (goto_programt::instructionst::iterator head =
-           it->second.body.instructions.begin();
-         head != it->second.body.instructions.end();
-         ++head)
-    {
-      get_modified_variables(head, loop, function_names);
-    }
+    // Compute (or fetch the cached) summary of the callee. Two loops that
+    // both call the same helper now share the helper's per-symbol set
+    // instead of re-walking the helper from scratch.
+    function_summaryt summary;
+    compute_function_summary(identifier, function_names, summary);
+    summary.bind_arguments(
+      goto_functions.function_map.at(identifier), function_call.operands);
+    apply_callee_summary(*loop, summary, function_call);
   }
   else if (
     instruction->is_goto() || instruction->is_assert() ||
     instruction->is_assume())
   {
     add_loop_var(*loop, instruction->guard, false);
-  }
-  else if (instruction->is_end_function())
-  {
-    function_names.pop_back();
   }
 }
 
@@ -419,6 +629,46 @@ void goto_loopst::add_loop_var(
 {
   if (is_nil_expr(expr))
     return;
+
+  // When walking an assign LHS, only the storage being written counts as
+  // modified; sub-expressions used to *locate* that storage are reads.
+  //   `*p = ...`        — pointer `p` is read, the pointee is modified
+  //   `arr[i] = ...`    — index `i` is read, `arr` element is modified
+  //   `s.f = ...`       — struct `s` storage is modified
+  // Without this distinction `*Var_Ptr = ...` adds `Var_Ptr` to the loop's
+  // modified set, which then causes the inductive step to havoc the
+  // pointer at loop entry — unsound if the loop never reassigns it.
+  if (is_modified && is_dereference2t(expr))
+  {
+    // The pointee has no named symbol, so record the pointer for the
+    // loop-invariant schema to havoc through; an unextractable pointer leaves
+    // the write uncoverable and the schema declines (#5230, #7478).
+    expr2tc ptr = extract_queried_pointer(expr);
+    if (is_nil_expr(ptr))
+      loop.set_pointer_array_write_unresolvable();
+    else
+      loop.add_pointer_array_write_ptr(ptr);
+    add_loop_var(loop, to_dereference2t(expr).value, false);
+    return;
+  }
+  if (is_modified && is_index2t(expr))
+  {
+    const index2t &idx = to_index2t(expr);
+    // An array-element write into pointer-reached memory (e.g. `p[i]`,
+    // `(*p)[i]`) has no named symbol to havoc (#5224); a stack array
+    // (array-typed symbol source) is havoc'd as a whole symbol.
+    if (indexes_through_pointer(idx.source_value))
+    {
+      expr2tc ptr = extract_queried_pointer(idx.source_value);
+      if (!is_nil_expr(ptr))
+        loop.add_pointer_array_write_ptr(ptr);
+      else
+        loop.set_pointer_array_write_unresolvable();
+    }
+    add_loop_var(loop, idx.source_value, true);
+    add_loop_var(loop, idx.index, false);
+    return;
+  }
 
   expr->foreach_operand([this, &loop, &is_modified](const expr2tc &e) {
     add_loop_var(loop, e, is_modified);

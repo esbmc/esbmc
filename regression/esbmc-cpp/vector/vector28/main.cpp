@@ -13,7 +13,10 @@ int main ()
 
   cout << "size: " << myvector.size() << "\n";
   cout << "capacity: " << myvector.capacity() << "\n";
-  assert(myvector.capacity() == 16); // WRONG: Implementation-dependent!
+  // capacity() after push_back is implementation-defined; this test exists
+  // to demonstrate that ESBMC reports the assertion violation. See
+  // vector28_1 for the portable form (capacity() >= size()).
+  assert(myvector.capacity() == 16);
   cout << "max_size: " << myvector.max_size() << "\n";
   return 0;
 }

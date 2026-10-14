@@ -1,0 +1,10 @@
+# cmakelint configuration for ESBMC.
+#
+# Filters out two categories that are style-only and would generate
+# hundreds of noisy warnings across the tree:
+#   - linelength       (we don't enforce an 80-col CMake limit)
+#   - whitespace/indent (indentation styles vary across subprojects)
+#
+# All structural categories (mismatch, wonkycase, mixedcase, tabs,
+# trailing whitespace, package/consistency, etc.) remain enforced.
+filter=-linelength,-whitespace/indent

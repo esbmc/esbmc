@@ -1,0 +1,300 @@
+#include <python-frontend/converter/converter_internal.h>
+#include <python-frontend/python_converter.h>
+#include <python-frontend/type/type_utils.h>
+#include <python-frontend/tuple/tuple_handler.h>
+#include <python-frontend/dynamic_type/dynamic_type_handler.h>
+#include <util/lang/c_typecast.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <irep2/irep2_utils.h>
+#include <util/irep/migrate.h>
+#include <util/lang/python_types.h>
+
+// The type of a numeric unary node: the operand's exact type (keeping its
+// metadata) where the operator preserves it, else @p fallback. The fallback is
+// current_element_type, the enclosing context's -- bool inside an assert.
+static typet unary_numeric_type(
+  const std::string &op,
+  const typet &operand_type,
+  const typet &fallback)
+{
+  const bool integral = type_utils::is_integer_type(operand_type);
+  if ((op == "USub" || op == "UAdd") && (integral || operand_type.is_floatbv()))
+    return operand_type;
+  if (op == "Invert" && integral)
+    return operand_type;
+  return fallback;
+}
+
+// The emptiness test behind Python truthiness (`not x`, and `bool(x)`
+// negated) for a dict, str, list or tuple literal, or nil for any other value.
+// A dict or list needs a statement context: its size is read into a temporary.
+exprt python_converter::build_emptiness_check(
+  const exprt &value,
+  const nlohmann::json &element)
+{
+  typet list_type = type_handler_.get_list_type();
+
+  // A tuple literal's length is its type's. A tuple variable keeps its first
+  // binding's type when rebound (x = (1,); x = ()), so its length is unknown.
+  if (tuple_handler_->is_tuple_type(value.type()))
+  {
+    if (!value.is_constant())
+      throw std::runtime_error(
+        "truthiness of a tuple that is not a literal is not yet supported");
+    return value.operands().empty() ? exprt(true_exprt())
+                                    : exprt(false_exprt());
+  }
+
+  if (dict_handler_->is_dict_type(value.type()))
+  {
+    if (!current_block)
+      throw std::runtime_error(
+        "Dictionary truthiness check requires a statement context");
+
+    locationt location = get_location_from_decl(element);
+
+    // Get dict.keys member. V.3: IREP2 member access (exact round-trip of
+    // member_exprt); `value` is dict-typed (is_dict_type ⇒ struct), so the
+    // member2t source precondition holds.
+    expr2tc dict2;
+    migrate_expr(value, dict2);
+    exprt keys_member =
+      migrate_expr_back(member2tc(migrate_type(list_type), dict2, "keys"));
+
+    // Find __ESBMC_list_size function
+    const symbolt *size_func =
+      symbol_table_.find_symbol("c:@F@__ESBMC_list_size");
+    if (!size_func)
+      throw std::runtime_error(
+        "__ESBMC_list_size not found for dict truthiness check");
+
+    // Create temporary variable to store the size result
+    symbolt &size_result = create_tmp_symbol(
+      element, "$dict_size$", size_type(), gen_zero(size_type()));
+    code_declt size_decl(symbol_expr(size_result));
+    size_decl.location() = location;
+    current_block->copy_to_operands(size_decl);
+
+    // Call __ESBMC_list_size(dict.keys)
+    code_function_callt size_call;
+    size_call.function() = symbol_expr(*size_func);
+    size_call.lhs() = symbol_expr(size_result);
+    size_call.arguments().push_back(keys_member);
+    size_call.type() = size_type();
+    size_call.location() = location;
+    current_block->copy_to_operands(size_call);
+
+    // Return comparison: size == 0 (empty dict is truthy for 'not'). Phase 4.4:
+    // build the returned comparison in IREP2 and lower once at the return. The
+    // size_decl/size_call statements above stay legacy — their operands feed
+    // legacy code_*t shells, so moving them in isolation buys nothing (P1).
+    expr2tc is_empty2 = equality2tc(
+      symbol_expr2tc(size_result), gen_zero(migrate_type(size_type())));
+    exprt is_empty = migrate_expr_back(is_empty2);
+    is_empty.location() = location;
+    return is_empty;
+  }
+
+  // A string is empty when strlen(a) == 0.
+  // In Python, a non-empty string is truthy; only "" is falsy.
+  if (type_utils::is_string_type(value.type()))
+  {
+    locationt location = get_location_from_decl(element);
+    const symbolt *strlen_sym = symbol_table_.find_symbol("c:@F@strlen");
+    if (!strlen_sym)
+      throw std::runtime_error("strlen not found for string truthiness check");
+
+    // Phase 4.4 (first wiring): build the `strlen(base) == 0` result in IREP2
+    // internally via the Phase 4.2 helpers, lowering to legacy `exprt` at a
+    // single seam (the `return`). The call argument comes back from the string
+    // handler as a legacy `exprt`, so migrate it forward; the whole subtree is
+    // then IREP2 until the one back-migration. This is statement-free, so no
+    // legacy `codet` shell is involved (P1 untouched).
+    const type2tc size_t2 = migrate_type(size_type());
+    expr2tc base2;
+    migrate_expr(string_handler_.get_array_base_address(value), base2);
+
+    expr2tc strlen_call2 = side_effect_function_call2tc(
+      size_t2, symbol_expr2tc(*strlen_sym), {base2});
+
+    expr2tc is_empty2 = equality2tc(strlen_call2, gen_zero(size_t2));
+
+    exprt is_empty = migrate_expr_back(is_empty2);
+    is_empty.location() = location;
+    return is_empty;
+  }
+
+  // A list is empty when __ESBMC_list_size(list) == 0.
+  if (
+    value.type() == list_type ||
+    (value.type().is_pointer() && value.type().subtype() == list_type))
+  {
+    if (!current_block)
+      throw std::runtime_error(
+        "List truthiness check requires a statement context");
+
+    locationt location = get_location_from_decl(element);
+
+    // Find __ESBMC_list_size function
+    const symbolt *size_func =
+      symbol_table_.find_symbol("c:@F@__ESBMC_list_size");
+    if (!size_func)
+      throw std::runtime_error(
+        "__ESBMC_list_size not found for list truthiness check");
+
+    // Create temporary variable to store the size result
+    symbolt &size_result = create_tmp_symbol(
+      element, "$list_size$", size_type(), gen_zero(size_type()));
+    code_declt size_decl(symbol_expr(size_result));
+    size_decl.location() = location;
+    current_block->copy_to_operands(size_decl);
+
+    // Call __ESBMC_list_size(list)
+    code_function_callt size_call;
+    size_call.function() = symbol_expr(*size_func);
+    size_call.lhs() = symbol_expr(size_result);
+    // Pass address if not already a pointer
+    if (value.type().is_pointer())
+      size_call.arguments().push_back(value);
+    else
+      size_call.arguments().push_back(address_of_exprt(value));
+    size_call.type() = size_type();
+    size_call.location() = location;
+    current_block->copy_to_operands(size_call);
+
+    // Return comparison: size == 0 (empty list is falsy, so 'not list' is true
+    // when empty). Phase 4.4: build in IREP2, lower once at the return; the
+    // size_decl/size_call statements above stay legacy (P1).
+    expr2tc is_empty2 = equality2tc(
+      symbol_expr2tc(size_result), gen_zero(migrate_type(size_type())));
+    exprt is_empty = migrate_expr_back(is_empty2);
+    is_empty.location() = location;
+    return is_empty;
+  }
+
+  return nil_exprt();
+}
+
+exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
+{
+  typet type = current_element_type;
+  if (
+    element["operand"].contains("value") &&
+    element["operand"]["_type"] == "Constant")
+  {
+    type = type_handler_.get_typet(element["operand"]["value"]);
+  }
+  else if (element["operand"]["_type"] == "Name")
+  {
+    const std::string var_type =
+      type_handler_.get_var_type(element["operand"]["id"].get<std::string>());
+    type = type_handler_.get_typet(var_type);
+  }
+
+  // Get the operand expression
+  exprt unary_sub = get_expr(element["operand"]);
+  convert_function_call_to_side_effect(unary_sub);
+
+  // A tagged operand needs runtime dispatch.
+  if (type_handler_.is_tagged_scalar_type(unary_sub.type()))
+  {
+    std::string unary_op = element["op"]["_type"].get<std::string>();
+    if (unary_op == "USub")
+      return dynamic_type_handler_.build_neg_tagged(unary_sub);
+    throw std::runtime_error(
+      "operator '" + unary_op +
+      "' on a dynamically-typed variable is not yet supported");
+  }
+
+  // An unresolved method call yields a placeholder null (see
+  // PYTHON_UNRESOLVED_CALL_ATTR). Reading that null as False would let
+  // `not obj.unresolved()` be proved from an inference gap, so this is the one
+  // context where the result has to be unknown rather than constant.
+  if (
+    element["op"]["_type"] == "Not" &&
+    unary_sub.get_bool(PYTHON_UNRESOLVED_CALL_ATTR))
+  {
+    side_effect_expr_nondett unknown_truth(bool_type());
+    unknown_truth.location() = get_location_from_decl(element);
+    unknown_truth.location().user_provided(true);
+    return unknown_truth;
+  }
+
+  std::string op = element["op"]["_type"].get<std::string>();
+  type = unary_numeric_type(op, unary_sub.type(), type);
+  if (op == "Not")
+  {
+    // An optional's value is zero when it is None, and `not None` is True.
+    unary_sub = unwrap_optional_if_needed(unary_sub, element);
+    exprt is_empty = build_emptiness_check(unary_sub, element);
+    if (is_empty.is_not_nil())
+      return is_empty;
+  }
+
+  {
+    exprt dunder_result = dispatch_unary_dunder_operator(
+      op, unary_sub, get_location_from_decl(element));
+    if (!dunder_result.is_nil())
+      return dunder_result;
+  }
+
+  // Built-in complex arithmetic: unary + and - operate component-wise.
+  if (is_complex_type(unary_sub.type()) && (op == "USub" || op == "UAdd"))
+    return complex_handler_.handle_unary_op(op, unary_sub);
+
+  // Python's `not` always yields a bool, regardless of its operand's type.
+  // Type the node accordingly (matching every other `not` site in the
+  // frontend) so it is well-formed IR: migrate_expr asserts that `not`/`and`/
+  // `or` nodes are bool-typed, and consumers that migrate eagerly (e.g.
+  // build_typecast) would otherwise abort before the C adjuster normalises it.
+  // `not obj` is a truth test like `if obj:`, so it goes through the class's
+  // __bool__ where there is one; without it the operand was cast straight to
+  // bool and the dunder never ran.
+  unary_sub =
+    apply_bool_dunder_for_not(op, unary_sub, get_location_from_decl(element));
+
+  /* Python's bool is a subclass of int, so every unary operator but `not`
+   * yields an int: -True is -1 and ~True is -2. Without the promotion the node
+   * is built over a bool-sorted operand and the SMT backend crashes (#7551).
+   * Matches the binary bitwise path in converter_binop.cpp. */
+  if (op != "Not" && unary_sub.type().is_bool())
+  {
+    const typet int_t = type_handler::python_int_typet();
+    unary_sub = typecast_exprt(unary_sub, int_t);
+    type = int_t;
+  }
+
+  const typet result_type = (op == "Not") ? bool_type() : type;
+  const std::string op_id = python_frontend::map_operator(op, result_type);
+
+  // V.3: build the generic unary node directly in IREP2, back-migrating once.
+  // The Python AST has exactly four unary operators and map_operator covers
+  // each: Not→"not", USub→"unary-", Invert→"bitnot", UAdd→"unary+". The
+  // factories below reproduce migrate_expr's lowering of those ids verbatim
+  // (not2t fixes a bool result; neg2t/bitnot2t take the node type; unary plus
+  // is the identity, dropping the wrapper exactly as migrate_expr does at
+  // util/migrate.cpp:1676), so this is behaviour-preserving under the
+  // mandatory --irep2-bodies round-trip.
+  expr2tc operand2;
+  migrate_expr(unary_sub, operand2);
+
+  expr2tc unary2;
+  if (op_id == "not")
+    unary2 = not2tc(operand2);
+  else if (op_id == "unary-")
+    unary2 = neg2tc(migrate_type(result_type), operand2);
+  else if (op_id == "bitnot")
+    unary2 = bitnot2tc(migrate_type(result_type), operand2);
+  else if (op_id == "unary+")
+    unary2 = operand2; // unary plus is the identity
+  else
+  {
+    // Unknown operator: preserve the legacy (malformed-node + warning) path.
+    exprt unary_expr(op_id, result_type);
+    unary_expr.operands().push_back(unary_sub);
+    return unary_expr;
+  }
+
+  return migrate_expr_back(unary2);
+}

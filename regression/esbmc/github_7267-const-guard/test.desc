@@ -1,0 +1,5 @@
+CORE
+main.c
+--dead-code-check
+^No provably-dead code found\.$
+^VERIFICATION SUCCESSFUL$

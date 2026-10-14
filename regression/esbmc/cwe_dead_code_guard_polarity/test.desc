@@ -1,0 +1,6 @@
+CORE
+main.c
+--dead-code-check
+main\.c:10: dead code: unreachable branch \[guard: flag\]$
+main\.c:13: dead code: unreachable branch \[guard: !\(x > 5\)\]$
+^VERIFICATION SUCCESSFUL$

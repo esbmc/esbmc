@@ -1,68 +1,109 @@
 # IRep2 — ESBMC's Internal Representation
 
-`irep2` is ESBMC's typed, reference-counted, copy-on-write internal
-representation for **expressions** (`expr2t`) and **types** (`type2t`). It is
-the data structure every frontend lowers to, every transformation rewrites,
-and every backend (symex, SMT, goto2c) consumes. It replaces the older
-"stringy" `irept` for the verification pipeline; conversions live in
-`util/migrate.{h,cpp}`.
+`irep2` is ESBMC's typed, intrusively reference-counted, copy-on-write
+internal representation for **expressions** (`expr2t`) and **types**
+(`type2t`). It is the data structure every frontend lowers to, every
+transformation rewrites, and every backend (symex, SMT, goto2c) consumes.
+It replaces the older "stringy" `irept` for the verification pipeline;
+conversions live in `util/irep/migrate.{h,cpp}`.
 
 ## Design at a glance
 
-- **Typed class hierarchy.** Each kind of expression or type is its own C++
-  class (e.g. `add2t`, `symbol2t`, `signedbv_type2t`). A `type_ids` /
+- **Typed class hierarchy.** Each kind of expression or type is its own
+  C++ class (e.g. `add2t`, `symbol2t`, `signedbv_type2t`). A `type_ids` /
   `expr_ids` enum on the base class lets code dispatch without RTTI.
-- **`expr2tc` / `type2tc` containers.** Thin wrappers around
-  `std::shared_ptr` providing **copy-on-write**: the const accessors share
-  the pointee, and the non-const `get()`/`operator->` automatically `detach()`
-  into a fresh copy when the refcount is > 1. This keeps `expr2tc` cheap to
-  copy and pass by value while preserving value semantics on mutation.
-- **Hash-consing friendly.** Each node caches its CRC (`crc_val`, guarded by
-  `crc_mutex`); the cache is invalidated on detach. `operator==` first checks
-  pointer identity, then falls back to structural comparison.
-- **Generated boilerplate.** The full list of IR nodes lives in two Boost
-  preprocessor lists at the top of `irep2.h`:
-  - `ESBMC_LIST_OF_EXPRS` — every expression kind (`add`, `if`, `symbol`,
+- **`expr2tc` / `type2tc` containers.** Hand-rolled smart pointers built
+  on an intrusive atomic refcount sitting on `irep2t` itself: one
+  allocation per node, no separate control block. They implement
+  **copy-on-write** — the const accessors share the pointee, the
+  non-const `get()` / `operator->` / `operator*` call `detach()` first,
+  which clones into a fresh refcount-1 object when the count is > 1.
+  This keeps containers cheap to copy and pass by value while preserving
+  value semantics on mutation.
+- **Construction.** Use `make_irep<T>(args...)` (or any of the generated
+  `<name>2tc(args...)` factories that wrap it). The factory `new`s the
+  node and hands it to a freshly-constructed container that adopts and
+  increments the refcount.
+- **Hash-consing friendly.** The IR does *not* intern nodes — there is
+  no global dedup table, so two structurally-equal trees stay distinct
+  allocations — but it is cheap to layer hash-consing on top. Each node
+  caches its CRC in a `std::atomic<size_t>` (`irep2t::crc_val`); `0`
+  means "not yet computed". Readers do an acquire load and skip the
+  recompute on a hit; producers compute on a local and release-store.
+  Mutation invalidates the cache via a relaxed store. `operator==`
+  checks pointer identity first, then falls back to structural
+  comparison.
+- **Threading contract.** Single-writer / thread-confined. The refcount
+  is atomic so containers may be dropped from any thread, but the
+  pointee may have at most one mutator at a time. In debug builds the
+  base class carries a writer-thread stamp that the container updates
+  on every mutable access; a mismatch fires an assertion.
+- **Generated boilerplate.** The full list of IR nodes lives in two
+  per-family manifest files:
+  - `expr_kinds.inc` — every expression kind (`add`, `if`, `symbol`,
     `code_assign`, ...).
-  - `ESBMC_LIST_OF_TYPES` — every type kind (`bool`, `signedbv`, `pointer`,
+  - `type_kinds.inc` — every type kind (`bool`, `signedbv`, `pointer`,
     `struct`, ...).
-  These lists drive forward declarations, the `expr_ids` / `type_ids` enums,
-  `is_foo2t()` / `to_foo2t()` accessors, and template instantiations.
+
+  Each entry is `IREP2_EXPR(kind, "pretty_name")` /
+  `IREP2_TYPE(kind, "pretty_name")`. Consumers (the `expr_ids` /
+  `type_ids` enums, the per-kind forward declarations, the
+  `is_*` / `to_*` / `try_to_*` predicate generators, the pretty-name
+  tables) `#include` the matching `.inc` with a redefining macro.
 
 ## File layout
 
 | File | Contents |
 |------|----------|
-| `irep2.h` | Base classes `irep2t`, `type2t`, `expr2t`; the `irep_container` smart pointer (alias `expr2tc` / `type2tc`); master node-kind lists. |
-| `irep2_type.h` / `irep2_type.cpp` | Concrete type classes (`bool_type2t`, `signedbv_type2t`, `array_type2t`, `pointer_type2t`, `struct_type2t`, ...). |
-| `irep2_expr.h` / `irep2_expr.cpp` | Concrete expression classes (`constant_int2t`, `symbol2t`, `add2t`, `if2t`, `code_assign2t`, ...) and their *data* base classes (`constant_int_data`, `arith_2ops`, ...). |
-| `irep2_utils.h` | Inline predicates and helpers (`is_bv_type`, `is_number_type`, `is_scalar_type`, `is_multi_dimensional_array`, simplification helpers). |
-| `irep2_templates.h` | CRTP-style scaffolding (`register_irep_methods`, `do_type2string`, `do_get_sub_expr`) that materialises `pretty`, `cmp`, `lt`, `do_crc`, `hash`, `clone`, and operand iteration for each node. |
-| `irep2_templates_expr.h`, `irep2_templates_types.h`, `irep2_template_utils.h`, `irep2_meta_templates.h` | Per-field trait machinery (`field_traits`, `expr2t_traits`, `type2t_traits`) and the metaprogramming that walks them. |
-| `templates/*.cpp` | Out-of-line explicit instantiations of the per-node template methods (split into several TUs to keep compile times manageable). |
-| `CMakeLists.txt` | Builds the `irep2` static library (depends on `bigint`, Boost, `fmt`, and privately `crypto_hash`). |
+| `irep2.h` | Base classes `irep2t`, `type2t`, `expr2t`; the `irep_container` smart pointer (alias `expr2tc` / `type2tc`); the `make_irep` factory; `function_ref`; `hash_combine`; checked-cast helpers. Declares the `cmp`/`lt`/`clone`/etc. virtual entry points; the switch-on-id dispatchers themselves live in `irep2_expr.cpp` / `irep2_type.cpp` (and `irep2_crc.cpp` for `crc`). |
+| `expr_kinds.inc` / `type_kinds.inc` | Manifest of node kinds in declaration order. Single source of truth. |
+| `irep2_type.h` / `irep2_type.cpp` | Concrete type classes (`bool_type2t`, `signedbv_type2t`, `array_type2t`, `pointer_type2t`, `struct_type2t`, ...). Each kind inherits directly from `type2t` and owns its fields. Free family helpers in the same header (`struct_union_members`, `array_or_vector_subtype`, ...) provide uniform field access when the caller doesn't care which specific kind it is. |
+| `irep2_expr.h` / `irep2_expr.cpp` | Concrete expression classes (`constant_int2t`, `symbol2t`, `add2t`, `if2t`, `code_assign2t`, ...). Each kind inherits directly from `expr2t`. |
+| `irep2_utils.h` | Inline predicates and helpers (`is_bv_type`, `is_number_type`, `is_scalar_type`, simplification helpers). |
+| `irep2_dispatch.h` | Generic `generic_*<K>` helpers that walk a kind's `K::fields` tuple via `std::apply` to implement cmp/lt/tostring/get_sub_expr/foreach_operand uniformly, plus the per-field-type overloads they invoke. Switch dispatchers on `expr2t`/`type2t` route to these. (`crc` and `clone` walk the same `K::fields` tuple from `irep2_crc.cpp` / `irep2_expr.cpp` / `irep2_type.cpp`.) |
+| `irep2_crc.cpp` | Iterative postorder CRC traversal and per-field CRC operations. Kept in one translation unit with internal linkage so the compiler sees and optimises the complete CRC path. |
+| `irep2_utils.cpp` | Definitions for the predicates and dispatch-catalogue overloads declared in `irep2_utils.h` and `irep2_dispatch.h`. |
+| `irep2_guard.{h,cpp}` / `guard_seq.h` | Path-condition guard container `guard2tc` — an `expr2tc` carrying a flat conjunct list — and `guard_seq`, the `immer::vector`-backed, oldest-first immutable conjunct sequence it stores (O(1) copy for the deep guard chains symex builds). |
+| `CMakeLists.txt` | Builds the `irep2` static library; links `fmt`, `bigint`, and `immer`, and adds Boost's include path (irep2 headers reach `boost/program_options.hpp` transitively through `config.h`). |
 
 ## Anatomy of a node
 
-A concrete node is composed by inheritance from three layers:
+Each concrete kind inherits directly from `expr2t` (or `type2t`, with a
+small set of shared `*_data` intermediates on the type side) and
+declares its fields plus two static class members:
 
-1. A **data class** holds the fields and exposes them as `field_traits` so the
-   metaprogramming can enumerate them — e.g. `constant_int_data` holds a
-   `BigInt value` field.
-2. An **`esbmct::expr2t_traits<...>`** typedef lists those fields. The
-   templates in `irep2_templates*.h` consume this trait list to generate
-   `clone`, `cmp`, `lt`, `do_crc`, `hash`, `tostring`, `foreach_operand`,
-   `get_sub_expr`, etc.
-3. The user-facing class (e.g. `constant_int2t`) inherits from the data class
-   and registers itself via `irep_methods2`, picking up all the generated
-   members.
+```cpp
+struct neg2t : expr2t {                          // arithmetic negation, -v
+  expr2tc value;
+  neg2t(const type2tc &t, const expr2tc &v) : expr2t(t, neg_id), value(v) {}
+  static constexpr auto fields =
+    std::make_tuple(&expr2t::type, &neg2t::value);
+  static std::string field_names[esbmct::num_type_fields];
+};
+```
 
-Net effect: adding a new node is mostly a matter of (a) appending its name to
-the master list in `irep2.h`, (b) declaring a data class with `field_traits`,
-and (c) declaring the user-facing class. Comparison, hashing, pretty-printing
-and operand iteration are generated for you.
+The generic helpers in `irep2_dispatch.h` walk `K::fields` via
+`std::apply` to implement `cmp`, `lt`, `tostring`, `get_sub_expr`, and
+`foreach_operand` once for every kind; `clone` (`irep2_expr.cpp` /
+`irep2_type.cpp`) and `do_crc` (`irep2_crc.cpp`) walk the same tuple.
+The switch-on-id dispatchers on `expr2t` / `type2t` (driven by the
+`expr_kinds.inc` / `type_kinds.inc` X-macro manifests) route each call
+to the matching `generic_*<K>`.
 
-## Working with `irep2tc` containers
+Net effect: adding a new node is a single-line manifest entry plus a
+concrete class with `fields` / `field_names`. Comparison, hashing,
+pretty-printing, and operand iteration are generated by the dispatchers
+for free.
+
+The `fields` tuple is canonical for the kind's primary constructor
+argument order, after the type slot (so `K(type, f1, f2, ...)` matches
+`K::fields = make_tuple(&K::f1, &K::f2, ...)` — or
+`make_tuple(&expr2t::type, &K::f1, &K::f2, ...)` for kinds where the
+type is itself part of the structural identity). `get_sub_expr(i)`
+indexes into this tuple after skipping non-expr2tc fields, so the tuple
+order is observable to callers.
+
+## Working with containers
 
 ```cpp
 expr2tc lhs = symbol2tc(int_type, "x");
@@ -81,42 +122,460 @@ to_add2t(sum).side_1 = constant_int2tc(int_type, BigInt(2));
 
 Notes:
 
-- `is_*2t` / `to_*2t` are generated from `ESBMC_LIST_OF_EXPRS` /
-  `ESBMC_LIST_OF_TYPES`; never `dynamic_cast` directly.
-- Treat `expr2tc` like a value: pass by const-ref where possible, copy where
-  you need a private mutation point. The container will detach as needed.
+- `is_*2t` / `to_*2t` / `try_to_*2t` are generated from
+  `expr_kinds.inc` / `type_kinds.inc`; never `dynamic_cast` directly.
+  `to_*2t` throws `irep2_cast_error` (a `std::logic_error` subclass) on
+  a mismatched kind; `try_to_*2t` returns `nullptr` instead.
+- Treat `expr2tc` like a value: pass by const-ref where possible, copy
+  where you need a private mutation point. The container will detach as
+  needed.
 - Calling `crc()` is safe to memoise on; mutation invalidates the cache.
-- `simplify()` on a container delegates to the node's `do_simplify`. A nil
-  return means "no further simplification."
+- `simplify()` on a container delegates to the node's `do_simplify`. A
+  nil return means "no further simplification."
 
 ## Adding a new node — checklist
 
-1. Append the node name to `ESBMC_LIST_OF_EXPRS` (or `ESBMC_LIST_OF_TYPES`)
-   in `irep2.h`.
-2. Define a *data* class in `irep2_expr.h` / `irep2_type.h` listing each
-   field with `esbmct::field_traits<...>` and aggregating them into a
-   `traits` typedef.
-3. Define the user-facing `foo2t` class (typically empty — it just inherits
-   the data class and registers methods).
-4. Add explicit template instantiations to the matching file under
-   `templates/` so the generated methods get emitted out-of-line.
-5. If the node has semantics worth modelling, teach `do_simplify` and the
-   relevant lowering passes (symex, SMT conversion in `src/solvers/`,
-   `goto2c`) about it.
+1. Append a row to `expr_kinds.inc` (or `type_kinds.inc`):
+   `IREP2_EXPR(my_kind, "my_kind")` / `IREP2_TYPE(my_kind, "my_kind")`.
+   The pretty-name string is what `pretty()` and diagnostic messages
+   print; it usually matches the identifier verbatim but may diverge
+   (`null_object` prints as `NULL-object`).
+2. Define the `<kind>2t` class in `irep2_expr.h` / `irep2_type.h`:
+   inherit from `expr2t` / `type2t` (or a shared `*_data` base on the
+   type side), declare each field, write a primary constructor
+   `(type, field1, field2, ...)`, and add a `static constexpr auto
+   fields = std::make_tuple(&kind2t::field1, ...)` tuple in the same
+   order as the constructor parameters.
+3. Add the `field_names` table for the kind in `irep2_expr.cpp` /
+   `irep2_type.cpp` — one string per `fields` entry, in tuple order.
+4. If the node has semantics worth modelling, teach `do_simplify`
+   (defined out-of-line in `src/util/expr/expr_simplifier.cpp` for
+   non-trivial nodes) and the relevant lowering passes (symex, SMT
+   conversion in `src/solvers/`, `goto2c`) about it.
 
 ## Related code
 
-- `util/migrate.{h,cpp}` — bidirectional conversion between legacy
+- `util/irep/migrate.{h,cpp}` — bidirectional conversion between legacy
   string-based `irept`/`exprt` and `irep2tc`/`expr2tc`. Frontends emit
   legacy ireps that get migrated before symex.
 - `src/goto-symex/`, `src/solvers/` — primary consumers; expect to walk
   `expr2tc` trees via `foreach_operand` and the `is_*` / `to_*` accessors.
-- `src/util/std_expr.h`, `src/util/std_types.h` — legacy counterparts on the
+- `src/util/irep/std_expr.h`, `src/util/irep/std_types.h` — legacy counterparts on the
   string-irep side.
+
+## Abstract grammar
+
+This section gives the **shape of the in-memory term**, not a parseable
+language — `irep2` has no surface syntax, parser, or evaluator. The node
+hierarchy is an inductive data type, and the productions below describe
+its abstract syntax: the structure walked by `get_sub_expr`, the
+comparison/crc dispatchers, and `clone`.
+
+The two manifests (`expr_kinds.inc` / `type_kinds.inc`) plus each kind's
+`fields` tuple define that grammar. The productions below are the
+structure; the *Reference* tables that follow enumerate every terminal in
+prose with its semantics.
+
+**Notation.** `::=` is a production, `|` alternation, `( … )` grouping,
+`{ x }` zero-or-more, `[ x ]` optional, `"lit"` a terminal keyword (the
+identifier as it appears in the `.inc` manifest). Lower-case words are
+non-terminals; leaf terminals (`nat`, `name`, `int-lit`, …) are defined
+at the end. `; …` is a comment. Every expression carries a result type,
+written `«T»` after the keyword: `«type»` when the type is a free operand,
+or a concrete type when the kind fixes it (`«bool»` for predicates,
+`«empty»` for statements, `«pointer»` for `address_of`). Operand lists
+appear in **`fields`-tuple order** — the order `get_sub_expr` and the
+dispatchers walk.
+
+### Types
+
+```
+type        ::= "bool"
+              | "empty"
+              | "symbol" "(" name ")"
+              | aggregate-type
+              | "code" "(" [ type { "," type } ] [ "," "..." ] ")" "->" type
+              | "array" "(" type "," ( expr | "infinite" ) ")"
+              | "vector" "(" type "," expr ")"
+              | "pointer" "(" type [ "," "provenance" ] ")"
+              | "unsignedbv" "(" nat ")"
+              | "signedbv" "(" nat ")"
+              | "fixedbv" "(" nat "," nat ")"     ; total width, integer bits
+              | "floatbv" "(" nat "," nat ")"     ; fraction bits, exponent bits
+              | "complex" "(" type ")"
+              | "cpp_name" "(" name [ "<" type { "," type } ">" ] ")"
+
+aggregate-type ::= ( "struct" | "union" ) name
+                   "{" [ member { "," member } ] "}" [ "packed" ]
+member      ::= name ":" type
+```
+
+`code` stores `argument_names` parallel to its argument types and an
+`ellipsis` flag (the `...`). `struct`/`union` additionally carry
+`member_pretty_names` parallel to `member` (elided above). An `array`
+whose `size_is_infinite` flag is set has size `infinite` and a nil
+`array_size`; a non-constant `array_size` is a dynamically-sized array.
+
+### Expressions
+
+```
+expr        ::= constant | symbol | cast | control | relation | logical
+              | bitwise | arithmetic | ieee | bitlevel | overflow
+              | pointer-expr | aggregate-expr | quantifier | python-pred
+              | cheri | sideeffect | statement
+```
+
+Constants:
+
+```
+constant    ::= "constant_int"      «type» int-lit
+              | "constant_fixedbv"  «type» fixedbv-lit
+              | "constant_floatbv"  «type» float-lit
+              | "constant_bool"     «bool» bool-lit
+              | "constant_string"   «type» string-lit
+              | "constant_struct"   «type» "{" [ expr { "," expr } ] "}"
+              | "constant_union"    «type» name "=" "{" [ expr { "," expr } ] "}"
+              | "constant_array"    «type» "{" [ expr { "," expr } ] "}"
+              | "constant_vector"   «type» "{" [ expr { "," expr } ] "}"
+              | "constant_array_of" «type» "(" expr ")"
+```
+
+Symbols and casts:
+
+```
+symbol      ::= "symbol" «type» name
+cast        ::= "typecast"  «type» "(" expr "," rmode ")"
+              | "bitcast"   «type» "(" expr ")"
+              | "nearbyint" «type» "(" expr "," rmode ")"
+```
+
+Control, comparison and logical:
+
+```
+control     ::= "if" «type» "(" expr "," expr "," expr ")"   ; cond, then, else
+relation    ::= relop «bool» "(" expr "," expr ")"
+              | "cmp_three_way" «type» "(" expr "," expr ")"
+relop       ::= "equality" | "notequal" | "lessthan" | "greaterthan"
+              | "lessthanequal" | "greaterthanequal"
+logical     ::= "not" «bool» "(" expr ")"
+              | logop2 «bool» "(" expr "," expr ")"
+logop2      ::= "and" | "or" | "xor" | "implies"
+```
+
+Bitwise and arithmetic:
+
+```
+bitwise     ::= "bitnot" «type» "(" expr ")"
+              | bitop2 «type» "(" expr "," expr ")"
+bitop2      ::= "bitand" | "bitor" | "bitxor" | "shl" | "lshr" | "ashr"
+arithmetic  ::= aunop «type» "(" expr ")"
+              | abinop «type» "(" expr "," expr ")"
+aunop       ::= "neg" | "abs"
+abinop      ::= "add" | "sub" | "mul" | "div" | "modulus"
+```
+
+IEEE-754 floating point:
+
+```
+ieee        ::= ieee-bin   «type» "(" rmode "," expr "," expr ")"
+              | "ieee_fma"  «type» "(" expr "," expr "," expr "," rmode ")"
+              | "ieee_sqrt" «type» "(" expr "," rmode ")"
+              | fp-class    «bool» "(" expr ")"
+              | "signbit"   «type» "(" expr ")"
+ieee-bin    ::= "ieee_add" | "ieee_sub" | "ieee_mul" | "ieee_div"
+fp-class    ::= "isnan" | "isinf" | "isnormal" | "isfinite"
+```
+
+Bit-level utilities and overflow checks:
+
+```
+bitlevel    ::= "popcount" «type» "(" expr ")"
+              | "bswap"    «type» "(" expr ")"
+              | "concat"   «type» "(" expr "," expr ")"
+              | "extract"  «type» "(" expr "," nat "," nat ")"  ; value, upper, lower
+overflow    ::= "overflow"      «bool» "(" expr ")"  ; operand is an add/sub/mul
+              | "overflow_cast" «bool» "(" expr "," nat ")"  ; operand, target width
+              | "overflow_neg"  «bool» "(" expr ")"
+```
+
+Pointers and the memory model:
+
+```
+pointer-expr ::= "address_of"         «pointer» "(" expr ")"
+               | "dereference"        «type» "(" expr ")"
+               | "same_object"        «bool» "(" expr "," expr ")"
+               | "pointer_offset"     «type» "(" expr ")"
+               | "pointer_object"     «type» "(" expr ")"
+               | "pointer_capability" «type» "(" expr ")"
+               | "valid_object"       «bool» "(" expr ")"
+               | "invalid_pointer"    «bool» "(" expr ")"
+               | "deallocated_obj"    «bool» "(" expr ")"
+               | "races_check"        «bool» "(" expr ")"
+               | "dynamic_size"       «type» "(" expr ")"
+               | "dynamic_object"     «type» "(" expr "," bool-lit "," bool-lit ")"
+               | "object_descriptor"  «type» "(" expr "," expr "," nat ")"
+               | "null_object"        «type»
+               | "unknown"            «type»
+               | "invalid"            «type»
+```
+
+Aggregate access and update:
+
+```
+aggregate-expr ::= "index"        «type» "(" expr "," expr ")"  ; array, index
+                 | "member"       «type» "(" expr "," name ")"  ; aggregate, field
+                 | "member_ref"   «type» "(" name ")"
+                 | "ptr_mem"      «type» "(" expr "," expr ")"
+                 | "with"         «type» "(" expr "," field "," expr ")"  ; src, field, val
+                 | "byte_extract" «type» "(" expr "," expr "," endian ")"
+                 | "byte_update"  «type» "(" expr "," expr "," expr "," endian ")"
+field          ::= name | expr     ; field name for struct/union, index for array
+endian         ::= "little" | "big"
+```
+
+Quantifiers, Python predicates and CHERI:
+
+```
+quantifier  ::= ( "forall" | "exists" ) «bool» "(" symbol "," expr ")"  ; bound var, body
+python-pred ::= ( "isinstance" | "hasattr" | "isnone" ) «bool» "(" expr "," expr ")"
+cheri       ::= ( "capability_base" | "capability_top" ) «type» "(" expr ")"
+```
+
+Side effects:
+
+```
+sideeffect  ::= "sideeffect" «type» "(" expr "," expr "," "[" { expr } "]"
+                              "," type "," allockind ")"  ; operand, size, args, alloc-type
+allockind   ::= "malloc" | "realloc" | "alloca" | "cpp_new" | "cpp_new_arr"
+              | "nondet" | "va_arg" | "printf2" | "function_call"
+              | "preincrement" | "postincrement" | "predecrement"
+              | "postdecrement" | "old_snapshot" | "assigns_target"
+              | "statement_expression" | "temporary_object"
+              | "gcc_conditional_expression" | "cpp_delete"
+              | "cpp_delete_array"
+```
+
+GOTO statements (`code_*`):
+
+```
+statement   ::= "code_block"         «empty» "(" { statement } ")"
+              | "code_assign"        «empty» "(" expr "," expr ")"  ; target, source
+              | "code_decl"          «type»  name
+              | "code_dead"          «type»  name
+              | "code_return"        «empty» "(" expr ")"
+              | "code_skip"          «type»
+              | "code_free"          «empty» "(" expr ")"
+              | "code_goto"          «empty» name                   ; target label
+              | "code_function_call" «empty» "(" expr "," expr ","
+                                              "[" { expr } "]" ")"  ; ret, func, args
+              | "code_printf"        «empty» "(" "[" { expr } "]" ")"
+              | "code_expression"    «empty» "(" expr ")"
+              | "code_comma"         «type»  "(" expr "," expr ")"
+              | "code_asm"           «type»  string-lit
+              | structured-statement
+              | cpp-statement
+structured-statement                                       ; V.4, see note below
+            ::= "code_ifthenelse"  «empty» "(" expr "," statement ","
+                                            statement-or-nil ")"  ; cond, then, else
+              | "code_while"       «empty» "(" expr "," statement ")"  ; cond, body
+              | "code_for"         «empty» "(" expr-or-nil "," expr-or-nil ","
+                                            expr-or-nil "," statement ")" ; init,cond,iter,body
+              | "code_switch"      «empty» "(" expr "," statement ")"  ; value, body
+              | "code_break"       «empty»
+              | "code_continue"    «empty»
+              | "code_label"       «empty» name statement              ; label, body
+cpp-statement ::= "code_cpp_delete"         «empty» "(" expr ")"
+                | "code_cpp_del_array"      «empty» "(" expr ")"
+                | "code_cpp_throw"          «empty» "(" expr "," "[" { name } "]" ")"
+                | "code_cpp_catch"          «empty» "(" "[" { name } "]" "," "[" { expr } "]" ")"
+```
+
+Leaf terminals:
+
+```
+nat         ::= unsigned decimal integer (a bit-width or field index)
+int-lit     ::= arbitrary-precision signed integer (BigInt)
+fixedbv-lit ::= fixed-point literal (fixedbvt)
+float-lit   ::= IEEE-754 literal (ieee_floatt)
+bool-lit    ::= "true" | "false"
+string-lit  ::= interned string literal (irep_idt)
+name        ::= interned identifier (irep_idt) — variable, field, label or type name
+rmode       ::= expr   ; rounding-mode operand, int32; defaults to __ESBMC_rounding_mode
+```
+
+Notes:
+
+- **Type slot.** The `«…»` annotation is the node's `type` field. Whether
+  it participates in structural equality depends on whether
+  `&expr2t::type` is the first entry of the kind's `fields` tuple (see
+  *Anatomy of a node*); a few kinds — `constant_bool`, `not` — omit it.
+- **Rounding mode.** Operand order follows `fields`, and the rounding-mode
+  operand's position is not uniform: the binary `ieee_*` ops list it
+  first, while `ieee_fma` / `ieee_sqrt` list it last.
+- **No conditional `code_goto`.** `code_*` statements carry `empty` type
+  and live inside GOTO programs. Conditional branches are encoded on the
+  GOTO *instruction*, not as an expression, so only the unconditional
+  `code_goto` appears here.
+- **Structured-statement kinds are dead-but-tested (V.4,
+  esbmc/esbmc#4715).** `code_ifthenelse` / `code_while` / `code_for` /
+  `code_switch` / `code_break` / `code_continue` / `code_label` mirror the
+  legacy structured `codet` statements so a frontend can build IREP2
+  bodies and `goto_convert` can consume them, removing the per-instruction
+  back-migration at the body seam (wall W1). They are **not yet built by
+  any pipeline path** — the converter still emits legacy structured
+  `codet`, which `goto_convert` lowers to flat `code_goto` + instruction
+  guards. Only the migrate round-trip tests exercise them today; they
+  become live in the `goto_convert` wiring phase.
+
+## Examples
+
+Each example shows the source, the C++ construction with the generated
+`*2tc` factories, and the resulting tree in the grammar notation above.
+Assume `type2tc i32 = signedbv_type2tc(32);` throughout.
+
+**Leaves — a variable and a literal.**
+
+```cpp
+expr2tc x   = symbol2tc(i32, "x");
+expr2tc one = constant_int2tc(i32, BigInt(1));
+```
+```
+symbol       «signedbv(32)» "x"
+constant_int «signedbv(32)» 1
+```
+
+**Arithmetic — `x + 2`.** `add` takes its result type plus two operands:
+
+```cpp
+expr2tc two = constant_int2tc(i32, BigInt(2));
+expr2tc sum = add2tc(i32, x, two);
+```
+```
+add «signedbv(32)» (
+  symbol       «signedbv(32)» "x",
+  constant_int «signedbv(32)» 2)
+```
+
+**Comparison + ternary — `y > 2 ? y : 0`.** Relations have boolean
+result and take only their two operands (no explicit type):
+
+```cpp
+expr2tc y    = symbol2tc(i32, "y");
+expr2tc gt   = greaterthan2tc(y, two);
+expr2tc zero = constant_int2tc(i32, BigInt(0));
+expr2tc tern = if2tc(i32, gt, y, zero);
+```
+```
+if «signedbv(32)» (
+  greaterthan «bool» (symbol «signedbv(32)» "y",
+                      constant_int «signedbv(32)» 2),
+  symbol       «signedbv(32)» "y",
+  constant_int «signedbv(32)» 0)
+```
+
+**Struct member — `p.y`** for `struct point { int x; int y; }`:
+
+```cpp
+type2tc point = struct_type2tc(
+  {i32, i32},      // members
+  {"x", "y"},      // member_names
+  {"x", "y"},      // member_pretty_names
+  "point",         // tag
+  false);          // not packed
+expr2tc p   = symbol2tc(point, "p");
+expr2tc p_y = member2tc(i32, p, "y");   // result type is the member's type
+```
+```
+member «signedbv(32)» (
+  symbol «struct point {x: signedbv(32), y: signedbv(32)}» "p",
+  "y")
+```
+
+**Array and pointers — `a[i]`, `&x`, `*p`.** Note `address_of2tc` takes
+the *pointee* type as its first argument; the node's own type is the
+pointer to it:
+
+```cpp
+expr2tc a    = symbol2tc(
+  array_type2tc(i32, constant_int2tc(i32, BigInt(3)), false), "a");
+expr2tc i    = symbol2tc(signedbv_type2tc(64), "i");
+expr2tc elem = index2tc(i32, a, i);          // a[i]
+expr2tc addr = address_of2tc(i32, x);        // &x : pointer(signedbv(32))
+expr2tc p    = symbol2tc(pointer_type2tc(i32), "p");
+expr2tc star = dereference2tc(i32, p);       // *p
+```
+```
+index       «signedbv(32)»          (symbol «array(signedbv(32), 3)» "a",
+                                     symbol «signedbv(64)» "i")
+address_of  «pointer(signedbv(32))» (symbol «signedbv(32)» "x")
+dereference «signedbv(32)»          (symbol «pointer(signedbv(32))» "p")
+```
+
+**Statements — a function body.** `code_*` nodes nest inside a
+`code_block`; their type is `empty`:
+
+```cpp
+expr2tc body = code_block2tc(std::vector<expr2tc>{
+  code_decl2tc(i32, "x"),
+  code_assign2tc(x, one),
+  code_decl2tc(i32, "y"),
+  code_assign2tc(y, add2tc(i32, x, two)),
+  code_return2tc(y),
+});
+```
+```
+code_block «empty» (
+  code_decl   «signedbv(32)» "x",
+  code_assign «empty» (symbol «signedbv(32)» "x", constant_int «signedbv(32)» 1),
+  code_decl   «signedbv(32)» "y",
+  code_assign «empty» (symbol «signedbv(32)» "y",
+                       add «signedbv(32)» (symbol «signedbv(32)» "x",
+                                           constant_int «signedbv(32)» 2)),
+  code_return «empty» (symbol «signedbv(32)» "y"))
+```
+
+**Seeing the IR for real code.** `esbmc file.c --goto-functions-only`
+dumps the GOTO program, where the same `code_*` / expression nodes print
+in a compact concrete syntax. For
+
+```c
+int f(int *a, int i) {
+  struct point p;
+  int x = 1;
+  int y = x + 2;
+  p.y = y;
+  int z = a[i];
+  if (y > 2) return p.y;
+  return z;
+}
+```
+
+the listing (comments and `p`'s nondet-init trimmed) is:
+
+```
+DECL signed int x;
+ASSIGN x=1;
+DECL signed int y;
+ASSIGN y=x + 2;
+ASSIGN p.y=y;
+DECL signed int z;
+ASSIGN z=a[(signed long int)i];
+IF !(y > 2) THEN GOTO 1
+RETURN: p.y
+1: RETURN: z
+```
+
+Reading it back to the grammar: `ASSIGN y=x + 2;` is
+`code_assign(symbol "y", add(symbol "x", constant_int 2))`; `p.y` is
+`member(symbol "p", "y")`; `a[(signed long int)i]` is
+`index(symbol "a", typecast(symbol "i"))`; and the `IF … GOTO` is the
+conditional branch carried on the GOTO instruction itself — not a
+`code_goto` expression (see the grammar note above).
 
 ## Reference: types
 
-Defined by `ESBMC_LIST_OF_TYPES` in `irep2.h`; declared in `irep2_type.h`.
+Listed in `type_kinds.inc` (one `IREP2_TYPE` row per kind); declared in
+`irep2_type.h`.
 
 | Kind | Description |
 |------|-------------|
@@ -124,7 +583,7 @@ Defined by `ESBMC_LIST_OF_TYPES` in `irep2.h`; declared in `irep2_type.h`.
 | `empty` | "Void" — used for void pointers, void function returns, statements. |
 | `symbol` | Placeholder/symbolic type used while linking, or for recursive references inside structs/arrays. |
 | `struct` | C `struct` and C++ class data. Carries member types, names, pretty names, struct name, and `packed` flag. |
-| `union` | C `union`. Same shape as `struct` (shares `struct_union_data`). |
+| `union` | C `union`. Same field shape as `struct` (members, names, packed, ...). |
 | `code` | Function type: argument types, argument names, return type, ellipsis flag. |
 | `array` | Fixed, infinite, or dynamically-sized array. Holds `subtype`, `array_size`, and `size_is_infinite`. |
 | `vector` | SIMD-style fixed-size vector. Same backing data as `array` but distinct semantics. |
@@ -133,12 +592,13 @@ Defined by `ESBMC_LIST_OF_TYPES` in `irep2.h`; declared in `irep2_type.h`.
 | `signedbv` | Signed bitvector of given `width`. |
 | `fixedbv` | Fixed-point bitvector — total width split into integer and fraction bits. |
 | `floatbv` | IEEE-754 floating-point — fraction-bit and exponent-bit counts. |
-| `complex` | C `_Complex` — pair of identical scalar components (shares `struct_union_data`). |
+| `complex` | C `_Complex` — stores only its element `subtype`; the SMT tuple lowering synthesises the (real, imag) 2-tuple view at the boundary via `struct_union_members` / `struct_union_member_names`. |
 | `cpp_name` | C++ qualified name with template arguments; used transiently by the C++ frontend. |
 
 ## Reference: expressions
 
-Defined by `ESBMC_LIST_OF_EXPRS` in `irep2.h`; declared in `irep2_expr.h`. Every
+Listed in `expr_kinds.inc` (one `IREP2_EXPR` row per kind); declared in
+`irep2_expr.h`. Every
 expression has a `type` and an `expr_id`. Statement-shaped nodes (the `code_*`
 family) carry `empty` type — they appear inside GOTO programs rather than
 inside an expression tree.
@@ -197,8 +657,6 @@ inside an expression tree.
 | `bitand` | Bitwise AND. |
 | `bitor` | Bitwise OR. |
 | `bitxor` | Bitwise XOR. |
-| `bitnand` | Bitwise NAND. |
-| `bitnor` | Bitwise NOR. |
 | `bitnot` | Bitwise NOT. |
 | `shl` | Logical shift left. |
 | `lshr` | Logical shift right (zero-fill). |
@@ -324,7 +782,6 @@ ordinary expression tree. Their type is `empty` unless noted.
 |------|-------------|
 | `code_block` | Sequence of statements. |
 | `code_assign` | `target = source`. |
-| `code_init` | Initialisation assignment (specialised `code_assign` — relevant for object lifetime). |
 | `code_decl` | Declaration of a local with a given type and name (starts its lifetime). |
 | `code_dead` | End of a local's lifetime — symex stops trusting reads through it. |
 | `code_return` | `return expr;` (or `return;` if operand is nil). |
@@ -337,6 +794,22 @@ ordinary expression tree. Their type is `empty` unless noted.
 | `code_comma` | C comma operator — evaluate left, then right; result is right. |
 | `code_asm` | Inline assembly (the string is preserved; semantics are usually opaque). |
 
+### Structured control-flow statements (V.4, dead-but-tested)
+
+These mirror the legacy structured `codet` statements so a frontend can emit
+IREP2 bodies; they are not yet built by any pipeline path (see the
+*Structured-statement kinds* note above).
+
+| Kind | Description |
+|------|-------------|
+| `code_ifthenelse` | `if (cond) then_case [else else_case]`. `else_case` is nil when absent. |
+| `code_while` | `while (cond) body`. |
+| `code_for` | `for (init; cond; iter) body`. `init`/`cond`/`iter` are each nil when absent. |
+| `code_switch` | `switch (value) body`. |
+| `code_break` | `break;`. |
+| `code_continue` | `continue;`. |
+| `code_label` | A labelled statement: `label: code`. |
+
 ### C++ exception / delete statements
 
 | Kind | Description |
@@ -344,18 +817,17 @@ ordinary expression tree. Their type is `empty` unless noted.
 | `code_cpp_delete` | C++ `delete expr;`. |
 | `code_cpp_del_array` | C++ `delete[] expr;`. |
 | `code_cpp_throw` | `throw expr;` with a list of types being thrown. |
-| `code_cpp_catch` | `catch (...)` clause with a list of catchable types. |
-| `code_cpp_throw_decl` | Function-level `throw(...)` declaration (start marker). |
-| `code_cpp_throw_decl_end` | Matching end marker for `code_cpp_throw_decl`. |
+| `code_cpp_catch` | `try`/`catch`: a list of catchable types plus, for the source-level form, the try block and per-type handler blocks as operands (empty on the post-goto-convert CATCH marker). |
 
 ## Gotchas
 
 - **Detach semantics.** Holding a raw `T *` from `irep2tc::get()` (non-const)
   detaches; calling `get()` const does not. Don't cache the raw pointer
   across non-const accesses on shared containers.
-- **CRC cache.** Any non-const access resets `crc_val` to 0. Concurrent
-  readers of the same node must go through `crc()` (which locks
-  `crc_mutex`), not the raw field.
+- **CRC cache.** `crc_val` is a `std::atomic<size_t>` with `0` meaning
+  "not yet computed". Readers do an acquire load and skip recompute on
+  a hit; producers compute on a local and release-store the result.
+  Concurrent readers should call `crc()`, not the raw field.
 - **`type2t::get_width()` can throw.** Symbolic, infinite-sized, or
   dynamically-sized types raise `symbolic_type_excp` /
   `array_type2t::inf_sized_array_excp` / `dyn_sized_array_excp`. Callers

@@ -1,0 +1,10 @@
+CORE
+main.c
+--dead-code-check --dead-store-check --sarif-output out.sarif
+:8: dead store: assignment to unused never read
+^\[Dead code\]$
+:9: dead code: unreachable branch
+^VERIFICATION SUCCESSFUL$
+CHECK_JSON out.sarif $.version == "2.1.0"
+CHECK_JSON out.sarif $.runs[0].results[0].ruleId == "dead-code"
+CHECK_JSON out.sarif $.runs[0].results[1].ruleId == "dead-store"

@@ -1,0 +1,5 @@
+CORE
+main.c
+--synthesise-loop-invariants
+^Synthesised loop invariants for 1 loop$
+^VERIFICATION FAILED$

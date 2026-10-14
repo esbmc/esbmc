@@ -10,7 +10,7 @@ namespace std
 #define STACK_CAPACITY 20
 
 // Forward declarations for specializations
-template <class T, class Container = deque<T>>
+template <class T, class Container = deque<T> >
 class stack;
 
 // Base template
@@ -88,7 +88,7 @@ public:
 
 // Specialization for list
 template <class T>
-class stack<T, list<T>>
+class stack<T, list<T> >
 {
   T buf[STACK_CAPACITY];
   size_t _top;
@@ -160,7 +160,7 @@ public:
 
 // Specialization for vector
 template <class T>
-class stack<T, vector<T>>
+class stack<T, vector<T> >
 {
   T buf[STACK_CAPACITY];
   size_t _top;
@@ -237,7 +237,7 @@ public:
 
 // Specialization for deque
 template <class T>
-class stack<T, deque<T>>
+class stack<T, deque<T> >
 {
   T buf[STACK_CAPACITY];
   size_t _top;

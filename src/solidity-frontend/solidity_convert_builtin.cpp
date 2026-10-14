@@ -1,5 +1,6 @@
 /// \file solidity_convert_builtin.cpp
-/// \brief Built-in function and low-level call handling for the Solidity frontend.
+/// \brief Built-in function and low-level call handling for the Solidity
+/// frontend.
 ///
 /// Implements recognition and conversion of Solidity built-in operations:
 /// low-level calls (call, delegatecall, staticcall, transfer, send),
@@ -9,14 +10,14 @@
 
 #include <solidity-frontend/solidity_convert.h>
 #include <solidity-frontend/typecast.h>
-#include <util/arith_tools.h>
-#include <util/bitvector.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/mp_arith.h>
-#include <util/std_expr.h>
-#include <util/message.h>
+#include <util/arith/arith_tools.h>
+#include <util/arith/bitvector.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
+#include <util/arith/mp_arith.h>
+#include <util/irep/std_expr.h>
+#include <util/message/message.h>
 #include <fstream>
 
 bool solidity_convertert::is_low_level_call(const std::string &name)
@@ -232,7 +233,6 @@ bool solidity_convertert::add_auxiliary_members(
   }
 
   t = string_t;
-  //set_sol_type(t, SolidityGrammar::SolType::STRING);
   get_builtin_symbol(
     "_ESBMC_bind_cname",
     sol_prefix + "_ESBMC_bind_cname",
@@ -329,12 +329,12 @@ void solidity_convertert::move_builtin_to_contract(
     abort();
   }
   symbolt &c_sym = *context.find_symbol(c_id);
-  assert(c_sym.type.is_struct());
+  assert(c_sym.get_type().is_struct());
 
   if (!is_method)
   {
     // check if it's already inserted
-    for (auto i : to_struct_type(c_sym.type).components())
+    for (auto i : to_struct_type(c_sym.get_type()).components())
     {
       if (i.identifier() == sym.identifier())
         return;
@@ -342,13 +342,17 @@ void solidity_convertert::move_builtin_to_contract(
 
     struct_typet::componentt comp(sym.name(), sym.name(), sym.type());
     comp.set_access(access);
-    comp.type().set("#member_name", c_sym.type.tag());
-    to_struct_type(c_sym.type).components().push_back(comp);
+    comp.type().member_name(c_sym.get_type().tag());
+    {
+      typet t = c_sym.get_type();
+      to_struct_type(t).components().push_back(comp);
+      c_sym.set_type(std::move(t));
+    }
   }
   else
   {
     // check if it's already inserted
-    for (auto i : to_struct_type(c_sym.type).methods())
+    for (auto i : to_struct_type(c_sym.get_type()).methods())
     {
       if (i.identifier() == sym.identifier())
         return;
@@ -362,7 +366,11 @@ void solidity_convertert::move_builtin_to_contract(
     comp.pretty_name(sym.name());
     comp.set_access(access);
     comp.id("symbol");
-    to_struct_type(c_sym.type).methods().push_back(comp);
+    {
+      typet t = c_sym.get_type();
+      to_struct_type(t).methods().push_back(comp);
+      c_sym.set_type(std::move(t));
+    }
   }
 }
 
@@ -383,12 +391,12 @@ void solidity_convertert::get_builtin_symbol(
 
   symbolt sym;
   get_default_symbol(sym, "C++", t, name, id, l);
-  sym.type.set("#sol_state_var", "1");
+  set_sol_state_var(id, true);
   sym.file_local = true;
   sym.lvalue = true;
   auto &added_sym = *move_symbol_to_context(sym);
   code_declt decl(symbol_expr(added_sym));
-  added_sym.value = val;
+  added_sym.set_value(migrate_expr(val));
   decl.operands().push_back(val);
   move_to_initializer(decl);
 
@@ -461,7 +469,7 @@ void solidity_convertert::get_aux_property_function(
   type.arguments().push_back(param);
 
   // populate param
-  added_symbol.type = type;
+  added_symbol.set_type(type);
   // move to struct symbol
   move_builtin_to_contract(cname, symbol_expr(added_symbol), true);
 
@@ -578,7 +586,7 @@ void solidity_convertert::get_aux_property_function(
   }
 
   // populate body
-  added_symbol.value = _block;
+  added_symbol.set_value(_block);
 
   // do function call. Set the call's own type to the helper's return
   // type — without this, the first invocation produces an untyped
@@ -609,7 +617,7 @@ bool solidity_convertert::struct_type_has_component(
     const symbolt *s = context.find_symbol(to_symbol_type(rt).get_identifier());
     if (s == nullptr)
       return false;
-    rt = s->type;
+    rt = s->get_type();
   }
   if (rt.id() != "struct")
     return false;

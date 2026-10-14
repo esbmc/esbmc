@@ -1,0 +1,4 @@
+CORE
+main.py
+--replace-call-with-contract double
+^VERIFICATION SUCCESSFUL$

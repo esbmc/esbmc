@@ -1,0 +1,4 @@
+CORE
+main.c
+--symbol-table-only --clang-c-irep2-adjust-only
+c = argc == 1 \? b : d;

@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^.*fields must have a constant size: 'variable length array in structure'
+^ERROR: PARSING ERROR$

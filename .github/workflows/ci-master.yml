@@ -1,0 +1,35 @@
+name: Master
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  trigger:
+    name: Trigger esbmc.github.io deploy
+    runs-on: ubuntu-slim
+    steps:
+      - name: Repository Dispatch
+        uses: peter-evans/repository-dispatch@v4
+        with:
+          token: ${{ secrets.PAGES_DEPLOY_TOKEN }}
+          repository: esbmc/esbmc.github.io
+          event-type: deploy-site
+
+  # Saves the ccache that the PR build restores: master's is the only cache
+  # scope every PR can read, and PR-scoped entries would evict it from the
+  # 10 GB budget. Operating system and flags must match build-ubuntu in
+  # ci-pull-request.yml, or the cache keys will not line up.
+  seed-ccache:
+    name: Seed ccache for PR builds
+    concurrency:
+      group: seed-ccache
+      cancel-in-progress: false
+    uses: ./.github/workflows/aux-build-unix.yml
+    with:
+      operating-system: ubuntu-24.04
+      build-flags: '-b DebugOpt -e ON'
+      testing: false
+      upload: false
+      save-cache: true

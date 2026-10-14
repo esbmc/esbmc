@@ -1,0 +1,7 @@
+CORE
+main.py
+--generate-pytest-testcase --pytest-output-dir custom-out/nested/dir --unwind 2
+^Generated pytest test case
+^VERIFICATION FAILED$
+CHECK_FILE custom-out/nested/dir/test_main.py contains def test_
+CHECK_FILE custom-out/nested/dir/test_main.py contains import pytest

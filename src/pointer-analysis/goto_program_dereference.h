@@ -4,7 +4,7 @@
 #include <goto-programs/goto_functions.h>
 #include <pointer-analysis/dereference.h>
 #include <pointer-analysis/value_sets.h>
-#include <util/namespace.h>
+#include <util/symtab/namespace.h>
 
 class goto_program_dereferencet : protected dereference_callbackt
 {
@@ -47,9 +47,9 @@ protected:
   void dereference_failure(
     const std::string &property,
     const std::string &msg,
-    const guardt &guard) override;
+    const guard2tc &guard) override;
 
-  void dereference_assume(const guardt &guard) override;
+  void dereference_assume(const guard2tc &guard) override;
 
   bool is_live_variable(const expr2tc &sym) override
   {

@@ -63,7 +63,8 @@ extern "C"
   cudaDeviceGetSharedMemConfig(enum cudaSharedMemConfig *pConfig);
   extern __device__ __cudart_builtin__ cudaError_t CUDARTAPI
   cudaDeviceSynchronize(void);
-  /*extern __device__ __cudart_builtin__ cudaError_t CUDARTAPI cudaGetLastError(void);*/
+  /*extern __device__ __cudart_builtin__ cudaError_t CUDARTAPI
+   * cudaGetLastError(void);*/
   extern __device__ __cudart_builtin__ cudaError_t CUDARTAPI
   cudaPeekAtLastError(void);
 
@@ -168,7 +169,7 @@ cudaOccupancyMaxActiveBlocksPerMultiprocessor(
 } // namespace
 
 #      endif // !defined(__CUDA_ARCH__) || (__CUDA_ARCH__ >= 350)
-#    endif // defined(__cplusplus) && defined(__CUDACC__)
+#    endif   // defined(__cplusplus) && defined(__CUDACC__)
 
 #  endif /* defined(__CUDABE__) */
 

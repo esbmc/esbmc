@@ -1,0 +1,4 @@
+CORE
+cbmc_libc_integration.goto
+--binary --unwind 8
+^VERIFICATION SUCCESSFUL$

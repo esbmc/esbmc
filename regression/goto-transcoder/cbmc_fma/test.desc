@@ -1,0 +1,4 @@
+CORE
+cbmc_fma.goto
+--binary
+^VERIFICATION SUCCESSFUL$

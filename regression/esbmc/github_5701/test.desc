@@ -1,0 +1,6 @@
+CORE
+main.cpp
+--multi-property --no-slice --unwind 2
+^VERIFICATION FAILED$
+line 33 column 9 function main
+(?s)\A(?!.*line 26 column 9 function main)

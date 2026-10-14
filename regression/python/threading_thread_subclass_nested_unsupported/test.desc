@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR:.*`class Worker\(threading\.Thread\)` must be defined at module scope

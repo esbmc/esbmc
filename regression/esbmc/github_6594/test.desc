@@ -1,0 +1,5 @@
+CORE
+main.c
+--32 --no-div-by-zero-check --force-malloc-success --state-hashing --add-symex-value-sets --memory-leak-check --no-reachable-memory-leak --no-assertions --no-abnormal-memory-leak --malloc-zero-is-null --incremental-bmc
+REQUIRES arch32
+^VERIFICATION SUCCESSFUL$

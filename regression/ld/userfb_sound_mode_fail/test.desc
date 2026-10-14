@@ -1,0 +1,5 @@
+CORE
+calc.ld
+--ld-props props.yaml --ld-sound-mode --k-induction --unlimited-k-steps
+^WARNING: user FB 'CALC' body not translated.*; its outputs are nondeterministic\.$
+^VERIFICATION FAILED$

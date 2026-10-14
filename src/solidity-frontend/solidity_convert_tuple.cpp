@@ -8,14 +8,14 @@
 
 #include <solidity-frontend/solidity_convert.h>
 #include <solidity-frontend/typecast.h>
-#include <util/arith_tools.h>
-#include <util/bitvector.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/mp_arith.h>
-#include <util/std_expr.h>
-#include <util/message.h>
+#include <util/arith/arith_tools.h>
+#include <util/arith/bitvector.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
+#include <util/arith/mp_arith.h>
+#include <util/irep/std_expr.h>
+#include <util/message/message.h>
 #include <fstream>
 
 bool solidity_convertert::get_tuple_definition(const nlohmann::json &ast_node)
@@ -58,7 +58,7 @@ bool solidity_convertert::get_tuple_definition(const nlohmann::json &ast_node)
                  : ast_node["returnParameters"]["parameters"];
 
   // populate params
-  //TODO: flatten the nested tuple (e.g. ((x,y),z) = (func(),1); )
+  // TODO: flatten the nested tuple (e.g. ((x,y),z) = (func(),1); )
   size_t counter = 0;
   for (const auto &arg : args.items())
   {
@@ -101,7 +101,7 @@ bool solidity_convertert::get_tuple_definition(const nlohmann::json &ast_node)
 
     // construct comp
     comp.type() = mem_type;
-    comp.type().set("#member_name", t.tag());
+    comp.type().member_name(t.tag());
     comp.identifier(mem_id);
     comp.name(mem_name);
     comp.pretty_name(mem_name);
@@ -115,7 +115,7 @@ bool solidity_convertert::get_tuple_definition(const nlohmann::json &ast_node)
   }
 
   t.location() = location_begin;
-  added_symbol.type = t;
+  added_symbol.set_type(t);
 
   return false;
 }
@@ -131,7 +131,7 @@ bool solidity_convertert::get_tuple_instance(
     return true;
 
   // get type
-  typet t = context.find_symbol(id)->type;
+  typet t = context.find_symbol(id)->get_type();
   set_sol_type(t, SolidityGrammar::SolType::TUPLE_INSTANCE);
   assert(t.id() == typet::id_struct);
 
@@ -153,8 +153,11 @@ bool solidity_convertert::get_tuple_instance(
   symbol.static_lifetime = true;
   symbol.file_local = true;
 
-  symbol.value = gen_zero(get_complete_type(t, ns), true);
-  symbol.value.zero_initializer(true);
+  {
+    exprt _v = gen_zero(get_complete_type(t, ns), true);
+    _v.zero_initializer(true);
+    symbol.set_value(std::move(_v));
+  }
   symbolt &added_symbol = *move_symbol_to_context(symbol);
   new_expr = symbol_expr(added_symbol);
   new_expr.identifier(id);
@@ -310,8 +313,8 @@ bool solidity_convertert::get_tuple_function_ref(
     return false;
   }
 
-  // For cross-contract calls, the tuple instance is in the callee's contract scope.
-  // Search all contracts for the tuple instance.
+  // For cross-contract calls, the tuple instance is in the callee's contract
+  // scope. Search all contracts for the tuple instance.
   for (const auto &contract_name : contractNamesList)
   {
     std::string alt_id = "sol:@C@" + contract_name + "@" + name;
@@ -374,7 +377,8 @@ bool solidity_convertert::get_tuple_function_ref(
   return true;
 }
 
-// Knowing that there is a component x in the struct_tuple_instance A, we construct A.x
+// Knowing that there is a component x in the struct_tuple_instance A, we
+// construct A.x
 bool solidity_convertert::get_tuple_member_call(
   const irep_idt instance_id,
   const exprt &comp,
@@ -413,7 +417,7 @@ void solidity_convertert::get_llc_ret_tuple(symbolt &s)
   }
   const symbolt &struct_sym = *context.find_symbol(_id);
 
-  typet sym_t = struct_sym.type;
+  typet sym_t = struct_sym.get_type();
   set_sol_type(sym_t, SolidityGrammar::SolType::TUPLE_INSTANCE);
 
   std::string name, id;
@@ -428,7 +432,7 @@ void solidity_convertert::get_llc_ret_tuple(symbolt &s)
   auto &added_sym = *move_symbol_to_context(symbol);
 
   // value
-  typet t = struct_sym.type;
+  typet t = struct_sym.get_type();
   exprt inits = gen_zero(t);
   // Cast nondet_bool to match the struct field type (C frontend compiles
   // _Bool/bool as unsigned int in struct layout due to padding)
@@ -440,7 +444,7 @@ void solidity_convertert::get_llc_ret_tuple(symbolt &s)
   }
   inits.op0() = bool_val;
   inits.op1() = nondet_uint_expr;
-  added_sym.value = inits;
+  added_sym.set_value(inits);
   s = added_sym;
 }
 
@@ -482,10 +486,12 @@ void solidity_convertert::get_string_assignment(
 
 /*
   lhs: code_blockt — each operand is a target expr or nil (omitted slot)
-  rhs: tuple_return / tuple_instance — a struct symbol with mem0, mem1, ... components
+  rhs: tuple_return / tuple_instance — a struct symbol with mem0, mem1, ...
+  components
 
-  Uses explicit position-based matching: LHS position i maps to RHS component "mem{i}".
-  This is robust regardless of which positions are omitted on either side.
+  Uses explicit position-based matching: LHS position i maps to RHS component
+  "mem{i}". This is robust regardless of which positions are omitted on either
+  side.
 */
 bool solidity_convertert::construct_tuple_assigments(
   const nlohmann::json &expr,
@@ -517,7 +523,8 @@ bool solidity_convertert::construct_tuple_assigments(
   {
     // (x,y) = func();
     // => func() populates tuple instance; then extract members
-    // The function call JSON is in "rightHandSide" (Assignment) or "initialValue" (VarDeclStmt)
+    // The function call JSON is in "rightHandSide" (Assignment) or
+    // "initialValue" (VarDeclStmt)
     const nlohmann::json *rhs_call_json = nullptr;
     if (expr.contains("rightHandSide"))
       rhs_call_json = &expr["rightHandSide"];
@@ -659,8 +666,9 @@ bool solidity_convertert::construct_tuple_assigments(
 
   // Build component lookup for the RHS struct.
   // For generated tuple structs, components are named "mem0", "mem1", etc.
-  // For library structs (sol_llc_ret), components have their own names (x, y, ...).
-  // We build both a name map and a positional list of non-padding components.
+  // For library structs (sol_llc_ret), components have their own names (x, y,
+  // ...). We build both a name map and a positional list of non-padding
+  // components.
   const struct_typet &rhs_struct = to_struct_type(new_rhs.type());
   std::map<std::string, exprt> rhs_by_name;
   std::vector<exprt> rhs_by_pos; // non-padding components in order
@@ -668,7 +676,7 @@ bool solidity_convertert::construct_tuple_assigments(
   {
     std::string cname = comp.get_name().as_string();
     rhs_by_name[cname] = comp;
-    // Skip padding components (anon_pad$N)
+    // Skip padding components (anon_pad#N)
     if (cname.find("anon_pad") == std::string::npos)
       rhs_by_pos.push_back(comp);
   }
@@ -843,10 +851,11 @@ bool solidity_convertert::flatten_nested_tuple_assignment(
             if (comp.get_name().as_string() == mem_name)
             {
               exprt target;
-              if (get_expr(
-                    inner_lhs_comps[j],
-                    inner_lhs_comps[j]["typeDescriptions"],
-                    target))
+              if (
+                get_expr(
+                  inner_lhs_comps[j],
+                  inner_lhs_comps[j]["typeDescriptions"],
+                  target))
                 return true;
 
               exprt member;

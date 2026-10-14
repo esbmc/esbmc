@@ -1,8 +1,8 @@
 #pragma once
 
-#include <util/algorithms.h>
+#include <goto-programs/goto_functions_algorithm.h>
 #include <irep2/irep2.h>
-#include <util/message.h>
+#include <util/message/message.h>
 
 /**
  * @brief This will look over non-initialized local declarations
@@ -20,5 +20,5 @@ public:
 protected:
   contextt &context;
   virtual bool
-  runOnFunction(std::pair<const dstring, goto_functiont> &F) override;
+  runOnFunction(std::pair<const irep_idt, goto_functiont> &F) override;
 };

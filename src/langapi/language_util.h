@@ -2,12 +2,18 @@
 #define CPROVER_LANGUAGE_UTIL_H
 
 #include <irep2/irep2.h>
-#include <util/language.h>
-#include <util/migrate.h>
-#include <util/namespace.h>
-#include <util/symbol.h>
+#include <util/lang/language.h>
+#include <util/irep/migrate.h>
+#include <util/symtab/namespace.h>
+#include <util/symtab/symbol.h>
 
 std::unique_ptr<languaget> language_from_symbol(const symbolt &symbol);
+
+/// The language to render expressions in when there is no symbol to take a mode
+/// from -- VCC dumps, SSA dumps and witness generation. Uses whatever the
+/// frontend parsed, falling back to C, rather than always C: dumping C++
+/// through expr2c prints references as pointers (esbmc/esbmc#782).
+language_idt configured_language();
 
 std::string from_expr(
   const namespacet &ns,

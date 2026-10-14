@@ -1,0 +1,4 @@
+CORE
+main.c
+--goto-functions-only
+main \(c:@F@main\):\n[\s\S]*?// \d+ file [^\n]*main\.c line 10 column 3 function main\n\s+FUNCTION_CALL:  f\(3\)

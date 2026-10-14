@@ -1,0 +1,5 @@
+CORE
+missing_interlock.ld
+--ld-props props.yaml --k-induction
+^VERIFICATION FAILED$
+Forward and Reverse coils must never be simultaneously energised

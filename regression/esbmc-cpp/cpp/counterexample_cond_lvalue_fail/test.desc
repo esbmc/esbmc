@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--no-slice
+^  c \? a : b = 5 \(00000000 00000000 00000000 00000101\)$
+^VERIFICATION FAILED$

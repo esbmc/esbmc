@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--std c++17
+^VERIFICATION FAILED$
+^ +FAILED +\[main\.assertion\.1\] +line +14 +assertion f<2>\(5\) == 2$

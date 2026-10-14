@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--std=c++20 --unwind 8
+^VERIFICATION SUCCESSFUL$

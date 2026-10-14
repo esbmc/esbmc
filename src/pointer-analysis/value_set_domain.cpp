@@ -1,7 +1,7 @@
 #include <pointer-analysis/value_set_domain.h>
 #include <irep2/irep2.h>
-#include <util/migrate.h>
-#include <util/std_code.h>
+#include <util/irep/migrate.h>
+#include <util/irep/std_code.h>
 
 void value_set_domaint::transform(
   const namespacet &ns,

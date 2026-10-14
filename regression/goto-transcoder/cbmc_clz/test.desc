@@ -1,0 +1,4 @@
+CORE
+cbmc_clz.goto
+--binary
+^VERIFICATION SUCCESSFUL$

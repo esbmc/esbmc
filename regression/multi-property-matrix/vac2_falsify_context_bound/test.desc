@@ -1,0 +1,5 @@
+CORE
+../vac2.c
+--falsify-context-bound 2 --multi-property
+^ERROR: --falsify-context-bound cannot be combined with --multi-property$
+\A(?![\s\S]*VERIFICATION)[\s\S]*\Z

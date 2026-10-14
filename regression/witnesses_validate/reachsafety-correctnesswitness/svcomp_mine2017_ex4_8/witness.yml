@@ -1,0 +1,33 @@
+# This file is part of the SV-Benchmarks collection of verification tasks:
+# https://gitlab.com/sosy-lab/benchmarking/sv-benchmarks
+#
+# SPDX-FileCopyrightText: 2023-2025 Simmo Saan
+#
+# SPDX-License-Identifier: MIT
+
+- entry_type: invariant_set
+  metadata:
+    format_version: "2.0"
+    uuid: 299c2080-fb13-4879-be2b-5d2758465577
+    creation_time: 2022-10-07T10:36:41Z
+    producer:
+      name: Simmo Saan
+      version: n/a
+    task:
+      input_files:
+      - mine2017-ex4.8.i
+      input_file_hashes:
+        mine2017-ex4.8.i: ee63462f1ec886f4aa9c5663162640144e173530e57636655ca95f3d6ab0ae72
+      specification: G ! call(reach_error())
+      data_model: LP64
+      language: C
+  content:
+  - invariant:
+      type: loop_invariant
+      location:
+        file_name: mine2017-ex4.8.i
+        line: 17
+        column: 3
+        function: main
+      value: 0 <= v && v <= 1
+      format: c_expression

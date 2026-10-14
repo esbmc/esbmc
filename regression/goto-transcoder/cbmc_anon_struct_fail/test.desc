@@ -1,0 +1,4 @@
+CORE
+cbmc_anon_struct_fail.goto
+--binary
+^VERIFICATION FAILED$

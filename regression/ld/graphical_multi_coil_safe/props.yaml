@@ -1,0 +1,15 @@
+properties:
+
+  # Two coils share the contact on a, but q1 sits behind a further contact on b.
+  # Each coil must get its own power flow from the shared node rather than both
+  # taking the longer or the shorter one. Both implications are asserted, so a
+  # coil left undriven fails rather than passing vacuously.
+  - id: P1
+    kind: invariant
+    expression: "(!q1 || (a && b)) && (q1 || !a || !b)"
+    description: "The far coil follows the whole chain"
+
+  - id: P2
+    kind: invariant
+    expression: "(!q2 || a) && (q2 || !a)"
+    description: "The near coil follows only the shared prefix"

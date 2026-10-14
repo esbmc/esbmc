@@ -1,0 +1,4 @@
+CORE
+cbmc_local_struct_scopes.goto
+--binary
+^VERIFICATION SUCCESSFUL$

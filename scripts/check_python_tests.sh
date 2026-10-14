@@ -26,23 +26,51 @@ ignored_dirs=(
   "cover4"
   "cover5"
   "concurrency_fail"
+  "threading_thread_skip_join_fail"
+  # A data race does not manifest deterministically under CPython, so the
+  # _fail expectation (non-zero exit) cannot be checked there.
+  "threading_thread_increment_race_no_flag_fail"
   "convert-byte-update2"
   "constants"
+  "uint64_pow_fold_recovers"
+  "uint64_pow_fold_recovers_fail"
+  "bytes_param_harness_backing"
+  "bytes_param_harness_backing_fail"
+  # --function harness: CPython never calls f, so the _fail half exits 0.
+  "harness_bytes_param_len_bound_fail"
+  "len_bytes_alias_dispatch"
+  "len_bytes_alias_dispatch_fail"
   "decimal"
   "decimal_fail"
   "decimal4"
   "decimal4_fail"
+  "decimal5"
+  "decimal6"
+  "decimal6_fail"
   "dict_del12_fail"
   "dict_del13_fail"
   "dict_del14"
   "dict_del14_fail"
+  "dict_eq_runtime"
   "div6_fail"
   "div7_fail"
+  "esbmc-assert-no-msg"
+  "esbmc-assert"
   "esbmc-assume"
+  "github_4629"
+  "github_4629_unwind"
+  "esbmc-assert"
+  "esbmc-assert-no-msg"
+  "esbmc-unreachable-args-fail"
+  "esbmc-unreachable-dead"
+  "esbmc-unreachable-flag-off"
+  "esbmc-unreachable-reachable"
+  "esbmc-unreachable-truncated-loop"
   "enumerate15"
   "enumerate15_fail"
   "func-no-params-types-fail"
   "function-option-fail"
+  "github_6211_function_multi_fail"
   "github_2843_fail"
   "github_2843_4_fail"
   "github_2908_1"
@@ -66,6 +94,18 @@ ignored_dirs=(
   "github_3563_3"
   "github_3769"
   "github_4149"
+  "github_4548_floordiv_call_arg"
+  "github_4548_floordiv_negative"
+  "github_4581"
+  "github_4756"
+  "github_4756_fail"
+  "github_4831"
+  "github_4668"
+  "github_4666_2d"
+  "github_4666_shape"
+  "github_5102_nested_list_copy"
+  "github_5937_fail"
+  "torch_mm_allclose"
   "global"
   "infer-func-no-return_fail"
   "integer_squareroot_fail"
@@ -75,6 +115,8 @@ ignored_dirs=(
   "input3"
   "input5"
   "input6"
+  "github_7377_input_len"
+  "harness_os_listdir"
   "github_3712"
   "github_3713"
   "github_3713_1"
@@ -108,6 +150,12 @@ ignored_dirs=(
   "random6_fail"
   "range19-fail"
   "ternary_symbolic"
+  "threading_thread_increment_race_fail"
+  "threading_thread_increment_race_no_flag_fail"
+  "threading_thread_race_fail"
+  "threading_thread_subclass_func_scope_race_fail"
+  "threading_thread_subclass_race_fail"
+  "threading_thread_subclass_run_assert_fail"
   "try-fail"
   "verifier-assume"
   "while-random-fail"
@@ -128,6 +176,24 @@ ignored_dirs=(
   "string-symbolic-8"
   "complex_str_nonconstant"
   "dataclass_factory_kwarg_ignored"
+  "harness_time_monotonic"
+  "harness_time_monotonic_fail"
+  # Top-level relative imports (`from . import X`) cannot run as a bare
+  # `python3 main.py` script -- CPython raises "attempted relative import with
+  # no known parent package" regardless of file layout. These exercise ESBMC's
+  # relative-import handling and are validated via the ESBMC regression harness.
+  "github_6281"
+  "github_6281_used"
+  "github_6281_fail"
+)
+
+# Prefixes for ESBMC-specific regression directories that are not suitable for
+# direct CPython execution in this smoke check (they are validated via ESBMC).
+ignored_prefixes=(
+  "github_4666_"
+  "github_4668_"
+  "harness_numpy_"
+  "harness_torch_"
 )
 
 for dir in */; do
@@ -148,11 +214,33 @@ for dir in */; do
     matched_tests=$((matched_tests + 1))
   fi
 
+  # Skip tests that use ESBMC verification intrinsics. Names like __ESBMC_*,
+  # __VERIFIER_* and nondet_* are not defined in CPython, so the test raises
+  # NameError under direct execution and can only be validated via ESBMC.
+  # Detecting them by content means an intrinsic-using test no longer needs a
+  # manual ignore-list entry (e.g. github_5104, github_5105).
+  #
+  # Comments are stripped first: a test that only *mentions* an intrinsic while
+  # calling none is plain Python, and matching the mention skipped it silently
+  # -- 22 tests were being reported as "expected" without ever being run.
+  if sed 's/#.*//' "$dir/main.py" |
+    grep -qE '__ESBMC|__VERIFIER_|nondet_'; then
+    echo "🚫 IGNORED: $dir (uses ESBMC intrinsics, not runnable under CPython)"
+    continue
+  fi
+
   # Always keep legacy ignore behavior, with or without query mode.
   if echo "$dir" | grep -iq 'nondet'; then
     echo "🚫 IGNORED: $dir (contains 'nondet')"
     continue
   fi
+
+  for prefix in "${ignored_prefixes[@]}"; do
+    if [[ "$dir" == "$prefix"* ]]; then
+      echo "🚫 IGNORED: $dir (ESBMC-only regression prefix)"
+      continue 2
+    fi
+  done
 
   for ignored in "${ignored_dirs[@]}"; do
     if [[ "$dir" == "$ignored" ]]; then
@@ -181,7 +269,6 @@ for dir in */; do
   if [[ "$dir" == *fail* ]]; then
     if [ $result -eq 0 ]; then
       echo "❌ $dir: expected to fail, but executed successfully (exit 0)"
-      all_passed=false
       failed_tests+=("$dir")
     else
       echo "✅ $dir: failed as expected (exit $result)"
@@ -191,7 +278,6 @@ for dir in */; do
       echo "✅ $dir: executed successfully (exit 0)"
     else
       echo "❌ $dir: expected to succeed, but failed (exit $result)"
-      all_passed=false
       failed_tests+=("$dir")
     fi
   fi

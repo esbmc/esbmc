@@ -1,0 +1,8 @@
+CORE
+main.c
+--multi-property --unwind 4
+^VERIFICATION SUCCESSFUL$
+^ +PASSED .*line +13 +worker: in loop$
+^ +PASSED .*line +15 +worker: after loop$
+^ +PASSED .*line +26 +main: after join$
+\A(?![\s\S]*PASSED .*worker: in loop[\s\S]*PASSED .*worker: in loop)[\s\S]*\Z

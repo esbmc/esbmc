@@ -5,7 +5,7 @@
 class BaseException:
     message: str = ""
 
-    def __init__(self, message: str):
+    def __init__(self, message: str = ""):
         self.message: str = message
 
     def __str__(self) -> str:
@@ -15,7 +15,17 @@ class BaseException:
 class Exception(BaseException):
     message: str = ""
 
-    def __init__(self, message: str):
+    def __init__(self, message: str = ""):
+        self.message: str = message
+
+    def __str__(self) -> str:
+        return self.message
+
+
+class KeyboardInterrupt(BaseException):
+    message: str = ""
+
+    def __init__(self, message: str = ""):
         self.message: str = message
 
     def __str__(self) -> str:
@@ -25,7 +35,7 @@ class Exception(BaseException):
 class ValueError(Exception):
     message: str = ""
 
-    def __init__(self, message: str):
+    def __init__(self, message: str = ""):
         self.message: str = message
 
     def __str__(self) -> str:
@@ -35,7 +45,17 @@ class ValueError(Exception):
 class TypeError(Exception):
     message: str = ""
 
-    def __init__(self, message: str):
+    def __init__(self, message: str = ""):
+        self.message: str = message
+
+    def __str__(self) -> str:
+        return self.message
+
+
+class AttributeError(Exception):
+    message: str = ""
+
+    def __init__(self, message: str = ""):
         self.message: str = message
 
     def __str__(self) -> str:
@@ -45,7 +65,7 @@ class TypeError(Exception):
 class IndexError(Exception):
     message: str = ""
 
-    def __init__(self, message: str):
+    def __init__(self, message: str = ""):
         self.message: str = message
 
     def __str__(self) -> str:
@@ -55,7 +75,7 @@ class IndexError(Exception):
 class KeyError(Exception):
     message: str = ""
 
-    def __init__(self, message: str):
+    def __init__(self, message: str = ""):
         self.message: str = message
 
     def __str__(self) -> str:
@@ -65,7 +85,17 @@ class KeyError(Exception):
 class ZeroDivisionError(Exception):
     message: str = ""
 
-    def __init__(self, message: str):
+    def __init__(self, message: str = ""):
+        self.message: str = message
+
+    def __str__(self) -> str:
+        return self.message
+
+
+class OverflowError(Exception):
+    message: str = ""
+
+    def __init__(self, message: str = ""):
         self.message: str = message
 
     def __str__(self) -> str:
@@ -75,7 +105,7 @@ class ZeroDivisionError(Exception):
 class AssertionError(Exception):
     message: str = ""
 
-    def __init__(self, message: str):
+    def __init__(self, message: str = ""):
         self.message: str = message
 
     def __str__(self) -> str:
@@ -85,7 +115,17 @@ class AssertionError(Exception):
 class NameError(Exception):
     message: str = ""
 
-    def __init__(self, message: str):
+    def __init__(self, message: str = ""):
+        self.message: str = message
+
+    def __str__(self) -> str:
+        return self.message
+
+
+class UnboundLocalError(NameError):
+    message: str = ""
+
+    def __init__(self, message: str = ""):
         self.message: str = message
 
     def __str__(self) -> str:

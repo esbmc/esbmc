@@ -1,0 +1,5 @@
+CORE
+main.c
+--error-label ERR --goto-functions-only
+ASSERT 0 // error label
+// Labels: ERR

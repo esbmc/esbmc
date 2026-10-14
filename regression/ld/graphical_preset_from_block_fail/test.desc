@@ -1,0 +1,5 @@
+CORE
+ton.ld
+--ld-props props.yaml --k-induction --unlimited-k-steps
+^ERROR: UnsupportedConstruct\(T0 pin PT driven by ADD, tier=2\)$
+^ERROR: PARSING ERROR$

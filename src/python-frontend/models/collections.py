@@ -1,6 +1,6 @@
 # Operational model for collections module
 # pylint: disable=function-redefined  # intentional stdlib shadow for ESBMC models
-# pylint: disable=keyword-arg-before-vararg,unused-argument
+# pylint: disable=keyword-arg-before-vararg,unused-argument,undefined-variable
 # defaultdict's signature is pinned: callers in regression/python/
 # (e.g. github_3841_*) pass `default_factory` positionally as in
 # `defaultdict(int)`, so it must come first; and the no-arg form
@@ -32,9 +32,10 @@ def deque(iterable: list[int] = None, maxlen: int = -1) -> list[int]:
 
     Approximation: deque is treated as a list backing store, exposing the
     same `append` / `pop` / `__len__` / subscript surface that the
-    frontend already supports for lists. `appendleft` / `popleft` /
-    `extendleft` and the `maxlen` rollover are NOT modelled; programs
-    relying on the FIFO end will need a richer model.
+    frontend already supports for lists. The FIFO front operations
+    `popleft()` and `appendleft(x)` are modelled as `pop(0)` / `insert(0, x)`
+    in the list-method handler. `extendleft` and the `maxlen` rollover are
+    still NOT modelled.
     """
     if iterable is None:
         return []
@@ -88,3 +89,30 @@ class Counter:
     def __bool__(self) -> bool:
         """Return True iff at least one key has been recorded."""
         return self.count != 0
+
+    def most_common(self, n: int = 1) -> list[tuple[int, int]]:
+        """Counter.most_common is not modelled — reject with a clear assertion.
+
+        CPython returns up to ``n`` ``(elem, count)`` pairs sorted by
+        count descending. ESBMC's Counter model does not track which key
+        maps to which count, so the CPython contract cannot be honoured.
+        Rather than silently returning a lossy approximation (which
+        caused issue #4665 by misleading callers that wrote
+        ``c.most_common(n)[i][j]``), this method fires a verification
+        assertion as soon as it is reached. Programs that need counts
+        without keys should iterate ``Counter.data`` directly.
+
+        The return type ``list[tuple[int, int]]`` is kept matching
+        CPython's API surface so the frontend can type-check
+        subscript-of-subscript expressions cleanly before the assertion
+        fires — otherwise callers see the cryptic "Unsupported
+        comparison with unresolved operand type" frontend error
+        instead of the assertion message.
+        """
+        __ESBMC_assert(
+            False,
+            "Counter.most_common is not modelled (issue #4665) — "
+            "iterate Counter.data directly to inspect counts and keys",
+        )
+        placeholder: tuple[int, int] = (0, 0)
+        return [placeholder]

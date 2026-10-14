@@ -1,0 +1,4 @@
+CORE
+main.py
+--goto-functions-only
+\A(?:(?!=list_size\(xs\))[\s\S])*=list_size\(xs\)(?:(?!=list_size\(xs\))[\s\S])*\Z

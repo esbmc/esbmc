@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^  assertion s\.f0 == 0$
+^VERIFICATION FAILED$

@@ -1,4 +1,6 @@
 CORE
 main.py
 --unwind 1
-TypeError
+
+^VERIFICATION FAILED$
+uncaught exception

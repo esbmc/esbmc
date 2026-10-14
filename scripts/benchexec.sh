@@ -1,7 +1,9 @@
 #!/bin/sh
 
 BENCHEXEC_BIN=/usr/bin/benchexec
-BENCHEXEC_COMMON_FLAGS="-o ../esbmc-output/ -N 30 ./esbmc.xml --read-only-dir / --overlay-dir /home/benchexec  -T $TIMEOUT --container"
+# Parallel runs. 27 x memlimit 6 GB fits a 168 GiB runner; a runner with fewer
+# cores or less memory sets BENCHEXEC_PARALLEL in its environment.
+BENCHEXEC_COMMON_FLAGS="-o $HOME/esbmc-output/ -N ${BENCHEXEC_PARALLEL:-27} ./esbmc.xml --read-only-dir / --overlay-dir /home/benchexec  -T $TIMEOUT --container"
 
 # Prepare Environment to run benchexec
 setup_folder () {
@@ -37,8 +39,8 @@ benchexec_run_task () {
 }
 
 save_files () {
-    zip -r run-output.zip ../esbmc-output
-    cp run-output.zip $HOME/output.zip
+    cd $HOME
+    zip -r output.zip esbmc-output
 }
 
 setup_folder

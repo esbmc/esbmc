@@ -1,0 +1,15 @@
+properties:
+  - id: P1
+    kind: mutual_exclusion
+    variables: [Motor_Forward, Motor_Reverse]
+    description: "Forward and Reverse coils must never be simultaneously energised"
+
+  - id: P2
+    kind: absence
+    expression: "OL_Trip && Motor_Forward"
+    description: "Motor must not run forward when overload trip is active"
+
+  - id: P3
+    kind: absence
+    expression: "OL_Trip && Motor_Reverse"
+    description: "Motor must not run reverse when overload trip is active"

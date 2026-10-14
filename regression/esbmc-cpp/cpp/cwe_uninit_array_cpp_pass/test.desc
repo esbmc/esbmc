@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--uninitialised-vars-check --incremental-bmc
+^VERIFICATION SUCCESSFUL$

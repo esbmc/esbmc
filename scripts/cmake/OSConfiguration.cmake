@@ -5,7 +5,7 @@
 #############################
 
 #[[
-The build system have flags based on the current system, this may 
+The build system have flags based on the current system, this may
 be for finding executables or custom links
 
 The global variables that all modules NEED to define are:
@@ -20,15 +20,6 @@ The global variables that all modules NEED to define are:
     OS;
 - OS_Z3_LIBS: Flags used by Z3 link;
 ]]
-
-# This function will check if a variable is defined
-function(assert_variable_is_defined VAR)
-    if(DEFINED ${VAR})
-        message(STATUS "${VAR}: ${${VAR}}")
-    else()
-        message(FATAL_ERROR "${VAR} must be defined")
-    endif()
-endfunction()
 
 include(AppleConfiguration)
 include(UnixConfiguration)

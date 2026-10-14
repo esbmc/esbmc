@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: numpy.unique\(\) keyword 'return_counts' is not supported$

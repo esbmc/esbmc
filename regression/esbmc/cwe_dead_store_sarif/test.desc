@@ -1,0 +1,8 @@
+CORE
+main.c
+--dead-store-check --sarif-output -
+^VERIFICATION SUCCESSFUL$
+"level": "note"
+"ruleId": "dead-store"
+"id": "563"
+"version": "4.20"

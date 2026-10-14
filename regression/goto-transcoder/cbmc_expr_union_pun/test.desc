@@ -1,0 +1,4 @@
+CORE
+cbmc_expr_union_pun.goto
+--binary
+^VERIFICATION SUCCESSFUL$

@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: ESBMC does not support arrays with more than 8 dimensions

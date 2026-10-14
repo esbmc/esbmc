@@ -1,0 +1,4 @@
+CORE
+main.c
+--bitwuzllob --k-induction --bitwuzllob-prog fake-mallob.sh
+does not support --k-induction

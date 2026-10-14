@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: .*main\.py:14:.*'f' is bound to methods at several sites and used other than as a whole call statement$

@@ -1,0 +1,4 @@
+CORE
+cbmc_local_struct.goto
+--binary
+^VERIFICATION SUCCESSFUL$

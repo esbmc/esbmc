@@ -1,0 +1,5 @@
+CORE
+main.c
+--k-induction --overflow --memory-leak-check --max-k-step 5 --multi-property
+^Solution found by the forward condition; all states are reachable \(k = 1\)$
+^VERIFICATION SUCCESSFUL$

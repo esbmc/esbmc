@@ -3,6 +3,6 @@ main.c
 --ir-ieee --z3 --smt-formula-only
 \(declare-fun \|smt_conv::ra_lo::0\| \(\) Real\)
 \(declare-fun \|smt_conv::ra_lo::1\| \(\) Real\)
-\(\* \|smt_conv::ra_lo::0\| \|smt_conv::ra_lo::0\|
-\(ite
+\(< \|smt_conv::ra_lo::0\| 0
+\(\* \|c:main.c@
 \(check-sat\)

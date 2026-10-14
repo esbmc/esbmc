@@ -1,0 +1,7 @@
+CORE
+main.c
+--clang-c-irep2-adjust-only --symbol-table-only
+^Symbol\.+: c:@F@outer$
+^Location\.+: file .*main\.c line 8 column 3 function main$
+^Symbol\.+: c:@F@inner$
+^Location\.+: file .*main\.c line 12 column 5 function main$

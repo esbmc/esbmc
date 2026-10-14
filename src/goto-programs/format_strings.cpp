@@ -25,7 +25,7 @@ void parse_flags(std::string::const_iterator &it, format_tokent &curtok)
     default:
       throw 0;
     }
-    it++;
+    ++it;
   }
 }
 
@@ -34,11 +34,11 @@ void parse_field_width(std::string::const_iterator &it, format_tokent &curtok)
   if (*it == '*')
   {
     curtok.flags.push_back(format_tokent::ASTERISK);
-    it++;
+    ++it;
   }
 
   std::string tmp;
-  for (; isdigit(*it); it++)
+  for (; isdigit(*it); ++it)
     tmp += *it;
   curtok.field_width = string2integer(tmp);
 }
@@ -47,17 +47,17 @@ void parse_precision(std::string::const_iterator &it, format_tokent &curtok)
 {
   if (*it == '.')
   {
-    it++;
+    ++it;
 
     if (*it == '*')
     {
       curtok.flags.push_back(format_tokent::ASTERISK);
-      it++;
+      ++it;
     }
     else
     {
       std::string tmp;
-      for (; isdigit(*it); it++)
+      for (; isdigit(*it); ++it)
         tmp += *it;
       curtok.precision = string2integer(tmp);
     }
@@ -70,31 +70,31 @@ void parse_length_modifier(
 {
   if (*it == 'h')
   {
-    it++;
+    ++it;
     if (*it == 'h')
-      it++;
+      ++it;
     curtok.length_modifier = format_tokent::LEN_h;
   }
   else if (*it == 'l')
   {
-    it++;
+    ++it;
     if (*it == 'l')
-      it++;
+      ++it;
     curtok.length_modifier = format_tokent::LEN_l;
   }
   else if (*it == 'L')
   {
-    it++;
+    ++it;
     curtok.length_modifier = format_tokent::LEN_L;
   }
   else if (*it == 'j')
   {
-    it++;
+    ++it;
     curtok.length_modifier = format_tokent::LEN_j;
   }
   else if (*it == 't')
   {
-    it++;
+    ++it;
     curtok.length_modifier = format_tokent::LEN_L;
   }
 }
@@ -151,15 +151,15 @@ void parse_conversion_specifier(
   case '[': // pattern matching in, e.g., fscanf.
   {
     std::string tmp;
-    it++;
+    ++it;
     if (*it == '^') // if it's there, it must be first
     {
       tmp += '^';
-      it++;
+      ++it;
       if (*it == ']') // if it's there, it must be here
       {
         tmp += ']';
-        it++;
+        ++it;
       }
     }
 
@@ -172,7 +172,7 @@ void parse_conversion_specifier(
   default:
     throw std::string("unsupported format conversion specifier: `") + *it + "'";
   }
-  it++;
+  ++it;
 }
 
 bool parse_format_string(
@@ -193,7 +193,7 @@ bool parse_format_string(
       {
         token_list.push_back(format_tokent());
         format_tokent &curtok = token_list.back();
-        it++;
+        ++it;
 
         parse_flags(it, curtok);
         parse_field_width(it, curtok);
@@ -207,7 +207,7 @@ bool parse_format_string(
           token_list.push_back(format_tokent(format_tokent::TEXT));
 
         std::string tmp;
-        for (; it != arg_string.end() && *it != '%'; it++)
+        for (; it != arg_string.end() && *it != '%'; ++it)
           tmp += *it;
 
         token_list.back().value = tmp;

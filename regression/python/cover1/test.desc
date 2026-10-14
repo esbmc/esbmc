@@ -1,4 +1,4 @@
 CORE
 main.py
 --multi-property
-^Properties: 4 verified \✓ 1 passed, \✗ 3 failed$
+^\*\* 3 of 4 properties failed, 1 passed$

@@ -1,0 +1,4 @@
+KNOWNBUG
+main.c
+--goto-functions-only --clang-c-irep2-adjust
+^\s*ASSIGN s=sizeof\(signed char \[strlen\(&entry->d_name\[0\]\) \+ 2\]\);$

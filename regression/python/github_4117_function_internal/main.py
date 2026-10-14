@@ -1,8 +1,11 @@
-# Known limitation of the usage-site scanner: instance variables created
-# inside function bodies are not tracked, so `<var>.attr = <other>`
-# assignments happening inside a function don't refine the attribute's
-# inferred type. The fix would need scope-aware tracking of local
-# instance variables.
+# `setup()` returns `n1`, whose `.next` points to the function-local `n2`.
+# ESBMC stack-allocates Python objects, so the returned reference to `n2` used
+# to be reported as a use-after-free ("accessed expired variable pointer
+# 'n2'"). Python objects are garbage-collected, so an instance referenced after
+# its defining function returns is valid at runtime. Symex now gives
+# user-defined Python class instances whole-program (GC) lifetime, so the
+# escaped reference stays valid and `n.next.value` reads the real value. See
+# issue #4773.
 
 class Node:
     def __init__(self, v):

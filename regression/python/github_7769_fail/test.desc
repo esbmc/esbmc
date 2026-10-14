@@ -1,0 +1,6 @@
+CORE
+main.py
+--multi-property
+^VERIFICATION FAILED$
+^  FAILED       \[main\.assertion\.[0-9]+\] +line +7 +uncaught exception: IndexError$
+^  FAILED       \[main\.assertion\.[0-9]+\] +line +9 +uncaught exception: IndexError$

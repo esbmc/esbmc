@@ -3,7 +3,7 @@
 
 #include <goto-programs/goto_functions.h>
 #include <unordered_set>
-#include <util/std_types.h>
+#include <util/irep/std_types.h>
 
 // do a full inlining
 void goto_inline(
@@ -69,7 +69,7 @@ protected:
 
   void parameter_assignments(
     const locationt &location,
-    const code_typet &code_type,
+    const code_type2t &code_type,
     const std::vector<expr2tc> &arguments,
     goto_programt &dest);
 

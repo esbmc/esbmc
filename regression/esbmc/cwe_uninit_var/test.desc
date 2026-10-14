@@ -1,0 +1,6 @@
+CORE
+main.c
+--uninitialised-vars-check --incremental-bmc
+^VERIFICATION FAILED$
+^  use of uninitialized variable: x$
+^  CWE: CWE-457$

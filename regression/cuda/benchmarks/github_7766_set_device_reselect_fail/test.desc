@@ -1,0 +1,5 @@
+CORE
+main.cu
+--unwind 10
+^VERIFICATION FAILED$
+^\s*FAILED\s+\[.*\]\s+line\s+[0-9]+\s+assertion cudaSetDevice\(0\) == cudaErrorDeviceAlreadyInUse$

@@ -1,0 +1,4 @@
+CORE
+main.c
+--function nofresh --enforce-contract nofresh --unwind 8
+needs its pointer parameter's extent stated by an unconditional, direct __ESBMC_is_fresh

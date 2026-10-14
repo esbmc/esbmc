@@ -1,0 +1,7 @@
+CORE
+main.cpp
+--std=c++17 --multi-property
+FAILED.*line 34 .*assertion dtors == 1$
+FAILED.*line 39 .*assertion dtors == before \+ 1$
+FAILED.*line 44 .*assertion dtors == before \+ 1$
+^VERIFICATION FAILED$

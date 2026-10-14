@@ -1,18 +1,21 @@
 #include <goto-programs/goto_check.h>
 #include <cctype>
-#include <util/c_expr2string.h>
-#include <util/arith_tools.h>
-#include <util/array_name.h>
-#include <util/base_type.h>
-#include <util/config.h>
-#include <util/expr_util.h>
-#include <util/guard.h>
-#include <util/i2string.h>
-#include <util/location.h>
-#include <util/migrate.h>
-#include <util/mp_arith.h>
-#include <util/python_types.h>
-#include <util/std_types.h>
+#include <util/lang/c_builtins.h>
+#include <util/lang/c_expr2string.h>
+#include <langapi/language_util.h>
+#include <util/arith/arith_tools.h>
+#include <util/expr/array_name.h>
+#include <util/expr/base_type.h>
+#include <util/config/config.h>
+#include <util/expr/expr_util.h>
+#include <irep2/irep2_guard.h>
+#include <util/base/i2string.h>
+#include <util/irep/location.h>
+#include <util/irep/pad_names.h>
+#include <util/irep/migrate.h>
+#include <util/arith/mp_arith.h>
+#include <util/lang/python_types.h>
+#include <util/irep/std_types.h>
 
 class goto_checkt
 {
@@ -34,7 +37,10 @@ public:
         options.get_bool_option("unsigned-overflow-check")),
       enable_ub_shift_check(options.get_bool_option("ub-shift-check")),
       enable_nan_check(options.get_bool_option("nan-check")),
-      enable_is_instance_check(options.get_bool_option("is-instance-check"))
+      enable_is_instance_check(options.get_bool_option("is-instance-check")),
+      enable_clz_zero_check(options.get_bool_option("clz-zero-check")),
+      disable_fp_conversion_check(
+        options.get_bool_option("no-fp-conversion-check"))
   {
   }
 
@@ -48,40 +54,50 @@ protected:
 
   void check_rec(
     const expr2tc &expr,
-    guardt &guard,
+    guard2tc &guard,
     const locationt &loc,
     bool address);
 
   void div_by_zero_check(
     const expr2tc &expr,
-    const guardt &guard,
+    const guard2tc &guard,
     const locationt &loc);
 
-  void
-  bounds_check(const expr2tc &expr, const guardt &guard, const locationt &loc);
+  void bounds_check(
+    const expr2tc &expr,
+    const guard2tc &guard,
+    const locationt &loc);
 
   void pointer_rel_check(
     const expr2tc &expr,
-    const guardt &guard,
+    const guard2tc &guard,
     const locationt &loc);
 
   void overflow_check(
     const expr2tc &expr,
-    const guardt &guard,
+    const guard2tc &guard,
     const locationt &loc);
 
   void float_overflow_check(
     const expr2tc &expr,
-    const guardt &guard,
+    const guard2tc &guard,
     const locationt &loc);
 
   void cast_overflow_check(
     const expr2tc &expr,
-    const guardt &guard,
+    const guard2tc &guard,
+    const locationt &loc);
+
+  /** check a floating-point value converts into the destination integer type */
+  void fp_to_int_range_check(
+    const expr2tc &expr,
+    const guard2tc &guard,
     const locationt &loc);
 
   /** check for the buffer overflow in scanf/fscanf */
   void input_overflow_check(const expr2tc &expr, const locationt &loc);
+  /** check __builtin_clz* is not called with a zero argument (UB) */
+  void clz_zero_check(const expr2tc &code, const locationt &loc);
   /* check for signed/unsigned_bv */
   void input_overflow_check_int(
     const BigInt &width,
@@ -94,10 +110,10 @@ protected:
     bool &buf_overflow);
 
   void
-  shift_check(const expr2tc &expr, const guardt &guard, const locationt &loc);
+  shift_check(const expr2tc &expr, const guard2tc &guard, const locationt &loc);
 
   void
-  nan_check(const expr2tc &expr, const guardt &guard, const locationt &loc);
+  nan_check(const expr2tc &expr, const guard2tc &guard, const locationt &loc);
 
   void is_instance_check(
     goto_programt::targett target,
@@ -127,7 +143,7 @@ protected:
     const std::string &comment,
     const std::string &property,
     const locationt &location,
-    const guardt &guard);
+    const guard2tc &guard);
 
   goto_programt new_code;
   std::set<expr2tc> assertions;
@@ -143,11 +159,13 @@ protected:
   bool enable_ub_shift_check;
   bool enable_nan_check;
   bool enable_is_instance_check;
+  bool enable_clz_zero_check;
+  bool disable_fp_conversion_check;
 };
 
 void goto_checkt::div_by_zero_check(
   const expr2tc &expr,
-  const guardt &guard,
+  const guard2tc &guard,
   const locationt &loc)
 {
   if (disable_div_by_zero_check)
@@ -175,7 +193,7 @@ void goto_checkt::div_by_zero_check(
 
 void goto_checkt::float_overflow_check(
   const expr2tc &expr,
-  const guardt &guard,
+  const guard2tc &guard,
   const locationt &loc)
 {
   if (!enable_overflow_check)
@@ -252,11 +270,75 @@ void goto_checkt::float_overflow_check(
   }
 }
 
-void goto_checkt::cast_overflow_check(
+/// C11 6.3.1.4p1 and [conv.fpint]/1: converting a floating value whose integral
+/// part is not representable in the destination integer type is undefined.
+/// cast_overflow_check's bitvector check is gated on --int-encoding, so in the
+/// default mode this conversion went unchecked (#7572). A NaN operand fails
+/// both comparisons, which is right -- it is equally undefined.
+///
+/// --no-fp-conversion-check exists for SV-COMP: its no-overflow property is
+/// only about signed-integer arithmetic, and the rules say so explicitly --
+/// "Hence, conversions to signed-integer types do not violate this property."
+/// esbmc-wrapper.py reports any violated property under that run as
+/// FALSE_OVERFLOW, so leaving this on turns a real conversion UB into a wrong
+/// competition verdict.
+void goto_checkt::fp_to_int_range_check(
   const expr2tc &expr,
-  const guardt &guard,
+  const guard2tc &guard,
   const locationt &loc)
 {
+  if (
+    !enable_overflow_check || disable_fp_conversion_check ||
+    !is_typecast2t(expr))
+    return;
+
+  const typecast2t &fp_cast = to_typecast2t(expr);
+  const type2tc &src_type = ns.follow(fp_cast.from->type);
+  const type2tc &dst_type = ns.follow(expr->type);
+  if (!is_floatbv_type(src_type))
+    return;
+
+  const bool is_signed = is_signedbv_type(dst_type);
+  if (!is_signed && !is_unsignedbv_type(dst_type))
+    return;
+
+  // 6.3.1.4p1 constrains the *integral part* after truncation toward zero, not
+  // the value, so the defined operands are the open interval (MIN - 1, MAX +
+  // 1): (unsigned)-0.5f is 0, and (int)-2147483648.5 is INT_MIN. Getting the
+  // lower bound closed reported both as undefined, which cost an SV-COMP
+  // incorrect-false on float-benchs/bary_diverge.
+  const unsigned int w = dst_type->get_width();
+  const BigInt lo = is_signed ? -power(2, w - 1) : BigInt(0);
+  const BigInt hi = is_signed ? power(2, w - 1) : power(2, w);
+
+  // MIN - 1 is representable only while the source significand can hold it.
+  // Where it cannot, from_integer would round it to MIN and the strict bound
+  // would then exclude MIN itself -- but no float lies between MIN - 1 and MIN
+  // there, so the closed bound already describes the same set of operands.
+  const expr2tc lo_open = from_integer(lo - 1, src_type);
+  const bool lo_open_exact =
+    to_constant_floatbv2t(lo_open).value.to_integer() == lo - 1;
+
+  add_guarded_claim(
+    and2tc(
+      lo_open_exact ? expr2tc(greaterthan2tc(fp_cast.from, lo_open))
+                    : expr2tc(greaterthanequal2tc(
+                        fp_cast.from, from_integer(lo, src_type))),
+      lessthan2tc(fp_cast.from, from_integer(hi, src_type))),
+    "floating-point conversion out of range of " + get_type_id(dst_type) +
+      " on " + get_expr_id(expr),
+    "overflow",
+    loc,
+    guard);
+}
+
+void goto_checkt::cast_overflow_check(
+  const expr2tc &expr,
+  const guard2tc &guard,
+  const locationt &loc)
+{
+  fp_to_int_range_check(expr, guard, loc);
+
   // For Solidity, narrowing casts (e.g. uint256 → uint8) need overflow checks
   // even in bitvector mode. Only apply to user .sol code, not C library models.
   bool is_solidity = (config.language.lid == language_idt::SOLIDITY);
@@ -320,9 +402,19 @@ void goto_checkt::cast_overflow_check(
     cast_overflow, claim_msg + get_expr_id(expr), "overflow", loc, guard);
 }
 
+static expr2tc overflow_expr(const expr2tc &expr)
+{
+  if (is_neg2t(expr))
+    return overflow_neg2tc(to_neg2t(expr).value);
+  // abs overflows exactly when negating its operand does (C11 7.22.6.1p2).
+  if (is_abs2t(expr))
+    return overflow_neg2tc(to_abs2t(expr).value);
+  return overflow2tc(expr);
+}
+
 void goto_checkt::overflow_check(
   const expr2tc &expr,
-  const guardt &guard,
+  const guard2tc &guard,
   const locationt &loc)
 {
   if (
@@ -366,8 +458,7 @@ void goto_checkt::overflow_check(
     return;
 
   // add overflow subgoal
-  expr2tc overflow =
-    is_neg2t(expr) ? overflow_neg2tc(to_neg2t(expr).value) : overflow2tc(expr);
+  expr2tc overflow = overflow_expr(expr);
   make_not(overflow);
 
   add_guarded_claim(
@@ -434,7 +525,8 @@ void goto_checkt::input_overflow_check(
   const std::string fmt = to_constant_string2t(base_expr).value.as_string();
 
   // obtain the length limits in the format string
-  // TODO: A specific class for the scanf/fscanf format string(e.g scanf_formattert)
+  // TODO: A specific class for the scanf/fscanf format string(e.g
+  // scanf_formattert)
   long unsigned int pos = 0;
   std::vector<std::string> limits;
 
@@ -443,15 +535,47 @@ void goto_checkt::input_overflow_check(
     if (fmt[pos] == '%' && fmt[pos + 1] != '.')
     {
       pos++;
+
+      // "%%" is a literal percent (no conversion) and "%*..." suppresses
+      // assignment (it reads input but consumes no argument).  Neither maps to
+      // a call argument, so skip it -- pushing a phantom limit here would
+      // misalign limits[] against the argument list and abandon the whole check
+      // ("too few arguments for format specifiers"), silently dropping a real
+      // overflow on a later %s.
+      if (pos < fmt.length() && (fmt[pos] == '%' || fmt[pos] == '*'))
+        continue;
+
       while (std::isdigit(fmt[pos]))
       {
         tmp_str += fmt[pos];
         pos++;
       }
+
+      // After the optional field width, skip C length modifiers (h, l, L, j,
+      // z, t, q) to reach the actual conversion specifier.  Only string
+      // conversions read an unbounded run of bytes into the caller's buffer:
+      // %s, the %[...] scanset, and the XSI/glibc wide-string %S (= %ls).
+      // Numeric, pointer and (wide-)char conversions write a single fixed-size
+      // scalar -- including %c/%lc/%C, which read exactly one (wide) character
+      // -- and so cannot overflow a buffer through a missing field width.  A
+      // width-less non-string conversion is therefore recorded as BOUNDED
+      // rather than INF, so it does not trip the unlimited buffer-overflow rule
+      // below (esbmc/esbmc#1470, scanf "%ld" false alarm).
+      long unsigned int conv_pos = pos;
+      while (conv_pos < fmt.length() &&
+             (fmt[conv_pos] == 'h' || fmt[conv_pos] == 'l' ||
+              fmt[conv_pos] == 'L' || fmt[conv_pos] == 'j' ||
+              fmt[conv_pos] == 'z' || fmt[conv_pos] == 't' ||
+              fmt[conv_pos] == 'q'))
+        conv_pos++;
+      const bool is_string_conv =
+        conv_pos < fmt.length() &&
+        (fmt[conv_pos] == 's' || fmt[conv_pos] == 'S' || fmt[conv_pos] == '[');
+
       if (tmp_str != "")
         limits.push_back(tmp_str);
       else
-        limits.push_back("INF");
+        limits.push_back(is_string_conv ? "INF" : "BOUNDED");
       tmp_str = "";
     }
   }
@@ -462,25 +586,28 @@ void goto_checkt::input_overflow_check(
   for (long unsigned int i = fmt_idx + 1; i <= number_of_format_args + fmt_idx;
        i++)
   {
-    const expr2tc &base_expr = get_base_object(func_call.operands[i]);
+    expr2tc base_expr = get_base_object(func_call.operands[i]);
     irep_idt arg_name;
-    if (is_symbol2t(base_expr))
-      arg_name = to_symbol2t(base_expr).thename;
 
     // e.g
     // int *arr = (int*) malloc(10 * sizeof(int));
     // scanf("%13d",&arr[0]);  --> overflow
-    if (arg_name.empty())
+    //
+    // `&arr[i]` is lowered to pointer arithmetic `arr + i` (an add2t),
+    // which get_base_object does not peel.  Descend into the pointer-typed
+    // operand to recover the underlying buffer symbol.
+    if (
+      (is_add2t(base_expr) || is_sub2t(base_expr)) &&
+      is_pointer_type(base_expr))
     {
-      expr2tc deref = get_base_object(func_call.operands[i]);
-      exprt ptr = migrate_expr_back(deref);
-
-      // not the format we expected
-      if (!ptr.type().is_pointer())
-        return;
-
-      arg_name = ptr.operands()[0].identifier();
+      const expr2tc &lhs = *base_expr->get_sub_expr(0);
+      const expr2tc &rhs = *base_expr->get_sub_expr(1);
+      base_expr = get_base_object(is_pointer_type(lhs) ? lhs : rhs);
     }
+
+    if (is_symbol2t(base_expr))
+      arg_name = to_symbol2t(base_expr).thename;
+
     arg_names.push_back(arg_name);
   }
 
@@ -503,8 +630,13 @@ void goto_checkt::input_overflow_check(
     if (arg_names.at(i).empty())
       return;
 
+    // A non-string conversion with no field width writes a single scalar; there
+    // is no buffer to overflow, so skip it (see the format-parse loop above).
+    if (limits.at(i) == "BOUNDED")
+      continue;
+
     const symbolt &arg = *ns.lookup(arg_names.at(i));
-    const irep_idt type_id = arg.type.id();
+    const irep_idt type_id = arg.get_type().id();
     std::string width;
 
     // if no length limits, then we treat it as a buffer overflow
@@ -519,13 +651,13 @@ void goto_checkt::input_overflow_check(
 
     if (type_id == "array")
     {
-      width = to_array_type(arg.type).size().cformat().as_string();
+      width = to_array_type(arg.get_type()).size().cformat().as_string();
       input_overflow_check_arr(
         string2integer(width), string2integer(limits.at(i)), buf_overflow);
     }
     else if (type_id == "unsignedbv" || type_id == "signedbv")
     {
-      width = arg.type.width().as_string();
+      width = arg.get_type().width().as_string();
       input_overflow_check_int(
         string2integer(width), string2integer(limits.at(i)), buf_overflow);
     }
@@ -537,8 +669,8 @@ void goto_checkt::input_overflow_check(
     else if (type_id == "pointer")
     {
       // remove typecast
-      assert(arg.value.is_typecast());
-      const exprt out_operands = to_typecast_expr(arg.value).op();
+      assert(arg.get_value().is_typecast());
+      const exprt out_operands = to_typecast_expr(arg.get_value()).op();
       const exprt::operandst operands = out_operands.op1().operands();
 
       if (!operands[0].has_operands())
@@ -558,20 +690,24 @@ void goto_checkt::input_overflow_check(
         // e.g
         // int *arr = (int*) malloc(10 * sizeof(int));
         // scanf("%12d",&arr[0]);  --> overflow
-        const exprt &it = operands[0].op1();
+        // The per-element type T rides on the sizeof(T) operand of the
+        // `count * sizeof(T)` size expression (esbmc/esbmc#5337); peel any
+        // surrounding typecast to reach it.
+        const exprt *sz = &operands[0].op1();
+        while (sz->id() == "typecast" && sz->operands().size() == 1)
+          sz = &sz->op0();
+        if (sz->id() != "sizeof" || sz->operands().empty())
+          return;
+        const typet &elem = sz->op0().type();
 
-        if (
-          it.c_sizeof_type().id() == typet::t_signedbv ||
-          it.c_sizeof_type().id() == typet::t_unsignedbv)
+        if (elem.id() == typet::t_signedbv || elem.id() == typet::t_unsignedbv)
         {
-          width = it.c_sizeof_type().width().as_string();
+          width = elem.width().as_string();
           input_overflow_check_int(
             string2integer(width), string2integer(limits.at(i)), buf_overflow);
         }
 
-        else if (
-          it.c_sizeof_type().id() == typet::t_floatbv ||
-          it.c_sizeof_type().id() == typet::t_fixedbv)
+        else if (elem.id() == typet::t_floatbv || elem.id() == typet::t_fixedbv)
         {
           // TODO
           break;
@@ -588,7 +724,7 @@ void goto_checkt::input_overflow_check(
         "Unsupported type {}, skip overflow checking", type_id.as_string());
   }
 
-  if (buf_overflow) // FIX ME! add assert(0) to output the error msg
+  if (buf_overflow)
   {
     goto_programt::targett t = new_code.add_instruction(ASSERT);
     t->guard = gen_false_expr();
@@ -596,14 +732,13 @@ void goto_checkt::input_overflow_check(
     t->location.user_provided(true);
     t->location.property("overflow");
     t->location.comment(
-      "buffer overflow on " +
-      c_expr2string(migrate_expr_back(func_call.function), ns));
+      "buffer overflow on " + from_expr(ns, "", func_call.function));
   }
 }
 
 void goto_checkt::shift_check(
   const expr2tc &expr,
-  const guardt &guard,
+  const guard2tc &guard,
   const locationt &loc)
 {
   overflow_check(expr, guard, loc);
@@ -632,17 +767,6 @@ void goto_checkt::shift_check(
   // get a signedness mismatch in the lessthan2tc below
   expr2tc left_op_type_size =
     constant_int2tc(right_op_type, BigInt(left_op_type->get_width()));
-#ifndef NDEBUG
-  // Be paranoid and verify that the size is the same regardless of which type we're using for the
-  // constant. In theory, we could have different signedness or width, but in practice
-  // those differences should not be relevant as the relevant numbers e.g. 32 or 64 can't
-  // cause wraparound issues.
-  expr2tc check2 = (equality2tc(
-    constant_int2tc(left_op_type, BigInt(left_op_type->get_width())),
-    constant_int2tc(right_op_type, BigInt(left_op_type->get_width()))));
-  simplify(check2);
-  assert(is_true(check2));
-#endif
 
   expr2tc right_op_size_check = lessthan2tc(right_op, left_op_type_size);
 
@@ -669,7 +793,7 @@ void goto_checkt::shift_check(
 
 void goto_checkt::nan_check(
   const expr2tc &expr,
-  const guardt &guard,
+  const guard2tc &guard,
   const locationt &loc)
 {
   if (!enable_nan_check)
@@ -848,7 +972,7 @@ typet goto_checkt::resolve_python_effective_type(
     {
       const symbolt *type_symbol = ns.lookup(pointed);
       if (type_symbol != nullptr)
-        pointed = type_symbol->type;
+        pointed = type_symbol->get_type();
     }
 
     if (pointed.id() == "struct")
@@ -859,7 +983,7 @@ typet goto_checkt::resolve_python_effective_type(
   {
     const symbolt *type_symbol = ns.lookup(effective);
     if (type_symbol != nullptr)
-      effective = type_symbol->type;
+      effective = type_symbol->get_type();
   }
 
   return effective;
@@ -879,7 +1003,7 @@ expr2tc goto_checkt::build_python_type_operand(const typet &type) const
     const symbolt *symbol = ns.lookup(followed);
     if (symbol == nullptr)
       return expr2tc();
-    type2tc symbol_type = migrate_type(symbol->type);
+    type2tc symbol_type = migrate_symbol_type(*symbol);
     return symbol2tc(symbol_type, symbol->id);
   }
 
@@ -889,7 +1013,7 @@ expr2tc goto_checkt::build_python_type_operand(const typet &type) const
 
 void goto_checkt::pointer_rel_check(
   const expr2tc &expr,
-  const guardt &guard,
+  const guard2tc &guard,
   const locationt &loc)
 {
   if (disable_pointer_check || disable_pointer_relation_check)
@@ -901,37 +1025,79 @@ void goto_checkt::pointer_rel_check(
     is_pointer_type(*expr->get_sub_expr(0)) &&
     is_pointer_type(*expr->get_sub_expr(1)))
   {
-    // add same-object subgoal
+    // Relational comparison is only well-defined when both operands point
+    // into the same array object (or one past its end); otherwise it is
+    // undefined behaviour (C11 6.5.8p5).
     expr2tc side_1 = *expr->get_sub_expr(0);
     expr2tc side_2 = *expr->get_sub_expr(1);
 
     expr2tc same_object = same_object2tc(side_1, side_2);
     add_guarded_claim(
-      same_object, "Same object violation", "pointer", loc, guard);
+      same_object,
+      "Relational comparison between pointers is only valid for pointers "
+      "to the same object",
+      "pointer",
+      loc,
+      guard);
   }
 }
 
-static bool has_dereference(const expr2tc &expr)
+// Trailing padding is appended after the declared members (padding.cpp, the
+// `pad(components, components.end(), ...)` calls), so the last declared member
+// is the last non-`anon_pad#` entry. That one name is enough: of the four pad
+// kinds add_padding mints, `anon_bit_field_pad#` is only appended to a struct
+// that *ends* in bit-fields, `ext_int_pad#` only ever follows an _ExtInt
+// member, and the union pad is union-only -- none of them can follow a trailing
+// array. The `char qux[1]` case in regression/esbmc/github_6508_safe pins this.
+static bool is_trailing_member(const type2tc &t, const irep_idt &name)
+{
+  const std::vector<irep_idt> names = struct_union_member_names(t);
+
+  auto it = names.rbegin();
+  while (it != names.rend() && has_prefix(*it, pad_prefix))
+    ++it;
+
+  return it != names.rend() && *it == name;
+}
+
+// True when `expr` may designate storage extending past its declared type,
+// i.e. a trailing member reached through a pointer. That is the struct-hack
+// idiom -- `struct { int n; T qux[1]; }` allocated with room for more than one
+// `qux` -- where the declared array bound does not govern the object actually
+// allocated (see 82b5ce54f7). An interior member array cannot be over-allocated
+// that way, so its declared bound does apply (C11 6.5.6p8).
+static bool may_be_over_allocated(const expr2tc &expr, const namespacet &ns)
 {
   if (is_dereference2t(expr))
     return true;
 
-  if (is_index2t(expr) && is_pointer_type(to_index2t(expr).source_value))
-    // This is an index of a pointer, which is a dereference
-    return true;
+  if (is_index2t(expr))
+    // An index into a pointer is a dereference; an index into a real array
+    // selects a fixed-size element, which cannot be over-allocated.
+    return is_pointer_type(to_index2t(expr).source_value);
 
-  // Recurse through all subsequent source objects, which are always operand
-  // zero.
-  bool found = false;
-  expr->foreach_operand(
-    [&found](const expr2tc &e) { found |= has_dereference(e); });
+  if (is_typecast2t(expr))
+    return may_be_over_allocated(to_typecast2t(expr).from, ns);
 
-  return found;
+  if (is_bitcast2t(expr))
+    return may_be_over_allocated(to_bitcast2t(expr).from, ns);
+
+  if (is_member2t(expr))
+  {
+    const member2t &memb = to_member2t(expr);
+    const type2tc &t = ns.follow(memb.source_value->type);
+    // A union's storage is deliberately shared, so reaching a larger sibling
+    // member through a smaller one is legitimate rather than an overflow.
+    return (is_union_type(t) || is_trailing_member(t, memb.member)) &&
+           may_be_over_allocated(memb.source_value, ns);
+  }
+
+  return false;
 }
 
 void goto_checkt::bounds_check(
   const expr2tc &expr,
-  const guardt &guard,
+  const guard2tc &guard,
   const locationt &loc)
 {
   (void)guard;
@@ -966,10 +1132,13 @@ void goto_checkt::bounds_check(
   if (is_pointer_type(t))
     return; // done by the pointer code
 
-  // Otherwise, if there's a dereference in the array source, this bounds check
-  // should be performed by the symex-time dereferencing code, as the base thing
-  // being accessed may be anything.
-  if (has_dereference(ind.source_value))
+  // Otherwise, if the object really being accessed may be larger than its
+  // declared type, defer to the symex-time dereferencing code, which bounds
+  // the allocation rather than the type. That only happens for a trailing
+  // member reached through a pointer; for an interior one the declared bound
+  // governs, and the symex-time check misses the overflow entirely because it
+  // still lands inside the enclosing object (issue #6508).
+  if (may_be_over_allocated(ind.source_value, ns))
     return;
 
   // We can't check bounds of an infinite sized array
@@ -980,7 +1149,7 @@ void goto_checkt::bounds_check(
     "array bounds violated: " + array_name(ns, ind.source_value);
   const expr2tc &the_index = ind.index;
 
-  // Lower bound access should be greater than zero
+  // Lower bound: index must be non-negative (>= 0)
   expr2tc zero = gen_zero(the_index->type);
   assert(!is_nil_expr(zero));
 
@@ -1003,7 +1172,7 @@ void goto_checkt::add_guarded_claim(
   const std::string &comment,
   const std::string &property,
   const locationt &location,
-  const guardt &guard)
+  const guard2tc &guard)
 {
   expr2tc e = expr;
 
@@ -1030,7 +1199,7 @@ void goto_checkt::add_guarded_claim(
 
 void goto_checkt::check_rec(
   const expr2tc &expr,
-  guardt &guard,
+  guard2tc &guard,
   const locationt &loc,
   bool address)
 {
@@ -1070,7 +1239,7 @@ void goto_checkt::check_rec(
   {
     assert(is_bool_type(expr));
 
-    guardt old_guards(guard);
+    guard2tc old_guards(guard);
 
     bool is_or = is_or2t(expr);
     expr->foreach_operand([this, &is_or, &guard, &loc](const expr2tc &e) {
@@ -1087,7 +1256,7 @@ void goto_checkt::check_rec(
         guard.add(e);
     });
 
-    guard.swap(old_guards);
+    guard = std::move(old_guards);
     return;
   }
 
@@ -1101,24 +1270,35 @@ void goto_checkt::check_rec(
 
     // Check true path
     {
-      guardt old_guards(guard);
+      guard2tc old_guards(guard);
       guard.add(i.cond);
       check_rec(i.true_value, guard, loc, false);
-      guard.swap(old_guards);
+      guard = std::move(old_guards);
     }
 
     // Check false path, the guard is negated
     {
-      guardt old_guards(guard);
+      guard2tc old_guards(guard);
       expr2tc tmp = i.cond;
       make_not(tmp);
       guard.add(tmp);
       check_rec(i.false_value, guard, loc, false);
-      guard.swap(old_guards);
+      guard = std::move(old_guards);
     }
 
     return;
   }
+
+  case expr2t::forall_id:
+  case expr2t::exists_id:
+    // A quantifier binds a fresh logical variable ranging over its whole type;
+    // its body is a pure predicate, not executed code. Runtime safety checks
+    // (bounds, overflow, div-by-zero) over the bound variable are meaningless
+    // -- e.g. a[i] inside `forall i . (0 <= i < n) ==> a[i] == 0` is not a real
+    // out-of-bounds access, since i is universally quantified, not a concrete
+    // index. CBMC likewise emits no such checks inside a quantifier body. Skip
+    // the whole node so the array theory (not goto_check) models the body.
+    return;
 
   default:
     break;
@@ -1146,6 +1326,7 @@ void goto_checkt::check_rec(
     /* fallthrough */
 
   case expr2t::neg_id:
+  case expr2t::abs_id:
   case expr2t::add_id:
   case expr2t::sub_id:
   case expr2t::mul_id:
@@ -1185,8 +1366,37 @@ void goto_checkt::check_rec(
 
 void goto_checkt::check(const expr2tc &expr, const locationt &loc)
 {
-  guardt guard;
+  guard2tc guard;
   check_rec(expr, guard, loc, false);
+}
+
+void goto_checkt::clz_zero_check(const expr2tc &code, const locationt &loc)
+{
+  const code_function_call2t &call = to_code_function_call2t(code);
+  if (!is_symbol2t(call.function))
+    return;
+
+  // A zero argument is undefined for __builtin_clz*/ctz* (GCC); assert it is
+  // non-zero. The two-argument clzg/ctzg name their own result at zero, so the
+  // arity test below leaves them alone, and ffs and clrsb are defined there
+  // outright.
+  const std::string name = to_symbol2t(call.function).thename.as_string();
+  const bit_scan_endt kind = bit_scan_builtin(name);
+  if (kind != bit_scan_endt::leading && kind != bit_scan_endt::trailing)
+    return;
+
+  if (call.operands.size() != 1)
+    return;
+
+  const expr2tc &arg = call.operands[0];
+  expr2tc nonzero = notequal2tc(arg, gen_zero(arg->type));
+  guard2tc guard;
+  add_guarded_claim(
+    nonzero,
+    "__builtin_clz/ctz of zero is undefined",
+    "undef-behavior",
+    loc,
+    guard);
 }
 
 void goto_checkt::goto_check(goto_programt &goto_program)
@@ -1252,7 +1462,7 @@ void goto_checkt::goto_check(goto_programt &goto_program)
                 expr2tc cast_overflow =
                   overflow_cast2tc(assign.source, narrow_width);
                 make_not(cast_overflow);
-                guardt guard;
+                guard2tc guard;
                 add_guarded_claim(
                   cast_overflow,
                   "Narrowing assignment overflow",
@@ -1272,6 +1482,9 @@ void goto_checkt::goto_check(goto_programt &goto_program)
 
       if (enable_overflow_check)
         input_overflow_check(i.code, loc);
+
+      if (enable_clz_zero_check)
+        clz_zero_check(i.code, loc);
     }
     else if (i.is_return())
     {

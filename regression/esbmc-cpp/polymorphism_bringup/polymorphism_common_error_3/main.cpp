@@ -1,5 +1,8 @@
-//treat with a base class object like a derived class object
-//it can generate a compilation error
+// `new Shape` is well-formed: Shape's virtual functions are declared but not
+// pure, so Shape is not abstract. Their missing definitions are only a
+// link-time error (missing vtable, ill-formed but no diagnostic required per
+// [basic.def.odr]) and are never reached here, so ESBMC reports VERIFICATION
+// SUCCESSFUL. (ESBMC's legacy C++ frontend wrongly reported CONVERSION ERROR.)
 
 class Shape{
   public:

@@ -25,7 +25,7 @@
 /// nondet indirect-call path.
 
 #include <solidity-frontend/solidity_convert.h>
-#include <util/message.h>
+#include <util/message/message.h>
 
 #include <nlohmann/json.hpp>
 

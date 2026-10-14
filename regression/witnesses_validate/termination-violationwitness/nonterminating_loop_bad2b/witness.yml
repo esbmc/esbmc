@@ -1,0 +1,90 @@
+# This file is part of the SV-Benchmarks collection of verification tasks:
+# https://gitlab.com/sosy-lab/benchmarking/sv-benchmarks
+#
+# SPDX-FileCopyrightText: 2025 The SV-Benchmarks Community
+#
+# SPDX-License-Identifier: Apache-2.0
+
+- entry_type: "violation_sequence"
+  metadata:
+    format_version: "2.1"
+    uuid: 36108573-fdb0-4f46-90a0-e58ff4011d3c
+    creation_time: "2025-10-03T15:35:47+02:00"
+    producer:
+      name: "Paulina"
+      version: "ASE-paper"
+    task:
+      input_files:
+      - "nonterminating-loop.c"
+      input_file_hashes:
+        nonterminating-loop.c: 94318f2e020fa99240fdeb58b4aaa55ec050234af8261d6ef5de47ee65978d23
+      specification: "CHECK( init(main()), LTL(F end) )"
+      data_model: "LP64"
+      language: "C"
+  content:
+  - segment:
+    - waypoint:
+        type: "assumption"
+        action: "follow"
+        constraint:
+          value: "x == 0"
+          format: "c_expression"
+        location:
+          file_name: "nonterminating-loop.c"
+          line: 13
+          column: 5
+  - segment:
+    - waypoint:
+        type: "assumption"
+        action: "follow"
+        constraint:
+          value: "y == 1"
+          format: "c_expression"
+        location:
+          file_name: "nonterminating-loop.c"
+          line: 14
+          column: 5
+  - segment:
+    - waypoint:
+        type: "assumption"
+        action: "cycle"
+        constraint:
+          value: "x == 1" # in the first iteration, x is still 0 here
+          format: "c_expression"
+        location:
+          file_name: "nonterminating-loop.c"
+          line: 18
+          column: 9
+  - segment:
+    - waypoint:
+        type: "assumption"
+        action: "cycle"
+        constraint:
+          value: "y == 0" # in the first iteration, y is still 1 here
+          format: "c_expression"
+        location:
+          file_name: "nonterminating-loop.c"
+          line: 19
+          column: 9
+  - segment:
+    - waypoint:
+        type: "assumption"
+        action: "cycle"
+        constraint:
+          value: "x == 0"
+          format: "c_expression"
+        location:
+          file_name: "nonterminating-loop.c"
+          line: 18
+          column: 9
+  - segment:
+    - waypoint:
+        type: "assumption"
+        action: "cycle"
+        constraint:
+          value: "y == 1"
+          format: "c_expression"
+        location:
+          file_name: "nonterminating-loop.c"
+          line: 19
+          column: 9

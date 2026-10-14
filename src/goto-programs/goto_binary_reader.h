@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/context.h>
+#include <util/symtab/context.h>
 #include <vector>
 #include <string>
 
@@ -10,12 +10,16 @@ class goto_functionst;
 class goto_binary_reader
 {
 public:
+  /** Reads a bundled library blob. \p goto_functions is null for a blob whose
+   *  bodies travel in their symbols' values and are built later by
+   *  goto_convert_functions; pass one for a blob written after goto_convert,
+   *  whose bodies are already lowered. */
   bool read_goto_binary_array(
     const void *data,
     size_t size,
     contextt &context,
     contextt &ignored,
-    goto_functionst &dest);
+    goto_functionst *goto_functions = nullptr);
 
   void set_functions_to_read(const std::vector<std::string> &funcs)
   {

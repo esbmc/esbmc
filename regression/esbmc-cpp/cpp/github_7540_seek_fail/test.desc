@@ -1,0 +1,6 @@
+CORE
+main.cpp
+--std c++11 --32 --multi-property
+^\s*PASSED\s+\[tellp\..*\]\s+line\s+[0-9]+\s+Invalid stream position$
+^\s*FAILED\s+\[main\..*\]\s+line\s+[0-9]+\s+assertion end < 0$
+^VERIFICATION FAILED$

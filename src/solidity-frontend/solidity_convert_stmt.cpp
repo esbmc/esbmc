@@ -8,14 +8,14 @@
 
 #include <solidity-frontend/solidity_convert.h>
 #include <solidity-frontend/typecast.h>
-#include <util/arith_tools.h>
-#include <util/bitvector.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/mp_arith.h>
-#include <util/std_expr.h>
-#include <util/message.h>
+#include <util/arith/arith_tools.h>
+#include <util/arith/bitvector.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
+#include <util/arith/mp_arith.h>
+#include <util/irep/std_expr.h>
+#include <util/message/message.h>
 #include <fstream>
 #include <set>
 
@@ -205,10 +205,10 @@ bool solidity_convertert::get_function_params(
   // 2b. handle Omitted Names in Function Definitions
   if (name == "")
   {
-    // Items with omitted names will still be present on the stack, but they are inaccessible by name.
-    // e.g. ~omitted1, ~omitted2. which is a invalid name for solidity.
-    // Therefore it won't conflict with other arg names.
-    //log_error("Omitted params are not supported");
+    // Items with omitted names will still be present on the stack, but they are
+    // inaccessible by name. e.g. ~omitted1, ~omitted2. which is a invalid name
+    // for solidity. Therefore it won't conflict with other arg names.
+    // log_error("Omitted params are not supported");
     // return true;
     ;
   }
@@ -398,9 +398,9 @@ bool solidity_convertert::get_statement(
   const nlohmann::json &stmt,
   exprt &new_expr)
 {
-  // For rule statement
-  // Since this is an additional layer of grammar rules compared to clang C, we do NOT set location here.
-  // Just pass the new_expr reference to the next layer.
+  // For rule statement.
+  // Compute the location up front and apply it to new_expr at the end of the
+  // function (see the new_expr.location() assignment before return).
 
   locationt loc;
   get_location_from_node(stmt, loc);
@@ -443,7 +443,8 @@ bool solidity_convertert::get_statement(
         }
       }
     }
-    if (get_expr(
+    if (
+      get_expr(
           stmt["expression"], stmt["expression"]["typeDescriptions"], new_expr))
       return true;
     // Bare expression-statement forms that reduce to no-op exprt shapes
@@ -607,9 +608,11 @@ bool solidity_convertert::get_statement(
     // 1. get return type
     // TODO: Fix me! Assumptions:
     //  a). It's "return <expr>;" not "return;"
-    //  b). <expr> is pointing to a DeclRefExpr, we need to wrap it in an ImplicitCastExpr as a subexpr
-    //  c). For multiple return type, the return statement represented as a tuple expression using a components field.
-    //      Besides, tuple can only be declared literally. https://docs.soliditylang.org/en/latest/control-structures.html#assignment
+    //  b). <expr> is pointing to a DeclRefExpr, we need to wrap it in an
+    //  ImplicitCastExpr as a subexpr c). For multiple return type, the return
+    //  statement represented as a tuple expression using a components field.
+    //      Besides, tuple can only be declared literally.
+    //      https://docs.soliditylang.org/en/latest/control-structures.html#assignment
     //      e.g. return (false, 123)
     if (!stmt.contains("expression"))
     {
@@ -623,8 +626,9 @@ bool solidity_convertert::get_statement(
 
     // get_type_description
     typet return_exrp_type;
-    if (get_type_description(
-          stmt["expression"]["typeDescriptions"], return_exrp_type))
+    if (
+      get_type_description(
+        stmt["expression"]["typeDescriptions"], return_exrp_type))
       return true;
 
     // `return f();` where f is itself void: solc gives the call expression
@@ -729,10 +733,11 @@ bool solidity_convertert::get_statement(
         {
           // lop: struct member call (e.g. tuple.men0)
           exprt lop;
-          if (get_tuple_member_call(
-                lhs.identifier(),
-                to_struct_type(lhs.type()).components().at(i),
-                lop))
+          if (
+            get_tuple_member_call(
+              lhs.identifier(),
+              to_struct_type(lhs.type()).components().at(i),
+              lop))
             return true;
 
           // rop: constant/symbol
@@ -773,7 +778,8 @@ bool solidity_convertert::get_statement(
         exprt func_call;
         if (!rhs_is_nondet)
         {
-          if (get_expr(
+          if (
+            get_expr(
                 stmt["expression"],
                 stmt["expression"]["typeDescriptions"],
                 func_call))
@@ -794,10 +800,11 @@ bool solidity_convertert::get_statement(
         {
           // lop: struct member call (e.g. tupleA.men0)
           exprt lop;
-          if (get_tuple_member_call(
-                lhs.identifier(),
-                to_struct_type(lhs.type()).components().at(i),
-                lop))
+          if (
+            get_tuple_member_call(
+              lhs.identifier(),
+              to_struct_type(lhs.type()).components().at(i),
+              lop))
             return true;
 
           // rop: struct member call (e.g. tupleB.men0), or nondet fallback
@@ -996,8 +1003,8 @@ bool solidity_convertert::get_statement(
     current_forStmt = &stmt;
 
     // 1. annotate init
-    codet init =
-      code_skipt(); // code_skipt() means no init in for-stmt, e.g. for (; i< 10; ++i)
+    codet init = code_skipt(); // code_skipt() means no init in for-stmt, e.g.
+                               // for (; i< 10; ++i)
     if (stmt.contains("initializationExpression"))
       if (get_statement(stmt["initializationExpression"], init))
         return true;
@@ -1323,9 +1330,9 @@ bool solidity_convertert::get_statement(
           {
             const symbolt &sym =
               *context.find_symbol(var_decl.op0().identifier());
-            symbol_exprt sym_expr(sym.id, sym.type);
+            symbol_exprt sym_expr(sym.id, sym.get_type());
             exprt nondet_val;
-            get_nondet_expr(sym.type, nondet_val);
+            get_nondet_expr(sym.get_type(), nondet_val);
             code_assignt assign(sym_expr, nondet_val);
             assign.location() = loc;
             out.copy_to_operands(var_decl);
@@ -1363,9 +1370,9 @@ bool solidity_convertert::get_statement(
             {
               const symbolt &sym =
                 *context.find_symbol(var_decl.op0().identifier());
-              symbol_exprt sym_expr(sym.id, sym.type);
+              symbol_exprt sym_expr(sym.id, sym.get_type());
               exprt nondet_val;
-              get_nondet_expr(sym.type, nondet_val);
+              get_nondet_expr(sym.get_type(), nondet_val);
               code_assignt assign(sym_expr, nondet_val);
               assign.location() = loc;
               catch_block.copy_to_operands(var_decl);
@@ -1471,7 +1478,7 @@ bool solidity_convertert::get_statement(
       return true;
     }
     exprt flag_expr = symbol_expr(*flag_sym);
-    const typet flag_t = flag_sym->type;
+    const typet flag_t = flag_sym->get_type();
     const std::string dbg_mod = get_modulename_from_path(absolute_path);
 
     // Fresh bool temp matching the flag type.
@@ -1483,7 +1490,7 @@ bool solidity_convertert::get_statement(
       s.lvalue = true;
       s.file_local = true;
       const symbolt &added = *move_symbol_to_context(s);
-      return symbol_exprt(added.id, added.type);
+      return symbol_exprt(added.id, added.get_type());
     };
 
     code_blockt try_block;
@@ -2503,7 +2510,7 @@ bool solidity_convertert::convert_yul_statement(
           const symbolt *s = context.find_symbol(tag);
           if (s == nullptr)
             return irep_idt();
-          rt = s->type;
+          rt = s->get_type();
         }
         return rt.id() == "struct" ? tag : irep_idt();
       };

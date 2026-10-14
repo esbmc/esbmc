@@ -1,0 +1,2100 @@
+import ast
+import copy
+import keyword
+# pylint: disable=too-many-locals,too-many-branches,too-many-statements,too-many-return-statements
+# pylint: disable=too-many-nested-blocks,too-many-boolean-expressions,no-else-return,no-else-raise
+# pylint: disable=import-outside-toplevel
+
+
+class CoreVisitorsMixin:
+
+    _MUTATING_LIST_METHODS = {
+        "append",
+        "clear",
+        "extend",
+        "insert",
+        "pop",
+        "remove",
+        "reverse",
+        "sort",
+    }
+    _PURE_DICT_METHODS = {"__getitem__", "copy", "get", "items", "keys", "values"}
+    # Positional-or-keyword parameters of the builtins whose call paths read
+    # positional arguments only, in declaration order (CPython 3.12). A leading
+    # positional-only parameter is spelled None so no keyword can bind it:
+    # int(x="10") is a TypeError, only int(x, base=...) names its second one.
+    _BUILTIN_POSITIONAL_PARAMS = {
+        "int": (None, "base"),
+        "pow": ("base", "exp", "mod"),
+        "round": ("number", "ndigits"),
+        "str": ("object", ),
+    }
+    _SHADOW_TRACKED_BUILTINS = set(_BUILTIN_POSITIONAL_PARAMS) | {"getattr"}
+    _PURE_LIST_CONSUMERS = {
+        "abs",
+        "all",
+        "any",
+        "bool",
+        "dict",
+        "enumerate",
+        "filter",
+        "float",
+        "frozenset",
+        "hash",
+        "id",
+        "int",
+        "isinstance",
+        "iter",
+        "len",
+        "list",
+        "map",
+        "max",
+        "min",
+        "next",
+        "print",
+        "range",
+        "repr",
+        "reversed",
+        "set",
+        "sorted",
+        "str",
+        "sum",
+        "tuple",
+        "type",
+        "zip",
+    }
+
+    def _update_assignment_call_origins(self, targets, value):
+        # Track `x = Call(...)` so eq-shape rewrites can recover the inline
+        # form on `x == ...`; all other target shapes invalidate.
+
+        rebound = set()
+
+        def invalidate(target):
+            if isinstance(target, ast.Name):
+                rebound.add(target.id)
+                self._assignment_call_origins.pop(target.id, None)
+            elif isinstance(target, (ast.Tuple, ast.List)):
+                for elt in target.elts:
+                    invalidate(elt)
+            elif isinstance(target, ast.Starred):
+                invalidate(target.value)
+            elif isinstance(target, ast.Subscript) and isinstance(target.value, ast.Name):
+                rebound.add(target.value.id)
+                self._assignment_call_origins.pop(target.value.id, None)
+
+        for target in targets:
+            invalidate(target)
+
+        # Drop tracked origins that reference a rebound free variable —
+        # otherwise the cascade rewrites against the new binding.
+        if rebound:
+            for tracked, origin in list(self._assignment_call_origins.items()):
+                for n in ast.walk(origin):
+                    if (isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)
+                            and n.id in rebound):
+                        self._assignment_call_origins.pop(tracked, None)
+                        break
+
+        if (len(targets) == 1 and isinstance(targets[0], ast.Name) and isinstance(value, ast.Call)):
+            self._assignment_call_origins[targets[0].id] = value
+
+    def _scan_eq_only_items_view_targets(self, body):
+        """Return target names safe to neutralise: exactly one Store and
+        every Load on one side of an equality compare. Any other use
+        (iteration, len, subscript, rebinding) would observe the placeholder
+        instead of the cascade-rewritten value.
+        """
+        candidates = {}  # target name -> receiver name
+        synthetic = ast.Module(body=list(body), type_ignores=[])
+        for stmt in ast.walk(synthetic):
+            if (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1
+                    and isinstance(stmt.targets[0], ast.Name)
+                    and self._is_items_view_call(stmt.value)):
+                recv = self._items_view_receiver_name(stmt.value)
+                if recv is not None:
+                    candidates[stmt.targets[0].id] = recv
+        if not candidates:
+            return set()
+
+        # Names inside a comprehension/generator are scope-local in Python 3
+        # except the outermost iter of the first generator.
+        comp_local_ids = set()
+
+        def _add_names(sub_tree):
+            for n in ast.walk(sub_tree):
+                if isinstance(n, ast.Name):
+                    comp_local_ids.add(id(n))
+
+        for node in ast.walk(synthetic):
+            if not isinstance(node, (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)):
+                continue
+            if isinstance(node, ast.DictComp):
+                _add_names(node.key)
+                _add_names(node.value)
+            else:
+                _add_names(node.elt)
+            for i, gen in enumerate(node.generators):
+                _add_names(gen.target)
+                for if_node in gen.ifs:
+                    _add_names(if_node)
+                if i > 0:
+                    _add_names(gen.iter)
+
+        # Watch receivers too: a rebound dict would let the cascade rewrite
+        # against a different value than the captured origin.
+        watched = set(candidates) | set(candidates.values())
+        store_count = {n: 0 for n in watched}
+        disqualified = set()
+        for parent in ast.walk(synthetic):
+            for child in ast.iter_child_nodes(parent):
+                if not isinstance(child, ast.Name) or child.id not in watched:
+                    continue
+                if id(child) in comp_local_ids:
+                    continue
+                if isinstance(child.ctx, ast.Store):
+                    store_count[child.id] += 1
+                    continue
+                if child.id not in candidates:
+                    continue
+                # Load is safe only on one side of an Eq compare.
+                if (isinstance(parent, ast.Compare) and len(parent.ops) == 1
+                        and isinstance(parent.ops[0], ast.Eq)
+                        and (parent.left is child or
+                             (len(parent.comparators) == 1 and parent.comparators[0] is child))):
+                    continue
+                disqualified.add(child.id)
+        return {
+            n
+            for n, recv in candidates.items()
+            if store_count[n] == 1 and store_count.get(recv, 0) <= 1 and n not in disqualified
+        }
+
+    def _is_items_view_call(self, node):
+        """True if node is W(d.<attr>()) or sorted(list(d.<attr>())) with
+        W in (list, sorted) and attr in (items, keys, values)."""
+        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                and node.func.id in ("list", "sorted") and len(node.args) == 1
+                and not getattr(node, "keywords", [])):
+            return False
+        arg = node.args[0]
+        if node.func.id == "sorted":
+            if (isinstance(arg, ast.Call) and isinstance(arg.func, ast.Name)
+                    and arg.func.id == "list" and len(arg.args) == 1
+                    and not getattr(arg, "keywords", [])):
+                arg = arg.args[0]
+        return (isinstance(arg, ast.Call) and isinstance(arg.func, ast.Attribute)
+                and arg.func.attr in ("items", "keys", "values") and not arg.args
+                and not getattr(arg, "keywords", []))
+
+    def _items_view_receiver_name(self, node):
+        """Return the receiver Name id of an items-view-call, else None."""
+        if not self._is_items_view_call(node):
+            return None
+        arg = node.args[0]
+        if (isinstance(arg, ast.Call) and isinstance(arg.func, ast.Name) and arg.func.id == "list"):
+            arg = arg.args[0]
+        receiver = arg.func.value
+        return receiver.id if isinstance(receiver, ast.Name) else None
+
+    def _invalidate_list_literals_for_assign_targets(self, targets):
+
+        def invalidate(target):
+            # Recurse into tuple/list unpacking targets so a subscript store
+            # nested in a swap (a[i], a[j] = a[j], a[i]) still invalidates the
+            # literal const-fold for its container; otherwise later reads fold
+            # to the stale original element (#4792).
+            if isinstance(target, (ast.Tuple, ast.List)):
+                for elt in target.elts:
+                    invalidate(elt)
+            elif isinstance(target, ast.Starred):
+                invalidate(target.value)
+            elif isinstance(target, ast.Subscript) and isinstance(target.value, ast.Name):
+                self.list_literal_values.pop(target.value.id, None)
+                self.dict_literal_values.pop(target.value.id, None)
+
+        for target in targets:
+            invalidate(target)
+
+    def _maybe_record_type_alias_assign(self, node):
+        if (len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
+                and self._is_type_alias_expression(node.value)):
+            self.type_aliases[node.targets[0].id] = node.value
+            return True
+        return False
+
+    def _update_known_literal_for_simple_assign(self, node):
+        if not (len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)):
+            return
+        target_name = node.targets[0].id
+        if self._is_assert_literal_shape(node.value):
+            self._known_literal_values[target_name] = copy.deepcopy(node.value)
+            return
+        if (isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Name)
+                and node.value.func.id in self._identity_functions and len(node.value.args) == 1
+                and not node.value.keywords and self._is_assert_literal_shape(node.value.args[0])):
+            self._known_literal_values[target_name] = copy.deepcopy(node.value.args[0])
+            return
+        self._known_literal_values.pop(target_name, None)
+
+    @staticmethod
+    def _build_stop_iteration_raise(source_node):
+        raise_node = ast.Raise(
+            exc=ast.Call(
+                func=ast.Name(id="StopIteration", ctx=ast.Load()),
+                args=[ast.Constant(value="StopIteration")],
+                keywords=[],
+            ),
+            cause=None,
+        )
+        ast.copy_location(raise_node, source_node)
+        ast.fix_missing_locations(raise_node)
+        return raise_node
+
+    def _maybe_rewrite_next_call_assign(self, node):
+        next_gen_info = self._find_generator_next_call(node.value)
+        if next_gen_info is None:
+            return None
+        gen_var, func_name = next_gen_info
+        if func_name in self.early_return_generator_funcs:
+            return self._build_stop_iteration_raise(node)
+        return self._inline_next_call(node.targets, func_name, gen_var, node)
+
+    def _maybe_lower_listcomp_assign(self, node):
+        prefix, lowered_value, lowered_type = self._lower_listcomp_in_expr(node.value)
+        node.value = lowered_value
+        if not prefix:
+            return None
+        assigns = []
+        for target in node.targets:
+            assign = ast.Assign(targets=[target], value=node.value)
+            self._copy_location_info(node, assign)
+            self.ensure_all_locations(assign, node)
+            ast.fix_missing_locations(assign)
+            if isinstance(target, ast.Name):
+                self.known_variable_types[target.id] = lowered_type
+            assigns.append(assign)
+        return prefix + assigns
+
+    def _maybe_lower_dict_from_comprehension_assign(self, node):
+        """Lower ``x = dict([(k, v) for <gens>])`` into ``x = {}`` followed by
+        population loops ``for <gens>: x[k] = v``.
+
+        The ``dict(<comprehension>)`` constructor is otherwise routed through the
+        runtime dict-comprehension model, whose symbolic list iteration is far
+        more expensive than ordinary for-loop lowering and times out even on
+        tiny inputs. Emitting the plain ``{}`` + for-loop pattern reuses the
+        fast, well-tested dict-subscript-assign path. Handles ListComp and
+        GeneratorExp whose element is an explicit ``(key, value)`` 2-tuple.
+        (HumanEval/93, /126)
+        """
+        if len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name):
+            return None
+        value = node.value
+        if not (isinstance(value, ast.Call) and isinstance(value.func, ast.Name)
+                and value.func.id == "dict" and len(value.args) == 1 and not value.keywords):
+            return None
+        comp = value.args[0]
+        if not isinstance(comp, (ast.ListComp, ast.GeneratorExp)):
+            return None
+        if not (isinstance(comp.elt, ast.Tuple) and len(comp.elt.elts) == 2):
+            return None
+        if not comp.generators or any(gen.is_async for gen in comp.generators):
+            return None
+
+        target_id = node.targets[0].id
+
+        # x = {}
+        init = ast.Assign(targets=[ast.Name(id=target_id, ctx=ast.Store())],
+                          value=ast.Dict(keys=[], values=[]))
+        self.ensure_all_locations(init, node)
+        ast.fix_missing_locations(init)
+
+        # innermost body: x[key] = value
+        subscript = ast.Subscript(value=ast.Name(id=target_id, ctx=ast.Load()),
+                                  slice=self.visit(copy.deepcopy(comp.elt.elts[0])),
+                                  ctx=ast.Store())
+        body = [ast.Assign(targets=[subscript], value=self.visit(copy.deepcopy(comp.elt.elts[1])))]
+
+        # Wrap with the comprehension's generators, outermost first. Each
+        # generator's filters become nested ``if`` guards around the body.
+        for gen in reversed(comp.generators):
+            inner = body
+            for cond in reversed(gen.ifs):
+                inner = [ast.If(test=self.visit(copy.deepcopy(cond)), body=inner, orelse=[])]
+            body = [
+                ast.For(target=copy.deepcopy(gen.target),
+                        iter=self.visit(copy.deepcopy(gen.iter)),
+                        body=inner,
+                        orelse=[])
+            ]
+
+        # Lower the synthesised for-loops the same way ordinary loops are
+        # lowered: NodeTransformer does not re-visit nodes we return, so run
+        # the outermost loop through visit_For explicitly (mirrors
+        # _lower_listcomp). Otherwise the converter rejects the raw For node.
+        lowered_loops = self.visit_For(body[0])
+        if not isinstance(lowered_loops, list):
+            lowered_loops = [lowered_loops]
+
+        result = [init] + lowered_loops
+        for stmt in result:
+            self._copy_location_info(node, stmt)
+            self.ensure_all_locations(stmt, node)
+            ast.fix_missing_locations(stmt)
+
+        # Mirror the metadata a plain ``x = {}`` assignment would record so
+        # downstream rewrites and type inference treat the name as a dict. The
+        # original ``dict(<comprehension>)`` value is an ast.Call, so visit_Assign
+        # registered it as the target's call-origin; drop that stale entry so a
+        # later ``target == ...`` is not rewritten against the discarded call.
+        self.dict_literal_vars.add(target_id)
+        self.list_literal_values.pop(target_id, None)
+        self._assignment_call_origins.pop(target_id, None)
+
+        return result
+
+    def _maybe_lower_dictcomp_over_items(self, node):
+        """Lower a dict comprehension whose iterable is a dict view into ``x = {}``
+        followed by a population loop, e.g.
+        ``x = {key: val for k, v in d.items()}`` ->
+        ``x = {}; for k, v in d.items(): x[key] = val``, and
+        ``x = {v: val for u, v in d}`` -> ``x = {}; for u, v in d: x[v] = val``.
+
+        The converter's dict-comprehension handler models a list-of-tuples
+        iterable but not a dict view: ``d.items()`` returns the keys list as a
+        placeholder (so the (k, v) tuple target cannot be unpacked), and a bare
+        dict / ``d.keys()`` iterable is a struct it rejects outright. Reusing the
+        for-loop lowering (visit_For -> _transform_items_for / dict-key
+        iteration) gives the comprehension the bindings it needs. Scoped to dict
+        iterables so list-of-tuples dict comprehensions keep their existing
+        converter path.
+        """
+        if len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name):
+            return None
+        comp = node.value
+        if not isinstance(comp, ast.DictComp):
+            return None
+        if not comp.generators or any(gen.is_async for gen in comp.generators):
+            return None
+        outer = comp.generators[0].iter
+        is_items_call = (isinstance(outer, ast.Call) and isinstance(outer.func, ast.Attribute)
+                         and outer.func.attr == "items")
+        # Iterating a known dict directly (``for k in d``) or via ``d.keys()``
+        # yields its keys; the C++ dict-comp handler cannot consume the dict
+        # struct, so route these through the for-loop key-iteration path too.
+        is_dict_iter = (isinstance(outer, ast.Name) and self._is_known_dict_name(outer.id))
+        is_keys_call = (isinstance(outer, ast.Call) and isinstance(outer.func, ast.Attribute)
+                        and outer.func.attr == "keys" and isinstance(outer.func.value, ast.Name)
+                        and self._is_known_dict_name(outer.func.value.id))
+        if not (is_items_call or is_dict_iter or is_keys_call):
+            return None
+
+        target_id = node.targets[0].id
+
+        # x = {}
+        init = ast.Assign(targets=[ast.Name(id=target_id, ctx=ast.Store())],
+                          value=ast.Dict(keys=[], values=[]))
+        self.ensure_all_locations(init, node)
+        ast.fix_missing_locations(init)
+
+        # innermost body: x[key] = value
+        subscript = ast.Subscript(value=ast.Name(id=target_id, ctx=ast.Load()),
+                                  slice=self.visit(copy.deepcopy(comp.key)),
+                                  ctx=ast.Store())
+        body = [ast.Assign(targets=[subscript], value=self.visit(copy.deepcopy(comp.value)))]
+
+        # Wrap with the comprehension's generators, outermost first; each
+        # generator's filters become nested ``if`` guards around the body.
+        for gen in reversed(comp.generators):
+            inner = body
+            for cond in reversed(gen.ifs):
+                inner = [ast.If(test=self.visit(copy.deepcopy(cond)), body=inner, orelse=[])]
+            body = [
+                ast.For(target=copy.deepcopy(gen.target),
+                        iter=self.visit(copy.deepcopy(gen.iter)),
+                        body=inner,
+                        orelse=[])
+            ]
+
+        # Lower the synthesised for-loops the same way ordinary loops are
+        # (NodeTransformer does not re-visit returned nodes), so run the
+        # outermost loop through visit_For explicitly.
+        lowered_loops = self.visit_For(body[0])
+        if not isinstance(lowered_loops, list):
+            lowered_loops = [lowered_loops]
+
+        result = [init] + lowered_loops
+        for stmt in result:
+            self._copy_location_info(node, stmt)
+            self.ensure_all_locations(stmt, node)
+            ast.fix_missing_locations(stmt)
+
+        # Treat the target as a dict for downstream rewrites/type inference.
+        self.dict_literal_vars.add(target_id)
+        self.list_literal_values.pop(target_id, None)
+        self._assignment_call_origins.pop(target_id, None)
+
+        return result
+
+    def _annotated_assign_for_value(self, target_id, node, was_defaultdict_call):
+        """The AnnAssign this assignment's value implies, or None for no annotation.
+
+        Two values imply one: a `defaultdict(...)` call, whose value type the
+        empty Dict literal replacing it no longer carries, and a rewritten
+        nondet builder, whose element types live in its name and which would
+        otherwise leave the converter no return type to infer from
+        (esbmc/esbmc#7575).
+
+        The two cannot both apply -- by the time this runs a defaultdict call
+        has become an `ast.Dict` -- but the nondet arm is still guarded on the
+        first yielding nothing, so the order matches the branches it replaced.
+        """
+        annotation = None
+        known_type = None
+
+        if was_defaultdict_call:
+            annotation = self._build_defaultdict_value_annotation(target_id, node)
+        if (annotation is None and isinstance(node.value, ast.Call)
+                and isinstance(node.value.func, ast.Name)):
+            annotation = self._nondet_builder_annotation(node.value.func.id)
+            known_type = self._infer_type_from_call(node.value)
+
+        if annotation is None:
+            return None
+
+        ann_assign = ast.AnnAssign(
+            target=ast.Name(id=target_id, ctx=ast.Store()),
+            annotation=annotation,
+            value=node.value,
+            simple=1,
+        )
+        self._copy_location_info(node, ann_assign)
+        ast.fix_missing_locations(ann_assign)
+        self.variable_annotations[target_id] = annotation
+        if known_type is not None:
+            self.known_variable_types[target_id] = known_type
+        return ann_assign
+
+    def _handle_single_target_assign(self, node):
+        target = node.targets[0]
+        if isinstance(target, (ast.Tuple, ast.List)):
+            return self._handle_tuple_unpacking(target, node.value, node)
+
+        if (isinstance(target, ast.Name) and isinstance(node.value, ast.Call)
+                and self._is_newtype_call(node.value) and len(node.value.args) >= 2):
+            self.newtype_vars.add(target.id)
+            node.value = node.value.args[1]
+            ast.fix_missing_locations(node)
+        elif isinstance(target, ast.Name) and target.id in self.newtype_vars:
+            self.newtype_vars.discard(target.id)
+
+        captured = self._track_bound_method(target, node.value)
+        if captured is not None:
+            return captured
+
+        self._update_variable_types_simple(target, node.value)
+
+        if isinstance(target, ast.Name):
+            # _update_name_target_assignment_metadata replaces a
+            # defaultdict(...) call with an empty Dict literal, so the
+            # call shape must be sampled before that mutation.
+            was_defaultdict_call = (isinstance(node.value, ast.Call)
+                                    and self._is_defaultdict_call(node.value))
+            self._update_name_target_assignment_metadata(target.id, node)
+            annotated = self._annotated_assign_for_value(target.id, node, was_defaultdict_call)
+            if annotated is not None:
+                return annotated
+
+        if (isinstance(node.value, ast.Subscript) and isinstance(node.value.value, ast.Name)
+                and node.value.value.id in self._defaultdict_factory):
+            dict_name = node.value.value.id
+            key_node = node.value.slice
+            if not self._is_defaultdict_key_initialized(dict_name, key_node):
+                factory = self._defaultdict_factory[dict_name]
+                init_stmts, key_expr = self._make_defaultdict_missing_check(
+                    dict_name, key_node, factory, node)
+                node.value.slice = key_expr
+                self._record_defaultdict_assignment_target(node)
+                return init_stmts + [node]
+
+        # Generic defaultdict-read lowering: when the RHS is not a direct
+        # Subscript but contains defaultdict reads inside (e.g.,
+        # `d[k] = min(d[k1], d[k2])`), insert the missing-key checks for
+        # each contained read so the dict_handler value-type scan sees
+        # at least one `d[key] = factory()` assignment in the function
+        # body. Mirrors what visit_Return/visit_Assert already do.
+        if node.value is not None:
+            dd_inits, node.value = self._lower_defaultdict_reads_in_expr(node.value, node)
+            if dd_inits:
+                self._record_defaultdict_assignment_target(node)
+                return dd_inits + [node]
+        self._record_defaultdict_assignment_target(node)
+        return node
+
+    def _record_defaultdict_assignment_target(self, node):
+        if not node.targets:
+            return
+        target = node.targets[0]
+        if (isinstance(target, ast.Subscript) and isinstance(target.value, ast.Name)
+                and target.value.id in self._defaultdict_factory):
+            self._record_defaultdict_key_initialized(target.value.id, target.slice)
+
+    def _update_name_target_assignment_metadata(self, target_id, node):
+        annotation_node = self._create_annotation_node_from_value(node.value)
+        if annotation_node:
+            self.variable_annotations[target_id] = annotation_node
+            if isinstance(node.value, ast.Subscript):
+                self._subscript_inferred_vars.add(target_id)
+
+        self._track_literal_binding(target_id, node.value)
+
+        if isinstance(node.value, ast.Dict):
+            self.dict_literal_vars.add(target_id)
+            if self._has_heterogeneous_keys(node.value):
+                self.het_dict_literals[target_id] = node.value
+            if self._has_heterogeneous_values(node.value):
+                self.het_value_dict_literals[target_id] = node.value
+        else:
+            # Reassigned to a non-dict: stop treating the name as a dict so a
+            # later list(name)/sorted(name) is not rewritten incorrectly.
+            self.dict_literal_vars.discard(target_id)
+
+        if isinstance(node.value, ast.Call):
+            self._track_call_result_bindings(target_id, node)
+
+    def _track_call_result_bindings(self, target_id, node):
+        if isinstance(node.value.func, ast.Name):
+            self.instance_class_map[target_id] = node.value.func.id
+            if node.value.func.id in self.generator_funcs:
+                self.generator_vars[target_id] = node.value.func.id
+                sentinel = ast.Constant(value=True)
+                ast.copy_location(sentinel, node.value)
+                node.value = sentinel
+
+        dict_expr = self._get_dict_expr_from_items_call(node.value)
+        if dict_expr is not None:
+            self.dict_items_vars[target_id] = dict_expr
+
+        if self._is_defaultdict_call(node.value):
+            factory = self._get_defaultdict_factory(node.value)
+            if factory is not None:
+                self._defaultdict_factory[target_id] = factory
+                self._defaultdict_initialized_keys[target_id] = set()
+            empty_dict = ast.Dict(keys=[], values=[])
+            ast.copy_location(empty_dict, node.value)
+            ast.fix_missing_locations(empty_dict)
+            node.value = empty_dict
+
+    def _build_defaultdict_value_annotation(self, target_id, template):
+        """Build ``dict[Any, <factory>[Any]]`` annotation for ``d = defaultdict(<factory>)``.
+
+        Returns ``None`` when no factory was recorded, or when the factory is
+        not a plain ``Name`` referring to a known container builtin
+        (``list``/``dict``/``set``). The annotation lets the dict handler
+        resolve ``d[k]`` to the factory's container type, which in turn
+        lets list-method calls like ``d[k].append(v)`` find the underlying
+        list via the dict-subscript path.
+        """
+        factory = self._defaultdict_factory.get(target_id)
+        if not isinstance(factory, ast.Name) or factory.id not in ("list", "dict", "set"):
+            return None
+        any_key = ast.Name(id="Any", ctx=ast.Load())
+        any_elem = ast.Name(id="Any", ctx=ast.Load())
+        factory_value = ast.Subscript(
+            value=ast.Name(id=factory.id, ctx=ast.Load()),
+            slice=any_elem,
+            ctx=ast.Load(),
+        )
+        slice_tuple = ast.Tuple(elts=[any_key, factory_value], ctx=ast.Load())
+        annotation = ast.Subscript(
+            value=ast.Name(id="dict", ctx=ast.Load()),
+            slice=slice_tuple,
+            ctx=ast.Load(),
+        )
+        for node in (any_key, any_elem, factory_value, slice_tuple, annotation):
+            ast.copy_location(node, template)
+        ast.fix_missing_locations(annotation)
+        return annotation
+
+    def _handle_multi_target_assign(self, node):
+        has_tuple_target = any(isinstance(t, (ast.Tuple, ast.List)) for t in node.targets)
+        if has_tuple_target:
+            tmp_name = f"ESBMC_chain_{self.listcomp_counter}"
+            self.listcomp_counter += 1
+            tmp_store = ast.Name(id=tmp_name, ctx=ast.Store())
+            self._copy_location_info(node, tmp_store)
+            tmp_assign = self._create_individual_assignment(tmp_store, node.value, node)
+            ast.fix_missing_locations(tmp_assign)
+            tmp_load = ast.Name(id=tmp_name, ctx=ast.Load())
+            self._copy_location_info(node, tmp_load)
+            assignments = [tmp_assign]
+            for target in node.targets:
+                sub_assign = self._create_individual_assignment(target, tmp_load, node)
+                ast.fix_missing_locations(sub_assign)
+                if isinstance(target, ast.Name):
+                    self._update_variable_types_simple(target, node.value)
+                assignments.append(sub_assign)
+            return assignments
+
+        assignments = []
+        for target in node.targets:
+            individual_assign = self._create_individual_assignment(target, node.value, node)
+            self._update_variable_types_simple(target, node.value)
+            assignments.append(individual_assign)
+        return assignments
+
+    def _track_literal_binding(self, name, value):
+        for store, kind in ((self.list_literal_values, ast.List), (self.dict_literal_values,
+                                                                   ast.Dict)):
+            if isinstance(value, kind):
+                store[name] = copy.deepcopy(value)
+            else:
+                store.pop(name, None)
+            # ``alias = name`` lets later mutation through the alias go unseen.
+            if isinstance(value, ast.Name):
+                store.pop(value.id, None)
+
+    def _invalidate_list_literals_for_call(self, node):
+        if isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name):
+            if node.func.attr in self._MUTATING_LIST_METHODS:
+                self.list_literal_values.pop(node.func.value.id, None)
+            if node.func.attr not in self._PURE_DICT_METHODS:
+                self.dict_literal_values.pop(node.func.value.id, None)
+        if isinstance(node.func, ast.Name) and node.func.id in self._PURE_LIST_CONSUMERS:
+            return
+        for arg in list(node.args) + [kw.value for kw in node.keywords]:
+            if isinstance(arg, ast.Name):
+                self.list_literal_values.pop(arg.id, None)
+                self.dict_literal_values.pop(arg.id, None)
+
+    def _maybe_rewrite_newtype_call(self, node):
+        if (isinstance(node.func, ast.Name) and node.func.id in self.newtype_vars
+                and len(node.args) == 1 and not node.keywords):
+            return self.visit(node.args[0])
+        return None
+
+    def _track_bound_method(self, target, value, resolvable=True):
+        """Replace `target = obj.attr` when the module calls `target`, so that
+        each later `target(...)` becomes `obj.attr(...)`, and forget a
+        `target` bound to anything else. Where `_captures_receiver` holds,
+        `obj` is first stored in a fresh name, so each call acts on the object
+        `obj` gave at the binding (#8439). Returns the statements replacing
+        the binding, or None if it stays."""
+        captures = self._captures_receiver(target, value)
+        if not (resolvable and isinstance(target, ast.Name) and isinstance(value, ast.Attribute) and
+                (captures or isinstance(value.value, ast.Name)) and target.id in self.called_names):
+            if isinstance(target, ast.Name):
+                self.bound_method_vars.pop(target.id, None)
+            return None
+        if not captures:
+            self.bound_method_vars[target.id] = value
+            return []
+        receiver = f"ESBMC_bound_receiver_{self._next_unpack_tmp_id()}"
+        self.bound_method_vars[target.id] = ast.Attribute(value=ast.Name(id=receiver,
+                                                                         ctx=ast.Load()),
+                                                          attr=value.attr,
+                                                          ctx=ast.Load())
+        capture = ast.Assign(targets=[ast.Name(id=receiver, ctx=ast.Store())], value=value.value)
+        self._update_variable_types_simple(capture.targets[0], value.value)
+        return [ast.fix_missing_locations(ast.copy_location(capture, value))]
+
+    def _captures_receiver(self, target, value):
+        """Whether `target = obj.attr` stores `obj` for the calls of `target`:
+        nothing else binds `target` in the scope being visited, or its bindings
+        run in source order (#8467), so each call sees the last binding above
+        it, and `obj` is a call or a name that is not only bound by an import,
+        a definition or a builtin."""
+        if not (isinstance(target, ast.Name) and isinstance(value, ast.Attribute)):
+            return False
+        scope = id(self._vararg_scope_stack[-1]) if self._vararg_scope_stack else None
+        _, counts = self.scope_binding_counts.get(scope, (None, {}))
+        return (counts.get(target.id) == 1 or (scope, target.id) in self.in_order_bindings) and (
+            isinstance(value.value, ast.Call) or
+            (isinstance(value.value, ast.Name) and value.value.id in self.variable_names))
+
+    def _is_resolvable_unpacked_method(self, target, value, statement):
+        """Whether unpacking `obj.m` into `target` may be resolved at each call
+        of `target`: the statement is top-level, `target` is bound nowhere
+        else, and `obj.m` is a method of a fixed instance (#8354)."""
+        return (id(statement) in self.module_statements and target.id in self.once_bound_names
+                and isinstance(value, ast.Attribute) and isinstance(value.value, ast.Name)
+                and value.attr in self.fixed_receivers.get(value.value.id, ()))
+
+    def _maybe_rewrite_bound_method_call(self, node):
+        if isinstance(node.func, ast.Name) and node.func.id in self.bound_method_vars:
+            node.func = self.bound_method_vars[node.func.id]
+            self.generic_visit(node)
+            return node
+        return None
+
+    def _maybe_rewrite_getattr_call(self, node):
+        """Call `getattr(o, "m")(...)` as `o.m(...)`, which it is exactly (#8457).
+
+        A name with `__` is left alone: the frontend stores a private `__m`
+        unmangled, so neither `__m` nor `_C__m` would resolve.
+        """
+        getter = node.func
+        if not (isinstance(getter, ast.Call) and isinstance(getter.func, ast.Name)
+                and getter.func.id == "getattr" and len(getter.args) == 2 and not getter.keywords
+                and not isinstance(getter.args[0], ast.Starred)
+                and not self._builtin_is_shadowed("getattr")):
+            return None
+        name = getter.args[1]
+        if not (isinstance(name, ast.Constant) and isinstance(name.value, str)
+                and name.value.isidentifier() and not keyword.iskeyword(name.value)
+                and "__" not in name.value):
+            return None
+        node.func = ast.copy_location(
+            ast.Attribute(value=getter.args[0], attr=name.value, ctx=ast.Load()), getter)
+        return self.visit(node)
+
+    def _record_staticmethod(self, node, qualified_name):
+        """Note a @staticmethod, whose call binds no receiver (#7546)."""
+        if any(isinstance(d, ast.Name) and d.id == "staticmethod" for d in node.decorator_list):
+            self.static_methods.add(qualified_name)
+
+    def _params_without_implicit_self(self, key):
+        """A method's parameters minus its implicit first argument.
+
+        A @staticmethod has no implicit first argument, so stripping one would
+        eat a real parameter and make every call look over-supplied (#7546).
+        """
+        params = self.functionParams[key]
+        return params if key in self.static_methods else params[1:]
+
+    def _resolve_function_signature(self, node):
+        function_name = None
+        expected_args = None
+        kwonly_args = []
+        if isinstance(node.func, ast.Attribute):
+            method_name = node.func.attr
+            # The receiver of a chained attribute call (`os.path.abspath(x)`) is
+            # as unresolved as a bare one, and must not bind a same-named
+            # module-level function as if it were a method (#6742).
+            receiver_root = node.func.value
+            while isinstance(receiver_root, ast.Attribute):
+                receiver_root = receiver_root.value
+            if isinstance(receiver_root, ast.Name):
+                var_name = receiver_root.id
+                if (var_name not in self.known_variable_types
+                        and var_name not in self.functionParams
+                        and not hasattr(__builtins__, var_name)):
+                    return "__unknown__", [], []
+            qualified_name = None
+            if isinstance(node.func.value, ast.Name):
+                var_type = self.known_variable_types.get(node.func.value.id)
+                if var_type and var_type != "Any":
+                    qualified_name = f"{var_type}.{method_name}"
+            if qualified_name and qualified_name in self.functionParams:
+                function_name = qualified_name
+                expected_args = self._params_without_implicit_self(qualified_name)
+                kwonly_args = self.functionKwonlyParams.get(qualified_name, [])
+        elif isinstance(node.func, ast.Name):
+            func_name = node.func.id
+            init_name = f"{func_name}.__init__"
+            if init_name in self.functionParams:
+                function_name = init_name
+                expected_args = self._params_without_implicit_self(init_name)
+                kwonly_args = self.functionKwonlyParams.get(init_name, [])
+            elif func_name in self.functionParams:
+                function_name = func_name
+                expected_args = self.functionParams[func_name]
+                kwonly_args = self.functionKwonlyParams.get(func_name, [])
+        return function_name, expected_args, kwonly_args
+
+    @staticmethod
+    def _iter_own_scope_nodes(scope_node):
+        """The nodes whose name bindings belong to `scope_node`'s own scope.
+
+        A nested ``def`` opens a scope of its own, so its parameters and body
+        are skipped; the name it binds, its decorators and its default
+        expressions are evaluated here and are kept. Class bodies, async defs,
+        lambdas and comprehensions are walked into instead of skipped -- their
+        bindings are not visible here, but including them only ever disables a
+        rewrite, and no scope is opened for them below.
+        """
+        stack = list(ast.iter_child_nodes(scope_node))
+        while stack:
+            node = stack.pop()
+            yield node
+            if isinstance(node, ast.FunctionDef):
+                stack.extend(node.decorator_list)
+                stack.extend(d for d in node.args.defaults + node.args.kw_defaults if d)
+            else:
+                stack.extend(ast.iter_child_nodes(node))
+
+    def _scan_scope_builtin_shadows(self, scope_node):
+        """Builtin names from the table that `scope_node` binds in its own scope.
+
+        Python resolves a name at call time, so a ``def pow(...)`` below the
+        call shadows the builtin exactly as one above it does: a binding
+        anywhere in the scope covers the whole scope.
+        """
+        bound = set()
+        for n in self._iter_own_scope_nodes(scope_node):
+            if isinstance(n, ast.Name) and isinstance(n.ctx, (ast.Store, ast.Del)):
+                bound.add(n.id)
+            elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                bound.add(n.name)
+            elif isinstance(n, ast.arg):
+                bound.add(n.arg)
+            elif isinstance(n, ast.ExceptHandler) and n.name:
+                bound.add(n.name)
+            elif isinstance(n, (ast.Import, ast.ImportFrom)):
+                bound.update(a.asname or a.name.split(".")[0] for a in n.names)
+        return bound & self._SHADOW_TRACKED_BUILTINS
+
+    def _scan_builtin_shadow_names(self, module_node):
+        """Builtin names bound at module scope, which every scope inherits."""
+        bound = self._scan_scope_builtin_shadows(module_node)
+        for n in ast.walk(module_node):
+            if isinstance(n, ast.Global):
+                # `global int` binds the module-level name from a function.
+                bound.update(set(n.names) & self._SHADOW_TRACKED_BUILTINS)
+        return bound
+
+    def _enter_builtin_shadow_scope(self, node):
+        """Open `node`'s name scope, returning the set to restore on exit.
+
+        A binding local to one function does not reach another, so the scan is
+        per scope; an inner scope still sees the names its enclosing scopes
+        bind, hence the union (#7557).
+        """
+        saved = self._builtin_shadow_names
+        if saved is not None:
+            self._builtin_shadow_names = saved | self._scan_scope_builtin_shadows(node)
+        return saved
+
+    def _builtin_is_shadowed(self, name):
+        # None means the module was never scanned: assume shadowed, so an
+        # unscanned path keeps the pre-existing behaviour instead of rewriting.
+        return self._builtin_shadow_names is None or name in self._builtin_shadow_names
+
+    def _normalize_builtin_keyword_args(self, node):
+        """Move a builtin call's keywords into their positional slots (#7557).
+
+        The builtin call paths read node.args and never node.keywords, so a
+        keyword spelling silently falls back to the parameter default and
+        proves the wrong value. Rewrite only a run of keywords that fills the
+        slots directly after the positional arguments; anything else (a gap, an
+        unknown name, **kwargs) is left alone rather than guessed at.
+        """
+        if not isinstance(node.func, ast.Name) or not node.keywords:
+            return
+        params = self._BUILTIN_POSITIONAL_PARAMS.get(node.func.id)
+        if params is None or self._builtin_is_shadowed(node.func.id):
+            return
+        if any(kw.arg is None for kw in node.keywords):
+            return  # **kwargs splat: the names are not statically known
+        keywords = self._build_keyword_map(node)
+        bound = []
+        for param in params[len(node.args):]:
+            if param not in keywords:
+                break
+            bound.append(keywords.pop(param))
+        if keywords:
+            return
+        slots = params[len(node.args):len(node.args) + len(bound)]
+        if [kw.arg for kw in node.keywords] != list(slots) and not all(
+                isinstance(value, (ast.Constant, ast.Name)) for value in bound):
+            return  # Python evaluates arguments in source order (ref/expressions)
+        node.args = node.args + bound
+        node.keywords = []
+
+    def _build_keyword_map(self, node):
+        keywords = {}
+        for kw in node.keywords:
+            if kw.arg in keywords:
+                raise SyntaxError(
+                    f"Keyword argument repeated:{kw.arg}",
+                    (self.module_name, kw.lineno, kw.col_offset, ""),
+                )
+            keywords[kw.arg] = kw.value
+        return keywords
+
+    @staticmethod
+    def _display_name(function_name):
+        return function_name.split(".")[-1] if "." in function_name else function_name
+
+    def _validate_kwonly_args(self, function_name, kwonly_args, keywords):
+        missing_kwonly = [
+            kwarg for kwarg in kwonly_args
+            if kwarg not in keywords and (function_name, kwarg) not in self.functionDefaults
+        ]
+        if not missing_kwonly:
+            return
+        display_name = self._display_name(function_name)
+        if len(missing_kwonly) == 1:
+            raise TypeError(
+                f"{display_name}() missing 1 required keyword-only argument: '{missing_kwonly[0]}'")
+        args_str = " and ".join([f"'{arg}'" for arg in missing_kwonly])
+        raise TypeError(
+            f"{display_name}() missing {len(missing_kwonly)} required keyword-only arguments: {args_str}"
+        )
+
+    def _validate_positional_call_arity(self, node, function_name, expected_args):
+        # A *args parameter absorbs any number of extra positionals (PEP 3102).
+        if function_name in self.functionVarargs:
+            return
+        display_name = self._display_name(function_name)
+        if len(node.args) > len(expected_args):
+            if display_name == "__init__":
+                total_params, total_given = len(expected_args) + 1, len(node.args) + 1
+            else:
+                total_params, total_given = len(expected_args), len(node.args)
+            raise TypeError(
+                f"{display_name}() takes {total_params} positional argument{'s' if total_params != 1 else ''} "
+                f"but {total_given} {'were' if total_given != 1 else 'was'} given")
+
+    def _validate_duplicate_positional_keyword(self, node, expected_args, keywords):
+        for index in range(len(node.args)):
+            if index < len(expected_args) and expected_args[index] in keywords:
+                raise SyntaxError(
+                    f"Multiple values for argument '{expected_args[index]}'",
+                    (self.module_name, node.lineno, node.col_offset, ""),
+                )
+
+    def _normalize_decimal_constructor_call(self, node):
+        is_decimal_call = False
+        decimal_names = {"Decimal"}
+        if self.decimal_class_alias:
+            decimal_names.add(self.decimal_class_alias)
+
+        if (self.decimal_imported and isinstance(node.func, ast.Name)
+                and node.func.id in decimal_names):
+            is_decimal_call = True
+            if node.func.id != "Decimal":
+                node.func = ast.Name(id="Decimal", ctx=ast.Load())
+        elif self.decimal_module_imported and isinstance(node.func, ast.Attribute):
+            module_names = {"decimal"}
+            if self.decimal_module_alias:
+                module_names.add(self.decimal_module_alias)
+            if (isinstance(node.func.value, ast.Name) and node.func.value.id in module_names
+                    and node.func.attr == "Decimal"):
+                is_decimal_call = True
+                node.func = ast.Name(id="Decimal", ctx=ast.Load())
+        return is_decimal_call
+
+    @staticmethod
+    def _decimal_from_single_arg(arg, decimal_module):
+        if isinstance(arg, ast.Constant):
+            return decimal_module.Decimal(arg.value)
+        if (isinstance(arg, ast.UnaryOp) and isinstance(arg.op, ast.USub)
+                and isinstance(arg.operand, ast.Constant)):
+            return decimal_module.Decimal(-arg.operand.value)
+        raise NotImplementedError("Decimal() with non-constant arguments is not supported")
+
+    @staticmethod
+    def _decimal_tuple_to_esbmc_args(decimal_tuple):
+        sign = decimal_tuple.sign
+        if decimal_tuple.exponent == "n":
+            return [sign, 0, 0, 2]
+        if decimal_tuple.exponent == "N":
+            return [sign, 0, 0, 3]
+        if decimal_tuple.exponent == "F":
+            return [sign, 0, 0, 1]
+        int_val = 0
+        power = 1
+        i = len(decimal_tuple.digits) - 1
+        while i >= 0:
+            int_val = int_val + decimal_tuple.digits[i] * power
+            power = power * 10
+            i = i - 1
+        return [sign, int_val, decimal_tuple.exponent, 0]
+
+    def _maybe_rewrite_decimal_call(self, node):
+        if not self._normalize_decimal_constructor_call(node):
+            return None
+        if node.keywords:
+            raise NotImplementedError("Decimal() with keyword arguments is not supported")
+        import decimal as _decimal_mod
+
+        if len(node.args) == 0:
+            dec = _decimal_mod.Decimal("0")
+        elif len(node.args) == 1:
+            dec = self._decimal_from_single_arg(node.args[0], _decimal_mod)
+        else:
+            raise NotImplementedError("Decimal() with multiple arguments is not supported")
+
+        node.args = [
+            ast.Constant(value=value) for value in self._decimal_tuple_to_esbmc_args(dec.as_tuple())
+        ]
+        ast.fix_missing_locations(node)
+        return node
+
+    @staticmethod
+    def _maybe_fold_as_integer_ratio(node):
+        # (2.5).as_integer_ratio() on a numeric literal folds to its exact
+        # (numerator, denominator) tuple, computed by CPython itself, so the
+        # result matches the interpreter bit-for-bit. Non-literal receivers
+        # are left to the regular dispatch.
+        if not (isinstance(node.func, ast.Attribute) and node.func.attr == "as_integer_ratio"
+                and not node.args and not node.keywords):
+            return None
+        recv = node.func.value
+        value = None
+        if (isinstance(recv, ast.Constant) and isinstance(recv.value, (int, float))
+                and not isinstance(recv.value, bool)):
+            value = recv.value
+        elif (isinstance(recv, ast.UnaryOp) and isinstance(recv.op, (ast.USub, ast.UAdd))
+              and isinstance(recv.operand, ast.Constant)
+              and isinstance(recv.operand.value,
+                             (int, float)) and not isinstance(recv.operand.value, bool)):
+            value = -recv.operand.value if isinstance(recv.op, ast.USub) else recv.operand.value
+        if value is None:
+            return None
+        try:
+            num, den = value.as_integer_ratio()
+        except (OverflowError, ValueError):  # inf / nan
+            return None
+        # Stay within the frontend's 64-bit integer comfort zone; larger
+        # ratios (huge exponents) fall through unfolded.
+        if abs(num) > 2**63 - 1 or den > 2**63 - 1:
+            return None
+        result = ast.Tuple(
+            elts=[ast.Constant(value=num), ast.Constant(value=den)],
+            ctx=ast.Load(),
+        )
+        ast.copy_location(result, node)
+        ast.fix_missing_locations(result)
+        return result
+
+    @staticmethod
+    def _normalize_math_gcd_lcm_variadic(node):
+        # math.gcd / math.lcm accept any number of integer arguments in CPython,
+        # but the operational model (models/math.py) is binary. Normalise to
+        # nested 2-argument calls reusing the binary model: f() -> identity,
+        # f(x) -> f(x, identity), f(a, b, c, ...) -> f(f(a, b), c, ...). gcd's
+        # identity is 0 (gcd(x, 0) == abs(x)); lcm's is 1 (lcm(x, 1) == abs(x)).
+        # Only the canonical `math.gcd(...)` / `math.lcm(...)` spelling is
+        # normalised; `from math import gcd` and `import math as m` forms (and a
+        # user object named `math`) fall through unchanged.
+        if not (isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "math" and node.func.attr in ("gcd", "lcm")):
+            return
+        if node.keywords or len(node.args) == 2:
+            return  # gcd/lcm take no keywords; the binary form is already modelled
+        if any(isinstance(a, ast.Starred) for a in node.args):
+            return  # *args splat: argument count is not statically known
+        identity = 0 if node.func.attr == "gcd" else 1
+        args = node.args
+        if len(args) == 0:
+            node.args = [ast.Constant(value=identity), ast.Constant(value=identity)]
+        elif len(args) == 1:
+            node.args = [args[0], ast.Constant(value=identity)]
+        else:  # >= 3: left-fold into nested binary calls
+            acc = ast.Call(func=copy.deepcopy(node.func), args=[args[0], args[1]], keywords=[])
+            for a in args[2:-1]:
+                acc = ast.Call(func=copy.deepcopy(node.func), args=[acc, a], keywords=[])
+            node.args = [acc, args[-1]]
+        ast.fix_missing_locations(node)
+
+    def _fill_missing_args_with_defaults(self, node, function_name, expected_args, keywords):
+        missing_args = []
+        for i in range(len(node.args), len(expected_args)):
+            if (expected_args[i] not in keywords
+                    and (function_name, expected_args[i]) not in self.functionDefaults):
+                missing_args.append(expected_args[i])
+        if missing_args:
+            display_name = self._display_name(function_name)
+            if len(missing_args) == 1:
+                raise TypeError(
+                    f"{display_name}() missing 1 required positional argument: '{missing_args[0]}'")
+            args_str = " and ".join([f"'{arg}'" for arg in missing_args])
+            raise TypeError(
+                f"{display_name}() missing {len(missing_args)} required positional arguments: {args_str}"
+            )
+        consumed = set()
+        for i in range(len(node.args), len(expected_args)):
+            if expected_args[i] in keywords:
+                node.args.append(keywords[expected_args[i]])
+                consumed.add(expected_args[i])
+                continue
+            default_val = self.functionDefaults[(function_name, expected_args[i])]
+            if isinstance(default_val, ast.AST):
+                default_expr = copy.deepcopy(default_val)
+                if isinstance(default_expr, ast.Name):
+                    default_expr.ctx = ast.Load()
+                node.args.append(default_expr)
+            else:
+                node.args.append(ast.Constant(value=default_val))
+
+        # A keyword moved into a positional slot must leave node.keywords, or
+        # the node claims the same parameter twice. A range loop visits its body
+        # a second time, and the duplicate check then rejects the frontend's own
+        # output (#7542).
+        if consumed:
+            node.keywords = [kw for kw in node.keywords if kw.arg not in consumed]
+
+    def _apply_call_signature_defaults(self, node):
+        function_name, expected_args, kwonly_args = self._resolve_function_signature(node)
+        if function_name == "__unknown__" or function_name is None or expected_args is None:
+            return False
+
+        if (function_name not in self.functionVarargs
+                and any(isinstance(arg, ast.Starred) for arg in node.args)):
+            raise NotImplementedError(
+                f"Unpacking *x into {self._display_name(function_name)}() is supported only "
+                "when x is a list or tuple of statically known length")
+        keywords = self._build_keyword_map(node)
+        self._validate_kwonly_args(function_name, kwonly_args, keywords)
+        self._validate_positional_call_arity(node, function_name, expected_args)
+        self._validate_duplicate_positional_keyword(node, expected_args, keywords)
+        self._fill_missing_args_with_defaults(node, function_name, expected_args, keywords)
+        return True
+
+    def _resolve_and_store_function_annotations(self, node):
+        if node.returns is not None:
+            node.returns = self._resolve_annotation_aliases(node.returns)
+        for arg in node.args.args:
+            if arg.annotation is not None:
+                arg.annotation = self._resolve_annotation_aliases(arg.annotation)
+        if node.args.vararg and node.args.vararg.annotation is not None:
+            node.args.vararg.annotation = self._resolve_annotation_aliases(
+                node.args.vararg.annotation)
+        if node.args.kwarg and node.args.kwarg.annotation is not None:
+            node.args.kwarg.annotation = self._resolve_annotation_aliases(
+                node.args.kwarg.annotation)
+        for arg in node.args.kwonlyargs:
+            if arg.annotation is not None:
+                arg.annotation = self._resolve_annotation_aliases(arg.annotation)
+
+    def _prepare_generator_function(self, node):
+        is_generator = any(isinstance(n, (ast.Yield, ast.YieldFrom)) for n in ast.walk(node))
+        if not is_generator:
+            return node, False
+        if self._is_recursive_call(node.name, node.body):
+            return self._transform_recursive_generator(node), False
+        self.generator_funcs.add(node.name)
+        if self._has_early_return_before_yield(node.body):
+            self.early_return_generator_funcs.add(node.name)
+        return node, True
+
+    def _record_function_param_types(self, node):
+        if node.returns is not None:
+            self.function_return_annotations[node.name] = node.returns
+        for arg in node.args.args:
+            if arg.annotation is not None:
+                param_type = self._extract_type_from_annotation(arg.annotation)
+                self.known_variable_types[arg.arg] = param_type
+                self.variable_annotations[arg.arg] = arg.annotation
+        for arg in node.args.kwonlyargs:
+            if arg.annotation is not None:
+                param_type = self._extract_type_from_annotation(arg.annotation)
+                self.known_variable_types[arg.arg] = param_type
+                self.variable_annotations[arg.arg] = arg.annotation
+        self._infer_dict_params_structurally(node)
+
+    def _infer_dict_params_structurally(self, node):
+        """Recover the container *kind* of unannotated parameters.
+
+        An unannotated parameter carries no static type, so a dict passed into
+        it is treated as a list: iterating it (`for k, v in p`) or comprehending
+        over it then fails. Only dicts expose .items()/.keys()/.values(), so a
+        parameter on which any of those is called in the body is a dict. This
+        recovers the kind, not the element type (which would be unsound to
+        guess), and unblocks iteration/comprehension over a parameter dict
+        (#5444).
+        """
+        # Unannotated parameters only; annotated ones are recorded above.
+        all_args = (list(node.args.posonlyargs) + list(node.args.args) + list(node.args.kwonlyargs))
+        candidates = {arg.arg for arg in all_args if arg.annotation is None}
+        dict_methods = {"items", "keys", "values"}
+        for n in ast.walk(node):
+            if (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                    and n.func.attr in dict_methods and isinstance(n.func.value, ast.Name)
+                    and n.func.value.id in candidates):
+                self.known_variable_types[n.func.value.id] = "dict"
+
+        # Recover the concrete key/value types of parameter dicts from their
+        # call sites, so iteration/comprehension over them resolves
+        # tuple/scalar element types instead of erasing them (#5444). This
+        # also *establishes* the dict kind for parameters the method scan
+        # above could not mark (a body that only iterates the dict, e.g.
+        # `{v: 0 for u, v in g}`, calls no dict method):
+        # _recover_param_dict_annotation returns a shape only when every
+        # direct call site passes an agreeing dict, so the kind comes from
+        # the actual arguments, never from body-usage guessing.
+        positional = list(node.args.posonlyargs) + list(node.args.args)
+        for idx, arg in enumerate(positional):
+            name = arg.arg
+            # The call-shape table is keyed by bare function name, and method
+            # calls (obj.f(...)) are never recorded in it -- so a method's
+            # lookup can only ever hit an unrelated same-named function's
+            # evidence. Skip the conventional receiver outright; it is never
+            # a dict passed positionally.
+            if idx == 0 and name in ("self", "cls"):
+                continue
+            if arg.annotation is None and name not in self.variable_annotations:
+                recovered = self._recover_param_dict_annotation(node.name, idx)
+                # The shape table also records list-literal shapes (#5571);
+                # only a dict-based shape may stamp the dict kind here.
+                if (recovered is not None
+                        and self._get_base_type_name(recovered) in ("dict", "Dict")):
+                    self.known_variable_types[name] = "dict"
+                    self.variable_annotations[name] = recovered
+            elif (arg.annotation is not None
+                  and self._get_base_type_name(arg.annotation) == "list"):
+                # An ANNOTATED list[tuple[..., str, ...]] parameter carries no
+                # component sizes; when every call site passes an agreeing
+                # list-of-tuple-literals, the sized shape (str components
+                # embedded as literals, #5571) replaces the bare annotation.
+                # _recover_param_dict_annotation's all-sites-agree refusal
+                # applies unchanged; compatibility with the user's annotation
+                # is checked structurally so a wrong-shaped call site can
+                # never widen or narrow the declared type.
+                #
+                # The sized shape is stamped onto arg.annotation itself, not
+                # just the preprocessor-local variable_annotations table: the
+                # C++ frontend re-derives the element type of a `pairs[i]`
+                # subscript straight from the parameter's own JSON decl node
+                # (get_elem_type_from_annotation in list_access.cpp), which
+                # variable_annotations never reaches. Stamping the arg node is
+                # sound here specifically because _recover_param_dict_annotation
+                # requires byte-identical ast.dump() of the recovered
+                # ANNOTATION across every call site -- agreement is on the
+                # shape and per-component byte lengths (the only facts the
+                # C++ consumer reads: value.size() + 1), never on element
+                # values, which may differ between a list's entries (#5571).
+                recovered = self._recover_param_dict_annotation(node.name, idx)
+                if (recovered is not None
+                        and self._sized_matches_declared(recovered, arg.annotation)):
+                    # Deep-copy per store: the recovered node is the shape
+                    # table's own object, shared across call records; a
+                    # future in-place pass must not propagate cross-function.
+                    self.variable_annotations[name] = copy.deepcopy(recovered)
+                    stamped = copy.deepcopy(recovered)
+                    ast.copy_location(stamped, arg.annotation)
+                    ast.fix_missing_locations(stamped)
+                    arg.annotation = stamped
+
+    def _recover_param_dict_annotation(self, func_name, param_index):
+        """Recover a parameter dict's dict[K, V] annotation from its call sites.
+
+        Returns the inferred annotation node only when every direct call to
+        ``func_name`` passes, at ``param_index``, a dict literal or a name bound
+        to a dict literal whose inferred dict[K, V] type is identical. If any
+        call site is unknown or the shapes disagree, returns None so the
+        parameter stays untyped (a sound refusal rather than a wrong guess).
+        """
+        calls = self._dict_param_call_shapes.get(func_name, [])
+        candidates = []
+        for shapes in calls:
+            # A call that does not supply this parameter positionally (keyword
+            # arg, splat, too few args) leaves its shape unknown, which forces a
+            # refusal rather than silently trusting the remaining call sites.
+            candidates.append(shapes[param_index] if param_index < len(shapes) else None)
+        if not candidates or any(c is None for c in candidates):
+            return None
+        dumps = {ast.dump(c) for c in candidates}
+        return candidates[0] if len(dumps) == 1 else None
+
+    def _build_dict_annotation_from_literal(self, dict_node):
+        """Build a concrete dict[K, V] annotation node from a dict literal.
+
+        Returns None when the literal contains a ** spread (a None key --
+        its contribution is unknowable statically), when any entry's key
+        annotation disagrees with the first entry's, or when the key or value
+        type cannot be inferred, so callers treat the shape as unknown.
+        """
+        if not dict_node.keys or not dict_node.values or None in dict_node.keys:
+            return None
+        key_ann = self._infer_dict_key_annotation(dict_node.keys[0])
+        if key_ann is None:
+            return None
+        # Every entry must agree with the first on the key annotation --
+        # trusting entry 0 alone would stamp {('A','B'): 1, 7: 2} as
+        # dict[tuple[str, str], int].
+        for k in dict_node.keys[1:]:
+            other = self._infer_dict_key_annotation(k)
+            if other is None or ast.dump(other) != ast.dump(key_ann):
+                return None
+        key_ann = self._size_tuple_str_components(key_ann, dict_node.keys)
+        val_ann = self._infer_dict_value_annotation(dict_node.values[0])
+        if key_ann is None or val_ann is None:
+            return None
+        return ast.Subscript(
+            value=ast.Name(id="dict", ctx=ast.Load()),
+            slice=ast.Tuple(elts=[key_ann, val_ann], ctx=ast.Load()),
+            ctx=ast.Load(),
+        )
+
+    def _build_list_annotation_from_literal(self, list_node):
+        """Build a list[tuple[...]] annotation from a list-of-tuple-literals,
+        with tuple str components sized via _size_tuple_str_components.
+
+        Returns None unless every element is a tuple literal and every
+        element's inferred annotation agrees with the first's — the same
+        sound refusal discipline as _build_dict_annotation_from_literal
+        (#5571).
+        """
+        if not list_node.elts:
+            return None
+        if not all(isinstance(e, ast.Tuple) for e in list_node.elts):
+            return None
+        elem_ann = self._infer_dict_key_annotation(list_node.elts[0])
+        if elem_ann is None:
+            return None
+        for e in list_node.elts[1:]:
+            other = self._infer_dict_key_annotation(e)
+            if other is None or ast.dump(other) != ast.dump(elem_ann):
+                return None
+        elem_ann = self._size_tuple_str_components(elem_ann, list_node.elts)
+        return ast.Subscript(
+            value=ast.Name(id="list", ctx=ast.Load()),
+            slice=elem_ann,
+            ctx=ast.Load(),
+        )
+
+    def _sized_matches_declared(self, sized, declared):
+        """True when `sized` is the call-site-recovered annotation for the
+        user-`declared` one, differing only by str components carrying an
+        embedded string literal where the declaration says bare 'str'.
+
+        Any other structural difference (base type, arity, non-str member
+        types) means the call sites disagree with the declaration, and the
+        declaration must win untouched.
+        """
+        if isinstance(declared, ast.Name):
+            if declared.id == "str":
+                return (isinstance(sized, ast.Constant)
+                        and isinstance(sized.value, str)) or (isinstance(sized, ast.Name)
+                                                              and sized.id == "str")
+            return isinstance(sized, ast.Name) and sized.id == declared.id
+        if isinstance(declared, ast.Subscript) and isinstance(sized, ast.Subscript):
+            if ast.dump(declared.value) != ast.dump(sized.value):
+                return False
+            d_slice, s_slice = declared.slice, sized.slice
+            if isinstance(d_slice, ast.Tuple) and isinstance(s_slice, ast.Tuple):
+                return (len(d_slice.elts) == len(s_slice.elts) and all(
+                    self._sized_matches_declared(s, d) for s, d in zip(s_slice.elts, d_slice.elts)))
+            if isinstance(d_slice, ast.Tuple) != isinstance(s_slice, ast.Tuple):
+                return False
+            return self._sized_matches_declared(s_slice, d_slice)
+        return ast.dump(sized) == ast.dump(declared)
+
+    def _size_tuple_str_components(self, key_ann, tuples):
+        """Embed a concrete byte length for each str component of a
+        tuple[str, ...] annotation, when every tuple literal in the SAME
+        container literal (dict keys, or list elements -- #5571) agrees on
+        that component's exact UTF-8 byte length (the quantity the C++
+        layers size structs with).
+
+        A bare 'str' component carries no size, so the C++ struct built for
+        the recovered tuple key ends up with a 0-byte placeholder for it --
+        unusable for anything beyond existence (any read is an out-of-bounds
+        access on a genuinely 0-byte object, #5444). Every key in a dict
+        literal is caller-stamped (not a body-usage guess), so when they all
+        agree on a component's length, that length is sound to encode; a
+        str-typed component whose keys disagree, or aren't all literal
+        strings, is left as bare 'str' -- the pre-existing (safe) refusal
+        path for that component.
+        """
+        if not (isinstance(key_ann, ast.Subscript) and self._get_base_type_name(key_ann) == "tuple"
+                and isinstance(key_ann.slice, ast.Tuple)):
+            return key_ann
+        elts = key_ann.slice.elts
+        for i, elt in enumerate(elts):
+            if not (isinstance(elt, ast.Name) and elt.id == "str"):
+                continue
+            sample = None
+            homogeneous = True
+            for k in tuples:
+                if not (isinstance(k, ast.Tuple) and i < len(k.elts)):
+                    homogeneous = False
+                    break
+                comp = k.elts[i]
+                if not (isinstance(comp, ast.Constant) and isinstance(comp.value, str)):
+                    homogeneous = False
+                    break
+                # Agreement is on UTF-8 BYTE length -- the quantity the C++
+                # side sizes structs with (tuple_handler sizes as
+                # value.size()+1 on the UTF-8 encoded string, matching
+                # string_builder::build_string_literal). len() counts
+                # characters, which diverges for non-ASCII ('é' is 1 char, 2
+                # bytes) and would size the struct from one key while other
+                # keys occupy a different byte width.
+                if sample is None:
+                    sample = comp.value
+                elif len(comp.value.encode("utf-8")) != len(sample.encode("utf-8")):
+                    homogeneous = False
+                    break
+            if homogeneous and sample is not None:
+                elts[i] = ast.Constant(value=sample)
+        return key_ann
+
+    def _infer_dict_key_annotation(self, key_node):
+        """Build a full key-type annotation node (preserving tuple element types).
+
+        Unlike _infer_dict_key_type, a tuple key yields the nested
+        tuple[A, B, ...] annotation rather than the bare name 'tuple', so the
+        recovered parameter dict carries the concrete struct shape. Returns None
+        for anything not statically known.
+        """
+        if isinstance(key_node, ast.Constant):
+            value = key_node.value
+            if isinstance(value, bool):
+                return ast.Name(id="bool", ctx=ast.Load())
+            if isinstance(value, float):
+                return ast.Name(id="float", ctx=ast.Load())
+            if isinstance(value, int):
+                return ast.Name(id="int", ctx=ast.Load())
+            if isinstance(value, str):
+                return ast.Name(id="str", ctx=ast.Load())
+            return None
+        if isinstance(key_node, ast.Tuple):
+            elt_anns = [self._infer_dict_key_annotation(e) for e in key_node.elts]
+            if not elt_anns or any(e is None for e in elt_anns):
+                return None
+            return ast.Subscript(
+                value=ast.Name(id="tuple", ctx=ast.Load()),
+                slice=ast.Tuple(elts=elt_anns, ctx=ast.Load()),
+                ctx=ast.Load(),
+            )
+        return None
+
+    def _build_qualified_function_name(self, node):
+        if hasattr(self, "current_class_name") and self.current_class_name:
+            return f"{self.current_class_name}.{node.name}"
+        return node.name
+
+    def _store_function_defaults(self, node, qualified_name):
+        return_nodes = []
+        is_method = "." in qualified_name
+        for i in range(1, len(node.args.defaults) + 1):
+            arg_index = len(node.args.args) - i
+            if arg_index < 0:
+                continue
+            default_node = node.args.defaults[-i]
+            arg_name = node.args.args[-i].arg
+            if isinstance(default_node, ast.Constant):
+                self.functionDefaults[(qualified_name, arg_name)] = default_node.value
+            elif isinstance(default_node, (ast.Name, ast.List, ast.Dict, ast.Set)):
+                assignment_node, target_var = self.generate_variable_copy(
+                    qualified_name, node.args.args[-i],
+                    self.class_scope_default(default_node, node) if is_method else default_node)
+                self.functionDefaults[(qualified_name, arg_name)] = target_var
+                self.hoisted_default_names.add(target_var.id)
+                if is_method:
+                    self._pending_method_default_inits.append(assignment_node)
+                else:
+                    return_nodes.append(assignment_node)
+            else:
+                self.functionDefaults[(qualified_name, arg_name)] = default_node
+        for i, default in enumerate(node.args.kw_defaults):
+            if default is None:
+                continue
+            kwarg_name = node.args.kwonlyargs[i].arg
+            if isinstance(default, ast.Constant):
+                self.functionDefaults[(qualified_name, kwarg_name)] = default.value
+            elif isinstance(default, (ast.Name, ast.List, ast.Dict, ast.Set)):
+                assignment_node, target_var = self.generate_variable_copy(
+                    qualified_name, node.args.kwonlyargs[i],
+                    self.class_scope_default(default, node) if is_method else default)
+                self.functionDefaults[(qualified_name, kwarg_name)] = target_var
+                self.hoisted_default_names.add(target_var.id)
+                if is_method:
+                    self._pending_method_default_inits.append(assignment_node)
+                else:
+                    return_nodes.append(assignment_node)
+            else:
+                self.functionDefaults[(qualified_name, kwarg_name)] = default
+        return return_nodes
+
+    def visit_Delete(self, node):
+        # `del a[i]` / `del a` mutates or unbinds `a`; drop any tracked list
+        # literal so later subscript reads are not constant-folded to stale
+        # element values (the del lowers to list.pop(i) in the converter).
+        node = self.generic_visit(node)
+        for target in node.targets:
+            base = target.value if isinstance(target, ast.Subscript) else target
+            if isinstance(base, ast.Name):
+                self.list_literal_values.pop(base.id, None)
+                self.dict_literal_values.pop(base.id, None)
+        return node
+
+    def visit_Assign(self, node):
+        """
+        Handle assignment nodes, including multiple assignments and tuple unpacking.
+        """
+        self._invalidate_list_literals_for_assign_targets(node.targets)
+        self._update_assignment_call_origins(node.targets, node.value)
+        # Neutralise `x = sorted(...d.items()...)` to `x = []` when the scan
+        # certified x as eq-only with a known dict receiver; the cascade
+        # then recovers the assert against the tracked Call origin.
+        # Only sorted() is neutralised: plain `list(d.items())` still has a
+        # materialised list path elsewhere that other rewrites depend on.
+        neutralized_target = None
+        if (len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
+                and node.targets[0].id in self._eq_only_items_view_targets
+                and self._is_items_view_call(node.value) and node.value.func.id == "sorted"):
+            recv = self._items_view_receiver_name(node.value)
+            if recv is not None and self._is_known_dict_name(recv):
+                placeholder = ast.List(elts=[], ctx=ast.Load())
+                ast.copy_location(placeholder, node.value)
+                ast.fix_missing_locations(placeholder)
+                node.value = placeholder
+                neutralized_target = node.targets[0].id
+
+        if self._maybe_record_type_alias_assign(node):
+            return None
+
+        node = self.generic_visit(node)
+        self._update_known_literal_for_simple_assign(node)
+        self._track_static_seq_binding(node)
+        self._maybe_track_seq_iterator(node)
+        # Drop any literal recorded by _update_known_literal_for_simple_assign
+        # for the synthetic `x = []` so a non-cascade fallback (e.g. an assert
+        # the cascade transforms decline) cannot constant-fold `x` to `[]`.
+        if neutralized_target is not None:
+            self._known_literal_values.pop(neutralized_target, None)
+
+        rewritten_next_call = self._maybe_rewrite_next_call_assign(node)
+        if rewritten_next_call is not None:
+            return rewritten_next_call
+
+        rewritten_seq_next = self._maybe_rewrite_seq_next_assign(node)
+        if rewritten_seq_next is not None:
+            return rewritten_seq_next
+
+        lowered_dict_comp = self._maybe_lower_dict_from_comprehension_assign(node)
+        if lowered_dict_comp is not None:
+            return lowered_dict_comp
+
+        lowered_items_dictcomp = self._maybe_lower_dictcomp_over_items(node)
+        if lowered_items_dictcomp is not None:
+            return lowered_items_dictcomp
+
+        lowered_listcomp = self._maybe_lower_listcomp_assign(node)
+        if lowered_listcomp is not None:
+            return lowered_listcomp
+
+        if len(node.targets) == 1:
+            return self._handle_single_target_assign(node)
+        return self._handle_multi_target_assign(node)
+
+    def _is_known_dict_name(self, name):
+        """True when `name` is reliably known to be bound to a dict.
+
+        Only an explicit ``dict``/``Dict`` annotation or a tracked dict-literal
+        binding qualifies, so the list(d)/sorted(d) rewrite never fires on a
+        list/set/other iterable.
+        """
+        ann = self.variable_annotations.get(name)
+        if isinstance(ann, ast.Subscript) and isinstance(ann.value, ast.Name):
+            if ann.value.id in ("dict", "Dict"):
+                return True
+            # An annotation for a different generic (list[...], set[...], ...)
+            # means the name was rebound away from a dict; do not treat a stale
+            # dict-literal binding as a dict.
+            return False
+        # A bare ``dict``/``Dict`` annotation (e.g. ``def f(d: dict)``) carries
+        # no element types but still reliably marks the name as a dict. Mirror
+        # the subscript branch: an annotation for any other base type means the
+        # name is not a dict, regardless of a stale dict-literal binding.
+        if isinstance(ann, ast.Name):
+            return ann.id in ("dict", "Dict")
+        if name in self.dict_literal_vars:
+            return True
+        # An unannotated parameter recovered as a dict by structural inference
+        # (a .items()/.keys()/.values() call on it in the body — see
+        # _infer_dict_params_structurally) is a reliable dict too, so dict-view
+        # comprehensions and bare-dict iteration over a parameter dict desugar
+        # through the for-loop key-iteration path instead of reaching the C++
+        # dict-comp handler, which cannot consume a dict struct (#5444).
+        return self.known_variable_types.get(name) == "dict"
+
+    def _maybe_rewrite_dict_to_list_call(self, node):
+        """Rewrite iterating builtins over a dict to use d.keys().
+
+        list(d) -> d.keys(); sorted/max/min/sum(d, ...) -> ...(d.keys(), ...).
+        The bare builtins reinterpret the dict struct as a list (wrong length,
+        unsound subscript / wrong reduction). Routing through d.keys() reuses the
+        correctly-typed dict-keys list path — Python iterates a dict over its
+        keys. Only fires for names reliably known to be dicts. (GitHub #4790)
+        """
+        if not (isinstance(node.func, ast.Name)
+                and node.func.id in ("list", "sorted", "max", "min", "sum")):
+            return None
+        if not node.args or (node.keywords and node.func.id == "list"):
+            return None
+        # max()/min() with several positional arguments is the variadic form
+        # (the max/min OF the arguments), not reduction over a single iterable —
+        # a dict argument there is compared, not iterated, so leave it alone.
+        if node.func.id in ("max", "min") and len(node.args) != 1:
+            return None
+        first = node.args[0]
+        if not (isinstance(first, ast.Name) and self._is_known_dict_name(first.id)):
+            return None
+
+        keys_call = ast.Call(func=ast.Attribute(value=ast.Name(id=first.id, ctx=ast.Load()),
+                                                attr="keys",
+                                                ctx=ast.Load()),
+                             args=[],
+                             keywords=[])
+        ast.copy_location(keys_call, node)
+        ast.fix_missing_locations(keys_call)
+
+        if node.func.id == "list":
+            # list(d) yields the keys list; d.keys() is exactly that. Note this
+            # aliases the dict's keys member rather than copying it, so mutating
+            # the result also mutates the dict — acceptable here because the
+            # pre-fix relabeling was outright unsound, and the common uses
+            # (len/iteration/indexing/sorted) are read-only.
+            return self.visit(keys_call)
+
+        # sorted(d, key=..., reverse=...) -> sorted(d.keys(), key=..., reverse=...)
+        node.args[0] = keys_call
+        self.generic_visit(node)
+        return node
+
+    @staticmethod
+    def _index_name_for(call):
+        """A comprehension index name unique to one call site, so nesting is safe."""
+        return f"__esbmc_iter_idx_{call.lineno}_{call.col_offset}"
+
+    @staticmethod
+    def _load_name(ident, ctx=None):
+        return ast.Name(id=ident, ctx=ctx or ast.Load())
+
+    @staticmethod
+    def _builtin_call(func, args):
+        return ast.Call(func=CoreVisitorsMixin._load_name(func), args=args, keywords=[])
+
+    def _subscript(self, ident, idx):
+        return ast.Subscript(value=self._load_name(ident),
+                             slice=self._load_name(idx),
+                             ctx=ast.Load())
+
+    @staticmethod
+    def _sequence_literal_elts(seq):
+        """The element nodes of a list/tuple literal, else None.
+
+        A Starred element stands for an unknown number of elements, so the
+        literal's length is not known here and folding it would be wrong.
+        """
+        if not isinstance(seq, (ast.List, ast.Tuple)):
+            return None
+        if any(isinstance(e, ast.Starred) for e in seq.elts):
+            return None
+        return seq.elts
+
+    def _shortest_len(self, names):
+        """len(a) for one name, else min(len(a), len(b)) folded left."""
+        bound = self._builtin_call("len", [self._load_name(names[0])])
+        for other in names[1:]:
+            other_len = self._builtin_call("len", [self._load_name(other)])
+            bound = self._builtin_call("min", [bound, other_len])
+        return bound
+
+    @staticmethod
+    def _index_comprehension(idx, elt_parts, bound):
+        return ast.ListComp(elt=ast.Tuple(elts=elt_parts, ctx=ast.Load()),
+                            generators=[
+                                ast.comprehension(
+                                    target=CoreVisitorsMixin._load_name(idx, ast.Store()),
+                                    iter=CoreVisitorsMixin._builtin_call("range", [bound]),
+                                    ifs=[],
+                                    is_async=0)
+                            ])
+
+    def _zip_to_list(self, call):
+        literals = [self._sequence_literal_elts(s) for s in call.args]
+        if all(elts is not None for elts in literals):
+            width = min((len(elts) for elts in literals), default=0)
+            return ast.List(elts=[
+                ast.Tuple(elts=[copy.deepcopy(elts[i]) for elts in literals], ctx=ast.Load())
+                for i in range(width)
+            ],
+                            ctx=ast.Load())
+        if call.args and all(isinstance(s, ast.Name) for s in call.args):
+            idx = self._index_name_for(call)
+            return self._index_comprehension(idx, [self._subscript(s.id, idx) for s in call.args],
+                                             self._shortest_len([s.id for s in call.args]))
+        return None
+
+    def _enumerate_to_list(self, call):
+        if not 1 <= len(call.args) <= 2:
+            return None
+        seq = call.args[0]
+        start = call.args[1] if len(call.args) == 2 else ast.Constant(value=0)
+        constant_start = isinstance(start, ast.Constant) and isinstance(start.value, int)
+
+        elts = self._sequence_literal_elts(seq)
+        if elts is not None and constant_start:
+            return ast.List(elts=[
+                ast.Tuple(elts=[ast.Constant(value=start.value + i),
+                                copy.deepcopy(e)],
+                          ctx=ast.Load()) for i, e in enumerate(elts)
+            ],
+                            ctx=ast.Load())
+        # A non-constant start would land inside the comprehension body and be
+        # re-evaluated per element; CPython evaluates it once, before iterating.
+        # Hoisting it needs statement context this hook does not have.
+        if isinstance(seq, ast.Name) and constant_start:
+            idx = self._index_name_for(call)
+            position = self._load_name(idx) if start.value == 0 else ast.BinOp(
+                left=self._load_name(idx), op=ast.Add(), right=copy.deepcopy(start))
+            return self._index_comprehension(idx, [position, self._subscript(seq.id, idx)],
+                                             self._builtin_call("len", [self._load_name(seq.id)]))
+        return None
+
+    def _maybe_rewrite_list_over_iterator(self, node):
+        """list(zip(...)) / list(enumerate(...)) -> the equivalent literal or comprehension.
+
+        zip and enumerate are modelled only as a for-loop rewrite
+        (loop_mixin._transform_zip_for), so as a standalone value they reach the
+        generic call builder and produce a list of the wrong length and
+        elements — a false alarm on an assertion CPython holds (#7555).
+        """
+        if not (isinstance(node.func, ast.Name) and node.func.id == "list" and len(node.args) == 1
+                and not node.keywords):
+            return None
+        inner = node.args[0]
+        if not (isinstance(inner, ast.Call) and isinstance(inner.func, ast.Name)
+                and not inner.keywords):
+            return None
+        if inner.func.id == "zip":
+            rewritten = self._zip_to_list(inner)
+        elif inner.func.id == "enumerate":
+            rewritten = self._enumerate_to_list(inner)
+        else:
+            return None
+        if rewritten is None:
+            return None
+        ast.copy_location(rewritten, node)
+        ast.fix_missing_locations(rewritten)
+        return self.visit(rewritten)
+
+    _OPERATOR_DUNDERS = {"__getitem__": 1, "__len__": 0, "__contains__": 1}
+
+    def _maybe_rewrite_operator_dunder_call(self, node):
+        """Rewrite an explicit operator dunder call to the operator itself.
+
+        ``d.__getitem__(k)`` -> ``d[k]``, ``x.__len__()`` -> ``len(x)``,
+        ``x.__contains__(v)`` -> ``v in x``. The frontend models the operators
+        but not the method spelling, so the latter raised AttributeError and the
+        run failed on correct code. The two forms are equivalent in Python, and
+        for a user class defining the dunder the operator dispatches back to it.
+        """
+        if not (isinstance(node.func, ast.Attribute) and node.func.attr in self._OPERATOR_DUNDERS
+                and not node.keywords and len(node.args) == self._OPERATOR_DUNDERS[node.func.attr]):
+            return None
+
+        receiver = node.func.value
+        if node.func.attr == "__getitem__":
+            rewritten = ast.Subscript(value=receiver, slice=node.args[0], ctx=ast.Load())
+        elif node.func.attr == "__len__":
+            rewritten = ast.Call(func=ast.Name(id="len", ctx=ast.Load()),
+                                 args=[receiver],
+                                 keywords=[])
+        else:
+            rewritten = ast.Compare(left=node.args[0], ops=[ast.In()], comparators=[receiver])
+
+        ast.copy_location(rewritten, node)
+        ast.fix_missing_locations(rewritten)
+        return self.visit(rewritten)
+
+    def visit_Call(self, node):  # pylint: disable=too-many-locals,too-many-branches,too-many-statements,import-outside-toplevel,no-else-raise
+        self._expand_starred_call_args(node)
+        self._invalidate_list_literals_for_call(node)
+        rewritten_nondet = self._rewrite_nondet_collection_call(node)
+        if rewritten_nondet is not None:
+            self.generic_visit(rewritten_nondet)
+            return rewritten_nondet
+        rewritten_dunder = self._maybe_rewrite_operator_dunder_call(node)
+        if rewritten_dunder is not None:
+            return rewritten_dunder
+        rewritten_dict_list = self._maybe_rewrite_dict_to_list_call(node)
+        if rewritten_dict_list is not None:
+            return rewritten_dict_list
+        rewritten_iter_list = self._maybe_rewrite_list_over_iterator(node)
+        if rewritten_iter_list is not None:
+            return rewritten_iter_list
+        rewritten_newtype = self._maybe_rewrite_newtype_call(node)
+        if rewritten_newtype is not None:
+            return rewritten_newtype
+
+        rewritten = self._rewrite_dataclass_api_call(node)
+        if rewritten is not node:
+            return rewritten
+
+        rewritten_bound = self._maybe_rewrite_bound_method_call(node)
+        if rewritten_bound is not None:
+            return rewritten_bound
+
+        rewritten_getattr = self._maybe_rewrite_getattr_call(node)
+        if rewritten_getattr is not None:
+            return rewritten_getattr
+
+        rewritten_decimal = self._maybe_rewrite_decimal_call(node)
+        if rewritten_decimal is not None:
+            return rewritten_decimal
+
+        rewritten_ratio = self._maybe_fold_as_integer_ratio(node)
+        if rewritten_ratio is not None:
+            return rewritten_ratio
+
+        self._normalize_builtin_keyword_args(node)
+        self._normalize_math_gcd_lcm_variadic(node)
+
+        guard = self._lower_starred_call_argument(node)
+        self._apply_call_signature_defaults(node)
+        self._specialize_vararg_call(node)
+        self.generic_visit(node)
+        if guard is None:
+            return node
+        guard.test = self.visit(guard.test)
+        guard.orelse = self.visit(guard.orelse)
+        return guard
+
+    def _lower_starred_call_argument(self, node):
+        """Spell `f(a, *xs)` out as `f(a, xs[0], ..., xs[k-1]) if len(xs) == k else e()`.
+
+        Only for a call _scan_starred_calls marked, to a known function with a
+        fixed positional signature (no *args, no defaults among the starred
+        slots). CPython raises TypeError when len(xs) does not fill the k
+        remaining parameters; _starred_arity_error raises it before any
+        element is read. The frontend has no Starred expression, so without
+        this every such call was refused. Constant indices let the frontend
+        type each element on its own (#8472). Returns the guarding IfExp,
+        whose body is `node`, or None.
+        """
+        if not getattr(node, "esbmc_starred_sequence", False):
+            return None
+        operand = node.args[-1].value
+        function_name, expected_args, _ = self._resolve_function_signature(node)
+        if function_name in (None, "__unknown__") or expected_args is None:
+            return None
+        if function_name in self.functionVarargs:
+            return None
+        fixed = len(node.args) - 1
+        slots = expected_args[fixed:]
+        if not slots or any((function_name, arg) in self.functionDefaults for arg in slots):
+            return None
+        length_ok = ast.Compare(left=ast.Call(func=ast.Name(id="len", ctx=ast.Load()),
+                                              args=[ast.Name(id=operand.id, ctx=ast.Load())],
+                                              keywords=[]),
+                                ops=[ast.Eq()],
+                                comparators=[ast.Constant(value=len(slots))])
+        arity_error = ast.Call(func=ast.Name(id="_starred_arity_error", ctx=ast.Load()),
+                               args=[],
+                               keywords=[])
+        node.args = node.args[:-1] + [
+            ast.Subscript(value=ast.Name(id=operand.id, ctx=ast.Load()),
+                          slice=ast.Constant(value=i),
+                          ctx=ast.Load()) for i in range(len(slots))
+        ]
+        ast.copy_location(length_ok, node)
+        ast.fix_missing_locations(node)
+        # The raising arm reads as `(e(), f(...))[1]` so both arms carry
+        # f's result type; e() raises before f is reached.
+        unreached = copy.deepcopy(node)
+        unreached.esbmc_starred_sequence = False
+        raising = ast.Subscript(value=ast.Tuple(elts=[arity_error, unreached], ctx=ast.Load()),
+                                slice=ast.Constant(value=1),
+                                ctx=ast.Load())
+        guard = ast.IfExp(test=length_ok, body=node, orelse=raising)
+        ast.copy_location(guard, node)
+        ast.fix_missing_locations(guard)
+        return guard
+
+    def _scan_starred_calls(self, node):
+        """Mark each `f(..., *xs)` on a parameter xs that _lower_starred_call_argument
+        may spell out.
+
+        _expand_starred_call_args already splices a name of statically known
+        length; a parameter's length is not known, so the lowering checks it at
+        run time. Indexing spells out a list or tuple, not a dict or set, so xs
+        must be annotated as one, or every call of its function must pass a
+        list or tuple display, and xs must not be rebound. A callee bound in the
+        calling scope is not the global function whose signature the lowering
+        reads."""
+        calls_to, loads = {}, {}
+        for n in ast.walk(node):
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
+                calls_to.setdefault(n.func.id, []).append(n)
+            elif isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load):
+                loads[n.id] = loads.get(n.id, 0) + 1
+        methods = {id(m) for c in ast.walk(node) if isinstance(c, ast.ClassDef) for m in c.body}
+        for scope in ast.walk(node):
+            if isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                self._mark_starred_calls(scope, id(scope) in methods, calls_to, loads)
+
+    def _mark_starred_calls(self, scope, is_method, calls_to, loads):
+        positional = {a.arg: i for i, a in enumerate(scope.args.args)}
+        annotations = {
+            a.arg: a.annotation
+            for a in scope.args.posonlyargs + scope.args.args + scope.args.kwonlyargs
+        }
+        stored = {
+            n.id
+            for n in self._own_scope(scope)
+            if isinstance(n, ast.Name) and not isinstance(n.ctx, ast.Load)
+        }
+        sequence_params = {
+            xs
+            for xs, ann in annotations.items()
+            if xs not in stored and (self._is_sequence_annotation(ann) or (
+                xs in positional and not is_method
+                and self._passed_sequence(scope.name, positional[xs], calls_to, loads)))
+        }
+        shadowed = stored | annotations.keys()
+        for n in self._own_scope(scope):
+            if self._starred_name_operand(n) in sequence_params and n.func.id not in shadowed:
+                n.esbmc_starred_sequence = True
+
+    @staticmethod
+    def _own_scope(root):
+        """Unlike _iter_own_scope_nodes, this skips lambdas and class bodies,
+        whose own names may shadow a parameter."""
+        nested = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
+        todo = list(ast.iter_child_nodes(root))
+        while todo:
+            n = todo.pop()
+            yield n
+            if not isinstance(n, nested):
+                todo.extend(ast.iter_child_nodes(n))
+
+    @staticmethod
+    def _starred_name_operand(n):
+        """The name xs in a call `f(..., *xs)` with no other star or keyword."""
+        if (isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.args and not n.keywords
+                and isinstance(n.args[-1], ast.Starred) and isinstance(n.args[-1].value, ast.Name)
+                and not any(isinstance(a, ast.Starred) for a in n.args[:-1])):
+            return n.args[-1].value.id
+        return None
+
+    @staticmethod
+    def _is_sequence_annotation(ann):
+        if isinstance(ann, ast.Subscript):
+            ann = ann.value
+        return isinstance(ann, ast.Name) and ann.id in ("list", "tuple", "List", "Tuple")
+
+    @staticmethod
+    def _passed_sequence(func_name, index, calls_to, loads):
+        calls = calls_to.get(func_name, [])
+        # Every load of the name must be one of these calls, so the
+        # function is never called through another name. A list at one
+        # call and a tuple at another give the parameter no single type.
+        kinds = {
+            type(c.args[index]) if not c.keywords and index < len(c.args) else None
+            for c in calls
+        }
+        return loads.get(func_name, 0) == len(calls) and kinds in ({ast.List}, {ast.Tuple})
+
+    def _locally_bound_names(self, node):
+        """Names this function scope binds, ignoring nested scopes and globals."""
+        bound = set()
+        declared = set()
+        target_names = self._target_names
+        scope_nodes = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
+
+        def walk(body):
+            for stmt in body:
+                if isinstance(stmt, (ast.Global, ast.Nonlocal)):
+                    declared.update(stmt.names)
+                    continue
+                if isinstance(stmt, ast.Assign):
+                    for t in stmt.targets:
+                        bound.update(target_names(t))
+                elif isinstance(stmt, (ast.AnnAssign, ast.AugAssign, ast.For)):
+                    bound.update(target_names(stmt.target))
+                elif isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                    bound.add(stmt.name)
+                    continue
+                for child in ast.iter_child_nodes(stmt):
+                    if isinstance(child, scope_nodes):
+                        continue
+                    walk([child])
+
+        walk(node.body)
+        return bound - declared
+
+    @staticmethod
+    def _restore_shadowed_literals(store, names, saved):
+        """Undo inner-scope rebindings of `names`, keeping other changes."""
+        for name in names:
+            if name in saved:
+                store[name] = saved[name]
+            else:
+                store.pop(name, None)
+
+    def visit_FunctionDef(self, node):  # pylint: disable=too-many-branches,too-many-statements
+        # dict-literal bindings are local to a scope: snapshot on entry and
+        # restore on exit so a dict named `d` in one function does not make a
+        # same-named plain parameter in another function look like a dict.
+        saved_dict_vars = set(self.dict_literal_vars)
+        # Parameter/local variable kinds are scope-local for the same reason:
+        # an unannotated dict parameter recorded in one function must not make a
+        # same-named plain parameter in another function look like a dict (#5444).
+        saved_known_types = dict(self.known_variable_types)
+        # Recovered parameter-dict annotations (#5444) are scope-local too: a
+        # synthesized dict[K, V] for a parameter in one function must not leak
+        # onto a same-named parameter elsewhere.
+        saved_var_anns = dict(self.variable_annotations)
+        # A nested `c = [9]` binds a local and must not make the enclosing
+        # scope's `c[0]` fold to the inner literal. A nested `c[0] += 1`
+        # mutates the enclosing list, so its invalidation must survive --
+        # restore only the names this scope binds.
+        saved_list_literals = dict(self.list_literal_values)
+        saved_dict_literals = dict(self.dict_literal_values)
+        shadowed_literals = self._locally_bound_names(node)
+        saved_key_funcs = self._single_return_funcs
+        self._single_return_funcs = {
+            name: body
+            for name, body in saved_key_funcs.items()
+            if not self._scope_locally_binds(node, {name})
+        }
+        # Per-function scope for call-origin tracking and the eq-only set.
+        saved_call_origins = dict(self._assignment_call_origins)
+        self._assignment_call_origins.clear()
+        saved_eq_only = set(self._eq_only_items_view_targets)
+        self._eq_only_items_view_targets = self._scan_eq_only_items_view_targets(node.body)
+        saved_vararg_defs = self._enter_vararg_scope(node)
+        saved_builtin_shadows = self._enter_builtin_shadow_scope(node)
+        try:
+            node = self._rewrite_humaneval_20_none_sentinel(node)
+
+            if (len(node.args.args) == 1 and len(node.body) == 1
+                    and isinstance(node.body[0], ast.Return)
+                    and isinstance(node.body[0].value, ast.Name)
+                    and node.body[0].value.id == node.args.args[0].arg):
+                self._identity_functions.add(node.name)
+
+            self._resolve_and_store_function_annotations(node)
+            node, is_generator = self._prepare_generator_function(node)
+            self._record_function_param_types(node)
+            qualified_name = self._build_qualified_function_name(node)
+
+            self.functionParams[qualified_name] = [i.arg for i in node.args.args]
+            self.functionKwonlyParams[qualified_name] = [i.arg for i in node.args.kwonlyargs]
+            self._record_staticmethod(node, qualified_name)
+            self._record_vararg_function(node, qualified_name)
+
+            if len(node.args.defaults) < 1 and len(node.args.kw_defaults) < 1:
+                self.generic_visit(node)
+                if is_generator:
+                    self.generator_func_defs[node.name] = list(node.body)
+                return node
+            return_nodes = self._store_function_defaults(node, qualified_name)
+
+            self.generic_visit(node)
+            if is_generator:
+                self.generator_func_defs[node.name] = list(node.body)
+            return_nodes.append(node)
+            return return_nodes
+        finally:
+            self.dict_literal_vars = saved_dict_vars
+            self.known_variable_types = saved_known_types
+            self.variable_annotations = saved_var_anns
+            self._restore_shadowed_literals(self.list_literal_values, shadowed_literals,
+                                            saved_list_literals)
+            self._restore_shadowed_literals(self.dict_literal_values, shadowed_literals,
+                                            saved_dict_literals)
+            self._single_return_funcs = saved_key_funcs
+            self._assignment_call_origins = saved_call_origins
+            self._eq_only_items_view_targets = saved_eq_only
+            self._builtin_shadow_names = saved_builtin_shadows
+            self._exit_vararg_scope(node, saved_vararg_defs)

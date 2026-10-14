@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--unwind 6 --no-unwinding-assertions --std c++11
+^VERIFICATION FAILED$
+noexcept specification violated

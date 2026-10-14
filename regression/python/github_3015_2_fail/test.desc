@@ -1,5 +1,5 @@
 CORE
 main.py
 --unwind 1
-^SyntaxError: Multiple values for argument 'y'$
+^ERROR: .*Multiple values for argument 'y'$
 

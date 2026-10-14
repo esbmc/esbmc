@@ -8,15 +8,15 @@
 #include <stdlib.h>
 #include <sys/types.h>
 
-#ifdef _MSVC
-#  include <BaseTsd.h>
-#  define ssize_t SSIZE_T
-#endif
-
 #ifdef _MINGW
 #  undef feof
 #  undef ferror
 #endif
+
+/* True when ESBMC runs in SV-COMP mode (--sv-comp). Lowered to a constant by
+ * symex from the runtime option, so fopen/fclose can skip malloc/free for
+ * SV-COMP without a separate build of this model. */
+_Bool __ESBMC_sv_comp(void);
 
 #undef putchar
 #undef puts
@@ -96,22 +96,25 @@ __ESBMC_HIDE:;
 FILE *fopen(const char *filename, const char *m)
 {
 __ESBMC_HIDE:;
-#if __ESBMC_SVCOMP
-  FILE *f = (void *)1;
-#else
-  FILE *f = malloc(sizeof(FILE));
-#endif
+  /* In SV-COMP mode, avoid allocating a FILE so callers that never fclose()
+   * don't trip memory-leak checks; return a non-null sentinel instead. */
+  FILE *f = __ESBMC_sv_comp() ? (void *)1 : malloc(sizeof(FILE));
   return f;
 }
 
 int fclose(FILE *stream)
 {
 __ESBMC_HIDE:;
-// Don't clear pending state here - let it remain for verification
-#if __ESBMC_SVCOMP
-#else
-  free(stream);
-#endif
+  // Don't clear pending state here - let it remain for verification.
+  // Mirror fopen: in SV-COMP mode the stream is a sentinel, not heap memory.
+  // Outside SV-COMP, only release storage we actually allocated on the heap
+  // (fopen/fdopen).  The standard streams stdin/stdout/stderr are not heap
+  // objects, so free()ing them would spuriously report "invalid pointer
+  // freed" even though fclose(stdout) is well-defined.  Guarding on
+  // __ESBMC_is_dynamic keeps a genuine double-fclose of an fopen'd stream
+  // detectable as a double free (the flag stays set after free()).
+  if (!__ESBMC_sv_comp() && __ESBMC_is_dynamic[__ESBMC_POINTER_OBJECT(stream)])
+    free(stream);
   return nondet_int();
 }
 
@@ -133,14 +136,13 @@ __ESBMC_HIDE:;
   // Set currently reading state
   __esbmc_currently_reading = 1;
 
-  // (rest of existing fgets implementation...)
   _Bool early_termination = 0;
   // check for pre-conditions
   __ESBMC_assert(
     stream == stdin || stream != NULL,
     "the pointer to a file object must be a valid argument");
 
-  //do nothing, report error
+  // do nothing, report error
   if (size < 2)
     return NULL;
 
@@ -187,6 +189,59 @@ __ESBMC_HIDE:;
   str[size - 1] = '\0';
 
   return str;
+}
+
+ssize_t getline(char **lineptr, size_t *n, FILE *stream)
+{
+__ESBMC_HIDE:;
+  __ESBMC_assert(
+    stream == stdin || stream != NULL,
+    "the pointer to a file object must be a valid argument");
+
+  /* POSIX.1-2008 makes a null lineptr or n a "shall fail" [EINVAL], not
+   * undefined behaviour, so report it where the caller can see it rather than
+   * as a property violation on a portable program. */
+  if (lineptr == NULL || n == NULL)
+  {
+    __esbmc_errno = 22; // EINVAL
+    return -1;
+  }
+
+  __esbmc_currently_reading = 1;
+
+  /* Nothing left to read: -1, with *lineptr and *n as they were. POSIX allows
+   * that; glibc and musl allocate before reading instead, so a program that
+   * frees only after a success is correct under either and this model does
+   * not pick one. */
+  if (nondet_bool())
+    return -1;
+
+  /* 1 <= len <= SSIZE_MAX - 1. getline never returns 0, the cast below has to
+   * stay positive, and len + 1 must not wrap at any size_t width -- an
+   * unbounded draw does both on ILP32. */
+  size_t len;
+  __ESBMC_assume(len >= 1 && len <= (((size_t)-1) >> 1) - 1);
+
+  /* Hand back a fresh object rather than writing into the caller's: the bytes
+   * are the stream's, and keeping the old ones would let a second call prove
+   * the line came back unchanged. POSIX has *lineptr malloc-allocated exactly
+   * so getline may replace it. The capacity need only cover the line and its
+   * terminator; pinning it to len + 1 would be more precise than the spec. */
+  size_t cap;
+  __ESBMC_assume(cap >= len + 1);
+  char *buf = malloc(cap);
+  if (buf == NULL)
+  {
+    __esbmc_errno = 12; // ENOMEM
+    return -1;
+  }
+
+  free(*lineptr);
+  *lineptr = buf;
+  *n = cap;
+
+  buf[len] = '\0';
+  return (ssize_t)len;
 }
 
 size_t fread(void *ptr, size_t size, size_t nitems, FILE *stream)
@@ -313,6 +368,12 @@ int fseek(FILE *stream, long offset, int whence)
 {
 __ESBMC_HIDE:;
   return nondet_int();
+}
+
+int fseeko(FILE *stream, off_t offset, int whence)
+{
+__ESBMC_HIDE:;
+  return nondet_bool() ? 0 : -1;
 }
 
 long ftell(FILE *stream)
@@ -487,6 +548,16 @@ int *__errno_location(void)
 __ESBMC_HIDE:;
   return &__esbmc_errno;
 }
+
+// macOS/BSD expose errno as (*__error()); model it like __errno_location so
+// that errno-setting models work under the Apple/BSD sysroot too.
+#if defined(__APPLE__) || defined(__FreeBSD__)
+int *__error(void)
+{
+__ESBMC_HIDE:;
+  return &__esbmc_errno;
+}
+#endif
 
 int pipe(int pipefd[2])
 {

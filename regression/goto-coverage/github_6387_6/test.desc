@@ -1,0 +1,5 @@
+CORE
+main.c
+--multi-property --condition-coverage --k-induction --unwind 6
+^Total Conditions:  8$
+\A(?![\s\S]*VERIFICATION FAILED)[\s\S]*\Z

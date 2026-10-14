@@ -1,4 +1,4 @@
 CORE
 main.py
---incremental-bmc --no-standard-checks --smt-during-symex --smt-symex-guard --bitwuzla
+--incremental-bmc --no-standard-checks --smt-during-symex --bitwuzla
 ^VERIFICATION FAILED$

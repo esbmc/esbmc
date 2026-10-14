@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 12
+^VERIFICATION FAILED$
+ValueError: attempt to assign sequence of different size to extended slice

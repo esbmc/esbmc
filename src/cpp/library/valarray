@@ -2,7 +2,10 @@
 #define STL_VALARRAY
 
 #include "definitions.h"
-#include <initializer_list>
+#include "OM_compiler_defs.h" // OM_NULLPTR
+#if __cplusplus >= 201103L
+#  include <initializer_list>
+#endif
 
 namespace std
 {
@@ -49,7 +52,7 @@ private:
   size_t _ndim;
 
 public:
-  gslice() : _start(0), _lengths(nullptr), _strides(nullptr), _ndim(0)
+  gslice() : _start(0), _lengths(OM_NULLPTR), _strides(OM_NULLPTR), _ndim(0)
   {
   }
   gslice(
@@ -221,7 +224,7 @@ private:
 
 public:
   // Constructors
-  valarray() : _data(nullptr), _size(0)
+  valarray() : _data(OM_NULLPTR), _size(0)
   {
   }
 
@@ -261,6 +264,7 @@ public:
     }
   }
 
+#if __cplusplus >= 201103L
   // C++11 initializer list constructor
   valarray(std::initializer_list<T> il) : _size(il.size())
   {
@@ -271,6 +275,7 @@ public:
       _data[i] = *it;
     }
   }
+#endif
 
   valarray(const slice_array<T> &sub) : _size(sub._size)
   {
@@ -444,11 +449,62 @@ public:
   valarray<T> &operator>>=(const T &val);
 
   // Member functions
-  valarray<T> apply(T func(T)) const;
-  valarray<T> apply(T func(const T &)) const;
-  valarray<T> cshift(int n) const;
-  T max() const;
-  T min() const;
+  valarray<T> apply(T func(T)) const
+  {
+    valarray<T> r(_size);
+    for (size_t i = 0; i < _size; ++i)
+      r[i] = func(_data[i]);
+    return r;
+  }
+
+  valarray<T> apply(T func(const T &)) const
+  {
+    valarray<T> r(_size);
+    for (size_t i = 0; i < _size; ++i)
+      r[i] = func(_data[i]);
+    return r;
+  }
+
+  /* [valarray.members]: cshift rotates, shift fills the vacated positions with
+   * a value-initialised T; a positive n moves elements toward the front. These
+   * five were declared and never defined, so every call returned a
+   * nondeterministic value -- `a.max()` satisfied neither `== 9` nor `!= 9`. */
+  valarray<T> cshift(int n) const
+  {
+    valarray<T> r(_size);
+    if (_size == 0)
+      return r;
+    for (size_t i = 0; i < _size; ++i)
+    {
+      long long k = (long long)i + (long long)n;
+      long long m = (long long)_size;
+      k %= m;
+      if (k < 0)
+        k += m;
+      r[i] = _data[(size_t)k];
+    }
+    return r;
+  }
+
+  T max() const
+  {
+    __ESBMC_assert(_size > 0, "valarray::max on an empty valarray");
+    T m = _data[0];
+    for (size_t i = 1; i < _size; ++i)
+      if (m < _data[i])
+        m = _data[i];
+    return m;
+  }
+
+  T min() const
+  {
+    __ESBMC_assert(_size > 0, "valarray::min on an empty valarray");
+    T m = _data[0];
+    for (size_t i = 1; i < _size; ++i)
+      if (_data[i] < m)
+        m = _data[i];
+    return m;
+  }
 
   // Assignment operators
   valarray<T> &operator=(const valarray<T> &x)
@@ -585,7 +641,16 @@ public:
   indirect_array<T> operator[](const valarray<size_t> &ind);
 
   void resize(size_t sz, T c = T());
-  valarray<T> shift(int n) const;
+  valarray<T> shift(int n) const
+  {
+    valarray<T> r(_size);
+    for (size_t i = 0; i < _size; ++i)
+    {
+      long long k = (long long)i + (long long)n;
+      r[i] = (k >= 0 && k < (long long)_size) ? _data[(size_t)k] : T();
+    }
+    return r;
+  }
 
   size_t size() const
   {

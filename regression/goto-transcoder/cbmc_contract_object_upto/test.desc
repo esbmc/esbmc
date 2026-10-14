@@ -1,0 +1,4 @@
+CORE
+cbmc_contract_object_upto.goto
+--binary --function fill2
+^VERIFICATION SUCCESSFUL$

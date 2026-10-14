@@ -1,7 +1,7 @@
 #include <algorithm>
 #include <set>
 #include <solvers/smt/array_conv.h>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
 #include <utility>
 
 static inline bool array_indexes_are_same(
@@ -20,20 +20,27 @@ static inline bool array_indexes_are_same(
   return true;
 }
 
-array_convt::array_convt(smt_convt *_ctx) : array_iface(true, true), ctx(_ctx)
+array_convt::array_convt(smt_solver_baset *_ctx)
+  : array_iface(true, true), ctx(_ctx)
 {
 }
 
 void array_convt::convert_array_assign(const array_ast *src, smt_astt sym)
 {
   // Implement array assignments by simply making the destination AST track the
-  // same array. No new variables need to be introduced, saving lots of searching
-  // hopefully. This works because we're working with an SSA program where the
-  // source array will never be modified.
+  // same array. No new variables need to be introduced, saving lots of
+  // searching hopefully. This works because we're working with an SSA program
+  // where the source array will never be modified.
 
   // Get a mutable reference to the destination
   array_ast *destination = const_cast<array_ast *>(array_downcast(sym));
   const array_ast *source = src;
+
+  // Copying into a pre-existing destination is only safe while the destination
+  // is current-level: array_fields would otherwise outlive the ASTs it names
+  // once pop_ctx runs, and base_array_id would index the containers
+  // pop_array_ctx resizes. That invariant is the one tuple assign relies on too
+  // (smt_tuple_node_ast.cpp), and it held across 2133 CORE push/pop tests.
 
   // And copy across it's valuation
   destination->array_fields = source->array_fields;
@@ -94,10 +101,6 @@ smt_astt array_convt::mk_array_symbol(
     "Can't create array of arrays with "
     "array flattener. Should be flattened elsewhere");
 
-  // Create either a new bounded or unbounded array.
-  size_t domain_width = ms->get_domain_width();
-  size_t array_size = 1UL << domain_width;
-
   // Create new AST storage
   array_ast *mast = new_ast(ms);
   mast->symname = name;
@@ -119,7 +122,11 @@ smt_astt array_convt::mk_array_symbol(
   }
 
   // For bounded arrays, populate it's storage vector with a bunch of fresh bvs
-  // of the correct sort.
+  // of the correct sort. is_unbounded_array() above guarantees a domain width
+  // <= 10 here, so 1UL << domain_width stays well within range (computing it
+  // before the unbounded check would shift by up to the full index width and
+  // is undefined behaviour once that reaches 64).
+  size_t array_size = 1UL << ms->get_domain_width();
   mast->array_fields.reserve(array_size);
 
   unsigned long i;
@@ -149,7 +156,9 @@ smt_astt array_convt::mk_select(
   {
     const constant_int2t &intref = to_constant_int2t(idx);
     unsigned int intval = intref.value.to_uint64();
-    if (intval > ma->array_fields.size())
+    /* array_fields is indexed 0..size()-1, so an index equal to size() is
+     * already out of range; `>` let it through to an out-of-bounds read. */
+    if (intval >= ma->array_fields.size())
       // Return a fresh value.
       return ctx->mk_fresh(ressort, "array_mk_select_badidx::");
 
@@ -194,7 +203,8 @@ smt_astt array_convt::mk_store(
   {
     const constant_int2t &intref = to_constant_int2t(idx);
     unsigned int intval = intref.value.to_uint64();
-    if (intval > ma->array_fields.size())
+    // Same off-by-one as mk_select, except the access below is a write.
+    if (intval >= ma->array_fields.size())
       return ma;
 
     // Otherwise,
@@ -255,7 +265,16 @@ smt_astt array_convt::mk_unbounded_select(
   {
     if (it->idx == real_idx)
     {
-      // Aha.
+      // Aha -- unless this is still the placeholder inserted below, meaning a
+      // re-entrant select: convert_ast() on the index has led back here before
+      // apply_new_selects() could fill the value in. That entry is what breaks
+      // the cycle, so we must not recurse to compute it. Hand out a free value
+      // and let apply_new_selects() bind it by equality, which it already does
+      // for an entry that arrives pre-filled. Returning the placeholder as-is
+      // handed NULL to callers that use the result immediately, such as
+      // finalize_pointer_chain() (esbmc/esbmc#595).
+      if (it->val == nullptr)
+        it->val = ctx->mk_fresh(ressort, "array_deferred_select::");
       return it->val;
     }
   }
@@ -438,6 +457,19 @@ array_convt::encode_array_equality(const array_ast *a1, const array_ast *a2)
   // Record an equality between two arrays at this point in time. To be
   // implemented at constraint time.
 
+  /* Both operands are resolved through array_valuation[id][update], so this
+   * pair is the identity of an array state, and only an unbounded array
+   * carries one -- a bounded one leaves both fields unset. */
+  assert(is_unbounded_array(a1->sort) && is_unbounded_array(a2->sort));
+
+  /* Same id and update level: the element-wise encoding would compare a
+   * valuation vector with itself, and that vector is empty when the array was
+   * never selected (#6794). */
+  if (
+    a1->base_array_id == a2->base_array_id &&
+    a1->array_update_num == a2->array_update_num)
+    return ctx->mk_smt_bool(true);
+
   struct array_equality e;
   e.arr1_id = a1->base_array_id;
   e.arr2_id = a2->base_array_id;
@@ -459,7 +491,7 @@ array_convt::mk_bounded_array_equality(const array_ast *a1, const array_ast *a2)
 {
   assert(a1->array_fields.size() == a2->array_fields.size());
 
-  smt_convt::ast_vec eqs;
+  smt_solver_baset::ast_vec eqs;
   for (unsigned int i = 0; i < a1->array_fields.size(); i++)
   {
     eqs.push_back(a1->array_fields[i]->eq(ctx, a2->array_fields[i]));
@@ -1043,7 +1075,7 @@ void array_convt::add_array_equality(
   const ast_vect &a1 = array_valuation[arr1_id][arr1_update];
   const ast_vect &a2 = array_valuation[arr2_id][arr2_update];
 
-  smt_convt::ast_vec lits;
+  smt_solver_baset::ast_vec lits;
   assert(start_pos < a1.size());
   for (unsigned int i = start_pos; i < a1.size(); i++)
   {
@@ -1332,7 +1364,8 @@ void array_convt::add_initial_ackerman_constraints(
   }
 }
 
-smt_astt array_ast::eq(smt_convt *ctx [[maybe_unused]], smt_astt sym) const
+smt_astt
+array_ast::eq(smt_solver_baset *ctx [[maybe_unused]], smt_astt sym) const
 {
   const array_ast *other = array_downcast(sym);
 
@@ -1344,26 +1377,28 @@ smt_astt array_ast::eq(smt_convt *ctx [[maybe_unused]], smt_astt sym) const
   return array_ctx->mk_bounded_array_equality(this, other);
 }
 
-void array_ast::assign(smt_convt *ctx [[maybe_unused]], smt_astt sym) const
+void array_ast::assign(smt_solver_baset *ctx [[maybe_unused]], smt_astt sym)
+  const
 {
   array_ctx->convert_array_assign(this, sym);
 }
 
 smt_astt array_ast::update(
-  smt_convt *ctx [[maybe_unused]],
+  smt_solver_baset *ctx [[maybe_unused]],
   smt_astt value,
   unsigned int idx,
-  expr2tc idx_expr) const
+  const expr2tc &idx_expr) const
 {
-  if (is_nil_expr(idx_expr))
-    idx_expr =
-      constant_int2tc(get_uint_type(sort->get_domain_width()), BigInt(idx));
-
-  return array_ctx->mk_store(this, idx_expr, value, sort);
+  const expr2tc &idx_resolved =
+    is_nil_expr(idx_expr)
+      ? constant_int2tc(get_uint_type(sort->get_domain_width()), BigInt(idx))
+      : idx_expr;
+  return array_ctx->mk_store(this, idx_resolved, value, sort);
 }
 
-smt_astt
-array_ast::select(smt_convt *ctx [[maybe_unused]], const expr2tc &idx) const
+smt_astt array_ast::select(
+  smt_solver_baset *ctx [[maybe_unused]],
+  const expr2tc &idx) const
 {
   // Look up the array subtype sort. If we're unbounded, use the base array id
   // to do that, otherwise pull the subtype out of an element.
@@ -1377,7 +1412,7 @@ array_ast::select(smt_convt *ctx [[maybe_unused]], const expr2tc &idx) const
 }
 
 smt_astt array_ast::ite(
-  smt_convt *ctx [[maybe_unused]],
+  smt_solver_baset *ctx [[maybe_unused]],
   smt_astt cond,
   smt_astt falseop) const
 {

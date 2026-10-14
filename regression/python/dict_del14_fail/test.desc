@@ -1,4 +1,4 @@
 CORE
 main.py
---unwind 17
-^  Should have raised KeyError$
+--nondet-str-length 4 --unwind 17
+^  assertion 0: Should have raised KeyError$

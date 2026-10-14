@@ -1,5 +1,6 @@
 KNOWNBUG
 main.c
 --overflow-check --32
+REQUIRES arch32
 ^VERIFICATION FAILED$
 \bdereference failure: NULL pointer\b

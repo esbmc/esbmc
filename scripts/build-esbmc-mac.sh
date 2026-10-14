@@ -51,7 +51,6 @@ CPU_COUNT=$(($(sysctl -n hw.ncpu) + 1))
 
 # Get paths
 PATH_LLVM=$(brew --prefix llvm)
-PATH_SDK=$(xcrun --show-sdk-path)
 PATH_Z3=$(brew --prefix z3)
 
 # Function to install Boolector
@@ -88,7 +87,6 @@ CMAKE_ARGS=(
     -DENABLE_Z3=1
     -DCMAKE_BUILD_TYPE=Debug
     -DZ3_DIR="$PATH_Z3"
-    -DC2GOTO_SYSROOT="$PATH_SDK"
     -DClang_DIR="$PATH_LLVM/lib/cmake/clang"
 )
 

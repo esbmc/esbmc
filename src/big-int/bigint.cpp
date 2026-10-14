@@ -94,7 +94,8 @@ copy:
   return 0;
 }
 
-// Subtract unsigned digit strings, return carry. Assumes l1 >= l2!
+// Subtract unsigned digit strings (r = d1 - d2). Assumes l1 >= l2 and
+// d1 >= d2, so there is no borrow out.
 static void digit_sub(
   onedig_t const *d1,
   unsigned l1,
@@ -994,8 +995,10 @@ void BigInt::div(BigInt const &x, BigInt const &y, BigInt &q, BigInt &r)
   }
   else if (y.length == 1)
   {
-    // This digit_div() transforms the dividend into the quotient.
-    q = y;
+    // digit_div() transforms its first argument (the dividend) into the
+    // quotient in place and returns the remainder, so seed q from the
+    // dividend x, not the divisor y.
+    q = x;
     r.digit[0] = digit_div(q.digit, q.length, y.digit[0]);
     r.length = r.digit[0] ? 1 : 0;
   }

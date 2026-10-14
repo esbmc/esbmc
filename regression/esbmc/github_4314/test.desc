@@ -1,0 +1,6 @@
+CORE
+main.c
+--incremental-bmc --all-witnesses --keep-verified-claims --max-witnesses 2
+^VERIFICATION FAILED$
+\[Counterexamples - [0-9]+ witnesses at k = 3\]
+\[Counterexamples - [0-9]+ witnesses at k = 4\]

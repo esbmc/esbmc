@@ -3,7 +3,7 @@
 
 #include "signal.h"
 template <class T>
-class sc_signal; // pre-declaration of sc_signal
+class sc_signal;
 
 #define sc_out sc_inout
 
@@ -11,7 +11,7 @@ template <class T>
 class sc_inout
 {
 public:
-  sc_inout(){}; //not implemented
+  sc_inout() {}; // not implemented
 
   void write(T arg)
   {

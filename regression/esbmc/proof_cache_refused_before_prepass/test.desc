@@ -1,0 +1,4 @@
+CORE
+main.c
+--proof-cache proof-store --falsify-context-bound 2
+^ERROR: --proof-cache reuses claims one at a time and needs --multi-property$

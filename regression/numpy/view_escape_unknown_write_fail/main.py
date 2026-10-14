@@ -1,0 +1,14 @@
+import numpy as np
+
+calls = 0
+
+
+def register(v):
+    global calls
+    calls = calls + 1
+
+
+a = np.zeros((2, 3), dtype=np.int64)
+row = a[0]
+register(row)
+a[0][0] = 9

@@ -1,0 +1,736 @@
+/// \file
+/// Integration tests for andersent::collect_constraints.
+///
+/// Unlike andersen.test.cpp, which drives the solver from synthetic
+/// constraints, these compile real C through the clang frontend and run the
+/// whole analysis over the resulting goto-functions.
+///
+/// Run just these:
+///   ctest -R "andersen frontend" --output-on-failure
+
+#define CATCH_CONFIG_MAIN
+#include <catch2/catch.hpp>
+
+#include "../testing-utils/goto_factory.h"
+#include <goto-programs/mark_decl_as_non_det.h>
+#include <pointer-analysis/andersen.h>
+#include <irep2/irep2_utils.h>
+
+namespace
+{
+bool ends_with(const std::string &s, const std::string &tail)
+{
+  return s.size() >= tail.size() &&
+         s.compare(s.size() - tail.size(), tail.size(), tail) == 0;
+}
+
+/// Locates the local \p name of function \p func, or a file-scope global when
+/// \p func is empty, so the tests never hard-code a frontend mangling.  Locals
+/// are scoped to one function because the linked libc models contain plenty of
+/// same-named ones; globals are told apart by carrying no `@F@` scope.  The
+/// expression found is the very one the analysis interned, so it is also the
+/// right key to query with.
+expr2tc find_symbol(
+  const goto_functionst &functions,
+  const std::string &func,
+  const std::string &name)
+{
+  const bool global = func.empty();
+  expr2tc found;
+
+  std::function<void(const expr2tc &)> search = [&](const expr2tc &e) {
+    if (is_nil_expr(e) || !is_nil_expr(found))
+      return;
+    if (is_symbol2t(e))
+    {
+      const std::string id = to_symbol2t(e).get_symbol_name();
+      if (
+        global
+          ? ends_with(id, "@" + name) && id.find("@F@") == std::string::npos
+          : ends_with(id, "@" + func + "@" + name))
+        found = e;
+      return;
+    }
+    e->foreach_operand([&search](const expr2tc &op) { search(op); });
+  };
+
+  forall_goto_functions (f_it, functions)
+    if (global || ends_with(f_it->first.as_string(), "@" + func))
+      forall_goto_program_instructions (i_it, f_it->second.body)
+        search(i_it->code);
+
+  return found;
+}
+
+/// The set of pointees the analysis reports for a local, as their symbol
+/// names.  An `unknown` (TOP) target is reported as "*".
+std::set<std::string> targets_of(
+  andersent &a,
+  const goto_functionst &functions,
+  const char *func,
+  const char *name)
+{
+  const expr2tc sym = find_symbol(functions, func, name);
+  REQUIRE(!is_nil_expr(sym));
+
+  value_setst::valuest values;
+  a.get_values(goto_programt::const_targett(), sym, values);
+
+  std::set<std::string> result;
+  for (const expr2tc &v : values)
+  {
+    if (!is_object_descriptor2t(v))
+    {
+      result.insert("*");
+      continue;
+    }
+    const expr2tc &obj = to_object_descriptor2t(v).object;
+    if (is_dynamic_object2t(obj))
+      result.insert("heap");
+    else if (is_symbol2t(obj))
+    {
+      const std::string id = to_symbol2t(obj).get_symbol_name();
+      result.insert(id.substr(id.rfind('@') + 1));
+    }
+    else
+      result.insert("?");
+  }
+  return result;
+}
+
+goto_functionst compile(std::string src)
+{
+  return goto_factory::get_goto_functions(
+           src, goto_factory::Architecture::BIT_64)
+    .functions;
+}
+} // namespace
+
+TEST_CASE("andersen frontend lowers address-of and copy", "[andersen][goto]")
+{
+  std::string src = R"(
+    int a, b;
+    int main(void)
+    {
+      int *p = &a;
+      int *q = p;
+      int *z = &b;
+      return 0;
+    }
+  )";
+
+  goto_functionst functions = compile(src);
+  andersent andersen;
+  andersen(functions);
+
+  REQUIRE(
+    targets_of(andersen, functions, "main", "p") == std::set<std::string>{"a"});
+  REQUIRE(
+    targets_of(andersen, functions, "main", "q") == std::set<std::string>{"a"});
+  REQUIRE(
+    targets_of(andersen, functions, "main", "z") == std::set<std::string>{"b"});
+}
+
+TEST_CASE("andersen frontend lowers load and store", "[andersen][goto]")
+{
+  // The classic mixed example, but expressed as C and lowered by the frontend:
+  // s reads what p points to, and the store through r adds b to p.
+  std::string src = R"(
+    int a, b;
+    int main(void)
+    {
+      int *p = &a;
+      int **r = &p;
+      int *s = *r;
+      *r = &b;
+      return 0;
+    }
+  )";
+
+  goto_functionst functions = compile(src);
+  andersent andersen;
+  andersen(functions);
+
+  REQUIRE(
+    targets_of(andersen, functions, "main", "r") == std::set<std::string>{"p"});
+  REQUIRE(
+    targets_of(andersen, functions, "main", "p") ==
+    std::set<std::string>{"a", "b"});
+  // Flow insensitivity: the store is visible to the earlier load.
+  REQUIRE(
+    targets_of(andersen, functions, "main", "s") ==
+    std::set<std::string>{"a", "b"});
+}
+
+TEST_CASE(
+  "andersen frontend interns one node per allocation site",
+  "[andersen][goto]")
+{
+  std::string src = R"(
+    void *malloc(unsigned long);
+    int main(void)
+    {
+      int *p = (int *)malloc(sizeof(int));
+      int *q = p;
+      return 0;
+    }
+  )";
+
+  goto_functionst functions = compile(src);
+  andersent andersen;
+  andersen(functions);
+
+  REQUIRE(
+    targets_of(andersen, functions, "main", "p") ==
+    std::set<std::string>{"heap"});
+  REQUIRE(
+    targets_of(andersen, functions, "main", "q") ==
+    std::set<std::string>{"heap"});
+}
+
+TEST_CASE("andersen frontend binds arguments and returns", "[andersen][goto]")
+{
+  std::string src = R"(
+    int a;
+    int *id(int *x) { return x; }
+    int main(void)
+    {
+      int *p = &a;
+      int *q = id(p);
+      return 0;
+    }
+  )";
+
+  goto_functionst functions = compile(src);
+  andersent andersen;
+  andersen(functions);
+
+  REQUIRE(
+    targets_of(andersen, functions, "id", "x") == std::set<std::string>{"a"});
+  REQUIRE(
+    targets_of(andersen, functions, "main", "q") == std::set<std::string>{"a"});
+}
+
+TEST_CASE(
+  "andersen frontend treats a callee without a body as symex does",
+  "[andersen][goto]")
+{
+  // Symex gives ext() a fresh result, whose dereference reaches no named
+  // object, and lets it write through none of its arguments.
+  std::string src = R"(
+    int a;
+    int *ext(int **out);
+    int main(void)
+    {
+      int *p = &a;
+      int **r = &p;
+      int *e = ext(r);
+      return 0;
+    }
+  )";
+
+  goto_functionst functions = compile(src);
+  andersent andersen;
+  andersen(functions);
+
+  REQUIRE(
+    targets_of(andersen, functions, "main", "e") ==
+    std::set<std::string>{andersent::nondet_object_name});
+  REQUIRE(
+    targets_of(andersen, functions, "main", "p") == std::set<std::string>{"a"});
+}
+
+TEST_CASE("andersen frontend widens an intrinsic to TOP", "[andersen][goto]")
+{
+  // Symex runs __ESBMC_ functions itself, whatever their body, and those may
+  // write through their arguments.
+  std::string src = R"(
+    int a;
+    int *__ESBMC_ext(int **out);
+    int main(void)
+    {
+      int *p = &a;
+      int **r = &p;
+      int *e = __ESBMC_ext(r);
+      return 0;
+    }
+  )";
+
+  goto_functionst functions = compile(src);
+  andersent andersen;
+  andersen(functions);
+
+  REQUIRE(
+    targets_of(andersen, functions, "main", "e") == std::set<std::string>{"*"});
+  REQUIRE(targets_of(andersen, functions, "main", "p").count("*") == 1);
+}
+
+TEST_CASE(
+  "andersen frontend widens variadic arguments only for va_arg",
+  "[andersen][goto]")
+{
+  // Symex reads an argument past the signature only through a va_arg in the
+  // callee's own frame.
+  std::string src = R"(
+    #include <stdarg.h>
+    int a, b;
+    int ignores(int n, ...)
+    {
+      return n;
+    }
+    int reads(int n, ...)
+    {
+      va_list ap;
+      va_start(ap, n);
+      int **pp = va_arg(ap, int **);
+      va_end(ap);
+      return 0;
+    }
+    int main(void)
+    {
+      int *p = &a;
+      int *q = &b;
+      ignores(1, &p);
+      reads(1, &q);
+      return 0;
+    }
+  )";
+
+  goto_functionst functions = compile(src);
+  andersent andersen;
+  andersen(functions);
+
+  REQUIRE(
+    targets_of(andersen, functions, "main", "p") == std::set<std::string>{"a"});
+  REQUIRE(targets_of(andersen, functions, "main", "q").count("*") == 1);
+}
+
+TEST_CASE(
+  "andersen frontend copies the old object into realloc's",
+  "[andersen][goto]")
+{
+  // Symex copies the old contents into the new object and, on failure,
+  // returns the old pointer.
+  std::string src = R"(
+    #include <stdlib.h>
+    int a;
+    int main(void)
+    {
+      int **p = malloc(sizeof(int *));
+      *p = &a;
+      int **q = realloc(p, sizeof(int *));
+      int *r = *q;
+      return 0;
+    }
+  )";
+
+  goto_functionst functions = compile(src);
+  andersent andersen;
+  andersen(functions);
+
+  REQUIRE(
+    targets_of(andersen, functions, "main", "r") == std::set<std::string>{"a"});
+}
+
+TEST_CASE(
+  "andersen frontend gives an integer constant no object",
+  "[andersen][goto]")
+{
+  // Symex resolves a non-zero integer used as a pointer to an invalid object,
+  // as it does an unconstrained pointer.
+  std::string src = R"(
+    int main(void)
+    {
+      int *c = (int *)0x1000;
+      return 0;
+    }
+  )";
+
+  goto_functionst functions = compile(src);
+  andersent andersen;
+  andersen(functions);
+
+  REQUIRE(
+    targets_of(andersen, functions, "main", "c") ==
+    std::set<std::string>{andersent::nondet_object_name});
+}
+
+TEST_CASE(
+  "andersen frontend tracks a pointer laundered through an integer",
+  "[andersen][goto]")
+{
+  // An integer carries the addresses it is computed from, as long as the
+  // arithmetic stays inside those objects, which the memory model already
+  // assumes.  Dropping the store into x would leave it empty and q would
+  // inherit that empty set.
+  std::string src = R"(
+    int a;
+    int main(void)
+    {
+      int *p = &a;
+      unsigned long x = (unsigned long)p;
+      int *q = (int *)x;
+      return 0;
+    }
+  )";
+
+  goto_functionst functions = compile(src);
+  andersent andersen;
+  andersen(functions);
+
+  REQUIRE(
+    targets_of(andersen, functions, "main", "q") == std::set<std::string>{"a"});
+  // The laundering must not cost precision on the pointer itself.
+  REQUIRE(
+    targets_of(andersen, functions, "main", "p") == std::set<std::string>{"a"});
+}
+
+TEST_CASE(
+  "andersen frontend keeps memory behind an unconstrained pointer inert",
+  "[andersen][goto]")
+{
+  std::string src = R"(
+    void ext(int **);
+    int x;
+    int main(void)
+    {
+      int **p;
+      int **r;
+      *p = &x;
+      ext(r);
+      int *q = *r;
+      int *s = *p;
+      return 0;
+    }
+  )";
+
+  program prog =
+    goto_factory::get_goto_functions(src, goto_factory::Architecture::BIT_64);
+  goto_functionst &functions = prog.functions;
+  mark_decl_as_non_det(prog.context).run(functions);
+  andersent andersen;
+  andersen(functions);
+
+  const std::set<std::string> nondet{andersent::nondet_object_name};
+  REQUIRE(targets_of(andersen, functions, "main", "q") == nondet);
+  REQUIRE(targets_of(andersen, functions, "main", "s") == nondet);
+}
+
+TEST_CASE(
+  "andersen frontend stores through the objects beside the nondet sentinel",
+  "[andersen][goto]")
+{
+  std::string src = R"(
+    int nd(void);
+    int x;
+    int *cell;
+    int main(void)
+    {
+      int c = nd();
+      int **uninit;
+      int **p = c ? &cell : uninit;
+      *p = &x;
+      int *q = cell;
+      int *r = *p;
+      return 0;
+    }
+  )";
+
+  program prog =
+    goto_factory::get_goto_functions(src, goto_factory::Architecture::BIT_64);
+  goto_functionst &functions = prog.functions;
+  mark_decl_as_non_det(prog.context).run(functions);
+  andersent andersen;
+  andersen(functions);
+
+  REQUIRE(
+    targets_of(andersen, functions, "main", "q") == std::set<std::string>{"x"});
+  REQUIRE(
+    targets_of(andersen, functions, "main", "r") ==
+    std::set<std::string>{"x", andersent::nondet_object_name});
+}
+
+TEST_CASE(
+  "andersen frontend gives each call of an allocator its own object",
+  "[andersen][goto]")
+{
+  // wrap is malloc behind two calls, as kzalloc is behind kmalloc and
+  // ldv_malloc: every call returns an object of its own.
+  std::string src = R"(
+    #include <stdlib.h>
+    int x;
+    void *alloc(unsigned long n)
+    {
+      if (n == 0)
+        return 0;
+      void *r = malloc(n);
+      return r;
+    }
+    void *wrap(unsigned long n) { return alloc(n); }
+    int main(void)
+    {
+      int **p = wrap(8);
+      int **q = wrap(8);
+      *p = &x;
+      int *r = *q;
+      int *s = *p;
+      return 0;
+    }
+  )";
+
+  goto_functionst functions = compile(src);
+  andersent andersen;
+  andersen(functions);
+
+  REQUIRE(targets_of(andersen, functions, "main", "r").empty());
+  REQUIRE(
+    targets_of(andersen, functions, "main", "s") == std::set<std::string>{"x"});
+}
+
+TEST_CASE(
+  "andersen frontend shares the object an allocator also keeps",
+  "[andersen][goto]")
+{
+  // keep stores what it allocates in g, so its calls may return the object g
+  // holds: they cannot be told apart.
+  std::string src = R"(
+    #include <stdlib.h>
+    int x;
+    void *g;
+    void *keep(unsigned long n)
+    {
+      void *r = malloc(n);
+      g = r;
+      return r;
+    }
+    int main(void)
+    {
+      int **p = keep(8);
+      int **q = keep(8);
+      *p = &x;
+      int *r = *q;
+      return 0;
+    }
+  )";
+
+  goto_functionst functions = compile(src);
+  andersent andersen;
+  andersen(functions);
+
+  REQUIRE(
+    targets_of(andersen, functions, "main", "r") == std::set<std::string>{"x"});
+}
+
+TEST_CASE(
+  "andersen frontend widens what an OTHER statement writes through",
+  "[andersen][goto]")
+{
+  // The printf family is lowered to an OTHER instruction rather than a call,
+  // so skipping those would claim s still holds the null it was initialised
+  // with -- while asprintf() stores a freshly allocated buffer into it.
+  std::string src = R"(
+    int asprintf(char **, const char *, ...);
+    int main(void)
+    {
+      char *s = 0;
+      asprintf(&s, "%d", 1);
+      return 0;
+    }
+  )";
+
+  goto_functionst functions = compile(src);
+  andersent andersen;
+  andersen(functions);
+
+  REQUIRE(
+    targets_of(andersen, functions, "main", "s") == std::set<std::string>{"*"});
+}
+
+TEST_CASE(
+  "andersen frontend is field- and index-insensitive",
+  "[andersen][goto]")
+{
+  std::string src = R"(
+    int a, b;
+    struct s { int *f; int *g; };
+    int main(void)
+    {
+      struct s v;
+      int *arr[4];
+      v.f = &a;
+      v.g = &b;
+      arr[2] = &a;
+      int *p = v.f;
+      int *q = arr[0];
+      return 0;
+    }
+  )";
+
+  goto_functionst functions = compile(src);
+  andersent andersen;
+  andersen(functions);
+
+  // Both fields fold onto v, so reading either yields the union.
+  REQUIRE(
+    targets_of(andersen, functions, "main", "p") ==
+    std::set<std::string>{"a", "b"});
+  REQUIRE(
+    targets_of(andersen, functions, "main", "q") == std::set<std::string>{"a"});
+}
+
+TEST_CASE(
+  "andersen frontend resolves calls through function pointers",
+  "[andersen][goto]")
+{
+  // fp reaches both foo and bar, so the argument must flow into both formals
+  // and out through g.  Leaving the formals empty would claim g aliases
+  // nothing, which is an under-approximation: at run time g == &a.
+  std::string src = R"(
+    int a;
+    int *g;
+    void foo(int *x) { g = x; }
+    void bar(int *y) { g = y; }
+    int main(void)
+    {
+      void (*fp)(int *) = foo;
+      if (a) fp = bar;
+      fp(&a);
+      return 0;
+    }
+  )";
+
+  goto_functionst functions = compile(src);
+  andersent andersen;
+  andersen(functions);
+
+  REQUIRE(
+    targets_of(andersen, functions, "main", "fp") ==
+    std::set<std::string>{"foo", "bar"});
+  REQUIRE(
+    targets_of(andersen, functions, "foo", "x") == std::set<std::string>{"a"});
+  REQUIRE(
+    targets_of(andersen, functions, "bar", "y") == std::set<std::string>{"a"});
+  REQUIRE(
+    targets_of(andersen, functions, "", "g") == std::set<std::string>{"a"});
+}
+
+TEST_CASE(
+  "andersen frontend widens an unknown function pointer",
+  "[andersen][goto]")
+{
+  // Nothing says what fp points to, so every callee is possible: the result
+  // must be TOP rather than an empty set.
+  std::string src = R"(
+    int a;
+    int *g;
+    void (*volatile ext_fp)(int *);
+    int main(void)
+    {
+      void (*fp)(int *) = ext_fp;
+      int *p = &a;
+      fp(p);
+      return 0;
+    }
+  )";
+
+  goto_functionst functions = compile(src);
+  andersent andersen;
+  andersen(functions);
+
+  // p's pointee must be assumed clobbered by the unknown callee.
+  REQUIRE(targets_of(andersen, functions, "", "a").count("*") == 1);
+}
+
+TEST_CASE(
+  "andersen widens the target of an assignment with no source",
+  "[andersen][goto]")
+{
+  std::string src = R"(
+    int a;
+    int main(void)
+    {
+      int *p = &a;
+      int *q = p;
+      return 0;
+    }
+  )";
+
+  // q = p gives p a node, so dropping the assignment would leave it empty
+  // rather than unknown.
+  goto_functionst functions = compile(src);
+  for (auto &f : functions.function_map)
+    for (auto &i : f.second.body.instructions)
+      if (i.is_assign() && is_address_of2t(to_code_assign2t(i.code).source))
+        i.code = code_assign2tc(to_code_assign2t(i.code).target, expr2tc());
+
+  andersent andersen;
+  andersen(functions);
+
+  REQUIRE(targets_of(andersen, functions, "main", "p").count("*") == 1);
+}
+
+TEST_CASE(
+  "andersen frontend dereferences indexed and member accesses",
+  "[andersen][goto]")
+{
+  // Each of these reaches the object a pointer points to, not the pointer:
+  // dropping one would leave a points-to set too small, which is unsound.
+  std::string src = R"(
+    int a, b, c;
+    struct s
+    {
+      int *f;
+    } g;
+    int main(void)
+    {
+      int *p0 = &a;
+      int **pp = &p0;
+      pp[0] = &b;
+      *(pp + 0) = &c;
+      struct s *sp = &g;
+      g.f = &a;
+      int *x = sp->f;
+      int **y = &sp->f;
+      return 0;
+    }
+  )";
+
+  goto_functionst functions = compile(src);
+  andersent andersen;
+  andersen(functions);
+
+  REQUIRE(
+    targets_of(andersen, functions, "main", "p0") ==
+    std::set<std::string>{"a", "b", "c"});
+  REQUIRE(
+    targets_of(andersen, functions, "", "g") == std::set<std::string>{"a"});
+  REQUIRE(
+    targets_of(andersen, functions, "main", "x") == std::set<std::string>{"a"});
+  REQUIRE(
+    targets_of(andersen, functions, "main", "y") == std::set<std::string>{"g"});
+}
+
+TEST_CASE(
+  "andersen frontend follows an address through integer arithmetic",
+  "[andersen][goto]")
+{
+  // CIL writes field accesses as `*(T *)((unsigned long)p + off)`: the
+  // integer still points into p's object, and an empty set would be unsound.
+  std::string src = R"(
+    int b[2];
+    int main(void)
+    {
+      long zero = 0;
+      long addr = (long)&b[0] + zero;
+      int *q = (int *)addr;
+      return 0;
+    }
+  )";
+
+  goto_functionst functions = compile(src);
+  andersent andersen;
+  andersen(functions);
+
+  REQUIRE(
+    targets_of(andersen, functions, "main", "q") == std::set<std::string>{"b"});
+}

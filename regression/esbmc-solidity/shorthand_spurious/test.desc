@@ -1,0 +1,6 @@
+CORE
+contract.solast
+--sol contract.sol --contract Base --symbol-table-only
+^shx=1;$
+^shy=shx;$
+^sol:@Base=&"Base"\[0\];$

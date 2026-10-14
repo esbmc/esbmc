@@ -1,0 +1,6 @@
+CORE
+main.c
+--incremental-bmc --multi-property --max-k-step 6
+^Unable to prove or falsify the program, giving up\.$
+^VERIFICATION UNKNOWN$
+\A(?![\s\S]*VERIFICATION FAILED)[\s\S]*\Z

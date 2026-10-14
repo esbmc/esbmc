@@ -1,0 +1,5 @@
+CORE
+main.py
+--incremental-bmc
+^  assertion !\(ISNONE\(r, 0\)\)$
+^VERIFICATION FAILED$

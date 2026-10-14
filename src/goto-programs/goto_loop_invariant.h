@@ -3,18 +3,38 @@
 
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/goto_loops.h>
-#include <util/guard.h>
-#include <util/context.h>
+#include <irep2/irep2_guard.h>
+#include <util/symtab/context.h>
 #include <irep2/irep2_expr.h>
 #include <set>
 #include <unordered_set>
 #include <vector>
 
-// Forward declaration: full definition is in frame_enforcer.h (included in .cpp)
+/// Property tag that goto_synthesise_loop_invariants stamps on the
+/// LOOP_INVARIANT markers it emits. The extractor here accepts a tagged marker
+/// only when it sits immediately before the loop head it is being extracted
+/// for; a user-written __ESBMC_loop_invariant carries no tag and keeps the
+/// looser proximity rule. Without the tag the two passes share nothing but a
+/// 10-instruction window, and a synthesised invariant silently attaches itself
+/// to whichever loop happens to be nearby.
+extern const char *const kSynthesisedInvariantProperty;
+
+namespace loop_invariant
+{
+/// Instructions with no effect a caller needs to account for: no write to a
+/// tracked variable, no control-flow or heap/external effect. Shared by two
+/// scans that both need exactly this and nothing more -- the window between a
+/// synthesised marker and the loop head it was emitted for, and
+/// goto_invariant_synthesis's reading of a loop body.
+bool is_inert_scan_instruction(goto_programt::const_targett t);
+} // namespace loop_invariant
+
+// Forward declaration: full definition is in frame_enforcer.h (included in
+// .cpp)
 class frame_enforcert;
 
 /// \brief Entry point: process loop invariants for all functions.
-/// When use_frame_rule is true, enables the Operational Frame Rule
+/// When use_frame_rule is true, enables the observational frame rule
 /// (Snapshot → Havoc → Assume) for enhanced inductive verification.
 void goto_loop_invariant(
   goto_functionst &goto_functions,
@@ -39,6 +59,17 @@ void goto_loop_invariant_combined(goto_functionst &goto_functions);
 class goto_loop_invariantt : public goto_loopst
 {
 public:
+  /// Maximum number of instructions to search backwards from the loop head
+  /// when locating the LOOP_INVARIANT instruction.  A typical for-loop init
+  /// (DECL + ASSIGN for the counter) contributes 2 steps, leaving ample room
+  /// for up to ~4 extra declarations before the invariant.  This is the only
+  /// definition: goto_loop_invariant.cpp's free functions name it qualified,
+  /// so extract_invariants_near, extract_loop_assigns and
+  /// extract_and_remove_side_effects search the same window, and so does
+  /// goto_synthesise_loop_invariants when deciding whether a loop already
+  /// carries a user-written invariant.
+  static constexpr size_t kMaxInvariantSearchBack = 10;
+
   goto_loop_invariantt(
     const irep_idt &_function_name,
     goto_functionst &_goto_functions,
@@ -63,15 +94,13 @@ protected:
   /// convert_loop_with_invariant after insert_inductive_step_and_termination.
   frame_enforcert *active_frame_enforcer = nullptr;
   /// Assigns targets for the current loop (mirrors loop_assigns passed to
-  /// insert_havoc_and_assume_before_condition, kept for use in the ASSERT step).
+  /// insert_havoc_and_assume_before_condition, kept for use in the ASSERT
+  /// step).
   std::vector<expr2tc> active_loop_assigns;
-  /// Maximum number of instructions to search backwards from the loop head
-  /// when locating the LOOP_INVARIANT instruction.  A typical for-loop init
-  /// (DECL + ASSIGN for the counter) contributes 2 steps, leaving ample room
-  /// for up to ~4 extra declarations before the invariant.  Both
-  /// extract_loop_invariants and extract_and_remove_side_effects use this
-  /// same limit so their searches are consistent.
-  static constexpr size_t kMaxInvariantSearchBack = 10;
+  /// Largest pointee, in bits, the havoc will cover. Measured on
+  /// quantified_array_invariant: 128 bits is free, 4096 costs eight seconds and
+  /// 16384 nine minutes.
+  static constexpr unsigned kMaxHavocPointeeBits = 1024;
 
   void goto_loop_invariant();
 
@@ -104,13 +133,26 @@ protected:
     const std::vector<expr2tc> &invariants,
     const goto_programt &side_effects);
 
-  // Insert HAVOC and ASSUME before loop condition (inserts side_effects
-  // between the HAVOC block and the ASSUME).
+  static type2tc havoc_pointee_type(const expr2tc &ptr, const namespacet &ns);
+
+  /// False when a pointee the loop writes is out of the havoc's reach, which
+  /// leaves the loop to the unwinder.
+  bool pointees_havocable(const loopst &loop) const;
+
+  // Insert HAVOC and ASSUME at \p loop_head, which must be the loop head's own
+  // instruction, so that everything the guard evaluates runs after the havoc
+  // (inserts side_effects between the HAVOC block and the ASSUME).
   // side_effects is non-const: if frame rule is active, old_snapshot assigns
   // are patched in-place so insert_inductive_step_and_termination (called
   // after this) sees the patched version too.
+  /// Havoc the objects the loop writes through a pointer.
+  void havoc_pointees(
+    const loopst &loop,
+    const locationt &loc,
+    goto_programt &dest) const;
+
   void insert_havoc_and_assume_before_condition(
-    goto_programt::targett &loop_head,
+    goto_programt::targett loop_head,
     const loopst &loop,
     const std::vector<expr2tc> &invariants,
     const std::vector<expr2tc> &loop_assigns,
@@ -141,17 +183,14 @@ protected:
  *   ASSUME(INV)
  *   ASSUME(loop_entry_cond)
  *   <copy of one loop-body iteration>
- *   ASSERT(INV)          [step case – tagged property="invariant-inductive-step"]
- *   ASSUME(false)        [terminate Branch 1 – never fall through]
- *   original_loop_head:  [unchanged; k-induction will transform this]
+ *   ASSERT(INV)          [step case – tagged
+ * property="invariant-inductive-step"] ASSUME(false)        [terminate Branch 1
+ * – never fall through] original_loop_head:  [unchanged; k-induction will
+ * transform this]
  *
  * The branch uses std::list::splice() rather than insert_swap() so that
  * existing backward-GOTO targets (which point to original_loop_head) are
  * not disturbed.
- *
- * Loops whose bodies contain forward GOTOs that jump outside the loop are
- * skipped (too complex to copy safely); they fall back to the ASSUME-only
- * k-induction acceleration provided by goto_k_inductiont.
  */
 class goto_loop_invariant_combinedt : public goto_loopst
 {
@@ -173,15 +212,15 @@ private:
   void insert_invariant_verification_branch(loopst &loop);
 
   /**
-   * Copy the loop body instructions (from the instruction immediately after
-   * @p loop_head up to, but not including, @p loop_exit) into @p out.
-   *
-   * Returns false and leaves @p out empty when the loop body contains a
-   * forward GOTO whose target is outside the loop body – such loops are too
-   * complex to inline safely and Branch 1 is skipped for them.
+   * Copy the loop body instructions (from @p body_begin up to, but not
+   * including, @p loop_exit) into @p out. Intra-loop jump targets are remapped
+   * to the copied instructions; targets outside the loop are left unchanged.
+   * @p body_begin is the instruction after the loop head when the head is the
+   * loop's guard, which ASSUME(entry_cond) models instead, and the head itself
+   * otherwise -- a do-while head is a body instruction (issue #7494).
    */
   void copy_loop_body(
-    goto_programt::targett loop_head,
+    goto_programt::targett body_begin,
     goto_programt::targett loop_exit,
     goto_programt &out) const;
 };

@@ -1,0 +1,7 @@
+CORE
+main.c
+--dead-code-check
+^\[Dead code\]$
+:9: dead code: unreachable branch
+^  CWE: CWE-561$
+^VERIFICATION SUCCESSFUL$

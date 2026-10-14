@@ -8,14 +8,14 @@
 
 #include <solidity-frontend/solidity_convert.h>
 #include <solidity-frontend/typecast.h>
-#include <util/arith_tools.h>
-#include <util/bitvector.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/mp_arith.h>
-#include <util/std_expr.h>
-#include <util/message.h>
+#include <util/arith/arith_tools.h>
+#include <util/arith/bitvector.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
+#include <util/arith/mp_arith.h>
+#include <util/irep/std_expr.h>
+#include <util/message/message.h>
 #include <fstream>
 
 void solidity_convertert::get_mapping_inf_arr_name(
@@ -69,7 +69,7 @@ bool solidity_convertert::build_mapping_t_init_value(
     arr_s.file_local = true;
     arr_s.lvalue = true;
     auto &add_added_s = *move_symbol_to_context(arr_s);
-    add_added_s.value = gen_zero(get_complete_type(arr_t, ns), true);
+    add_added_s.set_value(gen_zero(get_complete_type(arr_t, ns), true));
   }
 
   const symbolt *arr_sym = context.find_symbol(arr_id);
@@ -79,7 +79,7 @@ bool solidity_convertert::build_mapping_t_init_value(
     return true;
   }
 
-  typet map_t = context.find_symbol(lib_prefix + "mapping_t")->type;
+  typet map_t = context.find_symbol(lib_prefix + "mapping_t")->get_type();
   assert(map_t.is_struct());
 
   exprt inits = gen_zero(map_t);
@@ -117,9 +117,9 @@ bool solidity_convertert::build_mapping_t_init_value(
 }
 
 /**
-	@target: target index access child json
-	return true if it's a mapping_set, including assign, assign+, tuple assign...
-	otherwise return false, representing mapping_get
+  @target: target index access child json
+  return true if it's a mapping_set, including assign, assign+, tuple assign...
+  otherwise return false, representing mapping_get
 */
 bool solidity_convertert::is_mapping_set_lvalue(const nlohmann::json &target)
 {
@@ -136,14 +136,16 @@ bool solidity_convertert::get_mapping_key_value_type(
   SolidityGrammar::SolType &val_sol_type)
 {
   assert(map_node.contains("typeName"));
-  if (get_type_description(
-        map_node["typeName"]["keyType"]["typeDescriptions"], key_t))
+  if (
+    get_type_description(
+      map_node["typeName"]["keyType"]["typeDescriptions"], key_t))
   {
     log_error("cannot get mapping key type");
     return true;
   }
-  if (get_type_description(
-        map_node["typeName"]["valueType"]["typeDescriptions"], value_t))
+  if (
+    get_type_description(
+      map_node["typeName"]["valueType"]["typeDescriptions"], value_t))
   {
     log_error("cannot get mapping value type");
     return true;
@@ -162,7 +164,7 @@ void solidity_convertert::get_bytesN_size(
   const exprt &src_expr,
   exprt &len_expr)
 {
-  std::string byte_size = src_expr.type().get("#sol_bytesn_size").as_string();
+  std::string byte_size = get_sol_bytesn_size(src_expr.type());
   if (!byte_size.empty())
     len_expr = from_integer(std::stoul(byte_size), size_type());
   else
@@ -891,7 +893,7 @@ bool solidity_convertert::get_new_mapping_index_access(
     get_call.arguments().push_back(address_of_exprt(array));
     get_call.arguments().push_back(pos);
     solidity_gen_typecast(ns, get_call, aux_type);
-    added_sym.value = get_call;
+    added_sym.set_value(migrate_expr(get_call));
     decl.operands().push_back(get_call);
     move_to_front_block(decl);
 
@@ -952,7 +954,7 @@ bool solidity_convertert::get_new_mapping_index_access(
     get_aux_var(aux_name, aux_id);
     symbolt aux_sym;
     std::string debug_modulename = get_modulename_from_path(absolute_path);
-    typet aux_type = value_t; // struct *
+    typet aux_type = value_t; // struct value
     get_default_symbol(
       aux_sym, debug_modulename, aux_type, aux_name, aux_id, location);
     aux_sym.file_local = true;
@@ -975,7 +977,7 @@ bool solidity_convertert::get_new_mapping_index_access(
       value_t, struct_contract_name, call, map_struct_get);
 
     // struct temp = map_users_get(&array, pos);
-    added_sym.value = map_struct_get;
+    added_sym.set_value(map_struct_get);
     decl.operands().push_back(map_struct_get);
     move_to_front_block(decl);
 
@@ -1126,7 +1128,7 @@ void solidity_convertert::get_mapping_struct_function(
     temp_call.arguments()[i] = symbol_expr(*ps);
   }
   solidity_gen_typecast(ns, temp_call, aux_type);
-  added_sym.value = temp_call;
+  added_sym.set_value(temp_call);
   decl.operands().push_back(temp_call);
   // move to func body
   func_body.operands().push_back(decl);
@@ -1154,7 +1156,7 @@ void solidity_convertert::get_mapping_struct_function(
   code_declt decl2(symbol_expr(added_sym2));
   // zero value
   exprt inits = gen_zero(get_complete_type(aux_type2, ns), true);
-  added_sym2.value = inits;
+  added_sym2.set_value(inits);
   decl2.operands().push_back(inits);
   // move to func body
   func_body.operands().push_back(decl2);
@@ -1172,7 +1174,7 @@ void solidity_convertert::get_mapping_struct_function(
   ret.return_value() = if_expr;
   func_body.operands().push_back(ret);
 
-  func_sym.value = func_body;
+  func_sym.set_value(func_body);
 
   // func call
   call.function() = symbol_expr(func_sym);
@@ -1183,7 +1185,8 @@ void solidity_convertert::get_mapping_struct_function(
 }
 
 // invoking a function in the library
-// note that the function symbol might not be inside the symbol table at the moment
+// note that the function symbol might not be inside the symbol table at the
+// moment
 void solidity_convertert::get_library_function_call_no_args(
   const std::string &func_name,
   const std::string &func_id,

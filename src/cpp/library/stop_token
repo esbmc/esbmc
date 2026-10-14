@@ -1,0 +1,385 @@
+#ifndef ESBMC_STOP_TOKEN
+#define ESBMC_STOP_TOKEN
+
+// C++20 header (#7797). libc++ ships it in every language mode and expands it
+// to nothing in an older one, so an unconditional include still compiles
+// (#3387).
+//
+// The shared state is reference counted and guarded by an ESBMC pthread mutex,
+// like <mutex> (#6319). Callbacks run inside request_stop() while that mutex is
+// held, so a callback that touches its own stop_source deadlocks here where
+// [stopcallback.cons] says it may not; every other ordering [stoptoken.syn]
+// specifies is modelled.
+//
+// Not modelled: jthread, which lives in <thread> and has no stop_token
+// integration yet.
+#if __cplusplus >= 202002L
+
+#  include <pthread.h>
+#  include "cstddef"
+#  include "utility"
+
+namespace std
+{
+struct nostopstate_t
+{
+  explicit nostopstate_t() = default;
+};
+
+inline constexpr nostopstate_t nostopstate{};
+
+namespace __stop_detail
+{
+// Type-erased callback: stop_callback<C> derives and runs its own C.
+struct callback_node
+{
+  callback_node *__next;
+
+  callback_node() : __next(nullptr)
+  {
+  }
+  virtual ~callback_node()
+  {
+  }
+  virtual void __run() = 0;
+};
+
+struct state
+{
+  pthread_mutex_t __m;
+  bool __requested;
+  // Tokens and sources together keep the state alive; sources alone decide
+  // stop_possible() ([stoptoken.mem]).
+  long __uses;
+  long __sources;
+  callback_node *__callbacks;
+
+  state() : __requested(false), __uses(1), __sources(0), __callbacks(nullptr)
+  {
+    pthread_mutex_init(&__m, nullptr);
+  }
+
+  ~state()
+  {
+    pthread_mutex_destroy(&__m);
+  }
+
+  void __acquire()
+  {
+    pthread_mutex_lock(&__m);
+    ++__uses;
+    pthread_mutex_unlock(&__m);
+  }
+
+  // Returns true when the caller dropped the last use and must delete this.
+  bool __release()
+  {
+    pthread_mutex_lock(&__m);
+    long left = --__uses;
+    pthread_mutex_unlock(&__m);
+    return left == 0;
+  }
+
+  bool __stop_requested()
+  {
+    pthread_mutex_lock(&__m);
+    bool r = __requested;
+    pthread_mutex_unlock(&__m);
+    return r;
+  }
+
+  bool __stop_possible()
+  {
+    pthread_mutex_lock(&__m);
+    bool p = __requested || __sources > 0;
+    pthread_mutex_unlock(&__m);
+    return p;
+  }
+
+  bool __request_stop()
+  {
+    pthread_mutex_lock(&__m);
+    if (__requested)
+    {
+      pthread_mutex_unlock(&__m);
+      return false;
+    }
+    __requested = true;
+    for (callback_node *n = __callbacks; n != nullptr; n = n->__next)
+      n->__run();
+    __callbacks = nullptr;
+    pthread_mutex_unlock(&__m);
+    return true;
+  }
+
+  // Registers n unless stop was already requested, in which case the caller
+  // runs it itself ([stopcallback.cons]).
+  bool __add_callback(callback_node *n)
+  {
+    pthread_mutex_lock(&__m);
+    if (__requested)
+    {
+      pthread_mutex_unlock(&__m);
+      return false;
+    }
+    n->__next = __callbacks;
+    __callbacks = n;
+    pthread_mutex_unlock(&__m);
+    return true;
+  }
+
+  void __remove_callback(callback_node *n)
+  {
+    pthread_mutex_lock(&__m);
+    callback_node **link = &__callbacks;
+    while (*link != nullptr && *link != n)
+      link = &(*link)->__next;
+    if (*link == n)
+      *link = n->__next;
+    pthread_mutex_unlock(&__m);
+  }
+};
+
+inline void __drop(state *s)
+{
+  if (s != nullptr && s->__release())
+    delete s;
+}
+
+} // namespace __stop_detail
+
+class stop_source;
+
+template <class Callback>
+class stop_callback;
+
+class stop_token
+{
+  __stop_detail::state *__state;
+
+  friend class stop_source;
+  template <class Callback>
+  friend class stop_callback;
+
+  explicit stop_token(__stop_detail::state *s) : __state(s)
+  {
+    if (__state != nullptr)
+      __state->__acquire();
+  }
+
+public:
+  stop_token() noexcept : __state(nullptr)
+  {
+  }
+
+  stop_token(const stop_token &other) noexcept : __state(other.__state)
+  {
+    if (__state != nullptr)
+      __state->__acquire();
+  }
+
+  stop_token(stop_token &&other) noexcept : __state(other.__state)
+  {
+    other.__state = nullptr;
+  }
+
+  ~stop_token()
+  {
+    __stop_detail::__drop(__state);
+  }
+
+  stop_token &operator=(const stop_token &other) noexcept
+  {
+    if (this != &other)
+    {
+      if (other.__state != nullptr)
+        other.__state->__acquire();
+      __stop_detail::__drop(__state);
+      __state = other.__state;
+    }
+    return *this;
+  }
+
+  stop_token &operator=(stop_token &&other) noexcept
+  {
+    if (this != &other)
+    {
+      __stop_detail::__drop(__state);
+      __state = other.__state;
+      other.__state = nullptr;
+    }
+    return *this;
+  }
+
+  void swap(stop_token &other) noexcept
+  {
+    __stop_detail::state *tmp = __state;
+    __state = other.__state;
+    other.__state = tmp;
+  }
+
+  bool stop_requested() const noexcept
+  {
+    return __state != nullptr && __state->__stop_requested();
+  }
+
+  bool stop_possible() const noexcept
+  {
+    return __state != nullptr && __state->__stop_possible();
+  }
+
+  friend bool operator==(const stop_token &a, const stop_token &b) noexcept
+  {
+    return a.__state == b.__state;
+  }
+};
+
+class stop_source
+{
+  __stop_detail::state *__state;
+
+  void __add_source()
+  {
+    pthread_mutex_lock(&__state->__m);
+    ++__state->__sources;
+    pthread_mutex_unlock(&__state->__m);
+  }
+
+public:
+  stop_source() : __state(new __stop_detail::state())
+  {
+    __state->__sources = 1;
+  }
+
+  explicit stop_source(nostopstate_t) noexcept : __state(nullptr)
+  {
+  }
+
+  stop_source(const stop_source &other) noexcept : __state(other.__state)
+  {
+    if (__state != nullptr)
+    {
+      __state->__acquire();
+      __add_source();
+    }
+  }
+
+  stop_source(stop_source &&other) noexcept : __state(other.__state)
+  {
+    other.__state = nullptr;
+  }
+
+  ~stop_source()
+  {
+    if (__state != nullptr)
+    {
+      pthread_mutex_lock(&__state->__m);
+      --__state->__sources;
+      pthread_mutex_unlock(&__state->__m);
+      __stop_detail::__drop(__state);
+    }
+  }
+
+  stop_source &operator=(const stop_source &other) noexcept
+  {
+    if (this != &other)
+    {
+      stop_source tmp(other);
+      swap(tmp);
+    }
+    return *this;
+  }
+
+  stop_source &operator=(stop_source &&other) noexcept
+  {
+    if (this != &other)
+    {
+      stop_source tmp(static_cast<stop_source &&>(other));
+      swap(tmp);
+    }
+    return *this;
+  }
+
+  void swap(stop_source &other) noexcept
+  {
+    __stop_detail::state *tmp = __state;
+    __state = other.__state;
+    other.__state = tmp;
+  }
+
+  stop_token get_token() const noexcept
+  {
+    return stop_token(__state);
+  }
+
+  bool stop_possible() const noexcept
+  {
+    return __state != nullptr;
+  }
+
+  bool stop_requested() const noexcept
+  {
+    return __state != nullptr && __state->__stop_requested();
+  }
+
+  bool request_stop() noexcept
+  {
+    return __state != nullptr && __state->__request_stop();
+  }
+
+  friend bool operator==(const stop_source &a, const stop_source &b) noexcept
+  {
+    return a.__state == b.__state;
+  }
+};
+
+template <class Callback>
+class stop_callback : private __stop_detail::callback_node
+{
+  __stop_detail::state *__state;
+  Callback __cb;
+  bool __registered;
+
+  void __run() override
+  {
+    __cb();
+  }
+
+public:
+  using callback_type = Callback;
+
+  template <class C>
+  explicit stop_callback(const stop_token &st, C &&cb)
+    : __state(st.__state), __cb(static_cast<C &&>(cb)), __registered(false)
+  {
+    if (__state == nullptr)
+      return;
+    __state->__acquire();
+    __registered = __state->__add_callback(this);
+    // Already requested: [stopcallback.cons] runs the callback right here, on
+    // the constructing thread.
+    if (!__registered)
+      __cb();
+  }
+
+  ~stop_callback()
+  {
+    if (__state == nullptr)
+      return;
+    if (__registered)
+      __state->__remove_callback(this);
+    __stop_detail::__drop(__state);
+  }
+
+  stop_callback(const stop_callback &) = delete;
+  stop_callback &operator=(const stop_callback &) = delete;
+};
+
+template <class Callback>
+stop_callback(stop_token, Callback) -> stop_callback<Callback>;
+
+} // namespace std
+
+#endif // __cplusplus >= 202002L
+
+#endif // ESBMC_STOP_TOKEN

@@ -1,4 +1,6 @@
 CORE
 main.c
---overflow-check --64
+--overflow-check --64 --incremental-bmc
+^Violated property:$
+dereference failure: NULL pointer
 ^VERIFICATION FAILED$

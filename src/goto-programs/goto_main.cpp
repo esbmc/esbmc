@@ -1,5 +1,5 @@
 #include <goto-programs/goto_convert_class.h>
-#include <util/rename.h>
+#include <util/symtab/rename.h>
 
 void goto_convertt::new_name(symbolt &symbol)
 {
@@ -28,5 +28,5 @@ void goto_convert(contextt &context, optionst &options, goto_programt &dest)
     throw "failed to find main symbol";
 
   log_status("goto_convert : start converting symbol table to goto functions ");
-  ::goto_convert(to_code(s->value), context, options, dest);
+  ::goto_convert(to_code(s->get_value()), context, options, dest);
 }

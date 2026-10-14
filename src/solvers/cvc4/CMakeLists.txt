@@ -3,13 +3,10 @@ set(CVC4_MIN_VERSION "1.6")
 if(DEFINED CVC4_DIR)
     set(ENABLE_CVC4 ON)
 
-elseif(EXISTS $ENV{HOME}/cvc4)
-    set(ENABLE_CVC4 ON)
-
 else()
     if(ENABLE_CVC4 AND DOWNLOAD_DEPENDENCIES)
         # TODO: Replace this file when we go for CVC5!
-        CPMAddPackage(
+        cpmaddpackage(
             NAME cvc5
             DOWNLOAD_ONLY YES
             GITHUB_REPOSITORY cvc5/cvc5
@@ -40,9 +37,8 @@ if(ENABLE_CVC4)
 
     add_library(solvercvc4 cvc_conv.cpp)
     target_include_directories(solvercvc4
-            PRIVATE ${Boost_INCLUDE_DIRS}
             PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-    target_link_libraries(solvercvc4 fmt::fmt "CVC4::cvc4")
+    target_link_libraries(solvercvc4 PUBLIC esbmc_common fmt::fmt "CVC4::cvc4")
 
     # Add to solver link
     target_link_libraries(solvers INTERFACE solvercvc4)

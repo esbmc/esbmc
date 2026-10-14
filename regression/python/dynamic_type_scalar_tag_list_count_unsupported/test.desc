@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: this list operation on a dynamically-typed element is not yet supported$

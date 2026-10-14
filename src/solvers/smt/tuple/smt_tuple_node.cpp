@@ -1,10 +1,10 @@
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <solvers/smt/tuple/smt_tuple.h>
 #include <solvers/smt/tuple/smt_tuple_node_ast.h>
 #include <solvers/smt/tuple/smt_tuple_node.h>
 #include <sstream>
-#include <util/base_type.h>
-#include <util/c_types.h>
+#include <util/expr/base_type.h>
+#include <util/lang/c_types.h>
 
 smt_astt smt_tuple_node_flattener::tuple_create(const expr2tc &structdef)
 {
@@ -114,14 +114,15 @@ smt_astt smt_tuple_node_flattener::mk_tuple_array_symbol(const expr2tc &expr)
   smt_sortt tsort = ctx->convert_sort(leaf);
   tuple_node_smt_ast *result = new tuple_node_smt_ast(*this, ctx, tsort, name);
 
-  const struct_union_data &strct = ctx->get_type_def(leaf);
-  result->elements.resize(strct.members.size());
+  const std::vector<type2tc> &leaf_members = struct_union_members(leaf);
+  result->elements.resize(leaf_members.size());
 
   unsigned int i = 0;
-  for (auto const &it : strct.members)
+  for (auto const &it : leaf_members)
   {
     type2tc fld_arr_type = rebuild_array_leaf(sym.type, it);
-    std::string fname = name + "." + strct.member_names[i].as_string();
+    std::string fname =
+      name + "." + struct_union_member_names(leaf)[i].as_string();
     result->elements[i] =
       ctx->convert_ast(symbol2tc(fld_arr_type, irep_idt(fname)));
     i++;
@@ -142,7 +143,7 @@ smt_astt smt_tuple_node_flattener::tuple_array_create(
   // index. Ignore infinite arrays, they're "not for you".
   // XXX - probably more efficient to update each member array, but not now.
   smt_sortt sort = ctx->convert_sort(array_type);
-  smt_sortt subtype = ctx->convert_sort(get_array_subtype(array_type));
+  smt_sortt subtype = ctx->convert_sort(to_array_type(array_type).subtype);
 
   // Optimize the creation of a const array.
   if (const_array)
@@ -194,21 +195,21 @@ expr2tc smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
 {
   // XXX - what's the correct type to return here.
   std::vector<expr2tc> outmem;
-  const struct_union_data &strct =
-    ctx->get_type_def(tuple->sort->get_tuple_type());
+  const std::vector<type2tc> &members =
+    struct_union_members(tuple->sort->get_tuple_type());
 
   // If this tuple was free and never read, don't attempt to extract data from
   // it. There isn't any.
   if (tuple->elements.size() == 0)
   {
-    for (unsigned int i = 0; i < strct.members.size(); i++)
+    for (unsigned int i = 0; i < members.size(); i++)
       outmem.emplace_back();
     return constant_struct2tc(tuple->sort->get_tuple_type(), std::move(outmem));
   }
 
   // Run through all fields and despatch to 'get' again.
   unsigned int i = 0;
-  for (auto const &it : strct.members)
+  for (auto const &it : members)
   {
     expr2tc res;
     if (is_tuple_ast_type(it))
@@ -219,16 +220,11 @@ expr2tc smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
     {
       res = expr2tc(); // XXX currently unimplemented
     }
-    else if (is_bool_type(it))
-    {
-      res =
-        ctx->get_bool(tuple->elements[i]) ? gen_true_expr() : gen_false_expr();
-    }
-    else if (is_number_type(it) || is_union_type(it))
+    else if (is_bool_type(it) || is_number_type(it) || is_union_type(it))
     {
       res = ctx->get_by_ast(it, tuple->elements[i]);
     }
-    else if (is_array_type(it))
+    else if (is_array_type(it) || is_vector_type(it))
     {
       // this will eventually jump to get_array()
       res = ctx->get_by_ast(it, tuple->elements[i]);
@@ -329,7 +325,25 @@ void smt_tuple_node_flattener::push_tuple_ctx()
   array_conv.push_array_ctx();
 }
 
+void smt_tuple_node_flattener::note_elements_populated(
+  tuple_node_smt_ast *tuple)
+{
+  populated_elements[ctx->ctx_level].push_back(tuple);
+}
+
 void smt_tuple_node_flattener::pop_tuple_ctx()
 {
+  // ctx_level has already been decremented, and smt_solver_baset::pop_ctx has
+  // already deleted every AST allocated at the level being discarded. The
+  // tuples registered here outlive it, so their element vectors now name
+  // destroyed ASTs; drop them and let make_free rebuild on demand.
+  auto it = populated_elements.find(ctx->ctx_level + 1);
+  if (it != populated_elements.end())
+  {
+    for (tuple_node_smt_ast *tuple : it->second)
+      tuple->elements.clear();
+    populated_elements.erase(it);
+  }
+
   array_conv.pop_array_ctx();
 }

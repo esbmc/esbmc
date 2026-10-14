@@ -1,7 +1,7 @@
 #ifndef CPROVER_GOTO2C_H
 #define CPROVER_GOTO2C_H
 
-#include <util/namespace.h>
+#include <util/symtab/namespace.h>
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/goto_program.h>
 
@@ -97,12 +97,10 @@ private:
   void check_catch(goto_programt::instructiont instruction);
   void check_atomic_begin(goto_programt::instructiont instruction);
   void check_atomic_end(goto_programt::instructiont instruction);
-  void check_throw_decl(goto_programt::instructiont instruction);
-  void check_throw_decl_end(goto_programt::instructiont instruction);
   void check_other(goto_programt::instructiont instruction);
 
   // Methods for checking expressions
-  void check_guard(expr2tc guard);
+  void check_guard(const expr2tc &guard);
 };
 
 #endif

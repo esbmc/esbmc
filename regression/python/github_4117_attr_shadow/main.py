@@ -1,12 +1,10 @@
-# Known limitation: when a variable is reassigned to a different class,
-# the usage-site scanner conservatively drops the variable's class mapping
-# to avoid unsoundly attributing later attribute writes to the wrong
-# class. This is safer than the pre-fix behaviour (which would silently
-# adopt the shadowing class's type) but means legitimate code that mixes
-# reassignment with attribute writes can't benefit from type inference.
-#
-# Recovering this case would require flow-sensitive (per-program-point)
-# class tracking rather than the current lexical scan.
+# Flow-sensitive class tracking (#4772): when a variable is reassigned to a
+# different class (`n1 = A(1); n1 = B()`), the usage-site scanner still drops
+# the lexical class mapping, but flow_class_map_ tracks the LAST write per
+# variable at unconditional top-level scope. So at `a.x = n1`, n1's current
+# class is B, and the nested read `a.x.data` casts to B and resolves — matching
+# CPython. Gated to straight-line depth-1 code and cleared across control-flow
+# joins so a class is never adopted unsoundly.
 
 class A:
     def __init__(self, v):

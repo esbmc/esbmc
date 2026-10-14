@@ -1,0 +1,4 @@
+CORE
+main.py
+--ir --goto-functions-only
+\A(?![\s\S]*python_models_init)[\s\S]*\Z

@@ -1,5 +1,5 @@
 #include <goto-programs/set_claims.h>
-#include <util/i2string.h>
+#include <util/base/i2string.h>
 
 void convert_claims(
   const std::list<std::string> &claims,

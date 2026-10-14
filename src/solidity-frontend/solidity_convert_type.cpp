@@ -8,14 +8,14 @@
 
 #include <solidity-frontend/solidity_convert.h>
 #include <solidity-frontend/typecast.h>
-#include <util/arith_tools.h>
-#include <util/bitvector.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/mp_arith.h>
-#include <util/std_expr.h>
-#include <util/message.h>
+#include <util/arith/arith_tools.h>
+#include <util/arith/bitvector.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
+#include <util/arith/mp_arith.h>
+#include <util/irep/std_expr.h>
+#include <util/message/message.h>
 #include <fstream>
 
 bool solidity_convertert::get_type_description(
@@ -115,8 +115,8 @@ bool solidity_convertert::get_type_description(
   }
   case SolidityGrammar::TypeNameT::PointerArrayToPtr:
   {
-    // auxiliary type: pointer (FuncToPtr decay)
-    // This part is for FunctionToPointer decay only
+    // auxiliary type: pointer (ArrayToPtr decay)
+    // This part is for ArrayToPointer decay only
     assert(typeIdentifier.find("ArrayToPtr") != std::string::npos);
 
     // Array type descriptor is like:
@@ -180,8 +180,9 @@ bool solidity_convertert::get_type_description(
         "id": 5,
         "nodeType": "ArrayTypeName",
         "typeDescriptions": {
-            "typeIdentifier": "t_array$_t_array$_t_int256_$4_storage_$dyn_storage_ptr",
-            "typeString": "int256[4][]"
+            "typeIdentifier":
+    "t_array$_t_array$_t_int256_$4_storage_$dyn_storage_ptr", "typeString":
+    "int256[4][]"
         }
     convert it to:
 
@@ -190,7 +191,8 @@ bool solidity_convertert::get_type_description(
         * size: constant
             * type: unsignedbv
                 * width: 64
-            * value: 0000000000000000000000000000000000000000000000000000000000000100
+            * value:
+    0000000000000000000000000000000000000000000000000000000000000100
             * #cformat: 4
         * subtype: signedbv
             * width: 32
@@ -219,10 +221,11 @@ bool solidity_convertert::get_type_description(
       // From variable declaration: use AST baseType node directly
       nlohmann::json inner_decl;
       inner_decl["typeName"] = decl["typeName"]["baseType"];
-      if (get_type_description(
-            inner_decl,
-            decl["typeName"]["baseType"]["typeDescriptions"],
-            base_type))
+      if (
+        get_type_description(
+          inner_decl,
+          decl["typeName"]["baseType"]["typeDescriptions"],
+          base_type))
         return true;
 
       // Phase 5 Surface 1: preserve fixed-inner-array typing through outer
@@ -272,12 +275,14 @@ bool solidity_convertert::get_type_description(
     else
     {
       // From expression context (no decl): extract base type from strings.
-      // e.g. typeIdentifier "t_array$_t_array$_t_uint256_$dyn_storage_$dyn_storage"
+      // e.g. typeIdentifier
+      // "t_array$_t_array$_t_uint256_$dyn_storage_$dyn_storage"
       //      typeString     "uint256[] storage ref[] storage ref"
       // Base element is "uint256[]" / "t_array$_t_uint256_$dyn_storage"
       //
       // Also handles fixed outer arrays:
-      // e.g. typeIdentifier "t_array$_t_array$_t_uint256_$dyn_storage_$3_storage"
+      // e.g. typeIdentifier
+      // "t_array$_t_array$_t_uint256_$dyn_storage_$3_storage"
       //      typeString     "uint256[] storage ref[3] storage ref"
       // Base element is "uint256[]" / "t_array$_t_uint256_$dyn_storage"
       const std::string prefix = "t_array$_";
@@ -397,7 +402,7 @@ bool solidity_convertert::get_type_description(
             integer2binary(z_ext_value, bv_width(int_type())),
             integer2string(z_ext_value),
             int_type()));
-        new_type.set("#sol_array_size", outer_size_str);
+        set_sol_array_size(new_type, outer_size_str);
         set_sol_type(new_type, SolidityGrammar::SolType::ARRAY);
       }
     }
@@ -407,12 +412,13 @@ bool solidity_convertert::get_type_description(
   case SolidityGrammar::TypeNameT::ArrayTypeName:
   case SolidityGrammar::TypeNameT::DynArrayTypeName:
   {
-    // Deal with array with constant size, e.g., int a[2]; Similar to clang::Type::ConstantArray
-    // array's typeDescription is in a compact form, e.g.:
+    // Deal with array with constant size, e.g., int a[2]; Similar to
+    // clang::Type::ConstantArray array's typeDescription is in a compact form,
+    // e.g.:
     //    "typeIdentifier": "t_array$_t_uint8_$2_storage_ptr",
     //    "typeString": "uint8[2]"
-    // We need to extract the elementary type of array from the information provided above
-    // We want to make it like ["baseType"]["typeDescriptions"]
+    // We need to extract the elementary type of array from the information
+    // provided above We want to make it like ["baseType"]["typeDescriptions"]
 
     typet the_type;
     exprt the_size;
@@ -420,8 +426,9 @@ bool solidity_convertert::get_type_description(
     {
       // access from get_var_decl
       assert(decl["typeName"].contains("baseType"));
-      if (get_type_description(
-            decl["typeName"]["baseType"]["typeDescriptions"], the_type))
+      if (
+        get_type_description(
+          decl["typeName"]["baseType"]["typeDescriptions"], the_type))
         return true;
 
       if (get_array_pointer_type(decl, the_type, new_type))
@@ -456,7 +463,7 @@ bool solidity_convertert::get_type_description(
           integer2binary(z_ext_value, bv_width(int_type())),
           integer2string(z_ext_value),
           int_type()));
-      new_type.set("#sol_array_size", the_size);
+      set_sol_array_size(new_type, the_size);
       set_sol_type(new_type, SolidityGrammar::SolType::ARRAY_LITERAL);
     }
     else
@@ -518,7 +525,7 @@ bool solidity_convertert::get_type_description(
         new_type = array_typet();
         new_type.size(exprt("infinity"));
         new_type.subtype() = sub_type;
-        new_type.set("#sol_mapping_array", true);
+        set_sol_mapping_array(new_type, true);
         set_sol_type(new_type, SolidityGrammar::SolType::DYNARRAY);
       }
       else
@@ -545,7 +552,6 @@ bool solidity_convertert::get_type_description(
 
     new_type = pointer_typet(symbol_typet(id));
     set_sol_type(new_type, SolidityGrammar::SolType::CONTRACT);
-    new_type.set("#sol_contract", cname);
     break;
   }
   case SolidityGrammar::TypeNameT::TypeConversionName:
@@ -663,14 +669,14 @@ bool solidity_convertert::get_type_description(
   {
     // do nothing as it won't be used
     new_type = struct_typet();
-    new_type.set("#cpp_type", "void");
+    new_type.cpp_type("void");
     set_sol_type(new_type, SolidityGrammar::SolType::TUPLE_RETURNS);
     break;
   }
   case SolidityGrammar::TypeNameT::ErrorTypeName:
   {
     new_type = empty_typet();
-    new_type.set("#cpp_type", "void");
+    new_type.cpp_type("void");
     break;
   }
   case SolidityGrammar::TypeNameT::UserDefinedTypeName:
@@ -691,14 +697,6 @@ bool solidity_convertert::get_type_description(
   //    - Constant
   //    - Volatile
   //    - isRestrict
-
-  // set data location
-  if (typeIdentifier.find("_memory_ptr") != std::string::npos)
-    new_type.set("#sol_data_loc", "memory");
-  else if (typeIdentifier.find("_storage_ptr") != std::string::npos)
-    new_type.set("#sol_data_loc", "storage");
-  else if (typeIdentifier.find("_calldata_ptr") != std::string::npos)
-    new_type.set("#sol_data_loc", "calldata");
 
   return false;
 }
@@ -830,7 +828,7 @@ bool solidity_convertert::get_array_to_pointer_type(
       return false;
     new_type = is_signed ? (typet)signedbv_typet(bits)
                          : (typet)unsignedbv_typet(bits);
-    new_type.set("#cpp_type", is_signed ? "signed_int" : "unsigned_int");
+    new_type.cpp_type(is_signed ? "signed_int" : "unsigned_int");
     return true;
   };
 
@@ -854,8 +852,6 @@ bool solidity_convertert::get_array_to_pointer_type(
   return true;
 }
 
-// parse a tuple to struct
-
 bool solidity_convertert::get_elementary_type_name_uint(
   SolidityGrammar::ElementaryTypeNameT &type,
   typet &out)
@@ -867,12 +863,13 @@ bool solidity_convertert::get_elementary_type_name_uint(
 }
 
 /**
-     * @brief Populate the out `typet` parameter with the int type specified by type parameter
-     *
-     * @param type The type of the int to be poulated
-     * @param out The variable that holds the resulting type
-     * @return false iff population was successful
-     */
+ * @brief Populate the out `typet` parameter with the int type specified by type
+ * parameter
+ *
+ * @param type The type of the int to be poulated
+ * @param out The variable that holds the resulting type
+ * @return false iff population was successful
+ */
 bool solidity_convertert::get_elementary_type_name_int(
   SolidityGrammar::ElementaryTypeNameT &type,
   typet &out)
@@ -889,7 +886,8 @@ bool solidity_convertert::get_elementary_type_name_bytesn(
 {
   /*
     bytes1 has size of 8 bits (possible values 0x00 to 0xff),
-    which you can implicitly convert to uint8 (unsigned integer of size 8 bits) but not to int8
+    which you can implicitly convert to uint8 (unsigned integer of size 8 bits)
+    but not to int8
   */
   const unsigned int byte_num = SolidityGrammar::bytesn_type_name_to_size(type);
   out = unsignedbv_typet(byte_num * 8);
@@ -996,7 +994,7 @@ bool solidity_convertert::get_elementary_type_name(
   {
     // for int_const type
     new_type = signedbv_typet(256);
-    new_type.set("#cpp_type", "signed_char");
+    new_type.cpp_type("signed_char");
     set_sol_type(new_type, SolidityGrammar::SolType::INT_CONST);
     break;
   }
@@ -1008,7 +1006,6 @@ bool solidity_convertert::get_elementary_type_name(
   case SolidityGrammar::ElementaryTypeNameT::STRING:
   {
     // cpp: std::string str;
-    // new_type = symbol_typet("tag-std::string");
     new_type = string_t;
     break;
   }
@@ -1059,7 +1056,7 @@ bool solidity_convertert::get_elementary_type_name(
   case SolidityGrammar::ElementaryTypeNameT::BYTES32:
   {
     new_type = byte_static_t;
-    new_type.set("#sol_bytesn_size", bytesn_type_name_to_size(type));
+    set_sol_bytesn_size(new_type, bytesn_type_name_to_size(type));
     break;
   }
   case SolidityGrammar::ElementaryTypeNameT::BYTES:
@@ -1102,20 +1099,20 @@ bool solidity_convertert::get_elementary_type_name(
   }
   }
 
-  //TODO set #extint
-  // switch (type)
-  // {
-  // case SolidityGrammar::ElementaryTypeNameT::BOOL:
-  // case SolidityGrammar::ElementaryTypeNameT::STRING:
-  // {
-  //   break;
-  // }
-  // default:
-  // {
-  //   new_type.set("#extint", true);
-  //   break;
-  // }
-  // }
+  // TODO set #extint
+  //  switch (type)
+  //  {
+  //  case SolidityGrammar::ElementaryTypeNameT::BOOL:
+  //  case SolidityGrammar::ElementaryTypeNameT::STRING:
+  //  {
+  //    break;
+  //  }
+  //  default:
+  //  {
+  //    new_type.set("#extint", true);
+  //    break;
+  //  }
+  //  }
 
   return false;
 }
@@ -1125,7 +1122,8 @@ bool solidity_convertert::get_parameter_list(
   typet &new_type)
 {
   // For Solidity rule parameter-list:
-  //  - For non-empty param list, it may need to call get_elementary_type_name, since parameter-list is just a list of types
+  //  - For non-empty param list, it may need to call get_elementary_type_name,
+  //  since parameter-list is just a list of types
   SolidityGrammar::ParameterListT type =
     SolidityGrammar::get_parameter_list_t(type_name);
 
@@ -1140,7 +1138,7 @@ bool solidity_convertert::get_parameter_list(
   {
     // equivalent to clang's "void"
     new_type = empty_typet();
-    new_type.set("#cpp_type", "void");
+    new_type.cpp_type("void");
     break;
   }
   case SolidityGrammar::ParameterListT::ONE_PARAM:
@@ -1150,8 +1148,9 @@ bool solidity_convertert::get_parameter_list(
     const nlohmann::json &rtn_type = type_name["parameters"].at(0);
     if (rtn_type.contains("typeName"))
     {
-      if (get_type_description(
-            rtn_type, rtn_type["typeName"]["typeDescriptions"], new_type))
+      if (
+        get_type_description(
+          rtn_type, rtn_type["typeName"]["typeDescriptions"], new_type))
         return true;
     }
     else
@@ -1165,10 +1164,11 @@ bool solidity_convertert::get_parameter_list(
   case SolidityGrammar::ParameterListT::MORE_THAN_ONE_PARAM:
   {
     // if contains multiple return types
-    // We will return null because we create the symbols of the struct accordingly
+    // We will return null because we create the symbols of the struct
+    // accordingly
     assert(type_name["parameters"].size() > 1);
     new_type = empty_typet();
-    new_type.set("#cpp_type", "void");
+    new_type.cpp_type("void");
     set_sol_type(new_type, SolidityGrammar::SolType::TUPLE_RETURNS);
     break;
   }
@@ -1181,8 +1181,6 @@ bool solidity_convertert::get_parameter_list(
 
   return false;
 }
-
-// parse the state variable
 
 bool solidity_convertert::try_native_nested_fixed_array(
   const nlohmann::json &type_name_node,
@@ -1272,7 +1270,7 @@ bool solidity_convertert::get_array_pointer_type(
     new_type = array_typet();
     new_type.size(exprt("infinity"));
     new_type.subtype() = base_type;
-    new_type.set("#sol_mapping_array", true);
+    set_sol_mapping_array(new_type, true);
     set_sol_type(new_type, SolidityGrammar::SolType::DYNARRAY);
     return false;
   }
@@ -1317,7 +1315,8 @@ bool solidity_convertert::get_array_pointer_type(
       len_node["referencedDeclaration"].is_number_integer() &&
       len_node["referencedDeclaration"].get<int>() > 0)
     {
-      if (get_constant_value(
+      if (
+        get_constant_value(
             len_node["referencedDeclaration"].get<int>(), length))
         length.clear();
     }
@@ -1362,7 +1361,7 @@ bool solidity_convertert::get_array_pointer_type(
         return false;
       }
     }
-    new_type.set("#sol_array_size", length);
+    set_sol_array_size(new_type, length);
     set_sol_type(new_type, SolidityGrammar::SolType::ARRAY);
   }
   else
@@ -1435,12 +1434,10 @@ void solidity_convertert::convert_type_expr(
   {
     if (src_sol_type != dest_sol_type)
       not_same_type = true;
-    else if (
-      src_type.get("#sol_bytesn_size") != dest_type.get("#sol_bytesn_size"))
+    else if (get_sol_bytesn_size(src_type) != get_sol_bytesn_size(dest_type))
       // including unset situation
       not_same_type = true;
-    else if (
-      src_type.get("#sol_array_size") != dest_type.get("#sol_array_size"))
+    else if (get_sol_array_size(src_type) != get_sol_array_size(dest_type))
       not_same_type = true;
   }
 
@@ -1463,7 +1460,8 @@ void solidity_convertert::convert_type_expr(
     if (is_byte_type(src_type) && is_byte_type(dest_type))
     {
       // prevent something like
-      // bytes_dynamic_from_uint({ .offset=0, .length=0, .initialized=0, .anon_pad$3=0 }, this->$dynamic_pool);
+      // bytes_dynamic_from_uint({ .offset=0, .length=0, .initialized=0,
+      // .anon_pad#3=0 }, this->$dynamic_pool);
       if (src_expr.is_struct())
         src_expr = make_aux_var(src_expr, src_expr.location());
 
@@ -1626,10 +1624,9 @@ void solidity_convertert::convert_type_expr(
 
         // e.g. bytes3(0x1234); "BYTES3" => 3
         exprt len_expr;
-        if (!dest_type.get("#sol_bytesn_size").empty())
+        if (has_sol_bytesn_size(dest_type))
           len_expr = from_integer(
-            std::stoul(dest_type.get("#sol_bytesn_size").as_string()),
-            size_type());
+            std::stoul(get_sol_bytesn_size(dest_type)), size_type());
         else
         {
           log_error("got unexpected bytes typecast");
@@ -1777,12 +1774,12 @@ void solidity_convertert::convert_type_expr(
     {
       // E.g. for `Derive x = Derive(_addr)`:
       // => Derive* x = &_ESBMC_Obeject_Derive;
-      // because in trusted mode, the address has been limited to the set of _ESBMC_Object
-      // Save the original address before overwriting src_expr
+      // because in trusted mode, the address has been limited to the set of
+      // _ESBMC_Object Save the original address before overwriting src_expr
       exprt original_addr = src_expr;
 
       exprt c_ins;
-      std::string _cname = dest_type.get("#sol_contract").as_string();
+      std::string _cname = get_sol_contract(dest_type);
       // A library is converted in round 1, before any contract/interface
       // struct type exists (round 2). `IFoo(addr)` inside a library body then
       // referenced tag-IFoo before it was registered, and the implicit
@@ -1858,11 +1855,12 @@ void solidity_convertert::convert_type_expr(
       }
 
       // dynamic: uint x[] = [1,2]
-      // fixed:   uint x[3] = [1,2], whose rhs array is incomplete and need to add zero element
-      // the goal is to convert the rhs constant array to a static global var
+      // fixed:   uint x[3] = [1,2], whose rhs array is incomplete and need to
+      // add zero element the goal is to convert the rhs constant array to a
+      // static global var
 
       // get rhs constant array size
-      const std::string src_size = src_type.get("#sol_array_size").as_string();
+      const std::string src_size = get_sol_array_size(src_type);
       if (src_size.empty())
       {
         // e.g. a = new uint[](len);
@@ -1874,7 +1872,7 @@ void solidity_convertert::convert_type_expr(
       unsigned z_src_size = std::stoul(src_size, nullptr);
 
       // get lhs array size
-      std::string dest_size = dest_type.get("#sol_array_size").as_string();
+      std::string dest_size = get_sol_array_size(dest_type);
       if (dest_size.empty())
       {
         if (dest_sol_type == SolidityGrammar::SolType::ARRAY)
@@ -1897,12 +1895,13 @@ void solidity_convertert::convert_type_expr(
         // e.g. uint[3] x;  (x, y) = ([1,z], ...)
         // where [1,2] ==> uint8[] ==> tuple_instance.mem0
         // ==>
-        //  x  = [(uint256)tuple_instance.mem0[0], (uint256)tuple_instance.mem0[1], 0]
+        //  x  = [(uint256)tuple_instance.mem0[0],
+        //  (uint256)tuple_instance.mem0[1], 0]
         // - src_expr: [1, z]
         // - dest_type: uint*
         array_typet arr_t = array_typet(dest_type.subtype(), dest_array_size);
         set_sol_type(arr_t, SolidityGrammar::SolType::ARRAY);
-        arr_t.set("#sol_array_size", src_size);
+        set_sol_array_size(arr_t, src_size);
         exprt new_arr = exprt(irept::id_array, arr_t);
 
         exprt arr_comp;
@@ -1971,14 +1970,13 @@ void solidity_convertert::convert_type_expr(
 
           // update "#sol_array_size"
           assert(!dest_size.empty());
-          src_expr.type().set("#sol_array_size", dest_size);
+          set_sol_array_size(src_expr.type(), dest_size);
         }
       }
 
-      // since it's a array-constant/string-constant, we could safely make it to a local var
-      // this local var will not be referred again so the name could be random.
-      // e.g.
-      // int[3] p = [1,2];
+      // since it's a array-constant/string-constant, we could safely make it to
+      // a local var this local var will not be referred again so the name could
+      // be random. e.g. int[3] p = [1,2];
       // => int *p = [1,2,3];
       // => static int[3] tmp1 = [1,2,3];
       // return: src_expr = symbol_expr(tmp1)

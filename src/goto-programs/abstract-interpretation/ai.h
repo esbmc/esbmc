@@ -9,8 +9,8 @@
 #include <memory>
 #include <goto-programs/abstract-interpretation/ai_domain.h>
 #include <goto-programs/goto_functions.h>
-#include <util/xml.h>
-#include <util/expr.h>
+#include <util/base/xml.h>
+#include <util/irep/expr.h>
 
 /**
  * This is the basic interface of the abstract interpreter with default
@@ -22,7 +22,7 @@
  * 1. Running an analysis, via operator() overloads
  * 2. Accessing the results of an analysis, by looking up the state map
  * 3. Outputting the results of the analysis;
-*/
+ */
 class ai_baset
 {
 public:
@@ -77,6 +77,13 @@ public:
   {
   }
 
+  /// goto_programt::get_successors gives an ASSERT whose guard is false no
+  /// successor, as though a violation ended the run. Symex continues past a
+  /// failed assertion, so a run that checks claims beyond one
+  /// (--multi-property, coverage) must set this, or the states that follow
+  /// the violation are missing from every invariant computed here.
+  bool continue_past_failed_assertions = false;
+
   virtual void
   output(const goto_functionst &goto_functions, std::ostream &out) const;
 
@@ -94,7 +101,7 @@ protected:
 
   /* The fixedpoint is computed through a Work set algorithm which
    * consists in adding nodes that have changed with the current merge
-  */
+   */
   // the work-queue is sorted by location number
   typedef std::unordered_map<unsigned, goto_programt::const_targett>
     working_sett;

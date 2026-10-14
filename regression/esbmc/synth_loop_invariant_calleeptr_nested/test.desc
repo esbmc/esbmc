@@ -1,0 +1,6 @@
+CORE
+main.c
+--synthesise-loop-invariants --unwind 6
+\A(?![\s\S]*Synthesised loop invariants)[\s\S]*\Z
+^WARNING: --synthesise-loop-invariants: a user-written loop invariant reaches a call through a function pointer, whose callee cannot be named\. Synthesising nothing rather than risk weakening that invariant$
+^VERIFICATION SUCCESSFUL$

@@ -1,0 +1,4 @@
+CORE
+cbmc_expr_vla_extent.goto
+--binary --unwind 10
+^VERIFICATION SUCCESSFUL$

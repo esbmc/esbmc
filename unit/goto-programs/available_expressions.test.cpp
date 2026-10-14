@@ -3,7 +3,7 @@
 
 #include "../testing-utils/goto_factory.h"
 #include <goto-programs/abstract-interpretation/gcse.h>
-#include <util/prefix.h>
+#include <util/base/prefix.h>
 /* Testing this is almost impossible without having
  * a goto_program generation interface
  *
@@ -14,7 +14,8 @@
 
 namespace
 {
-// GOTO program index (PC) -> List of "symbols". This could be a vector of vectors.. but its enough for now
+// GOTO program index (PC) -> List of "symbols". This could be a vector of
+// vectors.. but its enough for now
 typedef std::map<std::string, std::vector<std::string>> test_vector;
 
 class ae_program
@@ -237,4 +238,5 @@ TEST_CASE("Expressions - Function Call", "[ai][available-expressions]")
   T.run_test(AE);
 }
 
-// TODO: pointers! Sadly I can't make the VSA work under this testing environment as string_container has some weird initialization bug.
+// TODO: pointers! Sadly I can't make the VSA work under this testing
+// environment as string_container has some weird initialization bug.

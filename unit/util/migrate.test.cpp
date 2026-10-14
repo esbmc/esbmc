@@ -1,0 +1,1721 @@
+// Round-trip tests for the IREP1 <-> IREP2 conversion layer (util/migrate.cpp).
+//
+// These pin the foundational property the goto-program IREP2 migration relies
+// on (esbmc/esbmc#4715): the IREP2 representation is stable under a round-trip
+// through the legacy irept form. Concretely, for every type/expression kind a
+// symbol can hold,
+//
+//     migrate_type(migrate_type_back(T2)) == T2
+//     migrate_expr(migrate_expr_back(E2)) == E2
+//
+// i.e. back-migrating an IREP2 node to legacy and re-migrating yields an equal
+// IREP2 node. The symbol-table migration (Phase 4) derives the legacy
+// symbolt::type/value from IREP2 shadow fields via migrate_*_back; this
+// idempotence is what makes that derivation lossless. We assert IREP2
+// round-trip (not legacy byte-equality) because migrate_type/expr deliberately
+// canonicalise some legacy forms, so the IREP2 side is the stable reference.
+
+#define CATCH_CONFIG_MAIN
+#include <catch2/catch.hpp>
+
+#include <irep2/irep2.h>
+#include <irep2/irep2_utils.h>
+#include <util/irep/migrate.h>
+#include <util/symtab/namespace.h>
+#include <util/symtab/context.h>
+#include <util/expr/expr_util.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_expr.h>
+#include <util/lang/c_types.h>
+#include <util/lang/exception_specification.h>
+#include <util/lang/python_types.h>
+#include <util/arith/arith_tools.h>
+#include <chrono>
+#include <utility>
+
+namespace
+{
+// Migrating a legacy symbol_exprt resolves the symbol's type through the
+// global migrate_namespace_lookup (migrate.cpp). Register a namespace with the
+// symbols our expr tests reference, and point the global at it. This mirrors
+// what language_ui does in the real pipeline.
+contextt &test_context()
+{
+  static contextt ctx;
+  static bool initialised = false;
+  if (!initialised)
+  {
+    symbolt x;
+    x.id = x.name = "x";
+    x.set_type(migrate_type_back(get_int_type(32)));
+    x.lvalue = true;
+    ctx.add(x);
+    initialised = true;
+  }
+  return ctx;
+}
+
+// Point the migrate layer at our namespace. Done at call time (not via a
+// static initialiser) to avoid the cross-translation-unit static-init order
+// fiasco with migrate.cpp's own `migrate_namespace_lookup = nullptr`.
+void use_test_ns()
+{
+  static namespacet ns(test_context());
+  migrate_namespace_lookup = &ns;
+}
+
+void require_type_roundtrip(const type2tc &t2)
+{
+  type2tc back = migrate_type(migrate_type_back(t2));
+  INFO("type kind id = " << get_type_id(t2));
+  REQUIRE(back == t2);
+}
+
+void require_expr_roundtrip(const expr2tc &e2)
+{
+  expr2tc back;
+  migrate_expr(migrate_expr_back(e2), back);
+  INFO("expr kind id = " << get_expr_id(e2));
+  REQUIRE(back == e2);
+}
+
+type2tc make_func_type()
+{
+  // int f(int a, unsigned b)
+  std::vector<type2tc> args{get_int_type(32), get_uint_type(32)};
+  std::vector<irep_idt> names{"a", "b"};
+  return code_type2tc(args, get_int_type(32), names, /*ellipsis=*/false);
+}
+
+type2tc make_struct_type()
+{
+  std::vector<type2tc> members{get_int_type(32), get_bool_type()};
+  std::vector<irep_idt> names{"x", "y"};
+  return struct_type2tc(members, names, names, "s");
+}
+
+type2tc make_nested_struct_type()
+{
+  const type2tc arr = array_type2tc(
+    get_int_type(32), constant_int2tc(get_uint_type(32), BigInt(4)), false);
+  std::vector<type2tc> members{arr, make_struct_type(), get_uint_type(64)};
+  std::vector<irep_idt> names{"a", "inner", "z"};
+  return struct_type2tc(members, names, names, "outer");
+}
+} // namespace
+
+TEST_CASE("migrate type round-trips for scalar kinds", "[migrate]")
+{
+  require_type_roundtrip(get_bool_type());
+  require_type_roundtrip(get_int_type(32));
+  require_type_roundtrip(get_uint_type(64));
+  require_type_roundtrip(get_empty_type());
+}
+
+TEST_CASE("migrate type round-trips for composite kinds", "[migrate]")
+{
+  require_type_roundtrip(pointer_type2tc(get_int_type(32)));
+  // fixed-size and infinite-size arrays. Use an explicit-width size constant:
+  // gen_ulong() would derive its width from config.ansi_c, which is not set up
+  // in a bare unit test (yielding a 0-width size that cannot hold the value).
+  require_type_roundtrip(array_type2tc(
+    get_int_type(32),
+    constant_int2tc(get_uint_type(64), BigInt(4)),
+    /*inf=*/false));
+  require_type_roundtrip(array_type2tc(get_uint_type(8), expr2tc(), true));
+  require_type_roundtrip(make_struct_type());
+}
+
+TEST_CASE("migrate type round-trips for function signatures", "[migrate]")
+{
+  // The function-signature kind that goto_functiont::type holds (Phase 3).
+  require_type_roundtrip(make_func_type());
+  // void g(void)
+  require_type_roundtrip(code_type2tc(
+    std::vector<type2tc>{},
+    get_empty_type(),
+    std::vector<irep_idt>{},
+    /*ellipsis=*/false));
+}
+
+// What a code type's arguments carry across the seam. The identifier is
+// reflected; the base name rides `argument_base_names`, which is deliberately
+// *not* reflected -- a parameter's spelling is no part of the function type
+// (C11 6.7.6.3p15), so two signatures differing only there must still hash and
+// compare equal. Both halves are asserted, because a consumer reads the base
+// name back: clang_cpp_convert_vft.cpp's thunk argument loop
+// (docs/roadmap/frontends-to-irep2.md §44).
+// The struct counterpart of the code-argument case below. `member_base_names`
+// carries the components' plain `base_name` -- a different field from the
+// `#base_name` a function parameter spells -- and is likewise unreflected. This
+// test is what pins its value: no consumer reads a struct component's base name
+// back across the seam (docs/roadmap/frontends-to-irep2.md §46, §47.4).
+TEST_CASE("a struct component keeps its base name", "[migrate]")
+{
+  struct_typet st;
+  st.tag("S");
+  // Spell the three names differently: with `pretty_name` equal to the base
+  // name, writing one into the other's vector passes every assertion.
+  struct_typet::componentt c("S::f", "pretty_f", int_type());
+  c.set_base_name("f");
+  c.set("#member_attr", "keepme");
+  st.components().push_back(c);
+
+  const typet back_t = migrate_type_back(migrate_type(st));
+  const struct_typet &back = to_struct_type(back_t);
+  REQUIRE(back.components().size() == 1);
+
+  // Carried, because struct_type2t reflects both.
+  REQUIRE(back.components().at(0).get_name() == irep_idt("S::f"));
+  REQUIRE(back.components().at(0).pretty_name() == irep_idt("pretty_f"));
+
+  // Carried by the unreflected member_base_names (§45).
+  REQUIRE(back.components().at(0).get_base_name() == irep_idt("f"));
+
+  // Unreflected, so a member's spelling is not part of the struct's identity:
+  // two structs differing only there are the same type.
+  struct_typet other = st;
+  other.components().at(0).set_base_name("g");
+  REQUIRE(migrate_type(other) == migrate_type(st));
+
+  // An arbitrary component attribute is still dropped; only the base name has a
+  // field. Recorded rather than fixed -- no consumer reads one back.
+  REQUIRE(back.components().at(0).get("#member_attr").empty());
+
+  // A component that had no base name must not gain an empty one. `base_name`
+  // is not a comment field, so an inserted empty key would take part in
+  // irept::operator== and the round trip would stop being the identity.
+  struct_typet plain;
+  plain.tag("P");
+  plain.components().push_back(
+    struct_typet::componentt("P::g", "pretty_g", int_type()));
+  const typet plain_back = migrate_type_back(migrate_type(plain));
+  REQUIRE(
+    to_struct_type(plain_back).components().at(0).find("base_name").is_nil());
+  REQUIRE(plain_back == plain);
+}
+
+TEST_CASE("a code argument keeps its identifier and its base name", "[migrate]")
+{
+  code_typet t;
+  t.return_type() = int_type();
+  code_typet::argumentt a(int_type());
+  a.cmt_identifier("f::p");
+  a.cmt_base_name("p");
+  t.arguments().push_back(a);
+
+  const type2tc t2 = migrate_type(t);
+  REQUIRE(to_code_type(t2).argument_names.at(0) == irep_idt("f::p"));
+
+  const typet back_t = migrate_type_back(t2);
+  const code_typet &back = to_code_type(back_t);
+  REQUIRE(back.arguments().size() == 1);
+  // argumentt::set_identifier writes `#identifier`, which is what
+  // get_identifier and cmt_identifier both read, so this survives.
+  REQUIRE(back.arguments().at(0).cmt_identifier() == irep_idt("f::p"));
+  // And the base name, carried by the unreflected argument_base_names (§44).
+  REQUIRE(back.arguments().at(0).cmt_base_name() == irep_idt("p"));
+
+  // Unreflected means two signatures differing only in a parameter's spelling
+  // are the same type, which is what C11 6.7.6.3p15 says and what the hash and
+  // equality must agree on.
+  code_typet other = t;
+  other.arguments().at(0).cmt_base_name("q");
+  REQUIRE(migrate_type(other) == t2);
+}
+
+TEST_CASE("a default code_typet migrates to a void signature", "[migrate]")
+{
+  // The forward direction, which the round-trip cases above do not reach: a
+  // default-constructed code_typet has no "return_type" sub-irep, so the code
+  // arm migrates an id-less typet as the return type, and migrate_type maps
+  // that to the empty type. A frontend spelling such a signature natively must
+  // write the empty type to stay equal to the legacy path
+  // (jimple_statement.cpp, scope-jimple-irep2.md 32.1).
+  const code_typet fresh;
+  REQUIRE(fresh.find("return_type").is_nil());
+  REQUIRE(fresh.arguments().empty());
+  REQUIRE_FALSE(fresh.has_ellipsis());
+  REQUIRE(
+    migrate_type(fresh) == code_type2tc(
+                             std::vector<type2tc>{},
+                             get_empty_type(),
+                             std::vector<irep_idt>{},
+                             /*ellipsis=*/false));
+}
+
+TEST_CASE("migrate expr round-trips for constant kinds", "[migrate]")
+{
+  require_expr_roundtrip(constant_int2tc(get_int_type(32), BigInt(42)));
+  require_expr_roundtrip(gen_true_expr());
+  require_expr_roundtrip(gen_false_expr());
+  std::vector<expr2tc> members{
+    constant_int2tc(get_int_type(32), BigInt(1)), gen_true_expr()};
+  require_expr_roundtrip(constant_struct2tc(make_struct_type(), members));
+}
+
+TEST_CASE("migrate expr round-trips for symbol and address-of", "[migrate]")
+{
+  use_test_ns();
+  expr2tc sym = symbol2tc(get_int_type(32), "x");
+  require_expr_roundtrip(sym);
+  require_expr_roundtrip(address_of2tc(get_int_type(32), sym));
+}
+
+TEST_CASE("migrate expr round-trips for code statements", "[migrate]")
+{
+  // Individual code statements round-trip (goto2c back-migrates instructions
+  // one at a time).
+  use_test_ns();
+  expr2tc lhs = symbol2tc(get_int_type(32), "x");
+  expr2tc rhs = constant_int2tc(get_int_type(32), BigInt(7));
+  require_expr_roundtrip(code_assign2tc(lhs, rhs));
+}
+
+TEST_CASE("migrate expr round-trips for code_decl with init", "[migrate]")
+{
+  use_test_ns();
+  expr2tc rhs = constant_int2tc(get_int_type(32), BigInt(42));
+  // 2-op code_decl: declaration with initializer -- must round-trip so that
+  // goto_convert places the DEAD instruction at end-of-scope, not early.
+  require_expr_roundtrip(code_decl2tc(get_int_type(32), irep_idt("x"), rhs));
+  // 1-op code_decl: no initializer -- init field is nil, round-trips as 1-op
+  require_expr_roundtrip(code_decl2tc(get_int_type(32), irep_idt("x")));
+}
+
+TEST_CASE(
+  "migrate coerces mismatched ternary branches to the result type",
+  "[migrate][v4-cf]")
+{
+  // esbmc#4715: the C `assert` macro lowers to a discarded statement-level
+  // ternary `cond ? 0 : __assert_fail()` whose result type is void (empty) and
+  // whose branch types differ from it (int and void). if2t requires both
+  // branches to share the result type, so the forward migration must coerce the
+  // divergent branch -- otherwise the if2t constructor's type invariant trips.
+  // Under --irep2-bodies the whole body is migrated before goto_convert lowers
+  // the ternary, so this shape reaches migrate_expr directly.
+  use_test_ns();
+  typet voidt = migrate_type_back(get_empty_type());
+  typet boolt = migrate_type_back(get_bool_type());
+  typet intt = migrate_type_back(get_int_type(32));
+
+  exprt tern("if", voidt);
+  tern.copy_to_operands(
+    from_integer(1, boolt), // cond
+    from_integer(0, intt),  // true: int, differs from the void result type
+    from_integer(0, intt)); // false: int, differs from the void result type
+
+  expr2tc m;
+  migrate_expr(tern, m);
+  REQUIRE(is_if2t(m));
+  // The if2t and both arms share the (void) result type id.
+  const if2t &i = to_if2t(m);
+  REQUIRE(i.type->type_id == i.true_value->type->type_id);
+  REQUIRE(i.type->type_id == i.false_value->type->type_id);
+}
+
+TEST_CASE(
+  "migrate flattens a single-decl labeled decl-block",
+  "[migrate][v4-cf]")
+{
+  // esbmc#4715: `lbl: char *s = p;` is legacy label(decl-block(decl)). The
+  // decl-block must NOT migrate to a code_block -- code_block back-migrates to
+  // code("block"), whose scope boundary makes convert_block emit a premature
+  // DEAD for the declared variable right after its init (killing it before its
+  // uses). A decl-block introduces no scope (convert_decl_block), so a
+  // single-decl labeled decl-block flattens to the bare decl: the label's body
+  // round-trips as a code_decl, deferring the DEAD to the enclosing scope.
+  use_test_ns();
+  typet ct = migrate_type_back(get_int_type(32));
+
+  codet decl("decl");
+  decl.copy_to_operands(symbol_exprt("x", ct), from_integer(7, ct));
+  codet declblock("decl-block");
+  declblock.copy_to_operands(decl);
+  codet label("label");
+  label.set("label", "lbl");
+  label.copy_to_operands(declblock);
+
+  expr2tc m;
+  migrate_expr(label, m);
+  REQUIRE(is_code_label2t(m));
+  // The labeled body is the bare decl, not a scope-introducing block.
+  REQUIRE(is_code_decl2t(to_code_label2t(m).code));
+}
+
+// V1 of the symbol-table V-track (esbmc/esbmc#4715): five expr2t kinds had
+// gaps in the migration layer (no back-arm, or no forward-arm, or neither).
+// These tests pin the round-trip property -- migrate_expr_back followed by
+// migrate_expr returns an equal IREP2 node -- that the value-side flip (V2)
+// relies on. The arms are dead code in the pipeline today; nothing constructs
+// the matching legacy form. The tests exercise them via the IREP2 constructors
+// directly, so the gate is independent of which frontend produces a body.
+
+TEST_CASE("migrate expr round-trips for code_block", "[migrate][b2-vtrack]")
+{
+  use_test_ns();
+  expr2tc lhs = symbol2tc(get_int_type(32), "x");
+  expr2tc rhs = constant_int2tc(get_int_type(32), BigInt(1));
+  std::vector<expr2tc> stmts{
+    code_assign2tc(lhs, rhs),
+    code_assign2tc(lhs, constant_int2tc(get_int_type(32), BigInt(2)))};
+  require_expr_roundtrip(code_block2tc(stmts));
+}
+
+TEST_CASE(
+  "migrate expr round-trips for code_block (empty)",
+  "[migrate][b2-vtrack]")
+{
+  // The zero-operand corner is the one a freshly-emitted empty body would hit;
+  // pinning it explicitly is cheap insurance against an iterator-on-empty bug.
+  require_expr_roundtrip(code_block2tc(std::vector<expr2tc>{}));
+}
+
+TEST_CASE("migrate expr round-trips for code_cpp_catch", "[migrate][b2-vtrack]")
+{
+  // Marker form (post-goto-convert CATCH-push/pop): catchable-type list only.
+  std::vector<irep_idt> exceptions{"std::exception", "std::runtime_error"};
+  require_expr_roundtrip(code_cpp_catch2tc(exceptions));
+}
+
+TEST_CASE(
+  "migrate expr round-trips for code_cpp_catch with operands",
+  "[migrate][b2-vtrack]")
+{
+  // Source-level try/catch (the --irep2-bodies form): operands[0] is the try
+  // block, operands[1..N] the catch-handler blocks parallel to the id list.
+  // The per-handler ids ride the legacy "exception_id" attribute across the
+  // round-trip, so dropping them would surface here.
+  std::vector<irep_idt> exceptions{"std::runtime_error", "std::logic_error"};
+  std::vector<expr2tc> ops{
+    code_block2tc(std::vector<expr2tc>{}),  // try block
+    code_block2tc(std::vector<expr2tc>{}),  // handler for std::runtime_error
+    code_block2tc(std::vector<expr2tc>{})}; // handler for std::logic_error
+  require_expr_roundtrip(code_cpp_catch2tc(exceptions, ops));
+}
+
+TEST_CASE("migrate expr round-trips for code_cpp_throw", "[migrate][b2-vtrack]")
+{
+  // Back-arm produces sideeffect("cpp-throw"); forward arm re-lifts that to
+  // code_cpp_throw2tc, completing the IREP2->legacy->IREP2 round-trip.
+  use_test_ns();
+  std::vector<irep_idt> exceptions{"std::runtime_error"};
+  expr2tc operand = symbol2tc(get_int_type(32), "ex");
+  require_expr_roundtrip(code_cpp_throw2tc(operand, exceptions));
+  // rethrow: null operand, empty exception list
+  require_expr_roundtrip(code_cpp_throw2tc(expr2tc(), std::vector<irep_idt>{}));
+}
+
+TEST_CASE("migrate expr round-trips for new_object", "[migrate][b2-vtrack]")
+{
+  // new_object is the C++ "this" placeholder in temporary_object initializers.
+  // Back-migrates to exprt("new_object") carrying the type, then re-migrates
+  // to the same new_object2tc.
+  use_test_ns();
+  type2tc t = make_struct_type();
+  require_expr_roundtrip(new_object2tc(t));
+}
+
+TEST_CASE(
+  "migrate expr round-trips for sideeffect temporary_object (1-op form)",
+  "[migrate][b2-vtrack]")
+{
+  // 1-op form: operand carries the constructor call; arguments empty.
+  // Back-migrates to side_effect_exprt("temporary_object") with one operand.
+  use_test_ns();
+  type2tc st = make_struct_type();
+  expr2tc operand = symbol2tc(get_int_type(32), "x");
+  expr2tc nil_expr;
+  std::vector<expr2tc> no_args;
+  // alloctype is the constructed struct type (as set by the C++ frontend).
+  require_expr_roundtrip(sideeffect2tc(
+    st,
+    operand,
+    nil_expr,
+    no_args,
+    st,
+    sideeffect_allockind::temporary_object));
+}
+
+TEST_CASE(
+  "migrate expr round-trips for sideeffect temporary_object (initializer form)",
+  "[migrate][b2-vtrack]")
+{
+  // initializer-form: operand is nil; initializer stored in arguments[0].
+  // Back-migrates to side_effect_exprt("temporary_object") with no direct
+  // operands and the initializer restored via theexpr.initializer().
+  use_test_ns();
+  type2tc st = make_struct_type();
+  expr2tc nil_expr;
+  expr2tc init = symbol2tc(get_int_type(32), "x");
+  std::vector<expr2tc> args{init};
+  // alloctype is the constructed struct type (as set by the C++ frontend).
+  require_expr_roundtrip(sideeffect2tc(
+    st, nil_expr, nil_expr, args, st, sideeffect_allockind::temporary_object));
+}
+
+TEST_CASE(
+  "migrate cpp_new[] recovers size and initializer from frontend fields",
+  "[migrate][v4-cf]")
+{
+  // Regression for esbmc#4715 V.4.4 cpp_new parity. The C++ frontend builds
+  // side_effect_exprt("cpp_new[]") with the array size in the "size" field
+  // (size_irep) and the initializer in the "initializer" sub; the "#size"
+  // (cmt_size) mirror is only populated later in the pipeline. Under
+  // --irep2-bodies the body is migrated before that mirror runs, so forward
+  // migration must read "size" — otherwise the whole size operand (and the
+  // initializer) is silently dropped.
+  use_test_ns();
+  typet int_t = migrate_type_back(get_int_type(32));
+  side_effect_exprt e("cpp_new[]", gen_pointer_type(int_t));
+  e.size(symbol_exprt("x", int_t));      // array-count leaf, in "size" only
+  e.initializer(from_integer(7, int_t)); // initializer in "initializer" sub
+
+  expr2tc m;
+  migrate_expr(e, m);
+  REQUIRE(is_sideeffect2t(m));
+  const sideeffect2t &se = to_sideeffect2t(m);
+  REQUIRE(se.kind == sideeffect_allockind::cpp_new_arr);
+  REQUIRE(!is_nil_expr(se.size));
+  REQUIRE(se.size == symbol2tc(get_int_type(32), "x"));
+  REQUIRE(se.arguments.size() == 1);
+  REQUIRE(se.arguments[0] == constant_int2tc(get_int_type(32), BigInt(7)));
+
+  // And the round-trip back must restore both the "size" field and the
+  // initializer so the legacy conversion pipeline sees them.
+  exprt back = migrate_expr_back(m);
+  REQUIRE(back.size_irep().is_not_nil());
+  REQUIRE(back.initializer().is_not_nil());
+}
+
+TEST_CASE(
+  "migrate preserves source location on basic code kinds",
+  "[migrate][v4-cf]")
+{
+  // V.4.4 (esbmc#4715): the basic code kinds (assign/decl/expression/...) carry
+  // a non-reflected `location` so the source location survives the body
+  // round-trip under --irep2-bodies. Without it, goto_convert stamps empty
+  // instruction locations and filename-gated checks (e.g. Solidity narrowing
+  // overflow, which only fires on ".sol" files) silently vanish -> unsound.
+  // Equality ignores `location`, so this asserts on it explicitly rather than
+  // via require_expr_roundtrip.
+  use_test_ns();
+  locationt loc;
+  loc.set_file("contract.sol");
+  loc.set_line(8);
+
+  // code_assign: legacy codet("assign") -> code_assign2t -> codet, loc intact.
+  codet assign("assign");
+  assign.copy_to_operands(
+    symbol_exprt("x", migrate_type_back(get_int_type(32))),
+    from_integer(7, migrate_type_back(get_int_type(32))));
+  assign.location() = loc;
+  expr2tc m;
+  migrate_expr(assign, m);
+  REQUIRE(is_code_assign2t(m));
+  REQUIRE(to_code_assign2t(m).location.get_file() == "contract.sol");
+  exprt back = migrate_expr_back(m);
+  REQUIRE(back.location().get_file() == "contract.sol");
+  REQUIRE(back.location().get_line() == "8");
+
+  // sideeffect_assign (compound `x += 10`) carries location too: it lowers to
+  // an ASSIGN instruction in goto_convert, whose location gates the Solidity
+  // narrowing-assignment overflow check.
+  side_effect_exprt comp("assign+");
+  comp.copy_to_operands(
+    symbol_exprt("x", migrate_type_back(get_int_type(32))),
+    from_integer(10, migrate_type_back(get_int_type(32))));
+  comp.location() = loc;
+  expr2tc mc;
+  migrate_expr(comp, mc);
+  REQUIRE(is_sideeffect_assign2t(mc));
+  REQUIRE(to_sideeffect_assign2t(mc).location.get_file() == "contract.sol");
+  REQUIRE(migrate_expr_back(mc).location().get_file() == "contract.sol");
+
+  // code_assert: its location becomes the ASSERT instruction location, which
+  // gates --assertion-coverage instrumentation (filename-pooled) and the
+  // coverage assert-count -- a dropped location yields "Total Asserts: 0".
+  codet assert_code("assert");
+  assert_code.copy_to_operands(
+    symbol_exprt("x", migrate_type_back(get_bool_type())));
+  assert_code.location() = loc;
+  expr2tc ma;
+  migrate_expr(assert_code, ma);
+  REQUIRE(is_code_assert2t(ma));
+  REQUIRE(to_code_assert2t(ma).location.get_file() == "contract.sol");
+  REQUIRE(migrate_expr_back(ma).location().get_file() == "contract.sol");
+
+  // code_assume: same, lowers to an ASSUME instruction.
+  codet assume_code("assume");
+  assume_code.copy_to_operands(
+    symbol_exprt("x", migrate_type_back(get_bool_type())));
+  assume_code.location() = loc;
+  expr2tc mu;
+  migrate_expr(assume_code, mu);
+  REQUIRE(is_code_assume2t(mu));
+  REQUIRE(to_code_assume2t(mu).location.get_file() == "contract.sol");
+  REQUIRE(migrate_expr_back(mu).location().get_file() == "contract.sol");
+}
+
+TEST_CASE("migrate preserves code_block end_location", "[migrate][v4-cf]")
+{
+  // W1 (esbmc#4715): code_block2t carries a non-reflected end_location (the
+  // closing-brace location) so it survives the --irep2-bodies round-trip.
+  // convert_block stamps it onto the destructor-unwind instructions at scope
+  // exit; without it those instructions are unlocated. Equality ignores it, so
+  // assert on it explicitly.
+  use_test_ns();
+  locationt loc, end_loc;
+  loc.set_file("contract.sol");
+  loc.set_line(3);
+  end_loc.set_file("contract.sol");
+  end_loc.set_line(9);
+
+  codet block("code");
+  block.statement("block");
+  block.location() = loc;
+  block.end_location(end_loc);
+
+  expr2tc m;
+  migrate_expr(block, m);
+  REQUIRE(is_code_block2t(m));
+  REQUIRE(to_code_block2t(m).end_location.get_line() == "9");
+
+  exprt back = migrate_expr_back(m);
+  REQUIRE(back.location().get_line() == "3");
+  REQUIRE(
+    static_cast<const locationt &>(back.end_location()).get_line() == "9");
+}
+
+TEST_CASE(
+  "migrate round-trips sizeof(T) carrying the measured type",
+  "[migrate][v4-cf]")
+{
+  // esbmc#5337: sizeof(T) is an unfolded `sizeof` node whose single type_exprt
+  // operand carries the measured type T. migrate maps it to a first-class
+  // sizeof2t with a reflected sizeof_type field (no side-channel attribute on a
+  // folded constant), and back to the legacy operand-typed form. get_alloc_type
+  // reads T off this node so malloc(sizeof(T)) allocates a struct T, not char.
+  use_test_ns();
+
+  exprt sz("sizeof", size_type());
+  sz.copy_to_operands(type_exprt(symbol_typet("tag-s")));
+  sz.copy_to_operands(from_integer(16, size_type()));
+  expr2tc m;
+  migrate_expr(sz, m);
+  REQUIRE(is_sizeof2t(m));
+  REQUIRE(!is_nil_type(to_sizeof2t(m).sizeof_type));
+  REQUIRE(is_constant_int2t(to_sizeof2t(m).value));
+
+  exprt back = migrate_expr_back(m);
+  REQUIRE(back.id() == "sizeof");
+  REQUIRE(back.operands().size() == 2);
+  REQUIRE(back.op0().type().id() == "symbol");
+
+  // A plain integer constant is unaffected and stays a constant_int2t.
+  expr2tc plain = constant_int2tc(get_uint_type(32), BigInt(8));
+  REQUIRE(is_constant_int2t(plain));
+  REQUIRE(migrate_expr_back(plain).id() == "constant");
+}
+
+TEST_CASE(
+  "migrate expr round-trips for pointer_capability",
+  "[migrate][b2-vtrack]")
+{
+  // pointer_capability is the only V1 kind that had no legacy form at all
+  // before this PR: it is constructed solver-side via pointer_capability2tc.
+  // V1 picks the legacy id "pointer_capability" symmetrically with
+  // pointer_object's existing pair, so back-then-forward round-trips.
+  use_test_ns();
+  expr2tc base = symbol2tc(get_int_type(32), "x");
+  type2tc cap_t = unsignedbv_type2tc(64);
+  require_expr_roundtrip(pointer_capability2tc(cap_t, base));
+}
+
+// V.4 of the migration (esbmc/esbmc#4715): structured control-flow code kinds.
+// These are dead-but-tested infrastructure -- nothing in the pipeline builds
+// them yet (the converter emits legacy structured codet, which goto_convert
+// lowers). The round-trip property pinned here is the precondition for the
+// goto_convert wiring phase that lets a frontend emit IREP2 bodies. The
+// nil-operand variants (else-less if, head-less for) exercise the null<->nil
+// mapping that an emitted body would hit.
+
+// A small legacy-shaped IREP2 body used as a sub-statement of the CF kinds.
+static expr2tc cf_block()
+{
+  expr2tc lhs = symbol2tc(get_int_type(32), "x");
+  expr2tc rhs = constant_int2tc(get_int_type(32), BigInt(1));
+  return code_block2tc(std::vector<expr2tc>{code_assign2tc(lhs, rhs)});
+}
+
+TEST_CASE("migrate expr round-trips for code_ifthenelse", "[migrate][v4-cf]")
+{
+  use_test_ns();
+  require_expr_roundtrip(
+    code_ifthenelse2tc(gen_true_expr(), cf_block(), cf_block()));
+  // No else branch: the else_case is a null expr2tc <-> nil exprt.
+  require_expr_roundtrip(
+    code_ifthenelse2tc(gen_true_expr(), cf_block(), expr2tc()));
+}
+
+TEST_CASE("migrate expr round-trips for code_while", "[migrate][v4-cf]")
+{
+  use_test_ns();
+  require_expr_roundtrip(code_while2tc(gen_true_expr(), cf_block()));
+}
+
+TEST_CASE("migrate expr round-trips for code_dowhile", "[migrate][v4-cf]")
+{
+  use_test_ns();
+  require_expr_roundtrip(code_dowhile2tc(gen_true_expr(), cf_block()));
+}
+
+TEST_CASE("migrate expr round-trips for code_for", "[migrate][v4-cf]")
+{
+  use_test_ns();
+  expr2tc i = symbol2tc(get_int_type(32), "i");
+  expr2tc init =
+    code_assign2tc(i, constant_int2tc(get_int_type(32), BigInt(0)));
+  expr2tc iter =
+    code_assign2tc(i, constant_int2tc(get_int_type(32), BigInt(1)));
+  require_expr_roundtrip(code_for2tc(init, gen_true_expr(), iter, cf_block()));
+  // Absent init/cond/iter -- the null<->nil corner for every head slot.
+  require_expr_roundtrip(
+    code_for2tc(expr2tc(), expr2tc(), expr2tc(), cf_block()));
+}
+
+TEST_CASE("migrate expr round-trips for code_switch", "[migrate][v4-cf]")
+{
+  use_test_ns();
+  expr2tc value = symbol2tc(get_int_type(32), "x");
+  require_expr_roundtrip(code_switch2tc(value, cf_block()));
+}
+
+TEST_CASE(
+  "migrate expr round-trips for code_break and code_continue",
+  "[migrate][v4-cf]")
+{
+  use_test_ns();
+  require_expr_roundtrip(code_break2tc());
+  require_expr_roundtrip(code_continue2tc());
+}
+
+TEST_CASE("migrate expr round-trips for code_label", "[migrate][v4-cf]")
+{
+  use_test_ns();
+  require_expr_roundtrip(code_label2tc("L1", cf_block()));
+}
+
+// V.4.1: each CF kind carries a source location through migrate in both
+// directions. The location field is intentionally NOT in the fields tuple, so
+// it does not enter operator== -- require_expr_roundtrip would pass even if it
+// were dropped. Assert it survives explicitly via the typed accessor.
+static locationt cf_loc()
+{
+  locationt l;
+  l.set_file("cf.c");
+  l.set_line(42u);
+  return l;
+}
+
+static expr2tc cf_roundtrip(const expr2tc &e2)
+{
+  expr2tc back;
+  migrate_expr(migrate_expr_back(e2), back);
+  return back;
+}
+
+TEST_CASE(
+  "migrate carries source location on CF code kinds",
+  "[migrate][v4-cf]")
+{
+  use_test_ns();
+  const locationt loc = cf_loc();
+  expr2tc value = symbol2tc(get_int_type(32), "x");
+
+  REQUIRE(
+    to_code_ifthenelse2t(cf_roundtrip(code_ifthenelse2tc(
+                           gen_true_expr(), cf_block(), expr2tc(), loc)))
+      .location == loc);
+  REQUIRE(
+    to_code_while2t(
+      cf_roundtrip(code_while2tc(gen_true_expr(), cf_block(), loc)))
+      .location == loc);
+  REQUIRE(
+    to_code_dowhile2t(
+      cf_roundtrip(code_dowhile2tc(gen_true_expr(), cf_block(), loc)))
+      .location == loc);
+  REQUIRE(
+    to_code_for2t(cf_roundtrip(code_for2tc(
+                    expr2tc(), expr2tc(), expr2tc(), cf_block(), loc)))
+      .location == loc);
+  REQUIRE(
+    to_code_switch2t(cf_roundtrip(code_switch2tc(value, cf_block(), loc)))
+      .location == loc);
+  REQUIRE(to_code_break2t(cf_roundtrip(code_break2tc(loc))).location == loc);
+  REQUIRE(
+    to_code_continue2t(cf_roundtrip(code_continue2tc(loc))).location == loc);
+  REQUIRE(
+    to_code_label2t(cf_roundtrip(code_label2tc("L1", cf_block(), loc)))
+      .location == loc);
+  REQUIRE(
+    to_code_assert2t(cf_roundtrip(code_assert2tc(gen_true_expr(), loc)))
+      .location == loc);
+  REQUIRE(
+    to_code_assume2t(cf_roundtrip(code_assume2tc(gen_true_expr(), loc)))
+      .location == loc);
+}
+
+TEST_CASE(
+  "migrate expr round-trips for code_assert and code_assume",
+  "[migrate][v4-cf]")
+{
+  use_test_ns();
+  require_expr_roundtrip(code_assert2tc(gen_true_expr()));
+  require_expr_roundtrip(code_assume2tc(gen_false_expr()));
+}
+
+// Phase 4.2 construction helpers (util/migrate.h): symbol_expr2tc and
+// side_effect_function_call2tc. The contract is that each is a faithful
+// drop-in for the legacy constructor it replaces -- it produces the same IREP2
+// node migrate_expr would yield from the legacy form -- and round-trips
+// losslessly. No frontend call site is wired to them yet (Phase 4.3/4.4).
+
+TEST_CASE(
+  "symbol_expr2tc is a drop-in for the migrated legacy symbol_expr",
+  "[migrate][phase4.2]")
+{
+  use_test_ns();
+  const symbolt *sym = test_context().find_symbol("x");
+  REQUIRE(sym != nullptr);
+
+  const expr2tc via_helper = symbol_expr2tc(*sym);
+  REQUIRE(is_symbol2t(via_helper));
+  REQUIRE(via_helper->type == migrate_symbol_type(*sym));
+
+  // Equal to migrating the legacy symbol_expr(sym): the helper is what the
+  // ~844 symbol_expr(symbolt) sites migrate to.
+  expr2tc via_legacy;
+  migrate_expr(symbol_expr(*sym), via_legacy);
+  REQUIRE(via_helper == via_legacy);
+
+  require_expr_roundtrip(via_helper);
+}
+
+TEST_CASE(
+  "side_effect_function_call2tc builds a function_call side-effect",
+  "[migrate][phase4.2]")
+{
+  use_test_ns();
+  const type2tc ret = get_int_type(32);
+  const symbolt *xsym = test_context().find_symbol("x");
+  const expr2tc fn = symbol_expr2tc(*xsym); // callee reference
+  const std::vector<expr2tc> args{
+    constant_int2tc(get_int_type(32), BigInt(7)),
+    constant_int2tc(get_int_type(32), BigInt(9))};
+
+  // Canonical IREP2 form: what migrate_expr yields from a real legacy
+  // side_effect_expr_function_callt. The helper must reproduce it exactly.
+  side_effect_expr_function_callt legacy(migrate_type_back(ret));
+  legacy.function() = symbol_expr(*xsym);
+  legacy.arguments().push_back(migrate_expr_back(args[0]));
+  legacy.arguments().push_back(migrate_expr_back(args[1]));
+  expr2tc via_legacy;
+  migrate_expr(legacy, via_legacy);
+
+  const expr2tc via_helper = side_effect_function_call2tc(ret, fn, args);
+  REQUIRE(is_sideeffect2t(via_helper));
+
+  const sideeffect2t &se = to_sideeffect2t(via_helper);
+  REQUIRE(se.kind == sideeffect2t::allockind::function_call);
+  REQUIRE(se.operand == fn);
+  REQUIRE(se.arguments == args);
+  REQUIRE(via_helper->type == ret);
+
+  REQUIRE(via_helper == via_legacy); // faithful drop-in
+  require_expr_roundtrip(via_helper);
+}
+
+// migrate_expr_back memoises on node identity so a shared subtree is expanded
+// once (R52 in docs/roadmap/goto-symex-verification-plan.md). A propagated
+// `with` chain over a nested array references its predecessor twice -- as the
+// store's source, and inside the `index` naming the row it updates -- so the
+// legacy form is reached along a number of paths exponential in the store
+// count.
+
+namespace
+{
+// `stores` levels of the DAG above, each store's value offset by `base` so two
+// chains of the same shape are distinguishable.
+expr2tc nested_store_dag(unsigned stores, unsigned base = 0)
+{
+  // Explicit-width indices, per the note on require_type_roundtrip above.
+  auto idx = [](unsigned v) {
+    return constant_int2tc(get_uint_type(64), BigInt(v));
+  };
+  const type2tc row = array_type2tc(get_int_type(32), idx(4), false);
+  const type2tc grid = array_type2tc(row, idx(4), false);
+
+  expr2tc chain = symbol2tc(grid, "grid");
+  for (unsigned k = 0; k < stores; ++k)
+  {
+    // Both operands name `chain`, which is what makes the result a DAG.
+    expr2tc old_row = index2tc(row, chain, idx(k % 4));
+    expr2tc updated = with2tc(
+      row, old_row, idx((k + 1) % 4), gen_long(get_int_type(32), base + k));
+    chain = with2tc(grid, chain, idx(k % 4), updated);
+  }
+  return chain;
+}
+} // namespace
+
+TEST_CASE("migrate_expr_back expands a shared subtree once", "[migrate]")
+{
+  use_test_ns();
+
+  const expr2tc chain = nested_store_dag(18);
+
+  // Wall-clock stands in for a node count the API does not expose. The
+  // separation it has to resolve is four orders of magnitude -- 18 stores
+  // expand along 2^18 paths unmemoised, measured at 1.5 s against under a
+  // millisecond -- so the threshold is not a tuned number.
+  const auto started = std::chrono::steady_clock::now();
+  const exprt legacy = migrate_expr_back(chain);
+  const auto elapsed = std::chrono::steady_clock::now() - started;
+  REQUIRE(
+    std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() <
+    300);
+
+  REQUIRE(legacy.id() == "with");
+}
+
+TEST_CASE("migrate_expr_back round-trips a shared subtree", "[migrate]")
+{
+  use_test_ns();
+  require_expr_roundtrip(nested_store_dag(6));
+}
+
+TEST_CASE("migrate_expr_back keeps no cache between calls", "[migrate]")
+{
+  use_test_ns();
+
+  exprt first;
+  {
+    const expr2tc a = nested_store_dag(6);
+    first = migrate_expr_back(a);
+  } // a's nodes die here, freeing their addresses for the allocator to reissue
+
+  const expr2tc b = nested_store_dag(6, 100);
+  const exprt second = migrate_expr_back(b);
+
+  // The cache keys on the address, so one surviving the first call would
+  // answer the second out of `a` at whatever addresses `b` reused.
+  expr2tc there_and_back;
+  migrate_expr(second, there_and_back);
+  REQUIRE(there_and_back == b);
+  REQUIRE(!full_eq(first, second));
+}
+
+// migrate_type_back memoises aggregate types on node identity (#7571).
+//
+// full_eq short-circuits on shared irept data (irep.cpp:209), so comparing two
+// cache hits asserts nothing -- these compare pretty() text, which always walks
+// the structure.
+
+TEST_CASE("migrate_type_back is stable across repeated calls", "[migrate]")
+{
+  const type2tc s = make_struct_type();
+  const std::string first = migrate_type_back(s).pretty();
+
+  migrate_type_back_cache_clear();
+  REQUIRE(migrate_type_back(s).pretty() == first);
+
+  // Distinct nodes that compare equal must still back-migrate equally: the
+  // cache keys on address, so an equal-but-separate node takes the slow path.
+  const type2tc other = make_struct_type();
+  REQUIRE(other == s);
+  REQUIRE(migrate_type_back(other).pretty() == first);
+}
+
+TEST_CASE("migrate_type_back recurses through nested aggregates", "[migrate]")
+{
+  // An array member routes the reverse migration through migrate_expr_back on
+  // the array size; a struct member exercises the recursive aggregate arm.
+  const type2tc s = make_nested_struct_type();
+  const std::string first = migrate_type_back(s).pretty();
+
+  migrate_type_back_cache_clear();
+  REQUIRE(migrate_type_back(s).pretty() == first);
+  REQUIRE(migrate_type_back(make_nested_struct_type()).pretty() == first);
+}
+
+TEST_CASE("migrate_type_back survives cache eviction", "[migrate]")
+{
+  const type2tc probe = make_nested_struct_type();
+  type2tc pinned = make_struct_type();
+  migrate_type_back_cache_clear();
+  const std::string expected = migrate_type_back(probe).pretty();
+  migrate_type_back(pinned);
+
+  // Overflow the cache to exercise the eviction path. Every node stays pinned
+  // while cached, so no address can be recycled and each insert is a new key.
+  std::vector<type2tc> nodes;
+  for (unsigned int i = 0; i < 5000; i++)
+  {
+    std::vector<type2tc> members{get_int_type(32), get_bool_type()};
+    std::vector<irep_idt> names{"x", "y"};
+    nodes.push_back(
+      struct_type2tc(members, names, names, "s" + std::to_string(i)));
+    migrate_type_back(nodes.back());
+  }
+
+  // Eviction dropped the cache's reference, so `pinned` is uniquely owned
+  // again and this mutable access does not clone. Were the cache still
+  // holding it, copy-on-write would detach and the address would change --
+  // which is what makes this discriminate eviction from an unbounded cache.
+  const type2t *node = std::as_const(pinned).get();
+  to_struct_type(pinned).name = "evicted";
+  REQUIRE(std::as_const(pinned).get() == node);
+
+  REQUIRE(migrate_type_back(probe).pretty() == expected);
+}
+
+TEST_CASE("a cached type2t detaches rather than mutating", "[migrate]")
+{
+  type2tc s = make_struct_type();
+  const std::string before = migrate_type_back(s).pretty();
+
+  // Read the node address through the const accessor: the non-const get() is
+  // itself the detaching overload, so reading with it would perform the very
+  // clone the test is trying to observe.
+  const type2t *original = std::as_const(s).get();
+
+  // Copy-on-write: the cache's reference makes the refcount > 1, so this
+  // mutable access must clone. If it wrote through instead, the cached legacy
+  // form would silently describe a type nobody holds any more.
+  to_struct_type(s).name = "renamed";
+  REQUIRE(std::as_const(s).get() != original);
+
+  REQUIRE(migrate_type_back(s).pretty() != before);
+  REQUIRE(migrate_type_back(make_struct_type()).pretty() == before);
+}
+
+// The round trip used to erase `#reference` / `#rvalue_reference`, so a
+// reference came back as a plain pointer.
+TEST_CASE("migrate carries the pointer reference kind", "[migrate]")
+{
+  pointer_typet plain(int_type());
+
+  pointer_typet lvalue(int_type());
+  lvalue.set("#reference", true);
+
+  pointer_typet rvalue(int_type());
+  rvalue.set("#rvalue_reference", true);
+
+  REQUIRE(
+    to_pointer_type(migrate_type(plain)).ref_kind == pointer_ref_kindt::NONE);
+  REQUIRE(
+    to_pointer_type(migrate_type(lvalue)).ref_kind ==
+    pointer_ref_kindt::LVALUE);
+  REQUIRE(
+    to_pointer_type(migrate_type(rvalue)).ref_kind ==
+    pointer_ref_kindt::RVALUE);
+
+  // No producer sets both today, but the read order is a decision: an rvalue
+  // reference wins, matching is_rvalue_reference, which ignores #reference.
+  pointer_typet both(int_type());
+  both.set("#reference", true);
+  both.set("#rvalue_reference", true);
+  REQUIRE(
+    to_pointer_type(migrate_type(both)).ref_kind == pointer_ref_kindt::RVALUE);
+
+  // In the fields tuple, so it separates otherwise identical types.
+  REQUIRE_FALSE(migrate_type(plain) == migrate_type(lvalue));
+  REQUIRE_FALSE(migrate_type(lvalue) == migrate_type(rvalue));
+
+  REQUIRE(
+    migrate_type(migrate_type_back(migrate_type(lvalue))) ==
+    migrate_type(lvalue));
+  REQUIRE(
+    migrate_type(migrate_type_back(migrate_type(rvalue))) ==
+    migrate_type(rvalue));
+  REQUIRE_FALSE(migrate_type_back(migrate_type(plain)).reference());
+  REQUIRE_FALSE(
+    migrate_type_back(migrate_type(plain)).get_bool("#rvalue_reference"));
+  REQUIRE(migrate_type_back(migrate_type(lvalue)).reference());
+  REQUIRE(
+    migrate_type_back(migrate_type(rvalue)).get_bool("#rvalue_reference"));
+}
+
+// The base-conversion markers the adjust passes dispatch on. They are irept
+// attributes, so before this they were erased by the round trip and an IREP2
+// pass could not tell that a cast owed a base displacement -- which silently
+// proves false assertions over multiple inheritance.
+TEST_CASE("migrate carries the base-conversion markers", "[migrate]")
+{
+  // migrate_expr resolves a symbol operand through the thread-local namespace.
+  use_test_ns();
+
+  const typet i32 = int_type();
+  exprt operand = symbol_exprt("x", i32);
+
+  typecast_exprt plain(operand, i32);
+  typecast_exprt to_base(operand, i32);
+  to_base.set("#derived_to_base", "tag-A");
+  typecast_exprt to_derived(operand, i32);
+  to_derived.set("#base_to_derived", true);
+
+  expr2tc m_plain, m_base, m_derived;
+  migrate_expr(plain, m_plain);
+  migrate_expr(to_base, m_base);
+  migrate_expr(to_derived, m_derived);
+
+  REQUIRE(to_typecast2t(m_plain).derived_to_base.empty());
+  REQUIRE_FALSE(to_typecast2t(m_plain).base_to_derived);
+  REQUIRE(to_typecast2t(m_base).derived_to_base == "tag-A");
+  REQUIRE(to_typecast2t(m_derived).base_to_derived);
+
+  // Both are in the fields tuple, so a marked cast is a different node from an
+  // unmarked one. fields_cover_class does not catch a field dropped from the
+  // tuple when the shortfall fits the alignment slack, so pin it here.
+  REQUIRE_FALSE(m_plain == m_base);
+  REQUIRE_FALSE(m_plain == m_derived);
+
+  // And they survive the way back, which is what clang_c_adjust reads.
+  REQUIRE(migrate_expr_back(m_base).get("#derived_to_base") == "tag-A");
+  REQUIRE(migrate_expr_back(m_derived).get_bool("#base_to_derived"));
+  REQUIRE(migrate_expr_back(m_plain).get("#derived_to_base").empty());
+}
+
+// migrate_expr has nowhere to hang a #derived_to_base marker on a node that is
+// not a cast, so it wraps one in a same-type typecast2t and back_typecast
+// unwraps it. Asserting only that the marker survives passes whether or not the
+// unwrap happens, so these pin the node kind: the legacy tree must come back
+// the shape it went in as, or clang_c_adjust sees a cast the program never
+// wrote.
+TEST_CASE("migrate unwraps the derived-to-base marker wrapper", "[migrate]")
+{
+  use_test_ns();
+
+  const typet i32 = int_type();
+  exprt marked = symbol_exprt("x", i32);
+  marked.set("#derived_to_base", "tag-A");
+
+  expr2tc m;
+  migrate_expr(marked, m);
+  REQUIRE(is_typecast2t(m));
+  REQUIRE(to_typecast2t(m).derived_to_base == "tag-A");
+  REQUIRE(to_typecast2t(m).type == to_typecast2t(m).from->type);
+
+  const exprt back = migrate_expr_back(m);
+  REQUIRE(back.id() == irept::id_symbol);
+  REQUIRE(back.get("#derived_to_base") == "tag-A");
+
+  // A cast the program did write keeps its cast on the way back, marker and
+  // all: the unwrap must key on the wrapper, not on the marker alone. The two
+  // types have to differ by *kind* -- config.ansi_c's widths are zero here, so
+  // int and long int migrate to the same type2tc and would read as a wrapper.
+  typecast_exprt real(symbol_exprt("y", i32), pointer_typet(i32));
+  real.set("#derived_to_base", "tag-A");
+  expr2tc m_real;
+  migrate_expr(real, m_real);
+  REQUIRE_FALSE(to_typecast2t(m_real).type == to_typecast2t(m_real).from->type);
+  const exprt back_real = migrate_expr_back(m_real);
+  REQUIRE(back_real.id() == exprt::typecast);
+  REQUIRE(back_real.get("#derived_to_base") == "tag-A");
+}
+
+// clang_cpp_convert_vft.cpp marks a dynamic_cast's typecast #base_to_derived
+// and #derived_to_base at once, so neither may be dropped when the other is
+// carried -- including through the wrapper unwrap.
+TEST_CASE("migrate carries both base markers on one cast", "[migrate]")
+{
+  use_test_ns();
+
+  // A constant operand, not a symbol: sym_name_to_symbol resolves a symbol's
+  // type through the namespace, which can leave from->type != type and take the
+  // ordinary path instead of the unwrap this test is about.
+  const typet i32 = int_type();
+  typecast_exprt both(from_integer(1, i32), i32);
+  both.set("#derived_to_base", "tag-A");
+  both.set("#base_to_derived", true);
+
+  expr2tc m;
+  migrate_expr(both, m);
+  REQUIRE(to_typecast2t(m).derived_to_base == "tag-A");
+  REQUIRE(to_typecast2t(m).base_to_derived);
+
+  // Same-type, so back_typecast takes its unwrap branch: the marker goes back
+  // on the operand. Pin that, or the test passes on the ordinary path and says
+  // nothing about the branch it is here for.
+  const exprt back = migrate_expr_back(m);
+  REQUIRE(back.id() != exprt::typecast);
+  REQUIRE(back.get("#derived_to_base") == "tag-A");
+  REQUIRE(back.get_bool("#base_to_derived"));
+}
+
+// struct_type2t and union_type2t have no per-member padding flag, so
+// #is_padding is re-derived from the member name on the way back
+// (migrate.cpp restore_padding_flag). Without it a pad member reads as a
+// declared field: c_expr2string prints it, and add_padding aligns around it as
+// if the user had written it.
+TEST_CASE("migrate_type_back re-flags struct padding members", "[migrate]")
+{
+  std::vector<type2tc> members{get_int_type(8), get_uint_type(24)};
+  std::vector<irep_idt> names{"a", "anon_pad#1"};
+  const typet back =
+    migrate_type_back(struct_type2tc(members, names, names, "s"));
+
+  const struct_union_typet::componentst &comps =
+    to_struct_union_type(back).components();
+  REQUIRE(comps.size() == 2);
+  REQUIRE_FALSE(comps[0].get_is_padding());
+  REQUIRE(comps[1].get_is_padding());
+}
+
+TEST_CASE("migrate_type_back re-flags union padding members", "[migrate]")
+{
+  std::vector<type2tc> members{get_int_type(8), get_uint_type(48)};
+  std::vector<irep_idt> names{"a", "union_pad#"};
+  const typet back =
+    migrate_type_back(union_type2tc(members, names, names, "u"));
+
+  const struct_union_typet::componentst &comps =
+    to_struct_union_type(back).components();
+  REQUIRE(comps.size() == 2);
+  REQUIRE_FALSE(comps[0].get_is_padding());
+  REQUIRE(comps[1].get_is_padding());
+}
+
+// A declared member cannot be mistaken for padding: every reserved pad name
+// contains '#', which no C or C++ identifier may (util/irep/pad_names.h).
+TEST_CASE("migrate_type_back leaves a look-alike member unflagged", "[migrate]")
+{
+  std::vector<type2tc> members{get_int_type(32), get_int_type(32)};
+  std::vector<irep_idt> names{"anon_pad", "union_pad"};
+  const typet back =
+    migrate_type_back(struct_type2tc(members, names, names, "s"));
+
+  const struct_union_typet::componentst &comps =
+    to_struct_union_type(back).components();
+  REQUIRE_FALSE(comps[0].get_is_padding());
+  REQUIRE_FALSE(comps[1].get_is_padding());
+}
+
+// clang_cpp_maint::adjust_init reads `#constructor` in final(), after the IREP2
+// adjust pass writes bodies back, so the marker has to survive the round trip.
+// `sideeffect2t::constructor` is unreflected, so operator== ignores it and
+// require_expr_roundtrip above cannot see it: assert on it in both directions.
+TEST_CASE("migrate preserves the constructor marker", "[migrate][v4-cf]")
+{
+  use_test_ns();
+  const typet legacy_int = migrate_type_back(get_int_type(32));
+
+  side_effect_expr_function_callt call;
+  call.type() = empty_typet();
+  call.function() = symbol_exprt("C::C", migrate_type_back(make_func_type()));
+  call.arguments().push_back(symbol_exprt("obj", legacy_int));
+  call.set("constructor", true);
+
+  expr2tc m;
+  migrate_expr(call, m);
+  REQUIRE(is_sideeffect2t(m));
+  REQUIRE(to_sideeffect2t(m).constructor);
+  REQUIRE(migrate_expr_back(m).get_bool("constructor"));
+
+  side_effect_expr_function_callt plain = call;
+  plain.remove("constructor");
+  expr2tc mp;
+  migrate_expr(plain, mp);
+  REQUIRE(is_sideeffect2t(mp));
+  REQUIRE_FALSE(to_sideeffect2t(mp).constructor);
+  REQUIRE_FALSE(migrate_expr_back(mp).get_bool("constructor"));
+}
+
+// What migrate_expr makes of a C++ symbol id, which contains characters
+// sym_name_to_symbol's renaming parser also uses. A clang USR is full of '#',
+// and '&' appears in the mangling of a reference parameter, so a name that was
+// never SSA-renamed can still look renamed (frontends-to-irep2.md §54.1).
+TEST_CASE("migrating an unresolvable C++ symbol id", "[migrate]")
+{
+  use_test_ns();
+  const type2tc t = pointer_type2tc(get_int_type(32));
+
+  SECTION("a '#'-bearing id keeps its whole name")
+  {
+    expr2tc e;
+    migrate_expr(symbol_exprt("c:@S@B@F@~B#this", migrate_type_back(t)), e);
+    REQUIRE(is_symbol2t(e));
+    REQUIRE(to_symbol2t(e).thename == irep_idt("c:@S@B@F@~B#this"));
+    INFO("level = " << (int)to_symbol2t(e).rlevel);
+    INFO("back  = " << migrate_expr_back(e).identifier());
+    REQUIRE(migrate_expr_back(e).identifier() == irep_idt("c:@S@B@F@~B#this"));
+  }
+
+  SECTION("an id bearing both '#' and '&' keeps its whole name")
+  {
+    expr2tc e;
+    migrate_expr(
+      symbol_exprt("c:@U@U@F@U#&1$@U@U#::ref", migrate_type_back(t)), e);
+    REQUIRE(is_symbol2t(e));
+    INFO("thename = " << to_symbol2t(e).thename);
+    REQUIRE(to_symbol2t(e).thename == irep_idt("c:@U@U@F@U#&1$@U@U#::ref"));
+  }
+
+  SECTION("a renamed '#'-bearing local keeps its renaming level and numbers")
+  {
+    const irep_idt local = "c:t.cpp@73@F@main#@n";
+    const type2tc it = get_int_type(32);
+    for (auto level :
+         {symbol_renaming_level::level1, symbol_renaming_level::level2})
+    {
+      const unsigned l2 = level == symbol_renaming_level::level2 ? 3 : 0;
+      const expr2tc sym = symbol2tc(it, local, level, 1, l2, 0, 0);
+      expr2tc e;
+      migrate_expr(migrate_expr_back(sym), e);
+      INFO("back = " << migrate_expr_back(sym).identifier());
+      REQUIRE(e == sym);
+    }
+  }
+}
+
+// A literal's `#cformat` is how the source wrote it, and c_expr2string prefers
+// it over deriving the text from the type -- so losing it re-renders every
+// printed constant (docs/roadmap/frontends-to-irep2.md §63). The field is
+// unreflected, so this also pins that two constants differing only in spelling
+// stay equal.
+TEST_CASE("a constant keeps its source spelling across the seam", "[migrate]")
+{
+  config.ansi_c.set_data_model(configt::LP64);
+
+  SECTION("an integer's spelling survives the round trip")
+  {
+    constant_exprt c(unsignedbv_typet(32));
+    c.set_value(integer2binary(BigInt(255), 32));
+    c.cformat("0xFF");
+
+    expr2tc e;
+    migrate_expr(c, e);
+    REQUIRE(is_constant_int2t(e));
+    REQUIRE(to_constant_int2t(e).cformat == irep_idt("0xFF"));
+    REQUIRE(migrate_expr_back(e).cformat() == irep_idt("0xFF"));
+  }
+
+  SECTION("a float's spelling survives the round trip")
+  {
+    ieee_floatt f;
+    f.spec = ieee_float_spect::single_precision();
+    f.from_double(0.1);
+    exprt c = f.to_expr();
+    c.cformat("0.1f");
+
+    expr2tc e;
+    migrate_expr(c, e);
+    REQUIRE(is_constant_floatbv2t(e));
+    REQUIRE(to_constant_floatbv2t(e).cformat == irep_idt("0.1f"));
+    REQUIRE(migrate_expr_back(e).cformat() == irep_idt("0.1f"));
+  }
+
+  SECTION("no spelling means no key, not an empty one")
+  {
+    constant_exprt c(unsignedbv_typet(32));
+    c.set_value(integer2binary(BigInt(255), 32));
+
+    expr2tc e;
+    migrate_expr(c, e);
+    REQUIRE(to_constant_int2t(e).cformat.empty());
+    // An empty `#cformat` would make c_expr2string print nothing at all rather
+    // than derive the text, so the key must be absent (§46's lesson).
+    REQUIRE(migrate_expr_back(e).find(irept::a_cformat).is_nil());
+  }
+
+  SECTION("the spelling is no part of a constant's identity")
+  {
+    constant_exprt hex(unsignedbv_typet(32));
+    hex.set_value(integer2binary(BigInt(255), 32));
+    hex.cformat("0xFF");
+    constant_exprt dec(unsignedbv_typet(32));
+    dec.set_value(integer2binary(BigInt(255), 32));
+    dec.cformat("255");
+
+    expr2tc a, b;
+    migrate_expr(hex, a);
+    migrate_expr(dec, b);
+    REQUIRE(a == b);
+    REQUIRE(a->crc() == b->crc());
+  }
+}
+
+// back_sideeffect used to write `#type` and `#size` unconditionally, so a side
+// effect that had neither came back carrying `#type: empty` and `#size: nil`.
+// Comments are invisible to irept::operator==, so nothing compared unequal --
+// but every printed symbol table and goto program showed them
+// (docs/roadmap/scope-clang-c-irep2.md §155).
+TEST_CASE("a nondet side effect gains no empty comment keys", "[migrate]")
+{
+  config.ansi_c.set_data_model(configt::LP64);
+
+  expr2tc se = sideeffect2tc(
+    get_uint32_type(),
+    expr2tc(),
+    expr2tc(),
+    std::vector<expr2tc>(),
+    type2tc(),
+    sideeffect2t::allockind::nondet);
+
+  exprt back = migrate_expr_back(se);
+  REQUIRE(back.id() == "sideeffect");
+  REQUIRE(back.find(irept::a_cmt_size).is_nil());
+  REQUIRE(back.find(irept::a_cmt_type).is_nil());
+}
+
+// side_effect_function_call2tc stores get_empty_type() as its alloctype because
+// that is what round-trips, so guarding the `#type` write on nil alone still
+// invents the key for every call -- which is why §155's guard moved nothing
+// (docs/roadmap/scope-clang-c-irep2.md §157.1).
+TEST_CASE("a call side effect gains no #type key", "[migrate]")
+{
+  config.ansi_c.set_data_model(configt::LP64);
+
+  expr2tc se = sideeffect2tc(
+    get_uint32_type(),
+    symbol2tc(get_uint32_type(), "c:@F@f"),
+    expr2tc(),
+    std::vector<expr2tc>(),
+    get_empty_type(),
+    sideeffect2t::allockind::function_call);
+
+  exprt back = migrate_expr_back(se);
+  REQUIRE(back.id() == "sideeffect");
+  REQUIRE(back.find(irept::a_cmt_type).is_nil());
+}
+
+// `const` on a pointee is `#constant` on the pointed-to type, and c_expr2string
+// prints it -- so losing it across the seam re-renders every cast through a
+// const pointer (docs/roadmap/scope-clang-c-irep2.md §158).
+TEST_CASE("a const-qualified integer keeps its qualifier", "[migrate]")
+{
+  config.ansi_c.set_data_model(configt::LP64);
+
+  SECTION("the qualifier survives the round trip")
+  {
+    unsignedbv_typet q(8);
+    q.cmt_constant(true);
+
+    type2tc t = migrate_type(q);
+    REQUIRE(is_unsignedbv_type(t));
+    REQUIRE(to_unsignedbv_type(t).constant_qualified);
+    REQUIRE(migrate_type_back(t).cmt_constant());
+  }
+
+  SECTION("an unqualified integer gains no key")
+  {
+    type2tc t = migrate_type(unsignedbv_typet(8));
+    REQUIRE_FALSE(to_unsignedbv_type(t).constant_qualified);
+    REQUIRE(migrate_type_back(t).find(irept::a_cmt_constant).is_nil());
+  }
+
+  SECTION("the qualifier is no part of the type's identity")
+  {
+    unsignedbv_typet q(8);
+    q.cmt_constant(true);
+    REQUIRE(migrate_type(q) == migrate_type(unsignedbv_typet(8)));
+    REQUIRE(migrate_type(q)->crc() == migrate_type(unsignedbv_typet(8))->crc());
+  }
+}
+
+// A code-typed member names a method, which is no part of a struct_type2t, so
+// member2t's component assertion has nothing to check it against. In-tree
+// sources are by-name and covered by the `symbol_id` disjunct; a *resolved*
+// source is what the clang-c local value write produces
+// (docs/roadmap/frontends-to-irep2.md §76).
+TEST_CASE("migrating a member access naming a method keeps it", "[migrate]")
+{
+  use_test_ns();
+
+  struct_typet st;
+  st.tag("slice");
+  st.components().push_back(
+    struct_typet::componentt("slice::_start", "_start", int_type()));
+
+  code_typet mt;
+  mt.return_type() = int_type();
+  mt.arguments().push_back(code_typet::argumentt(pointer_typet(st)));
+  st.methods().push_back(struct_typet::componentt("slice::size", "size", mt));
+
+  symbolt obj;
+  obj.id = obj.name = "sl";
+  obj.set_type(st);
+  obj.lvalue = true;
+  test_context().add(obj);
+
+  expr2tc out;
+  migrate_expr(member_exprt(symbol_exprt("sl", st), "slice::size", mt), out);
+
+  REQUIRE(is_member2t(out));
+  REQUIRE(to_member2t(out).member == irep_idt("slice::size"));
+  REQUIRE(is_code_type(to_member2t(out).type));
+  // The source is resolved, which is what makes the lookup applicable at all.
+  REQUIRE(is_struct_type(to_member2t(out).source_value->type));
+  // And the method is genuinely absent from it: the assertion is relaxed, not
+  // satisfied by the seam having started to carry methods().
+  REQUIRE_FALSE(struct_union_get_component_number(
+                  to_member2t(out).source_value->type, "slice::size")
+                  .has_value());
+}
+
+// The two Solidity delegate-shadow sites that store a zero return value now
+// build it with the IREP2 gen_zero over a migrated type, where they built a
+// legacy zero and let the setter migrate it. Those are different functions, so
+// this pins that they agree on the types reaching those sites. The sites are
+// verification-inert -- the GOTO takes the value from the code_declt operand on
+// the next line -- so no regression test can bite, and this is the pin
+// (docs/roadmap/scope-solidity-irep2.md §16.1).
+TEST_CASE(
+  "the two gen_zero overloads agree on Solidity return types",
+  "[migrate]")
+{
+  use_test_ns();
+
+  auto agree = [](const typet &t) {
+    const type2tc t2 = migrate_type(t);
+    expr2tc via_legacy;
+    migrate_expr(gen_zero(t, true), via_legacy);
+    const expr2tc via_irep2 = gen_zero(t2, true);
+    INFO("type kind id = " << get_type_id(t2));
+    REQUIRE(via_irep2 == via_legacy);
+  };
+
+  // uint256 and address: every corpus test reaching those sites returns one of
+  // these, `address` being an unsignedbv(160) carrying #sol_type.
+  agree(unsignedbv_typet(256));
+  agree(unsignedbv_typet(160));
+  agree(bool_typet());
+  agree(signedbv_typet(32));
+
+  SECTION("a Solidity string is a pointer, and agrees too")
+  {
+    agree(pointer_typet(signed_char_type()));
+  }
+}
+
+// `#cpp_type` is the source language's own spelling of a type. Unreflected --
+// two bitvectors of a width are the same type however spelled -- but a
+// consumer reads it back: python_converter::get_python_type_category tells a
+// 1-char string element from an 8-bit int by it, so dropping it at the seam
+// folds a char comparison to false (docs/roadmap/scope-python-irep2.md §9).
+TEST_CASE("a type keeps its source spelling", "[migrate]")
+{
+  SECTION("the spelling round-trips on the three kinds that carry one")
+  {
+    signedbv_typet c(8);
+    c.cpp_type("char");
+    REQUIRE(to_signedbv_type(migrate_type(c)).cpp_type == irep_idt("char"));
+    REQUIRE(migrate_type_back(migrate_type(c)).cpp_type() == irep_idt("char"));
+
+    unsignedbv_typet u(64);
+    u.cpp_type("unsigned_long");
+    REQUIRE(
+      migrate_type_back(migrate_type(u)).cpp_type() ==
+      irep_idt("unsigned_long"));
+
+    floatbv_typet d;
+    d.set_f(52);
+    d.set_width(64);
+    d.cpp_type("double");
+    REQUIRE(
+      migrate_type_back(migrate_type(d)).cpp_type() == irep_idt("double"));
+  }
+
+  SECTION("an unspelled type gains no key")
+  {
+    // `#cpp_type` is a comment field, so writing it empty inserts a key the
+    // printer then reads -- the §158 hazard, three times over by now.
+    const typet back = migrate_type_back(migrate_type(signedbv_typet(8)));
+    REQUIRE(back.find(irept::a_cpp_type).is_nil());
+    // full_eq, not ==: `operator==` skips comments, so it cannot see a leaked
+    // `#cpp_type` and asserting on it would be a tautology (§78's lesson).
+    REQUIRE(full_eq(back, signedbv_typet(8)));
+  }
+
+  SECTION("the spelling is no part of the type's identity")
+  {
+    signedbv_typet spelled(8);
+    spelled.cpp_type("char");
+    REQUIRE(migrate_type(spelled) == migrate_type(signedbv_typet(8)));
+    REQUIRE(
+      migrate_type(spelled)->crc() == migrate_type(signedbv_typet(8))->crc());
+  }
+}
+
+// An argument's `#default_value` is no part of a function's type, but Python
+// call lowering fills a missing argument from it, so it must survive the seam.
+TEST_CASE("a function type keeps its argument defaults", "[migrate]")
+{
+  code_typet f;
+  f.return_type() = empty_typet();
+  f.arguments().emplace_back(signedbv_typet(64));
+  f.arguments().emplace_back(signedbv_typet(64));
+
+  SECTION("a default round-trips on the argument that has one")
+  {
+    f.arguments()[1].default_value() = from_integer(7, signedbv_typet(64));
+    const code_typet back = to_code_type(migrate_type_back(migrate_type(f)));
+    REQUIRE(!back.arguments()[0].has_default_value());
+    REQUIRE(
+      back.arguments()[1].default_value() == f.arguments()[1].default_value());
+  }
+
+  SECTION("no default gains no key")
+  {
+    const code_typet back = to_code_type(migrate_type_back(migrate_type(f)));
+    for (const auto &arg : back.arguments())
+      REQUIRE(arg.find("#default_value").is_nil());
+  }
+
+  SECTION("a default is no part of the type's identity")
+  {
+    code_typet with = f;
+    with.arguments()[0].default_value() = from_integer(1, signedbv_typet(64));
+    REQUIRE(migrate_type(with) == migrate_type(f));
+    REQUIRE(migrate_type(with)->crc() == migrate_type(f)->crc());
+  }
+}
+
+// A resolved C++ exception specification is no part of a function's type, but
+// goto_convert_functions decodes it from the function symbol's type.
+TEST_CASE("a function type keeps its exception specification", "[migrate]")
+{
+  code_typet f;
+  f.return_type() = empty_typet();
+  auto round_trip = [](const code_typet &t) {
+    return exception_specificationt::from_type(
+      migrate_type_back(migrate_type(t)));
+  };
+
+  SECTION("a dynamic specification round-trips")
+  {
+    f.set(exception_specificationt::kind_attribute(), "dynamic");
+    irept types;
+    types.get_sub().emplace_back("tag-my_error");
+    f.set(exception_specificationt::types_attribute(), types);
+    const exception_specificationt back = round_trip(f);
+    REQUIRE(back.kind == exception_specificationt::kindt::dynamic);
+    REQUIRE(back.allowed_types == std::vector<irep_idt>{"tag-my_error"});
+  }
+
+  SECTION("noexcept round-trips")
+  {
+    f.set(exception_specificationt::kind_attribute(), "non_throwing");
+    REQUIRE(
+      round_trip(f).kind == exception_specificationt::kindt::non_throwing);
+  }
+
+  SECTION("an unresolved dynamic specification keeps its declared types")
+  {
+    f.set(exception_specificationt::kind_attribute(), "dynamic");
+    f.add("exception_spec_decl").get_sub().push_back(signedbv_typet(32));
+    const typet back = migrate_type_back(migrate_type(f));
+    REQUIRE(back.get(exception_specificationt::kind_attribute()) == "dynamic");
+    const auto &decl = back.find("exception_spec_decl").get_sub();
+    REQUIRE(decl.size() == 1);
+    REQUIRE(static_cast<const typet &>(decl[0]) == signedbv_typet(32));
+  }
+
+  SECTION("a constructor and a destructor keep their pseudo return types")
+  {
+    code_typet ctor = f, dtor = f;
+    ctor.return_type() = typet("constructor");
+    ctor.return_type().set("#implicit_union_copy_move_constructor", true);
+    dtor.return_type() = typet("destructor");
+    const typet ctor_back =
+      to_code_type(migrate_type_back(migrate_type(ctor))).return_type();
+    REQUIRE(ctor_back.id() == "constructor");
+    REQUIRE(ctor_back.get_bool("#implicit_union_copy_move_constructor"));
+    REQUIRE(
+      to_code_type(migrate_type_back(migrate_type(dtor))).return_type().id() ==
+      "destructor");
+  }
+
+  SECTION("no specification gains no key")
+  {
+    const typet back = migrate_type_back(migrate_type(f));
+    REQUIRE(back.find(exception_specificationt::kind_attribute()).is_nil());
+    REQUIRE(back.find(exception_specificationt::types_attribute()).is_nil());
+  }
+
+  SECTION("a specification is no part of the type's identity")
+  {
+    code_typet spec = f;
+    spec.set(exception_specificationt::kind_attribute(), "non_throwing");
+    REQUIRE(migrate_type(spec) == migrate_type(f));
+    REQUIRE(migrate_type(spec)->crc() == migrate_type(f)->crc());
+  }
+}
+
+// `#python_aggregate` marks a Python model struct (tuple, dict, Optional).
+// Unreflected -- the tag already names the type -- but `in` dispatches on it,
+// and a user class can share a tuple's tag prefix, so it cannot be derived
+// from the tag (docs/roadmap/scope-python-irep2.md §10.4).
+TEST_CASE("a struct keeps its Python aggregate kind", "[migrate]")
+{
+  struct_typet tuple;
+  tuple.components().emplace_back("element_0", "element_0", signedbv_typet(64));
+  tuple.tag("tag-tuple_signedbv");
+
+  SECTION("the kind round-trips")
+  {
+    set_python_aggregate_kind(tuple, "tuple");
+    REQUIRE(
+      python_aggregate_kind(migrate_type_back(migrate_type(tuple))) ==
+      irep_idt("tuple"));
+  }
+
+  SECTION("an unmarked struct gains no key")
+  {
+    const typet back = migrate_type_back(migrate_type(tuple));
+    REQUIRE(back.find(PYTHON_AGGREGATE_ATTR).is_nil());
+    REQUIRE(full_eq(back, tuple));
+  }
+
+  SECTION("the kind is no part of the type's identity")
+  {
+    struct_typet marked = tuple;
+    set_python_aggregate_kind(marked, "tuple");
+    REQUIRE(migrate_type(marked) == migrate_type(tuple));
+    REQUIRE(migrate_type(marked)->crc() == migrate_type(tuple)->crc());
+  }
+}
+
+// A class's `bases` list is no part of its type's identity, but exception
+// dispatch and base_type.cpp read the class hierarchy from it.
+TEST_CASE("a struct keeps its bases", "[migrate]")
+{
+  struct_typet cls;
+  cls.components().emplace_back("x", "x", signedbv_typet(64));
+  cls.tag("tag-D");
+
+  SECTION("the bases round-trip")
+  {
+    cls.add("bases").get_sub().emplace_back("tag-B");
+    REQUIRE(full_eq(migrate_type_back(migrate_type(cls)), cls));
+  }
+
+  SECTION("an empty list stays distinct from none")
+  {
+    cls.add("bases");
+    REQUIRE(migrate_type_back(migrate_type(cls)).find("bases").is_not_nil());
+  }
+
+  SECTION("no bases gains no key")
+  {
+    REQUIRE(migrate_type_back(migrate_type(cls)).find("bases").is_nil());
+  }
+
+  SECTION("the bases are no part of the type's identity")
+  {
+    struct_typet derived = cls;
+    derived.add("bases").get_sub().emplace_back("tag-B");
+    REQUIRE(migrate_type(derived) == migrate_type(cls));
+  }
+}

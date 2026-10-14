@@ -1,0 +1,5 @@
+CORE
+main.py
+--enforce-contract twice
+^  contract ensures$
+^VERIFICATION FAILED$

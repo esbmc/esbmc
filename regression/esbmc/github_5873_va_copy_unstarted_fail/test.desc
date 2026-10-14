@@ -1,0 +1,5 @@
+CORE
+main.c
+--function main
+missing va_start: va_arg on an uninitialised va_list
+^VERIFICATION FAILED$

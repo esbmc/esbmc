@@ -1,7 +1,7 @@
 #ifndef _ESBMC_SOLVERS_SMT_BITBLAST_CONV_H_
 #define _ESBMC_SOLVERS_SMT_BITBLAST_CONV_H_
 
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <sat_iface.h>
 
 class bitblast_smt_sort : public smt_sort
@@ -35,7 +35,7 @@ class bitblast_smt_ast : public smt_ast
 {
 public:
 #define bitblast_ast_downcast(x) static_cast<const bitblast_smt_ast *>(x)
-  bitblast_smt_ast(smt_convt *ctx, const smt_sort *s) : smt_ast(ctx, s)
+  bitblast_smt_ast(smt_solver_baset *ctx, const smt_sort *s) : smt_ast(ctx, s)
   {
   }
 
@@ -43,7 +43,7 @@ public:
   bvt bv;
 };
 
-class bitblast_convt : public smt_convt
+class bitblast_convt : public smt_solver_baset
 {
 public:
   typedef enum
@@ -76,7 +76,7 @@ public:
   // Update: SAT solver no longer subclasses this class, it instead provides a
   // SAT api pointer. Documentation not yet updated, sorry.
 
-  // smt_convt apis we fufil
+  // smt_solver_baset apis we fufil
 
   virtual smt_astt mk_func_app(
     const smt_sort *ressort,

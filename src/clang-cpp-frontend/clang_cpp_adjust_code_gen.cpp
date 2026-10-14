@@ -1,7 +1,44 @@
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
-#include <util/std_expr.h>
+#include <clang-cpp-frontend/clang_cpp_code_gen.h>
+#include <util/irep/std_expr.h>
+#include <functional>
 
-void clang_cpp_adjust::gen_vptr_initializations(symbolt &symbol)
+static exprt gen_vptr_init_rhs(
+  contextt &context,
+  const struct_union_typet::componentt &comp,
+  const code_typet &ctor_type);
+
+/// A ctor's or dtor's first argument is `this`, so its pointee names the class
+/// the function is declared in. Derived rather than read from the code type's
+/// `#member_name`, which is no part of the IREP2 code type -- 420 observations
+/// over the C++ corpora agree (frontends-to-irep2.md §50).
+static irep_idt ctor_class_id(const code_typet &ctor_type)
+{
+  assert(!ctor_type.arguments().empty());
+  return ctor_type.arguments().front().type().subtype().identifier();
+}
+
+/// The block holding a ctor's initializers: its body, or the try block a ctor
+/// that destroys its built subobjects on unwind puts them in.
+static code_blockt &initializer_block(code_blockt &body)
+{
+  exprt::operandst &ops = body.operands();
+  if (ops.size() == 2 && ops[1].get_bool("#subobject_unwind"))
+    return to_code_block(to_code(ops[1].op0()));
+  return body;
+}
+
+/// A leading base-subobject construction: a base ctor call (tagged
+/// `#is_base_ctor_call`), one wrapped in `if(__is_complete){...}`
+/// (esbmc/esbmc#938), or the progress marker before one.
+static bool is_base_construction(const exprt &op)
+{
+  return (op.has_operands() && op.op0().get_bool("#is_base_ctor_call")) ||
+         op.get_bool("#base_ctor_call_guard") ||
+         op.get_bool("#construction_progress");
+}
+
+void gen_vptr_initializations(contextt &context, symbolt &symbol)
 {
   /*
    * This function traverses the vptr components of the correponding class type
@@ -17,13 +54,14 @@ void clang_cpp_adjust::gen_vptr_initializations(symbolt &symbol)
    *
    *  where vtable::BLEH@BLEH contains overriding function,
    *  and vtable::BLAH@BLEH contains the function pointers to
-   *  the thunk function that does last casting and redirects the call to the overriding function
+   *  the thunk function that does last casting and redirects the call to the
+   * overriding function
    *
-   *  N.B. For a derived class, this function assumes that all vptrs are properly
-   *  copied to the `components` list in its type, which should have been
-   *  done in the converter.
+   *  N.B. For a derived class, this function assumes that all vptrs are
+   * properly copied to the `components` list in its type, which should have
+   * been done in the converter.
    */
-  if (!symbol.value.need_vptr_init() || symbol.value.is_nil())
+  if (!symbol.get_value().need_vptr_init() || symbol.get_value().is_nil())
     return;
 
   /*
@@ -31,101 +69,100 @@ void clang_cpp_adjust::gen_vptr_initializations(symbolt &symbol)
    *  - a ctor symbol shall contain a function body modelled by code_blockt
    *  - symbol should be of code type
    */
-  code_typet &ctor_type = to_code_type(symbol.type);
-  code_blockt &ctor_body = to_code_block(to_code(symbol.value));
+  const code_typet &ctor_type = to_code_type(symbol.get_type());
 
   /*
-   *  vptr initializations shall be done in ctor
-   *  TODO: For the time being, we just add vptr init code in ctors.
-   *        We *might* need to add vptr init code in dtors in the future. But we need some TCs first.
+   *  vptr initializations are needed in both constructors and destructors:
+   *  each sets the vptr to its own class's vtable at entry (after base ctors
+   *  for a ctor, before the body for a dtor) so that virtual calls made during
+   *  construction or destruction resolve to that class's overrides rather than
+   *  a more-derived one (C++ [class.cdtor]/4).
    */
-  if (ctor_type.return_type().id() != "constructor")
+  const irep_idt &rtn_id = ctor_type.return_type().id();
+  const bool is_dtor = rtn_id == "destructor";
+  if (rtn_id != "constructor" && !is_dtor)
     return;
 
   // get the class' type where this ctor is declared
   const symbolt *ctor_class_symb =
-    namespacet(context).lookup(ctor_type.get("#member_name"));
+    namespacet(context).lookup(ctor_class_id(ctor_type));
   assert(ctor_class_symb);
   // get the `components` vector from this class' type
   const struct_typet::componentst &components =
-    to_struct_type(ctor_class_symb->type).components();
+    to_struct_type(ctor_class_symb->get_type()).components();
 
-  // iterate over the `components` and initialize each virtual pointers
-  for (const auto &comp : components)
-  {
-    if (!comp.get_bool("is_vtptr"))
-      continue;
+  // Read-modify-set the value to mutate the body and clear need_vptr_init.
+  exprt value = symbol.get_value();
+  code_blockt &ctor_body = initializer_block(to_code_block(to_code(value)));
 
-    side_effect_exprt new_code("assign");
-    gen_vptr_init_code(comp, new_code, ctor_type);
-    codet code_expr("expression");
-    code_expr.move_to_operands(new_code);
-    ctor_body.operands().push_back(code_expr);
-  }
+  // Find where to insert the vptr assignments.  A destructor sets the vptr at
+  // the very start of its body.  A constructor sets it after the leading
+  // base-subobject constructor calls (tagged `#is_base_ctor_call`) but before
+  // its own member initializers and body — appending at the end would let the
+  // body run with the still-derived vptr.
+  exprt::operandst &body_ops = ctor_body.operands();
+  std::size_t insert_at = 0;
+  while (!is_dtor && insert_at < body_ops.size() &&
+         is_base_construction(body_ops[insert_at]))
+    ++insert_at;
 
-  symbol.value.need_vptr_init(false);
-}
-
-void clang_cpp_adjust::gen_vptr_init_code(
-  const struct_union_typet::componentt &comp,
-  side_effect_exprt &new_code,
-  const code_typet &ctor_type)
-{
-  /*
-   * Generate the statement to assign each vptr the corresponding
-   * vtable address, e.g.:
-   *  this->vptr = &<vtable_struct_var_name>
-   */
-
-  // 1. set the type
-  //typet vtable_type = symbol_typet(comp.type().subtype().id());
-  new_code.type() = comp.type();
-
-  // 2. LHS: generate the member pointer dereference expression
-  exprt lhs_expr = gen_vptr_init_lhs(comp, ctor_type);
-
-  // 3. RHS: generate the address of the target virtual pointer struct
-  exprt rhs_expr = gen_vptr_init_rhs(comp, ctor_type);
-
-  // now push them to the assignment statement code
-  new_code.operands().push_back(lhs_expr);
-  new_code.operands().push_back(rhs_expr);
-}
-
-exprt clang_cpp_adjust::gen_vptr_init_lhs(
-  const struct_union_typet::componentt &comp,
-  const code_typet &ctor_type)
-{
-  /*
-   * Generate the LHS expression for virtual pointer initialization,
-   * as in:
-   *  this->vptr = &<vtable_struct_variable>
-   */
-
-  exprt lhs_code;
-
-  // get the `this` argument symbol
-  const symbolt *this_symb = namespacet(context).lookup(
-    ctor_type.arguments().at(0).type().subtype().identifier());
+  // Build the `*this` lvalue that every vptr assignment is rooted at.
+  namespacet ns(context);
+  const symbolt *this_symb =
+    ns.lookup(ctor_type.arguments().at(0).type().subtype().identifier());
   assert(this_symb);
-
-  // prepare dereference operand
-  exprt deref_operand = symbol_exprt(
-    ctor_type.arguments().at(0).get("#identifier"), this_symb->type);
-
-  // get the reference symbol
-  dereference_exprt this_deref(deref_operand.type());
+  exprt this_operand = symbol_exprt(
+    ctor_type.arguments().at(0).get("#identifier"), this_symb->get_type());
+  dereference_exprt this_deref(this_operand.type());
   this_deref.operands().resize(0);
-  this_deref.operands().push_back(deref_operand);
+  this_deref.operands().push_back(this_operand);
 
-  // now we can get the member expr for "this->vptr"
-  lhs_code = member_exprt(comp.name(), comp.type());
-  lhs_code.operands().push_back(this_deref);
+  // Initialise every vptr reachable from this class: its own, plus those of
+  // the nested "@base@" base subobjects. Base vptrs live inside their
+  // subobject now, so the LHS is a member path (this->@base@B->vptr) rather
+  // than a flat member. The RHS is unchanged: each vptr is pointed at *this*
+  // class's vtable for that vptr-class (vtable::tag-B@Derived), which is what
+  // overrides the base ctor's own assignment. See #1866, #3894.
+  std::function<void(const struct_typet &, const exprt &)> emit_vptr_inits =
+    [&](const struct_typet &st, const exprt &access) {
+      for (const auto &comp : st.components())
+      {
+        exprt member = member_exprt(comp.name(), comp.type());
+        member.operands().resize(0);
+        member.operands().push_back(access);
 
-  return lhs_code;
+        if (comp.get_bool("is_vtptr"))
+        {
+          side_effect_exprt new_code("assign");
+          new_code.type() = comp.type();
+          new_code.operands().push_back(member);
+          new_code.operands().push_back(
+            gen_vptr_init_rhs(context, comp, ctor_type));
+          codet code_expr("expression");
+          code_expr.move_to_operands(new_code);
+          body_ops.insert(body_ops.begin() + insert_at, code_expr);
+          ++insert_at;
+        }
+        else if (comp.get_bool("is_base_subobject"))
+        {
+          const typet followed = ns.follow(comp.type());
+          if (followed.is_struct())
+            emit_vptr_inits(to_struct_type(followed), member);
+        }
+      }
+    };
+
+  emit_vptr_inits(to_struct_type(ctor_class_symb->get_type()), this_deref);
+  (void)components;
+
+  value.need_vptr_init(false);
+  expr2tc value2;
+  migrate_expr(value, value2);
+  symbol.set_value(value2);
 }
 
-exprt clang_cpp_adjust::gen_vptr_init_rhs(
+static exprt gen_vptr_init_rhs(
+  contextt &context,
   const struct_union_typet::componentt &comp,
   const code_typet &ctor_type)
 {
@@ -139,12 +176,13 @@ exprt clang_cpp_adjust::gen_vptr_init_rhs(
 
   // get the corresponding vtable variable symbol
   std::string vtable_var_id = comp.type().subtype().identifier().as_string() +
-                              "@" + ctor_type.get("#member_name").as_string();
+                              "@" + ctor_class_id(ctor_type).as_string();
   const symbolt *vtable_var_symb = namespacet(context).lookup(vtable_var_id);
   assert(vtable_var_symb);
 
   // get the operand for address_of expr as in `&<vtable_struct_variable>`
-  exprt vtable_var = symbol_exprt(vtable_var_symb->id, vtable_var_symb->type);
+  exprt vtable_var =
+    symbol_exprt(vtable_var_symb->id, vtable_var_symb->get_type());
   vtable_var.name(vtable_var_symb->name);
 
   // now we can get the address_of expr for "&<vtable_struct_variable>"

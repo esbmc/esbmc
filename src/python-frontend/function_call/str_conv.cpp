@@ -1,0 +1,1340 @@
+#include <python-frontend/function_call/expr.h>
+#include <python-frontend/json_utils.h>
+#include <irep2/irep2_utils.h>
+#include <python-frontend/exception/python_exception_handler.h>
+#include <python-frontend/string/string_builder.h>
+#include <python-frontend/string/string_handler.h>
+#include <util/base/host_rounding_mode.h>
+#include <python-frontend/type/type_handler.h>
+#include <python-frontend/type/type_utils.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/message/message.h>
+#include <util/irep/migrate.h>
+#include <util/irep/std_expr.h>
+
+#include <algorithm>
+#include <cctype>
+#include <cmath>
+#include <cstdio>
+#include <cstdlib>
+#include <functional>
+#include <optional>
+#include <sstream>
+#include <stdexcept>
+
+using namespace json_utils;
+
+namespace
+{
+// Constants for UTF-8 encoding
+constexpr unsigned int UTF8_1_BYTE_MAX = 0x7F;
+constexpr unsigned int UTF8_2_BYTE_MAX = 0x7FF;
+constexpr unsigned int UTF8_3_BYTE_MAX = 0xFFFF;
+constexpr unsigned int UTF8_4_BYTE_MAX = 0x10FFFF;
+constexpr unsigned int SURROGATE_START = 0xD800;
+constexpr unsigned int SURROGATE_END = 0xDFFF;
+
+static std::string utf8_encode(unsigned int int_value)
+{
+  /**
+   * Convert an integer value into its UTF-8 character equivalent
+   * similar to the python chr() function
+   */
+
+  // Check for surrogate pairs (invalid in UTF-8)
+  if (int_value >= SURROGATE_START && int_value <= SURROGATE_END)
+  {
+    std::ostringstream oss;
+    oss << "Code point 0x" << std::hex << std::uppercase << int_value
+        << " is a surrogate pair, invalid in UTF-8";
+    throw std::invalid_argument(oss.str());
+  }
+
+  // Manual UTF-8 encoding
+  std::string char_out;
+
+  if (int_value <= UTF8_1_BYTE_MAX)
+    char_out.append(1, static_cast<char>(int_value));
+  else if (int_value <= UTF8_2_BYTE_MAX)
+  {
+    char_out.append(1, static_cast<char>(0xc0 | ((int_value >> 6) & 0x1f)));
+    char_out.append(1, static_cast<char>(0x80 | (int_value & 0x3f)));
+  }
+  else if (int_value <= UTF8_3_BYTE_MAX)
+  {
+    char_out.append(1, static_cast<char>(0xe0 | ((int_value >> 12) & 0x0f)));
+    char_out.append(1, static_cast<char>(0x80 | ((int_value >> 6) & 0x3f)));
+    char_out.append(1, static_cast<char>(0x80 | (int_value & 0x3f)));
+  }
+  else if (int_value <= UTF8_4_BYTE_MAX)
+  {
+    char_out.append(1, static_cast<char>(0xf0 | ((int_value >> 18) & 0x07)));
+    char_out.append(1, static_cast<char>(0x80 | ((int_value >> 12) & 0x3f)));
+    char_out.append(1, static_cast<char>(0x80 | ((int_value >> 6) & 0x3f)));
+    char_out.append(1, static_cast<char>(0x80 | (int_value & 0x3f)));
+  }
+  else
+  {
+    std::ostringstream oss;
+    oss << "argument '0x" << std::hex << std::uppercase << int_value
+        << "' outside of Unicode range: [0x000000, 0x110000)";
+    throw std::out_of_range(oss.str());
+  }
+  return char_out;
+}
+
+// Render a double as CPython's str()/repr() does for the modelled subset:
+// std::to_string's %f (six fractional digits) with trailing zeros stripped, and
+// a ".0" restored for whole numbers (str(1.0) == "1.0"). Shared by
+// handle_float_to_str (str()/repr()) and handle_format's empty-spec float path
+// so format(x) folds identically to str(x); it therefore inherits the same
+// known gap (values needing more than six fractional digits, e.g. str(1/3), or
+// scientific notation, e.g. str(1e16)) — pre-existing in str(), not new here.
+std::string py_str_from_double(double d)
+{
+  // std::to_string uses %f, which honours the host rounding mode; an earlier
+  // symex step can leave the FPU in FE_UPWARD, folding str(0.1) to "0.100001".
+  // Pin FE_TONEAREST (CPython's round-half-to-even) for the conversion.
+  const host_rounding_mode rounding_guard(FE_TONEAREST);
+  std::string str_val = std::to_string(d);
+
+  // Remove unnecessary trailing zeros and dot (to match Python str): "5.500000"
+  // -> "5.5".
+  str_val.erase(str_val.find_last_not_of('0') + 1, std::string::npos);
+  if (str_val.back() == '.')
+    str_val.pop_back();
+
+  // A whole-number float keeps its ".0" (str(1.0) == "1.0", not "1"); re-append
+  // it when the strip above removed the fractional part entirely. Guard on a
+  // trailing digit so non-numeric spellings (inf/nan) are left untouched.
+  if (
+    str_val.find('.') == std::string::npos && !str_val.empty() &&
+    std::isdigit(static_cast<unsigned char>(str_val.back())))
+    str_val += ".0";
+
+  return str_val;
+}
+} // namespace
+
+int function_call_expr::decode_utf8_codepoint(const std::string &utf8_str) const
+{
+  if (utf8_str.empty())
+  {
+    throw std::runtime_error(
+      "TypeError: expected a character, but string of length 0 found");
+  }
+
+  const unsigned char *bytes =
+    reinterpret_cast<const unsigned char *>(utf8_str.c_str());
+  size_t length = utf8_str.length();
+
+  // Manual UTF-8 decoding
+  if ((bytes[0] & 0x80) == 0)
+  {
+    // 1-byte ASCII
+    if (length != 1)
+      throw std::runtime_error("TypeError: expected a single character");
+    return bytes[0];
+  }
+  else if ((bytes[0] & 0xE0) == 0xC0)
+  {
+    // 2-byte sequence
+    if (length != 2)
+      throw std::runtime_error("TypeError: expected a single character");
+    return ((bytes[0] & 0x1F) << 6) | (bytes[1] & 0x3F);
+  }
+  else if ((bytes[0] & 0xF0) == 0xE0)
+  {
+    // 3-byte sequence
+    if (length != 3)
+      throw std::runtime_error("TypeError: expected a single character");
+    return ((bytes[0] & 0x0F) << 12) | ((bytes[1] & 0x3F) << 6) |
+           (bytes[2] & 0x3F);
+  }
+  else if ((bytes[0] & 0xF8) == 0xF0)
+  {
+    // 4-byte sequence
+    if (length != 4)
+      throw std::runtime_error("TypeError: expected a single character");
+    return ((bytes[0] & 0x07) << 18) | ((bytes[1] & 0x3F) << 12) |
+           ((bytes[2] & 0x3F) << 6) | (bytes[3] & 0x3F);
+  }
+  else
+    throw std::runtime_error("ValueError: received invalid UTF-8 input");
+}
+
+exprt function_call_expr::handle_chr(nlohmann::json &arg) const
+{
+  int int_value = 0;
+  bool is_constant = false;
+
+  // Check for unary minus: e.g., chr(-1)
+  if (arg.contains("_type") && arg["_type"] == "UnaryOp")
+  {
+    const auto &op = arg["op"];
+    const auto &operand = arg["operand"];
+
+    if (
+      op["_type"] == "USub" && operand.contains("value") &&
+      operand["value"].is_number_integer())
+    {
+      int_value = -operand["value"].get<int>();
+      is_constant = true;
+    }
+    else
+      return converter_.get_exception_handler().gen_exception_raise(
+        "TypeError", "Unsupported UnaryOp in chr()");
+  }
+
+  // Handle integer input
+  else if (arg.contains("value") && arg["value"].is_number_integer())
+  {
+    int_value = arg["value"].get<int>();
+    is_constant = true;
+  }
+
+  // Reject float input
+  else if (arg.contains("value") && arg["value"].is_number_float())
+    return converter_.get_exception_handler().gen_exception_raise(
+      "TypeError", "chr() argument must be int, not float");
+
+  // Try converting string input to integer
+  else if (arg.contains("value") && arg["value"].is_string())
+  {
+    const std::string &s = arg["value"].get<std::string>();
+    try
+    {
+      int_value = std::stoi(s);
+      is_constant = true;
+    }
+    catch (const std::invalid_argument &)
+    {
+      return converter_.get_exception_handler().gen_exception_raise(
+        "TypeError", "invalid string passed to chr()");
+    }
+  }
+
+  // Handle variable references (Name nodes)
+  else if (arg.contains("_type") && arg["_type"] == "Name")
+  {
+    const symbolt *sym = lookup_python_symbol(arg["id"]);
+    if (!sym)
+    {
+      // Symbol not found - use runtime conversion via string_handler
+      exprt var_expr = converter_.get_expr(arg);
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.get_string_handler().handle_chr_conversion(
+        var_expr, loc);
+    }
+
+    exprt val = sym->get_value();
+
+    if (!val.is_constant())
+      val = converter_.get_resolved_value(val);
+
+    if (val.is_nil())
+    {
+      // Runtime variable: use string_handler for runtime conversion
+      exprt var_expr = converter_.get_expr(arg);
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.get_string_handler().handle_chr_conversion(
+        var_expr, loc);
+    }
+
+    // Even if the symbol has a constant value, we should not
+    // perform compile-time conversion if the symbol is mutable (lvalue)
+    // because its value may change at runtime (e.g., loop variables)
+    if (sym->lvalue)
+    {
+      // This is a mutable variable - use runtime conversion
+      exprt var_expr = converter_.get_expr(arg);
+      locationt loc = converter_.get_location_from_decl(call_);
+      return converter_.get_string_handler().handle_chr_conversion(
+        var_expr, loc);
+    }
+
+    // Try to extract constant value (only for truly constant symbols)
+    const auto &const_expr = to_constant_expr(val);
+    std::string binary_str = id2string(const_expr.get_value());
+    try
+    {
+      int_value = std::stoul(binary_str, nullptr, 2);
+      is_constant = true;
+    }
+    catch (std::out_of_range &)
+    {
+      return converter_.get_exception_handler().gen_exception_raise(
+        "ValueError", "chr() argument outside of Unicode range");
+    }
+    catch (std::invalid_argument &)
+    {
+      return converter_.get_exception_handler().gen_exception_raise(
+        "TypeError", "must be of type int");
+    }
+
+    arg["_type"] = "Constant";
+    arg.erase("id");
+    arg.erase("ctx");
+  }
+
+  // If we have a constant value, do compile-time conversion
+  if (is_constant)
+  {
+    std::string utf8_encoded;
+
+    try
+    {
+      utf8_encoded = utf8_encode(int_value);
+    }
+    catch (const std::out_of_range &e)
+    {
+      return converter_.get_exception_handler().gen_exception_raise(
+        "ValueError", "chr()");
+    }
+
+    // Build a proper character array, not a single char
+    // Create array type with proper size (length + null terminator)
+    size_t array_size = utf8_encoded.size() + 1;
+    typet char_array_type =
+      array_typet(char_type(), from_integer(array_size, size_type()));
+
+    // Build the array expression with all characters
+    std::vector<unsigned char> char_data(
+      utf8_encoded.begin(), utf8_encoded.end());
+    char_data.push_back('\0'); // Add null terminator
+
+    // Use converter's make_char_array_expr to build proper array
+    exprt result = converter_.make_char_array_expr(char_data, char_array_type);
+
+    return result;
+  }
+
+  // If we reach here, we need runtime conversion
+  exprt var_expr = converter_.get_expr(arg);
+  locationt loc = converter_.get_location_from_decl(call_);
+  return converter_.get_string_handler().handle_chr_conversion(var_expr, loc);
+}
+
+// Fold a known code point into an integer expression, rewriting the AST node
+// in place so converter_.get_expr() builds an int constant.
+exprt function_call_expr::build_ord_constant(
+  nlohmann::json &arg,
+  int code_point) const
+{
+  arg["_type"] = "Constant";
+  arg.erase("id");
+  arg.erase("ctx");
+  arg["value"] = code_point;
+  arg["type"] = "int";
+
+  exprt expr = converter_.get_expr(arg);
+  expr.type() = type_handler_.get_typet("int", 0);
+  return expr;
+}
+
+std::optional<int>
+function_call_expr::folded_char_array_codepoint(const exprt &e) const
+{
+  // Reuse the walk the Name path uses. The char-subtype test keeps bytes out:
+  // those are long_long_int arrays, and admitting them would turn
+  // ord(b"\xc3") into an error rather than 195.
+  if (
+    !e.is_constant() || !e.type().is_array() ||
+    e.type().subtype() != char_type() || !e.has_operands())
+    return std::nullopt;
+
+  symbolt folded;
+  folded.set_value(migrate_expr(e));
+  auto text = extract_string_from_symbol(&folded);
+  if (!text || text->empty())
+    return std::nullopt;
+
+  return decode_utf8_codepoint(*text);
+}
+
+exprt function_call_expr::handle_ord(nlohmann::json &arg) const
+{
+  // Fast path: constant string literal. Folding also handles multi-byte UTF-8
+  // code points that the byte-level runtime string model cannot reconstruct.
+  if (is_string_arg(arg))
+    return build_ord_constant(
+      arg, decode_utf8_codepoint(arg["value"].get<std::string>()));
+
+  // A Name bound to a constant string: fold from the stored value. Gate on the
+  // value being a string so a non-string variable (e.g. `a: str = 1`) skips
+  // folding and falls through to the runtime tail, which raises TypeError.
+  if (arg["_type"] == "Name" && arg.contains("id"))
+  {
+    const symbolt *sym = lookup_python_symbol(arg["id"]);
+    if (!sym)
+      return converter_.get_exception_handler().gen_exception_raise(
+        "NameError",
+        "variable '" + arg["id"].get<std::string>() + "' is not defined");
+
+    if (type_utils::is_string_type(sym->get_value().type()))
+      if (auto value_opt = extract_string_from_symbol(sym))
+        return build_ord_constant(arg, decode_utf8_codepoint(*value_opt));
+    // Non-constant string variable: fall through to runtime evaluation.
+  }
+
+  // Runtime evaluation for slices, method results, and string variables without
+  // a constant value: ord(s), ord(s[i]), ord(s.lower()).
+  exprt expr = converter_.get_expr(arg);
+
+  // Propagate an exception raised while evaluating the argument.
+  if (expr.statement() == "cpp-throw")
+    return expr;
+
+  // A character from string indexing is an 8-bit int tagged #cpp_type==char.
+  // It is one UTF-8 byte, read unsigned: sign-extending made ord() negative
+  // (#7552). A non-ASCII character still yields its lead byte, not its code
+  // point, since indexing is byte-wise.
+  // V.3: build the cast in IREP2, back-migrating once (mirrors the
+  // build_typecast helper; typecast2t round-trips byte-identically).
+  if (type_utils::is_char_type(expr.type()))
+  {
+    expr2tc expr2;
+    migrate_expr(expr, expr2);
+    return migrate_expr_back(typecast2tc(
+      migrate_type(int_type()), typecast2tc(get_uint8_type(), expr2)));
+  }
+
+  // chr() folds a code point into a constant char array of its UTF-8 bytes;
+  // folding it here spares the runtime decode below.
+  if (auto code_point = folded_char_array_codepoint(expr))
+    return build_ord_constant(arg, *code_point);
+
+  // A runtime string: return the code point of its first character.
+  if (type_utils::is_string_type(expr.type()))
+    return converter_.get_string_handler().handle_ord_conversion(
+      expr, converter_.get_location_from_decl(call_));
+
+  return converter_.get_exception_handler().gen_exception_raise(
+    "TypeError", "ord() expected string of length 1");
+}
+
+exprt function_call_expr::handle_int_to_str(nlohmann::json &arg) const
+{
+  std::string str_val = std::to_string(arg["value"].get<int>());
+  typet t = type_handler_.get_typet("str", str_val.size() + 1);
+  return converter_.make_char_array_expr(
+    std::vector<uint8_t>(str_val.begin(), str_val.end()), t);
+}
+
+exprt function_call_expr::handle_int_to_bytes() const
+{
+  const auto &args = call_["args"];
+  // Python accepts both int.to_bytes(x, ...) and x.to_bytes(...).
+  const bool is_type_method_call = call_["func"]["_type"] == "Attribute" &&
+                                   call_["func"]["value"]["_type"] == "Name" &&
+                                   call_["func"]["value"]["id"] == "int";
+
+  // CPython signature: int.to_bytes(length=1, byteorder='big', *,
+  // signed=False). length and byteorder may be passed positionally or by
+  // keyword, and both default (since 3.11). Resolve each from its positional
+  // slot, then its keyword, then the default. The type-method form passes the
+  // integer value as the leading positional argument, shifting the
+  // length/byteorder slots by one.
+  const std::size_t value_offset = is_type_method_call ? 1 : 0;
+  exprt value = is_type_method_call
+                  ? converter_.get_expr(args[0])
+                  : converter_.get_expr(call_["func"]["value"]);
+
+  auto positional = [&](std::size_t i) -> const nlohmann::json * {
+    const std::size_t idx = value_offset + i;
+    return idx < args.size() ? &args[idx] : nullptr;
+  };
+  auto keyword = [&](const char *name) -> const nlohmann::json * {
+    if (call_.contains("keywords"))
+      for (const auto &kw : call_["keywords"])
+        if (kw.contains("arg") && kw["arg"].is_string() && kw["arg"] == name)
+          return &kw["value"];
+    return nullptr;
+  };
+
+  const nlohmann::json *length_arg = positional(0);
+  if (!length_arg)
+    length_arg = keyword("length");
+  std::size_t length = 1; // CPython default
+  if (length_arg)
+  {
+    if (
+      !length_arg->contains("value") ||
+      !(*length_arg)["value"].is_number_unsigned())
+      throw std::runtime_error(
+        "int.to_bytes() currently expects a constant unsigned length");
+    length = (*length_arg)["value"].get<std::size_t>();
+  }
+
+  const nlohmann::json *byteorder_arg = positional(1);
+  if (!byteorder_arg)
+    byteorder_arg = keyword("byteorder");
+  bool big_endian = true; // CPython default 'big' when byteorder is omitted
+  if (byteorder_arg)
+  {
+    // An explicit byteorder must be a constant; otherwise default it silently
+    // to big-endian would mis-fold a little-endian intent into a wrong byte
+    // array. Reject the non-constant form with a clean error instead, matching
+    // the constant-length guard above.
+    std::string folded_byteorder;
+    if (
+      byteorder_arg->contains("value") &&
+      (*byteorder_arg)["value"].is_boolean())
+      big_endian = (*byteorder_arg)["value"].get<bool>();
+    else if (
+      byteorder_arg->contains("value") && (*byteorder_arg)["value"].is_string())
+      big_endian = (*byteorder_arg)["value"].get<std::string>() == "big";
+    else if (
+      string_handler::extract_constant_string(
+        *byteorder_arg, converter_, folded_byteorder))
+      big_endian = folded_byteorder == "big";
+    else
+      throw std::runtime_error(
+        "int.to_bytes() currently expects a constant byteorder");
+  }
+
+  const typet bytes_type = type_handler_.get_typet("bytes", length);
+  exprt result = gen_zero(bytes_type);
+  const typet &elem_type = bytes_type.subtype();
+
+  if (!value.type().is_unsignedbv())
+  {
+    // Convert the source value to an unsigned integer type before extracting
+    // individual bytes with shifts and masks.
+    const unsigned width =
+      (value.type().is_signedbv() || value.type().is_unsignedbv())
+        ? std::max(1u, bv_width(value.type()))
+        : 64;
+    value = typecast_exprt(value, unsignedbv_typet(width));
+  }
+
+  // Fill the output array one byte at a time. For big-endian we start from the
+  // most significant byte; for little-endian we start from the least
+  // significant one.
+  for (std::size_t i = 0; i < length; ++i)
+  {
+    const std::size_t byte_index = big_endian ? (length - 1 - i) : i;
+
+    // Shift the selected byte down to the low 8 bits and mask everything else
+    // out. `lshr`, not the `shr` placeholder: `shr` is only ever resolved by
+    // clang_c_adjust::adjust_expr_shifts (to lshr/ashr on op0's signedness),
+    // and migrate_expr has no `shr` arm — so a surviving `shr` aborts with
+    // "migrate expr failed". `value` is unsignedbv by construction above, which
+    // is the branch adjust_expr_shifts would take anyway.
+    const exprt shift_amount = from_integer(byte_index * 8, value.type());
+    exprt shifted("lshr", value.type());
+    shifted.copy_to_operands(value, shift_amount);
+
+    exprt masked("bitand", value.type());
+    masked.copy_to_operands(shifted, from_integer(0xff, value.type()));
+
+    result.operands().at(i) = typecast_exprt(masked, elem_type);
+  }
+
+  return result;
+}
+
+exprt function_call_expr::handle_float_to_str(nlohmann::json &arg) const
+{
+  // Fold the constant float through the shared string handler. It renders
+  // CPython's repr only when it can prove the 6-decimal spelling exact and
+  // emits a sound nondet string otherwise: a fixed %f fold here cannot
+  // reproduce CPython's shortest round-trip repr for every double (precision
+  // loss for str(0.1234567), exponential notation outside [1e-4, 1e16)) and
+  // would materialise a wrong constant that could verify a false assertion.
+  // Delegating also keeps this literal path in sync with the variable path.
+  return converter_.get_string_handler().convert_to_string(
+    converter_.get_expr(arg));
+}
+
+exprt function_call_expr::handle_complex_to_str() const
+{
+  // Non-constant complex: fall back to a generic placeholder.
+  return converter_.get_string_builder().build_string_literal("(complex)");
+}
+
+void function_call_expr::handle_float_to_int(nlohmann::json &arg) const
+{
+  double value = arg["value"].get<double>();
+  arg["value"] = static_cast<int>(value);
+}
+
+exprt function_call_expr::guard_nonfinite_float_to_int(
+  exprt operand,
+  const exprt &base) const
+{
+  if (!base.is_nil())
+    return operand;
+  return converter_.guard_nonfinite_float_to_int(std::move(operand), call_);
+}
+
+void function_call_expr::handle_int_to_float(nlohmann::json &arg) const
+{
+  int value = arg["value"].get<int>();
+  arg["value"] = static_cast<double>(value);
+}
+
+exprt function_call_expr::handle_base_conversion(
+  nlohmann::json &arg,
+  const std::string &func_name,
+  const std::string &prefix,
+  std::ios_base &(*base_formatter)(std::ios_base &)) const
+{
+  long long int_value = 0;
+  bool is_negative = false;
+
+  // Extract integer value from argument
+  if (arg.contains("_type") && arg["_type"] == "UnaryOp")
+  {
+    const auto &op = arg["op"];
+    const auto &operand = arg["operand"];
+
+    if (
+      op["_type"] == "USub" && operand.contains("value") &&
+      operand["value"].is_number_integer())
+    {
+      int_value = operand["value"].get<long long>();
+
+      // Treat -0 as 0 (consistent with Python behavior)
+      if (int_value != 0)
+        is_negative = true;
+    }
+    else
+    {
+      return converter_.get_exception_handler().gen_exception_raise(
+        "TypeError", "Unsupported UnaryOp in " + func_name + "()");
+    }
+  }
+  else if (arg.contains("value") && arg["value"].is_number_integer())
+  {
+    int_value = arg["value"].get<long long>();
+    if (int_value < 0)
+      is_negative = true;
+  }
+  else
+  {
+    // Not an AST integer literal. Try evaluating the argument:
+    //   - If it constant-folds to an integer (e.g. `bin(round(3.0))` where
+    //     handle_round's compile-time numeric path produces a `Constant`),
+    //     drive the existing string-building path below.
+    //   - Otherwise the value is symbolic; lower to the matching runtime
+    //     operational model (__python_int_to_{bin,hex,oct}) so the result
+    //     depends on the actual runtime int rather than being unreachable.
+    try
+    {
+      exprt operand_expr = converter_.get_expr(arg);
+      if (!type_utils::is_integer_type(operand_expr.type()))
+        return converter_.get_exception_handler().gen_exception_raise(
+          "TypeError", func_name + "() argument must be an integer");
+
+      expr2tc operand2;
+      migrate_expr(operand_expr, operand2);
+      simplify(operand2);
+      BigInt extracted;
+      if (!to_integer(operand2, extracted))
+      {
+        int_value = static_cast<long long>(extracted.to_int64());
+        if (int_value < 0)
+          is_negative = true;
+      }
+      else
+      {
+        // Symbolic int — dispatch to the runtime OM matching this builtin.
+        // Feed the simplified operand, migrated back to the legacy exprt the
+        // string builder expects.
+        operand_expr = migrate_expr_back(operand2);
+        const std::string fn_name = func_name == "bin" ? "__python_int_to_bin"
+                                    : func_name == "hex"
+                                      ? "__python_int_to_hex"
+                                      : "__python_int_to_oct";
+        return converter_.get_string_builder()
+          .build_runtime_str_conversion_call(
+            fn_name, long_long_int_type(), operand_expr);
+      }
+    }
+    catch (const std::exception &)
+    {
+      return converter_.get_exception_handler().gen_exception_raise(
+        "TypeError", func_name + "() argument must be an integer");
+    }
+  }
+
+  std::string result_str;
+  if (func_name == "bin")
+  {
+    // C++ iostreams have no binary formatter, so build the digits manually.
+    // Compute the magnitude via unsigned modular negation (well-defined for
+    // LLONG_MIN, unlike std::llabs). Key off int_value's own sign: the USub
+    // branch above stores a positive magnitude with is_negative set, while the
+    // direct-integer branch leaves int_value signed.
+    unsigned long long mag =
+      (int_value < 0) ? (0ULL - static_cast<unsigned long long>(int_value))
+                      : static_cast<unsigned long long>(int_value);
+    std::string digits;
+    if (mag == 0)
+      digits = "0";
+    else
+      while (mag != 0)
+      {
+        digits.push_back(static_cast<char>('0' + (mag & 1U)));
+        mag >>= 1U;
+      }
+    std::reverse(digits.begin(), digits.end());
+    result_str = (is_negative ? "-" + prefix : prefix) + digits;
+  }
+  else
+  {
+    // Convert to string with appropriate base and prefix
+    std::ostringstream oss;
+    oss << (is_negative ? "-" + prefix : prefix) << base_formatter;
+
+    // For hex, also apply nouppercase
+    if (func_name == "hex")
+      oss << std::nouppercase;
+
+    oss << std::llabs(int_value);
+    result_str = oss.str();
+  }
+
+  // Create string type and return character array expression
+  typet t = type_handler_.get_typet("str", result_str.size() + 1);
+  std::vector<uint8_t> string_literal(result_str.begin(), result_str.end());
+  return converter_.make_char_array_expr(string_literal, t);
+}
+
+exprt function_call_expr::handle_hex(nlohmann::json &arg) const
+{
+  return handle_base_conversion(arg, "hex", "0x", std::hex);
+}
+
+exprt function_call_expr::handle_oct(nlohmann::json &arg) const
+{
+  return handle_base_conversion(arg, "oct", "0o", std::oct);
+}
+
+exprt function_call_expr::handle_ascii() const
+{
+  const auto &args = call_["args"];
+  if (args.size() != 1)
+    return converter_.get_exception_handler().gen_exception_raise(
+      "TypeError", "ascii() takes exactly one argument");
+
+  const auto &arg = args[0];
+
+  // String constant: produce the quoted, ASCII-escaped repr form. This is the
+  // only case where ascii() differs from str(): non-printable and non-ASCII
+  // code points are rendered as \xNN / \uNNNN / \UNNNNNNNN escapes.
+  if (
+    arg["_type"] == "Constant" && arg.contains("value") &&
+    arg["value"].is_string())
+  {
+    const std::string s = arg["value"].get<std::string>();
+
+    // CPython prefers single quotes, switching to double quotes only when the
+    // string contains ' but not ".
+    const char quote =
+      (s.find('\'') != std::string::npos && s.find('"') == std::string::npos)
+        ? '"'
+        : '\'';
+
+    // cp is a Unicode code point (<= 0x10FFFF), so an unsigned int holds it
+    // and the widest escape is \U + 8 hex digits; using %08x (not %08lx) keeps
+    // the output within buf and avoids GCC's -Wformat-truncation.
+    auto append_escape = [](std::string &out, unsigned cp) {
+      char buf[12];
+      if (cp <= 0xff)
+        std::snprintf(buf, sizeof(buf), "\\x%02x", cp);
+      else if (cp <= 0xffff)
+        std::snprintf(buf, sizeof(buf), "\\u%04x", cp);
+      else
+        std::snprintf(buf, sizeof(buf), "\\U%08x", cp);
+      out += buf;
+    };
+
+    std::string out;
+    out.push_back(quote);
+    for (size_t i = 0; i < s.size();)
+    {
+      const unsigned char c = static_cast<unsigned char>(s[i]);
+      if (c == static_cast<unsigned char>(quote) || c == '\\')
+      {
+        out.push_back('\\');
+        out.push_back(static_cast<char>(c));
+        ++i;
+      }
+      else if (c == '\n')
+      {
+        out += "\\n";
+        ++i;
+      }
+      else if (c == '\r')
+      {
+        out += "\\r";
+        ++i;
+      }
+      else if (c == '\t')
+      {
+        out += "\\t";
+        ++i;
+      }
+      else if (c < 0x20 || c == 0x7f)
+      {
+        append_escape(out, c);
+        ++i;
+      }
+      else if (c < 0x80)
+      {
+        out.push_back(static_cast<char>(c));
+        ++i;
+      }
+      else
+      {
+        // Decode one UTF-8 sequence to a code point, then escape it.
+        unsigned cp = 0;
+        int extra = 0;
+        if ((c & 0xe0) == 0xc0)
+        {
+          cp = c & 0x1f;
+          extra = 1;
+        }
+        else if ((c & 0xf0) == 0xe0)
+        {
+          cp = c & 0x0f;
+          extra = 2;
+        }
+        else if ((c & 0xf8) == 0xf0)
+        {
+          cp = c & 0x07;
+          extra = 3;
+        }
+        else
+        {
+          // Invalid lead byte: escape the raw byte.
+          append_escape(out, c);
+          ++i;
+          continue;
+        }
+        if (i + extra >= s.size())
+        {
+          append_escape(out, c);
+          ++i;
+          continue;
+        }
+        for (int k = 1; k <= extra; ++k)
+          cp = (cp << 6) | (static_cast<unsigned char>(s[i + k]) & 0x3f);
+        append_escape(out, cp);
+        i += extra + 1;
+      }
+    }
+    out.push_back(quote);
+    return converter_.get_string_builder().build_string_literal(out);
+  }
+
+  // A runtime value: ascii(x) == repr(x) for a number, a bool and an ASCII
+  // str; __python_str_repr leaves a non-ASCII str unconstrained.
+  exprt value_expr = converter_.get_expr(arg);
+  if (!value_expr.is_nil() && value_expr.statement() != "cpp-throw")
+  {
+    exprt repr = converter_.get_string_handler().build_repr(
+      value_expr, converter_.get_location_from_decl(call_));
+    if (repr.is_not_nil())
+      return repr;
+  }
+  return converter_.get_exception_handler().gen_exception_raise(
+    "TypeError", "ascii() argument type not supported");
+}
+
+namespace
+{
+// Extract a constant double from a Constant or a unary +/-(Constant) node.
+bool const_double_from_json(const nlohmann::json &node, double &out)
+{
+  if (node.value("_type", std::string()) == "UnaryOp")
+  {
+    double v;
+    if (node.contains("operand") && const_double_from_json(node["operand"], v))
+    {
+      const std::string k = node["op"].value("_type", std::string());
+      if (k == "USub")
+      {
+        out = -v;
+        return true;
+      }
+      if (k == "UAdd")
+      {
+        out = v;
+        return true;
+      }
+    }
+    return false;
+  }
+  if (node.contains("value") && node["value"].is_number())
+  {
+    out = node["value"].get<double>();
+    return true;
+  }
+  return false;
+}
+
+bool is_align_char(char c)
+{
+  return c == '<' || c == '>' || c == '^' || c == '=';
+}
+
+// Insert `sep` into a magnitude digit string every `group` digits from the
+// right (the ',' / '_' thousands-separator options).
+std::string group_digits(const std::string &digits, char sep, int group)
+{
+  std::string out;
+  int cnt = 0;
+  for (auto it = digits.rbegin(); it != digits.rend(); ++it)
+  {
+    if (cnt != 0 && cnt % group == 0)
+      out.push_back(sep);
+    out.push_back(*it);
+    ++cnt;
+  }
+  std::reverse(out.begin(), out.end());
+  return out;
+}
+
+// Constant-fold Python's format(value, spec) for a numeric value, matching
+// CPython for the modelled subset of the format-spec mini-language:
+//   [[fill]align][sign][#][0][width][grouping][.precision][type]
+// Returns std::nullopt for any feature or combination not fully modelled, so
+// the caller rejects the spec with a clean error rather than risk a wrong fold
+// (which could verify a false assertion as SUCCESSFUL).
+std::optional<std::string>
+py_format_number(bool is_int, long long ival, double dval, const std::string &s)
+{
+  size_t i = 0;
+  char fill = ' ';
+  char align = 0;
+  bool fill_specified = false;
+  // [[fill]align]: a fill char is present only when an align char follows it.
+  if (s.size() >= 2 && is_align_char(s[1]))
+  {
+    fill = s[0];
+    align = s[1];
+    fill_specified = true;
+    i = 2;
+  }
+  else if (!s.empty() && is_align_char(s[0]))
+  {
+    align = s[0];
+    i = 1;
+  }
+
+  char sign = '-';
+  if (i < s.size() && (s[i] == '+' || s[i] == '-' || s[i] == ' '))
+    sign = s[i++];
+
+  bool alt = false;
+  if (i < s.size() && s[i] == '#')
+  {
+    alt = true;
+    ++i;
+  }
+
+  bool zeropad = false;
+  if (i < s.size() && s[i] == '0')
+  {
+    zeropad = true;
+    ++i;
+    // CPython's '0' flag sets a '0' fill unless a fill char was explicit, and
+    // derives '=' alignment only when no alignment was given — the two effects
+    // are independent (e.g. ">05d" keeps '>' but takes the '0' fill ->
+    // "00005").
+    if (!fill_specified)
+      fill = '0';
+    if (align == 0)
+      align = '=';
+  }
+
+  int width = 0;
+  while (i < s.size() && std::isdigit(static_cast<unsigned char>(s[i])))
+  {
+    width = width * 10 + (s[i++] - '0');
+    if (width > 1000000)
+      return std::nullopt;
+  }
+
+  char grouping = 0;
+  if (i < s.size() && (s[i] == ',' || s[i] == '_'))
+    grouping = s[i++];
+
+  int prec = -1;
+  if (i < s.size() && s[i] == '.')
+  {
+    ++i;
+    prec = 0;
+    while (i < s.size() && std::isdigit(static_cast<unsigned char>(s[i])))
+    {
+      prec = prec * 10 + (s[i++] - '0');
+      if (prec > 1000000)
+        return std::nullopt;
+    }
+  }
+
+  char type = 0;
+  if (i < s.size())
+    type = s[i++];
+
+  if (i != s.size())
+    return std::nullopt; // unparsed trailing characters
+
+  // Grouping combined with zero/'=' padding needs the fill to participate in
+  // the grouping (format(1234, "08,") == "0,001,234"); not modelled -> reject.
+  if (grouping != 0 && (zeropad || align == '='))
+    return std::nullopt;
+
+  bool negative = false;
+  std::string digits; // magnitude only (no sign)
+  std::string prefix; // 0x / 0o / 0b for '#'
+
+  if (is_int)
+  {
+    if (prec >= 0)
+      return std::nullopt; // precision is invalid for integer types
+    if (type == 0)
+      type = 'd';
+    if (type != 'd' && type != 'x' && type != 'X' && type != 'o' && type != 'b')
+      return std::nullopt; // 'c'/'n' and float types on an int: not modelled
+    if (grouping == ',' && type != 'd')
+      return std::nullopt; // ',' groups decimals only
+
+    negative = ival < 0;
+    // Magnitude in the unsigned domain so LLONG_MIN does not overflow.
+    unsigned long long mag = negative
+                               ? 0ULL - static_cast<unsigned long long>(ival)
+                               : static_cast<unsigned long long>(ival);
+    if (type == 'd')
+      digits = std::to_string(mag);
+    else
+    {
+      const unsigned base = (type == 'o') ? 8 : (type == 'b') ? 2 : 16;
+      const char *alphabet =
+        (type == 'X') ? "0123456789ABCDEF" : "0123456789abcdef";
+      if (mag == 0)
+        digits = "0";
+      for (; mag != 0; mag /= base)
+        digits.insert(digits.begin(), alphabet[mag % base]);
+    }
+    if (grouping != 0)
+      digits = group_digits(digits, grouping, (type == 'd') ? 3 : 4);
+    if (alt && type != 'd')
+      prefix = std::string("0") + ((type == 'X') ? 'X' : type);
+  }
+  else
+  {
+    // Float value. An explicit presentation type renders with snprintf and the
+    // spec's precision; the default (no type) is CPython's str()/repr()
+    // shortest form via the shared helper. '#' and default-type precision
+    // (a 'g'-like fold) are not modelled; grouping is modelled for the default
+    // type only.
+    if (
+      type != 0 && type != 'f' && type != 'F' && type != 'e' && type != 'E' &&
+      type != 'g' && type != 'G' && type != '%')
+      return std::nullopt;
+    if (alt)
+      return std::nullopt;
+
+    double d = dval;
+    const bool percent = (type == '%');
+    if (percent)
+      d *= 100.0;
+    negative = std::signbit(d) && !std::isnan(d);
+    const double ad = negative ? -d : d;
+
+    if (type == 0)
+    {
+      if (prec >= 0)
+        return std::nullopt; // default-type precision not modelled
+      digits = string_handler::cpython_float_str(ad);
+      if (grouping != 0)
+      {
+        // CPython groups only the integer part of fixed notation by 3; an
+        // exponential/inf/nan repr (its head is not all digits) is left as-is.
+        const size_t dot = digits.find('.');
+        const std::string head =
+          digits.substr(0, dot == std::string::npos ? digits.size() : dot);
+        if (std::all_of(head.begin(), head.end(), [](unsigned char c) {
+              return std::isdigit(c) != 0;
+            }))
+          digits =
+            group_digits(head, grouping, 3) +
+            (dot == std::string::npos ? std::string() : digits.substr(dot));
+      }
+    }
+    else
+    {
+      if (grouping != 0)
+        return std::nullopt; // grouping + explicit float type: not modelled
+      const int p = prec >= 0 ? prec : 6;
+      const char conv =
+        percent
+          ? 'f'
+          : static_cast<char>(std::tolower(static_cast<unsigned char>(type)));
+      const char *f = (conv == 'f') ? "%.*f" : (conv == 'e') ? "%.*e" : "%.*g";
+      {
+        const host_rounding_mode guard(FE_TONEAREST);
+        const int n = std::snprintf(nullptr, 0, f, p, ad);
+        if (n < 0)
+          return std::nullopt;
+        digits.resize(static_cast<size_t>(n));
+        std::snprintf(&digits[0], static_cast<size_t>(n) + 1, f, p, ad);
+      }
+      if (type == 'F' || type == 'E' || type == 'G')
+        for (char &ch : digits)
+          ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+      if (percent)
+        digits.push_back('%');
+    }
+  }
+
+  const std::string sign_str =
+    negative ? "-" : (sign == '+' ? "+" : (sign == ' ' ? " " : ""));
+
+  const std::string core = sign_str + prefix + digits;
+  const int core_len = static_cast<int>(core.size());
+  if (core_len >= width)
+    return core;
+
+  const int pad = width - core_len;
+  if (align == '=')
+    // Pad between the sign/prefix and the digits (fill is '0' for zero-pad).
+    return sign_str + prefix + std::string(pad, fill) + digits;
+  if (align == '<')
+    return core + std::string(pad, fill);
+  if (align == '^')
+  {
+    const int l = pad / 2; // extra fill goes on the right (CPython)
+    return std::string(l, fill) + core + std::string(pad - l, fill);
+  }
+  // Default and '>' : right-justify (numbers default to right alignment).
+  return std::string(pad, fill) + core;
+}
+} // namespace
+
+exprt function_call_expr::handle_format() const
+{
+  const auto &args = call_["args"];
+  if (args.empty() || args.size() > 2)
+    throw std::runtime_error("format() takes one or two arguments");
+
+  // The format spec (default "") must be a constant string.
+  std::string spec;
+  if (args.size() == 2)
+  {
+    if (!args[1].contains("value") || !args[1]["value"].is_string())
+      throw std::runtime_error(
+        "format() currently requires a constant string spec");
+    spec = args[1]["value"].get<std::string>();
+  }
+
+  // Only a genuine literal value is folded — a Constant or a unary +/- over
+  // one. extract_constant_integer would also resolve a Name to its bound
+  // constant, but that value can be stale after a reassignment (`x = 255; x =
+  // 10`), which would mis-fold; a variable argument is left unsupported
+  // instead.
+  const std::string value_node_type = args[0].value("_type", std::string());
+  const bool is_literal_value =
+    value_node_type == "Constant" || value_node_type == "UnaryOp";
+
+  long long ival = 0;
+  const bool is_int = is_literal_value && json_utils::extract_constant_integer(
+                                            args[0],
+                                            converter_.get_current_func_name(),
+                                            converter_.get_ast_json(),
+                                            ival);
+  double dval = 0.0;
+  const bool is_float =
+    !is_int && is_literal_value && const_double_from_json(args[0], dval);
+
+  // Numeric value: fold the format-spec mini-language for the modelled subset.
+  // An unmodelled spec returns nullopt and falls through to the reject below.
+  if (is_int || is_float)
+  {
+    std::optional<std::string> folded =
+      py_format_number(is_int, ival, dval, spec);
+    if (folded)
+      return converter_.get_string_builder().build_string_literal(*folded);
+  }
+
+  // format(value) / format(value, "") on a float is str(value): the default
+  // float.__format__ with an empty spec (format(1.0) == "1.0", format(-1.0) ==
+  // "-1.0"). py_format_number models only explicit float presentation types, so
+  // the repr-like default lands here. Folds identically to str()/repr() via the
+  // shared renderer (dval already carries the UnaryOp sign for negative
+  // literals), so it introduces no divergence beyond str()'s known gap.
+  if (spec.empty() && is_float)
+    return converter_.get_string_builder().build_string_literal(
+      py_str_from_double(dval));
+
+  // format(value) / format(value, "") on a constant string is the string
+  // itself (the default str.__format__ with an empty spec).
+  if (spec.empty() && args[0].contains("value") && args[0]["value"].is_string())
+    return converter_.get_string_builder().build_string_literal(
+      args[0]["value"].get<std::string>());
+
+  throw std::runtime_error(
+    "format() spec '" + spec + "' is not supported for this value");
+}
+
+exprt function_call_expr::handle_bin(nlohmann::json &arg) const
+{
+  // The formatter is unused for binary (handled manually in
+  // handle_base_conversion); std::dec is passed only to satisfy the signature.
+  return handle_base_conversion(arg, "bin", "0b", std::dec);
+}
+
+/// Extracts the character string represented by a symbol's constant value.
+std::optional<std::string>
+function_call_expr::extract_string_from_symbol(const symbolt *sym) const
+{
+  const exprt &val = sym->get_value();
+  std::string result;
+
+  if (val.id() == "if" && val.operands().size() == 3)
+  {
+    const exprt &cond = val.operands()[0];
+
+    symbolt true_sym;
+    true_sym.set_value(migrate_expr(val.operands()[1]));
+    true_sym.set_type(migrate_type(true_sym.get_value().type()));
+    auto true_text = extract_string_from_symbol(&true_sym);
+
+    symbolt false_sym;
+    false_sym.set_value(migrate_expr(val.operands()[2]));
+    false_sym.set_type(migrate_type(false_sym.get_value().type()));
+    auto false_text = extract_string_from_symbol(&false_sym);
+
+    if (cond.is_true())
+      return true_text;
+    if (cond.is_false())
+      return false_text;
+
+    if (true_text && false_text && *true_text == *false_text)
+      return true_text;
+    return std::nullopt;
+  }
+
+  std::function<std::optional<char>(const exprt &)> decode_char =
+    [&](const exprt &expr) -> std::optional<char> {
+    try
+    {
+      if (expr.id() == "typecast" && !expr.operands().empty())
+        return decode_char(expr.operands().front());
+
+      if (expr.id() == "if" && expr.operands().size() == 3)
+      {
+        const exprt &cond = expr.operands()[0];
+        const exprt &true_case = expr.operands()[1];
+        const exprt &false_case = expr.operands()[2];
+
+        if (cond.is_true())
+          return decode_char(true_case);
+        if (cond.is_false())
+          return decode_char(false_case);
+
+        auto true_char = decode_char(true_case);
+        auto false_char = decode_char(false_case);
+        if (true_char && false_char && *true_char == *false_char)
+          return true_char;
+        return std::nullopt;
+      }
+
+      if (!expr.is_constant())
+        return std::nullopt;
+
+      const auto &const_expr = to_constant_expr(expr);
+      std::string binary_str = id2string(const_expr.get_value());
+      unsigned c = std::stoul(binary_str, nullptr, 2);
+      return static_cast<char>(c);
+    }
+    catch (const std::exception &e)
+    {
+      log_error("Failed to decode character: {}", e.what());
+      return std::nullopt;
+    }
+  };
+
+  if (val.type().is_array() && val.has_operands())
+  {
+    for (const auto &ch : val.operands())
+    {
+      auto decoded = decode_char(ch);
+      if (!decoded)
+        return std::nullopt;
+      if (*decoded == '\0')
+        break;
+      result += *decoded;
+    }
+  }
+  else if (val.is_constant() && val.type().is_signedbv())
+  {
+    auto decoded = decode_char(val);
+    if (!decoded)
+      return std::nullopt;
+    result += *decoded;
+  }
+  else
+  {
+    log_error("Unhandled symbol format in string extraction.");
+    return std::nullopt;
+  }
+
+  return result;
+}
+
+bool function_call_expr::is_single_assignment_str_symbol(
+  const symbolt *sym,
+  const std::string &name) const
+{
+  return sym && sym->get_value().is_constant() &&
+         type_utils::is_string_type(sym->get_type()) &&
+         type_utils::is_string_type(sym->get_value().type()) &&
+         !json_utils::has_multiple_assignments_in_scope(
+           name, converter_.get_current_func_name(), converter_.get_ast_json());
+}
+
+std::optional<exprt>
+function_call_expr::handle_str_symbol_to_float(const symbolt *sym) const
+{
+  auto value_opt = extract_string_from_symbol(sym);
+  if (!value_opt)
+    return std::nullopt;
+
+  std::string digits;
+  const bool separators_ok =
+    type_utils::strip_pep515_underscores(*value_opt, digits);
+  char *end = nullptr;
+  double dval = separators_ok ? std::strtod(digits.c_str(), &end) : 0.0;
+  if (!separators_ok || !end || end != digits.c_str() + digits.size())
+    return std::nullopt;
+  return from_double(dval, type_handler_.get_typet("float", 0));
+}
+
+std::optional<exprt>
+function_call_expr::handle_str_symbol_to_int(const symbolt *sym) const
+{
+  auto value_opt = extract_string_from_symbol(sym);
+  if (!value_opt)
+    return std::nullopt;
+
+  std::string digits;
+  if (
+    !type_utils::strip_pep515_underscores(*value_opt, digits) ||
+    digits.empty() || !std::all_of(digits.begin(), digits.end(), ::isdigit))
+    return std::nullopt;
+
+  try
+  {
+    return from_integer(std::stoi(digits), type_handler_.get_typet("int", 0));
+  }
+  catch (const std::exception &)
+  {
+    return std::nullopt;
+  }
+}

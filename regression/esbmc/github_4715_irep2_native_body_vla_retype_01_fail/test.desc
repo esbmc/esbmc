@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwind 1
+array bounds violated: array `a. upper bound
+^VERIFICATION FAILED$

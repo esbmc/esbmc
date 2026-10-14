@@ -3,13 +3,13 @@
 ///
 /// Maps solc JSON AST node fields (type strings, operator tokens, node kinds)
 /// to the corresponding SolidityGrammar enums. Includes lookup tables for all
-/// uint/int bit-widths, operator precedence, and string-to-enum conversions.
+/// uint/int bit-widths, operator-token mapping, and string-to-enum conversions.
 
 #include <fmt/core.h>
 #include <solidity-frontend/solidity_convert.h>
 #include <solidity-frontend/solidity_grammar.h>
 #include <set>
-#include <util/message.h>
+#include <util/message/message.h>
 
 #define ENUM_TO_STR(s)                                                         \
   case s:                                                                      \
@@ -210,7 +210,8 @@ bool is_sol_library_function(const int ref_id)
 // rule type-name
 TypeNameT get_type_name_t(const nlohmann::json &type_name)
 {
-  // Solidity AST node has duplicate descrptions: ["typeName"]["typeDescriptions"] and ["typeDescriptions"]
+  // Solidity AST node has duplicate descrptions:
+  // ["typeName"]["typeDescriptions"] and ["typeDescriptions"]
   //! Order matters
 
   if (type_name.contains("typeString"))
@@ -244,10 +245,12 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
       //  "typeIdentifier": "t_array$_t_uint8_$2_memory_ptr",
       //  "typeString": "uint8[2] memory"
 
-      // The Arrays in Solidity can be classified into the following two types based on size –
+      // The Arrays in Solidity can be classified into the following two types
+      // based on size –
       //   Fixed Size Array
       //   Dynamic Array
-      // Furthermore, the solidity array can also be categorized based on where they are stored as –
+      // Furthermore, the solidity array can also be categorized based on where
+      // they are stored as –
       //   Storage Array
       //   Memory Array
 
@@ -325,7 +328,8 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     }
     else if (typeIdentifier.find("ArrayToPtr") != std::string::npos)
     {
-      // ArrayToPointer decay in DeclRefExpr when dereferencing an array, e.g. a[0]
+      // ArrayToPointer decay in DeclRefExpr when dereferencing an array, e.g.
+      // a[0]
       return PointerArrayToPtr;
     }
     // for Special Variables and Functions

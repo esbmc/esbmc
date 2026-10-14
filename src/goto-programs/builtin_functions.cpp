@@ -3,22 +3,39 @@
 #include <ac_config.h>
 
 #include <cassert>
+#include <functional>
+#include <goto-programs/destructor.h>
 #include <goto-programs/goto_convert_class.h>
 #include <regex>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/cprover_prefix.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/location.h>
-#include <util/message.h>
+#include <util/arith/arith_tools.h>
+#include <util/base/filesystem.h>
+#include <util/lang/c_types.h>
+#include <util/symtab/cprover_prefix.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
+#include <util/irep/location.h>
+#include <util/message/message.h>
 #include <util/message/format.h>
-#include <util/prefix.h>
-#include <util/simplify_expr.h>
-#include <util/std_code.h>
-#include <util/std_expr.h>
-#include <util/string_constant.h>
-#include <util/type_byte_size.h>
+#include <util/base/prefix.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_expr.h>
+#include <util/expr/string_constant.h>
+#include <util/expr/type_byte_size.h>
+
+// Simplify a legacy exprt via the IREP2 simplifier. The legacy CBMC
+// simplifier (util/simplify_expr) is being retired
+// (docs/roadmap/irep2-migration.md Part II Phase 2.2); these alloc-size sites
+// still operate on exprt, so they round-trip through migrate.
+// Behaviour-equivalent for the constant / typecast-of-constant folds these
+// sites need (typecast2t::do_simplify folds (size_t)C to a constant exactly as
+// the legacy simplifier did).
+static void simplify_via_irep2(exprt &e)
+{
+  expr2tc tmp;
+  migrate_expr(e, tmp);
+  simplify(tmp);
+  e = migrate_expr_back(tmp);
+}
 
 static void get_string_constant(const exprt &expr, std::string &the_string)
 {
@@ -32,7 +49,16 @@ static void get_string_constant(const exprt &expr, std::string &the_string)
     !expr.is_address_of() || expr.operands().size() != 1 ||
     !expr.op0().is_index() || expr.op0().operands().size() != 2)
   {
-    log_warning("expected string constant, but got:\n{}", expr);
+    // Only the assertion's description is read from here, so a message built
+    // at runtime is not an error: the caller falls back to printing the guard.
+    // Name the location rather than dumping the expression tree — the dump was
+    // pages of irep for a benign case, and it is the source line the user needs
+    // (#1557).
+    const locationt &loc = expr.find_location();
+    log_warning(
+      "assertion description at {} is not a string literal; reporting the "
+      "guard instead",
+      loc.is_nil() ? std::string("unknown location") : loc.as_string());
     return;
   }
 
@@ -51,18 +77,44 @@ static void get_string_constant(const exprt &expr, std::string &the_string)
   the_string.append(v.as_string());
 }
 
+// Recover the measured type T from a sizeof(T) node, peeling any surrounding
+// typecast. Returns a nil type if `src` is not (a cast of) a sizeof node
+// (esbmc/esbmc#5337). T rides as the type of the node's first (type_exprt)
+// operand; a second operand may carry the byte-size value.
+static typet sizeof_measured_type(const exprt &src)
+{
+  const exprt *e = &src;
+  while (e->id() == "typecast" && e->operands().size() == 1)
+    e = &e->op0();
+  if (e->id() == "sizeof" && !e->operands().empty())
+    return e->op0().type();
+  return static_cast<const typet &>(get_nil_irep());
+}
+
 static void get_alloc_type_rec(
   const exprt &src,
   typet &type,
   exprt &size,
   bool is_mul = false)
 {
-  const irept &sizeof_type = src.c_sizeof_type();
+  // A (possibly typecast-wrapped) sizeof(T) outside a multiplication sets the
+  // allocated element type T. The typecast is peeled only in service of
+  // reaching the sizeof — a cast around a non-sizeof size operand (e.g. the
+  // (size_t)(-4) of malloc(-4)) is left intact, so its size_t reconciliation
+  // survives into `size`. Inside `n * sizeof(T)` the product is treated as a
+  // raw byte count and the allocated type stays char, matching the historical
+  // behaviour (esbmc/esbmc#5337).
+  if (!is_mul)
+  {
+    typet measured = sizeof_measured_type(src);
+    if (measured.is_not_nil())
+    {
+      type = measured;
+      return;
+    }
+  }
 
-  // If sizeof_type is valid and we are not in a multiplication context
-  if (!sizeof_type.is_nil() && !is_mul)
-    type = static_cast<const typet &>(sizeof_type);
-  else if (src.id() == "*")
+  if (src.id() == "*")
   {
     // Mark as multiplication context and recurse
     for (const auto &operand : src.operands())
@@ -116,8 +168,89 @@ void goto_convertt::get_alloc_size(typet &alloc_type, exprt &alloc_size)
   if (alloc_size.type() != size_type())
   {
     alloc_size.make_typecast(size_type());
-    simplify(alloc_size);
+    simplify_via_irep2(alloc_size);
   }
+}
+
+void goto_convertt::emit_assert_fail_noreturn(
+  const locationt &location,
+  goto_programt &dest)
+{
+  // __assert_fail / __assert_rtn / FreeBSD __assert / _wassert are
+  // __noreturn.  Under --no-assertions the family-specific ASSERT false
+  // is suppressed, leaving symex to fall through past the call --- which
+  // is unsound for end-of-main memory-property walkers (valid-memsafety
+  // / valid-memcleanup spuriously report "forgotten memory" on
+  // post-noreturn paths --- see #4441).
+  //
+  // Gate the noreturn truncation on --memory-leak-check: it is the
+  // property set whose end-of-main walker is sensitive to fall-through
+  // past noreturn calls.  Other --no-assertions clients
+  // (--data-races-check-only, --overflow-check, plain --no-assertions)
+  // intentionally treat the assertion as fully suppressed and need the
+  // call to remain a no-op --- otherwise the implicit ASSUME false
+  // silently turns user assert(cond) into assume(cond), pruning paths
+  // where cond is false and hiding bugs that manifest on those paths
+  // (e.g. SV-COMP no-data-race qw2004-2 / mcslock --- see #4442 review).
+  if (!config.options.get_bool_option("memory-leak-check"))
+    return;
+
+  // Mirror abort()'s body in src/c2goto/library/stdlib.c: only invoke
+  // the leak walker when abnormal-termination leak checks are enabled.
+  // --no-abnormal-memory-leak is what SV-COMP's valid-memsafety wrapper
+  // sets to keep leaks-on-abort/__assert_fail out of the verdict;
+  // valid-memcleanup leaves it unset, so the walker fires there.
+  if (!config.options.get_bool_option("no-abnormal-memory-leak"))
+  {
+    const symbolt *s = context.find_symbol("c:@F@__ESBMC_memory_leak_checks");
+    if (s != nullptr)
+    {
+      code_function_callt call;
+      call.function() = symbol_expr(*s);
+      call.location() = location;
+      do_function_call(
+        call.lhs(), call.function(), call.arguments(), location, dest);
+    }
+  }
+
+  // ASSUME false truncates the post-noreturn path so the end-of-main
+  // walker sees only paths that genuinely reached the end of main.
+  goto_programt::targett a = dest.add_instruction(ASSUME);
+  a->guard = gen_false_expr();
+  a->location = location;
+  a->location.user_provided(true);
+}
+
+void goto_convertt::do_assert_fail(
+  const exprt &function,
+  const exprt::operandst &arguments,
+  goto_programt &dest,
+  const irep_idt &base_name,
+  std::size_t arity,
+  std::size_t expr_arg)
+{
+  if (arguments.size() != arity)
+  {
+    log_error(
+      "`{}' expected to have {} arguments", id2string(base_name), arity);
+    abort();
+  }
+
+  std::string description = "assertion ";
+  get_string_constant(arguments[expr_arg], description);
+
+  if (options.get_bool_option("no-assertions"))
+  {
+    emit_assert_fail_noreturn(function.location(), dest);
+    return;
+  }
+
+  goto_programt::targett t = dest.add_instruction(ASSERT);
+  t->guard = gen_false_expr();
+  t->location = function.location();
+  t->location.user_provided(true);
+  t->location.property("assertion");
+  t->location.comment(description);
 }
 
 void goto_convertt::do_printf(
@@ -169,8 +302,8 @@ void goto_convertt::do_atomic_begin(
   }
 
   // We should allow a context switch to happen before synchronization points.
-  // In particular, here we force a context switch to happen before an atomic block
-  // via the intrinsic function __ESBMC_yield();
+  // In particular, here we force a context switch to happen before an atomic
+  // block via the intrinsic function __ESBMC_yield();
   if (
     function.location().function() != "pthread_create" &&
     function.location().function() != "pthread_join_noswitch" &&
@@ -218,10 +351,20 @@ void goto_convertt::do_mem(
 {
   std::string func = is_malloc ? "malloc" : "alloca";
 
-  if (lhs.is_nil())
-    return; // does nothing
-
   locationt location = function.location();
+
+  // `malloc(n);` with the result discarded still allocates, and the storage is
+  // unreachable the moment the statement ends -- exactly what
+  // --memory-leak-check exists to report. Dropping the call made that leak
+  // invisible, so allocate into a temporary instead (#822). The result type is
+  // the allocator's own; the object's type and size ride on the side effect
+  // below, so nothing downstream depends on it.
+  exprt target = lhs;
+  if (target.is_nil())
+  {
+    const typet ptr_type = pointer_typet(empty_typet());
+    target = symbol_exprt(new_tmp_symbol(ptr_type).id, ptr_type);
+  }
 
   // get alloc type and size
   typet alloc_type;
@@ -232,7 +375,7 @@ void goto_convertt::do_mem(
 
   // produce new object
 
-  exprt new_expr("sideeffect", lhs.type());
+  exprt new_expr("sideeffect", target.type());
   new_expr.statement(func);
   new_expr.copy_to_operands(arguments[0]);
   new_expr.cmt_size(alloc_size);
@@ -241,7 +384,7 @@ void goto_convertt::do_mem(
 
   goto_programt::targett t_n = dest.add_instruction(ASSIGN);
 
-  exprt new_assign = code_assignt(lhs, new_expr);
+  exprt new_assign = code_assignt(target, new_expr);
   expr2tc new_assign_expr;
   migrate_expr(new_assign, new_assign_expr);
   t_n->code = new_assign_expr;
@@ -274,7 +417,8 @@ void goto_convertt::do_realloc(
 {
   assert(arguments.size() == 2 && "realloc requires two arguments");
 
-  // Create a null pointer expression (workaround for missing null_pointer_exprt)
+  // Create a null pointer expression (workaround for missing
+  // null_pointer_exprt)
   exprt null_ptr = gen_zero(arguments[0].type());
 
   // Compare if the pointer is NULL
@@ -300,9 +444,10 @@ void goto_convertt::do_realloc(
   realloc_expr.cmt_size(arguments[1]);
   realloc_expr.location() = function.location();
 
-  // Use conditional expression: (ptr == NULL) ? malloc(size) : realloc(ptr, size)
+  // Use conditional expression: (ptr == NULL) ? malloc(size) : realloc(ptr,
+  // size)
   if_exprt conditional_expr(is_null, malloc_expr, realloc_expr);
-  simplify(conditional_expr);
+  simplify_via_irep2(conditional_expr);
 
   goto_programt::targett t_n = dest.add_instruction(ASSIGN);
 
@@ -324,11 +469,20 @@ void goto_convertt::do_cpp_new(
     assert(0);
   }
 
-  // grab initializer
-  goto_programt tmp_initializer;
-  cpp_new_initializer(lhs, rhs, tmp_initializer);
+  // The frontend attaches the resolved allocation function when the program
+  // replaced ::operator new, or the class supplied its own. Calling it is the
+  // whole point: a pool allocator that hands out the same storage twice makes
+  // two objects alias, which a fresh built-in allocation hides (github #6494).
+  const exprt &alloc_function =
+    static_cast<const exprt &>(rhs.find("alloc_function"));
+  const exprt &placement = static_cast<const exprt &>(rhs.find("placement"));
 
+  // The element count drives both the allocation size and the construction
+  // loop, and `new T[f()]` evaluates f() exactly once, so evaluate it here --
+  // ahead of cpp_new_initializer -- and hand the resulting side-effect-free
+  // expression to both.
   exprt alloc_size;
+  exprt elem_count;
 
   if (rhs.statement() == "cpp_new[]")
   {
@@ -337,13 +491,14 @@ void goto_convertt::do_cpp_new(
       alloc_size.make_typecast(size_type());
 
     remove_sideeffects(alloc_size, dest);
+    elem_count = alloc_size;
 
     // jmorse: multiply alloc size by size of subtype.
     type2tc subtype = migrate_type(ns.follow(rhs.type().subtype()));
     expr2tc alloc_units;
     migrate_expr(alloc_size, alloc_units);
 
-    BigInt sz = type_byte_size(subtype);
+    BigInt sz = type_byte_size(subtype, &ns);
     expr2tc sz_expr = constant_int2tc(size_type2(), sz);
     expr2tc byte_size = mul2tc(size_type2(), alloc_units, sz_expr);
     alloc_size = migrate_expr_back(byte_size);
@@ -351,33 +506,463 @@ void goto_convertt::do_cpp_new(
   else
     alloc_size = from_integer(1, size_type());
 
+  // grab initializer
+  goto_programt tmp_initializer;
+  // With no initializer the built-in path zero-fills, which models a fresh
+  // object well enough. Storage from a replaced operator new is not fresh --
+  // the program decides its contents ([expr.new]/17 default-initialises a
+  // scalar to nothing at all) -- so zero-filling it would overwrite what the
+  // replacement just returned, and the same holds for placement storage.
+  if (
+    (alloc_function.is_nil() && placement.is_nil()) ||
+    rhs.initializer().is_not_nil())
+    cpp_new_initializer(lhs, rhs, elem_count, tmp_initializer);
+
   if (alloc_size.is_nil())
     alloc_size = from_integer(1, size_type());
 
   if (alloc_size.type() != size_type())
   {
     alloc_size.make_typecast(size_type());
-    simplify(alloc_size);
+    simplify_via_irep2(alloc_size);
   }
 
-  exprt new_expr("sideeffect", rhs.type());
-  new_expr.statement(rhs.statement());
-  new_expr.cmt_size(alloc_size);
-  new_expr.location() = rhs.find_location();
+  if (placement.is_not_nil())
+    cpp_new_at(lhs, placement, rhs.find_location(), dest);
+  else if (alloc_function.is_not_nil())
+  {
+    // operator new takes a byte count. alloc_size is already scaled by the
+    // element size for the array form; the scalar form allocates one T.
+    exprt byte_size = alloc_size;
+    if (rhs.statement() == "cpp_new")
+      byte_size = from_integer(
+        type_byte_size(migrate_type(ns.follow(rhs.type().subtype()))),
+        size_type());
 
-  // produce new object
-  goto_programt::targett t_n = dest.add_instruction(ASSIGN);
-  exprt new_assign = code_assignt(lhs, new_expr);
-  migrate_expr(new_assign, t_n->code);
-  t_n->location = rhs.find_location();
+    const typet &raw_type = to_code_type(alloc_function.type()).return_type();
+    symbol_exprt raw(new_tmp_symbol(raw_type).id, raw_type);
+
+    code_function_callt call;
+    call.lhs() = raw;
+    call.function() = alloc_function;
+    call.arguments().push_back(byte_size);
+    for (exprt arg :
+         static_cast<const exprt &>(rhs.find("alloc_arguments")).operands())
+    {
+      remove_sideeffects(arg, dest);
+      call.arguments().push_back(arg);
+    }
+    call.location() = rhs.find_location();
+
+    goto_programt::targett t_a = dest.add_instruction(FUNCTION_CALL);
+    migrate_expr(call, t_a->code);
+    t_a->location = rhs.find_location();
+
+    exprt allocated = raw;
+    allocated.make_typecast(lhs.type());
+
+    goto_programt::targett t_n = dest.add_instruction(ASSIGN);
+    migrate_expr(code_assignt(lhs, allocated), t_n->code);
+    t_n->location = rhs.find_location();
+  }
+  else
+  {
+    exprt new_expr("sideeffect", rhs.type());
+    new_expr.statement(rhs.statement());
+    new_expr.cmt_size(alloc_size);
+    new_expr.location() = rhs.find_location();
+
+    // produce new object
+    goto_programt::targett t_n = dest.add_instruction(ASSIGN);
+    exprt new_assign = code_assignt(lhs, new_expr);
+    migrate_expr(new_assign, t_n->code);
+    t_n->location = rhs.find_location();
+  }
 
   // run initializer
   dest.destructive_append(tmp_initializer);
 }
 
+void goto_convertt::cpp_new_at(
+  const exprt &lhs,
+  const exprt &placement,
+  const locationt &location,
+  goto_programt &dest)
+{
+  exprt place = placement;
+  remove_sideeffects(place, dest);
+  place.make_typecast(lhs.type());
+
+  goto_programt::targett t = dest.add_instruction(ASSIGN);
+  migrate_expr(code_assignt(lhs, place), t->code);
+  t->location = location;
+}
+
+// Locate the element constructor inside a cpp_new[] initializer, by shape.
+//
+// The decl-path helper (find_constructor_call in clang_cpp_adjust_code.cpp)
+// keys on the "constructor" flag, but nothing in the initializer the frontend
+// builds for the array form carries it. What is there is a plain function_call
+// side effect -- the element constructor, whose first argument is the `this`
+// pointer -- nested inside a temporary_object of the whole array type. Match
+// that shape instead, and note a temporary_object keeps its call under the
+// named "initializer" sub-irep rather than in an operand.
+static exprt *find_cpp_new_constructor(exprt &e)
+{
+  if (
+    e.id() == "sideeffect" && e.statement() == "function_call" &&
+    e.operands().size() == 2 && !e.op1().operands().empty())
+    return &e;
+
+  if (e.id() == "sideeffect" && e.statement() == "temporary_object")
+  {
+    if (e.find("initializer").is_not_nil())
+      if (
+        exprt *c =
+          find_cpp_new_constructor(static_cast<exprt &>(e.add("initializer"))))
+        return c;
+  }
+
+  Forall_operands (it, e)
+    if (exprt *c = find_cpp_new_constructor(*it))
+      return c;
+
+  return nullptr;
+}
+
+// The non-array type at the bottom of `type`, and how many of it one `type`
+// holds. False if an array level has no constant size.
+static bool
+array_leaves(const namespacet &ns, const typet &type, typet &leaf, BigInt &n)
+{
+  const typet &t = ns.follow(type);
+  if (!t.is_array())
+  {
+    leaf = type;
+    n = 1;
+    return true;
+  }
+
+  BigInt size;
+  if (
+    to_integer(to_array_type(t).size(), size) ||
+    !array_leaves(ns, t.subtype(), leaf, n))
+    return false;
+  n *= size;
+  return true;
+}
+
+// Zero the elements a value-initialising `new T[n]()` just allocated:
+//
+//   for (size_type i = 0; i < n; ++i)
+//     *(lhs + i) = <zero of T>;
+//
+// An assignment loop rather than a memset call: n need not be a compile-time
+// constant, and __ESBMC_memset falls back to a library body that is only linked
+// when the program itself calls memset.
+void goto_convertt::cpp_new_zero_fill(
+  const exprt &lhs,
+  const exprt &rhs,
+  const exprt &elem_count,
+  goto_programt &dest)
+{
+  // `new T[n][m]()` zeroes n * m leaves through a pointer to the leaf type,
+  // since symex rejects a dereference that yields an array.
+  typet leaf;
+  BigInt stride;
+  if (!array_leaves(ns, rhs.type().subtype(), leaf, stride))
+    return;
+  const typet &subtype = ns.follow(leaf);
+
+  exprt base = lhs;
+  exprt count = elem_count;
+  if (ns.follow(rhs.type().subtype()).is_array())
+  {
+    base = typecast_exprt(lhs, pointer_typet(leaf));
+    count = mult_exprt(elem_count, from_integer(stride, size_type()));
+    count.type() = size_type();
+  }
+
+  symbol_exprt index(new_tmp_symbol(size_type()).id, size_type());
+
+  // Pointer arithmetic on lhs, for the reason spelled out at the element
+  // constructor loop below: &lhs[i] does not survive symex.
+  plus_exprt element_addr(base, index);
+  element_addr.type() = base.type();
+
+  exprt element("dereference", subtype);
+  element.copy_to_operands(element_addr);
+
+  code_assignt body(element, gen_zero(subtype));
+  body.location() = rhs.find_location();
+
+  plus_exprt next(index, from_integer(1, size_type()));
+  next.type() = size_type();
+
+  code_fort loop;
+  loop.init() = code_assignt(index, from_integer(0, size_type()));
+  loop.cond() = binary_relation_exprt(index, "<", count);
+  loop.iter() = code_assignt(index, next);
+  loop.body() = body;
+  loop.location() = rhs.find_location();
+
+  convert(loop, dest);
+}
+
+// A list's elements; a string literal's are its characters and the zeros
+// padding it to its array type ([dcl.init.string]/3).
+static std::size_t list_size(const exprt &init)
+{
+  if (init.id() != "string-constant")
+    return init.operands().size();
+  BigInt n;
+  to_integer(to_array_type(init.type()).size(), n);
+  return n.to_uint64();
+}
+
+static exprt list_element(const exprt &init, std::size_t i)
+{
+  if (init.id() != "string-constant")
+    return init.operands()[i];
+  return index_exprt(
+    init, from_integer(i, index_type()), init.type().subtype());
+}
+
+// Whether every nested list in `init` is spelled element by element, so
+// cpp_new_store_element can reach each leaf.
+static bool is_splittable_list(const namespacet &ns, const exprt &init)
+{
+  if (!ns.follow(init.type()).is_array())
+    return true;
+
+  typet leaf;
+  BigInt n;
+  if (
+    (!init.is_constant() && init.id() != "array" &&
+     init.id() != "string-constant") ||
+    !array_leaves(ns, init.type(), leaf, n))
+    return false;
+
+  forall_operands (it, init)
+    if (!is_splittable_list(ns, *it))
+      return false;
+  return true;
+}
+
+// The constructor call of a list element the frontend built as a temporary,
+// which initialises the array element itself ([dcl.init]/17.6.1).
+static exprt *element_constructor(exprt &init)
+{
+  if (init.id() != "sideeffect" || init.statement() != "temporary_object")
+    return nullptr;
+
+  exprt &code = static_cast<exprt &>(init.add("initializer"));
+  if (code.operands().size() != 1 || !code.op0().get_bool("constructor"))
+    return nullptr;
+  return &code.op0();
+}
+
+// Append to `out` the code initialising the leaves `init` covers, starting
+// `offset` leaves past `base`.
+void goto_convertt::cpp_new_store_element(
+  const exprt &base,
+  const exprt &offset,
+  const exprt &init,
+  const locationt &location,
+  const exprt &built,
+  code_blockt &out)
+{
+  const typet &type = ns.follow(init.type());
+  if (type.is_array())
+  {
+    typet leaf;
+    BigInt stride;
+    array_leaves(ns, type.subtype(), leaf, stride);
+    for (std::size_t i = 0; i < list_size(init); ++i)
+    {
+      exprt at = plus_exprt(offset, from_integer(stride * i, size_type()));
+      at.type() = size_type();
+      simplify_via_irep2(at);
+      cpp_new_store_element(
+        base, at, list_element(init, i), location, built, out);
+    }
+    return;
+  }
+
+  if (built.is_not_nil())
+    out.copy_to_operands(code_assignt(built, offset));
+
+  plus_exprt element_addr(base, offset);
+  element_addr.type() = base.type();
+
+  exprt element_init = init;
+  codet code;
+  if (exprt *ctor = element_constructor(element_init))
+  {
+    ctor->op1().operands().at(0) = element_addr;
+    code = code_expressiont(*ctor);
+  }
+  else
+  {
+    exprt element("dereference", base.type().subtype());
+    element.copy_to_operands(element_addr);
+    code = code_assignt(element, element_init);
+  }
+  code.location() = location;
+  out.move_to_operands(code);
+}
+
+/* `new T[n]{a, b}`: the listed elements are initialised in order, each by its
+ * own initializer, and the rest by the list's filler, which is zero unless the
+ * frontend attached one ([dcl.init.aggr]/5). A nested list is stored leaf by
+ * leaf through a pointer to the leaf type, since symex rejects a dereference
+ * that yields an array. The initializer is the list decayed to
+ * `&list[0]...[0]`; false for any other initializer. A non-nil `built` is set
+ * to each leaf's index before it is initialised. */
+bool goto_convertt::cpp_new_init_list(
+  const exprt &lhs,
+  const exprt &rhs,
+  const exprt &decayed,
+  const exprt &elem_count,
+  const exprt &built,
+  code_blockt &out)
+{
+  if (!decayed.is_address_of())
+    return false;
+  const exprt *init = &decayed.op0();
+  while (init->is_index() && init->op1().is_zero())
+    init = &init->op0();
+
+  const typet &elem_type = ns.follow(rhs.type().subtype());
+  exprt filler = static_cast<const exprt &>(rhs.find("array_filler"));
+  if (filler.is_nil())
+    filler = gen_zero(elem_type);
+
+  typet leaf;
+  BigInt stride;
+  if (
+    init == &decayed.op0() || !is_splittable_list(ns, *init) ||
+    !is_splittable_list(ns, filler) ||
+    !array_leaves(ns, rhs.type().subtype(), leaf, stride))
+    return false;
+
+  exprt base = lhs;
+  if (elem_type.is_array())
+    base = typecast_exprt(lhs, pointer_typet(leaf));
+  const locationt &location = rhs.find_location();
+
+  cpp_new_store_element(
+    base, from_integer(0, size_type()), *init, location, built, out);
+
+  symbol_exprt index(new_tmp_symbol(size_type()).id, size_type());
+  exprt at = index;
+  if (stride != 1)
+  {
+    at = mult_exprt(index, from_integer(stride, size_type()));
+    at.type() = size_type();
+  }
+  code_blockt body;
+  cpp_new_store_element(base, at, filler, location, built, body);
+
+  plus_exprt next(index, from_integer(1, size_type()));
+  next.type() = size_type();
+
+  code_fort tail;
+  tail.init() =
+    code_assignt(index, from_integer(list_size(*init), size_type()));
+  tail.cond() = binary_relation_exprt(index, "<", elem_count);
+  tail.iter() = code_assignt(index, next);
+  tail.body() = body;
+  tail.location() = location;
+  out.move_to_operands(tail);
+  return true;
+}
+
+bool goto_convertt::user_code_throws()
+{
+  if (user_code_throws_cache)
+    return *user_code_throws_cache;
+
+  std::function<bool(const irept &)> throws = [&](const irept &irep) {
+    const irep_idt &statement = irep.statement();
+    if (statement == "cpp-throw" || statement == "cpp-catch")
+      return true;
+    for (const irept &sub : irep.get_sub())
+      if (throws(sub))
+        return true;
+    for (const auto &named : irep.get_named_sub())
+      if (throws(named.second))
+        return true;
+    return false;
+  };
+
+  bool result = false;
+  context.foreach_operand([&](const symbolt &s) {
+    if (
+      !result && s.get_type().is_code() &&
+      !file_operations::is_bundled_source(s.location.file().as_string()))
+      result = throws(s.get_value());
+  });
+  user_code_throws_cache = result;
+  return result;
+}
+
+/* Convert the code constructing the elements of a `new T[n]`. When an element's
+ * initialization exits by an exception, the elements already constructed are
+ * destroyed in reverse order ([except.ctor]/3): `construction`
+ * then runs in a try block whose catch-all destroys the `built` leaves before
+ * `base + built`, newest first, and rethrows. */
+void goto_convertt::convert_cpp_new_elements(
+  const exprt &base,
+  const exprt &built,
+  const codet &construction,
+  goto_programt &dest)
+{
+  // A class-typed element may lower to a temporary copied into place, which
+  // must not get its own scope-exit destructor.
+  const std::size_t stack_size = targets.destructor_stack.size();
+  code_function_callt destructor;
+  if (built.is_nil() || !get_destructor(ns, base.type().subtype(), destructor))
+  {
+    convert(construction, dest);
+    targets.destructor_stack.resize(stack_size);
+    return;
+  }
+
+  const locationt &location = construction.location();
+  exprt prev("-", size_type());
+  prev.copy_to_operands(built, from_integer(1, size_type()));
+  plus_exprt element_addr(base, built);
+  element_addr.type() = base.type();
+  destructor.arguments().push_back(element_addr);
+
+  code_blockt destroy;
+  destroy.copy_to_operands(code_assignt(built, prev), destructor);
+  code_whilet unwind;
+  unwind.cond() =
+    binary_relation_exprt(built, ">", from_integer(0, size_type()));
+  unwind.body() = destroy;
+
+  code_blockt handler;
+  handler.set("exception_id", "ellipsis");
+  handler.copy_to_operands(unwind, codet("cpp-throw"));
+
+  codet guarded("cpp-catch");
+  guarded.location() = location;
+  guarded.copy_to_operands(construction, handler);
+
+  code_blockt block;
+  block.location() = location;
+  block.copy_to_operands(
+    code_assignt(built, from_integer(0, size_type())), guarded);
+  convert(block, dest);
+  targets.destructor_stack.resize(stack_size);
+}
+
 void goto_convertt::cpp_new_initializer(
   const exprt &lhs,
   const exprt &rhs,
+  const exprt &elem_count,
   goto_programt &dest)
 {
   // grab initializer
@@ -403,7 +988,13 @@ void goto_convertt::cpp_new_initializer(
   {
     initializer = static_cast<const code_expressiont &>(rhs.initializer());
 
-    if (!initializer.op0().get_bool("constructor"))
+    // The wrap below is scalar-shaped: it assigns into a `new_object` of the
+    // element type. For the array form the frontend supplies an array-typed
+    // temporary_object, so wrapping it assigns a T* into a T. The cpp_new[]
+    // arm retargets the element constructor itself instead (github #6584).
+    if (
+      rhs.statement() != "cpp_new[]" &&
+      !initializer.op0().get_bool("constructor"))
     {
       // for auto *p = Foo(3) and int *p = 3
       // constructor case:  init is Foo(&(*new_object), 3)
@@ -428,14 +1019,108 @@ void goto_convertt::cpp_new_initializer(
   {
     if (rhs.statement() == "cpp_new[]")
     {
-      // build loop
+      // The parenthesised and braced-empty forms value-initialise, which zeroes
+      // every element the constructor -- if any -- does not write itself
+      // ([expr.new]/24, github #6588). The frontend flags exactly those forms,
+      // so plain `new T[n]` keeps its indeterminate elements.
+      if (rhs.get_bool("zero_initialized"))
+        cpp_new_zero_fill(lhs, rhs, elem_count, dest);
+
+      // Construct every element: what the scalar arm below does once, done for
+      // each element of the allocated array. Leaving this unimplemented meant
+      // `new T[n]` ran no constructor at all, so members initialised by T's
+      // constructor read back nondeterministically (github #6584). The element
+      // count need not be a compile-time constant, so emit a loop rather than
+      // unrolling it:
+      //
+      //   for (size_type i = 0; i < n; ++i)
+      //     <element constructor, with `this` = lhs + i>
+      // do_cpp_new already evaluated the count for the allocation; reusing it
+      // is what keeps `new T[f()]` from calling f() a second time here.
+      exprt count = elem_count;
+
+      // `new T[n][m]` constructs n * m class elements: step through them
+      // with a pointer to the class, not to a row.
+      exprt base = lhs;
+      typet leaf = rhs.type().subtype();
+      while (ns.follow(leaf).is_array())
+      {
+        BigInt size;
+        if (to_integer(to_array_type(ns.follow(leaf)).size(), size))
+          return;
+        count = mult_exprt(count, from_integer(size, size_type()));
+        count.type() = size_type();
+        leaf = ns.follow(leaf).subtype();
+        base = typecast_exprt(lhs, pointer_typet(leaf));
+      }
+
+      exprt built = nil_exprt();
+      if (user_code_throws())
+        built = symbol_exprt(new_tmp_symbol(size_type()).id, size_type());
+
+      code_blockt construction;
+      construction.location() = rhs.find_location();
+      if (
+        cpp_new_init_list(
+          lhs, rhs, initializer.op0(), elem_count, built, construction))
+      {
+        convert_cpp_new_elements(base, built, construction, dest);
+        return;
+      }
+
+      exprt *ctor = find_cpp_new_constructor(initializer);
+      if (ctor == nullptr)
+        return;
+
+      symbol_exprt index(new_tmp_symbol(size_type()).id, size_type());
+
+      // The element address is plain pointer arithmetic on lhs. Building it as
+      // &lhs[i] instead would not survive symex: dereference_expr_nonscalar
+      // recurses into an index's source, and a pointer source is scalar, so it
+      // trips the "no sudden transition back to scalars" assertion. `p[i]` in
+      // user code only reaches symex as a dereference because the adjuster
+      // rewrites it, and this runs after adjust.
+      plus_exprt element_addr(base, index);
+      element_addr.type() = base.type();
+
+      // The frontend's initializer is shaped for the whole array: a
+      // temporary_object of type T[n] wrapping the element constructor, whose
+      // `this` is &new_object[0]. Lift that call out and re-point its `this`
+      // at lhs + i, so each iteration constructs its own element in place.
+      exprt call = *ctor;
+      call.op1().operands().at(0) = element_addr;
+      code_blockt body;
+      if (built.is_not_nil())
+        body.copy_to_operands(code_assignt(built, index));
+      body.copy_to_operands(code_expressiont(call));
+      body.location() = rhs.find_location();
+
+      plus_exprt next(index, from_integer(1, size_type()));
+      next.type() = size_type();
+
+      code_fort loop;
+      loop.init() = code_assignt(index, from_integer(0, size_type()));
+      loop.cond() = binary_relation_exprt(index, "<", count);
+      loop.iter() = code_assignt(index, next);
+      loop.body() = body;
+      loop.location() = rhs.find_location();
+      convert_cpp_new_elements(base, built, loop, dest);
     }
     else if (rhs.statement() == "cpp_new")
     {
       exprt deref_new("dereference", rhs.type().subtype());
       deref_new.copy_to_operands(lhs);
       replace_new_object(deref_new, initializer);
+
+      // A class-typed initializer may lower to a stack temporary copied into
+      // the heap object (`*new_ptr = tmp`). That temporary is a transfer
+      // slot, not a C++ object: the heap object owns the constructed state
+      // and is destructed via delete, so drop the scope-exit entries this
+      // conversion pushes -- destructing the slot would double-count
+      // (github #6075).
+      std::size_t stack_size = targets.destructor_stack.size();
       convert(to_code(initializer), dest);
+      targets.destructor_stack.resize(stack_size);
     }
     else
       assert(0);
@@ -500,6 +1185,104 @@ exprt make_va_list(const exprt &expr)
   return expr;
 }
 
+// Keep a va_start/va_copy call in the GOTO program (with no lhs) so symex
+// can track which va_lists have been initialised. run_builtin intercepts
+// the call; no actual function body is ever looked up.
+static void emit_va_marker_call(
+  const exprt &function,
+  const exprt::operandst &arguments,
+  goto_programt &dest)
+{
+  code_function_callt call;
+  call.location() = function.location();
+  call.function() = function;
+  call.arguments() = arguments;
+  goto_programt::targett t = dest.add_instruction(FUNCTION_CALL);
+  migrate_expr(call, t->code);
+  t->location = function.location();
+}
+
+bool goto_convertt::drop_inactive_contract_clause(bool is_clause) const
+{
+  return is_clause && !options.contracts_enabled();
+}
+
+// The assigns marker is an assignment, so symex reads its right-hand side. A
+// whole array read through a pointer is the one rvalue dereference refuses to
+// build (pointer-analysis/dereference.cpp), so carry an array target by
+// address; the contracts layer strips it back off. A frame target is a place,
+// and its address is the part that matters.
+static exprt assigns_marker_operand(const exprt &target)
+{
+  if (!target.type().is_array())
+    return target;
+  return address_of_exprt(target);
+}
+
+/// Lower a call to ::operator new(n) into a cpp_new side effect. Kept out of
+/// do_function_call_symbol, which is already over the complexity gate.
+void goto_convertt::do_operator_new(
+  const exprt &lhs,
+  const exprt &function,
+  const exprt::operandst &arguments,
+  goto_programt &dest)
+{
+  assert(arguments.size() == 1);
+
+  // A byte count that is not a constant cannot be encoded in a type's
+  // width, and the fallback below would model operator new(n) as a
+  // *one-byte* object, reporting every in-bounds access through the returned
+  // pointer as out of bounds. Allocate the n bytes the call asks for
+  // instead, as an array new of unsigned char whose element count is the
+  // requested size: new[] already carries a symbolic extent, which is why
+  // `new T[n]` and `malloc(n)` never had this problem.
+  if (
+    sizeof_measured_type(arguments.front()).is_nil() &&
+    !arguments.front().is_constant())
+  {
+    side_effect_exprt new_array("cpp_new[]");
+    new_array.add("#location") = function.cmt_location();
+    new_array.size(arguments.front());
+    new_array.type() = pointer_typet(unsigned_char_type());
+    new_array.type().add("#location") = function.cmt_location();
+    do_cpp_new(lhs, new_array, dest);
+    return;
+  }
+
+  // Change it into a cpp_new expression
+  side_effect_exprt new_function("cpp_new");
+  new_function.add("#location") = function.cmt_location();
+  new_function.add("sizeof") = arguments.front();
+
+  // The allocated element type is the T of a `sizeof(T)` size argument,
+  // recovered from the unfolded sizeof node (esbmc/esbmc#5337). When the
+  // argument is not a sizeof (e.g. operator new(n) for a raw byte count),
+  // fall back to a single zero-initialised unsigned integer spanning the
+  // requested bytes: operator new(n) allocates n raw bytes, so a later typed
+  // read sees zero, matching the sizeof-present path.
+  typet sizeof_type = sizeof_measured_type(arguments.front());
+  if (sizeof_type.is_nil())
+  {
+    const unsigned char_width = config.ansi_c.char_width;
+    BigInt nbytes(1);
+    if (arguments.front().is_constant())
+      nbytes = binary2integer(arguments.front().value().as_string(), false);
+    // Fall back to a single byte for a non-constant or pathological size:
+    // 1 byte avoids the crash, and capping the byte count keeps the derived
+    // bitvector width from overflowing unsignedbv_typet's 32-bit width.
+    if (nbytes < 1 || nbytes > BigInt(0xFFFFFFFFu / char_width))
+      nbytes = 1;
+    sizeof_type = unsignedbv_typet(nbytes.to_uint64() * char_width);
+  }
+
+  // Set return type, a allocated pointer
+  // XXX jmorse, const-qual misery
+  new_function.type() = pointer_typet(sizeof_type);
+  new_function.type().add("#location") = function.cmt_location();
+
+  do_cpp_new(lhs, new_function, dest);
+}
+
 void goto_convertt::do_function_call_symbol(
   const exprt &lhs,
   const exprt &function,
@@ -519,15 +1302,24 @@ void goto_convertt::do_function_call_symbol(
     abort();
   }
 
-  if (!symbol->type.is_code())
+  if (!symbol->get_type().is_code())
   {
     log_error(
       "Function `{}' type mismatch: expected code", id2string(identifier));
   }
 
   // If the symbol is not nil, i.e., the user defined the expected behavior of
-  // the builtin function, we should honor the user function and call it
-  if (symbol->value.is_not_nil() && symbol->value.has_operands())
+  // the builtin function, we should honor the user function and call it.
+  // Exception: under --enable-unreachability-intrinsic, reach_error and
+  // __VERIFIER_error are treated as error sentinels -- skip any user body and
+  // insert ASSERT false at the call site so the violation location in the
+  // counterexample/witness points to the call site, not inside the body.
+  const bool skip_body =
+    options.get_bool_option("enable-unreachability-intrinsic") &&
+    (symbol->name == "reach_error" || symbol->name == "__VERIFIER_error");
+  if (
+    symbol->get_value().is_not_nil() && symbol->get_value().has_operands() &&
+    !skip_body)
   {
     // insert function call
     code_function_callt function_call;
@@ -542,13 +1334,17 @@ void goto_convertt::do_function_call_symbol(
 
   std::string base_name = symbol->name.as_string();
 
-  bool is_assume =
-    (base_name == "__ESBMC_assume") || (base_name == "__VERIFIER_assume");
+  // __builtin_assume(cond) is GCC/Clang's assumption hint; model it as an
+  // assume, like __ESBMC_assume / __VERIFIER_assume. See #4606.
+  bool is_assume = (base_name == "__ESBMC_assume") ||
+                   (base_name == "__VERIFIER_assume") ||
+                   (base_name == "__builtin_assume");
   bool is_assert = (base_name == "assert");
 
   bool is_loop_invariant = (base_name == "__ESBMC_loop_invariant");
   bool is_requires = (base_name == "__ESBMC_requires");
   bool is_ensures = (base_name == "__ESBMC_ensures");
+  bool is_clause = is_requires || is_ensures;
   bool is_assigns = (base_name == "__ESBMC_assigns");
 
   // Debug: log if we see assigns
@@ -560,7 +1356,15 @@ void goto_convertt::do_function_call_symbol(
       arguments.size());
   }
 
-  if (is_assume || is_assert || is_loop_invariant || is_requires || is_ensures)
+  // A contract clause states nothing outside contract mode. goto_sideeffects
+  // already drops it, but only for clauses that arrive as a side-effect
+  // expression; the Python frontend emits a direct FUNCTION_CALL, which never
+  // reaches that strip, so a live `requires` would be assumed and mask real
+  // bugs in the function it annotates.
+  if (drop_inactive_contract_clause(is_clause))
+    return;
+
+  if (is_assume || is_assert || is_loop_invariant || is_clause)
   {
     if (arguments.size() != 1)
     {
@@ -570,11 +1374,12 @@ void goto_convertt::do_function_call_symbol(
 
     if (
       options.get_bool_option("no-assertions") && !is_assume &&
-      !is_loop_invariant && !is_requires && !is_ensures)
+      !is_loop_invariant && !is_clause)
       return;
 
-    // Rafael's invariant merging: combine consecutive __invariant() calls
-    // into a single LOOP_INVARIANT instruction for efficiency
+    // Rafael's invariant merging: combine consecutive
+    // __ESBMC_loop_invariant() calls into a single LOOP_INVARIANT
+    // instruction for efficiency
     // not tested yet, but should be correct
     goto_programt::targett t;
     expr2tc guard;
@@ -601,8 +1406,9 @@ void goto_convertt::do_function_call_symbol(
     }
     else
     {
-      // For contract functions, generate ASSUME instructions with special markers
-      if (is_requires || is_ensures)
+      // For contract functions, generate ASSUME instructions with special
+      // markers
+      if (is_clause)
       {
         t = dest.add_instruction(ASSUME);
         t->guard = guard;
@@ -650,11 +1456,13 @@ void goto_convertt::do_function_call_symbol(
     // __ESBMC_assigns_impl(&expr1, &expr2, ...): unified assigns clause handler
     //
     // The macro __ESBMC_assigns(x) expands to __ESBMC_assigns_impl(&(x))
-    // This allows accepting any lvalue expression (scalars, arrays, struct fields, etc.)
+    // This allows accepting any lvalue expression (scalars, arrays, struct
+    // fields, etc.)
     //
-    // Strategy: For each argument, unwrap the address_of to get the original expression,
-    // then create an ASSIGN to a sideeffect "assigns_target". This stores the expression
-    // tree for later evaluation during replace-call with proper parameter substitution.
+    // Strategy: For each argument, unwrap the address_of to get the original
+    // expression, then create an ASSIGN to a sideeffect "assigns_target". This
+    // stores the expression tree for later evaluation during replace-call with
+    // proper parameter substitution.
     //
     if (arguments.empty())
     {
@@ -708,7 +1516,8 @@ void goto_convertt::do_function_call_symbol(
       }
     }
 
-    // For each argument, unwrap address_of and create an assigns_target sideeffect
+    // For each argument, unwrap address_of and create an assigns_target
+    // sideeffect
     for (size_t i = 0; i < arguments.size(); ++i)
     {
       exprt actual_arg = arguments[i];
@@ -750,6 +1559,8 @@ void goto_convertt::do_function_call_symbol(
       log_debug(
         "builtin_functions", "  Assigns target {}: {}", i, actual_arg.pretty());
 
+      actual_arg = assigns_marker_operand(actual_arg);
+
       // Create a sideeffect expression to mark this as an assigns target
       // Type is inherited from the actual argument (after stripping typecast)
       exprt assigns_expr("sideeffect", actual_arg.type());
@@ -767,9 +1578,10 @@ void goto_convertt::do_function_call_symbol(
   }
   else if (base_name == "__ESBMC_loop_assigns_impl")
   {
-    // __ESBMC_loop_assigns_impl(&expr1, &expr2, ...): loop assigns clause handler
-    // Similar to __ESBMC_assigns_impl but stores targets in LOOP_INVARIANT instruction
-    // for frame rule enforcement during loop invariant checking.
+    // __ESBMC_loop_assigns_impl(&expr1, &expr2, ...): loop assigns clause
+    // handler Similar to __ESBMC_assigns_impl but stores targets in
+    // LOOP_INVARIANT instruction for frame rule enforcement during loop
+    // invariant checking.
 
     if (arguments.empty())
     {
@@ -850,13 +1662,15 @@ void goto_convertt::do_function_call_symbol(
   else if (base_name == "__ESBMC_old_raw")
   {
     // __ESBMC_old_raw(void* addr): low-level implementation of __ESBMC_old().
-    // Called via the macro: #define __ESBMC_old(x) (*(__typeof__(x)*)__ESBMC_old_raw(&(x)))
+    // Called via the macro: #define __ESBMC_old(x)
+    // (*(__typeof__(x)*)__ESBMC_old_raw(&(x)))
     //
     // The argument is (void*)(&x) — a pointer to the lvalue x.
-    // We strip the void* cast and address_of to recover the original expression x,
-    // then create an old_snapshot sideeffect with x as operand (type T).
-    // The sideeffect is typed as void* (matching the lhs) to avoid type mismatch;
-    // the contracts processing uses the operand's type T to create the snapshot.
+    // We strip the void* cast and address_of to recover the original expression
+    // x, then create an old_snapshot sideeffect with x as operand (type T). The
+    // sideeffect is typed as void* (matching the lhs) to avoid type mismatch;
+    // the contracts processing uses the operand's type T to create the
+    // snapshot.
     if (arguments.size() != 1)
     {
       log_error("`__ESBMC_old_raw' expected to have one argument");
@@ -937,17 +1751,26 @@ void goto_convertt::do_function_call_symbol(
       abort();
     }
 
-#if ESBMC_SVCOMP
     /* <https://gitlab.com/sosy-lab/benchmarking/sv-benchmarks/-/issues/1296> */
-    if (base_name == "__builtin_unreachable")
+    if (
+      base_name == "__builtin_unreachable" &&
+      config.options.get_bool_option("sv-comp"))
       return;
-#endif
 
-    goto_programt::targett t = dest.add_instruction(ASSERT);
-    t->guard = gen_false_expr();
-    t->location = function.location();
-    t->location.user_provided(true);
-    t->location.property("assertion");
+    if (!options.get_bool_option("no-assertions"))
+    {
+      goto_programt::targett t = dest.add_instruction(ASSERT);
+      t->guard = gen_false_expr();
+      t->location = function.location();
+      t->location.user_provided(true);
+      t->location.property("assertion");
+      t->location.comment(base_name);
+    }
+    else
+      // Under --no-assertions, trigger the memory-leak-check walker on this
+      // abnormal-termination path (mirrors __assert_fail's handling and what
+      // abort() does in the stdlib operational model).
+      emit_assert_fail_noreturn(function.location(), dest);
 
     if (lhs.is_not_nil())
     {
@@ -955,8 +1778,6 @@ void goto_convertt::do_function_call_symbol(
       abort();
     }
 
-    // __VERIFIER_error has abort() semantics, even if no assertions
-    // are being checked
     goto_programt::targett a = dest.add_instruction(ASSUME);
     a->guard = gen_false_expr();
     a->location = function.location();
@@ -1012,101 +1833,39 @@ void goto_convertt::do_function_call_symbol(
   else if (
     base_name == "printf" || base_name == "fprintf" || base_name == "dprintf" ||
     base_name == "sprintf" || base_name == "snprintf" ||
-    base_name == "vfprintf")
+    base_name == "vfprintf" || base_name == "vprintf" ||
+    base_name == "vsprintf" || base_name == "vsnprintf" ||
+    base_name == "asprintf" || base_name == "vasprintf")
   {
     do_printf(lhs, function, arguments, dest, base_name);
   }
   else if (base_name == "__assert_rtn" || base_name == "__assert_fail")
   {
-    // __assert_fail is Linux
-    // These take four arguments:
-    // "expression", "file.c", line, __func__
-
-    if (arguments.size() != 4)
-    {
-      log_error("`{}' expected to have four arguments", id2string(base_name));
-      abort();
-    }
-
-    std::string description = "assertion ";
-    get_string_constant(arguments[0], description);
-
-    if (options.get_bool_option("no-assertions"))
-      return;
-
-    goto_programt::targett t = dest.add_instruction(ASSERT);
-    t->guard = gen_false_expr();
-    t->location = function.location();
-    t->location.user_provided(true);
-    t->location.property("assertion");
-    t->location.comment(description);
-    // we ignore any LHS
+    // Both take four arguments, but not in the same order. glibc's
+    // __assert_fail is (#e, file, line, __func__); Darwin's __assert_rtn is
+    // (__func__, file, line, #e) -- the FreeBSD __assert order handled below.
+    // Reading argument 0 for both put the enclosing function's name in every
+    // macOS counterexample where the failing expression belongs.
+    do_assert_fail(
+      function,
+      arguments,
+      dest,
+      base_name,
+      4,
+      base_name == "__assert_rtn" ? 3 : 0);
   }
   else if (config.ansi_c.target.is_freebsd() && base_name == "__assert")
   {
     /* This is FreeBSD, taking 4 arguments: __func__, __FILE__, __LINE__, #e */
-
-    if (arguments.size() != 4)
-    {
-      log_error("`{}' expected to have four arguments", id2string(base_name));
-      abort();
-    }
-
-    std::string description = "assertion ";
-    get_string_constant(arguments[3], description);
-
-    if (options.get_bool_option("no-assertions"))
-      return;
-
-    goto_programt::targett t = dest.add_instruction(ASSERT);
-    t->guard = gen_false_expr();
-    t->location = function.location();
-    t->location.user_provided(true);
-    t->location.property("assertion");
-    t->location.comment(description);
-    // we ignore any LHS
+    do_assert_fail(function, arguments, dest, base_name, 4, 3);
   }
   else if (base_name == "_wassert")
   {
-    // this is Windows
-
-    if (arguments.size() != 3)
-    {
-      log_error("`{}' expected to have three arguments", id2string(base_name));
-      abort();
-    }
-
-    std::string description = "assertion ";
-    get_string_constant(arguments[0], description);
-
-    if (options.get_bool_option("no-assertions"))
-      return;
-
-    goto_programt::targett t = dest.add_instruction(ASSERT);
-    t->guard = gen_false_expr();
-    t->location = function.location();
-    t->location.user_provided(true);
-    t->location.property("assertion");
-    t->location.comment(description);
-    // we ignore any LHS
+    // this is Windows: #e, __FILE__, __LINE__
+    do_assert_fail(function, arguments, dest, base_name, 3, 0);
   }
   else if (base_name == "operator new")
-  {
-    assert(arguments.size() == 1);
-
-    // Change it into a cpp_new expression
-    side_effect_exprt new_function("cpp_new");
-    new_function.add("#location") = function.cmt_location();
-    new_function.add("sizeof") = arguments.front();
-
-    // Set return type, a allocated pointer
-    // XXX jmorse, const-qual misery
-    new_function.type() = pointer_typet(
-      static_cast<const typet &>(arguments.front().c_sizeof_type()));
-    new_function.type().add("#location") = function.cmt_location();
-
-    do_cpp_new(lhs, new_function, dest);
-  }
+    do_operator_new(lhs, function, arguments, dest);
   else if (base_name == "__ESBMC_va_arg")
   {
     // This does two things.
@@ -1123,8 +1882,11 @@ void goto_convertt::do_function_call_symbol(
 
     if (lhs.is_not_nil())
     {
+      // Carry the va_list lvalue as the operand so symex can flag a va_arg
+      // on a va_list that was never initialised by va_start; the argument's
+      // value plays no role in resolving the vararg itself.
       side_effect_exprt rhs("va_arg", lhs.type());
-      rhs.copy_to_operands(gen_zero(lhs.type()));
+      rhs.copy_to_operands(make_va_list(arguments[0]));
       rhs.location() = function.location();
       goto_programt::targett t2 = dest.add_instruction(ASSIGN);
       exprt assign_expr = code_assignt(lhs, rhs);
@@ -1216,6 +1978,8 @@ void goto_convertt::do_function_call_symbol(
       log_error("va_start argument expected to be lvalue");
       abort();
     }
+
+    emit_va_marker_call(function, arguments, dest);
   }
   else if (base_name == "__builtin_va_end")
   {
@@ -1232,8 +1996,13 @@ void goto_convertt::do_function_call_symbol(
   else if (base_name == "__builtin_va_copy")
   {
     // For Clang frontend, goto_symex tracks VA args via va_index in the
-    // call frame; no assignment is needed. Emitting an ASSIGN crashes the
-    // pointer analysis on Linux/Windows where va_list is a struct array.
+    // call frame, so va_arg needs no assignment here. Emitting an ASSIGN
+    // crashes the pointer analysis on Linux/Windows where va_list is a
+    // struct array, so those targets keep the erased form. Where va_list is
+    // a plain pointer, emit the real copy: symex_printf's va_list recovery
+    // must be able to see that the destination now aliases another va_list
+    // (an erased copy would let a foreign va_list masquerade as a fresh
+    // local, defeating the recovery's provenance gate).
     exprt dest_expr = make_va_list(arguments[0]);
 
     if (!is_lvalue(dest_expr))
@@ -1241,6 +2010,19 @@ void goto_convertt::do_function_call_symbol(
       log_error("va_copy argument expected to be lvalue");
       abort();
     }
+
+    if (arguments.size() >= 2 && ns.follow(dest_expr.type()).is_pointer())
+    {
+      exprt src_expr =
+        typecast_exprt(make_va_list(arguments[1]), dest_expr.type());
+      goto_programt::targett t = dest.add_instruction(ASSIGN);
+      exprt assign_expr = code_assignt(dest_expr, src_expr);
+      migrate_expr(assign_expr, t->code);
+      t->location = function.location();
+    }
+
+    if (arguments.size() >= 2)
+      emit_va_marker_call(function, arguments, dest);
   }
   // Nontemporal means "do not cache please" (https://lwn.net/Articles/255364/)
   else if (base_name == "__builtin_nontemporal_load")
@@ -1349,9 +2131,9 @@ void goto_convertt::do_function_call_symbol(
   {
     symbolt new_symbol;
     new_symbol.name = "__ESBMC_unexpected";
-    new_symbol.type = arguments[0].type();
+    new_symbol.set_type(arguments[0].type());
     new_symbol.id = "c:@F@" + id2string(new_symbol.name);
-    new_symbol.value = arguments[0].op0().op0();
+    new_symbol.set_value(arguments[0].op0().op0());
     new_name(new_symbol);
     return;
   }

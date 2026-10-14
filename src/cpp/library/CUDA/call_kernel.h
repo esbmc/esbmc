@@ -1,19 +1,65 @@
 #ifndef _CALL_KERNEL_H
-#define _CALL_KERNEL_H 1
+#  define _CALL_KERNEL_H 1
 
-#include <stddef.h>
-#include <cstdlib>
-#include <string.h>
-#include <pthread.h>
-#include <assert.h>
-#include "vector_types.h"
-#include "device_launch_parameters.h"
-#include <new>
+#  include <stddef.h>
+#  include <cstdlib>
+#  include <string.h>
+#  include <pthread.h>
+#  include <assert.h>
+#  include "vector_types.h"
+#  include "device_launch_parameters.h"
+#  include <new>
 
 int blockGlobal;
 int threadGlobal;
 
-#define GPU_threads 2
+#  define GPU_threads 2
+
+// The device count is platform-dependent. It is chosen once, before any thread
+// starts; the upper bound keeps __cudaPeerIndex within an unsigned int.
+int __cudaChooseDeviceCount()
+{
+  int n = nondet_int();
+  __ESBMC_assume(n >= 1 && n <= 65536);
+  return n;
+}
+
+int __cudaDeviceCount = __cudaChooseDeviceCount();
+// CUDA keeps the current device per host thread.
+__thread int __cudaCurrentDevice = 0;
+// Owning device plus one of each cudaMalloc allocation; zero for host memory.
+__attribute__((annotate("__ESBMC_inf_size"))) int __cudaDeviceOf[1];
+// Whether a device may dereference a peer's memory.
+__attribute__((annotate("__ESBMC_inf_size"))) bool __cudaPeerAccess[1];
+
+unsigned int __cudaPeerIndex(int device, int peer)
+{
+  return (unsigned int)device * 65536u + (unsigned int)peer;
+}
+
+template <class T>
+void __cudaCheckKernelArg(T)
+{
+}
+
+// A kernel runs on the current device and may only dereference that device's
+// memory, or a peer's once peer access is enabled.
+template <class T>
+void __cudaCheckKernelArg(T *p)
+{
+  const int owner = __cudaDeviceOf[__ESBMC_POINTER_OBJECT((const void *)p)];
+  __ESBMC_assert(
+    owner == 0 || owner == __cudaCurrentDevice + 1 ||
+      __cudaPeerAccess[__cudaPeerIndex(__cudaCurrentDevice, owner - 1)],
+    "kernel argument is allocated on another device");
+}
+
+template <class... Ts>
+void __cudaCheckKernelArgs(Ts... args)
+{
+  int checked[] = {0, (__cudaCheckKernelArg(args), 0)...};
+  (void)checked;
+}
 
 /*ESBMC_verify_kernel()*/
 typedef void *(*voidFunction_no_params)();
@@ -320,90 +366,90 @@ Targ1_ui dev_ui;
 /*ESBMC_execute_kernel()*/
 void *ESBMC_execute_kernel_no_params(void *args)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   dev_no_params.func();
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
   return NULL;
 }
 
 void *ESBMC_execute_kernel_one(void *args)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   dev_one.func(dev_one.a);
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
   return NULL;
 }
 
 void *ESBMC_execute_kernel_two(void *args)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   dev_two.func(dev_two.a, dev_two.b);
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
   return NULL;
 }
 
 void *ESBMC_execute_kernel_three(void *args)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   dev_three.func(dev_three.a, dev_three.b, dev_three.c);
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
   return NULL;
 }
 
 /*ESBMC_execute_kernel_i()*/
 void *ESBMC_execute_kernel_two_i(void *args)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   dev_two_i.func(dev_two_i.a, dev_two_i.b);
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
   return NULL;
 }
 
 /*ESBMC_execute_kernel_u()*/
 void *ESBMC_execute_kernel_one_u(void *args)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   dev_one_u.func(dev_one_u.a);
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
   return NULL;
 }
 
 void *ESBMC_execute_kernel_two_u(void *args)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   dev_two_u.func(dev_two_u.a, dev_two_u.b);
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
   return NULL;
 }
 
 void *ESBMC_execute_kernel_three_u(void *args)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   dev_three_u.func(dev_three_u.a, dev_three_u.b, dev_three_u.c);
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
   return NULL;
 }
 
 /*ESBMC_execute_kernel_f()*/
 void *ESBMC_execute_kernel_float(void *args)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   dev_float.func(dev_float.a);
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
   return NULL;
 }
 
 void *ESBMC_execute_kernel_ffloat(void *args)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   dev_ffloat.func(dev_ffloat.a, dev_ffloat.b);
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
   return NULL;
 }
 
 void *ESBMC_execute_kernel_f5i2(void *args)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   dev_f5i2.func(
     dev_f5i2.a,
     dev_f5i2.b,
@@ -412,106 +458,106 @@ void *ESBMC_execute_kernel_f5i2(void *args)
     dev_f5i2.e,
     dev_f5i2.f,
     dev_f5i2.g);
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
   return NULL;
 }
 
 /*ESBMC_execute_kernel_c()*/
 void *ESBMC_execute_kernel_d1(void *args)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   dev_d1.func(dev_d1.a);
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
   return NULL;
 }
 
 void *ESBMC_execute_kernel_d2(void *args)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   dev_d2.func(dev_d2.a, dev_d2.b);
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
   return NULL;
 }
 
 void *ESBMC_execute_kernel_c3(void *args)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   dev_c3.func(dev_c3.a, dev_c3.b, dev_c3.c);
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
   return NULL;
 }
 
 /*ESBMC_execute_kernel_intt()*/
 void *ESBMC_execute_kernel_intt(void *args)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   dev_intt.func(dev_intt.a, dev_intt.b);
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
   return NULL;
 }
 
 /*ESBMC_execute_kernel_fuintt()*/
 void *ESBMC_execute_kernel_fuintt(void *args)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   dev_fuintt.func(dev_fuintt.a, dev_fuintt.b, dev_fuintt.c);
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
   return NULL;
 }
 
 void *ESBMC_execute_kernel_fuint(void *args)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   dev_fuint.func(dev_fuint.a, dev_fuint.b);
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
   return NULL;
 }
 
 /*ESBMC_execute_kernel_fuintint()*/
 void *ESBMC_execute_kernel_fuintint(void *args)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   dev_fuintint.func(dev_fuintint.a, dev_fuintint.b, dev_fuintint.c);
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
   return NULL;
 }
 
 void *ESBMC_execute_kernel_fint(void *args)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   dev_fint.func(dev_fint.a, dev_fint.b);
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
   return NULL;
 }
 
 /*ESBMC_execute_kernel_three_args_iuull()*/
 void *ESBMC_execute_kernel_three_iuull(void *args)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   dev_three_iuull.func(dev_three_iuull.a, dev_three_iuull.b, dev_three_iuull.c);
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
   return NULL;
 }
 
 /*ESBMC_execute_kernel_four_args_iuull()*/
 void *ESBMC_execute_kernel_four_i_ui_ull_f(void *args)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   dev_four_i_ui_ull_f.func(
     dev_four_i_ui_ull_f.a,
     dev_four_i_ui_ull_f.b,
     dev_four_i_ui_ull_f.c,
     dev_four_i_ui_ull_f.d);
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
   return NULL;
 }
 
 /*ESBMC_execute_kernel_three_args_ui()*/
 void *ESBMC_execute_kernel_ui(void *args)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   dev_ui.func(dev_ui.a);
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
   return NULL;
 }
 
@@ -1009,7 +1055,7 @@ void ESBMC_verify_kernel_one_ui(
 template <class RET, class BLOCK, class THREAD>
 void ESBMC_verify_kernel(RET *kernel, BLOCK blocks, THREAD threads)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
 
@@ -1021,15 +1067,16 @@ void ESBMC_verify_kernel(RET *kernel, BLOCK blocks, THREAD threads)
   for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
 }
 
 template <class RET, class BLOCK, class THREAD, class T1>
 void ESBMC_verify_kernel(RET *kernel, BLOCK blocks, THREAD threads, T1 arg)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg);
 
   ESBMC_verify_kernel_with_one_arg(
     (voidFunction_one)kernel,
@@ -1040,7 +1087,7 @@ void ESBMC_verify_kernel(RET *kernel, BLOCK blocks, THREAD threads, T1 arg)
   for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
 }
 
 template <class RET, class BLOCK, class THREAD, class T1, class T2>
@@ -1051,9 +1098,10 @@ void ESBMC_verify_kernel(
   T1 arg,
   T2 arg2)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg, arg2);
 
   ESBMC_verify_kernel_with_two_args(
     (voidFunction_two)kernel,
@@ -1065,7 +1113,7 @@ void ESBMC_verify_kernel(
   for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
 }
 
 template <class RET, class BLOCK, class THREAD, class T1, class T2, class T3>
@@ -1077,9 +1125,10 @@ void ESBMC_verify_kernel(
   T2 arg2,
   T3 arg3)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg, arg2, arg3);
 
   ESBMC_verify_kernel_with_three_args(
     (voidFunction_three)kernel,
@@ -1092,7 +1141,7 @@ void ESBMC_verify_kernel(
   for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
 }
 
 /*ESBMC_verify_kernel_i*/
@@ -1104,9 +1153,10 @@ void ESBMC_verify_kernel_i(
   T1 arg,
   T2 arg2)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg, arg2);
 
   ESBMC_verify_kernel_with_two_args_i(
     (voidFunction_two_i)kernel,
@@ -1118,16 +1168,17 @@ void ESBMC_verify_kernel_i(
   for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
 }
 
 /*ESBMC_verify_kernel_u()*/
 template <class RET, class BLOCK, class THREAD, class T1>
 void ESBMC_verify_kernel_u(RET *kernel, BLOCK blocks, THREAD threads, T1 arg)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg);
 
   ESBMC_verify_kernel_with_one_args_u(
     (voidFunction_one_u)kernel,
@@ -1138,7 +1189,7 @@ void ESBMC_verify_kernel_u(RET *kernel, BLOCK blocks, THREAD threads, T1 arg)
   for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
 }
 
 template <class RET, class BLOCK, class THREAD, class T1, class T2>
@@ -1149,9 +1200,10 @@ void ESBMC_verify_kernel_u(
   T1 arg,
   T2 arg2)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg, arg2);
 
   ESBMC_verify_kernel_with_two_args_u(
     (voidFunction_two_u)kernel,
@@ -1163,7 +1215,7 @@ void ESBMC_verify_kernel_u(
   for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
 }
 
 template <class RET, class BLOCK, class THREAD, class T1, class T2, class T3>
@@ -1175,9 +1227,10 @@ void ESBMC_verify_kernel_u(
   T2 arg2,
   T3 arg3)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg, arg2, arg3);
 
   ESBMC_verify_kernel_with_three_args_u(
     (voidFunction_three_u)kernel,
@@ -1190,7 +1243,7 @@ void ESBMC_verify_kernel_u(
   for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
 }
 
 /*ESBMC_verify_kernel_f()*/
@@ -1202,9 +1255,10 @@ void ESBMC_verify_kernel_f(
   T1 arg,
   T2 arg2)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg, arg2);
 
   ESBMC_verify_kernel_ffloat(
     (voidFunction_ffloat)kernel,
@@ -1216,15 +1270,16 @@ void ESBMC_verify_kernel_f(
   for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
 }
 
 template <class RET, class BLOCK, class THREAD, class T1>
 void ESBMC_verify_kernel_f(RET *kernel, BLOCK blocks, THREAD threads, T1 arg)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg);
 
   ESBMC_verify_kernel_float(
     (voidFunction_float)kernel,
@@ -1235,7 +1290,7 @@ void ESBMC_verify_kernel_f(RET *kernel, BLOCK blocks, THREAD threads, T1 arg)
   for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
 }
 template <
   class RET,
@@ -1260,9 +1315,10 @@ void ESBMC_verify_kernel_f(
   T6 arg6,
   T7 arg7)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg, arg2, arg3, arg4, arg5, arg6, arg7);
 
   ESBMC_verify_kernel_f5i2(
     (voidFunction_f5i2)kernel,
@@ -1279,7 +1335,7 @@ void ESBMC_verify_kernel_f(
   for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
 }
 
 /*ESBMC_verify_kernel_c()*/
@@ -1292,9 +1348,10 @@ void ESBMC_verify_kernel_c(
   T2 arg2,
   T3 arg3)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg, arg2, arg3);
 
   ESBMC_verify_kernel_c3(
     (voidFunction_c3)kernel,
@@ -1307,15 +1364,16 @@ void ESBMC_verify_kernel_c(
   for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
 }
 
 template <class RET, class BLOCK, class THREAD, class T1>
 void ESBMC_verify_kernel_c(RET *kernel, BLOCK blocks, THREAD threads, T1 arg)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg);
 
   ESBMC_verify_kernel_d1(
     (voidFunction_d1)kernel,
@@ -1326,7 +1384,7 @@ void ESBMC_verify_kernel_c(RET *kernel, BLOCK blocks, THREAD threads, T1 arg)
   for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
 }
 
 template <class RET, class BLOCK, class THREAD, class T1, class T2>
@@ -1337,9 +1395,10 @@ void ESBMC_verify_kernel_c(
   T1 arg,
   T2 arg2)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg, arg2);
 
   ESBMC_verify_kernel_d2(
     (voidFunction_d2)kernel,
@@ -1351,7 +1410,7 @@ void ESBMC_verify_kernel_c(
   for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
 }
 
 /*ESBMC_verify_kernel_intt()*/
@@ -1363,9 +1422,10 @@ void ESBMC_verify_kernel_intt(
   T1 arg,
   T2 arg2)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg, arg2);
 
   ESBMC_verify_kernel__intt(
     (voidFunction_intt)kernel,
@@ -1377,7 +1437,7 @@ void ESBMC_verify_kernel_intt(
   for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
 }
 
 /*ESBMC_verify_kernel_fuintt()*/
@@ -1390,9 +1450,10 @@ void ESBMC_verify_kernel_fuintt(
   T2 arg2,
   T3 arg3)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg, arg2, arg3);
 
   ESBMC_verify_kernel__fuintt(
     (voidFunction_fuintt)kernel,
@@ -1405,7 +1466,7 @@ void ESBMC_verify_kernel_fuintt(
   for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
 }
 
 template <class RET, class BLOCK, class THREAD, class T1, class T2>
@@ -1416,9 +1477,10 @@ void ESBMC_verify_kernel_fuintt(
   T1 arg,
   T2 arg2)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg, arg2);
 
   ESBMC_verify_kernel__fuint(
     (voidFunction_fuint)kernel,
@@ -1430,7 +1492,7 @@ void ESBMC_verify_kernel_fuintt(
   for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
 }
 
 /*ESBMC_verify_kernel_fuintint()*/
@@ -1443,9 +1505,10 @@ void ESBMC_verify_kernel_fuintint(
   T2 arg2,
   T3 arg3)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg, arg2, arg3);
 
   ESBMC_verify_kernel__fuintint(
     (voidFunction_fuintint)kernel,
@@ -1458,7 +1521,7 @@ void ESBMC_verify_kernel_fuintint(
   for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
 }
 
 template <class RET, class BLOCK, class THREAD, class T1, class T2>
@@ -1469,9 +1532,10 @@ void ESBMC_verify_kernel_fuintint(
   T1 arg,
   T2 arg2)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg, arg2);
 
   ESBMC_verify_kernel__fint(
     (voidFunction_fint)kernel,
@@ -1483,7 +1547,7 @@ void ESBMC_verify_kernel_fuintint(
   for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
 }
 
 /*ESBMC_verify_kernel__three_args_iuull()*/
@@ -1496,9 +1560,10 @@ void ESBMC_verify_kernel_three_args_iuull(
   T2 arg2,
   T3 arg3)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg, arg2, arg3);
 
   ESBMC_verify_kernel_with_three_args_iuull(
     (voidFunction_iuull)kernel,
@@ -1511,7 +1576,7 @@ void ESBMC_verify_kernel_three_args_iuull(
   for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
 }
 
 //\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/
@@ -1533,9 +1598,10 @@ void ESBMC_verify_kernel_four(
   T3 arg3,
   T4 arg4)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg, arg2, arg3, arg4);
 
   ESBMC_verify_kernel_with_four__args_i_ui_ull_f(
     (voidFunction_i_ui_ull_f)kernel,
@@ -1549,16 +1615,17 @@ void ESBMC_verify_kernel_four(
   for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
 }
 
 /*ESBMC_verify_kernel_ui()*/
 template <class RET, class BLOCK, class THREAD, class T1>
 void ESBMC_verify_kernel_ui(RET *kernel, BLOCK blocks, THREAD threads, T1 arg)
 {
-  //ESBMC_atomic_begin();
+  // ESBMC_atomic_begin();
   gridDim = dim3(blocks);
   blockDim = dim3(threads);
+  __cudaCheckKernelArgs(arg);
 
   ESBMC_verify_kernel_one_ui(
     (voidFunction_one_ui)kernel,
@@ -1569,7 +1636,7 @@ void ESBMC_verify_kernel_ui(RET *kernel, BLOCK blocks, THREAD threads, T1 arg)
   for (unsigned short int i = 0; i < GPU_threads; i++)
     pthread_join(threads_id[i], NULL);
 
-  //ESBMC_atomic_end();
+  // ESBMC_atomic_end();
 }
 
 #endif /*call_kernel*/

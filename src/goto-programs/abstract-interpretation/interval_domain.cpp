@@ -3,9 +3,13 @@
 // TODO: Ternary operators, lessthan into lessthanequal for integers
 #include <goto-programs/abstract-interpretation/interval_domain.h>
 #include <goto-programs/abstract-interpretation/bitwise_bounds.h>
-#include <util/arith_tools.h>
-#include <util/c_typecast.h>
-#include <util/std_expr.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_typecast.h>
+#include <util/irep/std_expr.h>
+#include <util/base/prefix.h>
+#include <optional>
+#include <string_view>
+#include <unordered_set>
 #ifdef ENABLE_GOTO_CONTRACTOR
 #  include <goto-programs/goto_contractor.h>
 #endif
@@ -138,8 +142,6 @@ interval_domaint::get_interval_from_const(const expr2tc &e) const
   return result;
 }
 
-#include <cmath>
-
 template <>
 interval_domaint::real_intervalt
 interval_domaint::get_interval_from_const(const expr2tc &e) const
@@ -150,15 +152,20 @@ interval_domaint::get_interval_from_const(const expr2tc &e) const
 
   auto real_value = to_constant_floatbv2t(e).value;
 
-  // Health check, is the conversion to double ok? See #1037
-  if (!real_value.is_normal() || real_value.is_zero())
+  // Zero is exactly representable as a double (#1037 was fixed in PR #1038);
+  // the tightest sound interval for a zero constant is [0, 0].
+  if (real_value.is_zero())
   {
-    if (real_value.is_double())
-      log_warning("ESBMC fails to convert {} into double", *e);
-
-    // Give up for top!
+    const double zero = real_value.to_double(); // exactly 0.0
+    result.make_le_than(zero);
+    result.make_ge_than(zero);
     return result;
   }
+
+  // We can only derive a finite real interval from a normal, double-precision
+  // constant. NaN/infinity, subnormals, or non-double specs stay at top.
+  if (!real_value.is_normal())
+    return result;
 
   auto value1 = to_constant_floatbv2t(e).value;
   auto value2 = to_constant_floatbv2t(e).value;
@@ -208,9 +215,8 @@ interval_domaint::get_interval_from_const(const expr2tc &e) const
 
 template <>
 interval_domaint::integer_intervalt interval_domaint::generate_modular_interval<
-  interval_domaint::integer_intervalt>(const symbol2t sym) const
+  interval_domaint::integer_intervalt>(const type2tc &t) const
 {
-  auto t = sym.type;
   interval_domaint::integer_intervalt result;
   if (is_unsignedbv_type(t))
   {
@@ -235,7 +241,7 @@ interval_domaint::integer_intervalt interval_domaint::generate_modular_interval<
 template <>
 interval_domaint::real_intervalt
 interval_domaint::generate_modular_interval<interval_domaint::real_intervalt>(
-  const symbol2t) const
+  const type2tc &) const
 {
   // TODO: Support this
   interval_domaint::real_intervalt t;
@@ -245,11 +251,40 @@ interval_domaint::generate_modular_interval<interval_domaint::real_intervalt>(
 
 template <>
 wrapped_interval interval_domaint::generate_modular_interval<wrapped_interval>(
-  const symbol2t sym) const
+  const type2tc &t) const
 {
   // Wrapped intervals are modular by definition
-  wrapped_interval t(sym.type);
-  return t;
+  return wrapped_interval(t);
+}
+
+template <class Interval>
+Interval
+interval_domaint::wrap_to_type(const Interval &i, const type2tc &) const
+{
+  return i;
+}
+
+template <>
+interval_domaint::integer_intervalt interval_domaint::wrap_to_type(
+  const integer_intervalt &i,
+  const type2tc &t) const
+{
+  if (!is_bv_type(t) || !i.lower || !i.upper)
+    return integer_intervalt();
+
+  // Shift both bounds by the multiple of 2^width that brings the lower bound
+  // into range; if the upper bound then leaves it, the image is not an
+  // interval.
+  const BigInt lower = binary2integer(
+    integer2binary(i.get_lower(), t->get_width()), is_signedbv_type(t));
+  const BigInt upper = i.get_upper() + (lower - i.get_lower());
+  if (!generate_modular_interval<integer_intervalt>(t).contains(upper))
+    return integer_intervalt();
+
+  integer_intervalt result;
+  result.set_lower(lower);
+  result.set_upper(upper);
+  return result;
 }
 
 template <class T>
@@ -265,7 +300,7 @@ void interval_domaint::apply_assignment(
   auto b = get_interval<T>(rhs);
   if (enable_modular_intervals)
   {
-    auto a = generate_modular_interval<T>(sym);
+    auto a = generate_modular_interval<T>(sym.type);
     b.intersect_with(a);
   }
 
@@ -341,6 +376,30 @@ T interval_domaint::interpolate_intervals(const T &before, const T &after)
 }
 
 template <class T>
+T interval_domaint::get_interval_from_typecast(const typecast2t &cast, T result)
+  const
+{
+  // Special case: boolean
+  if (is_bool_type(cast.type))
+  {
+    tvt truth = eval_boolean_expression(cast.from, *this);
+    result.set_lower(0);
+    result.set_upper(1);
+
+    if (truth.is_true())
+      result.set_lower(1);
+
+    if (truth.is_false())
+      result.set_upper(0);
+
+    return result;
+  }
+  if (!T::is_representable(cast.from->type))
+    return result;
+  return T::cast(get_interval<T>(cast.from), cast.type);
+}
+
+template <class T>
 T interval_domaint::get_interval(const expr2tc &e) const
 {
   T result = get_top_interval_from_expr<T>(e);
@@ -364,7 +423,7 @@ T interval_domaint::get_interval(const expr2tc &e) const
     break;
 
   case expr2t::neg_id:
-    result = -get_interval<T>(to_neg2t(e).value);
+    result = wrap_to_type(-get_interval<T>(to_neg2t(e).value), e->type);
     break;
 
   case expr2t::not_id:
@@ -376,9 +435,8 @@ T interval_domaint::get_interval(const expr2tc &e) const
   case expr2t::xor_id:
   case expr2t::implies_id:
   {
-    const auto &logic_op = dynamic_cast<const logic_2ops &>(*e);
-    tvt lhs = eval_boolean_expression(logic_op.side_1, *this);
-    tvt rhs = eval_boolean_expression(logic_op.side_2, *this);
+    tvt lhs = eval_boolean_expression(*e->get_sub_expr(0), *this);
+    tvt rhs = eval_boolean_expression(*e->get_sub_expr(1), *this);
 
     if (is_and2t(e))
     {
@@ -473,26 +531,8 @@ T interval_domaint::get_interval(const expr2tc &e) const
   }
 
   case expr2t::typecast_id:
-  {
-    // Special case: boolean
-    if (is_bool_type(to_typecast2t(e).type))
-    {
-      tvt truth = eval_boolean_expression(to_typecast2t(e).from, *this);
-      result.set_lower(0);
-      result.set_upper(1);
-
-      if (truth.is_true())
-        result.set_lower(1);
-
-      if (truth.is_false())
-        result.set_upper(0);
-
-      break;
-    }
-    auto inner = get_interval<T>(to_typecast2t(e).from);
-    result = T::cast(inner, to_typecast2t(e).type);
+    result = get_interval_from_typecast<T>(to_typecast2t(e), result);
     break;
-  }
 
   case expr2t::add_id:
   case expr2t::sub_id:
@@ -501,9 +541,8 @@ T interval_domaint::get_interval(const expr2tc &e) const
   case expr2t::modulus_id:
     if (enable_interval_arithmetic)
     {
-      const auto &arith_op = dynamic_cast<const arith_2ops &>(*e);
-      const T lhs = get_interval<T>(arith_op.side_1);
-      const T rhs = get_interval<T>(arith_op.side_2);
+      const T lhs = get_interval<T>(*e->get_sub_expr(0));
+      const T rhs = get_interval<T>(*e->get_sub_expr(1));
       if (is_add2t(e))
         result = lhs + rhs;
 
@@ -518,6 +557,8 @@ T interval_domaint::get_interval(const expr2tc &e) const
 
       else if (is_modulus2t(e))
         result = lhs % rhs;
+
+      result = wrap_to_type(result, e->type);
     }
     break;
 
@@ -527,15 +568,14 @@ T interval_domaint::get_interval(const expr2tc &e) const
   case expr2t::bitor_id:
   case expr2t::bitand_id:
   case expr2t::bitxor_id:
-  case expr2t::bitnand_id:
-  case expr2t::bitnor_id:
     if (enable_interval_bitwise_arithmetic)
     {
-      const auto &bit_op = dynamic_cast<const bit_2ops &>(*e);
-      auto lhs = get_interval<T>(bit_op.side_1);
-      auto rhs = get_interval<T>(bit_op.side_2);
-      lhs.type = bit_op.side_1->type;
-      rhs.type = bit_op.side_2->type;
+      const expr2tc &s1 = *e->get_sub_expr(0);
+      const expr2tc &s2 = *e->get_sub_expr(1);
+      auto lhs = get_interval<T>(s1);
+      auto rhs = get_interval<T>(s2);
+      lhs.type = s1->type;
+      rhs.type = s2->type;
       if (is_shl2t(e))
         result = T::left_shift(lhs, rhs);
 
@@ -552,11 +592,6 @@ T interval_domaint::get_interval(const expr2tc &e) const
         result = lhs & rhs;
       else if (is_bitxor2t(e))
         result = lhs ^ rhs;
-
-      else if (is_bitnand2t(e))
-        result = T::bitnot(lhs & rhs);
-      else if (is_bitnor2t(e))
-        result = T::bitnot(lhs | rhs);
     }
     break;
 
@@ -574,6 +609,8 @@ T interval_domaint::get_interval(const expr2tc &e) const
   {
     const expr2tc &lhs = *e->get_sub_expr(0);
     const expr2tc &rhs = *e->get_sub_expr(1);
+    if (!T::is_representable(lhs->type) || !T::is_representable(rhs->type))
+      break;
 
     auto lhs_i = get_interval<T>(lhs);
     auto rhs_i = get_interval<T>(rhs);
@@ -717,8 +754,9 @@ interval_domaint::make_expression_value<interval_domaint::real_intervalt>(
     (upper ? *interval.upper : *interval.lower).convert_to<double>();
   v.value.from_double(d);
 
-  // 'from_double' changes the original spec. This makes solvers complain that we are comparing
-  // 'orange' floats to 'apple' floats. To fix this, we need to convert the spec back.
+  // 'from_double' changes the original spec. This makes solvers complain that
+  // we are comparing 'orange' floats to 'apple' floats. To fix this, we need to
+  // convert the spec back.
   const ieee_float_spect original_spec(
     to_floatbv_type(type).fraction, to_floatbv_type(type).exponent);
   v.value.change_spec(original_spec);
@@ -811,7 +849,7 @@ expr2tc interval_domaint::make_expression_helper(const expr2tc &symbol) const
   // Although this is expected (when modular intervals are off)
   // We still need to deal with the out-of-bounds when generating
   // the expressions, as 256 would be converted to 0.
-  T type_interval = generate_modular_interval<T>(src);
+  T type_interval = generate_modular_interval<T>(src.type);
   interval.intersect_with(type_interval);
 
   if (interval.is_top())
@@ -864,7 +902,9 @@ void print_interval(
   out << name;
 
   if (i.upper)
-    out << " <= " << i.get_upper() << "\n";
+    out << " <= " << i.get_upper();
+
+  out << "\n";
 }
 
 // TODO: refactor
@@ -913,12 +953,21 @@ bool contains_float(const expr2tc &e)
 void interval_domaint::transform(
   goto_programt::const_targett from,
   goto_programt::const_targett to,
-  ai_baset &,
+  ai_baset &ai,
   const namespacet &ns)
 {
   (void)ns;
 
   const goto_programt::instructiont &instruction = *from;
+
+  // Post-k-induction recomputation: the loop's nondet havoc + entry-condition
+  // assume that k-induction inserts before each loop head must be transparent
+  // so the fixpoint at the loop head reflects the *original* program's
+  // dataflow. Without this, the havoc would widen every loop-modified var to
+  // its full type range and the bounds we'd assume back would be useless.
+  if (
+    skip_inductive_step_instructions && instruction.inductive_step_instruction)
+    return;
   switch (instruction.type)
   {
   case DECL:
@@ -957,7 +1006,7 @@ void interval_domaint::transform(
   {
     // After a return, all function arguments becomes nondet
     const symbolt *current_function = ns.lookup(instruction.function);
-    type2tc t = migrate_type(current_function->type);
+    type2tc t = migrate_symbol_type(*current_function);
     const code_type2t &function = to_code_type(t);
 
     for (size_t i = 0; i < function.arguments.size(); i++)
@@ -981,14 +1030,13 @@ void interval_domaint::transform(
   }
 
   case ASSERT:
-  {
-    // There is a bug in Floats that need to be investigated! regression-float/nextafter
-    if (!contains_float(instruction.guard) && enable_assume_asserts)
-      assume(instruction.guard);
+    assume_assertion(instruction.guard, ai);
     break;
-  }
 
   case FUNCTION_CALL:
+    havoc_written_arguments(to_code_function_call2t(instruction.code));
+    break;
+
   case END_FUNCTION:
   case ATOMIC_BEGIN:
   case ATOMIC_END:
@@ -999,15 +1047,14 @@ void interval_domaint::transform(
   case THROW: // TODO: try/catch intervals
   case CATCH: // TODO: try/catch intervals
   case DEAD:
-  case THROW_DECL:
-  case THROW_DECL_END:
   case LOOP_INVARIANT:
     break;
   }
 
-  /* The abstract interpreter can only affect the state 'after' the execution of the statement
-   * however, function calls need to change the parameter 'before' its execution. We can
-   * deal with this by just checking if the target instruction is a function call!
+  /* The abstract interpreter can only affect the state 'after' the execution of
+   * the statement however, function calls need to change the parameter 'before'
+   * its execution. We can deal with this by just checking if the target
+   * instruction is a function call!
    */
   if (to->is_function_call())
   {
@@ -1027,10 +1074,17 @@ void interval_domaint::transform(
     // Let's do an assignment for all parameters!
     for (size_t i = 0; i < function.arguments.size(); i++)
     {
-      const expr2tc &arg_value = code_function_call.operands[i];
       const type2tc &arg_type = function.arguments[i];
       const expr2tc arg_symbol =
         symbol2tc(arg_type, function.argument_names[i]);
+
+      if (i >= code_function_call.operands.size())
+      {
+        havoc_rec(arg_symbol);
+        continue;
+      }
+
+      const expr2tc &arg_value = code_function_call.operands[i];
 
       // Are we dealing with a recursive function?
       std::unordered_set<expr2tc, irep2_hash> symbols;
@@ -1135,7 +1189,7 @@ bool interval_domaint::join(
          * This happens due to the Abstract Interpreter
          * being unable to merge the information that is
          * coming before the loop (see #1738)
-        */
+         */
         log_error(
           "Narrowing is currently disabled. See GitHub issue #1738 for more "
           "details");
@@ -1217,6 +1271,22 @@ bool interval_domaint::join(
   return result;
 }
 
+void interval_domaint::join_snapshot(
+  const std::shared_ptr<interval_map> &snapshot)
+{
+  if (is_bottom())
+  {
+    bottom = false;
+    intervals = snapshot;
+    copied = false;
+    return;
+  }
+  if (intervals == snapshot)
+    return;
+  copy_if_needed();
+  join(*intervals, *snapshot, false);
+}
+
 void interval_domaint::assign(const expr2tc &expr, const bool recursive)
 {
   assert(is_code_assign2t(expr));
@@ -1242,6 +1312,81 @@ void interval_domaint::assign(const expr2tc &expr, const bool recursive)
   else if (isfloatbvop && enable_real_intervals)
     apply_assignment<interval_domaint::real_intervalt>(
       c.target, c.source, recursive);
+  else
+    // Unmodelled assignment: the old range must not survive the write.
+    havoc_rec(c.target);
+}
+
+/* The first argument a body-less call that symex models may write through,
+ * or none: the input functions write past their format, its intrinsics and
+ * builtins anywhere. An intrinsic missing from read_only is assumed to write,
+ * which costs precision, never soundness. */
+static std::optional<size_t> first_written_argument(const irep_idt &callee)
+{
+  static const std::unordered_set<std::string_view> read_only = {
+    "c:@F@__ESBMC_memcmp",
+    "c:@F@__ESBMC_memchr",
+    "c:@F@__ESBMC_r_ok",
+    "c:@F@__ESBMC_is_fresh",
+    "c:@F@__ESBMC_get_object_size",
+    "c:@F@__ESBMC_builtin_object_size"};
+  const std::string &id = callee.as_string();
+  if (id == "c:@F@scanf")
+    return 1;
+  if (id == "c:@F@sscanf" || id == "c:@F@fscanf")
+    return 2;
+  if (
+    read_only.count(id) ||
+    !(has_prefix(id, "c:@F@__ESBMC") || has_prefix(id, "c:@F@__builtin")))
+    return std::nullopt;
+  return 0;
+}
+
+/// The object @p address points into, or nil when that is not statically known.
+static expr2tc pointed_object(expr2tc address)
+{
+  while (is_typecast2t(address))
+    address = to_typecast2t(address).from;
+  if (!is_address_of2t(address))
+    return expr2tc();
+  expr2tc object = to_address_of2t(address).ptr_obj;
+  while (is_index2t(object) || is_member2t(object))
+    object = is_index2t(object) ? to_index2t(object).source_value
+                                : to_member2t(object).source_value;
+  return object;
+}
+
+bool interval_domaint::havoc_pointee(const expr2tc &arg, bool any_type)
+{
+  const expr2tc object = pointed_object(arg);
+  if (object && is_constant_expr(object))
+    return true;
+  if (object && is_symbol2t(object))
+  {
+    havoc_rec(object);
+    return true;
+  }
+  return !is_pointer_type(arg) && !any_type;
+}
+
+void interval_domaint::havoc_written_arguments(const code_function_call2t &call)
+{
+  if (!is_symbol2t(call.function))
+    return;
+  const std::optional<size_t> first =
+    first_written_argument(to_symbol2t(call.function).thename);
+  if (!first)
+    return;
+  // symex_input writes through each input argument whatever its type.
+  const bool any_type = *first > 0;
+  for (size_t i = *first; i < call.operands.size(); ++i)
+    if (
+      !is_nil_expr(call.operands[i]) &&
+      !havoc_pointee(call.operands[i], any_type))
+    {
+      clear_state();
+      return;
+    }
 }
 
 void interval_domaint::havoc_rec(const expr2tc &expr)
@@ -1257,7 +1402,8 @@ void interval_domaint::havoc_rec(const expr2tc &expr)
   }
   else if (is_symbol2t(expr) || is_code_decl2t(expr))
   {
-    // Reset the interval domain if it is being reassigned (-infinity, +infinity).
+    // Reset the interval domain if it is being reassigned (-infinity,
+    // +infinity).
     irep_idt identifier = is_symbol2t(expr) ? to_symbol2t(expr).thename
                                             : to_code_decl2t(expr).value;
     if (intervals->count(identifier))
@@ -1328,6 +1474,18 @@ void interval_domaint::assume_rec(
   else if (
     is_floatbv_type(lhs) && is_floatbv_type(rhs) && enable_real_intervals)
     apply_assume_less<interval_domaint::real_intervalt>(lhs, rhs);
+}
+
+void interval_domaint::assume_assertion(
+  const expr2tc &guard,
+  const ai_baset &ai)
+{
+  // There is a bug in Floats that need to be investigated!
+  // regression-float/nextafter
+  if (
+    enable_assume_asserts && !ai.continue_past_failed_assertions &&
+    !contains_float(guard))
+    assume(guard);
 }
 
 void interval_domaint::assume(const expr2tc &cond)
@@ -1495,7 +1653,8 @@ void interval_domaint::assume_rec(const expr2tc &cond, bool negation)
   {
     assume_rec(to_typecast2t(cond).from, negation);
   }
-  //added in case "cond = false" which happens when the ibex contractor results in empty set.
+  // added in case "cond = false" which happens when the ibex contractor results
+  // in empty set.
   else if (is_constant_bool2t(cond))
   {
     if ((negation && is_true(cond)) || (!negation && is_false(cond)))
@@ -1602,6 +1761,17 @@ void interval_domaint::process_instruction(goto_programt::const_targett from)
   case ASSUME:
     assume(instruction.guard);
     break;
+  case FUNCTION_CALL:
+  {
+    const expr2tc &ret = to_code_function_call2t(instruction.code).ret;
+    if (is_nil_expr(ret))
+      break;
+    if (is_dereference2t(ret))
+      clear_state();
+    else
+      havoc_rec(ret);
+    break;
+  }
   default:
     log_debug(
       "interval",
@@ -1623,6 +1793,7 @@ bool interval_domaint::enable_real_intervals = true;
 bool interval_domaint::enable_assume_asserts = true;
 bool interval_domaint::enable_eval_assumptions = true;
 bool interval_domaint::enable_ibex_contractor = false;
+thread_local bool interval_domaint::skip_inductive_step_instructions = false;
 
 // Widening options
 unsigned interval_domaint::fixpoint_limit = 5;

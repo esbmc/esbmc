@@ -1,3 +1,5 @@
 CORE
 main.py
-^ERROR: TypeError: bad operand type for abs\(\): 'str'$
+
+^  uncaught exception: TypeError$
+^VERIFICATION FAILED$

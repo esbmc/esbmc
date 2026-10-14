@@ -1,0 +1,4 @@
+CORE
+cbmc_expr_pointer_index_fail.goto
+--binary
+^VERIFICATION FAILED$

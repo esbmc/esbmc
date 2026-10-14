@@ -1,0 +1,6 @@
+CORE
+main.c
+--incremental-bmc --multi-property --max-k-step 10
+^Solution found by the forward condition; all states are reachable \(k = 5\)$
+^VERIFICATION SUCCESSFUL$
+\A(?![\s\S]*VERIFICATION FAILED)[\s\S]*\Z

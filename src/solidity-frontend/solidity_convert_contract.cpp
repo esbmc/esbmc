@@ -9,15 +9,15 @@
 
 #include <solidity-frontend/solidity_convert.h>
 #include <solidity-frontend/typecast.h>
-#include <util/arith_tools.h>
-#include <util/bitvector.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/mp_arith.h>
-#include <util/std_expr.h>
-#include <util/message.h>
-#include <util/std_types.h>
+#include <util/arith/arith_tools.h>
+#include <util/arith/bitvector.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
+#include <util/arith/mp_arith.h>
+#include <util/irep/std_expr.h>
+#include <util/message/message.h>
+#include <util/irep/std_types.h>
 #include <fstream>
 
 // ---- --path-cov-fixture: the deployment is REPLACED by a recorded state ----
@@ -270,7 +270,8 @@ void solidity_convertert::add_static_contract_instance(
   if (context.find_symbol(ctor_id) == nullptr)
   {
     // this means that contract, including ctor, has not been parse yet
-    // this will lead to issue in the following process, particuarly this_pointer
+    // this will lead to issue in the following process, particuarly
+    // this_pointer
     const auto &json = find_constructor_ref(c_name);
     if (json.empty())
     {
@@ -328,7 +329,7 @@ void solidity_convertert::add_static_contract_instance(
   }
 
   if (run_ctor)
-    added_sym.value = ctor;
+    added_sym.set_value(ctor);
 }
 
 void solidity_convertert::get_inherit_static_contract_instance_name(
@@ -365,7 +366,7 @@ void solidity_convertert::get_inherit_ctor_definition(
   code_typet ft;
   typet tmp_rtn_type("constructor");
   ft.return_type() = tmp_rtn_type;
-  ft.set("#member_name", prefix + c_name);
+  ft.member_name(prefix + c_name);
   ft.set("#inlined", true);
   symbolt fs;
   locationt l;
@@ -426,7 +427,7 @@ void solidity_convertert::get_inherit_ctor_definition(
   param.cmt_identifier(aid);
   param.location() = l;
   ft.arguments().push_back(param);
-  add_sym.type = ft;
+  add_sym.set_type(migrate_type(ft));
 
   // body
   exprt func_body = code_blockt();
@@ -478,7 +479,7 @@ void solidity_convertert::get_inherit_ctor_definition(
   current_functionDecl = old_current_functionDecl;
   current_functionName = old_current_functionName;
 
-  add_sym.value = func_body;
+  add_sym.set_value(func_body);
 
   new_expr = symbol_expr(add_sym);
   move_builtin_to_contract(c_name, new_expr, "public", true);
@@ -605,7 +606,7 @@ void solidity_convertert::get_inherit_static_contract_instance(
   call.location().line(1);
   exprt val;
   get_temporary_object(call, val);
-  added_ctor_symbol.value = val;
+  added_ctor_symbol.set_value(val);
   sym = added_ctor_symbol;
 
   log_debug("solidity", "finish get_inherit_static_contract_instance");
@@ -681,7 +682,7 @@ bool solidity_convertert::get_high_level_call_wrapper(
     locationt());
   symbolt &added_old_sender = *move_symbol_to_context(old_sender);
   code_declt old_sender_decl(symbol_expr(added_old_sender));
-  added_old_sender.value = msg_sender;
+  added_old_sender.set_value(migrate_expr(msg_sender));
   old_sender_decl.operands().push_back(msg_sender);
   front_block.move_to_operands(old_sender_decl);
 
@@ -748,7 +749,6 @@ bool solidity_convertert::get_high_level_call_wrapper(
 
 nlohmann::json solidity_convertert::reorder_arguments(
   const nlohmann::json &expr,
-  const nlohmann::json &src_ast_json,
   const nlohmann::json &callee_expr_json)
 {
   // build a map from name to argument
@@ -884,7 +884,7 @@ void solidity_convertert::emit_per_tx_reseed_call(codet &out)
   in any function calling order.
   convert the verifying contract to a "sol_main" function, e.g.
 
-  Contract Base             
+  Contract Base
   {
       constrcutor(){}
       function A(){}
@@ -903,9 +903,12 @@ void solidity_convertert::emit_per_tx_reseed_call(codet &out)
     }
   }
 
-  Additionally, we need to handle the inheritance. Theoretically, we need to merge (i.e. create a copy) the public and internal state variables and functions inside Base contracts into the Derive contract. However, in practice we do not need to do so. Instead, we 
-    - call the constructors based on the linearizedBaseList 
-    - add the inherited public function call to the if-body 
+  Additionally, we need to handle the inheritance. Theoretically, we need to
+  merge (i.e. create a copy) the public and internal state variables and
+  functions inside Base contracts into the Derive contract. However, in practice
+  we do not need to do so. Instead, we
+    - call the constructors based on the linearizedBaseList
+    - add the inherited public function call to the if-body
 
 */
 bool solidity_convertert::multi_transaction_verification(
@@ -959,7 +962,7 @@ bool solidity_convertert::multi_transaction_verification(
           prefix + c_name);
         abort();
       }
-      const struct_typet &c_type = to_struct_type(c_sym->type);
+      const struct_typet &c_type = to_struct_type(c_sym->get_type());
 
       exprt instance;
       get_static_contract_instance_ref(c_name, instance);
@@ -1076,8 +1079,8 @@ bool solidity_convertert::multi_transaction_verification(
   // no params
   main_type.make_ellipsis();
 
-  main_sym.type = main_type;
-  main_sym.value = func_body;
+  main_sym.set_type(migrate_type(main_type));
+  main_sym.set_value(func_body);
 
   // set "_ESBMC_Main_X" as the main function
   // this will be overwrite in multi-contract mode.
@@ -1087,8 +1090,8 @@ bool solidity_convertert::multi_transaction_verification(
 }
 
 /*
-  This function perform multi-transaction verification on each contract in isolation.
-  To do so, we construct nondetered switch_case;
+  This function perform multi-transaction verification on each contract in
+  isolation. To do so, we construct nondetered switch_case;
 */
 // Shared: call multi_transaction_verification for each contract and collect
 // the resulting _ESBMC_Main_X entry function symbols.
@@ -1156,8 +1159,8 @@ bool solidity_convertert::register_harness_main(
 
   symbolt &added_symbol = *context.move_symbol_to_context(new_symbol);
   main_type.make_ellipsis();
-  added_symbol.type = main_type;
-  added_symbol.value = func_body;
+  added_symbol.set_type(migrate_type(main_type));
+  added_symbol.set_value(func_body);
   config.main = sol_name;
   return false;
 }

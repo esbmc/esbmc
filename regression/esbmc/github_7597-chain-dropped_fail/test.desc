@@ -1,0 +1,6 @@
+CORE
+main.c
+--no-standard-checks
+^WARNING: constant propagation gave up on a `with` chain past 1024 symbolic updates
+^\s*FAILED\s+\[main\.assertion\.\d+\]\s+line \d+\s+assertion i == 1024$
+^VERIFICATION FAILED$

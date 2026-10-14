@@ -74,7 +74,7 @@ Lastly, a main function also needs to be added: https://github.com/esbmc/esbmc/b
 
 **5. Additional Considerations**
 
-* _Symbol Table:_ In ESBMC, a program consists of a symbol table and functions. This information is stored inside a [`contextt` class](https://github.com/esbmc/esbmc/blob/master/src/util/context.h#L26).
+* _Symbol Table:_ In ESBMC, a program consists of a symbol table and functions. This information is stored inside a [`contextt` class](https://github.com/esbmc/esbmc/blob/master/src/util/symtab/context.h#L26).
 
 * _Build System:_ Ensure your new frontend is included in the CMake build system. You must modify [CMakeLists.txt](https://github.com/esbmc/esbmc/blob/82b3069a567dafd299f7f0d3916388a0c5cedb06/src/CMakeLists.txt) to register the new language and its dependencies.
 

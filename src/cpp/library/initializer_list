@@ -1,6 +1,9 @@
 #ifndef ESBMC_INITIALIZER_LIST
 #define ESBMC_INITIALIZER_LIST
 
+// Post-C++03 header: inert in older modes, matching libstdc++/libc++ (#3387).
+#if __cplusplus >= 201103L
+
 #include "cstddef"
 
 namespace std
@@ -63,4 +66,5 @@ constexpr const E *end(initializer_list<E> il) noexcept
 
 } // namespace std
 
+#endif // __cplusplus >= 201103L
 #endif // ESBMC_INITIALIZER_LIST

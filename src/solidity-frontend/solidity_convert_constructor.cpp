@@ -9,15 +9,15 @@
 #include <solidity-frontend/solidity_convert.h>
 #include <set>
 #include <solidity-frontend/typecast.h>
-#include <util/arith_tools.h>
-#include <util/bitvector.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/focus_function.h>
-#include <util/i2string.h>
-#include <util/mp_arith.h>
-#include <util/std_expr.h>
-#include <util/message.h>
+#include <util/arith/arith_tools.h>
+#include <util/arith/bitvector.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/config/focus_function.h>
+#include <util/base/i2string.h>
+#include <util/arith/mp_arith.h>
+#include <util/irep/std_expr.h>
+#include <util/message/message.h>
 #include <fstream>
 #include <functional>
 
@@ -97,23 +97,39 @@ void solidity_convertert::mark_ctor_instantiability(
           bases += (bases.empty() ? "" : " ") + nm->second;
       }
     if (!bases.empty())
-      ctor->type.set("#sol_bases", bases);
+      {
+        typet t = ctor->get_type();
+        t.set("#sol_bases", bases);
+        ctor->set_type(std::move(t));
+      }
   }
 
   if (nonContractNamesList.count(contract_name) == 0)
     return;
-  ctor->type.set("#sol_no_new", true);
+  {
+    typet t = ctor->get_type();
+    t.set("#sol_no_new", true);
+    ctor->set_type(std::move(t));
+  }
   // Distinguish a library (called statically as `Lib.fn(args)`) from an
   // abstract contract / interface (which cannot be called at all). The
   // Foundry generator emits a static call for the former.
   if (libraryNamesList.count(contract_name))
-    ctor->type.set("#sol_library", true);
+    {
+      typet t = ctor->get_type();
+      t.set("#sol_library", true);
+      ctor->set_type(std::move(t));
+    }
   // Mark a true interface. The Foundry generator synthesizes an
   // `ESBMCMock_<I> is <I>` only for an interface (guaranteed no constructor
   // args and no abstract receive/fallback, so the mock is always fully
   // implementable); an abstract contract is not mockable.
   if (interfaceNamesList.count(contract_name))
-    ctor->type.set("#sol_interface", true);
+    {
+      typet t = ctor->get_type();
+      t.set("#sol_interface", true);
+      ctor->set_type(std::move(t));
+    }
 }
 
 // add a empty constructor to the contract
@@ -134,7 +150,7 @@ bool solidity_convertert::add_implicit_constructor(
   code_typet type;
   typet tmp_rtn_type("constructor");
   type.return_type() = tmp_rtn_type;
-  type.set("#member_name", prefix + contract_name);
+  type.member_name(prefix + contract_name);
   type.set("#inlined", true);
 
   locationt location_begin;
@@ -151,13 +167,13 @@ bool solidity_convertert::add_implicit_constructor(
   auto &sym = *move_symbol_to_context(symbol);
 
   code_blockt body_exprt = code_blockt();
-  sym.value = body_exprt;
+  sym.set_value(body_exprt);
 
   // add this pointer
   get_function_this_pointer_param(
     contract_name, id, debug_modulename, location_begin, type);
 
-  sym.type = type;
+  sym.set_type(migrate_type(type));
   return false;
 }
 
@@ -195,7 +211,7 @@ void solidity_convertert::convert_unboundcall_nondet(
     static Base instance;
     void test()
     {
-      instance.doSomething(); // 
+      instance.doSomething(); //
     }
     void doSomething()
     {
@@ -472,8 +488,8 @@ bool solidity_convertert::get_unbound_function(
     // no params
     h_type.make_ellipsis();
 
-    added_sym.type = h_type;
-    added_sym.value = func_body;
+    added_sym.set_type(h_type);
+    added_sym.set_value(func_body);
     h_sym = added_sym;
   }
 
@@ -567,8 +583,8 @@ bool solidity_convertert::build_bound_drive_helper(
       p_sym.is_extern = false;
       p_sym.file_local = false;
       symbolt &p_added = *context.move_symbol_to_context(p_sym);
-      p_added.type = p_type;
-      p_added.value = p_body;
+      p_added.set_type(p_type);
+      p_added.set_value(p_body);
     }
     sym = *context.find_symbol(p_id);
     return false;
@@ -736,8 +752,8 @@ bool solidity_convertert::build_bound_drive_helper(
   new_symbol.file_local = false;
 
   symbolt &added_sym = *context.move_symbol_to_context(new_symbol);
-  added_sym.type = h_type;
-  added_sym.value = func_body;
+  added_sym.set_type(h_type);
+  added_sym.set_value(func_body);
 
   sym = added_sym;
   return false;
@@ -924,8 +940,8 @@ bool solidity_convertert::build_esol_state_forward_helper(
   new_symbol.file_local = false;
 
   symbolt &added_sym = *context.move_symbol_to_context(new_symbol);
-  added_sym.type = h_type;
-  added_sym.value = func_body;
+  added_sym.set_type(h_type);
+  added_sym.set_value(func_body);
 
   sym = added_sym;
   return false;
@@ -1137,7 +1153,7 @@ bool solidity_convertert::build_tod_clone_helper(
           ctr_sym, debug_modulename, uint256_t_typet, ctr_name, ctr_id, c_loc);
         ctr_sym.lvalue = true;
         ctr_sym.file_local = true;
-        ctr_sym.value = gen_zero(uint256_t_typet);
+        ctr_sym.set_value(gen_zero(uint256_t_typet));
         auto &added_ctr = *move_symbol_to_context(ctr_sym);
         exprt ctr_ref = symbol_expr(added_ctr);
 
@@ -1245,9 +1261,9 @@ bool solidity_convertert::build_tod_clone_helper(
   //    contract-handle fields are unaffected — the outer `*c = *base`
   //    already produces the right value for them.
   const symbolt *struct_sym = context.find_symbol(prefix + c_name);
-  if (struct_sym && struct_sym->type.id() == "struct")
+  if (struct_sym && struct_sym->get_type().id() == "struct")
   {
-    const struct_typet &st = to_struct_type(struct_sym->type);
+    const struct_typet &st = to_struct_type(struct_sym->get_type());
     for (const auto &comp : st.components())
     {
       // Skip nested type declarations (e.g. a nested `struct Box {...}`
@@ -1296,8 +1312,8 @@ bool solidity_convertert::build_tod_clone_helper(
   new_symbol.file_local = false;
 
   symbolt &added_sym = *context.move_symbol_to_context(new_symbol);
-  added_sym.type = h_type;
-  added_sym.value = func_body;
+  added_sym.set_type(h_type);
+  added_sym.set_value(func_body);
 
   sym = added_sym;
   return false;
@@ -1324,7 +1340,7 @@ bool solidity_convertert::needs_clone_deep_fixup(const typet &t)
     const symbolt *rs =
       ns.lookup(to_symbol_type(resolved).get_identifier().as_string());
     if (rs)
-      resolved = rs->type;
+      resolved = rs->get_type();
   }
   // Bytes struct / contract struct: do NOT recurse.  Bytes structs
   // are value-semantics carriers whose scalars ride on the outer
@@ -1381,7 +1397,7 @@ bool solidity_convertert::emit_clone_deep_copy_fixup(
     type_id = to_symbol_type(resolved).get_identifier().as_string();
     const symbolt *rs = ns.lookup(type_id);
     if (rs)
-      resolved = rs->type;
+      resolved = rs->get_type();
   }
   else
   {
@@ -1637,7 +1653,7 @@ bool solidity_convertert::needs_ctor_deep_init(const typet &t)
     const symbolt *rs =
       ns.lookup(to_symbol_type(resolved).get_identifier().as_string());
     if (rs)
-      resolved = rs->type;
+      resolved = rs->get_type();
   }
   if (
     resolved.is_struct() && !is_byte_type(resolved) &&
@@ -1788,7 +1804,7 @@ bool solidity_convertert::emit_ctor_deep_init_fixup(
     const symbolt *rs =
       ns.lookup(to_symbol_type(resolved).get_identifier().as_string());
     if (rs)
-      resolved = rs->type;
+      resolved = rs->get_type();
   }
   if (
     resolved.is_struct() && !is_byte_type(resolved) &&
@@ -1846,7 +1862,8 @@ bool solidity_convertert::emit_ctor_deep_init_fixup(
 // Normally, we would expect expr to be a code_declt expression
 void solidity_convertert::move_to_initializer(const exprt &expr)
 {
-  // the initializer will clear its elements, so we populate the copy instead of origins
+  // the initializer will clear its elements, so we populate the copy instead of
+  // origins
   if (!ctor_frontBlockDecl.operands().empty())
   {
     // reverse order
@@ -1941,6 +1958,9 @@ bool solidity_convertert::move_initializer_to_ctor(
     return true;
   }
   symbolt &sym = *context.find_symbol(ctor_id);
+  // Read-modify-set: many inserts into sym.value.operands() below; restored
+  // via sym.set_value(...) before each return.
+  exprt sym_value = sym.get_value();
 
   // get this pointer
   exprt base;
@@ -1965,12 +1985,12 @@ bool solidity_convertert::move_initializer_to_ctor(
         "\t@@@ initializing symbol {} in the constructor",
         comp.name().as_string());
 
-      bool is_state = comp.type().get("#sol_state_var") == "1";
+      bool is_state = get_sol_state_var(comp.identifier());
       if (!is_state)
       {
         // auxiliary local variable we created
         exprt tmp = *it;
-        sym.value.operands().insert(sym.value.operands().begin(), tmp);
+        sym_value.operands().insert(sym_value.operands().begin(), tmp);
         continue;
       }
       if (is_aux_ctor)
@@ -1988,7 +2008,7 @@ bool solidity_convertert::move_initializer_to_ctor(
         abort();
       }
       symbolt *symbol = context.find_symbol(comp.identifier());
-      exprt rhs = symbol->value;
+      exprt rhs = symbol->get_value();
 
       // B3: native nested multi-dim fixed arrays (`array_typet(array_typet
       // (T, N), M)` from option B). A single `this->grid = { { 0 } }`
@@ -2046,7 +2066,11 @@ bool solidity_convertert::move_initializer_to_ctor(
             exprt assign = side_effect_exprt("assign", cur_type);
             assign.copy_to_operands(cur_lhs, zero);
             convert_expression_to_code(assign);
-            sym.value.operands().insert(sym.value.operands().begin(), assign);
+            {
+              exprt v = sym.get_value();
+              v.operands().insert(v.operands().begin(), assign);
+              sym.set_value(std::move(v));
+            }
           };
         unroll_zero(lhs, comp.type());
         continue;
@@ -2105,11 +2129,15 @@ bool solidity_convertert::move_initializer_to_ctor(
       {
         exprt op = *rit;
         convert_expression_to_code(op);
-        sym.value.operands().insert(sym.value.operands().begin(), op);
+        {
+          exprt v = sym.get_value();
+          v.operands().insert(v.operands().begin(), op);
+          sym.set_value(std::move(v));
+        }
       }
 
       // insert before the sym.value.operands
-      sym.value.operands().insert(sym.value.operands().begin(), _assign);
+      sym_value.operands().insert(sym_value.operands().begin(), _assign);
 
       // we might need to insert some expression
       // due to the convert_type_expr and get_string_assignment
@@ -2118,7 +2146,7 @@ bool solidity_convertert::move_initializer_to_ctor(
         for (auto &op : ctor_frontBlockDecl.operands())
         {
           convert_expression_to_code(op);
-          sym.value.operands().insert(sym.value.operands().begin(), op);
+          sym_value.operands().insert(sym_value.operands().begin(), op);
         }
         ctor_frontBlockDecl.clear();
       }
@@ -2127,13 +2155,15 @@ bool solidity_convertert::move_initializer_to_ctor(
     {
       exprt tmp = *it;
       convert_expression_to_code(tmp);
-      sym.value.operands().insert(sym.value.operands().begin(), tmp);
+      sym_value.operands().insert(sym_value.operands().begin(), tmp);
     }
   }
 
   // insert parent ctor call in the front
+  sym.set_value(sym_value);
   if (move_inheritance_to_ctor(based_contracts, contract_name, ctor_id, sym))
     return true;
+  sym_value = sym.get_value();
 
   if (is_aux_ctor)
   {
@@ -2141,7 +2171,7 @@ bool solidity_convertert::move_initializer_to_ctor(
     code_labelt label;
     label.set_label("__ESBMC_HIDE");
     label.code() = code_skipt();
-    sym.value.operands().insert(sym.value.operands().begin(), label);
+    sym_value.operands().insert(sym_value.operands().begin(), label);
   }
 
   // _sol_init_
@@ -2149,8 +2179,9 @@ bool solidity_convertert::move_initializer_to_ctor(
   get_library_function_call_no_args(
     "_sol_init_", "sol:@F@_sol_init_", empty_typet(), locationt(), init_call);
   convert_expression_to_code(init_call);
-  sym.value.operands().insert(sym.value.operands().begin(), init_call);
+  sym_value.operands().insert(sym_value.operands().begin(), init_call);
 
+  sym.set_value(std::move(sym_value));
   return false;
 }
 
@@ -2237,6 +2268,10 @@ bool solidity_convertert::move_inheritance_to_ctor(
   }
   exprt this_expr = symbol_expr(*context.find_symbol(this_id));
 
+  // Read-modify-set: mutate sym.value operands via this local, then write back
+  // before each return.
+  exprt sym_value = sym.get_value();
+
   // As we are handling the constructor
   const std::string old_fname = current_functionName;
   current_functionName = contract_name;
@@ -2253,7 +2288,7 @@ bool solidity_convertert::move_inheritance_to_ctor(
           constructor() Base1() Base2() {}
         }
 
-      E.g. 
+      E.g.
         contract DD is BB(3)
       Result ctor symbol table:
         Symbol......: c:@S@DD@F@DD#
@@ -2261,12 +2296,12 @@ bool solidity_convertert::move_inheritance_to_ctor(
         Base name...: DD
         Mode........: C++
         Type........: constructor  (struct DD *)
-        Value.......: 
+        Value.......:
         {
           BB((struct BB *)this, 3);
         }
       However, since the c++ frontend is broken(esbmc/issues/1866),
-      we convert it as 
+      we convert it as
         function ctor()
         {
           // create temporary object
@@ -2341,10 +2376,10 @@ bool solidity_convertert::move_inheritance_to_ctor(
           contract_name, c_name, c_args_list_node, added_ctor_symbol);
 
         // copy value e.g.  this.data = X.data
-        struct_typet type_complete =
-          to_struct_type(context.find_symbol(prefix + contract_name)->type);
+        struct_typet type_complete = to_struct_type(
+          context.find_symbol(prefix + contract_name)->get_type());
         struct_typet c_type_complete =
-          to_struct_type(context.find_symbol(prefix + c_name)->type);
+          to_struct_type(context.find_symbol(prefix + c_name)->get_type());
 
         exprt lhs;
         exprt rhs;
@@ -2360,14 +2395,15 @@ bool solidity_convertert::move_inheritance_to_ctor(
 
               if (is_sol_builin_symbol(c_name, c_comp.name().as_string()))
                 // skip builtin symbol.
-                //e.g. this->$address = _ESBMC_ctor_A_tmp.$address;
+                // e.g. this->$address = _ESBMC_ctor_A_tmp.$address;
                 continue;
 
               lhs = member_exprt(this_expr, comp.name(), comp.type());
               rhs = member_exprt(
                 symbol_expr(added_ctor_symbol), c_comp.name(), c_comp.type());
               if (get_sol_type(comp.type()) == SolidityGrammar::SolType::STRING)
-                // it have been initialized so should have no dereference failure
+                // it have been initialized so should have no dereference
+                // failure
                 get_string_assignment(lhs, rhs, _assign);
               else
               {
@@ -2377,8 +2413,8 @@ bool solidity_convertert::move_inheritance_to_ctor(
               }
 
               convert_expression_to_code(_assign);
-              sym.value.operands().insert(
-                sym.value.operands().begin(), _assign);
+              sym_value.operands().insert(
+                sym_value.operands().begin(), _assign);
               break;
             }
           }
@@ -2386,13 +2422,14 @@ bool solidity_convertert::move_inheritance_to_ctor(
 
         // insert ctor call
         code_declt dl(symbol_expr(added_ctor_symbol));
-        dl.operands().push_back(added_ctor_symbol.value);
-        sym.value.operands().insert(sym.value.operands().begin(), dl);
+        dl.operands().push_back(added_ctor_symbol.get_value());
+        sym_value.operands().insert(sym_value.operands().begin(), dl);
       }
     }
   }
 
   current_functionName = old_fname;
+  sym.set_value(std::move(sym_value));
   return false;
 }
 
@@ -2536,7 +2573,7 @@ solidity_convertert::find_constructor_ref(const std::string &contract_name)
 /**
  * @param decl_ref: the declaration of the ctor. Can be empty for implicit ctor.
  * @caller: the caller node that might contain the arguments
-*/
+ */
 bool solidity_convertert::get_ctor_call(
   const nlohmann::json &decl_ref,
   const nlohmann::json &caller,
@@ -2589,8 +2626,8 @@ bool solidity_convertert::get_new_object_ctor_call(
   log_debug("solidity", "generating new contract object");
   // 1. get the ctor call expr
   nlohmann::json callee_expr_json;
-  // if the caller's nextnode is a NewExpression, we can use it's expression directly
-  // else, we need to use the expression's expression
+  // if the caller's nextnode is a NewExpression, we can use it's expression
+  // directly else, we need to use the expression's expression
   if (caller["expression"]["nodeType"] == "NewExpression")
     callee_expr_json = caller["expression"];
   else

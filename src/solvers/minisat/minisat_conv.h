@@ -8,7 +8,7 @@
 #include <limits.h>
 #include <stdint.h>
 #include <inttypes.h>
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <solvers/smt/smt_tuple_flat.h>
 #include <solvers/smt/array_conv.h>
 #include <solvers/sat/bitblast_conv.h>
@@ -33,7 +33,7 @@ public:
   ~minisat_convt();
 
   // Things definitely to be done by the solver:
-  virtual resultt dec_solve();
+  virtual smt_resultt dec_solve();
   virtual const std::string solver_text();
   virtual tvt l_get(const literalt &a);
   virtual literalt new_variable();

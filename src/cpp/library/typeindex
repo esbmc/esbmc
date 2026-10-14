@@ -1,0 +1,84 @@
+// ESBMC model for <typeindex>
+//
+// std::type_index is a thin, copyable wrapper over a `const type_info &` so
+// that a type can be used as a key in an associative container. Everything it
+// needs is already provided by the <typeinfo> model: equality is pointer
+// comparison on the type-name string, and `before` orders by that same
+// pointer, so the ordering is consistent within a run without being stable
+// across runs -- exactly the guarantee the standard gives ([type.index]).
+//
+// It was the single largest remaining blocker to parsing ESBMC's own sources
+// (issue #5868).
+
+#ifndef ESBMC_TYPEINDEX
+#define ESBMC_TYPEINDEX
+
+#include <cstddef>
+#include <functional> // std::hash, for the specialisation below
+#include <typeinfo>
+
+namespace std
+{
+
+class type_index
+{
+  const type_info *__t;
+
+public:
+  type_index(const type_info &t) _ESBMC_NOEXCEPT : __t(&t)
+  {
+  }
+
+  bool operator==(const type_index &o) const _ESBMC_NOEXCEPT
+  {
+    return *__t == *o.__t;
+  }
+
+  bool operator!=(const type_index &o) const _ESBMC_NOEXCEPT
+  {
+    return *__t != *o.__t;
+  }
+
+  bool operator<(const type_index &o) const _ESBMC_NOEXCEPT
+  {
+    return __t->before(*o.__t);
+  }
+
+  bool operator<=(const type_index &o) const _ESBMC_NOEXCEPT
+  {
+    return !o.__t->before(*__t);
+  }
+
+  bool operator>(const type_index &o) const _ESBMC_NOEXCEPT
+  {
+    return o.__t->before(*__t);
+  }
+
+  bool operator>=(const type_index &o) const _ESBMC_NOEXCEPT
+  {
+    return !__t->before(*o.__t);
+  }
+
+  size_t hash_code() const _ESBMC_NOEXCEPT
+  {
+    return __t->hash_code();
+  }
+
+  const char *name() const _ESBMC_NOEXCEPT
+  {
+    return __t->name();
+  }
+};
+
+template <>
+struct hash<type_index>
+{
+  size_t operator()(type_index t) const
+  {
+    return t.hash_code();
+  }
+};
+
+} // namespace std
+
+#endif

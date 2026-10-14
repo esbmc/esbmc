@@ -1,7 +1,9 @@
 #include <assert.h>
 #include <string.h>
 
-// Alignment/sizeof isn't properly calculated for empty structs right now...
+// An over-aligned empty struct occupies its alignment (16 bytes here), so its
+// byte layout must include trailing padding to match sizeof; otherwise the
+// memcmp below reads out of bounds.
 struct alignas(16) __aligned_storage_max_align_t
 {
 };

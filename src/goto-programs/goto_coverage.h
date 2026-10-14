@@ -2,6 +2,7 @@
 #include <goto-programs/goto_convert_class.h>
 #include <goto-programs/loop_unroll.h>
 #include <langapi/language_util.h>
+#include <map>
 #include <unordered_set>
 #include <array>
 #include <atomic>
@@ -84,7 +85,7 @@ public:
   void condition_coverage();
   expr2tc gen_not_eq_expr(const expr2tc &lhs, const expr2tc &rhs);
   expr2tc gen_and_expr(const expr2tc &lhs, const expr2tc &rhs);
-  expr2tc gen_not_expr(const expr2tc &expr);
+  expr2tc gen_not_expr(const expr2tc &expr) const;
   int get_total_instrument() const;
   int get_total_assert_instance() const;
   std::set<std::pair<std::string, std::string>> get_total_cond_assert() const;
@@ -116,6 +117,14 @@ public:
   // decision edge, built with NO covered-set skip applied) so the
   // denominator never shrinks when edges are skipped (Item 2c).
   static std::set<std::pair<std::string, std::string>> all_claims;
+  // Guard text of the opposite direction for each claim in all_claims, keyed
+  // the same way. A probe assert(c) left unviolated proves !c infeasible, so
+  // --dead-code-check names this rather than the claim's own comment. Derived
+  // from the expression, not by rewriting the comment text: gen_not_expr drops
+  // a leading not2t, so the comment "!flag" gives "flag" and not "!(!flag)",
+  // and from_expr re-parenthesises by precedence, so "x > 5" gives "!(x > 5)".
+  static std::map<std::pair<std::string, std::string>, std::string>
+    claim_negation;
 
   // Cross-run persisted covered-set (Item 2). covered_set holds the
   // (guard_str, location.as_string()) edge keys loaded from the JSON at
@@ -1061,7 +1070,7 @@ public:
   //
   // ---- THE DIRECTION THAT IS SAFE, AND THE ONE THAT IS NOT ----
   //
-  // `util/focus_function.h` argues that the dispatcher filter and the
+  // `util/config/focus_function.h` argues that the dispatcher filter and the
   // instrumentation filter must not disagree, and it is right about the
   // direction it names: a unit the dispatcher CAN enter but nothing
   // instruments is an invisible zero in the numerator. This option is the
@@ -1504,7 +1513,6 @@ public:
   size_t k_path_max_goals = 10000;
 
 protected:
-  // turn a OP b OP c into a list a, b, c
   expr2tc handle_single_guard(const expr2tc &expr, bool top_level);
   void handle_operands_guard(
     const expr2tc &expr,
@@ -1538,7 +1546,8 @@ protected:
 
   // we need to skip the conditions within the built-in library
   // while keeping the file manually included by user
-  // this filter, however, is unsound.. E.g. if the src filename is the same as the builtin library name
+  // this filter, however, is unsound.. E.g. if the src filename is the same as
+  // the builtin library name
   std::string filename;
 
   int target_num;

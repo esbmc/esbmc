@@ -1,7 +1,7 @@
 #include <goto-programs/remove_unreachable.h>
 #include <set>
 #include <stack>
-#include <prefix.h>
+#include <util/base/prefix.h>
 
 // This method iterates through all GOTO functions in the program
 // and removes all unreachable instructions from each of them.
@@ -48,7 +48,7 @@ void remove_unreachable(goto_programt &goto_program)
       for (goto_programt::const_targetst::const_iterator s_it =
              successors.begin();
            s_it != successors.end();
-           s_it++)
+           ++s_it)
         working.push(*s_it);
     }
   }

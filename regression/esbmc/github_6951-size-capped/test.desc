@@ -1,0 +1,6 @@
+CORE
+main.c
+--multi-property
+^VERIFICATION FAILED$
+^.*one-byte object is 16-aligned.*$
+^.*array of packed is 16-aligned.*$

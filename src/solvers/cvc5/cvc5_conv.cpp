@@ -1,11 +1,12 @@
 #include <cstdint>
-#include <util/c_types.h>
+#include <util/lang/c_types.h>
+#include <util/arith/mp_arith.h>
 #include <cvc5_conv.h>
 #include <solvers/solve.h>
 
 #define new_ast new_solver_ast<cvc5_smt_ast>
 
-smt_convt *create_new_cvc5_solver(
+smt_solver_baset *create_new_cvc5_solver(
   const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api,
@@ -28,7 +29,7 @@ smt_convt *create_new_cvc5_solver(
 }
 
 cvc5_convt::cvc5_convt(const namespacet &ns, const optionst &options)
-  : smt_convt(ns, options),
+  : smt_solver_baset(ns, options),
     array_iface(true, true),
     fp_convt(this),
     to_bv_counter(0),
@@ -51,7 +52,7 @@ cvc5_convt::cvc5_convt(const namespacet &ns, const optionst &options)
   }
 }
 
-smt_convt::resultt cvc5_convt::dec_solve()
+smt_resultt cvc5_convt::dec_solve()
 {
   pre_solve();
 
@@ -65,11 +66,11 @@ smt_convt::resultt cvc5_convt::dec_solve()
   return P_UNSATISFIABLE;
 }
 
-bool cvc5_convt::get_bool(smt_astt a)
+tvt cvc5_convt::get_bool(smt_astt a)
 {
   auto const *ca = to_solver_smt_ast<cvc5_smt_ast>(a);
   cvc5::Term e = slv.getValue(ca->a);
-  return e.getBooleanValue();
+  return tvt(e.getBooleanValue());
 }
 
 ieee_floatt cvc5_convt::get_fpbv(smt_astt a)
@@ -471,6 +472,16 @@ smt_astt cvc5_convt::mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm)
     lhs->sort);
 }
 
+smt_astt cvc5_convt::mk_smt_fpbv_rem(smt_astt lhs, smt_astt rhs)
+{
+  return new_ast(
+    slv.mkTerm(
+      cvc5::Kind::FLOATINGPOINT_REM,
+      {to_solver_smt_ast<cvc5_smt_ast>(lhs)->a,
+       to_solver_smt_ast<cvc5_smt_ast>(rhs)->a}),
+    lhs->sort);
+}
+
 smt_astt cvc5_convt::mk_smt_nearbyint_from_float(smt_astt from, smt_astt rm)
 {
   return new_ast(
@@ -765,32 +776,6 @@ smt_astt cvc5_convt::mk_bvnot(smt_astt a)
     a->sort);
 }
 
-smt_astt cvc5_convt::mk_bvnor(smt_astt a, smt_astt b)
-{
-  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
-  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
-  assert(a->sort->get_data_width() == b->sort->get_data_width());
-  return new_ast(
-    slv.mkTerm(
-      cvc5::Kind::BITVECTOR_NOR,
-      {to_solver_smt_ast<cvc5_smt_ast>(a)->a,
-       to_solver_smt_ast<cvc5_smt_ast>(b)->a}),
-    a->sort);
-}
-
-smt_astt cvc5_convt::mk_bvnand(smt_astt a, smt_astt b)
-{
-  assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
-  assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
-  assert(a->sort->get_data_width() == b->sort->get_data_width());
-  return new_ast(
-    slv.mkTerm(
-      cvc5::Kind::BITVECTOR_NAND,
-      {to_solver_smt_ast<cvc5_smt_ast>(a)->a,
-       to_solver_smt_ast<cvc5_smt_ast>(b)->a}),
-    a->sort);
-}
-
 smt_astt cvc5_convt::mk_bvxor(smt_astt a, smt_astt b)
 {
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
@@ -1037,7 +1022,11 @@ smt_astt cvc5_convt::mk_select(smt_astt a, smt_astt b)
 
 smt_astt cvc5_convt::mk_smt_int(const BigInt &theint)
 {
-  cvc5::Term e = slv.mkInteger(theint.to_int64());
+  // BigInt::to_int64 silently truncates past 64 bits, so for values outside
+  // the int64 range fall back to cvc5::Solver::mkInteger(const std::string&)
+  // which accepts an arbitrary-precision decimal literal. Issue #4642.
+  cvc5::Term e = theint.is_int64() ? slv.mkInteger(theint.to_int64())
+                                   : slv.mkInteger(integer2string(theint, 10));
   return new_ast(e, mk_int_sort());
 }
 
@@ -1158,6 +1147,45 @@ smt_astt cvc5_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   symtable.emplace(name, ast, ctx_level);
 
   return ast;
+}
+
+smt_astt cvc5_convt::mk_smt_uninterpreted_function(
+  const std::string &name,
+  const std::vector<smt_astt> &args,
+  smt_sortt rangesort)
+{
+  // A nullary uninterpreted function is just a fixed constant; mk_smt_symbol
+  // already caches it by name, so repeated uses share one term (congruence).
+  if (args.empty())
+    return mk_smt_symbol(name, rangesort);
+
+  // Declare-or-reuse the function constant so every application shares it and
+  // the solver enforces functional congruence natively.
+  auto it = uf_decls.find(name);
+  cvc5::Term fun;
+  if (it != uf_decls.end())
+    fun = it->second;
+  else
+  {
+    std::vector<cvc5::Sort> domain;
+    domain.reserve(args.size());
+    for (smt_astt arg : args)
+      domain.push_back(to_solver_smt_sort<cvc5::Sort>(arg->sort)->s);
+
+    cvc5::Sort fun_sort =
+      slv.mkFunctionSort(domain, to_solver_smt_sort<cvc5::Sort>(rangesort)->s);
+    fun = slv.mkConst(fun_sort, name);
+    uf_decls.emplace(name, fun);
+  }
+
+  // APPLY_UF takes [function, arg0, arg1, ...].
+  std::vector<cvc5::Term> apply_args;
+  apply_args.reserve(args.size() + 1);
+  apply_args.push_back(fun);
+  for (smt_astt arg : args)
+    apply_args.push_back(to_solver_smt_ast<cvc5_smt_ast>(arg)->a);
+
+  return new_ast(slv.mkTerm(cvc5::Kind::APPLY_UF, apply_args), rangesort);
 }
 
 smt_astt cvc5_convt::mk_extract(smt_astt a, unsigned int high, unsigned int low)
@@ -1321,7 +1349,7 @@ smt_sortt cvc5_convt::mk_fpbv_rm_sort()
 
 void cvc5_convt::push_ctx()
 {
-  smt_convt::push_ctx();
+  smt_solver_baset::push_ctx();
   slv.push();
 }
 
@@ -1331,7 +1359,7 @@ void cvc5_convt::pop_ctx()
   symtab_levels.erase(ctx_level);
 
   slv.pop();
-  smt_convt::pop_ctx();
+  smt_solver_baset::pop_ctx();
 }
 
 std::string cvc5_convt::dump_smt()
@@ -1436,10 +1464,10 @@ cvc5::Term cvc5_convt::cvc5_tuple_update(
 }
 
 smt_astt cvc5_smt_ast::update(
-  smt_convt *ctx,
+  smt_solver_baset *ctx,
   smt_astt value,
   unsigned int idx,
-  expr2tc idx_expr) const
+  const expr2tc &idx_expr) const
 {
   if (sort->id == SMT_SORT_ARRAY)
     return smt_ast::update(ctx, value, idx, idx_expr);
@@ -1453,15 +1481,17 @@ smt_astt cvc5_smt_ast::update(
     cv->cvc5_tuple_update(a, idx, updateval->a), sort);
 }
 
-smt_astt cvc5_smt_ast::project(smt_convt *ctx, unsigned int elem) const
+smt_astt
+cvc5_smt_ast::project(smt_solver_baset *ctx, unsigned int elem) const
 {
   cvc5_convt *cv = static_cast<cvc5_convt *>(ctx);
 
   assert(!is_nil_type(sort->get_tuple_type()));
-  const struct_union_data &data = ctx->get_type_def(sort->get_tuple_type());
+  const std::vector<type2tc> &members =
+    struct_union_members(sort->get_tuple_type());
 
-  assert(elem < data.members.size());
-  smt_sortt idx_sort = ctx->convert_sort(data.members[elem]);
+  assert(elem < members.size());
+  smt_sortt idx_sort = ctx->convert_sort(members[elem]);
 
   cvc5::Term selected = cv->cvc5_tuple_select(a, elem);
   return cv->new_solver_ast<cvc5_smt_ast>(selected, idx_sort);
@@ -1480,10 +1510,11 @@ smt_sortt cvc5_convt::mk_struct_sort(const type2tc &type)
     return mk_array_sort(d, subtypesort);
   }
 
-  const struct_union_data &def = get_type_def(type);
+  const std::vector<type2tc> &def_members =
+    struct_union_members(is_pointer_type(type) ? pointer_struct : type);
   std::vector<cvc5::Sort> sorts;
-  sorts.reserve(def.members.size());
-  for (auto const &it : def.members)
+  sorts.reserve(def_members.size());
+  for (auto const &it : def_members)
   {
     smt_sortt s = convert_sort(it);
     sorts.push_back(to_solver_smt_sort<cvc5::Sort>(s)->s);
@@ -1497,12 +1528,11 @@ smt_astt cvc5_convt::tuple_create(const expr2tc &structdef)
 {
   const constant_struct2t &strct = to_constant_struct2t(structdef);
   const std::vector<expr2tc> &members = strct.datatype_members;
-  const struct_union_data &type =
-    static_cast<const struct_union_data &>(*strct.type);
+  const std::size_t n_members = struct_union_members(strct.type).size();
 
   std::vector<cvc5::Term> args;
-  args.reserve(type.members.size());
-  for (std::size_t i = 0; i < type.members.size(); ++i)
+  args.reserve(n_members);
+  for (std::size_t i = 0; i < n_members; ++i)
     args.push_back(to_solver_smt_ast<cvc5_smt_ast>(convert_ast(members[i]))->a);
 
   smt_sortt s = mk_struct_sort(structdef->type);
@@ -1618,28 +1648,29 @@ cvc5_convt::tuple_array_of(const expr2tc &init, unsigned long domain_width)
 
 expr2tc cvc5_convt::tuple_get(const type2tc &type, smt_astt sym)
 {
-  const struct_union_data &strct = get_type_def(type);
+  const std::vector<type2tc> &members =
+    struct_union_members(is_pointer_type(type) ? pointer_struct : type);
 
   if (is_pointer_type(type))
   {
     smt_astt object = new_ast(
       cvc5_tuple_select(to_solver_smt_ast<cvc5_smt_ast>(sym)->a, 0),
-      convert_sort(strct.members[0]));
+      convert_sort(members[0]));
     smt_astt offset = new_ast(
       cvc5_tuple_select(to_solver_smt_ast<cvc5_smt_ast>(sym)->a, 1),
-      convert_sort(strct.members[1]));
+      convert_sort(members[1]));
 
     unsigned int num =
-      get_bv(object, is_signedbv_type(strct.members[0])).to_uint64();
+      get_bv(object, is_signedbv_type(members[0])).to_uint64();
     unsigned int offs =
-      get_bv(offset, is_signedbv_type(strct.members[1])).to_uint64();
+      get_bv(offset, is_signedbv_type(members[1])).to_uint64();
     pointer_logict::pointert p(num, BigInt(offs));
     return pointer_logic.back().pointer_expr(p, type);
   }
 
   std::vector<expr2tc> outmem;
   unsigned int i = 0;
-  for (auto const &it : strct.members)
+  for (auto const &it : members)
   {
     outmem.push_back(get_by_ast(
       it,
@@ -1654,7 +1685,9 @@ expr2tc cvc5_convt::tuple_get(const type2tc &type, smt_astt sym)
 
 expr2tc cvc5_convt::tuple_get(const expr2tc &expr)
 {
-  const struct_union_data &strct = get_type_def(expr->type);
+  const type2tc &t = is_pointer_type(expr->type) ? pointer_struct : expr->type;
+  const std::vector<type2tc> &members = struct_union_members(t);
+  const std::vector<irep_idt> &mnames = struct_union_member_names(t);
 
   if (is_pointer_type(expr->type))
   {
@@ -1662,24 +1695,24 @@ expr2tc cvc5_convt::tuple_get(const expr2tc &expr)
 
     smt_astt object = new_ast(
       cvc5_tuple_select(to_solver_smt_ast<cvc5_smt_ast>(sym)->a, 0),
-      convert_sort(strct.members[0]));
+      convert_sort(members[0]));
     smt_astt offset = new_ast(
       cvc5_tuple_select(to_solver_smt_ast<cvc5_smt_ast>(sym)->a, 1),
-      convert_sort(strct.members[1]));
+      convert_sort(members[1]));
 
     unsigned int num =
-      get_bv(object, is_signedbv_type(strct.members[0])).to_uint64();
+      get_bv(object, is_signedbv_type(members[0])).to_uint64();
     unsigned int offs =
-      get_bv(offset, is_signedbv_type(strct.members[1])).to_uint64();
+      get_bv(offset, is_signedbv_type(members[1])).to_uint64();
     pointer_logict::pointert p(num, BigInt(offs));
     return pointer_logic.back().pointer_expr(p, expr->type);
   }
 
   std::vector<expr2tc> outmem;
   unsigned int i = 0;
-  for (auto const &it : strct.members)
+  for (auto const &it : members)
   {
-    expr2tc memb = member2tc(it, expr, strct.member_names[i]);
+    expr2tc memb = member2tc(it, expr, mnames[i]);
     outmem.push_back(get(memb));
     i++;
   }

@@ -1,0 +1,6 @@
+CORE
+main.c
+--smtlib --smtlib-solver-prog "z3 -in"
+REQUIRES z3_binary
+^  r = -54782528 \(11111100 10111100 00010101 11000000\)$
+^VERIFICATION FAILED$

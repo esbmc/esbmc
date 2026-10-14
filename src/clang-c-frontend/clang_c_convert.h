@@ -4,11 +4,12 @@
 #define __STDC_LIMIT_MACROS
 #define __STDC_FORMAT_MACROS
 
-#include <util/context.h>
-#include <util/namespace.h>
-#include <util/std_code.h>
-#include <util/std_types.h>
-#include <util/symbol_generator.h>
+#include <util/symtab/context.h>
+#include <util/symtab/namespace.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_types.h>
+#include <util/symtab/symbol_generator.h>
+#include <unordered_map>
 
 // Forward dec, to avoid bringing in clang headers
 namespace clang
@@ -18,6 +19,7 @@ class ASTContext;
 class SourceManager;
 class FunctionDecl;
 class Decl;
+class LabelDecl;
 class VarDecl;
 class ParmVarDecl;
 class RecordDecl;
@@ -39,11 +41,14 @@ class IntegerLiteral;
 class FloatingLiteral;
 class TagDecl;
 class FieldDecl;
+class ValueDecl;
 class MemberExpr;
 class EnumConstantDecl;
 class APValue;
 class AlignedAttr;
 class InitListExpr;
+class TemplateParamObjectDecl;
+class Expr;
 } // namespace clang
 
 std::string
@@ -61,15 +66,15 @@ public:
   bool convert();
 
   /**
- * @brief Perform the typecast by creating a tmp variable on RHS
- *
- * The idea is to look for all components of the union and match
- * the type. If not found, throws an error
- *
- * @param dest RHS dest
- * @param type Union type
- * @param msg  Message object
- */
+   * @brief Perform the typecast by creating a tmp variable on RHS
+   *
+   * The idea is to look for all components of the union and match
+   * the type. If not found, throws an error
+   *
+   * @param ns Namespace for looking up the union components
+   * @param dest RHS dest
+   * @param type Union type
+   */
   static void
   gen_typecast_to_union(const namespacet &ns, exprt &dest, const typet &type);
 
@@ -83,6 +88,20 @@ protected:
   irep_idt mode;
   symbol_generator anon_symbol;
 
+  // set_location() cache. Profiling on ECA-style programs showed that every
+  // exprt built during AST conversion gets its own freshly-allocated
+  // locationt dt (4 named_sub entries: file/line/column/function). On a
+  // 590 KB benchmark that was 168 MB / 2M detatches — 68% of peak heap.
+  // Since consecutive AST nodes almost always share file+function (and
+  // often line+column for compiler-generated decls), share the locationt
+  // dt across calls when the source key matches.
+  locationt last_loc;
+  unsigned last_loc_line = 0;
+  unsigned last_loc_column = 0;
+  std::string last_loc_filename;
+  std::string last_loc_function;
+  bool last_loc_valid = false;
+
   // class symbol id prefix `tag-`
   std::string tag_prefix = "tag-";
 
@@ -94,20 +113,54 @@ protected:
    */
   code_blockt *current_block;
 
+  /** A block-scope VLA's size, bound to a local just before its declarator
+   *  (C11 6.7.6.2p5, 6.7.8p3). Keyed by clang's size expression, which every
+   *  expression typed by that declarator shares. */
+  std::unordered_map<const clang::Expr *, exprt> vla_size_snapshots;
+  bool snapshot_vla_sizes(const clang::Decl &decl, codet &dest);
+  bool get_vla_size(const clang::Expr &size, exprt &new_expr);
+
   clang::SourceManager *sm;
 
   const clang::FunctionDecl *current_functionDecl;
+
+  /** Address-taken labels of the function being converted, in the order the
+   *  addresses appear. A label has no storage, so `&&L` lowers to its 1-based
+   *  position cast to a pointer and `goto *p` to an equality chain over those
+   *  positions. Collected up front because a label's address may be taken
+   *  after the indirect goto that jumps to it. A vector, not a map keyed on
+   *  the decl: pointer order varies per run, and the chain it emits has to be
+   *  reproducible (GCC computed goto, issue #4083). */
+  std::vector<const clang::LabelDecl *> address_taken_labels;
+
+  void collect_address_taken_labels(const clang::Stmt &body);
 
   bool convert_builtin_types();
   virtual bool convert_top_level_decl();
 
   /**
    *  Since this class is inherited by clang-cpp-frontend,
-   *  some get_* functions are made `virtual' to deal with clang CXX declarations
+   *  some get_* functions are made `virtual' to deal with clang CXX
+   * declarations
    */
   virtual bool get_decl(const clang::Decl &decl, exprt &new_expr);
 
   virtual bool get_var(const clang::VarDecl &vd, exprt &new_expr);
+  virtual const clang::Expr &elided_copy_source(const clang::Expr &init);
+  bool has_dynamic_local_init(const clang::VarDecl &vd) const;
+  void add_init_guard(const symbolt &var);
+  bool get_static_var_init(
+    const clang::VarDecl &vd,
+    symbolt &symbol,
+    const typet &t,
+    const locationt &location_begin,
+    exprt &new_expr);
+
+  std::string header_internal_suffix(const clang::NamedDecl &nd);
+  /// Internal-linkage functions and variables sharing a USR, in the order they
+  /// were first named; see header_internal_suffix.
+  std::unordered_map<std::string, std::vector<const clang::Decl *>>
+    internal_copies;
 
   virtual bool get_function(const clang::FunctionDecl &fd, exprt &new_expr);
 
@@ -117,9 +170,20 @@ protected:
     const code_typet &ftype);
 
   /**
+   *  Annotate a function's type with its C++ exception specification.
+   *  No-op in C (which has no exception specifications); overridden in the
+   *  C++ frontend to record noexcept / dynamic-throw specifications as
+   *  function-boundary metadata on the function type.
+   */
+  virtual void
+  annotate_exception_specification(const clang::FunctionDecl &, typet &)
+  {
+  }
+
+  /**
    *  Parse function parameters
    *  This function simply contains a loop to populate the code argument list
-   *  and calls get_function_body to parse each individual parameter.
+   *  and calls get_function_param to parse each individual parameter.
    */
   virtual bool get_function_params(
     const clang::FunctionDecl &fd,
@@ -129,14 +193,13 @@ protected:
    */
   bool get_function_param(const clang::ParmVarDecl &pd, exprt &param);
   /*
-   * This function determines whether we should name an unnamed function parameter
-   * and continue to add its symbol.
+   * This function determines whether we should name an unnamed function
+   * parameter and continue to add its symbol.
    *
    * Params:
-   *  pd: the clang AST node for the function parameter we are currently dealing with
-   *  id: id for this function parameter
-   *  name: name for this function parameter
-   *  param: ESBMC's IR representing the function parameter
+   *  pd: the clang AST node for the function parameter we are currently dealing
+   * with id: id for this function parameter name: name for this function
+   * parameter param: ESBMC's IR representing the function parameter
    */
   virtual void name_param_and_continue(
     const clang::ParmVarDecl &pd,
@@ -191,11 +254,20 @@ protected:
    * member-expression lowering, and ctor member-initialiser-list lowering. */
   bool wrap_bitfield_type_if_needed(const clang::FieldDecl &fd, typet &t);
 
+  /* If `vd` is a flexible array member, give its array type `t` size zero:
+   * C17 6.7.2.1p18 sizes the struct as if the member were omitted. Every site
+   * that lowers a field's type must agree, or members and components differ. */
+  void size_flexible_array_member(const clang::ValueDecl &vd, typet &t);
+
   virtual bool get_expr(const clang::Stmt &stmt, exprt &new_expr);
 
   bool get_base_flattened_inits(
     const clang::InitListExpr &init,
     std::vector<exprt> &flat);
+
+  /* The value `init`'s array filler gives each element past its explicit
+   * initialisers, or nil where that value is zero. */
+  bool get_array_filler(const clang::InitListExpr &init, exprt &filler);
 
   bool get_enum_value(const clang::EnumConstantDecl *e, exprt &new_expr);
 
@@ -203,6 +275,14 @@ protected:
 
   bool
   get_binary_operator_expr(const clang::BinaryOperator &binop, exprt &new_expr);
+
+  void get_vector_comparison(
+    const clang::BinaryOperator &binop,
+    irep_idt relation,
+    exprt lhs,
+    exprt rhs,
+    const typet &type,
+    exprt &new_expr);
 
   bool get_compound_assign_expr(
     const clang::CompoundAssignOperator &compop,
@@ -230,6 +310,10 @@ protected:
 
   void
   get_start_location_from_stmt(const clang::Stmt &stmt, locationt &location);
+
+  /// Report an initializer list none of get_expr's arms models, with its type
+  /// and source location. Always returns true (conversion failed).
+  bool report_unsupported_init_list(const clang::InitListExpr &init_stmt);
 
   void
   get_final_location_from_stmt(const clang::Stmt &stmt, locationt &location);
@@ -280,11 +364,19 @@ protected:
   process_aligned_attribute(const clang::AlignedAttr &aattr, typet &t) const;
 
   /*
-   * add additional annotations if a class/struct/union field has alignment attribute
+   * Apply a record's packing and alignment attributes to its type
    * Arguments:
-   *   field: clang AST representing the class/struct/union field we are dealing with
-   *   comp: a `component` in class/struct/union's symbol type
-   *   type: a class/struct/union's symbol type
+   *   rd: the record definition whose attributes to inspect
+   *   t: the struct/union type to annotate
+   */
+  bool
+  process_record_layout_attributes(const clang::RecordDecl &rd, typet &t) const;
+
+  /*
+   * add additional annotations if a class/struct/union field has alignment
+   * attribute Arguments: field: clang AST representing the class/struct/union
+   * field we are dealing with comp: a `component` in class/struct/union's
+   * symbol type type: a class/struct/union's symbol type
    */
   bool check_alignment_attributes(
     const clang::FieldDecl *field,
@@ -294,7 +386,8 @@ protected:
    * check if a class/struct/union's field has global storage
    * (e.g. static)
    * Arguments:
-   *   field: clang AST representing the class/struct/union field we are dealing with
+   *   field: clang AST representing the class/struct/union field we are dealing
+   * with
    */
   bool is_field_global_storage(const clang::FieldDecl *field);
 
@@ -311,11 +404,8 @@ protected:
   virtual bool perform_virtual_dispatch(const clang::MemberExpr &member);
 
   /*
-   * Function to get the ESBMC IR representing a virtual function table dynamic binding for "->" operator
-   * Turning
-   *  x->F
-   * into
-   *  x->X@vtable_pointer->F
+   * Function to get the ESBMC IR representing a virtual function table dynamic
+   * binding for "->" operator Turning x->F into x->X@vtable_pointer->F
    *
    * Params:
    *  - member: the method to which this MemberExpr refers
@@ -339,7 +429,15 @@ protected:
 
   virtual bool is_aggregate_type(const clang::QualType &q_type);
 
-  bool get_APValue_expr(const clang::APValue &value, exprt &new_expr);
+  bool get_mangled_id(const clang::NamedDecl &nd, std::string &id);
+  bool add_template_param_object(
+    const clang::TemplateParamObjectDecl &tpo,
+    const std::string &name,
+    const std::string &id);
+  bool get_APValue_expr(
+    const clang::APValue &value,
+    exprt &new_expr,
+    const clang::QualType *type = nullptr);
 
   /*
    * Function to check whether a MemberExpr references to a static variable
@@ -348,9 +446,9 @@ protected:
 
   /**
    * Rewrites references to builtin functions to their ESBMC counterparts.
-   * Clang provides builtins for e.g. malloc, memcpy, etc. Instead of re-implementing
-   * these functions in ESBMC, we rewrite references to e.g. `__builtin_memcpy` to
-   * just `memcpy`.
+   * Clang provides builtins for e.g. malloc, memcpy, etc. Instead of
+   * re-implementing these functions in ESBMC, we rewrite references to e.g.
+   * `__builtin_memcpy` to just `memcpy`.
    *
    * @param d declaration to rewrite (if it refers to a builtin function)
    * @param name name of the declaration
@@ -360,6 +458,8 @@ protected:
     const clang::Decl &d,
     std::string &name,
     std::string &id) const;
+
+  bool is_unlowered_math_builtin(const std::string &name) const;
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

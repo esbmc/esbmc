@@ -7,7 +7,7 @@
 class fp_convt
 {
 public:
-  explicit fp_convt(smt_convt *_ctx);
+  explicit fp_convt(smt_solver_baset *_ctx);
   virtual ~fp_convt() = default;
 
   /** Create a floating point bitvector
@@ -20,7 +20,8 @@ public:
   /** Create a sort representing a floating-point number.
    *  @param ew Exponent width, in bits, of the bitvector to create.
    *  @param sw Significand width, in bits, of the bitvector to create.
-   *  @return The floating-point representation of the type, wrapped in an smt_sort. */
+   *  @return The floating-point representation of the type, wrapped in an
+   * smt_sort. */
   virtual smt_sortt mk_fpbv_sort(const unsigned ew, const unsigned sw);
 
   /** Create a sort representing a floating-point rounding mode.
@@ -84,7 +85,8 @@ public:
   virtual smt_astt
   mk_smt_typecast_sbv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm);
 
-  /** Calculate the nearby int from a floating point, considering the rounding mode
+  /** Calculate the nearby int from a floating point, considering the rounding
+   * mode
    *  @param from the floating-point
    *  @param rm the rounding mode
    *  @return The newly created cast smt_ast. */
@@ -118,13 +120,21 @@ public:
    *  @return The newly created cast smt_ast. */
   virtual smt_astt mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm);
 
+  /** Convert the ieee remainder (SMT-LIB fp.rem, C's remainder()). The
+   *  operation is exact, so it takes no rounding mode.
+   *  @param lhs left hand side of the remainder
+   *  @param rhs right hand side of the remainder
+   *  @return The newly created fp.rem smt_ast. */
+  virtual smt_astt mk_smt_fpbv_rem(smt_astt lhs, smt_astt rhs);
+
   /** Convert the ieee arithmetic square-root (sqrt)
    *  @param op the sqrt radicand
    *  @param rm the rounding mode
    *  @return The newly created sqrt smt_ast */
   virtual smt_astt mk_smt_fpbv_sqrt(smt_astt rd, smt_astt rm);
 
-  /** Convert the ieee arithmetic fused-multiply add (fma): round((v1 * v2) + v3)
+  /** Convert the ieee arithmetic fused-multiply add (fma): round((v1 * v2) +
+   * v3)
    *  @param v1 in the equation
    *  @param v2 in the equation
    *  @param v3 in the equation
@@ -220,7 +230,7 @@ public:
   virtual smt_astt mk_from_fp_to_bv(smt_astt op);
 
 private:
-  smt_convt *ctx;
+  smt_solver_baset *ctx;
 
   void unpack(
     smt_astt &src,

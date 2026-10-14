@@ -1,0 +1,31 @@
+properties:
+  - id: P1
+    kind: mutual_exclusion
+    description: A and B must not both be true
+    variables:
+      - A
+      - B
+
+  - id: P2
+    kind: invariant
+    description: C must always be true when A is
+    expression: "!A || C"
+
+  - id: P3
+    kind: absence
+    description: D must never be true
+    expression: "D"
+
+  - id: P4
+    kind: reachability
+    description: E can be reached
+    expression: "E"
+    justification: "E is reachable by design"
+
+  - id: P5
+    kind: response
+    description: A must trigger C within 5 scans
+    trigger: A
+    response: C
+    max_scans: 5
+    justification: "Response bound of 5 scans derived from spec"

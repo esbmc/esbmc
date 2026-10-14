@@ -1,4 +1,5 @@
 CORE
 main.py
---bitwuzla --unwind 4 --no-bounds-check --no-pointer-check --no-align-check --no-div-by-zero-check
+--unwind 4 --no-bounds-check --no-pointer-check --no-align-check --no-div-by-zero-check --smt-during-symex --smt-symex-guard
+^\s*FAILED\s+\[global\.assertion\.1\]\s+line\s+34\s+assertion
 ^VERIFICATION FAILED$

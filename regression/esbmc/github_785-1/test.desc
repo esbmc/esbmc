@@ -1,4 +1,5 @@
 CORE
 main.c
 --32 --force-malloc-success
+REQUIRES arch32
 ^VERIFICATION SUCCESSFUL$

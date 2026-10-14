@@ -1,0 +1,7 @@
+properties:
+  - id: R1
+    kind: response
+    trigger: Start
+    response: Out
+    max_scans: 2
+    justification: "negative test: Out gated by Enable, so response can be blocked"

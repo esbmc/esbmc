@@ -1,0 +1,4 @@
+CORE
+cbmc_fesetround.goto
+--binary
+^VERIFICATION SUCCESSFUL$

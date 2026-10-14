@@ -1,0 +1,5 @@
+THOROUGH
+main.py
+--force-malloc-success --unwind 9
+^VERIFICATION SUCCESSFUL$
+^  PASSED +\[global\.assertion\.\d+\] +line +14 +assertion .* == 1$

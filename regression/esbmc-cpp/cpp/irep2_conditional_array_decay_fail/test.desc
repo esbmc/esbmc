@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--clang-cpp-irep2-adjust-only --std c++17 --unwind 6 --no-unwinding-assertions
+^VERIFICATION FAILED$

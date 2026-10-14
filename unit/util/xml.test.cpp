@@ -3,9 +3,10 @@ Module: Unit tests for xmlt
 Author: Thomas Kiley
 \*******************************************************************/
 
-#define CATCH_CONFIG_MAIN // This tells Catch to provide a main() - only do this in one cpp file
+#define CATCH_CONFIG_MAIN // This tells Catch to provide a main() - only do this
+                          // in one cpp file
 #include <catch2/catch.hpp>
-#include <util/xml.h>
+#include <util/base/xml.h>
 
 TEST_CASE("xml_equal", "[core][util][xml]")
 {
@@ -93,5 +94,33 @@ TEST_CASE("xml_equal", "[core][util][xml]")
       REQUIRE_FALSE(a == b);
       REQUIRE(a != b);
     }
+  }
+}
+
+TEST_CASE("xml_unescape", "[core][util][xml]")
+{
+  SECTION("No entities")
+  {
+    REQUIRE(xmlt::unescape("plain text") == "plain text");
+  }
+  SECTION("Named entities")
+  {
+    REQUIRE(xmlt::unescape("a&gt;b&lt;c&amp;d") == "a>b<c&d");
+  }
+  SECTION("Numeric entity")
+  {
+    REQUIRE(xmlt::unescape("&#65;&#66;") == "AB");
+  }
+  SECTION("Unterminated entity at end of input")
+  {
+    // The trailing "&gt" has no ';': the inner scan reaches end() and the
+    // loop must stop without advancing the outer iterator past end()
+    // (which was undefined behaviour / an out-of-bounds read before the
+    // fix). The malformed tail is dropped rather than crashing.
+    REQUIRE(xmlt::unescape("ok&gt") == "ok");
+  }
+  SECTION("Lone ampersand at end of input")
+  {
+    REQUIRE(xmlt::unescape("trailing&") == "trailing");
   }
 }

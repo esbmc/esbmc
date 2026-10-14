@@ -1,13 +1,13 @@
-#define CATCH_CONFIG_MAIN // This tells Catch to provide a main() - only do this in one cpp file
+#define CATCH_CONFIG_MAIN // This tells Catch to provide a main() - only do this
+                          // in one cpp file
 #include <catch2/catch.hpp>
 
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/config.h>
-#include <util/namespace.h>
-#include <util/simplify_expr.h>
-#include <util/std_expr.h>
-#include <util/std_types.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/config/config.h>
+#include <util/symtab/namespace.h>
+#include <util/irep/std_expr.h>
+#include <util/irep/std_types.h>
 
 TEST_CASE("for a division expression...", "[unit][util][std_expr]")
 {
@@ -21,7 +21,8 @@ TEST_CASE("for a division expression...", "[unit][util][std_expr]")
     REQUIRE(div.op0() == dividend);
     REQUIRE(div.op1() == divisor);
   }
-  /* This will not work on current implementation (and we probably shouldn't waste time on this)
+  /* This will not work on current implementation (and we probably shouldn't
+  waste time on this)
    * after irep is switched to irep2 we have to fix this
   SECTION("its type is that of its operands")
   {

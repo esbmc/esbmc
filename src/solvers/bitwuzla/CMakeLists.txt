@@ -1,4 +1,6 @@
-set(Bitwuzla_MIN_VERSION "0.1")
+# The BitwuzlaTermManager interface this backend is written against, and the
+# term/sort reference counting it uses, both arrived in 0.4.0 (Bitwuzla NEWS.md).
+set(Bitwuzla_MIN_VERSION "0.4")
 
 if(DEFINED Bitwuzla_DIR)
     set(ENABLE_BITWUZLA ON)
@@ -6,13 +8,13 @@ else()
     if(ENABLE_BITWUZLA AND DOWNLOAD_DEPENDENCIES)
         # See Boolector configurations for more details about this
 
-        CPMAddPackage(
+        cpmaddpackage(
             NAME bitwuzla
             DOWNLOAD_ONLY YES
             GITHUB_REPOSITORY bitwuzla/bitwuzla
             GIT_TAG 0.9.0)
 
-	  message("[bitwuzla] Source-dir: ${bitwuzla_SOURCE_DIR} ")
+    message("[bitwuzla] Source-dir: ${bitwuzla_SOURCE_DIR} ")
         message("[bitwuzla] Configuring project:  ./configure.py --prefix ${bitwuzla_BINARY_DIR}")
         execute_process(COMMAND python3 ./configure.py --prefix ${bitwuzla_BINARY_DIR} --no-fpexp
           WORKING_DIRECTORY "${bitwuzla_SOURCE_DIR}")
@@ -21,15 +23,11 @@ else()
         message("[bitwuzla] Building...")
         execute_process(COMMAND meson install
           WORKING_DIRECTORY ${bitwuzla_SOURCE_DIR}/build
-	  COMMAND_ECHO STDOUT)
+    COMMAND_ECHO STDOUT)
 
         set(Bitwuzla_DIR ${bitwuzla_BINARY_DIR})
     endif()
 
-endif()
-
-if(EXISTS $ENV{HOME}/bitwuzla)
-    set(ENABLE_BITWUZLA ON)
 endif()
 
 if(ENABLE_BITWUZLA)
@@ -66,7 +64,7 @@ if(ENABLE_BITWUZLA)
   endif()
 
   if(NOT Bitwuzla_FOUND)
-    message(ERROR "Could not find Bitwuzla in '${Bitwuzla_DIR}'")
+    message(FATAL_ERROR "Could not find Bitwuzla in '${Bitwuzla_DIR}'")
   endif()
 
     message(STATUS "Found Bitwuzla at: ${Bitwuzla_PREFIX}")
@@ -77,9 +75,8 @@ if(ENABLE_BITWUZLA)
 
     add_library(solverbitw bitwuzla_conv.cpp)
     target_include_directories(solverbitw
-            PRIVATE ${Boost_INCLUDE_DIRS}
             PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-    target_link_libraries(solverbitw fmt::fmt PkgConfig::Bitwuzla)
+    target_link_libraries(solverbitw PUBLIC esbmc_common fmt::fmt PkgConfig::Bitwuzla)
 
     target_link_libraries(solvers INTERFACE solverbitw)
 

@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: .*main\.py:6: enumerate\(\) with a nested unpacking target is unsupported here: the iterable is not a list literal$

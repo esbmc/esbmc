@@ -1,0 +1,8 @@
+properties:
+  # p0.A is fed by a contact on X, which the user-FB path does not model, so A
+  # is sampled nondeterministically: an over-approximation that makes Y and X
+  # disagree in some scan. The front end must say so rather than stay silent.
+  - id: P1
+    kind: invariant
+    expression: "(!Y || X) && (Y || !X)"
+    description: "Deliberately unprovable: the contact wire is not modelled"

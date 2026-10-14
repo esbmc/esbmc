@@ -1,0 +1,4 @@
+CORE
+main.c
+--context-bound 6 --no-por --cswitch-skip-readonly-globals
+^VERIFICATION FAILED$

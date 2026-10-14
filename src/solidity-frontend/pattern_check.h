@@ -11,9 +11,9 @@
 
 #include <memory>
 #include <iomanip>
-#include <util/context.h>
-#include <util/namespace.h>
-#include <util/std_types.h>
+#include <util/symtab/context.h>
+#include <util/symtab/namespace.h>
+#include <util/irep/std_types.h>
 #include <fmt/core.h>
 #include <nlohmann/json.hpp>
 #include <solidity-frontend/solidity_grammar.h>
@@ -24,7 +24,8 @@ class pattern_checker
   //  - pattern-based vulnerability (e.g. Authorization via TxOrigin)
   //  - reasoning-based vulnerability (e.g. array out-of-bound access)
   // This class implements the detection of pattern-based vulnerability.
-  // The reasoning-based vulnerability is handled by ESBMC verification pipeline.
+  // The reasoning-based vulnerability is handled by ESBMC verification
+  // pipeline.
 public:
   pattern_checker(
     const nlohmann::json &_ast_nodes,

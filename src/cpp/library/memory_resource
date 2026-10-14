@@ -1,0 +1,201 @@
+#ifndef ESBMC_MEMORY_RESOURCE
+#define ESBMC_MEMORY_RESOURCE
+
+#include "cstddef"
+#include "new"
+
+#if __cplusplus >= 201703L
+
+// [mem.res]: the resource interface, the two standard resources, the
+// default-resource accessors and polymorphic_allocator.
+//
+// The pool resources and monotonic_buffer_resource are not modelled. They are
+// allocation strategies whose whole observable content is where the bytes come
+// from and when they are released, so a stub forwarding to new/delete would
+// verify a program against the wrong lifetime; an absent class stays the
+// compile error it already is.
+
+namespace std
+{
+namespace pmr
+{
+
+class memory_resource
+{
+public:
+  virtual ~memory_resource()
+  {
+  }
+
+  void *allocate(size_t bytes, size_t alignment = alignof(max_align_t))
+  {
+    return do_allocate(bytes, alignment);
+  }
+
+  void deallocate(void *p, size_t bytes, size_t alignment = alignof(max_align_t))
+  {
+    do_deallocate(p, bytes, alignment);
+  }
+
+  bool is_equal(const memory_resource &other) const noexcept
+  {
+    return do_is_equal(other);
+  }
+
+protected:
+  virtual void *do_allocate(size_t bytes, size_t alignment) = 0;
+  virtual void do_deallocate(void *p, size_t bytes, size_t alignment) = 0;
+  virtual bool do_is_equal(const memory_resource &other) const noexcept = 0;
+};
+
+inline bool operator==(const memory_resource &a, const memory_resource &b)
+{
+  return &a == &b || a.is_equal(b);
+}
+
+inline bool operator!=(const memory_resource &a, const memory_resource &b)
+{
+  return !(a == b);
+}
+
+namespace __detail
+{
+class __new_delete_resource : public memory_resource
+{
+protected:
+  void *do_allocate(size_t bytes, size_t) override
+  {
+    return ::operator new(bytes);
+  }
+
+  void do_deallocate(void *p, size_t, size_t) override
+  {
+    ::operator delete(p);
+  }
+
+  bool do_is_equal(const memory_resource &other) const noexcept override
+  {
+    return this == &other;
+  }
+};
+
+// [mem.res.global]/5: null_memory_resource()->allocate() always throws.
+class __null_resource : public memory_resource
+{
+protected:
+  void *do_allocate(size_t, size_t) override
+  {
+    throw bad_alloc();
+  }
+
+  void do_deallocate(void *, size_t, size_t) override
+  {
+  }
+
+  bool do_is_equal(const memory_resource &other) const noexcept override
+  {
+    return this == &other;
+  }
+};
+
+inline __new_delete_resource *__new_delete()
+{
+  static __new_delete_resource r;
+  return &r;
+}
+
+inline __null_resource *__null_res()
+{
+  static __null_resource r;
+  return &r;
+}
+
+inline memory_resource *&__default_resource()
+{
+  static memory_resource *r = __new_delete();
+  return r;
+}
+} // namespace __detail
+
+inline memory_resource *new_delete_resource() noexcept
+{
+  return __detail::__new_delete();
+}
+
+inline memory_resource *null_memory_resource() noexcept
+{
+  return __detail::__null_res();
+}
+
+inline memory_resource *get_default_resource() noexcept
+{
+  return __detail::__default_resource();
+}
+
+inline memory_resource *set_default_resource(memory_resource *r) noexcept
+{
+  memory_resource *old = __detail::__default_resource();
+  __detail::__default_resource() = (r == nullptr) ? new_delete_resource() : r;
+  return old;
+}
+
+template <class T>
+class polymorphic_allocator
+{
+  memory_resource *__r;
+
+public:
+  typedef T value_type;
+
+  polymorphic_allocator() noexcept : __r(get_default_resource())
+  {
+  }
+
+  polymorphic_allocator(memory_resource *r) noexcept : __r(r)
+  {
+  }
+
+  template <class U>
+  polymorphic_allocator(const polymorphic_allocator<U> &other) noexcept
+    : __r(other.resource())
+  {
+  }
+
+  T *allocate(size_t n)
+  {
+    return static_cast<T *>(__r->allocate(n * sizeof(T), alignof(T)));
+  }
+
+  void deallocate(T *p, size_t n)
+  {
+    __r->deallocate(p, n * sizeof(T), alignof(T));
+  }
+
+  memory_resource *resource() const
+  {
+    return __r;
+  }
+};
+
+template <class T, class U>
+bool operator==(
+  const polymorphic_allocator<T> &a,
+  const polymorphic_allocator<U> &b) noexcept
+{
+  return *a.resource() == *b.resource();
+}
+
+template <class T, class U>
+bool operator!=(
+  const polymorphic_allocator<T> &a,
+  const polymorphic_allocator<U> &b) noexcept
+{
+  return !(a == b);
+}
+
+} // namespace pmr
+} // namespace std
+
+#endif // __cplusplus >= 201703L
+
+#endif

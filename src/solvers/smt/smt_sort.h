@@ -159,7 +159,7 @@ protected:
 private:
   /** Data size of the sort.
    * For bitvectors and floating-points, this is the bit width,
-   * for arrays, the range BV bit width,
+   * for arrays, the domain (index) bit width,
    * For everything else, undefined */
   size_t data_width;
 
@@ -174,9 +174,8 @@ private:
   smt_sortt range_sort;
 
   /** Type of the tuple
-   * For structs, this is the actual type (struct or array of structs) of a tuple
-   * that's been flattened
-   * For everything else, undefined
+   * For structs, this is the actual type (struct or array of structs) of a
+   * tuple that's been flattened For everything else, undefined
    */
   const type2tc tupletype;
 };

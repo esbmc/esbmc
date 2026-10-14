@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^VERIFICATION FAILED$
+^ +FAILED .*line +18 +assertion return_value\$_local\$[0-9]+ != 25$

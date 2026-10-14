@@ -1,7 +1,7 @@
 #ifndef _ESBMC_SOLVERS_CVC_CVC5_CONV_H_
 #define _ESBMC_SOLVERS_CVC_CVC5_CONV_H_
 
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <cvc5/cvc5.h>
 
 class cvc5_smt_ast : public solver_smt_ast<cvc5::Term>
@@ -10,16 +10,18 @@ public:
   using solver_smt_ast<cvc5::Term>::solver_smt_ast;
   ~cvc5_smt_ast() override = default;
 
-  smt_astt
-  update(smt_convt *ctx, smt_astt value, unsigned int idx, expr2tc idx_expr)
-    const override;
+  smt_astt update(
+    smt_solver_baset *ctx,
+    smt_astt value,
+    unsigned int idx,
+    const expr2tc &idx_expr) const override;
 
-  smt_astt project(smt_convt *ctx, unsigned int elem) const override;
+  smt_astt project(smt_solver_baset *ctx, unsigned int elem) const override;
 
   void dump() const override;
 };
 
-class cvc5_convt : public smt_convt,
+class cvc5_convt : public smt_solver_baset,
                    public tuple_iface,
                    public array_iface,
                    public fp_convt
@@ -36,10 +38,10 @@ public:
   cvc5::Term
   cvc5_tuple_update(const cvc5::Term &t, unsigned i, const cvc5::Term &newval);
 
-  smt_convt::resultt dec_solve() override;
+  smt_resultt dec_solve() override;
   const std::string solver_text() override;
 
-  bool get_bool(smt_astt a) override;
+  tvt get_bool(smt_astt a) override;
   BigInt get_bv(smt_astt a, bool is_signed) override;
   ieee_floatt get_fpbv(smt_astt a) override;
   expr2tc get_array_elem(smt_astt array, uint64_t index, const type2tc &subtype)
@@ -68,8 +70,6 @@ public:
   smt_astt mk_neg(smt_astt a) override;
   smt_astt mk_bvneg(smt_astt a) override;
   smt_astt mk_bvnot(smt_astt a) override;
-  smt_astt mk_bvnor(smt_astt a, smt_astt b) override;
-  smt_astt mk_bvnand(smt_astt a, smt_astt b) override;
   smt_astt mk_bvxor(smt_astt a, smt_astt b) override;
   smt_astt mk_bvor(smt_astt a, smt_astt b) override;
   smt_astt mk_bvand(smt_astt a, smt_astt b) override;
@@ -134,6 +134,7 @@ public:
   smt_astt mk_smt_fpbv_sub(smt_astt lhs, smt_astt rhs, smt_astt rm) override;
   smt_astt mk_smt_fpbv_mul(smt_astt lhs, smt_astt rhs, smt_astt rm) override;
   smt_astt mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm) override;
+  smt_astt mk_smt_fpbv_rem(smt_astt lhs, smt_astt rhs) override;
   smt_astt mk_smt_nearbyint_from_float(smt_astt from, smt_astt rm) override;
   smt_astt mk_smt_fpbv_sqrt(smt_astt rd, smt_astt rm) override;
 
@@ -159,6 +160,10 @@ public:
     const smt_sort *s,
     smt_sortt array_subtype) override;
   smt_astt mk_smt_symbol(const std::string &name, const smt_sort *s) override;
+  smt_astt mk_smt_uninterpreted_function(
+    const std::string &name,
+    const std::vector<smt_astt> &args,
+    smt_sortt rangesort) override;
   smt_astt mk_extract(smt_astt a, unsigned int high, unsigned int low) override;
   smt_astt mk_sign_ext(smt_astt a, unsigned int topwidth) override;
   smt_astt mk_zero_ext(smt_astt a, unsigned int topwidth) override;
@@ -202,6 +207,10 @@ public:
   cvc5::Solver slv;
 
   symtabt symtable;
+
+  /** Uninterpreted-function constants, keyed by name, so every application
+   *  shares one declaration and the solver enforces functional congruence. */
+  std::unordered_map<std::string, cvc5::Term> uf_decls;
 };
 
 #endif /* _ESBMC_SOLVERS_CVC_CVC_CONV_H_ */

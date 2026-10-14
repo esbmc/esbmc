@@ -1,10 +1,10 @@
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <solvers/smt/tuple/smt_tuple.h>
 #include <solvers/smt/tuple/smt_tuple_node.h>
 #include <solvers/smt/tuple/smt_tuple_node_ast.h>
 #include <sstream>
-#include <util/base_type.h>
-#include <util/c_types.h>
+#include <util/expr/base_type.h>
+#include <util/lang/c_types.h>
 
 /* An optimization of the tuple flattening technique found in smt_tuple_sym.cpp,
  * where we separate out tuple elements into their own variables without any
@@ -13,20 +13,27 @@
  *
  * Arrays are handled by using the array flattener API */
 
-void tuple_node_smt_ast::make_free(smt_convt *ctx)
+void tuple_node_smt_ast::make_free(smt_solver_baset *ctx)
 {
   if (elements.size() != 0)
     return;
 
-  const struct_union_data &strct = ctx->get_type_def(sort->get_tuple_type());
+  const std::vector<type2tc> &members =
+    struct_union_members(sort->get_tuple_type());
+  const std::vector<irep_idt> &member_names =
+    struct_union_member_names(sort->get_tuple_type());
 
-  elements.resize(strct.members.size());
+  elements.resize(members.size());
+  // A member-less tuple leaves the vector empty, so the early return above
+  // never latches and this would re-register on every call.
+  if (!elements.empty() && ctx->ctx_level > creation_ctx_level)
+    flat.note_elements_populated(this);
 
   unsigned int i = 0;
-  for (auto const &it : strct.members)
+  for (auto const &it : members)
   {
     smt_sortt newsort = ctx->convert_sort(it);
-    std::string fieldname = name + "." + strct.member_names[i].as_string();
+    std::string fieldname = name + "." + member_names[i].as_string();
 
     if (is_tuple_ast_type(it))
     {
@@ -39,10 +46,10 @@ void tuple_node_smt_ast::make_free(smt_convt *ctx)
         ctx->convert_sort(ctx->get_flattened_array_subtype(it));
       elements[i] = flat.array_conv.mk_array_symbol(newname, newsort, subsort);
     }
-    else if (is_array_type(it))
+    else if (is_array_type(it) || is_vector_type(it))
     {
       elements[i] = ctx->mk_fresh(
-        newsort, fieldname, ctx->convert_sort(get_array_subtype(it)));
+        newsort, fieldname, ctx->convert_sort(array_or_vector_subtype(it)));
     }
     else
     {
@@ -53,8 +60,10 @@ void tuple_node_smt_ast::make_free(smt_convt *ctx)
   }
 }
 
-smt_astt
-tuple_node_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
+smt_astt tuple_node_smt_ast::ite(
+  smt_solver_baset *ctx,
+  smt_astt cond,
+  smt_astt falseop) const
 {
   // So - we need to generate an ite between true_val and false_val, that gets
   // switched on based on cond, and store the output into result. Do this by
@@ -71,11 +80,12 @@ tuple_node_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
   const_cast<tuple_node_smt_ast *>(true_val)->make_free(ctx);
   const_cast<tuple_node_smt_ast *>(false_val)->make_free(ctx);
 
-  const struct_union_data &data = ctx->get_type_def(sort->get_tuple_type());
-  result_sym->elements.resize(data.members.size());
+  const std::vector<type2tc> &members =
+    struct_union_members(sort->get_tuple_type());
+  result_sym->elements.resize(members.size());
 
   // Iterate through each field and encode an ite.
-  for (unsigned int i = 0; i < data.members.size(); i++)
+  for (unsigned int i = 0; i < members.size(); i++)
   {
     smt_astt truepart = true_val->project(ctx, i);
     smt_astt falsepart = false_val->project(ctx, i);
@@ -88,7 +98,7 @@ tuple_node_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
   return result_sym;
 }
 
-void tuple_node_smt_ast::assign(smt_convt *ctx, smt_astt sym) const
+void tuple_node_smt_ast::assign(smt_solver_baset *ctx, smt_astt sym) const
 {
   // If we're being assigned to something, populate all our vars first
   const_cast<tuple_node_smt_ast *>(this)->make_free(ctx);
@@ -112,27 +122,38 @@ void tuple_node_smt_ast::assign(smt_convt *ctx, smt_astt sym) const
 
   // Just copy across element data.
   destination->elements = elements;
+
+  // convert_assign's LHS is an SSA symbol converted at the level its defining
+  // assignment is encoded at, so the destination is expected to be
+  // current-level and this registration to be redundant -- measured over 2133
+  // CORE tests that push and pop, where it never fired. Kept because nothing
+  // enforces that invariant, and the cost of it breaking silently is the
+  // use-after-free this whole change is about.
+  assert(destination->creation_ctx_level == ctx->ctx_level);
+  if (ctx->ctx_level > destination->creation_ctx_level)
+    flat.note_elements_populated(destination);
 }
 
-smt_astt tuple_node_smt_ast::eq(smt_convt *ctx, smt_astt other) const
+smt_astt tuple_node_smt_ast::eq(smt_solver_baset *ctx, smt_astt other) const
 {
   const_cast<tuple_node_smt_ast *>(to_tuple_node_ast(other))->make_free(ctx);
 
-  // We have two tuple_node_smt_asts and need to create a boolean ast representing
-  // their equality: iterate over all their members, compute an equality for
-  // each of them, and then combine that into a final ast.
+  // We have two tuple_node_smt_asts and need to create a boolean ast
+  // representing their equality: iterate over all their members, compute an
+  // equality for each of them, and then combine that into a final ast.
   tuple_node_smt_astt ta = this;
   tuple_node_smt_astt tb = to_tuple_node_ast(other);
 
-  const struct_union_data &data = ctx->get_type_def(sort->get_tuple_type());
+  const std::vector<type2tc> &members =
+    struct_union_members(sort->get_tuple_type());
 
-  smt_convt::ast_vec eqs;
-  eqs.reserve(data.members.size());
+  smt_solver_baset::ast_vec eqs;
+  eqs.reserve(members.size());
 
   assert(sort->get_tuple_type() == other->sort->get_tuple_type());
 
   // Iterate through each field and encode an equality.
-  for (unsigned int i = 0; i < data.members.size(); i++)
+  for (unsigned int i = 0; i < members.size(); i++)
   {
     smt_astt side1 = ta->project(ctx, i);
     smt_astt side2 = tb->project(ctx, i);
@@ -144,10 +165,10 @@ smt_astt tuple_node_smt_ast::eq(smt_convt *ctx, smt_astt other) const
 }
 
 smt_astt tuple_node_smt_ast::update(
-  smt_convt *ctx,
+  smt_solver_baset *ctx,
   smt_astt value,
   unsigned int idx,
-  expr2tc idx_expr [[maybe_unused]] /*ndebug*/) const
+  const expr2tc &idx_expr [[maybe_unused]] /*ndebug*/) const
 {
   // 2C.2d: struct-of-arrays array store.  A non-nil idx_expr on a
   // tuple_node whose elements are solver-native arrays is an array
@@ -172,21 +193,33 @@ smt_astt tuple_node_smt_ast::update(
     return result;
   }
 
+  smt_solver_baset::ast_vec eqs;
   assert(
     is_nil_expr(idx_expr) &&
     "Can't apply non-constant index update to "
     "structure");
 
+  // Populate our own fields before copying them across: an unpopulated source
+  // copies an empty vector, and make_free() below then invents fresh
+  // unconstrained variables for the fields the update does not touch, so
+  // member(with(s, a, v), b) loses its link to s.b. Pinned by
+  // unit/solvers/tuple_node_update.test.cpp.
+  const_cast<tuple_node_smt_ast *>(this)->make_free(ctx);
+
+  // Same disagreement as in project(), but this one writes. Checked before the
+  // result is built so a rejected update allocates nothing.
+  check_tuple_field(idx, elements.size(), sort->get_tuple_type());
+
   std::string name = ctx->mk_fresh_name("tuple_update::") + ".";
   tuple_node_smt_ast *result = new tuple_node_smt_ast(flat, ctx, sort, name);
   result->elements = elements;
-  result->make_free(ctx);
   result->elements[idx] = value;
 
   return result;
 }
 
-smt_astt tuple_node_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
+smt_astt
+tuple_node_smt_ast::select(smt_solver_baset *ctx, const expr2tc &idx) const
 {
   // 2C.2d: struct-of-arrays array select.  A select on a tuple_node
   // whose elements are solver-native arrays is an array index into the
@@ -211,7 +244,8 @@ smt_astt tuple_node_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
   abort();
 }
 
-smt_astt tuple_node_smt_ast::project(smt_convt *ctx, unsigned int idx) const
+smt_astt
+tuple_node_smt_ast::project(smt_solver_baset *ctx, unsigned int idx) const
 {
   // Create an AST representing the i'th field of the tuple a. This means we
   // have to open up the (tuple symbol) a, tack on the field name to the end
@@ -223,9 +257,12 @@ smt_astt tuple_node_smt_ast::project(smt_convt *ctx, unsigned int idx) const
   // actually allocate all our pieces of ASTs as variables.
   const_cast<tuple_node_smt_ast *>(this)->make_free(ctx);
 
-#ifndef NDEBUG
-  const struct_union_data &data = ctx->get_type_def(sort->get_tuple_type());
-  assert(idx < data.members.size() && "Out-of-bounds tuple element accessed");
-#endif
+  // Bounded by `elements` rather than by the sort's member list, because that
+  // is the vector indexed below. smt_solver_baset::convert_member takes this
+  // index from the *expression's* struct type while the AST carries the sort
+  // it was built from; where a frontend leaves the two disagreeing this read
+  // ran off the end and returned a garbage pointer.
+  check_tuple_field(idx, elements.size(), sort->get_tuple_type());
+
   return elements[idx];
 }

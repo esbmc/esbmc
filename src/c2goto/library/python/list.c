@@ -4,6 +4,25 @@
 #include <string.h>
 #include "python_types.h"
 
+int __python_scalar_eq_obj(
+  const PyObject *a,
+  const PyObject *b,
+  size_t num_type_id,
+  size_t bool_type_id);
+
+// Allocate a Python object instance. The frontend emits a call to this for
+// `ClassName(...)` so class instances get CPython reference semantics (a
+// pointer to a non-expiring object) and survive escaping their defining
+// function, instead of dangling as expired stack locals. This body is a
+// placeholder: symex intercepts the call (the __ESBMC_new_object handler in
+// goto_symext::run_intrinsic) and allocates a typed, non-expiring dynamic
+// object -- a single value, not an infinite array -- of the class struct
+// carried by the call's result pointer type.
+void *__ESBMC_new_object()
+{
+  return 0;
+}
+
 // TODO: There is no such a thing as a generic type in python.
 static PyType __ESBMC_generic_type;
 static PyType __ESBMC_list_type;
@@ -15,6 +34,27 @@ static PyType __ESBMC_list_type;
 static double __ESBMC_float_buf[__ESBMC_FLOAT_BUF_SIZE];
 static size_t __ESBMC_float_buf_idx = 0;
 
+// Set once a store changes an element's type, which the frontend's per-list
+// element type map does not see; its == fast path holds only while unset.
+bool __ESBMC_list_retyped = false;
+
+/* An 8-byte read of an object whose declared type is not known here. A packed
+ * struct has alignment 1, so forming this pointer is defined whatever the
+ * object's alignment -- a plain `uint64_t *` cast is not (C23 6.3.2.3p7) --
+ * and may_alias lets the read see an object of any effective type, which
+ * C23 6.5.1p7 otherwise allows only for character types. ESBMC likewise drops
+ * its alignment claim on a packed member, and that claim used to fire ahead of
+ * the invalid-pointer dereference behind #4780 and hide it. */
+struct __attribute__((packed, may_alias)) __ESBMC_unaligned_u64
+{
+  uint64_t v;
+};
+
+static inline uint64_t __ESBMC_load_u64(const void *p)
+{
+  return ((const struct __ESBMC_unaligned_u64 *)p)->v;
+}
+
 // Optimized value comparison - avoids memcmp loop unrolling for common sizes
 static inline bool
 __ESBMC_values_equal(const void *a, const void *b, size_t size)
@@ -24,18 +64,22 @@ __ESBMC_values_equal(const void *a, const void *b, size_t size)
   // Direct comparison for common sizes - no loop needed
   // Python frontend maps: int/float -> 8 bytes, bool -> 1 byte
   if (size == 8)
-    return *(const uint64_t *)a == *(const uint64_t *)b;
+    return __ESBMC_load_u64(a) == __ESBMC_load_u64(b);
   if (size == 1)
-    return *(const uint8_t *)a == *(const uint8_t *)b;
+    return *(const unsigned char *)a == *(const unsigned char *)b;
   if (size == 16)
-    return ((const uint64_t *)a)[0] == ((const uint64_t *)b)[0] &&
-           ((const uint64_t *)a)[1] == ((const uint64_t *)b)[1];
-  // Fallback for larger/unusual sizes
+    return __ESBMC_load_u64(a) == __ESBMC_load_u64(b) &&
+           __ESBMC_load_u64((const unsigned char *)a + 8) ==
+             __ESBMC_load_u64((const unsigned char *)b + 8);
+  // Fallback for larger/unusual sizes. A word-wise compare loop here would
+  // unwind --unwind times on every symbolic-size comparison, with no benefit
+  // to any converging test (large-struct compares only occur in tests that
+  // stay KNOWNBUG on the symbolic-list scalability wall, #5121).
   return memcmp(a, b, size) == 0;
 }
 
-// Default maximum nesting depth to prevent state explosion during symbolic execution.
-// This can be overridden via --python-list-compare-depth option.
+// Default maximum nesting depth to prevent state explosion during symbolic
+// execution. This can be overridden via --python-list-compare-depth option.
 #define __ESBMC_LIST_DEFAULT_DEPTH 4
 
 // Maximum physical stack size for list comparison (prevents buffer overflow).
@@ -58,13 +102,36 @@ PyListObject *__ESBMC_list_create()
 
 size_t __ESBMC_list_size(const PyListObject *l)
 {
-  return l ? l->size : 0;
+  // Assert the null case rather than folding it to 0 with a conditional: a
+  // `l ? l->size : 0` return does not constant-propagate even when l is a
+  // concrete address, so every loop bounded by len() -- sum(), max(), the
+  // slice lowering -- unwound to --unwind instead of the list's own length
+  // (docs/roadmap/symex-dead-work-cost-plan.md W4). An assert keeps the null
+  // case reported, which is closer to CPython's TypeError than silently
+  // answering 0.
+  __ESBMC_assert(l != NULL, "TypeError: object of this type has no len()");
+  // The claim above reports the null case; without also assuming it away the
+  // read below still runs on the failing path (--multi-property keeps going
+  // past a violated claim), dereferencing NULL for a garbage size and a
+  // spurious out-of-bounds report downstream.
+  __ESBMC_assume(l != NULL);
+  return l->size;
 }
 
 // ptr_free=1: payload has no pointer field, so we can reinterpret it as
 // uint64_t and use the 16/24/32-byte fast paths below. Pass 0 for opaque or
 // pointer-bearing structs — writing through a uint64_t lvalue would lose the
-// pointer object under ESBMC's byte-encoding.
+// pointer object under ESBMC's byte-encoding. ptr_free=2: the payload is one
+// pointer (a nested list or an object reference), copied as a pointer so the
+// element still names its object; an 8-byte integer copy would rebuild it
+// from bytes and every later read through it would range over all objects.
+// The storage of a pointer payload. A struct, not a bare `void *`, so the cell
+// is an object of its own kind and a SAME-OBJECT test between two cells folds.
+struct __ESBMC_pointer_cell
+{
+  void *ptr;
+};
+
 static inline void *__ESBMC_copy_value(
   const void *value,
   size_t size,
@@ -94,10 +161,26 @@ static inline void *__ESBMC_copy_value(
     return (void *)&__ESBMC_float_buf[idx];
   }
 
+  if (ptr_free == 2 && size == sizeof(void *))
+  {
+    struct __ESBMC_pointer_cell *cell =
+      __ESBMC_alloca(sizeof(struct __ESBMC_pointer_cell));
+    cell->ptr = *(void *const *)value;
+    return cell;
+  }
+
   void *copied = __ESBMC_alloca(size);
 
-  // 8-byte-aligned fast paths for scalars and small tuple keys.
-  // Avoids memcpy's per-byte loop which blows up incremental-bmc.
+  // Branch-free 8-byte-aligned fast paths for the common small sizes. These
+  // avoid memcpy's per-byte loop, which blows up incremental-bmc (size unwind
+  // iterations per copied element) and, under a tight --unwind, trips the copy
+  // loop's unwinding assertion (dict_tuple_key copies a 3-int tuple key at
+  // --unwind 3, #4805). Larger payloads fall through to memcpy: a word-wise
+  // loop here would unwind --unwind times on every call where size is symbolic
+  // (e.g. the list_slice_assign snapshot loop), on top of memcpy's own loop,
+  // pushing list-slice-assign past the CI per-test cap for no benefit to any
+  // converging test (large-struct copies only appear in tests that stay
+  // KNOWNBUG on the symbolic-list scalability wall, #5121).
   if (size == 8)
     *(uint64_t *)copied = *(const uint64_t *)value;
   else if (size == 16)
@@ -105,13 +188,13 @@ static inline void *__ESBMC_copy_value(
     ((uint64_t *)copied)[0] = ((const uint64_t *)value)[0];
     ((uint64_t *)copied)[1] = ((const uint64_t *)value)[1];
   }
-  else if (ptr_free && size == 24)
+  else if (ptr_free == 1 && size == 24)
   {
     ((uint64_t *)copied)[0] = ((const uint64_t *)value)[0];
     ((uint64_t *)copied)[1] = ((const uint64_t *)value)[1];
     ((uint64_t *)copied)[2] = ((const uint64_t *)value)[2];
   }
-  else if (ptr_free && size == 32)
+  else if (ptr_free == 1 && size == 32)
   {
     ((uint64_t *)copied)[0] = ((const uint64_t *)value)[0];
     ((uint64_t *)copied)[1] = ((const uint64_t *)value)[1];
@@ -149,6 +232,63 @@ bool __ESBMC_list_push(
   return true;
 }
 
+// Copy a tagged scalar's payload. `size` may be symbolic across branches (e.g.
+// int vs str), so this uses a bounded loop rather than __ESBMC_copy_value's
+// memcpy fallback, which never finishes unwinding over a symbolic n. A float
+// payload goes through __ESBMC_copy_value instead, so the element keeps this
+// library's invariant that a float's value lives in __ESBMC_float_buf at
+// float_idx -- __ESBMC_list_push_object and __ESBMC_list_push_shallow_sz both
+// read it back that way.
+static void *__ESBMC_copy_tagged_value(
+  const void *value,
+  size_t type_id,
+  size_t size,
+  size_t float_type_id,
+  size_t *out_float_idx)
+{
+  *out_float_idx = 0;
+
+  if (size == 8 && float_type_id != 0 && type_id == float_type_id)
+    return __ESBMC_copy_value(
+      value, size, type_id, float_type_id, out_float_idx, 0);
+
+  __ESBMC_assert(
+    size <= ESBMC_PY_STRNLEN_BOUND,
+    "tagged list element exceeds the modelled bound");
+
+  void *copied = __ESBMC_alloca(size);
+  for (size_t i = 0; i < ESBMC_PY_STRNLEN_BOUND; ++i)
+  {
+    if (i >= size)
+      break;
+    ((char *)copied)[i] = ((const char *)value)[i];
+  }
+  return copied;
+}
+
+// Push an already-tagged scalar's own value/type_id/size.
+bool __ESBMC_list_push_tagged(
+  PyListObject *l,
+  const void *value,
+  size_t type_id,
+  size_t size,
+  size_t float_type_id)
+{
+  assert(l != NULL);
+
+  size_t float_idx = 0;
+  void *copied =
+    __ESBMC_copy_tagged_value(value, type_id, size, float_type_id, &float_idx);
+
+  PyObject *item = &l->items[l->size];
+  item->value = copied;
+  item->float_idx = float_idx;
+  item->type_id = type_id;
+  item->size = size;
+  l->size++;
+  return true;
+}
+
 bool __ESBMC_list_push_object(
   PyListObject *l,
   PyObject *o,
@@ -159,7 +299,8 @@ bool __ESBMC_list_push_object(
   assert(o != NULL);
   // For float elements, read from the global float_buf array via a local temp.
   // This avoids the expired-pointer issue of loop-scoped $list_elem symbols,
-  // and the local temp ensures the pointer is "fresh" (not stored void*) in --ir.
+  // and the local temp ensures the pointer is "fresh" (not stored void*) in
+  // --ir.
   if (o->size == 8 && float_type_id != 0 && o->type_id == float_type_id)
   {
     double temp = __ESBMC_float_buf[o->float_idx];
@@ -168,6 +309,87 @@ bool __ESBMC_list_push_object(
   }
   return __ESBMC_list_push(
     l, o->value, o->type_id, o->size, float_type_id, ptr_free);
+}
+
+// Per-element append for list copy / assignment / slice / concat that handles
+// elements stored by reference correctly (esbmc/esbmc#5102).
+//
+// An element whose payload is a pointer to a shared object must keep that
+// pointer, not have its pointee byte-copied. Two such elements exist:
+//   * nested lists — the inner PyListObject* is stored in `value`
+//     (type_id == list_type_id);
+//   * pointer-only payloads stored with size == 0 — e.g. nested dicts inserted
+//     via __ESBMC_list_push_dict_ptr (value holds the dict*), and None
+//     (value == NULL).
+// For these we copy the PyObject record verbatim, preserving the pointer. The
+// generic byte-copy would run __ESBMC_copy_value with size == 0 (alloca(0) +
+// memcpy of 0 bytes) and drop the stored pointer, so the copied list would read
+// garbage. Sharing the reference also matches Python's shallow-copy semantics:
+// nested containers are shared, not deep-copied.
+//
+// Scalar elements (size > 0) must NOT share their buffer: Python subscript
+// assignment (l[i] = x) writes through the element's value pointer in place, so
+// two lists sharing a scalar buffer would alias. Scalars therefore keep the
+// independent byte-copy via __ESBMC_list_push_object.
+// Size-aware core: elem_size is the statically-known scalar element byte size
+// (0 if unknown). When known, the scalar copy goes straight to
+// __ESBMC_list_push with the constant size, so __ESBMC_copy_value takes its
+// branch-free fast path instead of the symbolic o->size memcpy loop. elem_size
+// == 0 reproduces the original behaviour exactly (copy o->size bytes), so a
+// missing size is never wrong.
+static bool __ESBMC_list_push_shallow_sz(
+  PyListObject *l,
+  PyObject *o,
+  size_t list_type_id,
+  size_t elem_size,
+  size_t float_type_id)
+{
+  assert(l != NULL);
+  assert(o != NULL);
+  if (o->size == 0 || (list_type_id != 0 && o->type_id == list_type_id))
+  {
+    l->items[l->size] = *o;
+    l->size++;
+    return true;
+  }
+  if (elem_size != 0)
+    return __ESBMC_list_push(
+      l, o->value, o->type_id, elem_size, float_type_id, 0);
+  return __ESBMC_list_push_object(l, o, float_type_id, 0);
+}
+
+// Shallow append for a list of tagged scalars. Their payload width is
+// per-element and symbolic after a branch join, and item->value points at the
+// payload rather than at the PyObject wrapper, so neither the wrapper's static
+// width nor an o->size memcpy is usable here (#7716). Reuses the bounded copy.
+bool __ESBMC_list_push_shallow_tagged(
+  PyListObject *l,
+  PyObject *o,
+  size_t list_type_id,
+  size_t float_type_id)
+{
+  assert(l != NULL);
+  assert(o != NULL);
+  if (o->size == 0 || (list_type_id != 0 && o->type_id == list_type_id))
+  {
+    l->items[l->size] = *o;
+    l->size++;
+    return true;
+  }
+  return __ESBMC_list_push_tagged(
+    l, o->value, o->type_id, o->size, float_type_id);
+}
+
+// elem_size is threaded straight to the size-aware core above: the slice
+// lowering knows the source list's element width, and passing it keeps the
+// per-element copy off memcpy's byte loop. 0 keeps the previous behaviour.
+bool __ESBMC_list_push_shallow(
+  PyListObject *l,
+  PyObject *o,
+  size_t list_type_id,
+  size_t elem_size)
+{
+  return __ESBMC_list_push_shallow_sz(l, o, list_type_id, elem_size, 0);
 }
 
 // Store a dict pointer directly in the list without byte-copying.
@@ -183,11 +405,31 @@ bool __ESBMC_list_push_dict_ptr(PyListObject *l, void *dict_ptr, size_t type_id)
   return true;
 }
 
+/* The length to compare one element over: the width the frontend recorded for
+ * every element of both lists when it had one, else the element's own size.
+ * A read of o->size is symbolic under a loop-carried index, which leaves
+ * memcmp's byte loop to unwind unboundedly -- even on a branch that is only
+ * explored and never taken (#7691). */
+static inline size_t __ESBMC_elem_cmp_size(const PyObject *o, size_t elem_size)
+{
+  return (elem_size != 0) ? elem_size : o->size;
+}
+
+// max_depth, or the default when it is 0, capped at the physical stack size.
+static inline size_t __ESBMC_list_eq_depth_limit(size_t max_depth)
+{
+  size_t depth_limit = max_depth > 0 ? max_depth : __ESBMC_LIST_DEFAULT_DEPTH;
+  return depth_limit > __ESBMC_LIST_MAX_STACK ? __ESBMC_LIST_MAX_STACK
+                                              : depth_limit;
+}
+
 bool __ESBMC_list_eq(
   const PyListObject *l1,
   const PyListObject *l2,
   size_t list_type_id,
-  size_t max_depth)
+  size_t max_depth,
+  size_t float_type_id,
+  size_t elem_size)
 {
   // Quick checks
   if (!l1 || !l2)
@@ -197,43 +439,40 @@ bool __ESBMC_list_eq(
   if (l1->size != l2->size)
     return false;
 
-  // Use max_depth or default if 0, but cap at physical stack size
-  size_t depth_limit = max_depth > 0 ? max_depth : __ESBMC_LIST_DEFAULT_DEPTH;
-  if (depth_limit > __ESBMC_LIST_MAX_STACK)
-    depth_limit = __ESBMC_LIST_MAX_STACK;
+  const size_t depth_limit = __ESBMC_list_eq_depth_limit(max_depth);
 
-  // Use explicit stack to avoid recursive function calls
-  // This prevents state explosion from recursive unrolling
+  // An explicit stack rather than recursion keeps symex from unrolling a
+  // recursive call. The pair being compared lives in scalars and only the
+  // suspended outer pairs go on the stack: a read of the stack arrays does
+  // not constant-propagate once a pointer stored in them is not a literal
+  // address, so a flat list compared through them lost its object and every
+  // element width became symbolic.
   const PyListObject *stack_a[__ESBMC_LIST_MAX_STACK];
   const PyListObject *stack_b[__ESBMC_LIST_MAX_STACK];
   size_t stack_idx[__ESBMC_LIST_MAX_STACK];
   int top = 0;
 
-  // Initialize with first list pair
-  stack_a[0] = l1;
-  stack_b[0] = l2;
-  stack_idx[0] = 0;
-  top = 1;
+  const PyListObject *cur_a = l1;
+  const PyListObject *cur_b = l2;
+  size_t idx = 0;
 
-  while (top > 0)
+  while (1)
   {
-    int cur = top - 1;
-    const PyListObject *cur_a = stack_a[cur];
-    const PyListObject *cur_b = stack_b[cur];
-    size_t idx = stack_idx[cur];
-
-    // Finished comparing this list pair?
+    // Finished comparing this list pair? Resume the enclosing one.
     if (idx >= cur_a->size)
     {
+      if (top == 0)
+        break;
       top--;
+      cur_a = stack_a[top];
+      cur_b = stack_b[top];
+      idx = stack_idx[top];
       continue;
     }
 
-    // Advance index for next iteration
-    stack_idx[cur] = idx + 1;
-
     const PyObject *a = &cur_a->items[idx];
     const PyObject *b = &cur_b->items[idx];
+    idx++;
 
     // Same pointer => elements equal
     if (a->value == b->value)
@@ -253,7 +492,35 @@ bool __ESBMC_list_eq(
     {
       // size == 0 means a dict pointer or None element — stored by pointer
       // identity, not byte content, so cross-type-id comparison is unsound.
-      if (a->size == 0 || !__ESBMC_values_equal(a->value, b->value, a->size))
+      if (a->size == 0)
+        return false;
+
+      // int-vs-float: Python compares numerically (1 == 1.0), but the two
+      // store different bit patterns, so a byte compare would wrongly differ.
+      // Triggered when exactly one side is a float (sizes already match here,
+      // and float/int elements are both 8 bytes). float_type_id is derived by
+      // the frontend from top-level element types only, so this numeric path
+      // does not reach nested mixed int/float lists; like list_lt, the int side
+      // is widened to double, so |int| > 2^53 loses precision vs CPython.
+      if (
+        float_type_id != 0 && a->size == 8 &&
+        (a->type_id == float_type_id) != (b->type_id == float_type_id))
+      {
+        double av = (a->type_id == float_type_id)
+                      ? *(const double *)a->value
+                      : (double)*(const int64_t *)a->value;
+        double bv = (b->type_id == float_type_id)
+                      ? *(const double *)b->value
+                      : (double)*(const int64_t *)b->value;
+        if (av != bv)
+          return false;
+        continue;
+      }
+
+      // The sizes were compared equal above, so this is the same length the
+      // primitive path below uses.
+      if (!__ESBMC_values_equal(
+            a->value, b->value, __ESBMC_elem_cmp_size(a, elem_size)))
         return false;
       continue;
     }
@@ -273,10 +540,11 @@ bool __ESBMC_list_eq(
         return false;
 
       // Check depth limit and report if exceeded
-      if ((size_t)top >= depth_limit)
+      if ((size_t)top + 1 >= depth_limit)
       {
         // List depth unwinding assertion: similar to loop unwinding assertions.
-        // If this fires, increase depth with --python-list-compare-depth option.
+        // If this fires, increase depth with --python-list-compare-depth
+        // option.
         __ESBMC_assert(
           0,
           "list comparison depth limit exceeded "
@@ -285,19 +553,48 @@ bool __ESBMC_list_eq(
         return false;
       }
 
-      // Push nested comparison onto stack
-      stack_a[top] = nested_a;
-      stack_b[top] = nested_b;
-      stack_idx[top] = 0;
+      // Suspend this pair and descend into the nested one
+      stack_a[top] = cur_a;
+      stack_b[top] = cur_b;
+      stack_idx[top] = idx;
       top++;
+      cur_a = nested_a;
+      cur_b = nested_b;
+      idx = 0;
     }
     else
     {
-      // Primitive comparison - use optimized version (no memcmp loop)
-      if (!__ESBMC_values_equal(a->value, b->value, a->size))
+      // Primitive comparison - use optimized version (no memcmp loop).
+      if (!__ESBMC_values_equal(
+            a->value, b->value, __ESBMC_elem_cmp_size(a, elem_size)))
         return false;
     }
   }
+  return true;
+}
+
+// Element-wise equality for two lists of tagged scalars (#7723). A tag only
+// ever holds a bool, int, float or str, so there is no nesting to walk and no
+// depth stack; and its payload width is symbolic after a branch join, so the
+// byte compare has to be the bounded one __python_scalar_eq_obj already
+// implements rather than __ESBMC_values_equal's memcmp fallback.
+bool __ESBMC_list_eq_tagged(
+  const PyListObject *l1,
+  const PyListObject *l2,
+  size_t num_type_id,
+  size_t bool_type_id)
+{
+  if (!l1 || !l2)
+    return false;
+  if (__ESBMC_same_object(l1, l2))
+    return true;
+  if (l1->size != l2->size)
+    return false;
+
+  for (size_t i = 0; i < l1->size; ++i)
+    if (!__python_scalar_eq_obj(
+          &l1->items[i], &l2->items[i], num_type_id, bool_type_id))
+      return false;
   return true;
 }
 
@@ -385,6 +682,9 @@ bool __ESBMC_list_set_at(
   void *copied_value = __ESBMC_copy_value(
     value, type_size, type_id, float_type_id, &float_idx, ptr_free);
 
+  if (l->items[index].type_id != type_id)
+    __ESBMC_list_retyped = true;
+
   // Update the element at the given index
   l->items[index].value = copied_value;
   l->items[index].float_idx = float_idx;
@@ -396,15 +696,28 @@ bool __ESBMC_list_set_at(
 
 bool __ESBMC_list_insert(
   PyListObject *l,
-  size_t index,
+  int64_t index,
   const void *value,
   size_t type_id,
   size_t type_size,
   size_t float_type_id,
   int ptr_free)
 {
-  // If index is beyond the end, just append
-  if (index >= l->size)
+  // Normalize a Python insert index: a negative index counts from the end and
+  // the result is clamped to [0, size]. insert() never raises for an
+  // out-of-range index (CPython): l.insert(-1, x) inserts before the last
+  // element, l.insert(len, x)/beyond appends, and a too-negative index clamps
+  // to the front.
+  int64_t n = (int64_t)l->size;
+  if (index < 0)
+  {
+    index += n;
+    if (index < 0)
+      index = 0;
+  }
+
+  // If index is at or beyond the end, just append.
+  if (index >= n)
     return __ESBMC_list_push(
       l, value, type_id, type_size, float_type_id, ptr_free);
 
@@ -425,6 +738,46 @@ bool __ESBMC_list_insert(
   l->items[index].float_idx = float_idx;
   l->items[index].type_id = type_id;
   l->items[index].size = type_size;
+  l->size++;
+  return true;
+}
+
+// Insert variant of __ESBMC_list_push_tagged. Index normalisation matches
+// __ESBMC_list_insert.
+bool __ESBMC_list_insert_tagged(
+  PyListObject *l,
+  int64_t index,
+  const void *value,
+  size_t type_id,
+  size_t size,
+  size_t float_type_id)
+{
+  int64_t n = (int64_t)l->size;
+  if (index < 0)
+  {
+    index += n;
+    if (index < 0)
+      index = 0;
+  }
+
+  if (index >= n)
+    return __ESBMC_list_push_tagged(l, value, type_id, size, float_type_id);
+
+  size_t float_idx = 0;
+  void *copied =
+    __ESBMC_copy_tagged_value(value, type_id, size, float_type_id, &float_idx);
+
+  size_t i = l->size;
+  while (i > (size_t)index)
+  {
+    l->items[i] = l->items[i - 1];
+    i--;
+  }
+
+  l->items[index].value = copied;
+  l->items[index].float_idx = float_idx;
+  l->items[index].type_id = type_id;
+  l->items[index].size = size;
   l->size++;
   return true;
 }
@@ -457,9 +810,113 @@ bool __ESBMC_list_contains(
   return false;
 }
 
+size_t __ESBMC_list_count(
+  const PyListObject *l,
+  const void *item,
+  size_t item_type_id,
+  size_t item_size)
+{
+  if (!l || !item)
+    return 0;
+
+  size_t cnt = 0;
+  size_t i = 0;
+  while (i < l->size)
+  {
+    const PyObject *elem = &l->items[i];
+    if (
+      elem->type_id == item_type_id && elem->size == item_size &&
+      __ESBMC_values_equal(elem->value, item, item_size))
+      ++cnt;
+    ++i;
+  }
+  return cnt;
+}
+
+size_t __ESBMC_list_index(
+  const PyListObject *l,
+  const void *item,
+  size_t item_type_id,
+  size_t item_size)
+{
+  if (!l || !item)
+    return 0;
+
+  size_t i = 0;
+  while (i < l->size)
+  {
+    const PyObject *elem = &l->items[i];
+    if (
+      elem->type_id == item_type_id && elem->size == item_size &&
+      __ESBMC_values_equal(elem->value, item, item_size))
+      return i;
+    ++i;
+  }
+  __ESBMC_assert(0, "ValueError: list.index(x): x not in list");
+  return 0;
+}
+
+size_t __ESBMC_list_index_range(
+  const PyListObject *l,
+  const void *item,
+  size_t item_type_id,
+  size_t item_size,
+  int64_t start,
+  int64_t end)
+{
+  if (!l || !item)
+    return 0;
+
+  // Normalize start/end like CPython slice bounds: a negative bound counts
+  // from the end, then start and end each clamp to [0, size]. The search
+  // covers l[start:end] for list.index(x, start[, end]).
+  int64_t n = (int64_t)l->size;
+  if (start < 0)
+  {
+    start += n;
+    if (start < 0)
+      start = 0;
+  }
+  if (start > n)
+    start = n;
+  if (end < 0)
+  {
+    end += n;
+    if (end < 0)
+      end = 0;
+  }
+  if (end > n)
+    end = n;
+
+  size_t i = (size_t)start;
+  while (i < (size_t)end)
+  {
+    const PyObject *elem = &l->items[i];
+    if (
+      elem->type_id == item_type_id && elem->size == item_size &&
+      __ESBMC_values_equal(elem->value, item, item_size))
+      return i;
+    ++i;
+  }
+  // Not found in l[start:end]. Return the SIZE_MAX sentinel so the frontend can
+  // raise a catchable ValueError (the dict KeyError / list.remove pattern);
+  // asserting here would be an uncatchable property violation instead.
+  return SIZE_MAX;
+}
+
 /* ---------- extend list ---------- */
 
-void __ESBMC_list_extend(PyListObject *l, const PyListObject *other)
+// elem_size: the statically-known element byte width from the frontend, used
+// as the copy length so __ESBMC_copy_value sees a compile-time constant and
+// takes its branch-free fast path. Without it the length is the symbolic field
+// read elem->size, which drops the copy into memcpy's per-byte loop and
+// unwinds it once per element (__ESBMC_list_store_elem threads the same
+// constant for the same reason, see above). 0 means the frontend could not
+// supply a width and reproduces the previous behaviour exactly.
+void __ESBMC_list_extend(
+  PyListObject *l,
+  const PyListObject *other,
+  size_t elem_size)
 {
   if (!l || !other)
     return;
@@ -469,8 +926,10 @@ void __ESBMC_list_extend(PyListObject *l, const PyListObject *other)
   {
     const PyObject *elem = &other->items[i];
 
-    void *copied_value = __ESBMC_alloca(elem->size);
-    memcpy(copied_value, elem->value, elem->size);
+    // Reuse the float-aware copier so the SMT model tracks size.
+    size_t copy_size = (elem_size != 0) ? elem_size : elem->size;
+    void *copied_value =
+      __ESBMC_copy_value(elem->value, copy_size, elem->type_id, 0, NULL, 0);
 
     l->items[l->size].value = copied_value;
     l->items[l->size].float_idx = elem->float_idx;
@@ -478,6 +937,33 @@ void __ESBMC_list_extend(PyListObject *l, const PyListObject *other)
     l->items[l->size].size = elem->size;
     l->size++;
 
+    ++i;
+  }
+}
+
+// Extend variant for a source list of tagged scalars: their payload width is
+// per-element and symbolic, so the elem_size above and __ESBMC_copy_value's
+// o->size fallback both overrun (#7716). Reuses the bounded copy.
+void __ESBMC_list_extend_tagged(
+  PyListObject *l,
+  const PyListObject *other,
+  size_t float_type_id)
+{
+  if (!l || !other)
+    return;
+
+  size_t i = 0;
+  while (i < other->size)
+  {
+    const PyObject *elem = &other->items[i];
+    if (elem->size == 0)
+    {
+      l->items[l->size] = *elem;
+      l->size++;
+    }
+    else
+      __ESBMC_list_push_tagged(
+        l, elem->value, elem->type_id, elem->size, float_type_id);
     ++i;
   }
 }
@@ -590,8 +1076,12 @@ bool __ESBMC_list_remove_at(PyListObject *l, size_t index)
 
 PyObject *__ESBMC_list_pop(PyListObject *l, int64_t index)
 {
+  // An uncaught IndexError ends the program, so a failed check also ends the
+  // path rather than reporting the reads past it.
   __ESBMC_assert(l != NULL, "IndexError: pop from empty list");
+  __ESBMC_assume(l != NULL);
   __ESBMC_assert(l->size > 0, "IndexError: pop from empty list");
+  __ESBMC_assume(l->size > 0);
 
   // Handle negative index or default (pop last element)
   size_t actual_index;
@@ -600,12 +1090,14 @@ PyObject *__ESBMC_list_pop(PyListObject *l, int64_t index)
     // Convert negative index to positive
     int64_t positive_index = (int64_t)l->size + index;
     __ESBMC_assert(positive_index >= 0, "IndexError: pop index out of range");
+    __ESBMC_assume(positive_index >= 0);
     actual_index = (size_t)positive_index;
   }
   else
     actual_index = (size_t)index;
 
   __ESBMC_assert(actual_index < l->size, "IndexError: pop index out of range");
+  __ESBMC_assume(actual_index < l->size);
 
   // Make a copy of the element to return before shifting
   PyObject *popped = __ESBMC_alloca(sizeof(PyObject));
@@ -632,7 +1124,8 @@ bool __ESBMC_dict_eq(
   const PyListObject *lhs_keys,
   const PyListObject *lhs_values,
   const PyListObject *rhs_keys,
-  const PyListObject *rhs_values)
+  const PyListObject *rhs_values,
+  size_t float_type_id)
 {
   if (!lhs_keys || !lhs_values || !rhs_keys || !rhs_values)
     return false;
@@ -684,7 +1177,24 @@ bool __ESBMC_dict_eq(
       const PyListObject *rhs_list =
         (rhs_value->size == 0) ? (const PyListObject *)rhs_value->value
                                : *(const PyListObject **)rhs_value->value;
-      if (!__ESBMC_list_eq(lhs_list, rhs_list, 0, 0))
+      if (!__ESBMC_list_eq(lhs_list, rhs_list, 0, 0, 0, 0))
+        return false;
+    }
+    else if (
+      float_type_id != 0 && lhs_value->size == 8 && rhs_value->size == 8 &&
+      (lhs_value->type_id == float_type_id) !=
+        (rhs_value->type_id == float_type_id))
+    {
+      // int-vs-float: Python compares numerically (1 == 1.0), but the two
+      // store different bit patterns, so a byte compare would wrongly
+      // differ. Mirrors __ESBMC_list_eq's int/float fallback.
+      const double lv = (lhs_value->type_id == float_type_id)
+                          ? *(const double *)lhs_value->value
+                          : (double)*(const int64_t *)lhs_value->value;
+      const double rv = (rhs_value->type_id == float_type_id)
+                          ? *(const double *)rhs_value->value
+                          : (double)*(const int64_t *)rhs_value->value;
+      if (lv != rv)
         return false;
     }
     else
@@ -738,6 +1248,212 @@ PyListObject *__ESBMC_list_copy(const PyListObject *l)
   return copied;
 }
 
+// Shallow copy with __ESBMC_list_push_shallow's sharing rules: scalar
+// elements get independent buffers, pointer-payload elements (nested
+// lists/dicts/None) keep their pointer record — i.e. Python's shallow-copy
+// semantics, unlike __ESBMC_list_copy whose generic byte-copy drops stored
+// pointers (#5102). Used for tuple(list) and list slice self-assignment.
+// elem_size: statically-known scalar element byte size (0 if unknown); passed
+// through to the per-element copy so it can take the constant-size fast path
+// instead of the symbolic o->size memcpy loop. 0 preserves prior behaviour.
+PyListObject *__ESBMC_list_copy_shallow_sz(
+  PyListObject *l,
+  size_t list_type_id,
+  size_t elem_size,
+  size_t float_type_id)
+{
+  __ESBMC_assert(l != NULL, "list_copy_shallow: list is null");
+  PyListObject *copied = __ESBMC_list_create();
+  size_t i = 0;
+  while (i < l->size)
+  {
+    __ESBMC_list_push_shallow_sz(
+      copied, &l->items[i], list_type_id, elem_size, float_type_id);
+    i++;
+  }
+  return copied;
+}
+
+PyListObject *__ESBMC_list_copy_shallow(PyListObject *l, size_t list_type_id)
+{
+  return __ESBMC_list_copy_shallow_sz(l, list_type_id, 0, 0);
+}
+
+// Store `o` into an existing slot, with __ESBMC_list_push_shallow's sharing
+// rules: pointer-payload elements (nested lists/dicts/None, size == 0 or
+// type_id == list_type_id) keep their pointer record; scalars get an
+// independent byte-copy so two slots never alias one buffer.
+// elem_size: the statically-known element byte size from the frontend (the
+// list's declared element type). The deep-copy path uses it as the copy
+// length so __ESBMC_copy_value sees a compile-time constant and takes its
+// branch-free fast path, instead of the symbolic-index field read o->size
+// (which forces memcpy's per-byte loop to unwind per element). Falls back to
+// o->size when the frontend could not supply a concrete size (elem_size == 0).
+static void __ESBMC_list_store_elem(
+  PyObject *slot,
+  const PyObject *o,
+  size_t list_type_id,
+  size_t elem_size)
+{
+  if (o->size == 0 || (list_type_id != 0 && o->type_id == list_type_id))
+  {
+    *slot = *o;
+    return;
+  }
+  size_t copy_size = (elem_size != 0) ? elem_size : o->size;
+  slot->value = __ESBMC_copy_value(o->value, copy_size, o->type_id, 0, NULL, 0);
+  slot->float_idx = o->float_idx;
+  slot->type_id = o->type_id;
+  slot->size = o->size;
+}
+
+// CPython slice assignment: l[lower:upper:step] = src.
+// has_lower/has_upper distinguish an absent bound from an explicit one;
+// present bounds follow slice.indices(len(l)) normalization (negative bounds
+// add len, then clamp). step == 1 may resize the list (replace [start, stop)
+// with all of src); any other step requires len(src) == slice length, as in
+// CPython, which raises ValueError otherwise (modelled as a failing assert,
+// like the step-zero case).
+bool __ESBMC_list_slice_assign(
+  PyListObject *l,
+  int64_t lower,
+  int has_lower,
+  int64_t upper,
+  int has_upper,
+  int64_t step,
+  const PyListObject *src,
+  size_t list_type_id,
+  size_t elem_size)
+{
+  __ESBMC_assert(
+    l != NULL && src != NULL, "list_slice_assign: list or source is null");
+  __ESBMC_assert(step != 0, "ValueError: slice step cannot be zero");
+
+  int64_t size = (int64_t)l->size;
+  int64_t lo_clamp = (step < 0) ? -1 : 0;
+  int64_t hi_clamp = (step < 0) ? size - 1 : size;
+
+  int64_t start;
+  if (has_lower)
+  {
+    start = (lower < 0) ? lower + size : lower;
+    if (start < lo_clamp)
+      start = lo_clamp;
+    if (start > hi_clamp)
+      start = hi_clamp;
+  }
+  else
+    start = (step < 0) ? size - 1 : 0;
+
+  int64_t stop;
+  if (has_upper)
+  {
+    stop = (upper < 0) ? upper + size : upper;
+    if (stop < lo_clamp)
+      stop = lo_clamp;
+    if (stop > hi_clamp)
+      stop = hi_clamp;
+  }
+  else
+    stop = (step < 0) ? -1 : size;
+
+  int64_t slicelen;
+  if (step < 0)
+    slicelen = (stop < start) ? (start - stop - 1) / (-step) + 1 : 0;
+  else
+    slicelen = (start < stop) ? (stop - start - 1) / step + 1 : 0;
+
+  int64_t srclen = (int64_t)src->size;
+
+  // Self-assignment (l[1:] = l): snapshot src before mutating l, with the
+  // same sharing rules as the writes below (see __ESBMC_list_copy_shallow).
+  // Pass elem_size so the snapshot's scalar copies take the constant-size fast
+  // path too (the writes below already do via __ESBMC_list_store_elem).
+  if (src == l)
+    src = __ESBMC_list_copy_shallow_sz(l, list_type_id, elem_size, 0);
+
+  if (step == 1)
+  {
+    if (srclen < slicelen)
+    {
+      // Shrink: shift the tail left to close the gap.
+      int64_t to = start + srclen;
+      int64_t from = start + slicelen;
+      while (from < size)
+        l->items[to++] = l->items[from++];
+    }
+    else if (srclen > slicelen)
+    {
+      // Grow: shift the tail right, last element first.
+      int64_t shift = srclen - slicelen;
+      int64_t i = size - 1;
+      while (i >= start + slicelen)
+      {
+        l->items[i + shift] = l->items[i];
+        i--;
+      }
+    }
+    l->size = (size_t)(size + srclen - slicelen);
+  }
+  else
+    __ESBMC_assert(
+      srclen == slicelen,
+      "ValueError: attempt to assign sequence of different size to extended "
+      "slice");
+
+  // For step != 1 a length mismatch has already failed the assert above;
+  // still bound the writes by the slice so no slot outside it is touched.
+  int64_t writelen = srclen;
+  if (step != 1 && slicelen < writelen)
+    writelen = slicelen;
+
+  int64_t k = 0;
+  int64_t idx = start;
+  while (k < writelen)
+  {
+    __ESBMC_list_store_elem(
+      &l->items[idx], &src->items[k], list_type_id, elem_size);
+    idx += step;
+    k++;
+  }
+
+  return true;
+}
+
+/* Find the first element equal to item and shift the tail left over it.
+ * Search and shift are kept in separate loops: nesting them makes symex
+ * emit one full shift per candidate index, which is quadratic in the list
+ * length (see #7361). */
+static bool __ESBMC_list_remove_first(
+  PyListObject *l,
+  const void *item,
+  size_t item_type_id,
+  size_t item_size)
+{
+  size_t i = 0;
+  while (i < l->size)
+  {
+    const PyObject *elem = &l->items[i];
+    if (
+      elem->type_id == item_type_id && elem->size == item_size &&
+      __ESBMC_values_equal(elem->value, item, item_size))
+      break;
+    i++;
+  }
+
+  if (i == l->size)
+    return false;
+
+  size_t j = i;
+  while (j < l->size - 1)
+  {
+    l->items[j] = l->items[j + 1];
+    j++;
+  }
+  l->size--;
+  return true;
+}
+
 bool __ESBMC_list_remove(
   PyListObject *l,
   const void *item,
@@ -746,32 +1462,7 @@ bool __ESBMC_list_remove(
 {
   __ESBMC_assert(l != NULL, "ValueError: list is null");
 
-  size_t i = 0;
-  while (i < l->size)
-  {
-    const PyObject *elem = &l->items[i];
-
-    if (elem->type_id == item_type_id && elem->size == item_size)
-    {
-      if (__ESBMC_values_equal(elem->value, item, item_size))
-      {
-        /* Shift elements left to fill the gap */
-        size_t j = i;
-        while (j < l->size - 1)
-        {
-          l->items[j] = l->items[j + 1];
-          j++;
-        }
-        l->size--;
-        return true; /* found and removed */
-      }
-    }
-    i++;
-  }
-
-  /* Item not found */
-  __ESBMC_assert(0, "ValueError: list.remove(x): x not in list");
-  return false;
+  return __ESBMC_list_remove_first(l, item, item_type_id, item_size);
 }
 
 /* set.add(elem) — append elem to the underlying list iff it is not
@@ -800,29 +1491,7 @@ bool __ESBMC_set_discard(
 {
   __ESBMC_assert(s != NULL, "ValueError: set is null");
 
-  size_t i = 0;
-  while (i < s->size)
-  {
-    const PyObject *elem = &s->items[i];
-
-    if (elem->type_id == item_type_id && elem->size == item_size)
-    {
-      if (__ESBMC_values_equal(elem->value, item, item_size))
-      {
-        size_t j = i;
-        while (j < s->size - 1)
-        {
-          s->items[j] = s->items[j + 1];
-          j++;
-        }
-        s->size--;
-        return true;
-      }
-    }
-    i++;
-  }
-
-  return false;
+  return __ESBMC_list_remove_first(s, item, item_type_id, item_size);
 }
 
 void __ESBMC_list_sort(PyListObject *l, int type_flag, uint64_t float_type_id)
@@ -850,45 +1519,71 @@ void __ESBMC_list_sort(PyListObject *l, int type_flag, uint64_t float_type_id)
 
       bool prev_greater = false;
 
-      if (prev->size == 8 && type_flag == 0)
+      // Dispatch on type_flag, not on prev->size. type_flag is a literal from
+      // the frontend, so symex decides it and never enters the arm it did not
+      // select; prev->size is a field read through the element array, which
+      // does not fold, so leading with it made every numeric comparison also
+      // symex the memcmp below and unwind its byte loop to --unwind (#7361's
+      // defect class, docs/roadmap/symex-dead-work-cost-plan.md §3).
+      if (type_flag != 2)
       {
-        // All-integer list: compare as int64_t.
-        // Stays entirely in integer arithmetic — fast for the SMT solver.
-        int64_t a = *(const int64_t *)prev->value;
-        int64_t b = *(const int64_t *)tmp.value;
-        prev_greater = (a > b);
-      }
-      else if (prev->size == 8 && type_flag == 1)
-      {
-        // All-float list: read bits directly as IEEE 754 double.
-        double a = *(const double *)prev->value;
-        double b = *(const double *)tmp.value;
-        prev_greater = (a > b);
-      }
-      else if (prev->size == 8 && type_flag == 3)
-      {
-        // Mixed int + float list.
-        // Per-element dispatch: check each element's own type_id.
-        //   float element → read bits as double
-        //   int element   → numeric cast (double)(int64_t)  [exact up to 2^53]
-        double a = (prev->type_id == float_type_id)
-                     ? (*(const double *)prev->value)
-                     : ((double)(*(const int64_t *)prev->value));
-        double b = (tmp.type_id == float_type_id)
-                     ? (*(const double *)tmp.value)
-                     : ((double)(*(const int64_t *)tmp.value));
-        prev_greater = (a > b);
+        // Numeric list: no lexicographic arm. The frontend widens every
+        // numeric element to 8 bytes (bools arrive as bool_as_long), so the
+        // size-1 arm below is currently unreachable and kept only because
+        // removing it is a separate change; a byte compare of two numbers
+        // would be wrong anyway, which is why the memcmp arm is gone.
+        if (prev->size == 8)
+        {
+          if (type_flag == 0)
+          {
+            // All-integer list: compare as int64_t.
+            // Stays entirely in integer arithmetic — fast for the SMT solver.
+            int64_t a = *(const int64_t *)prev->value;
+            int64_t b = *(const int64_t *)tmp.value;
+            prev_greater = (a > b);
+          }
+          else if (type_flag == 1)
+          {
+            // All-float list: read bits directly as IEEE 754 double.
+            double a = *(const double *)prev->value;
+            double b = *(const double *)tmp.value;
+            prev_greater = (a > b);
+          }
+          else if (type_flag == 3)
+          {
+            // Mixed int + float list.
+            // Per-element dispatch: check each element's own type_id.
+            //   float element → read bits as double
+            //   int element   → numeric cast (double)(int64_t) [exact to 2^53]
+            double a = (prev->type_id == float_type_id)
+                         ? (*(const double *)prev->value)
+                         : ((double)(*(const int64_t *)prev->value));
+            double b = (tmp.type_id == float_type_id)
+                         ? (*(const double *)tmp.value)
+                         : ((double)(*(const int64_t *)tmp.value));
+            prev_greater = (a > b);
+          }
+        }
+        else if (prev->size == 1)
+        {
+          // bool / single-byte
+          uint8_t a = *(const uint8_t *)prev->value;
+          uint8_t b = *(const uint8_t *)tmp.value;
+          prev_greater = (a > b);
+        }
       }
       else if (prev->size == 1)
       {
-        // bool / single-byte
+        // The empty string, whose only byte is the terminator. Kept ahead of
+        // the memcmp arm so this reads exactly as it did before the dispatch
+        // was reordered.
         uint8_t a = *(const uint8_t *)prev->value;
         uint8_t b = *(const uint8_t *)tmp.value;
         prev_greater = (a > b);
       }
       else
       {
-        // type_flag == 2: string / lexicographic comparison.
+        // String / lexicographic comparison.
         //
         // Must use min(prev->size, tmp->size) as the memcmp length.
         // Using prev->size alone reads past the end of tmp's buffer when
@@ -1025,6 +1720,61 @@ void __ESBMC_list_reverse(PyListObject *l)
     l->items[left] = l->items[right];
     l->items[right] = tmp;
 
+    left++;
+    right--;
+  }
+}
+
+// In-place reverse of the sub-range l[lower:upper] (step 1). Lowers the idiom
+// `l[lower:upper] = reversed(l[lower:upper])` to a single swap pass, avoiding
+// the three heap passes the literal form generates (slice-read copy,
+// reversed() rebuild, slice-assign resize+copy). Bounds are normalized exactly
+// as CPython's slice.indices for step 1 — the same clamping
+// __ESBMC_list_slice_assign uses — so the observable result is identical to the
+// three-step form. has_lower/has_upper distinguish an absent bound (None) from
+// an explicit one; the slice length equals itself, so no resize is needed.
+void __ESBMC_list_reverse_range(
+  PyListObject *l,
+  int64_t lower,
+  int has_lower,
+  int64_t upper,
+  int has_upper)
+{
+  __ESBMC_assert(l != NULL, "list_reverse_range: list is null");
+
+  int64_t size = (int64_t)l->size;
+
+  int64_t start;
+  if (has_lower)
+  {
+    start = (lower < 0) ? lower + size : lower;
+    if (start < 0)
+      start = 0;
+    if (start > size)
+      start = size;
+  }
+  else
+    start = 0;
+
+  int64_t stop;
+  if (has_upper)
+  {
+    stop = (upper < 0) ? upper + size : upper;
+    if (stop < 0)
+      stop = 0;
+    if (stop > size)
+      stop = size;
+  }
+  else
+    stop = size;
+
+  int64_t left = start;
+  int64_t right = stop - 1;
+  while (left < right)
+  {
+    PyObject tmp = l->items[left];
+    l->items[left] = l->items[right];
+    l->items[right] = tmp;
     left++;
     right--;
   }

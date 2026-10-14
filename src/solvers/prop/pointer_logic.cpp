@@ -1,12 +1,12 @@
 #include <cassert>
 #include <pointer_logic.h>
-#include <util/arith_tools.h>
-#include <util/config.h>
-#include <util/i2string.h>
+#include <util/arith/arith_tools.h>
+#include <util/config/config.h>
+#include <util/base/i2string.h>
 #include <irep2/irep2_utils.h>
-#include <util/prefix.h>
-#include <util/std_expr.h>
-#include <util/type_byte_size.h>
+#include <util/base/prefix.h>
+#include <util/irep/std_expr.h>
+#include <util/expr/type_byte_size.h>
 
 unsigned pointer_logict::add_object(const expr2tc &expr)
 {
@@ -74,7 +74,7 @@ expr2tc pointer_logict::object_rec(
 {
   if (is_array_type(src->type))
   {
-    const array_type2t &arrtype = to_array_type(*src->type.get());
+    const array_type2t &arrtype = to_array_type(src->type);
     BigInt size = type_byte_size(arrtype.subtype);
 
     if (size == 0)
@@ -95,11 +95,9 @@ expr2tc pointer_logict::object_rec(
   }
   if (is_structure_type(src))
   {
-    const struct_union_data &data_ref =
-      dynamic_cast<const struct_union_data &>(*src->type);
-    const std::vector<type2tc> &members = data_ref.get_structure_members();
+    const std::vector<type2tc> &members = struct_union_members(src->type);
     const std::vector<irep_idt> &member_names =
-      data_ref.get_structure_member_names();
+      struct_union_member_names(src->type);
 
     assert(offset >= 0);
 

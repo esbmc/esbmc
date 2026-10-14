@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^WARNING: assertion description at .* is not a string literal; reporting the guard instead$
+^VERIFICATION SUCCESSFUL$

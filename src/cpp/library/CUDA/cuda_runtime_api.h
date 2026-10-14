@@ -1,32 +1,32 @@
 #ifndef _CUDA_RUNTIME_API_H
-#define _CUDA_RUNTIME_API_H 1
+#  define _CUDA_RUNTIME_API_H 1
 
-#include "driver_types.h"
-#include "host_defines.h"
-#include "builtin_types.h"
-#include "cuda_device_runtime_api.h"
-#include "sm_atomic_functions.h"
-#include "cuda_error.h"
-#include "call_kernel.h"
+#  include "driver_types.h"
+#  include "host_defines.h"
+#  include "builtin_types.h"
+#  include "cuda_device_runtime_api.h"
+#  include "sm_atomic_functions.h"
+#  include "cuda_error.h"
+#  include "call_kernel.h"
 
-#include <stddef.h>
-#include <stdio.h>
-#include <cstdlib>
+#  include <stddef.h>
+#  include <stdio.h>
+#  include <cstdlib>
 
 /** \cond impl_private */
-#if !defined(__dv)
+#  if !defined(__dv)
 
-#  if defined(__cplusplus)
+#    if defined(__cplusplus)
 
-#    define __dv(v)
+#      define __dv(v)
 
-#  else /* __cplusplus */
+#    else /* __cplusplus */
 
-#    define __dv(v)
+#      define __dv(v)
 
-#  endif /* __cplusplus */
+#    endif /* __cplusplus */
 
-#endif /* !__dv */
+#  endif /* !__dv */
 /** \endcond impl_private */
 
 cudaError_t
@@ -57,16 +57,19 @@ cudaError_t cudaMalloc(void **devPtr, size_t size)
 {
   __ESBMC_atomic_begin();
   cudaError_t tmp;
-  //pre-conditions
+  // pre-conditions
   __ESBMC_assert(size > 0, "Size to be allocated may not be less than zero");
   *devPtr = malloc(size);
 
   if (*devPtr == NULL)
     tmp = CUDA_ERROR_OUT_OF_MEMORY;
   else
+  {
+    __cudaDeviceOf[__ESBMC_POINTER_OBJECT(*devPtr)] = __cudaCurrentDevice + 1;
     tmp = CUDA_SUCCESS;
+  }
 
-  //post-conditions
+  // post-conditions
   __ESBMC_assert(tmp == CUDA_SUCCESS, "Memory was not allocated");
 
   lastError = tmp;
@@ -271,7 +274,7 @@ const char *cudaGetErrorString(cudaError_t error)
 ////////////////////////////////////////////////////////////////////////////
 //!  Structure that represents the devices of CUDA.
 
-//Struct to Device - OK
+// Struct to Device - OK
 typedef struct cudaDevicesList
 {
   int id;
@@ -282,22 +285,22 @@ typedef struct cudaDevicesList
 
 cudaDeviceList_t *cudaDeviceList = NULL;
 
-//Insert a device
+// Insert a device
 void cudaDeviceInsert(int device)
 {
   cudaDeviceList_t *auxDevice = cudaDeviceList;
 
-  //Verifies that the device exists in the list
+  // Verifies that the device exists in the list
   while (auxDevice != NULL)
   {
     if (auxDevice->id == device)
     {
-      //printf("\nDevice existing");
-      //return 0;
+      // printf("\nDevice existing");
+      // return 0;
     }
     auxDevice = auxDevice->prox;
   }
-  //Insert new device
+  // Insert new device
   cudaDeviceList_t *newCudaDevice;
 
   newCudaDevice = (cudaDeviceList_t *)__ESBMC_alloca(sizeof(cudaDeviceList_t));
@@ -306,7 +309,7 @@ void cudaDeviceInsert(int device)
 
   newCudaDevice->id = device;
   newCudaDevice->active = 0;
-  //newCudaDevice->deviceProp.regsPerBlock = var; //Insert fields to deviceProp
+  // newCudaDevice->deviceProp.regsPerBlock = var; //Insert fields to deviceProp
   newCudaDevice->prox = NULL;
 
   if (cudaDeviceList == NULL)
@@ -321,22 +324,22 @@ void cudaDeviceInsert(int device)
   //	return 1;
 }
 
-//Searching for a device in the devices list
+// Searching for a device in the devices list
 void cudaPrintDevice()
 {
-  //printf("\n\n*** CUDA Device\n");
+  // printf("\n\n*** CUDA Device\n");
   __ESBMC_atomic_begin();
   cudaDeviceList_t *auxDevice = cudaDeviceList;
 
   while (auxDevice != NULL)
   {
-    //printf("->Device: %d Active:%d\n",auxDevice->id,auxDevice->active);
+    // printf("->Device: %d Active:%d\n",auxDevice->id,auxDevice->active);
     auxDevice = auxDevice->prox;
   }
   __ESBMC_atomic_end();
 }
 
-//Searching for a device in the devices list
+// Searching for a device in the devices list
 int searchCudaDevice(int device)
 {
   cudaDeviceList_t *auxDevice = cudaDeviceList;
@@ -355,7 +358,7 @@ int searchCudaDevice(int device)
   return 0;
 }
 
-//Checks whether the device is in use
+// Checks whether the device is in use
 int cudaDeviceActive(int device)
 {
   cudaDeviceList_t *auxDevice = cudaDeviceList;
@@ -377,7 +380,7 @@ int cudaDeviceActive(int device)
   return 0;
 }
 
-//Start a device
+// Start a device
 int cudaDeviceStart(int device)
 {
   cudaDeviceList_t *auxDevice = cudaDeviceList;
@@ -397,61 +400,41 @@ int cudaDeviceStart(int device)
 // Choose a device to work
 cudaError_t cudaSetDevice(int device)
 {
-  cudaDeviceList_t *auxDevice = cudaDeviceList;
-
-  while (auxDevice != NULL)
-  { //Scroll through the list
-    if (auxDevice->id == device)
-    { //Checks if the device
-      if (auxDevice->active == 1)
-      {                                     //Verifies that the device is active
-        return cudaErrorDeviceAlreadyInUse; //cudaErrorDeviceAlreadyInUse
-        lastError = cudaErrorDeviceAlreadyInUse;
-      }
-      auxDevice->active = 1;
-      lastError = cudaSuccess;
-      return cudaSuccess;
-    }
-    else
-      auxDevice = auxDevice->prox;
+  if (device < 0 || device >= __cudaDeviceCount)
+  {
+    lastError = cudaErrorInvalidDevice;
+    return cudaErrorInvalidDevice;
   }
-  //If not found, return cudaErrorInvalidDevice
-  lastError = cudaErrorInvalidDevice;
-  return cudaErrorInvalidDevice;
+  __cudaCurrentDevice = device;
+  lastError = cudaSuccess;
+  return cudaSuccess;
 }
 
 // Returns the number of compute-capable devices.
 cudaError_t cudaGetDeviceCount(int *count)
 {
-  /*
-	cudaDeviceList_t *auxDevice = cudaDeviceList;
-	int i;
-
-	while(auxDevice!=NULL){
-		i++;
-		auxDevice = auxDevice->prox;
-	}
-	 */
+  *count = __cudaDeviceCount;
   lastError = cudaSuccess;
   return cudaSuccess;
 }
 
-//Destroy all allocations and reset all state on the current device in the current process.
+// Destroy all allocations and reset all state on the current device in the
+// current process.
 cudaError_t cudaDeviceReset()
 {
   /*
-	int tmp;
-	threadsList_t *node;
+  int tmp;
+  threadsList_t *node;
 
-	while(cudaThreadList != NULL){
-		//		pthread_exit(cudaThreadList->thread);
-		node = cudaThreadList;
-		cudaThreadList = cudaThreadList->prox;
-		free(node);
-	}
+  while(cudaThreadList != NULL){
+    //		pthread_exit(cudaThreadList->thread);
+    node = cudaThreadList;
+    cudaThreadList = cudaThreadList->prox;
+    free(node);
+  }
 
-	lastError = cudaSuccess;
-	*/
+  lastError = cudaSuccess;
+  */
   return cudaSuccess;
 }
 
@@ -732,14 +715,71 @@ extern __host__ cudaError_t CUDARTAPI cudaPointerGetAttributes(
   struct cudaPointerAttributes *attributes,
   const void *ptr);
 
-extern __host__ cudaError_t CUDARTAPI
-cudaDeviceCanAccessPeer(int *canAccessPeer, int device, int peerDevice);
+// The model does not know the platform's peer topology.
+cudaError_t
+cudaDeviceCanAccessPeer(int *canAccessPeer, int device, int peerDevice)
+{
+  if (
+    device < 0 || device >= __cudaDeviceCount || peerDevice < 0 ||
+    peerDevice >= __cudaDeviceCount)
+  {
+    lastError = cudaErrorInvalidDevice;
+    return cudaErrorInvalidDevice;
+  }
+  *canAccessPeer = nondet_bool();
+  lastError = cudaSuccess;
+  return cudaSuccess;
+}
 
-extern __host__ cudaError_t CUDARTAPI
-cudaDeviceEnablePeerAccess(int peerDevice, unsigned int flags);
+// Access is one-way: from the current device to peerDevice only.
+cudaError_t cudaDeviceEnablePeerAccess(int peerDevice, unsigned int flags)
+{
+  if (flags != 0)
+  {
+    lastError = CUDA_ERROR_INVALID_VALUE;
+    return CUDA_ERROR_INVALID_VALUE;
+  }
+  if (
+    peerDevice < 0 || peerDevice >= __cudaDeviceCount ||
+    peerDevice == __cudaCurrentDevice)
+  {
+    lastError = cudaErrorInvalidDevice;
+    return cudaErrorInvalidDevice;
+  }
+  const unsigned int pair = __cudaPeerIndex(__cudaCurrentDevice, peerDevice);
+  if (__cudaPeerAccess[pair])
+  {
+    lastError = CUDA_ERROR_PEER_ACCESS_ALREADY_ENABLED;
+    return CUDA_ERROR_PEER_ACCESS_ALREADY_ENABLED;
+  }
+  // Whether the current device can reach peerDevice is platform-dependent.
+  if (nondet_bool())
+  {
+    lastError = cudaErrorInvalidDevice;
+    return cudaErrorInvalidDevice;
+  }
+  __cudaPeerAccess[pair] = 1;
+  lastError = cudaSuccess;
+  return cudaSuccess;
+}
 
-extern __host__ cudaError_t CUDARTAPI
-cudaDeviceDisablePeerAccess(int peerDevice);
+cudaError_t cudaDeviceDisablePeerAccess(int peerDevice)
+{
+  if (peerDevice < 0 || peerDevice >= __cudaDeviceCount)
+  {
+    lastError = cudaErrorInvalidDevice;
+    return cudaErrorInvalidDevice;
+  }
+  const unsigned int pair = __cudaPeerIndex(__cudaCurrentDevice, peerDevice);
+  if (!__cudaPeerAccess[pair])
+  {
+    lastError = CUDA_ERROR_PEER_ACCESS_NOT_ENABLED;
+    return CUDA_ERROR_PEER_ACCESS_NOT_ENABLED;
+  }
+  __cudaPeerAccess[pair] = 0;
+  lastError = cudaSuccess;
+  return cudaSuccess;
+}
 
 extern __host__ cudaError_t CUDARTAPI cudaBindTexture(
   size_t *offset,
@@ -777,6 +817,6 @@ extern __host__ cudaError_t CUDARTAPI cudaDriverGetVersion(int *driverVersion);
 extern __host__ __cudart_builtin__ cudaError_t CUDARTAPI
 cudaRuntimeGetVersion(int *runtimeVersion);
 
-#undef __dv
+#  undef __dv
 
 #endif /* cuda_runtime_api.h */

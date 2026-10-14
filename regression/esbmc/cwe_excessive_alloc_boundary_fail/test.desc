@@ -1,0 +1,6 @@
+CORE
+main.c
+--excessive-alloc-check=99 --incremental-bmc
+^VERIFICATION FAILED$
+^  excessive allocation size: malloc$
+^  CWE: CWE-789$

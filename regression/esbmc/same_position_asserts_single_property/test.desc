@@ -1,0 +1,6 @@
+CORE
+main.c
+
+^\s+FAILED\s+\[main\.array-bounds-violated\.\d+\]\s+line\s+8\s+array bounds violated: array `a' upper bound \[\([^)]*\)j < 4\]$
+^\*\* 1 of 2 properties failed, 1 not checked$
+^VERIFICATION FAILED$

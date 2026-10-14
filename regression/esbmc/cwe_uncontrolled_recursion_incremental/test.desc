@@ -1,0 +1,6 @@
+CORE
+main.c
+--incremental-bmc --unwind 8
+^VERIFICATION UNKNOWN$
+\A(?![\s\S]*CWE-674)[\s\S]*\Z
+\A(?![\s\S]*uncontrolled recursion)[\s\S]*\Z

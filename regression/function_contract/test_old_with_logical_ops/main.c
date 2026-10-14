@@ -6,7 +6,8 @@
 // Test case 1: __ESBMC_old with || (using simple int parameter)
 void test_or(int *x) {
     __ESBMC_requires(x != NULL);
-    
+    __ESBMC_requires(__ESBMC_is_fresh(x, sizeof(int)));
+
     // If old value was 0, then new value is 1
     __ESBMC_ensures(__ESBMC_old(*x) != 0 || *x == 1);
     

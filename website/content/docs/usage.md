@@ -95,7 +95,9 @@ Here, ESBMC is invoked as follows:
 esbmc file.c --memory-leak-check
 ```
 
-<p> where <i>file.c</i> is the C program to be checked and <i>--memory-leak-check</i> indicates that ESBMC will check for memory leaks. For this particular C program, ESBMC produces the following counterexample:</p>
+where `file.c` is the C program to be checked and `--memory-leak-check`
+indicates that ESBMC will check for memory leaks. For this particular C program,
+ESBMC produces the following counterexample:
 
 ```
 Counterexample:
@@ -152,7 +154,7 @@ int main (void) {
 
 Here, we create two threads `id1` and `id1`; both threads will run the same code as implemented in **P**. Note that these two threads communicate via the shared memory `n`, which is protected by a mutex via **pthread_mutex_lock** and **pthread_mutex_unlock**. Note further that the thread `main` contains two joining points via **pthread_join** for `id1` and `id2`.
 
-ESBMC can be invoked as follows: `esbmc file.c --context-bound 2` where <i>file.c</i> is the C program to be checked, and `--context-bound nr` limits the number of context switches for each thread. For this particular C program, ESBMC produces the following verification result:
+ESBMC can be invoked as follows: `esbmc file.c --context-bound 2` where `file.c` is the C program to be checked, and `--context-bound nr` limits the number of context switches for each thread. For this particular C program, ESBMC produces the following verification result:
 
 ```
 *** Thread interleavings 612 ***
@@ -181,66 +183,10 @@ BMC program time: 0.040s
 VERIFICATION SUCCESSFUL
 ```
 
-## Verification of Python Programs
+## Verifying Python Programs
 
-As an illustrative example to show some of the ESBMC features concerning Python programs, consider the following Python code:
-
-```Python
-def divide(a: int, b: int) -> int:
-    assert b != 0
-    return a // b
-
-def main():
-    a: int = nondet_int()
-    b: int = nondet_int()
-
-    __ESBMC_assume(b != 0)
-    result: int = divide(a, b)
-    assert result == a // b
-
-main()
-```
-
-Here, ESBMC is invoked as follows:
-
-```sh
-esbmc file.py
-```
-
-where `file.py` is the Python program to be checked. ESBMC's Python front-end parses the source into an abstract syntax tree, annotates it with type information, and translates it into an intermediate representation that the standard ESBMC back-end can process via SMT solvers. For this particular Python program, ESBMC produces the following verification result:
-
-```
-Converting
-Generating GOTO Program
-GOTO program creation time: 1.216s
-GOTO program processing time: 0.025s
-Starting Bounded Model Checking
-Symex completed in: 0.003s (63 assignments)
-Caching time: 0.000s (removed 1 assertions)
-Slicing time: 0.000s (removed 53 assignments)
-Generated 4 VCC(s), 3 remaining after simplification (9 assignments)
-No solver specified; defaulting to z3
-Encoding remaining VCC(s) using bit-vector/floating-point arithmetic
-Encoding to solver time: 0.000s
-Solving with solver Z3 v4.15.4
-Runtime decision procedure: 0.001s
-BMC program time: 0.016s
-
-VERIFICATION SUCCESSFUL
-```
-
-## Using the SMT Boolector Solver
-
-Boolector is a fast solver and is recommended. To install Boolector, use the following one-line command:
-
-```
-git clone --depth=1 --branch=3.2.3 https://github.com/boolector/boolector && cd boolector && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j9 && make install && cd .. && cd ..
-```
-Now rerun cmake,
-
-```
-cmake .. -DENABLE_Z3=1 -DENABLE_BOOLECTOR=1 -DBoolector_DIR=<the folder you ran the above command from>/boolector-release
-```
+ESBMC has a dedicated Python frontend. See the [Python](/docs/python) section for
+how to verify Python programs, the supported features, and worked examples.
 
 ## Witness Generation
 
@@ -266,7 +212,6 @@ esbmc main.c --witness-output main.graphml
 ```
 
 ```xml
-<xmp>
 <?xml version="1.0" encoding="utf-8"?>
 <graphml xmlns="http://graphml.graphdrawing.org/xmlns" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <key id="frontier" attr.name="isFrontierNode" attr.type="boolean" for="node">
@@ -345,10 +290,18 @@ esbmc main.c --witness-output main.graphml
     </edge>
   </graph>
 </graphml>
-</xmp>
 ```
     
 We recommend reading [Exchange Format for Violation Witnesses and Correctness Witnesses](https://github.com/sosy-lab/sv-witnesses) to obtain further information about violation and correctness witnesses in graphml format.
+
+A GraphML trace step that comes from a header or from one of ESBMC's operational
+models is emitted with an `originfile` naming the file it came from, and keeps
+that file's own line numbers instead of having them resolved against the
+verified file. `originfile` is not a key the exchange format defines, so a
+conforming validator ignores it; the edges it appears on were unmatchable to a
+validator before, either way. YAML witnesses have no equivalent, so there a
+waypoint is hoisted to its innermost call site inside an input file and one that
+cannot name an input file is dropped, as `README-YAML.md` requires.
 
 ## Unwinding Assertions
 
@@ -411,49 +364,581 @@ file file.c line 5 function main
 unwinding assertion loop
 ```
 
-## Docker Build
+`--no-unwinding-assertions` removes that assertion, so paths past the bound are
+assumed away rather than reported. A proof obtained that way holds only up to
+the bound, and a run whose loops were cut short says so above the verdict:
 
 ```
-FROM node:18-slim
+** 0 of 1 properties failed, 1 passed
+WARNING: the unwinding bound cut a loop short while unwinding checks were
+disabled, so paths past the bound were assumed away rather than verified; this
+result holds only up to that bound
 
-## Install dependencies for ESBMC and other build tools
-RUN apt-get update && apt-get install -y \
-    clang-14 \
-    llvm-14 \
-    clang-tidy-14 \
-    python-is-python3 \
-    python3 \
-    git \
-    ccache \
-    unzip \
-    wget \
-    curl \
-    bison \
-    flex \
-    g++-multilib \
-    linux-libc-dev \
-    libboost-all-dev \
-    libz3-dev \
-    libclang-14-dev \
-    libclang-cpp-dev \
-    cmake \
-    && rm -rf /var/lib/apt/lists/*
-
-# Keep the container running with tail -f /dev/null
-CMD ["bash", "-c", "tail -f /dev/null"]
+VERIFICATION SUCCESSFUL
 ```
 
-Docker compose file:
-```
-version: '3.8'
-services:
-  esbmc:
-    platform: linux/amd64
-    build:
-      context: .
-      dockerfile: Dockerfile  # Assuming your Dockerfile is named `Dockerfile`
-    tty: true
-    stdin_open: true
+## Verification Strategies
+
+ESBMC offers several incremental strategies that control how loops are unwound
+and whether correctness can be proven. For an in-depth explanation of how each
+algorithm works, see
+[Verification Algorithms](/docs/theory/verification-algorithms).
+
+| Flag | Strategy | Proves correctness? |
+|---|---|---|
+| `--falsification` | Iteratively unwind, looking only for bugs | No (bug-finding only) |
+| `--incremental-bmc` | Iteratively unwind; also detect full unrolling | Yes, once all loops fully unwind |
+| `--k-induction` | Base case + forward condition + inductive step | Yes |
+
+`--max-k-step N` caps the unwind bound (default 50); `--k-step N` changes the
+increment granularity.
+
+### Extracting a transition system (experimental)
+
+```sh
+esbmc file.c --ts-check
+esbmc file.c --ts-check --ts-dump
 ```
 
-The Linux/Amd64 line is very important for virtualizing Amd64. Now do docker-compose up --build. You can then follow the Linux instructions. Make -j16 works well on M2 mac's and beyond.
+`--ts-check` applies the k-induction transformation, recognises a single
+unbounded loop in `main`, and extracts it as a transition system: the initial
+state, a one-iteration step relation, the loop's inputs and the bad-state
+conditions, sliced to what the properties depend on. It prints one `TS-CHECK`
+line saying whether extraction succeeded (`TS-CHECK accepted ...` or
+`TS-CHECK rejected`) and stops with `VERIFICATION UNKNOWN`; it proves nothing.
+`--ts-dump` also prints the extracted system. No verification engine consumes
+it yet ([#8081](https://github.com/esbmc/esbmc/pull/8081)).
+
+## Reusing common subexpressions
+
+`--gcse` precomputes a subexpression shared between assignments into an
+intermediate variable, so symbolic execution builds it once rather than at every
+use. Whether a rewrite is safe depends on what the program's pointers can
+address, which comes from an inclusion-based (Andersen) whole-program points-to
+analysis over the GOTO program. The analysis is deliberately imprecise —
+symbolic execution supplies the real precision — and abstains on any expression
+whose targets it cannot determine, in which case the rewrite is not made. The
+flag is off by default.
+
+The available-expressions analysis is sequential, so `--gcse` is skipped with a
+warning on a program that may create threads: another thread can write a
+variable between two reads that the analysis treats as equal
+([#8072](https://github.com/esbmc/esbmc/pull/8072)).
+
+## Selecting the floating-point rounding mode
+
+Under `--floatbv`, every floating-point operation reads its rounding mode from
+the global `__ESBMC_rounding_mode`, which starts at round-to-nearest-even. Five
+flags change that initial value:
+
+| Flag | IEEE 754 mode |
+|---|---|
+| `--round-to-nearest`, `--round-to-even` | Nearest, ties to even (default) |
+| `--round-to-plus-inf` | Toward +∞ |
+| `--round-to-minus-inf` | Toward −∞ |
+| `--round-to-zero` | Toward zero (truncation) |
+
+```sh
+esbmc file.c --floatbv --round-to-zero
+```
+
+Only the initial value is rewritten, so a program calling `fesetround()` still
+changes the mode from that point on.
+
+## Floating-point to integer conversion
+
+C11 6.3.1.4p1 and [conv.fpint]/1 make a conversion undefined when the integral
+part of the floating value is not representable in the destination integer type.
+`--overflow-check` now checks it:
+
+```c
+double d = 1e300;
+long long x = (long long)d;      /* undefined */
+```
+
+```
+  FAILED       [main.assertion.1]  line 7  floating-point conversion out of range of signedbv on typecast
+VERIFICATION FAILED
+```
+
+The existing cast check was gated on `--int-encoding`, so the default bitvector
+mode had no check at all and reported `VERIFICATION SUCCESSFUL` here
+([#7622](https://github.com/esbmc/esbmc/pull/7622)). Truncation is toward zero,
+so the representable operands are exactly `[MIN, MAX + 1)`; a NaN operand fails
+both comparisons, which is correct — that conversion is equally undefined.
+
+`--no-fp-conversion-check` turns just this check off and leaves the rest of
+`--overflow-check` in place. The check is disabled under `--sv-comp`, whose
+no-overflow property covers signed-integer arithmetic only.
+
+## Function-pointer calls with no target
+
+A call through a function pointer whose value matches no function in the program
+is, by default, assumed to reach some external definition, so ESBMC keeps the
+path alive. `--closed-world-fnptr` instead treats such a call as unreachable:
+
+```sh
+esbmc file.c --closed-world-fnptr
+```
+
+Use it when the program under verification is the whole program — no dynamic
+loading, no linker-supplied implementations — so a pointer with no compatible
+target genuinely cannot be called. It is off by default because assuming the
+world is closed can prune real behaviour when it is not.
+
+## Verifying modules that span multiple files
+
+ESBMC can verify code that relies on existing infrastructure. Consider a program
+whose `mul` function lives in a separate library:
+
+```c
+#include "lib.h"
+// Running with: esbmc --overflow-check main.c lib.c
+int main() {
+  int64_t a, b, r;
+  if (mul(a, b, &r)) {
+    __ESBMC_assert(r == a * b, "Expected result from multiplication");
+  }
+  return 0;
+}
+```
+
+Invoke ESBMC with the include path and the implementation file:
+
+```sh
+esbmc main.c --overflow-check -I lib/ lib/lib.c
+```
+
+where `--overflow-check` enables arithmetic over-/underflow checks and `-I path`
+sets the include path. The library under `lib/` is:
+
+```c
+// lib.h
+#include <stdint.h>
+_Bool mul(const int64_t a, const int64_t b, int64_t *res);
+```
+
+```c
+// lib.c
+#include "lib.h"
+_Bool mul(int64_t a, int64_t b, int64_t *res) {
+  if ((a == 0) || (b == 0)) { *res = 0; return 1; }
+  else if (a == 1)          { *res = b; return 1; }
+  else if (b == 1)          { *res = a; return 1; }
+  *res = a * b;   // there exists an overflow
+  return 1;
+}
+```
+
+ESBMC reports the overflow at the unguarded multiplication:
+
+```
+Counterexample:
+
+State 1 file lib.c line 14 function mul thread 0
+----------------------------------------------------
+Violated property:
+file lib.c line 14 function mul
+arithmetic overflow on mul
+!overflow("*", a, b)
+
+VERIFICATION FAILED
+```
+
+## Checking `restrict` pointer aliasing
+
+The C `restrict` qualifier is a promise to the compiler that, for the lifetime of
+the pointer, the object it points to is accessed *only* through that pointer.
+Calling a function with two `restrict` parameters that alias the same object —
+when at least one access is a write — is undefined behaviour (C11 6.7.3.1).
+Compilers exploit this promise to optimise, so a violation can silently miscompile.
+
+The opt-in `--restrict-check` flag turns that contract into a checkable property.
+At the entry of every function with two or more `restrict`-qualified pointer
+parameters, ESBMC asserts that their pointed-to element footprints
+(`sizeof(*p)` bytes each) do not overlap within a shared object:
+
+```c
+void f(int *restrict a, int *restrict b) {
+  *a = 1;
+  *b = 2;
+}
+
+int main(void) {
+  int x = 0;
+  f(&x, &x);   // a and b alias the same object
+  return 0;
+}
+```
+
+```sh
+esbmc file.c --restrict-check
+```
+
+ESBMC reports the aliasing at the function entry:
+
+```
+[Counterexample]
+
+State 1 file file.c line 2 column 3 function f thread 0
+----------------------------------------------------
+Violated property:
+  file file.c line 2 column 3 function f
+  restrict pointer aliasing
+  !(a != 0 && b != 0 && SAME-OBJECT(a, b) && POINTER_OFFSET(a) < POINTER_OFFSET(b) + 4 && POINTER_OFFSET(b) < POINTER_OFFSET(a) + 4)
+
+VERIFICATION FAILED
+```
+
+The footprint is an *under-approximation* of the accessed region, so two pointers
+into the same object whose element ranges are genuinely disjoint are never
+flagged — `f(&arr[0], &arr[2])` verifies successfully. Null parameters designate
+no object and are exempt.
+
+The check is **off by default**; without `--restrict-check` the program above
+verifies successfully. Its scope and known limitations:
+
+- Only function-parameter aliasing is checked; there is no whole-program
+  "based-on" tracking of derived pointers.
+- It over-approximates the *modification* clause of 6.7.3.1p4: the assertion
+  fires on overlap regardless of whether the body performs a modifying access,
+  and `const`-qualified targets are not exempt (a `const` access path is still
+  undefined once the shared object is modified by any means).
+
+### Assuming the contract instead of checking it
+
+`--restrict-assume` is the dual of `--restrict-check`: instead of asserting the
+contract, it *assumes* the entry function's `restrict` pointer parameters do not
+alias. Use it when verifying a function in isolation, where non-aliasing is a
+precondition the callers must honour rather than something the function can
+establish:
+
+```sh
+esbmc file.c --function f --restrict-assume
+```
+
+The assumption is scoped to the entry point only, and it does not imply the
+parameters are distinct pointers: `f(NULL, NULL)` is a conforming call
+(C11 6.7.3.1p4), so `a != b` still does not follow.
+
+## Per-property results
+
+Every verification run ends with a `** Results:` block naming each property,
+grouped by file and function in source order. It is printed whatever the
+strategy — plain BMC, `--incremental-bmc`, `--k-induction` — and `--result-only`
+keeps it while suppressing the rest of the output (a coverage run reports its
+own goals instead):
+
+```sh
+esbmc file.c --result-only
+```
+
+```
+** Results:
+file.c, function main
+  PASSED       [main.assertion.1]  line 5  A1
+  FAILED       [main.assertion.2]  line 6  A2
+
+** 1 of 2 properties failed, 1 passed
+
+VERIFICATION FAILED
+```
+
+A property is reported `NOT CHECKED` rather than `PASSED` when the run never
+separated it. A default run stops at the first violation, so the properties
+after it were never decided, and saying they passed would be wrong:
+
+```
+  PASSED       [main.assertion.1]  line 5  addition commutes
+  FAILED       [main.assertion.2]  line 8  a is not one
+  NOT CHECKED  [main.assertion.3]  line 9  a is not two
+
+** 1 of 3 properties failed, 1 passed, 1 not checked
+   (this mode stops at the first violation; use --multi-property for a verdict on every property)
+```
+
+Adding `--multi-property` decides all three, and appends the solver and its
+decision-procedure time to the summary.
+
+## Bounding the stack
+
+```sh
+esbmc file.c --stack-limit 8192
+esbmc file.c --total-stack-limit 65536
+```
+
+`--stack-limit` bounds a *single* stack frame, so a deep recursion whose
+individual frames each fit never trips it. `--total-stack-limit` bounds the
+combined size of all live frames instead, which is what a real stack budget
+constrains. ESBMC's own operational models are excluded from the total, so the
+bound stays calibratable against the program's own frames.
+
+Both bounds are given in **bits**, not bytes. The total is accounted per
+symbolic path at declaration points, and over-approximates for spawned threads.
+A violation names the declaration that crossed the bound:
+
+```
+Total stack limit property was violated when declaring buf
+```
+
+## Multiple Property Verification
+
+```sh
+esbmc file.c --multi-property
+```
+
+ESBMC can verify the satisfiability of all claims of a given bound. In
+multi-property mode, ESBMC does not stop at the first counterexample; it
+continues until all bugs are found. Relevant options:
+
+- `--multi-property` — verify all claims of the current bound (also activates `--no-remove-unreachable`).
+- `--multi-fail-fast N` — stop after the first `N` violations.
+- `--multi-property-interleavings N` — for concurrent programs, keep exploring thread interleavings after a violation until `N` consecutive ones reach a verdict on no new property (default 100, must be positive).
+- `--keep-verified-claims` — do not skip verified claims (assertions inside a loop body are then re-verified during unwinding).
+- `--all-witnesses` — after a property is violated, enumerate further inputs that also violate it (implies `--multi-property`; see below).
+- `--max-witnesses N` — cap witnesses per property (default 16; 0 = unlimited).
+- `--full-traces` — print every trace state per witness instead of the 50 nearest the failure (only meaningful with `--all-witnesses`).
+
+A claim the solver never decided — an error, or a formula handed off without an
+answer under `--smt-formula-only` — is no longer folded into
+`VERIFICATION SUCCESSFUL`; a solver error additionally names the claim it failed
+on.
+
+Verdicts accumulate across the whole run and each property is reported exactly
+once at the end, with *failed* dominating *unknown* dominating *passed* — so a
+property discharged under one schedule and violated under another is reported as
+violated rather than printing contradictory lines. For a concurrent program,
+exploration continues past the first violation until
+`--multi-property-interleavings` consecutive interleavings decide nothing new; a
+run that stops early states that its report is partial.
+
+### Under the verification strategies
+
+`--multi-property` works with plain BMC and with the k-step strategies; two
+strategies reject it:
+
+| Strategy | Per-property result |
+|---|---|
+| `--unwind N` | Every violated claim `FAILED`, the rest `PASSED` |
+| `--k-induction`, `--incremental-bmc` | `FAILED` at the k where a base case finds the violation, `PASSED` once the forward condition (or, under `--k-induction`, the inductive step) proves the remaining claims, `UNKNOWN` if neither happens by `--max-k-step` |
+| `--falsification` | `FAILED` as above; nothing is proved, so a claim not violated by `--max-k-step` is `UNKNOWN` |
+| `--k-induction-parallel` (except with `--termination`), `--falsify-context-bound` | Rejected with an error |
+
+This holds whether `--multi-property` is given or implied by
+`--parallel-solving` or `--all-witnesses`. Under a k-step strategy the run
+keeps going past a violation and prints one table at the end, with property ids
+that stay the same across k. Running out of k steps after a violation was
+recorded ends `VERIFICATION FAILED` ([#7913](https://github.com/esbmc/esbmc/pull/7913));
+a run that neither violated nor proved anything ends `VERIFICATION UNKNOWN`.
+`--falsification` does not stop after a violation, because a larger k can raise
+claims that no smaller k did; with `--unlimited-k-steps` it runs until killed
+and prints no table, so give it `--max-k-step`.
+
+Two assertions at the same position with the same description, such as the two
+bound checks of `a[i] + a[j]`, get one row each, and rows that would otherwise
+read the same end with their condition, e.g. `[(signed long int)j < 4]`
+([#7923](https://github.com/esbmc/esbmc/pull/7923)). Two claims that symbolic
+execution raises at one instruction still share a row
+([#7900](https://github.com/esbmc/esbmc/discussions/7900)).
+
+### Enumerating all violating inputs
+
+```sh
+esbmc file.c --all-witnesses
+esbmc file.c --all-witnesses --max-witnesses 4
+```
+
+By default `--multi-property` reports a single counterexample per failing
+property. `--all-witnesses` instead enumerates *distinct concrete input vectors*
+that violate the same property, until the set is exhausted (UNSAT) or the
+`--max-witnesses` cap is reached — useful for fault localisation, test-case
+mining, and characterising the failing-input sub-domain.
+
+```c
+#include <assert.h>
+int main(void) {
+  int x;                 // nondet
+  if (x > 0) x--; else x++;
+  assert(x != 0);        // violated by x == 1 AND x == -1
+  return 0;
+}
+```
+
+`esbmc file.c --all-witnesses` reports both witnesses:
+
+```
+[Counterexamples - 2 witnesses]
+
+  Inputs by witness:
+    #1 : [0] = -1
+    #2 : [0] = 1
+
+  ┌─ Witness 1 of 2 ─────────────────────────────
+  │  Inputs : [0] = -1
+  │  Trace  :
+  │    ...
+  └──────────────────────────────────────────────
+
+  ┌─ Witness 2 of 2 ─────────────────────────────
+  │  Inputs : [0] = 1
+  │  Trace  :
+  │    ...
+  └──────────────────────────────────────────────
+
+Summary: 2 distinct input tuples violate this property (enumeration stopped: UNSAT after 2 witnesses)
+```
+
+Internally the same SMT instance is re-solved with a blocking clause over the
+nondet input symbols, so enumerating *N* witnesses is much cheaper than running
+ESBMC *N* times. Floating-point inputs are handled specially (the NaN
+equivalence class is excluded as a whole; other values use bit-pattern equality,
+so `+0` and `-0` are distinct). The footer states why enumeration stopped; only
+*UNSAT after N* means the witness set is complete.
+
+**Implementation notes.** Blocking clauses are scoped to a single SMT context
+frame (`push_ctx`/`pop_ctx`) per claim, so the feature is safe under
+`--smt-during-symex` and does not leak between claims. Machine-readable artifacts
+(`--cex-output`, `--generate-testcase`, `--generate-html-report`,
+`--generate-json-report`, `--witness-output-graphml`, `--witness-output-yaml`)
+fan out per witness using the `<phase>-k<K>-<N>-<file>` prefix scheme —
+`<phase>` is the verification phase (`base`/`fwd`/`indstep`/`bmc`), `<K>` the
+unwind bound, and `<N>` a decimal increasing from zero — one file per witness,
+so it is also safe under `--parallel-solving`, and counterexamples found in
+different k-induction phases or k-steps do not overwrite each other. Enumeration is skipped during the
+inductive step of k-induction (a SAT result there means UNKNOWN, not a real
+counterexample).
+
+**Reading a multi-witness report.** Every witness's inputs are collected in the
+`Inputs by witness:` block under the header, before the first trace, since that
+is what differs between them; if the list was cut short by `--max-witnesses`,
+the header says so rather than leaving it to the footer. Each trace is then
+truncated to the 50 states nearest the failure, with a count of what was
+dropped — pass `--full-traces` for the whole trace. If you only need the
+violating inputs, that first block is usually enough, and the machine-readable
+per-witness files give the full data without the noise.
+
+Formally this is *bounded projected model enumeration* for a fixed property: the
+blocking-clause loop from SAT all-solutions algorithms, lifted to SMT and
+projected onto the nondet input symbols. See McMillan, *Applying SAT Methods in
+Unbounded Symbolic Model Checking*, CAV 2002
+([doi](https://doi.org/10.1007/3-540-45657-0_19)), and Grumberg, Schuster,
+Yadgar, *Memory Efficient All-Solutions SAT Solver and Its Application for
+Reachability Analysis*, FMCAD 2004
+([doi](https://doi.org/10.1007/978-3-540-30494-4_20)). It complements
+dynamic-symbolic-execution test generation (KLEE, DART, SAGE), which varies the
+path condition to maximise coverage; `--all-witnesses` instead fixes the failure
+path and enumerates input vectors on it.
+
+## Suppressing assertions inside the operational models
+
+```sh
+esbmc file.c --no-library-assertions
+```
+
+ESBMC's operational models assert their own API preconditions (for example
+`"Sem is not initialized"`). `--no-library-assertions` drops those claims while
+keeping every assertion in the program under verification — useful when a model
+precondition is deliberately violated in code you do not own.
+
+It hides genuine API misuse the models report, so it is off by default. It also
+leaves the checks ESBMC *generates* inside model code (those are controlled by
+`--no-standard-checks`), renumbers `--claim` indices, and is unsupported for
+Python.
+
+## When an option value swallows another option
+
+`boost::program_options` takes the next token as a value-taking option's value,
+whatever it looks like, so `--witness-output --show-loops` silently made
+`"--show-loops"` the witness path: the swallowed option never ran and the
+witness landed in files literally named `--show-loops.graphml`. ESBMC now warns
+when an option value names a registered option, on the command line and in
+`ESBMC_OPTS` alike ([#7538](https://github.com/esbmc/esbmc/pull/7538)). A bare
+`-` (stdout) is not treated as a match.
+
+## When ESBMC itself crashes
+
+A SIGSEGV or SIGBUS inside ESBMC is an internal error, not a verification
+result, and is reported as one rather than leaving the exit status as its only
+trace:
+
+```
+ESBMC caught SIGSEGV: this is an internal error, not a verification result.
+Re-run with --segfault-handler for a backtrace.
+Please report it at https://github.com/esbmc/esbmc/issues
+```
+
+The report needs no flag and runs on an alternate signal stack, so a crash from
+stack exhaustion is reported too. A handler installed by someone else is left
+alone, so an AddressSanitizer build keeps its own richer report.
+`--segfault-handler` *replaces* this reporter with one that prints a backtrace
+and the process memory map, and covers `SIGABRT` as well — asking for the
+backtrace is explicit intent, so that one does not defer to a foreign handler.
+
+## Supported SMT backends {#smt-backends}
+
+ESBMC integrates several SMT solvers directly via their APIs, and on Unix can
+also drive an external solver process, either interactively over a pipe or in
+one-shot batch mode:
+
+| Backend | Option |
+|---|---|
+| Bitwuzla | `--bitwuzla` (default) |
+| Boolector | `--boolector` |
+| Z3 | `--z3` |
+| MathSAT | `--mathsat` |
+| CVC4 | `--cvc` |
+| Yices | `--yices` |
+| SMTLIB | `--smtlib --smtlib-solver-prog CMD` |
+| Bitwuzllob | `--bitwuzllob` |
+| NeuroSym | `--neurosym` |
+
+Bitwuzllob and NeuroSym are one-shot subprocess backends: ESBMC renders the
+formula to an SMT-LIB2 file and runs an external program on it in batch mode —
+`mallob` in mono mode (Bitwuzla on the massively parallel Mallob platform) for
+Bitwuzllob, and the NeuroSym neural-guided solver (GAN with Z3 fallback,
+QF_BV only) for NeuroSym. The external command is set with
+`--bitwuzllob-prog CMD` / `--neurosym-prog CMD` (every `%f` is replaced by the
+formula file), and counterexamples are reconstructed by a local interactive
+SMT-LIB2 solver given via `--bitwuzllob-model-prog CMD` /
+`--neurosym-model-prog CMD` (e.g. `"z3 -in"`). Neither backend is ever picked
+implicitly, and NeuroSym rejects `--ir` and incremental strategies.
+
+Floating-point arithmetic is encoded with the SMT floating-point theory
+(`fp.add`, `fp.lt`, …) on every backend that offers it — Bitwuzla, Z3, MathSAT,
+CVC4/CVC5 — and lowered to bit-vectors elsewhere. `--fp2bv` forces the
+bit-vector lowering on any backend, which is the encoding to reach for when a
+property depends on the sign of a NaN: the theory cannot represent it
+([#7021](https://github.com/esbmc/esbmc/issues/7021)). `fmod`, `remainder` and
+`remquo` are always lowered through a bit-vector round-trip, since the theory's
+`fp.rem` is far slower to solve.
+
+An alternative default solver can be set with `--default-solver SOLVER` (the
+name without the `--`), which suits a shell alias or the `ESBMC_OPTS`
+environment variable. The `CMD` for the SMTLIB backend is interpreted by the
+shell, so it can include options or chain commands (the tools must be on
+`PATH`):
+
+- `boolector --incremental`
+- `z3 -in`
+- `tee formula.smt2 | z3 -in | tee output.txt`
+- `yices-smt2 --incremental`
+- `cvc5 -L smt2 -m`
+
+Remember to quote the `CMD` string when invoking ESBMC.
+
+A backend that cannot decide a goal says so rather than ending the run without a
+verdict. Under the integer/real encoding (`--ir`, `--ir-ieee`) Z3's `smt` tactic
+is incomplete for nonlinear real arithmetic, so the tactic chain falls back to
+`qfnra-nlsat` on exactly the goals `smt` abandoned, and declines anything
+outside QF_NRA. Bitwuzla returns a query term unchanged when evaluating it would
+need a quantifier it never registered; that is reported as an unknown value, as
+the Z3 backend already did.
+
+### Symmetry breaking
+
+Symmetric formulas — most often a running maximum or minimum folded over an
+uninitialised array — make the backend solver enumerate equivalent case splits.
+ESBMC recognises those max/min folds and asserts the redundant bounds they imply
+before solving, which cuts the search. This is **on by default**; pass
+`--no-symmetry-breaking` to disable it if the extra constraints hurt on a
+particular benchmark.

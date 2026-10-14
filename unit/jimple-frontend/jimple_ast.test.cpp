@@ -9,7 +9,8 @@
    - Initialize ast from json string
  \*******************************************************************/
 
-#define CATCH_CONFIG_MAIN // This tells Catch to provide a main() - only do this in one cpp file
+#define CATCH_CONFIG_MAIN // This tells Catch to provide a main() - only do this
+                          // in one cpp file
 
 #include <catch2/catch.hpp>
 #include <jimple-frontend/AST/jimple_ast.h>
@@ -19,6 +20,7 @@
 #include <jimple-frontend/AST/jimple_statement.h>
 #include <jimple-frontend/AST/jimple_declaration.h>
 #include <nlohmann/json.hpp>
+#include <util/lang/c_types.h>
 
 // ** Try to initialize an structure with a JSON string
 SCENARIO("AST initialization from JSON (basic constructs)", "[jimple-frontend]")
@@ -278,5 +280,46 @@ SCENARIO("AST initialization from JSON (expressions)", "[jimple-frontend]")
 
     REQUIRE(f.binop == "-");
     REQUIRE_FALSE(f.binop == "+");
+  }
+}
+
+// jimple_identity declares no native to_code2t, so the base's migrating default
+// reaches to_exprt; without it the statement silently becomes a code_skipt
+// (docs/roadmap/scope-jimple-irep2.md §44).
+SCENARIO(
+  "Statements that reach to_exprt through the migrating default",
+  "[jimple-frontend]")
+{
+  GIVEN("An identity statement naming a declared local")
+  {
+    contextt ctx;
+    symbolt local;
+    local.id = "MainKt:foo_1@i0";
+    local.name = "i0";
+    local.set_type(int_type());
+    ctx.move_symbol_to_context(local);
+
+    std::istringstream file(R"json({
+    "identifier": "parameter0",
+    "name": "MainKt:foo_1@i0",
+    "type": {"identifier": "int", "dimensions": 0}
+})json");
+    nlohmann::json j;
+    file >> j;
+
+    jimple_identity f;
+    j.get_to(f);
+
+    REQUIRE(f.local_name == "MainKt:foo_1@i0");
+    REQUIRE(f.at_identifier == "parameter0");
+
+    exprt lowered = f.to_exprt(ctx, "MainKt", "foo_1");
+
+    REQUIRE(lowered.is_code());
+    REQUIRE(lowered.statement() == "assign");
+    REQUIRE_FALSE(lowered.statement() == "skip");
+    REQUIRE(lowered.op0().identifier() == "MainKt:foo_1@i0");
+    REQUIRE(lowered.op1().identifier() == "@parameter0");
+    REQUIRE_FALSE(lowered.op1().identifier() == "parameter0");
   }
 }

@@ -1,0 +1,4 @@
+CORE
+task.ld
+--ld-props props.yaml
+^ERROR: UnsupportedConstruct\(task interval .100ms., tier=2\)

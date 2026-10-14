@@ -1,0 +1,7 @@
+CORE
+main.c
+--smtlib --smtlib-solver-prog "z3 -in"
+REQUIRES z3_binary
+^  a = -4 \(11111111 11111111 11111111 11111100\)$
+^  f = 1 \(00000000 00000000 00000000 00000001\)$
+^VERIFICATION FAILED$

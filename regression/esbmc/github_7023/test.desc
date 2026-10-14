@@ -1,0 +1,8 @@
+CORE
+main.c
+--result-only
+^\*\* Results:$
+^ +PASSED .*line +5 +A1$
+^ +FAILED .*line +6 +A2$
+^\*\* 1 of 2 properties failed, 1 passed$
+^VERIFICATION FAILED$

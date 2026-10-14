@@ -1,0 +1,6 @@
+CORE
+main.c
+--synthesise-loop-invariants
+^Synthesised loop invariants for 1 loop$
+FAILED.*assertion sn == \(uint64_t\)n \* a \+ 1
+^VERIFICATION FAILED$

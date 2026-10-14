@@ -1,0 +1,5 @@
+CORE
+main.c
+--force-malloc-success
+^VERIFICATION FAILED$
+Relational comparison between pointers is only valid for pointers to the same object

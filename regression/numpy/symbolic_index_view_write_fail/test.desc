@@ -1,0 +1,5 @@
+CORE
+main.py
+--incremental-bmc
+^VERIFICATION FAILED$
+line +13 +assertion a\[1\]\[2\] == 98

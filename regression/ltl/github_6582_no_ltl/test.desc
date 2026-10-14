@@ -1,0 +1,5 @@
+CORE
+prog.c
+safety.c -DLTL_PREFIX_BOUND=6
+^WARNING: monitor has no __ESBMC_switch_from_monitor\(\) call; regenerate it with
+^VERIFICATION SUCCESSFUL$

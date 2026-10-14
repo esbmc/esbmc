@@ -1,0 +1,5 @@
+CORE
+main.py
+--ir-ieee
+^VERIFICATION SUCCESSFUL$
+\bdefaulting to Z3\b

@@ -1,0 +1,4 @@
+CORE
+main.py
+--enable-unreachability-intrinsic --unwind 1
+^VERIFICATION SUCCESSFUL$

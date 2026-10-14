@@ -5,6 +5,7 @@
 #define __STDC_FORMAT_MACROS
 
 #include <clang-c-frontend/clang_c_convert.h>
+#include <optional>
 
 class clang_cpp_convertert : public clang_c_convertert
 {
@@ -16,7 +17,8 @@ public:
   virtual ~clang_cpp_convertert() = default;
 
 protected:
-  // this_map contains key-value pairs in the form of <method address, <identifier, type>>
+  // this_map contains key-value pairs in the form of <method address,
+  // <identifier, type>>
   typedef std::unordered_map<std::size_t, std::pair<std::string, typet>>
     this_mapt;
   this_mapt this_map;
@@ -41,6 +43,10 @@ protected:
 
   bool get_method(const clang::CXXMethodDecl &md, exprt &new_expr);
 
+  void annotate_exception_specification(
+    const clang::FunctionDecl &fd,
+    typet &type) override;
+
   /**
    *  Get reference for constructor callsite
    */
@@ -54,7 +60,7 @@ protected:
 #  define CAPTURE_VARIABLE_TYPE clang::ValueDecl
 #endif
   /*
-   *  Map captured variables and this to the non-static members storing their 
+   *  Map captured variables and this to the non-static members storing their
    *  values or references.
    *  Arguments:
    *   is_lambda_operator: the lambda operator is being converted
@@ -89,6 +95,18 @@ protected:
     const clang::FunctionDecl &fd,
     exprt &new_expr,
     const code_typet &ftype) override;
+  bool get_new_initializer(const clang::CXXNewExpr &ne, exprt &new_expr);
+
+  bool get_member_initializer(
+    const clang::Expr &init,
+    const typet &member_type,
+    exprt &rhs);
+
+  /** Body for a lambda's static invoker: forward to the closure's
+   *  operator(). Clang synthesises this in CodeGen, so the AST has none. */
+  bool build_lambda_static_invoker(
+    const clang::CXXMethodDecl &invoker,
+    exprt &new_expr);
 
   /**
    *  Get function params for C++
@@ -120,6 +138,7 @@ protected:
   bool get_struct_union_class(const clang::RecordDecl &rd) override;
 
   bool get_var(const clang::VarDecl &vd, exprt &new_expr) override;
+  const clang::Expr &elided_copy_source(const clang::Expr &init) override;
 
   bool get_struct_union_class_fields(
     const clang::RecordDecl &rd,
@@ -134,7 +153,7 @@ protected:
    * a class or function template declaration respectively.
    * For C++14 and above, this function might be extended to deal
    * with VarTemplateDecl for variable template.
-  */
+   */
   template <typename TemplateDecl>
   bool get_template_decl(
     const TemplateDecl &D,
@@ -161,14 +180,101 @@ protected:
    * these calls in the AST body (they are codegen-only in a real compiler),
    * so the C++ frontend has to synthesise them here.
    */
-  bool build_destructor_chain(const clang::FunctionDecl &fd, code_blockt &body);
+  bool
+  build_destructor_chain(const clang::CXXDestructorDecl &dd, code_blockt &body);
+
+public:
+  /*
+   * The destructor calls of one subobject of a class, and the subobject's
+   * position in construction order: the direct non-virtual bases, then the
+   * members, numbered from 0.
+   */
+  struct subobject_destructort
+  {
+    std::size_t position;
+    code_blockt calls;
+  };
+
+protected:
+  const this_mapt::mapped_type &
+  method_this(const clang::CXXMethodDecl &md) const;
+  const symbolt *nontrivial_destructor(const clang::CXXRecordDecl *rec);
+  bool member_destructor(
+    const clang::FieldDecl &field,
+    const exprt &deref,
+    code_blockt &calls);
+  code_function_callt base_destructor(
+    const symbolt &sym,
+    const clang::CXXRecordDecl &base,
+    const clang::CXXMethodDecl &md);
+
+  /*
+   * The members and direct non-virtual bases of md's class whose destructor
+   * is non-trivial, in destruction order, with `this` taken from md.
+   */
+  bool subobject_destructors(
+    const clang::CXXMethodDecl &md,
+    std::vector<subobject_destructort> &out);
+
+  /*
+   * Whether this translation unit's own code throws or catches. If not, no
+   * constructor gets the handler that unwinds its subobjects, so the program
+   * stays out of exception lowering and pays nothing for it.
+   */
+  std::optional<bool> uses_exceptions;
+  bool user_code_uses_exceptions();
+
+  /*
+   * try { tried } catch (...) { handler; throw; }
+   */
+  codet rethrowing_catch(const code_blockt &tried, code_blockt handler);
+
+  /*
+   * Run cd's class destructor when the body of the delegating constructor cd,
+   * which starts at body_start in body, exits by an exception.
+   */
+  bool destroy_object_on_body_unwind(
+    const clang::CXXConstructorDecl &cd,
+    std::size_t body_start,
+    code_blockt &body);
+
+  /*
+   * Destroy the subobjects a constructor has built when an exception leaves
+   * it ([except.ctor]/3), or a delegating constructor's object when its body
+   * throws ([except.ctor]/4). starts[i] is where the code of cd's i-th
+   * initializer begins in body, and starts.back() where its own body does.
+   */
+  bool unwind_constructed_subobjects(
+    const clang::CXXConstructorDecl &cd,
+    const std::vector<std::size_t> &starts,
+    code_blockt &body);
+
+  /*
+   * Put a constructor's converted initializers at the start of its body.
+   */
+  bool insert_constructor_initializers(
+    const clang::CXXConstructorDecl &cd,
+    exprt::operandst &initializers,
+    std::vector<std::size_t> starts,
+    const symbolt *array_init_sym,
+    code_blockt &body);
+
+  /*
+   * The `this` a base destructor is called with: the address of the derived
+   * object's base subobject, not the derived object itself.
+   */
+  exprt base_dtor_this(
+    const clang::CXXRecordDecl &base,
+    const exprt &deref,
+    const irep_idt &this_id,
+    const typet &this_ptr_type);
 
   /*
    * Add additional annotations for class/struct/union fields
    * Arguments:
    *  field: clang AST node representing the field we are dealing with
-   *  type:  ESBMC's typet representing the type of the class we are currently dealing with
-   *  comp: the `component` representing the field
+   *  type:  ESBMC's typet representing the type of the class we are currently
+   * dealing with comp: the `component` representing the field
    */
   bool annotate_class_field(
     const clang::FieldDecl &field,
@@ -212,7 +318,8 @@ protected:
    * Arguments:
    *  cxxmdd:   clang AST node representing the method we are dealing with
    *  new_expr: the `component` in class/struct/union symbol type
-   *  fd: clang AST node representing the function declaration we are dealing with
+   *  fd: clang AST node representing the function declaration we are dealing
+   * with
    */
   bool
   annotate_class_method(const clang::CXXMethodDecl &cxxmdd, exprt &new_expr);
@@ -227,10 +334,9 @@ protected:
     const clang::CXXMethodDecl &cxxmdd,
     typet &ctor_return_type);
   /*
-   * Flag return type in ctor or dtor, e.g.
-   * A default copy constructor would have the return type below:
+   * Flag return type in ctor or dtor by setting it to the marker type
+   * `constructor` (or `destructor`), e.g. a constructor gets:
    * * return_type: constructor
-   *   #default_copy_cons: 1
    *
    * Arguments:
    *  cxxmdd: clang AST node representing the ctor/dtor we are dealing with
@@ -239,23 +345,43 @@ protected:
   void annotate_ctor_dtor_rtn_type(
     const clang::CXXMethodDecl &cxxmdd,
     typet &rtn_type);
+
+  /*
+   * A reference to the ctor or dtor md, with its `this` parameter, whether or
+   * not md has been converted yet.
+   */
+  bool get_ctor_dtor_ref(const clang::CXXMethodDecl &md, exprt &new_expr);
   bool is_copy_or_move_ctor(const clang::DeclContext &dcxt);
   bool is_defaulted_ctor(const clang::CXXMethodDecl &md);
 
   /*
-   * When getting a function call to ctor, we might call the base ctor from a derived class ctor
-   * Need to wrap derived class `this` in a typecast expr and convert to the base `this`, e.g.:
-   *    Base( (Base*) this)
+   * When getting a function call to ctor, we might call the base ctor from a
+   * derived class ctor Need to wrap derived class `this` in a typecast expr and
+   * convert to the base `this`, e.g.: Base( (Base*) this)
    *
    * Arguments:
    *  callee_decl: base ctor symbol
    *  call: function call statement to the base ctor
-   *  initializer: this is an intermediate data structure containing the information of derived `this`
+   *  initializer: this is an intermediate data structure containing the
+   * information of derived `this`
    */
   void gen_typecast_base_ctor_call(
     const exprt &callee_decl,
     side_effect_expr_function_callt &call,
     exprt &initializer);
+
+  /*
+   * Constructors of a class with virtual bases carry a hidden trailing
+   * `__is_complete` boolean parameter that models the Itanium C1/C2 split:
+   * only the most-derived (complete-object) constructor initialises the
+   * shared virtual base subobjects, while base-object constructor calls skip
+   * them. This appends that parameter (and its symbol) for such constructors;
+   * classes without virtual bases are left with their original signature.
+   * See esbmc/esbmc#938.
+   */
+  bool get_cxx_constructor_is_complete_param(
+    const clang::CXXConstructorDecl &cxxcd,
+    code_typet::argumentt &param);
 
   /*
    * This is an ancillary function deciding whether we need
@@ -268,21 +394,32 @@ protected:
   /*
    * Methods to pull bases in
    */
-  using base_map = std::map<std::string, const clang::CXXRecordDecl &>;
+  // Bases are collected in declaration order, ancestors first, not
+  // alphabetical. That order defines the flattened component layout, which is
+  // the only offset oracle the base-offset paths (dtor/cast/thunk) may use:
+  // clang's getBaseClassOffset disagrees with it once a virtual base makes the
+  // primary-base rule apply (#7025). See #1866, #3894 and
+  // docs/design/cpp-multiple-inheritance-subobjects.md.
+  using base_map =
+    std::vector<std::pair<std::string, const clang::CXXRecordDecl *>>;
   /*
    * Recursively get the bases for this derived class.
    *
    * Params:
-   *  - cxxrd: clang AST representing the class/struct we are currently dealing with
-   *  - map: this map contains all base class(es) of this class std::map<class_id, pointer to clang AST of base class>
+   *  - cxxrd: clang AST representing the class/struct we are currently dealing
+   * with
+   *  - map: ordered list of (class_id, base clang AST) in declaration order,
+   * deduped
    */
   bool get_base_map(const clang::CXXRecordDecl &cxxrd, base_map &map);
   /*
    * Check whether we've already got this component in a class type
-   * Avoid copying duplicate component from a base class type to the derived class type.
+   * Avoid copying duplicate component from a base class type to the derived
+   * class type.
    *
    * Params:
-   *  - component: the component to be copied from a base class to the derived class type
+   *  - component: the component to be copied from a base class to the derived
+   * class type
    *  - type: ESBMC IR representing the derived class type
    */
   bool is_duplicate_component(
@@ -290,10 +427,12 @@ protected:
     const struct_union_typet &type);
   /*
    * Check whether we've already got this method in a class type
-   * Avoid copying duplicate method from a base class type to the derived class type.
+   * Avoid copying duplicate method from a base class type to the derived class
+   * type.
    *
    * Params:
-   *  - method: the method to be copied from a base class to the derived class type
+   *  - method: the method to be copied from a base class to the derived class
+   * type
    *  - type: ESBMC IR representing the derived class type
    */
   bool is_duplicate_method(
@@ -304,10 +443,19 @@ protected:
    * For virtual base class, we only copy it once.
    *
    * Params:
-   *  - map: this map contains all base class(es) of this class std::map<class_id, pointer to clang AST of base class>
+   *  - map: this map contains all base class(es) of this class
+   * std::map<class_id, pointer to clang AST of base class>
    *  - type: ESBMC IR representing the class' type
    */
-  void get_base_components_methods(base_map &map, struct_union_typet &type);
+  /* When the class has any virtual base, nesting is disabled and the legacy
+   * flattened layout is used for all of its bases: a shared virtual base must
+   * appear once in the most-derived object, which nested per-path subobjects
+   * cannot express yet (P5). See #1866, #3894. */
+  void get_base_components_methods(
+    base_map &map,
+    struct_union_typet &type,
+    bool has_virtual_bases,
+    const clang::CXXRecordDecl &cxxrd);
 
   /*
    * Methods for virtual tables and virtual pointers
@@ -315,6 +463,20 @@ protected:
    */
   std::string vtable_type_prefix = "virtual_table::";
   std::string vtable_ptr_suffix = "@vtable_pointer";
+  /* Leading component of every vtable type: a pointer to the printed name of
+   * the most-derived class the vtable belongs to. Reading it through an
+   * object's vptr is how `typeid` recovers the dynamic type (#6310). */
+  static irep_idt rtti_name_component_id(const irep_idt &vtable_type_id);
+  static struct_typet::componentt
+  rtti_name_component(const irep_idt &vtable_type_id);
+  /* The single spelling of a type used as typeid identity; see #6310. */
+  std::string rtti_type_name(const clang::QualType &qtype);
+  std::string rtti_type_name(const clang::CXXRecordDecl &rd);
+  exprt typeid_object(
+    const exprt &value,
+    const std::string &type_name,
+    const clang::Stmt &stmt,
+    bool dynamic);
   // if a class/struct has vptr component, it needs to be initialized in ctor
   bool has_vptr_component = false;
   std::string thunk_prefix = "thunk::";
@@ -334,8 +496,8 @@ protected:
    *    add a thunk function that does late casting of the `this` parameter
    *    and redirects the call to the overriding function (i.e. method X itself)
    *
-   *  Last but not least, set up the vtable varaible symbols (i.e. these are the struct variables
-   *  instantiated from the vtable type symbols)
+   *  Last but not least, set up the vtable varaible symbols (i.e. these are the
+   * struct variables instantiated from the vtable type symbols)
    */
   bool get_struct_class_virtual_methods(
     const clang::CXXRecordDecl &cxxrd,
@@ -367,7 +529,8 @@ protected:
     struct_typet &type);
   /*
    * Add virtual pointer(vptr).
-   * Vptr is NOT a symbol but rather simply added as a component to the class' type.
+   * Vptr is NOT a symbol but rather simply added as a component to the class'
+   * type.
    *
    * This is done the first time we encounter a virtual method in a class
    */
@@ -375,8 +538,9 @@ protected:
   /*
    * Add an entry to the virtual table type
    *
-   * This is done when NOT the first time we encounter a virtual method in a class
-   * in which case we just want to add a new entry to the virtual table type
+   * This is done when NOT the first time we encounter a virtual method in a
+   * class in which case we just want to add a new entry to the virtual table
+   * type
    */
   void add_vtable_type_entry(
     struct_typet &type,
@@ -388,7 +552,8 @@ protected:
    *
    * Params:
    *  - md: clang AST of the overriding method
-   *  - map: key: a map that takes method id as key and pointer to the overriden method AST
+   *  - map: key: a map that takes method id as key and pointer to the overriden
+   * method AST
    */
   void
   get_overriden_methods(const clang::CXXMethodDecl &md, overriden_map &map);
@@ -397,16 +562,17 @@ protected:
    *
    * Params:
    *  - md: clang AST of the overriden method in base class
-   *  - component: ESBMC IR representing the the overriding method in derived class' type
+   *  - component: ESBMC IR representing the the overriding method in derived
+   * class' type
    *  - type: ESBMC IR representing the derived class' type
    */
   void add_thunk_method(
-    const clang::CXXRecordDecl &derived_rd,
     const clang::CXXMethodDecl &md,
     const struct_typet::componentt &component,
     struct_typet &type);
   /*
-   * change the type of 'this' pointer from derived class type to base class type
+   * change the type of 'this' pointer from derived class type to base class
+   * type
    */
   void update_thunk_this_type(
     typet &thunk_symbol_type,
@@ -421,17 +587,18 @@ protected:
    * Add thunk function body
    * Params:
    *  - thunk_func_symb: function symbol for the thunk method
-   *  - component: ESBMC IR representing the the overriding method in derived class' type
+   *  - component: ESBMC IR representing the the overriding method in derived
+   * class' type
    */
   void add_thunk_method_body(
     symbolt &thunk_func_symb,
-    const struct_typet::componentt &component,
-    uint64_t base_offset);
+    const struct_typet::componentt &component);
   /*
    * Add thunk body that contains return value
    * Params:
    *  - thunk_func_symb: function symbol for the thunk method
-   *  - component: ESBMC IR representing the the overriding method in derived class' type
+   *  - component: ESBMC IR representing the the overriding method in derived
+   * class' type
    *  - late_cast_this: late casting of `this`
    */
   void add_thunk_method_body_return(
@@ -442,7 +609,8 @@ protected:
    * Add thunk body that does NOT contain return value
    * Params:
    *  - thunk_func_symb: function symbol for the thunk method
-   *  - component: ESBMC IR representing the the overriding method in derived class' type
+   *  - component: ESBMC IR representing the the overriding method in derived
+   * class' type
    *  - late_cast_this: late casting of `this`
    */
   void add_thunk_method_body_no_return(
@@ -459,20 +627,24 @@ protected:
   void add_thunk_component_to_type(
     const symbolt &thunk_func_symb,
     struct_typet &type,
-    const struct_typet::componentt &comp);
+    const struct_typet::componentt &comp,
+    const irep_idt &virtual_name);
   /*
    * Set an intuitive name to thunk function
    */
   void
   set_thunk_name(symbolt &thunk_func_symb, const std::string &base_class_id);
   /*
-   * Recall that we mode the virtual function table as struct of function pointers.
-   * This function adds the symbols for these struct variables.
+   * Recall that we mode the virtual function table as struct of function
+   * pointers. This function adds the symbols for these struct variables.
    *
    * Params:
-   *  - cxxrd: clang AST node representing the class/struct we are currently dealing with
-   *  - type: ESBMC IR representing the type the class/struct we are currently dealing with
-   *  - vft_value_map: representing the vtable value maps for this class/struct we are currently dealing with
+   *  - cxxrd: clang AST node representing the class/struct we are currently
+   * dealing with
+   *  - type: ESBMC IR representing the type the class/struct we are currently
+   * dealing with
+   *  - vft_value_map: representing the vtable value maps for this class/struct
+   * we are currently dealing with
    */
   void setup_vtable_struct_variables(
     const clang::CXXRecordDecl &cxxrd,
@@ -483,14 +655,16 @@ protected:
    * with each key-value pair in the form of:
    *  Class X : {VirtualName Y : FunctionID}
    *
-   * where X represents the name of a virtual/thunk/overriding function and function ID represents the
-   * actual function we are calling when calling the virtual/thunk/overriding function
-   * via a Class X* pointer, something like:
+   * where X represents the name of a virtual/thunk/overriding function and
+   * function ID represents the actual function we are calling when calling the
+   * virtual/thunk/overriding function via a Class X* pointer, something like:
    *   xptr->Y()
    *
    * Params:
-   *  - struct_type: ESBMC IR representing the type of the class/struct we are currently dealing with
-   *  - vtable_value_map: representing the vtable value maps for this class/struct we are currently dealing with
+   *  - struct_type: ESBMC IR representing the type of the class/struct we are
+   * currently dealing with
+   *  - vtable_value_map: representing the vtable value maps for this
+   * class/struct we are currently dealing with
    */
   void build_vtable_map(
     const struct_typet &struct_type,
@@ -505,9 +679,12 @@ protected:
    *    };
    *
    * Params:
-   *  - cxxrd: clang AST node representing the class/struct we are currently dealing with
-   *  - struct_type: ESBMC IR representing the type the class/struct we are currently dealing with
-   *  - vtable_value_map: representing the vtable value maps for this class/struct we are currently dealing with
+   *  - cxxrd: clang AST node representing the class/struct we are currently
+   * dealing with
+   *  - struct_type: ESBMC IR representing the type the class/struct we are
+   * currently dealing with
+   *  - vtable_value_map: representing the vtable value maps for this
+   * class/struct we are currently dealing with
    */
   void add_vtable_variable_symbols(
     const clang::CXXRecordDecl &cxxrd,
@@ -564,7 +741,8 @@ protected:
    *
    * Params:
    *  - member: the method to which this MemberExpr refers
-   *  - new_expr: ESBMC IR to represent x dereferencing as in `x->X@vtable_ptr->F`
+   *  - new_expr: ESBMC IR to represent x dereferencing as in
+   * `x->X@vtable_ptr->F`
    */
   bool
   get_vft_binding_expr_base(const clang::MemberExpr &member, exprt &new_expr);
@@ -573,8 +751,10 @@ protected:
    *
    * Params:
    *  - member: the method to which this MemberExpr refers
-   *  - new_expr: ESBMC IR to represent X@Vtable_ptr dereferencing as in `x->X@vtable_ptr->F`
-   *  - base_deref: the base dereferencing expression incorporated in vtable pointer dereferencing expression
+   *  - new_expr: ESBMC IR to represent X@Vtable_ptr dereferencing as in
+   * `x->X@vtable_ptr->F`
+   *  - base_deref: the base dereferencing expression incorporated in vtable
+   * pointer dereferencing expression
    */
   void get_vft_binding_expr_vtable_ptr(
     const clang::MemberExpr &member,
@@ -595,7 +775,7 @@ protected:
 
   bool is_aggregate_type(const clang::QualType &q_type) override;
   /*
-   * check if a method is Copy assignment Operator or 
+   * check if a method is Copy assignment Operator or
    * Move assignment Operator
    * Arguments:
    *  md: clang AST representing a C++ method
@@ -615,7 +795,33 @@ protected:
    */
   void make_temporary(exprt &expr);
 
+  /* Lower a class-typed conditional operator to a single temporary_object whose
+   * initializer branches, so both constructors target one object (guaranteed
+   * elision). Sets `elided` when it applied; leaves it false for shapes that
+   * keep the generic if_exprt lowering. Returns true on conversion error. */
+  bool get_conditional_class_prvalue(
+    const clang::ConditionalOperator &ternary,
+    exprt &new_expr,
+    bool &elided);
+
+  bool get_new_storage(const clang::CXXNewExpr &ne, exprt &new_expr);
+  bool get_dealloc_function(const clang::CXXDeleteExpr &de, exprt &new_expr);
+  bool get_align_val(
+    const clang::QualType &type,
+    const clang::ParmVarDecl &param,
+    exprt &align);
+
+  /* Lower a non-allocating placement new to
+   * comma(<initialize *(T*)place>, (T*)place); a side-effecting place is
+   * first bound to a local, ({ void *p = place; <that comma on p>; }).
+   * Returns true on error. */
+  bool get_placement_new(
+    const clang::CXXNewExpr &ne,
+    const typet &t,
+    const locationt &location,
+    exprt &new_expr);
+
   bool get_member_expr(const clang::MemberExpr &memb, exprt &new_expr) override;
 };
 
-#endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */
+#endif /* CLANG_CPP_FRONTEND_CLANG_CPP_CONVERT_H_ */

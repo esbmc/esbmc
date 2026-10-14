@@ -1,0 +1,4 @@
+CORE
+main.c
+--overflow-check --function g
+^VERIFICATION FAILED$

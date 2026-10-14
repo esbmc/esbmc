@@ -3,14 +3,12 @@ include(CPM)
 
 if(DEFINED Boolector_DIR)
   set(ENABLE_BOOLECTOR ON)
-elseif(EXISTS $ENV{HOME}/boolector)
-  set(ENABLE_BOOLECTOR ON)
 else()
   if(ENABLE_BOOLECTOR AND DOWNLOAD_DEPENDENCIES)
     # Sadly... Boolector requires some manual execution
     # before invoking its scripts. Thus, we can't use
     # FetchContent here
-    CPMAddPackage(
+    cpmaddpackage(
       NAME boolector
       DOWNLOAD_ONLY YES
       GITHUB_REPOSITORY rafaelsamenezes/boolector
@@ -56,9 +54,8 @@ if(ENABLE_BOOLECTOR)
   add_library(solverbtor boolector_conv.cpp)
   target_include_directories(
     solverbtor
-    PRIVATE ${Boost_INCLUDE_DIRS}
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-  target_link_libraries(solverbtor Boolector::boolector fmt::fmt)
+  target_link_libraries(solverbtor PUBLIC esbmc_common Boolector::boolector fmt::fmt)
 
   target_link_libraries(solvers INTERFACE solverbtor)
 

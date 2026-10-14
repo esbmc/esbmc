@@ -4,10 +4,15 @@
  *  x->F
  *  where F represents a virtual/overriding method
  *
- *  clang::MemberExpr may represent x->F or x.F, but we don't care about dot operator.
+ *  A clang::MemberExpr may be written with `->` or `.`. Both need dynamic
+ *  binding when Clang reports the call performs virtual dispatch (e.g. a call
+ *  through a reference or a dereferenced pointer, `(*x).F` / `ref.F`). Only an
+ *  explicitly-qualified call (`obj.Base::F()`) is devirtualised; a plain
+ *  complete-object call still goes through the vtable, which resolves to the
+ *  object's own type.
  */
 
-#include <util/compiler_defs.h>
+#include <util/base/compiler_defs.h>
 // Remove warnings from Clang headers
 CC_DIAGNOSTIC_PUSH()
 CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
@@ -26,20 +31,16 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 CC_DIAGNOSTIC_POP()
 
 #include <clang-cpp-frontend/clang_cpp_convert.h>
-#include <util/expr_util.h>
+#include <util/expr/expr_util.h>
 
 bool clang_cpp_convertert::perform_virtual_dispatch(
   const clang::MemberExpr &member)
 {
-  // x.F() can't be a virtual dispatch
-  if (!member.isArrow())
-    return false;
-
   const clang::Decl &decl = *member.getMemberDecl();
   switch (decl.getKind())
   {
   // TODO: dtor might be virtual too
-  //case clang::Decl::CXXDestructor:
+  // case clang::Decl::CXXDestructor:
   case clang::Decl::CXXMethod:
   {
     const clang::CXXMethodDecl &cxxmd =
@@ -115,7 +116,14 @@ bool clang_cpp_convertert::get_vft_binding_expr_base(
   if (get_expr(*member.getBase(), base))
     return true;
 
-  new_expr = dereference_exprt(base, base.type());
+  // For `ptr->F`, the base is a pointer and the object is `*ptr`. For `obj.F`
+  // (a reference or dereferenced-pointer object expression that still needs
+  // dynamic dispatch), the base already denotes the object lvalue, so binding
+  // its vtable pointer must not add a further dereference.
+  if (member.isArrow())
+    new_expr = dereference_exprt(base, base.type());
+  else
+    new_expr = base;
 
   return false;
 }
@@ -138,7 +146,8 @@ void clang_cpp_convertert::get_vft_binding_expr_vtable_ptr(
   pointer_typet member_type(vtable_type);
   member_exprt deref_member(base_deref, vtable_ptr_name, member_type);
 
-  // we've got the deref type and member. Now we are ready to make the deref new_expr
+  // we've got the deref type and member. Now we are ready to make the deref
+  // new_expr
   new_expr = dereference_exprt(deref_member, member_type);
 }
 

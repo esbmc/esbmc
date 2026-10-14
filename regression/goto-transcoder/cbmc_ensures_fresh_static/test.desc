@@ -1,0 +1,4 @@
+CORE
+cbmc_ensures_fresh_static.goto
+--binary --function alloc_one
+^VERIFICATION SUCCESSFUL$

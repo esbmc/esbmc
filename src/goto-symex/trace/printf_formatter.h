@@ -1,0 +1,68 @@
+#ifndef CPROVER_PRINTF_FORMATTER
+#define CPROVER_PRINTF_FORMATTER
+
+#include <irep2/irep2_expr.h>
+
+class printf_formattert
+{
+public:
+  void
+  operator()(const std::string &format, const std::list<expr2tc> &_operands);
+
+  void print(std::ostream &out);
+  std::string as_string();
+
+  /** Minimum possible output length for the last print() call.
+   *  Equals max_outlen when all format arguments are constants. */
+  size_t min_outlen = 0;
+  /** Maximum possible output length for the last print() call. */
+  size_t max_outlen = 0;
+  /** False when print() could not compute a sound upper bound on the output
+   *  length: a value-dependent conversion (%s, %e/%f/%g) was given a
+   *  non-constant argument, or an expected argument was missing. When false,
+   *  max_outlen is NOT a valid upper bound and callers must treat the return
+   *  value as unbounded (unconstrained nondet). Always true after a run over
+   *  a format whose conversions are all constant-bounded. */
+  bool bounded = true;
+
+  /** False when a '#' flag outside %o, %x and %X or a conversion (%p, an
+   *  unknown one) the formatter does not model appeared, so the text it
+   *  produced may differ from the real output. */
+  bool exact = true;
+
+  /** True when `operands` are the call's actual arguments, so a non-literal
+   *  %s operand may be used to derive a sound object-size length bound. For
+   *  the v* variants (vprintf/vsprintf/vsnprintf/vasprintf/vfprintf) the
+   *  arguments are hidden behind a va_list and the operand at a %s position is
+   *  the va_list itself, not the string — deriving a size bound from it would
+   *  be unsound, so callers set this false and %s stays unbounded. */
+  bool args_reliable = true;
+
+protected:
+  std::string format;
+  std::list<expr2tc> operands;
+  std::list<expr2tc>::const_iterator next_operand;
+  unsigned format_pos;
+  inline bool eol() const
+  {
+    return format_pos >= format.size();
+  }
+
+  class eol_exception
+  {
+  };
+
+  char next()
+  {
+    if (eol())
+      throw eol_exception();
+    return format[format_pos++];
+  }
+
+  void process_char(std::ostream &out);
+  void process_format(std::ostream &out);
+
+  const expr2tc make_type(const expr2tc &src, const type2tc &dest);
+};
+
+#endif

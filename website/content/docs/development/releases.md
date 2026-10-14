@@ -22,18 +22,6 @@ case:
 git switch -c v8.1
 ```
 
-### Update the Release Notes
-
-Update the release notes in `/scripts/release-notes.txt` to reflect the changes
-included in the new version.
-
-> [!TIP] Tip
->
-> You can use Claude or any other LLM for this, just use this command to get the
-> differences from the last tag
-> `git log v8.0..master --oneline > /tmp/commits-for-release.txt` (in this case
-> being `v8.0`) and instruct it to update the file for the next version.
-
 ### Update the Project Version
 
 Update the project version by modifying `/CMakeLists.txt`. Specifically the
@@ -46,7 +34,7 @@ Commit the changes and push them to the branch created earlier. Then submit a
 PR. Name the commit appropriately, in this case `update: bump version to v8.1`.
 
 ```sh
-git add scripts/release-notes.txt CMakeLists.txt
+git add CMakeLists.txt
 git commit -m "update: bump version to v8.1"
 git push
 ```
@@ -63,7 +51,7 @@ Make sure to change the title and body to your version number.
 ```sh
 gh pr create \
     --title "update: bump version to v8.1" \
-    --body "Bump version to v8.1 and update release notes."
+    --body "Bump version to v8.1."
 ```
 
 ### Await PR to be Merged
@@ -85,26 +73,37 @@ Push the tag to origin:
 git push --tags
 ```
 
-### Creating the Release Artifacts
+> [!IMPORTANT]
+>
+> Pushing a `v*` tag automatically triggers the
+> [Release](https://github.com/esbmc/esbmc/actions/workflows/ci-release.yml)
+> workflow ("Upload Release Asset"). It builds every platform and creates a
+> **draft** GitHub release named after the tag (e.g. `ESBMC v8.1`), with the
+> canonical `esbmc-linux.zip`, `esbmc-linux-armv8.zip`, `esbmc-windows.zip`,
+> `esbmc-macos.zip` and `esbmc.info` assets already attached. You do **not**
+> need to run the workflow manually, create the release by hand, or upload any
+> artifacts yourself.
 
-You need to get the build artifacts that will be uploaded. Run a new
-[Release](https://github.com/esbmc/esbmc/actions/workflows/release.yml) job on
-the `master` branch. Download the artifacts and prepare to upload them in the
-next step.
+### Publish the Draft Release
 
-### Creating the Release on GitHub
+Wait for the Release workflow to finish, then open the repository’s
+[Releases](https://github.com/esbmc/esbmc/releases) page and find the draft
+release the workflow created for your tag.
 
-After pushing the tag, GitHub will allow you to create the official release
-associated with that tag through the repository’s Releases page.
-
-1. Select the tag you created and title the release according to your version
-   "Release 8.1" (note the missing v, for consistency with past releases).
-2. Write the release description, which should just be a markdown version of the
-   content written in `/scripts/release-notes.txt` from earlier.
-3. You will need to upload the release artifacts created in the last step.
+1. Confirm the attached assets are present: `esbmc-linux.zip`,
+   `esbmc-linux-armv8.zip`, `esbmc-windows.zip`, `esbmc-macos.zip` and
+   `esbmc.info`.
+2. Adjust the title if needed — the draft is created as `ESBMC v8.1`; past
+   releases use "Release 8.1" (note the missing v).
+3. Replace the placeholder description with release notes describing the
+   changes included in the new version.
+4. Publish the release.
 
 > [!TIP]
 >
-> You can use Claude or any other LLM to prepare the release description.
+> You can use Claude or any other LLM to prepare the release description. To get
+> the differences from the last tag, run
+> `git log v8.0..master --oneline > /tmp/commits-for-release.txt` (in this case
+> being `v8.0`) and let it write the notes from that.
 
 {{% /steps %}}

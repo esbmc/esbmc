@@ -1,0 +1,4 @@
+CORE
+cbmc_anon_aggregate.goto
+--binary
+^VERIFICATION SUCCESSFUL$

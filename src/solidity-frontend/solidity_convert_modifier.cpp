@@ -1,5 +1,6 @@
 /// \file solidity_convert_modifier.cpp
-/// \brief Function and modifier definition conversion for the Solidity frontend.
+/// \brief Function and modifier definition conversion for the Solidity
+/// frontend.
 ///
 /// Converts Solidity function definitions, modifier definitions, and fallback/
 /// receive functions from the solc JSON AST into ESBMC's symbol table and code
@@ -8,14 +9,14 @@
 
 #include <solidity-frontend/solidity_convert.h>
 #include <solidity-frontend/typecast.h>
-#include <util/arith_tools.h>
-#include <util/bitvector.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/mp_arith.h>
-#include <util/std_expr.h>
-#include <util/message.h>
+#include <util/arith/arith_tools.h>
+#include <util/arith/bitvector.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
+#include <util/arith/mp_arith.h>
+#include <util/irep/std_expr.h>
+#include <util/message/message.h>
 #include <fstream>
 #include <functional>
 
@@ -75,7 +76,7 @@ bool solidity_convertert::get_function_definition(
   {
     typet tmp_rtn_type("constructor");
     type.return_type() = tmp_rtn_type;
-    type.set("#member_name", prefix + c_name);
+    type.member_name(prefix + c_name);
     type.set("#inlined", true);
   }
   else if (ast_node.contains("returnParameters"))
@@ -88,7 +89,7 @@ bool solidity_convertert::get_function_definition(
   {
     type.return_type() = empty_typet();
     type.return_type().set("cpp_type", "void");
-    type.set("#member_name", prefix + c_name);
+    type.member_name(prefix + c_name);
   }
 
   // special handling for tuple:
@@ -114,8 +115,8 @@ bool solidity_convertert::get_function_definition(
     type.set("#sol_payable", true);
 
   // 5. Check fd.isVariadic(), fd.isInlined()
-  //  Skipped since Solidity does not support variadic (optional args) or inline function.
-  //  Actually "inline" doesn not make sense in Solidity
+  //  Skipped since Solidity does not support variadic (optional args) or inline
+  //  function. Actually "inline" doesn not make sense in Solidity
 
   // 6. Populate "locationt location_begin"
   locationt location_begin;
@@ -153,7 +154,8 @@ bool solidity_convertert::get_function_definition(
   std::string debug_modulename =
     get_modulename_from_path(location_begin.file().as_string());
 
-  // 9. Populate "symbol.static_lifetime", "symbol.is_extern" and "symbol.file_local"
+  // 9. Populate "symbol.static_lifetime", "symbol.is_extern" and
+  // "symbol.file_local"
   symbolt symbol;
   get_default_symbol(symbol, debug_modulename, type, name, id, location_begin);
 
@@ -165,7 +167,8 @@ bool solidity_convertert::get_function_definition(
   // 10. Add symbol into the context
   symbolt &added_symbol = *move_symbol_to_context(symbol);
   // 11. Convert parameters, if no parameter, assume ellipis
-  //  - Convert params before body as they may get referred by the statement in the body
+  //  - Convert params before body as they may get referred by the statement in
+  //  the body
 
   // 11.1 add this pointer as the first param
   bool is_event_err_lib =
@@ -289,7 +292,7 @@ bool solidity_convertert::get_function_definition(
     }
   }
 
-  added_symbol.type = type;
+  added_symbol.set_type(migrate_type(type));
 
   // 11.3 Declare named return parameters as local variables.
   // Solidity allows `returns (uint result) { result = 42; }` where `result`
@@ -356,8 +359,8 @@ bool solidity_convertert::get_function_definition(
     {
       // func() modf_1 modf_2
       // => func() => func_modf1() => func_modf2()
-      if (get_func_modifier(
-            ast_node, c_name, name, id, add_reentry, body_exprt))
+      if (
+        get_func_modifier(ast_node, c_name, name, id, add_reentry, body_exprt))
         return true;
     }
     else
@@ -443,7 +446,7 @@ bool solidity_convertert::get_function_definition(
           context.find_symbol(tid) != nullptr)
         {
           const symbolt &tsym = *context.find_symbol(tid);
-          const struct_typet &tst = to_struct_type(tsym.type);
+          const struct_typet &tst = to_struct_type(tsym.get_type());
           for (size_t k = 0; k < named_ret_syms.size(); ++k)
           {
             const size_t pos = named_ret_positions[k];
@@ -511,7 +514,7 @@ bool solidity_convertert::get_function_definition(
           location_begin);
         symbolt &added_sa = *move_symbol_to_context(sa);
         code_declt sa_decl(symbol_expr(added_sa));
-        added_sa.value = encl_addr_g;
+        added_sa.set_value(encl_addr_g);
         sa_decl.operands().push_back(encl_addr_g);
 
         symbolt st;
@@ -525,7 +528,7 @@ bool solidity_convertert::get_function_definition(
           location_begin);
         symbolt &added_st = *move_symbol_to_context(st);
         code_declt st_decl(symbol_expr(added_st));
-        added_st.value = encl_this_g;
+        added_st.set_value(encl_this_g);
         st_decl.operands().push_back(encl_this_g);
 
         exprt this_addr_mem = member_exprt(this_expr, "$address", addr_t_sym);
@@ -600,7 +603,7 @@ bool solidity_convertert::get_function_definition(
           const symbolt *save_sym_ptr = context.find_symbol(save_id);
           if (save_sym_ptr != nullptr)
           {
-            exprt this_deref = dereference_exprt(this_expr, save_sym_ptr->type);
+            exprt this_deref = dereference_exprt(this_expr, save_sym_ptr->get_type());
             code_declt save_decl(symbol_expr(*save_sym_ptr));
             code_assignt save_init(symbol_expr(*save_sym_ptr), this_deref);
             wrapped.copy_to_operands(save_decl);
@@ -707,13 +710,14 @@ bool solidity_convertert::get_function_definition(
         get_default_symbol(
           out_sym,
           debug_modulename,
-          param_sym->type,
+          param_sym->get_type(),
           p_name + "$out",
           out_id,
           location_begin);
         out_sym.static_lifetime = true;
         out_sym.lvalue = true;
-        out_sym.value = gen_zero(get_complete_type(param_sym->type, ns), true);
+        out_sym.set_value(
+          gen_zero(get_complete_type(param_sym->get_type(), ns), true));
         move_symbol_to_context(out_sym);
       }
 
@@ -722,7 +726,7 @@ bool solidity_convertert::get_function_definition(
     }
   }
 
-  added_symbol.value = body_exprt;
+  added_symbol.set_value(body_exprt);
 
   // 13. Restore current_functionDecl
   log_debug("solidity", "@@@ Finish parsing function {}", current_functionName);
@@ -889,7 +893,7 @@ void solidity_convertert::collect_contract_global_stores(
     // file-local static infinite-array globals that live outside *this.
     if (!s.static_lifetime || !s.file_local)
       return;
-    if (s.type.id() != "array")
+    if (s.get_type().id() != "array")
       return;
     const std::string sid = id2string(s.id);
     if (sid.compare(0, store_prefix.size(), store_prefix) != 0)
@@ -899,7 +903,7 @@ void solidity_convertert::collect_contract_global_stores(
       return;
     if (sid.find("_sol_save_") != std::string::npos)
       return;
-    out.emplace_back(sid, s.type);
+    out.emplace_back(sid, s.get_type());
   });
 }
 
@@ -1013,7 +1017,7 @@ bool solidity_convertert::build_revert_rollback_block(
   {
     // *this = _sol_save_this;
     exprt this_expr = symbol_expr(*this_sym);
-    exprt this_deref = dereference_exprt(this_expr, save_sym->type);
+    exprt this_deref = dereference_exprt(this_expr, save_sym->get_type());
     exprt save_ref = symbol_expr(*save_sym);
     code_assignt restore(this_deref, save_ref);
     block.copy_to_operands(restore);
@@ -1044,7 +1048,7 @@ bool solidity_convertert::build_revert_rollback_block(
           get_default_symbol(
             g_save,
             store_sym->module.as_string(),
-            store_sym->type,
+            store_sym->get_type(),
             "_sol_save_g_" + base,
             g_save_id,
             store_sym->location);
@@ -1227,7 +1231,7 @@ bool solidity_convertert::add_reentry_check(
   // we should only add this to the contract's functions
   // rather than interface and library's functions,
   // or contract's errors, events and ctor
-  //TODO: detect is_library_function
+  // TODO: detect is_library_function
 
   // add a global mutex checker _ESBMC_check_reentrancy() in the front
   side_effect_expr_function_callt call;
@@ -1293,7 +1297,8 @@ bool solidity_convertert::get_func_modifier(
   for (auto it = modifiers.rbegin(); it != modifiers.rend(); ++it)
   {
     int modifier_id = (*it)["modifierName"]["referencedDeclaration"];
-    // we cannot use reference here, as the src_ast_json got inserted/deleted later
+    // we cannot use reference here, as the src_ast_json got inserted/deleted
+    // later
     nlohmann::json mod_def = find_decl_ref(modifier_id);
     assert(!mod_def.is_null());
     assert(!mod_def.empty());
@@ -1371,8 +1376,9 @@ bool solidity_convertert::get_func_modifier(
     if (has_return)
     {
       // return func_modifier();
-      if (get_type_description(
-            ast_node["returnParameters"], aux_type.return_type()))
+      if (
+        get_type_description(
+          ast_node["returnParameters"], aux_type.return_type()))
         return true;
       // Multi-return functions lower their return type to empty_typet
       // (TUPLE_RETURNS) — get_parameter_list returns void for tuples.
@@ -1433,7 +1439,7 @@ bool solidity_convertert::get_func_modifier(
         return true;
       aux_type.arguments().push_back(arg);
     }
-    a_sym.type = aux_type;
+    a_sym.set_type(migrate_type(aux_type));
     // Stamp the wrapper with the base method it wraps. The wrapper is named
     // `<f_name>_<mod_name>` (get_modifier_function_name), but `_` is a legal
     // identifier char and the delimiter is unescaped, so the name alone cannot
@@ -1441,7 +1447,11 @@ bool solidity_convertert::get_func_modifier(
     // `a`+`b_mod` and `a_b`+`mod`). The Foundry coverage-test generator reads
     // this authoritative marker to attribute a covered branch inside the wrapper
     // to its externally-callable method, rather than guessing by name prefix.
-    a_sym.type.set("#sol_modifier_wrapper_for", f_name);
+    {
+      typet t = a_sym.get_type();
+      t.set("#sol_modifier_wrapper_for", f_name);
+      a_sym.set_type(std::move(t));
+    }
     move_builtin_to_contract(c_name, symbol_expr(a_sym), "internal", true);
 
     // If the wrapped function returns a tuple, register a tuple instance
@@ -1630,8 +1640,6 @@ bool solidity_convertert::get_func_modifier(
       // move the symbol to the context
       symbolt &ret_sym = *move_symbol_to_context(ret_symbol);
       code_declt ret_decl(symbol_expr(ret_sym));
-      //ret_sym.value = func_modifier;
-      // ret_decl.operands().push_back(func_modifier);
       mod_body.operands().insert(mod_body.operands().begin(), ret_decl);
 
       // 2. replace every "return x" to "aux_var = x". Bare `return;` inside
@@ -1668,7 +1676,7 @@ bool solidity_convertert::get_func_modifier(
       mod_body.move_to_operands(return_expr);
     }
 
-    a_sym.value = mod_body;
+    a_sym.set_value(mod_body);
 
     // reset
     current_functionDecl = old_decl;
@@ -1731,7 +1739,8 @@ bool solidity_convertert::get_func_modifier(
         }
       }
 
-      if (insert_modifier_json(
+      if (
+        insert_modifier_json(
             ast_node, c_name, next_aux_func_name, modifier_func))
         return true;
       assert(modifier_func != nullptr);

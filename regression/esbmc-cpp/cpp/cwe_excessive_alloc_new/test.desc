@@ -1,0 +1,6 @@
+CORE
+main.cpp
+--excessive-alloc-check --incremental-bmc
+^VERIFICATION FAILED$
+^  excessive allocation size: operator new\[\]$
+^  CWE: CWE-789$

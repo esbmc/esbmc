@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: numpy.transpose\(\) does not support this constructor call \(unsupported keywords or non-constant arguments\)$

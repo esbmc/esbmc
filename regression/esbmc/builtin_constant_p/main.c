@@ -1,5 +1,5 @@
 // Exercises run_builtin's __builtin_constant_p handler in
-// src/goto-symex/builtin_functions/run_builtin.cpp. The handler
+// src/goto-symex/engine/builtin_functions/run_builtin.cpp. The handler
 // renames the operand and assigns 1 to ret when the renamed value
 // is a constant_int2t, 0 otherwise.
 #include <assert.h>

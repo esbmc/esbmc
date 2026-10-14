@@ -1,0 +1,5 @@
+CORE
+main.c
+--goto-functions-only
+^\s+ASSERT !\(c == 2\) // j$
+\A(?![\s\S]*ASSERT 0 // j)[\s\S]*\Z

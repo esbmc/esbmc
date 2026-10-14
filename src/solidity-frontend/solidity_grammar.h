@@ -13,8 +13,8 @@
 #include <string>
 #include <nlohmann/json.hpp>
 
-// Anything auxiliary means it's not in Solidity grammar, but we need it to work with
-// ESBMC's irept
+// Anything auxiliary means it's not in Solidity grammar, but we need it to work
+// with ESBMC's irept
 namespace SolidityGrammar
 {
 // rule contract-body-element
@@ -43,7 +43,8 @@ enum TypeNameT
   // rule parameter-list. Strictly, this should not be here. Just a workaround
   ParameterList,
 
-  // auxiliary type for FunctionToPointer decay in CallExpr when making a function call
+  // auxiliary type for FunctionToPointer decay in CallExpr when making a
+  // function call
   Pointer, // TODO: Fix me. Rename it to PointerFuncToPtr
 
   // auxiliary type for ArrayToPointer when dereferencing array, e.g. a[0]
@@ -216,9 +217,7 @@ enum ElementaryTypeNameT
   BYTES31,
   BYTES32,
 
-  // TODO: rule signed-integer-type
   // TODO: rule e
-  // TODO: fixed-bytes
   // TODO: fixed
   // TODO: ufixed
   ElementaryTypeNameTError
@@ -287,14 +286,14 @@ const char *statement_to_str(StatementT type);
 enum ExpressionT
 {
   // BinaryOperator
-  BinaryOperatorClass =
-    0, // This type covers all binary operators in Solidity, such as =, +, - .etc
-  BO_Assign, // =
-  BO_Add,    // +
-  BO_Sub,    // -
-  BO_Mul,    // *
-  BO_Div,    // /
-  BO_Rem,    // %
+  BinaryOperatorClass = 0, // This type covers all binary operators in Solidity,
+                           // such as =, +, - .etc
+  BO_Assign,               // =
+  BO_Add,                  // +
+  BO_Sub,                  // -
+  BO_Mul,                  // *
+  BO_Div,                  // /
+  BO_Rem,                  // %
 
   BO_Shl, // <<
   BO_Shr, // >>
@@ -334,7 +333,7 @@ enum ExpressionT
   UO_LNot,    // !
   UO_Delete,  // delete
 
-  //ternaryOperator
+  // ternaryOperator
   ConditionalOperatorClass, // ?...:...
 
   // rule identifier
@@ -398,7 +397,8 @@ enum ExpressionT
   ContractMemberCall,
 
   // Members of Address Types
-  // see https://docs.soliditylang.org/en/v0.8.23/units-and-global-variables.html#members-of-address-types
+  // see
+  // https://docs.soliditylang.org/en/v0.8.23/units-and-global-variables.html#members-of-address-types
   AddressMemberCall,
 
   // library function call
@@ -459,7 +459,8 @@ enum ImplicitCastTypeT
   // for return value casting
   LValueToRValue = 0,
 
-  // for ImplicitCastExpr<FunctionToPointerDecay> as in CallExpr when making a function call
+  // for ImplicitCastExpr<FunctionToPointerDecay> as in CallExpr when making a
+  // function call
   FunctionToPointerDecay,
 
   // for ImplicitCastExpr<ArrayToPointerDecay> as in IndexAccess
@@ -489,8 +490,9 @@ enum VisibilityT
 };
 VisibilityT get_access_t(const nlohmann::json &ast_node);
 
-// Solidity type annotation stored on irep typet objects via #sol_type attribute.
-// Replaces the previous string-based system with a formal enum for type safety.
+// Solidity type annotation stored on irep typet objects via #sol_type
+// attribute. Replaces the previous string-based system with a formal enum for
+// type safety.
 enum class SolType
 {
   // unsigned integers (uint8 – uint256)

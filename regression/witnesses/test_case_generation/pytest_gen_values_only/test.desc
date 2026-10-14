@@ -1,0 +1,5 @@
+CORE
+main.py
+--generate-pytest-testcase --pytest-values-only
+^Generated pytest test case\: test_main\.py
+^VERIFICATION FAILED$

@@ -1,0 +1,2015 @@
+#include <python-frontend/function_call/builder.h>
+#include <python-frontend/function_call/expr.h>
+#include <python-frontend/exception/python_exception_handler.h>
+#include <python-frontend/json_utils.h>
+#include <python-frontend/consteval/python_consteval.h>
+#include <python-frontend/python_converter.h>
+#include <python-frontend/python_expr_builder.h>
+#include <python-frontend/lambda/python_lambda.h>
+#include <python-frontend/python-list/python_list.h>
+#include <python-frontend/string/string_builder.h>
+#include <python-frontend/string/string_handler.h>
+#include <python-frontend/tuple/tuple_handler.h>
+#include <python-frontend/type/type_handler.h>
+#include <python-frontend/type/type_utils.h>
+#include <irep2/irep2_utils.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_typecast.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/message/message.h>
+#include <util/irep/migrate.h>
+#include <util/lang/python_types.h>
+#include <util/irep/std_code.h>
+#include <util/expr/string_constant.h>
+
+#include <algorithm>
+#include <optional>
+#include <sstream>
+
+using namespace json_utils;
+
+namespace
+{
+std::optional<std::size_t>
+get_nonnegative_literal_size(const nlohmann::json &node)
+{
+  if (
+    !node.is_object() || node.value("_type", std::string()) != "Constant" ||
+    !node.contains("value"))
+    return std::nullopt;
+
+  const auto &value = node["value"];
+  if (value.is_number_unsigned())
+    return value.get<std::size_t>();
+
+  if (value.is_number_integer())
+  {
+    const auto signed_value = value.get<long long>();
+    if (signed_value >= 0)
+      return static_cast<std::size_t>(signed_value);
+  }
+
+  return std::nullopt;
+}
+
+std::optional<std::size_t> get_keyword_literal_size(
+  const nlohmann::json &call,
+  const std::string &keyword_name)
+{
+  if (!call.contains("keywords"))
+    return std::nullopt;
+
+  for (const auto &kw : call["keywords"])
+  {
+    if (
+      kw.is_object() && kw.value("_type", std::string()) == "keyword" &&
+      !kw["arg"].is_null() && kw["arg"] == keyword_name)
+      return get_nonnegative_literal_size(kw["value"]);
+  }
+
+  return std::nullopt;
+}
+
+std::optional<long long> get_literal_int_index(const nlohmann::json &node)
+{
+  if (
+    node.value("_type", "") == "Constant" && node.contains("value") &&
+    node["value"].is_number_integer())
+    return node["value"].get<long long>();
+
+  if (
+    node.value("_type", "") == "UnaryOp" && node.contains("op") &&
+    node["op"].value("_type", "") == "USub" && node.contains("operand") &&
+    node["operand"].value("_type", "") == "Constant" &&
+    node["operand"].contains("value") &&
+    node["operand"]["value"].is_number_integer())
+    return -node["operand"]["value"].get<long long>();
+
+  return std::nullopt;
+}
+
+std::optional<std::pair<long long, long long>>
+get_fixed_2d_array_shape(const symbolt &source, const namespacet &ns)
+{
+  typet source_type = ns.follow(source.get_type());
+  if (!source_type.is_array())
+    return std::nullopt;
+
+  const array_typet &array_type = to_array_type(source_type);
+  if (array_type.size().is_nil() || !array_type.size().is_constant())
+    return std::nullopt;
+
+  source_type = ns.follow(array_type.subtype());
+  if (!source_type.is_array())
+    return std::nullopt;
+
+  const array_typet &row_type = to_array_type(source_type);
+  if (row_type.size().is_nil() || !row_type.size().is_constant())
+    return std::nullopt;
+
+  return std::make_pair(
+    binary2integer(array_type.size().value().c_str(), false).to_int64(),
+    binary2integer(row_type.size().value().c_str(), false).to_int64());
+}
+
+bool is_numpy_random_attr(const nlohmann::json &func, const std::string &name)
+{
+  if (
+    !func.is_object() || func.value("_type", std::string()) != "Attribute" ||
+    func.value("attr", std::string()) != name || !func.contains("value") ||
+    !func["value"].is_object() ||
+    func["value"].value("_type", std::string()) != "Attribute" ||
+    func["value"].value("attr", std::string()) != "random" ||
+    !func["value"].contains("value") || !func["value"]["value"].is_object())
+    return false;
+
+  const auto &base = func["value"]["value"];
+  return base.value("_type", std::string()) == "Name" &&
+         base.value("id", std::string()) == "np";
+}
+
+nlohmann::json
+make_list_from_repeated_call(const nlohmann::json &call, std::size_t size)
+{
+  nlohmann::json list_node;
+  list_node["_type"] = "List";
+  list_node["elts"] = nlohmann::json::array();
+  for (const char *key :
+       {"lineno", "col_offset", "end_lineno", "end_col_offset"})
+    if (call.contains(key))
+      list_node[key] = call[key];
+
+  for (std::size_t i = 0; i < size; ++i)
+    list_node["elts"].push_back(call);
+
+  return list_node;
+}
+} // namespace
+
+// Resolve symbol values to constants
+exprt python_converter::get_resolved_value(const exprt &expr)
+{
+  // Handle direct function call expressions
+  if (expr.id() == "sideeffect")
+  {
+    const side_effect_exprt &side_effect = to_side_effect_expr(expr);
+    if (
+      side_effect.get_statement() == "function_call" &&
+      side_effect.operands().size() >= 2)
+      // Structure: operand 0 = function symbol, operand 1 = arguments
+      return resolve_function_call(
+        side_effect.operands()[0], side_effect.operands()[1]);
+  }
+
+  // Handle symbols that contain function calls or constants
+  if (!expr.is_symbol())
+    return nil_exprt();
+
+  const symbol_exprt &sym = to_symbol_expr(expr);
+  const symbolt *symbol = symbol_table_.find_symbol(sym.get_identifier());
+
+  if (!symbol || symbol->get_value().is_nil())
+    return nil_exprt();
+
+  // Return constant values directly
+  if (symbol->get_value().is_constant())
+    return symbol->get_value();
+
+  // Handle function calls stored as code
+  if (symbol->get_value().is_code())
+  {
+    const codet &code = to_code(symbol->get_value());
+
+    if (code.get_statement() == "function_call" && code.operands().size() >= 3)
+    {
+      // Structure: operand 1 = function symbol, operand 2 = arguments
+      exprt result =
+        resolve_function_call(code.operands()[1], code.operands()[2]);
+      if (!result.is_nil())
+        return result;
+    }
+  }
+
+  return nil_exprt();
+}
+
+// Resolve function calls (both identity functions and constant-returning
+// functions)
+exprt python_converter::resolve_function_call(
+  const exprt &func_expr,
+  const exprt &args_expr)
+{
+  if (!func_expr.is_symbol())
+    return nil_exprt();
+
+  const symbol_exprt &func_sym = to_symbol_expr(func_expr);
+  const symbolt *func_symbol =
+    symbol_table_.find_symbol(func_sym.get_identifier());
+
+  if (!func_symbol || func_symbol->get_value().is_nil())
+    return nil_exprt();
+
+  // First check if this function returns a constant value
+  exprt constant_result =
+    get_function_constant_return(func_symbol->get_value());
+  if (!constant_result.is_nil())
+    return constant_result;
+
+  // Then check if this function is an identity function (returns its parameter)
+  if (!is_identity_function(
+        func_symbol->get_value(), func_sym.get_identifier().as_string()))
+    return nil_exprt();
+
+  // Extract the first argument for identity functions
+  if (args_expr.id() != "arguments" || args_expr.operands().empty())
+    return nil_exprt();
+
+  exprt arg = args_expr.operands()[0];
+
+  // Handle address_of wrapper
+  if (arg.is_address_of() && arg.operands().size() > 0)
+    arg = arg.operands()[0];
+
+  // If the argument is itself a function call, recursively resolve it
+  if (arg.id() == "sideeffect")
+  {
+    exprt nested_resolved = get_resolved_value(arg);
+    if (!nested_resolved.is_nil())
+      arg = nested_resolved;
+  }
+
+  // If the argument is a symbol, try to resolve it to its constant value
+  if (arg.is_symbol())
+  {
+    const symbol_exprt &sym = to_symbol_expr(arg);
+    const symbolt *symbol = symbol_table_.find_symbol(sym.get_identifier());
+    if (symbol && symbol->get_value().is_constant())
+      arg = symbol->get_value();
+  }
+
+  // Return string constants, array constants, and single character constants
+  if (
+    arg.id() == "string-constant" || (arg.is_constant() && arg.is_array()) ||
+    (arg.is_constant() && arg.type().is_array()) ||
+    (arg.is_constant() &&
+     (arg.type().is_unsignedbv() || arg.type().is_signedbv())))
+  {
+    return arg;
+  }
+
+  return nil_exprt();
+}
+
+// Check if a function returns a constant value
+exprt python_converter::get_function_constant_return(const exprt &func_value)
+{
+  if (!func_value.is_code())
+    return nil_exprt();
+
+  const codet &func_code = to_code(func_value);
+
+  // Check if it's a simple return statement with a constant
+  if (func_code.get_statement() == "return")
+  {
+    const code_returnt &ret = to_code_return(func_code);
+    if (ret.has_return_value())
+    {
+      const exprt &return_val = ret.return_value();
+      if (
+        return_val.id() == "string-constant" ||
+        (return_val.is_constant() && return_val.is_array()) ||
+        (return_val.is_constant() && return_val.type().is_array()) ||
+        (return_val.is_constant() && (return_val.type().is_unsignedbv() ||
+                                      return_val.type().is_signedbv())))
+      {
+        return return_val;
+      }
+    }
+  }
+
+  // Check nested code structures
+  for (const auto &operand : func_value.operands())
+  {
+    if (operand.is_code())
+    {
+      const codet &sub_code = to_code(operand);
+      if (sub_code.get_statement() == "return")
+      {
+        const code_returnt &ret = to_code_return(sub_code);
+        if (ret.has_return_value())
+        {
+          const exprt &return_val = ret.return_value();
+          if (
+            return_val.id() == "string-constant" ||
+            (return_val.is_constant() && return_val.is_array()) ||
+            (return_val.is_constant() && return_val.type().is_array()) ||
+            (return_val.is_constant() && (return_val.type().is_unsignedbv() ||
+                                          return_val.type().is_signedbv())))
+          {
+            return return_val;
+          }
+        }
+      }
+    }
+  }
+
+  return nil_exprt();
+}
+
+// Check if a function is an identity function (returns its parameter)
+bool python_converter::is_identity_function(
+  const exprt &func_value,
+  const std::string &func_identifier)
+{
+  if (!func_value.is_code())
+    return false;
+
+  const codet &func_code = to_code(func_value);
+
+  // Check if it's a simple return statement
+  if (func_code.get_statement() == "return")
+  {
+    const code_returnt &ret = to_code_return(func_code);
+    if (ret.has_return_value() && ret.return_value().is_symbol())
+    {
+      const symbol_exprt &return_sym = to_symbol_expr(ret.return_value());
+      std::string return_identifier = return_sym.get_identifier().as_string();
+      std::string parameter_prefix = func_identifier + "@";
+
+      // Check if the returned symbol is a parameter of this function
+      // Parameter pattern: func_identifier + "@" + parameter_name
+      if (
+        return_identifier.size() >= parameter_prefix.size() &&
+        return_identifier.compare(
+          0, parameter_prefix.size(), parameter_prefix) == 0)
+        return true;
+    }
+  }
+
+  // Check nested code structures
+  for (const auto &operand : func_value.operands())
+  {
+    if (operand.is_code())
+    {
+      const codet &sub_code = to_code(operand);
+      if (sub_code.get_statement() == "return")
+      {
+        const code_returnt &ret = to_code_return(sub_code);
+        if (ret.has_return_value() && ret.return_value().is_symbol())
+        {
+          const symbol_exprt &return_sym = to_symbol_expr(ret.return_value());
+          std::string return_identifier =
+            return_sym.get_identifier().as_string();
+          std::string parameter_prefix = func_identifier + "@";
+
+          // Check if the returned symbol is a parameter of this function
+          if (
+            return_identifier.size() >= parameter_prefix.size() &&
+            return_identifier.compare(
+              0, parameter_prefix.size(), parameter_prefix) == 0)
+            return true;
+        }
+      }
+    }
+  }
+
+  return false;
+}
+
+exprt python_converter::get_len_on_class_instance(const nlohmann::json &element)
+{
+  if (
+    !element.contains("func") || !element["func"].is_object() ||
+    element["func"].value("_type", "") != "Name" ||
+    element["func"].value("id", "") != "len" || !element.contains("args") ||
+    !element["args"].is_array() || element["args"].size() != 1)
+    return nil_exprt();
+
+  const nlohmann::json &arg = element["args"][0];
+  const locationt location = get_location_from_decl(element);
+  if (has_dunder_method(arg, "__len__"))
+    return checked_len_result(
+      get_expr(
+        build_dunder_call(arg, "__len__", nlohmann::json::array(), element)),
+      location);
+
+  // Without a __len__ the builtin path measures the struct with strlen and
+  // reports 0, silently emptying any `for x in obj` bounded by len() (#7085).
+  const std::string cls = instance_class_name(arg);
+  if (!cls.empty() && is_class_instance(arg))
+    return get_exception_handler().gen_exception_raise(
+      "TypeError", "object of type '" + cls + "' has no len()");
+
+  return get_len_on_list_element(arg, location);
+}
+
+// len(xs[i]): the AST names no class, but the element's converted type does
+// (#7966). That type is the list's static element type, and the list model
+// tags every object element alike, so the runtime class is known only when
+// the program defines a single class; with several, len() is refused rather
+// than dispatched to a possibly wrong __len__. The converted element appears
+// twice below, so an argument whose conversion could call anything is refused
+// as well.
+exprt python_converter::get_len_on_list_element(
+  const nlohmann::json &arg,
+  const locationt &location)
+{
+  if (arg.value("_type", "") != "Subscript")
+    return nil_exprt();
+  const exprt probed = probe_expr(arg);
+  if (
+    (!is_user_class_pointer(probed.type()) &&
+     !is_user_class_struct_type(probed.type())) ||
+    list_element_type_id(probed).is_nil())
+    return nil_exprt();
+
+  if (!is_pure_read(arg) || count_user_classes() != 1)
+    throw std::runtime_error(
+      "len() of a list element is not modelled when the program defines "
+      "several classes or the index is not a plain read");
+
+  exprt object = get_expr(arg);
+  code_assertt same_class(equality_exprt(
+    list_element_type_id(object),
+    type_handler_.tagged_scalar_type_id(object.type())));
+  same_class.location() = location;
+  same_class.location().user_provided(true);
+  same_class.location().comment(
+    "len() of a list element that is not a class instance is not modelled");
+  current_block->copy_to_operands(same_class);
+
+  const exprt dunder = dispatch_unary_dunder_operator("len", object, location);
+  if (dunder.is_nil())
+    return get_exception_handler().gen_exception_raise(
+      "TypeError",
+      "object of type '" + class_name_of(object.type()) + "' has no len()");
+  return checked_len_result(dunder, location);
+}
+
+// Classes the program can instantiate: every ClassDef in a user module, at
+// any scope and whether converted yet or not, and every class an operational
+// model has registered.
+std::size_t python_converter::count_user_classes()
+{
+  std::size_t count = json_utils::count_class_defs(*entry_ast_);
+  if (extra_asts_)
+    for (const nlohmann::json &ast : *extra_asts_)
+      count += json_utils::count_class_defs(ast);
+  for (const auto &module : module_ast_pool_)
+    count += json_utils::count_class_defs(module.second);
+
+  std::size_t registered = 0;
+  symbol_table_.foreach_operand([&](const symbolt &sym) {
+    if (
+      sym.id.as_string().rfind("tag-", 0) == 0 &&
+      is_user_class_struct_type(sym.get_type()))
+      ++registered;
+  });
+  return std::max(count, registered);
+}
+
+// The element's `type_id`, read off the PyObject its converted value unwraps
+// (`*(C **)obj->value`), or nil when the expression is not such a read.
+exprt python_converter::list_element_type_id(const exprt &value)
+{
+  if (value.id() == "member" && value.get("component_name") == "value")
+    return member_exprt(value.op0(), "type_id", size_type());
+  for (const exprt &op : value.operands())
+  {
+    exprt found = list_element_type_id(op);
+    if (found.is_not_nil())
+      return found;
+  }
+  return nil_exprt();
+}
+
+// CPython's len() rejects a negative __len__ result with ValueError.
+exprt python_converter::checked_len_result(
+  const exprt &len_call,
+  const locationt &location)
+{
+  // Stored once: the guard and the caller both read it.
+  symbolt tmp =
+    create_return_temp_variable(len_call.type(), location, "__len__");
+  symbol_table_.add(tmp);
+  const exprt result = symbol_expr(tmp);
+  code_declt decl(result);
+  decl.location() = location;
+  current_block->copy_to_operands(decl);
+  exprt call = len_call;
+  convert_function_call_to_side_effect(call);
+  code_assignt store(result, call);
+  store.location() = location;
+  current_block->copy_to_operands(store);
+  code_ifthenelset guard;
+  guard.cond() = binary_relation_exprt(result, "<", gen_zero(result.type()));
+  codet raise("expression");
+  raise.copy_to_operands(
+    get_exception_handler().gen_exception_raise(
+      "ValueError", "__len__() should return >= 0"));
+  guard.then_case() = raise;
+  guard.location() = location;
+  current_block->copy_to_operands(guard);
+  return result;
+}
+
+// A name, constant, negated constant, or attribute/subscript chain over them:
+// converting one emits reads and no calls of its own.
+bool python_converter::is_pure_read(const nlohmann::json &node)
+{
+  const std::string kind = node.value("_type", "");
+  if (kind == "Name" || kind == "Constant")
+    return true;
+  if (kind == "UnaryOp")
+    return node["op"].value("_type", "") == "USub" &&
+           node["operand"].value("_type", "") == "Constant";
+  if (kind == "Attribute")
+    return is_pure_read(node["value"]);
+  if (kind == "Subscript")
+    return is_pure_read(node["value"]) && is_pure_read(node["slice"]);
+  return false;
+}
+
+// len(v) where v is a pointer-backed numpy view (ADR-NP-003 etapa 2, 1-D
+// slice views): __ESBMC_get_object_size on the pointer would report the
+// base array's remaining size from that offset, not v's own (possibly
+// shorter) logical length -- e.g. an empty view still points at a valid
+// position with nonzero remaining capacity. Returns the tracked literal
+// length directly instead of routing through the generic len() dispatch.
+std::optional<exprt>
+python_converter::try_get_numpy_pointer_view_len(const nlohmann::json &element)
+{
+  if (
+    !element.contains("func") || !element["func"].is_object() ||
+    element["func"].value("_type", "") != "Name" ||
+    element["func"].value("id", "") != "len" || !element.contains("args") ||
+    !element["args"].is_array() || element["args"].size() != 1)
+    return std::nullopt;
+
+  const nlohmann::json &arg = element["args"][0];
+  if (
+    std::optional<exprt> subscript_len =
+      try_get_numpy_subscript_pointer_view_len(arg, element))
+    return subscript_len;
+
+  return try_get_numpy_named_pointer_view_len(arg);
+}
+
+std::optional<exprt> python_converter::try_get_numpy_subscript_pointer_view_len(
+  const nlohmann::json &arg,
+  const nlohmann::json &element)
+{
+  if (
+    arg.value("_type", "") != "Subscript" || !arg.contains("value") ||
+    arg["value"].value("_type", "") != "Name")
+    return std::nullopt;
+
+  std::optional<long long> literal_index = get_literal_int_index(arg["slice"]);
+  if (!literal_index)
+    return std::nullopt;
+
+  const std::string source_id =
+    resolve_name_symbol_id(arg["value"]["id"].get<std::string>());
+  if (source_id.empty() || numpy_array_symbols_.count(source_id) == 0)
+    return std::nullopt;
+
+  const symbolt *source = symbol_table_.find_symbol(source_id);
+  if (!source)
+    return std::nullopt;
+
+  const namespacet ns(symbol_table_);
+  std::optional<std::pair<long long, long long>> shape =
+    get_fixed_2d_array_shape(*source, ns);
+  if (!shape)
+    return std::nullopt;
+
+  long long row_index = *literal_index;
+  const long long row_count = shape->first;
+  const long long col_count = shape->second;
+  if (row_count == 0)
+    return from_integer(0, long_long_int_type());
+
+  if (row_index < 0)
+    row_index += row_count;
+  if (row_index < 0 || row_index >= row_count)
+  {
+    std::ostringstream msg;
+    msg << "index " << *literal_index
+        << " is out of bounds for axis 0 with size " << row_count;
+    const locationt location = get_location_from_decl(element);
+    if (!location.is_nil())
+      msg << " at " << location.get_file() << ":" << location.get_line();
+
+    exprt raise =
+      get_exception_handler().gen_exception_raise("IndexError", msg.str());
+    codet throw_code("expression");
+    throw_code.operands().push_back(raise);
+    throw_code.location() = location;
+    add_instruction(throw_code);
+    return from_integer(0, long_long_int_type());
+  }
+
+  return from_integer(col_count, long_long_int_type());
+}
+
+std::optional<exprt> python_converter::try_get_numpy_named_pointer_view_len(
+  const nlohmann::json &arg) const
+{
+  if (arg.value("_type", "") != "Name")
+    return std::nullopt;
+
+  const std::string arg_name = arg["id"].get<std::string>();
+  if (std::optional<exprt> length = symbolic_numpy_view_length(arg_name))
+    return typecast_exprt(*length, long_long_int_type());
+
+  if (
+    std::optional<std::vector<std::size_t>> shape =
+      tracked_numpy_shape_from_name(arg_name))
+    return from_integer(shape->front(), long_long_int_type());
+
+  if (
+    std::optional<std::vector<std::size_t>> shape =
+      numpy_shape_from_indexed_decl(arg_name))
+    return from_integer(shape->front(), long_long_int_type());
+
+  return std::nullopt;
+}
+
+exprt python_converter::get_call_expr(const nlohmann::json &element)
+{
+  reject_numpy_view_callee(element);
+  reject_inline_runtime_numpy_slice(element);
+  if (std::optional<nlohmann::json> folded = fold_numpy_view_call(element))
+    return get_expr(*folded);
+  if (std::optional<exprt> call = call_returned_function(element))
+    return *call;
+  if (element["func"].value("_type", "") == "Call")
+    throw std::runtime_error(
+      "calling the result of a call is only supported through a module "
+      "function that returns a function");
+  if (std::optional<exprt> raise = call_property_value(element))
+    return *raise;
+  return get_function_call(element);
+}
+
+// `obj.prop()` on a @property: CPython runs the getter, then calls the value
+// it returns (#8250). A value that may itself be callable is refused.
+std::optional<exprt>
+python_converter::call_property_value(const nlohmann::json &element)
+{
+  const nlohmann::json &func = element["func"];
+  if (
+    func.value("_type", "") != "Attribute" ||
+    element.value("_property_getter", false) ||
+    !json_utils::any_class_has_property(
+      (*ast_json)["body"], func.value("attr", "")))
+    return std::nullopt;
+  const symbol_id callee =
+    function_call_builder(*this, element).build_function_id();
+  if (!json_utils::is_property_method(
+        (*ast_json)["body"], callee.get_class(), callee.get_function()))
+    return std::nullopt;
+
+  if (
+    func["value"].value("_type", "") == "Name" &&
+    is_class(func["value"].value("id", ""), *ast_json))
+    return get_exception_handler().gen_exception_raise(
+      "TypeError", "'property' object is not callable");
+
+  const std::string unsupported =
+    "calling the value of @property '" + callee.get_function() + "'";
+  if (!element["args"].empty() || !element["keywords"].empty())
+    throw std::runtime_error(unsupported + " with arguments is not supported");
+
+  nlohmann::json getter_call = element;
+  getter_call["_property_getter"] = true;
+  const exprt value = get_expr(getter_call);
+  const typet &type = value.type();
+  if (may_be_callable(type))
+    throw std::runtime_error(unsupported + " is not supported");
+
+  if (value.is_code())
+    current_block->copy_to_operands(value);
+  else if (value.id() == "sideeffect")
+    current_block->copy_to_operands(code_expressiont(value));
+  return get_exception_handler().gen_exception_raise(
+    "TypeError",
+    "'" + type_handler_.type_to_string(type) + "' object is not callable");
+}
+
+bool python_converter::may_be_callable(const typet &type)
+{
+  return type.is_nil() || type.id().empty() || type.is_code() ||
+         (type.is_pointer() && type.subtype().is_code()) ||
+         is_user_class_pointer(type) || is_user_class_struct_type(type);
+}
+
+/// A call converted as a statement, as a side-effect expression: goto-convert
+/// hoists it in evaluation order (short-circuit, loop guards).
+static exprt call_as_value(const exprt &call)
+{
+  if (
+    !call.is_code() || call.statement() != "function_call" ||
+    !to_code_function_call(to_code(call)).function().type().is_code())
+    return call;
+  const code_function_callt &code = to_code_function_call(to_code(call));
+  side_effect_expr_function_callt value;
+  value.location() = code.location();
+  value.function() = code.function();
+  value.arguments() = code.arguments();
+  value.type() = to_code_type(code.function().type()).return_type();
+  return value;
+}
+
+/// The function a call of `callee` returns, when its type is known before
+/// converting it: `get()` or `get()()` where `get` is a module function.
+std::optional<code_typet>
+python_converter::returned_function(const nlohmann::json &callee)
+{
+  if (callee.value("_type", "") != "Call")
+    return std::nullopt;
+  const nlohmann::json &func = callee["func"];
+  typet returned;
+  if (func.value("_type", "") == "Name")
+  {
+    // A variable of that name, such as a parameter, shadows the function.
+    const std::string name = func["id"].get<std::string>();
+    const symbolt *fn =
+      resolve_name_symbol_id(name).empty()
+        ? find_symbol(symbol_id(current_python_file, "", name).to_string())
+        : nullptr;
+    if (!fn || !fn->get_type().is_code())
+      return std::nullopt;
+    returned = to_code_type(fn->get_type()).return_type();
+  }
+  else if (std::optional<code_typet> outer = returned_function(func))
+    returned = outer->return_type();
+  if (!returned.is_pointer() || !returned.subtype().is_code())
+    return std::nullopt;
+  return to_code_type(returned.subtype());
+}
+
+/// Keyword, starred and default arguments of a call of an expression's result
+/// are not bound.
+static void
+refuse_unbound_arguments(const nlohmann::json &element, bool is_lambda)
+{
+  const auto is_starred = [](const nlohmann::json &arg) {
+    return arg.value("_type", "") == "Starred";
+  };
+  if (
+    (element.contains("keywords") && !element["keywords"].empty()) ||
+    std::any_of(element["args"].begin(), element["args"].end(), is_starred) ||
+    (is_lambda && !element["func"]["args"]["defaults"].empty()))
+    throw std::runtime_error(
+      "calling the result of an expression with keyword, starred or default "
+      "arguments is not supported");
+}
+
+/// Whether an argument of type `arg` binds `param` as it is, a string
+/// decaying to a pointer to its first character.
+static bool passes_as(const typet &arg, const code_typet::argumentt &param)
+{
+  return arg == param.type() || (arg.is_array() && param.type().is_pointer() &&
+                                 arg.subtype() == param.type().subtype());
+}
+
+static void refuse_unbound_parameters(
+  const side_effect_expr_function_callt &call,
+  const code_typet &callee_type,
+  bool is_lambda)
+{
+  if (callee_type.arguments().size() != call.arguments().size())
+    throw std::runtime_error(
+      "calling the result of an expression with a different number of "
+      "arguments is not supported");
+  for (std::size_t i = 0; is_lambda && i < call.arguments().size(); ++i)
+    if (!passes_as(call.arguments()[i].type(), callee_type.arguments()[i]))
+      throw std::runtime_error(
+        "calling a lambda directly with an argument of this type is not "
+        "supported");
+}
+
+void python_converter::convert_lambda_call(
+  const nlohmann::json &element,
+  side_effect_expr_function_callt &call)
+{
+  // A lambda's conversion emits no code, so its arguments may be converted
+  // first and give a scalar parameter its type. A list parameter is not
+  // modelled (#7328), so other arguments must match the parameter as it is.
+  std::vector<std::optional<typet>> types;
+  for (const auto &arg : element["args"])
+  {
+    call.arguments().push_back(call_as_value(get_expr(arg)));
+    const typet &type = call.arguments().back().type();
+    types.push_back(
+      type.is_signedbv() || type.is_floatbv() || type.is_bool()
+        ? std::optional<typet>(type)
+        : std::nullopt);
+  }
+  call.function() = get_lambda_expr(element["func"], types);
+}
+
+std::optional<exprt>
+python_converter::call_returned_function(const nlohmann::json &element)
+{
+  const nlohmann::json &inner = element["func"];
+  const bool is_lambda = inner.value("_type", "") == "Lambda";
+  std::optional<code_typet> callee_type = returned_function(inner);
+  if (!is_lambda && !callee_type)
+    return std::nullopt;
+  refuse_unbound_arguments(element, is_lambda);
+
+  side_effect_expr_function_callt call;
+  call.location() = get_location_from_decl(element);
+  if (is_lambda)
+  {
+    convert_lambda_call(element, call);
+    callee_type = to_code_type(call.function().type());
+  }
+  else
+  {
+    call.function() = call_as_value(get_expr(inner));
+    for (const auto &arg : element["args"])
+      call.arguments().push_back(call_as_value(get_expr(arg)));
+  }
+  refuse_unbound_parameters(call, *callee_type, is_lambda);
+  call.type() = callee_type->return_type();
+  return call;
+}
+
+// The argument of list(...). A 1-D numpy array held in a static array
+// becomes the list of its elements, as a.tolist() builds it: the array
+// itself would reach list operations that expect a list object.
+exprt python_converter::list_argument_expr(const nlohmann::json &arg)
+{
+  const std::string id = arg.value("_type", "") == "Name"
+                           ? resolve_name_symbol_id(arg.value("id", ""))
+                           : std::string();
+  const symbolt *symbol = id.empty() ? nullptr : symbol_table_.find_symbol(id);
+  if (symbol == nullptr || numpy_array_symbols_.count(id) == 0)
+    return get_expr(arg);
+  const typet type = ns.follow(symbol->get_type());
+  std::optional<exprt> elements;
+  if (type.is_array() && !ns.follow(type.subtype()).is_array())
+    elements = build_numpy_descriptor_materialized_list(arg, true);
+  return elements ? *elements : get_expr(arg);
+}
+
+exprt python_converter::get_function_call(const nlohmann::json &element)
+{
+  if (!element.contains("func") || element["_type"] != "Call")
+    throw std::runtime_error("Invalid function call");
+
+  track_numpy_view_call_escape(element);
+
+  // A callable instance: `c(args)` where c is an object whose class defines
+  // __call__. Calling the instance directly treats it as a function and aborts
+  // in to_code_type (the receiver's type is a class struct, not code). Rewrite
+  // it to `c.__call__(args)`, which dispatches as an ordinary instance method.
+  if (
+    element["func"]["_type"] == "Name" && element["func"].contains("id") &&
+    !is_class(element["func"]["id"].get<std::string>(), *ast_json) &&
+    has_dunder_method(element["func"], "__call__"))
+  {
+    // Copy the whole Call node and replace only `func`, preserving `args` and
+    // `keywords` — a callable may be invoked with keyword arguments. (This is
+    // why build_dunder_call is not reused here: it drops keyword arguments.)
+    nlohmann::json call_node = element;
+    nlohmann::json attr;
+    attr["_type"] = "Attribute";
+    attr["value"] = element["func"];
+    attr["attr"] = "__call__";
+    for (const char *f :
+         {"lineno", "col_offset", "end_lineno", "end_col_offset"})
+      if (element["func"].contains(f))
+        attr[f] = element["func"][f];
+    call_node["func"] = attr;
+    return get_function_call(call_node);
+  }
+
+  // a.<method>(...) on a tracked numpy array (sum/mean/min/max/std/var/
+  // flatten/transpose/reshape/ravel/copy) only resolves through the numpy
+  // operational model when it has the np.<method>(a, ...) shape a
+  // module-form call would have produced. The assignment-statement RHS
+  // already rewrites this shape before it reaches here; this call covers
+  // every other expression context (assert, nested expressions, call
+  // arguments, ...), which otherwise fall through to an unrelated builtin
+  // or class-method lookup for the same method name.
+  if (
+    std::optional<nlohmann::json> rewritten =
+      rewrite_numpy_method_call_node(element))
+    return rewritten->value("_type", "") == "Call"
+             ? get_function_call(*rewritten)
+             : get_expr(*rewritten);
+
+  if (
+    is_numpy_random_attr(element["func"], "random") &&
+    element.contains("args") && element["args"].size() == 1)
+  {
+    if (auto size = get_nonnegative_literal_size(element["args"][0]))
+    {
+      nlohmann::json scalar_call = element;
+      scalar_call["args"] = nlohmann::json::array();
+      return get_expr(make_list_from_repeated_call(scalar_call, *size));
+    }
+  }
+
+  if (
+    is_numpy_random_attr(element["func"], "rand") && element.contains("args") &&
+    element["args"].size() == 1)
+  {
+    if (auto size = get_nonnegative_literal_size(element["args"][0]))
+    {
+      nlohmann::json scalar_call = element;
+      scalar_call["args"] = nlohmann::json::array();
+      return get_expr(make_list_from_repeated_call(scalar_call, *size));
+    }
+  }
+
+  if (is_numpy_random_attr(element["func"], "randint"))
+  {
+    if (auto size = get_keyword_literal_size(element, "size"))
+    {
+      nlohmann::json scalar_call = element;
+      nlohmann::json keywords = nlohmann::json::array();
+      if (scalar_call.contains("keywords"))
+      {
+        for (const auto &kw : scalar_call["keywords"])
+        {
+          if (
+            kw.is_object() && kw.value("_type", std::string()) == "keyword" &&
+            !kw["arg"].is_null() && kw["arg"] == "size")
+            continue;
+          keywords.push_back(kw);
+        }
+      }
+      scalar_call["keywords"] = std::move(keywords);
+      return get_expr(make_list_from_repeated_call(scalar_call, *size));
+    }
+  }
+
+  // Handle direct range(...) calls by converting to list. A bare range() is
+  // consumed by len() or as a for-iterable, so its backing list only needs
+  // the right size; materialising the elements would add unwinding that a
+  // task with a fixed --unwind cannot afford (regression range36-nondet).
+  if (element["func"]["_type"] == "Name" && element["func"]["id"] == "range")
+  {
+    const auto &range_args = element["args"];
+    return python_list::build_list_from_range(
+      *this, range_args, element, /*materialise_elements=*/false);
+  }
+
+  // Handle direct slice(...) calls by materialising a PySliceObject value.
+  if (element["func"]["_type"] == "Name" && element["func"]["id"] == "slice")
+    return build_slice_from_args(element["args"], element);
+
+  // Handle set(iterable) and frozenset(iterable) calls. frozenset is
+  // modelled as a regular set: the verifier doesn't reason about
+  // immutability, so the only divergence (rejecting mutation methods)
+  // is academic for the safety properties we check.
+  if (
+    element["func"]["_type"] == "Name" &&
+    (element["func"]["id"] == "set" || element["func"]["id"] == "frozenset") &&
+    element.contains("args") && element["args"].size() == 1)
+  {
+    exprt iterable_expr = get_expr(element["args"][0]);
+    python_set set_handler(*this, element);
+    return set_handler.get_from_iterable(iterable_expr, element);
+  }
+
+  // frozenset() with no args — empty frozenset.
+  if (
+    element["func"]["_type"] == "Name" &&
+    element["func"]["id"] == "frozenset" &&
+    (!element.contains("args") || element["args"].empty()))
+  {
+    python_set set_handler(*this, element);
+    return set_handler.get_empty_set();
+  }
+
+  // list() with no args — empty list. Lower to a List literal so it routes
+  // through the well-tested `[]` path (python_list::get()).
+  if (
+    element["func"]["_type"] == "Name" && element["func"]["id"] == "list" &&
+    (!element.contains("args") || element["args"].empty()))
+  {
+    nlohmann::json list_node;
+    list_node["_type"] = "List";
+    list_node["elts"] = nlohmann::json::array();
+    for (const char *k :
+         {"lineno", "col_offset", "end_lineno", "end_col_offset"})
+      if (element.contains(k))
+        list_node[k] = element[k];
+    return get_expr(list_node);
+  }
+
+  // Handle list(...) calls
+  if (
+    element["func"]["_type"] == "Name" && element["func"]["id"] == "list" &&
+    element.contains("args") && element["args"].size() == 1)
+  {
+    const auto &list_arg = element["args"][0];
+
+    // list((a, b, ...)) — a tuple literal: lower to a List literal so it routes
+    // through the well-tested `[]` path with full element-type tracking. (A
+    // tuple held in a variable is handled below, after get_expr.)
+    if (list_arg["_type"] == "Tuple")
+    {
+      nlohmann::json list_node = list_arg;
+      list_node["_type"] = "List";
+      return get_expr(list_node);
+    }
+
+    // Handle list(range(...))
+    if (
+      list_arg["_type"] == "Call" && list_arg["func"]["_type"] == "Name" &&
+      list_arg["func"]["id"] == "range")
+    {
+      return python_list::build_list_from_range(
+        *this, list_arg["args"], element);
+    }
+
+    // Handle list(iterable) where iterable evaluates to a list — e.g.
+    // list(d.items()), list(d.keys()), list(d.values()), list(some_list).
+    // d.items() returns the keys member as a placeholder list (correct size).
+    exprt arg_expr = list_argument_expr(list_arg);
+    if (arg_expr.type() == type_handler_.get_list_type())
+      return arg_expr;
+
+    // list(tuple) — materialise the tuple's components into a real list.
+    // Without this the tuple struct flows into the generic builder, which
+    // mistypes it as a list (wrong elements / out-of-bounds dereference).
+    if (get_tuple_handler().is_tuple_type(arg_expr.type()))
+      return python_list::build_list_from_tuple(*this, arg_expr, element);
+
+    // list("abc") — a constant string yields a list of single-character
+    // strings (CPython: list("ab") == ['a', 'b']). Lower to a list literal so
+    // it routes through the proven `[]` path. Gate on a genuine string
+    // (char-element) operand: a bytes literal serialises to an identical
+    // Constant JSON, but list(b"ab") is [97, 98] in CPython — its operand type
+    // is an int array (not char), so it correctly falls through to the error.
+    const typet &arg_t = arg_expr.type();
+    const bool is_string_operand = (arg_t.is_array() || arg_t.is_pointer()) &&
+                                   arg_t.subtype() == char_type();
+    std::string str_val;
+    if (
+      is_string_operand &&
+      string_handler::extract_constant_string(list_arg, *this, str_val))
+      return get_expr(build_char_sequence_node("List", str_val, element));
+
+    // list(b"ab") — a bytes literal serialises to the same Constant JSON as a
+    // str, so it also extracts as a constant string, but CPython yields the
+    // int list [97, 98], not a char list. Its operand type is a (non-char) int
+    // array, so it is excluded above; reject it here with a clean diagnostic
+    // rather than letting the byte array reach the generic builder, which
+    // mistypes it as a list pointer (out-of-bounds dereference / migrate
+    // failure). This pins the str-only boundary of the fold above.
+    if (
+      arg_t.is_array() && arg_t.subtype() != char_type() &&
+      string_handler::extract_constant_string(list_arg, *this, str_val))
+      throw std::runtime_error(
+        "list() over a bytes object is not supported; bytes elements are "
+        "integers, not characters");
+    // Fall through to the generic function-call builder below for non-list
+    // iterables (e.g. list(42) or a non-constant string).
+  }
+
+  // Handle dict(iterable) constructor:
+  // lower to a Dict literal so it routes through the existing dict path.
+  // Without this, the iterable is processed as a list
+  // and later ".items()" / ".keys()" accesses crash BMC.
+  if (
+    element["func"]["_type"] == "Name" && element["func"]["id"] == "dict" &&
+    element.contains("args") && element["args"].is_array() &&
+    element["args"].size() <= 1)
+  {
+    exprt result = dict_handler_->handle_dict_constructor(element);
+    if (!result.is_nil())
+      return result;
+  }
+
+  // Handle dict.keys(), dict.values(), and dict.items() methods
+  if (element["func"]["_type"] == "Attribute")
+  {
+    const std::string &method_name = element["func"]["attr"].get<std::string>();
+
+    if (method_name == "conjugate")
+    {
+      exprt result = complex_handler_.handle_attribute(element);
+      if (!result.is_nil())
+        return result;
+    }
+
+    if (
+      method_name == "keys" || method_name == "values" ||
+      method_name == "items")
+    {
+      exprt obj_expr = get_expr(element["func"]["value"]);
+
+      // Check if this is a dict type
+      if (dict_handler_->is_dict_type(obj_expr.type()))
+      {
+        typet list_type = type_handler_.get_list_type();
+        // V.3: IREP2 member access (exact round-trip of member_exprt);
+        // `obj_expr` is dict-typed (is_dict_type ⇒ struct), so the member2t
+        // source precondition holds.
+        expr2tc dict2;
+        migrate_expr(obj_expr, dict2);
+        if (method_name == "items")
+        {
+          // For-loop uses of items() are rewritten by the preprocessor into
+          // separate keys()/values() accesses and never reach here.
+          // For standalone/discarded calls (e.g. bare `d.items()` statement),
+          // return the keys member as a placeholder — same size as the dict,
+          // so size/emptiness comparisons (e.g. list(d.items()) == []) work.
+          // Full (key, value) tuple semantics are not modelled.
+          exprt items_view = migrate_expr_back(
+            member2tc(migrate_type(list_type), dict2, "keys"));
+          items_view.set(PYTHON_ITEMS_VIEW_ATTR, true);
+          return items_view;
+        }
+        exprt view = migrate_expr_back(
+          member2tc(migrate_type(list_type), dict2, method_name));
+        if (method_name == "keys")
+          view.set(PYTHON_KEYS_VIEW_ATTR, true);
+        return view;
+      }
+    }
+  }
+
+  // Compile-time evaluation for parse_nested_parens on constant strings.
+  if (
+    element["func"]["_type"] == "Name" && element["func"].contains("id") &&
+    element["func"]["id"] == "parse_nested_parens" &&
+    element.contains("args") && element["args"].is_array() &&
+    element["args"].size() == 1 &&
+    (!element.contains("keywords") ||
+     (element["keywords"].is_array() && element["keywords"].empty())))
+  {
+    bool can_fold = true;
+    if (!ast_json || !ast_json->contains("body"))
+      can_fold = false;
+
+    nlohmann::json func_node;
+    if (can_fold)
+    {
+      func_node = try_find_function((*ast_json)["body"], "parse_nested_parens");
+      if (func_node.empty())
+        can_fold = false;
+    }
+
+    auto returns_list = [](const nlohmann::json &ret) -> bool {
+      if (ret.is_null())
+        return false;
+      if (
+        ret.contains("_type") && ret["_type"] == "Subscript" &&
+        ret.contains("value") && ret["value"].contains("id"))
+      {
+        const std::string &container = ret["value"]["id"];
+        return container == "List" || container == "list";
+      }
+      if (ret.contains("id"))
+      {
+        const std::string &name = ret["id"];
+        return name == "List" || name == "list";
+      }
+      return false;
+    };
+
+    if (
+      !func_node.empty() &&
+      (!func_node.contains("returns") || !returns_list(func_node["returns"])))
+      can_fold = false;
+
+    const auto &arg0 = element["args"][0];
+    if (
+      can_fold && arg0.contains("_type") && arg0["_type"] == "Constant" &&
+      arg0.contains("value") && arg0["value"].is_string())
+    {
+      const std::string input = arg0["value"].get<std::string>();
+      std::vector<long long> out;
+      std::string token;
+      auto flush_token = [&](const std::string &tok) {
+        if (tok.empty())
+          return;
+        long long depth = 0;
+        long long max_depth = 0;
+        for (char c : tok)
+        {
+          if (c == '(')
+          {
+            ++depth;
+            if (depth > max_depth)
+              max_depth = depth;
+          }
+          else
+          {
+            --depth;
+          }
+        }
+        out.push_back(max_depth);
+      };
+      for (char c : input)
+      {
+        if (c == ' ')
+        {
+          flush_token(token);
+          token.clear();
+        }
+        else
+        {
+          token.push_back(c);
+        }
+      }
+      flush_token(token);
+
+      nlohmann::json list_node;
+      list_node["_type"] = "List";
+      list_node["elts"] = nlohmann::json::array();
+      for (long long v : out)
+      {
+        nlohmann::json elt;
+        elt["_type"] = "Constant";
+        elt["value"] = v;
+        copy_location_fields_from_decl(element, elt);
+        list_node["elts"].push_back(elt);
+      }
+      copy_location_fields_from_decl(element, list_node);
+      python_list list(*this, list_node);
+      return list.get();
+    }
+  }
+
+  // Check for forward-referenced constructor calls
+  if (type_handler_.is_constructor_call(element))
+  {
+    code_blockt temp_block;
+    process_forward_reference(element["func"], temp_block);
+  }
+
+  // Handle indirect calls through subscript (e.g., {'+': lambda: 1.0}[x]())
+  if (element["func"]["_type"] == "Subscript")
+  {
+    const nlohmann::json &func_node = element["func"];
+    exprt container = get_expr(func_node["value"]);
+
+    exprt func_ptr;
+    if (
+      container.type().is_struct() &&
+      dict_handler_->is_dict_type(container.type()))
+      func_ptr = dict_handler_->handle_dict_subscript(
+        container, func_node["slice"], gen_pointer_type(code_typet()));
+    else
+      func_ptr = get_expr(element["func"]);
+
+    // Determine return type: prefer current function's declared return type,
+    // then try to infer from any lambda body in the dict literal.
+    typet ret_type = current_func_return_type_;
+    if (ret_type.is_empty() && func_node["value"]["_type"] == "Dict")
+    {
+      for (const auto &val : func_node["value"]["values"])
+      {
+        if (val["_type"] == "Lambda" && val.contains("body"))
+        {
+          ret_type = lambda_handler_->infer_lambda_return_type(val["body"]);
+          break;
+        }
+      }
+    }
+    if (ret_type.is_empty())
+      ret_type = double_type();
+
+    side_effect_expr_function_callt call;
+    call.location() = get_location_from_decl(element);
+    call.function() = func_ptr;
+    call.type() = ret_type;
+    if (element.contains("args"))
+      for (const auto &arg : element["args"])
+      {
+        exprt arg_expr = get_expr(arg);
+        // No parameter types to check against here, so refuse cleanly.
+        if (type_handler_.is_tagged_scalar_type(arg_expr.type()))
+          dynamic_type_handler_.refuse_tagged_argument();
+        call.arguments().push_back(arg_expr);
+      }
+
+    return call;
+  }
+
+  // Handle indirect calls through function pointer variables
+  if (element["func"]["_type"] == "Name")
+  {
+    std::string func_name = element["func"]["id"].get<std::string>();
+
+    // Try to find as a variable first
+    symbol_id var_sid = create_symbol_id();
+    var_sid.set_object(func_name);
+    symbolt *var_symbol = find_symbol(var_sid.to_string());
+
+    if (var_symbol && var_symbol->get_type().is_pointer())
+    {
+      // This is an indirect call through function pointer
+      side_effect_expr_function_callt call;
+      call.location() = get_location_from_decl(element);
+
+      // The function pointer itself, not dereferenced.
+      // Any pointer whose pointee is not code needs the cast to a generic
+      // function pointer: the adjuster dereferences the callee and calls
+      // to_code_type on the result, which asserts on anything else. Any-typed
+      // (void*) parameters get here, and so does a callable returned by an
+      // unannotated function, which the frontend types None, i.e. bool*
+      // (#6640).
+      // V.3: build the function-pointer reference (and the generic-pointer
+      // cast the adjuster relies on) in IREP2; both are over a clean symbol.
+      exprt func_ptr_expr = python_expr::build_symbol(*var_symbol);
+      if (!var_symbol->get_type().subtype().is_code())
+        func_ptr_expr = python_expr::build_typecast(
+          func_ptr_expr, gen_pointer_type(code_typet()));
+      call.function() = func_ptr_expr;
+
+      // Resolve return type from the concrete target function stored in
+      // the symbol's value (address_of(func)), because gen_pointer_type
+      // does not preserve the full code_typet (return type + arguments).
+      bool resolved = false;
+      const code_typet *resolved_func_type = nullptr;
+      if (
+        var_symbol->get_value().is_address_of() &&
+        !var_symbol->get_value().operands().empty() &&
+        var_symbol->get_value().operands()[0].is_symbol())
+      {
+        const symbolt *target_func = symbol_table_.find_symbol(
+          var_symbol->get_value().operands()[0].identifier());
+        if (target_func && target_func->get_type().is_code())
+        {
+          resolved_func_type = &to_code_type(target_func->get_type());
+          call.type() = resolved_func_type->return_type();
+          resolved = true;
+        }
+      }
+
+      // Try to get return type from the pointer's subtype
+      if (!resolved && var_symbol->get_type().subtype().is_code())
+      {
+        resolved_func_type = &to_code_type(var_symbol->get_type().subtype());
+        call.type() = resolved_func_type->return_type();
+        resolved = true;
+      }
+
+      // Fallback for Any-typed (void*) function parameters: use any_type so
+      // the indirect call expression has a well-formed type.
+      if (!resolved)
+        call.type() = any_type();
+
+      // Process arguments
+      if (element.contains("args"))
+      {
+        for (const auto &arg_element : element["args"])
+        {
+          exprt arg_expr = get_expr(arg_element);
+          // The pointer target only carries a return type, no parameter
+          // types, so refuse cleanly instead of passing a mistyped arg.
+          if (type_handler_.is_tagged_scalar_type(arg_expr.type()))
+            dynamic_type_handler_.refuse_tagged_argument();
+          // A function name used as an argument decays to a function pointer.
+          if (arg_expr.type().is_code() && arg_expr.is_symbol())
+            arg_expr = address_of_exprt(arg_expr);
+          call.arguments().push_back(arg_expr);
+        }
+      }
+
+      // Fill omitted trailing parameters that carry a default value (e.g. a
+      // `lambda x, y=2: ...` called with fewer arguments), so symex does not
+      // model them as nondet. Stop at the first parameter that cannot be
+      // filled so the remaining positional arguments stay aligned: either it
+      // has no default, or its default is a string/array. A string default is
+      // stored raw (a char array) and needs the string_constantt/address-of
+      // conversion finalize_call applies to direct calls; pushing it here would
+      // pass an unconverted array->pointer argument (right content but wrong
+      // len()), so leave it — and everything after it — nondet as before.
+      if (resolved_func_type)
+      {
+        const auto &params = resolved_func_type->arguments();
+        for (size_t i = call.arguments().size(); i < params.size(); ++i)
+        {
+          if (!params[i].has_default_value())
+            break;
+          const exprt &default_val = params[i].default_value();
+          if (default_val.type().is_array())
+            break;
+          call.arguments().push_back(default_val);
+        }
+      }
+
+      return call;
+    }
+  }
+
+  // Handle empty set() creation
+  if (
+    element["func"]["_type"] == "Name" && element["func"]["id"] == "set" &&
+    (!element.contains("args") || element["args"].empty()))
+  {
+    // Create an empty set (modeled as list)
+    python_set set_handler(*this, element);
+    return set_handler.get_empty_set();
+  }
+
+  // TypeVar(...) is only used to build typing aliases and has no runtime
+  // effect in the frontend, so model it as an opaque placeholder value.
+  if (element["func"]["_type"] == "Name" && element["func"]["id"] == "TypeVar")
+  {
+    return gen_zero(any_type());
+  }
+
+  const std::string function = config.options.get_option("function");
+  // To verify a specific function, it is necessary to load the definitions of
+  // functions it calls.
+  if (!function.empty() && !is_loading_models)
+  {
+    std::string func_name("");
+    if (element["func"]["_type"] == "Name")
+      func_name = element["func"]["id"];
+    else if (element["func"]["_type"] == "Attribute")
+      func_name = element["func"]["attr"];
+
+    if (
+      !type_utils::is_builtin_type(func_name) &&
+      !type_utils::is_consensus_type(func_name) &&
+      !type_utils::is_consensus_func(func_name) &&
+      !type_utils::is_python_model_func(func_name) &&
+      !is_class(func_name, *ast_json))
+    {
+      // A call into an unrecognised module (e.g. itertools.islice) has no
+      // definition in the AST, so try_find_function returns an empty node. Skip
+      // loading here and let the call fall through to the "Undefined function
+      // - replacing with assert(false)" fallback instead of feeding an empty
+      // node to get_function_definition, which would dereference missing
+      // fields and abort (issue #5898).
+      const auto &func_node = try_find_function((*ast_json)["body"], func_name);
+      if (!func_node.empty())
+        get_function_definition(func_node);
+    }
+  }
+
+  // Compile-time evaluation: if the function is user-defined and all
+  // arguments are constants, try to evaluate the call entirely at
+  // conversion time, eliminating loops from the GOTO program.
+  if (
+    element["func"]["_type"] == "Name" && ast_json &&
+    element.contains("args") &&
+    (!element.contains("keywords") || element["keywords"].empty()))
+  {
+    const std::string &callee = element["func"]["id"].get<std::string>();
+
+    // Check if the callee is shadowed by a local FunctionDef inside
+    // the current enclosing function.  Consteval only knows about
+    // top-level definitions, so folding a shadowed name would resolve
+    // to the wrong function.
+    bool locally_shadowed = false;
+    if (!current_func_name_.empty())
+    {
+      // Walk the function nesting path (split on "@F@").
+      const nlohmann::json &ast_body = (*ast_json)["body"];
+      nlohmann::json cur_body = ast_body;
+      std::string remaining = current_func_name_;
+      while (!remaining.empty() && !locally_shadowed)
+      {
+        std::string part;
+        auto sep = remaining.find("@F@");
+        if (sep != std::string::npos)
+        {
+          part = remaining.substr(0, sep);
+          remaining = remaining.substr(sep + 3);
+        }
+        else
+        {
+          part = remaining;
+          remaining.clear();
+        }
+        auto fn = try_find_function(cur_body, part);
+        if (fn.empty() || !fn.contains("body") || !fn["body"].is_array())
+          break;
+        for (const auto &stmt : fn["body"])
+        {
+          if (
+            stmt.contains("_type") && stmt["_type"] == "FunctionDef" &&
+            stmt.contains("name") && stmt["name"] == callee)
+          {
+            locally_shadowed = true;
+            break;
+          }
+        }
+        cur_body = fn["body"];
+      }
+    }
+
+    // Skip builtins / models — only try user-defined functions
+    if (
+      !locally_shadowed && !type_utils::is_builtin_type(callee) &&
+      !type_utils::is_python_model_func(callee) &&
+      !try_find_function((*ast_json)["body"], callee).empty())
+    {
+      // Collect constant arguments
+      bool all_const = true;
+      std::vector<PyConstValue> const_args;
+      for (const auto &arg_node : element["args"])
+      {
+        // Bignum literal (issue #4642): the constant carries `_bigint` and a
+        // null `value`. Refuse to fold so the call falls back through to the
+        // normal builder, whose recursion into get_literal raises the
+        // overflow diagnostic. Without this guard the null `value` is taken
+        // as Python None below and the bignum is silently consumed.
+        const bool arg_is_bigint =
+          arg_node["_type"] == "Constant" && arg_node.contains("_bigint");
+        const bool usub_operand_is_bigint =
+          arg_node["_type"] == "UnaryOp" && arg_node["op"]["_type"] == "USub" &&
+          arg_node["operand"]["_type"] == "Constant" &&
+          arg_node["operand"].contains("_bigint");
+        if (arg_is_bigint || usub_operand_is_bigint)
+        {
+          all_const = false;
+          break;
+        }
+        if (arg_node["_type"] == "Constant" && arg_node["value"].is_string())
+        {
+          const_args.push_back(
+            PyConstValue::make_string(arg_node["value"].get<std::string>()));
+        }
+        else if (
+          arg_node["_type"] == "Constant" &&
+          arg_node["value"].is_number_integer())
+        {
+          const_args.push_back(
+            PyConstValue::make_int(arg_node["value"].get<long long>()));
+        }
+        else if (
+          arg_node["_type"] == "Constant" &&
+          arg_node["value"].is_number_float())
+        {
+          const_args.push_back(
+            PyConstValue::make_float(arg_node["value"].get<double>()));
+        }
+        else if (
+          arg_node["_type"] == "Constant" && arg_node["value"].is_boolean())
+        {
+          const_args.push_back(
+            PyConstValue::make_bool(arg_node["value"].get<bool>()));
+        }
+        else if (arg_node["_type"] == "Constant" && arg_node["value"].is_null())
+        {
+          const_args.push_back(PyConstValue::make_none());
+        }
+        else if (
+          arg_node["_type"] == "UnaryOp" && arg_node["op"]["_type"] == "USub" &&
+          arg_node["operand"]["_type"] == "Constant" &&
+          arg_node["operand"]["value"].is_number_integer())
+        {
+          const_args.push_back(
+            PyConstValue::make_int(
+              -arg_node["operand"]["value"].get<long long>()));
+        }
+        else if (
+          arg_node["_type"] == "UnaryOp" && arg_node["op"]["_type"] == "USub" &&
+          arg_node["operand"]["_type"] == "Constant" &&
+          arg_node["operand"]["value"].is_number_float())
+        {
+          const_args.push_back(
+            PyConstValue::make_float(
+              -arg_node["operand"]["value"].get<double>()));
+        }
+        else
+        {
+          all_const = false;
+          break;
+        }
+      }
+
+      if (all_const)
+      {
+        python_consteval evaluator(*ast_json);
+        auto result = evaluator.try_eval_call(callee, const_args);
+        if (result.has_value())
+        {
+          if (result->kind == PyConstValue::STRING)
+            return string_builder_->build_string_literal(result->string_val);
+          if (result->kind == PyConstValue::INT)
+            return from_integer(result->int_val, long_long_int_type());
+          if (result->kind == PyConstValue::BOOL)
+            // V.3: build the folded bool constant in IREP2.
+            return migrate_expr_back(
+              result->bool_val ? gen_true_expr() : gen_false_expr());
+          // NONE and FLOAT fall through to normal call
+        }
+      }
+    }
+  }
+
+  if (
+    exprt len_expr = get_len_on_class_instance(element); len_expr.is_not_nil())
+    return len_expr;
+
+  if (std::optional<exprt> view_len = try_get_numpy_pointer_view_len(element))
+    return *view_len;
+
+  function_call_builder call_builder(*this, element);
+  exprt call_expr = call_builder.build();
+
+  // Convert boolean-returning function calls to side-effect expressions when
+  // used in expression contexts (e.g., logical operations). This prevents GOTO
+  // generation failures where code statements appear in boolean expression
+  // operands.
+  if (
+    call_expr.is_code() && call_expr.statement() == "function_call" &&
+    is_converting_rhs)
+  {
+    const code_function_callt &code_call =
+      to_code_function_call(to_code(call_expr));
+    const typet &return_type = code_call.type();
+
+    if (return_type.is_bool())
+    {
+      side_effect_expr_function_callt side_effect_call;
+      side_effect_call.function() = code_call.function();
+      side_effect_call.arguments() = code_call.arguments();
+      side_effect_call.type() = return_type;
+      side_effect_call.location() = code_call.location();
+
+      call_expr = side_effect_call;
+    }
+  }
+
+  auto handle_keywords = [&](exprt &call_expr) {
+    if (!element.contains("keywords") || element["keywords"].empty())
+      return;
+
+    const exprt &func =
+      call_expr.operands().size() > 1 ? call_expr.operands()[1] : exprt();
+
+    if (!func.is_symbol())
+      return;
+
+    const symbolt *func_symbol = symbol_table_.find_symbol(func.identifier());
+    if (!func_symbol || !func_symbol->get_type().is_code())
+      return;
+
+    const code_typet &func_type = to_code_type(func_symbol->get_type());
+    const code_typet::argumentst &params = func_type.arguments();
+
+    code_function_callt &call = static_cast<code_function_callt &>(call_expr);
+    auto &args = call.arguments();
+
+    size_t positional_count =
+      element.contains("args") && element["args"].is_array()
+        ? element["args"].size()
+        : 0;
+
+    std::map<std::string, size_t> param_positions;
+    for (size_t i = 0; i < params.size(); ++i)
+    {
+      std::string param_name = params[i].get_base_name().as_string();
+      assert(!param_name.empty());
+      param_positions[param_name] = i;
+    }
+
+    if (args.size() < params.size())
+      args.resize(params.size(), exprt());
+
+    for (const auto &kw : element["keywords"])
+    {
+      std::string arg_name = kw["arg"].get<std::string>();
+
+      auto it = param_positions.find(arg_name);
+      if (it == param_positions.end())
+      {
+        // For user-defined functions, unknown kwargs are a TypeError.
+        // For builtins/models (e.g. sorted(key=...), max(key=...)), silently
+        // skip.
+        if (search_function_in_ast(*ast_json, func_symbol->name.as_string()))
+          throw std::runtime_error(
+            "Unknown keyword argument: " + arg_name + " in function " +
+            func_symbol->name.as_string());
+        continue;
+      }
+
+      exprt arg_expr = function_call_expr::fold_from_bytes_byteorder(
+        get_expr(kw["value"]),
+        kw["value"],
+        *func_symbol,
+        params,
+        it->second,
+        *ast_json);
+
+      // Convert array to pointer to match parameter type
+      const typet &param_type = params[it->second].type();
+      if (arg_expr.type().is_array() && param_type.is_pointer())
+        arg_expr = string_handler_.get_array_base_address(arg_expr);
+
+      args[it->second] = arg_expr;
+    }
+
+    // we need to check if the argument is provided despite being optional
+    auto is_optional_type = [&](const typet &param_type) {
+      if (!param_type.is_struct())
+        return false;
+      const struct_typet &struct_type = to_struct_type(param_type);
+      const std::string &tag = struct_type.tag().as_string();
+      return tag.starts_with("tag-Optional_");
+    };
+
+    std::vector<size_t> missing_required;
+    std::vector<bool> provided(params.size(), false);
+
+    size_t bound_params = 0;
+    if (!params.empty())
+    {
+      const std::string &first_param_name =
+        params[0].get_base_name().as_string();
+      if (first_param_name == "self" || first_param_name == "cls")
+        bound_params = 1;
+    }
+
+    for (size_t i = 0; i < bound_params && i < provided.size(); ++i)
+      provided[i] = true;
+
+    for (size_t i = 0; i < positional_count; ++i)
+    {
+      size_t param_idx = bound_params + i;
+      if (param_idx < provided.size())
+        provided[param_idx] = true;
+    }
+
+    for (const auto &entry : param_positions)
+    {
+      size_t index = entry.second;
+      if (
+        index < provided.size() &&
+        !(args[index].is_nil() || args[index].id().empty()))
+        provided[index] = true;
+    }
+
+    // check if any argument is missing
+    for (size_t i = 0; i < params.size(); ++i)
+    {
+      if (provided[i])
+        continue;
+
+      bool has_default = params[i].has_default_value();
+      bool optional_param = is_optional_type(params[i].type());
+
+      if (!has_default && !optional_param)
+      {
+        missing_required.push_back(i); // add the index of the missing argument
+      }
+    }
+
+    if (!missing_required.empty())
+    {
+      std::vector<std::string> missing_names;
+      missing_names.reserve(missing_required.size());
+      for (size_t idx : missing_required)
+        missing_names.push_back(params[idx].get_base_name().as_string());
+
+      std::ostringstream msg;
+      if (missing_names.size() == 1)
+      {
+        msg << "TypeError: " << func_symbol->name.as_string()
+            << "() missing 1 required positional argument: '"
+            << missing_names.front() << "'";
+      }
+      else
+      {
+        msg << "TypeError: " << func_symbol->name.as_string() << "() missing "
+            << missing_names.size() << " required positional arguments: ";
+        for (size_t i = 0; i < missing_names.size(); ++i)
+        {
+          msg << "'" << missing_names[i] << "'";
+          if (i + 2 < missing_names.size())
+            msg << ", ";
+          else if (i + 2 == missing_names.size())
+            msg << " and ";
+        }
+      }
+
+      throw std::runtime_error(msg.str());
+    }
+
+    // Fill empty arguments with proper Optional values or None for optional
+    // parameters
+    for (size_t i = 0; i < args.size(); ++i)
+    {
+      if (args[i].is_nil() || args[i].id().empty())
+      {
+        const typet &param_type = params[i].type();
+
+        // Check if this is an Optional type (struct with "is_none" field)
+        if (is_optional_type(param_type))
+        {
+          // Create Optional value with is_none=true
+          constant_exprt none_expr(none_type());
+          none_expr.set_value("NULL");
+          args[i] = wrap_in_optional(none_expr, param_type);
+        }
+        else
+        {
+          // Non-struct type - use NULL for None
+          constant_exprt none_expr(none_type());
+          none_expr.set_value("NULL");
+          args[i] = none_expr;
+        }
+      }
+    }
+  };
+
+  handle_keywords(call_expr);
+
+  // Convert struct arguments to pointers for union-typed parameters
+  // This handles both positional and keyword arguments
+  if (call_expr.id() == "code" && call_expr.get("statement") == "function_call")
+  {
+    code_function_callt &call = static_cast<code_function_callt &>(call_expr);
+    // Get function symbol to access parameter types
+    const exprt &func = call.function();
+    if (func.is_symbol())
+    {
+      const symbolt *func_symbol = symbol_table_.find_symbol(func.identifier());
+      if (func_symbol && func_symbol->get_type().is_code())
+      {
+        const code_typet &func_type = to_code_type(func_symbol->get_type());
+        const code_typet::argumentst &params = func_type.arguments();
+        auto &args = call.arguments();
+        for (size_t i = 0; i < args.size() && i < params.size(); ++i)
+        {
+          const typet &param_type = params[i].type();
+          exprt &arg = args[i];
+
+          // Get the actual type of the argument (resolve symbols)
+          typet arg_actual_type = arg.type();
+          if (arg.is_symbol())
+          {
+            const symbolt *arg_symbol =
+              symbol_table_.find_symbol(arg.identifier());
+            if (arg_symbol)
+              arg_actual_type = arg_symbol->get_type();
+          }
+          // Follow a `symbol_typet` (`tag-Class`) to the struct it names. This
+          // must run for ANY argument, not just symbol expressions: a by-value
+          // class instance produced by a call (e.g. `use(make())` where
+          // `make() -> C`) arrives as a side_effect whose *type* is the
+          // unfollowed `tag-C` symbol — without following it, is_struct() below
+          // is false and the struct-to-`Class*`-parameter coercion is skipped,
+          // so a struct is passed to a pointer parameter (#4558/#4564).
+          if (arg_actual_type.id() == "symbol")
+            arg_actual_type = ns.follow(arg_actual_type);
+          // Handle union types: if param is pointer and arg is struct (or
+          // symbol to struct), take address. This is the post-processing pass
+          // for general pointer-to-struct coercion. NOTE:
+          // function_call_expr.cpp also has an earlier coercion pass that
+          // specifically handles char[0]* union parameters (str | T pattern).
+          // These two mechanisms are complementary: the pass here handles the
+          // general case; the earlier pass handles the specific char[0]* union
+          // representation and also materialises non-symbol struct temporaries.
+          if (
+            param_type.is_pointer() && arg_actual_type.is_struct() &&
+            !arg.is_address_of() && !arg_actual_type.is_pointer())
+          {
+            // Rvalue structs (e.g. the constant `__ESBMC_PySliceObj` produced
+            // by `a[i:j]`, or a call returning a by-value class instance)
+            // cannot be the operand of `address_of` at the SMT level.
+            // Materialise them in a temp symbol first so the address we hand to
+            // the callee points at a real lvalue.
+            if (!arg.is_symbol())
+            {
+              assert(
+                current_block &&
+                "rvalue struct argument requires a statement-level block to "
+                "materialise into");
+              locationt loc = get_location_from_decl(element);
+              symbolt &tmp = create_tmp_symbol(
+                element,
+                "$struct_arg$",
+                arg_actual_type,
+                gen_zero(arg_actual_type));
+              code_declt tmp_decl(symbol_expr(tmp));
+              tmp_decl.location() = loc;
+              current_block->copy_to_operands(tmp_decl);
+              code_assignt tmp_assign(symbol_expr(tmp), arg);
+              tmp_assign.location() = loc;
+              current_block->copy_to_operands(tmp_assign);
+              arg = symbol_expr(tmp);
+            }
+            arg = gen_address_of(arg);
+          }
+
+          // Propagate instance attributes set on this parameter back to the
+          // caller's argument. This models Python's pass-by-object-reference:
+          // if o.x = 5 is set inside f(a) via parameter o, then a.x should
+          // reflect the instance attribute rather than the class attribute.
+          // Note: this relies on the callee body being processed before the
+          // call site (true for top-level sequential Python), so that
+          // instance_attr_map[param] is already populated here.
+          const exprt *arg_sym = &args[i];
+          if (arg_sym->is_address_of())
+            arg_sym = &arg_sym->op0();
+          if (arg_sym->is_symbol())
+          {
+            // `#identifier`, not the plain key: only it crosses the seam.
+            copy_instance_attributes(
+              type_utils::argument_identifier(params[i]).as_string(),
+              arg_sym->identifier().as_string());
+          }
+        }
+      }
+    }
+  }
+
+  return call_expr;
+}
+exprt python_converter::store_call_result(
+  exprt call_expr,
+  const locationt &location,
+  const std::string &temp_prefix)
+{
+  if (!call_expr.is_function_call())
+    return call_expr;
+
+  symbolt temp_symbol =
+    create_return_temp_variable(call_expr.type(), location, temp_prefix);
+  symbol_table_.add(temp_symbol);
+  exprt temp_var_expr = symbol_expr(temp_symbol);
+
+  code_declt temp_decl(temp_var_expr);
+  temp_decl.location() = location;
+  if (!call_expr.type().is_empty())
+    call_expr.op0() = temp_var_expr;
+  if (current_block)
+  {
+    current_block->copy_to_operands(temp_decl);
+    current_block->copy_to_operands(call_expr);
+  }
+
+  return temp_var_expr;
+}
+exprt python_converter::get_return_from_func(const char *func_symbol_id)
+{
+  symbolt *func_symbol = symbol_table_.find_symbol(func_symbol_id);
+  assert(func_symbol);
+
+  const auto &operands = func_symbol->get_value().operands();
+
+  for (std::vector<exprt>::const_reverse_iterator it = operands.rbegin();
+       it != operands.rend();
+       ++it)
+  {
+    const codet &c = to_code(*it);
+    if (c.statement() == "return")
+    {
+      return c;
+    }
+  }
+  return nil_exprt();
+}
+exprt python_converter::materialize_list_function_call(
+  const exprt &expr,
+  const nlohmann::json &element,
+  codet &target_block)
+{
+  // Check if this is a function call returning a list
+  if (expr.id() != "code" || expr.get("statement") != "function_call")
+    return expr;
+
+  const code_function_callt &call = to_code_function_call(to_code(expr));
+
+  // Only handle list-returning functions and array-value-returning functions
+  // (e.g. bytes): both need a bound temporary before they can be indexed or
+  // sliced, since a code_function_callt embedded directly as an index/slice
+  // operand is a statement, not a value (#4807's list case; bytes hits the
+  // same gap when a `-> bytes` call is indexed inline, e.g. `f()[0:8]`).
+  if (call.type() != type_handler_.get_list_type() && !call.type().is_array())
+    return expr;
+
+  locationt location = get_location_from_decl(element);
+
+  // Create temporary variable for the list
+  symbolt &tmp_var_symbol = create_tmp_symbol(
+    element, "$iter_temp$", call.type(), gen_zero(call.type()));
+
+  // Declare the temporary
+  code_declt tmp_var_decl(symbol_expr(tmp_var_symbol));
+  tmp_var_decl.location() = location;
+  target_block.copy_to_operands(tmp_var_decl);
+
+  // Create function call with temp as LHS
+  code_function_callt new_call;
+  new_call.function() = call.function();
+  new_call.arguments() = call.arguments();
+  new_call.lhs() = symbol_expr(tmp_var_symbol);
+  new_call.type() = call.type();
+  new_call.location() = location;
+
+  target_block.copy_to_operands(new_call);
+
+  // Return reference to the temp variable
+  return symbol_expr(tmp_var_symbol);
+}

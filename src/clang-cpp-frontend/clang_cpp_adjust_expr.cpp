@@ -1,10 +1,13 @@
 #include <clang-c-frontend/typecast.h>
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
-#include <util/c_sizeof.h>
-#include <util/c_types.h>
-#include <util/destructor.h>
-#include <util/expr_util.h>
-#include <util/message.h>
+#include <clang-cpp-frontend/clang_cpp_code_gen.h>
+#include <clang-cpp-frontend/clang_cpp_destructor_call.h>
+#include <clang-cpp-frontend/clang_cpp_exception_id.h>
+#include <util/lang/c_sizeof.h>
+#include <util/lang/c_types.h>
+#include <goto-programs/destructor.h>
+#include <util/expr/expr_util.h>
+#include <util/message/message.h>
 
 clang_cpp_adjust::clang_cpp_adjust(contextt &_context)
   : clang_c_adjust(_context)
@@ -13,36 +16,40 @@ clang_cpp_adjust::clang_cpp_adjust(contextt &_context)
 
 void clang_cpp_adjust::gen_implicit_union_copy_move_constructor(symbolt &symbol)
 {
-  if (!symbol.type.is_code())
+  if (!symbol.get_type().is_code())
     return;
 
-  code_typet &ctor_type = to_code_type(symbol.type);
+  const code_typet &ctor_type = to_code_type(symbol.get_type());
 
   if (
     ctor_type.return_type().id() != "constructor" ||
     !ctor_type.return_type().get_bool("#implicit_union_copy_move_constructor"))
     return;
 
-  if (symbol.value.is_not_nil())
+  // Read-modify-set the value to mutate its body.
+  exprt value;
+  if (symbol.get_value().is_not_nil())
   {
-    code_blockt &ctor_body = to_code_block(to_code(symbol.value));
-    assert(
-      ctor_body.operands().size() == 1 &&
-      ctor_body.op0().statement() ==
-        "throw_decl"); // just a sanity check that we don't accidentally change any clang generated body in the future
+    value = symbol.get_value();
+    const code_blockt &existing_body = to_code_block(to_code(value));
+    // Sanity check that we don't accidentally clobber a clang-generated body:
+    // the implicit union copy/move constructor has no statements of its own.
+    assert(existing_body.operands().empty());
+    (void)existing_body;
   }
   else
   {
-    code_blockt ctor_body;
-    symbol.value = ctor_body;
+    value = code_blockt();
   }
-  code_blockt &ctor_body = to_code_block(to_code(symbol.value));
+  code_blockt &ctor_body = to_code_block(to_code(value));
   /* https://en.cppreference.com/w/cpp/language/copy_constructor#Implicitly-defined_copy_constructor
-   * > If the implicitly-declared copy constructor is not deleted, it is defined (that is, a function body is generated and compiled)
-   * > by the compiler if odr-used or needed for constant evaluation(since C++11).
-   * > **For union types, the implicitly-defined copy constructor copies the object representation (as by std::memmove).**
-   * We don't call std::memmove here, we should be able to just assign the union.
-   * (The wording is similar for https://en.cppreference.com/w/cpp/language/move_constructor#Implicitly-defined_move_constructor)
+   * > If the implicitly-declared copy constructor is not deleted, it is defined
+   * (that is, a function body is generated and compiled) > by the compiler if
+   * odr-used or needed for constant evaluation(since C++11). > **For union
+   * types, the implicitly-defined copy constructor copies the object
+   * representation (as by std::memmove).** We don't call std::memmove here, we
+   * should be able to just assign the union. (The wording is similar for
+   * https://en.cppreference.com/w/cpp/language/move_constructor#Implicitly-defined_move_constructor)
    */
 
   code_assignt copy_ctor_assign;
@@ -58,11 +65,27 @@ void clang_cpp_adjust::gen_implicit_union_copy_move_constructor(symbolt &symbol)
   copy_ctor_assign.location() = ctor_body.location();
   adjust_assign(copy_ctor_assign);
   ctor_body.operands().push_back(copy_ctor_assign);
+
+  // Resolvable only because clang_c_adjust::adjust() points
+  // migrate_namespace_lookup at the context being adjusted; without that both
+  // operands collapse onto one name (§52).
+  expr2tc value2;
+  migrate_expr(value, value2);
+  symbol.set_value(value2);
 }
 
 void clang_cpp_adjust::adjust_symbol(symbolt &symbol)
 {
   clang_c_adjust::adjust_symbol(symbol);
+
+  // Resolve a dynamic exception specification's declared types to exception
+  // ids now that the namespace is fully populated.
+  if (symbol.get_type().is_code())
+  {
+    typet t = symbol.get_type();
+    if (::finalize_exception_specification(ns, t))
+      symbol.set_type(migrate_type(t));
+  }
 
   /*
    * implicit code generation for vptr initializations:
@@ -70,7 +93,7 @@ void clang_cpp_adjust::adjust_symbol(symbolt &symbol)
    * add implicit code to set each virtual pointer of this
    * class to point to the corresponding virtual table.
    */
-  gen_vptr_initializations(symbol);
+  gen_vptr_initializations(context, symbol);
   gen_implicit_union_copy_move_constructor(symbol);
 }
 
@@ -84,18 +107,7 @@ void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
   }
   else if (statement == "cpp_delete" || statement == "cpp_delete[]")
   {
-    adjust_operands(expr);
-    // adjust side effect node to explicitly call class destructor
-    // e.g. the adjustment here will add the following instruction in GOTO:
-    // FUNCTION_CALL:  ~t2(&(*p))
-    code_function_callt destructor = get_destructor(ns, expr.type());
-    if (destructor.is_not_nil())
-    {
-      exprt new_object("new_object", expr.type());
-
-      destructor.arguments().push_back(address_of_exprt(new_object));
-      expr.set("destructor", destructor);
-    }
+    adjust_cpp_delete(expr);
   }
   else if (statement == "temporary_object")
   {
@@ -119,6 +131,31 @@ void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
     clang_c_adjust::adjust_side_effect(expr);
 }
 
+void clang_cpp_adjust::adjust_cpp_delete(side_effect_exprt &expr)
+{
+  adjust_operands(expr);
+
+  // adjust side effect node to explicitly call class destructor
+  // e.g. the adjustment here will add the following instruction in GOTO:
+  // FUNCTION_CALL:  ~t2(&(*p))
+  const struct_typet *class_type = resolve_class_type(ns, expr.type());
+  if (class_type == nullptr)
+    return;
+
+  const struct_typet::componentt *dtor =
+    get_destructor_component(ns, *class_type);
+  if (dtor == nullptr)
+    return;
+
+  exprt new_object("new_object", expr.type());
+
+  code_function_callt destructor;
+  destructor.function() =
+    destructor_binding(ns, *class_type, *dtor, new_object);
+  destructor.arguments().push_back(address_of_exprt(new_object));
+  expr.set("destructor", destructor);
+}
+
 void clang_cpp_adjust::adjust_new(exprt &expr)
 {
   if (expr.initializer().is_not_nil())
@@ -134,11 +171,24 @@ void clang_cpp_adjust::adjust_new(exprt &expr)
     expr.size(new_size);
   }
 
-  // Set sizeof and cmt_sizeof_type
-  exprt size_of = c_sizeof(expr.type().subtype(), ns);
-  size_of.set("#c_sizeof_type", expr.type().subtype());
+  if (expr.find("alloc_arguments").is_not_nil())
+  {
+    const code_typet::argumentst &params =
+      to_code_type(
+        static_cast<const exprt &>(expr.find("alloc_function")).type())
+        .arguments();
+    exprt &args = static_cast<exprt &>(expr.add("alloc_arguments"));
+    for (std::size_t i = 0; i < args.operands().size(); ++i)
+    {
+      adjust_expr(args.operands()[i]);
+      gen_typecast(ns, args.operands()[i], params[i + 1].type());
+    }
+  }
 
-  expr.set("sizeof", size_of);
+  // Note: the cpp_new allocation size flows via size_irep() (the array count)
+  // and the allocated type via type().subtype(); the old "sizeof" named-sub
+  // (a c_sizeof fold tagged with the legacy sizeof-type attribute) was never
+  // read, so it is no longer produced (esbmc/esbmc#5337).
 }
 
 void clang_cpp_adjust::adjust_member(member_exprt &expr)
@@ -210,7 +260,7 @@ void clang_cpp_adjust::adjust_cpp_member(member_exprt &expr)
   }
   // compoment's type shall be the same as member_exprt's type
   // and both are of the type `code`
-  assert(comp_symb->type.is_code());
+  assert(comp_symb->get_type().is_code());
   exprt method_call = symbol_expr(*comp_symb);
   expr.swap(method_call);
 }
@@ -239,9 +289,13 @@ void clang_cpp_adjust::adjust_side_effect_assign(side_effect_exprt &expr)
     // just populate rhs' argument and replace the entire expression
     exprt &lhs = expr.op0();
     exprt arg = address_of_exprt(lhs);
-    exprt base_symbol = arg.op0();
-    assert(base_symbol.op0().id() == "symbol");
-    // TODO: wrap base symbol into dereference if it's a member
+    // Sanity: the object being constructed must ultimately root at a symbol,
+    // whether it is a plain member `s.m` or a nested member/array element such
+    // as `s.arr[i]` (emitted for per-element construction of array members).
+    const exprt *base_symbol = &lhs;
+    while (base_symbol->has_operands())
+      base_symbol = &base_symbol->op0();
+    assert(base_symbol->id() == "symbol");
     exprt::operandst &arguments = rhs_func_call.arguments();
     arguments.insert(arguments.begin(), arg);
 
@@ -372,6 +426,13 @@ void clang_cpp_adjust::adjust_side_effect_throw(side_effect_exprt &expr)
   if (expr.operands().size() == 0)
     return;
 
+  // Adjust the thrown expression like any other operand. In particular, when
+  // the operand is the copy/move construction of the exception object (e.g.
+  // `throw e;` for a by-value parameter `e`), this address-of's the lvalue
+  // arguments bound to the constructor's reference parameters — otherwise the
+  // ctor is called with a struct value where a pointer is expected.
+  adjust_expr(expr.op0());
+
   const typet &exception_type = expr.op0().type();
 
   std::vector<irep_idt> ids;
@@ -394,72 +455,7 @@ void clang_cpp_adjust::convert_exception_id(
   std::vector<irep_idt> &ids,
   bool is_catch)
 {
-  if (type.id() == "pointer" || type.id() == "array")
-  {
-    if (type.reference())
-    {
-      convert_exception_id(type.subtype(), suffix, ids, is_catch);
-      return;
-    }
-    if (type.subtype().id() == "empty")
-    {
-      irep_idt identifier = "void_ptr";
-      ids.emplace_back(id2string(identifier) + suffix);
-    }
-    else
-    {
-      convert_exception_id(type.subtype(), "_ptr" + suffix, ids, is_catch);
-      return;
-    }
-  }
-  else if (type.id() == "symbol")
-  {
-    irep_idt identifier = type.identifier();
-
-    // Check if base class exists
-    typet t = ns.lookup(identifier)->type;
-
-    // only get the base class when throwing
-    if (t.id() == "struct" && !is_catch)
-    {
-      struct_typet struct_type = to_struct_type(t);
-      const exprt &bases =
-        static_cast<const exprt &>(struct_type.find("bases"));
-
-      // Throwing a derived class
-      if (bases.is_not_nil() && bases.get_sub().size())
-      {
-        // record the derived class
-        ids.emplace_back(id2string(identifier).substr(4) + suffix);
-
-        // record all the base classes id
-        for (const auto &i : bases.get_sub())
-        {
-          identifier = i.id();
-          ids.emplace_back(id2string(identifier).substr(4) + suffix);
-        }
-      }
-      else
-        ids.emplace_back(id2string(identifier).substr(4) + suffix);
-    }
-    else
-      ids.emplace_back(id2string(identifier) + suffix);
-  }
-  else if (type.ellipsis())
-  {
-    irep_idt identifier = "ellipsis";
-    ids.emplace_back(id2string(identifier) + suffix);
-  }
-  else if (type.id() == "noexcept")
-  {
-    irep_idt identifier = "noexcept";
-    ids.emplace_back(id2string(identifier) + suffix);
-  }
-
-  // add C++ type
-  std::string cpp_type = type.get("#cpp_type").as_string();
-  if (!cpp_type.empty())
-    ids.emplace_back(cpp_type + suffix);
+  ::convert_exception_id(ns, type, suffix, ids, is_catch);
 }
 
 void clang_cpp_adjust::adjust_side_effect_function_call(

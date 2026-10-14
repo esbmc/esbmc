@@ -326,7 +326,10 @@ def main(argv: list[str] | None = None) -> int:
         default=script_dir,
         help="directory for sv-comp-hist-*.png files",
     )
-    ap.add_argument("--cache-dir", type=Path, default=Path("/tmp/esbmc-svcomp-hist"))
+    # Default cache lives under /tmp so multiple runs on the same host
+    # share rendered intermediates; user can override with --cache-dir.
+    ap.add_argument("--cache-dir", type=Path,
+                    default=Path("/tmp/esbmc-svcomp-hist"))  # nosec B108
     ap.add_argument(
         "--scale",
         choices=("log", "linear"),

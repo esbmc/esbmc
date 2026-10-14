@@ -1,27 +1,27 @@
 #include <cassert>
-#include <util/arith_tools.h>
-#include <util/c_types.h>
-#include <util/config.h>
-#include <util/expr_util.h>
-#include <util/message.h>
-#include <util/namespace.h>
-#include <util/std_code.h>
-#include <util/std_expr.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/config/config.h>
+#include <util/expr/expr_util.h>
+#include <util/message/message.h>
+#include <util/symtab/namespace.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_expr.h>
 #include <clang-c-frontend/clang_c_main.h>
 
 void clang_c_maint::init_variable(codet &dest, const symbolt &sym)
 {
-  const exprt &value = sym.value;
+  const exprt &value = sym.get_value();
 
   if (value.is_nil())
     return;
 
   assert(!value.type().is_code());
 
-  exprt symbol("symbol", sym.type);
+  exprt symbol("symbol", sym.get_type());
   symbol.identifier(sym.id);
 
-  code_assignt code(symbol, sym.value);
+  code_assignt code(symbol, sym.get_value());
   code.location() = sym.location;
 
   codet adjusted("decl-block");
@@ -47,13 +47,64 @@ void clang_c_maint::static_lifetime_init(const contextt &context, codet &dest)
 
   // call designated "initialization" functions
   context.foreach_operand_in_order([&dest](const symbolt &s) {
-    if (s.type.initialization() && s.type.is_code())
+    if (s.get_type().initialization() && s.get_type().is_code())
     {
       code_function_callt function_call;
       function_call.function() = symbol_expr(s);
       dest.move_to_operands(function_call);
     }
   });
+}
+
+void clang_c_maint::static_lifetime_destroy(codet &)
+{
+}
+
+static bool mentions_symbol(const irept &irep, const irep_idt &id)
+{
+  if (irep.id() == "symbol" && irep.identifier() == id)
+    return true;
+  for (const auto &sub : irep.get_sub())
+    if (mentions_symbol(sub, id))
+      return true;
+  for (const auto &named : irep.get_named_sub())
+    if (named.first != "type" && mentions_symbol(named.second, id))
+      return true;
+  return false;
+}
+
+// Only call the atexit handler when some function can register one: its loop
+// does not fold under --no-propagation and would unwind without bound. Under
+// --memory-leak-check and --termination symex always ran past main, so the
+// call stays and their schedule exploration is unchanged.
+bool clang_c_maint::atexit_may_register() const
+{
+  if (
+    config.options.get_bool_option("memory-leak-check") ||
+    config.options.get_bool_option("termination"))
+    return true;
+
+  const irep_idt atexit_id = "c:@F@atexit";
+  bool found = false;
+  context.foreach_operand([&](const symbolt &s) {
+    if (!found && s.id != atexit_id)
+      found = mentions_symbol(s.get_value(), atexit_id);
+  });
+  return found;
+}
+
+// What exit() does after main returns: the atexit handlers (C11 7.22.4.4p4),
+// then any static-storage-duration destructors.
+void clang_c_maint::add_exit_code(codet &dest, const locationt &location)
+{
+  if (atexit_may_register())
+  {
+    code_function_callt atexit_call;
+    atexit_call.location() = location;
+    atexit_call.function() = symbol_exprt("c:@F@__ESBMC_atexit_handler");
+    dest.move_to_operands(atexit_call);
+  }
+  static_lifetime_destroy(dest);
 }
 
 bool clang_c_maint::clang_main()
@@ -65,8 +116,7 @@ bool clang_c_maint::clang_main()
   // find main symbol
   std::list<irep_idt> matches;
 
-  forall_symbol_base_map (it, context.symbol_base_map, main)
-  {
+  context.foreach_named_symbol_with_base(main, [&](irep_idt id) {
     // if user provided class/contract name
     if (!config.cname.empty() && !config.main.empty())
     {
@@ -80,7 +130,7 @@ bool clang_c_maint::clang_main()
       while (iss >> tgt_cname)
       {
         const std::string fmt = "@" + tgt_cname + "@F@" + main;
-        if (it->second.as_string().find(fmt) != std::string::npos)
+        if (id.as_string().find(fmt) != std::string::npos)
         {
           is_found_sym = true;
           break;
@@ -88,20 +138,21 @@ bool clang_c_maint::clang_main()
       }
       if (is_found_sym)
       {
-        symbolt *s = context.find_symbol(it->second);
-        if (s != nullptr && s->type.is_code())
-          matches.push_back(it->second);
-        break; // prevent ambiguous
+        symbolt *s = context.find_symbol(id);
+        if (s != nullptr && s->get_type().is_code())
+          matches.push_back(id);
+        return false; // first cname match wins; stop scanning
       }
     }
     else
     {
       // look it up
-      symbolt *s = context.find_symbol(it->second);
-      if (s != nullptr && s->type.is_code())
-        matches.push_back(it->second);
+      symbolt *s = context.find_symbol(id);
+      if (s != nullptr && s->get_type().is_code())
+        matches.push_back(id);
     }
-  }
+    return true; // keep scanning
+  });
 
   if (matches.empty())
   {
@@ -125,7 +176,7 @@ bool clang_c_maint::clang_main()
   const symbolt &symbol = *s;
 
   // check if it has a body
-  if (symbol.value.is_nil())
+  if (symbol.get_value().is_nil())
     return false; // give up
 
   codet init_code;
@@ -133,7 +184,7 @@ bool clang_c_maint::clang_main()
   static_lifetime_init(context, init_code);
 
   init_code.make_block();
-  init_code.end_location(symbol.value.end_location());
+  init_code.end_location(symbol.get_value().end_location());
 
   // build call to function
 
@@ -142,7 +193,7 @@ bool clang_c_maint::clang_main()
   call.function() = symbol_expr(symbol);
 
   const code_typet::argumentst &arguments =
-    to_code_type(symbol.type).arguments();
+    to_code_type(symbol.get_type()).arguments();
 
   if (symbol.name == "main")
   {
@@ -157,7 +208,7 @@ bool clang_c_maint::clang_main()
       const symbolt &argc_symbol = *ns.lookup("argc'");
       const symbolt &argv_symbol = *ns.lookup("argv'");
 
-      exprt one = from_integer(1, argc_symbol.type);
+      exprt one = from_integer(1, argc_symbol.get_type());
 
       exprt add("+", uint_type());
       add.copy_to_operands(symbol_expr(argc_symbol), one); // argc + 1
@@ -177,17 +228,17 @@ bool clang_c_maint::clang_main()
       // assume argc is at most MAX-1
       BigInt max;
 
-      if (argc_symbol.type.id() == "signedbv")
-        max = power(2, atoi(argc_symbol.type.width().c_str()) - 1) - 1;
-      else if (argc_symbol.type.id() == "unsignedbv")
-        max = power(2, atoi(argc_symbol.type.width().c_str())) - 1;
+      if (argc_symbol.get_type().id() == "signedbv")
+        max = power(2, atoi(argc_symbol.get_type().width().c_str()) - 1) - 1;
+      else if (argc_symbol.get_type().id() == "unsignedbv")
+        max = power(2, atoi(argc_symbol.get_type().width().c_str())) - 1;
       else
         assert(false);
 
       // The argv array of MAX elements of pointer type has to fit
       max /= config.ansi_c.pointer_width() / 8;
 
-      exprt max_minus_one = from_integer(max - 1, argc_symbol.type);
+      exprt max_minus_one = from_integer(max - 1, argc_symbol.get_type());
 
       exprt le("<=", bool_type());
       le.copy_to_operands(symbol_expr(argc_symbol), max_minus_one);
@@ -207,13 +258,13 @@ bool clang_c_maint::clang_main()
       // rather than NULL: this is a bounded under-approximation, raise
       // --argv-max-args for wider coverage at the cost of a larger SMT
       // formula.
-      exprt null = gen_zero(argv_symbol.type.subtype());
+      exprt null = gen_zero(argv_symbol.get_type().subtype());
 
       // argv[argc] == NULL
       index_exprt argv_argc(
         symbol_expr(argv_symbol),
         symbol_expr(argc_symbol),
-        argv_symbol.type.subtype());
+        argv_symbol.get_type().subtype());
       exprt term_eq("=", bool_type());
       term_eq.copy_to_operands(argv_argc, null);
       init_code.copy_to_operands(code_assumet(term_eq));
@@ -253,16 +304,17 @@ bool clang_c_maint::clang_main()
           max_args,
           max_args * 2);
       const int max_strlen = get_int_opt("argv-max-strlen", 256, 1);
-      typet char_t = argv_symbol.type.subtype().subtype();
+      typet char_t = argv_symbol.get_type().subtype().subtype();
 
       for (int ai = 0; ai < max_args; ++ai)
       {
-        // Nondet length for this string (uninitialized static ⟹ nondet in symex).
+        // Nondet length for this string (uninitialized static ⟹ nondet in
+        // symex).
         std::string lname = "__ESBMC_argv_len_" + std::to_string(ai);
         symbolt len_sym;
         len_sym.name = irep_idt(lname);
         len_sym.id = irep_idt("c:@" + lname);
-        len_sym.type = uint_type();
+        len_sym.set_type(migrate_type(uint_type()));
         len_sym.static_lifetime = true;
         len_sym.lvalue = true;
         symbolt *len_ptr = nullptr;
@@ -285,7 +337,7 @@ bool clang_c_maint::clang_main()
         symbolt str_sym;
         str_sym.name = irep_idt(sname);
         str_sym.id = irep_idt("c:@" + sname);
-        str_sym.type = array_typet(char_t, len);
+        str_sym.set_type(migrate_type(array_typet(char_t, len)));
         str_sym.static_lifetime = true;
         str_sym.lvalue = true;
         symbolt *str_ptr = nullptr;
@@ -308,16 +360,16 @@ bool clang_c_maint::clang_main()
 
         exprt cond_lt("<", bool_type());
         cond_lt.copy_to_operands(
-          from_integer(ai, argc_symbol.type), symbol_expr(argc_symbol));
+          from_integer(ai, argc_symbol.get_type()), symbol_expr(argc_symbol));
 
         index_exprt argv_ai(
           symbol_expr(argv_symbol),
           from_integer(ai, index_type()),
-          argv_symbol.type.subtype());
+          argv_symbol.get_type().subtype());
 
         index_exprt str_first(
           symbol_expr(*str_ptr), gen_zero(index_type()), char_t);
-        exprt addr_str("address_of", argv_symbol.type.subtype());
+        exprt addr_str("address_of", argv_symbol.get_type().subtype());
         addr_str.copy_to_operands(str_first);
 
         code_ifthenelset if_assign;
@@ -372,7 +424,7 @@ bool clang_c_maint::clang_main()
         index_exprt envp_index(
           symbol_expr(envp_symbol),
           symbol_expr(envp_size_symbol),
-          envp_symbol.type.subtype());
+          envp_symbol.get_type().subtype());
 
         // disable bounds check on that one
         // Logic to perform this ^ moved into goto_check, rather than load
@@ -416,13 +468,9 @@ bool clang_c_maint::clang_main()
   thread_end_call.function() =
     symbol_exprt("c:@F@__ESBMC_pthread_end_main_hook");
 
-  code_function_callt atexit_call;
-  atexit_call.location() = symbol.location;
-  atexit_call.function() = symbol_exprt("c:@F@__ESBMC_atexit_handler");
-
   init_code.move_to_operands(thread_start_call);
   init_code.move_to_operands(call);
-  init_code.move_to_operands(atexit_call);
+  add_exit_code(init_code, symbol.location);
   init_code.move_to_operands(thread_end_call);
 
   // add "main"
@@ -433,8 +481,16 @@ bool clang_c_maint::clang_main()
 
   new_symbol.id = "__ESBMC_main";
   new_symbol.name = "__ESBMC_main";
-  new_symbol.type.swap(main_type);
-  new_symbol.value.swap(init_code);
+  {
+    typet t = new_symbol.get_type();
+    t.swap(main_type);
+    new_symbol.set_type(migrate_type(t));
+  }
+  {
+    exprt v = new_symbol.get_value();
+    v.swap(init_code);
+    new_symbol.set_value(std::move(v));
+  }
 
   if (context.move(new_symbol))
   {

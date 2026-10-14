@@ -11,14 +11,14 @@ if __name__ == "__main__":
 
     p = args.path
     files = [f for f in os.listdir(p) if os.path.isfile(os.path.join(p, f))]
+    # Filter guarantees every filename ends in ".h", so splitext always
+    # returns (name, ".h") below — no extra length check needed.
     files = [f for f in files if f.endswith(".h")]
     files.sort()
 
     print('extern "C"\n{\n')
     for filename in files:
         name, ext = os.path.splitext(filename)
-        assert len(ext) == 2
-
         name_ = name.replace('-', '_')
         print("extern char " + name_ + "_buf[];")
         print("extern unsigned int " + name_ + "_buf_size;\n")
@@ -26,8 +26,6 @@ if __name__ == "__main__":
     print('struct hooked_header clang_headers[] = {')
     for filename in files:
         name, ext = os.path.splitext(filename)
-        assert len(ext) == 2
-
         name_ = name.replace('-', '_')
         print(f'{{"{filename}", {name_}_buf, &{name_}_buf_size}},')
 

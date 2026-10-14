@@ -1,0 +1,1066 @@
+#include <cassert>
+#include <cstring>
+#include <fstream>
+#include <goto-symex/trace/goto_trace.h>
+#include <goto-symex/trace/printf_formatter.h>
+#include <goto-symex/witness/witnesses.h>
+
+#include <regex>
+#include <set>
+#include <langapi/language_util.h>
+#include <langapi/languages.h>
+#include <util/arith/arith_tools.h>
+#include <util/base/cwe_mapping.h>
+#include <util/irep/std_types.h>
+#include <util/symtab/namespace.h>
+#include <nlohmann/json.hpp>
+#include <optional>
+#include <ostream>
+
+void goto_tracet::output(const class namespacet &ns, std::ostream &out) const
+{
+  for (const auto &step : steps)
+    step.output(ns, out);
+}
+
+void goto_trace_stept::dump() const
+{
+  std::ostringstream oss;
+  output(*migrate_namespace_lookup, oss);
+  log_debug("goto-trace", "{}", oss.str());
+}
+
+void goto_trace_stept::output(const namespacet &ns, std::ostream &out) const
+{
+  switch (type)
+  {
+  case symex_targett::ASSERT:
+    out << "ASSERT";
+    break;
+
+  case symex_targett::ASSUME:
+    out << "ASSUME";
+    break;
+
+  case symex_targett::ASSIGNMENT:
+    out << "ASSIGNMENT";
+    break;
+
+  default:
+    assert(false);
+  }
+
+  if (type == symex_targett::ASSERT || type == symex_targett::ASSUME)
+    out << " (" << guard << ")";
+
+  out << "\n";
+
+  if (!pc->location.is_nil())
+    out << pc->location << "\n";
+
+  if (pc->is_goto())
+    out << "GOTO   ";
+  else if (pc->is_assume())
+    out << "ASSUME ";
+  else if (pc->is_assert())
+    out << "ASSERT ";
+  else if (pc->is_other())
+    out << "OTHER  ";
+  else if (pc->is_assign())
+    out << "ASSIGN ";
+  else if (pc->is_function_call())
+    out << "CALL   ";
+  else
+    out << "(?)    ";
+
+  out << "\n";
+
+  if (pc->is_other() || pc->is_assign())
+  {
+    irep_idt identifier;
+
+    if (!is_nil_expr(original_lhs))
+      identifier = to_symbol2t(original_lhs).get_symbol_name();
+    else
+      identifier = to_symbol2t(lhs).get_symbol_name();
+
+    out << "  " << identifier << " = " << from_expr(ns, identifier, value)
+        << "\n";
+  }
+  else if (pc->is_assert())
+  {
+    if (!guard)
+    {
+      out << "Violated property:"
+          << "\n";
+      if (pc->location.is_nil())
+        out << "  " << pc->location << "\n";
+
+      if (!comment.empty())
+      {
+        out << "  " << comment << "\n";
+        std::string cwes = format_cwe_list(cwe_for(comment));
+        if (!cwes.empty())
+          out << "  CWE: " << cwes << "\n";
+      }
+      out << "  " << from_expr(ns, "", pc->guard) << "\n";
+      out << "\n";
+    }
+  }
+
+  out << "\n";
+}
+
+void counterexample_value(
+  std::ostream &out,
+  const namespacet &ns,
+  const expr2tc &lhs,
+  const expr2tc &value)
+{
+  out << "  " << from_expr(ns, "", lhs);
+  if (is_nil_expr(value))
+    out << "(assignment removed)";
+  else
+  {
+    out << " = " << from_expr(ns, "", value);
+
+    // Don't print the bit-vector if we're running on integer/real mode
+    if (is_constant_expr(value) && !config.options.get_bool_option("ir"))
+    {
+      std::string binary_value = "";
+      if (is_bv_type(value))
+      {
+        binary_value = integer2binary(
+          to_constant_int2t(value).value, value->type->get_width());
+      }
+      else if (is_fixedbv_type(value))
+      {
+        binary_value =
+          to_constant_fixedbv2t(value).value.to_expr().get_value().as_string();
+      }
+      else if (is_floatbv_type(value))
+      {
+        binary_value =
+          to_constant_floatbv2t(value).value.to_expr().get_value().as_string();
+      }
+
+      if (!binary_value.empty())
+      {
+        out << " (";
+
+        std::string::size_type i = 0;
+        for (const auto c : binary_value)
+        {
+          out << c;
+          if (++i % 8 == 0 && binary_value.size() != i)
+            out << ' ';
+        }
+
+        out << ")";
+      }
+    }
+
+    out << "\n";
+  }
+}
+
+void show_goto_trace_gui(
+  std::ostream &out,
+  const namespacet &ns,
+  const goto_tracet &goto_trace)
+{
+  locationt previous_location;
+
+  for (const auto &step : goto_trace.steps)
+  {
+    const locationt &location = step.pc->location;
+
+    if ((step.type == symex_targett::ASSERT) && !step.guard)
+    {
+      out << "FAILED"
+          << "\n"
+          << step.comment << "\n" // value
+          << "\n"                 // PC
+          << location.file() << "\n"
+          << location.line() << "\n"
+          << location.column() << "\n";
+    }
+    else if (step.type == symex_targett::ASSIGNMENT)
+    {
+      irep_idt identifier;
+
+      if (!is_nil_expr(step.original_lhs))
+        identifier = to_symbol2t(step.original_lhs).get_symbol_name();
+      else
+        identifier = to_symbol2t(step.lhs).get_symbol_name();
+
+      std::string value_string = from_expr(ns, identifier, step.value);
+
+      const symbolt *symbol = ns.lookup(identifier);
+      irep_idt base_name;
+      if (symbol)
+        base_name = symbol->name;
+
+      out << "TRACE"
+          << "\n";
+
+      out << identifier << "," << base_name << ","
+          << get_type_id(step.value->type) << "," << value_string << "\n"
+          << step.step_nr << "\n"
+          << step.pc->location.file() << "\n"
+          << step.pc->location.line() << "\n"
+          << step.pc->location.column() << "\n";
+    }
+    else if (location != previous_location)
+    {
+      // just the location
+
+      if (!location.file().empty())
+      {
+        out << "TRACE"
+            << "\n";
+
+        out << "," // identifier
+            << "," // base_name
+            << "," // type
+            << ""
+            << "\n" // value
+            << step.step_nr << "\n"
+            << location.file() << "\n"
+            << location.line() << "\n"
+            << location.column() << "\n";
+      }
+    }
+
+    previous_location = location;
+  }
+}
+
+/*
+   Return true if
+   - the location's file_name matches one of the user's input files or one of
+     the user-supplied include files
+   - the location is explicitly labeled as user_provided
+   - the location is empty
+   - the location is the esbmc_intrinsics.h exception
+*/
+bool input_file_check(const locationt &l)
+{
+  // probably esbmc internally converted stuff
+  if (l.as_string() == "" || l.location().user_provided())
+    return true;
+  const irep_idt &f_name = l.get_file();
+  if (f_name.empty())
+    return true;
+  /* config.args, not options["input-file"]: the latter retains only the last
+     positional argument, so under multiple input files every step from an
+     earlier one would look foreign. */
+  for (const std::string &arg : config.args)
+    if (f_name == arg)
+      return true;
+  for (const auto &inc : config.ansi_c.include_files)
+  {
+    if (f_name == inc)
+      return true;
+  }
+
+  // exception
+  if (f_name == "esbmc_intrinsics.h")
+    return true;
+
+  return false;
+}
+
+/* The step's own file, when the witness does not already describe it.
+   A consumer resolves a bare line number against the program file, so a step
+   from a header or an operational model has to name where it came from.
+   The reference is the verified file, because that is the only case in which
+   witness_start_line expresses the line in the program file. */
+static std::string
+witness_origin_file(const locationt &loc, const std::string &verified_file)
+{
+  const std::string file = loc.get_file().as_string();
+  return file == verified_file ? "" : file;
+}
+
+static BigInt witness_start_line(
+  const locationt &loc,
+  const std::string &verified_file,
+  optionst &options)
+{
+  BigInt line = std::atoi(loc.get_line().c_str());
+  /* get_line_number() remaps by matching the text of verified_file's line into
+     the program file, which says nothing about a line of some other file. */
+  const irep_idt &file = loc.get_file();
+  if (!file.empty() && file.as_string() != verified_file)
+    return line;
+  return get_line_number(verified_file, line, options);
+}
+
+static std::string
+witness_waypoint_file(const locationt &loc, const std::string &verified_file)
+{
+  const irep_idt &file = loc.get_file();
+  return file.empty() ? verified_file : file.as_string();
+}
+
+static waypoint witness_waypoint(
+  const locationt &loc,
+  const std::string &verified_file,
+  optionst &options)
+{
+  waypoint wp;
+  wp.file = witness_waypoint_file(loc, verified_file);
+  wp.line = witness_start_line(loc, verified_file, options);
+  wp.column = loc.get_column().c_str();
+  wp.function = loc.function().c_str();
+  return wp;
+}
+
+/* README-YAML.md requires a waypoint's file_name to be one of the task's input
+   files, so a step inside a header or an operational model is reported at its
+   innermost call site that is one. Null when no frame qualifies. */
+static const locationt *witness_input_location(const goto_trace_stept &step)
+{
+  if (input_file_check(step.pc->location))
+    return &step.pc->location;
+
+  for (const auto &frame : step.stack_trace)
+    if (
+      frame.src != nullptr && frame.src->is_set &&
+      input_file_check(frame.src->pc->location))
+      return &frame.src->pc->location;
+
+  return nullptr;
+}
+
+/* A violation witness whose target waypoint is missing guides a validator
+   nowhere, so an unhoistable target is attributed to the verified file rather
+   than dropped: a file_name the validator was never given makes the witness
+   ill-formed, while a line it cannot match only costs confirmation. */
+static waypoint witness_target_waypoint(
+  const goto_trace_stept &step,
+  const std::string &verified_file,
+  optionst &options)
+{
+  const locationt *loc = witness_input_location(step);
+  waypoint wp =
+    witness_waypoint(loc ? *loc : step.pc->location, verified_file, options);
+  wp.type = waypoint::target;
+  if (loc == nullptr)
+    wp.file = verified_file;
+  return wp;
+}
+
+void show_state_header(
+  std::ostream &out,
+  const goto_trace_stept &state,
+  const locationt &location,
+  unsigned step_nr,
+  const bool simplify_trace)
+{
+  out << "\n";
+  if (simplify_trace)
+  {
+    show_simplified_location(out, location);
+    out << "------------------------"
+        << "\n";
+  }
+  else
+  {
+    out << "State " << step_nr;
+    out << " " << location << " thread " << state.thread_nr << "\n";
+
+    out << "----------------------------------------------------"
+        << "\n";
+  }
+}
+
+/* The values a violated claim reads through a pointer into an object the
+ * program never wrote. No assignment step carries them, so without this the
+ * witness names every local but not what made the property fail, and a
+ * validator cannot replay it (#7858). */
+static std::string
+format_nondet_reads(const namespacet &ns, const goto_trace_stept &step)
+{
+  std::string assumptions;
+  for (const auto &[lvalue, value] : step.nondet_reads)
+  {
+    std::string one =
+      from_expr(ns, "", lvalue, presentationt::WITNESS) +
+      " == " + from_expr(ns, "", value, presentationt::WITNESS) + ";";
+    std::replace(one.begin(), one.end(), '$', '_');
+    check_replace_invalid_assignment(one);
+    if (!one.empty())
+      assumptions += assumptions.empty() ? one : " " + one;
+  }
+  return assumptions;
+}
+
+void violation_graphml_goto_trace(
+  optionst &options,
+  const namespacet &ns,
+  const goto_tracet &goto_trace,
+  const std::string &output_path_override)
+{
+  grapht graph(grapht::VIOLATION);
+  graph.verified_file = options.get_option("input-file");
+
+  log_progress(
+    "Generating Violation Graphml Witness for: {}", graph.verified_file);
+
+  edget *first_edge = &graph.edges.at(0);
+  nodet *prev_node = first_edge->to_node;
+
+  for (const auto &step : goto_trace.steps)
+  {
+    switch (step.type)
+    {
+    case symex_targett::ASSERT:
+      if (!step.guard)
+      {
+        graph.check_create_new_thread(step.thread_nr, prev_node);
+        prev_node = graph.edges.back().to_node;
+
+        nodet *violation_node = new nodet();
+        violation_node->violation = true;
+        violation_node->cwe = format_cwe_list(cwe_for(step.comment));
+
+        edget violation_edge(prev_node, violation_node);
+        violation_edge.thread_id = std::to_string(step.thread_nr);
+        violation_edge.assumption = format_nondet_reads(ns, step);
+        violation_edge.origin_file =
+          witness_origin_file(step.pc->location, graph.verified_file);
+        violation_edge.start_line =
+          witness_start_line(step.pc->location, graph.verified_file, options);
+
+        graph.edges.push_back(violation_edge);
+
+        /* having printed a property violation, don't print more steps. */
+
+        graph.generate_graphml(options, output_path_override);
+        return;
+      }
+      break;
+
+    case symex_targett::ASSIGNMENT:
+      if (
+        step.pc->is_assign() || step.pc->is_return() ||
+        (step.pc->is_other() && is_nil_expr(step.lhs)) ||
+        step.pc->is_function_call())
+      {
+        std::string assignment = get_formated_assignment(ns, step, false);
+
+        graph.check_create_new_thread(step.thread_nr, prev_node);
+        prev_node = graph.edges.back().to_node;
+
+        edget new_edge;
+        new_edge.thread_id = std::to_string(step.thread_nr);
+        new_edge.assumption = assignment;
+        new_edge.origin_file =
+          witness_origin_file(step.pc->location, graph.verified_file);
+        new_edge.start_line =
+          witness_start_line(step.pc->location, graph.verified_file, options);
+
+        nodet *new_node = new nodet();
+        new_edge.from_node = prev_node;
+        new_edge.to_node = new_node;
+        prev_node = new_node;
+        graph.edges.push_back(new_edge);
+      }
+      break;
+
+    default:
+      continue;
+    }
+  }
+}
+
+/* The \result value of a nondet call, when this step carries one a validator
+   can act on. */
+static std::optional<waypoint> witness_nondet_waypoint(
+  const namespacet &ns,
+  const goto_trace_stept &step,
+  const std::string &verified_file,
+  optionst &options)
+{
+  if (is_nil_expr(step.rhs) || !find_nondet_in_expr(step.rhs))
+    return {};
+
+  if (!input_file_check(step.pc->location))
+    return {};
+
+  std::string assignment = get_formated_assignment(ns, step, true);
+  if (assignment.empty())
+    return {};
+
+  // Extract just the value part ("lhs == value" -> "value") for \result
+  std::string value_str;
+  auto eq_pos = assignment.find(" == ");
+  if (eq_pos != std::string::npos)
+    value_str = assignment.substr(eq_pos + 4);
+
+  waypoint wp = witness_waypoint(step.pc->location, verified_file, options);
+  wp.type = waypoint::function_return;
+  wp.value = "\\result == " + value_str;
+  return wp;
+}
+
+void violation_yaml_goto_trace(
+  optionst &options,
+  const namespacet &ns,
+  const goto_tracet &goto_trace,
+  const std::string &output_path_override)
+{
+  yamlt yml(yamlt::VIOLATION);
+  yml.verified_file = options.get_option("input-file");
+  log_progress("Generating Violation Yaml Witness for: {}", yml.verified_file);
+
+  for (const auto &step : goto_trace.steps)
+  {
+    switch (step.type)
+    {
+    case symex_targett::ASSERT:
+      if (!step.guard)
+      {
+        yml.segments.push_back(
+          witness_target_waypoint(step, yml.verified_file, options));
+
+        /* having printed a property violation, don't print more steps. */
+
+        yml.generate_yaml(options, output_path_override);
+        return;
+      }
+      break;
+
+    case symex_targett::BREANCHING:
+      if (step.pc->is_goto())
+      {
+        /* A validator cannot match a follow waypoint against a file it was
+           not given; dropping one only weakens guidance. */
+        if (!input_file_check(step.pc->location))
+          break;
+
+        waypoint wp =
+          witness_waypoint(step.pc->location, yml.verified_file, options);
+        wp.type = waypoint::branching;
+        wp.value = !step.guard ? "true" : "false";
+        yml.segments.push_back(wp);
+      }
+      break;
+
+    case symex_targett::ASSIGNMENT:
+      if (
+        step.pc->is_assign() || step.pc->is_return() ||
+        (step.pc->is_other() && is_nil_expr(step.lhs)) ||
+        step.pc->is_function_call())
+      {
+        if (
+          auto wp =
+            witness_nondet_waypoint(ns, step, yml.verified_file, options))
+          yml.segments.push_back(*wp);
+      }
+      break;
+
+    default:
+      continue;
+    }
+  }
+}
+
+void correctness_graphml_goto_trace(
+  optionst &options,
+  const namespacet &ns,
+  const goto_tracet &goto_trace)
+{
+  grapht graph(grapht::CORRECTNESS);
+  graph.verified_file = options.get_option("input-file");
+  log_progress(
+    "Generating Correctness Graphml Witness for: {}", graph.verified_file);
+
+  edget *first_edge = &graph.edges.at(0);
+  nodet *prev_node = first_edge->to_node;
+
+  for (const auto &step : goto_trace.steps)
+  {
+    /* checking restrictions for correctness GraphML */
+    if (
+      (!(is_valid_witness_step(ns, step))) ||
+      (!(step.is_assume() || step.is_assert())))
+      continue;
+
+    std::string invariant = get_invariant(
+      graph.verified_file,
+      std::atoi(step.pc->location.get_line().c_str()),
+      options);
+
+    if (invariant.empty())
+      continue; /* we don't have to consider this invariant */
+
+    nodet *new_node = new nodet();
+    edget *new_edge = new edget();
+    std::string function = step.pc->location.get_function().c_str();
+    new_edge->origin_file =
+      witness_origin_file(step.pc->location, graph.verified_file);
+    new_edge->start_line =
+      witness_start_line(step.pc->location, graph.verified_file, options);
+    new_node->invariant = invariant;
+    new_node->invariant_scope = function;
+
+    new_edge->from_node = prev_node;
+    new_edge->to_node = new_node;
+    prev_node = new_node;
+    graph.edges.push_back(*new_edge);
+  }
+
+  graph.generate_graphml(options);
+}
+
+void correctness_yaml_goto_trace(
+  optionst &options,
+  const namespacet &ns [[maybe_unused]],
+  const goto_tracet &goto_trace [[maybe_unused]])
+{
+  yamlt yml(yamlt::CORRECTNESS);
+  yml.verified_file = options.get_option("input-file");
+  log_progress(
+    "Generating Correctness Yaml Witness for: {}", yml.verified_file);
+
+  yml.generate_yaml(options);
+}
+
+void appendInfo(
+  std::string &dest,
+  const std::string &label,
+  const std::string &value)
+{
+  if (!value.empty())
+  {
+    if (!dest.empty())
+      dest += " ";
+    // Append in place rather than `label + " " + id2string(value)`, which
+    // builds two throwaway temporaries per trace label (this scales with
+    // counterexample size).
+    dest += label;
+    dest += ' ';
+    dest += value;
+  }
+}
+
+void show_simplified_location(std::ostream &out, const locationt &location)
+{
+  std::string dest;
+  const irep_idt &file = location.get_file();
+  const irep_idt &line = location.get_line();
+  const irep_idt &function = location.get_function();
+
+  if (file != "")
+    appendInfo(dest, "file", id2string(file));
+  if (line != "")
+    appendInfo(dest, "line", id2string(line));
+  if (function != "")
+    appendInfo(dest, "function", id2string(function));
+  out << dest << "\n";
+}
+
+void show_goto_trace(
+  std::ostream &out,
+  const namespacet &ns,
+  const goto_tracet &goto_trace,
+  bool reachability_trace)
+{
+  unsigned prev_step_nr = 0;
+  bool first_step = true;
+  bool cex_only = config.options.get_bool_option("cex-only");
+  bool simplify_trace = config.options.get_bool_option("simplify-trace");
+
+  for (const auto &step : goto_trace.steps)
+  {
+    // we only care about the counter example, which is only triggered by assert
+    // steps. Ignore all other steps.
+    if (cex_only && step.type != symex_targett::ASSERT)
+      continue;
+    switch (step.type)
+    {
+    case symex_targett::ASSERT:
+      if (!step.guard)
+      {
+        show_state_header(
+          out, step, step.pc->location, step.step_nr, simplify_trace);
+        out << (reachability_trace ? "Reached:" : "Violated property:") << "\n";
+        if (!step.pc->location.is_nil())
+        {
+          if (simplify_trace)
+          {
+            out << "  ";
+            show_simplified_location(out, step.pc->location);
+          }
+          else
+            out << "  " << step.pc->location << "\n";
+        }
+        if (config.options.get_bool_option("show-stacktrace"))
+        {
+          // Print stack trace
+          out << "Stack trace:" << std::endl;
+          for (const auto &it : step.stack_trace)
+          {
+            if (it.src == nullptr)
+              out << "  " << it.function.as_string() << std::endl;
+            else
+            {
+              out << "  " << it.function.as_string();
+              if (it.src->pc->location.is_not_nil())
+                out << " at " << it.src->pc->location << std::endl;
+              else
+                out << std::endl;
+            }
+          }
+        }
+        if (config.options.get_bool_option("show-funccall-trace"))
+        {
+          // Print chronological function-call trace.
+          // Each step carries the call stack at that point (innermost-first,
+          // outermost-last). Diff each step's stack against the previous to
+          // detect newly pushed frames and emit them in call order.
+          out << "Function call trace:" << std::endl;
+          std::vector<stack_framet> prev;
+          for (const auto &s : goto_trace.steps)
+          {
+            const auto &cur = s.stack_trace;
+            // Skip steps captured outside any function context (global
+            // initializers, per-tx reseed scaffolding, etc.). Their
+            // stack_trace is empty even though the program clearly has
+            // frames on the call stack at that moment; treating that as
+            // a reset would falsely re-emit the entire chain on the
+            // next non-empty step.
+            if (cur.empty())
+            {
+              if (&s == &step)
+                break;
+              continue;
+            }
+            // Common suffix length (outermost end of both vectors).
+            size_t common = 0;
+            while (common < prev.size() && common < cur.size() &&
+                   prev[prev.size() - 1 - common] ==
+                     cur[cur.size() - 1 - common])
+              ++common;
+            // New frames live at the front of `cur` (innermost end);
+            // emit outermost-of-new first to preserve call order.
+            size_t n_new = cur.size() - common;
+            for (size_t k = n_new; k-- > 0;)
+            {
+              const auto &it = cur[k];
+              if (it.src == nullptr)
+                out << "  " << it.function.as_string() << std::endl;
+              else
+              {
+                out << "  " << it.function.as_string();
+                if (it.src->pc->location.is_not_nil())
+                  out << " at " << it.src->pc->location << std::endl;
+                else
+                  out << std::endl;
+              }
+            }
+            prev = cur;
+            if (&s == &step)
+              break;
+          }
+        }
+
+        out << "  " << step.comment << "\n";
+        // A reached coverage probe carries no weakness: its guard is the
+        // constant `false` the instrumentation put there, not the program's
+        // own condition, so neither a CWE nor the guard text says anything
+        // about the program.
+        if (!reachability_trace)
+        {
+          std::string cwes = format_cwe_list(cwe_for(step.comment));
+          if (!cwes.empty())
+            out << "  CWE: " << cwes << "\n";
+
+          if (step.pc->is_assert())
+            out << "  " << from_expr(ns, "", step.pc->guard) << "\n";
+        }
+
+        // The trace ends at the assert that terminated it.
+        return;
+      }
+      break;
+
+    case symex_targett::ASSIGNMENT:
+      if (
+        step.pc->is_assign() || step.pc->is_return() ||
+        (step.pc->is_other() && is_nil_expr(step.lhs)) ||
+        step.pc->is_function_call())
+      {
+        if (simplify_trace)
+        {
+          // if the file is empty then it's probably internally created and
+          // should not print out
+          if (!input_file_check(step.pc->location))
+            break;
+        }
+        if (prev_step_nr != step.step_nr || first_step)
+        {
+          first_step = false;
+          prev_step_nr = step.step_nr;
+          show_state_header(
+            out, step, step.pc->location, step.step_nr, simplify_trace);
+        }
+        counterexample_value(out, ns, step.lhs, step.value);
+      }
+      break;
+
+    case symex_targett::OUTPUT:
+    {
+      printf_formattert printf_formatter;
+      printf_formatter(step.format_string, step.output_args);
+      printf_formatter.print(out);
+      out << "\n";
+      break;
+    }
+
+    case symex_targett::RENUMBER:
+      out << "Renumbered pointer to ";
+      counterexample_value(out, ns, step.lhs, step.value);
+      break;
+
+    case symex_targett::ASSUME:
+    case symex_targett::SKIP:
+    case symex_targett::BREANCHING:
+      // Something deliberately ignored
+      break;
+
+    default:
+      assert(false);
+    }
+  }
+}
+
+namespace
+{
+// Parse a Solidity-style symbol id of the form
+//   "sol:@C@<contract>@F@<function>#<node_id>"
+// and return (contract, function) if the id matches, otherwise
+// an empty optional pair. Robust to trailing `@` qualifiers and
+// missing `#<id>` suffix.
+std::pair<std::string, std::string> parse_sol_symbol_id(const std::string &id)
+{
+  std::pair<std::string, std::string> out;
+  const std::string c_tag = "@C@";
+  const std::string f_tag = "@F@";
+  auto c_pos = id.find(c_tag);
+  auto f_pos = id.find(f_tag);
+  if (
+    c_pos == std::string::npos || f_pos == std::string::npos ||
+    f_pos <= c_pos + c_tag.size())
+    return out;
+  auto c_begin = c_pos + c_tag.size();
+  auto c_end = id.find('@', c_begin);
+  if (c_end == std::string::npos || c_end > f_pos)
+    return out;
+  auto f_begin = f_pos + f_tag.size();
+  // Function name ends at the next '@' (nested scope) or '#' (id suffix)
+  // or end-of-string.
+  auto f_end_hash = id.find('#', f_begin);
+  auto f_end_at = id.find('@', f_begin);
+  auto f_end = std::min(f_end_hash, f_end_at);
+  if (f_end == std::string::npos)
+    f_end = id.size();
+  out.first = id.substr(c_begin, c_end - c_begin);
+  out.second = id.substr(f_begin, f_end - f_begin);
+  return out;
+}
+} // namespace
+
+bool dump_violation_info_json(
+  const std::string &path,
+  const namespacet &ns,
+  const goto_tracet &goto_trace)
+{
+  // 1. Locate the violated assertion step.
+  const goto_trace_stept *violated = nullptr;
+  for (const auto &step : goto_trace.steps)
+  {
+    if (step.is_assert() && !step.guard)
+    {
+      violated = &step;
+      break;
+    }
+  }
+  if (violated == nullptr)
+    return false;
+
+  const auto &loc = violated->pc->location;
+  std::string fn_bare = id2string(loc.get_function());
+  std::string file = id2string(loc.get_file());
+  std::string line_str = id2string(loc.get_line());
+  int abs_line = 0;
+  try
+  {
+    if (!line_str.empty())
+      abs_line = std::stoi(line_str);
+  }
+  catch (...)
+  {
+    abs_line = 0;
+  }
+
+  // 2. Walk the symbol table to find the fully-qualified Solidity id
+  //    that matches `fn_bare` — this gives us the enclosing contract
+  //    name and the function's declaration line.
+  std::string contract_name;
+  int fn_start_line = 0;
+  ns.get_context().foreach_operand([&](const symbolt &sym) {
+    if (!contract_name.empty())
+      return;
+    const std::string id = sym.id.as_string();
+    const auto parsed = parse_sol_symbol_id(id);
+    if (parsed.second != fn_bare)
+      return;
+    contract_name = parsed.first;
+    const std::string sym_line = id2string(sym.location.get_line());
+    if (!sym_line.empty())
+    {
+      try
+      {
+        fn_start_line = std::stoi(sym_line);
+      }
+      catch (...)
+      {
+        fn_start_line = 0;
+      }
+    }
+  });
+
+  int relative_offset = 0;
+  if (abs_line > 0 && fn_start_line > 0 && abs_line >= fn_start_line)
+    relative_offset = abs_line - fn_start_line;
+
+  // 3. trace_methods: Solidity (contract, function) pairs stepped
+  //    through before the violation. We filter synthetic frames that
+  //    the harness machinery emits — e.g. the dispatch entry
+  //    `_ESBMC_Main_<C>` and the nondet extcall stub
+  //    `_ESBMC_Nondet_Extcall_<C>` — and frames whose bare function
+  //    is a contract name itself (the constructor; already in
+  //    locked_symbols). Only frames that resolve to a symbol carrying
+  //    a real source location on a .sol file are emitted; this is
+  //    the precise "user-defined FunctionDefinition or
+  //    ModifierDefinition" predicate we need without having to
+  //    consult the AST.
+  auto is_user_solidity_symbol = [&](const std::string &sym_id) -> bool {
+    const symbolt *sym = ns.lookup(irep_idt(sym_id));
+    if (sym == nullptr)
+      return false;
+    const std::string sym_file = id2string(sym->location.get_file());
+    if (sym_file.empty())
+      return false;
+    // Reject stdlib-backed symbols (sol64 model files, C library
+    // helpers) and any symbol whose underlying file is not a .sol.
+    if (
+      sym_file.size() < 4 ||
+      sym_file.compare(sym_file.size() - 4, 4, ".sol") != 0)
+      return false;
+    return true;
+  };
+  std::set<std::pair<std::string, std::string>> seen_trace;
+  nlohmann::json trace_methods = nlohmann::json::array();
+  for (const auto &step : goto_trace.steps)
+  {
+    for (const auto &frame : step.stack_trace)
+    {
+      const std::string frame_id = frame.function.as_string();
+      const auto parsed = parse_sol_symbol_id(frame_id);
+      if (parsed.first.empty() || parsed.second.empty())
+        continue;
+      // Drop obviously synthetic names emitted by the Solidity harness
+      // builder (prefixes reserved for auxiliary dispatch scaffolding).
+      if (
+        parsed.second.rfind("_ESBMC_", 0) == 0 ||
+        parsed.second == parsed.first /* constructor */)
+        continue;
+      if (!is_user_solidity_symbol(frame_id))
+        continue;
+      if (seen_trace.insert(parsed).second)
+      {
+        trace_methods.push_back(
+          {{"contract", parsed.first}, {"function", parsed.second}});
+      }
+    }
+    if (&step == violated)
+      break;
+  }
+
+  // 4. locked_symbols: mandatory-set seed. Always include:
+  //    - the violated function (bare) in its contract
+  //    - the original function when the bare name is an auxiliary of
+  //      the form "<orig>_<modifier>"
+  //    - the containing contract's own constructor (same name as the
+  //      contract)
+  //    - EVERY other Solidity contract's constructor in the symbol
+  //      table. A derived contract's instantiation invokes the
+  //      constructors of every base in the linearised chain, so
+  //      removing any of them would break the call path leading to
+  //      the violated function. We cannot distinguish "base of the
+  //      violated contract" from "unrelated contract in the same
+  //      compilation unit" at this layer (the linearizedBaseContracts
+  //      lives in the AST, not in the symbol table), so we
+  //      over-approximate with all constructors: safe, and Phase 2
+  //      will reclaim precision by pruning any constructor its
+  //      verifier oracle no longer needs.
+  std::string original_function;
+  {
+    const auto us_pos = fn_bare.rfind('_');
+    if (us_pos != std::string::npos && us_pos + 1 < fn_bare.size())
+    {
+      original_function = fn_bare.substr(0, us_pos);
+    }
+  }
+  std::set<std::string> locked_set;
+  if (!contract_name.empty())
+  {
+    locked_set.insert(contract_name + "." + contract_name);
+    locked_set.insert(contract_name + "." + fn_bare);
+    if (!original_function.empty())
+      locked_set.insert(contract_name + "." + original_function);
+  }
+  // Harvest every (contract, constructor) pair: constructors are
+  // FunctionDefinitions whose bare name equals the contract name in
+  // `sol:@C@<c>@F@<c>#<id>`.
+  ns.get_context().foreach_operand([&](const symbolt &sym) {
+    const auto parsed = parse_sol_symbol_id(sym.id.as_string());
+    if (!parsed.first.empty() && parsed.first == parsed.second)
+      locked_set.insert(parsed.first + "." + parsed.second);
+  });
+  nlohmann::json locked_symbols = nlohmann::json::array();
+  for (const auto &s : locked_set)
+    locked_symbols.push_back(s);
+
+  // 5. Assemble and write the JSON.
+  nlohmann::json root;
+  root["schema_version"] = 1;
+  root["tool"] = "esbmc";
+  root["violated"] = true;
+  root["oracle"] = {
+    {"contract", contract_name},
+    {"function", fn_bare},
+    {"bug_type", violated->comment},
+    {"in_function_offset_lines", relative_offset}};
+  root["original_function"] = original_function.empty()
+                                ? nlohmann::json(nullptr)
+                                : nlohmann::json(original_function);
+  root["trace_methods"] = trace_methods;
+  root["locked_symbols"] = locked_symbols;
+  root["source_files"] = nlohmann::json::array();
+  if (!file.empty())
+    root["source_files"].push_back(file);
+  root["violation_location"] = {
+    {"file", file}, {"line", abs_line}, {"function_start_line", fn_start_line}};
+
+  std::ofstream out(path);
+  if (!out)
+    return false;
+  out << root.dump(2) << "\n";
+  return out.good();
+}

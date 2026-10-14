@@ -1,0 +1,4 @@
+CORE
+main.c
+--fp-taylor-terms 6
+^VERIFICATION FAILED$

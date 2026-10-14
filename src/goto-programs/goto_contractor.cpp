@@ -1,11 +1,15 @@
 #include <goto-programs/goto_contractor.h>
 #include <goto-programs/abstract-interpretation/interval_domain.h>
+#include <irep2/irep2_utils.h>
 
 void goto_contractor(
   goto_functionst &goto_functions,
   const namespacet &ns,
   const optionst &options)
 {
+  /* gaol needs the FPU rounding upward; ESBMC otherwise runs rounding to
+   * nearest (see main()). */
+  const host_rounding_mode ibex_rounding(FE_UPWARD);
   goto_contractort gotoContractort(goto_functions, ns, options);
 
   goto_functions.update();
@@ -102,11 +106,11 @@ void goto_contractort::get_intervals(
   goto_functions.update();
 }
 
-void goto_contractort::parse_intervals(expr2tc expr)
+void goto_contractort::parse_intervals(const expr2tc &orig_expr)
 {
   double value;
 
-  expr = get_base_object(expr);
+  expr2tc expr = get_base_object(orig_expr);
 
   if (is_and2t(expr))
   {
@@ -118,12 +122,10 @@ void goto_contractort::parse_intervals(expr2tc expr)
   if (!is_comp_expr(expr))
     return;
 
-  const relation_data &rel = dynamic_cast<const relation_data &>(*expr);
-
-  //side1 1 is a symbol or typecast to symbol
-  auto side1 = rel.side_1;
-  //side 2 is always a number.
-  auto side2 = rel.side_2;
+  // side1 1 is a symbol or typecast to symbol
+  auto side1 = *expr->get_sub_expr(0);
+  // side 2 is always a number.
+  auto side2 = *expr->get_sub_expr(1);
 
   auto obj = get_base_object(side1);
   if (!is_symbol2t(obj))
@@ -165,7 +167,7 @@ void goto_contractort::insert_assume(goto_functionst goto_functions)
   loopst loop;
   unsigned int last_loc = 0;
 
-  ///This loop is to find the last loop in the code based on location
+  /// This loop is to find the last loop in the code based on location
   for (auto &function_loop : function_loops)
     if (last_loc < function_loop.get_original_loop_head()->location_number)
     {
@@ -192,7 +194,7 @@ void goto_contractort::insert_assume(goto_functionst goto_functions)
   else
     for (auto const &var : map.var_map)
     {
-      //testing with updating both bounds after reduction.
+      // testing with updating both bounds after reduction.
       expr2tc X = var.second.getSymbol();
       if (var.second.isIntervalChanged())
       {
@@ -212,9 +214,10 @@ void goto_contractort::apply_contractor()
 {
   Contractor *contractor = contractors.get_contractors();
 
-  //Take the intersection of all contractors to perform Algorithm 2
+  // Take the intersection of all contractors to perform Algorithm 2
   ibex::CtcFixPoint c_out(*contractor->get_outer());
-  //Take the union of all contractors with complement constraints to perform Algorithm 3
+  // Take the union of all contractors with complement constraints to perform
+  // Algorithm 3
   ibex::CtcFixPoint c_in(*contractor->get_inner());
 
   std::ostringstream oss;
@@ -253,13 +256,13 @@ void goto_contractort::insert_assume_at(
   goto_functiont goto_function,
   goto_programt::targett instruction)
 {
-  /// Here we build an assume instruction with a conjunction of multiple conditions.
-  /// We start with a true expression and add other conditions with and2tc
-  /// eventually, we will have something like: true and x>0 and x<10
+  /// Here we build an assume instruction with a conjunction of multiple
+  /// conditions. We start with a true expression and add other conditions with
+  /// and2tc eventually, we will have something like: true and x>0 and x<10
   expr2tc cond = gen_true_expr();
   for (auto const &var : map.var_map)
   {
-    //testing with updating both bounds after reduction.
+    // testing with updating both bounds after reduction.
     auto X = var.second.getSymbol();
     {
       if (var.second.getInterval().is_empty())
@@ -313,11 +316,11 @@ void goto_contractort::goto_contractor_condition(
   {
     Forall_goto_program_instructions (i_it, f_it->second.body)
     {
-      if (i_it->is_goto() && !is_true(i_it->guard)) //if or if-else or loop
+      if (i_it->is_goto() && !is_true(i_it->guard)) // if or if-else or loop
       {
         Contractor contractor;
 
-        //create contractor and domains
+        // create contractor and domains
         if (is_not2t(i_it->guard))
         {
           vars = new ibex::Variable(CspMap::MAX_VAR);
@@ -359,12 +362,12 @@ void goto_contractort::goto_contractor_condition(
           auto goto_target = i_it->get_target();
           goto_target--;
 
-          if (goto_target->is_goto()) //target-1 is goto and
+          if (goto_target->is_goto()) // target-1 is goto and
           {
             if (!goto_target->is_backwards_goto())
             {
               // IF-ELSE
-              //ELSE clause gets the inner contractor results
+              // ELSE clause gets the inner contractor results
               auto next = std::next(i_it);
               insert_assume_at(f_it->second, next);
               map.update_intervals(X_in);
@@ -375,7 +378,7 @@ void goto_contractort::goto_contractor_condition(
             else
             {
               // LOOP
-              //TODO: Add a check if loop is monotonic
+              // TODO: Add a check if loop is monotonic
             }
           }
           else
@@ -396,8 +399,8 @@ void goto_contractort::goto_contractor_condition(
          to_symbol2t(to_code_function_call2t(i_it->code).function)
              .get_symbol_name() == "c:@F@__VERIFIER_assert"))
       {
-        //convert map to ibex
-        //first create the contractor to populate cspmap with the variables.
+        // convert map to ibex
+        // first create the contractor to populate cspmap with the variables.
         vars = new ibex::Variable(CspMap::MAX_VAR);
         map = CspMap();
         parser = expr_to_ibex_parser(&map, vars);
@@ -408,7 +411,7 @@ void goto_contractort::goto_contractor_condition(
           continue;
         }
 
-        //get intervals and convert them to ibex intervals by updating the map
+        // get intervals and convert them to ibex intervals by updating the map
         interval_analysis(goto_functions, namespacet);
         for (const auto &i : *interval_analysis[i_it].intervals)
         {
@@ -538,7 +541,7 @@ expr_to_ibex_parser::create_contractor_from_expr2t(const expr2tc &expr)
     }
     case expr2t::expr_ids::notequal_id:
     {
-      //std::shared_ptr<relation_data> rel;
+      // std::shared_ptr<relation_data> rel;
       auto rel = to_notequal2t(base_object);
       ibex::Function *f = create_function_from_expr2t(rel.side_1);
       ibex::Function *g = create_function_from_expr2t(rel.side_2);
@@ -551,7 +554,7 @@ expr_to_ibex_parser::create_contractor_from_expr2t(const expr2tc &expr)
       auto *c_side2 = new ibex::CtcFwdBwd(*side2);
       contractor = new ibex::CtcUnion(*c_side1, *c_side2);
 
-      //for clean up
+      // for clean up
       vector_nc.push_back(side1);
       vector_nc.push_back(side2);
       vector_ctc.push_back(c_side1);
@@ -632,7 +635,7 @@ expr_to_ibex_parser::create_contractor_from_expr2t_not(const expr2tc &expr)
       auto *c_side2 = new ibex::CtcFwdBwd(*side2);
       contractor = new ibex::CtcUnion(*c_side1, *c_side2);
 
-      //for clean up
+      // for clean up
       vector_nc.push_back(side1);
       vector_nc.push_back(side2);
       vector_ctc.push_back(c_side1);
@@ -684,10 +687,10 @@ expr_to_ibex_parser::create_constraint_from_expr2t(const expr2tc &expr)
     return c;
   }
 
-  auto rel = &dynamic_cast<const relation_data &>(*get_base_object(expr));
+  const expr2tc &base_obj = get_base_object(expr);
   ibex::Function *f, *g;
-  f = create_function_from_expr2t(rel->side_1);
-  g = create_function_from_expr2t(rel->side_2);
+  f = create_function_from_expr2t(*base_obj->get_sub_expr(0));
+  g = create_function_from_expr2t(*base_obj->get_sub_expr(1));
   if (f == nullptr || g == nullptr)
     return nullptr;
 
@@ -711,7 +714,7 @@ expr_to_ibex_parser::create_constraint_from_expr2t(const expr2tc &expr)
   default:
     return nullptr;
   }
-  //for clean up
+  // for clean up
   vector_nc.push_back(c);
 
   return c;
@@ -733,11 +736,10 @@ expr_to_ibex_parser::create_constraint_from_expr2t_not(const expr2tc &expr)
     return c;
   }
 
-  auto rel = &dynamic_cast<const relation_data &>(*get_base_object(expr));
-
+  const expr2tc &base_obj2 = get_base_object(expr);
   ibex::Function *f, *g;
-  f = create_function_from_expr2t(rel->side_1);
-  g = create_function_from_expr2t(rel->side_2);
+  f = create_function_from_expr2t(*base_obj2->get_sub_expr(0));
+  g = create_function_from_expr2t(*base_obj2->get_sub_expr(1));
   if (f == nullptr || g == nullptr)
     return nullptr;
   switch (get_base_object(expr)->expr_id)
@@ -760,7 +762,7 @@ expr_to_ibex_parser::create_constraint_from_expr2t_not(const expr2tc &expr)
   default:
     return nullptr;
   }
-  //for clean up
+  // for clean up
   vector_nc.push_back(c);
 
   return c;
@@ -782,10 +784,10 @@ bool expr_to_ibex_parser::is_unsupported_operator_in_constraint_not(
          is_equality2t(e) || is_modulus2t(e) || is_or2t(e) || is_and2t(e);
 }
 
-ibex::Function *expr_to_ibex_parser::create_function_from_expr2t(expr2tc expr)
+ibex::Function *
+expr_to_ibex_parser::create_function_from_expr2t(const expr2tc &expr)
 {
   ibex::Function *f = nullptr;
-  ibex::Function *g, *h;
 
   if (is_comp_expr(expr))
   {
@@ -801,13 +803,15 @@ ibex::Function *expr_to_ibex_parser::create_function_from_expr2t(expr2tc expr)
   {
     if (!is_arith_expr(expr))
       return nullptr;
-    auto arith_op = &dynamic_cast<const arith_2ops &>(*get_base_object(expr));
-    g = create_function_from_expr2t(arith_op->side_1);
-    h = create_function_from_expr2t(arith_op->side_2);
+    const expr2tc &arith_base = get_base_object(expr);
+    ibex::Function *g =
+      create_function_from_expr2t(*arith_base->get_sub_expr(0));
+    ibex::Function *h =
+      create_function_from_expr2t(*arith_base->get_sub_expr(1));
     if (g == nullptr || h == nullptr)
       return nullptr;
 
-    switch (arith_op->expr_id)
+    switch (arith_base->expr_id)
     {
     case expr2t::expr_ids::add_id:
       f = new ibex::Function(*vars, (*g)(*vars) + (*h)(*vars));
@@ -828,7 +832,7 @@ ibex::Function *expr_to_ibex_parser::create_function_from_expr2t(expr2tc expr)
   }
   case expr2t::expr_ids::neg_id:
   {
-    h = create_function_from_expr2t(to_neg2t(expr).value);
+    ibex::Function *h = create_function_from_expr2t(to_neg2t(expr).value);
     if (h == nullptr)
       return nullptr;
     f = new ibex::Function(*vars, -(*h)(*vars));
@@ -869,13 +873,13 @@ ibex::Function *expr_to_ibex_parser::create_function_from_expr2t(expr2tc expr)
   default:
     f = nullptr;
   }
-  //for clean up
+  // for clean up
   vector_f.push_back(f);
 
   return f;
 }
 
-int expr_to_ibex_parser::create_variable_from_expr2t(expr2tc expr)
+int expr_to_ibex_parser::create_variable_from_expr2t(const expr2tc &expr)
 {
   if (is_symbol2t(expr))
   {
@@ -969,7 +973,7 @@ void interval_analysis_ibex_contractor::apply_contractor()
 
   c_out->contract(X);
 
-  //Find a fixed point in 5 or fewer iterations
+  // Find a fixed point in 5 or fewer iterations
   while (Y != X && i >= 0)
   {
     Y = X;
@@ -977,7 +981,7 @@ void interval_analysis_ibex_contractor::apply_contractor()
     i--;
   }
 
-  //copy results to map_outer
+  // copy results to map_outer
   map_outer = CspMap(map);
   map_outer.update_intervals(X);
   apply_time =
@@ -995,14 +999,14 @@ expr2tc interval_analysis_ibex_contractor::result_of_outer()
   {
     for (auto const &var : map_outer.var_map)
     {
-      //testing with updating both bounds after reduction.
+      // testing with updating both bounds after reduction.
       expr2tc X = var.second.getSymbol();
 
-      //if empty, skip
+      // if empty, skip
       if (var.second.getInterval().is_empty())
         continue;
 
-      //if unbounded, skip
+      // if unbounded, skip
       if (
         isinf(var.second.getInterval().lb()) &&
         isinf(var.second.getInterval().ub()))
@@ -1017,7 +1021,7 @@ expr2tc interval_analysis_ibex_contractor::result_of_outer()
       {
         lower_limit = BigInt::power2(X->type->get_width() - 1);
         lower_limit = -lower_limit;
-      } //if its unsigned then its just zero
+      } // if its unsigned then its just zero
 
       if (isfinite(var.second.getInterval().lb()))
       {

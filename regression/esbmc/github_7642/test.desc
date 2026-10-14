@@ -1,0 +1,7 @@
+CORE
+main.c
+
+^\s*PASSED\s+\[main\.assertion\.1\]\s+line\s+11\s+set returns old 0$
+^\s*PASSED\s+\[main\.assertion\.5\]\s+line\s+20\s+clear stores 0$
+^\*\* 0 of 11 properties failed, 11 passed$
+^VERIFICATION SUCCESSFUL$

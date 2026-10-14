@@ -8,7 +8,11 @@ import sys
 import unittest
 from subprocess import Popen, PIPE, STDOUT
 import argparse
+import json
+import operator
 import re
+import shutil
+import tempfile
 import xml.etree.ElementTree as ET
 import time
 import shlex
@@ -18,6 +22,41 @@ import subprocess
 # set_tests_properties(ENVIRONMENT).
 _TIMEOUT_ENVVAR = "ESBMC_REGRESS_TIMEOUT"
 _MEMORY_LIMIT_ENVVAR = "ESBMC_REGRESS_MEMORY_LIMIT"
+# Narrows the budget for one run, so a slowdown fails instead of passing under
+# the 1200s default. CMake bakes _TIMEOUT_ENVVAR into each test's ctest
+# ENVIRONMENT property, which overrides the caller's value, and `ctest
+# --timeout` only supplies a default for tests carrying no TIMEOUT property --
+# so tightening the budget needs a name ctest does not set (#7628).
+_TIMEOUT_CAP_ENVVAR = "ESBMC_REGRESS_TIMEOUT_MAX"
+
+
+# CMake grants the long_timeout capability at configure time, from a budget the
+# cap has not been applied to yet (ESBMC_REGRESS_TIMEOUT GREATER_EQUAL 600 in
+# regression/CMakeLists.txt). A narrowed run still receives it on the command
+# line, and would fail the very tests it exists to skip.
+_LONG_TIMEOUT_SECONDS = 600
+
+
+def _timeout_cap():
+    raw = os.environ.get(_TIMEOUT_CAP_ENVVAR, "").strip()
+    if not raw:
+        return None
+    # Rejected rather than ignored: a run that silently kept the 1200s budget
+    # after a typo would report every test as comfortably within it.
+    if not raw.isdigit() or int(raw) == 0:
+        sys.exit(
+            "{}={!r}: expected a positive whole number of seconds".format(
+                _TIMEOUT_CAP_ENVVAR, raw))
+    return int(raw)
+
+
+def _capped_timeout(budget):
+    cap = _timeout_cap()
+    if cap is None:
+        return budget
+    return budget if budget is not None and budget <= cap else cap
+
+
 #####################
 # Testing Tool
 #####################
@@ -39,7 +78,362 @@ _MEMORY_LIMIT_ENVVAR = "ESBMC_REGRESS_MEMORY_LIMIT"
 # FUTURE -> Test that are known to fail due to missing implementation
 # ALL -> Run all tests
 SUPPORTED_TEST_MODES = ["CORE", "FUTURE", "THOROUGH", "KNOWNBUG", "ALL"]
-FAIL_MODES = ["KNOWNBUG"]
+# FAIL_MODES: regex describes desired post-fix output; current run must NOT
+# match. Matching = test now passes -> exit 77, prompting reclassification.
+FAIL_MODES = ["KNOWNBUG", "FUTURE"]
+
+# CHECK_JSON directive: see regression/README.md for the format.
+CHECK_JSON_KEYWORD = "CHECK_JSON"
+_CHECK_JSON_OPS = {
+    "==": operator.eq,
+    "!=": operator.ne,
+    "<": operator.lt,
+    ">": operator.gt,
+    "<=": operator.le,
+    ">=": operator.ge,
+}
+
+
+def _is_check_json_line(stripped):
+    """True iff the first whitespace-delimited token is CHECK_JSON."""
+    head = stripped.split(maxsplit=1)
+    return bool(head) and head[0] == CHECK_JSON_KEYWORD
+
+
+def _parse_check_json(line):
+    """Parse one CHECK_JSON directive into (file, jsonpath, op, expected)."""
+    parts = line.split(None, 4)
+    if len(parts) != 5 or parts[0] != CHECK_JSON_KEYWORD:
+        raise ValueError(
+            f"CHECK_JSON expects: CHECK_JSON <file> <jsonpath> <op> <literal>; "
+            f"got: {line!r}"
+        )
+    _, file, jsonpath, op, literal = parts
+    if os.path.isabs(file):
+        raise ValueError(
+            f"CHECK_JSON file must be a relative path (resolved against ESBMC's "
+            f"working directory); got {file!r}"
+        )
+    if op not in _CHECK_JSON_OPS:
+        raise ValueError(
+            f"CHECK_JSON op must be one of {list(_CHECK_JSON_OPS)}; got {op!r}"
+        )
+    return (file, jsonpath, op, json.loads(literal))
+
+
+def _eval_jsonpath(root, path):
+    """Walk a restricted JSONPath ('$', '.field', '[N]') over a parsed value."""
+    if not path.startswith("$"):
+        raise ValueError(f"JSONPath must start with '$': {path!r}")
+    cur = root
+    i = 1
+    while i < len(path):
+        c = path[i]
+        if c == ".":
+            j = i + 1
+            while j < len(path) and path[j] not in ".[":
+                j += 1
+            cur = cur[path[i + 1:j]]
+            i = j
+        elif c == "[":
+            j = path.find("]", i)
+            if j == -1:
+                raise ValueError(f"JSONPath: unclosed '[' in {path!r}")
+            idx = path[i + 1:j]
+            if not idx.isdigit():
+                raise ValueError(
+                    f"JSONPath: array index must be a non-negative integer; "
+                    f"got {idx!r} in {path!r}"
+                )
+            cur = cur[int(idx)]
+            i = j + 1
+        else:
+            raise ValueError(f"JSONPath: unexpected {c!r} at {i} in {path!r}")
+    return cur
+
+
+def _run_check_json(check, base_dir):
+    """Return (passed, message). message is None on pass, diagnostic on fail."""
+    file, jsonpath, op, expected = check
+    path = os.path.join(base_dir, file)
+    if not os.path.isfile(path):
+        return False, f"CHECK_JSON file not found: {file}"
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError) as exc:
+        return False, f"CHECK_JSON read/parse failed for {file}: {exc}"
+    try:
+        actual = _eval_jsonpath(data, jsonpath)
+    except (KeyError, IndexError, TypeError, ValueError) as exc:
+        return False, f"CHECK_JSON path {jsonpath} on {file}: {exc}"
+    # JSON distinguishes booleans from numbers
+    # Python's bool-is-int coercion would otherwise mask the schema divergence this catches.
+    if isinstance(actual, bool) != isinstance(expected, bool):
+        return (
+            False,
+            f"CHECK_JSON {file} {jsonpath}: type mismatch "
+            f"({type(actual).__name__} vs {type(expected).__name__}); "
+            f"actual={actual!r}, expected={expected!r}",
+        )
+    try:
+        result = _CHECK_JSON_OPS[op](actual, expected)
+    except TypeError as exc:
+        return (
+            False,
+            f"CHECK_JSON {file} {jsonpath}: cannot apply {op!r} to "
+            f"{actual!r} and {expected!r}: {exc}",
+        )
+    if not result:
+        return (
+            False,
+            f"CHECK_JSON {file} {jsonpath} = {actual!r}; expected {op} {expected!r}",
+        )
+    return True, None
+
+
+# CHECK_FILE directive: assert a regex is present in / absent from a file ESBMC
+# wrote (e.g. an --output .smt2 dump), which stdout/stderr regexes cannot reach.
+CHECK_FILE_KEYWORD = "CHECK_FILE"
+_CHECK_FILE_OPS = ("contains", "absent")
+
+
+def _is_check_file_line(stripped):
+    """True iff the first whitespace-delimited token is CHECK_FILE."""
+    head = stripped.split(maxsplit=1)
+    return bool(head) and head[0] == CHECK_FILE_KEYWORD
+
+
+def _parse_check_file(line):
+    """Parse one CHECK_FILE directive into (file, op, pattern)."""
+    parts = line.split(None, 3)
+    if len(parts) != 4 or parts[0] != CHECK_FILE_KEYWORD:
+        raise ValueError(
+            f"CHECK_FILE expects: CHECK_FILE <file> <contains|absent> <regex>; "
+            f"got: {line!r}"
+        )
+    _, file, op, pattern = parts
+    if os.path.isabs(file):
+        raise ValueError(
+            f"CHECK_FILE file must be a relative path (resolved against ESBMC's "
+            f"working directory); got {file!r}"
+        )
+    if op not in _CHECK_FILE_OPS:
+        raise ValueError(
+            f"CHECK_FILE op must be one of {list(_CHECK_FILE_OPS)}; got {op!r}"
+        )
+    return (file, op, pattern)
+
+
+def _run_check_file(check, base_dir):
+    """Return (passed, message). message is None on pass, diagnostic on fail."""
+    file, op, pattern = check
+    path = os.path.join(base_dir, file)
+    if not os.path.isfile(path):
+        return False, f"CHECK_FILE file not found: {file}"
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            content = f.read()
+    except OSError as exc:
+        return False, f"CHECK_FILE read failed for {file}: {exc}"
+    found = re.search(pattern, content, re.MULTILINE) is not None
+    if op == "contains" and not found:
+        return False, f"CHECK_FILE {file}: expected to contain /{pattern}/"
+    if op == "absent" and found:
+        return False, f"CHECK_FILE {file}: expected NOT to contain /{pattern}/"
+    return True, None
+
+
+# SEED_FILE directive: create a file in ESBMC's working directory before the
+# run, so a test can establish a precondition CHECK_FILE then asserts on --
+# e.g. that ESBMC refuses to overwrite a file it did not generate.
+SEED_FILE_KEYWORD = "SEED_FILE"
+
+# A test may only run where the host and the build actually support what it
+# exercises. Each name below is a capability the build system probes for and
+# passes in via --capabilities; a test naming one it does not get is reported
+# SKIPPED rather than failed. Names are validated against this set, so a typo
+# is a hard error instead of a test that quietly stops running.
+REQUIRES_KEYWORD = "REQUIRES"
+
+STATIC_CAPABILITIES = {
+    # <uchar.h> is present. Not in the C standard library on macOS.
+    "uchar_h",
+    # The 32-bit target (--32) is usable: multi-arch headers exist and the
+    # frontend's type model matches them. See issue #1400.
+    "arch32",
+    # The host is x86. For tests whose *input* is x86-only: clang's SSE/MMX
+    # intrinsic headers reject other targets outright, and inline asm naming
+    # x86 register constraints ('=a', '=q') does not compile elsewhere.
+    "arch_x86",
+    # The operational-model library is bundled as a goto binary. With
+    # ESBMC_BUNDLE_LIBC=OFF it is parsed from sources instead, and anything
+    # measuring the blob has nothing to measure.
+    "bundled_libc",
+    # The bundled musl libm is reached rather than shadowed by the host's own
+    # <math.h>. Not so on Windows, where the UCRT declares cosf/pow itself.
+    "bundled_libm",
+    # The host's `unsigned long` is 64 bits. Value-set descriptor offsets are
+    # materialised through it, so a negative offset is a different constant --
+    # and draws the opposite out-of-bounds verdict -- on LLP64 hosts.
+    "lp64_host",
+    # A `z3` executable is on PATH and the host is POSIX. The smtlib backend
+    # reads model values from a solver it spawns over a pipe
+    # (--smtlib-solver-prog); a build that links z3 need not also ship the
+    # executable, and Windows has no implementation of that pipe at all.
+    "z3_binary",
+    # The per-test budget (ESBMC_REGRESS_TIMEOUT) is at least 600s. For tests
+    # whose solve genuinely takes minutes: the PR leg caps every test at 120s,
+    # where such a test can only ever report a timeout.
+    "long_timeout",
+}
+
+# Capabilities of the frontend itself, which the build system cannot answer:
+# CMake would have to probe with the *build* compiler, whose target need not
+# match the one ESBMC's Clang is configured for -- a probe that disagreed would
+# silently skip tests on hosts that actually support them. Ask the tool under
+# test instead, by parsing a snippet that exercises the feature.
+# "source" is the probe; "suffix" (default .c) picks the frontend, and "args"
+# adds options the probe needs.
+DYNAMIC_CAPABILITY_PROBES = {
+    # Clang caps _BitInt/_ExtInt width per target (128 bits on aarch64-darwin,
+    # far higher on x86_64-linux), so this cannot be answered statically.
+    "bitint_wide": {
+        "source": "int main() { _BitInt(1000) x = 0; return (int)x; }\n",
+    },
+    # The `_BitInt(N)` spelling parses at all. Clang exposes bit-precise
+    # integers as `_ExtInt` before LLVM 14, so a source written with the
+    # standard C23 spelling is a parse error on the LLVM 11-13 builds the
+    # project still supports. Narrower than bitint_wide, which additionally
+    # requires a 1000-bit width the aarch64-darwin target caps out below.
+    "bitint": {
+        "source": "int main() { _BitInt(80) x = 0; return (int)x; }\n",
+    },
+    # Plain `char` is signed, as the System V x86-64 ABI has it and the AAPCS
+    # does not. Pins both tests spelling a char type in expected output
+    # ("signed char c") and tests whose verdict turns on the range: CHAR_MIN,
+    # and whether char arithmetic such as 100 + 100 overflows. It also pins the
+    # Python frontend, whose string model assumes a signed char throughout and
+    # aborts where the target disagrees (#7308).
+    "signed_char_host": {
+        "source": '_Static_assert((char)-1 < 0, "plain char is signed");\n'
+        "int main() { return 0; }\n",
+    },
+    # wchar_t is `int`, as it is on x86-64 Linux. The AAPCS makes it
+    # `unsigned int`, so a source redeclaring it as int is rejected there.
+    "signed_wchar_host": {
+        "source": '_Static_assert((__WCHAR_TYPE__)-1 < 0, "wchar_t is signed");\n'
+        "int main() { return 0; }\n",
+    },
+    # The AArch64 builtin __mfp8 parses: an AArch64 target and LLVM 20 or later.
+    "mfp8": {
+        "source": "__mfp8 m; int main() { return 0; }\n",
+    },
+    # `long double` is the x87 80-bit format (64-bit significand) rather than
+    # IEEE binary128. Exact floating-point identities hold in one and not the
+    # other, so a test asserting one cannot hold on both.
+    "x87_long_double": {
+        "source": '_Static_assert(__LDBL_MANT_DIG__ == 64, "x87 long double");\n'
+        "int main() { return 0; }\n",
+    },
+    # The host's C++ standard library headers are reachable, which is what the
+    # tests passing --no-abstracted-cpp-includes, --no-library or
+    # --mix-cpp-host-headers read instead of the bundled OMs. Installing
+    # libstdc++-dev is not enough: on aarch64 ESBMC's Clang fails to find the
+    # GCC C++ include tree even when it is present (#7308).
+    "host_cxx_headers": {
+        "source": "#include <cassert>\nint main() { return 0; }\n",
+        "suffix": ".cpp",
+        "args": ["--no-abstracted-cpp-includes"],
+    },
+}
+
+KNOWN_CAPABILITIES = STATIC_CAPABILITIES | set(DYNAMIC_CAPABILITY_PROBES)
+
+
+def _probe_capability(name, executor_path):
+    """Ask the tool under test whether it supports `name`.
+
+    Parsing is enough -- every dynamic capability is a frontend question -- and
+    it keeps the probe far cheaper than a verification run. An unparseable
+    snippet, a crash, or a hang all mean "not supported", so the test is
+    skipped rather than failing for a reason that is not about the test.
+    """
+    probe = DYNAMIC_CAPABILITY_PROBES[name]
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        source = os.path.join(tmp_dir, "probe" + probe.get("suffix", ".c"))
+        with open(source, "w") as fp:
+            fp.write(probe["source"])
+        try:
+            completed = subprocess.run(
+                shlex.split(executor_path)
+                + ["--parse-tree-only"]
+                + probe.get("args", [])
+                + [source],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                timeout=120,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return False
+    return b"PARSING ERROR" not in completed.stdout
+
+
+def _is_requires_line(stripped):
+    """True iff the first whitespace-delimited token is REQUIRES."""
+    head = stripped.split(maxsplit=1)
+    return bool(head) and head[0] == REQUIRES_KEYWORD
+
+
+def _parse_requires(line):
+    """Parse one REQUIRES directive into a list of capability names."""
+    parts = line.split()
+    names = parts[1:]
+    if not names:
+        raise ValueError(f"REQUIRES expects: REQUIRES <capability>...; got: {line!r}")
+    unknown = [n for n in names if n not in KNOWN_CAPABILITIES]
+    if unknown:
+        raise ValueError(
+            f"unknown capability {', '.join(sorted(unknown))}; known names are "
+            f"{', '.join(sorted(KNOWN_CAPABILITIES))}"
+        )
+    return names
+
+
+def _is_seed_file_line(stripped):
+    """True iff the first whitespace-delimited token is SEED_FILE."""
+    head = stripped.split(maxsplit=1)
+    return bool(head) and head[0] == SEED_FILE_KEYWORD
+
+
+def _parse_seed_file(line):
+    """Parse one SEED_FILE directive into (file, content)."""
+    parts = line.split(None, 2)
+    if len(parts) not in (2, 3) or parts[0] != SEED_FILE_KEYWORD:
+        raise ValueError(
+            f"SEED_FILE expects: SEED_FILE <file> [content]; got: {line!r}"
+        )
+    file = parts[1]
+    # Omitting the content seeds a zero-byte file, which is a distinct case
+    # from a file whose first line is empty.
+    content = parts[2] if len(parts) == 3 else ""
+    if os.path.isabs(file) or os.path.normpath(file).startswith(".."):
+        raise ValueError(
+            f"SEED_FILE file must be a relative path inside ESBMC's working "
+            f"directory; got {file!r}"
+        )
+    return (file, content)
+
+
+def _run_seed_file(seed, base_dir):
+    """Write one seeded file. Raises on failure -- a test whose precondition
+    could not be established would otherwise pass vacuously."""
+    file, content = seed
+    path = os.path.join(base_dir, file)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(content + "\n" if content else "")
+
 
 # Bring up a single benchmark
 BENCHMARK_BRINGUP = False
@@ -52,25 +446,62 @@ class TestCase:
 
     def _initialize_test_case(self):
         """Reads test description and initialize this object"""
-        with open(os.path.join(self.test_dir, "test.desc")) as fp:
+        with open(
+            os.path.join(self.test_dir, "test.desc"), encoding="utf-8"
+        ) as fp:
             # First line - TEST MODE
             self.test_mode = fp.readline().strip()
             assert (
                 self.test_mode in SUPPORTED_TEST_MODES
             ), f"{self.test_dir}: {self.test_mode} is not supported"
 
-            # Second line - Test file
+            # Second line - Test file. Empty means "no positional input file"
+            # (e.g. a test exercising an option like Solidity's --sol that
+            # supplies the input file itself).
             self.test_file = fp.readline().strip()
-            assert os.path.exists(self.test_dir + "/" + self.test_file)
+            if self.test_file:
+                assert os.path.exists(self.test_dir + "/" + self.test_file)
 
             # Third line - Arguments of executable
             self.test_args = fp.readline().strip()
 
-            # Fourth line and beyond
-            # Regex of expected output
+            # Line 4+: stdout/stderr regexes and optional CHECK_JSON /
+            # CHECK_FILE lines.
             self.test_regex = []
+            self.check_json = []
+            self.check_file = []
+            self.seed_file = []
+            self.requires = []
             for line in fp:
-                self.test_regex.append(line.strip())
+                stripped = line.strip()
+                if _is_requires_line(stripped):
+                    try:
+                        self.requires.extend(_parse_requires(stripped))
+                    except ValueError as exc:
+                        raise ValueError(f"{self.test_dir}/test.desc: {exc}") from exc
+                elif _is_seed_file_line(stripped):
+                    try:
+                        self.seed_file.append(_parse_seed_file(stripped))
+                    except ValueError as exc:
+                        raise ValueError(
+                            f"{self.test_dir}/test.desc: {exc}"
+                        ) from exc
+                elif _is_check_json_line(stripped):
+                    try:
+                        self.check_json.append(_parse_check_json(stripped))
+                    except ValueError as exc:
+                        raise ValueError(
+                            f"{self.test_dir}/test.desc: {exc}"
+                        ) from exc
+                elif _is_check_file_line(stripped):
+                    try:
+                        self.check_file.append(_parse_check_file(stripped))
+                    except ValueError as exc:
+                        raise ValueError(
+                            f"{self.test_dir}/test.desc: {exc}"
+                        ) from exc
+                else:
+                    self.test_regex.append(stripped)
 
     def generate_run_argument_list(self, *tool):
         """Generates run command list to be used in Popen"""
@@ -94,7 +525,8 @@ class TestCase:
             except ValueError:
                 pass
 
-        result.append(os.path.join(self.test_dir, self.test_file))
+        if self.test_file:
+            result.append(os.path.join(self.test_dir, self.test_file))
         return result
 
     def __str__(self):
@@ -104,11 +536,17 @@ class TestCase:
         assert os.path.exists(test_dir)
         assert os.path.exists(os.path.join(test_dir, "test.desc"))
         self.name = name
-        self.test_dir = test_dir
+        # Every test runs ESBMC in a private temporary cwd, where a test_dir
+        # relative to the invoking cwd no longer resolves. Anchor it here so
+        # every derived path survives the chdir.
+        self.test_dir = os.path.abspath(test_dir)
         self.test_args = None
         self.test_file = None
         self.test_mode = "CORE"
         self.mem_limit_bytes = None
+        self.check_json = []
+        self.check_file = []
+        self.seed_file = []
         self._initialize_test_case()
         # Optional per-test memory cap override.  When a `mem_limit_mb` file
         # is present in the test directory, its integer value (in MB) is
@@ -122,12 +560,19 @@ class TestCase:
         """Replaces original test with the current configuration"""
         test_desc_path = os.path.join(self.test_dir, "test.desc")
         assert os.path.isfile(test_desc_path)
-        with open(test_desc_path, "w") as f:
+        with open(test_desc_path, "w", encoding="utf-8") as f:
             f.write(f"{self.test_mode}\n")
             f.write(f"{self.test_file}\n")
             f.write(f"{self.test_args}\n")
             for re in self.test_regex:
                 f.write(f"{re}\n")
+            for file, jsonpath, op, expected in self.check_json:
+                f.write(
+                    f"{CHECK_JSON_KEYWORD} {file} {jsonpath} {op} "
+                    f"{json.dumps(expected)}\n"
+                )
+            for file, op, pattern in self.check_file:
+                f.write(f"{CHECK_FILE_KEYWORD} {file} {op} {pattern}\n")
 
     """Ignore regex and only check for crashes"""
     RUN_ONLY = False
@@ -155,10 +600,15 @@ _TERM_GRACE = 3
 class Executor:
     def __init__(self, tool="esbmc"):
         self.tool = shlex.split(tool)
+        # Each test runs in its own cwd, and Popen chdirs before exec, so an
+        # explicitly-pathed tool has to be anchored here. A bare name keeps
+        # going through PATH.
+        if os.sep in self.tool[0]:
+            self.tool[0] = os.path.abspath(self.tool[0])
         self.timeout = RegressionBase.TIMEOUT
 
-    def run(self, test_case: TestCase):
-        """Execute the test case with `executable`"""
+    def run(self, test_case: TestCase, cwd=None):
+        """Execute the test case. `cwd` isolates ESBMC's output files."""
         cmd = test_case.generate_run_argument_list(*self.tool)
         # Per-test override (mem_limit_mb file) wins over the global env cap.
         limit_bytes = test_case.mem_limit_bytes or RegressionBase.MEMORY_LIMIT
@@ -170,6 +620,7 @@ class Executor:
             stderr=PIPE,
             preexec_fn=preexec,
             env=dict(os.environ, ESBMC_CONFIG_FILE=""),
+            cwd=cwd,
         ) as proc:
             try:
                 stdout, stderr = proc.communicate(timeout=self.timeout)
@@ -177,13 +628,23 @@ class Executor:
                 # Gracefully shut down the whole process group so
                 # grandchildren don't linger and starve the CI runner.
                 if os.name == "posix":
+                    # ESBMC does not necessarily die on SIGTERM, so the SIGKILL
+                    # escalation has to run even when the SIGTERM itself failed.
+                    # Sharing one try with the wait meant a killpg that raised
+                    # (on macOS it raises EPERM when the group holds a process
+                    # we can no longer signal) skipped the kill entirely and
+                    # left the group running.
                     try:
                         os.killpg(proc.pid, signal.SIGTERM)
+                    except OSError:
+                        pass
+                    try:
                         proc.wait(timeout=_TERM_GRACE)
                     except subprocess.TimeoutExpired:
-                        os.killpg(proc.pid, signal.SIGKILL)
-                    except ProcessLookupError:
-                        pass
+                        try:
+                            os.killpg(proc.pid, signal.SIGKILL)
+                        except OSError:
+                            pass
                 else:
                     proc.kill()
                 stdout, stderr = proc.communicate()
@@ -218,8 +679,8 @@ class RegressionBase(unittest.TestCase):
     longMessage = True
 
     FAIL_WITH_WORD: str = None
-    # The env var set by CMake.
-    TIMEOUT = int(os.environ.get(_TIMEOUT_ENVVAR, 0)) or None
+    # The env var set by CMake, narrowed by _TIMEOUT_CAP_ENVVAR when set.
+    TIMEOUT = _capped_timeout(int(os.environ.get(_TIMEOUT_ENVVAR, 0)) or None)
     _mem_mb = int(os.environ.get(_MEMORY_LIMIT_ENVVAR, 0))
     MEMORY_LIMIT = _mem_mb * 1024 * 1024 if _mem_mb else None
 
@@ -238,72 +699,140 @@ def _add_test(test_case, executor):
     """This method returns a function that defines a test"""
 
     def test(self):
-        stdout, stderr, rc = executor.run(test_case)
+        # Every test gets a private cwd. Relative output paths in test.desc
+        # (--witness-output, --cex-output, --output) otherwise land in the
+        # runner's cwd -- build/regression under ctest, the invocation
+        # directory when testing_tool.py is run by hand, which is how the
+        # artefacts once tracked under regression/ came to be overwritten on
+        # every run. It also races parallel CHECK_JSON/CHECK_FILE tests.
+        tmp_dir = tempfile.mkdtemp(prefix="esbmc-regress-")
+        try:
+            for seed in test_case.seed_file:
+                _run_seed_file(seed, tmp_dir)
+            stdout, stderr, rc = executor.run(test_case, cwd=tmp_dir)
 
-        if stdout is None:
-            timeout_message = "\nTIMEOUT TEST: {} (limit {}s)".format(
-                test_case.test_dir, executor.timeout or "none")
-            if stderr:
-                timeout_message += "\n" + stderr.decode(errors="replace")
-            self.fail(timeout_message)
+            if stdout is None:
+                # Timeout: ESBMC didn't finish within ESBMC_REGRESS_TIMEOUT.
+                # For KNOWNBUG tests, "doesn't produce the expected output
+                # within the budget" is exactly the bug being tracked, so
+                # treat a timeout as satisfying the KNOWNBUG expectation
+                # rather than as a hard failure that breaks CI.
+                if test_case.test_mode in FAIL_MODES:
+                    print(
+                        "TIMEOUT after limit {}s -- accepted under {}".format(
+                            executor.timeout or "none", test_case.test_mode
+                        )
+                    )
+                    return
+                cap = _timeout_cap()
+                capped = (", capped by " + _TIMEOUT_CAP_ENVVAR
+                          if cap is not None and executor.timeout == cap
+                          else "")
+                timeout_message = "\nTIMEOUT TEST: {} (limit {}s{})".format(
+                    test_case.test_dir, executor.timeout or "none", capped)
+                if stderr:
+                    timeout_message += "\n" + stderr.decode(errors="replace")
+                self.fail(timeout_message)
 
-        if TestCase.RUN_ONLY:
-            if rc != 0:
-                self.fail(f"Wrong output for process. Bombed out with exit code {rc}")
-            return
+            if TestCase.RUN_ONLY:
+                if rc != 0:
+                    self.fail(f"Wrong output for process. Bombed out with exit code {rc}")
+                return
 
-        output_to_validate = stdout.decode(errors="replace") + stderr.decode(errors="replace")
-        error_message_prefix = (
-            "\nTEST: "
-            + str(test_case.test_dir)
-            + "\nEXPECTED TO FIND: "
-            + str(test_case.test_regex)
-            + "\n\nPROGRAM OUTPUT\n"
-        )
-        error_message = (
-            output_to_validate
-            + "\n\nARGUMENTS: "
-            + str(test_case.generate_run_argument_list(*executor.tool))
-        )
-
-        if BENCHMARK_BRINGUP:
-            if os.environ.get("LOG_DIR") is None:
-                raise RuntimeError("environment variable LOG_DIR is not defined")
-            assert os.path.isdir(os.environ["LOG_DIR"])
-            destination = os.environ["LOG_DIR"] + "/" + test_case.name
-            f = open(destination, "a")
-            f.write("ESBMC args: " + test_case.test_args + "\n\n")
-            f.write(output_to_validate)
-            f.close()
-
-        matches_regex = True
-        for regex in test_case.test_regex:
-            match_regex = re.compile(regex, re.MULTILINE)
-            if not match_regex.search(output_to_validate.replace("\r", "")):
-                matches_regex = False
-
-        if (test_case.test_mode in FAIL_MODES) and matches_regex:
-            rel_path = os.path.relpath(test_case.test_dir, os.path.dirname(__file__))
-            print(
-                f"\033[33mERROR: Test '{rel_path}' passed but is marked as KNOWNBUG. Consider reclassifying it as CORE.\033[0m"
+            output_to_validate = stdout.decode(errors="replace") + stderr.decode(errors="replace")
+            error_message_prefix = (
+                "\nTEST: "
+                + str(test_case.test_dir)
+                + "\nEXPECTED TO FIND: "
+                + str(test_case.test_regex)
+                + "\n\nPROGRAM OUTPUT\n"
             )
-            sys.exit(77)
-        elif (test_case.test_mode not in FAIL_MODES) and (not matches_regex):
-            if RegressionBase.FAIL_WITH_WORD is not None:
-                match_regex = re.compile(RegressionBase.FAIL_WITH_WORD, re.MULTILINE)
-                if match_regex.search(output_to_validate):
-                    test_case.mark_test_as_knownbug(RegressionBase.FAIL_WITH_WORD)
-                    self.fail(error_message_prefix + error_message)
-            else:
+            error_message = (
+                output_to_validate
+                + "\n\nARGUMENTS: "
+                + str(test_case.generate_run_argument_list(*executor.tool))
+            )
+
+            # Write a per-test log to LOG_DIR/<suite>_<test> whenever LOG_DIR
+            # is set. Used by --benchbringup workflows and stand-alone via
+            # `LOG_DIR=/tmp/logs ctest ...` for A/B-comparing two builds
+            # (interleaving counts, symex time, VCCs, etc).
+            #
+            # The filename embeds the parent directory (the test suite) so
+            # name collisions like k-induction/vogal_bug vs k-induction-
+            # parallel/vogal_bug don't overwrite each other.
+            log_dir = os.environ.get("LOG_DIR")
+            if log_dir is not None or BENCHMARK_BRINGUP:
+                if log_dir is None:
+                    raise RuntimeError("environment variable LOG_DIR is not defined")
+                os.makedirs(log_dir, exist_ok=True)
+                suite = os.path.basename(os.path.dirname(test_case.test_dir))
+                destination = os.path.join(log_dir, f"{suite}_{test_case.name}")
+                # Overwrite on every run — accumulating across ctest invocations
+                # would corrupt downstream stat-counting (e.g. summing VCCs).
+                with open(destination, "w", encoding="utf-8") as f:
+                    f.write("ESBMC args: " + test_case.test_args + "\n\n")
+                    f.write(output_to_validate)
+
+            matches_regex = True
+            for regex in test_case.test_regex:
+                match_regex = re.compile(regex, re.MULTILINE)
+                if not match_regex.search(output_to_validate.replace("\r", "")):
+                    matches_regex = False
+
+            check_failures = []
+            for check in test_case.check_json:
+                passed, msg = _run_check_json(check, tmp_dir)
+                if not passed:
+                    check_failures.append(msg)
+            for check in test_case.check_file:
+                passed, msg = _run_check_file(check, tmp_dir)
+                if not passed:
+                    check_failures.append(msg)
+            all_checks_pass = matches_regex and not check_failures
+
+            if (test_case.test_mode in FAIL_MODES) and all_checks_pass:
+                rel_path = os.path.relpath(test_case.test_dir, os.path.dirname(__file__))
+                print(
+                    f"\033[33mERROR: Test '{rel_path}' passed but is marked as {test_case.test_mode}. Consider reclassifying it as CORE.\033[0m"
+                )
+                sys.exit(77)
+            elif (test_case.test_mode not in FAIL_MODES) and (not all_checks_pass):
+                if check_failures:
+                    error_message = "\n".join(check_failures) + "\n\n" + error_message
+                if RegressionBase.FAIL_WITH_WORD is not None:
+                    match_regex = re.compile(RegressionBase.FAIL_WITH_WORD, re.MULTILINE)
+                    if match_regex.search(output_to_validate):
+                        error_message = (
+                            f"Output matched FAIL_WITH_WORD marker "
+                            f"{RegressionBase.FAIL_WITH_WORD!r}\n" + error_message
+                        )
                 self.fail(error_message_prefix + error_message)
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
 
     return test
 
 
-def gen_one_test(base_dir: str, test: str, executor_path: str, modes):
+def gen_one_test(
+    base_dir: str, test: str, executor_path: str, modes, capabilities=None
+):
     executor = Executor(executor_path)
     test_case = TestCase(os.path.join(base_dir, test), test)
     if test_case.test_mode not in modes:
+        exit(10)
+    missing = []
+    for capability in test_case.requires:
+        if capability in DYNAMIC_CAPABILITY_PROBES:
+            if not _probe_capability(capability, executor_path):
+                missing.append(capability)
+        # No --capabilities at all means the caller did not probe the static
+        # ones: run the test and let it fail loudly rather than silently
+        # dropping coverage.
+        elif capabilities is not None and capability not in capabilities:
+            missing.append(capability)
+    if missing:
+        print(f"SKIP: {test} requires {', '.join(missing)}")
         exit(10)
     test_func = _add_test(test_case, executor)
     setattr(RegressionBase, "test_{0}".format(test_case.name), test_func)
@@ -347,10 +876,17 @@ def _arg_parsing():
         type=int,
         help="Per-test virtual memory limit in megabytes",
     )
+    parser.add_argument(
+        "--capabilities",
+        required=False,
+        help="Comma/semicolon-separated capabilities this build and host "
+        "provide; a test whose REQUIRES names one that is absent is skipped. "
+        "Omitting the flag runs every test regardless of its REQUIRES.",
+    )
 
     main_args = parser.parse_args()
     if main_args.timeout:
-        RegressionBase.TIMEOUT = int(main_args.timeout)
+        RegressionBase.TIMEOUT = _capped_timeout(int(main_args.timeout))
     if main_args.memory_limit:
         RegressionBase.MEMORY_LIMIT = main_args.memory_limit * 1024 * 1024
     RegressionBase.FAIL_WITH_WORD = main_args.mark_knownbug_with_word
@@ -368,7 +904,30 @@ def _arg_parsing():
         TestCase.RUN_ONLY = True
         TestCase.SMT_ONLY = True
 
-    gen_one_test(regression_path, main_args.file, main_args.tool, main_args.modes)
+    capabilities = None
+    if main_args.capabilities is not None:
+        capabilities = {
+            c for c in re.split(r"[,;\s]+", main_args.capabilities.strip()) if c
+        }
+        # Only the static ones: the dynamic capabilities are the tool's own
+        # answer, so accepting them here would let the build override it.
+        unknown = capabilities - STATIC_CAPABILITIES
+        assert not unknown, (
+            f"--capabilities names unknown capability "
+            f"{', '.join(sorted(unknown))}; known names are "
+            f"{', '.join(sorted(STATIC_CAPABILITIES))}"
+        )
+        if (RegressionBase.TIMEOUT is not None
+                and RegressionBase.TIMEOUT < _LONG_TIMEOUT_SECONDS):
+            capabilities.discard("long_timeout")
+
+    gen_one_test(
+        regression_path,
+        main_args.file,
+        main_args.tool,
+        main_args.modes,
+        capabilities,
+    )
 
 
 def main():

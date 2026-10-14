@@ -1,38 +1,45 @@
 /*
  * This function is used to check function contracts.
- * 
+ *
  * Verification Strategy: Abstraction and Hierarchical Verification
- * 
- * Function contracts enable a manual abstraction approach to assist over-approximation
- * verification logic. By splitting verification into system-level and function-level,
- * we should be able to reduce verification complexity. 
- * 
+ *
+ * Function contracts enable a manual abstraction approach to assist
+ * over-approximation verification logic. By splitting verification into
+ * system-level and function-level, we should be able to reduce verification
+ * complexity.
+ *
  * 1. Function-level verification (enforce_contracts):
  *    - Verify each function independently against its contract
- *    - Use contract as specification: assume requires -> execute function -> assert ensures
- *    - This provides over-approximation: if function satisfies contract, it's correct
+ *    - Use contract as specification: assume requires -> execute function ->
+ * assert ensures
+ *    - This provides over-approximation: if function satisfies contract, it's
+ * correct
  *    - Complexity: O(n) where n is function size, not system size
- * 
+ *
  * 2. System-level verification (replace_calls):
  *    - Replace function calls with contract semantics
- *    - Use contract as abstraction: assert requires -> havoc assigns -> assume ensures
+ *    - Use contract as abstraction: assert requires -> havoc assigns -> assume
+ * ensures
  *    - This avoids exploring function body, reducing state space
  *    - Complexity: O(m) where m is call sites, not function implementations
- * 
+ *
  * Benefits:
  * - Modularity: Verify functions separately from system
  * - Scalability: System verification doesn't need to explore function internals
  * - Reusability: Once function is verified, contract can be used in any context
- * - Over-approximation: Contract provides safe abstraction (may have false positives)
- * 
+ * - Over-approximation: Contract provides safe abstraction (may have false
+ * positives)
+ *
  * This approach transforms a complex system verification problem into:
  * - Multiple simpler function verification problems
  * - One system verification problem using abstracted functions
- * 
+ *
  * It takes phases:
  * 1. Extract contract clauses (requires, ensures, assigns) from contract symbol
- * 2. For contract checking: rename original function, generate wrapper with assume requires -> call -> assert ensures
- * 3. For contract replacement: replace calls with assert requires -> havoc assigns -> assume ensures
+ * 2. For contract checking: rename original function, generate wrapper with
+ * assume requires -> call -> assert ensures
+ * 3. For contract replacement: replace calls with assert requires -> havoc
+ * assigns -> assume ensures
  */
 
 #ifndef ESBMC_CONTRACTS_H
@@ -40,18 +47,23 @@
 
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/frame_enforcer.h>
-#include <util/context.h>
-#include <util/namespace.h>
+#include <util/symtab/context.h>
+#include <util/symtab/namespace.h>
+#include <functional>
+#include <map>
 #include <set>
 #include <string>
 
 /// \brief Basic contract handling class
-/// Provides contract checking and replacement functionality at goto function level
+/// Provides contract checking and replacement functionality at goto function
+/// level
 ///
-/// Function contracts are specifications that describe the behavior of functions.
-/// They consist of:
-/// - Preconditions (requires): conditions that must hold when the function is called
-/// - Postconditions (ensures): conditions that must hold when the function returns
+/// Function contracts are specifications that describe the behavior of
+/// functions. They consist of:
+/// - Preconditions (requires): conditions that must hold when the function is
+/// called
+/// - Postconditions (ensures): conditions that must hold when the function
+/// returns
 /// - Assigns clauses: memory locations that the function may modify
 ///
 /// Contracts enable modular verification by allowing functions to be verified
@@ -64,9 +76,10 @@ public:
   /// \brief Structure to store is_fresh mapping information
   struct is_fresh_mapping_t
   {
-    irep_idt
-      temp_var_name; ///< Temporary variable name (e.g., return_value$___ESBMC_is_fresh$1)
-    expr2tc ptr_expr; ///< Pointer expression (dereferenced from &ptr)
+    irep_idt temp_var_name; ///< Temporary variable name (e.g.,
+                            ///< return_value$___ESBMC_is_fresh$1)
+    expr2tc ptr_expr;       ///< Pointer expression (dereferenced from &ptr)
+    expr2tc size_expr; ///< Extent the contract asked for, in bytes; may be nil
   };
 
   code_contractst(
@@ -75,14 +88,19 @@ public:
     const namespacet &ns);
 
   /// \brief Enforce function contracts
-  /// Renames function F to __ESBMC_contracts_original_F and generates a new wrapper function F
-  /// Wrapper function: assume requires -> call original function -> assert ensures
+  /// Renames function F to __ESBMC_contracts_original_F and generates a new
+  /// wrapper function F Wrapper function: assume requires -> call original
+  /// function -> assert ensures
   /// \param to_enforce Set of function names to enforce contracts for
-  /// \param entry_function The --function entry point name (empty if using main).
+  /// \param entry_function The --function entry point name (empty if using
+  /// main).
   ///        When non-empty AND matches the function being enforced, the wrapper
   ///        allocates fresh backing storage for all pointer parameters so that
-  ///        the harness-generated nil args become valid dereferenceable objects.
-  void enforce_contracts(
+  ///        the harness-generated nil args become valid dereferenceable
+  ///        objects.
+  /// \return The subset of \p to_enforce that was actually enforced. A name
+  ///         absent from the result named nothing this pass could act on.
+  std::set<std::string> enforce_contracts(
     const std::set<std::string> &to_enforce,
     const std::string &entry_function = "",
     bool check_assigns_compliance = false);
@@ -93,7 +111,7 @@ public:
   ///   2. Havoc all potentially modified locations:
   ///      - Assigns clause targets (if specified)
   ///      - Static lifetime global variables (conservative)
-  ///      - Memory locations through pointer parameters (TODO)
+  ///      - Memory locations through pointer parameters
   ///   3. Assume ensures clause (assume postcondition)
   ///
   /// CRITICAL: We must havoc everything the function might modify,
@@ -106,10 +124,29 @@ public:
   /// \return True if function has any contract clauses
   bool has_contracts(const goto_programt &function_body) const;
 
-  /// \brief Check if function is marked with __attribute__((annotate("__ESBMC_contract")))
+  /// \brief Check if function is marked with
+  /// __attribute__((annotate("__ESBMC_contract")))
   /// \param func_sym Function symbol to check
   /// \return True if function has the contract annotation
   bool is_annotated_contract_function(const symbolt &func_sym) const;
+
+  /// \brief Name of the first non-intrinsic call a clause in \p body depends
+  ///   on, empty when there is none.
+  std::string clause_call_callee(const goto_programt &body) const;
+
+  /// \brief Diagnostic for such a call, empty when there is none.
+  std::string clause_call_reason(const goto_programt &body) const;
+
+  /// \brief Whether \p func_sym has a body carrying contract clauses, or the
+  ///   __ESBMC_contract annotation. Used to pick the function the user
+  ///   annotated when a short name matches symbols from several modes.
+  bool declares_contracts(const symbolt &func_sym) const;
+
+  /// \brief Code symbols whose short name is \p short_name and which satisfy
+  ///   \p accept, in goto-function order.
+  std::vector<symbolt *> short_name_candidates(
+    const std::string &short_name,
+    const std::function<bool(const symbolt &)> &accept);
 
   /// \brief Per-field snapshot for pointer-struct-field assigns compliance.
   /// Captures the pre-call value of a field NOT in the assigns clause so that
@@ -123,9 +160,10 @@ public:
     expr2tc snapshot_sym; ///< Snapshot symbol holding pre-call field value
   };
 
-  /// \brief Snapshot for pointer-parameter dereference assigns compliance (Phase 2C).
-  /// When a pointer param p is NOT declared in the assigns clause at all, its
-  /// pointed-to value (*p or p->field for structs) must remain unchanged.
+  /// \brief Snapshot for pointer-parameter dereference assigns compliance
+  /// (Phase 2C). When a pointer param p is NOT declared in the assigns clause
+  /// at all, its pointed-to value (*p or p->field for structs) must remain
+  /// unchanged.
   struct ptr_deref_snapshot_t
   {
     expr2tc ptr_sym;      ///< Pointer parameter symbol
@@ -133,19 +171,49 @@ public:
     irep_idt field_name;  ///< Empty for scalars; field name for struct members
     type2tc value_type;   ///< Type of the snapshotted value
     expr2tc snapshot_sym; ///< Snapshot symbol holding the pre-call value
+    expr2tc
+      array_index; ///< Nil for scalars; nondet witness index for array fields
+    type2tc
+      member_type; ///< Array-field member type (for indexing); nil otherwise
+    expr2tc alias_exemption; ///< Nil, or a guard under which this location is
+                             ///< an assigns target reached by another name
   };
 
   /// \brief Snapshot for array element assigns compliance (Phase 2B).
-  /// For __ESBMC_assigns(arr[declared_idx]), use a nondet witness index j
-  /// to check that no other element arr[j] (j != declared_idx) was modified.
+  /// For __ESBMC_assigns(arr[i], arr[k]), use one nondet witness index j to
+  /// check that no element arr[j] outside the declared indices was modified.
   struct arr_elem_snapshot_t
   {
     expr2tc arr_ptr;      ///< Array pointer symbol (e.g. symbol2tc for "arr")
     type2tc arr_add_type; ///< Result type of (arr + j) pointer-arithmetic
     type2tc elem_type;    ///< Element type (pointee of arr_ptr)
-    expr2tc declared_idx; ///< Declared index expression (from assigns clause)
+    /// Every index the clause names on this array: the witness assertion must
+    /// excuse all of them, not just one (#7184).
+    std::vector<expr2tc> declared_indices;
     expr2tc witness_idx;  ///< Nondet witness index symbol j
     expr2tc snapshot_sym; ///< Snapshot symbol holding arr[j] pre-call value
+  };
+
+  /// \brief Byte extent of a harness-allocated pointer parameter.
+  ///
+  /// \p justified says whether the harness backing is real enough to read
+  /// through: an __ESBMC_is_fresh size, or the one-element stack backing of
+  /// a C++ `this`. It is false for a nondet heap extent, which nothing
+  /// may dereference. An absent map entry is a third state: the harness never
+  /// allocated, so the pointer is the real caller's.
+  ///
+  /// \p from_is_fresh is narrower: true only when \p bytes came from the
+  /// contract's own __ESBMC_is_fresh(ptr, bytes) clause. The `this` entry
+  /// is \p justified (real stack storage genuinely backs one element)
+  /// but NOT \p from_is_fresh (the contract never stated that extent) --
+  /// consumers that need the extent to match what the contract actually
+  /// claims, not just "some real memory happens to be there", must check
+  /// this instead of \p justified alone (#7057).
+  struct param_extentt
+  {
+    expr2tc bytes;              ///< Byte-extent expression of the allocation
+    bool justified;             ///< True when the backing may be dereferenced
+    bool from_is_fresh = false; ///< True only when bytes is from is_fresh
   };
 
   /// \brief Check if a function is compiler-generated and should be skipped.
@@ -153,6 +221,24 @@ public:
   /// \param function_name Function name or full ID
   /// \return True if the function should be skipped (destructor, __cxa_*, etc.)
   bool is_compiler_generated(const std::string &function_name) const;
+
+  /// \brief Say why \p function_name cannot be used by a contract flag.
+  ///
+  /// The eligibility rules differ between the two passes and always have:
+  /// enforce_contracts resolves a name through find_function_symbol, while
+  /// replace_calls selects through matches_replace_pattern, which is why a
+  /// C++ id with parameters satisfies one and not the other. This method is
+  /// the single place both rules live, so a caller can ask the same question
+  /// the pass will ask, and get the same answer.
+  ///
+  /// Call it before any pass runs: enforce_contracts rewrites the functions it
+  /// acts on into wrappers that carry no contract, so asking afterwards
+  /// reports a name that was used as unusable.
+  ///
+  /// \param for_replace Ask replace_calls' rule rather than enforce's
+  /// \return The reason, or an empty string when the name is usable
+  std::string
+  diagnose_contract_target(const std::string &function_name, bool for_replace);
 
 private:
   goto_functionst &goto_functions;
@@ -166,9 +252,14 @@ private:
   size_t arr_elem_snap_counter =
     0; ///< Counter for unique array-element snapshot names (Phase 2B)
 
-  /// Number of elements to allocate for pointer params that serve as arrays
-  /// (i.e., appear in array_elem_targets). Must match the ASSUME(j < N) bound.
-  static constexpr size_t ARRAY_ALLOC_ELEMS = 100;
+  /// Fallback element count for the Phase 2B array-element witness index when
+  /// no extent is recorded for the pointer: a global pointer, or a pointer
+  /// parameter with no __ESBMC_is_fresh in a run without --function, where the
+  /// entry harness never allocates. A global *array* does not reach here; it
+  /// takes the whole-object snapshot path instead. It can over-bound the index
+  /// and produce the spurious "array bounds violated" of #5314, so prefer a
+  /// recorded extent whenever one exists.
+  static constexpr size_t WITNESS_IDX_FALLBACK_ELEMS = 100;
 
   /// \brief Find function symbol
   /// \param function_name Function name (can be full ID or simple name)
@@ -201,6 +292,22 @@ private:
     const std::vector<expr2tc> &assigns_targets = {},
     bool check_assigns_compliance = false);
 
+  /// \brief A fresh lvalue symbol of \p type registered under \p name
+  expr2tc
+  declare_local_symbol(const std::string &name, const type2tc &type) const;
+
+  /// \brief Declare and havoc the value a replaced call returns
+  /// \param function_symbol Function symbol being called
+  /// \param ret_val Place the call assigns to, nil when the result is dropped
+  /// \param call_location Location to give the emitted instructions
+  /// \param replacement Program the declaration and havoc are appended to
+  /// \return The result symbol, nil for a function returning nothing
+  expr2tc declare_call_result(
+    const symbolt &function_symbol,
+    const expr2tc &ret_val,
+    const locationt &call_location,
+    goto_programt &replacement) const;
+
   /// \brief Generate replacement code at function call site
   /// \param function_symbol Function symbol being called
   /// \param function_body Function body (to extract contracts from)
@@ -224,12 +331,14 @@ private:
 
   /// \brief Extract requires clauses from function body
   /// \param function_body Function goto program
-  /// \return Requires expression (conjunction of all requires), or true_exprt() if none
+  /// \return Requires expression (conjunction of all requires), or true_exprt()
+  /// if none
   expr2tc extract_requires_from_body(const goto_programt &function_body);
 
   /// \brief Extract ensures clauses from function body
   /// \param function_body Function goto program
-  /// \return Ensures expression (conjunction of all ensures), or true_exprt() if none
+  /// \return Ensures expression (conjunction of all ensures), or true_exprt()
+  /// if none
   expr2tc extract_ensures_from_body(const goto_programt &function_body);
 
   /// \brief Extract assigns clause from function body
@@ -243,7 +352,8 @@ private:
   /// \return Assigns expression, or nil_exprt() if not present
   expr2tc extract_assigns_clause(const symbolt &contract_symbol);
 
-  /// \brief Replace __ESBMC_return_value symbols in expression with actual return value
+  /// \brief Replace __ESBMC_return_value symbols in expression with actual
+  /// return value
   /// \param expr Expression to replace symbols in
   /// \param ret_val Actual return value expression
   /// \return Expression with __ESBMC_return_value replaced
@@ -254,10 +364,12 @@ private:
   /// \brief Extract struct/union member accesses to temporary variables
   /// For struct return values, accessing members directly (ret_val.x) can cause
   /// symbolic execution issues when ret_val's value is a 'with' expression.
-  /// This function extracts member accesses to temporary variables to avoid dereference failures.
+  /// This function extracts member accesses to temporary variables to avoid
+  /// dereference failures.
   /// \param expr Expression containing member accesses
   /// \param ret_val Return value symbol (must be struct/union type)
-  /// \param wrapper GOTO program to add temporary variable declarations and assignments
+  /// \param wrapper GOTO program to add temporary variable declarations and
+  /// assignments
   /// \param location Source location for generated instructions
   /// \return Expression with member accesses replaced by temporary variables
   expr2tc extract_struct_members_to_temps(
@@ -276,6 +388,20 @@ private:
     const expr2tc &old_symbol,
     const expr2tc &new_expr) const;
 
+  /// \brief An assigns target with the callee's formals replaced by the
+  ///        arguments of one call
+  /// \param target_expr Assigns target as written in the callee
+  /// \param function_symbol The callee
+  /// \param actual_args Arguments at this call site
+  /// \param[out] is_pointer_param Whether the target was a pointer parameter
+  ///        and nothing else, the only shape whose havoc follows the pointer
+  /// \return The target expressed in the caller's terms
+  expr2tc instantiate_assigns_target(
+    const expr2tc &target_expr,
+    const symbolt &function_symbol,
+    const std::vector<expr2tc> &actual_args,
+    bool &is_pointer_param) const;
+
   // ========== __ESBMC_old support ==========
 
   /// \brief Structure to store old() snapshot information
@@ -283,6 +409,16 @@ private:
   {
     expr2tc original_expr; ///< Expression inside __ESBMC_old()
     expr2tc snapshot_var;  ///< Snapshot variable symbol
+
+    /// True for __ESBMC_old(ptr[j]) where ptr is a pointer parameter (not a
+    /// named array): original_expr is the pointer itself, snapshot_var
+    /// becomes an array-typed copy of its is_fresh'd extent (materialized by
+    /// a copy loop, not a single whole-value ASSIGN), and region_elem_type
+    /// is the element type. The index itself isn't stored here -- both
+    /// consumers (the copy loop, replace_old_in_expr) each already have
+    /// their own index expression in hand and never need this one. #7057.
+    bool is_ptr_region = false;
+    type2tc region_elem_type = type2tc(); ///< nil unless is_ptr_region
   };
 
   /// \brief Check if expression is an __ESBMC_old() call
@@ -300,6 +436,23 @@ private:
     const std::string &func_name,
     size_t index) const;
 
+  /// \brief The snapshot whose original_expr symbol matches \p thename and
+  /// whose is_ptr_region equals \p want_region, nil if none. #7057.
+  static expr2tc find_snapshot_by_symbol(
+    const irep_idt &thename,
+    const std::vector<old_snapshot_t> &snapshots,
+    bool want_region);
+
+  /// \brief __ESBMC_old(ptr[j]), ptr a pointer parameter: try the
+  /// dereference(add(typecast(old-temp-symbol), j)) shape
+  /// goto_sideeffects.cpp's lift produces for this case. Returns nil if \p
+  /// ptr_expr isn't this shape. #7057.
+  static expr2tc try_replace_ptr_region_old(
+    const type2tc &result_type,
+    const expr2tc &ptr_expr,
+    const std::vector<old_snapshot_t> &snapshots,
+    const namespacet &ns);
+
   /// \brief Replace __ESBMC_old() calls with snapshot variables
   /// \param expr Expression containing old() calls
   /// \param snapshots Vector of snapshot information
@@ -308,16 +461,29 @@ private:
     const expr2tc &expr,
     const std::vector<old_snapshot_t> &snapshots) const;
 
+  /// \brief Does this old-temp's hoisted symbol appear under a
+  /// pointer-region dereference shape somewhere in the body? Sets
+  /// is_ptr_region/region_elem_type on each entry that does. #7057.
+  static void classify_ptr_region_snapshots(
+    std::vector<old_snapshot_t> &old_snapshots,
+    const goto_programt &function_body);
+
+  /// \brief Reject a pointer used both as a bare __ESBMC_old(ptr) and a
+  /// region __ESBMC_old(ptr[j]) in the same contract -- ambiguous to
+  /// materialize. #7057.
+  static void check_old_snapshot_pointer_ambiguity(
+    const std::vector<old_snapshot_t> &old_snapshots);
+
   /// \brief Collect old_snapshot assignments from function body
   /// \param function_body GOTO program to scan for old_snapshot sideeffects
   /// \return Vector of old_snapshot_t structures (original_expr, temp_var)
   std::vector<old_snapshot_t>
   collect_old_snapshots_from_body(const goto_programt &function_body) const;
 
-  /// \brief Snapshot fields of pointed-to structs that are NOT in the assigns clause.
-  /// For each pointer symbol in classified.ptr_field_targets, enumerates the
-  /// pointed-to struct's fields, and for each field NOT in the assigned set
-  /// emits DECL+ASSIGN instructions capturing the pre-call value.
+  /// \brief Snapshot fields of pointed-to structs that are NOT in the assigns
+  /// clause. For each pointer symbol in classified.ptr_field_targets,
+  /// enumerates the pointed-to struct's fields, and for each field NOT in the
+  /// assigned set emits DECL+ASSIGN instructions capturing the pre-call value.
   /// \param classified Classified assigns targets (provides ptr_field_targets)
   /// \param original_func Original function symbol (provides parameter types)
   /// \param wrapper GOTO program to append snapshot instructions to
@@ -341,19 +507,29 @@ private:
     goto_programt &wrapper,
     const locationt &location);
 
-  // ========== Phase 2C: pointer-parameter dereference assigns compliance ==========
+  // ========== Phase 2C: pointer-parameter dereference assigns compliance
+  // ==========
 
-  /// \brief Snapshot pointer params whose dereferenced value is NOT in the assigns clause.
-  /// For each pointer parameter p not covered by the assigns clause:
+  /// \brief Snapshot pointer params whose dereferenced value is NOT in the
+  /// assigns clause. For each pointer parameter p not covered by the assigns
+  /// clause:
   ///   - scalar pointee: snapshot *p
   ///   - struct pointee: snapshot each field of *p
   /// Called before the function call in the checking wrapper.
-  /// \param classified Classified assigns targets (provides pointer_targets, ptr_field_targets)
-  /// \param assigns_targets Full assigns target list (must be non-empty to enable check)
-  /// \param original_func Original function symbol (provides parameter types/names)
+  /// \param classified Classified assigns targets (provides pointer_targets,
+  /// ptr_field_targets)
+  /// \param assigns_targets Full assigns target list (must be non-empty to
+  /// enable check)
+  /// \param original_func Original function symbol (provides parameter
+  /// types/names)
   /// \param wrapper GOTO program to append snapshot instructions to
   /// \param location Source location
   /// \param func_name Function name for unique snapshot naming
+  /// \param param_extents Byte extent of each harness allocation. Params whose
+  ///        backing is not justified are skipped: the snapshot dereferences
+  ///        the pointer, and against a nondet extent that harness-invented
+  ///        read fails its own bounds check, reporting a violation in a
+  ///        parameter the contract never mentions.
   /// \return Vector of snapshot records for use in emit_ptr_deref_assertions
   std::vector<ptr_deref_snapshot_t> materialize_ptr_deref_snapshots(
     const frame_enforcert::classified_assignst &classified,
@@ -361,10 +537,31 @@ private:
     const symbolt &original_func,
     goto_programt &wrapper,
     const locationt &location,
-    const std::string &func_name);
+    const std::string &func_name,
+    const std::map<irep_idt, param_extentt> &param_extents);
 
-  /// \brief Emit ASSERT instructions for pointer-parameter dereference compliance.
-  /// For each snapshot: asserts *p == snapshot (scalar) or p->field == snapshot (struct).
+  /// \brief Snapshot one scalar element of an array field of *p.
+  /// A whole-array rvalue read through the pointer is illegal C, so the
+  /// element (*p).field[k] is captured at a nondet witness index k, clamped
+  /// into range -- sound by the same forall-via-witness argument as Phase 2B.
+  /// Appends to \p result unless the field is one this check skips (a VLA, a
+  /// non-scalar element type, or a zero-length array, which has no element).
+  /// \param deref_expr The *p expression the field is read from
+  void materialize_ptr_deref_array_field(
+    const irep_idt &param_id,
+    const irep_idt &field,
+    const type2tc &ftype,
+    const type2tc &pointee,
+    const expr2tc &ptr_sym,
+    const expr2tc &deref_expr,
+    goto_programt &wrapper,
+    const locationt &location,
+    const std::string &func_name,
+    std::vector<ptr_deref_snapshot_t> &result);
+
+  /// \brief Emit ASSERT instructions for pointer-parameter dereference
+  /// compliance. For each snapshot: asserts *p == snapshot (scalar) or p->field
+  /// == snapshot (struct).
   /// \param snapshots Snapshots produced by materialize_ptr_deref_snapshots
   /// \param wrapper GOTO program to append assertions to
   /// \param location Source location
@@ -375,25 +572,33 @@ private:
 
   // ========== Phase 2B: array element assigns compliance ==========
 
-  /// \brief Materialize nondet witness snapshots for array element assigns compliance.
-  /// For each dereference(add(arr, declared_idx)) in classified.pointer_targets:
-  ///   - Creates a nondet witness index j (same type as declared_idx)
+  /// \brief Materialize nondet witness snapshots for array element assigns.
+  /// Groups the add(arr, idx) entries of classified.pointer_targets by array
+  /// symbol, and for each array:
+  ///   - Creates a nondet witness index j (typed after the first index)
   ///   - Snapshots arr[j] before the function call
   /// \param classified Classified assigns targets (provides pointer_targets)
-  /// \param assigns_targets Full assigns target list (must be non-empty to enable check)
+  /// \param assigns_targets Full assigns target list (non-empty enables check)
   /// \param wrapper GOTO program to append snapshot instructions to
   /// \param location Source location
   /// \param func_name Function name for unique snapshot naming
+  /// \param param_extents Byte extent of each harness allocation, used to
+  ///        clamp the witness index to extent/sizeof(elem). An absent entry
+  ///        falls back to WITNESS_IDX_FALLBACK_ELEMS. The bound is a clamp and
+  ///        never an ASSUME: assuming a range that a zero or symbolic extent
+  ///        can falsify would discharge the whole wrapper vacuously (#6212).
   /// \return Vector of snapshot records for use in emit_arr_elem_assertions
   std::vector<arr_elem_snapshot_t> materialize_arr_elem_snapshots(
     const frame_enforcert::classified_assignst &classified,
     const std::vector<expr2tc> &assigns_targets,
     goto_programt &wrapper,
     const locationt &location,
-    const std::string &func_name);
+    const std::string &func_name,
+    const std::map<irep_idt, param_extentt> &param_extents);
 
   /// \brief Emit ASSERT instructions for array element assigns compliance.
-  /// For each snapshot: asserts (j == declared_idx) || (arr[j] == snapshot).
+  /// For each snapshot: asserts (arr[j] == snapshot) unless j is one of the
+  /// declared indices.
   /// \param snapshots Snapshots produced by materialize_arr_elem_snapshots
   /// \param wrapper GOTO program to append assertions to
   /// \param location Source location
@@ -402,38 +607,124 @@ private:
     goto_programt &wrapper,
     const locationt &location);
 
-  /// \brief Materialize old snapshots in wrapper function (enforce-contract mode)
-  /// Creates DECL and ASSIGN instructions for snapshot variables before function call
-  /// \param old_snapshots Vector of snapshots to materialize (modified in-place)
+  /// \brief Materialize one __ESBMC_old(ptr[j]) region snapshot: since there
+  /// is no array rvalue to read through the pointer in one whole-value
+  /// ASSIGN, this declares a new array-typed temp sized by ptr's
+  /// __ESBMC_is_fresh extent and fills it with a hand-built element-wise
+  /// copy loop. Extracted out of materialize_old_snapshots_at_wrapper's
+  /// region branch (#7057).
+  /// \param original_expr The pointer-typed expression being snapshotted --
+  ///   the callee's own parameter symbol in wrapper mode, or (call-site
+  ///   mode, #7057) the actual argument, which is commonly an array-decay
+  ///   expression (`address_of(index(x, 0))`) rather than a bare symbol;
+  ///   only a pointer TYPE is required, not a specific expr kind
+  /// \param region_elem_type The element type (possibly an unfollowed
+  ///   struct symbol reference; followed internally before use)
+  /// \param wrapper GOTO program to append the DECLs and copy loop to
+  /// \param func_name Function name for unique variable naming
+  /// \param location Source location for generated instructions
+  /// \param extent_bytes The pointer's is_fresh-stated byte extent, already
+  ///   resolved and validated by the caller (wrapper mode looks this up in
+  ///   param_extents itself; call-site mode resolves it via
+  ///   find_callsite_is_fresh_extent) -- this function only consumes it
+  /// \param snap_idx Index for unique naming among this function's snapshots
+  /// \return The new array-typed snapshot variable symbol
+  expr2tc materialize_ptr_region_old_snapshot(
+    const expr2tc &original_expr,
+    const type2tc &region_elem_type,
+    goto_programt &wrapper,
+    const std::string &func_name,
+    const locationt &location,
+    const expr2tc &extent_bytes,
+    size_t snap_idx) const;
+
+  /// \brief Materialize old snapshots in wrapper function (enforce-contract
+  /// mode) Creates DECL and ASSIGN instructions for snapshot variables before
+  /// function call. A region snapshot (__ESBMC_old(ptr[j]), ptr a pointer
+  /// parameter) instead gets a DECL for a new array-typed temp plus a
+  /// hand-built copy loop sized by param_extents, since there is no array
+  /// rvalue to read through the pointer in one ASSIGN (#7057). \param
+  /// old_snapshots Vector of snapshots to materialize (modified in-place)
   /// \param wrapper GOTO program to add snapshot instructions to
   /// \param func_name Function name for unique variable naming
   /// \param location Source location for generated instructions
+  /// \param param_extents Byte extent of each is_fresh'd pointer parameter,
+  ///   needed only for region snapshots
   void materialize_old_snapshots_at_wrapper(
     std::vector<old_snapshot_t> &old_snapshots,
     goto_programt &wrapper,
     const std::string &func_name,
-    const locationt &location) const;
+    const locationt &location,
+    const std::map<irep_idt, param_extentt> &param_extents) const;
 
   /// \brief Materialize old snapshots at call site (replace-call mode)
-  /// Creates DECL and ASSIGN instructions for snapshot variables at call location
-  /// \param old_snapshots Vector of snapshots from function body
+  /// Creates DECL and ASSIGN instructions for snapshot variables at call
+  /// location \param old_snapshots Vector of snapshots from function body
   /// \param function_symbol Function symbol for parameter substitution
+  /// \param function_body Callee's body, scanned for a matching
+  ///        __ESBMC_is_fresh(ptr, N) clause when a snapshot is a pointer
+  ///        region (#7057) -- unused otherwise.
+  /// \param requires_clause The already-parameter-substituted requires
+  ///        clause generate_replacement_at_call already has in hand,
+  ///        forwarded to find_callsite_is_fresh_extent to test whether a
+  ///        candidate is_fresh call is asserted unconditionally -- unused
+  ///        otherwise.
   /// \param actual_args Actual arguments at call site
   /// \param replacement GOTO program to add snapshot instructions to
   /// \param call_location Source location for generated instructions
-  /// \return Vector of call-site snapshots (with parameter substitution applied)
+  /// \return Vector of call-site snapshots (with parameter substitution
+  /// applied)
   std::vector<old_snapshot_t> materialize_old_snapshots_at_callsite(
     const std::vector<old_snapshot_t> &old_snapshots,
     const symbolt &function_symbol,
+    const goto_programt &function_body,
+    const expr2tc &requires_clause,
     const std::vector<expr2tc> &actual_args,
     goto_programt &replacement,
     const locationt &call_location) const;
+
+  /// \brief Find the __ESBMC_is_fresh(ptr, size) call in \p function_body
+  ///        whose ptr operand names \p target_param and which \p
+  ///        requires_clause asserts unconditionally, and return its size
+  ///        operand with \p params rebound to \p actual_args
+  /// Used by materialize_old_snapshots_at_callsite to give a pointer-region
+  /// __ESBMC_old(ptr[j]) snapshot a call-site-visible extent under
+  /// --replace-call-with-contract (#7057); the enforce-mode counterpart
+  /// (generate_checking_wrapper) instead reads this straight from
+  /// param_extents, built once when its wrapper allocates the pointer.
+  /// \param function_body Callee's body, scanned for the is_fresh call
+  /// \param target_param Bare parameter symbol to match ptr against, in the
+  ///        callee's own terms (pre-substitution)
+  /// \param requires_clause Already-substituted requires clause, tested via
+  ///        asserted_unconditionally so a guarded is_fresh (stating nothing
+  ///        on the branch that skips it) is not treated as a hard extent
+  /// \param params Callee's formal parameters
+  /// \param actual_args Actual arguments at this call site
+  /// \param out_size Set to the rebound size expression on success; left
+  ///        untouched otherwise. Only names matching a formal in \p params
+  ///        are rebound; anything else the size expression names (a global,
+  ///        a named constant) is deliberately left alone, since it is not
+  ///        scoped to the callee and already resolves identically at the
+  ///        call site.
+  /// \return True if exactly one matching, unconditional is_fresh call was
+  ///         found. Aborts, rather than returning, if more than one such
+  ///         call names \p target_param with genuinely different extents --
+  ///         see the definition for why silently picking one is exactly the
+  ///         defect this function exists to rule out.
+  bool find_callsite_is_fresh_extent(
+    const goto_programt &function_body,
+    const expr2tc &target_param,
+    const expr2tc &requires_clause,
+    const code_typet::argumentst &params,
+    const std::vector<expr2tc> &actual_args,
+    expr2tc &out_size) const;
 
   // ========== Type fixing for return value comparisons ==========
 
   /// \brief Check if a symbol represents a return value variable
   /// \param sym Symbol to check
-  /// \return True if symbol is a return value variable (matches patterns like "return_value", "__ESBMC_return_value", etc.)
+  /// \return True if symbol is a return value variable (matches patterns like
+  /// "return_value", "__ESBMC_return_value", etc.)
   bool is_return_value_symbol(const symbol2t &sym) const;
 
   /// \brief Remove incorrect typecasts on return value symbols
@@ -443,23 +734,27 @@ private:
   expr2tc
   remove_incorrect_casts(const expr2tc &expr, const expr2tc &ret_val) const;
 
-  /// \brief Fix type mismatches in comparison expressions involving return values
+  /// \brief Fix type mismatches in comparison expressions involving return
+  /// values
   /// \param expr Expression to fix (typically an ensures guard)
   /// \param ret_val Return value symbol with correct type
   /// \return Expression with corrected type casts
   expr2tc
   fix_comparison_types(const expr2tc &expr, const expr2tc &ret_val) const;
 
-  /// \brief Normalize floating-point addition in contract expressions to use IEEE semantics
-  /// This ensures contracts use IEEE_ADD (matching implementation) instead of regular +
+  /// \brief Normalize floating-point addition in contract expressions to use
+  /// IEEE semantics This ensures contracts use IEEE_ADD (matching
+  /// implementation) instead of regular +
   /// \param expr Expression to normalize (typically an ensures guard)
   /// \return Expression with floating-point add2t replaced by ieee_add2t
   expr2tc normalize_fp_add_in_ensures(const expr2tc &expr) const;
 
   /// \brief Normalize ensures guard expression for return value handling
-  /// This is a unified helper that applies all return_value-related transformations:
+  /// This is a unified helper that applies all return_value-related
+  /// transformations:
   /// 1. Replaces __ESBMC_return_value with actual ret_val symbol
-  /// 2. Fixes type mismatches in comparisons (removes incorrect casts, adds correct casts)
+  /// 2. Fixes type mismatches in comparisons (removes incorrect casts, adds
+  /// correct casts)
   /// 3. Normalizes floating-point operations to use IEEE semantics
   /// \param ensures_clause Original ensures clause expression
   /// \param ret_val Return value symbol (may be nil if function returns void)
@@ -476,13 +771,18 @@ private:
   std::vector<is_fresh_mapping_t>
   extract_is_fresh_mappings_from_body(const goto_programt &function_body) const;
 
-  /// \brief Replace is_fresh temporary variables in ensures with verification expressions
+  /// \brief Replace is_fresh temporary variables with a concrete predicate.
   /// \param expr Expression containing is_fresh temp variables
   /// \param mappings Vector of is_fresh mappings
-  /// \return Expression with is_fresh temp variables replaced by verification expressions
-  expr2tc replace_is_fresh_in_ensures_expr(
+  /// \param require_dynamic true for ensures (valid_object && is_dynamic);
+  ///   false for a requires clause asserted at a --replace-call-with-contract
+  ///   call site (valid_object only, so live stack/interior sub-objects are
+  ///   accepted, #6380).
+  /// \return Expression with is_fresh temp variables replaced
+  expr2tc replace_is_fresh_temps(
     const expr2tc &expr,
-    const std::vector<is_fresh_mapping_t> &mappings) const;
+    const std::vector<is_fresh_mapping_t> &mappings,
+    bool require_dynamic) const;
 
   /// \brief Havoc assigns targets (similar to loop invariant approach)
   /// \param assigns_clause Assigns clause expression
@@ -512,20 +812,141 @@ private:
   /// \param location Location information
   void havoc_static_globals(goto_programt &dest, const locationt &location);
 
+  /// \brief Havoc the globals, but only for the entry harness
+  /// The wrapper doubles as the body real callers invoke, and havocking there
+  /// would discard the caller's state. With no caller, the globals still hold
+  /// their static initialisers while a caller could have written anything the
+  /// `requires` admits (#7356).
+  void havoc_globals_for_entry_harness(
+    goto_programt &dest,
+    const locationt &location,
+    bool is_entry_harness);
+
   /// \brief Allocate fresh malloc backing storage for all pointer parameters.
   /// Called in --function entry harness mode so that pointer params point to
   /// real heap objects instead of nil, enabling valid dereference in the body.
+  ///
+  /// The extent of each allocation is a fresh nondet value, so a parameter is
+  /// only dereferenceable as far as the contract itself justifies via
+  /// __ESBMC_is_fresh.  A fixed extent here would assume a buffer size the
+  /// contract does not state and mask out-of-bounds accesses in the body
+  /// (GitHub issue #6212). A C++ `this` is the exception, see
+  /// emit_receiver_backing.
   /// \param wrapper Destination goto program (wrapper body)
   /// \param func Function symbol
   /// \param location Location information
-  /// \param array_params Set of param IDs that need array allocation (ARRAY_ALLOC_ELEMS elements)
   /// \param skip_params Set of param IDs already allocated by __ESBMC_is_fresh
+  /// \param separated_params Those of \p skip_params whose __ESBMC_is_fresh
+  ///        the requires clause asserts unconditionally, and which therefore
+  ///        state separation. Only these are withheld from aliasing.
+  /// \param allocated_ptrs Output: snapshots of the heap allocations made
+  ///        here, taken at allocation time by retain_allocation_for_free
+  ///        rather than the lvalues themselves, which aliasing may reassign.
+  ///        A stack-backed `this` is not appended. Callers use this to
+  ///        emit matching free() calls at wrapper exit so --memory-leak-check
+  ///        does not blame the user's function for wrapper-internal
+  ///        allocations (CWE-401).
+  /// \param param_extents Output: byte extent of each allocation, keyed by
+  ///        parameter symbol, each tagged with whether it may be dereferenced.
   void add_pointer_validity_assumptions(
     goto_programt &wrapper,
     const symbolt &func,
     const locationt &location,
-    const std::set<irep_idt> &array_params = {},
-    const std::set<irep_idt> &skip_params = {});
+    const std::set<irep_idt> &skip_params,
+    const std::set<irep_idt> &separated_params,
+    std::vector<expr2tc> &allocated_ptrs,
+    std::map<irep_idt, param_extentt> &param_extents);
+
+  /// \brief Whether \p func can observe the extent of pointer parameter
+  ///        \p param: dereferences it, or lets it escape into a call.
+  ///
+  /// Gates the unstated-extent warning so it is not raised for a parameter
+  /// nothing reads through (#6511). Conservative: true whenever the body
+  /// cannot be inspected, since a missed warning is worse than a spurious one.
+  bool
+  param_extent_is_observable(const symbolt &func, const irep_idt &param) const;
+
+  /// \brief Lower __ESBMC_is_fresh in a requires clause for a replace site.
+  ///
+  /// \param separation Output: obligations the caller must discharge, one per
+  ///        pair of arguments the contract declares separate.
+  /// \return The requires clause with is_fresh temps rewritten.
+  expr2tc lower_is_fresh_in_requires(
+    const symbolt &function_symbol,
+    const goto_programt &function_body,
+    const std::vector<expr2tc> &actual_args,
+    expr2tc requires_clause,
+    std::vector<expr2tc> &separation);
+
+  /// \brief Mark snapshots whose location an assigns target may also name.
+  ///
+  /// Pointer parameters may alias, so a parameter can be another name for
+  /// memory the clause permits writing, and the frame assertion would report a
+  /// violation that is not one. Matched on the field, so a sibling stays
+  /// protected, and the base is read in the pre-state.
+  void attach_alias_exemptions(
+    std::vector<ptr_deref_snapshot_t> &result,
+    const std::vector<expr2tc> &assigns_targets,
+    const symbolt &original_func,
+    goto_programt &wrapper,
+    const locationt &location,
+    const std::string &func_name);
+
+  /// \brief Snapshot a just-made allocation so the wrapper can free it.
+  ///
+  /// The lvalue that received the allocation is not a reliable handle on it.
+  /// Pointer parameters may alias (see emit_pointer_param_aliasing), so an
+  /// lvalue can be reassigned, or two lvalues can turn out to be one and the
+  /// second allocation overwrite the first. Freeing the lvalue would then free
+  /// one object twice and leak the other. Freeing this snapshot cannot.
+  ///
+  /// \param name Distinguishes this snapshot's symbol within \p func.
+  /// \return The snapshot symbol, to be registered for the matching free.
+  expr2tc retain_allocation_for_free(
+    goto_programt &wrapper,
+    const expr2tc &allocated,
+    const std::string &name,
+    const symbolt &func,
+    const locationt &location);
+
+  /// \brief Let harness-backed pointer parameters alias one another.
+  ///
+  /// Backing each pointer parameter separately would let a callee's proof rest
+  /// on the parameters addressing distinct objects, a hypothesis no contract
+  /// clause states and nothing checks at a replace site. Enforcing a function
+  /// and then replacing a call that passes one object twice would then prove
+  /// properties false in the real program (issue #6551). Parameters covered by
+  /// __ESBMC_is_fresh are excluded by their caller: is_fresh does state
+  /// separation, so it keeps it.
+  ///
+  /// \param params Pointer parameters backed by the harness, each with the
+  ///        pretty name used to build readable flag symbols.
+  void emit_pointer_param_aliasing(
+    goto_programt &wrapper,
+    const symbolt &func,
+    const locationt &location,
+    const std::vector<std::pair<expr2tc, std::string>> &params);
+
+  /// \brief Back a C++ `this` with one stack-allocated object of its class.
+  void emit_receiver_backing(
+    goto_programt &wrapper,
+    const expr2tc &p,
+    const std::string &param_name,
+    const type2tc &pointee,
+    const symbolt &func,
+    const locationt &location);
+
+  /// \brief Emit malloc + non-null ASSUME for one pointer parameter.
+  /// Allocates a nondet number of bytes and assigns the result to \p p. The
+  /// caller registers a snapshot of \p p, not \p p itself, for the matching
+  /// free: see retain_allocation_for_free for why the lvalue will not do.
+  /// \return The byte-extent expression of the allocation.
+  expr2tc emit_pointer_param_malloc(
+    goto_programt &wrapper,
+    const expr2tc &p,
+    const std::string &param_name,
+    const symbolt &func,
+    const locationt &location);
 };
 
 #endif // ESBMC_CONTRACTS_H

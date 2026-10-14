@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwind 129 --timeout 60s --big-endian
+^VERIFICATION FAILED$
+^  FAILED +\[main\.assertion\.\d+\] +line +\d+ +assertion \*e\.key == 2$

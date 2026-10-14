@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: Unsupported operation: numpy.fmod on array operands$

@@ -6,7 +6,7 @@
 #endif
 
 // side_effect_expr_function_callt Specialization
-#include <util/std_code.h>
+#include <util/irep/std_code.h>
 template <>
 struct fmt::formatter<side_effect_expr_function_callt>
 {
@@ -19,7 +19,8 @@ struct fmt::formatter<side_effect_expr_function_callt>
     return it;
   }
 
-  // This will teach fmt how to convert side_effect_expr_function_callt into a str.
+  // This will teach fmt how to convert side_effect_expr_function_callt into a
+  // str.
   template <typename FormatContext>
   auto
   format(const side_effect_expr_function_callt &p, FormatContext &ctx) const

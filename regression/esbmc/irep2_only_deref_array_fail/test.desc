@@ -1,0 +1,5 @@
+CORE
+main.c
+--clang-c-irep2-adjust-only
+^VERIFICATION FAILED$
+^  \*a assigns the second element$

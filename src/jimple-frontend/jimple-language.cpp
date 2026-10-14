@@ -50,17 +50,17 @@ unsigned jimple_languaget::default_flags(presentationt) const
 
 static inline void init_variable(codet &dest, const symbolt &sym)
 {
-  const exprt &value = sym.value;
+  const exprt &value = sym.get_value();
 
   if (value.is_nil())
     return;
 
   assert(!value.type().is_code());
 
-  exprt symbol("symbol", sym.type);
+  exprt symbol("symbol", sym.get_type());
   symbol.identifier(sym.id);
 
-  code_assignt code(symbol, sym.value);
+  code_assignt code(symbol, sym.get_value());
   code.location() = sym.location;
 
   dest.move_to_operands(code);
@@ -78,7 +78,7 @@ static inline void static_lifetime_init(const contextt &context, codet &dest)
 
   // call designated "initialization" functions
   context.foreach_operand_in_order([&dest](const symbolt &s) {
-    if (s.type.initialization() && s.type.is_code())
+    if (s.get_type().initialization() && s.get_type().is_code())
     {
       code_function_callt function_call;
       function_call.function() = symbol_expr(s);
@@ -87,14 +87,16 @@ static inline void static_lifetime_init(const contextt &context, codet &dest)
   });
 }
 
-static void
-add_global_static_variable(contextt &ctx, const typet t, std::string name)
+static void add_global_static_variable(
+  contextt &ctx,
+  const type2tc &t,
+  const std::string &name)
 {
   // TODO: Maybe they should be part of Jimple context?
   std::string id = "c:@" + name;
   symbolt symbol;
   symbol.mode = "C";
-  symbol.type = std::move(t);
+  symbol.set_type(t);
   symbol.name = name;
   symbol.id = id;
 
@@ -102,23 +104,23 @@ add_global_static_variable(contextt &ctx, const typet t, std::string name)
   symbol.static_lifetime = true;
   symbol.is_extern = false;
   symbol.file_local = false;
-  symbol.value = gen_zero(t, true);
-  symbol.value.zero_initializer(true);
+  // Drops the legacy `#zero_initializer` marker, which no IREP2 node models and
+  // only Solidity's converter reads (#4715).
+  symbol.set_value(gen_zero(t, true));
 
-  symbolt &added_symbol = *ctx.move_symbol_to_context(symbol);
-  code_declt decl(symbol_expr(added_symbol));
+  ctx.move_symbol_to_context(symbol);
 }
 
 void jimple_languaget::add_intrinsics(contextt &context)
 {
-  auto type1 = array_typet(bool_type(), exprt("infinity"));
+  const type2tc type1 = array_type2tc(get_bool_type(), expr2tc(), true);
   add_global_static_variable(context, type1, "__ESBMC_alloc");
   add_global_static_variable(context, type1, "__ESBMC_is_dynamic");
 
-  auto type2 = array_typet(size_type(), exprt("infinity"));
+  const type2tc type2 = array_type2tc(size_type2(), expr2tc(), true);
   add_global_static_variable(context, type2, "__ESBMC_alloc_size");
 
-  add_global_static_variable(context, int_type(), "__ESBMC_rounding_mode");
+  add_global_static_variable(context, int_type2(), "__ESBMC_rounding_mode");
 }
 
 void jimple_languaget::setup_main(contextt &context)
@@ -131,17 +133,13 @@ void jimple_languaget::setup_main(contextt &context)
   // find main symbol
   std::list<irep_idt> matches;
 
-  forall_symbol_base_map (it, context.symbol_base_map, main)
-  {
+  context.foreach_named_symbol_with_base(main, [&](irep_idt id) {
     // look it up
-    symbolt *s = context.find_symbol(it->second);
-
-    if (s == nullptr)
-      continue;
-
-    if (s->type.is_code())
-      matches.push_back(it->second);
-  }
+    symbolt *s = context.find_symbol(id);
+    if (s != nullptr && s->get_type().is_code())
+      matches.push_back(id);
+    return true; // collect all; ambiguity is reported after the scan
+  });
   if (matches.empty())
     abort();
 
@@ -158,7 +156,7 @@ void jimple_languaget::setup_main(contextt &context)
 
   const symbolt &symbol = *s;
   // check if it has a body
-  if (symbol.value.is_nil())
+  if (symbol.get_value().is_nil())
   {
     log_error("Empty body for main");
     abort();
@@ -175,7 +173,7 @@ void jimple_languaget::setup_main(contextt &context)
   call.function() = symbol_expr(symbol);
 
   const code_typet::argumentst &arguments =
-    to_code_type(symbol.type).arguments();
+    to_code_type(symbol.get_type()).arguments();
 
   call.arguments().resize(
     arguments.size(), static_cast<const exprt &>(get_nil_irep()));
@@ -186,13 +184,16 @@ void jimple_languaget::setup_main(contextt &context)
   // add "main"
   symbolt new_symbol;
 
-  code_typet main_type;
-  main_type.return_type() = empty_typet();
-
   new_symbol.id = "__ESBMC_main";
   new_symbol.name = "__ESBMC_main";
-  new_symbol.type.swap(main_type);
-  new_symbol.value.swap(init_code);
+  new_symbol.set_type(code_type2tc(
+    std::vector<type2tc>{},
+    get_empty_type(),
+    std::vector<irep_idt>{},
+    /*ellipsis=*/false));
+  expr2tc init_code2;
+  migrate_expr(init_code, init_code2);
+  new_symbol.set_value(init_code2);
 
   if (context.move(new_symbol))
   {

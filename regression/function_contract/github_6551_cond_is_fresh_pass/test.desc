@@ -1,0 +1,4 @@
+CORE
+main.c
+--replace-call-with-contract g --unwind 8
+^VERIFICATION SUCCESSFUL$

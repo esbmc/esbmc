@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc --function is_slashable_validator
+^VERIFICATION SUCCESSFUL$

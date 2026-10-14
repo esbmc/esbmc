@@ -1,0 +1,5 @@
+CORE
+main.py
+--incremental-bmc
+Unsupported function 'append' is reached
+^VERIFICATION FAILED$

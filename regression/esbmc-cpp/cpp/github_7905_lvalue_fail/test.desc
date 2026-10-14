@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--little-endian
+^VERIFICATION FAILED$
+^.*assertion h\[1\] != 2$

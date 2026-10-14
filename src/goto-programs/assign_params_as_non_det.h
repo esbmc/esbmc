@@ -1,9 +1,9 @@
 #pragma once
 
-#include <util/algorithms.h>
-#include <util/expr_util.h>
+#include <goto-programs/goto_functions_algorithm.h>
+#include <util/expr/expr_util.h>
 #include <irep2/irep2.h>
-#include <util/message.h>
+#include <util/message/message.h>
 
 /**
  * @brief To make the counterexample trace complete in "--function" mode
@@ -20,7 +20,7 @@ public:
 protected:
   contextt &context;
   virtual bool
-  runOnFunction(std::pair<const dstring, goto_functiont> &F) override;
+  runOnFunction(std::pair<const irep_idt, goto_functiont> &F) override;
   symbolt *get_default_symbol(
     typet type,
     std::string name,

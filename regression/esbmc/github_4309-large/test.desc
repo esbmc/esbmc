@@ -4,3 +4,4 @@ main.c
 ^VERIFICATION FAILED$
 \[Counterexamples - 2 witnesses\]
 --max-witnesses cap reached
+^  (│|\|)    \.\.\. [0-9]+ earlier states omitted \(--full-traces to show them\) \.\.\.$

@@ -1,11 +1,11 @@
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <sstream>
-#include <util/base_type.h>
-#include <util/expr_util.h>
-#include <util/message.h>
+#include <util/expr/base_type.h>
+#include <util/expr/expr_util.h>
+#include <util/message/message.h>
 #include <util/message/format.h>
 
-smt_astt smt_convt::convert_typecast_to_bool(const typecast2t &cast)
+smt_astt smt_solver_baset::convert_typecast_to_bool(const typecast2t &cast)
 {
   if (is_pointer_type(cast.from))
   {
@@ -19,7 +19,8 @@ smt_astt smt_convt::convert_typecast_to_bool(const typecast2t &cast)
   return convert_ast(neq);
 }
 
-smt_astt smt_convt::convert_typecast_to_fixedbv_nonint(const expr2tc &expr)
+smt_astt
+smt_solver_baset::convert_typecast_to_fixedbv_nonint(const expr2tc &expr)
 {
   const typecast2t &cast = to_typecast2t(expr);
 
@@ -40,8 +41,8 @@ smt_astt smt_convt::convert_typecast_to_fixedbv_nonint(const expr2tc &expr)
   abort();
 }
 
-smt_astt
-smt_convt::convert_typecast_to_fixedbv_nonint_from_bv(const expr2tc &expr)
+smt_astt smt_solver_baset::convert_typecast_to_fixedbv_nonint_from_bv(
+  const expr2tc &expr)
 {
   const typecast2t &cast = to_typecast2t(expr);
   const fixedbv_type2t &fbvt = to_fixedbv_type(cast.type);
@@ -77,8 +78,8 @@ smt_convt::convert_typecast_to_fixedbv_nonint_from_bv(const expr2tc &expr)
   return mk_concat(frontpart, zero_fracbits);
 }
 
-smt_astt
-smt_convt::convert_typecast_to_fixedbv_nonint_from_bool(const expr2tc &expr)
+smt_astt smt_solver_baset::convert_typecast_to_fixedbv_nonint_from_bool(
+  const expr2tc &expr)
 {
   const typecast2t &cast = to_typecast2t(expr);
   const fixedbv_type2t &fbvt = to_fixedbv_type(cast.type);
@@ -89,12 +90,14 @@ smt_convt::convert_typecast_to_fixedbv_nonint_from_bool(const expr2tc &expr)
 
   smt_astt zero = mk_smt_bv(BigInt(0), to_integer_bits);
   smt_astt one = mk_smt_bv(BigInt(1), to_integer_bits);
-  smt_astt switched = mk_ite(a, zero, one);
-  return mk_concat(switched, zero);
+  smt_astt switched = mk_ite(a, one, zero);
+
+  smt_astt zero_fracbits = mk_smt_bv(BigInt(0), fbvt.width - to_integer_bits);
+  return mk_concat(switched, zero_fracbits);
 }
 
-smt_astt
-smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(const expr2tc &expr)
+smt_astt smt_solver_baset::convert_typecast_to_fixedbv_nonint_from_fixedbv(
+  const expr2tc &expr)
 {
   const typecast2t &cast = to_typecast2t(expr);
   assert(is_fixedbv_type(cast.from));
@@ -152,7 +155,7 @@ smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(const expr2tc &expr)
   return mk_concat(magnitude, fraction);
 }
 
-smt_astt smt_convt::convert_typecast_to_fpbv(const typecast2t &cast)
+smt_astt smt_solver_baset::convert_typecast_to_fpbv(const typecast2t &cast)
 {
   // Convert each type
   if (is_bool_type(cast.from))
@@ -187,7 +190,7 @@ smt_astt smt_convt::convert_typecast_to_fpbv(const typecast2t &cast)
   abort();
 }
 
-smt_astt smt_convt::convert_typecast_from_fpbv(const typecast2t &cast)
+smt_astt smt_solver_baset::convert_typecast_from_fpbv(const typecast2t &cast)
 {
   if (is_unsignedbv_type(cast.type))
     return fp_api->mk_smt_typecast_from_fpbv_to_ubv(
@@ -207,7 +210,7 @@ smt_astt smt_convt::convert_typecast_from_fpbv(const typecast2t &cast)
   abort();
 }
 
-smt_astt smt_convt::convert_typecast_to_ints(const typecast2t &cast)
+smt_astt smt_solver_baset::convert_typecast_to_ints(const typecast2t &cast)
 {
   if (int_encoding)
     return convert_typecast_to_ints_intmode(cast);
@@ -228,7 +231,8 @@ smt_astt smt_convt::convert_typecast_to_ints(const typecast2t &cast)
   abort();
 }
 
-smt_astt smt_convt::convert_typecast_to_ints_intmode(const typecast2t &cast)
+smt_astt
+smt_solver_baset::convert_typecast_to_ints_intmode(const typecast2t &cast)
 {
   assert(int_encoding);
   // Integer-mode conversion of integers. Immediately, we don't care about
@@ -279,7 +283,7 @@ smt_astt smt_convt::convert_typecast_to_ints_intmode(const typecast2t &cast)
 }
 
 smt_astt
-smt_convt::convert_typecast_to_ints_from_fbv_sint(const typecast2t &cast)
+smt_solver_baset::convert_typecast_to_ints_from_fbv_sint(const typecast2t &cast)
 {
   assert(!int_encoding);
   unsigned to_width = cast.type->get_width();
@@ -287,11 +291,24 @@ smt_convt::convert_typecast_to_ints_from_fbv_sint(const typecast2t &cast)
 
   unsigned from_width = cast.from->type->get_width();
 
+  if (is_fixedbv_type(cast.from) && is_bv_type(cast.type))
+  {
+    /* Round in the source width first. A fixedbv's low bits hold its fraction,
+     * so resizing the raw bit pattern would yield the fraction rather than the
+     * integer value (esbmc/esbmc#562). */
+    smt_astt rounded = round_fixedbv_to_int(a, from_width, from_width);
+
+    if (from_width == to_width)
+      return rounded;
+
+    if (from_width < to_width)
+      return mk_sign_ext(rounded, to_width - from_width);
+
+    return mk_extract(rounded, to_width - 1, 0);
+  }
+
   if (from_width == to_width)
   {
-    if (is_fixedbv_type(cast.from) && is_bv_type(cast.type))
-      return round_fixedbv_to_int(a, from_width, to_width);
-
     if (
       (is_signedbv_type(cast.type) && is_unsignedbv_type(cast.from)) ||
       (is_unsignedbv_type(cast.type) && is_signedbv_type(cast.from)))
@@ -308,7 +325,7 @@ smt_convt::convert_typecast_to_ints_from_fbv_sint(const typecast2t &cast)
 }
 
 smt_astt
-smt_convt::convert_typecast_to_ints_from_unsigned(const typecast2t &cast)
+smt_solver_baset::convert_typecast_to_ints_from_unsigned(const typecast2t &cast)
 {
   assert(!int_encoding);
   unsigned to_width = cast.type->get_width();
@@ -318,7 +335,7 @@ smt_convt::convert_typecast_to_ints_from_unsigned(const typecast2t &cast)
   unsigned from_width = cast.from->type->get_width();
 
   if (from_width == to_width)
-    return a; // output = output
+    return a;
 
   if (from_width < to_width)
     return mk_zero_ext(a, (to_width - from_width));
@@ -327,7 +344,8 @@ smt_convt::convert_typecast_to_ints_from_unsigned(const typecast2t &cast)
   return mk_extract(a, to_width - 1, 0);
 }
 
-smt_astt smt_convt::convert_typecast_to_ints_from_bool(const typecast2t &cast)
+smt_astt
+smt_solver_baset::convert_typecast_to_ints_from_bool(const typecast2t &cast)
 {
   assert(!int_encoding);
   smt_astt a = convert_ast(cast.from);
@@ -395,7 +413,7 @@ capability_from_components(const expr2tc &pesbt, const expr2tc &cursor)
     "cap");
 }
 
-smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
+smt_astt smt_solver_baset::convert_typecast_to_ptr(const typecast2t &cast)
 {
   // First, sanity check -- typecast from one kind of pointer to another kind
   // is a simple operation. Check for that first.
@@ -418,7 +436,7 @@ smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
   std::vector<smt_astt> obj_ids(addr_space_data.back().size());
   std::vector<smt_astt> obj_starts(addr_space_data.back().size());
 
-  std::map<unsigned, unsigned>::const_iterator it;
+  std::map<unsigned, bool>::const_iterator it;
   unsigned int i;
   for (it = addr_space_data.back().begin(), i = 0;
        it != addr_space_data.back().end();
@@ -449,7 +467,7 @@ smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
   // Technically C doesn't allow for any variable to hold an invalid pointer,
   // except through initialization.
 
-  std::string newname = mk_fresh_name("smt_convt::int_to_ptr");
+  std::string newname = mk_fresh_name("smt_solver_baset::int_to_ptr");
   expr2tc output_sym = symbol2tc(cast.type, newname);
   smt_astt output = convert_ast(output_sym);
   smt_astt output_obj = output->project(this, 0);
@@ -538,7 +556,7 @@ smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
   return output;
 }
 
-smt_astt smt_convt::convert_typecast_from_ptr(const typecast2t &cast)
+smt_astt smt_solver_baset::convert_typecast_from_ptr(const typecast2t &cast)
 {
   type2tc addr_type = ptraddr_type2();
   type2tc diff_type = get_int_type(config.ansi_c.address_width);
@@ -563,6 +581,18 @@ smt_astt smt_convt::convert_typecast_from_ptr(const typecast2t &cast)
   expr2tc address = add2tc(addr_type, from_start, ptr_offs);
   expr2tc pointer = address;
 
+  /* Object 0 is NULL and occupies the single address 0; finalize_pointer_chain
+   * makes every other live object disjoint from it, so only NULL has address
+   * zero. Those constraints exist only for objects symex registered, so a
+   * pointer whose object id is a free variable -- one returned by an
+   * unmodelled function, say -- escaped the invariant and the solver could
+   * place it at address 0. A `p != NULL` assumption was then lost the moment
+   * the pointer went through its numeric address, which is what any store into
+   * an untyped byte object does (#7008). */
+  assert_expr(implies2tc(
+    notequal2tc(obj_num, gen_zero(obj_num->type)),
+    notequal2tc(address, gen_zero(address->type))));
+
   if (config.ansi_c.cheri && can_carry_provenance(cast.type))
   {
     /* encode capability information */
@@ -579,7 +609,7 @@ smt_astt smt_convt::convert_typecast_from_ptr(const typecast2t &cast)
   return convert_ast(typecast2tc(cast.type, address));
 }
 
-smt_astt smt_convt::convert_typecast_to_struct(const typecast2t &cast)
+smt_astt smt_solver_baset::convert_typecast_to_struct(const typecast2t &cast)
 {
   const struct_type2t &struct_type_from = to_struct_type(cast.from->type);
   const struct_type2t &struct_type_to = to_struct_type(cast.type);
@@ -674,13 +704,14 @@ smt_astt smt_convt::convert_typecast_to_struct(const typecast2t &cast)
   return fresh;
 }
 
-smt_astt smt_convt::convert_typecast(const expr2tc &expr)
+smt_astt smt_solver_baset::convert_typecast(const expr2tc &expr)
 {
   const typecast2t &cast = to_typecast2t(expr);
 
-  // Under integer encoding (--ir/--ir-ieee), fp values are represented as reals.
-  // The following three cases handle fp<->int casts explicitly because the
-  // generic bitvector-based path is incorrect when operands are real-encoded.
+  // Under integer encoding (--ir/--ir-ieee), fp values are represented as
+  // reals. The following three cases handle fp<->int casts explicitly because
+  // the generic bitvector-based path is incorrect when operands are
+  // real-encoded.
 
   // fp -> fp: reals are exact, no conversion needed
   if (
@@ -707,13 +738,22 @@ smt_astt smt_convt::convert_typecast(const expr2tc &expr)
     }
   }
 
-  // int -> fp: lift integer to real
+  // int -> fp: lift integer to float under integer encoding.
+  // Under --ir-ieee, plain integer (bv) sources apply IEEE 754 RNE
+  // quantization so that values above the target significand boundary are
+  // correctly rounded.  Plain --ir and fixedbv sources retain the previous
+  // exact-lift behaviour.
   if (
     int_encoding &&
     (is_bv_type(cast.from->type) || is_fixedbv_type(cast.from->type)) &&
     is_floatbv_type(cast.type))
   {
     smt_astt from_int = convert_ast(cast.from);
+    if (ir_ieee && is_bv_type(cast.from->type))
+    {
+      const floatbv_type2t &fbv_type = to_floatbv_type(cast.type);
+      return round_int_to_fp(from_int, fbv_type, cast.from->type->get_width());
+    }
     return mk_int2real(from_int);
   }
 
@@ -766,6 +806,18 @@ smt_astt smt_convt::convert_typecast(const expr2tc &expr)
     log_error("Can't typecast between unions\n{}", *expr);
     abort();
   }
+
+  // A cast between two array types of the same element type is a resize: the
+  // SMT array sort carries no length, so the source converts unchanged. Reached
+  // when a dynamic array's size is symbolic, e.g. a with2t over
+  // symex_dynamic::dynamic_N_array whose array_size is a member + 1 (#7544).
+  if (
+    is_array_type(cast.type) && is_array_type(cast.from->type) &&
+    base_type_eq(
+      to_array_type(cast.type).subtype,
+      to_array_type(cast.from->type).subtype,
+      ns))
+    return convert_ast(cast.from);
 
   log_error("Typecast for unexpected type\n{}", *expr);
   abort();

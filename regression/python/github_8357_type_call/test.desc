@@ -1,0 +1,4 @@
+CORE
+main.py
+
+ERROR: Cannot resolve attribute 'b' on Call result

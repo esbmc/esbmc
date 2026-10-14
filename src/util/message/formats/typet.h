@@ -6,7 +6,7 @@
 #endif
 
 // typet Specialization
-#include <util/type.h>
+#include <util/irep/type.h>
 template <>
 struct fmt::formatter<typet>
 {

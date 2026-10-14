@@ -1,0 +1,7 @@
+CORE
+main.py
+--multi-property
+^VERIFICATION FAILED$
+^  FAILED       \[global\.assertion\.[0-9]+\] +line +0 +uncaught exception: ValueError$
+^  PASSED       \[check\.assertion\.[0-9]+\] +line +8 +uncaught exception: ValueError$
+^  PASSED       \[check\.assertion\.[0-9]+\] +line +10 +uncaught exception: ValueError$

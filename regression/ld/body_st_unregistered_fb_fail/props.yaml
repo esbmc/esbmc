@@ -1,0 +1,5 @@
+properties:
+  - id: P1
+    kind: invariant
+    expression: "Safe"
+    description: "Safe is driven by the function block's output pin"

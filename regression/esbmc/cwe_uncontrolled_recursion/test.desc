@@ -1,0 +1,6 @@
+CORE
+main.c
+--unwind 8
+^VERIFICATION FAILED$
+^  uncontrolled recursion in f$
+^  CWE: CWE-674$

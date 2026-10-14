@@ -1,0 +1,4 @@
+CORE
+forwardref.goto
+--binary
+^ERROR: goto binary: irep 7 referenced before it is defined$

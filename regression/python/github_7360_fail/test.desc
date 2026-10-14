@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 8
+^VERIFICATION FAILED$
+^\s*FAILED.*line\s+6\s+assertion return_value\$___ESBMC_list_size\$\d+ == \(unsigned long int\)2$

@@ -8,16 +8,31 @@ fi
 
 echo "Generating diff between runs"
 
-shopt -s failglob
+shopt -s nullglob
 
 old=$1
 new=$2
 out=diff-$1-$2
 
-res=()
-mkdir -p $out &&
-    for c in no-overflow termination unreach-call valid-memcleanup valid-memsafety; do
-	table-generator -f html -d -o $out/$c {$old,$new}/esbmc.*.results.SV-COMP26_$c.xml.bz2
-    done
+mkdir -p "$out"
+
+# Collect unique result identifiers (runset.task) from both directories,
+# regardless of tool name or date prefix.
+declare -A seen
+for f in "$old"/*.results.*.xml.bz2 "$new"/*.results.*.xml.bz2; do
+    base=$(basename "$f")
+    id="${base#*.results.}"   # strip <tool>.<date>.results.
+    id="${id%.xml.bz2}"       # strip .xml.bz2
+    seen["$id"]=1
+done
+
+if [ ${#seen[@]} -eq 0 ]; then
+    echo "No result files found in $old or $new"
+    exit 1
+fi
+
+for id in "${!seen[@]}"; do
+    files=( "$old"/*.results."$id".xml.bz2 "$new"/*.results."$id".xml.bz2 )
+    [ ${#files[@]} -gt 0 ] && table-generator -f html -d -o "$out/$id" "${files[@]}"
+done
 echo
-printf "%s\n" "${res[@]}"

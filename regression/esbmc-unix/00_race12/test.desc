@@ -1,4 +1,0 @@
-THOROUGH
-main.c
---data-races-check -Wno-error=implicit-function-declaration
-^VERIFICATION SUCCESSFUL$

@@ -1,0 +1,5 @@
+CORE
+main.py
+--incremental-bmc --python-ignore-assertions
+^VERIFICATION FAILED$
+^.*TypeError: unsupported operand type\(s\) for /

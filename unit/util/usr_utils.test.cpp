@@ -9,7 +9,7 @@ Notes:
 
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
-#include <util/usr_utils.h>
+#include <util/base/usr_utils.h>
 #include <string>
 
 TEST_CASE(
@@ -78,7 +78,8 @@ TEST_CASE(
   REQUIRE(user_name_to_usr("c:@F@func") == "c:@F@func#");
   REQUIRE(user_name_to_usr("c:@N@ns@F@func") == "c:@N@ns@F@func#");
 
-  // File-scoped USRs (c:file@...) - critical for --show-loops -> --unwindsetname workflow
+  // File-scoped USRs (c:file@...) - critical for --show-loops ->
+  // --unwindsetname workflow
   REQUIRE(user_name_to_usr("c:file.c@F@func#") == "c:file.c@F@func#");
   REQUIRE(
     user_name_to_usr("c:test.cpp@N@ns@F@func#") == "c:test.cpp@N@ns@F@func#");

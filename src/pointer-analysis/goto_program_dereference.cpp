@@ -1,9 +1,9 @@
 #include <pointer-analysis/goto_program_dereference.h>
-#include <util/base_type.h>
+#include <util/expr/base_type.h>
 #include <irep2/irep2.h>
-#include <util/migrate.h>
-#include <util/prefix.h>
-#include <util/std_code.h>
+#include <util/irep/migrate.h>
+#include <util/base/prefix.h>
+#include <util/irep/std_code.h>
 
 bool goto_program_dereferencet::has_failed_symbol(
   const expr2tc &expr,
@@ -11,8 +11,9 @@ bool goto_program_dereferencet::has_failed_symbol(
 {
   if (is_symbol2t(expr))
   {
-    if (has_prefix(
-          to_symbol2t(expr).thename.as_string(), "symex::invalid_object"))
+    if (
+      has_prefix(
+        to_symbol2t(expr).thename.as_string(), "symex::invalid_object"))
       return false;
 
     // Null and invalid name lookups will fail.
@@ -21,9 +22,9 @@ bool goto_program_dereferencet::has_failed_symbol(
       to_symbol2t(expr).thename == "INVALID")
       return false;
 
-    const symbolt &ptr_symbol = *ns.lookup(migrate_expr_back(expr));
+    const symbolt &ptr_symbol = *ns.lookup(to_symbol2t(expr).thename);
 
-    const irep_idt &failed_symbol = ptr_symbol.type.failed_symbol();
+    const irep_idt &failed_symbol = ptr_symbol.get_type().failed_symbol();
 
     if (failed_symbol == "")
       return false;
@@ -41,7 +42,7 @@ bool goto_program_dereferencet::has_failed_symbol(
 void goto_program_dereferencet::dereference_failure(
   const std::string &property,
   const std::string &msg,
-  const guardt &guard)
+  const guard2tc &guard)
 {
   expr2tc guard_expr = guard.as_expr();
 
@@ -67,7 +68,7 @@ void goto_program_dereferencet::dereference_failure(
   }
 }
 
-void goto_program_dereferencet::dereference_assume(const guardt &guard)
+void goto_program_dereferencet::dereference_assume(const guard2tc &guard)
 {
   expr2tc guard_expr = guard.as_expr();
 
@@ -103,7 +104,7 @@ void goto_program_dereferencet::dereference_expr(
   const bool checks_only,
   const dereferencet::modet mode)
 {
-  guardt guard;
+  guard2tc guard;
 
   if (checks_only)
   {
@@ -135,7 +136,7 @@ void goto_program_dereferencet::dereference_program(
     {
       goto_program.insert_swap(it, new_code.instructions.front());
       new_code.instructions.pop_front();
-      it++;
+      ++it;
     }
   }
 }
@@ -180,7 +181,7 @@ void goto_program_dereferencet::dereference_instruction(
       // via pointer analysis, instead just assert that it's a valid pointer.
       const dereference2t &deref = to_dereference2t(func_call.function);
       expr2tc invalid_ptr = invalid_pointer2tc(deref.value);
-      guardt guard;
+      guard2tc guard;
       guard.add(invalid_ptr);
       if (!options.get_bool_option("no-pointer-check"))
       {
@@ -219,7 +220,7 @@ void goto_program_dereferencet::dereference_instruction(
       code_free2t &free = to_code_free2t(i.code);
       expr2tc operand = free.operand;
 
-      guardt guard;
+      guard2tc guard;
       // Result discarded
       dereference.dereference(
         operand, operand->type, guard, dereferencet::FREE, expr2tc());

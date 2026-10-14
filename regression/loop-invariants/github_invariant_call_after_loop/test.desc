@@ -1,0 +1,4 @@
+CORE
+main.c
+--loop-invariant-check --unwind 4
+^VERIFICATION FAILED$

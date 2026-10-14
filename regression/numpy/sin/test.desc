@@ -1,4 +1,4 @@
 CORE
 main.py
---multi-property
+--multi-property --fp2bv
 ^VERIFICATION SUCCESSFUL$

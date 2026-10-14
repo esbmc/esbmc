@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwind 3
+^VERIFICATION FAILED$
+^\s+assertion p\[1\]\[0\] == 3$

@@ -1,0 +1,5 @@
+CORE
+main.py
+--enforce-contract double
+^  contract ensures$
+^VERIFICATION FAILED$

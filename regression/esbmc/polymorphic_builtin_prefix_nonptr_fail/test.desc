@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^\s*FAILED\s+\[main\.assertion\.1\]\s+line 11\s+assertion r == 42$
+^VERIFICATION FAILED$

@@ -12,7 +12,7 @@
 
 #include <clang-c-frontend/clang_c_language.h>
 #include <clang-cpp-frontend/clang_cpp_language.h>
-#include <util/language.h>
+#include <util/lang/language.h>
 #include <fstream>
 #include <sstream>
 #include <nlohmann/json.hpp>
@@ -55,7 +55,8 @@ public:
   // contract name for verification, allow multiple inputs.
   std::string contract_names;
 
-  // function name for verification that requires this information before GOTO conversion phase.
+  // function name for verification that requires this information before GOTO
+  // conversion phase.
   std::string func_name;
 
   // focus function name: like func_name, but the full contract harness

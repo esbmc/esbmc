@@ -6,9 +6,8 @@
 /// before arithmetic, comparison, and assignment operations.
 
 #include <solidity-frontend/typecast.h>
-#include <util/c_typecast.h>
-#include <util/c_types.h>
-#include <util/simplify_expr_class.h>
+#include <util/lang/c_typecast.h>
+#include <util/lang/c_types.h>
 #include <stdexcept>
 #include <sstream>
 

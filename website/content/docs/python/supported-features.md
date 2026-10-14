@@ -7,10 +7,12 @@ This page is a reference of all Python language constructs, data structures, and
 
 ## Basic Constructs
 
-- **Control flow**: `if`/`elif`/`else`, `for` (with `range()`), `while`
+- **Control flow**: `if`/`elif`/`else`, `for` (with `range()`), `while`, `for ... else` and `while ... else` (the `else` clause runs when the loop completes without `break`; both are lowered via a did-not-break flag)
 - **Arithmetic**: `+`, `-`, `*`, `/`, `//`, `%`, `**`
 - **Logical operations**: `and`, `or`, `not`
 - **Identity comparisons**: `is`, `is not` (including `x is None`, `x is not None`)
+- **Tuple-unpacking assignment**: `a, b = b, a` and cross-binding forms like `a, b = b, a % b` evaluate the entire right-hand side before binding any target (Python's parallel-assignment semantics), so swaps and idioms such as the Euclidean-GCD loop `while b: a, b = b, a % b` are lowered correctly. The simple non-cross-binding shape (`x, y = 1, 2`) uses direct assignment. Unpacking targets may be subscripts or attributes (`a[i], b.x = ...`), and may be **nested** (`(a, b), c = ((1, 2), 3)`, including over a runtime right-hand side such as a for-loop element or function return: `for (u, v), w in items:`).
+- **Walrus operator** (PEP 572 `:=`): assignment expressions in the contexts where the target is evaluated exactly once — an `if`/`elif` condition (`if (n := len(data)) > 2:`), a standalone assignment expression (`x = (y := 5)`), and a comprehension filter (`[d for v in data if (d := v * 2) > 4]`). The expression evaluates to the bound value. Use inside `and`/`or` operands and `while`-loop conditions is refused with a clear diagnostic (see [Limitations](/docs/python/limitations#walrus-operator)).
 - **None handling**: Proper type distinction from `int`, `bool`, `str`, etc.; correctly falsy in boolean contexts (`None and True` → `None`, `None or 1` → `1`)
 - **Global variables**: The `global` keyword for accessing and modifying global scope from within functions
 - **Context managers**: `with` and `async with` statements via preprocessor desugaring into explicit `__enter__`/`__exit__` calls:
@@ -18,25 +20,46 @@ This page is a reference of all Python language constructs, data structures, and
   - `with EXPR: BODY` — context manager used without variable binding
   - `with A as a, B as b: BODY` — multiple context managers in one statement; expanded left-to-right, `__exit__` called in reverse order
   - `async with` is handled identically to `with`
+  - Exception suppression: when the body raises, `__exit__(type, value, traceback)` is called and the exception is re-raised iff the return value is falsy, matching CPython semantics. This covers static `return True`, conditional returns (`return self.flag`, `return et is ValueError`), implicit-`None` bodies (propagate by default), and single-level base-class inheritance of `__exit__`.
 
 ## Functions and Methods
 
 - **Function definitions**: Parameters, return values, and calls
 - **Variadic parameters**: `*args` syntax for variable-length positional argument lists
-- **Type annotations**: Basic types (`int`, `float`, `bool`, `str`), `Any`, `Union[T1, T2]`, PEP 604 `T1 | T2` syntax
+- **Type annotations**: Basic types (`int`, `float`, `bool`, `str`), `Any`, `Union[T1, T2]`, PEP 604 `T1 | T2` syntax (including `T | None` on class attributes), subscripted forms (`list[int]`), **string forward references** (`node: 'Foo'`) and **dotted** annotations (`node: pkg.mod.Robot`, resolved on the last component). An annotation that cannot be resolved degrades to a clean error rather than a crash
 - **Union types**: Both `Union[int, bool]` and `int | bool` syntax are supported, including chained unions with multiple members
 - **Type widening**: ESBMC selects the widest type from Union members using the hierarchy `float > int > bool`
 - **Any type**: When a function is annotated `-> Any`, ESBMC infers the actual return type by analyzing return statements in the function body; supports `int`, `float`, `bool`, and expressions evaluating to those types
 - **Variable inference**: Variables annotated with `Any` that are assigned from function calls inherit the function's inferred return type
-- **Lambda expressions**: Single-expression lambdas with multiple parameters; converted to regular functions and stored as function pointers; can be assigned to variables and called indirectly
+- **`Optional[T]` equality**: Equality (`==`, `!=`, `is`, `is not`) between an `Optional[T]` value and a matching primitive succeeds after an `is not None` round-trip — the primitive side is implicitly cast to the pointer-backed representation. Ordered comparisons (`<`, `>`, `<=`, `>=`) on `Optional[T]` are deliberately disabled (they would compare addresses, not values).
+- **`Optional[T]` return type**: A function annotated `-> Optional[T]` (the `typing.Optional` subscript form) can return `None` as a distinct value, so a body that returns `None` on some path verifies correctly. `None` comparisons (`is`, `is not`, `==`, `!=`) applied directly to such a call — `f() is None`, `f() == None` — are evaluated against the function's return type rather than collapsed to a constant. For `int`, `float` and `bool`, `Optional[T]` uses the same `Optional<T>` struct as the PEP 604 `T | None` annotation — in variables, returns, parameters, fields and dict values — so a stored `0` is distinguished from `None`, and a `None` returned from a function declared `-> int` is reported. Over `str`, `List` and `Set`, `None` is a NULL pointer, including for an unannotated caller of an `Optional[T]` function and for `T if c else None`.
+- **Parameter type recovery**: A bare `list` annotation, or no annotation at all, does not stop the parameter being typed. A body that uses the parameter as a list (`len(x)`, `x[i]`, a list mutator, or an unpack such as `first, *rest = arr`) refines it to the list model — in an imported module as well as the entry file — and the *element* type is recovered from the statically resolvable call sites when they agree on one, so `x[i] + 1` behaves as it does under a `list[T]` annotation instead of reading as `Any`
+- **Default arguments**: A parameter whose default is a `list`, `dict` or `set` literal receives that container when the argument is omitted, rather than `None`. Defaults are also filled in for a call into an imported module and for an imported class's constructor
+- **Callables in containers**: A function name stored in a list decays to a function pointer, so a callable read back out of the list can be invoked
+- **Closures**: a nested `def` may read a scalar of the enclosing function and write through a captured list (`c[0] += 1`), provided nothing rebinds the captured name after the `def`; a nested `c = [9]` binds its own local rather than the enclosing list
+- **`Callable[[A], R]` annotations** on a return type or a variable carry the spelled signature, so a call through the value returns `R` rather than a nondeterministic value; a bare `Callable` takes its signature from the assigned function
+- **Dunder spellings of operators**: `d.__getitem__(k)`, `xs.__len__()` and `d.__contains__(k)` are rewritten to `d[k]`, `len(xs)` and `k in d`, and dispatch to a user class's own dunder as the operators do
+- **Lambda expressions**: Single-expression lambdas with multiple parameters; converted to regular functions and stored as function pointers; can be assigned to variables and called indirectly. A parameter's type is taken from the calls made through the bound name when they all agree, so a lambda whose body subscripts its parameter (`f = lambda p: p[0]`) is typed as the list it is called with instead of defaulting to `float` and reporting `'float' object is not subscriptable`
 
 ## Object-Oriented Programming
 
 - **Classes**: Definitions, methods, and attributes
 - **Class attributes**: Class-level variables shared across all instances; supports both explicit type annotations and automatic type inference from assigned values; accessible via both `instance.attr` and `ClassName.attr`
+- **PEP 604 attribute annotations**: `self.x: T | None` (and other `T1 | T2` `BinOp` annotations) are recognised and mapped to the same pointer-to-`T` encoding used for `Optional[T]`
+- **`Callable[...]` attributes**: a member annotated `Callable[[A], R]` is typed as a function pointer, so the class both constructs and dispatches — `self.fn = fn` in `__init__` followed by `self.fn(v)` calls the stored function. The unannotated spelling works too: an assignment from a parameter takes that parameter's spelled signature, so a bare `self.fn = fn` behaves as the annotated form rather than degrading to a signature-less pointer and reporting a spurious `AttributeError` at the call
 - **Instance variables**: Attributes defined in `__init__`
+- **Object reference semantics**: When an instance attribute is assigned an aliased class-instance reference (e.g. `self.head = head` from a constructor parameter), the field is stored as a reference, so mutating the object through one binding is visible through the attribute (and vice versa). This makes linked-list, queue, and tree patterns that reassign such attributes through chained references (`curr = q.head; curr = curr.nxt; q.head = curr`) verify correctly. A fresh-constructor RHS (`self.a: A = A()`) is still constructed in place by value.
+- **Return-by-reference for class instances**: A function whose return annotation resolves to a user-defined class returns a `Cls*` reference to the heap-allocated object rather than a value copy, so the returned object survives the callee frame and preserves identity/aliasing across the call boundary (`y = f(x); y.v = 1` is observed through `x` when `f` returns its argument). This matches CPython and the pointer representation already used for locals, parameters, and `self`; `return self` / `return param` and `return ClassName(...)` are all handled.
+- **Self-referential instance attributes**: When an attribute set in `__init__` from a `param=None`-defaulted parameter (e.g. `self.successor = successor`) is populated at construction time (`Node(2, a)`), its field type is recovered by unifying the matching positional constructor argument across module-level `ClassName(...)` calls — enabling linked-list / tree patterns and multi-level attribute chains such as `c.successor.successor`. This also works when the class is imported from another module (`from node import Node`): the attribute types are inferred across the module boundary, so a nested read like `node.successor.value` on an imported-class instance resolves.
 - **Inheritance**: Single and multi-level inheritance; verification of scenarios involving overridden methods
 - **`super()` calls**: `super().__init__(...)` and other `super().method(...)` calls, enabling verification of polymorphic behavior and parent-constructor side effects
+- **Explicit base-class `__init__`**: unbound parent-constructor calls of the form `Base.__init__(self, ...)` (the pre-`super()` idiom) are dispatched to the base constructor with `self` bound correctly
+- **`@staticmethod` and `@classmethod`**: receiver binding is taken from the method's decorator list rather than guessed from the first parameter's name. A `@staticmethod` receives no implicit receiver (so `M.twice(6)` binds `6` to the first real parameter), and a `@classmethod`'s `cls` parameter is typed against the enclosing class, so `cls.<attr>` resolves and `cls(...)` constructs the class the method runs on, including a subclass that inherits it. The decorator lookup walks the base classes, stopping at the first class that declares the method, so an **inherited** `@staticmethod` called through an instance (`D().add(10, 4)`, where `add` is on `D`'s base) binds its arguments to the right slots and a derived override still wins
+- **`@property` getters**: reading a `@property`-decorated attribute (`obj.area`) invokes the decorated getter method rather than looking up a struct field; inherited properties resolve through the base class
+- **`__bool__` truth-testing**: a class's `__bool__` is called in every truth context — `if obj:`, `while obj:`, ternaries, `bool(obj)`, and also `not obj` and a bare `assert obj`, so `assert falsy_obj` fails exactly as CPython raises
+- **Constructor temporaries**: calling a method directly on a fresh instance (`C().get()`) works without binding the instance to a name first — `__init__` runs on the temporary, its own methods win over same-named ones from other classes, and dunder methods (e.g. `C() == x`, `len(C())`) dispatch on it
+- **Classes as first-class values**: a class name passed as a bare value (`register(Twist)`) — the class object itself, not an instance — is modelled as an opaque placeholder for inert uses (storing/forwarding the class), while normal construction through the name (`Twist()`) is unaffected
+- **Class-method defaults**: `Name` defaults referencing `ESBMC_default_*` helpers are hoisted past the enclosing `ClassDef` so they remain visible at call sites
 
 ## String Formatting and Literals
 
@@ -44,10 +67,12 @@ This page is a reference of all Python language constructs, data structures, and
 - Built-in variable access in f-strings: `f"Running as: {__name__}"`
 - Integer format specs: `f"{num:d}"`, `f"{num:i}"`
 - Float format specs: `f"{val:.2f}"`, `f"{price:.1f}"`
+- Full format specs applied to f-string fields: fill/alignment (`<`, `>`, `^`, and sign-aware `=`), width, zero-padding, and the `+`/`-`/space sign flags — e.g. `f"{x:03d}"` → `"007"`, `f"{n:05d}"` → `"-0042"`, `f"{s:>5}"` → `"   ab"`, `f"{v:07.2f}"` → `"0001.50"`
 - Boolean formatting: automatic conversion to `True`/`False` strings
 - Empty and literal f-strings: `f""`, `f"Just a string"`
 - F-string concatenation with other strings
 - IEEE 754–compliant 32-bit and 64-bit float-to-string conversion
+- **Shortest-repr floats**: `str()`, `repr()`, f-string interpolation and empty-`{}` `format()` share one renderer that reproduces CPython's `repr` — a whole value below `1e16` renders as `N.0`, everything else uses the fewest significant digits that read back as the same `double`, with the same fixed/exponential cut-over. So `str(0.1 + 0.2)` is `"0.30000000000000004"`, `str(1e-5)` is `"1e-05"` and `repr(0.1234567)` is exact, where a previous release degraded these to a nondeterministic string (which made a correct assertion report a spurious `VERIFICATION FAILED`)
 
 ## Data Structures
 
@@ -58,42 +83,59 @@ This page is a reference of all Python language constructs, data structures, and
 - `pop([i])`: Remove and return element at index (default: last)
 - `remove(x)`: Remove first occurrence of value
 - `copy()`: Return a shallow copy
-- `extend(iterable)`: Append all elements from an iterable
+- `extend(iterable)`: Append all elements from an iterable (list, string, tuple, or function-call result)
 - `reverse()`: Reverse in place
-- `sort()`: Sort in place (no arguments; key/reverse parameters not supported)
+- `sort()`: Sort in place, with `reverse=`. `xs.sort(key=...)` on a bare name is rewritten to `xs = sorted(xs, key=...)`, so it is supported exactly where `sorted()`'s `key=` is (see [Built-in Functions](#built-in-functions))
 - `insert(i, x)`: Insert at position; handles index at/beyond end, within bounds, and empty lists
-- `in` operator: Membership testing (`2 in [1, 2, 3]`)
-- `+` operator: List concatenation (`[1,2] + [3,4]`)
+- `count(x)`: Return the number of occurrences of a value
+- `index(x[, start[, end]])`: Return the position of the first occurrence of a value; the optional `start`/`end` bounds search the slice `l[start:end]` and return the absolute index (CPython slice-clamping semantics), raising `ValueError` if not found
+- `in` operator: Membership testing (`2 in [1, 2, 3]`), including membership of a user-class instance by identity (`obj in [obj]`)
+- `del l[i]`: Remove the element at a constant index; `del l[i:j]` removes a slice
+- **Slice assignment**: `l[i:j] = src` and the extended form `l[i:j:k] = src`, including grow/shrink replacement (step 1), step > 1 (CPython requires matching lengths), and negative step (`l[::-1] = src`)
+- `+` operator: List concatenation (`[1,2] + [3,4]`). A definite non-list right operand (`[1,2] + 3`, `[1,2] + "x"`) raises a catchable `TypeError`, matching CPython's `can only concatenate list (not "int") to list`; an unknown/`Any`-typed operand is left alone rather than misfiring on imprecise typing
 - **Repetition**: `lst * n` with both literal and variable lists
 - **Nested lists**: Method calls on subscripted elements (e.g., `nested[i].append(v)`)
 - **Typed instance attributes**: `self.attr: List[T]` instance attributes with full method support
 
 ### Strings
 
-**Predicates**: `startswith()`, `endswith()`, `isspace()`, `isalpha()`, `isdigit()`, `islower()`, `isupper()`, `isalnum()`, `isnumeric()`, `isidentifier()`
+**Predicates**: `startswith()`, `endswith()`, `isspace()`, `isalpha()`, `isdigit()`, `islower()`, `isupper()`, `isalnum()`, `isnumeric()`, `isidentifier()`, `istitle()`, `isascii()`, `isdecimal()`, `isprintable()`
+
+`startswith()`/`endswith()` also accept a **tuple of affixes** (`s.startswith(("ab", "x"))` is true if `s` matches any element) and the optional **position arguments** `s.startswith(prefix, start[, end])`, evaluated as `s[start:end].startswith(prefix)` with Python slice clamping over constant receivers.
 
 **Case conversion**: `lower()`, `upper()`, `capitalize()`, `title()`, `swapcase()`, `casefold()`
 
-**Search**: `find()`, `rfind()`, `index()`, `count()` (with optional range arguments)
+**Search**: `find()`, `rfind()`, `index()`, `rindex()`, `count()` (with optional range arguments). `index()`/`rindex()` are the raising forms of `find()`/`rfind()` — they return the first/last position and raise `ValueError` when the substring is absent (rather than returning `-1`). All four are constant-folded when receiver and argument are both constants, so the answer is exact and independent of `--unwind`; `index`/`rindex` decline the fold on a miss, leaving the model to raise.
 
-**Modification**: `replace()`, `strip()`, `lstrip()`, `rstrip()`, `removeprefix()`, `removesuffix()`
+**Modification**: `replace()` (constant-folded when receiver, needle and replacement are all constants, whatever spelling the receiver has; otherwise a single-scan runtime model), `strip()`, `lstrip()`, `rstrip()`, `removeprefix()`, `removesuffix()`, `translate(str.maketrans(...))` (constant-folded over ASCII operands; the two- and three-argument `maketrans` forms map and delete characters, matching CPython)
 
-**Splitting/joining**: `split()`, `splitlines()`, `partition()`, `join()`
+**Splitting/joining**: `split()`, `rsplit()`, `splitlines()`, `partition()`, `rpartition()`, `join()`
 
 **Padding**: `center()`, `ljust()`, `rjust()`, `zfill()`, `expandtabs()`
 
-**Formatting**: `format()` with `{}`, `{0}`, `{name}` placeholders; `format_map()` with constant dicts
+**Formatting**: `format()` with `{}`, `{0}`, `{name}` placeholders, including **format specs** on any positional, indexed, or keyword field (`"{:.2f}"`, `"{:>5}"`, `"{:^6}"`, `"{:05d}"`, `"{:+d}"`, `"{:08.2f}"` — fill/alignment, width, zero-pad, sign, and precision, applied to the original constant value); `format_map()` with constant dicts
+
+**Printf-style `%` operator**: bare conversions (`"%s=%d" % ("x", 5)`, `"%x" % 255`), flags/width/precision (`"%.2f" % 3.14159`, `"%05d" % 7`, `"%-5d" % 42`, `"%+d" % 5`, `"%8.2f"`, `"%e"`, sign-aware zero padding `"%07.2f" % -3.1`), integer precision as a minimum digit count (`"%.3d" % 5` → `"005"`), string width/precision truncation (`"%10s"`, `"%.3s"`), and the `%(name)s` mapping form against a right-hand dict (`"%(n)d" % {"n": 5}`, repeated keys, `%%` literal percent)
 
 **Slicing**: `s[start:end]`, omitted bounds (`s[:end]`, `s[start:]`), negative indices (`s[-3:]`), empty slices
 
 **Operators**: `in` (substring test), `*` (repetition: `"a" * 3`, `3 * "a"`, boolean multipliers)
+
+**Comparison**: `==`, `!=`, and the ordered comparisons `<`, `<=`, `>`, `>=` over constant strings, evaluated lexicographically by code point (characters compared as unsigned bytes, so high-bit characters order as in CPython)
+
+**Non-constant receivers**: Calls with a non-constant string receiver no longer abort GOTO conversion. Three layers cooperate to give a sound result:
+
+1. **Constant folding (symex layer).** When the receiver and arguments are compile-time constants — either as literals or after AST-level const-propagation of a single `Assign`/`AnnAssign` in the enclosing function — the result folds to an exact value. Folded methods include `swapcase`, `upper`, `lower`, `casefold`, `capitalize`, `title`, `isalpha`, `isdigit`, `isalnum`, `isspace`, `isupper`, `islower`, `startswith`, `endswith`, `count`, `find`, `rfind`, `index`, `strip`, `lstrip`, and `rstrip`.
+2. **Runtime operational models.** A growing set of `str` methods lower to bounded operational models in `src/c2goto/library/python/string.c` rather than a bare nondet. These include the case transforms `lower()`, `upper()`, `swapcase()`, `capitalize()`, `title()` (`__python_str_lower`/`_upper`/`_swapcase`/`_capitalize`/`_title`), the predicates `isupper()`, `islower()`, `isalpha()`, `isdigit()`, `isalnum()`, `isspace()`, the counter `count(sub)`, and the searches `find()`/`rfind()`. Concrete arguments fold via symex's constant propagation; symbolic receivers get a real symbolic count, predicate, or returned string rather than an unconstrained nondet. The string-returning models cap the receiver at ~255 characters (a 256-byte buffer): an over-length receiver trips an explicit assertion (e.g. `String too long for swapcase() - exceeds 255 characters`), except `upper()`, which truncates at the buffer bound. `str.join(iterable)` also lowers to a runtime model (`__python_str_join`, 511-character result bound) when its iterable is a variable whose initialiser cannot be folded (e.g. a `List[str]` parameter): an empty list yields `""` and a non-empty list is concatenated element-by-element with the separator.
+3. **Nondet fallback.** For all other string methods, a non-constant receiver yields a sound symbolic value (nondet `char *`, `bool`, or `int`) instead of aborting. `partition()` falls back to the 3-tuple `("", "", "")` so `len(t) == 3` holds; `splitlines()` falls back to an empty list. `format()` and `format_map()` follow the same shape when their format string or arguments are non-constant. `join()` falls back to a nondet `char *` when its iterable argument is not a literal list that can be folded at conversion time (e.g. `sorted(...)`, a list comprehension, or a function-call result), so such calls convert instead of aborting. The result is a sound over-approximation: specific functional values are not preserved, but safety checks downstream remain meaningful.
 
 ### Sets
 
 - **Literals**: `{1, 2, 3}`
 - **Empty set**: `set()` (note: `{}` creates an empty dict, not a set)
 - **From iterable**: `set(list)`, `set(str)`, `set(d.keys())`, `set(d.values())`
-- **Operators**: `-` (difference), `&` (intersection), `|` (union)
+- **Operators**: `-` (difference), `&` (intersection), `|` (union), `^` (symmetric difference, equivalent to `.symmetric_difference()`); the augmented assignment `^=` is supported too
+- **Methods**: `issubset(other)`, `issuperset(other)`, `symmetric_difference(other)`, `update(other)`, and the variadic method forms `union(*others)`, `intersection(*others)`, `difference(*others)` (non-mutating; they accept any number of operands, route to the same builders as the `|`/`&`/`-` operators, and return a fresh set). Subset/superset relations are evaluated directly over the operand lists (a set-materialization bypass), so `set(iterable).issuperset(...)` works without first building the set.
 - **Membership**: `x in s`, `x not in s`
 - **Equality**: `s1 == s2`, `s1 != s2` (order-independent)
 - **`len()`** built-in
@@ -106,25 +148,30 @@ This page is a reference of all Python language constructs, data structures, and
 - Constant-index access with bounds checking: `t[0]`, `t[2]`
 - Generic annotation (`t: tuple`) and parameterized annotation (`-> tuple[int, int]`)
 - Equality comparison: `t1 == (1, 2, 3)`
+- Ordering comparison (`<`, `<=`, `>`, `>=`): element-wise **lexicographic**, matching CPython (`(1, 2) < (1, 3)`)
+- `tuple(...)` constructor: `tuple(t)` returns the tuple unchanged; `tuple(list)` (a literal, variable, or list-returning call such as `sorted(...)`) builds a shallow copy of the list; `tuple("ab")` over a constant string yields a tuple of single-character strings (`('a', 'b')`). `tuple(bytes)` is rejected with a clean error (CPython would produce a tuple of ints).
 - `len()` built-in
 - `isinstance(obj, tuple)` type checking
 
 ### Dictionaries
 
 - **Literals**: `{"a": 1, "b": 2}`
+- **Constructor**: `dict()` (empty), `dict(a=1, b=2)` (keyword form), and `dict([("k", 9)])` (positional iterable of key/value pairs)
 - **Subscript access**: `d["a"]`; raises `KeyError` if absent
 - **Subscript assignment**: `d["c"] = 3`
 - **Membership**: `"a" in d`, `"a" not in d`
 - **Deletion**: `del d["a"]`; raises `KeyError` if absent
 - **Equality**: `d1 == d2` (order-independent)
-- **Iteration**: `for` loops over `d.keys()`, `d.values()`, `d.items()`
-- **`update(other)`**: Merge another dict
+- **Iteration**: `for` loops over `d.keys()`, `d.values()`, `d.items()`, and directly over the dict (`for k in d:`). For a **local dict literal** with tuple keys, the destructuring form `for u, v in d:` is also supported — each key is unrolled as a tuple literal so it unpacks correctly. Iteration, dict comprehensions, and `.items()` unpacking over an **unannotated parameter dict** are sound for **scalar keys** and **integer-tuple keys** — the concrete `dict[K, V]` is recovered (scope-aware) from the call sites, and an ambiguous shape stays a clean error rather than a wrong guess. String-tuple-keyed parameter dicts remain a known gap ([#5571](https://github.com/esbmc/esbmc/issues/5571)).
+- **`update(other)`**: Merge another dict; also accepts keyword arguments (`d.update(a=1, b=2)`)
 - **`get(key[, default])`**: Return value or default; returns `Optional[T]` when no default is provided
 - **`setdefault(key[, default])`**: Insert key with default if absent, then return value; supports `int`, `float`, `bool`, `str`
 - **`pop(key[, default])`**: Remove and return value; raises `KeyError` if absent and no default
 - **`popitem()`**: Remove and return last inserted `(key, value)` pair; raises `KeyError` if empty
+- **`clear()`**: Remove all entries in place; the dict stays usable afterwards (`len(d) == 0`)
 - **Nested dicts**: `dict[int, dict[int, int]]`
 - **`Optional[T]` values**: `dict[str, Optional[T]]` storage and retrieval
+- **Dict comprehensions**: `{k: v for ...}` is lowered to an empty dict plus a population loop. Supported iterables include `range(...)` (constant or symbolic bound), a list of tuples, and `d.items()` with a `(key, value)` tuple target (`{k: v + 1 for k, v in d.items()}`), with optional `if` filters. Subsequent key lookups return the populated values rather than raising `KeyError`.
 
 ## Complex Numbers
 
@@ -150,22 +197,123 @@ This page is a reference of all Python language constructs, data structures, and
 
 Byte sequences and integer class methods:
 
-- **`int.from_bytes(bytes_data, big_endian, signed)`** — converts a byte sequence to an integer; supports big- and little-endian, signed and unsigned
-- **`int.bit_length(n)`** — returns the number of bits required to represent `n` in binary
+- **`nondet_bytes(n)`** — a `bytes` value of constant length `n` whose bytes are independent nondeterministic values; it can be returned from a `-> bytes` function, sliced, indexed and concatenated with `+`
+- **`bytes(...)` constructor** — `bytes(iterable-of-ints)` (e.g. `bytes([1, 2, 3])`) and `bytes(n)` (`n` zero bytes) build a real byte array, like a `b"..."` literal, so `len()` and indexing work; byte literals (`b"abc"`) are also supported
+- **`int.from_bytes(bytes_data, byteorder, *, signed=False)`** — converts a byte sequence to an integer; supports big- and little-endian, signed and unsigned. Endianness may be given positionally (`int.from_bytes(b, "big")`) or as the `byteorder=` keyword (`int.from_bytes(b, byteorder="big")`), and defaults to `"big"`; an alias such as `f = int.from_bytes` honours it. A byteorder that is not a literal (or a module name bound once to one) is refused with a located error rather than guessed
+- **`int.to_bytes(length=1, byteorder='big', *, signed=False)`** — converts an integer to a byte sequence. `length` and `byteorder` may each be passed positionally or by keyword, and both default (CPython 3.11+: `(5).to_bytes()` → one big-endian byte). `byteorder` may also be a variable bound to a constant; only a genuinely non-constant one is rejected, with a clean error rather than a silent default to big-endian
+- **`bytes.hex([sep[, bytes_per_sep]])`** — constant-folds a literal `bytes` object to its hex string. With the optional one-character `sep` (and optional `bytes_per_sep` group size) it reproduces CPython grouping exactly: `bytes([1, 2, 3]).hex("-")` → `"01-02-03"`, `bytes([0xb9, 0x01, 0x9e, 0xf3]).hex("_", 2)` → `"b901_9ef3"` (positive group size counts from the right, negative from the left)
+- **`bytes.fromhex(s)`** — constant-folds a hex string to a `bytes` object (the inverse of `.hex()`); accepts upper/lowercase digits and ASCII whitespace *between* byte pairs, and raises CPython's `ValueError` on odd-length or non-hex input
+- **`bytes.startswith`/`endswith`/`find`/`rfind` over literal operands** — folded directly over the byte-array representation when the receiver (and affix/sub argument) are literal `bytes([...])` constructors, so `bytes([1,2,3]).endswith(bytes([2,3]))` is `True` and `bytes([1,2,3]).find(bytes([2,3]))` is `1`. `find`/`rfind` also accept a single integer byte. Non-literal receivers, `b"..."` literals, and the position-argument forms fall through to the existing dispatch unchanged
+- **`bytes.index`/`rindex` over literal operands** — the raising counterparts of `find`/`rfind`, folded over the byte-array representation: `bytes([1,2,3]).index(bytes([2,3]))` is `1`, `rindex` returns the last occurrence, a single integer byte is accepted (`bytes([1,2,3]).index(2)`), NUL bytes are treated as ordinary data, and an absent subsequence raises a catchable `ValueError` (rather than `find`'s `-1`)
+- **`int.bit_length(n)`** — returns the number of bits required to represent `n` in binary. The operational model bounds the loop length by `512`, which covers narrow 64-bit `IntWide` and 512-bit `--ir` bignum receivers and guarantees termination on symbolic `n` without an explicit `--unwind`.
+- **`int.conjugate()`** — returns the integer unchanged (the conjugate of a real integer is itself; part of the numeric-tower API)
+- **Numeric-tower properties** — `int.numerator` / `int.denominator` (an `int` is the ratio `n/1`), `int.real` / `int.imag`, and `float.real` / `float.imag`. `float.numerator` / `float.denominator` and these properties on a `bool` deliberately raise a clean `AttributeError` (CPython's `float` is not a `Rational`).
+- **`float.is_integer()`** — constant-folds on a literal float receiver (e.g. `(2.0).is_integer()` → `True`), evaluated as `isfinite(d) && d == trunc(d)` to match CPython
+- **`float.as_integer_ratio()` / `int.as_integer_ratio()`** — folds a numeric literal to its exact `(numerator, denominator)` pair in lowest terms (`(2.5).as_integer_ratio()` → `(5, 2)`, `(5).as_integer_ratio()` → `(5, 1)`, `(-2.5)` → `(-5, 2)`), including the exact dyadic ratio of a non-representable decimal (`(0.1).as_integer_ratio()`); the folded tuple unpacks (`n, d = (1.5).as_integer_ratio()`)
+- **`float.hex()`** — folds a literal float receiver to CPython's exact hexadecimal string (`(3.5).hex()` → `"0x1.c000000000000p+1"`), including negative and subnormal magnitudes and the special `-0.0` / `0.0` spellings. A `Name` receiver is not folded
+- **`float.fromhex(s)`** — the exact inverse over a **constant string**, matched against the strict C99 hex-float grammar `[sign]0x<hex>[.<hex>]p[sign]<dec>` that `float.hex()` emits, so the `hex → fromhex` round trip is exact. CPython's lenient spellings (no `0x` prefix, missing `p` exponent, `inf`/`nan`, out-of-range input) are rejected rather than folded
+- **`str.encode()` / `bytes.decode()`** — standalone constant-folded conversions over **ASCII** data (`s.encode()` → byte array of ordinals, `b.decode()` → string of byte values); a non-ASCII / multi-byte character falls through to a clean error, matching CPython's `UnicodeDecodeError`. The round-trip form `s.encode().decode()` is also supported.
 
 ## Error Handling
 
 - **`try`/`except`** blocks with multiple handlers and `except ExceptionType as var` binding
-- **`raise`** statements with exception instantiation and custom messages
+- **`try`/`finally`** blocks: the `finally` body runs on normal completion, after a caught exception, when an exception propagates uncaught (run `finally`, then re-raise), and on the `return` / `break` / `continue` edges that escape the `try`, a handler, or the `finally` itself. A returned expression is spilled to a temporary before the `finally` runs, as CPython evaluates it first. Bare `try`/`finally` (no `except`) is supported. Shapes that cannot be lowered soundly are refused with a clean diagnostic (see [Limitations](/docs/python/limitations#exception-handling))
+- **`raise`** statements with exception instantiation and custom messages, including an f-string message that interpolates a symbolic value (`raise ValueError(f"bad {x}")`); bare `raise` re-raises the active exception inside an `except` handler
 - **`assert`** statements for property verification
 - **`__ESBMC_assume`** for constraining non-deterministic inputs
 - **`ImportError` guards**: Imports inside `try/except ImportError` are handled statically
 
 **Built-in exception hierarchy**:
 - `BaseException` → `Exception` → `AssertionError`, `ValueError`, `TypeError`, `IndexError`, `KeyError`, `ZeroDivisionError`, `ImportError`
+- `BaseException` → `KeyboardInterrupt` (raisable and catchable; like `BaseException` itself, its `__init__` takes a required argument)
 - `OSError` → `FileNotFoundError`, `FileExistsError`, `PermissionError`
 
 Exception instances expose a message attribute and support `__str__()`.
+
+## Concurrency (`threading` module)
+
+ESBMC-Python lowers `threading` primitives onto ESBMC's existing pthread operational model in `src/c2goto/library/pthread_lib.c`, so symex's interleaving exploration, deadlock detection, and data-race detection apply.
+
+### `threading.Lock`
+
+`Lock.acquire()` and `Lock.release()` mirror `pthread_mutex_lock_noassert` via `__ESBMC_atomic_begin / __ESBMC_assume / __ESBMC_atomic_end`. Supported usage:
+
+- `lock = threading.Lock()` at module scope or as a class instance attribute
+- `lock.acquire()` / `lock.release()`
+- Multiple `Lock` instances co-existing on the same object (e.g. paired `mutex` and `lock` fields)
+- `from threading import Lock` aliasing
+
+### `threading.Thread`
+
+For each `Thread(target=f, args=(...))` construction site, the frontend synthesises a per-call-site trampoline `__pythread_trampoline_<N>` plus three helpers in `pthread_lib.c` (`__pyt_init_tid`, `__pyt_terminate`, `__pyt_join`) that mirror `pthread_create` / `pthread_join` bookkeeping. The resulting GOTO program is a direct call (not a function pointer), so symex preserves precision.
+
+Supported `Thread` shapes:
+
+- `target=f` — `f` must be a function statically resolvable at the construction site (a `Name` or attribute chain). Lambdas and runtime-callable values are out of scope.
+- `args=(...)` — must be a tuple literal whose elements are expressions evaluable at the construction site. Passing simple values (ints, floats, bools, strings) works end-to-end.
+- `t.start()` and `t.join()` — lower to `pthread_create` and `pthread_join` semantics; `join` establishes happens-before.
+- Multiple construction sites per program, with independent trampolines.
+
+### `Thread` subclassing
+
+A subclass of `threading.Thread` that overrides `run` is lowered the same way, with the `run` body taking the place of `target`:
+
+```python
+import threading
+
+shared: int = 0
+
+class Worker(threading.Thread):
+    def __init__(self) -> None:
+        super().__init__()
+
+    def run(self) -> None:
+        global shared
+        shared = 42
+
+w: Worker = Worker()
+w.start()
+w.join()
+assert shared == 42
+```
+
+The class must be defined at module scope, but the instance may be constructed inside a function: a function-local instance is hoisted onto a synthesised module global so the spawned thread can reach it, including constructor arguments stored on `self`. Race detection applies to subclass threads exactly as it does to `target=` ones.
+
+The shapes the lowering cannot express are refused at parse time with a named error rather than being mis-modelled: multiple inheritance, a class defined below module scope, a missing `run`, an overridden `start`, a `super().__init__()` that is not a bare statement-level call, a class defined after the function that constructs it, an instance reassigned in the same scope, an instance bound by anything other than a simple assignment (for example inside a module-level `if`), construction inside a loop, and assignment to a `global`/`nonlocal` name from inside a function.
+
+### Data-race detection
+
+Python module-level globals (declared with `x: T = …` or `x = …` at module scope) are flagged in the symbol table so they are visible to ESBMC's race-assertion pass. Two threads writing to the same global without synchronisation are detected under `--data-races-check`:
+
+```python
+import threading
+
+shared: int = 0
+
+def writer_a() -> None:
+    global shared
+    shared = 1
+
+def writer_b() -> None:
+    global shared
+    shared = 2
+
+t1 = threading.Thread(target=writer_a)
+t2 = threading.Thread(target=writer_b)
+t1.start(); t2.start(); t1.join(); t2.join()
+```
+
+`esbmc race.py --incremental-bmc --data-races-check` reports `W/W data race on py:race.py@shared` and `VERIFICATION FAILED`.
+
+## Function Contracts
+
+`__ESBMC_requires` / `__ESBMC_ensures` clauses at the top of a function body
+are lowered for `--enforce-contract` and `--replace-call-with-contract`, with
+`__ESBMC_return_value` typed from the return annotation; the clauses are inert
+under a plain BMC run. Malformed clauses (calls or subscripts inside the
+condition, untypeable references, `__ESBMC_return_value` in `requires` or on a
+`-> None` function) are rejected with a named diagnostic. See
+[Function Contracts](/docs/function-contracts#contracts-in-python).
 
 ## Cover Properties and Reachability
 
@@ -179,6 +327,55 @@ if x > 0:
     __ESBMC_cover(x > 100)  # Is this branch reachable?
 ```
 
+## Dynamic Typing
+
+A variable whose type diverges across an `if`/`else` — or an `if`/`elif`/`else`
+chain in which every branch assigns it — `x = 1` in one branch and
+`x = "hello"` in the other — is given a *tagged* representation carrying a
+runtime type tag alongside the value, instead of being forced to one branch's
+type. This covers a variable created inside the branches and one that already
+had a native type before them:
+
+```python
+def main() -> None:
+    flag: bool = __VERIFIER_nondet_bool()
+    x = 1
+    if flag:
+        x = "hello"
+    else:
+        x = 2
+    assert isinstance(x, str) or isinstance(x, int)
+    assert not isinstance(x, float)
+```
+
+Supported on a tagged variable:
+
+- **`isinstance(x, T)`** for `bool`, `int`, `float` and `str`, compared against
+  the runtime tag. An aggregate or user class is answered `False` rather than
+  refused, since a tag cannot hold one.
+- **`x is None`**, folded against a literal `None` — a tagged variable never
+  holds one.
+- **`==` between two tagged variables**, dispatched on the tag, with the numeric
+  arm fixed-width and the `str` arm under a compile-time bound. `bool` and
+  `int` compare equal, so `True == 1` holds as it does in CPython.
+- **`<`, `<=`, `>`, `>=`** against a literal and between two tagged variables,
+  dispatched through a shared three-way result and composed against zero with
+  the operator asked for. Comparing a tagged variable with a string literal
+  reuses the literal's own length as the loop bound, so it stays a compile-time
+  constant. A type mismatch between two tagged operands raises `TypeError`.
+- **`+`, `-`, `*`, `/` against a literal**, numeric, plus string concatenation
+  for `+`; **`+`, `-` and `/` between two tagged operands**, raising `TypeError`
+  when either turns out non-numeric. The result of `+` is itself tagged, since
+  whether it added or concatenated is not known until run time — and an
+  untagged target assigned such an addition becomes tagged with it.
+- **Rebinding to a container** — a list, tuple or class instance assigned to a
+  tagged variable gets its own slot, as Python rebinds the name outright.
+- **Function return values**: a function whose `return` statements diverge in
+  type across an `if`/`else` reconciles both branches into one tagged return
+  type, instead of the type of whichever `return` was reached first.
+
+See [Limitations](/docs/python/limitations#dynamic-typing) for what a tag cannot hold.
+
 ## Strict Type Checking
 
 The `--strict-types` flag enables type compatibility validation for function arguments at verification time. When a type mismatch is detected, a `TypeError` is generated with a descriptive message. Instance methods, class methods, and static methods are all handled with appropriate implicit-parameter awareness.
@@ -190,27 +387,46 @@ The `--strict-types` flag enables type compatibility validation for function arg
 ## Module System
 
 - **`__name__`**: Set to `"__main__"` when run directly; set to the module name when imported. Enables `if __name__ == "__main__":` idioms.
-- **Imports**: Standard `import` and `from ... import ...` styles validated at verification time
+- **Imports**: Standard `import` and `from ... import ...` styles validated at verification time. Module-level and function-local imports are also processed when verifying a single function with `--function`, so calls through imported modules (including operational models such as `math` and `random`) resolve there too
+- **Multiple files on the command line**: `esbmc a.py b.py` converts each file as its own translation unit of the same program — its own imports, its own global pre-registration, its own `__name__`/`__file__` — and appends each into `python_user_main`, mirroring how the C frontend merges several `.c` files. (Earlier releases kept only the last file, so a violated assertion in `a.py` silently dropped out of verification.)
+- **Relative imports**: `from .module import X` resolves as before. The no-module forms `from . import X` and `from .. import X` are treated as *unresolved* — the importing module still converts and verifies — instead of aborting
+- **Base classes bound by `from ... import`**: a class spelled `class T(Base)` after `from module import Base` resolves its inherited methods and `__init__` against the imported module, as the dotted `module.Base` spelling already did. The last binding of the name wins, and a local binding that shadows the import is respected
+- **Local bindings shadow imported modules**: When a name is both an imported module and a local binding (e.g. a parameter `node` while `from node import Node` is in scope), attribute access such as `node.value` resolves to the local binding, following Python's LEGB rule, rather than to a module member.
+- **Selective imports preserve module-level constants**: `from M import f, C` retains plain `Assign` bindings such as `INT_BOUND = 1024` in addition to `AnnAssign` ones. Tuple-unpacking targets are treated atomically.
+- **Parser package layout**: The Python parser ships as a package under `src/python-frontend/parser/` (entrypoint `parser/__main__.py`, public facade `parser/__init__.py`, import resolution in `parser/import_resolver.py`). The resolver emits deterministic, review-friendly diagnostics for missing modules, cyclic imports, and relative-import rewrites.
 
 ## Built-in Functions
 
 | Function | Notes |
 |---|---|
 | `abs`, `divmod` | Standard arithmetic |
-| `int`, `float`, `bool`, `chr`, `ord`, `str`, `repr`, `hex`, `oct` | Type conversions and representations |
-| `len` | Works on lists, sets, strings, tuples |
+| `int`, `float`, `bool`, `chr`, `ord`, `str`, `repr`, `hex`, `oct`, `bin`, `ascii` | Type conversions and representations. `bin`, `hex`, and `oct` accept non-literal integer arguments: a compile-time-foldable expression (e.g. `bin(round(3.0))`) folds to the exact literal, while a genuinely symbolic operand (a function parameter or variable) lowers to a runtime operational model (`__python_int_to_{bin,hex,oct}`) producing the correctly prefixed string (`0b`/`0x`/`0o`, a leading `-` for negatives, lowercase hex digits); a non-integer argument still raises `TypeError`. `bin` is `LLONG_MIN`-safe; `ascii` emits `\xNN`/`\uNNNN`/`\UNNNNNNNN` escapes for non-ASCII codepoints. |
+| `pow(b, e)` | Shares the `**` operator lowering (integer, float, bool operands) |
+| `pow(b, e, m)` | 3-argument modular exponentiation: exact `BigInt` for constant integer operands; symbolic operands raise an unsupported diagnostic rather than emit unsound floating-point modulo |
+| `format(value[, spec])` | Builtin formatting (distinct from the `str.format()` method). Constant-folds a literal integer with a bare presentation-type spec (`'d'`/`'x'`/`'X'`/`'o'`/`'b'` or empty) — `format(255, "x")` → `"ff"` (no `0x`/`0o`/`0b` prefix, leading `-` for negatives, `LLONG_MIN`-safe) — and a constant string with the default spec to itself. A **typeless float spec** (no presentation type) is folded too: width, alignment, sign and zero-padding (`format(1.5, "10")`, `format(-1.5, "08")`, `format(1.5, "=+10")`) render the digits through the shared shortest-repr renderer and then pad, and `,`/`_` grouping groups the integer part by 3 as CPython does (`format(1234.5, ",")` → `"1,234.5"`). Combinations that are *not* modelled — typeless precision (`format(1.5, ".2")`), grouping with an explicit float type (`",.1f"`), grouping plus zero/`=` padding (`"08,"`) — and variable arguments raise a clean error rather than a wrong fold |
+| `callable(obj)`, `issubclass(cls, base)` | Resolved at compile time from the symbol table and AST class hierarchy |
+| `len` | Works on lists, sets, strings, tuples. On a class instance it dispatches to `__len__`, walking the ancestry so an inherited one is found; a class that defines none raises `TypeError` as CPython does, rather than measuring the struct with `strlen` and answering 0 |
 | `range` | Used in `for` loops |
 | `min(a, b)`, `max(a, b)` | Two-argument form only; promotes `int` to `float` |
-| `min([...])`, `max([...])` | Single-list form; supports `int`, `float`, and `str` element types |
+| `min([...])`, `max([...])` | Single-list form; supports `int`, `float`, and `str` element types. `key=` is folded over **constant** lists for the `lambda x: x[K]`, `key=abs`, and `key=len` forms, and otherwise lowered to an explicit linear scan, so a lambda or a named function applies to a list literal of symbolic scalars too (`max([a, a + 1], key=neg)`). Ties keep the first occurrence, as CPython does; an empty iterable raises `IndexError` where CPython raises `ValueError`. A shape the scan cannot lower is refused rather than answered with the key dropped |
 | `sum([...])` | Sum of list elements; supports `int` and `float` |
-| `sorted(iterable)` | Returns a new sorted list; supports `int`, `float`, and `str` elements |
+| `sum(range(EXPR))` | Single-arg `sum` of a single-arg `range` is rewritten to the Gauss closed form `EXPR * (EXPR - 1) // 2 if EXPR > 0 else 0`, yielding an exact value (and `0` for `EXPR <= 0`) instead of a nondet result |
+| `sorted(iterable)` | Returns a new sorted list; supports `int`, `float`, and `str` elements and homogeneous lists of tuples, whose element types are carried through (as `reversed()` and `list()` also do). `key=` is applied wherever the iterable's shape is known at conversion time: a list literal of symbolic scalars, a constant list literal, and a constant dict literal ordered by value through `d.__getitem__`; the key itself may be a lambda or an undecorated, never-rebound module-level `def`. A list of *tuples* has only the constant-fold path — the scan declines it, so its elements must be constants. This holds when the call is a `for` loop's iterable (`for edge in sorted(w, key=w.__getitem__):`) as well. A dict with a symbolic value, a bound method other than `__getitem__` such as `d.get`, and any other unfoldable shape are refused with `sorted() with key= is only supported over a constant iterable` rather than silently sorted in natural order |
 | `any([...])` | List literals only; short-circuit OR logic |
 | `all([...])` | List literals only; short-circuit AND logic |
 | `enumerate(iterable, start=0)` | Tuple unpacking and single-variable forms; optional `start` |
-| `isinstance(obj, type)` | Runtime type checking |
+| `zip(a, b, ...)` | Lowered to an index-based `while` loop in `for` form, mirroring `enumerate` |
+| `reversed(iter)` | Lowered to an index-based `while` loop in `for` form; `reversed(range(...))` is rewritten to an equivalent forward `range(...)` |
+| `filter(pred, iter)` | Lowered to an index-based `while` loop guarded by `pred` in `for` form |
+| `list()` | Zero-arg constructor lowers to an empty list literal. `list(iterable)` over a list, `range`, or tuple (`list((2, 3))`, `list(t)`) builds a real list; `list("abc")` over a constant string yields a list of single-character strings. `list(bytes)` is rejected with a clean diagnostic (CPython would produce a list of ints). |
+| `isinstance(obj, type)` | Runtime type checking, including over a [dynamically-typed](#dynamic-typing) variable |
 | `float("nan")`, `float("inf")` | Special values (case-insensitive, whitespace-tolerant) |
 | `input()` | Modelled as nondeterministic string, max 256 chars |
 | `print(...)` | Arguments evaluated for side effects; no output produced |
+
+`sum`, `min`, `max` and `sorted` over a **generator expression** keep the
+generator's `if` clauses, so `sum(x for x in xs if x > 2)` filters rather than
+summing every element.
 
 ## Complex Math Module (`cmath`)
 
@@ -240,7 +456,7 @@ All functions accept `complex`, `float`, `int`, or `bool` arguments. Real inputs
 
 **Hyperbolic**: `sinh`, `cosh`, `tanh`, `asinh`, `acosh`, `atanh`
 
-**Integer helpers**: `factorial(n)`, `gcd(a, b)`, `lcm(a, b)`, `isqrt(n)`, `perm(n[, k])`, `comb(n, k)`, `prod(lst[, start])` (expects `list[int]`)
+**Integer helpers**: `factorial(n)`, `gcd(*ints)`, `lcm(*ints)` (variadic — any number of integer arguments, including the 0- and 1-argument forms, folded via the binary model and working on symbolic operands), `isqrt(n)`, `perm(n[, k])`, `comb(n, k)`, `prod(lst[, start])` (expects `list[int]`)
 
 **Geometry**: `hypot(x, y)`, `dist(p, q)` (expects `list[float]`)
 
@@ -273,15 +489,75 @@ All functions are modelled using nondeterministic values with appropriate constr
 - `random.random()` → nondeterministic `float` in `[0.0, 1.0)`
 - `random.uniform(a, b)` → nondeterministic `float` N where `min(a,b) ≤ N ≤ max(a,b)`
 - `random.randint(a, b)` → nondeterministic `int` N where `a ≤ N ≤ b`
-- `random.getrandbits(k)` → nondeterministic integer with k random bits
+- `random.getrandbits(k)` → nondeterministic non-negative `int` in `[0, 2**k − 1]`; raises `ValueError` if `k < 0`; returns `0` when `k == 0`
 - `random.randrange(start[, stop[, step]])` → randomly selected integer from the specified range; single-argument form (`randrange(stop)`) is also supported
+- `random.choice(seq)` → nondeterministic element `seq[i]` for a constrained index; raises `IndexError` on an empty sequence
+- `random.sample(population, k)` → under-approximation that returns the first `k` elements of `population`; raises `ValueError` if `k < 0` or `k > len(population)`
+- `random.shuffle(lst)` → under-approximation; leaves the list untouched
+- `random.seed(a=0)` → no-op; nondet outputs already cover any seed-dependent outcome
 
-See also: [Random Operational Model](./random-operational-model)
+See also: [Random Operational Model](/docs/python/random-operational-model)
 
 ## Collections Module (`collections`)
 
-- **`defaultdict(default_factory)`**: Dict subclass that returns a default value for missing keys; modelled as a plain `dict` with a nondeterministic default
+- **`defaultdict(default_factory)`**: Dict subclass that returns a default value for missing keys; modelled as a plain `dict` with a nondeterministic default. When the dict has no value annotation, the value type is inferred from the factory or from a subscript assignment in the enclosing function: built-in type factories (`defaultdict(int)`, `float`, `bool`, `str`), nullary `lambda` factories whose body is a constant or a built-in constructor call (`defaultdict(lambda: float('inf'))`), and constant literal assignments (`d[k] = 5`, `0.0`, `True`, `"x"`) all map to the matching value type, so `min`/`max`/comparisons over `d[k]` no longer fall back to `char *`
 - **`Counter`**: Mapping of elements to integer counts; supports `__getitem__`, `__setitem__`, `values()`, and boolean truthiness
+- **`deque`**: List-backed double-ended queue; supports construction, indexing, `__setitem__`, `append()`, and the FIFO-front methods `popleft()` (front pop) and `appendleft()` (front insert), enabling FIFO/BFS patterns. Aliased imports such as `from collections import deque as Queue` resolve correctly
+- **`OrderedDict`**: Supports construction and basic indexing / `append` / `__setitem__`
+
+`defaultdict`, `deque` and `OrderedDict` are classes in CPython but functions returning a dict or list in the operational model, so a variable *annotated* with one (`d: deque = deque()`, in either the dotted or the `from collections import …` spelling) resolves to the model function's return type rather than raising `NameError`.
+
+## Queue Module (`queue`)
+
+A single-threaded verification model: `queue.Queue` is backed by a plain list (FIFO) and `queue.LifoQueue` by a list-backed stack (LIFO). Both the qualified form (`queue.Queue()`) and `from queue import LifoQueue` work.
+
+- **`Queue`** (FIFO): `put(item)` → append, `get()` → pop front, in insertion order
+- **`LifoQueue`** (LIFO / stack): `put(item)` → append, `get()` → pop back
+- **Shared methods**: `qsize()`, `empty()`, `full()`, `put_nowait()`, `get_nowait()`; `task_done()` and `join()` are accepted no-ops
+- **`maxsize`**: tracked by `full()` (`Queue(2)`); `put()` does not block on it
+
+The blocking semantics of `put()`/`get()` (the `block`/`timeout` arguments) are not modelled — there is nothing to block on under sequential symbolic execution. An unguarded `get()` on an empty queue pops from an empty list, reported as an `IndexError`; guard with `empty()`/`qsize()` first.
+
+A queue held in an instance field (`self.q = queue.Queue()`, then `self.q.get()`) dispatches correctly, as does any other imported class held in a field.
+
+## Unittest Module (`unittest`)
+
+A `unittest.TestCase` subclass is verified rather than merely parsed: each
+assertion method lowers to an ESBMC claim, so a test that can fail is a violated
+property with a counterexample rather than a red test run on one input.
+
+**Assertions**: `assertEqual`, `assertNotEqual`, `assertTrue`, `assertFalse`,
+`assertIs`, `assertIsNot`, `assertIsNone`, `assertIsNotNone`, `assertIn`,
+`assertNotIn`, `assertLess`, `assertLessEqual`, `assertGreater`,
+`assertGreaterEqual`, and `fail()`. A `msg=` argument is accepted and ignored —
+the claim carries the location.
+
+**`unittest.main()`** runs the tests it discovers, following CPython's discovery
+order: test methods in alphabetical order, a fresh instance per test, `setUp`
+before and `tearDown` after each one, and a test method inherited from a base
+class re-run under the subclass's own `setUp`. A method is discovered when its
+name starts with `test`, it takes only `self`, and it carries no decorator —
+`@unittest.skip` and `@unittest.expectedFailure` therefore exclude it, since
+under the real runner neither counts a failure from that method.
+
+```python
+import unittest
+
+
+class T(unittest.TestCase):
+
+    def setUp(self) -> None:
+        self.base = 2
+
+    def test_add(self) -> None:
+        self.assertEqual(self.base + 1, 3)
+
+
+unittest.main()
+```
+
+The base class may be spelled either way: `class T(unittest.TestCase)`, or
+`from unittest import TestCase` followed by `class T(TestCase)`.
 
 ## Datetime Module (`datetime`)
 
@@ -292,7 +568,10 @@ See also: [Random Operational Model](./random-operational-model)
 - **`Decimal`** class with full arithmetic:
   - **Comparison**: `==`, `!=`, `<`, `<=`, `>`, `>=`
   - **Arithmetic**: `+`, `-`, `*`, `/`, `//`, `%`
-  - **Unary**: `-d` (negation), `abs(d)`
+  - **Unary**: `-d` (negation), `+d` (unary plus), `abs(d)`
+  - **Query methods**: `is_nan()`, `is_snan()`, `is_qnan()`, `is_infinite()`, `is_finite()`, `is_zero()`, `is_signed()`, `is_normal()`, `is_subnormal()`
+  - **Copy methods**: `copy_abs()`, `copy_negate()`, `copy_sign(other)`
+  - **Comparison / selection methods**: `compare(other)` (returns a `Decimal` `-1`/`0`/`1`), `max(other)`, `min(other)`, `adjusted()` (adjusted exponent)
   - Special values: infinity and NaN (via `is_special` flag; propagated through all operations)
 
 ## Heapq Module (`heapq`)
@@ -301,7 +580,7 @@ All functions operate on plain Python lists used as min-heaps.
 
 - `heapify(heap)`: No-op in the model (heap invariant assumed)
 - `heappush(heap, item)`: Appends item to the heap list
-- `heappop(heap)`: Removes and returns the minimum element
+- `heappop(heap)`: Removes and returns the minimum element; on a heap of tuples the result unpacks (`d, n = heappop(h)`)
 - `heappushpop(heap, item)`: Pushes then pops the minimum
 
 ## Time Module (`time`)
@@ -329,14 +608,44 @@ All `os` functions use nondeterministic modelling to verify both success and fai
 
 ## NumPy Module (`numpy`)
 
-Partial stub-level support for type-inference and basic arithmetic verification. Arrays are modelled as plain Python lists.
+Partial executable support for list-backed arrays, element-wise arithmetic, selected math functions, and small determinants, now covering 1-D, 2-D, and 3-D (n-D) shapes. Some APIs remain stubs for type inference only.
 
-**Array construction**: `np.array(l)`, `np.zeros(shape)`, `np.ones(shape)`
+**Array construction**: `np.array(l)`, `np.zeros(shape)`, `np.ones(shape)` for 1-D, 2-D, and 3-D shapes, including explicit constructor `dtype` coercion for literal `bool`, `int`, and `float` inputs (a `dtype=` keyword is carried through to later `transpose`, `flatten`, `sort` and reducer calls, and the `*_like` constructors accept a `dtype=` override); `np.arange([start, ]stop[, step])`, `np.full(shape, value)`, `np.eye(N[, M])`, `np.identity(n)`, and `np.linspace(start, stop, num)`. **Symbolic shapes** are handled: a nondeterministic dimension such as `np.zeros(n)` with a constrained `n` yields an array of the corresponding length (`len(a) == 0` when `n == 0`)
 
-**Element-wise arithmetic**: `np.add(a, b)`, `np.subtract(a, b)`, `np.multiply(a, b)`, `np.divide(a, b)`, `np.power(a, b)`
+**Indexing**: n-D tuple indexing `a[i, j, k]` on 2-D and 3-D arrays (`a[0, 0, 0]`, `a[1, 1, 1]`); supplying more indices than the array has dimensions is rejected. **Boolean-mask selection** `a[mask]` returns the elements where a same-length boolean array is `True` (an all-`False` mask yields an empty array); a non-boolean or symbolic mask is rejected
 
-**Math**: `np.ceil(x)`, `np.floor(x)`, `np.fabs(x)`, `np.sqrt(x)`, `np.trunc(x)`, `np.round(x)`, `np.copysign(x, y)`, `np.fmin(x, y)`, `np.fmax(x, y)`, `np.sin(x)`
+**Slicing**: bounded 1-D slicing `a[i:j]` on a list-backed array returns a new `list[T]` (bounded, open-ended `a[i:]`/`a[:j]`, and full-copy `a[:]` forms), with the slice typed as the element type rather than collapsing to a scalar. **2-D slicing** selects whole rows (`a[i, :]`) and whole columns (`a[:, j]`)
 
-**Additional stubs** (return constant placeholder values for type inference only): `np.cos(x)`, `np.arccos(x)`, `np.arctan(x)`, `np.exp(x)`, `np.fmod(x)`, `np.dot(a, b)`, `np.matmul(a, b)`, `np.transpose(a, b)`
+**Views**: a slice or selection with literal bounds assigned to a bare name is a real **view** onto `a`'s own buffer, so writes through either side are observed by the other, and `len(v)`, `v.shape` and `v.ndim` report the view's own extent: 1-D slices with any step (`a[1:3]`, `a[::2]`, `a[::-1]`), 2-D row views (`a[0]`, `a[-1]`) and column views (`a[:, j]`), `np.ravel(a)` / `a.ravel()` / `a.flat[i]` (writable, contiguous), and `np.diagonal(a, offset=k)` / `a.diagonal()` (read-only). `np.trace(a)` and `np.fill_diagonal(a, v)` reuse the same offset arithmetic as a reduction and an in-place write. Rebinding the base array detaches its live views. A slice with a symbolic bound still copies
 
-**Linear algebra** (`numpy.linalg`): `np.linalg.det(a, b)` (2×2 stub)
+**Shape/stride descriptors**: a fixed-shape view carries its own shape and strides, so 2-D `np.transpose(a)` / `a.T`, `np.swapaxes` and `np.moveaxis`, a contiguous `np.reshape`, `np.squeeze` / `np.expand_dims` and a read-only `np.broadcast_to` are views over the base buffer rather than copies. A descriptor iterates with `np.nditer`, materialises through `np.copy(v)` / `v.copy()` / `np.array(v)` / `v.tolist()`, and answers the flattened reducers `sum`, `mean`, `min`, `max` plus `v.any()` / `v.all()`. Shapes outside that set — escaping a view into a container, advanced indexing — are rejected explicitly rather than silently copied
+
+**Shape manipulation**: `np.reshape(a, shape)` (2-D and 3-D targets; an incompatible element count is rejected), `np.flatten(a)` / `np.ravel(a)` (row-major 1-D view), `np.squeeze(a)` (drop unit-length axes; a non-unit axis is rejected), `np.stack([a, b, ...])` (join arrays along a new leading axis, e.g. 1-D → 2-D), `np.concatenate([a, b, ...])` (join along the existing axis), and `a.astype(dtype)` (dtype conversion; `astype` to a complex dtype is rejected)
+
+**Reductions**: `np.sum(a)`, `np.prod(a)`, `np.min(a)`, `np.max(a)`, `np.mean(a)`, `np.std(a)`, `np.var(a)`, `np.argmin(a)`, `np.argmax(a)` over list-backed arrays. The reductions, `transpose` and `flatten` accept arrays built by any constructor (`zeros`, `ones`, `full`, `eye`, `identity`, `linspace`, `arange`), not only `np.array(<literal>)`. The method spellings (`a.sum()`, `a.min()`, `a.prod()`, `a.transpose()`, `a.flatten()`, …) are rewritten to the module form in any expression context — e.g. `assert a.min() == 0` — not just on the right-hand side of an assignment
+
+**Arrays returned from user functions**: a function may return a concrete `np.array` / `np.zeros` / `np.ones` / `np.full`, a bare array parameter, a subarray or view, or a supported descriptor call over a parameter (`np.transpose(a)`), and the result keeps its metadata — reducers, `argmin`/`argmax` and the method forms below all work on it. Statements before the `return` and calls in its arguments execute exactly once; an incompatible-type branch, and a view or descriptor that escapes into a container, are rejected explicitly
+
+**`ndarray` methods on a concrete variable**: `a.tolist()`, `a.any()` / `a.all()`, `a.sum()` / `a.mean()` / `a.min()` / `a.max()`, `a.argmin()` / `a.argmax()` (flattened and `axis=0`/`axis=1`), the in-place `a.sort()` and `a.argsort()`, and `np.sort` / `np.argsort` / `np.searchsorted` / `a.searchsorted()` accept an array *variable* — including one returned by a pure user function — not only an inline literal. `sort`/`argsort` accept `kind='stable'`/`'mergesort'`/`None`, and `searchsorted` a vector or symbolic value and a `sorter=` argument. `.T`, `.transpose()`, `.flatten()`, `.ravel()`, `.reshape()`, `.diagonal()`, the reducers `.sum()`/`.mean()`/`.min()`/`.max()`/`.prod()`/`.std()`/`.var()`/`.argmin()`/`.argmax()`, `.argsort()`, `.searchsorted()` and `.size` may also be chained directly on a constructor call (`np.eye(3).transpose()`, `np.full((2, 4), 7).size`)
+
+**Comparison and logical ufuncs**: `np.greater`, `np.greater_equal`, `np.less`, `np.less_equal`, `np.equal`, `np.not_equal`, `np.logical_and`, `np.logical_or`, `np.logical_not`, and `np.where(cond, a, b)` (element-wise select; also the scalar-condition form `np.where(False, 1, 2)`). One of these may be **chained** as another numpy call's argument, nested directly or through an intermediate variable, instead of the inner result being silently substituted
+
+**Element-wise arithmetic**: `np.add(a, b)`, `np.subtract(a, b)`, `np.multiply(a, b)`, `np.divide(a, b)`, `np.power(a, b)` on literal list-backed inputs, with NumPy-style broadcasting for 1D/2D shapes
+
+**Complex elements**: element-wise complex arithmetic (`add`/`subtract`/`multiply`/`divide`) on complex scalars and arrays, plus `np.conjugate(z)` and `.real`/`.imag` on complex results; division by zero is reported. Complex determinants are rejected (see [Limitations](/docs/python/limitations#numpy-module))
+
+**Math**: `np.ceil(x)`, `np.floor(x)`, `np.fabs(x)`, `np.sqrt(x)`, `np.trunc(x)`, `np.round(x)`, `np.rint(x)`, `np.copysign(x, y)`, `np.fmin(x, y)`, `np.fmax(x, y)`, `np.remainder(x, y)`, `np.nextafter(x, y)`, `np.sin(x)`, `np.cos(x)`, `np.tan(x)`, `np.arcsin(x)`, `np.arctan(x)`, `np.arccos(x)`, `np.sinh(x)`, `np.cosh(x)`, `np.tanh(x)`, `np.exp(x)`, `np.log(x)`, `np.log2(x)`, `np.log10(x)`, `np.isclose(a, b)` on scalar or literal list-backed 1D/2D inputs. `np.arccos` additionally lowers a runtime 1D array through the libm operational model; a runtime 2D `arccos` is still rejected. The two-output helpers `np.modf(x)` → `(frac, int)` and `np.frexp(x)` → `(mantissa, exponent)` are also supported.
+
+**Modulo**: `np.fmod(x, y)` on scalars and on literal list-backed 1D/2D inputs with NumPy-style broadcasting. Operands wrapped in `np.array(...)` are rejected with `Unsupported operation: numpy.fmod on array operands` rather than mis-folded to a scalar.
+
+**Element-wise float ufuncs**: `np.add`/`np.subtract`/`np.multiply`/`np.divide` on float arrays dispatch to a typed `*_double` operational model instead of reinterpreting IEEE-754 payloads as `int64`. The `--python-no-fold` flag suppresses the frontend's constant-folding paths and forces SMT encoding (useful for differential testing of the folder against the encoder).
+
+**Linear algebra**:
+
+- `np.dot(a, b)`, `np.matmul(a, b)`: 1D/2D inputs with both integer and float backends (via `linalg.c`), including symbolic elements. The integer path carries the operand dtype width and asserts each result element fits the dtype range, so narrow dtypes (`int16`/`int32`) flag accumulation overflow (trivially satisfied for the default 64-bit `int`; combine with `--overflow-check` for int64-level overflow)
+- `np.transpose(a)`: 2D arrays, including runtime array variables (1D is the identity); higher-rank transpose is rejected
+- `np.linalg.det(a)`: constant numeric 2x2 and 3x3 matrices (complex-valued matrices are rejected)
+- `np.linalg.inv(a)`: matrix inverse of a constant numeric 2x2 matrix
+- `np.linalg.norm(a)`: Euclidean (L2) norm of a 1-D array (`np.linalg.norm(np.array([3.0, 4.0]))` → `5.0`)
+- `np.linalg.eig(a)`: eigenvalues of a constant numeric 2x2 matrix (returned as a list)
+- `np.linalg.svd(a)`: singular values of a constant numeric 2x2 matrix (returned as a list)

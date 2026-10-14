@@ -1,0 +1,158 @@
+#ifndef ESBMC_CODECVT
+#define ESBMC_CODECVT
+
+// C++11 header, deprecated since C++17 ([depr.codecvt]) (#7797). libc++ ships
+// it in every language mode and expands it to nothing in an older one, so an
+// unconditional include still compiles (#3387).
+//
+// The facets carry their own encoding constants; the conversions themselves
+// (in/out/unshift and the do_* members they call) are not modelled, following
+// the codecvt facet in <locale>, whose members are declarations only. A call
+// to one returns a nondeterministic value, which over-approximates: a property
+// that holds for every conversion result still verifies, but a property that
+// depends on a specific one does not.
+#if __cplusplus >= 201103L
+
+#  include "cwchar"
+#  include "locale"
+
+namespace std
+{
+// [depr.codecvt.syn]
+enum codecvt_mode
+{
+  consume_header = 4,
+  generate_header = 2,
+  little_endian = 1
+};
+
+namespace __codecvt_detail
+{
+// A UTF-8 sequence is at most 4 bytes, but only 3 can be produced for a code
+// unit that cannot exceed 0xFFFF; UTF-16 pairs the other way round. Taken from
+// libc++'s measured values rather than the wording, which leaves max_length()
+// implementation-defined.
+template <class Elem>
+struct utf8_width
+{
+  static const int value = 4;
+};
+template <>
+struct utf8_width<char16_t>
+{
+  static const int value = 3;
+};
+
+template <class Elem>
+struct utf16_width
+{
+  static const int value = 4;
+};
+template <>
+struct utf16_width<char16_t>
+{
+  static const int value = 2;
+};
+} // namespace __codecvt_detail
+
+template <
+  class Elem,
+  unsigned long Maxcode = 0x10ffff,
+  codecvt_mode Mode = (codecvt_mode)0>
+class codecvt_utf8 : public codecvt<Elem, char, mbstate_t>
+{
+public:
+  explicit codecvt_utf8(size_t refs = 0) : codecvt<Elem, char, mbstate_t>(refs)
+  {
+  }
+
+  ~codecvt_utf8()
+  {
+  }
+
+  int encoding() const throw()
+  {
+    return 0;
+  }
+
+  bool always_noconv() const throw()
+  {
+    return false;
+  }
+
+  int max_length() const throw()
+  {
+    return __codecvt_detail::utf8_width<Elem>::value +
+           ((Mode & consume_header) ? 3 : 0);
+  }
+};
+
+template <
+  class Elem,
+  unsigned long Maxcode = 0x10ffff,
+  codecvt_mode Mode = (codecvt_mode)0>
+class codecvt_utf16 : public codecvt<Elem, char, mbstate_t>
+{
+public:
+  explicit codecvt_utf16(size_t refs = 0) : codecvt<Elem, char, mbstate_t>(refs)
+  {
+  }
+
+  ~codecvt_utf16()
+  {
+  }
+
+  int encoding() const throw()
+  {
+    return 0;
+  }
+
+  bool always_noconv() const throw()
+  {
+    return false;
+  }
+
+  int max_length() const throw()
+  {
+    return __codecvt_detail::utf16_width<Elem>::value +
+           ((Mode & consume_header) ? 2 : 0);
+  }
+};
+
+template <
+  class Elem,
+  unsigned long Maxcode = 0x10ffff,
+  codecvt_mode Mode = (codecvt_mode)0>
+class codecvt_utf8_utf16 : public codecvt<Elem, char, mbstate_t>
+{
+public:
+  explicit codecvt_utf8_utf16(size_t refs = 0)
+    : codecvt<Elem, char, mbstate_t>(refs)
+  {
+  }
+
+  ~codecvt_utf8_utf16()
+  {
+  }
+
+  int encoding() const throw()
+  {
+    return 0;
+  }
+
+  bool always_noconv() const throw()
+  {
+    return false;
+  }
+
+  int max_length() const throw()
+  {
+    return 4 + ((Mode & consume_header) ? 3 : 0);
+  }
+};
+
+} // namespace std
+
+#endif
+
+#endif

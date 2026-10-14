@@ -29,8 +29,6 @@ _LN10: float = 2.302585092994046
 
 
 def phase(z: complex) -> float:
-    if z.real == 0.0 and z.imag == 0.0:
-        return 0.0
     return math.atan2(z.imag, z.real)
 
 
@@ -87,11 +85,30 @@ def _abs_complex(z: complex) -> float:
 
 
 def polar(z: complex) -> tuple[float, float]:
+    # Keep the computation local to avoid nested helper calls in tuple-return
+    # expressions, which can generate unstable FP VCCs in the current backend.
+    mag2 = z.real * z.real + z.imag * z.imag
+    if mag2 <= 0.0:
+        r = 0.0
+    else:
+        r = math.sqrt(mag2)
+    # Preserve CPython signed-zero phase behavior explicitly.
     if z.real == 0.0 and z.imag == 0.0:
-        return (0.0, 0.0)
-    if z.imag == 0.0 and z.real > 0.0:
-        return (z.real, 0.0)
-    return (_abs_complex(z), phase(z))
+        real_sign = math.copysign(1.0, z.real)
+        imag_sign = math.copysign(1.0, z.imag)
+        if real_sign < 0.0:
+            if imag_sign < 0.0:
+                p = -pi
+            else:
+                p = pi
+        else:
+            if imag_sign < 0.0:
+                p = -0.0
+            else:
+                p = 0.0
+    else:
+        p = math.atan2(z.imag, z.real)
+    return (r, p)
 
 
 def rect(r: float, phi: float) -> complex:

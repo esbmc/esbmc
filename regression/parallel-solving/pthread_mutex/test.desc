@@ -1,4 +1,6 @@
 THOROUGH
 main.i
 --parallel-solving --k-induction
-^VERIFICATION UNKNOWN$
+^Bug found \(k = 1\)$
+^VERIFICATION FAILED$
+\A(?![\s\S]*Unable to prove or falsify the program)[\s\S]*\Z

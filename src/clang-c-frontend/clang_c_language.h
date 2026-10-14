@@ -1,7 +1,7 @@
 #ifndef CLANG_C_FRONTEND_CLANG_C_LANGUAGE_H_
 #define CLANG_C_FRONTEND_CLANG_C_LANGUAGE_H_
 
-#include <util/language.h>
+#include <util/lang/language.h>
 
 #define __STDC_LIMIT_MACROS
 #define __STDC_FORMAT_MACROS
@@ -54,6 +54,9 @@ public:
   clang_c_languaget();
   ~clang_c_languaget();
 
+  /** @brief Registers the bundled clang headers with file_operations. */
+  static void register_bundled();
+
 protected:
   virtual std::string internal_additions();
 
@@ -73,7 +76,8 @@ protected:
    *    src/cpp/library
    * 4. our C standard library and system headers, corresponds to:
    *    src/c2goto/headers
-   * 5. the system's C++ standard library, e.g., /usr/include/c++/v1 for libc++ or
+   * 5. the system's C++ standard library, e.g., /usr/include/c++/v1 for libc++
+   * or
    *    /usr/lib/gcc/x86_64-pc-linux-gnu/13/include/g++-v13/{.,x86_64-pc-linux-gnu,backward}
    *    for the default libstdc++
    * 6. the Clang resource directory's /include, e.g.

@@ -1,0 +1,6 @@
+CORE
+main.c
+
+^Violated property:$
+^  assertion 0$
+^VERIFICATION FAILED$

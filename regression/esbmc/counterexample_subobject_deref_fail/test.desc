@@ -1,0 +1,6 @@
+CORE
+main.c
+--no-slice
+^  o\.g = 9 \(00000000 00000000 00000000 00001001\)$
+^  p->g = \{ \.g=9, \.in=\{ \.pad=0, \.g=5 \} \}$
+^VERIFICATION FAILED$

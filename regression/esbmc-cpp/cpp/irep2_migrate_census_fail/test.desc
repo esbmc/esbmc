@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--clang-cpp-irep2-migrate-census
+^IREP2 migrate census: \d+ symbols, \d+ values migrated, ([2-9]|[1-9]\d+) type kinds, 0 failures$
+^VERIFICATION FAILED$

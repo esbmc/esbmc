@@ -1,0 +1,6 @@
+CORE
+main.py
+--unwind 6 --multi-property
+^\s+PASSED\s+\[main\.assertion\.[0-9]+\]\s+line\s+9\s+assertion
+^\s+FAILED\s+\[main\.assertion\.[0-9]+\]\s+line\s+10\s+assertion
+^VERIFICATION FAILED$

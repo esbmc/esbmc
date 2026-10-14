@@ -2,13 +2,14 @@
 
 // GCSE - Global Common Subexpression Elimination
 
-#include <util/message.h>
+#include <util/message/message.h>
 #include <goto-programs/abstract-interpretation/ai.h>
-#include <pointer-analysis/value_set_analysis.h>
+#include <pointer-analysis/value_sets.h>
 /**
  * @brief Abstract domain to obtain all available expressions (AE)
  *
- * The domain is the set of expressions that were already computed up to this point.
+ * The domain is the set of expressions that were already computed up to this
+ * point.
  *
  * ... // AE: []
  * int x = a + b + c // AE: [a + b, a + b + c]
@@ -16,10 +17,10 @@
  * c = 42 // AE: [a + b, a + b + d]
  *
  *
- * There are some level of precision to be considered. We shouldn't track constants
- * or symbols as there is no point in saying that something like '42' is available.
- * However, '42 + a' will be cached. This opens a path for canonization algorithms as
- * '42 + a' = 'a + 42'
+ * There are some level of precision to be considered. We shouldn't track
+ * constants or symbols as there is no point in saying that something like '42'
+ * is available. However, '42 + a' will be cached. This opens a path for
+ * canonization algorithms as '42 + a' = 'a + 42'
  *
  * TODO: add a canonization method for expr2tc.
  *
@@ -31,8 +32,9 @@
  *      then just replace the abstract state with "new".
  *   Otherwise, compute the intersection between "prev" and "new".
  * - Transform operator:
- *   + END_FUNCTION: all local variables are not available anymore
- *   + ASSIGN: RHS (and sub-expressions) is now available, LHS (and dependencies) is not available anymore
+ *   + RETURN: the returned expression (and sub-expressions) is now available
+ *   + ASSIGN: RHS (and sub-expressions) is now available, LHS (and
+ * dependencies) is not available anymore
  *   + GOTO/ASSERT/ASSUME: guard (and sub-expressions) is now available
  *   + DECL/DEAD: variable is no longer available
  *   + FUNCTION_CALL: same as assign
@@ -53,13 +55,18 @@ public:
 
   virtual void make_bottom() override
   {
-    // A bottom for AE means that there are no expressions available
     available_expressions.clear();
+    bottom = true;
   }
 
+  /// Entry has nothing available yet, but is reachable — distinct from bottom.
+  /// Conflating the two would let a merge adopt the other side's expressions
+  /// wholesale, and would make ai_baset treat a function whose exit has no
+  /// available expression as an unreachable exit point.
   virtual void make_entry() override
   {
     available_expressions.clear();
+    bottom = false;
   };
   virtual void make_top() override
   {
@@ -71,7 +78,7 @@ public:
 
   virtual bool is_bottom() const override
   {
-    return available_expressions.size() == 0;
+    return bottom;
   }
   virtual bool is_top() const override
   {
@@ -91,15 +98,26 @@ public:
   /// All expressions available
   std::unordered_set<expr2tc, irep2_hash> available_expressions;
 
+  /// Unreachable-so-far marker. A default-constructed domain must be bottom:
+  /// ai_baset asserts as much for states it has not visited.
+  bool bottom = true;
+
 protected:
-  /// Add non-primitive expression `e` (and its sub-expressions) into available_expressions.
+  /// Add non-primitive expression `e` (and its sub-expressions) into
+  /// available_expressions.
   void make_expression_available(const expr2tc &e);
 
-  /// Remove expression `e` (and everything that it depends on) from available_expressions
+  /// Remove expression `e` (and everything that it depends on) from
+  /// available_expressions
   void havoc_expr(const expr2tc &e, const goto_programt::const_targett &);
 
-  /// Remove every expression from available_expressions that depends on symbol `sym`
+  /// Remove every expression from available_expressions that depends on symbol
+  /// `sym`
   void havoc_symbol(const irep_idt &sym);
+
+  /// Remove every expression that may read the object `ptr` points to, which
+  /// is about to be deallocated
+  void havoc_pointee(expr2tc ptr, const goto_programt::const_targett &);
 
   // Helper function to check whether `src` depends on `taint`
   bool should_remove_expr(const expr2tc &taint, const expr2tc &src) const;
@@ -107,18 +125,18 @@ protected:
   bool should_remove_expr(const irep_idt &sym, const expr2tc &src) const;
 
 public:
-  // TODO: clearly this shouldn't be here. The proper way is to create a new Abstract Interpreter
-  // that contains a points-to analysis
-  static std::shared_ptr<value_set_analysist> vsa;
+  // TODO: clearly this shouldn't be here. The proper way is to create a new
+  // Abstract Interpreter that contains a points-to analysis
+  static std::shared_ptr<value_setst> vsa;
 };
 
-#include <util/algorithms.h>
+#include <goto-programs/goto_functions_algorithm.h>
 /**
  * @brief Global Common Subexpression Elimination algorithm
  *
- * Compute all common subexpression in a goto program. 
- * For each common subexpression, a new intermediate variable 
- * `__esbmc_cse_symbol$` is created and assigned to the common
+ * Compute all common subexpression in a goto program.
+ * For each common subexpression, a new intermediate variable
+ * `__ESBMC_cse_symbol$` is created and assigned to the common
  * value.
  *
  * In ESBMC, the main advantage is for sequential dereferences/with
@@ -137,7 +155,7 @@ public:
 class goto_cse : public goto_functions_algorithm
 {
 public:
-  goto_cse(contextt &ns, std::shared_ptr<value_set_analysist> &vsa)
+  goto_cse(contextt &ns, std::shared_ptr<value_setst> &vsa)
     : goto_functions_algorithm(true), context(ns)
   {
     cse_domaint::vsa = vsa;
@@ -145,9 +163,10 @@ public:
 
   virtual bool runOnProgram(goto_functionst &) override;
   virtual bool
-  runOnFunction(std::pair<const dstring, goto_functiont> &F) override;
+  runOnFunction(std::pair<const irep_idt, goto_functiont> &F) override;
 
-  // TODO: we should have a method to convert an cse_symbol back to the original expr for CE.
+  // TODO: we should have a method to convert an cse_symbol back to the original
+  // expr for CE.
 
 protected:
   ait<cse_domaint> available_expressions;
@@ -155,6 +174,12 @@ protected:
   expr2tc obtain_max_sub_expr(const expr2tc &e, const cse_domaint &state) const;
   void replace_max_sub_expr(
     expr2tc &e,
+    const std::unordered_map<expr2tc, expr2tc, irep2_hash> &expr2symbol,
+    const goto_programt::const_targett &to,
+    std::unordered_set<expr2tc, irep2_hash> &matched_expressions) const;
+  /// Like replace_max_sub_expr, but only in the value operands of an lvalue
+  void replace_in_lvalue(
+    expr2tc &lhs,
     const std::unordered_map<expr2tc, expr2tc, irep2_hash> &expr2symbol,
     const goto_programt::const_targett &to,
     std::unordered_set<expr2tc, irep2_hash> &matched_expressions) const;

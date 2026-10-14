@@ -1,0 +1,5 @@
+CORE
+main.c
+--enforce-contract push --function push
+^VERIFICATION FAILED$
+^.*buf not in assigns clause.*$

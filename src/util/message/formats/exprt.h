@@ -6,7 +6,7 @@
 #endif
 
 // exprt Specialization
-#include <util/expr.h>
+#include <util/irep/expr.h>
 template <>
 struct fmt::formatter<exprt>
 {

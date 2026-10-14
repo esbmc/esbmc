@@ -1,4 +1,5 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR\: Attribute \"a\" not found$
+^VERIFICATION FAILED$
+uncaught exception: AttributeError

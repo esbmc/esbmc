@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^WARNING: not checking alignment for access to packed struct struct S$
+^VERIFICATION SUCCESSFUL$

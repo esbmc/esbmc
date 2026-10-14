@@ -1,0 +1,26 @@
+- entry_type: invariant_set
+  metadata:
+    format_version: "2.0"
+    uuid: "8faefbb9-b514-441e-b3a9-9d4a491f2827"
+    creation_time: "2024-09-17T09:35:16+0000"
+    producer:
+      name: "Handcrafted"
+      version: ""
+    task:
+      input_files:
+      - "./trex02-2.c"
+      input_file_hashes:
+        "./trex02-2.c": "813a8ddd546bc7f5130f32994d5f684af23ea3f2882f066aeb97d0e96f57ab55"
+      specification: "G ! call(reach_error())"
+      data_model: "ILP32"
+      language: "C"
+  content:
+    - invariant:
+        type: loop_invariant
+        location:
+          file_name: "./trex02-2.c"
+          line: 23
+          column: 3
+          function: main
+        value: "1" # The invariant is correct, but the program is unsafe
+        format: c_expression

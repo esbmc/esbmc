@@ -9,14 +9,14 @@
 
 #include <solidity-frontend/solidity_convert.h>
 #include <solidity-frontend/typecast.h>
-#include <util/arith_tools.h>
-#include <util/bitvector.h>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/mp_arith.h>
-#include <util/std_expr.h>
-#include <util/message.h>
+#include <util/arith/arith_tools.h>
+#include <util/arith/bitvector.h>
+#include <util/lang/c_types.h>
+#include <util/expr/expr_util.h>
+#include <util/base/i2string.h>
+#include <util/arith/mp_arith.h>
+#include <util/irep/std_expr.h>
+#include <util/message/message.h>
 #include <fstream>
 
 namespace
@@ -88,7 +88,8 @@ bool solidity_convertert::get_var_decl_ref(
   const bool is_this_ptr,
   exprt &new_expr)
 {
-  // Function to configure new_expr that has a +ve referenced id, referring to a variable declaration
+  // Function to configure new_expr that has a +ve referenced id, referring to a
+  // variable declaration
   assert(decl["nodeType"] == "VariableDeclaration");
   std::string name, id;
   if (get_var_decl_name(decl, name, id))
@@ -104,7 +105,7 @@ bool solidity_convertert::get_var_decl_ref(
   bool is_global_static_mapping =
     (get_sol_type(type) == SolidityGrammar::SolType::MAPPING &&
      type.is_array()) ||
-    type.get_bool("#sol_mapping_array") || is_dynarray_state_var;
+    get_sol_mapping_array(type) || is_dynarray_state_var;
 
   if (context.find_symbol(id) != nullptr)
     new_expr = symbol_expr(*context.find_symbol(id));
@@ -182,8 +183,9 @@ bool solidity_convertert::get_func_decl_ref(
   const nlohmann::json &decl,
   exprt &new_expr)
 {
-  // Function to configure new_expr that has a +ve referenced id, referring to a function declaration
-  // This allow to get func symbol before we add it to the symbol table
+  // Function to configure new_expr that has a +ve referenced id, referring to a
+  // function declaration This allow to get func symbol before we add it to the
+  // symbol table
   assert(
     decl["nodeType"] == "FunctionDefinition" ||
     decl["nodeType"] == "EventDefinition" ||
@@ -199,8 +201,8 @@ bool solidity_convertert::get_func_decl_ref(
   }
 
   typet type;
-  if (get_func_decl_ref_type(
-        decl, type)) // "type-name" as in state-variable-declaration
+  if (get_func_decl_ref_type(decl, type)) // "type-name" as in
+                                          // state-variable-declaration
     return true;
 
   //! function with no value i.e function body
@@ -394,7 +396,7 @@ bool solidity_convertert::get_esbmc_builtin_ref(
     blt_name == "__VERIFIER_assert")
     name = "assert";
   else
-    //!assume it's a solidity built-in func
+    //! assume it's a solidity built-in func
     return get_sol_builtin_ref(decl, new_expr);
   id = "c:@F@" + name;
 
@@ -402,7 +404,6 @@ bool solidity_convertert::get_esbmc_builtin_ref(
   {
     assert(context.find_symbol(id) != nullptr);
     new_expr = symbol_expr(*context.find_symbol(id));
-    new_expr.type().set("#sol_name", blt_name);
   }
   else
   {
@@ -413,7 +414,6 @@ bool solidity_convertert::get_esbmc_builtin_ref(
     return_type = bool_t;
     convert_type.return_type() = return_type;
     type = convert_type;
-    type.set("#sol_name", blt_name);
 
     new_expr = exprt("symbol", type);
     new_expr.identifier(id);
@@ -431,7 +431,8 @@ bool solidity_convertert::get_esbmc_builtin_ref(
 
 /*
   check if it's a solidity built-in function
-  - if so, get the function definition reference, assign to new_expr and return false
+  - if so, get the function definition reference, assign to new_expr and return
+  false
   - if not, return true
 */
 bool solidity_convertert::get_sol_builtin_ref(
@@ -667,8 +668,8 @@ bool solidity_convertert::get_sol_builtin_ref(
         if (get_expr(expr["expression"], base))
           return true;
         typet base_t;
-        if (get_type_description(
-              expr["expression"]["typeDescriptions"], base_t))
+        if (
+          get_type_description(expr["expression"]["typeDescriptions"], base_t))
           return true;
         SolidityGrammar::SolType solt = get_sol_type(base_t);
         if (
@@ -679,7 +680,7 @@ bool solidity_convertert::get_sol_builtin_ref(
           // mapping array: return the auxiliary _length variable
           if (
             solt == SolidityGrammar::SolType::DYNARRAY &&
-            base_t.get_bool("#sol_mapping_array"))
+            get_sol_mapping_array(base_t))
           {
             assert(base.is_symbol());
             std::string len_id =
@@ -711,7 +712,7 @@ bool solidity_convertert::get_sol_builtin_ref(
           // infinite array; resolve via get_dynarr_len_ref.
           else if (
             solt == SolidityGrammar::SolType::DYNARRAY && base.is_symbol() &&
-            base.type().get_bool("#sol_dynarray_state"))
+            get_sol_dynarray_state(base.type()))
           {
             assert(base.is_symbol());
             std::string len_id =
@@ -737,7 +738,7 @@ bool solidity_convertert::get_sol_builtin_ref(
           else
           {
             // static array:  uint[2] arr; arr.length = 2;
-            std::string arr_size = base_t.get("#sol_array_size").as_string();
+            std::string arr_size = get_sol_array_size(base_t);
             assert(!arr_size.empty());
             new_expr = constant_exprt(
               integer2binary(string2integer(arr_size), bv_width(uint_type())),
@@ -815,8 +816,8 @@ bool solidity_convertert::get_sol_builtin_ref(
           return true;
 
         typet base_t;
-        if (get_type_description(
-              expr["expression"]["typeDescriptions"], base_t))
+        if (
+          get_type_description(expr["expression"]["typeDescriptions"], base_t))
           return true;
 
         SolidityGrammar::SolType solt = get_sol_type(base_t);
@@ -826,7 +827,7 @@ bool solidity_convertert::get_sol_builtin_ref(
 
         if (
           solt == SolidityGrammar::SolType::DYNARRAY &&
-          base_t.get_bool("#sol_mapping_array"))
+          get_sol_mapping_array(base_t))
         {
           // mapping(K=>V)[]: push increments length, pop decrements.
           assert(base.is_symbol());
@@ -873,7 +874,7 @@ bool solidity_convertert::get_sol_builtin_ref(
         }
         else if (
           solt == SolidityGrammar::SolType::DYNARRAY && base.is_symbol() &&
-          base.type().get_bool("#sol_dynarray_state"))
+          get_sol_dynarray_state(base.type()))
         {
           // Dynarray state var: write element at len, then increment len.
           // T1.1 Stage S1: `len_ref` is now `<arr>_dynarray_len[this->$address]`
@@ -1135,7 +1136,7 @@ bool solidity_convertert::get_sol_builtin_ref(
           code_declt decl(symbol_expr(added_aux));
           exprt init_call = base; // already a (typecast over) map_dynarr_get
           solidity_gen_typecast(ns, init_call, ptr_void_t);
-          added_aux.value = init_call;
+          added_aux.set_value(init_call);
           decl.operands().push_back(init_call);
           move_to_front_block(decl);
 
@@ -1220,7 +1221,7 @@ bool solidity_convertert::get_sol_builtin_ref(
               elem_sym.lvalue = true;
               auto &added_elem = *move_symbol_to_context(elem_sym);
               code_declt elem_decl(symbol_expr(added_elem));
-              added_elem.value = val;
+              added_elem.set_value(val);
               elem_decl.operands().push_back(val);
               move_to_front_block(elem_decl);
 
@@ -1332,7 +1333,7 @@ bool solidity_convertert::get_sol_builtin_ref(
             aux_sym.file_local = true;
 
             auto &inserted = *move_symbol_to_context(aux_sym);
-            inserted.value = default_value;
+            inserted.set_value(migrate_expr(default_value));
 
             code_declt decl(symbol_expr(inserted));
             decl.operands().push_back(default_value);
@@ -1381,7 +1382,7 @@ bool solidity_convertert::get_sol_builtin_ref(
                 l);
               auto &added_aux = *move_symbol_to_context(aux_idx);
               code_declt decl(symbol_expr(added_aux));
-              added_aux.value = args;
+              added_aux.set_value(migrate_expr(args));
               decl.operands().push_back(args);
               move_to_front_block(decl);
               args = address_of_exprt(symbol_expr(added_aux));
@@ -1516,10 +1517,9 @@ bool solidity_convertert::get_sol_builtin_ref(
             if (func["arguments"].size() == 0)
               // x.push() == x.push(0x00)
               value_expr = gen_zero(uint_type());
-            else if (get_expr(
-                       func["arguments"][0],
-                       expr["argumentTypes"][0],
-                       value_expr))
+            else if (
+              get_expr(
+                func["arguments"][0], expr["argumentTypes"][0], value_expr))
               return true;
 
             // push value must be byte-sized
@@ -1605,7 +1605,7 @@ bool solidity_convertert::get_sol_builtin_ref(
 
           side_effect_expr_function_callt first;
           get_library_function_call_no_args(
-            "string_concat", "c:@F@string_concat", sym->type, l, first);
+            "string_concat", "c:@F@string_concat", sym->get_type(), l, first);
           first.arguments().push_back(args[0]);
           first.arguments().push_back(args[1]);
 
@@ -1614,7 +1614,7 @@ bool solidity_convertert::get_sol_builtin_ref(
           {
             side_effect_expr_function_callt next;
             get_library_function_call_no_args(
-              "string_concat", "c:@F@string_concat", sym->type, l, next);
+              "string_concat", "c:@F@string_concat", sym->get_type(), l, next);
             next.arguments().push_back(result);
             next.arguments().push_back(args[i]);
             result = next;
@@ -1636,7 +1636,7 @@ bool solidity_convertert::get_sol_builtin_ref(
           get_library_function_call_no_args(
             "bytes_dynamic_concat",
             "c:@F@bytes_dynamic_concat",
-            sym->type,
+            sym->get_type(),
             l,
             first);
           first.arguments().push_back(args[0]);
@@ -1650,7 +1650,7 @@ bool solidity_convertert::get_sol_builtin_ref(
             get_library_function_call_no_args(
               "bytes_dynamic_concat",
               "c:@F@bytes_dynamic_concat",
-              sym->type,
+              sym->get_type(),
               l,
               next);
             next.arguments().push_back(result);
@@ -1755,13 +1755,13 @@ bool solidity_convertert::get_sol_builtin_ref(
     {
       symbolt &sym = *context.find_symbol(id_var);
 
-      if (sym.value.is_empty() || sym.value.is_zero())
+      if (sym.get_value().is_empty() || sym.get_value().is_zero())
       {
         // update: set the value to rand (default 0）
         // since all the current support built-in vars are uint type.
         // we just set the value to c:@F@nondet_uint
         symbolt &r = *context.find_symbol("c:@F@nondet_uint");
-        sym.value = r.value;
+        sym.set_value(r.get_value());
       }
       new_expr = symbol_expr(sym);
     }

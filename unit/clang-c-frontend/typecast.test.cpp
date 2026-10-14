@@ -11,12 +11,13 @@
 
 #include "../testing-utils/util_irep.h"
 
-#define CATCH_CONFIG_MAIN // This tells Catch to provide a main() - only do this in one cpp file
+#define CATCH_CONFIG_MAIN // This tells Catch to provide a main() - only do this
+                          // in one cpp file
 #include <catch2/catch.hpp>
 #include <clang-c-frontend/clang_c_convert.h>
 #include <clang-c-frontend/typecast.h>
-#include <util/type.h>
-#include <util/expr_util.h>
+#include <util/irep/type.h>
+#include <util/expr/expr_util.h>
 
 // ******************** TESTS ********************
 

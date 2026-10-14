@@ -1,0 +1,4 @@
+CORE
+cbmc_overflow_p_fail.goto
+--binary
+^VERIFICATION FAILED$

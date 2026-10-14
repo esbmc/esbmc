@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^VERIFICATION SUCCESSFUL$
+^  PASSED       \[global\.assertion\.[0-9]+\] +line +5 +uncaught exception: IndexError$

@@ -3,14 +3,16 @@
 
 #include <goto-programs/goto_program.h>
 #include <list>
+#include <optional>
 #include <queue>
+#include <set>
 #include <stack>
-#include <util/expr_util.h>
-#include <util/guard.h>
-#include <util/namespace.h>
-#include <util/options.h>
-#include <util/symbol_generator.h>
-#include <util/std_code.h>
+#include <util/expr/expr_util.h>
+#include <irep2/irep2_guard.h>
+#include <util/symtab/namespace.h>
+#include <util/config/options.h>
+#include <util/symtab/symbol_generator.h>
+#include <util/irep/std_code.h>
 
 class goto_convertt
 {
@@ -19,6 +21,11 @@ public:
 
   /// Returns true iff @p expr is a direct reference to a C11 _Atomic variable.
   static bool is_atomic_symbol(const exprt &expr, const namespacet &ns);
+
+  /// Returns true iff @p expr contains a direct read of any C11 _Atomic
+  /// variable (does not recurse into address_of). Shared with the IREP2-native
+  /// body dispatcher so it gates an assignment exactly as convert_assign does.
+  static bool has_atomic_read(const exprt &expr, const namespacet &ns);
 
   goto_convertt(contextt &_context, optionst &_options)
     : context(_context),
@@ -50,12 +57,30 @@ protected:
   void make_temp_symbol(exprt &expr, goto_programt &dest);
 
   // this produces if(guard) dest;
-  void guard_program(const guardt &guard, goto_programt &dest);
+  void guard_program(const guard2tc &guard, goto_programt &dest);
 
   void remove_sideeffects(
     exprt &expr,
     goto_programt &dest,
     bool result_is_used = true);
+
+  // IREP2 dual-API seam (W1, esbmc/esbmc#4715): delegates to the legacy
+  // exprt overload above; behaviour-identical by construction.
+  void remove_sideeffects(
+    expr2tc &expr,
+    goto_programt &dest,
+    bool result_is_used = true);
+
+  /// Lowers the condition of an if, loop, for or switch statement, a
+  /// full-expression whose temporaries are destroyed before the branch
+  /// ([class.temporary]/4).
+  void remove_condition_sideeffects(exprt &cond, goto_programt &dest);
+  bool in_short_circuit = false;
+
+  // Recursively flatten a (possibly nested) &&/|| contract clause
+  // (__ESBMC_requires / __ESBMC_ensures), hoisting side effects (e.g.
+  // __ESBMC_old()) only at the leaves so no conjunct is dropped (#6298).
+  void flatten_contract_clause(exprt &clause, goto_programt &dest);
 
   void address_of_replace_objects(exprt &expr, goto_programt &dest);
 
@@ -64,15 +89,45 @@ protected:
   void generate_dynamic_size_vla(
     exprt &var,
     const locationt &loc,
-    goto_programt &dest);
+    goto_programt &dest,
+    bool allow_zero_size = false);
 
   bool has_sideeffect(const exprt &expr);
+  // IREP2 overload (W1, esbmc/esbmc#4715): native recursive scan for a
+  // sideeffect2t node, mirroring the legacy exprt overload above.
+  bool has_sideeffect(const expr2tc &expr);
+  /// True if lowering expr may create a temporary with a destructor.
+  bool has_destructible_sideeffect(const exprt &expr);
+  bool splits_and_condition(const exprt &cond);
 
   // Used by remove_sideeffects() to process a quantifier body expression.
   // Recursively walks || and && sub-expressions without converting them to
   // short-circuit ITE chains, so that bound variables remain reachable by
-  // replace_name_in_body() in smt_conv.cpp.
-  void remove_sideeffects_for_quantifier_body(exprt &body, goto_programt &dest);
+  // replace_name_in_body() in smt_solver.cpp.  @p bound_vars holds the
+  // identifiers bound by the enclosing quantifiers.
+  void remove_sideeffects_for_quantifier_body(
+    exprt &body,
+    const std::set<irep_idt> &bound_vars,
+    goto_programt &dest);
+  void inline_calls_in_quantifier_body(exprt &expr, unsigned depth);
+  bool try_inline_pure_call(const symbolt &fsym, const exprt &call, exprt &out);
+  // Summarize a callee with straight-line assignments, if/else, and
+  // constant-trip-count loops into a single side-effect-free expression so it
+  // can appear in a quantifier body.  Returns false (leaving @p out untouched)
+  // for any shape it cannot soundly turn into a pure expression.
+  bool summarize_pure_call(const symbolt &fsym, const exprt &call, exprt &out);
+  // Why summarize_pure_call() gave up, keyed by callsite location, so that
+  // the rejection reported for a quantifier body can name the cause.
+  std::map<std::string, std::string> summary_reject_reasons;
+  const exprt *find_sideeffect_on_bound_var(
+    const exprt &expr,
+    const std::set<irep_idt> &bound_vars);
+  void skolemize_asserted_foralls(exprt &expr, goto_programt &dest);
+  // Rewrite __ESBMC_forall/__ESBMC_exists intrinsic calls into forall/exists
+  // expressions, summarizing calls in the body first, before any hoisting can
+  // freeze the bound variable.  Bodies that cannot be made side-effect-free are
+  // left as calls for the skolemization / quantifier-body fallbacks.
+  void convert_quantifier_calls(exprt &expr);
 
   void remove_assignment(exprt &expr, goto_programt &dest, bool result_is_used);
   void remove_post(exprt &expr, goto_programt &dest, bool result_is_used);
@@ -81,6 +136,8 @@ protected:
   remove_function_call(exprt &expr, goto_programt &dest, bool result_is_used);
   void remove_cpp_new(exprt &expr, goto_programt &dest, bool result_is_used);
   void remove_cpp_delete(exprt &expr, goto_programt &dest);
+  void remove_operand_sideeffects(exprt &expr, goto_programt &dest);
+  void drop_destructor(const symbol_exprt &object, std::size_t from);
   void remove_temporary_object(exprt &expr, goto_programt &dest);
   void remove_statement_expression(
     exprt &expr,
@@ -93,8 +150,48 @@ protected:
 
   static void replace_new_object(const exprt &object, exprt &dest);
 
-  void
-  cpp_new_initializer(const exprt &lhs, const exprt &rhs, goto_programt &dest);
+  void cpp_new_at(
+    const exprt &lhs,
+    const exprt &placement,
+    const locationt &location,
+    goto_programt &dest);
+
+  void cpp_new_initializer(
+    const exprt &lhs,
+    const exprt &rhs,
+    const exprt &elem_count,
+    goto_programt &dest);
+
+  void cpp_new_zero_fill(
+    const exprt &lhs,
+    const exprt &rhs,
+    const exprt &elem_count,
+    goto_programt &dest);
+
+  void cpp_new_store_element(
+    const exprt &base,
+    const exprt &offset,
+    const exprt &init,
+    const locationt &location,
+    const exprt &built,
+    code_blockt &out);
+
+  bool cpp_new_init_list(
+    const exprt &lhs,
+    const exprt &rhs,
+    const exprt &init,
+    const exprt &elem_count,
+    const exprt &built,
+    code_blockt &out);
+
+  void convert_cpp_new_elements(
+    const exprt &base,
+    const exprt &built,
+    const codet &construction,
+    goto_programt &dest);
+
+  bool user_code_throws();
+  std::optional<bool> user_code_throws_cache;
 
   //
   // function calls
@@ -113,6 +210,11 @@ protected:
     const exprt::operandst &arguments,
     goto_programt &dest);
 
+  /// True when a contract clause should be dropped: no contract mode is
+  /// active, so the clause states nothing. Split out so the clause handling
+  /// adds no branching to do_function_call_symbol.
+  bool drop_inactive_contract_clause(bool is_clause) const;
+
   virtual void do_function_call_symbol(
     const exprt &lhs,
     const exprt &function,
@@ -129,7 +231,42 @@ protected:
   // conversion
   //
   void convert_block(const codet &code, goto_programt &dest);
+  void convert_controlled(const codet &code, goto_programt &dest);
   void convert_decl(const codet &code, goto_programt &dest);
+  void discard_comma_operands(exprt &initializer, goto_programt &dest);
+  void remove_comma_operand(exprt &operand, goto_programt &dest);
+  void destroy_comma_operand_temporaries(
+    std::size_t stack_size,
+    const locationt &location,
+    goto_programt &dest);
+  /// Temporaries created by a comma's discarded operands.
+  std::set<irep_idt> comma_operand_temporaries;
+  void convert_decl_initializer(
+    const exprt &var,
+    exprt &initializer,
+    const codet &new_code,
+    const symbolt &s,
+    goto_programt &dest);
+  bool construct_in_place(
+    const exprt &object,
+    const exprt &initializer,
+    goto_programt &dest);
+  void remove_initializer_sideeffects(
+    const exprt &object,
+    exprt &initializer,
+    goto_programt &dest);
+  void convert_dynamic_static_init(
+    const codet &decl,
+    const symbolt &s,
+    const symbolt &guard,
+    goto_programt &dest);
+  void construct_array_elements(
+    const exprt &base,
+    const typet &type,
+    const side_effect_expr_function_callt &ctor,
+    goto_programt &dest);
+  void schedule_array_element_destructors(const exprt &base, const typet &type);
+
   void convert_decl_block(const codet &code, goto_programt &dest);
   void convert_expression(const codet &code, goto_programt &dest);
   void convert_assign(const code_assignt &code, goto_programt &dest);
@@ -149,9 +286,15 @@ protected:
   void convert_dowhile(const codet &code, goto_programt &dest);
   void convert_assume(const codet &code, goto_programt &dest);
   void convert_assert(const codet &code, goto_programt &dest);
+  bool emits_assert(const locationt &location) const;
+  void assume_if_ends_path(
+    const expr2tc &guard,
+    const locationt &location,
+    goto_programt &dest);
   void convert_switch(const codet &code, goto_programt &dest);
   void convert_break(const code_breakt &code, goto_programt &dest);
   void convert_return(const code_returnt &code, goto_programt &dest);
+  void remove_return_value_sideeffects(exprt &value, goto_programt &dest);
   void convert_continue(const code_continuet &code, goto_programt &dest);
   void convert_ifthenelse(const codet &code, goto_programt &dest);
   void convert_init(const codet &code, goto_programt &dest);
@@ -172,6 +315,19 @@ protected:
 
   typedef std::vector<codet> destructor_stackt;
 
+  /// Converts a statement that is a full-expression ([class.temporary]/4), so
+  /// the temporaries it creates are destroyed when it ends.
+  void convert_full_expression(const codet &code, goto_programt &dest);
+  /// Emits the scope-exit entries pushed above `stack_size` when one of them
+  /// is a destructor call, as the temporaries of a full-expression; plain
+  /// DEADs of C temporaries keep block scope.
+  bool destroy_full_expression_temporaries(
+    std::size_t stack_size,
+    const locationt &,
+    goto_programt &dest);
+  std::size_t keep_reference_member_temporaries(
+    const exprt &initializer,
+    std::size_t stack_size);
   void unwind_destructor_stack(
     const locationt &,
     std::size_t stack_size,
@@ -181,6 +337,16 @@ protected:
     std::size_t stack_size,
     goto_programt &dest,
     destructor_stackt &stack);
+  /// A destructor call on the destructor stack, possibly guarded by
+  /// guard_arm_destructors; the other entries are DEADs.
+  static bool is_destructor_entry(const codet &entry);
+  void guard_arm_destructors(
+    exprt &cond,
+    std::size_t true_size,
+    std::size_t false_size,
+    const locationt &location,
+    goto_programt &dest);
+  void record_exception_unwind(goto_programt::instructiont &call);
 
   //
   // Try-catch conversion
@@ -188,8 +354,6 @@ protected:
 
   void convert_catch(const codet &code, goto_programt &dest);
   void convert_throw(const exprt &expr, goto_programt &dest);
-  void convert_throw_decl(const exprt &expr, goto_programt &dest);
-  void convert_throw_decl_end(const exprt &expr, goto_programt &dest);
 
   //
   // gotos
@@ -395,6 +559,39 @@ protected:
     const irep_idt &id,
     std::list<exprt> &dest);
 
+  // Emit the post-noreturn truncation for __assert_fail-family calls
+  // (__assert_fail / __assert_rtn / FreeBSD __assert / _wassert) under
+  // --no-assertions.  Fires only when --memory-leak-check is enabled
+  // (i.e. valid-memsafety / valid-memcleanup): the leak walker is
+  // invoked --- mirroring abort()'s body in
+  // src/c2goto/library/stdlib.c --- and then ASSUME false truncates
+  // the path.  Otherwise the call is a no-op so user assert(cond)
+  // does not silently become assume(cond) under property modes that
+  // intentionally suppress assertions (no-data-race, plain
+  // --no-assertions).  See PR #4442 review for the no-data-race
+  // regression that motivated the gate.
+  void
+  emit_assert_fail_noreturn(const locationt &location, goto_programt &dest);
+
+  // Lower a value-discarding `&&` / `||` as a statement; false when the caller
+  // should fall back to rewrite_short_circuit_as_ternary.
+  bool lower_discarded_short_circuit(
+    exprt &expr,
+    goto_programt &dest,
+    bool result_is_used);
+
+  void rewrite_short_circuit_as_ternary(exprt &expr);
+
+  // The same four hooks differ only in arity and in which argument carries the
+  // failing expression; `expr_arg` names the latter.
+  void do_assert_fail(
+    const exprt &function,
+    const exprt::operandst &arguments,
+    goto_programt &dest,
+    const irep_idt &base_name,
+    std::size_t arity,
+    std::size_t expr_arg);
+
   // some built-in functions
   void do_abort(
     const exprt &lhs,
@@ -452,6 +649,11 @@ protected:
     const exprt::operandst &arguments,
     goto_programt &dest,
     const std::string &bs_name);
+  void do_operator_new(
+    const exprt &lhs,
+    const exprt &function,
+    const exprt::operandst &arguments,
+    goto_programt &dest);
   void do_mem(
     bool is_malloc,
     const exprt &lhs,

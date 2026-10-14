@@ -1,7 +1,7 @@
 #include <goto2c/goto2c.h>
 #include <goto2c/expr2c.h>
-#include <util/expr_util.h>
-#include <util/c_sizeof.h>
+#include <util/expr/expr_util.h>
+#include <util/lang/c_sizeof.h>
 
 // Here we apply a sequence of preprocessing procedures
 // to prepare the given GOTO program for translation
@@ -74,16 +74,16 @@ typet goto2ct::get_base_type(typet type, namespacet ns)
   if (type.id() == "symbol")
   {
     const symbolt *symbol = ns.lookup(type.identifier());
-    if (symbol && symbol->is_type && !symbol->type.is_nil())
-      return get_base_type(symbol->type, ns);
+    if (symbol && symbol->is_type && !symbol->get_type().is_nil())
+      return get_base_type(symbol->get_type(), ns);
   }
 
   // This is to deal with incomplete types and unions
   if (type.id() == "struct" || type.id() == "union")
   {
     const symbolt *symbol = ns.lookup(("tag-" + type.tag().as_string()));
-    if (symbol && symbol->is_type && !symbol->type.is_nil())
-      return symbol->type;
+    if (symbol && symbol->is_type && !symbol->get_type().is_nil())
+      return symbol->get_type();
   }
 
   return type;
@@ -157,12 +157,12 @@ void goto2ct::extract_symbol_tables()
     if (s.is_type)
     {
       if (sym_fun_name.empty())
-        global_types.push_back(s.type);
+        global_types.push_back(s.get_type());
       else
-        local_types[sym_fun_name].push_back(s.type);
+        local_types[sym_fun_name].push_back(s.get_type());
     }
     // This is a function declaration
-    else if (s.type.id() == "code")
+    else if (s.get_type().id() == "code")
       fun_decls.push_back(s);
     // This is an extern variable
     else if (s.is_extern)
@@ -190,7 +190,7 @@ void goto2ct::extract_symbol_tables()
 //
 // is converted to:
 //
-//  const static int a = 10;
+//  const static int tmp = 10;
 //  const static int b = 10;
 //
 // This will not resolve chains with 3 and more initializers,
@@ -349,7 +349,7 @@ void goto2ct::assign_scope_ids(goto_programt &goto_program)
         // to the list of scopes and clear the current scope.
         // Otherwise, just continue.
         // !!! Also probably need to check whether it == instructions.rend()
-        if (std::next(it)->type != DEAD && scope_syms_stack.back().size() > 0)
+        if (std::next(it)->type != DEAD)
         {
           scope_syms_stack.push_back({});
         }
@@ -475,7 +475,7 @@ void goto2ct::remove_unsupported_instructions(goto_programt &goto_program)
     if (it->type == ASSIGN)
     {
       const code_assign2t &assign = to_code_assign2t(it->code);
-      // Removing assignments to "dynamic_type2t"
+      // Removing assignments to "dynamic_size2t"
       if (is_dynamic_size2t(assign.target))
         it = goto_program.instructions.erase(it);
     }

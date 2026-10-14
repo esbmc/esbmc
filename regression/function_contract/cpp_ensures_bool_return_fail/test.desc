@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--enforce-contract is_pos --function is_pos
+^VERIFICATION FAILED$

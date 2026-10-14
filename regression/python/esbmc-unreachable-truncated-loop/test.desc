@@ -1,0 +1,5 @@
+CORE
+main.py
+--enable-unreachability-intrinsic --unwind 5
+^VERIFICATION FAILED$
+\bunwinding assertion\b

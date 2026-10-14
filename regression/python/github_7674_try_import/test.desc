@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^WARNING: no operational model for module 'json'; its names will be unresolved$
+^VERIFICATION SUCCESSFUL$

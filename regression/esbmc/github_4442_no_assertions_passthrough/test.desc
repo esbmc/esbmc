@@ -1,0 +1,5 @@
+CORE
+main.c
+--no-assertions --incremental-bmc --k-step 2 --64
+^VERIFICATION FAILED$
+^\s*dereference failure: NULL pointer

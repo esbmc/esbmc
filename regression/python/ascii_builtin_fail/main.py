@@ -1,0 +1,1 @@
+assert ascii("a") == "a"

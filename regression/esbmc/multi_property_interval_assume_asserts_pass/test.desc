@@ -1,0 +1,5 @@
+CORE
+main.c
+--interval-analysis --interval-analysis-assume-asserts --multi-property
+^VERIFICATION SUCCESSFUL$
+\A(?![\s\S]*VERIFICATION FAILED)[\s\S]*\Z

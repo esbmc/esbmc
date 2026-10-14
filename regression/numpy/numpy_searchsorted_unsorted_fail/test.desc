@@ -1,0 +1,5 @@
+CORE
+main.py
+--incremental-bmc
+^VERIFICATION FAILED$
+numpy.searchsorted\(\) requires the input array to be sorted

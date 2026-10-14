@@ -9,12 +9,15 @@ set(inputs
            stdlib.h
            string.h
            time.h
+           wchar.h
            __esbmc/stddefs.h
            semaphore.h
 
            # pthreads
            pthread.h
            sched.h
+           # C11 threads, layered on the pthread model (issue #3449)
+           threads.h
            # Glibc
            bits/pthreadtypes.h
            bits/thread-shared-types.h
@@ -38,6 +41,14 @@ set(inputs
 
            # Windows math headers
            corecrt_math.h
+
+           # Socket / network operational models
+           sys/socket.h
+           sys/select.h
+           sys/time.h
+           netinet/in.h
+           arpa/inet.h
+           # end sockets
 
            # Linux operational models
            ubuntu20.04/kernel_5.15.0-76/include/linux/gfp.h

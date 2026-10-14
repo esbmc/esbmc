@@ -2,13 +2,11 @@ set(Yices_MIN_VERSION "2.6.1")
 
 if(DEFINED Yices_DIR)
     set(ENABLE_YICES ON)
-elseif(EXISTS $ENV{HOME}/yices)
-    set(ENABLE_YICES ON)
 
 else()
     if(ENABLE_YICES AND DOWNLOAD_DEPENDENCIES)
     # Yices does not support CMake
-    CPMAddPackage(
+    cpmaddpackage(
         NAME yices
         DOWNLOAD_ONLY YES
         GITHUB_REPOSITORY SRI-CSL/yices2
@@ -76,25 +74,25 @@ if(ENABLE_YICES)
         message(FATAL_ERROR "Expected version ${Yices_MIN_VERSION} or greater")
     endif()
 
-    if (Yices_VERSION VERSION_GREATER 2.5.2)
+    if(Yices_VERSION VERSION_GREATER 2.5.2)
         message(STATUS "Danger Will Robinson: the version of Yices you have is GPL licensed, distribution is impossible")
-    endif ()
+    endif()
 
     add_library(solveryices yices_conv.cpp)
 
     target_include_directories(solveryices
             PRIVATE ${Yices_INCLUDE_DIRS}
-            PRIVATE ${Boost_INCLUDE_DIRS}
             PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(solveryices PUBLIC esbmc_common)
 
     # Hack needed for Ubuntu, since it is not linking with static libs from system
     if(DEFINED GMP_DIR)
         find_library(LIBGMP_CUSTOM gmp NAMES libgmp.a HINTS ${GMP_DIR} PATH_SUFFIXES lib NO_DEFAULT_PATH)
         message(STATUS "Custom gmp found: ${LIBGMP_CUSTOM}")
-        target_link_libraries(solveryices fmt::fmt "${Yices_LIB}" "${LIBGMP_CUSTOM}")
-    else ()
-        target_link_libraries(solveryices fmt::fmt "${Yices_LIB}")
-    endif ()
+        target_link_libraries(solveryices PUBLIC fmt::fmt "${Yices_LIB}" "${LIBGMP_CUSTOM}")
+    else()
+        target_link_libraries(solveryices PUBLIC fmt::fmt "${Yices_LIB}")
+    endif()
 
     target_link_libraries(solvers INTERFACE solveryices)
     set(ESBMC_ENABLE_yices 1 PARENT_SCOPE)

@@ -2,25 +2,27 @@
 #define _ESBMC_SOLVERS_MATHSAT_MATHSAT_CONV_H_
 
 #include <mathsat.h>
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_solver.h>
 #include <solvers/smt/fp/fp_conv.h>
 
 class mathsat_smt_ast : public solver_smt_ast<msat_term>
 {
 public:
-  mathsat_smt_ast(smt_convt *ctx, msat_term _t, const smt_sort *_s);
+  mathsat_smt_ast(smt_solver_baset *ctx, msat_term _t, const smt_sort *_s);
   ~mathsat_smt_ast() override = default;
 
   void dump() const override;
 };
 
-class mathsat_convt : public smt_convt, public array_iface, public fp_convt
+class mathsat_convt : public smt_solver_baset,
+                      public array_iface,
+                      public fp_convt
 {
 public:
   mathsat_convt(const namespacet &ns, const optionst &options);
   ~mathsat_convt() override;
 
-  resultt dec_solve() override;
+  smt_resultt dec_solve() override;
   const std::string solver_text() override;
 
   void assert_ast(smt_astt a) override;
@@ -74,6 +76,10 @@ public:
   smt_astt mk_smt_real(const std::string &str) override;
   smt_astt mk_smt_bool(bool val) override;
   smt_astt mk_smt_symbol(const std::string &name, const smt_sort *s) override;
+  smt_astt mk_smt_uninterpreted_function(
+    const std::string &name,
+    const std::vector<smt_astt> &args,
+    smt_sortt rangesort) override;
   smt_astt mk_array_symbol(
     const std::string &name,
     const smt_sort *s,
@@ -108,6 +114,7 @@ public:
   smt_astt mk_smt_fpbv_sub(smt_astt lhs, smt_astt rhs, smt_astt rm) override;
   smt_astt mk_smt_fpbv_mul(smt_astt lhs, smt_astt rhs, smt_astt rm) override;
   smt_astt mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm) override;
+  smt_astt mk_smt_fpbv_rem(smt_astt lhs, smt_astt rhs) override;
   smt_astt mk_smt_nearbyint_from_float(smt_astt from, smt_astt rm) override;
   smt_astt mk_smt_fpbv_sqrt(smt_astt rd, smt_astt rm) override;
 
@@ -128,7 +135,7 @@ public:
   void push_ctx() override;
   void pop_ctx() override;
 
-  bool get_bool(smt_astt a) override;
+  tvt get_bool(smt_astt a) override;
   BigInt get_bv(smt_astt a, bool is_signed) override;
   ieee_floatt get_fpbv(smt_astt a) override;
   expr2tc get_array_elem(smt_astt array, uint64_t index, const type2tc &subtype)

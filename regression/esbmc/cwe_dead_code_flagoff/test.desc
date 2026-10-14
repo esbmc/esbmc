@@ -1,0 +1,5 @@
+CORE
+main.c
+--incremental-bmc
+^VERIFICATION FAILED$
+^  dereference failure: NULL pointer$

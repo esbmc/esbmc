@@ -1,0 +1,4 @@
+CORE
+main.c
+--ir --default-solver bitwuzla
+^ERROR: Integer/real arithmetic .* bit-vector-only

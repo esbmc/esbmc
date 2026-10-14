@@ -1,0 +1,4 @@
+CORE
+main.c
+--function f --enforce-contract f --no-pointer-check --unwind 4
+^ERROR: __ESBMC_is_fresh needs a pointer it can point at fresh storage

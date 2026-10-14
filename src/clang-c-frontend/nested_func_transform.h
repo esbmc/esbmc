@@ -2,7 +2,7 @@
 
 #include <optional>
 #include <string>
-#include <util/filesystem.h>
+#include <util/base/filesystem.h>
 
 /// Transforms GCC nested function definitions in a C source file into
 /// standard C by lambda-lifting them to file scope. Captured variables

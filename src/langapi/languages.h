@@ -2,7 +2,7 @@
 #define CPROVER_LANGUAGES_H
 
 #include <langapi/mode.h>
-#include <util/language.h>
+#include <util/lang/language.h>
 
 class languagest final
 {

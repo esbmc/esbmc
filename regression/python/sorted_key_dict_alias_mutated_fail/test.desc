@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: sorted\(\) with key= is only supported over a constant iterable

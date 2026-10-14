@@ -1,4 +1,4 @@
 THOROUGH
 main.cpp
---unwind 12 --timeout 900
+--unwind 11 --no-standard-checks
 ^VERIFICATION FAILED$

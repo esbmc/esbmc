@@ -1,0 +1,4 @@
+CORE
+byte.ld
+--ld-props props.yaml
+^ERROR: UnsupportedConstruct\(type BYTE, tier=2\)

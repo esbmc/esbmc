@@ -1,0 +1,6 @@
+CORE
+main.cpp
+--uninitialised-vars-check --incremental-bmc
+^VERIFICATION FAILED$
+^  use of uninitialized variable: table$
+^  CWE: CWE-457$

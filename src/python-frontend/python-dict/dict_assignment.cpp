@@ -1,0 +1,115 @@
+#include "python_dict_internal.h"
+
+using namespace python_expr;
+
+bool python_dict_handler::handle_subscript_assignment_check(
+  python_converter &converter,
+  const nlohmann::json &ast_node,
+  const nlohmann::json &target,
+  codet &target_block)
+{
+  if (target["_type"] != "Subscript")
+    return false;
+
+  exprt container_expr = converter.get_expr(target["value"]);
+  typet container_type = container_expr.type();
+
+  if (container_expr.is_symbol())
+  {
+    const symbolt *sym = symbol_table_.find_symbol(container_expr.identifier());
+    if (sym)
+      container_type = sym->get_type();
+  }
+
+  // Use the namespace from converter, not a method that doesn't exist
+  namespacet ns(symbol_table_);
+  if (container_type.id() == "symbol")
+    container_type = ns.follow(container_type);
+
+  if (!is_dict_type(container_type))
+    return false;
+
+  // Handle dict[key] = value assignment
+  converter.set_converting_rhs(true);
+  exprt rhs = converter.get_expr(ast_node["value"]);
+  converter.set_converting_rhs(false);
+  rhs = converter.wrap_if_optional(
+    rhs, resolve_expected_type_for_dict_subscript(container_expr));
+
+  handle_dict_subscript_assign(
+    container_expr,
+    get_key_expr(target["slice"]),
+    rhs,
+    converter.get_location_from_decl(target["slice"]),
+    target["slice"],
+    target_block);
+  return true;
+}
+
+bool python_dict_handler::handle_literal_assignment_check(
+  python_converter &converter,
+  const nlohmann::json &ast_node,
+  const exprt &lhs)
+{
+  if (!ast_node.contains("value") || ast_node["value"].is_null())
+    return false;
+
+  if (!is_dict_literal(ast_node["value"]))
+    return false;
+
+  // An Optional[dict] target is a dict pointer: allocate a non-expiring dict
+  // for it, as a class instance bound to a Class* is.
+  const namespacet ns(symbol_table_);
+  const typet &lhs_type = lhs.type();
+  if (lhs_type.is_pointer() && is_dict_type(ns.follow(lhs_type.subtype())))
+  {
+    const symbolt *new_object =
+      symbol_table_.find_symbol("c:@F@__ESBMC_new_object");
+    assert(new_object && "__ESBMC_new_object model required");
+    code_function_callt alloc;
+    alloc.lhs() = lhs;
+    alloc.function() = build_symbol(*new_object);
+    alloc.location() = converter.get_location_from_decl(ast_node);
+    converter.add_instruction(alloc);
+    create_dict_from_literal(
+      ast_node["value"], build_dereference(lhs, get_dict_struct_type()));
+  }
+  else
+    create_dict_from_literal(ast_node["value"], lhs);
+  converter.set_current_lhs(nullptr);
+  return true;
+}
+
+bool python_dict_handler::handle_unannotated_literal_check(
+  python_converter &converter,
+  const nlohmann::json &ast_node,
+  const nlohmann::json &target,
+  const symbol_id &sid)
+{
+  if (!ast_node.contains("value") || !ast_node["value"].contains("_type"))
+    return false;
+
+  if (!is_dict_literal(ast_node["value"]))
+    return false;
+
+  locationt location = converter.get_location_from_decl(target);
+  std::string module_name = location.get_file().as_string();
+  std::string name;
+
+  if (target["_type"] == "Name")
+    name = target["id"].get<std::string>();
+  else if (target["_type"] == "Attribute")
+    name = target["attr"].get<std::string>();
+
+  symbolt symbol = converter.create_symbol(
+    module_name, name, sid.to_string(), location, get_dict_struct_type());
+  symbol.lvalue = true;
+  symbol.file_local = true;
+  symbol.is_extern = false;
+  symbolt *lhs_symbol = converter.add_symbol_and_get_ptr(symbol);
+
+  exprt lhs = converter.create_lhs_expression(target, lhs_symbol, location);
+  create_dict_from_literal(ast_node["value"], lhs);
+  converter.set_current_lhs(nullptr);
+  return true;
+}

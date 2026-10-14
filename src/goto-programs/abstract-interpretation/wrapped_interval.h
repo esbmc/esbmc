@@ -12,12 +12,16 @@ public:
   explicit wrapped_interval(const type2tc &t)
     : t(t), upper_bound(compute_upper_bound(t))
   {
-    assert(
-      is_signedbv_type(t) || is_unsignedbv_type(t) || is_bool_type(t) ||
-      is_pointer_type(t));
+    assert(is_representable(t));
 
     lower = 0;
     upper = is_bool_type(t) ? 1 : compute_upper_bound(t) - 1;
+  }
+
+  static bool is_representable(const type2tc &t)
+  {
+    return is_signedbv_type(t) || is_unsignedbv_type(t) || is_bool_type(t) ||
+           is_pointer_type(t);
   }
 
   BigInt convert_to_wrap(const BigInt &b) const
@@ -136,7 +140,7 @@ public:
     *this = over_meet(*this, value);
   }
 
-  void make_ge_than(const BigInt &v) override // add upper bound
+  void make_ge_than(const BigInt &v) override // add lower bound
   {
     wrapped_interval value(t);
     value.set_lower(v);
@@ -144,7 +148,7 @@ public:
     *this = over_meet(*this, value);
   }
 
-  void make_ge_than(const wrapped_interval &rhs) // add upper bound
+  void make_ge_than(const wrapped_interval &rhs) // add lower bound
   {
     if (rhs.is_bottom())
     {
@@ -477,6 +481,17 @@ public:
       return result;
     }
 
+    // Overlapping at both ends, the meet is two pieces: keep the smaller
+    // operand, which covers both (#8204).
+    if (t.contains(a) && t.contains(b) && s.contains(c) && s.contains(d))
+    {
+      if (
+        (s.cardinality() < t.cardinality()) ||
+        (s.cardinality() == t.cardinality() && a <= c))
+        return s;
+      return t;
+    }
+
     if (s.contains(d) && t.contains(a))
     {
       result.lower = a;
@@ -484,22 +499,8 @@ public:
       return result;
     }
 
-    if (t.contains(b) && s.contains(c))
-    {
-      result.lower = c;
-      result.upper = b;
-      return result;
-    }
-
-    if (
-      (s.cardinality() < t.cardinality()) ||
-      (s.cardinality() == t.cardinality() && a <= c))
-    {
-      return s;
-    }
-
     result.lower = c;
-    result.upper = d;
+    result.upper = b;
     return result;
   }
 
@@ -965,7 +966,8 @@ public:
       - get_interval_bounds([255, 10]) --> <-1, 10>
 
       Note: This is not to represent a range interval, wrapped can have holes!
-      From the example: [10, 128] contains both <-128, 127> but it does not contain 9 or -127!
+      From the example: [10, 128] contains both <-128, 127> but it does not
+     contain 9 or -127!
   */
   std::pair<BigInt, BigInt> get_interval_bounds() const
   {
@@ -1173,7 +1175,6 @@ public:
   friend wrapped_interval
   operator/(const wrapped_interval &lhs, const wrapped_interval &rhs)
   {
-    // [a_0, a_1] + [b_0, b_1] = [a_0+b_0, a_1 + b_1]
     std::vector<wrapped_interval> r;
 
     wrapped_interval zero(lhs.t);

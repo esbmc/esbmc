@@ -1,0 +1,5 @@
+CORE
+cbmc_fabsf_fail.goto
+--binary
+^VERIFICATION FAILED$
+assertion y == 3.0f

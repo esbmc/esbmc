@@ -1,6 +1,9 @@
 #ifndef ESBMC_ANY
 #define ESBMC_ANY
 
+// Post-C++03 header: inert in older modes, matching libstdc++/libc++ (#3387).
+#if __cplusplus >= 201103L
+
 #include "type_traits"
 #include "typeinfo"
 #include "utility"
@@ -34,7 +37,14 @@ public:
 
   constexpr any() noexcept = default;
 
-  template <class T>
+  /* [any.cons]/6: this constructor participates only when decay_t<T> is not
+   * any itself. Unconstrained it is a better match than any(const any&) for a
+   * non-const lvalue, so `any b = a;` stored an any inside the any instead of
+   * copying the held object. */
+  template <
+    class T,
+    class = typename enable_if<!is_same<typename decay<T>::type, any>::value>::
+      type>
   any(T &&v)
   {
     using D = typename decay<T>::type;
@@ -224,4 +234,5 @@ T *any_cast(any *a) noexcept
 
 } // namespace std
 
+#endif // __cplusplus >= 201103L
 #endif

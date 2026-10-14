@@ -1,0 +1,5 @@
+CORE
+main.jimple
+--irep2-bodies --force-malloc-success --goto-functions-only
+^ +ASSIGN return_value\$_malloc\$1=MALLOC\(signed char, 2 \* 32\);$
+^ +ASSIGN return_value\$_malloc\$2=MALLOC\(signed char, 3 \* 64\);$

@@ -26,6 +26,8 @@ typedef struct
   int __lock;
   int __count;
   int __init;
+  /* Threads currently blocked on this semaphore; see __ESBMC_sem_waiters. */
+  unsigned int __waiters;
 } sem_t;
 
 /* Initialize semaphore object SEM to VALUE.  If PSHARED then share it

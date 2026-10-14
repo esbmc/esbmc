@@ -1,395 +1,92 @@
 #ifndef IREP2_TYPE_H_
 #define IREP2_TYPE_H_
 
+#include <optional>
 #include <irep2/irep2.h>
-#include <util/type.h>
 
-// Start with forward class definitions
-
-class bool_type2t;
-class empty_type2t;
-class symbol_type2t;
-class struct_type2t;
-class union_type2t;
-class bv_type2t;
-class unsignedbv_type2t;
-class signedbv_type2t;
-class code_type2t;
-class array_type2t;
-class vector_type2t;
-class pointer_type2t;
-class fixedbv_type2t;
-class floatbv_type2t;
-class complex_type2t;
-class cpp_name_type2t;
-
-// We also require in advance, the actual classes that store type data.
-
-class symbol_type_data : public type2t
-{
-public:
-  symbol_type_data(type2t::type_ids id, const dstring sym_name)
-    : type2t(id), symbol_name(sym_name)
-  {
-  }
-  symbol_type_data(const symbol_type_data &ref) = default;
-
-  irep_idt symbol_name;
-
-  // Type mangling:
-  typedef esbmct::
-    field_traits<irep_idt, symbol_type_data, &symbol_type_data::symbol_name>
-      symbol_name_field;
-  typedef esbmct::type2t_traits<symbol_name_field> traits;
-};
-
-class struct_union_data : public type2t
-{
-public:
-  struct_union_data(
-    type2t::type_ids id,
-    std::vector<type2tc> membs,
-    std::vector<irep_idt> names,
-    std::vector<irep_idt> pretty_names,
-    const irep_idt &n,
-    bool _packed)
-    : type2t(id),
-      members(std::move(membs)),
-      member_names(std::move(names)),
-      member_pretty_names(std::move(pretty_names)),
-      name(n),
-      packed(_packed)
-  {
-  }
-  struct_union_data(const struct_union_data &ref) = default;
-
-  /** Fetch index number of member. Given a textual name of a member of a
-   *  struct or union, this method will look up what index it is into the
-   *  vector of types that make up this struct/union. Always returns the correct
-   *  index, if you give it a name that isn't part of this struct/union it'll
-   *  abort.
-   *  @param name Name of member of this struct/union to look up.
-   *  @return Index into members/member_names vectors */
-  unsigned int get_component_number(const irep_idt &name) const;
-
-  const std::vector<type2tc> &get_structure_members() const;
-  const std::vector<irep_idt> &get_structure_member_names() const;
-  const irep_idt &get_structure_name() const;
-
-  std::vector<type2tc> members;
-  std::vector<irep_idt> member_names;
-  std::vector<irep_idt> member_pretty_names;
-  irep_idt name;
-  bool packed;
-
-  // Type mangling:
-  typedef esbmct::field_traits<
-    std::vector<type2tc>,
-    struct_union_data,
-    &struct_union_data::members>
-    members_field;
-  typedef esbmct::field_traits<
-    std::vector<irep_idt>,
-    struct_union_data,
-    &struct_union_data::member_names>
-    member_names_field;
-  typedef esbmct::field_traits<
-    std::vector<irep_idt>,
-    struct_union_data,
-    &struct_union_data::member_pretty_names>
-    member_pretty_names_field;
-  typedef esbmct::
-    field_traits<irep_idt, struct_union_data, &struct_union_data::name>
-      name_field;
-  typedef esbmct::
-    field_traits<bool, struct_union_data, &struct_union_data::packed>
-      packed_field;
-  typedef esbmct::type2t_traits<
-    members_field,
-    member_names_field,
-    member_pretty_names_field,
-    name_field,
-    packed_field>
-    traits;
-};
-
-class bv_data : public type2t
-{
-public:
-  bv_data(type2t::type_ids id, unsigned int w) : type2t(id), width(w)
-  {
-    // assert(w != 0 && "Must have nonzero width for integer type");
-    // XXX -- zero sized bitfields are permissible. Oh my.
-  }
-  bv_data(const bv_data &ref) = default;
-
-  unsigned int get_width() const override;
-
-  unsigned int width;
-
-  // Type mangling:
-  typedef esbmct::field_traits<unsigned int, bv_data, &bv_data::width>
-    width_field;
-  typedef esbmct::type2t_traits<width_field> traits;
-};
-
-class code_data : public type2t
-{
-public:
-  code_data(
-    type2t::type_ids id,
-    std::vector<type2tc> args,
-    const type2tc &ret,
-    std::vector<irep_idt> names,
-    bool e)
-    : type2t(id),
-      arguments(std::move(args)),
-      ret_type(ret),
-      argument_names(std::move(names)),
-      ellipsis(e)
-  {
-  }
-  code_data(const code_data &ref) = default;
-
-  unsigned int get_width() const override;
-
-  std::vector<type2tc> arguments;
-  type2tc ret_type;
-  std::vector<irep_idt> argument_names;
-  bool ellipsis;
-
-  // Type mangling:
-  typedef esbmct::
-    field_traits<std::vector<type2tc>, code_data, &code_data::arguments>
-      arguments_field;
-  typedef esbmct::field_traits<type2tc, code_data, &code_data::ret_type>
-    ret_type_field;
-  typedef esbmct::
-    field_traits<std::vector<irep_idt>, code_data, &code_data::argument_names>
-      argument_names_field;
-  typedef esbmct::field_traits<bool, code_data, &code_data::ellipsis>
-    ellipsis_field;
-  typedef esbmct::type2t_traits<
-    arguments_field,
-    ret_type_field,
-    argument_names_field,
-    ellipsis_field>
-    traits;
-};
-
-class array_data : public type2t
-{
-public:
-  // index_width: optional explicit bit-width for the array's index sort.
-  // Default 0 → smt_conv falls back to config.ansi_c.word_size (legacy
-  // 64-bit behaviour for all infinite arrays). Non-zero overrides for
-  // wide-BV-indexed infinite arrays — used by the Solidity mapping
-  // storage to declare a 480-bit-indexed array, closing ledger #22's
-  // 256→64 fold unsoundness.
-  array_data(
-    type2t::type_ids id,
-    const type2tc &st,
-    const expr2tc &sz,
-    bool i,
-    unsigned w = 0)
-    : type2t(id), subtype(st), array_size(sz), size_is_infinite(i),
-      index_width(w)
-  {
-  }
-  array_data(const array_data &ref) = default;
-
-  type2tc subtype;
-  expr2tc array_size;
-  bool size_is_infinite;
-  unsigned index_width;
-
-  // Type mangling:
-  typedef esbmct::field_traits<type2tc, array_data, &array_data::subtype>
-    subtype_field;
-  typedef esbmct::field_traits<expr2tc, array_data, &array_data::array_size>
-    array_size_field;
-  typedef esbmct::field_traits<bool, array_data, &array_data::size_is_infinite>
-    size_is_infinite_field;
-  typedef esbmct::field_traits<unsigned, array_data, &array_data::index_width>
-    index_width_field;
-  typedef esbmct::type2t_traits<
-    subtype_field,
-    array_size_field,
-    size_is_infinite_field,
-    index_width_field>
-    traits;
-};
-
-class pointer_data : public type2t
-{
-public:
-  pointer_data(type2t::type_ids id, const type2tc &st, const bool &p)
-    : type2t(id), subtype(st), carry_provenance(p)
-  {
-  }
-  pointer_data(const pointer_data &ref) = default;
-
-  type2tc subtype;
-  bool carry_provenance;
-
-  // Type mangling:
-  typedef esbmct::field_traits<type2tc, pointer_data, &pointer_data::subtype>
-    subtype_field;
-  typedef esbmct::
-    field_traits<bool, pointer_data, &pointer_data::carry_provenance>
-      provenance_field;
-  typedef esbmct::type2t_traits<subtype_field, provenance_field> traits;
-};
-
-class fixedbv_data : public type2t
-{
-public:
-  fixedbv_data(type2t::type_ids id, unsigned int w, unsigned int ib)
-    : type2t(id), width(w), integer_bits(ib)
-  {
-  }
-  fixedbv_data(const fixedbv_data &ref) = default;
-
-  unsigned int width;
-  unsigned int integer_bits;
-
-  // Type mangling:
-  typedef esbmct::field_traits<unsigned int, fixedbv_data, &fixedbv_data::width>
-    width_field;
-  typedef esbmct::
-    field_traits<unsigned int, fixedbv_data, &fixedbv_data::integer_bits>
-      integer_bits_field;
-  typedef esbmct::type2t_traits<width_field, integer_bits_field> traits;
-};
-
-class floatbv_data : public type2t
-{
-public:
-  floatbv_data(type2t::type_ids id, unsigned int f, unsigned int e)
-    : type2t(id), fraction(f), exponent(e)
-  {
-  }
-  floatbv_data(const floatbv_data &ref) = default;
-
-  unsigned int fraction;
-  unsigned int exponent;
-
-  // Type mangling:
-  typedef esbmct::
-    field_traits<unsigned int, floatbv_data, &floatbv_data::fraction>
-      fraction_field;
-  typedef esbmct::
-    field_traits<unsigned int, floatbv_data, &floatbv_data::exponent>
-      exponent_field;
-  typedef esbmct::type2t_traits<fraction_field, exponent_field> traits;
-};
-
-class cpp_name_data : public type2t
-{
-public:
-  cpp_name_data(
-    type2t::type_ids id,
-    const irep_idt &n,
-    std::vector<type2tc> templ_args)
-    : type2t(id), name(n), template_args(std::move(templ_args))
-  {
-  }
-  cpp_name_data(const cpp_name_data &ref) = default;
-
-  irep_idt name;
-  std::vector<type2tc> template_args;
-
-  // Type mangling:
-  typedef esbmct::field_traits<irep_idt, cpp_name_data, &cpp_name_data::name>
-    name_field;
-  typedef esbmct::field_traits<
-    std::vector<type2tc>,
-    cpp_name_data,
-    &cpp_name_data::template_args>
-    template_args_field;
-  typedef esbmct::type2t_traits<name_field, template_args_field> traits;
-};
+// Forward-declare a concrete <kind>_type2t class for every entry in
+// type_kinds.inc. The same manifest drives the type_ids enum in
+// irep2.h and the is_/to_/try_to_ predicate generators below.
+#define IREP2_TYPE(kind, pretty) class kind##_type2t;
+#include <irep2/type_kinds.inc>
+#undef IREP2_TYPE
 
 // Then give them a typedef name
 
-#define irep_typedefs(basename, superclass)                                    \
+#define irep_typedefs(basename)                                                \
   template <typename... Args>                                                  \
   inline type2tc basename##_type2tc(Args &&...args)                            \
   {                                                                            \
-    return type2tc(std::static_pointer_cast<type2t>(                           \
-      std::make_shared<basename##_type2t>(std::forward<Args>(args)...)));      \
-  }                                                                            \
-  typedef esbmct::                                                             \
-    type_methods2<basename##_type2t, superclass, superclass::traits>           \
-      basename##_type_methods;                                                 \
-  extern template class esbmct::                                               \
-    type_methods2<basename##_type2t, superclass, superclass::traits>;
+    return make_irep<basename##_type2t>(std::forward<Args>(args)...);          \
+  }
 
-irep_typedefs(bool, type2t);
-irep_typedefs(empty, type2t);
-irep_typedefs(symbol, symbol_type_data);
-irep_typedefs(struct, struct_union_data);
-irep_typedefs(union, struct_union_data);
-irep_typedefs(unsignedbv, bv_data);
-irep_typedefs(signedbv, bv_data);
-irep_typedefs(code, code_data);
-irep_typedefs(array, array_data);
-irep_typedefs(pointer, pointer_data);
-irep_typedefs(fixedbv, fixedbv_data);
-irep_typedefs(floatbv, floatbv_data);
-irep_typedefs(complex, struct_union_data);
-irep_typedefs(cpp_name, cpp_name_data);
-irep_typedefs(vector, array_data);
+irep_typedefs(bool);
+irep_typedefs(empty);
+irep_typedefs(symbol);
+irep_typedefs(struct);
+irep_typedefs(union);
+irep_typedefs(unsignedbv);
+irep_typedefs(signedbv);
+irep_typedefs(code);
+irep_typedefs(array);
+irep_typedefs(pointer);
+irep_typedefs(fixedbv);
+irep_typedefs(floatbv);
+irep_typedefs(complex);
+irep_typedefs(cpp_name);
+irep_typedefs(vector);
 #undef irep_typedefs
 
 /** Boolean type.
  *  Identifies a boolean type. Contains no additional data.
- *  @extends type2t
  */
-class bool_type2t : public bool_type_methods
+class bool_type2t : public type2t
 {
 public:
-  bool_type2t() : bool_type_methods(bool_id)
+  bool_type2t() : type2t(bool_id)
   {
   }
   bool_type2t(const bool_type2t &ref) = default;
-  unsigned int get_width() const override;
+  unsigned int get_width() const;
 
+  static constexpr auto fields = std::make_tuple();
   static std::string field_names[esbmct::num_type_fields];
 };
 
 /** Empty type.
  *  For void pointers and the like, with no type. No extra data.
- *  @extends type2t
  */
-class empty_type2t : public empty_type_methods
+class empty_type2t : public type2t
 {
 public:
-  empty_type2t() : empty_type_methods(empty_id)
+  empty_type2t() : type2t(empty_id)
   {
   }
   empty_type2t(const empty_type2t &ref) = default;
-  unsigned int get_width() const override;
+  unsigned int get_width() const;
 
+  static constexpr auto fields = std::make_tuple();
   static std::string field_names[esbmct::num_type_fields];
 };
 
 /** Symbolic type.
  *  Temporary, prior to linking up types after parsing, or when a struct/array
  *  contains a recursive pointer to its own type.
- *  @extends symbol_type_data
  */
-class symbol_type2t : public symbol_type_methods
+class symbol_type2t : public type2t
 {
 public:
   /** Primary constructor. @param sym_name Name of symbolic type. */
-  symbol_type2t(const dstring &sym_name)
-    : symbol_type_methods(symbol_id, sym_name)
+  symbol_type2t(const irep_idt &sym_name)
+    : type2t(symbol_id), symbol_name(sym_name)
   {
   }
   symbol_type2t(const symbol_type2t &ref) = default;
-  unsigned int get_width() const override;
+  unsigned int get_width() const;
 
+  irep_idt symbol_name;
+
+  static constexpr auto fields = std::make_tuple(&symbol_type2t::symbol_name);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -397,9 +94,8 @@ public:
  *  Represents both C structs and the data in C++ classes. Contains a vector
  *  of types recording what type each member is, a vector of names recording
  *  what the member names are, and a name for the struct.
- *  @extends struct_union_data
  */
-class struct_type2t : public struct_type_methods
+class struct_type2t : public type2t
 {
 public:
   /** Primary constructor.
@@ -408,23 +104,84 @@ public:
    *  @param name Name of this struct.
    */
   struct_type2t(
-    const std::vector<type2tc> &members,
+    const std::vector<type2tc> &_members,
     const std::vector<irep_idt> &memb_names,
     const std::vector<irep_idt> &memb_pretty_names,
-    const irep_idt &name,
-    bool packed = false)
-    : struct_type_methods(
-        struct_id,
-        members,
-        memb_names,
-        memb_pretty_names,
-        name,
-        packed)
+    const irep_idt &_name,
+    bool _packed = false,
+    const std::vector<irep_idt> &memb_base_names = {},
+    const BigInt &_alignment = 0,
+    const irep_idt &_python_aggregate = irep_idt(),
+    bool _has_bases = false,
+    const std::vector<irep_idt> &_bases = {})
+    : type2t(struct_id),
+      members(_members),
+      member_names(memb_names),
+      member_pretty_names(memb_pretty_names),
+      member_base_names(memb_base_names),
+      name(_name),
+      packed(_packed),
+      has_bases(_has_bases),
+      alignment(_alignment),
+      python_aggregate(_python_aggregate),
+      bases(_bases)
   {
+    assert(
+      memb_base_names.empty() || memb_base_names.size() == _members.size());
   }
   struct_type2t(const struct_type2t &ref) = default;
-  unsigned int get_width() const override;
+  unsigned int get_width() const;
 
+  std::vector<type2tc> members;
+  std::vector<irep_idt> member_names;
+  std::vector<irep_idt> member_pretty_names;
+  /// The components' plain `base_name`s -- a different field from the
+  /// `#base_name` that code_type2t::argument_base_names carries. Unreflected: a
+  /// member's spelling is no part of the struct's identity, so two otherwise
+  /// identical structs must still compare equal
+  /// (docs/roadmap/frontends-to-irep2.md §46).
+  std::vector<irep_idt> member_base_names;
+  irep_idt name;
+  bool packed;
+  /// Whether the legacy type had a `bases` list at all, which an empty one is
+  /// not the same as: the key takes part in legacy type equality.
+  bool has_bases;
+
+  /// An explicit `alignas`, in bytes; zero when the record has none. IREP2 does
+  /// not otherwise represent it, and add_padding reads it to decide a record's
+  /// trailing padding -- an over-aligned empty struct occupies its alignment,
+  /// so without it the back-migrated type gets no pad member and a literal of
+  /// it stays shorter than its own type (§7.4). Not reflected: two records that
+  /// differ only here would otherwise stop comparing equal, which is a wider
+  /// change than this repair.
+  BigInt alignment;
+
+  /// The Python model-aggregate kind ("tuple", "dict", "optional") that
+  /// `#python_aggregate` records; empty for any other struct. Unreflected, like
+  /// `alignment`: the tag already names the type. Carried because `in` and
+  /// membership dispatch read it, and a user class may share a tuple's tag
+  /// prefix (docs/roadmap/scope-python-irep2.md §10.4).
+  irep_idt python_aggregate;
+
+  /// The class ids `bases` lists, as the C++ and Python frontends write it.
+  /// Unreflected, like `alignment`. Carried because exception dispatch
+  /// (exception_typeid.cpp) and base_type.cpp read the class hierarchy from it
+  /// (docs/roadmap/scope-python-irep2.md §15).
+  std::vector<irep_idt> bases;
+
+  static constexpr auto fields = std::make_tuple(
+    &struct_type2t::members,
+    &struct_type2t::member_names,
+    &struct_type2t::member_pretty_names,
+    &struct_type2t::name,
+    &struct_type2t::packed);
+  /// Covers the deliberately unreflected members: `member_base_names` (a
+  /// member's spelling is no part of the struct's identity), `alignment` (two
+  /// records differing only in `alignas` must still compare equal),
+  /// `python_aggregate`, `has_bases` and `bases`.
+  static constexpr std::size_t excluded_field_bytes =
+    2 * sizeof(std::vector<irep_idt>) + sizeof(BigInt) + sizeof(irep_idt) +
+    sizeof(bool);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -432,9 +189,8 @@ public:
  *  Represents a union type - in a similar vein to struct_type2t, this contains
  *  a vector of types and vector of names, each element of which corresponds to
  *  a member in the union. There's also a name for the union.
- *  @extends struct_union_data
  */
-class union_type2t : public union_type_methods
+class union_type2t : public type2t
 {
 public:
   /** Primary constructor.
@@ -443,76 +199,214 @@ public:
    *  @param name Name of this union
    */
   union_type2t(
-    const std::vector<type2tc> &members,
+    const std::vector<type2tc> &_members,
     const std::vector<irep_idt> &memb_names,
     const std::vector<irep_idt> &memb_pretty_names,
-    const irep_idt &name,
-    bool packed = false)
-    : union_type_methods(
-        union_id,
-        members,
-        memb_names,
-        memb_pretty_names,
-        name,
-        packed)
+    const irep_idt &_name,
+    bool _packed = false)
+    : type2t(union_id),
+      members(_members),
+      member_names(memb_names),
+      member_pretty_names(memb_pretty_names),
+      name(_name),
+      packed(_packed)
   {
   }
   union_type2t(const union_type2t &ref) = default;
-  unsigned int get_width() const override;
+  unsigned int get_width() const;
 
+  std::vector<type2tc> members;
+  std::vector<irep_idt> member_names;
+  std::vector<irep_idt> member_pretty_names;
+  irep_idt name;
+  bool packed;
+
+  static constexpr auto fields = std::make_tuple(
+    &union_type2t::members,
+    &union_type2t::member_names,
+    &union_type2t::member_pretty_names,
+    &union_type2t::name,
+    &union_type2t::packed);
   static std::string field_names[esbmct::num_type_fields];
 };
 
 /** Unsigned integer type.
  *  Represents any form of unsigned integer; the size of this integer is
  *  recorded in the width field.
- *  @extends bv_data
  */
-class unsignedbv_type2t : public unsignedbv_type_methods
+class unsignedbv_type2t : public type2t
 {
 public:
   /** Primary constructor. @param width Width of represented integer */
-  unsignedbv_type2t(unsigned int width)
-    : unsignedbv_type_methods(unsignedbv_id, width)
+  unsignedbv_type2t(
+    unsigned int w,
+    bool qualified = false,
+    const irep_idt &cpp = irep_idt())
+    : type2t(unsignedbv_id),
+      width(w),
+      cpp_type(cpp),
+      constant_qualified(qualified)
   {
+    // assert(w != 0 && "Must have nonzero width for integer type");
+    // XXX -- zero sized bitfields are permissible. Oh my.
   }
   unsignedbv_type2t(const unsignedbv_type2t &ref) = default;
+  unsigned int get_width() const;
 
+  unsigned int width;
+  /// The source language's own spelling of this type, as `#cpp_type` records
+  /// it. Unreflected: a spelling is no part of the type's identity, so two
+  /// bitvectors of the same width are the same type however they were spelled.
+  /// Carried because a consumer reads it back -- `python_converter::
+  /// get_python_type_category` distinguishes a 1-char string element from an
+  /// 8-bit int by it (docs/roadmap/scope-python-irep2.md §9).
+  irep_idt cpp_type;
+  /// Whether the source qualified this `const`, as `#constant` records it.
+  /// Unreflected: `c_expr2string` prints it and nothing else reads it, so two
+  /// integers of the same width are the same type whether or not one was
+  /// qualified (docs/roadmap/scope-clang-c-irep2.md §158).
+  bool constant_qualified;
+
+  static constexpr auto fields = std::make_tuple(&unsignedbv_type2t::width);
+  static constexpr std::size_t excluded_field_bytes =
+    sizeof(irep_idt) + sizeof(bool);
+  /// `cpp_type` pushes `constant_qualified` into a fresh slot, so this class
+  /// now carries four bytes of trailing padding and `fields_cover_class` has no
+  /// margin left: a further unreflected field would fit in the hole unnoticed.
+  /// Pin the size so the next one has to come here first.
+  static_assert(
+    sizeof(unsigned int) + sizeof(irep_idt) + sizeof(bool) <=
+      2 * sizeof(void *),
+    "unsignedbv_type2t's reflected + excluded fields no longer fit the pinned "
+    "layout; re-check fields_cover_class's margin before adding a field");
   static std::string field_names[esbmct::num_type_fields];
 };
 
 /** Signed integer type.
  *  Represents any form of signed integer; the size of this integer is
  *  recorded in the width field.
- *  @extends bv_data
  */
-class signedbv_type2t : public signedbv_type_methods
+class signedbv_type2t : public type2t
 {
 public:
   /** Primary constructor. @param width Width of represented integer */
-  signedbv_type2t(signed int width) : signedbv_type_methods(signedbv_id, width)
+  signedbv_type2t(
+    signed int w,
+    bool qualified = false,
+    const irep_idt &cpp = irep_idt())
+    : type2t(signedbv_id),
+      width(w),
+      cpp_type(cpp),
+      constant_qualified(qualified)
   {
   }
   signedbv_type2t(const signedbv_type2t &ref) = default;
+  unsigned int get_width() const;
 
+  unsigned int width;
+  /// The source language's own spelling of this type, as `#cpp_type` records
+  /// it. Unreflected, for the reason given on unsignedbv_type2t.
+  irep_idt cpp_type;
+  /// Whether the source qualified this `const`, as `#constant` records it.
+  /// Unreflected: `c_expr2string` prints it and nothing else reads it, so two
+  /// integers of the same width are the same type whether or not one was
+  /// qualified (docs/roadmap/scope-clang-c-irep2.md §158).
+  bool constant_qualified;
+
+  static constexpr auto fields = std::make_tuple(&signedbv_type2t::width);
+  static constexpr std::size_t excluded_field_bytes =
+    sizeof(irep_idt) + sizeof(bool);
+  /// `cpp_type` pushes `constant_qualified` into a fresh slot, so this class
+  /// now carries four bytes of trailing padding and `fields_cover_class` has no
+  /// margin left: a further unreflected field would fit in the hole unnoticed.
+  /// Pin the size so the next one has to come here first.
+  static_assert(
+    sizeof(unsigned int) + sizeof(irep_idt) + sizeof(bool) <=
+      2 * sizeof(void *),
+    "signedbv_type2t's reflected + excluded fields no longer fit the pinned "
+    "layout; re-check fields_cover_class's margin before adding a field");
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** Type of functions. @extends code_data */
-class code_type2t : public code_type_methods
+/** Type of functions. */
+class code_type2t : public type2t
 {
 public:
   code_type2t(
     const std::vector<type2tc> &args,
-    const type2tc &ret_type,
+    const type2tc &ret,
     const std::vector<irep_idt> &names,
-    bool e)
-    : code_type_methods(code_id, args, ret_type, names, e)
+    bool e,
+    const std::vector<irep_idt> &base_names = {},
+    const std::vector<expr2tc> &defaults = {},
+    const irep_idt &exc_kind = irep_idt(),
+    const std::vector<irep_idt> &exc_types = {},
+    const irep_idt &ret_marker = irep_idt(),
+    bool implicit_union_copy_move = false,
+    const std::vector<type2tc> &exc_decl = {})
+    : type2t(code_id),
+      arguments(args),
+      ret_type(ret),
+      argument_names(names),
+      argument_base_names(base_names),
+      argument_defaults(defaults),
+      exception_types(exc_types),
+      exception_decl(exc_decl),
+      exception_kind(exc_kind),
+      return_marker(ret_marker),
+      ellipsis(e),
+      implicit_union_copy_move(implicit_union_copy_move)
   {
     assert(args.size() == names.size());
+    assert(base_names.empty() || base_names.size() == args.size());
+    assert(defaults.empty() || defaults.size() == args.size());
   }
   code_type2t(const code_type2t &ref) = default;
+  unsigned int get_width() const;
 
+  std::vector<type2tc> arguments;
+  type2tc ret_type;
+  std::vector<irep_idt> argument_names;
+  /// The arguments' `#base_name`s, carried across the migrate seam but *not*
+  /// reflected: C11 6.7.6.3p15 makes a parameter's spelling no part of the
+  /// function type, so two signatures differing only here are the same type and
+  /// must hash and compare equal. Kept because a consumer reads it back --
+  /// clang_cpp_convert_vft.cpp's thunk argument loop does
+  /// (docs/roadmap/frontends-to-irep2.md §44).
+  std::vector<irep_idt> argument_base_names;
+  /// The arguments' `#default_value`s, null where an argument has none, and
+  /// empty when none has one. Unreflected: a default is no part of the
+  /// function's type. Carried because Python call lowering fills a missing
+  /// argument from it (converter_funcall.cpp, function_call/expr.cpp).
+  std::vector<expr2tc> argument_defaults;
+  /// A resolved C++ exception specification, as `exception_spec_kind` and
+  /// `exception_spec_types` record it (util/lang/exception_specification.h);
+  /// empty when there is none. Unreflected, like the fields above: two
+  /// signatures differing only here still compare equal. Carried because
+  /// goto_convert_functions decodes it from the function symbol's type.
+  std::vector<irep_idt> exception_types;
+  /// A dynamic specification's declared types before
+  /// finalize_exception_specification resolves them to `exception_types`.
+  std::vector<type2tc> exception_decl;
+  irep_idt exception_kind;
+  /// A C++ constructor's or destructor's pseudo return type ("constructor" /
+  /// "destructor"), which ret_type models as empty; and whether it is an
+  /// implicit copy/move constructor of a union. Unreflected, like the fields
+  /// above. Carried because vptr initialisation and the union copy/move
+  /// synthesis read them (docs/roadmap/frontends-to-irep2.md §50.2,
+  /// scope-clang-cpp-irep2.md §12).
+  irep_idt return_marker;
+  bool ellipsis;
+  bool implicit_union_copy_move;
+
+  static constexpr auto fields = std::make_tuple(
+    &code_type2t::arguments,
+    &code_type2t::ret_type,
+    &code_type2t::argument_names,
+    &code_type2t::ellipsis);
+  static constexpr std::size_t excluded_field_bytes =
+    2 * sizeof(std::vector<irep_idt>) + sizeof(std::vector<expr2tc>) +
+    sizeof(std::vector<type2tc>) + 2 * sizeof(irep_idt) + sizeof(bool);
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -523,93 +417,128 @@ public:
  *
  *  If size_is_infinite is true, array_size will be null. If array_size is
  *  not a constant number, then it's a dynamically sized array.
- *  @extends array_data
  */
-class array_type2t : public array_type_methods
+class array_type2t : public type2t
 {
 public:
   /** Primary constructor.
    *  @param subtype Type of elements in this array.
    *  @param size Size of this array.
    *  @param inf Whether or not this array is infinitely sized
+   *  @param w Explicit bit-width of the index sort; 0 means the machine
+   *    word size. Non-zero only for wide-BV-indexed infinite arrays (the
+   *    Solidity mapping storage, which is indexed by address ++ key).
    */
   array_type2t(
     const type2tc &_subtype,
     const expr2tc &size,
     bool inf,
-    unsigned w = 0)
-    : array_type_methods(array_id, _subtype, size, inf, w)
+    unsigned int w = 0)
+    : type2t(array_id),
+      subtype(_subtype),
+      array_size(size),
+      size_is_infinite(inf),
+      index_width(w)
   {
-    // If we can simplify the array size, do so
-    // XXX, this is probably massively inefficient. Some kind of boundary in
-    // the checking process should exist to eliminate this requirement.
+    // Constant-fold the size expression so identical array types compare
+    // equal regardless of how their size was constructed. Skip the work
+    // when the size is already a constant_int (the common case from the
+    // frontend) — simplify() would just return nil for it but the walk
+    // still costs a few cycles. Long-term fix is to normalise sizes at
+    // the frontend / migration boundary instead.
     if (!is_nil_expr(size))
     {
       assert(
         size->type->type_id == signedbv_id ||
         size->type->type_id == unsignedbv_id);
-      expr2tc sz = size->simplify();
-      if (!is_nil_expr(sz))
-        array_size = sz;
+      if (size->expr_id != expr2t::constant_int_id)
+      {
+        expr2tc sz = size->simplify();
+        if (!is_nil_expr(sz))
+          array_size = sz;
+      }
     }
   }
   array_type2t(const array_type2t &ref) = default;
 
   virtual ~array_type2t() = default;
 
-  unsigned int get_width() const override;
+  unsigned int get_width() const;
 
-  /** Exception for invalid manipulations of an infinitely sized array. No
-   *  actual data stored. */
-  class inf_sized_array_excp
+  /** Common base for the two array-sizing exceptions thrown by
+   *  array_type2t::get_width (and friends). Lets callers `catch (const
+   *  array_size_excp &)` for unified handling, or one of the concrete
+   *  subclasses below when they need to distinguish infinite from
+   *  dynamic. Derives from std::exception so generic exception
+   *  machinery (e.g. catch(std::exception &)) sees them too. */
+  class array_size_excp : public std::exception
   {
-    virtual const char *what() const throw()
+  public:
+    const char *what() const noexcept override
+    {
+      return "array size is not statically known";
+    }
+  };
+
+  /** Exception for invalid manipulations of an infinitely sized array.
+   *  No payload — the array carries no concrete size. */
+  class inf_sized_array_excp : public array_size_excp
+  {
+  public:
+    const char *what() const noexcept override
     {
       return "infinite sized array encountered";
     }
   };
 
-  /** Exception for invalid manipultions of dynamically sized arrays.
-   *  Stores the size of the array in the exception; this way the catcher
-   *  has it immediately to hand. */
-  class dyn_sized_array_excp
+  /** Exception for invalid manipulations of dynamically sized arrays.
+   *  Stores the symbolic size of the array so the catcher has it
+   *  immediately to hand. */
+  class dyn_sized_array_excp : public array_size_excp
   {
   public:
     dyn_sized_array_excp(const expr2tc &_size) : size(_size)
     {
     }
 
-    virtual const char *what() const throw()
+    const char *what() const noexcept override
     {
       return "Sizeof nondeterministically sized array encountered";
     }
 
-    virtual ~dyn_sized_array_excp() = default;
-
     expr2tc size;
   };
 
+  type2tc subtype;
+  expr2tc array_size;
+  bool size_is_infinite;
+  unsigned int index_width;
+
+  static constexpr auto fields = std::make_tuple(
+    &array_type2t::subtype,
+    &array_type2t::array_size,
+    &array_type2t::size_is_infinite,
+    &array_type2t::index_width);
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** Vector type.
- *  @extends array_data
- */
-class vector_type2t : public vector_type_methods
+/** Vector type. */
+class vector_type2t : public type2t
 {
 public:
   /** Primary constructor.
-   *  @param subtype Type of elements in this array.
-   *  @param size Size of this array.
-   *  @param inf Whether or not this array is infinitely sized
+   *  @param _subtype Type of elements in this vector.
+   *  @param size Number of lanes.
    */
   vector_type2t(const type2tc &_subtype, const expr2tc &size)
-    : vector_type_methods(vector_id, _subtype, size, false)
+    : type2t(vector_id),
+      subtype(_subtype),
+      array_size(size),
+      size_is_infinite(false)
   {
-    // If we can simplify the array size, do so
-    // XXX, this is probably massively inefficient. Some kind of boundary in
-    // the checking process should exist to eliminate this requirement.
-    if (!is_nil_expr(size))
+    // Mirror array_type2t: skip simplify() when the size is already a
+    // literal. See note in array_type2t for the normalisation rationale.
+    if (!is_nil_expr(size) && size->expr_id != expr2t::constant_int_id)
     {
       expr2tc sz = size->simplify();
       if (!is_nil_expr(sz))
@@ -617,108 +546,140 @@ public:
     }
   }
   vector_type2t(const vector_type2t &ref) = default;
-  unsigned int get_width() const override;
+  unsigned int get_width() const;
+
+  type2tc subtype;
+  expr2tc array_size;
+  bool size_is_infinite;
+
+  static constexpr auto fields = std::make_tuple(
+    &vector_type2t::subtype,
+    &vector_type2t::array_size,
+    &vector_type2t::size_is_infinite);
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** How the source spelled a pointer. The irept form keeps this in the
+ *  `#reference` / `#rvalue_reference` attributes, which have no equivalent
+ *  here, so a round trip used to erase it. */
+enum class pointer_ref_kindt
+{
+  NONE,
+  LVALUE,
+  RVALUE
+};
+
 /** Pointer type.
- *  Simply has a subtype, of what it points to. No other attributes.
- *  @extends pointer_data
+ *  Simply has a subtype, of what it points to, and how the source spelled it.
  */
-class pointer_type2t : public pointer_type_methods
+class pointer_type2t : public type2t
 {
 public:
   /** Primary constructor. @param subtype Subtype of this pointer */
-  pointer_type2t(const type2tc &subtype, const bool &p = false)
-    : pointer_type_methods(pointer_id, subtype, p)
+  pointer_type2t(
+    const type2tc &st,
+    const bool &p = false,
+    pointer_ref_kindt rk = pointer_ref_kindt::NONE)
+    : type2t(pointer_id), subtype(st), carry_provenance(p), ref_kind(rk)
   {
   }
   pointer_type2t(const pointer_type2t &ref) = default;
-  unsigned int get_width() const override;
+  unsigned int get_width() const;
 
+  type2tc subtype;
+  bool carry_provenance;
+  pointer_ref_kindt ref_kind;
+
+  static constexpr auto fields = std::make_tuple(
+    &pointer_type2t::subtype,
+    &pointer_type2t::carry_provenance,
+    &pointer_type2t::ref_kind);
   static std::string field_names[esbmct::num_type_fields];
 };
 
 /** Fixed bitvector type.
- *  Contains a spec for a fixed bitwidth number -- this is the equivalent of a
- *  fixedbv_spect in the old irep situation. Stores how bits are distributed
- *  over integer bits and fraction bits.
- *  @extend fixedbv_data
+ *  Spec for a fixed bitwidth number — stores how the bits are distributed
+ *  between integer bits and fraction bits.
  */
-class fixedbv_type2t : public fixedbv_type_methods
+class fixedbv_type2t : public type2t
 {
 public:
   /** Primary constructor.
    *  @param width Total number of bits in this type of fixedbv
    *  @param integer Number of integer bits in this type of fixedbv
    */
-  fixedbv_type2t(unsigned int width, unsigned int integer)
-    : fixedbv_type_methods(fixedbv_id, width, integer)
+  fixedbv_type2t(unsigned int w, unsigned int ib)
+    : type2t(fixedbv_id), width(w), integer_bits(ib)
   {
   }
   fixedbv_type2t(const fixedbv_type2t &ref) = default;
-  unsigned int get_width() const override;
+  unsigned int get_width() const;
 
+  unsigned int width;
+  unsigned int integer_bits;
+
+  static constexpr auto fields =
+    std::make_tuple(&fixedbv_type2t::width, &fixedbv_type2t::integer_bits);
   static std::string field_names[esbmct::num_type_fields];
 };
 
 /** Floating-point bitvector type.
- *  Contains a spec for a floating point number -- this is the equivalent of a
- *  ieee_float_spect in the old irep situation. Stores how bits are distributed
- *  over fraction bits and exponent bits.
- *  @extend floatbv_data
+ *  Spec for a floating point number — stores how the bits are distributed
+ *  between fraction bits and exponent bits.
  */
-class floatbv_type2t : public floatbv_type_methods
+class floatbv_type2t : public type2t
 {
 public:
   /** Primary constructor.
    *  @param fraction Number of fraction bits in this type of floatbv
    *  @param exponent Number of exponent bits in this type of floatbv
    */
-  floatbv_type2t(unsigned int fraction, unsigned int exponent)
-    : floatbv_type_methods(floatbv_id, fraction, exponent)
+  floatbv_type2t(
+    unsigned int f,
+    unsigned int e,
+    const irep_idt &cpp = irep_idt())
+    : type2t(floatbv_id), fraction(f), exponent(e), cpp_type(cpp)
   {
   }
   floatbv_type2t(const floatbv_type2t &ref) = default;
-  unsigned int get_width() const override;
+  unsigned int get_width() const;
 
+  unsigned int fraction;
+  unsigned int exponent;
+  /// The source language's own spelling of this type, as `#cpp_type` records
+  /// it. Unreflected, for the reason given on unsignedbv_type2t.
+  irep_idt cpp_type;
+
+  static constexpr auto fields =
+    std::make_tuple(&floatbv_type2t::fraction, &floatbv_type2t::exponent);
+  static constexpr std::size_t excluded_field_bytes = sizeof(irep_idt);
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** Complex number type.
- *  Represents C's _Complex type, carrying the base element type.
- *  @extend complex_data
- */
-class complex_type2t : public complex_type_methods
+/** Complex number type. C's `_Complex T` is a pair (real, imag) of two
+ *  values of the same scalar type T, so the kind carries only the
+ *  element type. The SMT tuple lowering synthesises the 2-element view
+ *  at the boundary via struct_union_members / struct_union_member_names. */
+class complex_type2t : public type2t
 {
 public:
-  complex_type2t(
-    const std::vector<type2tc> &members,
-    const std::vector<irep_idt> &memb_names,
-    const std::vector<irep_idt> &memb_pretty_names,
-    const irep_idt &name,
-    bool packed = false)
-    : complex_type_methods(
-        complex_id,
-        members,
-        memb_names,
-        memb_pretty_names,
-        name,
-        packed)
+  complex_type2t(const type2tc &st) : type2t(complex_id), subtype(st)
   {
   }
   complex_type2t(const complex_type2t &ref) = default;
-  unsigned int get_width() const override;
+  unsigned int get_width() const;
 
+  type2tc subtype;
+
+  static constexpr auto fields = std::make_tuple(&complex_type2t::subtype);
   static std::string field_names[esbmct::num_type_fields];
 };
 
 /** C++ Name type.
  *  Contains a type name, but also a vector of template parameters.
  *  Something in the C++ frontend uses this; it's precise purpose is unclear.
- *  @extends cpp_name_data
  */
-class cpp_name_type2t : public cpp_name_type_methods
+class cpp_name_type2t : public type2t
 {
 public:
   /** Primary constructor.
@@ -726,22 +687,26 @@ public:
    *  @param ta Vector of template arguments (types).
    */
   cpp_name_type2t(const irep_idt &n, const std::vector<type2tc> &ta)
-    : cpp_name_type_methods(cpp_name_id, n, ta)
+    : type2t(cpp_name_id), name(n), template_args(ta)
   {
   }
   cpp_name_type2t(const cpp_name_type2t &ref) = default;
 
-  unsigned int get_width() const override;
+  unsigned int get_width() const;
 
+  irep_idt name;
+  std::vector<type2tc> template_args;
+
+  static constexpr auto fields =
+    std::make_tuple(&cpp_name_type2t::name, &cpp_name_type2t::template_args);
   static std::string field_names[esbmct::num_type_fields];
 };
 
-// Generate some "is-this-a-blah" macros, and type conversion macros. This is
-// fine in terms of using/ keywords in syntax, because the preprocessor
-// preprocesses everything out.
-#ifdef NDEBUG
-#  define dynamic_cast static_cast
-#endif
+// Generate "is_<name>_type" predicates and "to_<name>_type" downcasts. The
+// downcasts route through irep2_checked_type_cast so a bad to_*_type throws
+// irep2_cast_error in every build mode rather than invoking undefined
+// behaviour under NDEBUG (the previous design redefined dynamic_cast as
+// static_cast in release).
 #define type_macros(name)                                                      \
   inline bool is_##name##_type(const expr2tc &e)                               \
   {                                                                            \
@@ -753,39 +718,56 @@ public:
   }                                                                            \
   inline const name##_type2t &to_##name##_type(const type2tc &t)               \
   {                                                                            \
-    return dynamic_cast<const name##_type2t &>(*t.get());                      \
+    return irep2_checked_type_cast<const name##_type2t>(                       \
+      *t.get(), type2t::name##_id, #name);                                     \
   }                                                                            \
   inline name##_type2t &to_##name##_type(type2tc &t)                           \
   {                                                                            \
-    return dynamic_cast<name##_type2t &>(*t.get());                            \
+    return irep2_checked_type_cast<name##_type2t>(                             \
+      *t.get(), type2t::name##_id, #name);                                     \
   }                                                                            \
-  inline name##_type2t &to_##name##_type(type2t &t)                            \
+  inline const name##_type2t *try_to_##name##_type(const type2tc &t)           \
   {                                                                            \
-    return dynamic_cast<name##_type2t &>(t);                                   \
-  }                                                                            \
-  inline const name##_type2t &to_##name##_type(const type2t &t)                \
-  {                                                                            \
-    return dynamic_cast<const name##_type2t &>(t);                             \
+    return is_##name##_type(t) ? &to_##name##_type(t) : nullptr;               \
   }
 
-type_macros(bool);
-type_macros(empty);
-type_macros(symbol);
-type_macros(struct);
-type_macros(union);
-type_macros(code);
-type_macros(array);
-type_macros(vector);
-type_macros(pointer);
-type_macros(unsignedbv);
-type_macros(signedbv);
-type_macros(fixedbv);
-type_macros(floatbv);
-type_macros(complex);
-type_macros(cpp_name);
+// Instantiate the is_/to_/try_to_ predicate triple for every kind in
+// type_kinds.inc. Same manifest as the enum and forward declarations.
+#define IREP2_TYPE(kind, pretty) type_macros(kind);
+#include <irep2/type_kinds.inc>
+#undef IREP2_TYPE
 #undef type_macros
-#ifdef dynamic_cast
-#  undef dynamic_cast
-#endif
+
+// struct_type2t and union_type2t each own a 5-field block
+// (members / member_names / member_pretty_names / name / packed);
+// complex_type2t stores only its element type but the SMT tuple
+// lowering treats it as a (real, imag) 2-tuple of that type. The
+// helpers below give callers a uniform "tuple view" of all three
+// without forcing them to dispatch by hand: for struct/union they
+// copy the kind's stored vectors, for complex they synthesise the
+// 2-element view from the subtype. Return-by-value lets the helper
+// be uniform; callers bind to `const auto &x = ...` and rely on
+// temporary lifetime extension.
+//
+// Small per-call copies in exchange for a single point of truth per
+// field. Direct mutation goes via the mutating overload below (or via
+// the concrete kind, e.g. `to_struct_type(t).members`).
+std::vector<type2tc> struct_union_members(const type2tc &t);
+std::vector<irep_idt> struct_union_member_names(const type2tc &t);
+irep_idt struct_union_name(const type2tc &t);
+bool struct_union_packed(const type2tc &t);
+
+/** Mutating reference to a struct/union's members vector. Unlike the
+ *  read-only overload this does NOT synthesise a view for complex_type
+ *  (which has no members vector), so it is restricted to struct_id and
+ *  union_id; passing anything else aborts. Detaches @p t first via the
+ *  non-const `to_*_type` accessor, so the returned reference is safe to
+ *  mutate. */
+std::vector<type2tc> &struct_union_members(type2tc &t);
+
+/** Index of @p comp in struct/union/complex member_names, or nullopt
+ *  if it is missing or duplicated (the latter is malformed IR). */
+std::optional<unsigned int>
+struct_union_get_component_number(const type2tc &t, const irep_idt &comp);
 
 #endif /* IREP2_TYPE_H_ */

@@ -10,7 +10,7 @@ static void error_handler(Z3_context c, Z3_error_code e)
   abort();
 }
 
-smt_convt *create_new_z3_solver(
+smt_solver_baset *create_new_z3_solver(
   const optionst &options,
   const namespacet &ns,
   tuple_iface **tuple_api,
@@ -47,12 +47,20 @@ smt_convt *create_new_z3_solver(
 }
 
 z3_convt::z3_convt(const namespacet &_ns, const optionst &_options)
-  : smt_convt(_ns, _options),
+  : smt_solver_baset(_ns, _options),
     array_iface(true, true),
     fp_convt(this),
     z3_ctx(),
+    /* `smt` is incomplete for nonlinear real arithmetic, which the
+     * integer/real encoding (--ir) produces from a float multiplication, and
+     * the relevancy=0 below makes it give up rather than grind: it reports
+     * "incomplete (theory arithmetic)", which reaches the user as "SMT solver
+     * failed" with no verdict. Fall back to the complete NRA procedure, which
+     * declines any goal outside QF_NRA and leaves the result unknown exactly
+     * as before. */
     solver((z3::tactic(z3_ctx, "simplify") & z3::tactic(z3_ctx, "solve-eqs") &
-            z3::tactic(z3_ctx, "simplify") & z3::tactic(z3_ctx, "smt"))
+            z3::tactic(z3_ctx, "simplify") &
+            (z3::tactic(z3_ctx, "smt") | z3::tactic(z3_ctx, "qfnra-nlsat")))
              .mk_solver())
 {
   z3::params p(z3_ctx);
@@ -83,17 +91,17 @@ z3_convt::~z3_convt()
 
 void z3_convt::push_ctx()
 {
-  smt_convt::push_ctx();
+  smt_solver_baset::push_ctx();
   solver.push();
 }
 
 void z3_convt::pop_ctx()
 {
   solver.pop();
-  smt_convt::pop_ctx();
+  smt_solver_baset::pop_ctx();
 }
 
-smt_convt::resultt z3_convt::dec_solve()
+smt_resultt z3_convt::dec_solve()
 {
   pre_solve();
 
@@ -103,37 +111,16 @@ smt_convt::resultt z3_convt::dec_solve()
     return P_SATISFIABLE;
 
   if (result == z3::unsat)
-    return smt_convt::P_UNSATISFIABLE;
+    return P_UNSATISFIABLE;
 
-  // z3 answered `unknown`, and this is the ONLY place that answer still carries
-  // a reason. `smt_convt::resultt` has no P_UNKNOWN, so every backend folds
-  // unknown into P_ERROR (cvc5_conv.cpp does the same) and every caller
-  // downstream sees a bare error code -- path coverage turns it into the `U`
-  // token `solver-unknown`, which is then indistinguishable from a genuine
-  // solver failure.
-  //
-  // MEASURED, and it is why this line exists rather than a comment saying the
-  // reason is unavailable: on `st1inch --focus-function setFeeReceiver --z3
-  // --tuple-node-flattener`, 8 of 10 VCCs return no verdict after 9.6-11.3s
-  // while z3's own `timeout` parameter is set to 120000ms and the report prints
-  // `0 claim(s) abandoned over budget`. So z3 gives up ~110s early on an
-  // 875-assignment formula, for a reason nothing in this tree recorded BEFORE
-  // this line existed.
-  //
-  // AND THE LINE ANSWERED IT, so the question is not left open here: with it in
-  // place every no-verdict solve reports `reason: out of memory` — an
-  // exhausted resource bound, not an incomplete fragment. Which of those it was
-  // decides which Threats entry the benchmark's 0% belongs to, and they are not
-  // the same limitation. Raising the budget does NOT fix it: 4g and 16g give
-  // identical verdicts with per-solve time scaling ~4x, so the extra memory is
-  // consumed and what is exhausted is our own RLIMIT_DATA
-  // (esbmc_parseoptions.cpp:779-793). Full readings, fixed before that run:
-  // notes/coverage/D14-memlimit-discriminator.md.
+  // z3 answered `unknown`. Every backend folds that into P_ERROR, so this is
+  // the only place the reason is still available: an exhausted resource
+  // bound and an incomplete fragment are different limitations.
   log_warning(
     "z3 returned `unknown` (reason: {}); this is reported as `solver-unknown` "
     "and is NOT a proof that the property holds",
     solver.reason_unknown());
-  return smt_convt::P_ERROR;
+  return P_ERROR;
 }
 
 void z3_convt::assert_ast(smt_astt a)
@@ -440,28 +427,6 @@ smt_astt z3_convt::mk_bvnot(smt_astt a)
     assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
     return new_ast((~to_solver_smt_ast<z3_smt_ast>(a)->a), a->sort);
   }
-}
-
-smt_astt z3_convt::mk_bvnor(smt_astt a, smt_astt b)
-{
-  assert(
-    (a->sort->id == SMT_SORT_INT) || (b->sort->id == SMT_SORT_INT) ||
-    (a->sort->get_data_width() == b->sort->get_data_width()));
-  return new_ast(
-    !(to_solver_smt_ast<z3_smt_ast>(a)->a |
-      to_solver_smt_ast<z3_smt_ast>(b)->a),
-    a->sort);
-}
-
-smt_astt z3_convt::mk_bvnand(smt_astt a, smt_astt b)
-{
-  assert(
-    (a->sort->id == SMT_SORT_INT) || (b->sort->id == SMT_SORT_INT) ||
-    (a->sort->get_data_width() == b->sort->get_data_width()));
-  return new_ast(
-    !(to_solver_smt_ast<z3_smt_ast>(a)->a &
-      to_solver_smt_ast<z3_smt_ast>(b)->a),
-    a->sort);
 }
 
 smt_astt z3_convt::mk_bvxor(smt_astt a, smt_astt b)
@@ -910,10 +875,17 @@ smt_astt z3_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
 smt_astt z3_convt::mk_smt_int(const BigInt &theint)
 {
   smt_sortt s = mk_int_sort();
-  if (theint.is_negative())
+  // BigInt::to_int64 silently truncates past 64 bits, so for values outside
+  // the int64 range fall back to the string overload of z3::context::int_val.
+  // BigInt::is_uint64 is intentionally NOT used here even for in-range
+  // positives because it is a magnitude-only predicate (it ignores the sign),
+  // so a negative BigInt whose magnitude fits in uint64 would take the
+  // fast-path and silently flip sign. Issue #4642.
+  if (theint.is_int64())
     return new_ast(z3_ctx.int_val(theint.to_int64()), s);
 
-  return new_ast(z3_ctx.int_val(theint.to_uint64()), s);
+  std::string dec = integer2string(theint, 10);
+  return new_ast(z3_ctx.int_val(dec.c_str()), s);
 }
 
 smt_astt z3_convt::mk_smt_real(const std::string &str)
@@ -1032,6 +1004,28 @@ smt_astt z3_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
     z3_ctx.constant(name.c_str(), to_solver_smt_sort<z3::sort>(s)->s), s);
 }
 
+smt_astt z3_convt::mk_smt_uninterpreted_function(
+  const std::string &name,
+  const std::vector<smt_astt> &args,
+  smt_sortt rangesort)
+{
+  // Declare-or-reuse the function symbol: Z3 interns function declarations by
+  // (name, domain, range), so every application of the same name resolves to
+  // the same decl and the solver enforces functional congruence natively.
+  z3::sort_vector domain(z3_ctx);
+  z3::expr_vector z3_args(z3_ctx);
+  for (smt_astt arg : args)
+  {
+    const z3::expr &e = to_solver_smt_ast<z3_smt_ast>(arg)->a;
+    domain.push_back(e.get_sort());
+    z3_args.push_back(e);
+  }
+
+  z3::func_decl decl = z3_ctx.function(
+    name.c_str(), domain, to_solver_smt_sort<z3::sort>(rangesort)->s);
+  return new_ast(decl(z3_args), rangesort);
+}
+
 smt_sortt z3_convt::mk_struct_sort(const type2tc &type)
 {
   if (is_array_type(type))
@@ -1042,21 +1036,22 @@ smt_sortt z3_convt::mk_struct_sort(const type2tc &type)
     return mk_array_sort(d, subtypesort);
   }
 
-  const struct_type2t &strct = to_struct_type(type);
-  const std::size_t num_members = strct.members.size();
+  const type2tc &t = is_pointer_type(type) ? pointer_struct : type;
+  const std::vector<type2tc> &members = struct_union_members(t);
+  const std::vector<irep_idt> &mnames = struct_union_member_names(t);
+  const irep_idt &name = struct_union_name(t);
+  const std::size_t num_members = members.size();
 
   z3::array<Z3_symbol> member_names(num_members);
   z3::array<Z3_sort> member_sorts(num_members);
   for (std::size_t i = 0; i < num_members; ++i)
   {
-    member_names[i] =
-      z3_ctx.str_symbol(strct.member_names[i].as_string().c_str());
-    member_sorts[i] =
-      to_solver_smt_sort<z3::sort>(convert_sort(strct.members[i]))->s;
+    member_names[i] = z3_ctx.str_symbol(mnames[i].as_string().c_str());
+    member_sorts[i] = to_solver_smt_sort<z3::sort>(convert_sort(members[i]))->s;
   }
 
-  z3::symbol tuple_name = z3_ctx.str_symbol(
-    std::string("struct_type_" + strct.name.as_string()).c_str());
+  z3::symbol tuple_name =
+    z3_ctx.str_symbol(std::string("struct_type_" + name.as_string()).c_str());
 
   Z3_func_decl mk_tuple_decl;
   z3::array<Z3_func_decl> proj_decls(num_members);
@@ -1075,10 +1070,10 @@ smt_sortt z3_convt::mk_struct_sort(const type2tc &type)
 }
 
 smt_astt z3_smt_ast::update(
-  smt_convt *conv,
+  smt_solver_baset *conv,
   smt_astt value,
   unsigned int idx,
-  expr2tc idx_expr) const
+  const expr2tc &idx_expr) const
 {
   if (sort->id == SMT_SORT_ARRAY)
     return smt_ast::update(conv, value, idx, idx_expr);
@@ -1091,15 +1086,16 @@ smt_astt z3_smt_ast::update(
   return z3_conv->new_ast(z3_conv->mk_tuple_update(a, idx, updateval->a), sort);
 }
 
-smt_astt z3_smt_ast::project(smt_convt *conv, unsigned int elem) const
+smt_astt z3_smt_ast::project(smt_solver_baset *conv, unsigned int elem) const
 {
   z3_convt *z3_conv = static_cast<z3_convt *>(conv);
 
   assert(!is_nil_type(sort->get_tuple_type()));
-  const struct_union_data &data = conv->get_type_def(sort->get_tuple_type());
+  const std::vector<type2tc> &members =
+    struct_union_members(sort->get_tuple_type());
 
-  assert(elem < data.members.size());
-  const smt_sort *idx_sort = conv->convert_sort(data.members[elem]);
+  assert(elem < members.size());
+  const smt_sort *idx_sort = conv->convert_sort(members[elem]);
 
   z3::expr selected = z3_conv->mk_tuple_select(a, elem);
   return z3_conv->new_ast(selected, idx_sort);
@@ -1108,14 +1104,12 @@ smt_astt z3_smt_ast::project(smt_convt *conv, unsigned int elem) const
 smt_astt z3_convt::tuple_create(const expr2tc &structdef)
 {
   const constant_struct2t &strct = to_constant_struct2t(structdef);
-  const struct_union_data &type =
-    static_cast<const struct_union_data &>(*strct.type);
 
   // Converts a static struct - IE, one that hasn't had any "with"
   // operations applied to it, perhaps due to initialization or constant
   // propagation.
   const std::vector<expr2tc> &members = strct.datatype_members;
-  const std::vector<type2tc> &member_types = type.members;
+  const std::vector<type2tc> &member_types = struct_union_members(strct.type);
 
   // Populate tuple with members of that struct
   z3::expr_vector args(z3_ctx);
@@ -1216,7 +1210,8 @@ z3_convt::tuple_array_of(const expr2tc &init, unsigned long domain_width)
 
 expr2tc z3_convt::tuple_get(const type2tc &type, smt_astt sym)
 {
-  const struct_union_data &strct = get_type_def(type);
+  const type2tc &t = is_pointer_type(type) ? pointer_struct : type;
+  const std::vector<type2tc> &members = struct_union_members(t);
 
   if (is_pointer_type(type))
   {
@@ -1225,16 +1220,15 @@ expr2tc z3_convt::tuple_get(const type2tc &type, smt_astt sym)
 
     smt_astt object = new_ast(
       mk_tuple_select(to_solver_smt_ast<z3_smt_ast>(sym)->a, 0),
-      convert_sort(strct.members[0]));
+      convert_sort(members[0]));
 
     smt_astt offset = new_ast(
       mk_tuple_select(to_solver_smt_ast<z3_smt_ast>(sym)->a, 1),
-      convert_sort(strct.members[1]));
+      convert_sort(members[1]));
 
-    unsigned int num =
-      get_bv(object, is_signedbv_type(strct.members[0])).to_uint64();
+    unsigned int num = get_bv(object, is_signedbv_type(members[0])).to_uint64();
     unsigned int offs =
-      get_bv(offset, is_signedbv_type(strct.members[1])).to_uint64();
+      get_bv(offset, is_signedbv_type(members[1])).to_uint64();
     pointer_logict::pointert p(num, BigInt(offs));
     return pointer_logic.back().pointer_expr(p, type);
   }
@@ -1242,7 +1236,7 @@ expr2tc z3_convt::tuple_get(const type2tc &type, smt_astt sym)
   // Otherwise, run through all fields and dispatch to 'get_by_ast' again.
   std::vector<expr2tc> outmem;
   unsigned int i = 0;
-  for (auto const &it : strct.members)
+  for (auto const &it : members)
   {
     outmem.push_back(get_by_ast(
       it,
@@ -1257,7 +1251,9 @@ expr2tc z3_convt::tuple_get(const type2tc &type, smt_astt sym)
 
 expr2tc z3_convt::tuple_get(const expr2tc &expr)
 {
-  const struct_union_data &strct = get_type_def(expr->type);
+  const type2tc &t = is_pointer_type(expr->type) ? pointer_struct : expr->type;
+  const std::vector<type2tc> &members = struct_union_members(t);
+  const std::vector<irep_idt> &mnames = struct_union_member_names(t);
 
   if (is_pointer_type(expr->type))
   {
@@ -1268,16 +1264,15 @@ expr2tc z3_convt::tuple_get(const expr2tc &expr)
 
     smt_astt object = new_ast(
       mk_tuple_select(to_solver_smt_ast<z3_smt_ast>(sym)->a, 0),
-      convert_sort(strct.members[0]));
+      convert_sort(members[0]));
 
     smt_astt offset = new_ast(
       mk_tuple_select(to_solver_smt_ast<z3_smt_ast>(sym)->a, 1),
-      convert_sort(strct.members[1]));
+      convert_sort(members[1]));
 
-    unsigned int num =
-      get_bv(object, is_signedbv_type(strct.members[0])).to_uint64();
+    unsigned int num = get_bv(object, is_signedbv_type(members[0])).to_uint64();
     unsigned int offs =
-      get_bv(offset, is_signedbv_type(strct.members[1])).to_uint64();
+      get_bv(offset, is_signedbv_type(members[1])).to_uint64();
     pointer_logict::pointert p(num, BigInt(offs));
     return pointer_logic.back().pointer_expr(p, expr->type);
   }
@@ -1285,9 +1280,9 @@ expr2tc z3_convt::tuple_get(const expr2tc &expr)
   // Otherwise, run through all fields and dispatch to 'get' again.
   std::vector<expr2tc> outmem;
   unsigned int i = 0;
-  for (auto const &it : strct.members)
+  for (auto const &it : members)
   {
-    expr2tc memb = member2tc(it, expr, strct.member_names[i]);
+    expr2tc memb = member2tc(it, expr, mnames[i]);
     outmem.push_back(get(memb));
     i++;
   }
@@ -1297,7 +1292,7 @@ expr2tc z3_convt::tuple_get(const expr2tc &expr)
 
 // ***************************** 'get' api *******************************
 
-bool z3_convt::get_bool(smt_astt a)
+tvt z3_convt::get_bool(smt_astt a)
 {
   const z3_smt_ast *za = to_solver_smt_ast<z3_smt_ast>(a);
   // Set the model_completion to TRUE.
@@ -1305,24 +1300,18 @@ bool z3_convt::get_bool(smt_astt a)
   // which are essentially don't cares.
   z3::expr e = solver.get_model().eval(za->a, true);
 
-  Z3_lbool result = Z3_get_bool_value(z3_ctx, e);
-
-  bool res;
-  switch (result)
+  switch (Z3_get_bool_value(z3_ctx, e))
   {
   case Z3_L_TRUE:
-    res = true;
-    break;
+    return tvt(true);
   case Z3_L_FALSE:
-    res = false;
-    break;
+    return tvt(false);
   default:
-    // Note: quantifiers may result in undefined values
-    log_warning("Can't get boolean value from Z3. Returning false");
-    res = false;
+    // Terms still containing a quantifier have no ground value; report the
+    // absence rather than inventing one (see #6191).
+    log_debug("solver", "Z3 returned no boolean value; term is unevaluatable");
+    return tvt(tvt::TV_UNKNOWN);
   }
-
-  return res;
 }
 
 BigInt z3_convt::get_bv(smt_astt a, bool is_signed)
@@ -1333,15 +1322,15 @@ BigInt z3_convt::get_bv(smt_astt a, bool is_signed)
   if (int_encoding)
     return string2integer(Z3_get_numeral_string(z3_ctx, e));
 
-  // Not a numeral? Let's not try to convert it
-  std::string bin;
-  bool is_numeral [[maybe_unused]] = e.as_binary(bin);
-  assert(is_numeral);
-  /* 'bin' contains the ascii representation of the bit-vector, msb-first,
-   * no leading zeroes; zero-extend if possible */
-  if (bin.size() < e.get_sort().bv_size())
-    bin.insert(bin.begin(), '0');
-  return binary2integer(bin, is_signed);
+  /* Z3's model evaluation can return a bit-vector numeral that it stores with
+   * a negative internal value (printed as e.g. "(bvneg #x...)"). The binary
+   * string API (z3::expr::as_binary / Z3_get_numeral_binary_string) only
+   * accepts non-negative numerals and aborts the process with
+   * Z3_INVALID_ARG otherwise -- which previously crashed ESBMC while building
+   * the error trace (issue #5188). Read the value as a (possibly negative)
+   * decimal instead and reinterpret it within the bit-vector's width. */
+  BigInt val = string2integer(Z3_get_numeral_string(z3_ctx, e));
+  return binary2integer(integer2binary(val, e.get_sort().bv_size()), is_signed);
 }
 
 bool z3_convt::get_rational(smt_astt a, BigInt &numerator, BigInt &denominator)
@@ -1436,8 +1425,9 @@ ieee_floatt z3_convt::get_fpbv(smt_astt a)
   else
   {
     Z3_ast v;
-    if (Z3_model_eval(
-          z3_ctx, solver.get_model(), Z3_mk_fpa_to_ieee_bv(z3_ctx, e), 1, &v))
+    if (
+      Z3_model_eval(
+        z3_ctx, solver.get_model(), Z3_mk_fpa_to_ieee_bv(z3_ctx, e), 1, &v))
       number.unpack(BigInt(Z3_get_numeral_string(z3_ctx, v)));
   }
 
@@ -1808,6 +1798,14 @@ smt_astt z3_convt::mk_smt_fpbv_div(smt_astt lhs, smt_astt rhs, smt_astt rm)
   return new_ast(
     z3::to_expr(z3_ctx, Z3_mk_fpa_div(z3_ctx, mrm->a, mlhs->a, mrhs->a)),
     lhs->sort);
+}
+
+smt_astt z3_convt::mk_smt_fpbv_rem(smt_astt lhs, smt_astt rhs)
+{
+  const z3_smt_ast *mlhs = to_solver_smt_ast<z3_smt_ast>(lhs);
+  const z3_smt_ast *mrhs = to_solver_smt_ast<z3_smt_ast>(rhs);
+  return new_ast(
+    z3::to_expr(z3_ctx, Z3_mk_fpa_rem(z3_ctx, mlhs->a, mrhs->a)), lhs->sort);
 }
 
 smt_astt z3_convt::mk_smt_fpbv_eq(smt_astt lhs, smt_astt rhs)

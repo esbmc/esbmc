@@ -1,0 +1,6 @@
+CORE
+main.c
+--overflow-check --incremental-bmc
+^VERIFICATION FAILED$
+^  arithmetic overflow on add$
+^  CWE: CWE-190, CWE-191$

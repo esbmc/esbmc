@@ -1,0 +1,5 @@
+CORE
+main.c
+--little-endian
+^VERIFICATION FAILED$
+^.*assertion h\[1\] != 2$

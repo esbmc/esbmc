@@ -1,0 +1,5 @@
+CORE
+main.c
+--replace-call-with-contract f,g
+^ERROR: --replace-call-with-contract: cannot use 'f,g': no function of that name has a body here \(names are not comma-separated; repeat the flag once per function, or use "\*"\)$
+\A(?!(.|\n)*VERIFICATION)

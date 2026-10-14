@@ -1,0 +1,33 @@
+# This file is part of the SV-Benchmarks collection of verification tasks:
+# https://gitlab.com/sosy-lab/benchmarking/sv-benchmarks
+#
+# SPDX-FileCopyrightText: 2023-2025 Simmo Saan
+#
+# SPDX-License-Identifier: MIT
+
+- entry_type: invariant_set
+  metadata:
+    format_version: "2.0"
+    uuid: 6ee08942-60e6-4291-a9fc-ff6f2744ef4b
+    creation_time: 2022-10-12T11:19:46Z
+    producer:
+      name: Simmo Saan
+      version: n/a
+    task:
+      input_files:
+      - bh2017-ex1-poly.i
+      input_file_hashes:
+        bh2017-ex1-poly.i: d6dbcbf51695ea037a123bcc006ce5f6db095b874a22b169ec869d834ce41de6
+      specification: G ! call(reach_error())
+      data_model: LP64
+      language: C
+  content:
+  - invariant:
+      type: location_invariant
+      location:
+        file_name: bh2017-ex1-poly.i
+        line: 17
+        column: 5
+        function: main
+      value: 0 <= i && i <= 3
+      format: c_expression

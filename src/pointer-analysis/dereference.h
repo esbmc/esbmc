@@ -3,10 +3,10 @@
 
 #include <pointer-analysis/value_sets.h>
 #include <set>
-#include <util/expr.h>
-#include <util/guard.h>
-#include <util/namespace.h>
-#include <util/options.h>
+#include <util/irep/expr.h>
+#include <irep2/irep2_guard.h>
+#include <util/symtab/namespace.h>
+#include <util/config/options.h>
 
 /** @file dereference.h
  *  The dereferencing code's purpose is to take a symbol with pointer type that
@@ -55,11 +55,10 @@
  *
  *  A particular point of interest is the byte layout of the data objects we're
  *  dealing with. The underlying SMT objects mean nothing during byte
- *  addressing, only the code in 'type_byte_size' is relevant. To aid
- *  dereferencing, that code ensures that all data objects are word aligned in
- *  all struct fields (and that trailing padding exists). This is so that we
- *  can avoid all scenarios where dereferences cross field boundries, as that
- *  will ultimately be an alignment violation.
+ *  addressing, only the code in 'type_byte_size' is relevant: struct layout
+ *  follows the target ABI (including packed structs). Accesses that cross
+ *  field boundaries or are misaligned are handled by byte-stitching, plus
+ *  alignment assertions where applicable.
  *
  *  The value set tracking code also maintains a 'minimum alignment' piece of
  *  data when the offset is nondeterministic, guarenteeing that the offset used
@@ -72,12 +71,11 @@
  *   * There are two different flavours of offsets, the offset of the pointer
  *     being dereferenced, and the offset caused by the expression that's
  *     dereferencing it.
- *   * 'Scalar step lists' are a list of expressions applied to a struct or
- *     array to access a scalar within the base object. For example, the expr
- *     "foo->bar[baz]" dereferences foo and applies a member then index expr.
- *     The idea behind this is that we can directly pull the scalar value out
- *     of the underlying type if possible, instead of having to compute a
- *     reference to a struct or array in dereference code.
+ *   * Member/index chains applied on top of a dereference (e.g.
+ *     "foo->bar[baz]", which dereferences foo then applies a member and an
+ *     index expr) are folded into a single bit offset (the "lexical
+ *     offset"), so the scalar can be extracted directly instead of having
+ *     to compute a reference to an intermediate struct or array.
  *   * In that vein, building a reference to a struct only happens as a last
  *     resort, and is vigorously asserted against. An exception to this rule
  *     is when the underlying object is a byte array: we have to support this
@@ -91,8 +89,8 @@
 /** Class providing interface to value set tracking code.
  *  This class allows dereference code to get more data out of the environment
  *  in which it is dereferencing, fetching the set of values that a pointer
- *  points at, and also encoding any assertions that occur regarding the validity
- *  of the dereference.
+ *  points at, and also encoding any assertions that occur regarding the
+ * validity of the dereference.
  */
 class dereference_callbackt
 {
@@ -110,9 +108,9 @@ public:
   virtual void dereference_failure(
     const std::string &property,
     const std::string &msg,
-    const guardt &guard) = 0;
+    const guard2tc &guard) = 0;
 
-  virtual void dereference_assume(const guardt &guard) = 0;
+  virtual void dereference_assume(const guard2tc &guard) = 0;
 
   /** Fetch the set of values that the given pointer variable can point at.
    *  @param expr Pointer symbol to get the value set of.
@@ -126,8 +124,17 @@ public:
   virtual bool
   has_failed_symbol(const expr2tc &expr, const symbolt *&symbol) = 0;
 
-  /** Optionally rename the given expression. This exists to provide potential
-   *  optimization expansion in the future, it isn't currently used by anything.
+  /** Rename the given expression into the callback's current execution
+   *  context. The default implementation is a no-op; the symbolic-execution
+   *  override substitutes the SSA names and recorded constants symex
+   *  currently holds. Called on the index operands of dereference chains once
+   *  their inner dereferences are resolved, so an index whose value symex
+   *  knows folds to a constant and the access stays on the constant-offset
+   *  path (see dereference_expr_nonscalar, #7311). Indices mentioning a
+   *  symbol bound by an enclosing quantifier are excluded, as is the whole
+   *  body of a quantifier whose binder names no symbol: the callback has no
+   *  quantifier context and would substitute the like-named program
+   *  variable's value.
    *  @param expr An expression to be renamed
    */
   virtual void rename(expr2tc &expr [[maybe_unused]])
@@ -141,8 +148,8 @@ public:
     expr2tc guard;
   };
 
-  virtual void dump_internal_state(const std::list<struct internal_item> &data
-                                   [[maybe_unused]])
+  virtual void dump_internal_state(
+    const std::list<struct internal_item> &data [[maybe_unused]])
   {
   }
 
@@ -252,12 +259,12 @@ public:
    *  @param The way in which this dereference is being accessed. Only affects
    *         the assertions that are generated.
    */
-  virtual void dereference_expr(expr2tc &expr, guardt &guard, modet mode);
+  virtual void dereference_expr(expr2tc &expr, guard2tc &guard, modet mode);
 
   virtual expr2tc dereference(
     const expr2tc &dest,
     const type2tc &type,
-    const guardt &guard,
+    const guard2tc &guard,
     modet mode,
     const expr2tc &extra_offset);
 
@@ -266,6 +273,11 @@ public:
    *  @return True when the given expression does have a dereference.
    */
   bool has_dereference(const expr2tc &expr) const;
+
+  /** Zero the failed-symbol counter. Called once per exploration from
+   *  reachability_treet::setup_for_new_explore, so the equation is a function
+   *  of (program, options) alone (R15). */
+  static void reset_object_counter();
 
 private:
   /** Namespace to perform type lookups against. */
@@ -277,8 +289,10 @@ private:
   /** The callback object to funnel all interactions with the context through.*/
   dereference_callbackt &dereference_callback;
   /** The number of failed symbols that we've generated (they're numbered
-   *  individually. */
-  static unsigned invalid_counter;
+   *  individually. thread_local so parallel symex threads
+   *  (--k-induction-parallel) don't race when minting unique
+   *  `symex::invalid_objectN` names. */
+  static thread_local unsigned invalid_counter;
   /** Whether or not we're operating in a big endian environment. Value for this
    *  is taken from config.ansi_c.endianness. */
   bool is_big_endian;
@@ -296,7 +310,8 @@ private:
    *  @param guard The guard for evaluating this expression.
    *  @param mode The manner in which the result of this deref is accessed.
    */
-  virtual void dereference_guard_expr(expr2tc &expr, guardt &guard, modet mode);
+  virtual void
+  dereference_guard_expr(expr2tc &expr, guard2tc &guard, modet mode);
 
   /** Interpret an address-of expression. There's the potential that it's just
    *  taking the address of a dereference, which just evaluates to some pointer
@@ -306,7 +321,7 @@ private:
    *  @param mode The manner iin which the result of this deref is accessed.
    */
   virtual void
-  dereference_addrof_expr(expr2tc &expr, guardt &guard, modet mode);
+  dereference_addrof_expr(expr2tc &expr, guard2tc &guard, modet mode);
 
   /** Interpret an expression that accesses a nonscalar type. This means that
    *  it's an index or member (or some other glue expr) on top of a dereference
@@ -335,9 +350,17 @@ private:
    */
   virtual expr2tc dereference_expr_nonscalar(
     expr2tc &expr,
-    guardt &guard,
+    guard2tc &guard,
     modet mode,
     const expr2tc &base);
+
+  /** Resolve an access path whose steps were lifted out of a conditional,
+   *  e.g. `(c ? *ra : *rb).x` rewritten to `c ? (*ra).x : (*rb).x`. Each arm
+   *  is a complete path and is resolved under the condition selecting it, so
+   *  a dereference failure in the arm not taken cannot fire (#6717).
+   */
+  expr2tc
+  resolve_nonscalar_if(const expr2tc &expr, guard2tc &guard, modet mode);
 
   /** Check whether the given pointer expression satisfies the alignment
    *  requirements for accessing a value of the specified type. This uses the
@@ -353,12 +376,14 @@ private:
    *  @param guard A guard expression representing the execution conditions
    *         under which the dereference occurs; violations are only triggered
    *         when the guard holds.
+   *  @param what The points-to target being dereferenced.
    */
   void check_pointer_alignment(
     modet mode,
     const type2tc &type,
     const expr2tc &deref_expr,
-    const guardt &guard);
+    const guard2tc &guard,
+    const expr2tc &what);
 
   /** Construct an expression representing the pointer's offset, in bits, from
    *  the base of the containing object. This is used for alignment checking
@@ -424,21 +449,24 @@ private:
     modet mode,
     const expr2tc &deref_expr,
     const type2tc &type,
-    const guardt &guard,
+    const guard2tc &guard,
     const expr2tc &lexical_offset,
     expr2tc &pointer_guard);
 
-  void
-  deref_invalid_ptr(const expr2tc &deref_expr, const guardt &guard, modet mode);
+  void deref_invalid_ptr(
+    const expr2tc &deref_expr,
+    const guard2tc &guard,
+    modet mode,
+    const expr2tc &resolved = expr2tc());
 
   static const expr2tc &get_symbol(const expr2tc &object);
   void bounds_check(
     const expr2tc &expr,
     const expr2tc &offset,
     const type2tc &type,
-    const guardt &guard,
+    const guard2tc &guard,
     const expr2tc &deref = expr2tc());
-  void valid_check(const expr2tc &expr, const guardt &guard, modet mode);
+  void valid_check(const expr2tc &expr, const guard2tc &guard, modet mode);
   std::vector<expr2tc> extract_bytes(
     const expr2tc &object,
     unsigned int bytes,
@@ -449,15 +477,15 @@ private:
   expr2tc stitch_together_from_byte_array(
     const type2tc &type,
     const expr2tc &byte_array,
-    expr2tc offset_bits);
+    const expr2tc &offset_bits);
   void dereference_failure(
     const std::string &error_class,
     const std::string &error_name,
-    const guardt &guard);
-  void alignment_failure(const std::string &error_name, const guardt &guard);
+    const guard2tc &guard);
+  void alignment_failure(const std::string &error_name, const guard2tc &guard);
 
   void bad_base_type_failure(
-    const guardt &guard,
+    const guard2tc &guard,
     const std::string &wants,
     const std::string &have);
 
@@ -465,18 +493,28 @@ private:
     expr2tc &value,
     const expr2tc &offset,
     const type2tc &type,
-    const guardt &guard,
+    const guard2tc &guard,
     modet mode);
   void check_data_obj_access(
     const expr2tc &value,
     const expr2tc &offset,
     const type2tc &type,
-    const guardt &guard,
+    const guard2tc &guard,
     modet mode);
-  void
-  check_alignment(BigInt minwidth, const expr2tc &offset, const guardt &guard);
+  /** \p object is the object being accessed, or nil where the caller does not
+   *  know it yet -- then the base is assumed to carry the access width, as it
+   *  does for everything but a type that declines alignment. */
+  void check_alignment(
+    BigInt minwidth,
+    const expr2tc &offset,
+    const guard2tc &guard,
+    const expr2tc &object);
+  /** The alignment the address-space model guarantees the base of \p object's
+   *  object, i.e. the assumption check_alignment() is entitled to make about
+   *  everything below the offset it checks. */
+  BigInt object_base_alignment(const expr2tc &object) const;
   unsigned int static compute_num_bytes_to_extract(
-    const expr2tc offset,
+    const expr2tc &offset,
     unsigned long num_bits);
   static expr2tc extract_bits_from_byte_array(
     const expr2tc &value,
@@ -488,7 +526,7 @@ public:
     expr2tc &value,
     const expr2tc &offset,
     const type2tc &type,
-    const guardt &guard,
+    const guard2tc &guard,
     modet mode,
     unsigned long alignment = 0);
 
@@ -505,13 +543,13 @@ private:
     expr2tc &value,
     const expr2tc &offset,
     const type2tc &type,
-    const guardt &guard,
+    const guard2tc &guard,
     modet mode);
   void construct_from_dyn_struct_offset(
     expr2tc &value,
     const expr2tc &offset,
     const type2tc &type,
-    const guardt &guard,
+    const guard2tc &guard,
     unsigned long alignment,
     modet mode,
     const expr2tc *failed_symbol = nullptr);
@@ -519,42 +557,93 @@ private:
     expr2tc &value,
     const expr2tc &offset,
     const type2tc &type,
-    const guardt &guard,
+    const guard2tc &guard,
     unsigned long alignment,
     modet mode);
   void construct_struct_ref_from_const_offset_array(
     expr2tc &value,
     const expr2tc &offs,
     const type2tc &type,
-    const guardt &guard,
+    const guard2tc &guard,
     modet mode,
     unsigned long alignment);
   void construct_struct_ref_from_const_offset(
     expr2tc &value,
     const expr2tc &offs,
     const type2tc &type,
-    const guardt &guard,
+    const guard2tc &guard,
     modet mode);
   void construct_struct_ref_from_dyn_offset(
     expr2tc &value,
     const expr2tc &offs,
     const type2tc &type,
-    const guardt &guard,
+    const guard2tc &guard,
     modet mode);
   void construct_struct_ref_from_dyn_offs_rec(
     const expr2tc &value,
     const expr2tc &offs,
     const type2tc &type,
+    const guard2tc &guard,
     const expr2tc &accuml_guard,
     modet mode,
     std::list<std::pair<expr2tc, expr2tc>> &output);
+  void construct_struct_ref_from_dyn_offs_members(
+    const expr2tc &value,
+    const expr2tc &offs,
+    const type2tc &type,
+    const guard2tc &guard,
+    const expr2tc &accuml_guard,
+    modet mode,
+    std::list<std::pair<expr2tc, expr2tc>> &output);
+  void construct_struct_member_from_byte_array(
+    expr2tc &value,
+    const expr2tc &offset,
+    const type2tc &type,
+    const guard2tc &guard,
+    modet mode);
   void construct_from_array(
     expr2tc &value,
     const expr2tc &offset,
     const type2tc &type,
-    const guardt &guard,
+    const guard2tc &guard,
     modet mode,
     unsigned long alignment = 0);
+  /// Builds a vector or array destination; false for any other type.
+  bool construct_value_ref(
+    expr2tc &value,
+    const expr2tc &offset,
+    const type2tc &type,
+    const guard2tc &guard,
+    modet mode,
+    unsigned long alignment);
+  void construct_vector_ref(
+    expr2tc &value,
+    const expr2tc &offset,
+    const type2tc &type,
+    const guard2tc &guard,
+    modet mode,
+    unsigned long alignment);
+  void construct_array_ref(
+    expr2tc &value,
+    const expr2tc &offset,
+    const type2tc &type,
+    const guard2tc &guard,
+    modet mode,
+    unsigned long alignment);
+  class quantifier_scopet;
+
+  /** Variables bound by quantifiers enclosing the expression currently being
+   *  dereferenced, and how many of those quantifiers bind through a shape
+   *  that names no variable we can identify. */
+  std::multiset<irep_idt> quantifier_bound_vars;
+  unsigned opaque_binders = 0;
+
+  /** True when @p expr mentions a symbol bound by an enclosing quantifier. */
+  bool mentions_bound_var(const expr2tc &expr) const;
+
+  /** True when the index fold may substitute the value symex holds for
+   *  @p index. */
+  bool may_fold_index(const expr2tc &index) const;
 
 public:
   void set_block_assertions(void)

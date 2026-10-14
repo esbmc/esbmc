@@ -2,7 +2,7 @@
 #define GOTO_PROGRAM_SERIALIZATION_H_
 
 #include <goto-programs/goto_program.h>
-#include <util/irep_serialization.h>
+#include <util/irep/irep_serialization.h>
 
 class goto_program_serializationt
 {
@@ -12,7 +12,7 @@ private:
 
 public:
   goto_program_serializationt(irep_serializationt::ireps_containert &ic)
-    : irepconverter(ic){};
+    : irepconverter(ic) {};
 
   void convert(const goto_programt &, std::ostream &);
   void convert(std::istream &, irept &);

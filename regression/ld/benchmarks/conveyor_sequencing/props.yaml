@@ -1,0 +1,28 @@
+properties:
+  - id: P4
+    kind: invariant
+    expression: "Belt_1 || !Conveyor_Running"
+    description: "Belt_1 must be running whenever Conveyor_Running is true"
+
+  - id: P5
+    kind: invariant
+    expression: "Belt_2 || !Conveyor_Running"
+    description: "Belt_2 must be running whenever Conveyor_Running is true"
+
+  - id: P6
+    kind: absence
+    expression: "Emergency_Stop && Conveyor_Running"
+    description: "Conveyor must not run when Emergency_Stop is active"
+
+  # The conveyor only ever runs off a confirmed timer output, which in turn
+  # only holds while its enable is held. This pins TON's enable conjunct: a
+  # timer whose Q latches after IN drops would satisfy P4-P6 but not this.
+  - id: P7
+    kind: invariant
+    expression: "!Conveyor_Running || TON1_Q"
+    description: "Conveyor runs only on a confirmed timer output"
+
+  - id: P8
+    kind: invariant
+    expression: "!TON1_Q || TON1_IN"
+    description: "Timer output is held only while its enable is held"

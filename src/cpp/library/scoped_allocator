@@ -1,0 +1,329 @@
+#ifndef ESBMC_SCOPED_ALLOCATOR
+#define ESBMC_SCOPED_ALLOCATOR
+
+// C++11 header (#7797). libc++ ships it in every language mode and expands it
+// to nothing in an older one, so an unconditional include still compiles
+// (#3387).
+//
+// Modelled for a single inner allocator, the shape every container use has:
+// scoped_allocator_adaptor<Outer, Inner> and scoped_allocator_adaptor<Outer>.
+// Two or more inner allocators would need the adaptor to rebind to an adaptor
+// over the tail ([allocator.adaptor.types]), which is left out rather than
+// approximated.
+#if __cplusplus >= 201103L
+
+#  include "memory"
+#  include "type_traits"
+#  include "utility"
+
+namespace std
+{
+namespace __scoped_detail
+{
+// Uses-allocator construction, [allocator.uses.construction]: pass the inner
+// allocator after allocator_arg when T takes it there, else as a trailing
+// argument, else construct T alone.
+template <class T, class Alloc, class... Args>
+struct uses_leading
+  : integral_constant<
+      bool,
+      uses_allocator<T, Alloc>::value &&
+        is_constructible<T, allocator_arg_t, Alloc, Args...>::value>
+{
+};
+
+template <class T, class Alloc, class... Args>
+struct uses_trailing
+  : integral_constant<
+      bool,
+      uses_allocator<T, Alloc>::value &&
+        !is_constructible<T, allocator_arg_t, Alloc, Args...>::value &&
+        is_constructible<T, Args..., Alloc>::value>
+{
+};
+
+template <bool Leading, bool Trailing>
+struct construct_with
+{
+  template <class T, class Alloc, class... Args>
+  static void run(T *p, const Alloc &, Args &&...args)
+  {
+    ::new ((void *)p) T(static_cast<Args &&>(args)...);
+  }
+};
+
+template <>
+struct construct_with<true, false>
+{
+  template <class T, class Alloc, class... Args>
+  static void run(T *p, const Alloc &a, Args &&...args)
+  {
+    ::new ((void *)p) T(allocator_arg, a, static_cast<Args &&>(args)...);
+  }
+};
+
+template <>
+struct construct_with<false, true>
+{
+  template <class T, class Alloc, class... Args>
+  static void run(T *p, const Alloc &a, Args &&...args)
+  {
+    ::new ((void *)p) T(static_cast<Args &&>(args)..., a);
+  }
+};
+
+} // namespace __scoped_detail
+
+// [allocator.adaptor]
+template <class OuterAlloc, class... InnerAllocs>
+class scoped_allocator_adaptor;
+
+template <class OuterAlloc>
+class scoped_allocator_adaptor<OuterAlloc>
+{
+  OuterAlloc __outer;
+
+public:
+  typedef OuterAlloc outer_allocator_type;
+  typedef scoped_allocator_adaptor<OuterAlloc> inner_allocator_type;
+  typedef typename allocator_traits<OuterAlloc>::value_type value_type;
+  typedef typename allocator_traits<OuterAlloc>::size_type size_type;
+  typedef
+    typename allocator_traits<OuterAlloc>::difference_type difference_type;
+  typedef typename allocator_traits<OuterAlloc>::pointer pointer;
+  typedef typename allocator_traits<OuterAlloc>::const_pointer const_pointer;
+  typedef typename allocator_traits<OuterAlloc>::void_pointer void_pointer;
+  typedef typename allocator_traits<OuterAlloc>::const_void_pointer
+    const_void_pointer;
+
+  template <class T>
+  struct rebind
+  {
+    typedef scoped_allocator_adaptor<
+      typename allocator_traits<OuterAlloc>::template rebind_alloc<T>>
+      other;
+  };
+
+  scoped_allocator_adaptor()
+  {
+  }
+
+  explicit scoped_allocator_adaptor(const OuterAlloc &outer) : __outer(outer)
+  {
+  }
+
+  scoped_allocator_adaptor(const scoped_allocator_adaptor &other)
+    : __outer(other.__outer)
+  {
+  }
+
+  ~scoped_allocator_adaptor()
+  {
+  }
+
+  outer_allocator_type &outer_allocator()
+  {
+    return __outer;
+  }
+
+  const outer_allocator_type &outer_allocator() const
+  {
+    return __outer;
+  }
+
+  inner_allocator_type &inner_allocator()
+  {
+    return *this;
+  }
+
+  const inner_allocator_type &inner_allocator() const
+  {
+    return *this;
+  }
+
+  pointer allocate(size_type n)
+  {
+    return allocator_traits<OuterAlloc>::allocate(__outer, n);
+  }
+
+  // allocator_traits here has no hinted allocate, and the hint is advisory,
+  // so it is dropped.
+  pointer allocate(size_type n, const_void_pointer)
+  {
+    return allocator_traits<OuterAlloc>::allocate(__outer, n);
+  }
+
+  void deallocate(pointer p, size_type n)
+  {
+    allocator_traits<OuterAlloc>::deallocate(__outer, p, n);
+  }
+
+  size_type max_size() const
+  {
+    return allocator_traits<OuterAlloc>::max_size(__outer);
+  }
+
+  template <class T, class... Args>
+  void construct(T *p, Args &&...args)
+  {
+    __scoped_detail::construct_with<
+      __scoped_detail::uses_leading<T, inner_allocator_type, Args...>::value,
+      __scoped_detail::uses_trailing<T, inner_allocator_type, Args...>::value>::
+      run(p, inner_allocator(), static_cast<Args &&>(args)...);
+  }
+
+  template <class T>
+  void destroy(T *p)
+  {
+    p->~T();
+  }
+
+  scoped_allocator_adaptor select_on_container_copy_construction() const
+  {
+    return scoped_allocator_adaptor(
+      allocator_traits<OuterAlloc>::select_on_container_copy_construction(
+        __outer));
+  }
+};
+
+template <class OuterAlloc, class InnerAlloc>
+class scoped_allocator_adaptor<OuterAlloc, InnerAlloc>
+{
+  OuterAlloc __outer;
+  InnerAlloc __inner;
+
+public:
+  typedef OuterAlloc outer_allocator_type;
+  typedef scoped_allocator_adaptor<InnerAlloc> inner_allocator_type;
+  typedef typename allocator_traits<OuterAlloc>::value_type value_type;
+  typedef typename allocator_traits<OuterAlloc>::size_type size_type;
+  typedef
+    typename allocator_traits<OuterAlloc>::difference_type difference_type;
+  typedef typename allocator_traits<OuterAlloc>::pointer pointer;
+  typedef typename allocator_traits<OuterAlloc>::const_pointer const_pointer;
+  typedef typename allocator_traits<OuterAlloc>::void_pointer void_pointer;
+  typedef typename allocator_traits<OuterAlloc>::const_void_pointer
+    const_void_pointer;
+
+  template <class T>
+  struct rebind
+  {
+    typedef scoped_allocator_adaptor<
+      typename allocator_traits<OuterAlloc>::template rebind_alloc<T>,
+      InnerAlloc>
+      other;
+  };
+
+  scoped_allocator_adaptor() : __inner_adaptor(__inner)
+  {
+  }
+
+  scoped_allocator_adaptor(const OuterAlloc &outer, const InnerAlloc &inner)
+    : __outer(outer), __inner(inner), __inner_adaptor(inner)
+  {
+  }
+
+  scoped_allocator_adaptor(const scoped_allocator_adaptor &other)
+    : __outer(other.__outer),
+      __inner(other.__inner),
+      __inner_adaptor(other.__inner)
+  {
+  }
+
+  ~scoped_allocator_adaptor()
+  {
+  }
+
+  outer_allocator_type &outer_allocator()
+  {
+    return __outer;
+  }
+
+  const outer_allocator_type &outer_allocator() const
+  {
+    return __outer;
+  }
+
+  inner_allocator_type &inner_allocator()
+  {
+    return __inner_adaptor;
+  }
+
+  const inner_allocator_type &inner_allocator() const
+  {
+    return __inner_adaptor;
+  }
+
+  pointer allocate(size_type n)
+  {
+    return allocator_traits<OuterAlloc>::allocate(__outer, n);
+  }
+
+  // allocator_traits here has no hinted allocate, and the hint is advisory,
+  // so it is dropped.
+  pointer allocate(size_type n, const_void_pointer)
+  {
+    return allocator_traits<OuterAlloc>::allocate(__outer, n);
+  }
+
+  void deallocate(pointer p, size_type n)
+  {
+    allocator_traits<OuterAlloc>::deallocate(__outer, p, n);
+  }
+
+  size_type max_size() const
+  {
+    return allocator_traits<OuterAlloc>::max_size(__outer);
+  }
+
+  template <class T, class... Args>
+  void construct(T *p, Args &&...args)
+  {
+    __scoped_detail::construct_with<
+      __scoped_detail::uses_leading<T, InnerAlloc, Args...>::value,
+      __scoped_detail::uses_trailing<T, InnerAlloc, Args...>::value>::
+      run(p, __inner, static_cast<Args &&>(args)...);
+  }
+
+  template <class T>
+  void destroy(T *p)
+  {
+    p->~T();
+  }
+
+  scoped_allocator_adaptor select_on_container_copy_construction() const
+  {
+    return scoped_allocator_adaptor(
+      allocator_traits<OuterAlloc>::select_on_container_copy_construction(
+        __outer),
+      __inner);
+  }
+
+private:
+  // inner_allocator() returns an adaptor over the inner allocator, so the
+  // adaptor has to outlive the call; holding it is simpler than rebuilding one
+  // per call and handing back a reference to a temporary.
+  inner_allocator_type __inner_adaptor;
+};
+
+template <class OuterA1, class OuterA2, class... InnerAllocs>
+bool operator==(
+  const scoped_allocator_adaptor<OuterA1, InnerAllocs...> &a,
+  const scoped_allocator_adaptor<OuterA2, InnerAllocs...> &b)
+{
+  return a.outer_allocator() == b.outer_allocator();
+}
+
+template <class OuterA1, class OuterA2, class... InnerAllocs>
+bool operator!=(
+  const scoped_allocator_adaptor<OuterA1, InnerAllocs...> &a,
+  const scoped_allocator_adaptor<OuterA2, InnerAllocs...> &b)
+{
+  return !(a == b);
+}
+
+} // namespace std
+
+#endif
+
+#endif

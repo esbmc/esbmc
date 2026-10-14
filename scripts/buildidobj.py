@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import sys, os
+import re  # For comparing build IDs
 import shutil  # For git
 import subprocess  # For git
 from datetime import datetime  # For date
@@ -74,17 +75,41 @@ class BuildObj:
         return True
 
     @staticmethod
+    def format_id() -> str:
+        line = (f'{BuildObj.STR_ESBMC_BUILT_FROM} {BuildObj.get_last_hash()} '
+                f'{BuildObj.get_datetime()} {BuildObj.STR_BY} '
+                f'{BuildObj.get_username()}{BuildObj.STR_AT}'
+                f'{BuildObj.get_hostname()}')
+        if BuildObj.is_dirty_tree():
+            line += f' {BuildObj.STR_DIRTY}'
+        return line
+
+    @staticmethod
+    def without_datetime(line: str) -> str:
+        return re.sub(r'\d{4}-\d{2}-\d{2} [\d:.]+ ', '', line)
+
+    @staticmethod
+    def describes_same_build(output, line) -> bool:
+        """The build system re-runs this on every build so the ID cannot go
+        stale. Rewriting unconditionally would then relink the whole binary
+        every time, so report when the only difference is the timestamp."""
+        # errors='replace' rather than a narrower except: a file written by an
+        # older revision carries the locale encoding, and a decode failure here
+        # would abort the build. Mangled text simply reads as a different ID.
+        try:
+            with open(output, encoding='utf-8', errors='replace') as f:
+                old = f.read()
+        except OSError:
+            return False
+        return BuildObj.without_datetime(old) == BuildObj.without_datetime(line)
+
+    @staticmethod
     def run(output):
-        with open(output, 'w') as f:
-            f.write(f'{BuildObj.STR_ESBMC_BUILT_FROM} ')
-            f.write(f'{BuildObj.get_last_hash()} ')
-            f.write(f'{BuildObj.get_datetime()} ')
-            f.write(f'{BuildObj.STR_BY} ')
-            f.write(f'{BuildObj.get_username()}')
-            f.write(f'{BuildObj.STR_AT}')
-            f.write(f'{BuildObj.get_hostname()}')
-            if BuildObj.is_dirty_tree():
-                f.write(f' {BuildObj.STR_DIRTY}')
+        line = BuildObj.format_id()
+        if BuildObj.describes_same_build(output, line):
+            return
+        with open(output, 'w', encoding='utf-8') as f:
+            f.write(line)
 
 
 def main():

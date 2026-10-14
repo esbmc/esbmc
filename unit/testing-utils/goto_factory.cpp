@@ -8,9 +8,9 @@
 #include <goto-programs/goto_check.h>
 #include <goto-programs/remove_unreachable.h>
 #include <goto-programs/remove_no_op.h>
-#include <util/cmdline.h>
-#include <util/message.h>
-#include <util/filesystem.h>
+#include <util/config/cmdline.h>
+#include <util/message/message.h>
+#include <util/base/filesystem.h>
 
 const mode_table_et mode_table[] = {
   LANGAPI_MODE_CLANG_C,
@@ -85,9 +85,9 @@ program goto_factory::get_goto_functions(
   goto_factory::Architecture arch,
   const std::string &test_name)
 {
-  std::string filename(
+  file_operations::tmp_path dir(
     file_operations::get_unique_tmp_path("esbmc-test-%%%%%%"));
-  filename += "/" + test_name;
+  std::string filename = dir.path() + "/" + test_name;
   log_status("Creating {}", filename);
   goto_factory::create_file_from(c_file, filename);
 
@@ -99,9 +99,9 @@ program goto_factory::get_goto_functions(
   goto_factory::Architecture arch,
   const std::string &test_name)
 {
-  std::string filename(
+  file_operations::tmp_path dir(
     file_operations::get_unique_tmp_path("esbmc-test-%%%%%%"));
-  filename += "/" + test_name;
+  std::string filename = dir.path() + "/" + test_name;
   goto_factory::create_file_from(str, filename);
 
   return goto_factory::get_goto_functions_internal(filename, arch);
@@ -118,7 +118,7 @@ program goto_factory::get_goto_functions_internal(
   return goto_factory::get_goto_functions(cmd, opts);
 }
 
-cmdlinet goto_factory::get_default_cmdline(const std::string filename)
+cmdlinet goto_factory::get_default_cmdline(const std::string &filename)
 {
   cmdlinet cmdline;
   cmdline.args.push_back(filename);

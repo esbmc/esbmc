@@ -25,6 +25,9 @@ option(ENABLE_SOLIDITY_FRONTEND "Enable Solidity language frontend (default: OFF
 option(ENABLE_GOTO_CONTRACTOR "Enable IBEX in the build (default: OFF)" OFF)
 option(ENABLE_JIMPLE_FRONTEND "Enable Jimple language frontend (default: OFF)" OFF)
 option(ENABLE_PYTHON_FRONTEND "Enable Python language frontend (default: OFF)" OFF)
+option(ENABLE_LD_FRONTEND "Enable SAFE-LD IEC 61131-3 Ladder Diagram front-end (default: OFF)" OFF)
+option(ENABLE_SIMPLIFIER_EQUIVALENCE_CHECK "Prove each simplifier rewrite with an SMT solver (default: OFF)" OFF)
+option(ENABLE_LLM "Build LLM integration module (default: OFF)" OFF)
 
 #############################
 # SOLVERS
@@ -37,6 +40,8 @@ option(ENABLE_YICES "Use Yices solver (default: OFF)" OFF)
 option(ENABLE_CVC4 "Use CVC4 solver (default: OFF)" OFF)
 option(ENABLE_CVC5 "Use CVC5 solver (default: OFF)" OFF)
 option(ENABLE_BITWUZLA "Use Bitwuzla solver (default: OFF)" OFF)
+option(ENABLE_BITWUZLLOB "Use Bitwuzllob (Bitwuzla on the Mallob platform) via an external mallob binary (default: ON)" ON)
+option(ENABLE_NEUROSYM "Use NeuroSym (neural-guided GAN + Z3 fallback) via an external Python program (default: ON)" ON)
 
 #############################
 # OTHERS
@@ -49,15 +54,27 @@ option(ENABLE_CLANG_TIDY "Activate clang tidy analysis (default: OFF)" OFF)
 option(ENABLE_CSMITH "Add csmith Tests (default: OFF) (depends: ENABLE_REGRESSION)" OFF)
 option(BENCHBRINGUP "Run a user-specified benchmark in Github workflow" OFF)
 option(DOWNLOAD_DEPENDENCIES "Download and build dependencies if needed (default: OFF)" OFF)
+option(ENABLE_MIMALLOC "Link the mimalloc allocator into esbmc (default: OFF). Speeds up the allocation-heavy symex path (~15% on high-unwind runs) but regresses some SV-COMP benchmarks. Found via find_package, or downloaded when DOWNLOAD_DEPENDENCIES is ON." OFF)
 option(ACADEMIC_BUILD "Check and Enable libs that available only in Academic builds (default: OFF)" OFF)
-option(ESBMC_SVCOMP "Enable an SV-COMP build of ESBMC (default: OFF)" OFF)
 option(CORE_REGRESSION_ONLY "Only add tests in the regression that are CORE (default: OFF)" OFF)
+
+#############################
+# BUILD PERFORMANCE
+#############################
+# See BuildOptimizations.cmake; all are opt-in except the linker probe.
+option(ENABLE_IPO "Link-time optimization, when the toolchain supports it (default: OFF)" OFF)
+option(ENABLE_UNITY_BUILD "Batch sources per translation unit to cut full-build time (default: OFF)" OFF)
+set(ESBMC_LINKER "auto" CACHE STRING
+    "Linker to use: auto (fastest available), mold, lld, gold, default")
+set_property(CACHE ESBMC_LINKER PROPERTY STRINGS auto mold lld gold default)
 
 #############################
 # PRE-BUILT DEPENDENCIES
 #############################
 
-# these URLs are all for an x86_64 target
+# Pre-built LLVM toolchains. Windows ships upstream's x86_64 archive; Linux
+# x86_64 uses a trimmed archive on the ESBMC release, Linux aarch64 uses the
+# trimmed archive produced by esbmc/llvm (same LLVM major, 22).
 if(WIN32)
   set(DEFAULT_LLVM_URL "https://github.com/llvm/llvm-project/releases/download/llvmorg-22.1.4/clang+llvm-22.1.4-x86_64-pc-windows-msvc.tar.xz")
   set(DEFAULT_LLVM_NAME "clang+llvm-22.1.4-x86_64-pc-windows-msvc")
@@ -67,9 +84,21 @@ if(WIN32)
 
   set(MATHSAT_URL "https://mathsat.fbk.eu/download.php?file=mathsat-5.6.10-win64-msvc.zip")
   set(MATHSAT_NAME "mathsat-5.6.10-win64-msvc")
+elseif(NOT APPLE AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)$")
+  set(ESBMC_AARCH64_LINUX TRUE)
+
+  # Trimmed from upstream LLVM-22.1.6-Linux-ARM64 by esbmc/llvm's tools/trim.sh
+  # (see the Build trimmed LLVM archive workflow there). The archive's top-level
+  # directory is preserved verbatim so SetupLocalLLVM's
+  # ${CMAKE_BINARY_DIR}/LLVM/${ESBMC_LLVM_NAME} extraction contract holds. Z3
+  # comes from its arm64 prebuilt, which ships the libz3.a a static link needs.
+  set(DEFAULT_LLVM_URL "https://github.com/esbmc/llvm/releases/download/llvm-22.1.6-armv8/LLVM-22.1.6-Linux-ARM64-esbmc.tar.xz")
+  set(DEFAULT_LLVM_NAME "LLVM-22.1.6-Linux-ARM64")
+  set(DEFAULT_Z3_URL "https://github.com/Z3Prover/z3/releases/download/z3-4.13.3/z3-4.13.3-arm64-glibc-2.34.zip")
+  set(DEFAULT_Z3_NAME z3-4.13.3-arm64-glibc-2.34)
 else()
-  set(DEFAULT_LLVM_URL "https://github.com/esbmc/esbmc/releases/download/v7.10/clang+llvm-21.1.2-x86_64-linux-gnu-ubuntu-22.04.tar.xz")
-  set(DEFAULT_LLVM_NAME "clang+llvm-21.1.2-x86_64-linux-gnu-ubuntu-22.04")
+  set(DEFAULT_LLVM_URL "https://github.com/esbmc/esbmc/releases/download/v8.3/clang+llvm-22.1.6-x86_64-linux-gnu-ubuntu-22.04.tar.xz")
+  set(DEFAULT_LLVM_NAME "clang+llvm-22.1.6-x86_64-linux-gnu-ubuntu-22.04")
 
   set(DEFAULT_CHERI_LLVM_URL "https://github.com/XLiZHI/esbmc/releases/download/v17/clang-cheri-17.zip")
   set(DEFAULT_CHERI_LLVM_NAME "clang-cheri-17")
@@ -108,10 +137,26 @@ set(ESBMC_CHERI "" CACHE STRING "override CHERI-support enabled through detectio
 set(ESBMC_CHERI_HYBRID_SYSROOT "" CACHE STRING "Path containing the mips64-unknown-freebsd sysroot typically generated by 'cheribuild.py cheribsd-mips64-hybrid'")
 set(ESBMC_CHERI_PURECAP_SYSROOT "" CACHE STRING "Path containing the mips64-unknown-freebsd sysroot typically generated by 'cheribuild.py cheribsd-mips64-purecap'")
 
+# CHERI, CVC5 and MathSAT publish no aarch64 build, and an unset URL would
+# otherwise reach download_zip_and_extract as an empty string. Say what is
+# unsupported instead. See https://github.com/esbmc/esbmc/issues/7230.
+if(ESBMC_AARCH64_LINUX)
+  if(ESBMC_CHERI)
+    message(FATAL_ERROR "CHERI is not supported on aarch64: no CHERI-enabled Clang is published for this architecture.")
+  endif()
+  if(ENABLE_CVC5 AND DOWNLOAD_DEPENDENCIES)
+    message(FATAL_ERROR "CVC5 is not supported on aarch64: cvc5 1.1.2 publishes no Linux arm64 build. Pass -DENABLE_CVC5=Off.")
+  endif()
+  if(ENABLE_MATHSAT AND DOWNLOAD_DEPENDENCIES)
+    message(FATAL_ERROR "MathSAT is not supported on aarch64: no Linux arm64 build is published. Pass -DENABLE_MATHSAT=Off.")
+  endif()
+endif()
+
 set(ESBMC_BUNDLE_LIBC_32BIT "${ENABLE_BUNDLE_LIBC_32BIT}" CACHE BOOL "Enable 32-bit libc bundling" FORCE)
 
 # Demand C++23
-set (CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Used by try_compile
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)

@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--unwind 4
+^\s*FAILED\s+\[strcpy\.heap-array-bounds-violated\.1\]\s+line \d+\s+dereference failure: array bounds violated: heap object$
+^VERIFICATION FAILED$

@@ -1,0 +1,86 @@
+# This file is part of the SV-Benchmarks collection of verification tasks:
+# https://gitlab.com/sosy-lab/benchmarking/sv-benchmarks
+#
+# SPDX-FileCopyrightText: 2025 The SV-Benchmarks Community
+#
+# SPDX-License-Identifier: Apache-2.0
+
+- entry_type: "violation_sequence"
+  metadata:
+    format_version: "2.1"
+    uuid: 1fcba4e7-07c8-4fad-b897-0b7f0df89f62
+    creation_time: "2025-10-03T15:35:47+02:00"
+    producer:
+      name: "Paulina"
+      version: "ASE-paper"
+    task:
+      input_files:
+      - "Ex02.c"
+      input_file_hashes:
+        Ex02.c: afd40820c7a09c073d225c09c6690862ff04506300463cb312087d541b42d981
+      specification: "CHECK( init(main()), LTL(F end) )"
+      data_model: "LP64"
+      language: "C"
+  content:
+  - segment:
+    - waypoint:
+        type: "function_return"
+        constraint:
+          value: "\\result > 5"
+          format: "ext_c_expression"
+        location:
+          line: 14
+          column: 31
+          file_name: "Ex02.c"
+        action: "follow"
+  - segment:
+    - waypoint:
+        type: "branching"
+        constraint:
+          value: "true"
+        location:
+          line: 16
+          column: 5
+          file_name: "Ex02.c"
+        action: "follow"
+  - segment:
+    - waypoint:
+        type: "assumption"
+        constraint:
+          value: "i == 6"
+          format: "c_expression"
+        location:
+          line: 17
+          column: 9
+          file_name: "Ex02.c"
+        action: "follow"
+  - segment:
+    - waypoint:
+        type: "branching"
+        constraint:
+          value: "true"
+        location:
+          line: 17
+          column: 9
+          file_name: "Ex02.c"
+        action: "follow"
+  - segment:
+    - waypoint:
+        type: "branching"
+        constraint:
+          value: "true"
+        location:
+          line: 16
+          column: 5
+          file_name: "Ex02.c"
+        action: "cycle"
+  - segment:
+    - waypoint:
+        type: "branching"
+        constraint:
+          value: "false"
+        location:
+          line: 17
+          column: 9
+          file_name: "Ex02.c"
+        action: "cycle"

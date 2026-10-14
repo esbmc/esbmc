@@ -1,22 +1,31 @@
 #pragma once
 
+#include <functional>
 #include <nlohmann/json.hpp>
-#include <python-frontend/complex_handler.h>
-#include <python-frontend/function_call_cache.h>
-#include <python-frontend/global_scope.h>
-#include <python-frontend/python_dict_handler.h>
-#include <python-frontend/python_math.h>
-#include <python-frontend/string_handler.h>
-#include <python-frontend/type_handler.h>
-#include <python-frontend/type_utils.h>
-#include <python-frontend/python_set.h>
-#include <util/context.h>
-#include <util/namespace.h>
-#include <util/std_code.h>
-#include <util/symbol_generator.h>
+#include <python-frontend/math/complex_handler.h>
+#include <python-frontend/function_call/cache.h>
+#include <python-frontend/module/global_scope.h>
+#include <python-frontend/python-dict/python_dict_handler.h>
+#include <python-frontend/dynamic_type/dynamic_type_handler.h>
+#include <python-frontend/math/python_math.h>
+#include <python-frontend/string/string_handler.h>
+#include <python-frontend/type/element_type_registry.h>
+#include <python-frontend/type/type_handler.h>
+#include <python-frontend/type/type_utils.h>
+#include <python-frontend/set/python_set.h>
+#include <util/symtab/context.h>
+#include <util/symtab/namespace.h>
+#include <util/irep/std_code.h>
+#include <util/symtab/symbol_generator.h>
+#include <functional>
 #include <map>
+#include <optional>
 #include <set>
+#include <tuple>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
+#include <vector>
 
 class codet;
 class struct_typet;
@@ -31,13 +40,33 @@ class python_typechecking;
 class python_class_builder;
 class python_lambda;
 class python_exception_handler;
+class get_expr_depth_guard;
+
+// Defined in converter_stmt.cpp; shared with numpy_call_expr.cpp so both can
+// verify a Name/Attribute receiver actually resolves to the imported numpy
+// module before treating a call as a numpy constructor/method.
+bool is_imported_numpy_module_alias(
+  const nlohmann::json &ast,
+  const std::string &name);
+
+// One `Call` node together with the name of the function whose body it
+// textually appears in (empty for a module-level call). Declared here (Impl
+// in converter_funcdef.cpp) so python_converter can cache the whole-AST scan
+// that finds these instead of every caller re-walking the AST itself.
+struct numpy_param_call_site
+{
+  const nlohmann::json *call;
+  std::string enclosing_function;
+};
 
 /**
  * @class python_converter
- * @brief Main converter for transforming Python AST into ESBMC's intermediate representation.
+ * @brief Main converter for transforming Python AST into ESBMC's intermediate
+ * representation.
  *
- * This class is responsible for converting Python source code (represented as JSON AST)
- * into GOTO programs that can be processed by ESBMC's symbolic execution engine.
+ * This class is responsible for converting Python source code (represented as
+ * JSON AST) into GOTO programs that can be processed by ESBMC's symbolic
+ * execution engine.
  */
 class python_converter
 {
@@ -45,7 +74,8 @@ public:
   python_converter(
     contextt &_context,
     const nlohmann::json *ast,
-    const global_scope &gs);
+    const global_scope &gs,
+    const std::vector<nlohmann::json> *extra_asts = nullptr);
 
   ~python_converter();
 
@@ -86,11 +116,62 @@ public:
   {
     return *ast_json;
   }
+  /// \brief Symbol for __ESBMC_return_value in an ensures clause, null when
+  ///   the name is something else or the function returns nothing.
+  symbolt *contract_return_value_symbol(
+    const std::string &var_name,
+    const nlohmann::json &element);
+
   exprt get_expr(const nlohmann::json &element);
+
+  /**
+   * @brief Handles tuple `+`/`*` operators and lexicographic ordering.
+   *
+   * Concatenation builds a new tuple struct; repetition with a constant int
+   * builds an n-fold repeat; `Lt`/`LtE`/`Gt`/`GtE` lower to element-wise
+   * lexicographic comparisons. Returns nil_exprt for non-tuple operands or
+   * unsupported variants. Public so the sorted()/reversed() lowering can reuse
+   * the comparator for a convert-time sorting network over tuples.
+   */
+  exprt handle_tuple_operations(
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &element);
+
   std::string get_op(const std::string &op, const typet &type) const;
+  /// `Callable[[A, B], R]` as the function-pointer type `R (*)(A, B)`; the
+  /// generic `Callable` pointer when the signature is not spelled.
+  typet get_callable_type(
+    const nlohmann::json &annotation,
+    const nlohmann::json &stmt);
+  /// A bare `Callable` return as the pointer type of the functions the body
+  /// returns by name, when they agree on a signature (#7802).
+  typet returned_function_type(const nlohmann::json &function_node);
+  typet named_return_type(
+    const std::string &name,
+    const nlohmann::json &return_node,
+    const nlohmann::json &function_node);
+  std::optional<code_typet> returned_function(const nlohmann::json &callee);
+  /// `get()()`: a call through the function pointer that `get()` returns.
+  /// `(lambda x: ...)(a)`: a call of the lambda, typed by its arguments.
+  std::optional<exprt> call_returned_function(const nlohmann::json &element);
+  void convert_lambda_call(
+    const nlohmann::json &element,
+    side_effect_expr_function_callt &call);
+  std::optional<exprt> call_property_value(const nlohmann::json &element);
+  /// Unknown, function or class-instance types: a call on such a value may
+  /// succeed.
+  bool may_be_callable(const typet &type);
+
   typet get_type_from_annotation(
     const nlohmann::json &annotation_node,
     const nlohmann::json &element);
+
+  /// The type of `Optional[<slice>]`, or an empty typet when the slice is not
+  /// handled.
+  typet get_optional_type(const nlohmann::json &slice);
+  typet optional_container_type(const nlohmann::json &slice);
 
   string_builder &get_string_builder();
 
@@ -124,7 +205,7 @@ public:
     return string_handler_;
   }
 
-  tuple_handler &get_tuple_handler()
+  tuple_handler &get_tuple_handler() const
   {
     return *tuple_handler_;
   }
@@ -142,6 +223,34 @@ public:
   type_handler &get_type_handler()
   {
     return type_handler_;
+  }
+
+  element_type_registry &get_element_type_registry()
+  {
+    return element_type_registry_;
+  }
+
+  const element_type_registry &get_element_type_registry() const
+  {
+    return element_type_registry_;
+  }
+
+  /// Record that a list symbol escaped into a function/method call and may have
+  /// been mutated by the callee; see @ref call_escaped_lists_ (GitHub #5991).
+  void mark_list_call_escaped(const std::string &id)
+  {
+    call_escaped_lists_.insert(id);
+  }
+
+  bool is_list_call_escaped(const std::string &id) const
+  {
+    return call_escaped_lists_.find(id) != call_escaped_lists_.end();
+  }
+
+  /// Runs @p check once every statement has been converted.
+  void defer_check(std::function<void()> check)
+  {
+    deferred_checks_.push_back(std::move(check));
   }
 
   bool type_assertions_enabled() const;
@@ -165,6 +274,10 @@ public:
   {
     return current_class_name_;
   }
+
+  /// The current function as the AST lookups in json_utils name it: a method
+  /// is "Cls@C@m", so a same-named method of another class is not found.
+  std::string current_ast_scope() const;
 
   const namespacet &name_space() const
   {
@@ -192,11 +305,114 @@ public:
       current_block->copy_to_operands(expr);
   }
 
+  // Converts `ast_node` (an Assign statement) into GOTO and appends it to
+  // current_block, the same way any real source-level assignment is
+  // converted -- for a caller (numpy argument hoisting) that only has
+  // add_instruction's implicit current_block, not a codet& of its own to
+  // pass to get_var_assign directly. False when there is no current block to
+  // emit into (e.g. converting outside statement context).
+  bool emit_statement_into_current_block(const nlohmann::json &ast_node)
+  {
+    if (!current_block || !safe_to_emit_side_effecting_statement())
+      return false;
+    // get_var_assign always leaves current_lhs pointing at its own target
+    // (or null) when it returns, clobbering whatever an enclosing
+    // assignment's own RHS conversion had it pointing at -- e.g. a call
+    // argument hoisted into a temp mid-conversion (hoist_call_argument_
+    // into_temp) would otherwise silently erase the outer assignment's
+    // ability to retype its own target from the freshly computed RHS
+    // (retype_current_lhs_and_return and friends), leaving a stale
+    // static-annotator guess in place. Save and restore around the nested
+    // statement so it only ever affects its own target.
+    exprt *outer_lhs = current_lhs;
+    bool outer_is_converting_rhs = is_converting_rhs;
+    bool outer_is_converting_lhs = is_converting_lhs;
+    const nlohmann::json *outer_store_target = lhs_store_target_;
+    typet outer_element_type = current_element_type;
+    get_var_assign(ast_node, *current_block);
+    current_lhs = outer_lhs;
+    is_converting_rhs = outer_is_converting_rhs;
+    is_converting_lhs = outer_is_converting_lhs;
+    lhs_store_target_ = outer_store_target;
+    current_element_type = outer_element_type;
+    return true;
+  }
+
+  // True where a side-effecting statement (e.g. a hoisted temporary
+  // assignment) is safe to plant into current_block without being evaluated
+  // an extra time or leaking into a specification -- the same guard
+  // needs_zero_division_guard applies before hoisting a side-effecting
+  // divisor: not a lambda body at its definition (operands still unbound),
+  // not the discarded type-probe pass of an assignment RHS (which runs the
+  // real conversion again right after), and not inside a contract clause
+  // (which must not plant a statement into the enclosing block at all).
+  bool safe_to_emit_side_effecting_statement() const
+  {
+    return !converting_lambda_body_ && !in_rhs_type_probe_ &&
+           !in_contract_clause_;
+  }
+
+  // A runtime guard emitted into current_block runs once, unconditionally,
+  // ahead of the enclosing statement; that is wrong for an expression Python
+  // evaluates conditionally or repeatedly (an and/or tail, a while test).
+  bool can_emit_runtime_guard() const
+  {
+    return current_block && safe_to_emit_side_effecting_statement() &&
+           !in_lazy_operand_;
+  }
+
+  /// Bind a static cell, named under @p lambda_id, for each scalar free
+  /// variable of @p lambda_node that is a local of the enclosing function, as
+  /// create_capture_cells does for a nested `def`.
+  void capture_lambda_free_variables(
+    const nlohmann::json &lambda_node,
+    const std::string &lambda_id,
+    const locationt &location);
+
+  // Hoists @p operand into a temporary when it carries a side effect, so a
+  // guard and its use evaluate it once.
+  exprt hoist_side_effecting_operand(
+    const exprt &operand,
+    const nlohmann::json &element,
+    const std::string &prefix);
+
+  void emit_guarded_raise(
+    const exprt &cond,
+    const std::string &exception,
+    const std::string &message,
+    const locationt &location);
+
+  // Raises OverflowError (infinity) or ValueError (NaN) before a float
+  // @p operand is converted to int; returns the operand to convert.
+  exprt
+  guard_nonfinite_float_to_int(exprt operand, const nlohmann::json &element);
+
   void update_symbol(const exprt &expr) const;
 
   symbolt *find_symbol(const std::string &symbol_id) const;
 
   bool is_imported_module(const std::string &module_name) const;
+  /// How one scope binds a name: by an import, by anything else, or by a
+  /// `global`/`nonlocal` declaration handing it to an outer scope.
+  struct scope_bindings
+  {
+    bool by_import = false;
+    bool by_other = false;
+    bool declared_outer = false;
+  };
+  /// Whether @p receiver, a Name read by the call at @p use, is bound in its
+  /// scope by something other than an import, so that it is not the module
+  /// of the same name. Throws when the bindings leave that undecided.
+  bool name_shadows_module(
+    const nlohmann::json &receiver,
+    const nlohmann::json &use) const;
+  /// Whether @p receiver of the call at @p use is the imported module
+  /// @p module_name rather than a binding that shadows it.
+  bool is_module_receiver(
+    const std::string &module_name,
+    const nlohmann::json &receiver,
+    const nlohmann::json &use) const;
+  std::string current_module_name() const;
 
   const std::string
   get_imported_module_path(const std::string &module_name) const
@@ -214,9 +430,29 @@ public:
     const locationt &location,
     const typet &type) const;
 
+  // Register a ``void name(void)`` C intrinsic in the Python symbol
+  // table if not already present. Used for ESBMC built-ins whose bodies
+  // live in the C library (cprover_library) but whose call sites are
+  // synthesised by the Python frontend (atomic_begin/end, yield, the
+  // pthread main hooks, __pyt_*); the C-style ``c:@F@<name>`` id is
+  // needed so c2goto's linker resolves the call to the library body.
+  void ensure_void_void_intrinsic(
+    const std::string &name,
+    const locationt &location);
+
   exprt make_char_array_expr(
     const std::vector<unsigned char> &string_literal,
     const typet &t);
+
+  /// A class used as a value (`x = int`, `type(v)`): its name as a char array,
+  /// also held in `value` for the folds that read it back.
+  exprt make_class_object(const std::string &name);
+
+  static bool is_class_object(const exprt &expr)
+  {
+    return expr.is_constant() && expr.type().is_array() &&
+           !expr.get("value").empty();
+  }
 
   exprt get_literal(const nlohmann::json &element);
 
@@ -235,6 +471,30 @@ public:
   python_typechecking &get_typechecker();
   const python_typechecking &get_typechecker() const;
 
+  /// Enters a contract clause or loop invariant, staying entered when already
+  /// inside one. Returns the previous state for @ref restore_contract_clause.
+  bool enter_contract_clause(bool entering)
+  {
+    return std::exchange(in_contract_clause_, in_contract_clause_ || entering);
+  }
+  void restore_contract_clause(bool saved)
+  {
+    in_contract_clause_ = saved;
+  }
+  bool in_contract_clause() const
+  {
+    return in_contract_clause_;
+  }
+
+  /// The class a variable was last assigned as a value (`x = int`), or null.
+  /// Kept here rather than read back from the symbol's value, which the IREP2
+  /// seam cannot carry in this shape (docs/roadmap/scope-python-irep2.md §14).
+  const std::string *class_object_name(const irep_idt &id) const
+  {
+    auto it = class_object_names_.find(id);
+    return it == class_object_names_.end() ? nullptr : &it->second;
+  }
+
 private:
   friend class complex_handler;
   friend class function_call_expr;
@@ -244,11 +504,13 @@ private:
   friend class python_list;
   friend class string_handler;
   friend class tuple_handler;
+  friend class dynamic_type_handler;
   friend class python_typechecking;
   friend class python_class_builder;
   friend class python_dict_handler;
   friend class python_set;
   friend class python_exception_handler;
+  friend class get_expr_depth_guard;
   friend class python_converter_test_access;
 
   template <typename Func>
@@ -267,28 +529,131 @@ private:
 
   void preregister_global_variables(const nlohmann::json &ast_body);
 
+  /// None/Optional redesign (step A/B): if `annotation` is a nullable reference
+  /// to a user class — `Optional[Class]` or `Class | None` — return the user
+  /// class name; else "". Callers form `Class*` and build the class on demand
+  /// (so its struct symbol is complete, not a null/incomplete stub) per plan
+  /// section 10.
+  std::string annotated_optional_class(const nlohmann::json &annotation) const;
+
   typet
   resolve_variable_type(const std::string &var_name, const locationt &loc);
 
   void get_compound_assign(const nlohmann::json &ast_node, codet &target_block);
+
+  /// The symbol for @p name in an enclosing function's scope, or null. Python
+  /// resolves a name a nested function only reads or mutates against the
+  /// enclosing scope; only a bare-name assignment binds a new local.
+  symbolt *find_symbol_in_enclosing_scopes(const std::string &name);
+
+  symbolt *resolve_subscript_base_symbol(
+    const nlohmann::json &target,
+    const std::string &name,
+    symbolt *found);
+
+  /// Stand the static bounds check down for a list rebound by `xs += [...]`,
+  /// whose declaring literal no longer describes it.
+  void mark_augassign_list_escaped(const exprt &lhs, const exprt &rhs);
 
   void
   get_return_statements(const nlohmann::json &ast_node, codet &target_block);
 
   void get_function_definition(const nlohmann::json &function_node);
 
+  exprt get_function_body_or_unsupported(const nlohmann::json &function_node);
+
+  bool function_may_be_called(const nlohmann::json &function_node) const;
+
   void
   get_class_definition(const nlohmann::json &class_node, codet &target_block);
 
   exprt get_unary_operator_expr(const nlohmann::json &element);
 
+  /// Walrus operator `(target := value)` (PEP 572): bind value to target as a
+  /// side effect (emitted into the current block) and evaluate to that value.
+  exprt get_named_expr(const nlohmann::json &element);
+
+  /// True if a walrus operator (NamedExpr) appears anywhere in `node`'s tree.
+  /// Used to refuse a walrus in conditionally evaluated positions (ternary
+  /// branch, short-circuit operand) where the unconditional binding emitted by
+  /// get_named_expr would be unsound.
+  static bool contains_named_expr(const nlohmann::json &node);
+
+  /// True if a walrus sits inside a lambda or comprehension within `node`.
+  static bool contains_nested_scope_named_expr(const nlohmann::json &node);
+
   exprt get_binary_operator_expr(const nlohmann::json &element);
+  exprt get_binary_operator_expr(
+    const nlohmann::json &element,
+    const nlohmann::json &left,
+    const nlohmann::json &right,
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs);
+  exprt
+  keep_operand_calls(const exprt &result, const exprt &lhs, const exprt &rhs);
+  /// The right operand of @p element; a `str %` operand is only probed.
+  exprt get_right_operand_expr(
+    const nlohmann::json &element,
+    const nlohmann::json &right,
+    const exprt &lhs);
+  exprt build_division_guarded_binop(
+    const std::string &op,
+    exprt lhs,
+    exprt rhs,
+    const nlohmann::json &element);
+  exprt build_arithmetic_binop(
+    const std::string &op,
+    exprt lhs,
+    exprt rhs,
+    const nlohmann::json &element);
+  /// The static types of the arguments a `str %` right operand supplies.
+  std::vector<typet>
+  percent_arg_types(const nlohmann::json &right, const exprt &rhs) const;
+  /// The f-string @p joined with each formatted operand stored as it is
+  /// evaluated, so its operands run once and in order.
+  exprt get_fstring_in_order(const nlohmann::json &joined);
+  /// `str % args` with a literal format: an f-string when an argument is not
+  /// constant, otherwise folded to a literal.
+  exprt get_percent_format_expr(
+    const nlohmann::json &left,
+    const std::vector<nlohmann::json> &args,
+    const std::map<std::string, nlohmann::json> &mapping,
+    const std::vector<typet> &arg_types);
+
+  /// Coarse Python-level type category used to decide whether two operands
+  /// in an `Eq`/`NotEq` comparison are cross-type (Python's rule: different
+  /// types compare unequal without coercion, except within the numeric
+  /// tower of `bool`/`int`/`float`/`complex`).
+  ///
+  /// Returns one of `"numeric"`, `"string"`, `"bytes"`, `"list"`, `"dict"`,
+  /// `"tuple"`, or `""` when the category cannot be determined (unannotated
+  /// `any_type` void*, or a user-defined class instance whose `__eq__` must
+  /// still be dispatched). The caller MUST fall through to the existing
+  /// handling on the empty result.
+  std::string get_python_type_category(const typet &t) const;
 
   bool is_bytes_literal(const nlohmann::json &element);
 
-  exprt get_binary_operator_expr_for_is(const exprt &lhs, const exprt &rhs);
+  // V.3: build the `is` identity equality in IREP2 (shared by the `is` and
+  // `is not` paths); the public wrappers back-migrate once at the legacy seam.
+  expr2tc build_is_equality(
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
 
-  exprt get_negated_is_expr(const exprt &lhs, const exprt &rhs);
+  exprt get_binary_operator_expr_for_is(
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
+
+  exprt get_negated_is_expr(
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
 
   exprt get_resolved_value(const exprt &expr);
 
@@ -296,13 +661,17 @@ private:
 
   exprt resolve_function_call(const exprt &func_expr, const exprt &args_expr);
 
-  exprt get_lambda_expr(const nlohmann::json &element);
+  exprt get_lambda_expr(
+    const nlohmann::json &element,
+    const std::vector<std::optional<typet>> &argument_types = {});
 
   codet convert_expression_to_code(exprt &expr);
 
   std::string remove_quotes_from_type_string(const std::string &type_string);
 
   bool function_has_missing_return_paths(const nlohmann::json &function_node);
+
+  bool function_is_generator(const nlohmann::json &function_node);
 
   exprt materialize_list_function_call(
     const exprt &expr,
@@ -313,6 +682,25 @@ private:
     const typet &return_type,
     const locationt &location,
     const std::string &func_name);
+
+  // Stage 1 object-model migration (#3067): copy a constructed class *value*
+  // onto a fresh non-expiring `__ESBMC_new_object` heap object and return the
+  // pointer to it, so a `-> Cls` function can hand back a `Cls*` reference that
+  // survives its frame. `current_func_return_type_` must be the migrated
+  // pointer type. Used by both return paths in get_return_statements.
+  exprt box_value_on_heap(
+    const exprt &value,
+    const locationt &location,
+    codet &target_block);
+
+  // Same, but boxing behind an explicit pointer type instead of
+  // `current_func_return_type_` (e.g. `char (*)[N]` for a local string
+  // array whose bytes must survive the frame, #5571).
+  exprt box_value_on_heap(
+    const exprt &value,
+    const locationt &location,
+    codet &target_block,
+    const typet &ptr_type);
 
   void register_instance_attribute(
     const std::string &symbol_id,
@@ -337,6 +725,33 @@ private:
 
   std::string extract_class_name_from_tag(const std::string &tag_name);
 
+  // The class name `t` names, or empty when it is neither a struct nor a
+  // `tag-<Class>` symbol reference.
+  std::string class_name_of(const typet &t);
+
+  // True iff `t` denotes a user-defined Python class struct — either the struct
+  // itself or a `symbol_typet("tag-<Class>")` reference to it (robust to
+  // whether the struct has been built yet). Excludes the list/dict/object model
+  // structs.
+  bool is_user_class_struct_type(const typet &t);
+
+  // True iff `t` is a user class the object model migrates to the heap and
+  // stores in a container as a `Class*`. A reserved `__ESBMC` name opts out:
+  // the push and read paths must agree on which classes stay inline, so both
+  // gate on this one predicate (#7685).
+  bool is_heap_migrated_class_type(const typet &t);
+
+  // True iff `t` is a pointer to a user-defined class struct (a migrated
+  // `Class*` instance). Used to gate the object-model migration's
+  // None-keeps-Class* and dunder-dispatch-through-pointer paths to real
+  // classes.
+  bool is_user_class_pointer(const typet &t);
+
+  // Widen a symbol rebound from a non-class placeholder (None, Any, a bare
+  // scalar) to a class-pointer binding. Only those types are widened: a
+  // struct-shaped one may already back an expression built elsewhere.
+  void retype_placeholder_to_class(symbolt &sym, const typet &new_type);
+
   exprt resolve_identity_function_call(
     const exprt &func_expr,
     const exprt &args_expr);
@@ -350,31 +765,225 @@ private:
     const exprt &lhs,
     const exprt &rhs);
 
+  /// Binary operation with a None operand: raises for the operators CPython
+  /// rejects, otherwise defers to handle_none_comparison (#6260).
+  exprt handle_none_operand(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs);
+
+  void raise_on_optional_none(
+    const std::string &op,
+    const exprt &lhs_none,
+    const exprt &rhs_none,
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &element);
+
+  /// Rewrites `sl.start/stop/step is/is not None` to a check of the
+  /// corresponding `has_start/has_stop/has_step` flag on __ESBMC_PySliceObj.
+  /// Returns `nil_exprt()` when the operands are not a slice-member access
+  /// paired with a None literal, so the caller continues with default
+  /// None-comparison handling.
+  exprt try_lower_slice_member_is_none(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs);
+
   symbolt &create_tmp_symbol(
     const nlohmann::json &element,
     const std::string var_name,
     const typet &symbol_type,
     const exprt &symbol_value);
 
+  /// Same as above, but for callers that already have a resolved
+  /// `locationt` (e.g. string_handler's nondet-fallback materialisation)
+  /// rather than an AST node to derive one from.
+  symbolt &create_tmp_symbol(
+    const locationt &location,
+    const std::string var_name,
+    const typet &symbol_type,
+    const exprt &symbol_value);
+
   exprt get_logical_operator_expr(const nlohmann::json &element);
+
+  exprt get_boolop_operand(
+    const nlohmann::json &operand,
+    std::vector<code_blockt> &effects);
+
+  exprt lower_short_circuit_boolop(
+    const exprt &logical_expr,
+    const std::vector<code_blockt> &effects,
+    const std::function<exprt(const exprt &)> &truthy,
+    const nlohmann::json &element);
+
+  exprt emit_guarded_boolop(
+    const exprt &logical_expr,
+    const std::vector<code_blockt> &effects,
+    const std::function<exprt(const exprt &)> &truthy,
+    const locationt &location);
+
+  /// The and/or test of an if or while as one flat condition, which the
+  /// coverage modes instrument operand by operand. A later operand whose
+  /// conversion plants statements (a walrus binding, a bounds check) is
+  /// guarded by the operands before it instead.
+  exprt get_flat_boolop_test(
+    const nlohmann::json &test_node,
+    const std::function<exprt(const exprt &, const nlohmann::json &)> &to_bool);
 
   exprt get_conditional_stm(const nlohmann::json &ast_node);
 
+  /**
+   * @brief Converts `x = a if c else b`, whose two branches are literals of
+   * incompatible kinds, as the `if`/`else` statement spelling of the same
+   * code, so the dynamic-type tagging that spelling already gets applies
+   * here too. Tagging the target around the ternary instead would store the
+   * already-collapsed value under a single type id, which is what hid the
+   * TypeError obligation (github #8263). True if it rewrote the assignment.
+   */
+  bool rewrite_divergent_conditional_assign(
+    const nlohmann::json &ast_node,
+    codet &target_block);
+
   bool is_coverage_mode() const;
+
+  bool is_assert_fold_disabled() const;
 
   bool is_pytest_generation_mode() const;
 
   bool is_model_file(const nlohmann::json &node) const;
 
-  exprt get_function_call(const nlohmann::json &ast_block);
+  /// True when @p file is one of the program's own first-class source files
+  /// (the entry file or one of the extra positional command-line files,
+  /// github #6211) rather than an operational model or an `import`ed
+  /// module. Shared by every check that used to compare against
+  /// `main_python_file` alone before extra command-line files existed.
+  bool is_program_file(const std::string &file) const;
 
-  exprt get_block(const nlohmann::json &ast_block);
+  exprt get_function_call(const nlohmann::json &ast_block);
+  /// A Call expression: folded into the caller when it passes a numpy view
+  /// to a simple function, converted as a call otherwise.
+  exprt get_call_expr(const nlohmann::json &element);
+
+  /// Lowers len(obj) when obj is a class instance -- dispatching to its
+  /// __len__, or raising TypeError as CPython does when it defines none.
+  /// Returns nil when @p element is not such a call.
+  exprt get_len_on_class_instance(const nlohmann::json &element);
+  static bool is_pure_read(const nlohmann::json &node);
+  exprt
+  get_len_on_list_element(const nlohmann::json &arg, const locationt &location);
+  static exprt list_element_type_id(const exprt &value);
+  std::size_t count_user_classes();
+  exprt checked_len_result(const exprt &len_call, const locationt &location);
+
+  // len(v) where v is a pointer-backed numpy view (ADR-NP-003 etapa 2, 1-D
+  // slice views). Split out of get_function_call() to keep that already
+  // large function's own decision count from growing further; see
+  // converter_funcall.cpp for the full rationale.
+  std::optional<exprt>
+  try_get_numpy_pointer_view_len(const nlohmann::json &element);
+  std::optional<exprt>
+  try_get_numpy_named_pointer_view_len(const nlohmann::json &arg) const;
+  std::optional<exprt> try_get_numpy_subscript_pointer_view_len(
+    const nlohmann::json &arg,
+    const nlohmann::json &element);
+
+  // v.shape / v.ndim where v is a pointer-backed numpy view (ADR-NP-003
+  // etapa 2, 1-D slice views): unwrapping the pointer only reaches the
+  // scalar element type, not a shape, so the view's own tracked logical
+  // length is used instead. Split out of get_expr() to keep that already
+  // large function's own decision count from growing further; see
+  // converter_expr.cpp for the full rationale. Returns std::nullopt for
+  // any other attribute or an untracked symbol, so the caller falls
+  // through to the existing array/list handling.
+  std::optional<exprt> try_get_numpy_pointer_view_shape_attr(
+    const symbolt &symbol,
+    const std::string &attr_name);
+
+  // v.shape / v.ndim / v.size where v is a 2-D+ numpy array parameter: its
+  // full logical shape is tracked in numpy_param_shapes_ (populated by
+  // register_function_argument before the C-ABI row-pointer decay erases the
+  // outer dimension). Mirrors try_get_numpy_pointer_view_shape_attr's split
+  // reasoning. Returns std::nullopt for any other attribute or an untracked
+  // symbol, so the caller falls through to the existing array/list handling.
+  std::optional<exprt> try_get_numpy_param_shape_attr(
+    const symbolt &symbol,
+    const std::string &attr_name);
+
+  // Tries try_get_numpy_pointer_view_shape_attr then
+  // try_get_numpy_param_shape_attr, so get_expr's own Attribute dispatch
+  // needs a single `if` for both tracked-shape sources instead of growing
+  // its own decision count by one per source.
+  std::optional<exprt>
+  try_get_numpy_shape_attr(const symbolt &symbol, const std::string &attr_name);
+
+  std::optional<std::vector<std::size_t>>
+  tracked_numpy_shape_from_name(const std::string &name) const;
+
+  std::optional<std::vector<std::size_t>>
+  numpy_shape_from_indexed_decl(const std::string &name) const;
+
+  exprt numpy_shape_attr_expr(
+    const std::vector<std::size_t> &shape,
+    const std::string &attr_name);
+
+  std::optional<std::vector<std::size_t>>
+  get_numpy_constructor_shape(const nlohmann::json &node) const;
+
+  std::optional<exprt> try_get_numpy_value_shape_attr(
+    const exprt &base_expr,
+    const nlohmann::json &base_node,
+    const std::string &attr_name);
+
+  std::optional<exprt>
+  try_get_numpy_shape_subscript(const nlohmann::json &element) const;
+
+  std::optional<exprt> try_get_numpy_tracked_value_shape_attr(
+    const exprt &base_expr,
+    const nlohmann::json &base_node,
+    const std::string &attr_name);
+
+  void reject_numpy_shape_attr_on_nonobject_call_result(
+    const exprt &base_expr,
+    const nlohmann::json &base_node,
+    const std::string &attr_name);
+
+  bool should_reject_numpy_shape_attr_on_symbol(
+    const symbolt &symbol,
+    const std::string &attr_name);
+
+  std::optional<exprt> try_get_numpy_bool_mask_rows_shape_attr(
+    const exprt &base_expr,
+    const typet &base_type,
+    const std::string &attr_name);
+
+  exprt get_block(
+    const nlohmann::json &ast_block,
+    bool is_function_body = false,
+    bool is_loop_body = false);
 
   exprt get_static_array(const nlohmann::json &arr, const typet &shape);
 
   void adjust_statement_types(exprt &lhs, exprt &rhs) const;
 
   symbol_id create_symbol_id() const;
+
+  /**
+   * @brief Locate the function `--function` names, and the class owning it.
+   *
+   * Searches the module body and, for a method, the body of each class. A
+   * method is named either `Class.method` or, when only one class defines it,
+   * by its bare name. Only the module body used to be searched, so a method
+   * could not be given an entry harness at all.
+   *
+   * @param owning_class Set to the class name for a method, cleared otherwise
+   * @throws std::runtime_error if the name is missing, ambiguous, or names an
+   *         instance method, whose `self` the harness cannot build
+   */
+  void find_entry_function(
+    const std::string &target,
+    nlohmann::json &node,
+    std::string &owning_class) const;
 
   symbol_id create_symbol_id(const std::string &filename) const;
 
@@ -383,6 +992,26 @@ private:
   void handle_float_division(exprt &lhs, exprt &rhs, exprt &bin_expr) const;
 
   exprt get_tuple_expr(const nlohmann::json &element);
+
+  /**
+   * @brief Build a Python slice object from a `Slice` AST node.
+   *
+   * Lowers `lower`, `upper` and `step` into integer fields of a
+   * `PySliceObject` struct constant; absent components leave their integer
+   * field zero and clear the corresponding `has_*` flag.
+   */
+  exprt build_slice_object(const nlohmann::json &slice_node);
+
+  /**
+   * @brief Build a Python slice object from a `slice()` builtin call.
+   *
+   * Supports the one-, two- and three-argument forms; missing trailing
+   * arguments and explicit `None` arguments are recorded via the `has_*`
+   * flags. Both lowering paths share the same `PySliceObject` shape.
+   */
+  exprt build_slice_from_args(
+    const nlohmann::json &args,
+    const nlohmann::json &source_node);
 
   std::pair<exprt, exprt>
   resolve_comparison_operands_internal(const exprt &lhs, const exprt &rhs);
@@ -398,12 +1027,146 @@ private:
     const symbol_id &id,
     const locationt &location);
 
+  // Records a numpy array parameter's pre-decay shape (when 2-D+) and its
+  // tracked-array-symbol status once its arg_id is known. Split out of
+  // register_function_argument to keep that function's own decision count
+  // down -- both conditions live in here instead of as two more `if`s there.
+  void track_numpy_param(
+    const std::string &arg_id,
+    const std::optional<std::vector<std::size_t>> &numpy_param_full_shape,
+    bool numpy_array_param);
+
   size_t register_function_argument(
     const nlohmann::json &element,
     code_typet &type,
     const symbol_id &id,
     const locationt &location,
     bool is_keyword_only);
+
+  /// Give the nested function @p id its own static cell for each free variable
+  /// that resolves to a local of the enclosing function, and return the
+  /// statements that bind those cells where the `def` executes.
+  ///
+  /// A nested `def` becomes a standalone GOTO function, so a free variable it
+  /// reads resolves (converter_symbols.cpp's scope walk) to the enclosing
+  /// function's own local. Once the closure outlives that frame the read is
+  /// unconstrained, so `make_adder(5)(3) == 8` fails (#6256). The cell is
+  /// static, so it survives the frame; the binding poisons it with a nondet
+  /// value when a second instantiation disagrees, since a Python function
+  /// value is one static symbol here (#6640) and cannot hold per-closure state.
+  code_blockt create_capture_cells(
+    const nlohmann::json &function_node,
+    const symbol_id &id,
+    const locationt &location);
+
+  code_blockt bind_capture_cells(
+    const std::set<std::string> &free_names,
+    const std::string &enclosing_scope,
+    const std::string &func_id,
+    const locationt &location);
+
+  /// Cell bindings produced by the last nested `get_function_definition`,
+  /// drained by get_block where the `def` statement sits.
+  code_blockt pending_captures_;
+
+  /// The FunctionDef currently being converted, seen from a nested def as its
+  /// enclosing scope. Null at module level.
+  const nlohmann::json *enclosing_function_node_ = nullptr;
+
+  /**
+   * @brief Infer a numpy-array parameter's concrete array type by scanning
+   * call sites of @c func_name across the module and returning the shape of
+   * the first resolvable numpy-array argument fed to @c param_index (other
+   * call sites are not cross-checked for consistency).
+   *
+   * Mirrors, at a smaller scope, the call-site-driven retyping already used
+   * by `python_param_annotations::propagate_tuple_list_params`: a numpy
+   * array assigned via `np.array([...])` and passed straight through, or
+   * forwarded via another function's own array-typed parameter, resolves to
+   * that array's shape/type. Parameters fed only non-array arguments, or
+   * whose shape can't be determined this way, are left alone (defaulting to
+   * `Any`/list as before) so the boundary check in
+   * `function_call/expr.cpp` can reject the mismatch explicitly.
+   *
+   * @param visiting Tracks in-progress (function, index) pairs to guard
+   * against infinite recursion on mutually forwarding functions.
+   */
+  bool try_infer_numpy_param_type(
+    const std::string &func_name,
+    size_t param_index,
+    typet &out,
+    std::set<std::string> &visiting) const;
+
+  // A call-site argument that resolves to a numpy array's element type: a
+  // literal `np.array([...])` call (is_numpy_array_literal_call), or a
+  // `Call` to a user function whose body unconditionally returns one
+  // (numpy_array_literal_return in converter_funcdef.cpp). nullopt for
+  // anything else. Replaces try_infer_numpy_param_type's own former
+  // is_numpy_array_literal_call() check one-for-one (same call count there)
+  // instead of adding a second, separate dispatch branch for the `Call`
+  // case, to keep that function's own decision count down.
+  std::optional<typet> try_infer_numpy_array_arg_type(
+    const nlohmann::json &arg,
+    const nlohmann::json &module_body) const;
+
+  /**
+   * @brief True if some call site of @c func_name (positional at
+   * @c param_index, or keyword matching @c param_name) passes a bare `Name`
+   * that its enclosing scope assigns genuinely incompatible literal kinds
+   * across an if/else
+   */
+  bool try_infer_dynamic_param_type(
+    const std::string &func_name,
+    const std::string &param_name,
+    size_t param_index) const;
+
+  /// A bare `bytes` annotation carries no length, so its parameter type
+  /// defaults to a zero-size array (register_function_argument). Recovers a
+  /// concrete length by following each call site's argument for `func_name`
+  /// at `param_index` back to a `nondet_bytes(N)` literal, directly, through
+  /// one local-variable assignment, or forwarded through an intermediate
+  /// function's own bytes parameter; disagreeing call sites leave the
+  /// parameter untyped (returns false), same policy as
+  /// try_infer_numpy_param_type.
+  bool infer_bytes_param_size_from_call_sites(
+    const std::string &func_name,
+    size_t param_index,
+    long long &out_size) const;
+  bool infer_bytes_param_size_from_call_sites(
+    const std::string &func_name,
+    size_t param_index,
+    long long &out_size,
+    std::set<std::string> &visiting) const;
+
+  /// `arg` is a bare `Name` that did not resolve locally: if it names one
+  /// of `enclosing_function`'s own parameters, resolves that parameter's
+  /// bytes size recursively instead.
+  std::optional<long long> resolve_forwarded_bytes_param_size(
+    const nlohmann::json &arg,
+    const nlohmann::json &module_body,
+    const std::string &enclosing_function,
+    std::set<std::string> &visiting) const;
+
+  /// A single call site's argument (at `param_index`) resolved to a bytes
+  /// length: locally within the call's enclosing scope, or forwarded
+  /// through that scope's own bytes parameter
+  /// (resolve_forwarded_bytes_param_size).
+  std::optional<long long> resolve_bytes_call_site_arg_size(
+    const std::string &enclosing_function,
+    const nlohmann::json &call,
+    size_t param_index,
+    const nlohmann::json &module_body,
+    std::set<std::string> &visiting) const;
+
+  /// Wraps infer_bytes_param_size_from_call_sites for
+  /// register_function_argument: nullopt for `self`/`cls`, a non-bytes or
+  /// already-sized parameter, or one with no single inferable size; otherwise
+  /// the resolved `bytes` type.
+  std::optional<typet> try_infer_bytes_param_size(
+    const std::string &arg_name,
+    const typet &arg_type,
+    const symbol_id &id,
+    size_t param_index) const;
 
   void validate_return_paths(
     const nlohmann::json &function_node,
@@ -438,6 +1201,26 @@ private:
     const std::string &class_name,
     const std::string &attr_name);
 
+  /**
+   * @brief Build a tuple struct type from an AST value node when the annotation
+   *        is bare `tuple`.
+   *
+   * Walks a `Tuple` literal's elements and synthesises a struct_typet whose
+   * components mirror the element types. Constants are typed by their JSON
+   * kind; `Name` elements are resolved through @p param_annotations (used to
+   * recover types of parameters referenced inside `__init__`-style bodies);
+   * everything else falls back to `any_type()`. Returns `empty_typet()` when
+   * the node is not a Tuple literal.
+   *
+   * @param value_node       AST node holding the RHS of `attr: tuple = <rhs>`.
+   * @param param_annotations Parameter-name → annotation AST map for the
+   *                          enclosing function (may be empty).
+   * @return A struct_typet tagged as a tuple, or empty_typet on failure.
+   */
+  typet infer_tuple_struct_from_value(
+    const nlohmann::json &value_node,
+    const std::unordered_map<std::string, nlohmann::json> &param_annotations);
+
   exprt get_return_from_func(const char *func_symbol_id);
 
   void create_builtin_symbols();
@@ -446,6 +1229,33 @@ private:
     const nlohmann::json &import_node,
     module_locator &locator,
     code_blockt &code);
+
+  /// Binds an `import <mod> as <alias>` alias to the module's file, so the
+  /// alias resolves like the module name does (#6296).
+  void register_import_alias(
+    const nlohmann::json &import_node,
+    const std::string &module_file);
+
+  /// Converts every module-level and function-local Import/ImportFrom
+  /// statement in the current AST, appending the resulting code to
+  /// `all_imports_block`. Shared by both the whole-module conversion path
+  /// and the --function entry path (github #5937): the latter used to
+  /// build its own code block without ever calling this, so any call
+  /// through an imported module fell through to the unsupported-function
+  /// stub.
+  void convert_module_imports(code_blockt &all_imports_block);
+
+  /// Converts one additional positional Python file passed on the command
+  /// line (github #6211) as an extra translation unit of the same program:
+  /// its own imports/globals/statements are converted with
+  /// `current_python_file` pointing at its own filename (so locations and
+  /// `__name__`/`__file__` attribute correctly), and its top-level code is
+  /// appended to `combined_user_code` so it actually executes, mirroring
+  /// how the C frontend merges multiple .c files into one program.
+  void convert_extra_translation_unit(
+    const nlohmann::json &extra_ast,
+    code_blockt &init_code,
+    code_blockt &combined_user_code);
 
   nlohmann::json build_dunder_call(
     const nlohmann::json &object,
@@ -463,15 +1273,145 @@ private:
     module_locator &locator,
     code_blockt &accumulated_code);
 
+  /// Walk the import graph rooted at @p module_ast (without annotating or
+  /// generating code) and parse each reachable module's JSON AST into
+  /// @ref module_ast_pool_. Mirrors @ref process_module_imports's reach:
+  /// top-level imports plus imports directly inside top-level
+  /// FunctionDef bodies. Idempotent on names already pooled. Used so that
+  /// annotators for any one module can see subscript usages from any
+  /// other module in the graph (GitHub #4554).
+  void pre_collect_module_asts(
+    const nlohmann::json &module_ast,
+    module_locator &locator);
+
   symbolt *find_function_in_base_classes(
     const std::string &class_name,
     const std::string &symbol_id,
     std::string method_name,
     bool is_ctor) const;
 
+  /// @p method_name reached by walking the bases of @p class_name inside the
+  /// imported module that defines it. Ids are spelled against that module,
+  /// which an id rewritten against this file cannot name (#7398).
+  symbolt *find_function_in_imported_base_classes(
+    const std::string &class_name,
+    const std::string &method_name,
+    bool is_ctor) const;
+
+  /// AST and file path of the imported module that defines @p class_name, or
+  /// a null AST when no single imported module does. Ambiguity across modules
+  /// is declined rather than guessed.
+  std::pair<const nlohmann::json *, std::string>
+  find_imported_class_module(const std::string &class_name) const;
+
+  /// @p method_name under @p base_class, as the module that defines the base
+  /// spells it, or null when the base is not imported.
+  symbolt *find_method_in_imported_base(
+    const nlohmann::json &base_class_node,
+    const std::string &base_class,
+    const std::string &method_name,
+    bool is_ctor) const;
+
+  /// @p sym_id retried under the operational models' namespaces, for a base
+  /// such as Exception that a model defines and this file does not.
+  symbolt *find_method_in_model_base(
+    const std::string &base_class,
+    const std::string &sym_id) const;
+
+  std::optional<bool> function_shadows_module(
+    const std::string &name,
+    const nlohmann::json &use) const;
+  /// The module's own bindings of @p name, with declared_outer meaning that a
+  /// function rebinds it through `global`. Memoised: a module call reads
+  /// them at every dispatch site, and each read walks the whole module.
+  const scope_bindings &module_bindings(const std::string &name) const;
+  mutable std::
+    map<std::pair<const nlohmann::json *, std::string>, scope_bindings>
+      module_bindings_memo_;
+  using mro_memo =
+    std::map<std::string, std::optional<std::vector<std::string>>>;
+
+  /// The C3 method resolution order of class @p class_name in the file being
+  /// converted. Only classes that file binds once, by their class statement,
+  /// take part, each base named plainly; anything else (an import, a
+  /// rebinding, a qualified base) yields nothing.
+  std::optional<std::vector<std::string>>
+  class_mro(const std::string &class_name) const;
+  std::optional<std::vector<std::string>>
+  class_mro(const std::string &class_name, mro_memo &memo) const;
+  static std::optional<std::vector<std::string>>
+  c3_merge(std::vector<std::vector<std::string>> seqs);
+  /// The @p statement (a class or def) that alone binds @p name in the file
+  /// being converted, or null.
+  const nlohmann::json *sole_binding(
+    const std::string &name,
+    const std::string &statement = "ClassDef") const;
+  /// The def that alone binds @p method in the body of class @p class_name,
+  /// itself bound alone, or null.
+  const nlohmann::json *sole_method_def(
+    const std::string &class_name,
+    const std::string &method) const;
+  /// Whether a class other than @p class_name binds @p method and may derive
+  /// from @p class_name, so that a receiver typed @p class_name may run that
+  /// binding instead. A class whose bases cannot be resolved counts.
+  bool overridden_below(
+    const std::string &class_name,
+    const std::string &method) const;
+
+  /// The functions every store to an attribute assigns it (#8370): module
+  /// functions by name, or methods of the receiver the store is made on
+  /// (`self.a = self.m`), which a call through the attribute binds again.
+  struct attribute_functions
+  {
+    bool bound;
+    std::vector<std::string> ids;
+  };
+  /// What attribute @p attr holds, or null when some store in the file may
+  /// assign it anything else.
+  const attribute_functions *function_attribute(const std::string &attr);
+  static bool same_signature(const code_typet &a, const code_typet &b);
+  void collect_attribute_stores(
+    const nlohmann::json &node,
+    const std::string &owner,
+    const nlohmann::json *method);
+  void record_function_store(
+    const std::string &attr,
+    const std::pair<bool, std::string> &stored);
+  /// @p class_name and every class in the file that derives from it.
+  std::set<std::string> subclasses(const std::string &class_name) const;
+  std::optional<std::pair<bool, std::string>> stored_function(
+    const nlohmann::json &target,
+    const nlohmann::json &value,
+    const std::string &owner,
+    const nlohmann::json *method) const;
+  /// The method `self.m` names in a method of @p owner, when no subclass
+  /// resolves @p m elsewhere and it is a plain instance method.
+  std::optional<std::string>
+  bound_method_id(const std::string &owner, const std::string &m) const;
+  bool try_bound_method_store(const nlohmann::json &ast_node, codet &block);
+  /// An assignment get_var_assign leaves to a dedicated lowering, which
+  /// returns true once it has converted it.
+  bool try_dedicated_assign(const nlohmann::json &ast_node, codet &block);
+  void reject_bound_method_read(const nlohmann::json &element);
+  void reject_method_value(const std::string &class_name, const std::string &m)
+    const;
+  /// Per module, what each attribute holds; nullopt when the module reaches
+  /// attributes by a hook such as setattr.
+  std::map<
+    const nlohmann::json *,
+    std::optional<std::map<std::string, std::optional<attribute_functions>>>>
+    attribute_functions_;
+  /// Whether the body of class @p class_name may bind @p name, hiding any
+  /// base's @p name.
+  bool class_binds_name(const std::string &class_name, const std::string &name)
+    const;
+
   symbolt *find_imported_symbol(const std::string &symbol_id) const;
   symbolt *find_nested_function_symbol(const std::string &name) const;
   symbolt *find_symbol_in_global_scope(const std::string &symbol_id) const;
+  symbolt *find_model_symbol(const std::string &sym_id) const;
+  void collect_model_namespaces();
+  void build_models_block(code_blockt &models_block, bool models_precompiled);
 
   void copy_instance_attributes(
     const std::string &src_obj_id,
@@ -488,11 +1428,28 @@ private:
     std::list<std::string> &file_list,
     const std::string &dir_path);
 
+  typet nullable_dict_pointee(const typet &t) const;
+  bool keeps_pointer_type_on_none(const typet &t);
+  void guard_none_container(
+    exprt &rhs,
+    typet &rhs_type,
+    const nlohmann::json &element);
   exprt handle_membership_operator(
     exprt &lhs,
     exprt &rhs,
     const nlohmann::json &element,
     bool invert);
+  exprt range_membership(const exprt &x, const nlohmann::json &element);
+  exprt
+  list_or_range_contains(exprt &lhs, exprt &rhs, const nlohmann::json &element);
+
+  /// A PEP 604 union annotation, as the single type this
+  /// monomorphic frontend has to represent it with.
+  typet get_union_type_from_annotation(
+    const nlohmann::json &annotation_node,
+    const nlohmann::json &element);
+
+  typet narrow_union_to_member(const std::string &member_name);
 
   std::string extract_non_none_type(const nlohmann::json &annotation_node);
 
@@ -506,16 +1463,113 @@ private:
   std::pair<std::string, typet>
   extract_type_info(const nlohmann::json &ast_node);
 
+  /// Types an unannotated (Any) parameter from its default value, when that
+  /// default carries a usable concrete type.
+  void upgrade_param_type_from_default(
+    code_typet::argumentt &param_arg,
+    const exprt &default_expr);
+
+  /// Refines one unannotated parameter to the list model where warranted.
+  void refine_any_param_to_list(
+    code_typet::argumentt &param_arg,
+    const nlohmann::json &body,
+    const std::string &func_name,
+    size_t param_index);
+
+  /// Whether an unannotated parameter should be refined to the list model.
+  bool param_is_list_like(
+    const std::string &param_name,
+    const nlohmann::json &body,
+    const std::string &func_name,
+    size_t param_index,
+    typet &elem_type) const;
+
+  /// Types an unannotated parameter filled with constant list elements.
+  void refine_any_param_from_elements(
+    code_typet::argumentt &param_arg,
+    const std::string &func_name,
+    size_t param_index);
+
+  /// Records a list-annotated parameter's element type for subscript reads.
+  void seed_list_param_element_type(
+    const nlohmann::json &element,
+    const symbol_id &id,
+    const std::string &arg_id,
+    size_t param_index);
+
+  /// Recovers a bare `list` parameter's element type from its call sites.
+  bool seed_mixed_call_site_elements(
+    const std::string &param_id,
+    const std::string &func_name,
+    size_t param_index);
+  bool infer_list_elem_type_from_call_sites(
+    const std::string &func_name,
+    size_t param_index,
+    typet &out) const;
+  bool param_keeps_positions(
+    const std::string &func_name,
+    size_t param_index,
+    bool any_index = false) const;
+  bool param_elements(
+    const nlohmann::json &arg,
+    const std::string &enclosing_function,
+    std::vector<nlohmann::json> &out,
+    bool &direct,
+    unsigned depth) const;
+  bool call_site_list_literals(
+    const std::string &func_name,
+    size_t param_index,
+    std::vector<nlohmann::json> &out,
+    bool &direct,
+    unsigned depth) const;
+  bool literal_element_kinds(
+    const std::vector<nlohmann::json> &literals,
+    std::vector<std::vector<typet>> &kinds) const;
+  bool record_literal_positions(
+    const std::string &id,
+    const std::vector<nlohmann::json> &literals,
+    const std::vector<typet> &kinds);
+  bool record_literal_elements(
+    const std::string &id,
+    const std::vector<nlohmann::json> &literals,
+    bool positional);
+  bool mixes_str_and_number(
+    const std::string &probe,
+    const std::vector<typet> &kinds);
+
   void handle_array_unpacking(
     const nlohmann::json &ast_node,
     const nlohmann::json &target,
     exprt &rhs,
     codet &target_block);
 
+  /// Handles an assignment whose target is a dynamically-typed (tagged)
+  /// variable, returning false when the target is not tagged and the caller
+  /// should fall through to the ordinary assignment path.
+  bool
+  try_tagged_var_assign(const nlohmann::json &ast_node, codet &target_block);
+
+  /// Whether a module-scope assignment must probe its RHS type before fixing
+  /// the target's type.
+  bool module_scope_rhs_needs_type_probe(const nlohmann::json &ast_node);
+
+  /// Mints a fresh symbol of `new_type` to hold `orig`'s value from here on,
+  /// declares it in `target_block` when it is a local, and records the
+  /// redirection in retype_aliases_ under `alias_key`.
+  symbolt *mint_retyped_symbol(
+    const symbolt &orig,
+    const std::string &alias_key,
+    const typet &new_type,
+    const locationt &location,
+    const symbol_id &sid,
+    codet &target_block);
+
   void handle_list_literal_unpacking(
     const nlohmann::json &ast_node,
     const nlohmann::json &target,
     codet &target_block);
+
+  void set_assigned_value(symbolt &symbol, const exprt &rhs);
 
   void handle_assignment_type_adjustments(
     symbolt *lhs_symbol,
@@ -524,6 +1578,20 @@ private:
     const std::string &lhs_type,
     const nlohmann::json &ast_node,
     bool is_ctor_call);
+
+  /// Carries the list element-type map from @p rhs to @p lhs on a
+  /// container-level list assignment, resolving dict `.keys`/`.values`
+  /// members to the dict's internal list symbol.
+  void propagate_list_type_info(
+    const exprt &lhs,
+    const exprt &rhs,
+    symbolt *lhs_symbol);
+
+  /// Propagates the element-type map of the list backing a dict's `.keys` /
+  /// `.values` member expression @p rhs onto @p lhs_identifier.
+  void propagate_dict_member_list_type_info(
+    const exprt &rhs,
+    const std::string &lhs_identifier);
 
   // =========================================================================
   // Dictionary assignment helper methods
@@ -562,6 +1630,635 @@ private:
     const nlohmann::json &ast_node,
     const std::string &lhs_type);
 
+  /**
+   * @brief Preserves the array type of a subscript RHS instead of falling
+   * back to the uninformative `Any` (void*) annotation.
+   *
+   * `row = a[i]` on a numpy array has no static annotation the Python-side
+   * annotator can infer, so it defaults to `Any`; storing the symbol as
+   * void* loses the array type and either reads back NONDET values or
+   * crashes on a later chained subscript (`row[0]`). Scoped narrowly to a
+   * `Subscript` RHS whose resolved type is a fixed-size array of at most
+   * 2 dimensions, and to a source array of at most 2 dimensions, so
+   * n-D indexing remains explicitly unsupported rather than silently
+   * mis-modelled.
+   *
+   * @param ast_node The assignment AST node.
+   * @param current_type The current LHS type (only consulted/adjusted when
+   *   this is `any_type()`).
+   * @return The array type to use, or the unmodified `current_type` when the
+   *   RHS is not an eligible subscript.
+   */
+  typet resolve_any_subscript_array_type(
+    const nlohmann::json &ast_node,
+    const typet &current_type);
+
+  typet resolve_call_argument_array_type(
+    const nlohmann::json &ast_node,
+    const typet &current_type);
+
+  /**
+   * @brief Preserves the concrete result type of a np.<reducer>(a, axis=...)
+   * RHS instead of trusting the static annotator's guess.
+   *
+   * numpy.py necessarily declares sum/prod/mean/min/max/argmin/argmax's
+   * return type as `Any`, since their real shape is data-dependent (a scalar
+   * when flattened, an array along an axis); the static annotator resolves
+   * that ambiguity either to `Any` (void*) or, for some of these, to a plain
+   * scalar type guessed from the argument literal -- both wrong once axis=
+   * makes the real result a concrete array, and both would box/truncate the
+   * array numpy_call_expr's axis-aware fast paths actually produce, which
+   * can't be indexed afterwards. Unlike resolve_any_subscript_array_type,
+   * this does NOT gate on current_type being any_type() first: a wrong
+   * scalar guess needs overriding too. It is instead scoped narrowly by
+   * shape: a `Call` RHS whose callee is an attribute access on a name
+   * resolving to the imported numpy module, naming one of the functions
+   * above, and carrying a literal `axis=` keyword -- a shape that, on
+   * success, only ever produces a 1-D array result, so trusting a probe of
+   * the real call over the static guess is always correct here.
+   *
+   * @param ast_node The assignment AST node.
+   * @param current_type The current LHS type.
+   * @return The probed call result type, or the unmodified `current_type`
+   *   when the RHS does not match that shape.
+   */
+  typet resolve_numpy_reducer_call_array_type(
+    const nlohmann::json &ast_node,
+    const typet &current_type);
+
+  std::string resolve_name_symbol_id(const std::string &name) const;
+  symbolt *find_enclosing_scope_symbol(symbol_id sid) const;
+  symbolt *find_global_symbol(const symbol_id &sid);
+  exprt
+  module_function_expr(const std::string &name, const nlohmann::json &element);
+  void track_unbound_global(
+    const std::string &id,
+    const nlohmann::json &binding,
+    const typet &type);
+  void guard_unbound_global(
+    const std::string &id,
+    const std::string &name,
+    const nlohmann::json &element);
+  void mark_global_bound(const nlohmann::json &stmt, code_blockt &block);
+  /// A parameter default, evaluated where the def is, so a method's default
+  /// still sees the class body's names (#8200).
+  exprt get_default_expr(const nlohmann::json &node);
+
+  std::string root_name_from_subscript(const nlohmann::json &node) const;
+
+  bool is_basic_numpy_view_subscript(const nlohmann::json &node) const;
+
+  // is_basic_numpy_view_subscript(), excluding `.shape[i]`: that indexes the
+  // plain int tuple `.shape` returns, never the array's own data, so it must
+  // never be tracked as a numpy view/alias (root_name_from_subscript drills
+  // through any Attribute to its base Name, so without this exclusion
+  // `shape_0 = a.shape[0]` would register shape_0 as a view copy of `a`
+  // itself). A wrapper, not a change to is_basic_numpy_view_subscript
+  // itself, to keep that already-large function's own decision count as-is.
+  bool is_tracked_numpy_view_subscript(const nlohmann::json &node) const;
+
+  // True for a transpose()/reshape()/ravel()/diagonal() Attribute-call node
+  // (module or method form), independent of whether its root array name can
+  // be resolved. Shared by is_numpy_view_copy_expr and
+  // root_name_from_numpy_view_copy_expr so the view_functions set and the
+  // Call/Attribute shape check live in one place.
+  bool is_numpy_view_copy_call_node(const nlohmann::json &node) const;
+
+  bool is_numpy_array_constructor_expr(const nlohmann::json &node) const;
+
+  // The last direct assignment to `name` in `block[0..end)`, following into
+  // both arms of a trailing if/else (nullptr unless both arms agree it's a
+  // numpy array constructor call). Shared by block_assigns_numpy_array_to
+  // and reject_incompatible_numpy_local_return_branches so both walk the
+  // same "what did this name last bind to" search -- one only needs to know
+  // whether it resolved, the other needs the value node itself to compare
+  // shapes between branches.
+  const nlohmann::json *find_numpy_ctor_value_assigned_to(
+    const nlohmann::json &block,
+    std::size_t end,
+    const std::string &name) const;
+
+  // True when `block[0..end)` ends (directly, or through both arms of a
+  // trailing if/else) in an assignment binding `name` from a numpy array
+  // constructor call. Shared by local_var_numpy_array_return's straight-line
+  // and branching cases so both walk the same "what did this name last bind
+  // to" search.
+  bool block_assigns_numpy_array_to(
+    const nlohmann::json &block,
+    std::size_t end,
+    const std::string &name) const;
+
+  // True when `func_def`'s only top-level statement is `return <Name>`, and
+  // that Name was last bound (directly, or identically on both arms of an
+  // if/else) by a numpy array constructor call. get_function_definition
+  // checks this before its own return-type dispatch: the static annotator's
+  // pre-pass already resolved such a Name's own `np.zeros(...)`-shaped
+  // assignment through the numpy operational model's declared signature
+  // (`list[float]`) and wrote that bogus annotation into
+  // `function_node["returns"]` ahead of real conversion -- locking the
+  // function's return type to a generic PyListObject* before the body (which
+  // actually returns a concrete array) is ever converted. A direct
+  // `return np.zeros(...)` never hits this: static inference only chases a
+  // Name-based callee, not np.zeros's Attribute-based one, so it leaves the
+  // return type empty and the existing GOTO-scan fallback already types it
+  // correctly. Treating the local-var case the same way here (by having the
+  // caller skip the annotation-driven dispatch entirely) reaches that same
+  // already-correct fallback instead of duplicating it.
+  bool local_var_numpy_array_return(const nlohmann::json &func_def) const;
+
+  // The `returns` node get_function_definition's own dispatch should use:
+  // null when local_var_numpy_array_return applies, function_node["returns"]
+  // otherwise. Split out to keep the ternary this needs out of
+  // get_function_definition's own decision count.
+  const nlohmann::json &
+  resolve_return_annotation_node(const nlohmann::json &function_node) const;
+
+  // Throws an explicit TypeError when local_var_numpy_array_return's
+  // trailing if/else binds the returned name from a numpy array constructor
+  // call with a different literal shape argument on each arm -- e.g.
+  // np.zeros(3) on one branch, np.zeros((2, 2)) on the other. Left
+  // unchecked, converting the branch merge with two different concrete
+  // array types crashes value_sett::assign's type-compatibility assertion
+  // instead of rejecting cleanly (ADR-NP principle 3).
+  void reject_incompatible_numpy_local_return_branches(
+    const nlohmann::json &func_def) const;
+
+  // True when `func_name`'s own body reads `param_name`'s `.shape`/`.ndim`/
+  // `.size`/`.T`, or passes it to `numpy.transpose`/`numpy.sort`/
+  // `numpy.argsort`, *and* some call site feeds the `param_index`-th
+  // argument from a module-level numpy array constructor call whose shape
+  // argument is not a literal (e.g. `np.ones(n)` for a variable `n`).
+  // register_function_argument uses this to reject such a parameter with an
+  // explicit diagnostic instead of leaving it untyped, which previously
+  // surfaced as a generic runtime AttributeError the first time the callee
+  // touched one of those. Deliberately excludes `len()`, which already
+  // resolves soundly for a symbolic-shape parameter through a different
+  // path.
+  bool numpy_param_call_site_has_symbolic_shape(
+    const std::string &func_name,
+    size_t param_index,
+    const std::string &param_name) const;
+
+  // Every `Call` node in the AST, computed once and reused:
+  // register_function_argument calls numpy_param_call_site_has_symbolic_shape
+  // once per parameter, and each call previously re-walked the entire AST from
+  // scratch.
+  const std::vector<numpy_param_call_site> &numpy_call_sites() const;
+  mutable std::vector<numpy_param_call_site> numpy_call_sites_cache_;
+  mutable bool numpy_call_sites_cached_ = false;
+
+  // True when some top-level statement in `module_body` binds `arg_name` to
+  // a numpy array constructor call with a non-literal shape. Split out of
+  // numpy_param_call_site_has_symbolic_shape to keep that function's own
+  // decision count down.
+  bool module_level_symbolic_ctor_binding(
+    const nlohmann::json &module_body,
+    const std::string &arg_name) const;
+
+  // Throws when `numpy_array_param` is false and some call site feeds this
+  // parameter from a numpy array constructor call with a non-literal shape.
+  // Split out of register_function_argument to keep the `if` this check
+  // needs out of that function's own decision count.
+  void reject_if_symbolic_shape_param(
+    bool numpy_array_param,
+    const typet &arg_type,
+    const std::string &func_name,
+    size_t param_index,
+    const std::string &arg_name) const;
+
+  // `y = identity(x)`/`y = make()`: a call to a locally-defined function that
+  // itself returns a numpy array is never an is_numpy_array_constructor_expr
+  // (that only recognises a literal `np.<ctor>(...)` shape). lhs's own type
+  // already reflects the array-return fix by the time update_numpy_array_
+  // binding runs, so trust it instead of duplicating that resolution here.
+  // Split out of update_numpy_array_binding to keep its own decision count
+  // from growing further.
+  bool is_array_returning_call_expr(
+    const nlohmann::json &rhs_node,
+    const exprt &lhs) const;
+
+  bool is_numpy_view_copy_expr(const nlohmann::json &node) const;
+
+  std::string
+  root_name_from_numpy_view_copy_expr(const nlohmann::json &node) const;
+
+  bool contains_tracked_numpy_view_name(const nlohmann::json &node);
+
+  bool is_tracked_numpy_view_name_node(const nlohmann::json &node);
+
+  bool is_basic_numpy_view_subscript_escape(const nlohmann::json &node);
+  /// Converts @p node into a discarded block, so only its value is kept and
+  /// nothing it would emit reaches the program.
+  exprt probe_expr(const nlohmann::json &node);
+
+  bool contains_tracked_numpy_view_object(const nlohmann::json &node);
+
+  void reject_numpy_view_mutating_method_call(const nlohmann::json &node);
+
+  /// The storage a view ultimately reads: its source, through any chain of
+  /// views, with storage aliases resolved.
+  std::string numpy_view_storage_root(const std::string &id) const;
+  bool is_numpy_storage_escaped(const nlohmann::json &name) const;
+  bool is_closed_return_expression(
+    const nlohmann::json &value,
+    const nlohmann::json &params) const;
+  std::optional<nlohmann::json>
+  simple_call_return_value(const nlohmann::json &call) const;
+  /// The return expression of a simple function that receives or returns a
+  /// numpy view, with the call's arguments substituted; nullopt when it
+  /// cannot be folded.
+  std::optional<nlohmann::json>
+  fold_numpy_view_call(const nlohmann::json &call);
+  /// An assignment whose value is a foldable call is converted as the
+  /// assignment of the folded expression.
+  void
+  get_folded_var_assign(const nlohmann::json &ast_node, codet &target_block);
+  /// A `return` of a numpy view name: rejected, unless the function is simple
+  /// enough for every supported call to be folded, in which case the body
+  /// only fails if it is reached.
+  void reject_or_defer_numpy_view_return(
+    const nlohmann::json &ast_node,
+    codet &target_block);
+  bool bind_numpy_pointer_view_alias(
+    const exprt &lhs,
+    const std::string &lhs_id,
+    const std::string &rhs_id);
+  void reject_multi_path_numpy_view_return(const nlohmann::json &call);
+  bool numpy_subscript_yields_view(const nlohmann::json &node) const;
+  bool holds_numpy_view(const nlohmann::json &node) const;
+  bool is_numpy_module_call(const nlohmann::json &node) const;
+  bool is_numpy_view_value(const nlohmann::json &node) const;
+  void reject_numpy_view_comprehension(const nlohmann::json &node) const;
+  /// The per-statement numpy view checks: comprehensions over views and uses
+  /// of storage that escaped.
+  void check_numpy_view_statement(const nlohmann::json &statement) const;
+  void reject_unfoldable_numpy_view_call(const nlohmann::json &call);
+  bool reject_or_defer_numpy_view_name_return(
+    const nlohmann::json &ast_node,
+    codet &target_block);
+  nlohmann::json current_user_function_node() const;
+  bool is_numpy_module_param(const std::string &root_name) const;
+  bool is_copied_numpy_view_local(const std::string &name) const;
+  bool is_scalar_read_of_numpy_view_param(
+    const exprt &lhs,
+    const std::string &storage_id) const;
+  code_blockt *while_condition_block(
+    const nlohmann::json &ast_node,
+    code_blockt &cond_prelude);
+  void reject_live_numpy_view_copies_of(const nlohmann::json &args);
+  bool passes_numpy_view(const nlohmann::json &arg);
+  bool is_scalar_numpy_view_call(const nlohmann::json &call);
+  bool passes_unnamed_numpy_view_argument(const nlohmann::json &call);
+  bool contains_unnamed_numpy_view_argument(const nlohmann::json &node);
+  const nlohmann::json &hoist_unnamed_numpy_view_arguments(
+    const nlohmann::json &statement,
+    nlohmann::json &rewritten,
+    codet &target_block);
+  nlohmann::json bind_numpy_view_temporary(
+    const nlohmann::json &statement,
+    const nlohmann::json &value,
+    const std::string &prefix,
+    codet &target_block);
+  bool hoist_numpy_view_arguments(
+    const std::string &key,
+    nlohmann::json &rewritten,
+    codet &target_block);
+  bool needs_numpy_view_call_binding(const nlohmann::json &node);
+  bool split_conditional_numpy_view_assignment(
+    const nlohmann::json &statement,
+    nlohmann::json &rewritten);
+  bool needs_numpy_view_hoist(const nlohmann::json &node);
+  bool freeze_numpy_view_operand(
+    const nlohmann::json::json_pointer &path,
+    nlohmann::json &rewritten,
+    codet &target_block);
+  bool hoist_first_evaluated_numpy_view_call(
+    const nlohmann::json::json_pointer &path,
+    bool skip,
+    nlohmann::json &rewritten,
+    codet &target_block);
+  std::size_t numpy_view_arg_count_ = 0;
+  /// Whether every `return` of @p func_node yields one of its bound view
+  /// parameters.
+  bool returns_bound_numpy_view_param(const nlohmann::json &func_node);
+  /// The view argument such a function hands back for @p call, or nullptr.
+  const nlohmann::json *
+  returned_numpy_view_argument(const nlohmann::json &call);
+  bool try_bind_returned_numpy_view_param(
+    const nlohmann::json &ast_node,
+    codet &target_block);
+  /// The call whose result is not used as a value.
+  const nlohmann::json *numpy_discarded_call_ = nullptr;
+  void reject_numpy_view_argument_use(const nlohmann::json &call);
+  void reject_numpy_view_method_call(const nlohmann::json &func) const;
+  void reject_numpy_view_callee(const nlohmann::json &call);
+  void reject_inline_runtime_numpy_slice(const nlohmann::json &call) const;
+  void reject_numpy_view_container_store(const nlohmann::json &ast_node);
+  bool is_numpy_view_syntax(
+    const nlohmann::json &value,
+    const std::string &scope,
+    std::size_t depth) const;
+  bool is_numpy_storage_syntax(
+    const nlohmann::json &value,
+    const std::string &scope,
+    std::size_t depth) const;
+  bool is_fold_only_numpy_function(const nlohmann::json &function_node);
+  /// Converts a function definition unless every call to it is folded.
+  void get_unfolded_function_definition(const nlohmann::json &function_node);
+  /// Records the storage of every view passed to a call that is not folded.
+  void track_numpy_view_call_escape(const nlohmann::json &call);
+  void reject_escaped_numpy_view_read(const nlohmann::json &node) const;
+  void reject_escaped_numpy_view_write(const nlohmann::json &target) const;
+  /// Rejects value reads and writes of storage that escaped to an unknown
+  /// call; shape queries stay allowed.
+  void reject_escaped_numpy_view_use(const nlohmann::json &statement) const;
+
+  void reject_numpy_view_identity_query(const nlohmann::json &node);
+
+  void reject_copied_numpy_view_in_container(
+    const nlohmann::json &ast_node,
+    const std::set<std::string> &container_types);
+
+  nlohmann::json
+  get_ravel_receiver_node(const nlohmann::json &ravel_call) const;
+  bool is_numpy_ravel_receiver(const nlohmann::json &ravel_call) const;
+  nlohmann::json
+  flat_subscript_receiver_node(const nlohmann::json &subscript_node) const;
+  bool try_handle_flat_index_assignment(
+    const nlohmann::json &ast_node,
+    const nlohmann::json &target,
+    codet &target_block);
+  std::optional<exprt> try_build_flat_index_read(const nlohmann::json &element);
+
+  // ExpressionType::SUBSCRIPT's handler, split out of get_expr into its own
+  // function plus these sub-dispatch helpers -- each phase of a[...]'s
+  // handling (base resolution, dict/tuple pointer unwrap, and one dispatch
+  // per index shape: tuple, dict, bool-mask-rows, multi-axis tuple, fancy
+  // list, bool-mask variable, __getitem__) is independently a return early
+  // or fall-through step, so extracting them keeps every one individually
+  // simple instead of one function accumulating get_expr's own decision
+  // count as ADR-NP-003 etapa 2 adds more index shapes.
+  exprt handle_subscript_expr(const nlohmann::json &element);
+  std::optional<exprt>
+  resolve_subscript_base(const nlohmann::json &element, exprt &array);
+  std::optional<exprt> try_fold_constant_string_slice(
+    const nlohmann::json &element,
+    const exprt &array);
+  void unwrap_subscript_base_types(
+    exprt &array,
+    typet &array_type,
+    typet &array_type_for_dict,
+    bool &array_is_dict_pointer,
+    const nlohmann::json &element);
+  std::optional<exprt> try_dispatch_tuple_subscript(
+    const exprt &array,
+    const typet &array_type,
+    const nlohmann::json &slice,
+    const nlohmann::json &element);
+  std::optional<exprt> try_dispatch_dict_subscript(
+    exprt &array,
+    const typet &array_type_for_dict,
+    bool array_is_dict_pointer,
+    const nlohmann::json &slice);
+  bool subscript_targets_list_model(
+    const typet &array_type,
+    const typet &list_type) const;
+  std::optional<exprt> try_dispatch_multidim_tuple_index(
+    const exprt &array,
+    const typet &array_type,
+    const nlohmann::json &slice,
+    const nlohmann::json &element,
+    bool tuple_index_targets_list_model,
+    const typet &list_type);
+  std::optional<exprt> try_dispatch_multidim_tuple_axes(
+    const exprt &array,
+    const nlohmann::json &element,
+    const std::vector<nlohmann::json> &idx_nodes);
+  std::optional<exprt> try_dispatch_chained_axis_index(
+    const exprt &array,
+    const nlohmann::json &element,
+    const std::vector<nlohmann::json> &idx_nodes,
+    const typet &list_type);
+  std::optional<exprt> try_dispatch_fancy_list_index(
+    const exprt &array,
+    const nlohmann::json &slice,
+    const nlohmann::json &element,
+    bool tuple_index_targets_list_model);
+  std::optional<exprt> try_dispatch_bool_mask_variable_index(
+    const exprt &array,
+    const typet &array_type,
+    const nlohmann::json &slice,
+    const nlohmann::json &element,
+    bool tuple_index_targets_list_model);
+  std::optional<exprt> try_dispatch_fancy_index_via_list_variable(
+    const exprt &array,
+    const nlohmann::json &slice,
+    const nlohmann::json &element);
+  std::optional<exprt> try_dispatch_dunder_getitem(
+    const nlohmann::json &element,
+    const nlohmann::json &slice);
+  void reject_scalar_subscript(
+    const typet &array_type,
+    const nlohmann::json &element) const;
+
+  std::optional<nlohmann::json>
+  select_return_value_for_call(const nlohmann::json &call_node) const;
+
+  nlohmann::json substitute_call_arguments(
+    const nlohmann::json &node,
+    const nlohmann::json &call_node) const;
+
+  bool return_value_uses_call_argument(
+    const nlohmann::json &return_value,
+    const nlohmann::json &call_node) const;
+
+  // return <call>(<param>, ...), e.g. `def transposed(a): return
+  // np.transpose(a)`: true when every Name the call expression references is
+  // either one of `params` or an imported module alias. Split out of
+  // return_value_uses_call_argument to keep that function's own decision
+  // count down.
+  bool return_call_only_references_params_or_modules(
+    const nlohmann::json &return_value,
+    const nlohmann::json &params) const;
+
+  void reject_unsafe_numpy_view_target(const nlohmann::json &target);
+  void reject_unsafe_numpy_view_write_to(const std::string &root_id);
+
+  void reject_numpy_view_slice_assignment(const nlohmann::json &target);
+
+  /// Raise Python's TypeError for item assignment on an immutable container,
+  /// reporting whether `container_type` is one.
+  bool reject_immutable_item_assignment(
+    const typet &container_type,
+    codet &target_block);
+
+  void record_numpy_view_copy(const exprt &lhs, const nlohmann::json &rhs_node);
+  std::string numpy_view_source_of(const std::string &storage_id) const;
+
+  bool is_tracked_numpy_view_id(const std::string &symbol_id) const;
+
+  void reject_nonconstant_numpy_view_write(const nlohmann::json &target) const;
+
+  std::optional<std::vector<nlohmann::json>>
+  build_numpy_nditer_logical_elements(const nlohmann::json &arg) const;
+
+  std::optional<std::pair<std::vector<std::size_t>, std::vector<exprt>>>
+  build_numpy_descriptor_materialized_elements(
+    const nlohmann::json &arg,
+    const std::string &unsupported_rank_error);
+
+  std::optional<std::vector<std::size_t>>
+  get_empty_numpy_literal_slice_shape(const nlohmann::json &arg) const;
+
+  std::optional<exprt> build_numpy_descriptor_materialized_list(
+    const nlohmann::json &arg,
+    bool nested);
+
+  /// Set when a view-shaped call (transpose, ravel, ...) was lowered to an
+  /// independent copy rather than a view; consumed by the assignment binding.
+  bool numpy_result_is_fresh_copy_ = false;
+  /// Set when a numpy call registered the assignment target as a view.
+  bool numpy_result_is_view_ = false;
+
+  /// `a[...]` with a slice axis over a numpy parameter.
+  bool is_numpy_param_slice(const nlohmann::json &subscript) const;
+
+  /// `element` copied into a named temporary (or itself without a block).
+  exprt hoist_numpy_element(const exprt &element);
+
+  /// Named temporary holding `elems` (row-major) as an array of `shape`.
+  exprt materialize_numpy_elements(
+    const nlohmann::json &location_node,
+    const std::vector<std::size_t> &shape,
+    const std::vector<exprt> &elems,
+    const typet &elem_type);
+
+  /// `reshape_to`, when given, lays the same elements out in that shape.
+  std::optional<exprt> build_numpy_descriptor_materialized_array(
+    const nlohmann::json &arg,
+    const std::vector<std::size_t> *reshape_to = nullptr);
+
+  std::optional<std::vector<std::size_t>>
+  get_numpy_nditer_logical_shape(const std::string &root_id) const;
+
+  std::optional<typet>
+  get_numpy_descriptor_element_type(const std::string &root_id) const;
+
+  bool is_numpy_readonly_view_arg(const nlohmann::json &arg) const;
+
+  void clear_numpy_view_copy(const exprt &lhs);
+
+  void
+  update_numpy_array_binding(const exprt &lhs, const nlohmann::json &rhs_node);
+
+  bool update_numpy_array_binding_from_name(
+    const exprt &lhs,
+    const std::string &lhs_id,
+    const nlohmann::json &rhs_node,
+    bool unconditional_assignment);
+
+  bool preserve_conditional_numpy_alias_shape(
+    const std::string &lhs_id,
+    const std::string &rhs_id,
+    bool unconditional_assignment);
+
+  void copy_numpy_alias_shape_state(
+    const std::string &lhs_id,
+    const std::string &rhs_id);
+
+  void reject_conditional_numpy_alias_rebind(
+    const exprt &lhs,
+    const nlohmann::json &rhs_node) const;
+
+  bool record_numpy_view_copy_from_returned_argument(
+    const exprt &lhs,
+    const std::string &lhs_id,
+    const nlohmann::json &rhs_node);
+
+  void clear_numpy_array_storage_aliases_for(const std::string &symbol_id);
+
+  void bind_numpy_array_storage_alias(
+    const std::string &lhs_id,
+    const std::string &rhs_id);
+
+  symbolt *resolve_numpy_array_storage_alias(symbolt *symbol) const;
+
+  std::string
+  resolve_numpy_array_storage_alias_id(const std::string &symbol_id) const;
+
+  /// Detach every live pointer-backed view (ADR-NP-003 etapa 2) of
+  /// @p rebound_id from its storage, right before a plain `Name = ...`
+  /// assignment rebinds that symbol to a new value. Real NumPy rebind
+  /// semantics leave the old array object -- and anything still viewing it
+  /// -- untouched; without this, a view's raw pointer would keep aliasing
+  /// the same storage and silently start observing the new value instead.
+  std::vector<std::string> numpy_views_of(const std::string &rebound_id) const;
+
+  bool keep_numpy_result_view(const std::string &lhs_id);
+  bool is_readonly_numpy_view_expr(const nlohmann::json &node) const;
+
+  void record_numpy_constructor_binding(
+    const exprt &lhs,
+    const std::string &lhs_id,
+    const nlohmann::json &rhs_node,
+    bool unconditional_assignment);
+
+  void detach_numpy_pointer_views_of(
+    const std::string &rebound_id,
+    const locationt &location,
+    codet &target_block);
+
+  /// Detach one view into a snapshot of just what it sees.
+  void detach_numpy_pointer_view(
+    const std::string &view_id,
+    const locationt &location,
+    codet &target_block);
+
+  /// Detach several views of one storage into a single snapshot of that
+  /// storage, so they keep aliasing each other.
+  void share_numpy_storage_snapshot(
+    const std::string &storage_id,
+    const std::vector<std::string> &view_ids,
+    const locationt &location,
+    codet &target_block);
+
+  bool should_rebuild_cached_numpy_row_subscript_rhs(
+    const nlohmann::json &rhs_node) const;
+
+  bool is_tracked_2d_numpy_array_symbol(const std::string &source_id) const;
+
+  std::optional<nlohmann::json>
+  rewrite_numpy_method_call_node(const nlohmann::json &call_node) const;
+
+  // get_var_assign's RHS preprocessing step: rewrites `a.T` into
+  // `np.transpose(a)` (numpy's own Attribute-shaped transpose sugar, with
+  // no method-call node to reach rewrite_numpy_method_call_node through),
+  // or else defers to rewrite_numpy_method_call_node for any other numpy
+  // method-call RHS. Split out to keep get_var_assign's own decision count
+  // from growing as more special-cased RHS rewrites land there.
+  nlohmann::json rewrite_assign_rhs_node(const nlohmann::json &ast_node) const;
+
+  // Classifies a Call node as a numpy method call: (is_a_method_call,
+  // method_name, method_base, is_a_supported_copy_method,
+  // is_a_supported_dispatch_rewrite_method). Split out of
+  // rewrite_numpy_method_call_node() to keep that function's own decision
+  // count low.
+  std::tuple<bool, std::string, nlohmann::json, bool, bool>
+  classify_numpy_method_call(const nlohmann::json &call_node) const;
+
+  bool
+  method_base_is_imported_module(const std::string &method_base_name) const;
+
+  bool
+  method_base_is_tracked_numpy_array(const std::string &method_base_name) const;
+
+  // Builds the np.<method_name>(method_base, ...original args...) rewrite of
+  // a recognized numpy method call.
+  nlohmann::json build_numpy_method_rewrite_node(
+    const nlohmann::json &call_node,
+    const std::string &method_name,
+    const nlohmann::json &method_base) const;
+
   // =========================================================================
   // Unpacking helper methods
   // =========================================================================
@@ -578,6 +2275,30 @@ private:
    * @return true if this was an unpacking assignment and was handled.
    */
   bool handle_unpacking_assignment(
+    const nlohmann::json &ast_node,
+    const nlohmann::json &target,
+    codet &target_block);
+
+  bool unpack_record_is_trusted(const nlohmann::json &value) const;
+
+  /// Unpacks @p value, an element of an enclosing unpacking, into the nested
+  /// Tuple or List @p target. A list must be a symbol with element types
+  /// recorded exactly; any other value or target is refused.
+  void unpack_nested_target(
+    const nlohmann::json &ast_node,
+    const nlohmann::json &target,
+    const exprt &value,
+    codet &target_block);
+
+  /**
+   * Desugar a tuple/list unpacking whose targets include lvalues (a[i],
+   * obj.attr) into temp-mediated single assignments routed through the normal
+   * single-assignment path. Evaluates every RHS element into a temporary
+   * first (Python evaluates the whole RHS before assigning), then stores each
+   * target, so the swap a[i], a[j] = a[j], a[i] is handled soundly (#4792).
+   * Requires the RHS to be a Tuple/List literal of matching arity.
+   */
+  void desugar_unpacking_with_lvalue_targets(
     const nlohmann::json &ast_node,
     const nlohmann::json &target,
     codet &target_block);
@@ -626,6 +2347,15 @@ private:
   // =========================================================================
   // RHS processing helper methods
   // =========================================================================
+
+  /// The first argument of `ast_node`'s RHS when that RHS is a call to a
+  /// reordering builtin (sorted/reversed/list), else nullptr.
+  static const nlohmann::json *
+  reordering_builtin_arg(const nlohmann::json &ast_node);
+
+  void copy_elem_types_from_reordering_builtin(
+    const nlohmann::json &ast_node,
+    const std::string &lhs_id);
 
   /**
    * @brief Handles function call RHS assignment.
@@ -682,7 +2412,8 @@ private:
    * @param rhs The right operand expression.
    * @param left The left operand JSON AST node.
    * @param right The right operand JSON AST node.
-   * @return Boolean result expression, or nil_exprt if not a type identity check.
+   * @return Boolean result expression, or nil_exprt if not a type identity
+   * check.
    */
   exprt handle_type_identity_check(
     const std::string &op,
@@ -690,6 +2421,24 @@ private:
     const exprt &rhs,
     const nlohmann::json &left,
     const nlohmann::json &right);
+
+  /// Runtime dispatch for a tagged-scalar (PyObject-shaped) operand, which none
+  /// of the static-type-driven paths can handle. Throws for an operator this
+  /// mode does not model.
+  exprt handle_tagged_scalar_binop(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right,
+    const nlohmann::json &element);
+
+  exprt
+  build_emptiness_check(const exprt &value, const nlohmann::json &element);
+
+  /// A call statement nested in an expression is invisible to goto-convert's
+  /// side-effect removal, so it would reach the solver unevaluated.
+  static void convert_function_call_to_side_effect(exprt &expr);
 
   /**
    * @brief Converts function calls in binary operands to side effects.
@@ -707,6 +2456,31 @@ private:
   exprt handle_chained_comparisons_logic(
     const nlohmann::json &element,
     exprt &bin_expr);
+
+  /// Converts the operands of the chained comparison's pair \p i, binding
+  /// those an adjacent pair also reads; \p first_pair is pair 0.
+  std::pair<exprt, exprt> chained_pair_operands(
+    const nlohmann::json &element,
+    size_t i,
+    exprt &first_pair,
+    exprt &reuse);
+
+  /// Binds a side-effecting comparator that two adjacent pairs of a chained
+  /// comparison read to a temporary, so Python's single evaluation is kept.
+  /// Returns the expression that assigns and yields it, setting \p reuse to
+  /// the temporary, or nil when the operand needs no binding.
+  exprt bind_chained_comparator(
+    const exprt &operand,
+    const nlohmann::json &element,
+    exprt &reuse);
+
+  /// Prepares \p operand for two reads: returns the first read and sets
+  /// \p reread to the second, binding a side-effecting operand to a
+  /// temporary. Nil when such an operand cannot be bound.
+  exprt bind_operand_read_twice(
+    const exprt &operand,
+    const nlohmann::json &element,
+    exprt &reread);
 
   /**
    * @brief Determines if None comparison setup is needed.
@@ -731,7 +2505,8 @@ private:
    *
    * @param op The operator string.
    * @param lhs The left operand expression (may be modified for concatenation).
-   * @param rhs The right operand expression (may be modified for concatenation).
+   * @param rhs The right operand expression (may be modified for
+   * concatenation).
    * @param left The left operand JSON AST node.
    * @param right The right operand JSON AST node.
    * @param element The full binary operation JSON AST node.
@@ -744,6 +2519,11 @@ private:
     const nlohmann::json &left,
     const nlohmann::json &right,
     const nlohmann::json &element);
+
+  /// Builds a `bytes` concatenation (`lhs + rhs`) as a fresh array literal of
+  /// size `len(lhs) + len(rhs)`, indexing each source in turn. Returns
+  /// nil_exprt if either side's length is not a compile-time constant.
+  exprt build_bytes_concat(const exprt &lhs, const exprt &rhs);
 
   /**
    * @brief Handles list-related binary operations.
@@ -764,20 +2544,6 @@ private:
     exprt &rhs,
     const nlohmann::json &left,
     const nlohmann::json &right,
-    const nlohmann::json &element);
-
-  /**
-   * @brief Handles tuple `+` (concat) and `*` (repeat) operators.
-   *
-   * Concatenation builds a new tuple struct whose components are the
-   * concatenation of the operand tuples; repetition with a constant int
-   * builds an n-fold repeat. Returns nil_exprt for non-tuple operands or
-   * unsupported variants (e.g. variable repeat count).
-   */
-  exprt handle_tuple_operations(
-    const std::string &op,
-    exprt &lhs,
-    exprt &rhs,
     const nlohmann::json &element);
 
   /**
@@ -832,16 +2598,6 @@ private:
   exprt build_binary_expression(const std::string &op, exprt &lhs, exprt &rhs);
 
   /**
-   * @brief Promotes operands for IEEE floating-point operations.
-   *
-   * @param bin_expr The binary expression (operands may be modified).
-   * @param lhs The original left operand.
-   * @param rhs The original right operand.
-   */
-  void
-  promote_ieee_operands(exprt &bin_expr, const exprt &lhs, const exprt &rhs);
-
-  /**
    * @brief Infers function return type from return statements in the body.
    *
    * @param body The JSON AST node representing the function body statements.
@@ -868,7 +2624,24 @@ private:
   // =========================================================================
 
   /// Wrap values in Optional
+  typet optional_return_type(
+    const nlohmann::json &function_node,
+    const typet &declared);
   exprt wrap_in_optional(const exprt &value, const typet &optional_type);
+  /// \p value wrapped when \p type is an Optional<T> struct, else unchanged.
+  exprt wrap_if_optional(const exprt &value, const typet &type)
+  {
+    return type_utils::is_optional_struct(type) ? wrap_in_optional(value, type)
+                                                : value;
+  }
+  /// None, a literal or a scalar stored into an Optional<T> variable, wrapped
+  /// (#8016, #8248).
+  exprt wrap_stored_if_optional(const exprt &value, const typet &type);
+  typet optional_ternary_type(exprt &then, exprt &else_expr, bool then_is_none);
+  exprt get_return_value(const nlohmann::json &value);
+  typet subscript_annotation_type(
+    const std::string &base,
+    const nlohmann::json &var_node);
 
   // =========================================================================
   // Enum support helpers
@@ -881,8 +2654,27 @@ private:
     const std::string &class_name,
     const std::string &member_name);
 
+  void adopt_tagged_element(symbolt *lhs_symbol, exprt &lhs, const exprt &rhs);
+
   /// Handle Optional value access
-  exprt unwrap_optional_if_needed(const exprt &expr);
+  exprt materialize_optional(const exprt &expr, const nlohmann::json &element);
+  exprt coerce_optional_return(
+    const exprt &value,
+    const locationt &location,
+    codet &target_block);
+  exprt narrow_optional_return(
+    const exprt &value,
+    const locationt &location,
+    codet &target_block);
+  exprt resolve_optional_operands(
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &element,
+    bool is_none_check);
+  exprt unwrap_optional_if_needed(
+    const exprt &expr,
+    const nlohmann::json &element = nlohmann::json());
 
   // =========================================================================
   // Dunder method dispatch for user-defined struct types
@@ -890,9 +2682,30 @@ private:
 
   static std::string op_to_dunder(const std::string &op);
   static std::string op_to_rdunder(const std::string &op);
+  /// Rewrite @p cond into a call to its class's __bool__ when there is one.
+  exprt apply_bool_dunder(exprt cond, const locationt &location);
+
+  /// Rewrite a string @p str into `strlen(str) != 0`, its truthiness; any
+  /// other value comes back unchanged.
+  exprt apply_string_truthiness(const exprt &str, const locationt &location);
+
+  /// apply_bool_dunder for the `not` operator; a no-op for any other @p op.
+  exprt apply_bool_dunder_for_not(
+    const std::string &op,
+    exprt operand,
+    const locationt &location);
+
   symbolt *find_dunder_method(
     const std::string &class_name,
     const std::string &dunder_name);
+
+  /// Class @p value_node is an instance of, or "" when it is not an instance.
+  /// Resolves both a bound name and a constructor temporary.
+  std::string instance_class_name(const nlohmann::json &value_node);
+
+  /// True when @p value_node denotes a user-defined class instance, as opposed
+  /// to a model container that merely resolves to a class name.
+  bool is_class_instance(const nlohmann::json &value_node);
   bool has_dunder_method(
     const nlohmann::json &value_node,
     const std::string &dunder_name);
@@ -912,24 +2725,40 @@ private:
 
   contextt &symbol_table_;
   const nlohmann::json *ast_json;
+  /// The entry-point module AST, captured at construction. `ast_json` is
+  /// temporarily swapped to imported modules during conversion (see with_ast),
+  /// so this retains a stable handle to the top-level module whose body holds
+  /// the constructor call sites used by cross-module attribute-type inference.
+  const nlohmann::json *entry_ast_;
+  /// Additional positional Python files passed on the command line
+  /// (github #6211), each a fully parsed and annotated module AST. May be
+  /// null (single-file invocations) or empty.
+  const std::vector<nlohmann::json> *extra_asts_;
   const global_scope &global_scope_;
   type_handler type_handler_;
+  element_type_registry element_type_registry_;
+  std::vector<std::function<void()>> deferred_checks_;
   string_builder *string_builder_;
   symbol_generator sym_generator_;
 
   namespacet ns;
   typet current_element_type;
   typet current_func_return_type_;
+  /// The target of a ternary that is itself a return value; see
+  /// optional_ternary_type.
+  typet ternary_return_target_;
   std::string main_python_file;
   std::string current_python_file;
   nlohmann::json imported_module_json;
   std::string current_func_name_;
   std::string current_class_name_;
+  std::size_t get_expr_depth_ = 0;
   code_blockt *current_block;
   exprt *current_lhs;
   string_handler string_handler_;
   python_math math_handler_;
   complex_handler complex_handler_;
+  dynamic_type_handler dynamic_type_handler_;
   tuple_handler *tuple_handler_;
   python_dict_handler *dict_handler_;
   python_typechecking *typechecker_ = nullptr;
@@ -938,18 +2767,481 @@ private:
 
   bool is_converting_lhs = false;
   bool is_converting_rhs = false;
+
+  // The assignment target node currently being converted, or null. Reads
+  // nested inside a target -- the index in `xs[idx[0]] = v`, the base in
+  // `xs[0][1] = v` -- are converted with is_converting_lhs set too, so only
+  // node identity picks out the slot actually being stored to.
+  const nlohmann::json *lhs_store_target_ = nullptr;
+
+  /// Is @p node the slot this assignment stores into? A store target must
+  /// stay an lvalue; a read may be bound to a temporary.
+  bool is_store_target(const nlohmann::json &node) const
+  {
+    return is_converting_lhs && lhs_store_target_ == &node;
+  }
+  // The ZeroDivisionError guard (and its divisor hoist) must be emitted only
+  // where the division is really code-generated in its execution context.
+  // Suppress it while a lambda body is converted at its definition (operands
+  // are still unbound parameters) and during the discarded type-probe pass of
+  // an assignment RHS (which would otherwise emit the guard twice as dead code
+  // and evaluate a side-effecting divisor an extra time).
+  bool converting_defaults_ = false;
+  bool converting_lambda_body_ = false;
+  bool in_rhs_type_probe_ = false;
+  // Set while probe_expr() evaluates a node only to inspect its result.
+  bool in_scratch_probe_ = false;
+  // A clause is a specification, not code: converting one must not plant a
+  // statement into the enclosing block. The guard did, so annotating a file
+  // changed its verification result with contracts switched off, and a `//` in
+  // a loop invariant raised inside the loop body. C emits nothing from a
+  // clause either.
+  bool in_contract_clause_ = false;
+  bool in_lazy_operand_ = false;
+  // The test of the assert statement being converted; see
+  // lower_short_circuit_boolop.
+  const nlohmann::json *asserted_test_ = nullptr;
+
+  bool needs_zero_division_guard(const std::string &op, const exprt &rhs) const;
+  // Set by resolve_any_subscript_array_type when it adopts an array type for
+  // an Any-annotated `row = a[i]`-style assignment. The RHS in that case is a
+  // raw index/slice expression rather than an already-materialized array
+  // symbol, and the backend rejects a single whole-array-to-whole-array
+  // code_assignt between those (Z3 sort mismatch) -- get_var_assign's final
+  // store must copy it element by element instead.
+  bool any_subscript_array_needs_copy_ = false;
+  // An array-type probe may already have built this exprt while resolving the
+  // RHS's real type. get_var_assign's RHS fetch reuses it instead of converting
+  // the same RHS AST node a second time (which would duplicate any temporaries/
+  // instructions the probe emitted, e.g. for fancy/mask/column selection).
+  exprt cached_any_subscript_rhs_;
+  bool has_cached_any_subscript_rhs_ = false;
+  std::set<std::string> numpy_array_symbols_;
+  std::unordered_map<irep_idt, std::string, irep_id_hash> class_object_names_;
+
+  /// Whether the element types recorded for the lists the current unpacking
+  /// reaches are exact; see unpack_record_is_trusted.
+  bool unpack_record_trusted_ = false;
+  std::unordered_map<std::string, std::string> numpy_view_copy_sources_;
+  std::unordered_map<std::string, std::string> numpy_array_storage_aliases_;
+  // A pointer-backed numpy view's logical shape (ADR-NP-003 etapa 2 scalar
+  // strided views: 1-D unit-stride slices, 2-D row views, column views,
+  // stepped/reversed 1-D slices, diagonal views, ravel/.flat). `length` is
+  // the number of logical elements: __ESBMC_get_object_size on the pointer
+  // reports the base object's remaining size from that offset, not this
+  // (which may be shorter -- e.g. an empty view still points at a valid
+  // position), so len() looks the value up here instead for a tracked view
+  // symbol. `stride` is the step, in elements, between consecutive logical
+  // indices (1 for unit-stride slices and row views, num_cols for column
+  // views, num_cols+1 for the main diagonal, an explicit step for a
+  // stepped slice). `readonly` rejects writing through the view (the
+  // diagonal view NumPy itself treats as read-only); false for every other
+  // kind. See list_access.cpp's handle_range_slice/handle_index_access and
+  // converter_funcall.cpp's len() dispatch.
+  struct numpy_scalar_pointer_view_infot
+  {
+    std::size_t length;
+    long long stride;
+    bool readonly;
+    std::vector<std::size_t> shape;
+    std::string source_id;
+    // The other storages a view bound to different arrays on different
+    // paths may point at.
+    std::set<std::string> other_sources;
+    // Per-axis element strides of an N-D view over a scalar pointer; empty
+    // for a contiguous view (typed pointer to rows) or a legacy 1-D view.
+    std::vector<long long> strides;
+    // Runtime extents and strides, as the ids of the signed 64-bit temporaries
+    // holding them ("" for an axis whose value is a constant). Parallel to
+    // shape/strides, whose entries are placeholders for a runtime axis.
+    std::vector<std::string> shape_symbols;
+    std::vector<std::string> stride_symbols;
+    bool is_symbolic() const
+    {
+      for (const std::string &id : shape_symbols)
+        if (!id.empty())
+          return true;
+      for (const std::string &id : stride_symbols)
+        if (!id.empty())
+          return true;
+      return false;
+    }
+  };
+  std::unordered_map<std::string, numpy_scalar_pointer_view_infot>
+    numpy_pointer_view_info_;
+  const numpy_scalar_pointer_view_infot *
+  find_numpy_pointer_view_info(const std::string &name) const;
+  // Scans call sites of `func_name` for subscript view arguments at
+  // `param_index`; returns the common elem type and view info when all sites
+  // agree; returns false on conflict or when no analyzable view site exists.
+  bool try_infer_numpy_view_param(
+    const std::string &func_name,
+    std::size_t param_index,
+    typet &out_elem_type,
+    numpy_scalar_pointer_view_infot &out_info) const;
+  bool try_infer_numpy_view_param(
+    const std::string &func_name,
+    std::size_t param_index,
+    typet &out_elem_type,
+    numpy_scalar_pointer_view_infot &out_info,
+    std::set<std::string> &visiting) const;
+  std::optional<typet> numpy_literal_array_type(
+    const std::string &arr_name,
+    const std::string &function,
+    int line,
+    unsigned depth = 0) const;
+  std::optional<typet> numpy_filled_array_type(
+    const nlohmann::json &value,
+    const std::string &function) const;
+  std::optional<typet> numpy_arange_array_type(
+    const nlohmann::json &value,
+    const std::string &function) const;
+  exprt list_argument_expr(const nlohmann::json &arg);
+  std::optional<std::vector<std::size_t>>
+  numpy_filled_array_shape(const nlohmann::json &value) const;
+  const std::optional<std::pair<typet, numpy_scalar_pointer_view_infot>> &
+  inferred_numpy_view_param(
+    const std::string &func_name,
+    std::size_t param_index);
+  bool is_bound_numpy_view_param(
+    const std::string &func_name,
+    std::size_t param_index);
+  void reject_numpy_view_argument_type_mismatch(const nlohmann::json &call);
+  std::map<
+    std::string,
+    std::optional<std::pair<typet, numpy_scalar_pointer_view_infot>>>
+    numpy_view_param_layouts_;
+  // Parameters whose conversion has decided whether they bind a view, and
+  // what callers converted before that were told.
+  std::set<std::string> numpy_view_params_decided_;
+  std::map<std::string, bool> numpy_view_params_assumed_;
+  static std::optional<numpy_scalar_pointer_view_infot>
+  slice_view_info(std::size_t length, const nlohmann::json &slice_node);
+  static std::optional<numpy_scalar_pointer_view_infot> row_slice_view_info(
+    std::size_t rows,
+    std::size_t cols,
+    const nlohmann::json &slice_node);
+  static std::optional<numpy_scalar_pointer_view_infot> column_view_info(
+    std::size_t rows,
+    std::size_t cols,
+    const nlohmann::json &slice_node);
+  static std::optional<numpy_scalar_pointer_view_infot>
+  view_info_from_subscript(
+    const std::vector<std::size_t> &src_shape,
+    const nlohmann::json &slice_node);
+  static numpy_scalar_pointer_view_infot
+  runtime_view_info(std::size_t rank = 1);
+  static std::optional<numpy_scalar_pointer_view_infot>
+  slice_or_runtime_view_info(
+    std::size_t length,
+    const nlohmann::json &slice_node);
+  static std::optional<std::pair<typet, numpy_scalar_pointer_view_infot>>
+  merge_view_layouts(
+    const std::pair<typet, numpy_scalar_pointer_view_infot> &a,
+    const std::pair<typet, numpy_scalar_pointer_view_infot> &b);
+  // Symbol ids holding the extent and stride of each axis of a view whose
+  // layout is read at run time.
+  struct numpy_runtime_view_layoutt
+  {
+    std::vector<std::string> extents;
+    std::vector<std::string> strides;
+  };
+  // Keyed like numpy_view_params_: the statics every caller writes, and the
+  // parameter symbol with the callee's own copies.
+  std::map<std::string, numpy_runtime_view_layoutt> numpy_runtime_view_statics_;
+  std::map<std::string, std::pair<std::string, numpy_runtime_view_layoutt>>
+    numpy_runtime_view_locals_;
+  const nlohmann::json *numpy_runtime_bound_call_ = nullptr;
+  const numpy_runtime_view_layoutt &
+  runtime_numpy_view_statics(const std::string &key, std::size_t rank);
+  void declare_runtime_numpy_view_param(
+    numpy_scalar_pointer_view_infot &info,
+    const std::string &arg_id,
+    const std::string &key);
+  void prepend_runtime_numpy_view_prologue(
+    const std::string &function_id,
+    exprt &function_body);
+  void bind_runtime_numpy_view_arguments(
+    const nlohmann::json &statement,
+    codet &target_block);
+  void store_runtime_numpy_view_layout(
+    const nlohmann::json &call,
+    std::size_t param_index,
+    codet &target_block);
+  std::vector<std::size_t>
+  runtime_numpy_view_params(const std::string &func_name);
+  void reject_unbound_runtime_numpy_view_call(const nlohmann::json &call);
+  static bool same_view_layout(
+    const std::pair<typet, numpy_scalar_pointer_view_infot> &a,
+    const std::pair<typet, numpy_scalar_pointer_view_infot> &b);
+  static std::optional<numpy_scalar_pointer_view_infot> subview_info(
+    const numpy_scalar_pointer_view_infot &parent,
+    const nlohmann::json &slice_node);
+  std::optional<std::pair<typet, numpy_scalar_pointer_view_infot>>
+  infer_branch_bound_view_layout(
+    const nlohmann::json &node,
+    const std::string &function,
+    std::set<std::string> &visiting,
+    unsigned depth) const;
+  std::optional<std::pair<typet, numpy_scalar_pointer_view_infot>>
+  infer_numpy_view_layout(
+    const nlohmann::json &node,
+    const std::string &function,
+    std::set<std::string> &visiting,
+    unsigned depth = 0) const;
+  std::optional<numpy_scalar_pointer_view_infot> infer_numpy_view_param_type(
+    const std::string &func_name,
+    std::size_t param_index,
+    const std::string &arg_name,
+    bool numpy_array_param,
+    typet &arg_type) const;
+  void register_numpy_view_param(
+    const std::optional<numpy_scalar_pointer_view_infot> &view_param,
+    const std::string &arg_id,
+    const std::string &func_name,
+    std::size_t param_index);
+  // Runtime length of the named view when its extent is not a constant.
+  std::optional<exprt>
+  symbolic_numpy_view_length(const std::string &name) const;
+  // Axis `axis` extent / stride of a view as signed 64-bit expressions.
+  exprt numpy_view_extent(
+    const numpy_scalar_pointer_view_infot &info,
+    std::size_t axis) const;
+  exprt numpy_view_stride(
+    const numpy_scalar_pointer_view_infot &info,
+    std::size_t axis) const;
+  // Consumers that need a constant length/stride reject a symbolic view.
+  static void
+  reject_symbolic_numpy_view(const numpy_scalar_pointer_view_infot &info);
+
+  /// One axis of an N-D copy loop: signed 64-bit extent and stride.
+  struct strided_copy_axis
+  {
+    exprt extent;
+    exprt stride;
+  };
+
+  /// Appends `dst[i0]..[ik] = src[offset + sum(ik * stride_k)]` over every
+  /// index, as nested loops, to `block`. `dst` has one array level per axis,
+  /// `src` is a scalar pointer, `offset` a size_type element count.
+  void emit_strided_copy(
+    codet &block,
+    const exprt &dst,
+    const exprt &src,
+    const exprt &offset,
+    const std::vector<strided_copy_axis> &axes,
+    const locationt &location);
+
+  /// Detach for a view with a runtime extent or stride: copies what the view
+  /// sees into a fresh dense snapshot with loops and repoints the view at
+  /// it. Returns the snapshot's id.
+  std::string snapshot_symbolic_numpy_view(
+    const exprt &old_ptr,
+    numpy_scalar_pointer_view_infot &info,
+    const locationt &location,
+    codet &target_block);
+  void reject_numpy_view_rebind() const;
+  /// Whether the assignment target may be registered as a view described by
+  /// `candidate`: it is not a view yet, or it already is one with the same
+  /// layout over the same storage. A different view on a conditional path
+  /// is rejected.
+  bool accepts_numpy_view_binding(
+    const std::string &lhs_id,
+    const numpy_scalar_pointer_view_infot &candidate,
+    const typet &view_ptr_type,
+    const exprt &source);
+  bool can_merge_numpy_view_layouts(const std::string &view_id) const;
+  const numpy_runtime_view_layoutt &
+  numpy_view_layout_vars(const std::string &view_id, std::size_t rank);
+  void record_numpy_view_layout(
+    const std::string &view_id,
+    const std::string &storage_id);
+  void merge_numpy_view_binding(const std::string &view_id, bool same_kind);
+  static bool same_numpy_view_kind(
+    const numpy_scalar_pointer_view_infot &a,
+    const numpy_scalar_pointer_view_infot &b);
+  // Layout variables of each view name, the function-local ones among them,
+  // and the names whose metadata reads them.
+  std::map<std::string, numpy_runtime_view_layoutt> numpy_view_layout_vars_;
+  std::vector<std::string> numpy_view_layout_locals_;
+  std::set<std::string> numpy_merged_views_;
+  std::map<std::string, std::set<std::string>> numpy_view_other_sources_;
+  std::set<std::string> numpy_view_storage_roots(const std::string &id) const;
+  unsigned numpy_loop_depth_ = 0;
+  /// Detach for a constant-shape view: copies what it sees into a dense
+  /// snapshot and repoints it there. Returns the snapshot's id.
+  std::vector<exprt> read_strided_view_elements(
+    const exprt &base,
+    const std::vector<long long> &strides,
+    const std::vector<std::size_t> &shape);
+  std::vector<exprt> read_contiguous_view_elements(
+    exprt base,
+    std::size_t count,
+    long long stride,
+    const std::vector<std::size_t> &shape);
+  std::string snapshot_constant_numpy_view(
+    const symbolt &view_symbol,
+    numpy_scalar_pointer_view_infot &info,
+    const locationt &location,
+    codet &target_block);
+  /// A local list/tuple/dict literal holding numpy views: each element is
+  /// bound to its own hidden view variable, so the view metadata follows the
+  /// element. Keyed by scope and name.
+  struct numpy_view_containert
+  {
+    std::vector<std::string> elements;
+    std::map<std::string, std::size_t> keys;
+    bool is_dict = false;
+  };
+  std::unordered_map<std::string, numpy_view_containert> numpy_view_containers_;
+  std::size_t numpy_view_container_count_ = 0;
+  const numpy_view_containert *
+  find_numpy_view_container(const nlohmann::json &node) const;
+  std::string numpy_view_container_element(
+    const numpy_view_containert &container,
+    const nlohmann::json &slice) const;
+  std::optional<nlohmann::json>
+  resolve_numpy_view_container_use(const nlohmann::json &node) const;
+  /// Replaces each literal-index read of a view container by the element's
+  /// own variable; rejects any other use of the container.
+  nlohmann::json
+  rewrite_numpy_view_container_reads(const nlohmann::json &node) const;
+  const nlohmann::json &resolve_numpy_view_containers(
+    const nlohmann::json &statement,
+    nlohmann::json &rewritten) const;
+  bool try_bind_numpy_view_container(
+    const nlohmann::json &ast_node,
+    codet &target_block);
+  /// Simple functions whose body returns a numpy view name: sound only
+  /// through a folded call.
+  std::unordered_set<std::string> numpy_view_return_functions_;
+  /// Simple functions whose body was not converted because every call
+  /// passes a numpy view and is folded.
+  std::unordered_set<std::string> numpy_fold_only_functions_;
+  /// Storage roots passed to a call the frontend could not fold.
+  std::unordered_set<std::string> numpy_escaped_storage_;
+  /// Names bound to a read-only numpy view that is not a pointer view.
+  std::unordered_set<std::string> numpy_readonly_arrays_;
+  /// Namespace of each operational model loaded this run, in load order.
+  std::vector<std::string> model_namespaces_;
+  // A 2-D+ numpy array parameter's full logical shape, keyed by the
+  // parameter's own symbol id. register_function_argument decays such a
+  // parameter to a pointer to its row type for the C ABI (gen_pointer_type
+  // over arg_type.subtype()), which is what the backend needs but erases the
+  // outer dimension from the parameter's own type -- unwrapping the pointer
+  // recovers only the row shape, not the row count. `.shape`/`.ndim`/`.size`
+  // and the array-consuming numpy calls (transpose, sort/argsort/
+  // searchsorted, reducers) read the pre-decay shape from here instead.
+  std::unordered_map<std::string, std::vector<std::size_t>> numpy_param_shapes_;
+  std::unordered_set<std::string> numpy_ambiguous_shape_symbols_;
+  // Keys are "func_name#param_index" for parameters that receive numpy views
+  // and have registered view metadata in numpy_pointer_view_info_.
+  std::set<std::string> numpy_view_params_;
+  /// Symbol ids of the parameters bound as views.
+  std::unordered_set<std::string> numpy_view_param_symbols_;
   bool is_loading_models = false;
   bool is_importing_module = false;
   bool base_ctor_called = false;
   bool build_static_lists = false;
 
+  /// List symbols passed as an argument to a function/method call, keyed by
+  /// symbol id. Such a list may have been mutated (e.g. appended to) by the
+  /// callee, which the caller's static length tracking (the registry / the AST
+  /// literal) does not observe. The convert-time constant-index bounds check in
+  /// python-list/list_access.cpp is therefore suppressed for these lists, so
+  /// the access falls back to the sound runtime __ESBMC_list_at path (GitHub
+  /// #5991).
+  std::set<std::string> call_escaped_lists_;
+
   /// Map object to list of instance attributes
   std::map<std::string, std::set<std::string>> instance_attr_map;
   /// Map imported modules to their corresponding paths
   std::unordered_map<std::string, std::string> imported_modules;
+
+  /// Pool of every reachable imported module's parsed JSON AST, keyed by
+  /// module name. Populated by @ref pre_collect_module_asts before any
+  /// annotation runs so that @ref import_module_into_block can expose the
+  /// full pool to each module's annotator as extra subscript inference
+  /// sources (GitHub #4554). Owns the JSONs to keep their addresses stable
+  /// across annotator calls.
+  std::map<std::string, nlohmann::json> module_ast_pool_;
   /// Maps any symbol currently known to refer to an input() string
-  /// (e.g. $input_str$N or a variable aliasing it) to its $input_len$N symbol ID
+  /// (e.g. $input_str$N or a variable aliasing it) to its $input_len$N symbol
+  /// ID
   std::unordered_map<std::string, std::string> input_str_to_len_sym_;
+
+  /// Straight-line dynamic-retyping support (#4770, #4774). Maps the original
+  /// (first-typed) symbol ID of a variable to the symbol that currently holds
+  /// its value after an incompatible numeric<->string reassignment. Loads of
+  /// the variable (and the LHS of a later reassignment) are redirected through
+  /// this map so they observe the new type. Only populated for retypes at
+  /// block_nesting_ == 1 (an unconditional top-level statement), where there is
+  /// no control-flow join that could make the runtime type ambiguous.
+  std::unordered_map<std::string, std::string> retype_aliases_;
+
+  /// A module global or function read by code converted before its binding,
+  /// mapped to the flag its binding sets and the type the reads took (#8369).
+  std::unordered_map<std::string, std::pair<std::string, typet>>
+    unbound_global_flags_;
+
+  /// Flow-sensitive class tracking (#4771/#4772). Maps a straight-line lvalue
+  /// access path -- "v" for a Name `v`, "v.attr" for an `obj.attr` lvalue -- to
+  /// the class (struct tag, without the "tag-" prefix) most recently assigned
+  /// to it at the current program point, last-write-wins. Only written for
+  /// unconditional top-level (block_nesting_ == 1) assignments and cleared on
+  /// entry to any nested/conditional body, so a class is never carried across a
+  /// control-flow join. Read in converter_expr to resolve nested attribute
+  /// access on a field the usage-site scanner left as any_type().
+  std::unordered_map<std::string, std::string> flow_class_map_;
+
+  /// Canonicalise a Name / `Name.attr` AST node into a flow_class_map_ key.
+  /// Returns "" for any other shape (e.g. subscript, nested attribute base).
+  std::string flow_lvalue_path(const nlohmann::json &node) const;
+
+  /// Class name of an assignment RHS for flow_class_map_: a `Cls(...)` call to
+  /// a known class, or a Name already tracked in flow_class_map_. Else "".
+  std::string flow_rhs_class(const nlohmann::json &rhs) const;
+
+  /// Class name of the instance an assignment RHS refers to: flow_rhs_class,
+  /// else that of a Name whose symbol holds an instance reference, which the
+  /// flow map forgets on converting a nested body, an `if` or a `def` (#8468).
+  /// Else "".
+  std::string alias_rhs_class(const nlohmann::json &rhs);
+
+  /// User-class name returned by a non-constructor call RHS (`y = f(...)` where
+  /// `f` is annotated `-> Cls`), so the LHS can be typed as a `Cls*` reference.
+  /// Returns "" for constructor calls, unannotated returns, or non-class types.
+  /// Scope: only a direct `Name` call to a module-level function with a `Name`
+  /// or forward-reference-string return annotation. Method calls
+  /// (`obj.method()`), `Attribute` annotations (`-> mod.Cls`), and nested or
+  /// imported callees are not resolved here — those reach `Cls*` typing via the
+  /// explicit-annotation fallback in get_var_assign instead.
+  std::string call_return_class(const nlohmann::json &rhs) const;
+
+  /// Nesting depth of get_block() invocations. The module/imported-module body
+  /// is depth 1; every nested body (function, if/while/for, try/except) is
+  /// deeper because those bodies are converted through get_block() too.
+  unsigned block_nesting_ = 0;
+
+  /// How many of the enclosing get_block() frames are genuine function/method
+  /// bodies (bumped only when get_block is called for a function body). The
+  /// "unconditional spine" — the module body plus the chain of function bodies
+  /// containing the current statement — is exactly the frames where straight-
+  /// line retyping (#4770/#4774) is sound: there is no control-flow join that
+  /// could leave the runtime type ambiguous. That spine is precisely
+  /// block_nesting_ == function_body_depth_ + 1 (the +1 is the module body);
+  /// any if/while/for/try body adds a block_nesting_ frame WITHOUT a
+  /// function_body_depth_ frame, so the equality fails and retyping is refused.
+  /// Fail-safe: an unrecognised block kind is treated as conditional.
+  unsigned function_body_depth_ = 0;
+
+  /// How many enclosing get_block() frames are while/for loop bodies. A loop
+  /// target variable (and any rebinding inside the body) leaks past the loop in
+  /// Python, so reverting its retype at the body's join would be wrong (it
+  /// would hide the leaked value). Dynamic retyping (#4770/#4774) is therefore
+  /// refused while loop_body_depth_ > 0 and left to the existing fallback — the
+  /// pre-#5716 behaviour — whereas if/else/try bodies do retype-with-revert.
+  unsigned loop_body_depth_ = 0;
 
   function_call_cache function_call_cache_;
 

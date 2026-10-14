@@ -1,0 +1,5 @@
+CORE
+main.c
+--function g --k-induction --overflow-check
+^VERIFICATION FAILED$
+arithmetic overflow on add

@@ -1,14 +1,14 @@
 #include <goto-programs/goto_coverage.h>
-#include <util/focus_function.h>
+#include <util/config/focus_function.h>
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/goto_inline.h>
-#include <util/arith_tools.h>
+#include <util/arith/arith_tools.h>
 #include <goto-programs/k_path_spanning.h>
 #include <goto-programs/remove_no_op.h>
 #include <irep2/irep2_utils.h>
-#include <util/i2string.h>
-#include <util/options.h>
-#include <util/std_types.h>
+#include <util/base/i2string.h>
+#include <util/config/options.h>
+#include <util/irep/std_types.h>
 
 #include <nlohmann/json.hpp>
 
@@ -20,7 +20,22 @@
 #include <fstream>
 #include <functional>
 #include <map>
+#include <set>
 #include <vector>
+
+namespace
+{
+/// True when the guard is constant once folded, so the instruction is not a
+/// branch at all: `if (1)` lowers to `IF !1 THEN GOTO`, and instrumenting both
+/// directions of that leaves one probe unsatisfiable by construction, which
+/// --dead-code-check reports as CWE-561 (#7267).
+bool guard_folds_to_constant(const expr2tc &guard)
+{
+  expr2tc simplified = guard->simplify();
+  const expr2tc &folded = is_nil_expr(simplified) ? guard : simplified;
+  return is_true(folded) || is_false(folded);
+}
+} // namespace
 
 // Defined later in this TU; used by solidity_path_coverage() for --contract
 // scoping. Extracts the contract from a Solidity mangled id "sol:@C@<C>@F@...".
@@ -36,6 +51,8 @@ size_t goto_coveraget::total_kpath_spanning = 0;
 std::set<std::pair<std::string, std::string>>
   goto_coveraget::k_path_spanning_redundant;
 std::set<std::pair<std::string, std::string>> goto_coveraget::all_claims;
+std::map<std::pair<std::string, std::string>, std::string>
+  goto_coveraget::claim_negation;
 std::set<std::pair<std::string, std::string>> goto_coveraget::covered_set;
 std::map<std::string, char> goto_coveraget::claim_outcome;
 std::mutex goto_coveraget::claim_outcome_mutex;
@@ -2288,7 +2305,7 @@ bool goto_coveraget::focus_selects_unit(
   // whether the focus names it.
   //
   // --focus-function names a SET (`--focus-function a,b`), and the membership
-  // test lives in util/focus_function.h rather than here because the frontend's
+  // test lives in util/config/focus_function.h rather than here because the frontend's
   // dispatcher filter has to answer the identical question about the identical
   // value. Two copies of it would be a detector keyed on a condition its own
   // branch does not state: a unit the dispatcher can enter but this test skips
@@ -2516,7 +2533,11 @@ void goto_coveraget::replace_assert_to_guard(
     it->location.property("instrumented assertion");
   else
     it->location.property("replaced assertion");
-  it->location.comment(from_expr(ns, "", old_guard));
+  // Keep an existing comment (e.g. the "msg" of __ESBMC_assert(cond, "msg"),
+  // or the modeled "assertion ..." text of C library asserts) as the claim
+  // identifier; asserts lowered without a comment get the stringified guard.
+  if (it->location.comment().empty())
+    it->location.comment(from_expr(ns, "", old_guard));
   it->location.user_provided(true);
 }
 
@@ -2576,13 +2597,15 @@ void goto_coveraget::assertion_coverage()
 }
 
 /*
-Branch coverage applies to any control structure that can alter the flow of execution, including:
+Branch coverage applies to any control structure that can alter the flow of
+execution, including:
 - if-else
 - switch-case
 - Loops (for, while, do-while)
 - try-catch-finally (not in c)
 - Early exits (return, break, continue)
-The goal of branch coverage is to ensure that all possible execution paths in the program are tested.
+The goal of branch coverage is to ensure that all possible execution paths in
+the program are tested.
 
 The CBMC extends it to the entry of the function. So we will do the same.
 
@@ -2610,28 +2633,28 @@ void goto_coveraget::branch_function_coverage()
       if (filter(f_it->first, goto_program))
         continue;
 
-      bool flg = true;
+      auto in_verifying_files = [&](const goto_programt::instructiont &ins) {
+        return location_pool.count(
+                 get_filename_from_path(ins.location.file().as_string())) != 0;
+      };
+
+      // Add a false assert at the first instruction belonging to one of the
+      // files under verification, to check if the function is entered.
+      auto entry = std::find_if(
+        goto_program.instructions.begin(),
+        goto_program.instructions.end(),
+        in_verifying_files);
+      if (entry != goto_program.instructions.end())
+        insert_assert(
+          goto_program,
+          entry,
+          gen_false_expr(),
+          "function entry: " + id2string(f_it->first));
 
       Forall_goto_program_instructions (it, goto_program)
       {
-        std::string cur_filename =
-          get_filename_from_path(it->location.file().as_string());
-        // skip if it's not the verifying files
-        // probably a library
-        if (location_pool.count(cur_filename) == 0)
+        if (!in_verifying_files(*it))
           continue;
-
-        if (flg)
-        {
-          // add a false assert in the beginning
-          // to check if the function is entered.
-          insert_assert(
-            goto_program,
-            it,
-            gen_false_expr(),
-            "function entry: " + id2string(f_it->first));
-          flg = false;
-        }
 
         if (it->location.property().as_string() == "skipped")
           // this stands for the auxiliary condition/branch we added.
@@ -2660,12 +2683,11 @@ void goto_coveraget::branch_function_coverage()
           insert_assert(goto_program, it, gen_not_expr(it->guard));
         }
       }
-
-      flg = true;
     }
 
   // fix for branch coverage with kind/incr
-  // It seems in kind/incr, the goto_functions used during the BMC is simplified and incomplete
+  // It seems in kind/incr, the goto_functions used during the BMC is simplified
+  // and incomplete
   total_func_branch = get_total_instrument();
   all_claims = get_total_cond_assert();
 
@@ -2744,7 +2766,7 @@ bool goto_coveraget::edge_reaches_error_revert(
       if (is_symbol2t(fn))
       {
         const symbolt *s = ns.lookup(to_symbol2t(fn).thename);
-        if (s && !s->type.get("#sol_error").as_string().empty())
+        if (s && !s->get_type().get("#sol_error").as_string().empty())
           return true;
       }
       // A non-error call is straight-line; keep walking.
@@ -2913,7 +2935,9 @@ void goto_coveraget::branch_coverage()
         }
 
         // e.g. IF !(a > 1) THEN GOTO 3
-        else if (it->is_goto() && !is_true(it->guard))
+        else if (
+          it->is_goto() && !is_true(it->guard) &&
+          !guard_folds_to_constant(it->guard))
         {
           if (it->is_target())
             target_num = it->target_number;
@@ -2998,6 +3022,223 @@ static size_t expr_depth(const expr2tc &e, size_t cap)
       return d + 1;
   }
   return 1 + d;
+}
+
+// True when the conjunction of `atoms` ((guard, polarity) pairs) is
+// unsatisfiable because some scalar variable is pinned to an empty integer
+// range — e.g. `x==1 && x==2` or `x<0 && x>10`. This catches mutually
+// exclusive comparisons on one variable, which the same-atom check (a guard
+// and its negation) and simplify() both miss.
+//
+// Sound by construction: an atom only counts when it is exactly
+// `var <rel> int-const` (after peeling negations and normalising operand
+// order), and bounds are tracked over unbounded integers, so the admissible
+// set is over-approximated and a satisfiable conjunction is never reported
+// unsat. Like the same-atom check it treats a guard as a stable value across
+// the prefix window, so a variable reassigned between two branches is not
+// specially handled here.
+static bool
+kpath_atoms_comparison_unsat(const std::vector<std::pair<expr2tc, bool>> &atoms)
+{
+  enum relt
+  {
+    R_EQ,
+    R_NE,
+    R_LT,
+    R_GT,
+    R_LE,
+    R_GE
+  };
+
+  // Normalise `g` to (symbol-name, rel, constant), folding Boolean
+  // negations into `pol`. Returns false unless `g` is a comparison between
+  // a scalar symbol and an integer constant (either operand order).
+  auto normalise =
+    [](expr2tc g, bool pol, irep_idt &var, relt &rel, BigInt &c) -> bool {
+    while (is_not2t(g))
+    {
+      pol = !pol;
+      g = to_not2t(g).value;
+    }
+
+    relt base;
+    expr2tc s1, s2;
+    if (is_equality2t(g))
+    {
+      base = R_EQ;
+      s1 = to_equality2t(g).side_1;
+      s2 = to_equality2t(g).side_2;
+    }
+    else if (is_notequal2t(g))
+    {
+      base = R_NE;
+      s1 = to_notequal2t(g).side_1;
+      s2 = to_notequal2t(g).side_2;
+    }
+    else if (is_lessthan2t(g))
+    {
+      base = R_LT;
+      s1 = to_lessthan2t(g).side_1;
+      s2 = to_lessthan2t(g).side_2;
+    }
+    else if (is_greaterthan2t(g))
+    {
+      base = R_GT;
+      s1 = to_greaterthan2t(g).side_1;
+      s2 = to_greaterthan2t(g).side_2;
+    }
+    else if (is_lessthanequal2t(g))
+    {
+      base = R_LE;
+      s1 = to_lessthanequal2t(g).side_1;
+      s2 = to_lessthanequal2t(g).side_2;
+    }
+    else if (is_greaterthanequal2t(g))
+    {
+      base = R_GE;
+      s1 = to_greaterthanequal2t(g).side_1;
+      s2 = to_greaterthanequal2t(g).side_2;
+    }
+    else
+      return false;
+
+    // Require one symbol and one integer-constant operand; put the symbol
+    // on the left, mirroring the relation if the operands were swapped.
+    bool swapped = false;
+    if (is_constant_int2t(s1) && is_symbol2t(s2))
+    {
+      std::swap(s1, s2);
+      swapped = true;
+    }
+    else if (!(is_symbol2t(s1) && is_constant_int2t(s2)))
+      return false;
+
+    var = to_symbol2t(s1).get_symbol_name();
+    c = to_constant_int2t(s2).value;
+
+    // Swapping operands mirrors the relation (c < x  <=>  x > c).
+    if (swapped)
+    {
+      switch (base)
+      {
+      case R_LT:
+        base = R_GT;
+        break;
+      case R_GT:
+        base = R_LT;
+        break;
+      case R_LE:
+        base = R_GE;
+        break;
+      case R_GE:
+        base = R_LE;
+        break;
+      default:
+        // EQ / NE are symmetric
+        break;
+      }
+    }
+
+    // Negative polarity takes the complement relation.
+    if (!pol)
+    {
+      switch (base)
+      {
+      case R_EQ:
+        base = R_NE;
+        break;
+      case R_NE:
+        base = R_EQ;
+        break;
+      case R_LT:
+        base = R_GE;
+        break;
+      case R_GE:
+        base = R_LT;
+        break;
+      case R_GT:
+        base = R_LE;
+        break;
+      case R_LE:
+        base = R_GT;
+        break;
+      }
+    }
+
+    rel = base;
+    return true;
+  };
+
+  struct boundst
+  {
+    bool has_lo = false, has_hi = false;
+    BigInt lo, hi;
+    std::set<BigInt> excluded;
+  };
+  std::map<irep_idt, boundst> vars;
+
+  auto raise_lo = [](boundst &b, const BigInt &v) {
+    if (!b.has_lo || v > b.lo)
+    {
+      b.lo = v;
+      b.has_lo = true;
+    }
+  };
+  auto lower_hi = [](boundst &b, const BigInt &v) {
+    if (!b.has_hi || v < b.hi)
+    {
+      b.hi = v;
+      b.has_hi = true;
+    }
+  };
+
+  for (const auto &[g, pol] : atoms)
+  {
+    irep_idt var;
+    relt rel;
+    BigInt c;
+    if (!normalise(g, pol, var, rel, c))
+      continue;
+
+    boundst &b = vars[var];
+    switch (rel)
+    {
+    case R_EQ:
+      raise_lo(b, c);
+      lower_hi(b, c);
+      break;
+    case R_NE:
+      b.excluded.insert(c);
+      break;
+    case R_LT:
+      lower_hi(b, c - 1);
+      break;
+    case R_LE:
+      lower_hi(b, c);
+      break;
+    case R_GT:
+      raise_lo(b, c + 1);
+      break;
+    case R_GE:
+      raise_lo(b, c);
+      break;
+    }
+  }
+
+  for (const auto &[name, b] : vars)
+  {
+    (void)name;
+    if (b.has_lo && b.has_hi)
+    {
+      if (b.lo > b.hi)
+        // empty integer range, e.g. x<0 && x>10
+        return true;
+      // Single admissible point that is also excluded, e.g. x==1 && x!=1.
+      if (b.lo == b.hi && b.excluded.count(b.lo))
+        return true;
+    }
+  }
+  return false;
 }
 
 /*
@@ -3139,8 +3380,8 @@ void goto_coveraget::k_path_coverage()
           // contradictions (same stored guard with opposing polarities).
           // Semantically contradictory pairs across different stored
           // expressions — e.g. `(x == 1) ∧ (x == 2)` from successive
-          // switch-case branches — require comparison-domain reasoning
-          // and are out of scope for this PR.
+          // switch-case branches — require comparison-domain reasoning,
+          // handled per-goal below by kpath_atoms_comparison_unsat.
           expr2tc pwit;
           std::vector<std::pair<expr2tc, bool>> atoms;
           atoms.reserve(pdepth);
@@ -3199,6 +3440,17 @@ void goto_coveraget::k_path_coverage()
               continue;
             }
 
+            // Drop goals whose conjunction pins a variable to an empty
+            // integer range (e.g. x==1 && x==2). simplify() does not do this
+            // cross-term reasoning, so otherwise the tautological
+            // assert(!witness) can never be falsified and permanently
+            // inflates the spanning denominator. Built after the cheaper
+            // checks above so goals they skip don't pay for the vector.
+            std::vector<std::pair<expr2tc, bool>> goal_atoms = atoms;
+            goal_atoms.emplace_back(current_guard, cdir_pol);
+            if (kpath_atoms_comparison_unsat(goal_atoms))
+              continue;
+
             expr2tc neg_full = gen_not_expr(full);
             simplify(neg_full);
 
@@ -3208,8 +3460,6 @@ void goto_coveraget::k_path_coverage()
             // Record the goal's full atom multiset (prefix + current
             // direction) so the spanning-set analysis can drop subsumed
             // emissions from the coverage denominator.
-            std::vector<std::pair<expr2tc, bool>> goal_atoms = atoms;
-            goal_atoms.emplace_back(current_guard, cdir_pol);
             spanning.add_goal(
               std::move(goal_atoms), idf, it->location.as_string());
 
@@ -3301,7 +3551,7 @@ static size_t count_paths_no_instrument(
     if (!is_symbol2t(fn))
       return false;
     const symbolt *s = ns.lookup(to_symbol2t(fn).thename);
-    return s && !s->type.get("#sol_error").as_string().empty();
+    return s && !s->get_type().get("#sol_error").as_string().empty();
   };
 
   using becntt = std::map<unsigned, unsigned>;
@@ -3479,7 +3729,7 @@ public:
     {
       const irep_idt fid = to_symbol2t(call.function).thename;
       const symbolt *cs = sol_ns.get_context().find_symbol(fid);
-      if (cs != nullptr && cs->type.get_bool("sol_event"))
+      if (cs != nullptr && cs->get_type().get_bool("sol_event"))
       {
         // CARRY THE IDENTITY ONTO THE SURVIVING INSTRUCTION. `target` is not
         // deleted below -- it becomes a LOCATION and stays in place, in
@@ -3504,7 +3754,7 @@ public:
 
     goto_programt tmp;
     parameter_assignments(
-      tmp2.instructions.front().location, f.type, args, tmp);
+      tmp2.instructions.front().location, to_code_type(f.type), args, tmp);
     // parameter_assignments emits each formal as an OTHER instruction carrying
     // a code_decl. goto_symext::symex_other has no case for code_decl and
     // aborts the run ("unexpected statement: code_decl") — measured. The
@@ -4413,7 +4663,7 @@ void goto_coveraget::solidity_path_coverage()
     // ASSUME(false) and the enumerator detects it by name to place the path's
     // assert upstream of that assume. Expanding it would destroy that marker.
     const symbolt *csym = ns.lookup(cid);
-    if (csym != nullptr && !csym->type.get("#sol_error").as_string().empty())
+    if (csym != nullptr && !csym->get_type().get("#sol_error").as_string().empty())
       return nullptr;
     auto m_it = goto_functions.function_map.find(cid);
     if (m_it == goto_functions.function_map.end())
@@ -4917,7 +5167,7 @@ void goto_coveraget::solidity_path_coverage()
       const symbolt *s = ns.lookup(irep_idt("c:@" + env));
       if (s == nullptr)
         return false;
-      out = symbol2tc(migrate_type(s->type), s->id);
+      out = symbol2tc(migrate_type(s->get_type()), s->id);
       return true;
     }
     if (name.rfind("state.", 0) == 0)
@@ -4986,7 +5236,7 @@ void goto_coveraget::solidity_path_coverage()
         });
         if (store == nullptr)
           return false;
-        const type2tc mt = migrate_type(store->type);
+        const type2tc mt = migrate_type(store->get_type());
         if (!is_array_type(mt))
           return false;
         const type2tc et = to_array_type(mt).subtype;
@@ -5053,7 +5303,7 @@ void goto_coveraget::solidity_path_coverage()
       });
       if (obj == nullptr)
         return false;
-      const typet ostruct = ns.follow(obj->type);
+      const typet ostruct = ns.follow(obj->get_type());
       if (ostruct.id() != "struct")
         return false;
       // Same field walk as for struct parameters below, so a struct-typed state
@@ -5079,13 +5329,13 @@ void goto_coveraget::solidity_path_coverage()
     // `immutables.timelocks.deployedAt` costs nothing extra.
     const size_t dot = name.find('.');
     const std::string base = name.substr(0, dot);
-    for (const auto &arg : to_code_type(fsym->type).arguments())
+    for (const auto &arg : to_code_type(fsym->get_type()).arguments())
       if (arg.get_base_name() == base)
       {
         const symbolt *s = ns.lookup(arg.get_identifier());
         if (s == nullptr)
           return false;
-        out = symbol2tc(migrate_type(s->type), s->id);
+        out = symbol2tc(migrate_type(s->get_type()), s->id);
         if (dot == std::string::npos)
           return true;
         return walk_fields(ns, out, name.substr(dot + 1));
@@ -5134,7 +5384,7 @@ void goto_coveraget::solidity_path_coverage()
     // ASSUME(false)) and so permanently reports as undecided.
     {
       const symbolt *fsym = ns.lookup(f_it->first);
-      if (fsym && !fsym->type.get("#sol_error").as_string().empty())
+      if (fsym && !fsym->get_type().get("#sol_error").as_string().empty())
         continue;
     }
 
@@ -5285,7 +5535,7 @@ void goto_coveraget::solidity_path_coverage()
     {
       const symbolt *fsym = ns.lookup(f_it->first);
       const bool is_payable =
-        fsym != nullptr && fsym->type.get_bool("#sol_payable");
+        fsym != nullptr && fsym->get_type().get_bool("#sol_payable");
       const symbolt *mv = ns.lookup(irep_idt("c:@msg_value"));
       const symbolt *mark = ns.lookup(irep_idt("c:@F@_ESBMC_sol_mark_revert"));
       if (
@@ -5298,8 +5548,8 @@ void goto_coveraget::solidity_path_coverage()
         {
           const locationt loc = body_start->location;
           const irep_idt fn = body_start->location.get_function();
-          expr2tc mv_expr = symbol2tc(migrate_type(mv->type), mv->id);
-          expr2tc zero = gen_zero(migrate_type(mv->type));
+          expr2tc mv_expr = symbol2tc(migrate_type(mv->get_type()), mv->id);
+          expr2tc zero = gen_zero(migrate_type(mv->get_type()));
 
           // Plain list insertion, NOT insert_swap. insert_swap moves the
           // instruction's CONTENT, so the iterator that named the original
@@ -5328,7 +5578,7 @@ void goto_coveraget::solidity_path_coverage()
           call.type = FUNCTION_CALL;
           call.code = code_function_call2tc(
             expr2tc(),
-            symbol2tc(migrate_type(mark->type), mark->id),
+            symbol2tc(migrate_type(mark->get_type()), mark->id),
             std::vector<expr2tc>());
           call.location = loc;
           call.function = fn;
@@ -5369,7 +5619,7 @@ void goto_coveraget::solidity_path_coverage()
     // re-runs the update on every iteration (this is the Slice-2 enabler).
     const type2tc utype = get_uint_type(64);
     symbolt sym;
-    sym.type = unsignedbv_typet(64);
+    sym.set_type(unsignedbv_typet(64));
     sym.name = "__ESBMC_path_tr$" + i2string(ghost_counter++);
     sym.id = "path_cov::" + id2string(sym.name);
     sym.lvalue = true;
@@ -5377,7 +5627,7 @@ void goto_coveraget::solidity_path_coverage()
     sym.is_extern = false;
     symbolt *psym;
     cov_context->move(sym, psym);
-    expr2tc tr = symbol2tc(migrate_type(psym->type), psym->id);
+    expr2tc tr = symbol2tc(migrate_type(psym->get_type()), psym->id);
     irep_idt tr_id = psym->id;
 
     // Companion decision-COUNT ghost `cnt` (starts 0, +1 per decision). The
@@ -5386,7 +5636,7 @@ void goto_coveraget::solidity_path_coverage()
     // shorter emitted path's enc (its cnt = true length differs). Without this
     // a wrapped tr could fire another path's assert => a WRONG test (codex #1).
     symbolt csym;
-    csym.type = unsignedbv_typet(64);
+    csym.set_type(unsignedbv_typet(64));
     csym.name = "__ESBMC_path_cnt$" + i2string(ghost_counter++);
     csym.id = "path_cov::" + id2string(csym.name);
     csym.lvalue = true;
@@ -5394,7 +5644,7 @@ void goto_coveraget::solidity_path_coverage()
     csym.is_extern = false;
     symbolt *pcsym;
     cov_context->move(csym, pcsym);
-    expr2tc cnt = symbol2tc(migrate_type(pcsym->type), pcsym->id);
+    expr2tc cnt = symbol2tc(migrate_type(pcsym->get_type()), pcsym->id);
     irep_idt cnt_id = pcsym->id;
 
     // Snapshot one decision: insert `tr = tr*2 + (uint64)val; cnt = cnt+1`
@@ -5542,7 +5792,7 @@ void goto_coveraget::solidity_path_coverage()
       if (!is_nil_expr(retset_ghost))
         return;
       symbolt ssym;
-      ssym.type = bool_typet();
+      ssym.set_type(bool_typet());
       ssym.name = "__ESBMC_path_retset$" + i2string(ghost_counter++);
       ssym.id = "path_cov::" + id2string(ssym.name);
       ssym.lvalue = true;
@@ -5550,7 +5800,7 @@ void goto_coveraget::solidity_path_coverage()
       ssym.is_extern = false;
       symbolt *pssym;
       cov_context->move(ssym, pssym);
-      retset_ghost = symbol2tc(migrate_type(pssym->type), pssym->id);
+      retset_ghost = symbol2tc(migrate_type(pssym->get_type()), pssym->id);
       retset_ghost_id = pssym->id;
       if (protect_ce_symbols)
         config.no_slice_names.insert(retset_ghost_id.as_string());
@@ -5571,7 +5821,7 @@ void goto_coveraget::solidity_path_coverage()
         if (!has_ret_ghost)
         {
           symbolt rsym;
-          rsym.type = migrate_type_back(rt);
+          rsym.set_type(migrate_type_back(rt));
           rsym.name = "__ESBMC_path_ret$" + i2string(ghost_counter++);
           rsym.id = "path_cov::" + id2string(rsym.name);
           rsym.lvalue = true;
@@ -5579,7 +5829,7 @@ void goto_coveraget::solidity_path_coverage()
           rsym.is_extern = false;
           symbolt *prsym;
           cov_context->move(rsym, prsym);
-          ret_ghost = symbol2tc(migrate_type(prsym->type), prsym->id);
+          ret_ghost = symbol2tc(migrate_type(prsym->get_type()), prsym->id);
           ret_ghost_id = prsym->id;
           ensure_retset();
 
@@ -5705,7 +5955,7 @@ void goto_coveraget::solidity_path_coverage()
           if (ret_member_ghosts.count(k) == 0)
           {
             symbolt msym;
-            msym.type = migrate_type_back(mt);
+            msym.set_type(migrate_type_back(mt));
             msym.name = "__ESBMC_path_ret" + i2string((unsigned)k) + "$" +
                         i2string(ghost_counter++);
             msym.id = "path_cov::" + id2string(msym.name);
@@ -5714,7 +5964,7 @@ void goto_coveraget::solidity_path_coverage()
             msym.is_extern = false;
             symbolt *pm;
             cov_context->move(msym, pm);
-            ret_member_ghosts[k] = symbol2tc(migrate_type(pm->type), pm->id);
+            ret_member_ghosts[k] = symbol2tc(migrate_type(pm->get_type()), pm->id);
             ret_member_ids[k] = pm->id;
             // Same slicing exemption, and for the same measured reason: nothing
             // downstream reads these unless a rung does, and the report side
@@ -6303,7 +6553,7 @@ void goto_coveraget::solidity_path_coverage()
       if (!is_symbol2t(fn))
         return false;
       const symbolt *s = ns.lookup(to_symbol2t(fn).thename);
-      return s && !s->type.get("#sol_error").as_string().empty();
+      return s && !s->get_type().get("#sol_error").as_string().empty();
     };
 
     // "A rolled-back execution never reaches a RETURN" — MEASURED AND REFUTED.
@@ -7122,7 +7372,7 @@ void goto_coveraget::solidity_path_coverage()
       {
         const symbolt *usym = ns.lookup(f_it->first);
         const std::string ast_rets =
-          usym ? usym->type.get("#sol_ast_return_sites").as_string()
+          usym ? usym->get_type().get("#sol_ast_return_sites").as_string()
                : std::string();
         if (!ast_rets.empty() && std::stoul(ast_rets) > 0)
         {
@@ -7157,7 +7407,7 @@ void goto_coveraget::solidity_path_coverage()
         // refuse to emit a test for this unit and count the refusal, instead of
         // emitting one that is labelled certified and fails when run.
         const std::string tc =
-          usym ? usym->type.get("#sol_this_call_count").as_string()
+          usym ? usym->get_type().get("#sol_this_call_count").as_string()
                : std::string();
         if (!tc.empty())
           log_warning(
@@ -7169,7 +7419,7 @@ void goto_coveraget::solidity_path_coverage()
             "these sites must not be turned into tests",
             id2string(f_it->first),
             tc,
-            usym->type.get("#sol_this_call_names").as_string());
+            usym->get_type().get("#sol_this_call_names").as_string());
       }
 
       std::vector<std::string> unaccounted;
@@ -7353,7 +7603,7 @@ void goto_coveraget::solidity_path_coverage()
         }
         const type2tc ct = cexpr->type;
         symbolt ssym;
-        ssym.type = migrate_type_back(ct);
+        ssym.set_type(migrate_type_back(ct));
         ssym.name = "__ESBMC_outer$" + i2string(ghost_counter++);
         ssym.id = "path_cov::" + id2string(ssym.name);
         ssym.lvalue = true;
@@ -7361,7 +7611,7 @@ void goto_coveraget::solidity_path_coverage()
         ssym.is_extern = false;
         symbolt *psn;
         cov_context->move(ssym, psn);
-        expr2tc sn = symbol2tc(migrate_type(psn->type), psn->id);
+        expr2tc sn = symbol2tc(migrate_type(psn->get_type()), psn->id);
         auto entry = goto_program.instructions.begin();
         goto_programt::instructiont dcl;
         dcl.type = DECL;
@@ -8504,7 +8754,7 @@ void goto_coveraget::solidity_path_coverage()
           own_contract);
         exit(1);
       }
-      const typet ostruct = ns.follow(obj->type);
+      const typet ostruct = ns.follow(obj->get_type());
       if (ostruct.id() != "struct")
       {
         log_error(
@@ -8725,7 +8975,7 @@ void goto_coveraget::solidity_path_coverage()
         // the iterator naming the original first instruction ends up naming the
         // new one and the function acquires a self-loop (measured, ABI gate).
         symbolt ssym;
-        ssym.type = migrate_type_back(vt);
+        ssym.set_type(migrate_type_back(vt));
         ssym.name = "__ESBMC_pre$" + i2string(ghost_counter++);
         ssym.id = "path_cov::" + id2string(ssym.name);
         ssym.lvalue = true;
@@ -8733,7 +8983,7 @@ void goto_coveraget::solidity_path_coverage()
         ssym.is_extern = false;
         symbolt *psn;
         cov_context->move(ssym, psn);
-        expr2tc pre_v = symbol2tc(migrate_type(psn->type), psn->id);
+        expr2tc pre_v = symbol2tc(migrate_type(psn->get_type()), psn->id);
         goto_programt::instructiont dcl;
         dcl.type = DECL;
         dcl.code = code_decl2tc(vt, psn->id);
@@ -8912,7 +9162,7 @@ void goto_coveraget::solidity_path_coverage()
           exit(1);
         }
 
-        const type2tc mt = migrate_type(sit->second->type);
+        const type2tc mt = migrate_type(sit->second->get_type());
         if (!is_array_type(mt))
         {
           log_error(
@@ -8972,7 +9222,7 @@ void goto_coveraget::solidity_path_coverage()
         // instruction's CONTENT and the iterator would end up naming the new
         // instruction, which is how the ABI gate acquired a self-loop once.
         symbolt ksym;
-        ksym.type = migrate_type_back(kexpr->type);
+        ksym.set_type(migrate_type_back(kexpr->type));
         ksym.name = "__ESBMC_key$" + i2string(ghost_counter++);
         ksym.id = "path_cov::" + id2string(ksym.name);
         ksym.lvalue = true;
@@ -8980,7 +9230,7 @@ void goto_coveraget::solidity_path_coverage()
         ksym.is_extern = false;
         symbolt *pk;
         cov_context->move(ksym, pk);
-        expr2tc key_v = symbol2tc(migrate_type(pk->type), pk->id);
+        expr2tc key_v = symbol2tc(migrate_type(pk->get_type()), pk->id);
         {
           goto_programt::instructiont kd;
           kd.type = DECL;
@@ -9003,7 +9253,7 @@ void goto_coveraget::solidity_path_coverage()
         expr2tc live = index2tc(et, marr, key_v);
 
         symbolt ssym;
-        ssym.type = migrate_type_back(et);
+        ssym.set_type(migrate_type_back(et));
         ssym.name = "__ESBMC_pre$" + i2string(ghost_counter++);
         ssym.id = "path_cov::" + id2string(ssym.name);
         ssym.lvalue = true;
@@ -9011,7 +9261,7 @@ void goto_coveraget::solidity_path_coverage()
         ssym.is_extern = false;
         symbolt *ps;
         cov_context->move(ssym, ps);
-        expr2tc pre_v = symbol2tc(migrate_type(ps->type), ps->id);
+        expr2tc pre_v = symbol2tc(migrate_type(ps->get_type()), ps->id);
         {
           goto_programt::instructiont pd;
           pd.type = DECL;
@@ -9822,7 +10072,7 @@ void goto_coveraget::insert_assert(
   to
     1: ASSERT(guard);
     DECL x      <--- it
-    ASSIGN X 1  
+    ASSIGN X 1
 */
 void goto_coveraget::insert_assert(
   goto_programt &goto_program,
@@ -9880,6 +10130,9 @@ std::set<std::pair<std::string, std::string>>
 goto_coveraget::get_total_cond_assert() const
 {
   std::set<std::pair<std::string, std::string>> total_cond_assert = {};
+  // Rebuilt in lockstep with the returned claim set: every call site assigns
+  // it to all_claims, which report_dead_code indexes this map by.
+  claim_negation.clear();
   forall_goto_functions (f_it, goto_functions)
   {
     if (f_it->second.body_available && f_it->first != "__ESBMC_main")
@@ -9898,6 +10151,8 @@ goto_coveraget::get_total_cond_assert() const
           std::pair<std::string, std::string> claim_pair = std::make_pair(
             it->location.comment().as_string(), it->location.as_string());
           total_cond_assert.insert(claim_pair);
+          claim_negation[claim_pair] =
+            from_expr(ns, "", gen_not_expr(it->guard));
         }
       }
     }
@@ -9921,7 +10176,8 @@ void goto_coveraget::condition_coverage()
 {
   // we need to skip the conditions within the built-in library
   // while keeping the file manually included by user
-  // this filter, however, is unsound.. E.g. if the src filename is the same as the builtin library name
+  // this filter, however, is unsound.. E.g. if the src filename is the same as
+  // the builtin library name
   total_cond = {{}};
 
   std::unordered_set<std::string> location_pool = {};
@@ -9948,7 +10204,7 @@ void goto_coveraget::condition_coverage()
           // this stands for the auxiliary condition/branch we added.
           continue;
 
-        /* 
+        /*
           Places that could contains condition
           1. GOTO:          if (x == 1);
           2. ASSIGN:        int x = y && z;
@@ -9957,7 +10213,7 @@ void goto_coveraget::condition_coverage()
           5. FUNCTION_CALL  test((signed int)(x != y));
           6. RETURN         return x && y;
           7. Other          1?2?3:4
-          The issue is that, the side-effects have been removed 
+          The issue is that, the side-effects have been removed
           thus the condition might have been split or modified.
 
           For assert, assume and goto, we know it contains GUARD
@@ -9980,7 +10236,8 @@ void goto_coveraget::condition_coverage()
           {
             expr2tc guard = handle_single_guard(it->guard, true);
             gen_cond_cov_assert(guard, expr2tc(), goto_program, it);
-            // after adding the instrumentation, we neutralize the original assert
+            // after adding the instrumentation, we neutralize the original
+            // assert
             if (cov_assume_asserts)
               replace_assert_to_assume(it);
             else
@@ -10187,7 +10444,7 @@ expr2tc goto_coveraget::gen_and_expr(const expr2tc &lhs, const expr2tc &rhs)
   return and2tc(_lhs, _rhs);
 }
 
-expr2tc goto_coveraget::gen_not_expr(const expr2tc &guard)
+expr2tc goto_coveraget::gen_not_expr(const expr2tc &guard) const
 {
   if (is_not2t(guard))
     return to_not2t(guard).value;
@@ -10200,18 +10457,20 @@ expr2tc goto_coveraget::gen_not_expr(const expr2tc &guard)
   rule:
   1. No-op: Do nothing. This means it's a symbol or constant
   2. Binary OP: for boolean expreession, e.g. a>b, a==b, do nothing
-  3. Binary OP: for and/or expresson, add on both side, if possible. Do not add if it's already a binary boolean expression in 2. 
-    e.g. if(x==1 && a++) => if(x==1 && a++ !=0)
-  4. Others: for any other expresison, including unary, binary and teranry, traverse its op with handle_single_guard recursivly. convert it to not equal in the top level only.
-    e.g. if((bool)a+b+c) => if((bool)(a+b+c)!=0)
-    typecast <--- add not equal here
+  3. Binary OP: for and/or expresson, add on both side, if possible. Do not add
+  if it's already a binary boolean expression in 2. e.g. if(x==1 && a++) =>
+  if(x==1 && a++ !=0)
+  4. Others: for any other expresison, including unary, binary and teranry,
+  traverse its op with handle_single_guard recursivly. convert it to not equal
+  in the top level only. e.g. if((bool)a+b+c) => if((bool)(a+b+c)!=0) typecast
+  <--- add not equal here
     - +
       - a
-      - + 
+      - +
         - b
         - c
-  e.g. if(a) => if(a!=0); if(true) => if(true != 0); if(a?b:c:d) => if((a?b:c:d)!=0)
-  if(a==b) => if(a==b); if(a&&b) => if(a != 0 && b!=0 )
+  e.g. if(a) => if(a!=0); if(true) => if(true != 0); if(a?b:c:d) =>
+  if((a?b:c:d)!=0) if(a==b) => if(a==b); if(a&&b) => if(a != 0 && b!=0 )
 */
 /// Recursively maps each operand of @p expr through handle_single_guard
 /// (with the supplied @p sub_top_level), in place. Foreach_operand detaches

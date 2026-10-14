@@ -1,0 +1,5 @@
+CORE
+main.c
+--function read_thru --enforce-contract read_thru --memory-leak-check
+^VERIFICATION FAILED$
+^\s*dereference failure: forgotten memory:

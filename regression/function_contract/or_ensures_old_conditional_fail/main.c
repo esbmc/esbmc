@@ -12,6 +12,7 @@
 void f(int *p, int delta)
 {
   __ESBMC_requires(p != NULL);
+  __ESBMC_requires(__ESBMC_is_fresh(p, sizeof(int)));
   __ESBMC_requires(delta >= 0);
   __ESBMC_ensures(delta == 0 || *p == __ESBMC_old(*p) + delta);
 

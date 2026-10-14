@@ -3,7 +3,7 @@
 
 #include <goto-programs/goto_functions.h>
 #include <pointer-analysis/value_set_analysis.h>
-#include <util/namespace.h>
+#include <util/symtab/namespace.h>
 
 void show_value_sets(
   const goto_functionst &goto_functions,

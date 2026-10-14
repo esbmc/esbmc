@@ -1,0 +1,5 @@
+CORE
+main.c
+--no-standard-checks
+^\s*FAILED\s+\[main\.assertion\.\d+\]\s+line \d+\s+assertion s\.r == 5$
+^VERIFICATION FAILED$

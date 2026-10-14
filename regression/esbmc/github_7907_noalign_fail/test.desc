@@ -1,0 +1,5 @@
+CORE
+main.c
+--no-align-check
+^VERIFICATION FAILED$
+^.*assertion r.tag == 5$

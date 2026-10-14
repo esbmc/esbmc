@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import io
 import platform
 import unittest
 from pathlib import Path
@@ -17,6 +18,11 @@ class Flail:
         by converting its content into a char array. The resulting array will be written in a *.c file.
         The input file can be of any file type. For an input file of binary content, hexdump it
         and you'll see the matching between the output and each element in the result array.
+
+        The array ends with a NUL sentinel one past the file's own bytes, because clang's
+        Lexer requires null-terminated buffers. <name>_size excludes it, so it still gives
+        the input file's exact byte count.
+
         For input files that contain any text content, see example below:
 
         Example:
@@ -120,14 +126,26 @@ class Flail:
 
     def obtain_var_name(self):
         obj = Path(self.filepath)
-        return self.prefix + (obj.name.replace('.hs', '_buf')
-                                      .replace('.h', '_buf')
-                                      .replace('.c', '_buf')
-                                      .replace('.py', '_buf')
-                                      .replace('.goto', '_buf')
-                                      .replace('.txt', '_buf')
-                                      .replace('buildidobj', 'buildidstring')
-                                      .replace('-', '_'))
+        # For relative paths, use the full path to avoid collisions
+        # (e.g. libs/__init__.py vs libs/ast2json/__init__.py).
+        # For absolute paths, use just the filename (legacy behaviour).
+        if obj.is_absolute():
+            name = obj.name
+        else:
+            name = str(obj).replace(os.sep, '_').replace('/', '_')
+        name = (name.replace('.hs', '_buf')
+                    .replace('.h', '_buf')
+                    .replace('.c', '_buf')
+                    .replace('.py', '_buf')
+                    .replace('.goto', '_buf')
+                    .replace('.txt', '_buf')
+                    .replace('buildidobj', 'buildidstring'))
+        # Replace any remaining characters invalid in C identifiers
+        name = re.sub(r'[^A-Za-z0-9_]', '_', name)
+        # Ensure the name does not start with a digit
+        if name and name[0].isdigit():
+            name = '_' + name
+        return self.prefix + name
 
     def _step_2(self, content: str):
         return Flail.REGEX_REMOVE_ADDR.sub('', content)
@@ -142,17 +160,16 @@ class Flail:
 
     def _step_6(self, content, output, header, macro : str):
         name = self.obtain_var_name()
-        output.write('const char %s[] = {\n' % name)
+        output.write(f'const char {name}[] = {{\n')
         output.writelines(content)
-        output.write('};\n')
-        output.write('const unsigned int %s_size = sizeof(%s);\n' % (name, name))
+        output.write('0\n};\n')
+        output.write(f'const unsigned int {name}_size = sizeof({name}) - 1;\n')
         if header is not None:
             if macro is None:
-                header.write('extern const char %s[];\n' % name)
-                header.write('extern const unsigned int %s_size;\n' % name)
+                header.write(f'extern const char {name}[];\n')
+                header.write(f'extern const unsigned int {name}_size;\n')
             else:
-                header.write('%s(%s, %s_size, %s)\n' % (macro, name, name,
-                                                        self.filepath))
+                header.write(f'{macro}({name}, {name}_size, {self.filepath})\n')
 
     def run(self, output_file, header = None, macro : str = None):
         step_2 = self.custom_od()
@@ -232,6 +249,9 @@ if __name__ == "__main__":
 # `python3 -m unittest flail`
 
 class TestFlail(unittest.TestCase):
+    # The _step_N methods are the units under test.
+    # pylint: disable=protected-access
+
     # Since the objdump result may be system dependent, this will test the transformations
 
     OBJDUMP = ["0000000  35 105 102 110 100 101 102  32  95  95  69  83  66  77  67  95",
@@ -264,6 +284,18 @@ class TestFlail(unittest.TestCase):
 
     def test_step_5(self):
         self.assertEqual(self.step_5, self.__class__.STEP_5_EXPECTED)
+
+    def test_step_6_nul_sentinel_excluded_from_size(self):
+        obj = Flail("a.h")
+        output = io.StringIO()
+        obj._step_6(self.step_5, output, None, None)
+        text = output.getvalue()
+        body = text.split('{')[1].split('}')[0]
+        elements = [x for x in body.replace('\n', '').split(',') if x != '']
+        # 3 lines of 16 bytes, plus the sentinel the size must not count.
+        self.assertEqual(len(elements), 49)
+        self.assertEqual(elements[-1], '0')
+        self.assertIn('a_buf_size = sizeof(a_buf) - 1;', text)
 
     def test_variable_name_1(self):
         obj = Flail("a.h")
@@ -303,4 +335,14 @@ class TestFlail(unittest.TestCase):
     def test_variable_name_4_prefix(self):
         obj = Flail("buildidobj", 'prefix_')
         expected = "prefix_buildidstring"
+        self.assertEqual(obj.obtain_var_name(), expected)
+
+    def test_variable_name_subdir(self):
+        obj = Flail("libs/__init__.py", 'esbmc_')
+        expected = "esbmc_libs___init___buf"
+        self.assertEqual(obj.obtain_var_name(), expected)
+
+    def test_variable_name_nested_subdir(self):
+        obj = Flail("libs/ast2json/__init__.py", 'esbmc_')
+        expected = "esbmc_libs_ast2json___init___buf"
         self.assertEqual(obj.obtain_var_name(), expected)

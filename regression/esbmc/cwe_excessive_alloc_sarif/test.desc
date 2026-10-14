@@ -1,0 +1,9 @@
+CORE
+main.c
+--excessive-alloc-check --incremental-bmc --sarif-output -
+^VERIFICATION FAILED$
+"ruleId": "excessive-allocation"
+"external/cwe/cwe-789"
+"id": "789"
+"name": "CWE"
+"version": "4.20"

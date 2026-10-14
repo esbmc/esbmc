@@ -1,5 +1,5 @@
 
-if (ESBMC_CLANG_HEADERS_BUNDLED)
+if(ESBMC_CLANG_HEADERS_BUNDLED)
   message(STATUS "Bundling clang headers from: ${ESBMC_CLANG_HEADER_DIR}")
   mangle(${CMAKE_CURRENT_BINARY_DIR}/cheaders.c ${ESBMC_CLANG_HEADER_DIR}
          WILDCARD "*.h"

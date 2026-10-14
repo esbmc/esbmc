@@ -1,4 +1,4 @@
-#include <util/compiler_defs.h>
+#include <util/base/compiler_defs.h>
 // Remove warnings from Clang headers
 CC_DIAGNOSTIC_PUSH()
 CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
@@ -10,22 +10,32 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/AST/Expr.h>
 #include <clang/AST/ExprCXX.h>
 #include <clang/AST/QualTypeNames.h>
+#include <clang/AST/RecursiveASTVisitor.h>
+#include <clang/AST/RecordLayout.h>
 #include <clang/AST/Type.h>
 #include <clang/Index/USRGeneration.h>
 #include <clang/Frontend/ASTUnit.h>
 #include <clang/AST/ParentMapContext.h>
+#include <llvm/ADT/SmallVector.h>
+#include <llvm/ADT/STLExtras.h>
 #include <llvm/Support/raw_os_ostream.h>
+#include <clang-c-frontend/clang_ast_dump.h>
 CC_DIAGNOSTIC_POP()
 
 #include <clang-cpp-frontend/clang_cpp_convert.h>
-#include <util/expr_util.h>
-#include <util/message.h>
-#include <util/std_code.h>
-#include <util/std_expr.h>
+#include <clang-cpp-frontend/clang_cpp_exception_id.h>
+#include <util/expr/expr_util.h>
+#include <util/message/message.h>
+#include <util/irep/std_code.h>
+#include <util/irep/std_expr.h>
 #include <fmt/core.h>
 #include <clang-c-frontend/typecast.h>
-#include <util/c_types.h>
-#include <util/string_constant.h>
+#include <util/arith/arith_tools.h>
+#include <util/lang/c_types.h>
+#include <util/lang/exception_specification.h>
+#include <util/expr/string_constant.h>
+#include <util/expr/symbolic_types.h>
+#include <util/symtab/base_subobject.h>
 
 clang_cpp_convertert::clang_cpp_convertert(
   contextt &_context,
@@ -154,6 +164,61 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   return false;
 }
 
+// The types of the nullptr template arguments in @p args, which print as a
+// bare `nullptr` whatever their type.
+static bool print_nullptr_arg_types(
+  llvm::ArrayRef<clang::TemplateArgument> args,
+  llvm::raw_ostream &os)
+{
+  bool found = false;
+  for (const clang::TemplateArgument &arg : args)
+    if (arg.getKind() == clang::TemplateArgument::Pack)
+      found |= print_nullptr_arg_types(arg.getPackAsArray(), os);
+    else if (arg.getKind() == clang::TemplateArgument::NullPtr)
+    {
+      os << "(nullptr:" << arg.getNullPtrType().getCanonicalType().getAsString()
+         << ")";
+      found = true;
+    }
+  return found;
+}
+
+// clang's USR spells a member-pointer type and a nullptr template argument as
+// nothing, so f<int A::*> and f<long B::*>, the members of W<int A::*> and
+// W<long B::*>, overloads f(int A::*) and f(long B::*), and g<(int *)nullptr>
+// and g<(long *)nullptr> share one id and the last body converted wins.
+static std::string
+usr_gap_suffix(const clang::Decl &decl, const clang::ASTContext &ctx)
+{
+  std::string args;
+  llvm::raw_string_ostream os(args);
+  const clang::PrintingPolicy policy = ctx.getPrintingPolicy();
+  bool has_nullptr = false;
+  auto print = [&](llvm::ArrayRef<clang::TemplateArgument> list) {
+    clang::printTemplateArgumentList(os, list, policy);
+    has_nullptr |= print_nullptr_arg_types(list, os);
+  };
+  for (const clang::Decl *d = &decl; !llvm::isa<clang::TranslationUnitDecl>(d);
+       d = clang::Decl::castFromDeclContext(d->getDeclContext()))
+  {
+    if (const auto *fd = llvm::dyn_cast<clang::FunctionDecl>(d))
+    {
+      if (const auto *targs = fd->getTemplateSpecializationArgs())
+        print(targs->asArray());
+      os << "(" << fd->getType().getCanonicalType().getAsString(policy) << ")";
+    }
+    else if (
+      const auto *cs =
+        llvm::dyn_cast<clang::ClassTemplateSpecializationDecl>(d))
+      print(cs->getTemplateArgs().asArray());
+    else if (
+      const auto *vs = llvm::dyn_cast<clang::VarTemplateSpecializationDecl>(d))
+      print(vs->getTemplateArgs().asArray());
+  }
+  os.flush();
+  return has_nullptr || args.find("::*") != std::string::npos ? "#" + args : "";
+}
+
 void clang_cpp_convertert::get_decl_name(
   const clang::NamedDecl &nd,
   std::string &name,
@@ -205,21 +270,22 @@ void clang_cpp_convertert::get_decl_name(
   case clang::Decl::ParmVar:
   {
     const clang::ParmVarDecl &pd = static_cast<const clang::ParmVarDecl &>(nd);
-    // If the parameter is unnamed, it will be handled by `name_param_and_continue`, but not here.
+    // If the parameter is unnamed, it will be handled by
+    // `name_param_and_continue`, but not here.
     if (!name.empty())
     {
       /* Add the parameter index to the name and id to avoid name clashes.
-     * Consider the following example:
-     * ```
-     * template <typename... f> int e(f... g) {return 0;};
-     * int d = e(1, 2.0);
-     * ```
-     * The two parameters in the function e will have the same name and id
-     * because clang does not differentiate between them. This will cause
-     * the second parameter to overwrite the first in the symbol table which
-     * causes all kinds of problems. To avoid this, we append the parameter
-     * index to the name and id.
-    */
+       * Consider the following example:
+       * ```
+       * template <typename... f> int e(f... g) {return 0;};
+       * int d = e(1, 2.0);
+       * ```
+       * The two parameters in the function e will have the same name and id
+       * because clang does not differentiate between them. This will cause
+       * the second parameter to overwrite the first in the symbol table which
+       * causes all kinds of problems. To avoid this, we append the parameter
+       * index to the name and id.
+       */
       name += "::" + std::to_string(pd.getFunctionScopeIndex());
       id_suffix = "::" + std::to_string(pd.getFunctionScopeIndex());
       break;
@@ -247,19 +313,38 @@ void clang_cpp_convertert::get_decl_name(
 
   default:
     clang_c_convertert::get_decl_name(nd, name, id);
+    if (id.rfind("c:", 0) == 0)
+      id += usr_gap_suffix(nd, *ASTContext);
+    /* A lambda's operator(), __invoke and conversion-operator USRs name the
+     * enclosing specialisation but not the closure, so siblings in one
+     * instantiation share an id and the last body converted wins (#7499); the
+     * closure's own id is already unique (#6976). Constructors take the case
+     * above and need none -- their USR spells the class "(lambda at f:l:c)". */
+    if (
+      const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&nd);
+      md && md->getParent()->isLambda())
+    {
+      std::string closure_name, closure_id;
+      get_decl_name(*md->getParent(), closure_name, closure_id);
+      id += "@" + closure_id;
+    }
     return;
   }
 
   clang::SmallString<128> DeclUSR;
   if (!clang::index::generateUSRForDecl(&nd, DeclUSR))
   {
-    id = DeclUSR.str().str() + id_suffix;
+    id = DeclUSR.str().str() + usr_gap_suffix(nd, *ASTContext) + id_suffix;
     return;
   }
+
+  if (get_mangled_id(nd, id))
+    return;
 
   // Otherwise, abort
   std::ostringstream oss;
   llvm::raw_os_ostream ross(oss);
+  enable_ast_dump_colors(ross, *ASTContext);
   ross << "Unable to generate the USR for:\n";
   nd.dump(ross);
   ross.flush();
@@ -388,7 +473,8 @@ bool clang_cpp_convertert::get_method(
   const clang::CXXMethodDecl &md,
   exprt &new_expr)
 {
-  // Only convert instantiated functions/methods not depending on a template parameter
+  // Only convert instantiated functions/methods not depending on a template
+  // parameter
   if (md.isDependentContext())
     return false;
 
@@ -396,9 +482,13 @@ bool clang_cpp_convertert::get_method(
   // Copy assignment Operator/Move assignment Operator
   // A compiler-generated default ctor/dtor is considered implicit, but we have
   // to parse it.
+  // A captureless lambda's conversion-to-function-pointer operator and the
+  // static invoker it returns are implicit too, and skipping them left the
+  // conversion bodyless, so the pointer it yielded was invalid (issue #4077).
   if (
     md.isImplicit() && !is_ConstructorOrDestructor(md) &&
-    !is_CopyOrMoveOperator(md))
+    !is_CopyOrMoveOperator(md) && !md.isLambdaStaticInvoker() &&
+    !(md.getParent()->isLambda() && llvm::isa<clang::CXXConversionDecl>(md)))
     return false;
 
   if (clang_c_convertert::get_function(md, new_expr))
@@ -433,7 +523,8 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
       base_map bases;
       if (get_base_map(*cxxrd, bases))
         return true;
-      get_base_components_methods(bases, type);
+      get_base_components_methods(
+        bases, type, cxxrd->getNumVBases() > 0, *cxxrd);
     }
   }
 
@@ -563,6 +654,249 @@ bool clang_cpp_convertert::get_struct_union_class_methods_decls(
   return false;
 }
 
+// Substitute every "new_object" placeholder in @p dest with @p object
+// (mirrors goto_convertt::replace_new_object, which is not visible here).
+static void replace_new_object_with(const exprt &object, exprt &dest)
+{
+  if (dest.id() == "new_object")
+    dest = object;
+  else
+    Forall_operands (it, dest)
+      replace_new_object_with(object, *it);
+}
+
+// The aligned forms take std::align_val_t last
+// ([basic.stc.dynamic.deallocation]/3).
+static bool is_aligned_deallocation(const clang::FunctionDecl &op_del)
+{
+  const unsigned n = op_del.getNumParams();
+  return n >= 2 && op_del.getParamDecl(n - 1)->getType()->isAlignValT();
+}
+
+// Pick the deallocation function goto-conversion can actually call for a
+// delete-expression, or null to leave it on the built-in path (github #6494).
+// Clang resolves `delete p` to the C++14 sized form whenever one is declared,
+// and both sized forms are declared implicitly -- so a program that replaces
+// only `operator delete(void *)`, by far the most common shape, resolves to a
+// sized form it never defined. The default sized form's behaviour is to call
+// `operator delete(ptr)` ([new.delete.single]), so follow it to the
+// replacement the program did supply.
+static const clang::FunctionDecl *resolve_deallocation_function(
+  const clang::FunctionDecl *op_del,
+  bool array_form)
+{
+  if (!op_del)
+    return nullptr;
+
+  // The user-placement forms also take two parameters, but want a tag rather
+  // than the byte count this lowering supplies; the array form has no byte
+  // count to give, since the element size it knows is not the whole array's.
+  const bool aligned = is_aligned_deallocation(*op_del);
+  const unsigned unsized_params = aligned ? 2 : 1;
+  const bool sized = !array_form &&
+                     op_del->getNumParams() == unsized_params + 1 &&
+                     op_del->getParamDecl(1)->getType()->isIntegerType();
+
+  if (op_del->isDefined())
+    return op_del->getNumParams() == unsized_params || sized ? op_del : nullptr;
+
+  // Only the sized form forwards to a replacement the program did define.
+  if (!sized)
+    return nullptr;
+
+  for (const clang::NamedDecl *d :
+       op_del->getDeclContext()->lookup(op_del->getDeclName()))
+    if (const auto *fd = llvm::dyn_cast<clang::FunctionDecl>(d))
+      if (
+        fd->getNumParams() == unsized_params &&
+        is_aligned_deallocation(*fd) == aligned && fd->isDefined())
+        return fd;
+
+  return nullptr;
+}
+
+// Does this new-expression initializer value-initialise the allocated elements?
+// Clang spells the same request three ways: an ImplicitValueInitExpr for a
+// scalar element, an InitListExpr with no explicit initialiser for the braced
+// form, and, for a class element, a CXXConstructExpr carrying the zeroing flag
+// (set exactly when the constructor is not user-provided, so the elements are
+// zero-initialised before it runs).
+static bool zero_initialises(const clang::Expr &init)
+{
+  if (llvm::isa<clang::ImplicitValueInitExpr>(init))
+    return true;
+
+  if (const auto *ile = llvm::dyn_cast<clang::InitListExpr>(&init))
+  {
+    // A list with explicit initialisers zero-fills only the tail; modelling
+    // that needs the leading values too, which this does not supply.
+    if (ile->getNumInits() != 0)
+      return false;
+
+    // For an array new the per-element request is the filler, not an init, so
+    // a filler running a user-provided constructor must not be zeroed on top.
+    if (const clang::Expr *filler = ile->getArrayFiller())
+      return zero_initialises(*filler);
+
+    return true;
+  }
+
+  if (const auto *ce = llvm::dyn_cast<clang::CXXConstructExpr>(&init))
+    return ce->requiresZeroInitialization();
+
+  return false;
+}
+
+/// Attach a new-expression's initializer, and for an array its braced list's
+/// filler: a run-time element count can reach past the list.
+bool clang_cpp_convertert::get_new_initializer(
+  const clang::CXXNewExpr &ne,
+  exprt &new_expr)
+{
+  exprt init;
+  if (get_expr(*ne.getInitializer(), init))
+    return true;
+  convert_expression_to_code(init);
+  new_expr.initializer(init);
+
+  const auto *list = llvm::dyn_cast<clang::InitListExpr>(ne.getInitializer());
+  if (!ne.isArray() || list == nullptr)
+    return false;
+
+  exprt filler;
+  if (get_array_filler(*list, filler))
+    return true;
+  if (filler.is_not_nil())
+    new_expr.add("array_filler") = filler;
+  return false;
+}
+
+/// The id a catch handler matches a throw on. The catch type rides on the
+/// handler block's own type and is read off it exactly once -- here.
+/// clang_cpp_adjust used to do it, which is too late for an IREP2 adjust pass:
+/// code_block2t has no type to carry it across the seam
+/// (docs/roadmap/scope-clang-cpp-irep2.md §3.13).
+static void set_handler_exception_id(const namespacet &ns, exprt &handler)
+{
+  std::vector<irep_idt> ids;
+  convert_exception_id(ns, handler.type(), "", ids);
+  if (!ids.empty())
+    handler.set("exception_id", ids.front());
+}
+
+/// The object a typeid expression refers to, which has static storage duration
+/// ([expr.typeid]/1): one per type name. A polymorphic operand's dynamic type
+/// is only known when it is evaluated, so its site gets its own object,
+/// assigned there.
+exprt clang_cpp_convertert::typeid_object(
+  const exprt &value,
+  const std::string &type_name,
+  const clang::Stmt &stmt,
+  bool dynamic)
+{
+  std::string id = "c:@__ESBMC_typeid@" + type_name;
+  if (dynamic)
+  {
+    locationt l;
+    get_start_location_from_stmt(stmt, l);
+    id += "@" + l.file().as_string() + ":" + l.line().as_string() + ":" +
+          l.column().as_string();
+  }
+
+  const symbolt *s = context.find_symbol(id);
+  if (!s)
+  {
+    symbolt symbol;
+    get_default_symbol(symbol, "", value.type(), id, id, locationt());
+    symbol.lvalue = true;
+    symbol.static_lifetime = true;
+    symbol.set_value(
+      dynamic ? gen_zero(get_complete_type(value.type(), ns), true) : value);
+    s = context.move_symbol_to_context(symbol);
+  }
+
+  exprt object = symbol_expr(*s);
+  if (!dynamic)
+    return object;
+
+  side_effect_exprt assign("assign", object.type());
+  assign.copy_to_operands(object, value);
+  exprt comma("comma", object.type());
+  comma.copy_to_operands(assign, object);
+  return comma;
+}
+
+/// A pseudo-destructor call does nothing but evaluate its base
+/// ([expr.pseudo]/1) -- there is nothing to call. Reduce it where it is built,
+/// so the node never reaches the goto program: IREP2 has no kind for it, and an
+/// adjust pass that migrates first therefore cannot see it at all
+/// (docs/roadmap/scope-clang-cpp-irep2.md §3.15). Applied at get_expr's exit so
+/// it covers every call spelling, as clang_cpp_adjust's arm did.
+static void reduce_pseudo_destructor_call(exprt &expr)
+{
+  // The legacy arm only ever saw a side_effect_expr_function_callt. Say so,
+  // rather than leaning on "two operands whose first carries this id" -- true
+  // of nothing else today, but it states no precondition.
+  if (
+    expr.id() != "sideeffect" || expr.operands().size() != 2 ||
+    expr.op0().id() != "cpp-pseudo-destructor")
+    return;
+
+  assert(expr.op0().operands().size() == 1);
+  expr = expr.op0().op0();
+}
+
+/// Whether a thrown type's exception ids follow from the type alone, *and*
+/// cannot change between here and the adjust pass.
+///
+/// A class type's id is its symbol's name and its bases come from the symbol
+/// table, a lookup this early in conversion cannot rely on; everything else
+/// resolves to the `#cpp_type` spelling, which the IREP2 seam does not carry,
+/// so those ids are recorded at conversion time instead (§7.6). Pointer layers
+/// are stripped because convert_exception_id recurses through them.
+///
+/// An **array** operand is excluded: it decays between here and the legacy
+/// pass, so an id recorded from the pre-decay type is not the one the handler
+/// is matched against. A pointer is fine and is recursed through, as
+/// convert_exception_id does.
+static bool exception_id_needs_no_lookup(const typet &type)
+{
+  if (type.id() == "array")
+    return false;
+
+  if (type.id() == "pointer")
+    return exception_id_needs_no_lookup(type.subtype());
+
+  return type.id() != "symbol" && type.id() != "struct" &&
+         !type.cpp_type().empty();
+}
+
+/// Record a throw's exception ids at conversion time, for the operand types
+/// whose ids follow from the type alone.
+///
+/// A primitive's id is its `#cpp_type` spelling, and the IREP2 seam does not
+/// carry that: computed from a back-migrated type, `throw 1` reads as
+/// `signedbv` while the handler, whose ids never cross the seam, still reads
+/// `signed_int`, and the throw escapes uncaught. A class type is left to the
+/// adjust pass instead: its id is the type symbol's name, which crosses
+/// intact, and resolving its bases needs a lookup this early in conversion
+/// (docs/roadmap/scope-clang-cpp-irep2.md §7.6).
+static void
+record_primitive_exception_ids(exprt &throw_expr, const namespacet &ns)
+{
+  if (!exception_id_needs_no_lookup(throw_expr.op0().type()))
+    return;
+
+  std::vector<irep_idt> ids;
+  convert_exception_id(ns, throw_expr.op0().type(), "", ids);
+
+  irept exception_list("exception_list");
+  exception_list.get_sub().resize(ids.size());
+  for (std::size_t i = 0; i < ids.size(); i++)
+    exception_list.get_sub()[i].id(ids[i]);
+  throw_expr.set("exception_list", exception_list);
+}
+
 bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 {
   locationt location;
@@ -671,13 +1005,26 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     for (const clang::Expr *arg : member_call.arguments())
     {
       exprt single_arg;
-      if (get_expr(*arg, single_arg))
+      if (get_expr(elided_copy_source(*arg), single_arg))
         return true;
 
       call.arguments().push_back(single_arg);
     }
 
     new_expr = call;
+    break;
+  }
+
+  // C++20 rewritten comparisons: when only operator<=> (or operator==) is
+  // declared, clang synthesises operator</>/<=/>= from it and wraps the
+  // synthesised call as a CXXRewrittenBinaryOperator. The semantic form
+  // is the actual rewrite (e.g. `(a <=> b) < 0`); forward to it.
+  case clang::Stmt::CXXRewrittenBinaryOperatorClass:
+  {
+    const clang::CXXRewrittenBinaryOperator &rb =
+      static_cast<const clang::CXXRewrittenBinaryOperator &>(stmt);
+    if (get_expr(*rb.getSemanticForm(), new_expr))
+      return true;
     break;
   }
 
@@ -708,8 +1055,9 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     auto args = operator_call.arguments();
     auto begin = args.begin();
     const auto *direct = operator_call.getDirectCallee();
-    if (const auto *md = llvm::dyn_cast_or_null<clang::CXXMethodDecl>(direct);
-        md && md->isStatic())
+    if (
+      const auto *md = llvm::dyn_cast_or_null<clang::CXXMethodDecl>(direct);
+      md && md->isStatic())
     {
       assert(begin != args.end());
       ++begin;
@@ -718,7 +1066,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     for (auto it = begin; it != args.end(); ++it)
     {
       exprt single_arg;
-      if (get_expr(**it, single_arg))
+      if (get_expr(elided_copy_source(**it), single_arg))
         return true;
 
       call.arguments().push_back(single_arg);
@@ -761,11 +1109,22 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if (get_expr(*mtemp.getSubExpr(), tmp))
       return true;
 
-    side_effect_exprt temporary("temporary_object");
-    temporary.type() = tmp.type();
-    temporary.copy_to_operands(tmp);
+    // If the sub-expression already materialised a temporary (e.g. a class
+    // prvalue `B(7)`, lowered to a temporary_object by the constructor call),
+    // bind the reference directly to it. Wrapping it in a second
+    // temporary_object would construct one object and then copy it into
+    // another, leaving both with a scope-exit destructor.
+    exprt addr;
+    if (tmp.id() == "sideeffect" && tmp.statement() == "temporary_object")
+      addr = address_of_exprt(tmp);
+    else
+    {
+      side_effect_exprt temporary("temporary_object");
+      temporary.type() = tmp.type();
+      temporary.copy_to_operands(tmp);
+      addr = address_of_exprt(temporary);
+    }
 
-    address_of_exprt addr(temporary);
     if (mtemp.isBoundToLvalueReference())
       addr.type().set("#reference", true);
     else
@@ -784,6 +1143,19 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if (get_type(ne.getType(), t))
       return true;
 
+    // Placement new ([expr.new]/11): only the reserved non-allocating
+    // ::operator new(size_t, void*) qualifies — a user-declared
+    // pointer-parameter operator new or std::nothrow keeps the allocating
+    // path below.
+    if (
+      !ne.isArray() && ne.getOperatorNew() &&
+      ne.getOperatorNew()->isReservedGlobalPlacementOperator())
+    {
+      if (get_placement_new(ne, t, location, new_expr))
+        return true;
+      break;
+    }
+
     if (ne.isArray())
     {
       new_expr = side_effect_exprt("cpp_new[]", t);
@@ -801,16 +1173,21 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       new_expr = side_effect_exprt("cpp_new", t);
     }
 
-    if (ne.hasInitializer())
-    {
-      exprt init;
-      if (get_expr(*ne.getInitializer(), init))
-        return true;
+    if (get_new_storage(ne, new_expr))
+      return true;
 
-      convert_expression_to_code(init);
+    // [expr.new]/24: `new T[n]()` and `new T[n]{}` value-initialise every
+    // element, which zero-initialises whatever the element constructor -- if
+    // there is one at all -- does not write itself. Plain `new T[n]`
+    // default-initialises and correctly leaves a scalar element indeterminate,
+    // so the two forms must be told apart here (github #6588).
+    if (
+      ne.isArray() && ne.hasInitializer() &&
+      zero_initialises(*ne.getInitializer()))
+      new_expr.set("zero_initialized", true);
 
-      new_expr.initializer(init);
-    }
+    if (ne.hasInitializer() && get_new_initializer(ne, new_expr))
+      return true;
 
     break;
   }
@@ -830,10 +1207,16 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     new_expr.move_to_operands(arg);
 
-    if (de.getDestroyedType()->getAsCXXRecordDecl())
+    if (get_dealloc_function(de, new_expr))
+      return true;
+
+    // `delete[]` of a `T (*)[m]` destroys T elements ([expr.delete]/6).
+    const clang::QualType destroyed =
+      ASTContext->getBaseElementType(de.getDestroyedType());
+    if (destroyed->getAsCXXRecordDecl())
     {
       typet destt;
-      if (get_type(de.getDestroyedType(), destt))
+      if (get_type(destroyed, destt))
         return true;
       new_expr.type() = destt;
     }
@@ -841,11 +1224,60 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
   }
 
+  case clang::Stmt::ConditionalOperatorClass:
+  {
+    const clang::ConditionalOperator &ternary =
+      static_cast<const clang::ConditionalOperator &>(stmt);
+
+    // C++ [expr.cond]/2: a throw-expression operand contributes no value, so
+    // the branch has to become a statement rather than something the
+    // conditional's result is built from. Materialising a class-typed
+    // conditional takes the address of each branch, which for the throw is
+    // meaningless and used to abort inside the solver with an irep dump
+    // (issue #6717). Scalar conditionals never materialise, so they are
+    // unaffected and keep working.
+    if (
+      ternary.getType()->isRecordType() &&
+      (llvm::isa<clang::CXXThrowExpr>(
+         ternary.getTrueExpr()->IgnoreParenImpCasts()) ||
+       llvm::isa<clang::CXXThrowExpr>(
+         ternary.getFalseExpr()->IgnoreParenImpCasts())))
+    {
+      log_error(
+        "ESBMC currently does not support a throw-expression in a "
+        "class-typed conditional");
+      return true;
+    }
+
+    bool elided = false;
+    if (get_conditional_class_prvalue(ternary, new_expr, elided))
+      return true;
+    if (!elided && clang_c_convertert::get_expr(stmt, new_expr))
+      return true;
+
+    // An lvalue conditional denotes an object, not a copy of one. The C path
+    // types the `if` from getType(), which drops the reference, so both
+    // branches were dereferenced into a temporary and an assignment through
+    // the conditional left the original untouched (issue #6717).
+    if (
+      !elided && ternary.isLValue() && new_expr.id() == "if" &&
+      new_expr.operands().size() == 3 &&
+      (is_reference(new_expr.op1().type()) ||
+       is_reference(new_expr.op2().type())))
+    {
+      typet ref = reference_typet();
+      ref.subtype() = new_expr.type();
+      new_expr.type() = ref;
+    }
+    break;
+  }
+
   case clang::Stmt::CXXPseudoDestructorExprClass:
   {
     const clang::CXXPseudoDestructorExpr &cxxpd =
       static_cast<const clang::CXXPseudoDestructorExpr &>(stmt);
-    // A pseudo-destructor expression has no run-time semantics beyond evaluating the base expression.
+    // A pseudo-destructor expression has no run-time semantics beyond
+    // evaluating the base expression.
     exprt base;
     if (get_expr(*cxxpd.getBase(), base))
       return true;
@@ -900,8 +1332,8 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       return true;
 
     // In a lambda `CXXThisExpr` refers to the captured `this` pointer,
-    // while the `this_map` refers to the `this` pointer of the lambda closure type.
-    // This causes a mismatch, so ignore the type check in this case.
+    // while the `this_map` refers to the `this` pointer of the lambda closure
+    // type. This causes a mismatch, so ignore the type check in this case.
     assert(this_type == it->second.second || is_lambda());
 
     if (is_lambda())
@@ -986,6 +1418,11 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       call.arguments().push_back(arg);
     }
 
+    // Inherited constructors are lowered as base-object constructor calls, so
+    // the complete-object virtual-base initialisation must be suppressed.
+    if (ice.getConstructor()->getParent()->getNumVBases() > 0)
+      call.arguments().push_back(gen_boolean(false));
+
     call.set("constructor", 1);
     new_expr.swap(call);
     break;
@@ -999,6 +1436,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     {
       std::ostringstream oss;
       llvm::raw_os_ostream ross(oss);
+      enable_ast_dump_colors(ross, *ASTContext);
       ross << "Conversion of unsupported value-dependent size-of-pack expr: \"";
       ross << stmt.getStmtClassName() << "\" to expression"
            << "\n";
@@ -1037,6 +1475,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       if (get_expr(*cxxtry.getHandler(i), handler))
         return true;
 
+      set_handler_exception_id(namespacet(context), handler);
       new_expr.move_to_operands(handler);
     }
 
@@ -1084,11 +1523,17 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     exprt tmp;
     if (cxxte.getSubExpr())
     {
-      if (get_expr(*cxxte.getSubExpr(), tmp))
+      if (get_expr(elided_copy_source(*cxxte.getSubExpr()), tmp))
         return true;
 
       new_expr.move_to_operands(tmp);
+      // Deliberately the moved-from `tmp`, i.e. empty: a cpp-throw's own type
+      // is set by the adjust pass, and giving it the operand's type here
+      // changes the default path (three try_catch rows stop failing as they
+      // should).
       new_expr.type() = tmp.type();
+
+      record_primitive_exception_ids(new_expr, namespacet(context));
     }
 
     break;
@@ -1100,26 +1545,48 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       static_cast<const clang::CXXTypeidExpr &>(stmt);
 
     std::string type_name;
+    // For a polymorphic glvalue operand, [expr.typeid]/2 requires the operand
+    // to be evaluated: the answer is the *dynamic* type, which is only
+    // reachable through the object's vtable. `vtable_read` holds that read when
+    // applicable; it also faults on a null `*p`, as std::bad_typeid mandates.
+    exprt vtable_read = nil_exprt();
+    // Name of the vtable component holding the dynamic type's printed name,
+    // empty unless the operand is a polymorphic glvalue.
+    irep_idt dynamic_name_comp;
     if (cxxtid.isTypeOperand())
     {
       const clang::QualType qtype = cxxtid.getTypeOperand(*ASTContext);
-      type_name = qtype.getAsString();
+      type_name = rtti_type_name(qtype);
     }
     else
     {
       const clang::QualType qtype = cxxtid.getExprOperand()->getType();
-      if (!cxxtid.isMostDerived(*ASTContext) && qtype->getAsCXXRecordDecl())
-        log_warning("Typeid for polymorphism is not implemented");
-      type_name = qtype.getAsString();
+      type_name = rtti_type_name(qtype);
+
+      const clang::CXXRecordDecl *rd = qtype->getAsCXXRecordDecl();
+      if (!cxxtid.isMostDerived(*ASTContext) && rd && rd->isPolymorphic())
+      {
+        exprt operand;
+        if (get_expr(*cxxtid.getExprOperand(), operand))
+          return true;
+
+        const typet &op_type = ns.follow(operand.type());
+        if (op_type.is_struct())
+          for (const auto &comp : to_struct_type(op_type).components())
+            if (comp.get_bool("is_vtptr"))
+            {
+              vtable_read = member_exprt(operand, comp.name(), comp.type());
+              dynamic_name_comp = rtti_name_component_id(
+                to_pointer_type(comp.type()).subtype().identifier());
+              break;
+            }
+      }
     }
 
-    exprt size = constant_exprt(
-      integer2binary(type_name.size(), bv_width(size_type())),
-      integer2string(type_name.size()),
-      size_type());
-
-    typet arr = array_typet(char_type(), size);
-    string_constantt string_name(type_name, arr, string_constantt::k_default);
+    // Size the array as type_name.size() + 1 so the stored string keeps its
+    // terminating '\0'; type_info::name() returns this pointer, and reading it
+    // as a C string (e.g. strlen) would otherwise run off the end (#6308).
+    string_constantt string_name(type_name);
 
     typet t;
     if (get_type(cxxtid.getType(), t))
@@ -1129,14 +1596,32 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     // assigned to the temporary object
     // tmp = { .__name=&"int"[0], .std::type_info@vtable_pointer=0 }
     // const std::type_info& = &tmp
-    // Front end can't account for polymorphism
+    // type_info identity is the __name pointer, so for a polymorphic glvalue
+    // __name is taken from the vtable the object actually points at rather than
+    // from the operand's static type -- that is what makes the result reflect
+    // the dynamic type (#6310).
+    exprt name = address_of_exprt(string_name);
+    if (!dynamic_name_comp.empty())
+    {
+      name = member_exprt(
+        dereference_exprt(vtable_read, vtable_read.type()),
+        dynamic_name_comp,
+        pointer_typet(char_type()));
+    }
+
     exprt sym("struct", t);
-    sym.copy_to_operands(address_of_exprt(string_name));
-    sym.copy_to_operands(gen_zero(pointer_type()));
-    make_temporary(sym);
+    sym.copy_to_operands(name);
+    if (vtable_read.is_not_nil())
+    {
+      // Reading the vtable pointer dereferences the operand, so a null operand
+      // faults here (modelling std::bad_typeid). Cast to the field type.
+      gen_typecast(ns, vtable_read, pointer_type());
+      sym.copy_to_operands(vtable_read);
+    }
+    else
+      sym.copy_to_operands(gen_zero(pointer_type()));
 
-    new_expr = sym;
-
+    new_expr = typeid_object(sym, type_name, stmt, vtable_read.is_not_nil());
     break;
   }
   case clang::Stmt::LambdaExprClass:
@@ -1160,7 +1645,8 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       return true;
 
     exprt sym("struct", lambda_class_type);
-    // both `captures` (via `capture_begin`) and `capture_inits` have hopefully the same size and order
+    // both `captures` (via `capture_begin`) and `capture_inits` have hopefully
+    // the same size and order
     auto capture = lambda_expr.capture_begin();
     for (const auto &it : lambda_expr.capture_inits())
     {
@@ -1298,11 +1784,39 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if (get_expr(*aile.getSubExpr(), init))
       return true;
 
-    index_exprt ind = to_index_expr(init);
-
     const llvm::APInt &Int = aile.getArraySize();
     std::size_t size = Int.getSExtValue();
     exprt inits("constant", common.type());
+
+    // A class-typed element copies through its copy constructor, so the
+    // sub-expression is a CXXConstructExpr rather than the indexed read a
+    // scalar element yields. Casting it to an index walked off the end of the
+    // expression and crashed the frontend (issue #6717). A trivial
+    // constructor copies the representation and nothing else, so the
+    // element-wise read below says the same thing.
+    if (!init.is_index())
+    {
+      const auto *ctor = llvm::dyn_cast<clang::CXXConstructExpr>(
+        aile.getSubExpr()->IgnoreImplicit());
+      if (!ctor || !ctor->getConstructor()->isTrivial())
+      {
+        log_error(
+          "ESBMC currently does not support an array copy whose element "
+          "constructor is non-trivial");
+        return true;
+      }
+
+      const typet &elem_t = common.type().subtype();
+      for (std::size_t i = 0; i < size; ++i)
+        inits.copy_to_operands(
+          index_exprt(common, from_integer(i, index_type()), elem_t));
+
+      new_expr = inits;
+      break;
+    }
+
+    index_exprt ind = to_index_expr(init);
+
     // { ref->arr[0], ref->arr[1], ... ,ref->arr[i]}
     for (std::size_t i = 0; i < size; ++i)
     {
@@ -1392,8 +1906,19 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
   }
 
+  reduce_pseudo_destructor_call(new_expr);
+
   new_expr.location() = location;
   return false;
+}
+
+// A constructor needs the hidden `__is_complete` parameter iff its class has
+// one or more virtual base subobjects (directly or transitively). getNumVBases
+// returns the flattened set of virtual bases collected at this class, so it is
+// nonzero for every class in a hierarchy that reaches a virtual base. See #938.
+static bool ctor_needs_is_complete_param(const clang::CXXConstructorDecl &cxxcd)
+{
+  return cxxcd.getParent()->getNumVBases() > 0;
 }
 
 bool clang_cpp_convertert::get_constructor_call(
@@ -1463,10 +1988,28 @@ bool clang_cpp_convertert::get_constructor_call(
   for (const clang::Expr *arg : constructor_call.arguments())
   {
     exprt single_arg;
-    if (get_expr(*arg, single_arg))
+    if (get_expr(elided_copy_source(*arg), single_arg))
       return true;
 
     call.arguments().push_back(single_arg);
+  }
+
+  // Append the hidden `__is_complete` flag for constructors of classes with
+  // virtual bases: a base-class constructor call (base_ctor_derived) is a
+  // base-object construction and must not initialise the shared virtual base,
+  // whereas any other construction site is the most-derived/complete object.
+  // A delegating call forwards the enclosing ctor's completeness verbatim.
+  if (ctor_needs_is_complete_param(*constructor_call.getConstructor()))
+  {
+    if (new_expr.get_bool("#delegating_ctor"))
+    {
+      symbolt *ic =
+        context.find_symbol(new_expr.get("#delegating_ctor_is_complete"));
+      assert(ic);
+      call.arguments().push_back(symbol_expr(*ic));
+    }
+    else
+      call.arguments().push_back(gen_boolean(!new_expr.base_ctor_derived()));
   }
 
   call.set("constructor", 1);
@@ -1503,154 +2046,609 @@ void clang_cpp_convertert::build_member_from_component(
   component.swap(member);
 }
 
-// Look up the destructor of a class type by iterating the struct's methods
-// (the destructor is registered as the unique member function whose
-// return-type id is "destructor"). More robust than util/get_destructor,
-// which keys symbol_base_map by tag and so misses template instantiations
-// where the tag string is "struct A<B>" rather than "A<B>".
-static bool find_class_destructor(
-  const namespacet &ns,
-  const typet &type,
-  code_function_callt &call)
+// A non-primary base subobject sits away from the start of the derived object
+// (multiple inheritance); `this` must be adjusted to that subobject before the
+// base destructor runs, otherwise ~Base reads the derived's leading storage
+// (github #6021). Prefer the structural address `&this->@base@B`; a hierarchy
+// that kept the legacy flattened layout has no such component, so mark the
+// pointer for clang_c_adjust::adjust_derived_to_base instead. Both derive the
+// displacement from ESBMC's own layout, which is what the base ctor `this` and
+// the derived->base cast use -- clang's ABI offset disagrees with it once a
+// virtual base is involved, and mixing the two put ~Base and Base on different
+// bytes (#1866, #3894, #7025).
+exprt clang_cpp_convertert::base_dtor_this(
+  const clang::CXXRecordDecl &base,
+  const exprt &deref,
+  const irep_idt &this_id,
+  const typet &this_ptr_type)
 {
-  typet followed = type;
-  if (followed.id() == "symbol")
-    followed = ns.follow(followed);
-  if (followed.id() != "struct")
+  std::string base_name, base_id;
+  get_decl_name(base, base_name, base_id);
+  const irep_idt comp = base_subobject_name(base_id);
+  const typet derived_struct = ns.follow(this_ptr_type.subtype());
+  const symbolt *base_sym = context.find_symbol(base_id);
+  if (!base_sym)
+    return symbol_exprt(this_id, this_ptr_type);
+
+  if (
+    derived_struct.is_struct() &&
+    to_struct_type(derived_struct).has_component(comp))
+    return address_of_exprt(
+      member_exprt(deref, comp, symbol_typet(base_sym->id)));
+
+  exprt this_expr = symbol_exprt(this_id, this_ptr_type);
+  this_expr.set("#derived_to_base", base_sym->id);
+  return this_expr;
+}
+
+const symbolt *
+clang_cpp_convertert::nontrivial_destructor(const clang::CXXRecordDecl *rec)
+{
+  const clang::CXXDestructorDecl *d = rec ? rec->getDestructor() : nullptr;
+  if (!d || d->isTrivial())
+    return nullptr;
+  std::string name, id;
+  get_decl_name(*d, name, id);
+  return ns.lookup(irep_idt(id));
+}
+
+static code_function_callt destructor_call(const symbolt &sym, exprt arg)
+{
+  exprt fn("symbol", sym.get_type());
+  fn.identifier(sym.id);
+  code_function_callt call;
+  call.function() = fn;
+  call.arguments().push_back(std::move(arg));
+  return call;
+}
+
+const clang_cpp_convertert::this_mapt::mapped_type &
+clang_cpp_convertert::method_this(const clang::CXXMethodDecl &md) const
+{
+  auto it = this_map.find(reinterpret_cast<std::size_t>(md.getFirstDecl()));
+  assert(
+    it != this_map.end() &&
+    "method reached body synthesis without a registered `this`");
+  return it->second;
+}
+
+bool clang_cpp_convertert::member_destructor(
+  const clang::FieldDecl &field,
+  const exprt &deref,
+  code_blockt &calls)
+{
+  clang::QualType qt = field.getType();
+
+  // An array member of class type has each element destroyed; peel the
+  // (possibly nested) array dimensions to reach the element record type,
+  // since QualType::getAsCXXRecordDecl returns null for array types.
+  clang::QualType elem_qt = qt;
+  while (const clang::ArrayType *at = ASTContext->getAsArrayType(elem_qt))
+    elem_qt = at->getElementType();
+
+  const symbolt *sym = nontrivial_destructor(elem_qt->getAsCXXRecordDecl());
+  if (!sym)
     return false;
 
-  for (const auto &component : to_struct_type(followed).methods())
-  {
-    if (!component.type().is_code())
-      continue;
-    const code_typet &code_type = to_code_type(component.type());
-    if (code_type.return_type().id() != "destructor")
-      continue;
-
-    exprt fn("symbol", component.type());
-    fn.identifier(component.name());
-    call = code_function_callt();
-    call.function() = fn;
+  typet field_type;
+  if (get_type(qt, field_type))
     return true;
+
+  std::string field_name, field_id;
+  get_decl_name(field, field_name, field_id);
+
+  // C++ [class.dtor]/9: array elements are destroyed in reverse index
+  // order.  Emit one destructor call per element, recursing into nested
+  // arrays so every leaf element is destroyed.
+  std::function<bool(const exprt &)> destroy = [&](const exprt &obj) -> bool {
+    if (!ns.follow(obj.type()).is_array())
+    {
+      calls.copy_to_operands(destructor_call(*sym, address_of_exprt(obj)));
+      return false;
+    }
+    const array_typet &arr_type = to_array_type(ns.follow(obj.type()));
+    BigInt count;
+    if (to_integer(arr_type.size(), count))
+    {
+      log_error("cannot determine array size for member dtor chain");
+      return true;
+    }
+    for (BigInt i = count - 1; i >= 0; --i)
+      if (
+        destroy(
+          index_exprt(obj, from_integer(i, index_type()), arr_type.subtype())))
+        return true;
+    return false;
+  };
+  return destroy(member_exprt(deref, field_name, field_type));
+}
+
+code_function_callt clang_cpp_convertert::base_destructor(
+  const symbolt &sym,
+  const clang::CXXRecordDecl &base,
+  const clang::CXXMethodDecl &md)
+{
+  const auto &[this_id, this_ptr_type] = method_this(md);
+  exprt deref =
+    dereference_exprt(symbol_exprt(this_id, this_ptr_type), this_ptr_type);
+  exprt this_expr = base_dtor_this(base, deref, this_id, this_ptr_type);
+  gen_typecast(
+    ns, this_expr, to_code_type(sym.get_type()).arguments().front().type());
+  return destructor_call(sym, std::move(this_expr));
+}
+
+bool clang_cpp_convertert::subobject_destructors(
+  const clang::CXXMethodDecl &md,
+  std::vector<subobject_destructort> &out)
+{
+  const clang::CXXRecordDecl *parent = md.getParent();
+  if (!parent || !parent->hasDefinition())
+    return false;
+
+  const auto &[this_id, this_ptr_type] = method_this(md);
+  exprt deref =
+    dereference_exprt(symbol_exprt(this_id, this_ptr_type), this_ptr_type);
+
+  std::vector<const clang::CXXRecordDecl *> bases;
+  for (const clang::CXXBaseSpecifier &base : parent->bases())
+    if (!base.isVirtual())
+      bases.push_back(base.getType()->getAsCXXRecordDecl());
+
+  // Members, then direct non-virtual bases, each in reverse declaration order
+  // (C++ [class.dtor]/9).
+  llvm::SmallVector<const clang::FieldDecl *, 8> fields(parent->fields());
+  for (const clang::FieldDecl *field : llvm::reverse(fields))
+  {
+    subobject_destructort d{bases.size() + field->getFieldIndex(), {}};
+    if (member_destructor(*field, deref, d.calls))
+      return true;
+    if (d.calls.has_operands())
+      out.push_back(std::move(d));
+  }
+
+  for (std::size_t i = bases.size(); i-- > 0;)
+    if (const symbolt *sym = nontrivial_destructor(bases[i]))
+    {
+      subobject_destructort d{i, {}};
+      d.calls.copy_to_operands(base_destructor(*sym, *bases[i], md));
+      out.push_back(std::move(d));
+    }
+
+  return false;
+}
+
+/// The position in construction order of the subobject \p init builds, as
+/// subobject_destructors numbers them; \p bases are the direct non-virtual
+/// bases in declaration order.
+static std::size_t construction_position(
+  const clang::CXXCtorInitializer &init,
+  const std::vector<const clang::Type *> &bases)
+{
+  if (init.isBaseInitializer())
+  {
+    const clang::Type *t =
+      init.getBaseClass()->getCanonicalTypeUnqualified().getTypePtr();
+    return std::find(bases.begin(), bases.end(), t) - bases.begin();
+  }
+  const clang::FieldDecl *field =
+    init.isIndirectMemberInitializer()
+      ? llvm::cast<clang::FieldDecl>(init.getIndirectMember()->chain().front())
+      : init.getMember();
+  return bases.size() + field->getFieldIndex();
+}
+
+namespace
+{
+/// Finds user code that can throw or catch: a throw, a try, or a dynamic_cast
+/// to a reference, which throws std::bad_cast. The operational models are
+/// system headers; an exception they throw is observable only where user
+/// code catches it.
+class exception_findert : public clang::RecursiveASTVisitor<exception_findert>
+{
+public:
+  explicit exception_findert(const clang::SourceManager &sm) : sm(sm)
+  {
+  }
+
+  bool found = false;
+
+  bool VisitCXXThrowExpr(clang::CXXThrowExpr *e)
+  {
+    return !in_user_code(e);
+  }
+
+  bool VisitCXXTryStmt(clang::CXXTryStmt *s)
+  {
+    return !in_user_code(s);
+  }
+
+  bool VisitCXXDynamicCastExpr(clang::CXXDynamicCastExpr *e)
+  {
+    return !(e->getTypeAsWritten()->isReferenceType() && in_user_code(e));
+  }
+
+private:
+  const clang::SourceManager &sm;
+
+  bool in_user_code(const clang::Stmt *s)
+  {
+    found = !sm.isInSystemHeader(s->getBeginLoc());
+    return found;
+  }
+};
+} // namespace
+
+bool clang_cpp_convertert::user_code_uses_exceptions()
+{
+  if (!uses_exceptions)
+  {
+    exception_findert finder(ASTContext->getSourceManager());
+    finder.TraverseDecl(ASTContext->getTranslationUnitDecl());
+    uses_exceptions = finder.found;
+  }
+  return *uses_exceptions;
+}
+
+static bool cannot_throw(const clang::CXXConstructorDecl &cd)
+{
+  const auto *fpt =
+    llvm::dyn_cast<const clang::FunctionProtoType>(cd.getType().getTypePtr());
+  return fpt &&
+         !clang::isUnresolvedExceptionSpec(fpt->getExceptionSpecType()) &&
+         fpt->canThrow() == clang::CT_Cannot;
+}
+
+static code_blockt catch_all_handler()
+{
+  code_blockt handler;
+  handler.type().set("ellipsis", 1);
+  handler.set("exception_id", "ellipsis");
+  handler.copy_to_operands(code_skipt());
+  return handler;
+}
+
+/// catch (...) { <destroy each built subobject, newest first> }
+static code_blockt destroy_built_subobjects(
+  const exprt &built,
+  const std::vector<clang_cpp_convertert::subobject_destructort> &dtors)
+{
+  code_blockt handler = catch_all_handler();
+  for (const auto &d : dtors)
+  {
+    code_ifthenelset destroy;
+    destroy.cond() =
+      binary_relation_exprt(built, ">", from_integer(d.position, built.type()));
+    destroy.then_case() = d.calls;
+    handler.move_to_operands(destroy);
+  }
+  return handler;
+}
+
+codet clang_cpp_convertert::rethrowing_catch(
+  const code_blockt &tried,
+  code_blockt handler)
+{
+  exprt rethrow = side_effect_exprt("cpp-throw", empty_typet());
+  convert_expression_to_code(rethrow);
+  handler.move_to_operands(rethrow);
+
+  codet guarded("cpp-catch");
+  guarded.location() = tried.location();
+  guarded.copy_to_operands(tried, handler);
+  return guarded;
+}
+
+bool clang_cpp_convertert::destroy_object_on_body_unwind(
+  const clang::CXXConstructorDecl &cd,
+  std::size_t body_start,
+  code_blockt &body)
+{
+  // The destructor may be declared after cd and not converted yet.
+  const clang::CXXDestructorDecl *dd = cd.getParent()->getDestructor();
+  exprt::operandst &ops = body.operands();
+  if (!dd || dd->isTrivial() || body_start == ops.size())
+    return false;
+
+  code_function_callt call;
+  if (get_ctor_dtor_ref(*dd, call.function()))
+    return true;
+
+  code_blockt tried;
+  tried.location() = body.location();
+  tried.operands().assign(
+    std::make_move_iterator(ops.begin() + body_start),
+    std::make_move_iterator(ops.end()));
+  ops.erase(ops.begin() + body_start, ops.end());
+
+  const auto &[this_id, this_ptr_type] = method_this(cd);
+  exprt this_expr = symbol_exprt(this_id, this_ptr_type);
+  gen_typecast(
+    ns, this_expr, to_code_type(call.function().type()).arguments()[0].type());
+  call.arguments().push_back(this_expr);
+  code_blockt handler = catch_all_handler();
+  handler.move_to_operands(call);
+  body.copy_to_operands(rethrowing_catch(tried, std::move(handler)));
+  return false;
+}
+
+bool clang_cpp_convertert::unwind_constructed_subobjects(
+  const clang::CXXConstructorDecl &cd,
+  const std::vector<std::size_t> &starts,
+  code_blockt &body)
+{
+  if (cannot_throw(cd) || !user_code_uses_exceptions())
+    return false;
+
+  // [except.ctor]/4: the delegation completed the object, so a throw from the
+  // body destroys it whole.
+  if (cd.isDelegatingConstructor())
+    return destroy_object_on_body_unwind(cd, starts.back(), body);
+
+  std::vector<subobject_destructort> dtors;
+  if (subobject_destructors(cd, dtors))
+    return true;
+  if (dtors.empty())
+    return false;
+
+  const clang::CXXRecordDecl &parent = *cd.getParent();
+  std::vector<const clang::Type *> bases;
+  for (const clang::CXXBaseSpecifier &base : parent.bases())
+    if (!base.isVirtual())
+      bases.push_back(
+        base.getType()->getCanonicalTypeUnqualified().getTypePtr());
+
+  // The subobjects before `built` in construction order are complete.
+  const locationt &location = body.location();
+  symbolt built_sym;
+  get_default_symbol(
+    built_sym,
+    get_modulename_from_path(location.file().as_string()),
+    size_type(),
+    "subobjects_built$",
+    method_this(cd).first + "_subobjects_built$",
+    location);
+  built_sym.lvalue = true;
+  const exprt built = symbol_expr(*context.move_symbol_to_context(built_sym));
+
+  auto progress = [&](std::size_t n) {
+    code_assignt assign(built, from_integer(n, built.type()));
+    assign.set("#construction_progress", true);
+    return assign;
+  };
+
+  // Mark the start of each base and member initializer, then of the body. A
+  // virtual base is not numbered, and is not destroyed here.
+  exprt::operandst &ops = body.operands();
+  const std::size_t fields =
+    std::distance(parent.field_begin(), parent.field_end());
+  ops.insert(ops.begin() + starts.back(), progress(bases.size() + fields));
+  std::size_t i = starts.size() - 1;
+  for (auto it = cd.init_rbegin(); it != cd.init_rend(); ++it)
+  {
+    const std::size_t start = starts[--i];
+    if (!(*it)->isBaseInitializer() || !(*it)->isBaseVirtual())
+      ops.insert(
+        ops.begin() + start, progress(construction_position(**it, bases)));
+  }
+
+  codet guarded =
+    rethrowing_catch(body, destroy_built_subobjects(built, dtors));
+  guarded.set("#subobject_unwind", true);
+  guarded.location() = location;
+
+  code_blockt wrapped;
+  wrapped.location() = location;
+  code_declt decl(built);
+  decl.operands().push_back(from_integer(0, built.type()));
+  wrapped.move_to_operands(decl, guarded);
+  body.swap(wrapped);
+  return false;
+}
+
+bool clang_cpp_convertert::insert_constructor_initializers(
+  const clang::CXXConstructorDecl &cd,
+  exprt::operandst &initializers,
+  std::vector<std::size_t> starts,
+  const symbolt *array_init_sym,
+  code_blockt &body)
+{
+  for (exprt &initializer : initializers)
+    convert_expression_to_code(initializer);
+
+  // Insert initializers at the beginning of the body
+  body.operands().insert(
+    body.operands().begin(), initializers.begin(), initializers.end());
+  starts.push_back(initializers.size());
+  if (array_init_sym)
+  {
+    /* Need to declare the temp symbol for array initialization if it has
+     * been used. */
+    code_declt init_decl(symbol_expr(*array_init_sym));
+    body.operands().insert(body.operands().begin(), init_decl);
+    for (std::size_t &start : starts)
+      ++start;
+  }
+
+  return unwind_constructed_subobjects(cd, starts, body);
+}
+
+bool clang_cpp_convertert::build_destructor_chain(
+  const clang::CXXDestructorDecl &dd,
+  code_blockt &body)
+{
+  std::vector<subobject_destructort> dtors;
+  if (subobject_destructors(dd, dtors))
+    return true;
+  for (subobject_destructort &d : dtors)
+    for (exprt &call : d.calls.operands())
+      body.move_to_operands(call);
+
+  // Virtual base subobjects, reverse declaration order.
+  // ESBMC does not model the Itanium D1/D2 destructor split, so virtual bases
+  // are called unconditionally. Diamond hierarchies with non-trivial virtual-
+  // base destructors are not yet supported (nontrivial_destructor skips
+  // trivial ones, so structural-only diamond tests are safe).
+  const clang::CXXRecordDecl *parent = dd.getParent();
+  if (!parent || !parent->hasDefinition())
+    return false;
+  for (const clang::CXXBaseSpecifier &vbase : llvm::reverse(parent->vbases()))
+  {
+    const clang::CXXRecordDecl *rec = vbase.getType()->getAsCXXRecordDecl();
+    if (const symbolt *sym = nontrivial_destructor(rec))
+      body.copy_to_operands(base_destructor(*sym, *rec, dd));
   }
   return false;
 }
 
-bool clang_cpp_convertert::build_destructor_chain(
-  const clang::FunctionDecl &fd,
-  code_blockt &body)
+bool clang_cpp_convertert::build_lambda_static_invoker(
+  const clang::CXXMethodDecl &invoker,
+  exprt &new_expr)
 {
-  const auto *dd = llvm::dyn_cast<clang::CXXDestructorDecl>(&fd);
-  if (!dd)
-    return false;
+  const clang::CXXRecordDecl *closure = invoker.getParent();
+  const clang::CXXMethodDecl *call_op = closure->getLambdaCallOperator();
+  if (call_op == nullptr)
+    return true;
 
-  const clang::CXXRecordDecl *parent = dd->getParent();
-  if (!parent || !parent->hasDefinition())
-    return false;
+  typet closure_type;
+#if CLANG_VERSION_MAJOR >= 22
+  clang::QualType closure_qual_type =
+    closure->getASTContext().getCanonicalTagType(closure);
+  if (get_type(*closure_qual_type.getTypePtr(), closure_type))
+#else
+  if (get_type(*closure->getTypeForDecl(), closure_type))
+#endif
+    return true;
 
-  // Locate `this` for the destructor we're synthesising. Both member and
-  // base chains build their argument from `this`. By the time
-  // get_function_body runs for a CXXDestructor, the implicit `this`
-  // parameter must already have been registered in this_map by
-  // get_function; a miss is a frontend invariant violation, not a
-  // routinely-skippable case.
-  std::size_t this_addr = reinterpret_cast<std::size_t>(fd.getFirstDecl());
-  auto this_it = this_map.find(this_addr);
-  assert(
-    this_it != this_map.end() &&
-    "destructor reached body synthesis without a registered `this`");
-  const typet this_ptr_type = this_it->second.second;
+  exprt callee;
+  if (get_decl_ref(*call_op, callee))
+    return true;
 
-  // 1. Member-subobject destructors, in reverse declaration order.
-  std::vector<const clang::FieldDecl *> fields;
-  for (const clang::FieldDecl *f : parent->fields())
-    fields.push_back(f);
+  // The lambda is captureless -- that is the only way a static invoker is
+  // formed -- so the closure carries no state and a fresh one is as good as
+  // the original.
+  symbolt &obj = anon_symbol.new_symbol(context, closure_type, "lambda_self");
+  obj.lvalue = true;
+  obj.file_local = true;
 
-  for (auto rit = fields.rbegin(); rit != fields.rend(); ++rit)
+  side_effect_expr_function_callt call;
+  call.function() = callee;
+  call.type() = static_cast<const code_typet &>(callee.type()).return_type();
+  call.arguments().push_back(address_of_exprt(symbol_expr(obj)));
+  for (const auto *param : invoker.parameters())
   {
-    const clang::FieldDecl *field = *rit;
-    clang::QualType field_qt = field->getType();
-
-    // Only class-typed members can have a destructor to call.
-    // TODO: array-of-class members (`T member[N]`) are silently skipped
-    // here because getAsCXXRecordDecl() returns null for array types.
-    // C++ [class.dtor]/9 requires element destructors to run in reverse
-    // index order; covered by KNOWNBUG `cpp/dtor_array_member`.
-    if (!field_qt->getAsCXXRecordDecl())
-      continue;
-
-    typet field_type;
-    if (get_type(field_qt, field_type))
+    exprt arg;
+    if (get_decl_ref(*param, arg))
       return true;
-
-    code_function_callt dtor_call;
-    if (!find_class_destructor(ns, field_type, dtor_call))
-      continue;
-
-    // Resolve the field's symbol id so the member expression carries the
-    // same #identifier the rest of the frontend uses.
-    exprt field_ref;
-    if (get_decl_ref(*field, field_ref))
-      return true;
-
-    // Build &(*this).field.  dereference_exprt(op, tp) sets the type to
-    // tp.subtype(), so pass the pointer type and get the struct back.
-    exprt this_sym = symbol_exprt(this_it->second.first, this_ptr_type);
-    exprt deref = dereference_exprt(this_sym, this_ptr_type);
-    member_exprt member(deref, field_ref.name(), field_type);
-
-    dtor_call.arguments().push_back(address_of_exprt(member));
-    body.operands().push_back(dtor_call);
+    call.arguments().push_back(arg);
   }
 
-  // 2. Base-subobject destructors, in reverse declaration order.
-  //    Virtual bases are handled by the most-derived class only; skip here.
-  //    TODO: ESBMC does not yet model the Itanium ABI's split between the
-  //    complete-object destructor (D1, walks virtual bases exactly once) and
-  //    the base-object destructor (D2, skips them). Until that split exists,
-  //    virtual bases are never destroyed; covered by KNOWNBUG
-  //    `cpp/dtor_virtual_base`.
-  std::vector<const clang::CXXBaseSpecifier *> bases;
-  for (const auto &b : parent->bases())
-    bases.push_back(&b);
-
-  if (bases.empty())
-    return false;
-
-  for (auto rit = bases.rbegin(); rit != bases.rend(); ++rit)
+  code_blockt body;
+  body.copy_to_operands(code_declt(symbol_expr(obj)));
+  if (call.type().is_empty())
   {
-    const clang::CXXBaseSpecifier *base = *rit;
-    if (base->isVirtual())
-      continue;
-
-    clang::QualType base_qt = base->getType();
-    if (!base_qt->getAsCXXRecordDecl())
-      continue;
-
-    typet base_type;
-    if (get_type(base_qt, base_type))
-      return true;
-
-    code_function_callt dtor_call;
-    if (!find_class_destructor(ns, base_type, dtor_call))
-      continue;
-
-    // Cast `this` to the base destructor's expected `this` pointer type.
-    const code_typet &dtor_code_type =
-      to_code_type(dtor_call.function().type());
-    if (dtor_code_type.arguments().empty())
-      continue;
-    const typet base_this_type = dtor_code_type.arguments().at(0).type();
-
-    exprt this_expr =
-      symbol_exprt(this_it->second.first, this_it->second.second);
-    gen_typecast(ns, this_expr, base_this_type);
-
-    dtor_call.arguments().push_back(this_expr);
-    body.operands().push_back(dtor_call);
+    codet expr_stmt("expression");
+    expr_stmt.copy_to_operands(call);
+    body.move_to_operands(expr_stmt);
+  }
+  else
+  {
+    code_returnt ret;
+    ret.return_value() = call;
+    body.copy_to_operands(ret);
   }
 
+  new_expr = body;
   return false;
+}
+
+/* A prvalue of the member's own class initialises the member itself
+ * ([dcl.init]/17.6.1), so the temporary clang binds it to never exists:
+ * converting that binding constructed or copied into a second object and then
+ * destroyed it. Peels a default member initializer, parentheses, a transparent
+ * braced list ([dcl.init.list]/3.2), a prvalue qualification or converting
+ * cast, and the copy clang marks elidable before C++17, which it elides. */
+static const clang::Expr *peel_initializer_wrapper(const clang::Expr *e)
+{
+  if (const auto *dflt = llvm::dyn_cast<clang::CXXDefaultInitExpr>(e))
+    return dflt->getExpr();
+  if (const auto *ewc = llvm::dyn_cast<clang::ExprWithCleanups>(e))
+    return ewc->getSubExpr();
+  if (const auto *bind = llvm::dyn_cast<clang::CXXBindTemporaryExpr>(e))
+    return bind->getSubExpr();
+  if (const auto *paren = llvm::dyn_cast<clang::ParenExpr>(e))
+    return paren->getSubExpr();
+  if (const auto *ile = llvm::dyn_cast<clang::InitListExpr>(e))
+    return ile->isTransparent() ? ile->getInit(0) : nullptr;
+  if (const auto *cast = llvm::dyn_cast<clang::CastExpr>(e))
+    return !cast->isGLValue() &&
+               (cast->getCastKind() == clang::CK_ConstructorConversion ||
+                cast->getCastKind() == clang::CK_NoOp)
+             ? cast->getSubExpr()
+             : nullptr;
+  return nullptr;
+}
+
+static const clang::Expr *peel_elided_copy(const clang::Expr *e)
+{
+  const auto *ctor = llvm::dyn_cast<clang::CXXConstructExpr>(e);
+  if (!ctor || !ctor->isElidable() || ctor->getNumArgs() != 1)
+    return nullptr;
+  const auto *mte = llvm::dyn_cast<clang::MaterializeTemporaryExpr>(
+    ctor->getArg(0)->IgnoreImpCasts());
+  return mte ? mte->getSubExpr()->IgnoreImpCasts() : nullptr;
+}
+
+static const clang::Expr &member_result_object(const clang::Expr &init)
+{
+  const clang::Expr *e = &init;
+  for (const clang::Expr *next = e; next;)
+  {
+    e = next;
+    next = peel_initializer_wrapper(e);
+    if (!next)
+      next = peel_elided_copy(e);
+  }
+  return *e;
+}
+
+/* The copies clang marks elidable before C++17, of a variable's initializer,
+ * a returned value or a by-value argument, are elided: the object is
+ * initialised from the innermost copy's source, as C++17 requires
+ * ([dcl.init]/17.6.1, [stmt.return], [expr.call]/7), and what remains is the
+ * C++17 form. Converting a copy built a second object and destroyed it. A
+ * copy's source can wrap another copy, as in `C(C(1))`. */
+const clang::Expr &
+clang_cpp_convertert::elided_copy_source(const clang::Expr &init)
+{
+  const clang::Expr *source = &init;
+  for (const clang::Expr *e = &init; e;)
+  {
+    if (const clang::Expr *copied = peel_elided_copy(e))
+      source = e = copied;
+    else
+      e = peel_initializer_wrapper(e);
+  }
+  return *source;
+}
+
+bool clang_cpp_convertert::get_member_initializer(
+  const clang::Expr &member_init,
+  const typet &member_type,
+  exprt &rhs)
+{
+  const clang::Expr &init = member_result_object(member_init);
+  const auto *ctor_expr = llvm::dyn_cast<clang::CXXConstructExpr>(&init);
+  if (
+    ctor_expr && zero_initialises(init) && ctor_expr->getConstructor() &&
+    ctor_expr->getConstructor()->isTrivial())
+  {
+    // member_type may be a symbolic tag; resolve it so gen_zero walks the
+    // real struct/array.
+    rhs = gen_zero(get_complete_type(member_type, ns));
+    return false;
+  }
+
+  return get_expr(init, rhs);
 }
 
 bool clang_cpp_convertert::get_function_body(
@@ -1658,52 +2656,62 @@ bool clang_cpp_convertert::get_function_body(
   exprt &new_expr,
   const code_typet &ftype)
 {
+  // Clang leaves a lambda's static invoker bodyless in the AST -- the
+  // forwarding body is synthesised in CodeGen, which never runs here -- so a
+  // captureless lambda converted to a function pointer called into an empty
+  // function (issue #4077).
+  if (const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd))
+    if (md->isLambdaStaticInvoker())
+      return build_lambda_static_invoker(*md, new_expr);
+
   // For implicit or explicitly-defaulted destructors, Clang does not
   // synthesise a body (hasBody() returns false), leaving symbol.value as nil.
   // Start with an empty block; the member/base destructor chain is appended
   // below by build_destructor_chain, matching C++ [class.dtor]/9 semantics.
-  bool synthesised_dtor_body = false;
-  if (const auto *dd = llvm::dyn_cast<clang::CXXDestructorDecl>(&fd))
+  // Implicit/defaulted destructors have no AST body; synthesise an empty one.
+  // All other bodyless functions are declarations only — skip them.
+  if (!fd.hasBody())
   {
-    if (!fd.hasBody() && (dd->isImplicit() || dd->isExplicitlyDefaulted()))
-    {
-      new_expr = code_blockt();
-      synthesised_dtor_body = true;
-    }
+    if (
+      fd.getKind() != clang::Decl::CXXDestructor ||
+      (!fd.isImplicit() && !fd.isExplicitlyDefaulted()))
+      return false;
+    new_expr = code_blockt();
   }
-
-  // do nothing if function body doesn't exist (and we haven't synthesised one)
-  if (!fd.hasBody() && !synthesised_dtor_body)
-    return false;
-
-  // Retrieve the mapping between captured variables
-  // and the members that store their values or references
-  if (const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd))
+  else
   {
-    if (md->getParent()->getLambdaCallOperator() == md)
+    // Retrieve the mapping between captured variables and the members that
+    // store their values or references. Must be populated before parsing the
+    // body so that cap_map lookups inside the body translation succeed.
+    if (const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd))
     {
-      field_mapt captures;
-      clang::FieldDecl *thisCapture{};
-      md->getParent()->getCaptureFields(captures, thisCapture);
+      if (md->getParent()->getLambdaCallOperator() == md)
+      {
+        field_mapt captures;
+        clang::FieldDecl *thisCapture{};
+        md->getParent()->getCaptureFields(captures, thisCapture);
 
-      std::size_t address = reinterpret_cast<std::size_t>(md->getFirstDecl());
-      cap_map[address] =
-        std::pair<field_mapt, clang::FieldDecl *>(captures, thisCapture);
+        std::size_t address = reinterpret_cast<std::size_t>(md->getFirstDecl());
+        cap_map[address] =
+          std::pair<field_mapt, clang::FieldDecl *>(captures, thisCapture);
+      }
     }
-  }
 
-  // Parse body, unless we already synthesised an empty body for an
-  // implicit/defaulted destructor above.
-  if (!synthesised_dtor_body)
-  {
     if (clang_c_convertert::get_function_body(fd, new_expr, ftype))
       return true;
   }
 
-  if (new_expr.statement() != "block")
+  if (new_expr.statement() != "block" && new_expr.statement() != "cpp-catch")
     return false;
 
-  code_blockt &body = to_code_block(to_code(new_expr));
+  // A constructor/destructor may use a function-try-block; its body is then a
+  // `cpp-catch` whose first operand is the try block and whose remaining
+  // operands are the handlers. The member/base initializers and the destructor
+  // chain operate on that try block, so `body` points at it in that case.
+  const bool function_try_block = new_expr.statement() == "cpp-catch";
+  code_blockt &body = function_try_block
+                        ? to_code_block(to_code(new_expr.op0()))
+                        : to_code_block(to_code(new_expr));
 
   // if it's a constructor, check for initializers
   if (fd.getKind() == clang::Decl::CXXConstructor)
@@ -1730,8 +2738,11 @@ bool clang_cpp_convertert::get_function_body(
     // Parse the initializers, if any
 
     // `init` type is clang::CXXCtorInitializer
+    // Where each initializer's code starts in `initializers`.
+    std::vector<std::size_t> starts;
     for (auto init : cxxcd.inits())
     {
+      starts.push_back(initializers.size());
       exprt initializer;
 
       if (init->isDelegatingInitializer())
@@ -1749,6 +2760,14 @@ bool clang_cpp_convertert::get_function_body(
         initializer.set(
           "#delegating_ctor_this", ftype.arguments().at(0).get("#identifier"));
         initializer.set("#delegating_ctor", 1);
+        // For a class with virtual bases, a delegating constructor must pass
+        // its own completeness on to the target constructor (C1->C1, C2->C2):
+        // a base-object delegating ctor must not let the target re-initialise
+        // the virtual base. Forward the enclosing ctor's `__is_complete`. #938
+        if (ctor_needs_is_complete_param(cxxcd))
+          initializer.set(
+            "#delegating_ctor_is_complete",
+            ftype.arguments().back().get("#identifier"));
         if (get_expr(*init->getInit(), initializer))
           return true;
         initializers.push_back(initializer);
@@ -1760,15 +2779,54 @@ bool clang_cpp_convertert::get_function_body(
         initializer.derived_this_arg(
           ftype.arguments().at(0).get("#identifier"));
         initializer.base_ctor_derived(true);
+        // Route the base ctor `this` structurally through the nested
+        // "@base@<id>" subobject (non-virtual bases). See #1866, #3894.
+        if (!init->isBaseVirtual())
+        {
+          const clang::CXXRecordDecl *base_rd =
+            init->getBaseClass()->getAsCXXRecordDecl();
+          if (base_rd)
+          {
+            std::string bn, bid;
+            get_decl_name(*base_rd, bn, bid);
+            initializer.set("#base_subobject", base_subobject_name(bid));
+          }
+        }
         if (get_expr(*init->getInit(), initializer))
           return true;
+
+        // A virtual base subobject is initialised only by the most-derived
+        // (complete-object) constructor. Guard its initializer with the hidden
+        // `__is_complete` flag so base-object constructor calls skip it, per
+        // [class.base.init]/7 and the Itanium C1/C2 split. See #938.
+        if (init->isBaseVirtual())
+        {
+          const irep_idt is_complete_id =
+            ftype.arguments().back().get("#identifier");
+          symbolt *s = context.find_symbol(is_complete_id);
+          assert(s);
+          convert_expression_to_code(initializer);
+          code_ifthenelset guard;
+          guard.cond() = symbol_expr(*s);
+          guard.then_case() = to_code(initializer);
+          // Tag so gen_vptr_initializations still treats this as a leading
+          // base-subobject constructor call and inserts the vptr assignments
+          // *after* it (the guard's op0 is the condition, not the call).
+          guard.set("#base_ctor_call_guard", true);
+          initializer.swap(guard);
+        }
+
         initializers.push_back(initializer);
         init_sym_uptodate = false;
       }
-      else if (init->isMemberInitializer())
+      else if (
+        init->isMemberInitializer() || init->isIndirectMemberInitializer())
       {
-        // parsing non-static member initializer
-        const clang::FieldDecl *member_decl = init->getMember();
+        // parsing non-static member initializer. A member reached through an
+        // anonymous union or struct is an IndirectFieldDecl, for which clang
+        // sets isIndirectMemberInitializer instead; getAnyMember() yields the
+        // underlying FieldDecl for both (#7560).
+        const clang::FieldDecl *member_decl = init->getAnyMember();
 
         exprt member;
         member.set("#member_init", 1);
@@ -1783,13 +2841,51 @@ bool clang_cpp_convertert::get_function_body(
         if (wrap_bitfield_type_if_needed(*member_decl, member.type()))
           return true;
 
-        build_member_from_component(fd, member);
-        // set #member_init flag again, as it has been cleared between the first call...
+        // A member of an anonymous union/struct is not a component of the
+        // enclosing class: the anonymous field is, and the member sits inside
+        // it. IndirectFieldDecl::chain() runs outermost-first and ends at the
+        // member itself, so walking it yields this-><anon>.m; building
+        // this->m directly reads at the wrong offset (#7560).
+        if (init->isIndirectMemberInitializer())
+        {
+          exprt path;
+          bool rooted = false;
+          for (const clang::NamedDecl *nd : init->getIndirectMember()->chain())
+          {
+            const auto *link = llvm::dyn_cast<clang::FieldDecl>(nd);
+            if (!link)
+              return true;
+            exprt hop;
+            if (get_decl_ref(*link, hop))
+              return true;
+            if (!rooted)
+            {
+              build_member_from_component(fd, hop);
+              path = hop;
+              rooted = true;
+            }
+            else
+              path = member_exprt(path, hop.name(), hop.type());
+          }
+          member = path;
+        }
+        else
+          build_member_from_component(fd, member);
+        size_flexible_array_member(*member_decl, member.type());
+
+        // set #member_init flag again, as it has been cleared between the first
+        // call...
         member.set("#member_init", 1);
 
         exprt rhs;
         rhs.set("#member_init", 1);
-        if (get_expr(*init->getInit(), rhs))
+
+        /* `m()` in a mem-initializer value-initializes m. For a class type
+         * whose default ctor is trivial (thus not user-provided) this is
+         * exactly zero-initialization, [dcl.init.general]/8; and the implicit
+         * ctor has no GOTO body, so emitting the call would havoc m and leave
+         * it nondeterministic (#4243). */
+        if (get_member_initializer(*init->getInit(), member.type(), rhs))
           return true;
 
         /* We can't assign to arrays, dereference() will choke. */
@@ -1818,7 +2914,7 @@ bool clang_cpp_convertert::get_function_body(
             symbolt new_symbol;
             new_symbol.name = "array_init$";
             new_symbol.id = id2string(this_ptr.identifier()) + "_array_init$";
-            new_symbol.type = this_type;
+            new_symbol.set_type(migrate_type(this_type));
             if (context.move(new_symbol, array_init_sym))
             {
               log_error(
@@ -1845,10 +2941,75 @@ bool clang_cpp_convertert::get_function_body(
           new_member.op0() = init_sym;
 
           /* 1. array_init$.member = rhs; */
-          initializer = side_effect_exprt("assign", new_member.type());
-          initializer.move_to_operands(new_member, rhs);
-          initializer.location() = new_expr.location();
-          initializers.push_back(initializer);
+          const bool is_ctor_call = rhs.id() == "sideeffect" &&
+                                    rhs.statement() == "function_call" &&
+                                    rhs.get_bool("constructor");
+
+          /* Construct every leaf element, whatever the extent. Constructing
+           * only element 0 is not a cheaper approximation but an unsound one:
+           * destruction is not bounded to match, so the skipped elements are
+           * destroyed having never been constructed, and any element type
+           * holding a resource then reports a spurious violation (#6574).
+           * An extent that is not a compile-time constant cannot be unrolled,
+           * so it keeps the single-element fallback. */
+          const bool is_fixed_array = ns.follow(new_member.type()).is_array();
+          bool has_constant_extent = is_fixed_array;
+          for (typet t = ns.follow(new_member.type()); t.is_array();
+               t = ns.follow(to_array_type(t).subtype()))
+          {
+            BigInt dim;
+            if (to_integer(to_array_type(t).size(), dim))
+            {
+              has_constant_extent = false;
+              break;
+            }
+          }
+
+          if (is_ctor_call && has_constant_extent)
+          {
+            /* A single CXXConstructExpr for an array member stands for
+             * constructing *every* element (e.g. `B b_array[2];` runs B's
+             * default ctor twice).  adjust_side_effect_assign lowers an
+             * `array = ctor()` assign to a single `ctor(&array)` call, which
+             * only constructs element 0.  Emit one per-element assign instead
+             * so every leaf element is constructed, recursing into nested
+             * arrays.  Mirrors the static/local path in clang_cpp_main.cpp. */
+            std::function<void(const exprt &)> construct_elements =
+              [&](const exprt &arr) {
+                const array_typet &arr_type =
+                  to_array_type(ns.follow(arr.type()));
+                BigInt count;
+                if (to_integer(arr_type.size(), count))
+                {
+                  log_error("cannot determine array size for member ctor init");
+                  abort();
+                }
+
+                const typet &elem_type = arr_type.subtype();
+                for (BigInt idx = 0; idx < count; ++idx)
+                {
+                  index_exprt element(
+                    arr, from_integer(idx, index_type()), elem_type);
+                  if (ns.follow(elem_type).is_array())
+                  {
+                    construct_elements(element);
+                    continue;
+                  }
+                  side_effect_exprt elem_init("assign", elem_type);
+                  elem_init.copy_to_operands(element, rhs);
+                  elem_init.location() = new_expr.location();
+                  initializers.push_back(elem_init);
+                }
+              };
+            construct_elements(new_member);
+          }
+          else
+          {
+            initializer = side_effect_exprt("assign", new_member.type());
+            initializer.move_to_operands(new_member, rhs);
+            initializer.location() = new_expr.location();
+            initializers.push_back(initializer);
+          }
 
           /* 2. *this = array_init$; */
           initializer = side_effect_exprt("assign", this_sym.type());
@@ -1872,60 +3033,84 @@ bool clang_cpp_convertert::get_function_body(
       }
     }
 
-    for (exprt &initializer : initializers)
-      convert_expression_to_code(initializer);
-
-    // Insert initializers at the beginning of the body
-    body.operands().insert(
-      body.operands().begin(), initializers.begin(), initializers.end());
-    if (array_init_sym)
-    {
-      /* Need to declare the temp symbol for array initialization if it has
-       * been used. */
-      code_declt init_decl(symbol_expr(*array_init_sym));
-      body.operands().insert(body.operands().begin(), init_decl);
-    }
+    if (
+      insert_constructor_initializers(
+        cxxcd, initializers, starts, array_init_sym, body))
+      return true;
   }
 
   // if it's a destructor, append the implicit chain of member-subobject
   // and base-subobject destructor calls.
-  if (fd.getKind() == clang::Decl::CXXDestructor)
+  else if (fd.getKind() == clang::Decl::CXXDestructor)
   {
-    if (build_destructor_chain(fd, body))
+    if (
+      build_destructor_chain(
+        static_cast<const clang::CXXDestructorDecl &>(fd), body))
       return true;
   }
 
-  auto *type = fd.getType().getTypePtr();
-  if (const auto *fpt = llvm::dyn_cast<const clang::FunctionProtoType>(type))
+  // C++ [except.handle]/15: if control reaches the end of a handler of a
+  // constructor's or destructor's function-try-block, the currently handled
+  // exception is rethrown — a handler there cannot swallow an exception raised
+  // while constructing/destroying a base or member subobject. Append an
+  // implicit `throw;` to each handler to model this.
+  if (
+    function_try_block && (fd.getKind() == clang::Decl::CXXConstructor ||
+                           fd.getKind() == clang::Decl::CXXDestructor))
   {
-    if (fpt->hasExceptionSpec())
+    codet::operandst &ops = new_expr.operands();
+    for (std::size_t i = 1; i < ops.size(); i++)
     {
-      codet decl = codet("throw_decl");
-      if (fpt->hasDynamicExceptionSpec())
-      {
-        // e.g: void func() throw(int) { throw 1;}
-        // body is converted to
-        // {THROW_DECL(signed_int) throw 1; THROW_DECL_END}
-        for (unsigned i = 0; i < fpt->getNumExceptions(); i++)
-        {
-          codet tmp;
-          if (get_type(fpt->getExceptionType(i), tmp.type()))
-            return true;
-
-          decl.move_to_operands(tmp);
-        }
-      }
-      else if (fpt->hasNoexceptExceptionSpec())
-      {
-        codet tmp;
-        tmp.type() = typet("noexcept");
-        decl.move_to_operands(tmp);
-      }
-      body.operands().insert(body.operands().begin(), decl);
+      code_blockt &handler = to_code_block(to_code(ops[i]));
+      exprt rethrow = side_effect_exprt("cpp-throw", empty_typet());
+      convert_expression_to_code(rethrow);
+      handler.operands().push_back(rethrow);
     }
   }
 
   return false;
+}
+
+void clang_cpp_convertert::annotate_exception_specification(
+  const clang::FunctionDecl &fd,
+  typet &type)
+{
+  const auto *fpt =
+    llvm::dyn_cast<const clang::FunctionProtoType>(fd.getType().getTypePtr());
+  if (!fpt || !fpt->hasExceptionSpec())
+    return;
+
+  // A C++ exception specification constrains the function boundary, not any
+  // region of its body. Record it as metadata on the function type so it
+  // survives serialization and stays attached to the function frame. The
+  // allowed-type ids for a dynamic specification are derived later, in
+  // clang_cpp_adjust, where the namespace is available for base-class lookup;
+  // here we only stash the raw exception types.
+  if (fpt->hasNoexceptExceptionSpec())
+  {
+    // noexcept / noexcept(true) / noexcept(expr): only restrictive when the
+    // function actually cannot throw. noexcept(false) (and any noexcept(expr)
+    // evaluating to false) leaves the function potentially throwing, so it
+    // gets no metadata. canThrow() resolves the expression for us; a still
+    // value-dependent result is treated conservatively as throwing.
+    if (fpt->canThrow() == clang::CT_Cannot)
+      type.set(exception_specificationt::kind_attribute(), "non_throwing");
+  }
+  else if (fpt->hasDynamicExceptionSpec())
+  {
+    // Legacy dynamic spec throw(T...) (incl. empty throw()): violation calls
+    // std::unexpected.
+    type.set(exception_specificationt::kind_attribute(), "dynamic");
+    irept &decl = type.add("exception_spec_decl");
+    decl.get_sub().clear();
+    for (unsigned i = 0; i < fpt->getNumExceptions(); i++)
+    {
+      typet exc_type;
+      if (get_type(fpt->getExceptionType(i), exc_type))
+        continue;
+      decl.get_sub().push_back(exc_type);
+    }
+  }
 }
 
 bool clang_cpp_convertert::get_function_this_pointer_param(
@@ -1946,7 +3131,6 @@ bool clang_cpp_convertert::get_function_this_pointer_param(
   name = "this";
   id += name;
 
-  //this_param.cmt_base_name("this");
   this_param.cmt_base_name(name);
   this_param.cmt_identifier(id);
 
@@ -1980,6 +3164,47 @@ bool clang_cpp_convertert::get_function_this_pointer_param(
   return false;
 }
 
+bool clang_cpp_convertert::get_cxx_constructor_is_complete_param(
+  const clang::CXXConstructorDecl &cxxcd,
+  code_typet::argumentt &param)
+{
+  param.type() = bool_typet();
+
+  locationt location_begin;
+  get_location_from_decl(cxxcd, location_begin);
+
+  std::string id, name;
+  get_decl_name(cxxcd, name, id);
+
+  name = "__is_complete";
+  id += name;
+
+  param.cmt_base_name(name);
+  param.cmt_identifier(id);
+
+  // If the constructor is not defined we still need the parameter in the type
+  // (so call sites stay arity-consistent), but no symbol is required as the
+  // body -- and thus the guard reading it -- is never generated.
+  if (!cxxcd.isDefined())
+    return false;
+
+  symbolt param_symbol;
+  get_default_symbol(
+    param_symbol,
+    get_modulename_from_path(location_begin.file().as_string()),
+    param.type(),
+    name,
+    id,
+    location_begin);
+
+  param_symbol.lvalue = true;
+  param_symbol.is_parameter = true;
+  param_symbol.file_local = true;
+
+  context.move_symbol_to_context(param_symbol);
+  return false;
+}
+
 bool clang_cpp_convertert::get_function_params(
   const clang::FunctionDecl &fd,
   code_typet::argumentst &params)
@@ -2007,8 +3232,13 @@ bool clang_cpp_convertert::get_function_params(
   if (get_function_this_pointer_param(cxxmd, params))
     return true;
 
-  // reserve space for `this' pointer and params
-  params.resize(1 + fd.parameters().size());
+  // Constructors of classes with virtual bases carry a trailing
+  // `__is_complete` flag (Itanium C1/C2 split); reserve a slot for it.
+  const auto *cxxcd = llvm::dyn_cast<clang::CXXConstructorDecl>(&fd);
+  const bool needs_is_complete = cxxcd && ctor_needs_is_complete_param(*cxxcd);
+
+  // reserve space for `this' pointer, params and (optionally) `__is_complete'
+  params.resize(1 + fd.parameters().size() + (needs_is_complete ? 1 : 0));
 
   // TODO: replace the loop with get_function_params
   // Parse other args
@@ -2023,6 +3253,16 @@ bool clang_cpp_convertert::get_function_params(
     // All args are added shifted by one position, because
     // of the this pointer (first arg)
     params[i + 1].swap(param);
+  }
+
+  // Append `__is_complete' as the last parameter so the constructor body can
+  // gate virtual-base initialisation on it.
+  if (needs_is_complete)
+  {
+    code_typet::argumentt is_complete_param;
+    if (get_cxx_constructor_is_complete_param(*cxxcd, is_complete_param))
+      return true;
+    params.back().swap(is_complete_param);
   }
 
   return false;
@@ -2052,24 +3292,39 @@ void clang_cpp_convertert::name_param_and_continue(
   assert(id.empty() && name.empty());
 
   const clang::DeclContext *dcxt = pd.getParentFunctionOrMethod();
-  if (const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(dcxt))
+  /* Every implicit or explicitly-defaulted function gets a compiler-synthesised
+   * body that refers to its parameter, so the parameter needs a name even
+   * though the declaration leaves it unnamed. Testing isImplicit() alone left
+   * `= default` assignment and comparison operators — which are defaulted but
+   * not implicit — with an unnamed parameter, so their synthesised body read
+   * from an unbound operand (github #4377). Matching CXXMethodDecl alone left
+   * the same hole for a defaulted comparison declared as a friend, which is a
+   * plain FunctionDecl taking both operands as parameters (github #6578). */
+  const auto *fd = llvm::dyn_cast_or_null<clang::FunctionDecl>(dcxt);
+  if (!fd || !(fd->isImplicit() || fd->isDefaulted()))
+    return;
+
+  get_decl_name(*fd, name, id);
+
+  // name would be just `ref` and id would be "<cpyctor_id>::ref"
+  name = name + "::" + constref_suffix;
+  id = id + "::" + constref_suffix;
+
+  /* A defaulted friend comparison takes two unnamed parameters, which the
+   * suffix above would give the same symbol; disambiguate by position, as the
+   * named-parameter path in get_decl_name already does. */
+  if (fd->getNumParams() > 1)
   {
-    if (
-      (is_CopyOrMoveOperator(*md) && md->isImplicit()) ||
-      (is_ConstructorOrDestructor(*md) && is_defaulted_ctor(*md)))
-    {
-      get_decl_name(*md, name, id);
-
-      // name would be just `ref` and id would be "<cpyctor_id>::ref"
-      name = name + "::" + constref_suffix;
-      id = id + "::" + constref_suffix;
-
-      // sync param name
-      param.cmt_base_name(name);
-      param.identifier(id);
-      param.name(name);
-    }
+    const std::string index_suffix =
+      "::" + std::to_string(pd.getFunctionScopeIndex());
+    name += index_suffix;
+    id += index_suffix;
   }
+
+  // sync param name
+  param.cmt_base_name(name);
+  param.identifier(id);
+  param.name(name);
 }
 
 template <typename SpecializationDecl>
@@ -2132,9 +3387,10 @@ bool clang_cpp_convertert::get_decl_ref(
     // Replace decl in the lambda operator with FieldDecl
     // x = 1 convert into this->_x = 1;
     if (auto it = cap_map.find(address); it != cap_map.end())
-      if (auto it1 =
-            it->second.first.find(llvm::dyn_cast<CAPTURE_VARIABLE_TYPE>(&decl));
-          it1 != it->second.first.end())
+      if (
+        auto it1 =
+          it->second.first.find(llvm::dyn_cast<CAPTURE_VARIABLE_TYPE>(&decl));
+        it1 != it->second.first.end())
       {
         typet t;
         if (get_type(it1->first->getType(), t))
@@ -2153,9 +3409,9 @@ bool clang_cpp_convertert::get_decl_ref(
   /**
    * References are modeled as pointers in ESBMC.
    * Normally, when getting a reference, we should therefore dereference it.
-   * However, when a reference type variable is initialized in a (member initializer) constructor call,
-   * we should not dereference it, because the reference/pointer is _not_ yet initialized.
-   * See test case "RefMemberInit".
+   * However, when a reference type variable is initialized in a (member
+   * initializer) constructor call, we should not dereference it, because the
+   * reference/pointer is _not_ yet initialized. See test case "RefMemberInit".
    */
   bool should_dereference = !new_expr.get_bool("#member_init");
 
@@ -2166,6 +3422,15 @@ bool clang_cpp_convertert::get_decl_ref(
   case clang::Decl::Binding:
   {
     const auto &bd = static_cast<const clang::BindingDecl &>(decl);
+    // Tuple-like case ([dcl.struct.bind]/4): clang synthesises a holding
+    // variable initialised to get<i>(e) and getBinding() refers to it. That
+    // holding var is never emitted, so resolve directly to its initializer
+    // (the get<i>(e) call) — mirroring how the array/member cases substitute
+    // the holder sub-expression. Re-evaluating get<i>(e) is side-effect free
+    // and yields an lvalue into the holder, so reads and writes are correct.
+    if (const clang::VarDecl *hv = bd.getHoldingVar())
+      if (const clang::Expr *init = hv->getInit())
+        return get_expr(*init, new_expr);
     if (const clang::Expr *e = bd.getBinding())
       return get_expr(*e, new_expr);
     break;
@@ -2194,30 +3459,8 @@ bool clang_cpp_convertert::get_decl_ref(
     break;
   }
   case clang::Decl::CXXConstructor:
-  {
-    const clang::FunctionDecl &fd =
-      static_cast<const clang::FunctionDecl &>(decl);
-
-    get_decl_name(fd, name, id);
-
-    if (get_type(fd.getType(), type))
-      return true;
-
-    code_typet &fd_type = to_code_type(type);
-    if (get_function_params(fd, fd_type.arguments()))
-      return true;
-
-    // annotate return type - will be used to adjust the initiliazer or decl-derived stmt
-    const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd);
-    assert(md);
-    annotate_ctor_dtor_rtn_type(*md, fd_type.return_type());
-
-    new_expr = exprt("symbol", type);
-    new_expr.identifier(id);
-    new_expr.name(name);
-
-    break;
-  }
+    return get_ctor_dtor_ref(
+      static_cast<const clang::CXXMethodDecl &>(decl), new_expr);
 
   default:
   {
@@ -2237,19 +3480,42 @@ bool clang_cpp_convertert::get_decl_ref(
   return false;
 }
 
+bool clang_cpp_convertert::get_ctor_dtor_ref(
+  const clang::CXXMethodDecl &md,
+  exprt &new_expr)
+{
+  std::string name, id;
+  get_decl_name(md, name, id);
+
+  typet type;
+  if (get_type(md.getType(), type))
+    return true;
+
+  code_typet &fd_type = to_code_type(type);
+  if (get_function_params(md, fd_type.arguments()))
+    return true;
+
+  // annotate return type - will be used to adjust the initiliazer or
+  // decl-derived stmt
+  annotate_ctor_dtor_rtn_type(md, fd_type.return_type());
+
+  new_expr = exprt("symbol", type);
+  new_expr.identifier(id);
+  new_expr.name(name);
+  return false;
+}
+
 bool clang_cpp_convertert::annotate_class_field(
   const clang::FieldDecl &field,
   const struct_union_typet &type,
   struct_typet::componentt &comp)
 {
-  // set parent in component's type
+  // A field of a tagless class type has no parent to attach it to.
   if (type.tag().empty())
   {
     log_error("Goto empty tag in parent class type in {}", __func__);
     return true;
   }
-  std::string parent_class_id = tag_prefix + type.tag().as_string();
-  comp.type().set("#member_name", parent_class_id);
 
   // set access in component
   if (annotate_class_field_access(field, comp))
@@ -2313,12 +3579,11 @@ bool clang_cpp_convertert::annotate_class_method(
   /*
    * The order of annotations matters.
    */
-  // annotate parent — derive the id via get_decl_name so it matches the
-  // record's symbol id exactly (Clang 22+ prepends the kind name; older
-  // versions don't).
+  // The multi-TU vptr-init fallback below needs the class id; derive it via
+  // get_decl_name so it matches the record's symbol id exactly (Clang 22+
+  // prepends the kind name; older versions don't).
   std::string parent_class_name, parent_class_id;
   get_decl_name(*cxxmdd.getParent(), parent_class_name, parent_class_id);
-  component_type.set("#member_name", parent_class_id);
 
   // annotate ctor and dtor
   if (is_ConstructorOrDestructor(cxxmdd))
@@ -2331,20 +3596,44 @@ bool clang_cpp_convertert::annotate_class_method(
     /*
      * We also have a `component` in class type representing the ctor/dtor.
      * Need to sync the type of this function symbol and its corresponding type
-     * of the component inside the class' symbol
-     * We just need "#member_name" and "return_type" fields to be synced for later use
-     * in the adjuster.
+     * of the component inside the class' symbol: the adjuster reads the return
+     * type back to tell a ctor from a dtor.
      * So let's do the sync before adding more annotations.
      */
     symbolt *fd_symb = get_fd_symbol(cxxmdd);
     if (fd_symb)
     {
-      fd_symb->type = component_type;
+      fd_symb->set_type(migrate_type(component_type));
       /*
-       * we indicate the need for vptr initializations in contructor.
-       * vptr initializations will be added in the adjuster.
+       * We indicate the need for vptr initializations in the ctor/dtor;
+       * they are added in the adjuster.
+       *
+       * `has_vptr_component` is only set while the enclosing class is being
+       * converted, so it is stale (false) when a ctor/dtor body is converted
+       * in a different translation unit than the one that first set up the
+       * class' vtable — the vptr init would then be dropped and virtual calls
+       * during construction/destruction would find no target (multi-TU
+       * polymorphic classes). Fall back to inspecting the already-built class
+       * symbol for a vtable-pointer component, exactly as the adjuster does.
        */
-      fd_symb->value.need_vptr_init(has_vptr_component);
+      bool needs_vptr_init = has_vptr_component;
+      if (!needs_vptr_init)
+      {
+        const symbolt *class_symb = context.find_symbol(parent_class_id);
+        if (class_symb && class_symb->get_type().is_struct())
+          for (const auto &c :
+               to_struct_type(class_symb->get_type()).components())
+            if (c.get_bool("is_vtptr"))
+            {
+              needs_vptr_init = true;
+              break;
+            }
+      }
+      {
+        exprt v = fd_symb->get_value();
+        v.need_vptr_init(needs_vptr_init);
+        fd_symb->set_value(std::move(v));
+      }
     }
   }
 
@@ -2453,9 +3742,47 @@ void clang_cpp_convertert::gen_typecast_base_ctor_call(
   assert(s);
   exprt implicit_this_symb = symbol_expr(this_symbol);
 
+  // Route `this` through the nested base subobject: &this->@base@<id>, so the
+  // base ctor operates on its own subobject (sound structural access, not a
+  // byte offset). See #1866.
+  const irep_idt &base_comp = initializer.get("#base_subobject");
+  bool routed = false;
+  if (!base_comp.empty() && implicit_this_symb.type().is_pointer())
+  {
+    // Only when the derived actually carries the nested subobject; a
+    // hierarchy with a virtual base keeps the legacy flattened layout.
+    const typet derived_struct = ns.follow(implicit_this_symb.type().subtype());
+    if (
+      derived_struct.is_struct() &&
+      to_struct_type(derived_struct).has_component(base_comp))
+    {
+      // dereference_exprt(op, tp) types the node tp.subtype(): tp is the
+      // pointer, not the pointee.
+      dereference_exprt deref(implicit_this_symb, implicit_this_symb.type());
+      member_exprt m(deref, base_comp, base_ctor_this_type.subtype());
+      implicit_this_symb = address_of_exprt(m);
+      routed = true;
+    }
+  }
+
+  // Flattened layout: the base still sits at a displacement inside the
+  // derived object, so a plain cast hands the base ctor the derived object's
+  // leading storage (#7025). Mark it for
+  // clang_c_adjust::adjust_derived_to_base, which resolves the displacement
+  // once the layout is padded.
+  if (!routed && base_ctor_this_type.subtype().id() == "symbol")
+    implicit_this_symb.set(
+      "#derived_to_base", base_ctor_this_type.subtype().identifier());
+
   // generate the type casting expr and push it to callee's arguments
   gen_typecast(ns, implicit_this_symb, base_ctor_this_type);
   call.arguments().push_back(implicit_this_symb);
+
+  // Mark this as a base-subobject constructor call so gen_vptr_initializations
+  // can insert the vptr assignments *after* all base ctors run but *before*
+  // the derived class's own member initializers and constructor body
+  // (Itanium ABI / C++ [class.cdtor]).
+  call.set("#is_base_ctor_call", true);
 }
 
 bool clang_cpp_convertert::need_new_object(
@@ -2502,7 +3829,8 @@ bool clang_cpp_convertert::get_base_map(
   base_map &map)
 {
   /*
-   * This function gets all the base classes from which we need to get the components/methods
+   * This function gets all the base classes from which we need to get the
+   * components/methods
    */
   for (const clang::CXXBaseSpecifier &base : cxxrd.bases())
   {
@@ -2522,13 +3850,14 @@ bool clang_cpp_convertert::get_base_map(
     std::string class_id, class_name;
     get_decl_name(base_cxxrd, class_name, class_id);
 
-    // avoid adding the same base, e.g. in case of diamond problem
-    if (map.find(class_id) != map.end())
+    // avoid adding the same base, e.g. in case of diamond problem; keep
+    // declaration order so the flattened layout matches the ABI base order
+    if (std::any_of(map.begin(), map.end(), [&](const auto &e) {
+          return e.first == class_id;
+        }))
       continue;
 
-    auto status = map.insert({class_id, base_cxxrd});
-    (void)status;
-    assert(status.second);
+    map.emplace_back(class_id, &base_cxxrd);
   }
 
   return false;
@@ -2536,7 +3865,9 @@ bool clang_cpp_convertert::get_base_map(
 
 void clang_cpp_convertert::get_base_components_methods(
   base_map &map,
-  struct_union_typet &type)
+  struct_union_typet &type,
+  bool has_virtual_bases,
+  const clang::CXXRecordDecl &cxxrd)
 {
   irept::subt &base_ids = type.add("bases").get_sub();
   for (const auto &base : map)
@@ -2548,19 +3879,30 @@ void clang_cpp_convertert::get_base_components_methods(
     assert(s);
     base_ids.emplace_back(s->id);
 
-    const struct_typet &base_type = to_struct_type(s->type);
+    const struct_typet &base_type = to_struct_type(s->get_type());
 
-    // pull components in
-    const struct_typet::componentst &components = base_type.components();
-    for (auto component : components)
+    if (has_virtual_bases)
     {
-      // TODO: tweak access specifier
-      component.set("from_base", true);
-      if (!is_duplicate_component(component, type))
-        to_struct_type(type).components().push_back(component);
+      // Legacy flattened layout. A shared virtual base must appear exactly
+      // once in the most-derived object, which per-path nested subobjects
+      // cannot express yet; keep the whole hierarchy flat so virtual
+      // inheritance behaves exactly as before (P5). See #1866, #3894.
+      for (auto component : base_type.components())
+      {
+        component.set("from_base", true);
+        // Which class actually declared this member. is_duplicate_component
+        // merges by name alone, so two bases with a same-named member share
+        // one slot; the owner is what lets a later base->derived displacement
+        // tell its own storage from the slot it was merged into (#7025).
+        if (component.get("#base_owner").empty())
+          component.set("#base_owner", class_id);
+        if (!is_duplicate_component(component, type))
+          to_struct_type(type).components().push_back(component);
+      }
     }
 
-    // pull methods in
+    // Methods stay flattened as metadata (they carry their own class `this`);
+    // resolution goes through the base method symbol plus the receiver cast.
     const struct_typet::componentst &methods = base_type.methods();
     for (auto method : methods)
     {
@@ -2569,6 +3911,43 @@ void clang_cpp_convertert::get_base_components_methods(
       if (!is_duplicate_method(method, type))
         to_struct_type(type).methods().push_back(method);
     }
+  }
+
+  if (has_virtual_bases)
+    return;
+
+  // Nested base subobjects: one "@base@<class_id>" component per *direct*
+  // base only. Each base's own struct already nests its own bases, so walking
+  // the transitive base_map here would duplicate an ancestor's storage (e.g.
+  // C : B, B : A would give C both @base@A and @base@B, the latter already
+  // containing @base@A). Inherited member access, upcasts and base ctor/dtor
+  // `this` are routed structurally through these components, which is sound in
+  // ESBMC's dereference model -- unlike the byte-offset flattening it
+  // replaces. See #1866, #3894 and
+  // docs/design/cpp-multiple-inheritance-subobjects.md.
+  for (const clang::CXXBaseSpecifier &base_spec : cxxrd.bases())
+  {
+    const clang::CXXRecordDecl *base_rd =
+      base_spec.getType()->getAsCXXRecordDecl();
+    if (!base_rd)
+      continue;
+
+    std::string base_name, base_id;
+    get_decl_name(*base_rd, base_name, base_id);
+    const symbolt *s = context.find_symbol(base_id);
+    if (!s)
+      continue;
+
+    struct_typet::componentt base_comp;
+    const std::string comp_name = base_subobject_name(base_id);
+    base_comp.set_name(comp_name);
+    base_comp.set_base_name(comp_name);
+    base_comp.set_pretty_name(comp_name);
+    base_comp.type() = symbol_typet(s->id);
+    base_comp.set("from_base", true);
+    base_comp.set("is_base_subobject", true);
+    if (!is_duplicate_component(base_comp, type))
+      to_struct_type(type).components().push_back(base_comp);
   }
 }
 
@@ -2687,6 +4066,283 @@ bool clang_cpp_convertert::is_ConstructorOrDestructor(
 {
   return md.getKind() == clang::Decl::CXXConstructor ||
          md.getKind() == clang::Decl::CXXDestructor;
+}
+
+/* [dcl.init]/17.6.1: a class-typed conditional is a prvalue, and the target is
+ * initialised directly from it -- one object, one destructor. Lowering it as an
+ * if_exprt instead materialises a temporary per branch plus a result temporary
+ * and copies between them with a plain assignment, so no copy/move constructor
+ * runs and every one of those temporaries is destroyed, including the branch
+ * that was not taken. Emit a single temporary_object whose initializer
+ * branches, so replace_new_object points both constructors at the same object
+ * -- the same elision the MaterializeTemporaryExpr arm above performs one level
+ * down.
+ *
+ * Only the shape where both branches are constructor temporaries is rewritten;
+ * anything else (an lvalue operand, a non-constructor temporary) keeps the
+ * existing lowering, where a copy is genuinely required. */
+static bool is_constructor_temporary(const exprt &e)
+{
+  return e.id() == "sideeffect" && e.statement() == "temporary_object" &&
+         e.initializer().is_not_nil();
+}
+
+/* Before C++17 each branch is an elidable copy of its prvalue, bound as a
+ * temporary; the copy is elided as in elided_copy_source. */
+static const clang::Expr &conditional_branch_source(const clang::Expr &branch)
+{
+  const clang::Expr *e = branch.IgnoreParens();
+  if (const auto *bind = llvm::dyn_cast<clang::CXXBindTemporaryExpr>(e))
+    e = bind->getSubExpr();
+  const clang::Expr *source = peel_elided_copy(e);
+  return source ? *source->IgnoreParens() : *branch.IgnoreParens();
+}
+
+bool clang_cpp_convertert::get_conditional_class_prvalue(
+  const clang::ConditionalOperator &ternary,
+  exprt &new_expr,
+  bool &elided)
+{
+  elided = false;
+
+  if (!ternary.getType()->isRecordType() || ternary.isLValue())
+    return false;
+
+  exprt cond;
+  if (get_expr(*ternary.getCond(), cond))
+    return true;
+
+  exprt then;
+  if (get_expr(conditional_branch_source(*ternary.getTrueExpr()), then))
+    return true;
+
+  exprt else_expr;
+  if (get_expr(conditional_branch_source(*ternary.getFalseExpr()), else_expr))
+    return true;
+
+  if (!is_constructor_temporary(then) || !is_constructor_temporary(else_expr))
+    return false;
+
+  typet t;
+  if (get_type(ternary.getType(), t))
+    return true;
+
+  gen_typecast_bool(ns, cond);
+
+  code_ifthenelset ite;
+  ite.cond() = cond;
+  ite.then_case() = to_code(static_cast<const exprt &>(then.initializer()));
+  ite.else_case() =
+    to_code(static_cast<const exprt &>(else_expr.initializer()));
+
+  side_effect_exprt tmp_obj("temporary_object", t);
+  tmp_obj.initializer(ite);
+
+  new_expr = tmp_obj;
+  elided = true;
+  return false;
+}
+
+// An array placement new constructs its elements at the given address:
+// ::operator new[](size_t, void *) adds no array overhead (CWG2382).
+//
+// A program may replace ::operator new, and a class may supply its own
+// ([basic.stc.dynamic.allocation], [expr.new]/9). The built-in cpp_new
+// conjures a fresh object and never calls it, so ESBMC verifies a
+// different program: two allocations from a pool allocator that alias
+// are modelled as distinct objects, hiding real bugs (github #6494).
+// Record the resolved function for goto-conversion to call instead.
+// The plain (size) form, the aligned form and the user-placement forms are
+// routed, with the alignment and then the placement arguments ([expr.new]/16);
+// an allocation function without a body in this TU has nothing to call.
+bool clang_cpp_convertert::get_new_storage(
+  const clang::CXXNewExpr &ne,
+  exprt &new_expr)
+{
+  const clang::FunctionDecl *op_new = ne.getOperatorNew();
+  if (op_new && op_new->isReservedGlobalPlacementOperator())
+  {
+    exprt place;
+    if (get_expr(*ne.getPlacementArg(0), place))
+      return true;
+    new_expr.add("placement") = place;
+    return false;
+  }
+
+  const unsigned implicit_params = ne.passAlignment() ? 2 : 1;
+  if (
+    !op_new || !op_new->isDefined() ||
+    op_new->getNumParams() != implicit_params + ne.getNumPlacementArgs())
+    return false;
+
+  exprt alloc_function;
+  if (get_decl_ref(*op_new, alloc_function))
+    return true;
+  new_expr.add("alloc_function") = alloc_function;
+
+  exprt alloc_arguments("arguments");
+  if (ne.passAlignment())
+  {
+    exprt align;
+    if (get_align_val(ne.getAllocatedType(), *op_new->getParamDecl(1), align))
+      return true;
+    alloc_arguments.move_to_operands(align);
+  }
+  for (const clang::Expr *arg : ne.placement_arguments())
+  {
+    exprt a;
+    if (get_expr(*arg, a))
+      return true;
+    alloc_arguments.move_to_operands(a);
+  }
+  if (alloc_arguments.has_operands())
+    new_expr.add("alloc_arguments") = alloc_arguments;
+  return false;
+}
+
+// Mirror of the allocation side: a replaced operator delete has to be called,
+// or state it maintains is never updated and correct programs are reported as
+// failing (github #6494).
+bool clang_cpp_convertert::get_dealloc_function(
+  const clang::CXXDeleteExpr &de,
+  exprt &new_expr)
+{
+  const clang::FunctionDecl *op_del = resolve_deallocation_function(
+    de.getOperatorDelete(), de.isArrayFormAsWritten());
+  if (!op_del)
+    return false;
+
+  exprt dealloc_function;
+  if (get_decl_ref(*op_del, dealloc_function))
+    return true;
+  new_expr.add("dealloc_function") = dealloc_function;
+
+  if (is_aligned_deallocation(*op_del))
+  {
+    exprt align;
+    if (
+      get_align_val(
+        ASTContext->getBaseElementType(de.getDestroyedType()),
+        *op_del->getParamDecl(op_del->getNumParams() - 1),
+        align))
+      return true;
+    new_expr.add("dealloc_alignment") = align;
+  }
+  return false;
+}
+
+// The std::align_val_t argument clang's codegen passes for a type
+// ([expr.new]/16, [expr.delete]/10).
+bool clang_cpp_convertert::get_align_val(
+  const clang::QualType &type,
+  const clang::ParmVarDecl &param,
+  exprt &align)
+{
+  typet t;
+  if (get_type(param.getType(), t))
+    return true;
+  align = typecast_exprt(
+    from_integer(
+      ASTContext->getTypeAlignInChars(type).getQuantity(), size_type()),
+    t);
+  return false;
+}
+
+bool clang_cpp_convertert::get_placement_new(
+  const clang::CXXNewExpr &ne,
+  const typet &t,
+  const locationt &location,
+  exprt &new_expr)
+{
+  exprt place;
+  if (get_expr(*ne.getPlacementArg(0), place))
+    return true;
+
+  /* The address is used twice below, as the object and as the result, so a
+   * side-effecting one (e.g. std::addressof(*it)) is evaluated once, before
+   * the initializer ([expr.new]/19), into a local declared inside a statement
+   * expression: every evaluation gets its own, in a constructor's
+   * mem-initializer, under a label, or recursively. */
+  exprt bound = nil_exprt();
+  if (ne.getPlacementArg(0)->HasSideEffects(*ASTContext))
+  {
+    const std::string path = location.file().as_string();
+    symbolt &tmp = anon_symbol.new_symbol(
+      context,
+      place.type(),
+      path + ":" + location.get_line().as_string() + "$placement$");
+    get_default_symbol(
+      tmp,
+      get_modulename_from_path(path),
+      place.type(),
+      tmp.name,
+      tmp.id,
+      location);
+    tmp.file_local = true;
+
+    code_declt decl(symbol_expr(tmp));
+    decl.copy_to_operands(place);
+    decl.location() = location;
+    bound = decl;
+    place = symbol_expr(tmp);
+  }
+
+  exprt tp("typecast", t);
+  tp.copy_to_operands(place);
+  new_expr = tp;
+
+  // Default-initialising a non-class type performs no initialisation
+  // ([dcl.init.general]), so clang attaches no initializer and there is
+  // nothing to sequence: `new (p) int;` is just (int *)p. A comma with a
+  // single operand would corrupt every downstream op1() access
+  // (esbmc/esbmc#6184).
+  if (ne.hasInitializer())
+  {
+    exprt comma("comma", t);
+    exprt target("dereference", t.subtype());
+    target.copy_to_operands(tp);
+
+    exprt init;
+    if (get_expr(*ne.getInitializer(), init))
+      return true;
+
+    if (
+      init.id() == "sideeffect" && init.statement() == "temporary_object" &&
+      static_cast<const exprt &>(init.initializer()).is_not_nil())
+    {
+      // A class-type initializer arrives as a temporary_object whose
+      // initializer wraps the constructor call carrying an &new_object
+      // placeholder (make_temporary): retarget the call at the placement
+      // address and drop the temporary, so `this` is the placed object, not
+      // a copied-from temp.
+      exprt wrap = static_cast<const exprt &>(init.initializer());
+      assert(wrap.is_code() && to_code(wrap).get_statement() == "expression");
+      exprt call = wrap.op0();
+      replace_new_object_with(target, call);
+      comma.copy_to_operands(call);
+    }
+    else
+    {
+      side_effect_exprt assign("assign");
+      assign.type() = t.subtype();
+      assign.copy_to_operands(target, init);
+      comma.copy_to_operands(assign);
+    }
+    comma.copy_to_operands(tp);
+    new_expr = comma;
+  }
+
+  if (bound.is_not_nil())
+  {
+    code_expressiont value;
+    value.op0() = new_expr;
+    code_blockt block;
+    block.move_to_operands(bound, value);
+    side_effect_exprt stmt_expr("statement_expression", t);
+    stmt_expr.move_to_operands(block);
+    new_expr = stmt_expr;
+  }
+  return false;
 }
 
 void clang_cpp_convertert::make_temporary(exprt &expr)

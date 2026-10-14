@@ -4,4 +4,4 @@ main.cpp
 ^Function Entry Points & Branches : 5
 ^Reached : 3
 ^Branch Coverage: 60%
-^VERIFICATION FAILED$
+^COVERAGE ANALYSIS COMPLETE$
