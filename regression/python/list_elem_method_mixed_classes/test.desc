@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: method call on an element of list 'ps' at line 12 is not supported: its elements are not known to share one class$

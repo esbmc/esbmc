@@ -291,6 +291,42 @@ exprt python_converter::make_class_object(const std::string &name)
   expr.set("value", name);
   return expr;
 }
+
+ExpressionType
+python_converter::expression_type(const nlohmann::json &element) const
+{
+  if (
+    element.is_object() && element.value("_type", "") == "Attribute" &&
+    element.value("attr", "") == "__mro__" &&
+    element["value"].value("_type", "") == "Name")
+  {
+    const std::string &name = element["value"]["id"];
+    if (is_class(name, *ast_json) && class_mro(name))
+      return ExpressionType::CLASS_MRO;
+  }
+  return get_expression_type(element);
+}
+
+exprt python_converter::class_mro_tuple(const nlohmann::json &element)
+{
+  const auto mro = class_mro(element["value"]["id"]);
+
+  // Build the tuple as the literal `(Cls, ..., object)` would be, so it
+  // compares equal to one written in the source.
+  nlohmann::json tuple = element;
+  tuple["_type"] = "Tuple";
+  tuple["elts"] = nlohmann::json::array();
+  nlohmann::json name = element["value"];
+  for (const std::string &cls : *mro)
+  {
+    name["id"] = cls;
+    tuple["elts"].push_back(name);
+  }
+  name["id"] = "object";
+  tuple["elts"].push_back(name);
+  return get_expr(tuple);
+}
+
 /// Convert Python AST literal to expression.
 /// Handles integers, booleans, floats, chars, strings, and byte literals.
 /// Example: {"_type": "Constant", "value": 42} -> integer constant expr
@@ -479,14 +515,16 @@ bool python_converter::is_bytes_literal(const nlohmann::json &element)
   return false;
 }
 
-exprt python_converter::get_lambda_expr(const nlohmann::json &element)
+exprt python_converter::get_lambda_expr(
+  const nlohmann::json &element,
+  const std::vector<std::optional<typet>> &argument_types)
 {
   // The body is converted here with the lambda's parameters still unbound, so
   // any division inside it must not emit a ZeroDivisionError guard (which would
   // fire on the unconstrained divisor); it is checked at the bound call site.
   bool saved = converting_lambda_body_;
   converting_lambda_body_ = true;
-  exprt result = lambda_handler_->get_lambda_expr(element);
+  exprt result = lambda_handler_->get_lambda_expr(element, argument_types);
   converting_lambda_body_ = saved;
   return result;
 }
@@ -1824,6 +1862,32 @@ exprt python_converter::handle_subscript_expr(const nlohmann::json &element)
   return list.index(array, normalize_bool_index_node(slice));
 }
 
+/// A field holding a bound method is only called: read as a value it would
+/// lose the receiver a call passes again (#8370).
+void python_converter::reject_bound_method_read(const nlohmann::json &element)
+{
+  const std::string &attr = element["attr"].get_ref<const std::string &>();
+  const attribute_functions *held = function_attribute(attr);
+  if (!is_converting_lhs && held && held->bound)
+    throw std::runtime_error(
+      "reading attribute '" + attr +
+      "', which holds a bound method, as a value is not supported");
+}
+
+/// `obj.m` for a method `m` is a bound method, which has no value here.
+void python_converter::reject_method_value(
+  const std::string &class_name,
+  const std::string &m) const
+{
+  const auto mro = class_mro(class_name);
+  if (mro && std::any_of(mro->begin(), mro->end(), [&](const auto &cls) {
+        return class_binds_name(cls, m);
+      }))
+    throw std::runtime_error(
+      "using method '" + class_name + "." + m +
+      "' as a value is not supported");
+}
+
 exprt python_converter::get_expr(const nlohmann::json &element)
 {
   get_expr_depth_guard depth_guard(*this);
@@ -1847,7 +1911,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
   exprt expr;
 
-  ExpressionType type = get_expression_type(element);
+  ExpressionType type = expression_type(element);
 
   switch (type)
   {
@@ -1915,6 +1979,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     expr = list.get();
     break;
   }
+  case ExpressionType::CLASS_MRO:
+    expr = class_mro_tuple(element);
+    break;
   case ExpressionType::VARIABLE_REF:
   {
     std::string var_name;
@@ -1931,6 +1998,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     }
     else if (element["_type"] == "Attribute")
     {
+      reject_bound_method_read(element);
       // Resolve `<base>.<attr>` after unwrapping Optional[T] /
       // pointer-to-struct / complex types. Returns nil if the attribute cannot
       // be resolved.
@@ -2794,6 +2862,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             // Instance of a known class but the attribute genuinely does not
             // exist: raise a catchable AttributeError (issue #5904) instead of
             // aborting conversion.
+            reject_method_value(
+              extract_class_name_from_tag(obj_type_name), attr_name);
             expr = get_exception_handler().gen_exception_raise(
               "AttributeError",
               "'" + extract_class_name_from_tag(obj_type_name) +

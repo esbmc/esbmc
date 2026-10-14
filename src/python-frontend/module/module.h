@@ -180,6 +180,18 @@ public:
     return classes_;
   }
 
+  void set_mentions_dunder_all()
+  {
+    mentions_dunder_all_ = true;
+  }
+
+  /// Whether `from <this module> import *` binds @p name: a public name, and
+  /// no mention of `__all__`, which could narrow what the import binds.
+  bool star_import_binds(const std::string &name) const
+  {
+    return !mentions_dunder_all_ && name.rfind('_', 0) != 0;
+  }
+
 private:
   std::string name_;
   FunctionsList functions_;
@@ -189,4 +201,5 @@ private:
   std::vector<std::string> sources_;
   bool hydrated_ = false;
   bool readable_ = true;
+  bool mentions_dunder_all_ = false;
 };

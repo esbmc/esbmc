@@ -1446,13 +1446,17 @@ protected:
     const type2tc &char_type,
     std::vector<expr2tc> &chars);
   /** The length of an unrenamed printf-family call's output whose constant
-   *  format holds only text and %d, %i or %u conversions without flags,
+   *  format holds only text and %d, %i, %u or %s conversions without flags,
    *  width or precision, with its largest value in `max_len`; nil for any
    *  other format. */
   expr2tc printf_output_length(
     const code_printf2t &call,
     size_t fmt_idx,
     size_t &max_len);
+  /** The characters a %s conversion prints for the unrenamed char pointer
+   *  `ptr`, adding its largest value to `max_len`; nil unless `ptr` resolves
+   *  to one byte array at a constant offset. */
+  expr2tc string_length(const expr2tc &ptr, size_t &max_len);
   /** Assume a printf-family call's return value equals the length of the
    *  output stored, when both are known. */
   void assume_printf_length(const expr2tc &retval, const expr2tc &len);

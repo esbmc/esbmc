@@ -981,6 +981,11 @@ void python_converter::convert()
     }
   }
 
+  std::for_each(
+    deferred_checks_.begin(), deferred_checks_.end(), [](const auto &check) {
+      check();
+    });
+
   /*
    * Create three-function architecture for coverage support (similar to
    * Solidity Frontend):
