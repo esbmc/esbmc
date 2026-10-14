@@ -5857,6 +5857,27 @@ static bool ctor_arms_share_class(
   return then_class == else_class;
 }
 
+bool python_converter::ternary_needs_if_spelling(
+  const nlohmann::json &ifexp) const
+{
+  const std::string then_class = instantiated_class(ifexp["body"]);
+  const std::string else_class = instantiated_class(ifexp["orelse"]);
+  if (then_class.empty() && else_class.empty())
+  {
+    const std::string then_kind =
+      dynamic_type_detail::classify_literal_value_kind(ifexp["body"]);
+    const std::string else_kind =
+      dynamic_type_detail::classify_literal_value_kind(ifexp["orelse"]);
+    return !then_kind.empty() && !else_kind.empty() && then_kind != else_kind;
+  }
+  if (!ctor_arms_share_class(ifexp, then_class, else_class))
+    // A method call on the target would dispatch on one class only (#8408).
+    throw std::runtime_error(
+      "a conditional expression instantiating a class must pick that class "
+      "or None in its other branch");
+  return true;
+}
+
 bool python_converter::rewrite_divergent_conditional_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -5875,22 +5896,8 @@ bool python_converter::rewrite_divergent_conditional_assign(
   if (target.value("_type", "") != "Name")
     return false;
 
-  const std::string then_class = instantiated_class(value["body"]);
-  const std::string else_class = instantiated_class(value["orelse"]);
-  if (then_class.empty() && else_class.empty())
-  {
-    const std::string then_kind =
-      dynamic_type_detail::classify_literal_value_kind(value["body"]);
-    const std::string else_kind =
-      dynamic_type_detail::classify_literal_value_kind(value["orelse"]);
-    if (then_kind.empty() || else_kind.empty() || then_kind == else_kind)
-      return false;
-  }
-  else if (!ctor_arms_share_class(value, then_class, else_class))
-    // A method call on the target would dispatch on one class only (#8408).
-    throw std::runtime_error(
-      "a conditional expression instantiating a class must pick that class "
-      "or None in its other branch");
+  if (!ternary_needs_if_spelling(value))
+    return false;
 
   // Each arm keeps the assignment's own location, so a violation still points
   // at the line the ternary is written on. A constructor arm is annotated
