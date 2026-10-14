@@ -1051,6 +1051,43 @@ void python_converter::adopt_tagged_element(
   lhs.type() = rhs.type();
 }
 
+/// The user class whose instance a value of @p type is, or "".
+std::string python_converter::user_class_of(const typet &type)
+{
+  const typet &held = ns.follow(type.is_pointer() ? type.subtype() : type);
+  if (!held.is_struct())
+    return "";
+  const std::string name =
+    extract_class_name_from_tag(to_struct_type(held).tag().as_string());
+  return json_utils::is_class(name, *ast_json) ? name : "";
+}
+
+/// An attribute is typed by the class of the instance it first holds, so
+/// storing an instance of an unrelated class would read one class's storage
+/// as the other's (#8461).
+void python_converter::reject_attribute_class_change(
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &ast_node,
+  bool is_ctor_call)
+{
+  if (!lhs.is_member())
+    return;
+  const std::string held = user_class_of(lhs.type());
+  const std::string assigned =
+    is_ctor_call
+      ? get_typechecker().get_constructor_name(ast_node["value"]["func"])
+      : user_class_of(rhs.type());
+  if (
+    held.empty() || !json_utils::is_class(assigned, *ast_json) ||
+    type_handler_.class_derives_from(assigned, held))
+    return;
+  throw std::runtime_error(
+    "unsupported: attribute '" + lhs.component_name().as_string() +
+    "' holds a '" + held + "' and is assigned a '" + assigned +
+    "'; an attribute holding instances of unrelated classes is not modelled");
+}
+
 void python_converter::handle_assignment_type_adjustments(
   symbolt *lhs_symbol,
   exprt &lhs,
@@ -1059,6 +1096,7 @@ void python_converter::handle_assignment_type_adjustments(
   const nlohmann::json &ast_node,
   bool is_ctor_call)
 {
+  reject_attribute_class_change(lhs, rhs, ast_node, is_ctor_call);
   const bool has_annotation =
     ast_node.contains("annotation") && !ast_node["annotation"].is_null();
 
