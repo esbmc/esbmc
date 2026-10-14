@@ -13,3 +13,7 @@ contract C {
 }
 // ----
 // f(string[]): 0x20, 0x1, 0x20, 0x2, hex"6162000000000000000000000000000000000000000000000000000000000000" -> 1, 2, 97, 0x80, 2, "ab"
+// `a[0]` may be the empty string, so `m1[0]` is out of bounds:
+// --incremental-bmc reaches it at k = 5. The SUCCESSFUL this test once
+// expected came from an inductive step that closed at k = 4 before the base
+// case got there.
