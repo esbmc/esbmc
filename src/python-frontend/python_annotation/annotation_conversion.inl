@@ -334,6 +334,14 @@ bool python_annotation<Json>::is_imported_name_in_body(
 }
 
 template <class Json>
+bool python_annotation<Json>::is_imported_name(const std::string &name) const
+{
+  return is_imported_name_in_body(name, ast_["body"]) ||
+         (current_func != nullptr && (*current_func).contains("body") &&
+          is_imported_name_in_body(name, (*current_func)["body"]));
+}
+
+template <class Json>
 std::string python_annotation<Json>::get_object_name(
   const Json &call,
   const std::string &prefix)
@@ -1976,10 +1984,7 @@ std::string python_annotation<Json>::get_type_from_call(const Json &element)
         const nlohmann::json &body =
           static_cast<const nlohmann::json &>(ast_["body"]);
         // Keep imported names intact here; the converter resolves them later.
-        if (
-          is_imported_name_in_body(func_id, body) ||
-          (current_func != nullptr && (*current_func).contains("body") &&
-           is_imported_name_in_body(func_id, (*current_func)["body"])))
+        if (is_imported_name(func_id))
           return func_id;
         for (const auto &stmt : body)
         {
@@ -2657,6 +2662,11 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
       call["func"]["value"].contains("_type") &&
       call["func"]["value"]["_type"] == "Call")
       return "Any";
+
+    // A from-imported receiver has no declaration in this module; leave the
+    // type unknown so the converter resolves the call (#8375).
+    if (is_imported_name(obj))
+      return "";
 
     throw std::runtime_error("Object \"" + obj + "\" not found.");
   }
