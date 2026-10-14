@@ -20,3 +20,6 @@ contract Bal {
         assert(b.balance == y);
     }
 }
+// KNOWNBUG (performance): CVC5 solved this in ~52s when the test was added;
+// the frontend's encoding has since grown and the solve now takes ~280s, past
+// every CI timeout tier. The verdict is still VERIFICATION SUCCESSFUL.

@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 contract.sol
 --contract C --unbound --no-standard-checks --k-induction --max-k-step 25 --k-step 2 --solidity-max-tx 1
 ^VERIFICATION FAILED$

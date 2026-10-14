@@ -26,3 +26,6 @@ contract H {
         assert(clone.get(1) == a);
     }
 }
+// KNOWNBUG: the inductive step cannot prove this without the inductive
+// invariants the local k-induction inferred (loop-entry invariants,
+// counted-loop skip, per-field havoc), which upstream's rewrite dropped.

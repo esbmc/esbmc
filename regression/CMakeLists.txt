@@ -809,6 +809,10 @@ math(EXPR ESBMC_REGRESS_TIMEOUT_VERY_SLOW "${ESBMC_REGRESS_TIMEOUT} * 3")
 math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_VERY_SLOW
      "${ESBMC_REGRESS_TIMEOUT_VERY_SLOW} + 30")
 set(_very_slow_regression_tests
+    # napp_state_2d_dyn_address_fail is a FAILED case the base case reaches at
+    # k = 21; every inductive step on the way is a real (non-vacuous) query,
+    # ~128s in total on a local Release build.
+    "regression/esbmc-solidity/napp_state_2d_dyn_address_fail"
     "regression/quixbugs/shortest_path_lengths"
     "regression/quixbugs/shortest_path_lengths_fail"
     # humaneval_62 (derivative) verifies SUCCESSFUL but is heavy: its body is a

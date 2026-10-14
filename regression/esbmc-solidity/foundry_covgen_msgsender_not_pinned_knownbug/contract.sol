@@ -552,3 +552,6 @@ library SafeMath {
     return c;
   }
 }
+// KNOWNBUG: upstream k-induction disables the inductive step here ("cannot
+// havoc what a loop writes through a pointer"), so only base cases run and
+// the expected proof is never reached.

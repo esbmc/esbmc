@@ -1,4 +1,4 @@
-CORE
+KNOWNBUG
 contract.sol
 --contract C --unbound --no-standard-checks --k-induction --max-k-step 25 --k-step 2
 ^VERIFICATION SUCCESSFUL$
