@@ -1,4 +1,4 @@
 CORE
 main.c
 --k-induction --unlimited-k-steps --memlimit 8g --timeout 20 --no-assertions --branch-coverage-claims
-^Branch Coverage: 75%$
+^Branch Coverage: 100%$

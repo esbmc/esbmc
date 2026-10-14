@@ -245,12 +245,28 @@ void add_havoc_assigns(
     add(lhs, rhs);
 }
 
+/// Havoc the loop's modified variables in front of its head. With an
+/// @p entry_cond, an execution whose concrete state does not enter the loop
+/// jumps over the havocs (and over the ASSUME(entry_cond) placed after them)
+/// straight to the head, which then exits with that state. Without the jump
+/// the ASSUME would kill every zero-trip execution, and with it every claim
+/// past the loop, so the inductive step could prove them vacuously.
 void make_nondet_assign(
   goto_functiont &goto_function,
   goto_programt::targett &loop_head,
-  const havocst &havocs)
+  const havocst &havocs,
+  const expr2tc &entry_cond)
 {
   goto_programt dest;
+  if (!is_nil_expr(entry_cond))
+  {
+    goto_programt::targett skip = dest.add_instruction(GOTO);
+    skip->guard = not2tc(entry_cond);
+    skip->inductive_step_instruction = true;
+    skip->location = loop_head->location;
+    // Auxiliary: coverage must not count it as a branch of the program.
+    skip->location.property("skipped");
+  }
   add_havoc_assigns(dest, havocs, loop_head->location);
   const size_t inserted = dest.instructions.size();
   goto_function.body.insert_swap(loop_head, dest);
@@ -260,7 +276,10 @@ void make_nondet_assign(
   // "walk while inductive_step_instruction" heuristic, which also swallowed an
   // ASSUME a previous pass had left after the head and so retargeted the back
   // edge past the loop's exit IF.
+  const goto_programt::targett first = loop_head;
   std::advance(loop_head, inserted);
+  if (!is_nil_expr(entry_cond))
+    first->targets.push_back(loop_head);
 }
 
 bool contains_rec(const expr2tc &expr, const loopst::loop_varst &vars)
@@ -300,48 +319,10 @@ void remove_unrelated_loop_cond(guardst &guards, const loopst &loop)
   }
 }
 
-void assume_loop_entry_cond_before_loop(
-  goto_functiont &goto_function,
-  goto_programt::targett &loop_head,
-  const guardst &guards)
+/// The per-branch loop-entry guards combined into one condition, or nil when
+/// there is nothing to assume.
+expr2tc loop_entry_cond(const guardst &guards)
 {
-  // Combine all per-branch loop-entry guards into one ASSUME and
-  // insert it via raw `insert(loop_head, ...)` immediately before the
-  // loop_head IF. This runs *after* make_nondet_assign in
-  // transform_loop, so the layout becomes
-  //
-  //   NONDET havocs               [inductive_step]   <- make_nondet_assign
-  //   ASSUME(entry_cond)          [inductive_step]   <- this insert
-  //   loop_head: IF !cond GOTO exit                  <- original IF
-  //   body
-  //   GOTO loop_head  -> back-edge targets the IF
-  //   exit:
-  //
-  // Two properties matter for soundness/precision:
-  //   1. The ASSUME comes *after* the NONDET havocs, so it constrains
-  //      the just-havoced state (the actual inductive-hypothesis pin),
-  //      not the pre-loop concrete values.
-  //   2. The ASSUME sits *before* loop_head and is reached only via
-  //      fall-through from the havocs. The back-edge
-  //      (adjust_loop_head_and_exit retargets it at loop_head, the
-  //      IF) skips both the havocs and the ASSUME on every iteration
-  //      after the first, so the natural exit on `cond` is never
-  //      blocked by a re-firing entry-cond assume.
-  //
-  // The legacy `insert_swap(tmp_head, ASSUME)` placement (one ASSUME
-  // per branch, swapped *at* the branch instruction) was unsound
-  // for the loop_head IF because insert_swap pins external jumps to
-  // the iterator: back-edges then landed on the ASSUME and re-fired
-  // it on every iteration, killing the natural-exit path in IS and
-  // producing vacuous UNSAT proofs (e.g. SV-COMP
-  // sll_of_sll_nondet_append-2). The earlier fix that combined the
-  // ASSUME and placed it *after* loop_head fixed SLL but over-
-  // constrained loops where the body modifies a loop-exit variable
-  // (e.g. `i++` in array_3-1): the back-edge re-evaluated the
-  // ASSUME on the iteration where the body's increment had pushed
-  // the variable past the exit condition, again killing a natural
-  // path.
-  //
   // Iterate the collected guards directly instead of walking the
   // instruction range and looking each one up: after
   // make_nondet_assign's insert_swap the walk-and-lookup approach
@@ -362,7 +343,7 @@ void assume_loop_entry_cond_before_loop(
     // any unresolved false among the branch guards skips the whole
     // entry-cond instrumentation.
     if (is_false(loop_cond))
-      return;
+      return expr2tc();
 
     combined.add(loop_cond);
   }
@@ -371,11 +352,60 @@ void assume_loop_entry_cond_before_loop(
   if (
     is_nil_expr(combined_expr) || is_true(combined_expr) ||
     is_false(combined_expr))
+    return expr2tc();
+  return combined_expr;
+}
+
+void assume_loop_entry_cond_before_loop(
+  goto_functiont &goto_function,
+  goto_programt::targett &loop_head,
+  const expr2tc &entry_cond)
+{
+  // Insert the combined entry condition as one ASSUME via raw
+  // `insert(loop_head, ...)` immediately before the loop_head IF. This
+  // runs *after* make_nondet_assign in transform_loop, so the layout
+  // becomes
+  //
+  //   IF !entry_cond GOTO loop_head [inductive_step] <- make_nondet_assign
+  //   NONDET havocs               [inductive_step]   <- make_nondet_assign
+  //   ASSUME(entry_cond)          [inductive_step]   <- this insert
+  //   loop_head: IF !cond GOTO exit                  <- original IF
+  //   body
+  //   GOTO loop_head  -> back-edge targets the IF
+  //   exit:
+  //
+  // Two properties matter for soundness/precision:
+  //   1. The ASSUME comes *after* the NONDET havocs, so it constrains
+  //      the just-havoced state (the actual inductive-hypothesis pin),
+  //      not the pre-loop concrete values.
+  //   2. The ASSUME sits *before* loop_head and is reached only via
+  //      fall-through from the havocs, while the leading IF lets an
+  //      execution that does not enter the loop bypass both. The back-edge
+  //      (adjust_loop_head_and_exit retargets it at loop_head, the
+  //      IF) skips both the havocs and the ASSUME on every iteration
+  //      after the first, so the natural exit on `cond` is never
+  //      blocked by a re-firing entry-cond assume.
+  //
+  // The legacy `insert_swap(tmp_head, ASSUME)` placement (one ASSUME
+  // per branch, swapped *at* the branch instruction) was unsound
+  // for the loop_head IF because insert_swap pins external jumps to
+  // the iterator: back-edges then landed on the ASSUME and re-fired
+  // it on every iteration, killing the natural-exit path in IS and
+  // producing vacuous UNSAT proofs (e.g. SV-COMP
+  // sll_of_sll_nondet_append-2). The earlier fix that combined the
+  // ASSUME and placed it *after* loop_head fixed SLL but over-
+  // constrained loops where the body modifies a loop-exit variable
+  // (e.g. `i++` in array_3-1): the back-edge re-evaluated the
+  // ASSUME on the iteration where the body's increment had pushed
+  // the variable past the exit condition, again killing a natural
+  // path.
+
+  if (is_nil_expr(entry_cond))
     return;
 
   goto_programt::instructiont instruction;
   instruction.type = ASSUME;
-  instruction.guard = combined_expr;
+  instruction.guard = entry_cond;
   instruction.inductive_step_instruction = true;
   instruction.location = loop_head->location;
   goto_function.body.instructions.insert(loop_head, instruction);
@@ -520,7 +550,8 @@ void transform_loop(
   goto_functiont &goto_function,
   loopst &loop,
   const havocst &havocs,
-  bool continue_past_failed_assertions)
+  bool continue_past_failed_assertions,
+  bool zero_trip_bypass)
 {
   goto_programt::targett loop_head = loop.get_original_loop_head();
   goto_programt::targett loop_exit = loop.get_original_loop_exit();
@@ -549,11 +580,17 @@ void transform_loop(
   // assume_loop_entry_cond_before_loop runs the iterator is correct
   // and the ASSUME ends up between the havocs and the IF.
 
+  const expr2tc entry_cond = loop_entry_cond(guards);
+
   // Create the nondet assignments on the beginning of the loop
-  make_nondet_assign(goto_function, loop_head, havocs);
+  make_nondet_assign(
+    goto_function,
+    loop_head,
+    havocs,
+    zero_trip_bypass ? entry_cond : expr2tc());
 
   // Assume the loop entry condition before going into the loop
-  assume_loop_entry_cond_before_loop(goto_function, loop_head, guards);
+  assume_loop_entry_cond_before_loop(goto_function, loop_head, entry_cond);
 
   // Check if the loop exit needs to be updated. We must point to the
   // assume that was inserted in the previous transformation
@@ -1909,7 +1946,8 @@ bool havoc_loop(
   goto_functionst &goto_functions,
   goto_functiont &goto_function,
   const loop_writest &w,
-  bool continue_past_failed_assertions)
+  bool continue_past_failed_assertions,
+  bool zero_trip_bypass)
 {
   loopst &loop = w.loop;
   // Before the empty-modified-set skip: a loop that only writes through
@@ -1931,7 +1969,12 @@ bool havoc_loop(
     goto_functions.function_map[to_symbol2t(havoc_object).thename].type =
       havoc_object->type;
   }
-  transform_loop(goto_function, loop, havocs, continue_past_failed_assertions);
+  transform_loop(
+    goto_function,
+    loop,
+    havocs,
+    continue_past_failed_assertions,
+    zero_trip_bypass);
   return covered;
 }
 
@@ -1971,7 +2014,8 @@ unsettled_by_loops(goto_functionst &goto_functions)
 bool goto_k_induction(
   goto_functionst &goto_functions,
   const namespacet &,
-  bool continue_past_failed_assertions)
+  bool continue_past_failed_assertions,
+  bool zero_trip_bypass)
 {
   // Andersen and loop_shapest key on location numbers, which inlining
   // restarts in every function.
@@ -2051,7 +2095,8 @@ bool goto_k_induction(
            drops_unresolved,
            address_taken,
            *iteration++},
-          continue_past_failed_assertions) &&
+          continue_past_failed_assertions,
+          zero_trip_bypass) &&
         decides)
         uncovered_write = true;
   }
