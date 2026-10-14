@@ -3423,11 +3423,19 @@ smt_solver_baset::get_index_value(const expr2tc &expr, expr2tc &res)
       res = tuple_api->tuple_get_array_elem(
         array, to_constant_int2t(idx).value.to_uint64(), res->type);
     else
+    {
+      // convert_sort keeps one native sort per level of an array of arrays
+      // with an infinite level (e.g. Solidity's `uint256[3][]`), so a row
+      // read from it is the row array itself, not the flattened leaf.
+      const bool nested_sort = is_array_type(res->type) &&
+                               array_chain_has_infinite_level(src_value->type);
       res = array_api->get_array_elem(
         array,
         to_constant_int2t(idx).value.to_uint64(),
-        is_vector_type(res->type) ? res->type
-                                  : get_flattened_array_subtype(res->type));
+        is_vector_type(res->type) || nested_sort
+          ? res->type
+          : get_flattened_array_subtype(res->type));
+    }
 
     // If we got a nil result, return original expression
     if (is_nil_expr(res))
