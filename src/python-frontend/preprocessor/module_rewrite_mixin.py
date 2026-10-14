@@ -3,6 +3,7 @@ import copy
 from collections import Counter
 
 from preprocessor.bound_method_dispatch import dispatch_rebound_methods
+from preprocessor.match_lowering import lower_match_statements
 from preprocessor.unbound_locals import guard_unbound_locals
 # pylint: disable=too-many-branches,too-many-boolean-expressions
 
@@ -10,6 +11,7 @@ from preprocessor.unbound_locals import guard_unbound_locals
 class ModuleRewriteMixin:
     called_names: set
     shadowed_nondet_collections: set
+    imported_module_names: set
     variable_annotations: dict
     module_dunder_all: list | None
     exported_range_aliases: set
@@ -472,6 +474,7 @@ class ModuleRewriteMixin:
 
     def prepare_module(self, node, alias_seed=frozenset(), wrapper_seed=None):
         """Run pre-visit analyses and range-alias/wrapper canonicalization."""
+        lower_match_statements(node)
         self.expand_unittest_main(node)
         self._rewrite_module_aliases(node)
         guard_unbound_locals(node)
@@ -489,6 +492,7 @@ class ModuleRewriteMixin:
         self.scope_binding_counts = self._scope_binding_counts(node)
 
         self._scan_shadowed_nondet_collections(node)
+        self._scan_imported_module_names(node)
 
         self.iterator_classes = self._scan_iterator_classes(node)
 
@@ -564,6 +568,39 @@ class ModuleRewriteMixin:
             if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 local_binds, local_names = self._collect_scope_dict_binds(n.body)
                 self._record_scope_calls(n.body, local_binds, local_names, module_binds)
+
+    def _scan_imported_module_names(self, node):
+        """Record names bound by a module-level `import` and by nothing else.
+
+        Only such a name denotes the module wherever it is read, so only its
+        attributes may stand for the module's nondet functions.
+        """
+        imports, others = [], set()
+        for n in ast.walk(node):
+            if isinstance(n, ast.Import):
+                bound = [a.asname or a.name.split(".")[0] for a in n.names]
+                if n in node.body:
+                    imports += bound
+                else:
+                    others.update(bound)
+            else:
+                others |= self._names_bound_without_import(n)
+        self.imported_module_names = {m for m in imports if imports.count(m) == 1} - others
+
+    @staticmethod
+    def _names_bound_without_import(n):
+        """Names `n` binds in its scope, for any node but an `import`."""
+        if isinstance(n, ast.Name) and not isinstance(n.ctx, ast.Load):
+            return {n.id}
+        if isinstance(n, ast.arg):
+            return {n.arg}
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            return {n.name}
+        if isinstance(n, ast.ImportFrom):
+            return {a.asname or a.name for a in n.names}
+        if isinstance(n, ast.ExceptHandler) and n.name:
+            return {n.name}
+        return set()
 
     def _scan_shadowed_nondet_collections(self, node):
         """Record `nondet_list`/`nondet_dict` names this module defines itself.

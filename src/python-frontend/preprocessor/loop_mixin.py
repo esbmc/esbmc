@@ -218,6 +218,7 @@ class LoopMixin:
         remember to preserve the original `orelse`.
         """
         self._update_assignment_call_origins([node.target], None)
+        self._forget_literals_changed_in_loop(node)
         lowered = self._lower_iterator_protocol_for(node)
         if lowered is not None:
             return lowered
@@ -226,6 +227,29 @@ class LoopMixin:
         if not isinstance(result, list):
             result = [result]
         return for_else_pre + result + for_else_post
+
+    def _forget_literals_changed_in_loop(self, loop):
+        """Drop the tracked literals that @p loop rebinds or mutates anywhere.
+
+        A statement late in the body runs before the early ones on the next
+        iteration, so a literal it changes is not known anywhere in the loop
+        (#8506).
+        """
+        for n in ast.walk(loop):
+            if isinstance(n, ast.Call):
+                self._invalidate_list_literals_for_call(n)
+                continue
+            if isinstance(n, (ast.Assign, ast.AnnAssign)) and isinstance(n.value, ast.Name):
+                base = n.value
+            elif isinstance(n, (ast.Name, ast.Subscript)) and not isinstance(n.ctx, ast.Load):
+                base = n
+                while isinstance(base, ast.Subscript):
+                    base = base.value
+            else:
+                continue
+            if isinstance(base, ast.Name):
+                self.list_literal_values.pop(base.id, None)
+                self.dict_literal_values.pop(base.id, None)
 
     def _lower_iterator_protocol_for(self, node):
         """Lower `for x in Obj(...)` over a class with `__iter__`.
@@ -242,12 +266,11 @@ class LoopMixin:
                     break
                 <body>
 
-        Only for a constructor call of such a class, the one shape whose
-        class is known here, and without a for-else.
+        Only for a constructor call of such a class, or a name whose one
+        binding in its scope is such a call, and without a for-else.
         """
         it_expr = node.iter
-        if not (isinstance(it_expr, ast.Call) and isinstance(it_expr.func, ast.Name)
-                and it_expr.func.id in self.iterator_classes) or node.orelse:
+        if not self._constructs_iterator_class(it_expr) or node.orelse:
             return None
         self._iter_counter += 1
         it_name = f"ESBMC_iter_{self._iter_counter}"
@@ -278,6 +301,18 @@ class LoopMixin:
         ast.fix_missing_locations(init)
         ast.fix_missing_locations(loop)
         return [self.visit(init), self.visit(loop)]
+
+    def _constructs_iterator_class(self, expr):
+        """Whether `expr` is `Cls(...)`, or a name bound only by `x = Cls(...)`
+        in the scope being visited, for a class in `iterator_classes`."""
+        if isinstance(expr, ast.Name):
+            scope = id(self._vararg_scope_stack[-1]) if self._vararg_scope_stack else None
+            _, counts = self.scope_binding_counts.get(scope, (None, {}))
+            if counts.get(expr.id) != 1:
+                return False
+            expr = self._assignment_call_origins.get(expr.id)
+        return (isinstance(expr, ast.Call) and isinstance(expr.func, ast.Name)
+                and expr.func.id in self.iterator_classes)
 
     def _lower_for_else(self, node):
         """Lower `for ... else: <orelse>` into a did-not-break flag.
@@ -2736,8 +2771,21 @@ class LoopMixin:
     # the rewrite always passes the bound explicitly.
     _DEFAULT_NONDET_COLLECTION_SIZE = 8
 
-    @classmethod
-    def _nondet_generator_type(cls, node):
+    def _nondet_callee_name(self, node):
+        """Name of the function `node` refers to, else None.
+
+        A bare name, or an attribute of a module bound only by `import`, so
+        `_sv_verifier.nondet_list(_sv_verifier.nondet_int)` reads as
+        `nondet_list(nondet_int)` does after `from _sv_verifier import ...`.
+        """
+        if isinstance(node, ast.Name):
+            return node.id
+        if (isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name)
+                and node.value.id in self.imported_module_names):
+            return node.attr
+        return None
+
+    def _nondet_generator_type(self, node):
         """Type name behind a scalar nondet generator, else None.
 
         Accepts a call (``nondet_bool()``) and the bare function reference
@@ -2745,23 +2793,19 @@ class LoopMixin:
         an ordinary variable that happens to be named ``nondet_size`` is not
         mistaken for a generator and swallowed as the element type.
         """
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
-            name = node.func.id
-        elif isinstance(node, ast.Name):
-            name = node.id
-        else:
+        name = self._nondet_callee_name(node.func if isinstance(node, ast.Call) else node)
+        if name is None:
             return None
         for prefix in ("__VERIFIER_nondet_", "nondet_"):
             if name.startswith(prefix):
                 suffix = name[len(prefix):]
-                if suffix in cls._NONDET_SCALAR_SUFFIXES:
+                if suffix in self._NONDET_SCALAR_SUFFIXES:
                     return suffix
         return None
 
-    @classmethod
-    def _resolve_nondet_type(cls, node, allowed, func_name, role):
+    def _resolve_nondet_type(self, node, allowed, func_name, role):
         expected = ", ".join(f"nondet_{t}()" for t in allowed)
-        type_name = cls._nondet_generator_type(node)
+        type_name = self._nondet_generator_type(node)
         if type_name is None:
             raise SyntaxError(f"{func_name}: {role} must be a nondet generator, got "
                               f"{ast.unparse(node)!r}; expected one of {expected}")
@@ -2797,12 +2841,12 @@ class LoopMixin:
         in models/nondet.py that produces the requested element types, or None
         when `call` is not one of these generators.
         """
-        if not (isinstance(call, ast.Call) and isinstance(call.func, ast.Name)):
+        if not isinstance(call, ast.Call):
             return None
-        func_name = call.func.id
+        func_name = self._nondet_callee_name(call.func)
         if func_name not in ("nondet_list", "nondet_dict"):
             return None
-        if func_name in self.shadowed_nondet_collections:
+        if isinstance(call.func, ast.Name) and func_name in self.shadowed_nondet_collections:
             return None
 
         positional = list(call.args)
@@ -2896,11 +2940,10 @@ class LoopMixin:
         Both spellings are handled because the module pre-pass runs before the
         callee rewrite and the per-assignment pass runs after it.
         """
-        if not isinstance(call_node.func, ast.Name):
-            return None
-        annotation = self._nondet_builder_annotation(call_node.func.id)
-        if annotation is not None:
-            return annotation
+        if isinstance(call_node.func, ast.Name):
+            annotation = self._nondet_builder_annotation(call_node.func.id)
+            if annotation is not None:
+                return annotation
         parsed = self._parse_nondet_collection_call(call_node)
         if parsed is None:
             return None

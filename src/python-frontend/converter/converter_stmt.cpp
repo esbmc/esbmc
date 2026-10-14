@@ -1066,6 +1066,43 @@ bool python_converter::annotation_yields_to_rhs(
           !json_utils::is_imported_from(*ast_json, "typing", "Any"));
 }
 
+/// The user class whose instance a value of @p type is, or "".
+std::string python_converter::user_class_of(const typet &type)
+{
+  const typet &held = ns.follow(type.is_pointer() ? type.subtype() : type);
+  if (!held.is_struct())
+    return "";
+  const std::string name =
+    extract_class_name_from_tag(to_struct_type(held).tag().as_string());
+  return json_utils::is_class(name, *ast_json) ? name : "";
+}
+
+/// An attribute is typed by the class of the instance it first holds, so
+/// storing an instance of an unrelated class would read one class's storage
+/// as the other's (#8461).
+void python_converter::reject_attribute_class_change(
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &ast_node,
+  bool is_ctor_call)
+{
+  if (!lhs.is_member())
+    return;
+  const std::string held = user_class_of(lhs.type());
+  const std::string assigned =
+    is_ctor_call
+      ? get_typechecker().get_constructor_name(ast_node["value"]["func"])
+      : user_class_of(rhs.type());
+  if (
+    held.empty() || !json_utils::is_class(assigned, *ast_json) ||
+    type_handler_.class_derives_from(assigned, held))
+    return;
+  throw std::runtime_error(
+    "unsupported: attribute '" + lhs.component_name().as_string() +
+    "' holds a '" + held + "' and is assigned a '" + assigned +
+    "'; an attribute holding instances of unrelated classes is not modelled");
+}
+
 void python_converter::handle_assignment_type_adjustments(
   symbolt *lhs_symbol,
   exprt &lhs,
@@ -1074,6 +1111,7 @@ void python_converter::handle_assignment_type_adjustments(
   const nlohmann::json &ast_node,
   bool is_ctor_call)
 {
+  reject_attribute_class_change(lhs, rhs, ast_node, is_ctor_call);
   const bool has_annotation =
     ast_node.contains("annotation") && !ast_node["annotation"].is_null();
 
@@ -5853,6 +5891,55 @@ bool python_converter::module_scope_rhs_needs_type_probe(
          dynamic_type_handler_.is_tagged(value["id"].get<std::string>());
 }
 
+// The class `value` instantiates, or "" if it is not a constructor call.
+std::string
+python_converter::instantiated_class(const nlohmann::json &value) const
+{
+  if (
+    value.value("_type", "") != "Call" || !value.contains("func") ||
+    value["func"].value("_type", "") != "Name")
+    return "";
+  const std::string name = value["func"].value("id", "");
+  return json_utils::is_class(name, *ast_json) ? name : "";
+}
+
+static bool ctor_arms_share_class(
+  const nlohmann::json &ifexp,
+  const std::string &then_class,
+  const std::string &else_class)
+{
+  auto is_none = [](const nlohmann::json &v) {
+    return v.value("_type", "") == "Constant" && v.contains("value") &&
+           v["value"].is_null();
+  };
+  if (then_class.empty())
+    return is_none(ifexp["body"]);
+  if (else_class.empty())
+    return is_none(ifexp["orelse"]);
+  return then_class == else_class;
+}
+
+bool python_converter::ternary_needs_if_spelling(
+  const nlohmann::json &ifexp) const
+{
+  const std::string then_class = instantiated_class(ifexp["body"]);
+  const std::string else_class = instantiated_class(ifexp["orelse"]);
+  if (then_class.empty() && else_class.empty())
+  {
+    const std::string then_kind =
+      dynamic_type_detail::classify_literal_value_kind(ifexp["body"]);
+    const std::string else_kind =
+      dynamic_type_detail::classify_literal_value_kind(ifexp["orelse"]);
+    return !then_kind.empty() && !else_kind.empty() && then_kind != else_kind;
+  }
+  if (!ctor_arms_share_class(ifexp, then_class, else_class))
+    // A method call on the target would dispatch on one class only (#8408).
+    throw std::runtime_error(
+      "a conditional expression instantiating a class must pick that class "
+      "or None in its other branch");
+  return true;
+}
+
 bool python_converter::rewrite_divergent_conditional_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -5866,22 +5953,31 @@ bool python_converter::rewrite_divergent_conditional_assign(
     !value.contains("body") || !value.contains("orelse"))
     return false;
 
-  const std::string then_kind =
-    dynamic_type_detail::classify_literal_value_kind(value["body"]);
-  const std::string else_kind =
-    dynamic_type_detail::classify_literal_value_kind(value["orelse"]);
-  if (then_kind.empty() || else_kind.empty() || then_kind == else_kind)
-    return false;
-
   const nlohmann::json &target =
     ast_node.contains("targets") ? ast_node["targets"][0] : ast_node["target"];
   if (target.value("_type", "") != "Name")
     return false;
 
+  if (!ternary_needs_if_spelling(value))
+    return false;
+
   // Each arm keeps the assignment's own location, so a violation still points
-  // at the line the ternary is written on.
+  // at the line the ternary is written on. A constructor arm is annotated
+  // with its class, which it needs to allocate the instance through a
+  // pointer, as the annotation pass does for the `if` spelling.
   auto arm = [&](const nlohmann::json &branch) {
     nlohmann::json assign = ast_node;
+    const std::string cls = instantiated_class(branch);
+    if (!cls.empty())
+    {
+      assign["_type"] = "AnnAssign";
+      assign["target"] = target;
+      assign.erase("targets");
+      assign["annotation"] = {{"_type", "Name"}, {"id", cls}};
+      assign["simple"] = 1;
+      assign["value"] = branch;
+      return nlohmann::json::array({assign});
+    }
     assign["_type"] = "Assign";
     assign["targets"] = nlohmann::json::array({target});
     assign.erase("target");
@@ -8707,6 +8803,16 @@ exprt python_converter::narrow_optional_return(
   return unwrap_optional_if_needed(base);
 }
 
+static std::string unsupported_statement_message(const nlohmann::json &element)
+{
+  // The preprocessor lowers a match whose patterns are all literals, values,
+  // captures, wildcards or alternatives of these.
+  if (element["_type"] == "Match")
+    return "match statements with sequence, mapping or class patterns, or "
+           "with a guard that has a nested scope, are not supported";
+  return element["_type"].get<std::string>() + " statements are not supported";
+}
+
 exprt python_converter::get_block(
   const nlohmann::json &ast_block,
   bool is_function_body,
@@ -9085,8 +9191,7 @@ exprt python_converter::get_block(
       break;
     case StatementType::UNKNOWN:
     default:
-      throw std::runtime_error(
-        element["_type"].get<std::string>() + " statements are not supported");
+      throw std::runtime_error(unsupported_statement_message(element));
     }
   }
 
