@@ -979,10 +979,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::ConceptSpecializationExpr &concept_expr =
       static_cast<const clang::ConceptSpecializationExpr &>(stmt);
 
-    if (concept_expr.isSatisfied())
-      new_expr = true_exprt();
-    else
-      new_expr = false_exprt();
+    new_expr = gen_boolean(concept_expr.isSatisfied());
     break;
   }
 
@@ -992,10 +989,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   {
     const auto &requires_expr = static_cast<const clang::RequiresExpr &>(stmt);
 
-    if (requires_expr.isSatisfied())
-      new_expr = true_exprt();
-    else
-      new_expr = false_exprt();
+    new_expr = gen_boolean(requires_expr.isSatisfied());
     break;
   }
 
