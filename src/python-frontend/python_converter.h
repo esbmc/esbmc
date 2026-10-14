@@ -2654,6 +2654,10 @@ private:
     const nlohmann::json &annotation,
     codet &target_block);
 
+  // Build the class a `tag-<Name>` symbol type refers to when it is defined
+  // later in the module, so the type can be followed.
+  void build_forward_class(const typet &type);
+
   // =========================================================================
   // Optional type helpers
   // =========================================================================
