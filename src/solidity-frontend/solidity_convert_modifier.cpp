@@ -200,9 +200,9 @@ bool solidity_convertert::get_function_definition(
   //     must prune, because the EVM aborts contract creation. Making it
   //     observable would let construction continue with a half-initialised
   //     contract.
-  const bool is_event_or_err =
-    ast_node.contains("nodeType") && (ast_node["nodeType"] == "EventDefinition" ||
-                                      ast_node["nodeType"] == "ErrorDefinition");
+  const bool is_event_or_err = ast_node.contains("nodeType") &&
+                               (ast_node["nodeType"] == "EventDefinition" ||
+                                ast_node["nodeType"] == "ErrorDefinition");
   current_function_revert_observable = !is_event_or_err && !is_ctor;
   if (!is_event_err_lib && !is_free_function)
     get_function_this_pointer_param(
