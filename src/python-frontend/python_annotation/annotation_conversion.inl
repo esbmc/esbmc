@@ -587,6 +587,64 @@ std::string python_annotation<Json>::infer_unpacked_element_type(
   return "Any";
 }
 
+/// The type a subscript of a `container`-typed value yields, or empty.
+inline std::string
+subscript_result_type(const std::string &container, bool is_slice)
+{
+  // The trailing ']' is redundant against every current producer, and is
+  // kept only to hold the invariant the substr calls rely on.
+  if (container.size() < 6 || container.back() != ']')
+    return "";
+  const std::string params = container.substr(5, container.size() - 6);
+  if (container.rfind("list[", 0) == 0)
+    return is_slice ? container : params;
+  // A dict lookup yields the value type (GitHub #8358).
+  const auto kv = json_utils::split_top_level_params(params);
+  if (container.rfind("dict[", 0) == 0 && !is_slice && kv.size() == 2)
+    return kv[1];
+  return "";
+}
+
+/// True when `type` spells a tuple without its element types anywhere. A
+/// later round of call-site inference may still resolve the elements.
+inline bool has_bare_tuple(const std::string &type)
+{
+  for (size_t pos = type.find("tuple"); pos != std::string::npos;
+       pos = type.find("tuple", pos + 1))
+  {
+    const size_t end = pos + 5;
+    const bool starts = pos == 0 || type[pos - 1] == '[' ||
+                        type[pos - 1] == ' ' || type[pos - 1] == ',';
+    if (starts && (end == type.size() || type[end] == ']' || type[end] == ','))
+      return true;
+  }
+  return false;
+}
+
+/// True when an argument type says too little to annotate a parameter with
+/// (see collect_function_call_arg_types).
+inline bool is_unresolved_arg_type(const std::string &type)
+{
+  return type.empty() || type == "NoneType" || type == "Any" ||
+         has_bare_tuple(type);
+}
+
+/// list(x) copies an iterable into the list model, so the call has type
+/// list[T] for an iterable of T. Empty when the iterable's element type is
+/// unknown (GitHub #8358).
+template <class Json>
+std::string python_annotation<Json>::list_copy_type(
+  const std::string &func_name,
+  const Json &call)
+{
+  if (func_name != "list" || !call.contains("args") || call["args"].size() != 1)
+    return "";
+  const std::string source = get_argument_type(call["args"][0]);
+  if (source == "range")
+    return "list[int]";
+  return source.rfind("list[", 0) == 0 ? source : "";
+}
+
 // ---------- dispatchers ----------
 
 template <class Json>
@@ -675,15 +733,10 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
         !var_node.empty() && var_node.contains("value") &&
         !var_node["value"].is_null())
       {
-        const std::string base_type = get_argument_type(var_node["value"]);
         const bool is_slice =
           arg.contains("slice") && arg["slice"].value("_type", "") == "Slice";
-
-        // The trailing ']' is redundant against every current producer, and
-        // is kept only to hold the invariant the substr below relies on.
-        if (base_type.rfind("list[", 0) == 0 && base_type.back() == ']')
-          return is_slice ? base_type
-                          : base_type.substr(5, base_type.size() - 6);
+        return subscript_result_type(
+          get_argument_type(var_node["value"]), is_slice);
       }
     }
     return "";
@@ -894,10 +947,12 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
         get_argument_type(arg["args"][0]) != "bytes")
         return "int";
 
-      // Check built-in functions first
-      auto it = builtin_functions().find(func_name);
-      if (it != builtin_functions().end())
-        return it->second;
+      const std::string copied = list_copy_type(func_name, arg);
+      if (!copied.empty())
+        return copied;
+
+      if (builtin_functions().count(func_name))
+        return get_builtin_call_type(arg);
 
       // For user-defined functions, try to get return type
       try
@@ -1015,6 +1070,13 @@ python_annotation<Json>::get_list_type_from_literal(const Json &list_arg)
         element_type.rfind("tuple", 0) == 0 ||
         current_type.rfind("tuple", 0) == 0)
         return "";
+      // Nor does a list element beside a scalar: claiming list[int] reads the
+      // inner list as an int (#8472). The converter types such a parameter
+      // from its call sites instead.
+      if (
+        (element_type.rfind("list", 0) == 0) !=
+        (current_type.rfind("list", 0) == 0))
+        return "";
       // Non-numeric heterogeneity (e.g. str vs int) has no common element
       // type we can represent, so keep the historical int fallback.
       if (!all_numeric)
@@ -1068,6 +1130,21 @@ std::string python_annotation<Json>::recover_list_type_from_appends(
     return "";
 
   return "list[" + elem_type + "]";
+}
+
+template <class Json>
+std::string python_annotation<Json>::get_builtin_call_type(const Json &call)
+{
+  const std::string &func_name = call["func"]["id"];
+  // abs() of a float or a complex is a float; the table's int covers the rest.
+  if (func_name == "abs" && call.contains("args") && call["args"].size() == 1)
+  {
+    const std::string arg_type = get_argument_type(call["args"][0]);
+    if (arg_type == "float" || arg_type == "complex")
+      return "float";
+  }
+  auto it = builtin_functions().find(func_name);
+  return it != builtin_functions().end() ? it->second : func_name;
 }
 
 template <class Json>
@@ -1198,7 +1275,7 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
       const std::string &func_name = lhs["func"]["id"];
 
       if (type_utils::is_builtin_type(func_name))
-        type = func_name; // float() returns float, int() returns int, etc.
+        type = get_builtin_call_type(lhs);
       else
         type = get_function_return_type(
           func_name, body); // For user-defined functions
@@ -1803,6 +1880,11 @@ std::string python_annotation<Json>::get_type_from_rhs_variable(
       type_utils::is_type_identifier(rhs_var_name) ||
       type_utils::is_python_exceptions(rhs_var_name))
       return "type";
+
+    // A name read from an import is left to the converter, which types it as
+    // it does the name used directly (#8366).
+    if (reads_import(rhs_var_name, element["value"]))
+      return "";
 
     const auto &lineno = element["lineno"].template get<int>();
 
@@ -3026,6 +3108,8 @@ InferResult python_annotation<Json>::infer_type(
       return InferResult::UNKNOWN;
 
     inferred_type = get_type_from_rhs_variable(stmt, body);
+    if (inferred_type.empty() && value_type == "Name")
+      return InferResult::UNKNOWN;
   }
 
   // Get type from RHS binary expression
@@ -3776,7 +3860,7 @@ std::string python_annotation<Json>::resolve_wildcard_import_func(
     if (!is_star)
       continue;
     auto module = module_manager_->get_module(node["module"]);
-    if (!module)
+    if (!module || !module->star_import_binds(func_name))
       continue;
     auto func_info = module->get_function(func_name);
     if (func_info.name_.empty())
@@ -3786,6 +3870,50 @@ std::string python_annotation<Json>::resolve_wildcard_import_func(
     return func_info.return_type_;
   }
   return "";
+}
+
+template <class Json>
+bool python_annotation<Json>::reads_import(
+  const std::string &name,
+  const Json &use) const
+{
+  if (parent_func)
+    return false;
+  for (const auto &node : ast_["body"])
+  {
+    const Json names = node.value("names", Json::array());
+    if (
+      node.value("_type", "") != "ImportFrom" ||
+      std::none_of(names.begin(), names.end(), [](const Json &alias) {
+        return alias.value("name", "") == "*";
+      }))
+      continue;
+    const Json from = node.value("module", Json());
+    const auto module =
+      module_manager_ && from.is_string()
+        ? module_manager_->get_module(from.template get<std::string>())
+        : nullptr;
+    if (
+      !module || !module->star_import_binds(name) ||
+      module->get_function(name).name_.empty())
+      return false;
+  }
+  try
+  {
+    return python_converter::binding_is_import(
+             ast_,
+             python_converter::module_scope_bindings(ast_, name),
+             current_func,
+             !current_class_name_.empty(),
+             current_func == nullptr,
+             name,
+             use)
+      .value_or(false);
+  }
+  catch (const std::runtime_error &)
+  {
+    return false;
+  }
 }
 
 template <class Json>
@@ -4569,7 +4697,7 @@ void python_annotation<Json>::collect_function_call_arg_types(
           // a parameter is annotated only once *every* call site resolves —
           // an iterating pass must not commit to a type a later round
           // contradicts (GitHub #7254).
-          if (arg_type.empty() || arg_type == "NoneType" || arg_type == "Any")
+          if (is_unresolved_arg_type(arg_type))
             arg_type = unresolved_arg_type();
           param_types[{func_name, i}].insert(arg_type);
         }
@@ -4997,6 +5125,26 @@ void python_annotation<Json>::infer_loop_variable_types(Json &while_stmt)
   }
 }
 
+/// Annotates the else block of an if, and the else and finally blocks of a
+/// try. Handler bodies are annotated at module scope only: inside a function,
+/// an `except E as v` that rebinds a local of another type does not lower once
+/// its body starts with a declaration.
+template <class Json>
+void python_annotation<Json>::annotate_branch_blocks(Json &element)
+{
+  for (const char *field : {"orelse", "finalbody"})
+  {
+    if (!element.contains(field) || element[field].empty())
+      continue;
+    Json block = {{"body", element[field]}};
+    add_annotation(block);
+    element[field] = block["body"];
+  }
+  if (current_func_name_context_.empty() && element.contains("handlers"))
+    for (Json &handler : element["handlers"])
+      add_annotation(handler);
+}
+
 template <class Json>
 void python_annotation<Json>::add_annotation(Json &body)
 {
@@ -5023,17 +5171,8 @@ void python_annotation<Json>::add_annotation(Json &body)
       if (stmt_type == "While")
         infer_loop_variable_types(element);
 
-      // Process else block if it exists
-      if (
-        stmt_type == "If" && element.contains("orelse") &&
-        !element["orelse"].empty())
-      {
-        // Create a temporary body structure for the else block
-        Json else_body = {{"body", element["orelse"]}};
-        add_annotation(else_body);
-        // Update the original orelse with annotated version
-        element["orelse"] = else_body["body"];
-      }
+      if (stmt_type != "While")
+        annotate_branch_blocks(element);
 
       continue;
     }

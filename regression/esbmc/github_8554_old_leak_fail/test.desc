@@ -1,0 +1,5 @@
+CORE
+main.c
+--memory-leak-check --no-reachable-memory-leak --incremental-bmc
+forgotten memory: dynamic_\d+_value$
+^VERIFICATION FAILED$

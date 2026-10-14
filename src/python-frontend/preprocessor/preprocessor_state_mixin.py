@@ -55,6 +55,7 @@ class PreprocessorStateMixin:
         self.generator_func_defs = {}
         self.generator_next_index = {}
         self.generator_emitted_init = set()
+        self._gen_next_blacklist = set()
         # Sequence-iterator protocol lowering (range_iter): maps a name bound to
         # a statically-sized sequence (range()/list/tuple literal) to that
         # length, an iterator var (from ``seq.__iter__()``) to its captured

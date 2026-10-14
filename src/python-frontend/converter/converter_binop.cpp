@@ -902,6 +902,24 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
   }
   return build_boolean_chain(logical_expr);
 }
+
+// An unmodelled call stands for a nondet of no type. In arithmetic with a
+// number it is an unknown number of that type; left untyped, it builds an
+// arithmetic expression whose operand widths IREP2 cannot check.
+static void
+type_untyped_nondet_operand(const std::string &op, exprt &lhs, exprt &rhs)
+{
+  auto untyped_nondet = [](const exprt &e) {
+    return e.type().is_empty() && e.statement() == "nondet";
+  };
+  if (type_utils::is_relational_op(op))
+    return;
+  if (untyped_nondet(lhs) && is_number(rhs.type()))
+    lhs.type() = rhs.type();
+  else if (untyped_nondet(rhs) && is_number(lhs.type()))
+    rhs.type() = lhs.type();
+}
+
 // Sound over-approximation for a relational comparison that cannot be lowered
 // to a typed binop. Returns nil when the comparison lowers normally.
 static exprt relational_nondet_fallback(
@@ -1743,6 +1761,7 @@ exprt python_converter::get_binary_operator_expr(
 
   attach_symbol_location(lhs, symbol_table());
   attach_symbol_location(rhs, symbol_table());
+  type_untyped_nondet_operand(op, lhs, rhs);
 
   // Python rule: cross-type `==`/`!=` returns False/True without coercion,
   // except within the numeric tower (bool/int/float/complex). Fold here, before

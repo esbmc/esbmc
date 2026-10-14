@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^VERIFICATION FAILED$
+^ +FAILED .*line +7 +assertion return_value\$_get\$[0-9]+ != 2$
