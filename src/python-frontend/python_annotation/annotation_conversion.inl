@@ -5125,6 +5125,26 @@ void python_annotation<Json>::infer_loop_variable_types(Json &while_stmt)
   }
 }
 
+/// Annotates the else block of an if, and the else and finally blocks of a
+/// try. Handler bodies are annotated at module scope only: inside a function,
+/// an `except E as v` that rebinds a local of another type does not lower once
+/// its body starts with a declaration.
+template <class Json>
+void python_annotation<Json>::annotate_branch_blocks(Json &element)
+{
+  for (const char *field : {"orelse", "finalbody"})
+  {
+    if (!element.contains(field) || element[field].empty())
+      continue;
+    Json block = {{"body", element[field]}};
+    add_annotation(block);
+    element[field] = block["body"];
+  }
+  if (current_func_name_context_.empty() && element.contains("handlers"))
+    for (Json &handler : element["handlers"])
+      add_annotation(handler);
+}
+
 template <class Json>
 void python_annotation<Json>::add_annotation(Json &body)
 {
@@ -5151,17 +5171,8 @@ void python_annotation<Json>::add_annotation(Json &body)
       if (stmt_type == "While")
         infer_loop_variable_types(element);
 
-      // Process else block if it exists
-      if (
-        stmt_type == "If" && element.contains("orelse") &&
-        !element["orelse"].empty())
-      {
-        // Create a temporary body structure for the else block
-        Json else_body = {{"body", element["orelse"]}};
-        add_annotation(else_body);
-        // Update the original orelse with annotated version
-        element["orelse"] = else_body["body"];
-      }
+      if (stmt_type != "While")
+        annotate_branch_blocks(element);
 
       continue;
     }

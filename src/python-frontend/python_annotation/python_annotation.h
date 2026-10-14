@@ -304,6 +304,7 @@ private:
   void annotate_function(Json &function_element);
   void annotate_class(Json &class_element);
   void infer_loop_variable_types(Json &while_stmt);
+  void annotate_branch_blocks(Json &element);
   void add_annotation(Json &body);
 
   // ----- state -----
