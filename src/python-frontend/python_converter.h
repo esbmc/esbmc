@@ -1592,6 +1592,12 @@ private:
 
   void set_assigned_value(symbolt &symbol, const exprt &rhs);
 
+  /// True when an assignment's annotation is only a guess that the rhs type
+  /// should replace.
+  bool annotation_yields_to_rhs(
+    const nlohmann::json &ast_node,
+    const exprt &rhs) const;
+
   void handle_assignment_type_adjustments(
     symbolt *lhs_symbol,
     exprt &lhs,
