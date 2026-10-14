@@ -247,6 +247,9 @@ bool goto_symext::format_printf_output(
   return true;
 }
 
+// The most output characters a sprintf call stores one by one.
+static const size_t max_stored_output = 1024;
+
 // The characters a %d, %i or %u conversion prints for `v`: C11 7.21.6.1p8
 // gives no leading zeros and a '-' only for a negative value.
 static expr2tc decimal_length(expr2tc v, bool as_unsigned, size_t &max_len)
@@ -280,6 +283,43 @@ static expr2tc decimal_length(expr2tc v, bool as_unsigned, size_t &max_len)
   return len;
 }
 
+expr2tc goto_symext::string_length(const expr2tc &ptr, size_t &max_len)
+{
+  expr2tc object;
+  uint64_t offset, avail;
+  if (
+    !memcmp_resolve_operand(ptr, 0, object, offset, avail) || avail == 0 ||
+    max_len + avail > max_stored_output || !is_array_type(object) ||
+    !is_byte_type(to_array_type(object->type).subtype))
+    return expr2tc();
+  // The resolver drops NULL and invalid targets; this guard is false on them.
+  expr2tc points_here = internal_deref_items.front().guard;
+  cur_state->rename(points_here);
+  do_simplify(points_here);
+
+  // Off the object, or with no NUL in it (C11 7.24.1p1), the length is only
+  // bounded the way the formatter bounds it.
+  const type2tc len_type = int_type2();
+  expr2tc unknown = gen_nondet(len_type);
+  replace_nondet(unknown);
+  assume(and2tc(
+    greaterthanequal2tc(unknown, gen_zero(len_type)),
+    lessthan2tc(unknown, constant_int2tc(len_type, BigInt(avail)))));
+
+  const type2tc &elem = to_array_type(object->type).subtype;
+  expr2tc len = unknown;
+  for (uint64_t k = avail; k-- > 0;)
+    len = if2tc(
+      len_type,
+      equality2tc(
+        index2tc(elem, object, gen_ulong(offset + k)), gen_zero(elem)),
+      constant_int2tc(len_type, BigInt(k)),
+      len);
+  max_len += avail - 1;
+  return is_true(points_here) ? len
+                              : if2tc(len_type, points_here, len, unknown);
+}
+
 expr2tc goto_symext::printf_output_length(
   const code_printf2t &call,
   size_t fmt_idx,
@@ -308,17 +348,25 @@ expr2tc goto_symext::printf_output_length(
       text++;
       continue;
     }
+    const size_t conv = i;
     while (i < f.size() && std::string("jlzt").find(f[i]) != std::string::npos)
       i++;
-    if (
-      i == f.size() || std::string("diu").find(f[i]) == std::string::npos ||
-      arg == printf_args_end(call))
+    if (i == f.size() || arg == printf_args_end(call))
       return expr2tc();
     expr2tc v = call.operands[arg++];
-    cur_state->rename(v);
-    if (!is_bv_type(v))
+    expr2tc conv_len;
+    // A length modifier on %s makes it a wide string.
+    if (f[i] == 's' && i == conv)
+      conv_len = string_length(v, max_len);
+    else if (std::string("diu").find(f[i]) != std::string::npos)
+    {
+      cur_state->rename(v);
+      if (is_bv_type(v))
+        conv_len = decimal_length(v, f[i] == 'u', max_len);
+    }
+    if (is_nil_expr(conv_len))
       return expr2tc();
-    len = add2tc(len->type, len, decimal_length(v, f[i] == 'u', max_len));
+    len = add2tc(len->type, len, conv_len);
   }
   max_len += text;
   len = add2tc(len->type, len, constant_int2tc(len->type, BigInt(text)));
@@ -364,10 +412,9 @@ expr2tc goto_symext::sprintf_output(
     return len;
   }
 
-  // Any other output the formatter bounds, up to max_stored: its length is
-  // within those bounds and its characters may include a NUL (%c of 0).
-  const size_t max_stored = 1024;
-  if (!sound || formatter.max_outlen > max_stored)
+  // Any other output the formatter bounds, up to max_stored_output: its length
+  // is within those bounds and its characters may include a NUL (%c of 0).
+  if (!sound || formatter.max_outlen > max_stored_output)
     return expr2tc();
   for (size_t i = 0; i < formatter.max_outlen; i++)
   {

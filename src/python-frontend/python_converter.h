@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <nlohmann/json.hpp>
 #include <python-frontend/math/complex_handler.h>
 #include <python-frontend/function_call/cache.h>
@@ -151,8 +152,13 @@ public:
     const std::string &name,
     const nlohmann::json &return_node,
     const nlohmann::json &function_node);
+  std::optional<code_typet> returned_function(const nlohmann::json &callee);
   /// `get()()`: a call through the function pointer that `get()` returns.
+  /// `(lambda x: ...)(a)`: a call of the lambda, typed by its arguments.
   std::optional<exprt> call_returned_function(const nlohmann::json &element);
+  void convert_lambda_call(
+    const nlohmann::json &element,
+    side_effect_expr_function_callt &call);
   std::optional<exprt> call_property_value(const nlohmann::json &element);
   /// Unknown, function or class-instance types: a call on such a value may
   /// succeed.
@@ -239,6 +245,12 @@ public:
   bool is_list_call_escaped(const std::string &id) const
   {
     return call_escaped_lists_.find(id) != call_escaped_lists_.end();
+  }
+
+  /// Runs @p check once every statement has been converted.
+  void defer_check(std::function<void()> check)
+  {
+    deferred_checks_.push_back(std::move(check));
   }
 
   bool type_assertions_enabled() const;
@@ -388,6 +400,24 @@ public:
     bool by_other = false;
     bool declared_outer = false;
   };
+  /// The bindings of @p name in @p module's own scope, with declared_outer
+  /// meaning that a function rebinds it through `global`.
+  static scope_bindings
+  module_scope_bindings(const nlohmann::json &module, const std::string &name);
+  /// Whether @p name, read at @p use inside @p function (null at module or
+  /// class level), reads a binding made by an import (true), another binding
+  /// (false), or none in this module (empty). @p global is
+  /// module_scope_bindings for @p name. With @p in_order, @p use runs in source
+  /// order at module level, and an import must complete before it. Throws when
+  /// the bindings leave that undecided.
+  static std::optional<bool> binding_is_import(
+    const nlohmann::json &module,
+    const scope_bindings &global,
+    const nlohmann::json *function,
+    bool in_class,
+    bool in_order,
+    const std::string &name,
+    const nlohmann::json &use);
   /// Whether @p receiver, a Name read by the call at @p use, is bound in its
   /// scope by something other than an import, so that it is not the module
   /// of the same name. Throws when the bindings leave that undecided.
@@ -435,6 +465,13 @@ public:
   /// A class used as a value (`x = int`, `type(v)`): its name as a char array,
   /// also held in `value` for the folds that read it back.
   exprt make_class_object(const std::string &name);
+
+  /// The category get_expr converts @p element as; CLASS_MRO for
+  /// `Cls.__mro__` on a class whose MRO is known.
+  ExpressionType expression_type(const nlohmann::json &element) const;
+
+  /// `Cls.__mro__` as a tuple of class objects.
+  exprt class_mro_tuple(const nlohmann::json &element);
 
   static bool is_class_object(const exprt &expr)
   {
@@ -649,7 +686,9 @@ private:
 
   exprt resolve_function_call(const exprt &func_expr, const exprt &args_expr);
 
-  exprt get_lambda_expr(const nlohmann::json &element);
+  exprt get_lambda_expr(
+    const nlohmann::json &element,
+    const std::vector<std::optional<typet>> &argument_types = {});
 
   codet convert_expression_to_code(exprt &expr);
 
@@ -1304,12 +1343,8 @@ private:
     const std::string &base_class,
     const std::string &sym_id) const;
 
-  std::optional<bool> function_shadows_module(
-    const std::string &name,
-    const nlohmann::json &use) const;
-  /// The module's own bindings of @p name, with declared_outer meaning that a
-  /// function rebinds it through `global`. Memoised: a module call reads
-  /// them at every dispatch site, and each read walks the whole module.
+  /// module_scope_bindings for @p name. Memoised: a module call reads them at
+  /// every dispatch site, and each read walks the whole module.
   const scope_bindings &module_bindings(const std::string &name) const;
   mutable std::
     map<std::pair<const nlohmann::json *, std::string>, scope_bindings>
@@ -1327,9 +1362,11 @@ private:
   class_mro(const std::string &class_name, mro_memo &memo) const;
   static std::optional<std::vector<std::string>>
   c3_merge(std::vector<std::vector<std::string>> seqs);
-  /// The class statement that alone binds @p name in the file being
-  /// converted, or null.
-  const nlohmann::json *sole_class_binding(const std::string &name) const;
+  /// The @p statement (a class or def) that alone binds @p name in the file
+  /// being converted, or null.
+  const nlohmann::json *sole_binding(
+    const std::string &name,
+    const std::string &statement = "ClassDef") const;
   /// The def that alone binds @p method in the body of class @p class_name,
   /// itself bound alone, or null.
   const nlohmann::json *sole_method_def(
@@ -1341,6 +1378,50 @@ private:
   bool overridden_below(
     const std::string &class_name,
     const std::string &method) const;
+
+  /// The functions every store to an attribute assigns it (#8370): module
+  /// functions by name, or methods of the receiver the store is made on
+  /// (`self.a = self.m`), which a call through the attribute binds again.
+  struct attribute_functions
+  {
+    bool bound;
+    std::vector<std::string> ids;
+  };
+  /// What attribute @p attr holds, or null when some store in the file may
+  /// assign it anything else.
+  const attribute_functions *function_attribute(const std::string &attr);
+  static bool same_signature(const code_typet &a, const code_typet &b);
+  void collect_attribute_stores(
+    const nlohmann::json &node,
+    const std::string &owner,
+    const nlohmann::json *method);
+  void record_function_store(
+    const std::string &attr,
+    const std::pair<bool, std::string> &stored);
+  /// @p class_name and every class in the file that derives from it.
+  std::set<std::string> subclasses(const std::string &class_name) const;
+  std::optional<std::pair<bool, std::string>> stored_function(
+    const nlohmann::json &target,
+    const nlohmann::json &value,
+    const std::string &owner,
+    const nlohmann::json *method) const;
+  /// The method `self.m` names in a method of @p owner, when no subclass
+  /// resolves @p m elsewhere and it is a plain instance method.
+  std::optional<std::string>
+  bound_method_id(const std::string &owner, const std::string &m) const;
+  bool try_bound_method_store(const nlohmann::json &ast_node, codet &block);
+  /// An assignment get_var_assign leaves to a dedicated lowering, which
+  /// returns true once it has converted it.
+  bool try_dedicated_assign(const nlohmann::json &ast_node, codet &block);
+  void reject_bound_method_read(const nlohmann::json &element);
+  void reject_method_value(const std::string &class_name, const std::string &m)
+    const;
+  /// Per module, what each attribute holds; nullopt when the module reaches
+  /// attributes by a hook such as setattr.
+  std::map<
+    const nlohmann::json *,
+    std::optional<std::map<std::string, std::optional<attribute_functions>>>>
+    attribute_functions_;
   /// Whether the body of class @p class_name may bind @p name, hiding any
   /// base's @p name.
   bool class_binds_name(const std::string &class_name, const std::string &name)
@@ -2677,6 +2758,7 @@ private:
   const global_scope &global_scope_;
   type_handler type_handler_;
   element_type_registry element_type_registry_;
+  std::vector<std::function<void()>> deferred_checks_;
   string_builder *string_builder_;
   symbol_generator sym_generator_;
 

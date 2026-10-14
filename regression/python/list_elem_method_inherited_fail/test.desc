@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^VERIFICATION FAILED$
+^ +FAILED .*line +14 +assertion return_value\$_twice\$[0-9]+ != 10$

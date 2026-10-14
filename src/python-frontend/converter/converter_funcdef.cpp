@@ -3485,7 +3485,7 @@ returned_function_names(const nlohmann::json &function_node)
   return names;
 }
 
-static bool same_signature(const code_typet &a, const code_typet &b)
+bool python_converter::same_signature(const code_typet &a, const code_typet &b)
 {
   if (
     a.return_type() != b.return_type() ||
