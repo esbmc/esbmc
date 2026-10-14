@@ -864,11 +864,18 @@ private:
    * code, so the dynamic-type tagging that spelling already gets applies
    * here too. Tagging the target around the ternary instead would store the
    * already-collapsed value under a single type id, which is what hid the
-   * TypeError obligation (github #8263). True if it rewrote the assignment.
+   * TypeError obligation (github #8263). A branch instantiating a class is
+   * rewritten too: its constructor initialises the target in place and
+   * yields no value for the ternary to select (github #8502). True if it
+   * rewrote the assignment.
    */
   bool rewrite_divergent_conditional_assign(
     const nlohmann::json &ast_node,
     codet &target_block);
+
+  std::string instantiated_class(const nlohmann::json &value) const;
+
+  bool ternary_needs_if_spelling(const nlohmann::json &ifexp) const;
 
   bool is_coverage_mode() const;
 
@@ -1225,6 +1232,14 @@ private:
   typet infer_attr_type_from_usage(
     const std::string &class_name,
     const std::string &attr_name);
+
+  // The entry module, every imported module and the current one, each once.
+  std::vector<const nlohmann::json *> reachable_module_bodies() const;
+
+  // None when every write to an attribute named `attr_name` stores None, and
+  // Optional[T] when they store None and literals of one scalar type T.
+  // any_type() for any other write or a setattr call.
+  typet none_attribute_type(const std::string &attr_name) const;
 
   /**
    * @brief Build a tuple struct type from an AST value node when the annotation
@@ -2392,6 +2407,12 @@ private:
    * @param is_ctor_call Whether this is a constructor call.
    * @param target_block The code block to add generated code to.
    */
+  std::string user_class_of(const typet &type);
+  void reject_attribute_class_change(
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &ast_node,
+    bool is_ctor_call);
   void handle_function_call_rhs(
     const nlohmann::json &ast_node,
     symbolt *lhs_symbol,
@@ -2639,6 +2660,10 @@ private:
   void process_forward_reference(
     const nlohmann::json &annotation,
     codet &target_block);
+
+  // Build the class a `tag-<Name>` symbol type refers to when it is defined
+  // later in the module, so the type can be followed.
+  void build_forward_class(const typet &type);
 
   // =========================================================================
   // Optional type helpers
@@ -2918,6 +2943,9 @@ private:
     const nlohmann::json &value,
     const std::string &function) const;
   exprt list_argument_expr(const nlohmann::json &arg);
+  typet subscript_call_return_type(
+    const exprt &func_ptr,
+    const nlohmann::json &func_node);
   std::optional<std::vector<std::size_t>>
   numpy_filled_array_shape(const nlohmann::json &value) const;
   const std::optional<std::pair<typet, numpy_scalar_pointer_view_infot>> &

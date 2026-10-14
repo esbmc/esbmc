@@ -3,6 +3,7 @@ import copy
 from collections import Counter
 
 from preprocessor.bound_method_dispatch import dispatch_rebound_methods
+from preprocessor.match_lowering import lower_match_statements
 from preprocessor.unbound_locals import guard_unbound_locals
 # pylint: disable=too-many-branches,too-many-boolean-expressions
 
@@ -473,6 +474,7 @@ class ModuleRewriteMixin:
 
     def prepare_module(self, node, alias_seed=frozenset(), wrapper_seed=None):
         """Run pre-visit analyses and range-alias/wrapper canonicalization."""
+        lower_match_statements(node)
         self.expand_unittest_main(node)
         self._rewrite_module_aliases(node)
         guard_unbound_locals(node)

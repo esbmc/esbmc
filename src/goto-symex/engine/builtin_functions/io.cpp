@@ -250,15 +250,14 @@ bool goto_symext::format_printf_output(
 // The most output characters a sprintf call stores one by one.
 static const size_t max_stored_output = 1024;
 
-// The characters a %d, %i or %u conversion prints for `v`: C11 7.21.6.1p8
-// gives no leading zeros and a '-' only for a negative value.
-static expr2tc decimal_length(expr2tc v, bool as_unsigned, size_t &max_len)
+// The characters a %d, %i or %u conversion prints for `v`, already converted
+// to the conversion's type: C11 7.21.6.1p8 gives no leading zeros and a '-'
+// only for a negative value.
+static expr2tc decimal_length(expr2tc v, size_t &max_len)
 {
   if (v->type->get_width() < int_type2()->get_width())
     v = typecast2tc(int_type2(), v);
   const unsigned width = v->type->get_width();
-  if (as_unsigned && is_signedbv_type(v))
-    v = typecast2tc(unsignedbv_type2tc(width), v);
   const bool is_signed = is_signedbv_type(v);
   const BigInt top = power(2, is_signed ? width - 1 : width) - 1;
 
@@ -281,6 +280,25 @@ static expr2tc decimal_length(expr2tc v, bool as_unsigned, size_t &max_len)
     max_len++;
   }
   return len;
+}
+
+// The characters the %d, %i or %u conversion `conv` with length modifier `mod`
+// prints for the renamed argument `v`, nil when it cannot be measured. The
+// formatter prints `v` converted to the conversion's type, whatever type was
+// passed (C11 7.21.6.1p9), so that is the value measured.
+static expr2tc integer_length(
+  const expr2tc &v,
+  char conv,
+  const std::string &mod,
+  size_t &max_len)
+{
+  const bool is_signed = conv != 'u';
+  const type2tc target = printf_int_type(is_signed, mod);
+  if (
+    is_nil_type(target) || is_signedbv_type(target) != is_signed ||
+    !is_bv_type(v))
+    return expr2tc();
+  return decimal_length(typecast2tc(target, v), max_len);
 }
 
 expr2tc goto_symext::string_length(const expr2tc &ptr, size_t &max_len)
@@ -361,8 +379,7 @@ expr2tc goto_symext::printf_output_length(
     else if (std::string("diu").find(f[i]) != std::string::npos)
     {
       cur_state->rename(v);
-      if (is_bv_type(v))
-        conv_len = decimal_length(v, f[i] == 'u', max_len);
+      conv_len = integer_length(v, f[i], f.substr(conv, i - conv), max_len);
     }
     if (is_nil_expr(conv_len))
       return expr2tc();
@@ -491,6 +508,36 @@ expr2tc goto_symext::symex_sprintf_store(const code_printf2t &call)
   }
   cur_state->guard = saved_guard;
   return len;
+}
+
+expr2tc goto_symext::printf_return_length(
+  const expr2tc &lhs,
+  const code_printf2t &call,
+  size_t fmt_idx)
+{
+  const expr2tc stored = symex_sprintf_store(call);
+  if (!is_nil_expr(stored) || is_nil_expr(lhs))
+    return stored;
+  // asprintf returns -1 when allocation fails, and a v* call's arguments are
+  // behind its va_list, so only the direct stream forms return the length.
+  switch (call.kind)
+  {
+  case printf_kindt::PRINTF:
+  case printf_kindt::FPRINTF:
+  case printf_kindt::DPRINTF:
+    break;
+  case printf_kindt::SPRINTF:
+  case printf_kindt::SNPRINTF:
+  case printf_kindt::ASPRINTF:
+  case printf_kindt::VPRINTF:
+  case printf_kindt::VFPRINTF:
+  case printf_kindt::VSPRINTF:
+  case printf_kindt::VSNPRINTF:
+  case printf_kindt::VASPRINTF:
+    return expr2tc();
+  }
+  size_t max_len;
+  return printf_output_length(call, fmt_idx, max_len);
 }
 
 void goto_symext::assume_printf_length(
@@ -707,7 +754,8 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     !is_nil_expr(lhs) && format_is_constant &&
     recover_va_list_args(to_code_printf2t(rhs), fmt_idx, recovered_args);
 
-  const expr2tc stored_len = symex_sprintf_store(to_code_printf2t(rhs));
+  const expr2tc output_len =
+    printf_return_length(lhs, to_code_printf2t(rhs), fmt_idx);
 
   // Now we pop the format
   for (size_t i = 0; i < idx; i++)
@@ -868,7 +916,7 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     }
   }
 
-  assume_printf_length(retval, stored_len);
+  assume_printf_length(retval, output_len);
 
   // Model *strp for asprintf/vasprintf: assign a fresh tracked heap allocation.
   // The buffer size is modelled as 1 byte; exact sizing would need the
