@@ -894,10 +894,8 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
         get_argument_type(arg["args"][0]) != "bytes")
         return "int";
 
-      // Check built-in functions first
-      auto it = builtin_functions().find(func_name);
-      if (it != builtin_functions().end())
-        return it->second;
+      if (builtin_functions().count(func_name))
+        return get_builtin_call_type(arg);
 
       // For user-defined functions, try to get return type
       try
@@ -1071,6 +1069,21 @@ std::string python_annotation<Json>::recover_list_type_from_appends(
 }
 
 template <class Json>
+std::string python_annotation<Json>::get_builtin_call_type(const Json &call)
+{
+  const std::string &func_name = call["func"]["id"];
+  // abs() of a float or a complex is a float; the table's int covers the rest.
+  if (func_name == "abs" && call.contains("args") && call["args"].size() == 1)
+  {
+    const std::string arg_type = get_argument_type(call["args"][0]);
+    if (arg_type == "float" || arg_type == "complex")
+      return "float";
+  }
+  auto it = builtin_functions().find(func_name);
+  return it != builtin_functions().end() ? it->second : func_name;
+}
+
+template <class Json>
 std::string python_annotation<Json>::get_type_from_binary_expr(
   const Json &stmt,
   const Json &body)
@@ -1198,7 +1211,7 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
       const std::string &func_name = lhs["func"]["id"];
 
       if (type_utils::is_builtin_type(func_name))
-        type = func_name; // float() returns float, int() returns int, etc.
+        type = get_builtin_call_type(lhs);
       else
         type = get_function_return_type(
           func_name, body); // For user-defined functions
