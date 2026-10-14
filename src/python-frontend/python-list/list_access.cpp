@@ -3943,7 +3943,8 @@ exprt python_list::handle_range_slice(
 
       for (size_t i = begin; i < end; ++i)
       {
-        exprt element = converter_.get_expr(list_node["value"]["elts"][i]);
+        exprt element = decay_function_to_pointer(
+          converter_.get_expr(list_node["value"]["elts"][i]));
         if (!element.is_symbol())
         {
           symbolt &tmp = converter_.create_tmp_symbol(
