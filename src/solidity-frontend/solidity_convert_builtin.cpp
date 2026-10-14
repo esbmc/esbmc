@@ -681,8 +681,7 @@ void solidity_convertert::get_builtin_property_expr(
     else if (
       get_sol_type(base.op0().type()) == SolidityGrammar::SolType::CONTRACT)
     {
-      const std::string base_cname =
-        base.op0().type().get("#sol_contract").as_string();
+      const std::string base_cname = get_sol_contract(base.op0().type());
       // unclassifiable handle: keep the historical direct read
       own_field =
         base_cname.empty() || nonContractNamesList.count(base_cname) == 0;

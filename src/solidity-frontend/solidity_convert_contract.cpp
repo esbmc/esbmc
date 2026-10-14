@@ -319,7 +319,10 @@ void solidity_convertert::add_static_contract_instance(
   // of it. The concrete state that replaces the deployment is emitted by
   // multi_transaction_verification, which is where the entry function's body
   // is built.
-  if (run_ctor && fixture_drops_deployment(c_name))
+  if (!run_ctor)
+    return;
+
+  if (fixture_drops_deployment(c_name))
   {
     log_status(
       "--path-cov-fixture: contract {} is NOT deployed -- no constructor call "
@@ -329,8 +332,7 @@ void solidity_convertert::add_static_contract_instance(
     return;
   }
 
-  if (run_ctor)
-    added_sym.set_value(ctor);
+  added_sym.set_value(ctor);
 }
 
 void solidity_convertert::get_inherit_static_contract_instance_name(

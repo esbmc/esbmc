@@ -1021,7 +1021,7 @@ bool solidity_convertert::get_expr(
     // and short-circuit the legitimate alternatives.
     if (get_sol_type(type) == SolidityGrammar::SolType::CONTRACT)
     {
-      const std::string declared_cname = type.get("#sol_contract").as_string();
+      const std::string declared_cname = get_sol_contract(type);
       if (!declared_cname.empty())
       {
         const nlohmann::json &parent = find_last_parent(src_ast_json, expr);
@@ -1971,16 +1971,12 @@ bool solidity_convertert::get_call_expr(
       return true;
 
     // Extract contract name from the argument's type.  Contract
-    // values flow as pointer-to-struct here, so check both the top
-    // level type and, if it is a pointer, the pointee.
-    std::string cname = src_arg.type().get("#sol_contract").as_string();
-    if (cname.empty() && src_arg.type().is_pointer())
-      cname = src_arg.type().subtype().get("#sol_contract").as_string();
+    const std::string cname = get_sol_contract(src_arg.type());
     if (cname.empty())
     {
       log_error(
         "__ESOL_deep_copy: argument is not a contract instance "
-        "(missing #sol_contract tag on type)");
+        "(its type does not name a contract)");
       return true;
     }
 
@@ -2024,14 +2020,12 @@ bool solidity_convertert::get_call_expr(
     if (get_expr(arg_json, arg_json["typeDescriptions"], src_arg))
       return true;
 
-    std::string cname = src_arg.type().get("#sol_contract").as_string();
-    if (cname.empty() && src_arg.type().is_pointer())
-      cname = src_arg.type().subtype().get("#sol_contract").as_string();
+    const std::string cname = get_sol_contract(src_arg.type());
     if (cname.empty())
     {
       log_error(
         "__ESOL_nondet_state_forward: argument is not a contract "
-        "instance (missing #sol_contract tag on type)");
+        "instance (its type does not name a contract)");
       return true;
     }
 
@@ -3346,10 +3340,8 @@ bool solidity_convertert::get_contract_member_call_expr(
     // convert_type_expr patches the singleton's $address to carry `addr`
     // and returns `&singleton` as the CONTRACT-typed base.
     typet target_type = symbol_typet(prefix + cast_target_cname);
-    target_type.set("#sol_contract", cast_target_cname);
     set_sol_type(target_type, SolidityGrammar::SolType::CONTRACT);
     convert_type_expr(ns, base, target_type, expr);
-    base.type().set("#sol_contract", cast_target_cname);
     base_cname = cast_target_cname;
   }
   else if (!resolved_caller.contains("referencedDeclaration"))
@@ -3483,15 +3475,8 @@ bool solidity_convertert::get_contract_member_call_expr(
         if (get_sol_type(base.type()) != SolidityGrammar::SolType::CONTRACT)
         {
           typet target_type = symbol_typet(prefix + cast_target_cname);
-          target_type.set("#sol_contract", cast_target_cname);
           set_sol_type(target_type, SolidityGrammar::SolType::CONTRACT);
           convert_type_expr(ns, base, target_type, expr);
-          // `convert_type_expr` sets `#sol_type = CONTRACT` on the
-          // returned pointer but leaves `#sol_contract` unset on the
-          // pointer itself.  `get_base_contract_name` (called later by
-          // `get_high_level_member_access`) looks at the pointer's
-          // `#sol_contract`, so stamp it explicitly.
-          base.type().set("#sol_contract", cast_target_cname);
         }
       }
       assert(!base_cname.empty());

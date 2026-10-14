@@ -173,7 +173,9 @@ bool solidity_convertert::add_implicit_constructor(
   get_function_this_pointer_param(
     contract_name, id, debug_modulename, location_begin, type);
 
-  sym.set_type(migrate_type(type));
+  // Legacy storage keeps the parameter annotations; see
+  // get_function_definition.
+  sym.set_type(type);
   return false;
 }
 

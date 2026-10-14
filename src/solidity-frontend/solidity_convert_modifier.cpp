@@ -292,7 +292,13 @@ bool solidity_convertert::get_function_definition(
     }
   }
 
-  added_symbol.set_type(migrate_type(type));
+  // Stored as a legacy type, not through migrate_type: the function type and
+  // its parameter types carry Solidity-level annotations (#sol_payable,
+  // #sol_type, #sol_udvt_name) that the coverage instrumentation and the
+  // Foundry test generator read back from the symbol after the frontend has
+  // finished, and IREP2 has no field for them. A side table keyed by symbol id
+  // (docs/roadmap/scope-solidity-irep2.md §10) is what retires this.
+  added_symbol.set_type(type);
 
   // 11.3 Declare named return parameters as local variables.
   // Solidity allows `returns (uint result) { result = 42; }` where `result`
@@ -1442,7 +1448,6 @@ bool solidity_convertert::get_func_modifier(
         return true;
       aux_type.arguments().push_back(arg);
     }
-    a_sym.set_type(migrate_type(aux_type));
     // Stamp the wrapper with the base method it wraps. The wrapper is named
     // `<f_name>_<mod_name>` (get_modifier_function_name), but `_` is a legal
     // identifier char and the delimiter is unescaped, so the name alone cannot
@@ -1451,11 +1456,10 @@ bool solidity_convertert::get_func_modifier(
     // this authoritative marker to attribute a covered branch inside the
     // wrapper to its externally-callable method, rather than guessing by name
     // prefix.
-    {
-      typet t = a_sym.get_type();
-      t.set("#sol_modifier_wrapper_for", f_name);
-      a_sym.set_type(std::move(t));
-    }
+    // Legacy storage keeps this marker and the parameter annotations; see
+    // get_function_definition.
+    aux_type.set("#sol_modifier_wrapper_for", f_name);
+    a_sym.set_type(aux_type);
     move_builtin_to_contract(c_name, symbol_expr(a_sym), "internal", true);
 
     // If the wrapped function returns a tuple, register a tuple instance
