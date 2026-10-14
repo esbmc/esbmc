@@ -2398,6 +2398,8 @@ regression/esbmc/github_8564
 regression/esbmc/github_8564_fail
 regression/esbmc/github_8564_mismatch_fail
 regression/esbmc/github_8564_width_fail
+regression/esbmc/github_8564_s
+regression/esbmc/github_8564_s_fail
 regression/goto-transcoder/cbmc_kani_union_padding
 regression/goto-transcoder/cbmc_kani_union_padding_fail
 regression/esbmc/memspace_first_page
