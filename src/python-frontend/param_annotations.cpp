@@ -474,8 +474,8 @@ private:
       return std::nullopt;
 
     for (size_t i = 0; i < params.size() && i < call["args"].size(); ++i)
-      if (same_type(
-            params[i].value("annotation", nlohmann::json()), placeholder))
+      if (
+        same_type(params[i].value("annotation", nlohmann::json()), placeholder))
         return call["args"][i];
     return std::nullopt;
   }
