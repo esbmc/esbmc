@@ -50,7 +50,8 @@ enum class ExpressionType
   UNKNOWN,
   FSTRING,
   TUPLE,
-  SLICE
+  SLICE,
+  CLASS_MRO
 };
 
 struct TypeFlags

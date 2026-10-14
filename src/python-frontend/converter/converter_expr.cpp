@@ -291,6 +291,42 @@ exprt python_converter::make_class_object(const std::string &name)
   expr.set("value", name);
   return expr;
 }
+
+ExpressionType
+python_converter::expression_type(const nlohmann::json &element) const
+{
+  if (
+    element.is_object() && element.value("_type", "") == "Attribute" &&
+    element.value("attr", "") == "__mro__" &&
+    element["value"].value("_type", "") == "Name")
+  {
+    const std::string &name = element["value"]["id"];
+    if (is_class(name, *ast_json) && class_mro(name))
+      return ExpressionType::CLASS_MRO;
+  }
+  return get_expression_type(element);
+}
+
+exprt python_converter::class_mro_tuple(const nlohmann::json &element)
+{
+  const auto mro = class_mro(element["value"]["id"]);
+
+  // Build the tuple as the literal `(Cls, ..., object)` would be, so it
+  // compares equal to one written in the source.
+  nlohmann::json tuple = element;
+  tuple["_type"] = "Tuple";
+  tuple["elts"] = nlohmann::json::array();
+  nlohmann::json name = element["value"];
+  for (const std::string &cls : *mro)
+  {
+    name["id"] = cls;
+    tuple["elts"].push_back(name);
+  }
+  name["id"] = "object";
+  tuple["elts"].push_back(name);
+  return get_expr(tuple);
+}
+
 /// Convert Python AST literal to expression.
 /// Handles integers, booleans, floats, chars, strings, and byte literals.
 /// Example: {"_type": "Constant", "value": 42} -> integer constant expr
@@ -1847,7 +1883,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
   exprt expr;
 
-  ExpressionType type = get_expression_type(element);
+  ExpressionType type = expression_type(element);
 
   switch (type)
   {
@@ -1915,6 +1951,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     expr = list.get();
     break;
   }
+  case ExpressionType::CLASS_MRO:
+    expr = class_mro_tuple(element);
+    break;
   case ExpressionType::VARIABLE_REF:
   {
     std::string var_name;

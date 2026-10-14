@@ -436,6 +436,13 @@ public:
   /// also held in `value` for the folds that read it back.
   exprt make_class_object(const std::string &name);
 
+  /// The category get_expr converts @p element as; CLASS_MRO for
+  /// `Cls.__mro__` on a class whose MRO is known.
+  ExpressionType expression_type(const nlohmann::json &element) const;
+
+  /// `Cls.__mro__` as a tuple of class objects.
+  exprt class_mro_tuple(const nlohmann::json &element);
+
   static bool is_class_object(const exprt &expr)
   {
     return expr.is_constant() && expr.type().is_array() &&
