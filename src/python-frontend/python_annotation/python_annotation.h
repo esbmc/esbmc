@@ -5,6 +5,7 @@
 #include <python-frontend/module/global_scope.h>
 #include <python-frontend/module/module_manager.h>
 #include <python-frontend/module/module.h>
+#include <python-frontend/python_converter.h>
 #include <python-frontend/type/type_utils.h>
 #include <python-frontend/python_annotation/annotation_intrinsics.h>
 #include <python-frontend/python_annotation/annotation_parser.h>
@@ -274,6 +275,11 @@ private:
     const std::string &name,
     const Json &enclosing_func);
   std::string resolve_wildcard_import_func(const std::string &func_name);
+  /// Whether @p use, a read of @p name, provably reads a binding an import
+  /// made, by the scoping the converter applies to module names (#8470). A
+  /// star import must provably bind @p name to a function the module defines,
+  /// and a nested function is not decided.
+  bool reads_import(const std::string &name, const Json &use) const;
   std::string
   resolve_expr_in_enclosing_func(const Json &elt, const Json &enclosing_func);
   std::vector<std::string> infer_tuple_element_types(
