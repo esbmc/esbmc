@@ -2,7 +2,7 @@ def unsupported(x: int) -> int:
     if x > 0:
         return 1
     match x:
-        case 0:
+        case int():
             return 0
     return 2
 
