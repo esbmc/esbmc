@@ -1946,6 +1946,19 @@ bool bmct::fc_cut_by_context_bound() const
   return options.get_bool_option("forward-condition") && cs_bound_pruned;
 }
 
+/// Why an UNSAT round proves nothing on its own, or null when it may.
+const char *bmct::bounded_round_note() const
+{
+  // The driver decides a bounded round's verdict once the search becomes
+  // exhaustive.
+  if (options.get_bool_option("suppress-bounded-success"))
+    return "No violation found within the current context bound";
+  if (fc_cut_by_context_bound())
+    return "The context bound cut schedules short, so the forward condition "
+           "cannot show that every state was reached";
+  return nullptr;
+}
+
 void bmct::report_result(smt_resultt &res)
 {
   // k-induction prints its own messages
@@ -2008,14 +2021,8 @@ void bmct::report_result(smt_resultt &res)
         !options.get_bool_option("kind-violation-found") &&
         !(is && options.get_bool_option("disable-inductive-step")))
       {
-        // A bounded round proves nothing on its own: the driver decides the
-        // verdict once the search becomes exhaustive.
-        if (options.get_bool_option("suppress-bounded-success"))
-          log_status("No violation found within the current context bound");
-        else if (fc_cut_by_context_bound())
-          log_status(
-            "The context bound cut schedules short, so the forward condition "
-            "cannot show that every state was reached");
+        if (const char *note = bounded_round_note())
+          log_status("{}", note);
         else if (!proves_the_program())
           report_unknown();
         else
@@ -2064,8 +2071,7 @@ smt_resultt bmct::start_bmc()
 {
   std::shared_ptr<symex_target_equationt> eq;
   smt_resultt res = run(eq);
-  if (symex)
-    cs_bound_pruned = symex->cs_bound_pruned;
+  cs_bound_pruned = symex->cs_bound_pruned;
 
   // The dead-code advisory is emitted here, once, rather than from
   // report_coverage inside multi_property_check: that runs per thread
