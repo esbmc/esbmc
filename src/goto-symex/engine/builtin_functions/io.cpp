@@ -282,6 +282,25 @@ static expr2tc decimal_length(expr2tc v, size_t &max_len)
   return len;
 }
 
+// The characters the %d, %i or %u conversion `conv` with length modifier `mod`
+// prints for the renamed argument `v`, nil when it cannot be measured. The
+// formatter prints `v` converted to the conversion's type, whatever type was
+// passed (C11 7.21.6.1p9), so that is the value measured.
+static expr2tc integer_length(
+  const expr2tc &v,
+  char conv,
+  const std::string &mod,
+  size_t &max_len)
+{
+  const bool is_signed = conv != 'u';
+  const type2tc target = printf_int_type(is_signed, mod);
+  if (
+    is_nil_type(target) || is_signedbv_type(target) != is_signed ||
+    !is_bv_type(v))
+    return expr2tc();
+  return decimal_length(typecast2tc(target, v), max_len);
+}
+
 expr2tc goto_symext::string_length(const expr2tc &ptr, size_t &max_len)
 {
   expr2tc object;
@@ -359,16 +378,8 @@ expr2tc goto_symext::printf_output_length(
       conv_len = string_length(v, max_len);
     else if (std::string("diu").find(f[i]) != std::string::npos)
     {
-      // Measure the value the formatter prints: the argument converted to the
-      // conversion's type, whatever type was passed (C11 7.21.6.1p9).
-      const bool is_signed = f[i] != 'u';
-      const type2tc target =
-        printf_int_type(is_signed, f.substr(conv, i - conv));
       cur_state->rename(v);
-      if (
-        !is_nil_type(target) && is_signedbv_type(target) == is_signed &&
-        is_bv_type(v))
-        conv_len = decimal_length(typecast2tc(target, v), max_len);
+      conv_len = integer_length(v, f[i], f.substr(conv, i - conv), max_len);
     }
     if (is_nil_expr(conv_len))
       return expr2tc();
