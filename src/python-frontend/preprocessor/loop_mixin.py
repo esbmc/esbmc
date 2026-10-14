@@ -218,6 +218,7 @@ class LoopMixin:
         remember to preserve the original `orelse`.
         """
         self._update_assignment_call_origins([node.target], None)
+        self._forget_literals_changed_in_loop(node)
         lowered = self._lower_iterator_protocol_for(node)
         if lowered is not None:
             return lowered
@@ -226,6 +227,29 @@ class LoopMixin:
         if not isinstance(result, list):
             result = [result]
         return for_else_pre + result + for_else_post
+
+    def _forget_literals_changed_in_loop(self, loop):
+        """Drop the tracked literals that @p loop rebinds or mutates anywhere.
+
+        A statement late in the body runs before the early ones on the next
+        iteration, so a literal it changes is not known anywhere in the loop
+        (#8506).
+        """
+        for n in ast.walk(loop):
+            if isinstance(n, ast.Call):
+                self._invalidate_list_literals_for_call(n)
+                continue
+            if isinstance(n, (ast.Assign, ast.AnnAssign)) and isinstance(n.value, ast.Name):
+                base = n.value
+            elif isinstance(n, (ast.Name, ast.Subscript)) and not isinstance(n.ctx, ast.Load):
+                base = n
+                while isinstance(base, ast.Subscript):
+                    base = base.value
+            else:
+                continue
+            if isinstance(base, ast.Name):
+                self.list_literal_values.pop(base.id, None)
+                self.dict_literal_values.pop(base.id, None)
 
     def _lower_iterator_protocol_for(self, node):
         """Lower `for x in Obj(...)` over a class with `__iter__`.

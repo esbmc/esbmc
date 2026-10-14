@@ -397,6 +397,7 @@ class ExpressionRewriteMixin:
         # progress (wedges into an unbounded loop). Mirrors the range-for path
         # in _visit_for_inner.
         gen_pre_stmts = self._hoist_generator_inits(node.body, node)
+        self._forget_literals_changed_in_loop(node)
         node = self.generic_visit(node)
         # Lower `while ... else: <orelse>` (the else runs when the loop ends
         # without break) into a did-not-break flag, the same desugaring used for
