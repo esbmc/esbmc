@@ -1,6 +1,8 @@
 import ast
 import copy
+from collections import Counter
 
+from preprocessor.bound_method_dispatch import dispatch_rebound_methods
 from preprocessor.unbound_locals import guard_unbound_locals
 # pylint: disable=too-many-branches,too-many-boolean-expressions
 
@@ -418,10 +420,64 @@ class ModuleRewriteMixin:
             return names
         return None
 
+    @staticmethod
+    def _binding_sites(module_node):
+        """How many places anywhere in *module_node* bind or declare each name."""
+        sites = Counter()
+        for n in ast.walk(module_node):
+            if isinstance(n, ast.Name) and not isinstance(n.ctx, ast.Load):
+                sites[n.id] += 1
+            elif isinstance(n, ast.alias):
+                sites[n.asname or n.name.split(".")[0]] += 1
+            elif isinstance(n, ast.arg):
+                sites[n.arg] += 1
+            elif isinstance(n, (ast.Global, ast.Nonlocal)):
+                sites.update(n.names)
+            elif isinstance(getattr(n, "name", None), str):
+                sites[n.name] += 1
+            elif isinstance(n, ast.MatchMapping) and n.rest:
+                sites[n.rest] += 1
+        return sites
+
+    @staticmethod
+    def _appears_before(module_node, name, stmt):
+        """Whether a Name *name* occurs in *module_node* before *stmt*."""
+        positions = ((getattr(n, "lineno", 0), getattr(n, "col_offset", 0))
+                     for n in ast.walk(module_node) if isinstance(n, ast.Name) and n.id == name)
+        return any(p < (stmt.lineno, stmt.col_offset) for p in positions)
+
+    def _rewrite_module_aliases(self, module_node):
+        """Rewrite a top-level `alias = mod` into `import <module> as alias`.
+
+        Only when `mod` is bound solely by an earlier top-level import, `alias`
+        solely by this statement, and nothing reads `alias` before it: then
+        both forms bind the same module at the same point, and the converter
+        resolves calls through the import form only (#8366)."""
+        sites = self._binding_sites(module_node)
+        modules = {}
+        for i, stmt in enumerate(module_node.body):
+            if isinstance(stmt, ast.Import):
+                for a in stmt.names:
+                    root = a.name.split(".")[0]
+                    modules[a.asname or root] = a.name if a.asname else root
+            if not (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1
+                    and isinstance(stmt.targets[0], ast.Name) and isinstance(stmt.value, ast.Name)):
+                continue
+            alias, name = stmt.targets[0].id, stmt.value.id
+            if (name not in modules or sites[name] != 1 or sites[alias] != 1
+                    or self._appears_before(module_node, alias, stmt)):
+                continue
+            imp = ast.Import(names=[ast.alias(name=modules[name], asname=alias)])
+            module_node.body[i] = ast.fix_missing_locations(ast.copy_location(imp, stmt))
+
     def prepare_module(self, node, alias_seed=frozenset(), wrapper_seed=None):
         """Run pre-visit analyses and range-alias/wrapper canonicalization."""
         self.expand_unittest_main(node)
+        self._rewrite_module_aliases(node)
         guard_unbound_locals(node)
+        self.in_order_bindings.update(
+            dispatch_rebound_methods(node, self._names_bound_by, self._variable_names(node),
+                                     self._next_unpack_tmp_id, self.module_name))
         self.hoist_nested_classes(node)
         self.copy_aliased_methods(node)
 
@@ -454,6 +510,7 @@ class ModuleRewriteMixin:
         self.module_dunder_all = self._capture_dunder_all(node)
         self._scan_sequence_iterators(node)
         self._scan_starred_calls(node)
+        self._scan_generator_consumers(node)
         self._scan_module_vararg_defs(node)
         self._single_return_funcs = self._collect_single_return_funcs(node)
         self._param_subscripting_funcs = self._collect_param_subscripting_funcs(node)

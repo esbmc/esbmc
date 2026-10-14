@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: storing a bound method in typed attribute 'child' is not supported$

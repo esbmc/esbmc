@@ -529,14 +529,9 @@ exprt python_list::build_push_list_call(
       : from_integer(BigInt(0), size_type());
   push_func_call.arguments().push_back(float_type_id_arg); // float_type_id
 
-  // ptr_free gates the uint64 fast paths in __ESBMC_copy_value.
-  push_func_call.arguments().push_back(from_integer(
-    BigInt(
-      converter_.get_type_handler().is_pointer_free(
-        elem_info.elem_symbol->get_type())
-        ? 1
-        : 0),
-    int_type()));
+  push_func_call.arguments().push_back(
+    converter_.get_type_handler().ptr_free_arg(
+      element_arg, elem_info.elem_symbol->get_type()));
 
   push_func_call.type() = bool_type();
   push_func_call.location() = elem_info.location;
@@ -595,13 +590,9 @@ exprt python_list::build_insert_list_call(
     build_symbol(*elem_info.elem_type_sym));
   insert_func_call.arguments().push_back(elem_info.elem_size);
   insert_func_call.arguments().push_back(float_type_id_arg);
-  insert_func_call.arguments().push_back(from_integer(
-    BigInt(
-      converter_.get_type_handler().is_pointer_free(
-        elem_info.elem_symbol->get_type())
-        ? 1
-        : 0),
-    int_type()));
+  insert_func_call.arguments().push_back(
+    converter_.get_type_handler().ptr_free_arg(
+      insert_func_call.arguments()[2], elem_info.elem_symbol->get_type()));
   insert_func_call.type() = bool_type();
   insert_func_call.location() = elem_info.location;
 
@@ -700,9 +691,7 @@ std::optional<exprt> python_list::build_element_replacement(
     build_symbol(*info.elem_type_sym),
     info.elem_size,
     float_type_id,
-    from_integer(
-      BigInt(converter_.get_type_handler().is_pointer_free(value_type)),
-      int_type())};
+    converter_.get_type_handler().ptr_free_arg(value_arg, value_type)};
   set_at.type() = bool_type();
   set_at.location() = info.location;
   return set_at;

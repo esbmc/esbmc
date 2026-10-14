@@ -5,6 +5,8 @@
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/type/type_handler.h>
 #include <util/irep/expr.h>
+#include <map>
+#include <set>
 #include <unordered_map>
 
 enum class FunctionType
@@ -136,6 +138,24 @@ private:
   /// non-bytes argument.
   exprt handle_generic_hash();
 
+  /// The first abstract method the abc.ABC subclass that @p ctor_call
+  /// constructs leaves unimplemented, or "" when it constructs nothing
+  /// abstract.
+  std::string
+  unimplemented_abstract_method(const nlohmann::json &ctor_call) const;
+
+  bool is_abstract_instantiation() const;
+
+  /// The TypeError CPython raises on instantiating an abstract class.
+  exprt abstract_instantiation_error(const nlohmann::json &ctor_call) const;
+
+  static void collect_method_abstractness(
+    const python_converter &converter,
+    const std::string &class_name,
+    std::map<std::string, bool> &methods,
+    std::set<std::string> &visited,
+    bool &is_abc);
+
   bool is_input_call() const;
 
   bool is_print_call() const;
@@ -186,6 +206,8 @@ private:
   find_inherited_classmethod(const std::string &func_symbol_id) const;
   std::optional<exprt>
   build_post_init_forward_call(const std::string &func_symbol_id);
+
+  exprt forward_constant_return(const nlohmann::json &func_node) const;
 
   /*
    * Retrieves the object (caller) name from the AST.
@@ -657,6 +679,12 @@ private:
   // General function call handler
   exprt handle_general_function_call();
 
+  /// The symbol of a method call's named receiver; null when it has no name.
+  symbolt *find_receiver_symbol(symbol_id &obj_symbol_id) const;
+
+  /// The value of a method call's receiver expression, passed as self.
+  exprt build_value_receiver(const symbolt &method) const;
+
   // --- handle_general_function_call() decomposition helpers ---
   // Each "try_"/optional-returning helper extracts a self-contained block of
   // handle_general_function_call(). A returned value is the result the caller
@@ -860,6 +888,21 @@ private:
 
   /// Indirect call through a function pointer held in an instance field.
   std::optional<exprt> try_indirect_member_call();
+  /// The functions field @p attr of @p class_name holds, when it is untyped
+  /// and no class in its MRO binds @p attr too.
+  const python_converter::attribute_functions *held_functions(
+    const std::string &class_name,
+    const std::string &attr,
+    const typet &field_type) const;
+  /// The one signature of the functions @p held, which this call must match.
+  code_typet
+  held_signature(const python_converter::attribute_functions &held) const;
+  /// A call through field @p member of @p recv, which holds @p held when not
+  /// typed as a function pointer.
+  exprt call_field(
+    const python_converter::attribute_functions *held,
+    const exprt &recv,
+    const exprt &member) const;
 
   /*
    * Resolves the callee when the direct symbol lookup failed: dataclass
