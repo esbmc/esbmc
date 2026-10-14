@@ -426,6 +426,16 @@ void function_call_expr::get_function_type()
   }
 }
 
+exprt function_call_expr::build_value_receiver(const symbolt &method) const
+{
+  exprt receiver = converter_.get_expr(call_["func"]["value"]);
+  // Nothing, or a constant, stands in for an item that has already raised
+  // IndexError (`ps[3].m()`); a null self keeps the dead call well typed.
+  if (receiver.is_nil() || receiver.is_constant())
+    return gen_zero(to_code_type(method.get_type()).arguments()[0].type());
+  return receiver;
+}
+
 bool function_call_expr::is_nondet_call() const
 {
   static std::regex pattern(
@@ -1670,8 +1680,8 @@ std::string function_call_expr::get_object_name() const
     // temporary value, not a named symbol, so resolving obj_name to the base
     // variable (e.g. 'd' from d["k"]) would cause method handlers to operate
     // on the wrong object.  For-loop uses of dict.items() are rewritten by the
-    // preprocessor into a named temp before reaching here; other methods on
-    // subscript results are not yet supported.
+    // preprocessor into a named temp before reaching here; a method on an item
+    // of a list of instances dispatches on the class build_function_id found.
   }
   else
   {
@@ -2253,6 +2263,12 @@ bool function_call_expr::receiver_is_non_dict_object() const
       cls = cls.substr(4);
     return !cls.empty() && cls != "__python_dict__";
   }
+
+  // A list element (`ps[0].get()`) whose class build_function_id resolved is
+  // an instance; any other subscript (`d["k"].get()`) stays with the dict
+  // handler, since an unresolved receiver defaults to "str".
+  if (node_type_of(recv) == "Subscript")
+    return is_class(function_id_.get_class(), converter_.ast());
 
   // A constructor call as the receiver (`C().get()`) is a class instance, so
   // the class's own method must win over the same-named dict method. Without
@@ -4344,6 +4360,18 @@ exprt function_call_expr::get()
   return handle_general_function_call();
 }
 
+symbolt *
+function_call_expr::find_receiver_symbol(symbol_id &obj_symbol_id) const
+{
+  const std::string caller = get_object_name();
+  // A receiver with no name (`ps[0].m()`) has no symbol: looking one up would
+  // find the enclosing function, whose id is what an empty object leaves.
+  if (caller.empty())
+    return nullptr;
+  obj_symbol_id.set_object(caller);
+  return converter_.find_symbol(obj_symbol_id.to_string());
+}
+
 exprt function_call_expr::handle_general_function_call()
 {
   // Handle single-argument min/max/sum/sorted by dispatching to typed builtins
@@ -4391,11 +4419,7 @@ exprt function_call_expr::handle_general_function_call()
   symbol_id obj_symbol_id = converter_.create_symbol_id();
 
   if (call_["func"]["_type"] == "Attribute")
-  {
-    std::string caller = get_object_name();
-    obj_symbol_id.set_object(caller);
-    obj_symbol = converter_.find_symbol(obj_symbol_id.to_string());
-  }
+    obj_symbol = find_receiver_symbol(obj_symbol_id);
 
   // Indirect call through a variable holding a function pointer, e.g.:
   // times3 = make_multiplier(3); times3(4)
@@ -5792,7 +5816,9 @@ std::optional<exprt> function_call_expr::try_indirect_member_call()
   // regular method is not a component of the struct at all, so ordinary
   // dispatch is untouched.
   const typet &field_type = st.get_component(attr).type();
-  if (!field_type.is_pointer() || !field_type.subtype().is_code())
+  const python_converter::attribute_functions *held =
+    held_functions(class_name, attr, field_type);
+  if (!held && (!field_type.is_pointer() || !field_type.subtype().is_code()))
     return std::nullopt;
 
   exprt recv = converter_.get_expr(func_json["value"]);
@@ -5810,11 +5836,73 @@ std::optional<exprt> function_call_expr::try_indirect_member_call()
     recv2 = dereference2tc(migrate_type(recv_type), recv2);
   exprt member =
     migrate_expr_back(member2tc(migrate_type(field_type), recv2, attr));
+  return call_field(held, recv, member);
+}
 
+const python_converter::attribute_functions *function_call_expr::held_functions(
+  const std::string &class_name,
+  const std::string &attr,
+  const typet &field_type) const
+{
+  const auto mro = converter_.class_mro(class_name);
+  if (
+    field_type != any_type() || !mro ||
+    std::any_of(mro->begin(), mro->end(), [&](const auto &cls) {
+      return converter_.class_binds_name(cls, attr);
+    }))
+    return nullptr;
+  return converter_.function_attribute(attr);
+}
+
+code_typet function_call_expr::held_signature(
+  const python_converter::attribute_functions &held) const
+{
+  const std::string unsupported =
+    "calling attribute '" + call_["func"]["attr"].get<std::string>() + "'";
+  std::optional<code_typet> signature;
+  for (const std::string &id : held.ids)
+  {
+    const symbolt *fn = converter_.find_symbol(id);
+    if (!fn || !fn->get_type().is_code())
+      throw std::runtime_error(
+        unsupported +
+        " before the functions it holds are defined is not supported");
+    if (!signature)
+      signature = to_code_type(fn->get_type());
+    else if (!python_converter::same_signature(
+               *signature, to_code_type(fn->get_type())))
+      throw std::runtime_error(
+        unsupported +
+        ", which holds functions of different signatures, is not supported");
+  }
+
+  if (
+    !call_["keywords"].empty() ||
+    call_["args"].size() + held.bound != signature->arguments().size())
+    throw std::runtime_error(
+      unsupported +
+      " with arguments other than its functions' parameters is not supported");
+  return *signature;
+}
+
+exprt function_call_expr::call_field(
+  const python_converter::attribute_functions *held,
+  const exprt &recv,
+  const exprt &member) const
+{
   side_effect_expr_function_callt call;
   call.location() = converter_.get_location_from_decl(call_);
   call.function() = member;
-  call.type() = to_code_type(field_type.subtype()).return_type();
+  if (held)
+  {
+    const code_typet signature = held_signature(*held);
+    call.function() = typecast_exprt(member, gen_pointer_type(signature));
+    if (held->bound)
+      call.arguments().push_back(typecast_exprt(
+        recv.type().is_pointer() ? recv : build_address_of(recv),
+        signature.arguments()[0].type()));
+  }
+  call.type() = to_code_type(call.function().type().subtype()).return_type();
 
   for (const auto &arg_node : call_["args"])
   {
@@ -5884,6 +5972,39 @@ std::optional<exprt> function_call_expr::build_post_init_forward_call(
   }
 
   return exprt(call);
+}
+
+/// The FunctionDef for a call's callee: a module-level name, or a nested path
+/// such as "outer@F@b" for a sibling the enclosing body defines later.
+static nlohmann::json
+forward_function_node(const nlohmann::json &ast, const std::string &name)
+{
+  if (name.find("@F@") == std::string::npos)
+    return json_utils::try_find_function(ast["body"], name);
+  return json_utils::find_function_by_path(
+    ast, json_utils::split_function_path(name));
+}
+
+/// The constant a forward-referenced function always returns, or nil. Only a
+/// body that is a lone `return <constant>` is converted: the callee's
+/// statements would otherwise be converted in the caller's scope.
+exprt function_call_expr::forward_constant_return(
+  const nlohmann::json &func_node) const
+{
+  const nlohmann::json &body = func_node["body"];
+  if (
+    body.size() != 1 || body[0].value("_type", "") != "Return" ||
+    !body[0]["value"].is_object() ||
+    body[0]["value"].value("_type", "") != "Constant")
+    return nil_exprt();
+  return converter_.get_function_constant_return(converter_.get_block(body));
+}
+
+static bool defines_function(const nlohmann::json &ast, const std::string &name)
+{
+  if (name.find("@F@") == std::string::npos)
+    return json_utils::search_function_in_ast(ast, name);
+  return !forward_function_node(ast, name).empty();
 }
 
 std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
@@ -6119,8 +6240,7 @@ std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
       // module attribute is unresolved, not user code (#6742).
       const bool is_forward_reference =
         function_id_.get_filename() == converter_.python_file() &&
-        json_utils::search_function_in_ast(
-          converter_.ast(), function_id_.get_function());
+        defines_function(converter_.ast(), function_id_.get_function());
 
       if (is_forward_reference)
       {
@@ -6136,8 +6256,8 @@ std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
 
         // Extract return type from function definition in AST
         typet return_type = empty_typet();
-        const auto &func_node = try_find_function(
-          converter_.ast()["body"], function_id_.get_function());
+        const nlohmann::json func_node =
+          forward_function_node(converter_.ast(), function_id_.get_function());
         if (!func_node.empty())
         {
           if (func_node.contains("returns") && !func_node["returns"].is_null())
@@ -6161,8 +6281,7 @@ std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
                 return_type = gen_pointer_type(return_type);
             }
           }
-          exprt body = converter_.get_block(func_node["body"]);
-          exprt const_return = converter_.get_function_constant_return(body);
+          exprt const_return = forward_constant_return(func_node);
           if (!const_return.is_nil())
             return const_return;
         }
@@ -6439,8 +6558,8 @@ size_t function_call_expr::bind_call_receiver(
         {
           // Member/variable receiver (e.g., self.builder.build()): use the
           // actual receiver expression instead of a nondet temporary.
-          exprt obj_expr = converter_.get_expr(func_value);
-          call.arguments().push_back(bind_instance_receiver(obj_expr));
+          call.arguments().push_back(
+            bind_instance_receiver(build_value_receiver(*func_symbol)));
         }
       }
       else

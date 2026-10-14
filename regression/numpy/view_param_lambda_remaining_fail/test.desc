@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: passing a numpy view to a callable that is not a plain function is not supported$

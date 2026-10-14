@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 6
+^  FAILED .* line +10  assertion
+^VERIFICATION FAILED$
