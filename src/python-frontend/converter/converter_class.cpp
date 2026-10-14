@@ -727,6 +727,18 @@ struct attribute_writest
         walk(child, attr_name);
   }
 };
+
+bool stores_none_into(const nlohmann::json &n, const std::string &attr_name)
+{
+  if (n.is_object())
+    if (const nlohmann::json *value = attribute_store_value(n, attr_name))
+      if (literal_scalar_kind(*value).empty())
+        return true;
+  for (const auto &child : n)
+    if (child.is_structured() && stores_none_into(child, attr_name))
+      return true;
+  return false;
+}
 } // namespace
 
 /// An attribute only ever stored None, or None and one scalar type, is typed
@@ -741,6 +753,24 @@ typet python_converter::none_attribute_type(const std::string &attr_name) const
   return found.scalar.empty() ? none_type()
                               : type_handler_.build_optional_type(
                                   type_handler_.get_typet(found.scalar));
+}
+
+/// A class instance is held in place unless the attribute is bound to an
+/// existing instance or is stored None somewhere: both need a reference.
+bool python_converter::held_by_reference(
+  bool rhs_is_aliased_name,
+  const std::string &attr_name,
+  const typet &type,
+  const std::string &annotated_type) const
+{
+  if (type.id() != "symbol" || !json_utils::is_class(annotated_type, *ast_json))
+    return false;
+  if (rhs_is_aliased_name)
+    return true;
+  for (const nlohmann::json *body : reachable_module_bodies())
+    if (stores_none_into(*body, attr_name))
+      return true;
+  return false;
 }
 
 void python_converter::get_attributes_from_self(
@@ -964,8 +994,8 @@ void python_converter::get_attributes_from_self(
                                    stmt["value"].is_object() &&
                                    stmt["value"].value("_type", "") == "Name";
         if (
-          rhs_is_aliased_name && type.id() == "symbol" &&
-          json_utils::is_class(annotated_type, *ast_json))
+          held_by_reference(
+            rhs_is_aliased_name, attr_name, type, annotated_type))
           type = gen_pointer_type(type);
 
         // A bare `Callable` is what the annotation pass infers for an
