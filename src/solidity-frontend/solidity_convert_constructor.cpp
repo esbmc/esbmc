@@ -2073,11 +2073,7 @@ bool solidity_convertert::move_initializer_to_ctor(
             exprt assign = side_effect_exprt("assign", cur_type);
             assign.copy_to_operands(cur_lhs, zero);
             convert_expression_to_code(assign);
-            {
-              exprt v = sym.get_value();
-              v.operands().insert(v.operands().begin(), assign);
-              sym.set_value(std::move(v));
-            }
+            sym_value.operands().insert(sym_value.operands().begin(), assign);
           };
         unroll_zero(lhs, comp.type());
         continue;
@@ -2137,11 +2133,7 @@ bool solidity_convertert::move_initializer_to_ctor(
       {
         exprt op = *rit;
         convert_expression_to_code(op);
-        {
-          exprt v = sym.get_value();
-          v.operands().insert(v.operands().begin(), op);
-          sym.set_value(std::move(v));
-        }
+        sym_value.operands().insert(sym_value.operands().begin(), op);
       }
 
       // insert before the sym.value.operands

@@ -4286,6 +4286,10 @@ bool solidity_convertert::get_index_access_expr(
 
   // for MAPPING
   typet base_t;
+  // The data location is read off the AST: the type carries no field for it.
+  const bool base_is_calldata = base_json["typeDescriptions"]
+                                  .value("typeIdentifier", std::string())
+                                  .find("_calldata_ptr") != std::string::npos;
   if (get_type_description(base_json["typeDescriptions"], base_t))
     return true;
   if (get_sol_type(base_t) == SolidityGrammar::SolType::MAPPING)
@@ -4504,9 +4508,9 @@ bool solidity_convertert::get_index_access_expr(
   // need stable identity across reads.
   //
   // Scope:
-  //  - Only fires when the base array is calldata (`#sol_data_loc ==
-  //    "calldata"`), so user-declared storage `bytes[] x;` keeps the
-  //    precise index_exprt path and still catches real OOB.
+  //  - Only fires when the base array is calldata (its AST type
+  //    identifier says `_calldata_ptr`), so user-declared storage `bytes[] x;`
+  //    keeps the precise index_exprt path and still catches real OOB.
   //  - Only for rvalue reads (calldata is read-only in Solidity; any
   //    `a[i] = ...` would be rejected by solc anyway).
   //
@@ -4516,8 +4520,7 @@ bool solidity_convertert::get_index_access_expr(
   //    element equality across reads would fail spuriously; the
   //    workaround is `bytes memory b = a[i];` to materialise once.
   if (
-    get_sol_type(t) == SolidityGrammar::SolType::BYTES_DYN &&
-    base_t.get("#sol_data_loc").as_string() == "calldata")
+    get_sol_type(t) == SolidityGrammar::SolType::BYTES_DYN && base_is_calldata)
   {
     log_warning(
       "[approx] calldata bytes[] element access at {}:{}: repeated "
@@ -4538,9 +4541,7 @@ bool solidity_convertert::get_index_access_expr(
   // match. Substitute a bounded nondet_string() — valid zero-terminated
   // char* up to _ESBMC_NONDET_STRING_MAX — so downstream `bytes(a[i])`,
   // `a[i].length` and `a[i][j]` reads operate on a real buffer.
-  if (
-    get_sol_type(t) == SolidityGrammar::SolType::STRING &&
-    base_t.get("#sol_data_loc").as_string() == "calldata")
+  if (get_sol_type(t) == SolidityGrammar::SolType::STRING && base_is_calldata)
   {
     side_effect_expr_function_callt nondet_s;
     get_library_function_call_no_args(
