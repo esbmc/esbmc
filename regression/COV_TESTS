@@ -2938,6 +2938,7 @@ regression/python/github_8473_branch
 regression/python/github_8473_branch_fail
 regression/python/github_8473_mixed
 regression/python/github_8473_call_result
+regression/python/github_8473_call_result_fail
 regression/python/github_8473_module
 regression/python/github_8473_instance_branch
 regression/python/github_8472_flatten_unsupported
