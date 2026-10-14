@@ -368,21 +368,8 @@ typet python_converter::infer_attr_type_from_usage(
   // stay any_type() and nested reads inside functions abort ("Cannot resolve
   // nested attribute"), e.g. quixbugs detect_cycle's
   // `node.successor.successor`.
-  std::vector<const nlohmann::json *> module_bodies;
-  auto add_body = [&](const nlohmann::json &mod) {
-    if (!mod.is_object() || !mod.contains("body") || !mod["body"].is_array())
-      return;
-    const nlohmann::json *b = &mod["body"];
-    for (const auto *seen : module_bodies)
-      if (seen == b)
-        return;
-    module_bodies.push_back(b);
-  };
-  add_body(*ast_json);
-  if (entry_ast_)
-    add_body(*entry_ast_);
-  for (const auto &kv : module_ast_pool_)
-    add_body(kv.second);
+  const std::vector<const nlohmann::json *> module_bodies =
+    reachable_module_bodies();
 
   // Locate the class definition across all reachable modules. Accept only an
   // unambiguous single definition; if two modules define the same class name,
@@ -577,6 +564,120 @@ typet python_converter::infer_attr_type_from_usage(
   return typet();
 }
 
+std::vector<const nlohmann::json *>
+python_converter::reachable_module_bodies() const
+{
+  std::vector<const nlohmann::json *> module_bodies;
+  auto add_body = [&](const nlohmann::json &mod) {
+    if (!mod.is_object() || !mod.contains("body") || !mod["body"].is_array())
+      return;
+    const nlohmann::json *b = &mod["body"];
+    for (const auto *seen : module_bodies)
+      if (seen == b)
+        return;
+    module_bodies.push_back(b);
+  };
+  add_body(*ast_json);
+  if (entry_ast_)
+    add_body(*entry_ast_);
+  for (const auto &kv : module_ast_pool_)
+    add_body(kv.second);
+  return module_bodies;
+}
+
+namespace
+{
+bool is_attribute_named(const nlohmann::json &n, const std::string &attr_name)
+{
+  return n.is_object() && n.value("_type", "") == "Attribute" &&
+         n.value("attr", "") == attr_name;
+}
+
+/// The value `n` stores into an attribute named `attr_name`, if `n` is a
+/// single-target assignment to one; nullptr otherwise.
+const nlohmann::json *
+attribute_store_value(const nlohmann::json &n, const std::string &attr_name)
+{
+  const std::string kind = n.value("_type", "");
+  if (
+    kind == "Assign" && n["targets"].size() == 1 &&
+    is_attribute_named(n["targets"][0], attr_name))
+    return &n["value"];
+  if (
+    kind == "AnnAssign" && is_attribute_named(n["target"], attr_name) &&
+    !n["value"].is_null())
+    return &n["value"];
+  return nullptr;
+}
+
+/// "" for a None literal, the scalar type of a bool, int or float literal,
+/// "?" for anything else.
+std::string literal_scalar_kind(const nlohmann::json &value)
+{
+  if (value.value("_type", "") != "Constant")
+    return "?";
+  const nlohmann::json &literal = value["value"];
+  if (literal.is_null())
+    return "";
+  if (literal.is_boolean())
+    return "bool";
+  if (literal.is_number_integer())
+    return "int";
+  return literal.is_number_float() ? "float" : "?";
+}
+
+struct attribute_writest
+{
+  std::size_t writes = 0;
+  std::size_t stores = 0;
+  bool unknown = false;
+  std::string scalar;
+
+  void store(const nlohmann::json &value)
+  {
+    ++stores;
+    const std::string kind = literal_scalar_kind(value);
+    if (kind.empty())
+      return;
+    unknown |= kind == "?" || (!scalar.empty() && kind != scalar);
+    scalar = kind;
+  }
+
+  void visit(const nlohmann::json &n, const std::string &attr_name)
+  {
+    writes += is_attribute_named(n, attr_name) &&
+              (!n.contains("ctx") || n["ctx"].value("_type", "") != "Load");
+    unknown |= n.value("_type", "") == "Call" && n.contains("func") &&
+               n["func"].is_object() && n["func"].value("id", "") == "setattr";
+    if (const nlohmann::json *value = attribute_store_value(n, attr_name))
+      store(*value);
+  }
+
+  void walk(const nlohmann::json &n, const std::string &attr_name)
+  {
+    if (n.is_object())
+      visit(n, attr_name);
+    for (const auto &child : n)
+      if (child.is_structured())
+        walk(child, attr_name);
+  }
+};
+} // namespace
+
+/// An attribute only ever stored None, or None and one scalar type, is typed
+/// so that arithmetic on it raises TypeError where it holds None (#8248).
+typet python_converter::none_attribute_type(const std::string &attr_name) const
+{
+  attribute_writest found;
+  for (const nlohmann::json *body : reachable_module_bodies())
+    found.walk(*body, attr_name);
+  if (found.unknown || found.writes != found.stores)
+    return any_type();
+  return found.scalar.empty() ? none_type()
+                              : type_handler_.build_optional_type(
+                                  type_handler_.get_typet(found.scalar));
+}
+
 void python_converter::get_attributes_from_self(
   const nlohmann::json &func_node,
   struct_typet &clazz)
@@ -752,7 +853,7 @@ void python_converter::get_attributes_from_self(
           if (!unset(from_usage))
             resolved = from_usage;
         }
-        type = unset(resolved) ? any_type() : resolved;
+        type = unset(resolved) ? none_attribute_type(attr_name) : resolved;
       }
       else if (annotated_type == "tuple" || annotated_type == "Tuple")
       {

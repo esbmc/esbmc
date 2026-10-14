@@ -1226,6 +1226,14 @@ private:
     const std::string &class_name,
     const std::string &attr_name);
 
+  // The entry module, every imported module and the current one, each once.
+  std::vector<const nlohmann::json *> reachable_module_bodies() const;
+
+  // None when every write to an attribute named `attr_name` stores None, and
+  // Optional[T] when they store None and literals of one scalar type T.
+  // any_type() for any other write or a setattr call.
+  typet none_attribute_type(const std::string &attr_name) const;
+
   /**
    * @brief Build a tuple struct type from an AST value node when the annotation
    *        is bare `tuple`.
