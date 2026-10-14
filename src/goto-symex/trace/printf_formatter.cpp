@@ -1,4 +1,5 @@
 #include <goto-symex/trace/printf_formatter.h>
+#include <map>
 #include <optional>
 #include <sstream>
 #include <util/lang/c_types.h>
@@ -255,6 +256,21 @@ type2tc pick_int_type(bool is_signed, length_modt mod)
   }
 }
 } // namespace
+
+type2tc printf_int_type(bool is_signed, const std::string &mod)
+{
+  static const std::map<std::string, length_modt> mods = {
+    {"", length_modt::NONE},
+    {"hh", length_modt::HH},
+    {"h", length_modt::H},
+    {"l", length_modt::L},
+    {"ll", length_modt::LL},
+    {"j", length_modt::J},
+    {"z", length_modt::Z},
+    {"t", length_modt::T}};
+  const auto it = mods.find(mod);
+  return it == mods.end() ? type2tc() : pick_int_type(is_signed, it->second);
+}
 
 void printf_formattert::process_format(std::ostream &out)
 {
