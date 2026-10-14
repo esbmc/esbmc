@@ -602,7 +602,7 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<std::string>()->value_name("<path>"),
      "If a violation is found, writes a structured JSON describing the "
      "violation oracle (contract, function, bug_type, relative_loc), "
-     "trace functions, and locked symbols. Consumed by esbmc-minimise."},
+     "trace functions, and locked symbols."},
     {"result-only", NULL, "Do not print the counter-example"}}},
   {"Function Contracts",
    {{"enforce-contract",

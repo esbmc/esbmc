@@ -1,7 +1,6 @@
 # Solidity Coverage Support
 
-Full coverage pipeline reference: [`/CLAUDE_COVERAGE.md`](../../../CLAUDE_COVERAGE.md).
-This doc captures the Solidity-specific handling only.
+This doc captures the Solidity-specific handling of coverage.
 
 ## Quick Reference
 

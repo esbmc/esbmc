@@ -560,8 +560,8 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
   if (options.get_bool_option("generate-json-report"))
     generate_json_report("1", ns, goto_trace);
 
-  // esbmc-minimise consumes this structured violation summary to seed
-  // its mandatory set and oracle tuple.
+  // A structured violation summary for tools that post-process the
+  // counterexample (e.g. a source minimiser).
   const std::string violation_info_path =
     options.get_option("dump-violation-info");
   if (!violation_info_path.empty())
@@ -6355,9 +6355,8 @@ smt_resultt bmct::multi_property_check(
             // `type(uint256).max`, bvudiv's total-function value -- and warned
             // the value would flow into R2 assertions. The R1/R2 ladder is
             // built from this exact field, and a consumer either parses it as
-            // an integer (solidity_path_generalise.py's coord_values refuses
-            // the coordinate on failure, safe but lossy) or renders it into a
-            // test.
+            // an integer (refusing the coordinate on failure, safe but lossy)
+            // or renders it into a test.
             //
             // Dropped and NAMED, through the channel that already exists for
             // "this path wrote it and the value is not renderable" -- the same

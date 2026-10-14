@@ -168,8 +168,8 @@ void counterexample_value(
   const expr2tc &identifier,
   const expr2tc &value);
 
-// Dump a structured JSON description of the counter-example for the
-// esbmc-minimise driver. Extracts:
+// Dump a structured JSON description of the counter-example for tools
+// that post-process it. Extracts:
 //   - oracle tuple (contract, function, bug_type, in_function_offset_lines)
 //   - trace_methods: Solidity contract methods stepped through before the
 //     violation (derived from per-step source locations, not stderr text)

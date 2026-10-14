@@ -6,14 +6,8 @@ Solidity. It parses the Solidity AST (produced by `solc
 synthesises a verification harness, and hands the goto program to
 ESBMC's bounded / k-induction engine and its SMT backends.
 
-This README is the user-facing overview. Deeper references live in the
-repo:
-- [`CLAUDE_Solidity.md`](../../CLAUDE_Solidity.md) — index of
-  per-topic developer docs under `docs/claude/solidity/`.
-- [`../../CLAUDE_COVERAGE.md`](../../CLAUDE_COVERAGE.md) — coverage
-  pipeline reference.
-- [`../../scripts/minimise/ALGORITHM.md`](../../scripts/minimise/ALGORITHM.md) —
-  minimiser implementation spec.
+This README is the user-facing overview. Per-topic developer docs live
+under `docs/claude/solidity/`.
 
 ## Table of contents
 
@@ -27,7 +21,7 @@ repo:
 - [Property selection](#property-selection) — overflow, reentry, multi-property, standard checks
 - [Solver selection](#solver-selection) — automatic preference, `--16` word size, Z3/CVC5/Bitwuzla/Boolector
 - [TOD detection](#tod-transaction-order-dependence-detection) — `--tod-race-check`, `--tod-balance-check`, `--dump-harness`
-- [Counter-example minimisation](#counter-example-minimisation) — `esbmc-minimise`, `--dump-violation-info`
+- [Violation oracle](#violation-oracle) — `--dump-violation-info`
 - [Structural coverage](#structural-coverage) — branch / condition / assertion coverage
 - [Externally exposed intrinsics](#externally-exposed-intrinsics) — `__ESOL_deep_copy`, `__ESOL_nondet_state_forward`, `__ESBMC_assert`, `__ESBMC_assume`, `__ESBMC_nondet_*`
 - [Approximations you should know about](#approximations-you-should-know-about)
@@ -744,45 +738,17 @@ Full pipeline (auto mode):
 See [`docs/claude/solidity/tod.md`](../../docs/claude/solidity/tod.md)
 for the algorithm details and the list of known limitations.
 
-## Counter-example minimisation
+## Violation oracle
 
-For real-world contracts where the reported counterexample trace is
-unreadable against hundreds of lines of context, use the three-phase
-minimiser to shrink the source while preserving the exact violation
-oracle:
+`--dump-violation-info <path>` writes a structured JSON description of the
+violation ESBMC found (contract, function, bug type, relative location,
+trace functions), for tools that post-process a counterexample:
 
 ```sh
-# 1. Run ESBMC and dump the violation oracle
 esbmc contract.sol --contract C --overflow-check --cvc5 \
       --incremental-bmc \
       --dump-violation-info /tmp/violation.json
-
-# 2. Feed the oracle to the minimiser
-python scripts/minimise/minimise.py \
-    --input contract.sol \
-    --oracle /tmp/violation.json \
-    --out reduced/ \
-    --esbmc-flags "--contract C --overflow-check --cvc5 --incremental-bmc"
 ```
-
-Three phases:
-- **Phase 0 — dead-code sweep**: delete contracts / functions / state
-  variables / modifiers that can't contribute to the reported violation.
-- **Phase 1 — compile-driven closure**: re-add the minimum set of
-  declarations that `solc` needs to compile the reduced source.
-- **Phase 2 — greedy reduction**: delete statements / locals that do
-  not change the violation oracle; keep-last on any change that
-  breaks the oracle.
-
-Output: reduced source + `manifest.json` describing what was removed
-and why.
-
-ESBMC-side flag: `--dump-violation-info <path>` — writes a structured
-JSON oracle (contract, function, bug_type, relative_loc, trace
-functions, locked symbols) consumed by the minimiser.
-
-Full spec: [`scripts/minimise/ALGORITHM.md`](../../scripts/minimise/ALGORITHM.md).
-User overview: [`docs/claude/solidity/minimise.md`](../../docs/claude/solidity/minimise.md).
 
 ## Structural coverage
 
@@ -843,9 +809,6 @@ Solidity-specific handling:
 - Modifier-renamed functions (e.g. `deposit_onlyPositive`) are
   prefix-matched, so `--focus-function deposit` targets the modified
   form.
-
-See [`../../CLAUDE_COVERAGE.md`](../../CLAUDE_COVERAGE.md) for the full
-coverage architecture.
 
 ## Externally exposed intrinsics
 

@@ -1043,7 +1043,7 @@ void goto_coveraget::audit_certify_witness(bool ce_payload_requested)
 // forces `--no-simplify` (esbmc_parseoptions.cpp:4223) and therefore stops
 // folding loop guards (symex_goto.cpp:20). On that contract
 // `--path-cov-certify` printed CERTIFIED and `--path-cov-assert` printed
-// VACUOUS for the IDENTICAL region, and scripts/solidity_path_put.py refused
+// VACUOUS for the IDENTICAL region, and a downstream test generator refused
 // the PUT on the false signal.
 //
 // SO THE VERDICT BECOMES A THIRD, EXPLICIT TOKEN rather than being folded into

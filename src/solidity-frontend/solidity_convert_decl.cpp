@@ -468,7 +468,7 @@ bool solidity_convertert::get_var_decl(
      * the default pointer model to a nested infinite SMT array, keyed
      * by the folded 64-bit key. With the pointer model, push(x) called
      * `_ESBMC_array_push_uint256` which fresh-mallocs a new slab and
-     * can't carry prior pushes — see CLAUDE_Solidity.md §F.2.
+     * can't carry prior pushes.
      *
      * Shape: `array_typet(array_typet(elem, inf), inf)`. Per-key length
      * is tracked by a sibling aux `<name>_mapdynarr_len` of type
