@@ -38,18 +38,11 @@ struct module_ast
 void propagate_tuple_list_params(const std::vector<module_ast> &modules);
 
 /**
- * @brief Type the unannotated scalar parameters of imported functions from the
- * arguments their callers pass.
+ * @brief Annotate the unannotated parameters of imported modules' top-level
+ * functions with the scalar type every call site passes (GitHub #8501).
  *
- * An imported module is annotated on its own, so its parameters cannot take a
- * type from calls in another module and stay Any (void*); an operation such
- * as abs() on one then reaches the solver with a pointer operand (GitHub
- * #8501). A parameter is annotated only when every call site passes it an int,
- * a float or a str literal (or nondet value), directly or through a name bound
- * once to one, and the function is never referenced other than by a call this
- * pass resolves.
- *
- * @param modules As for propagate_tuple_list_params.
+ * Only modules with a non-null @c write are rewritten, and only parameters
+ * reached by at least one call from another module.
  */
 void propagate_scalar_params(const std::vector<module_ast> &modules);
 } // namespace python_param_annotations

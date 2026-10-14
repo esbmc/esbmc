@@ -1,6 +1,5 @@
 #include <python-frontend/param_annotations.h>
 #include <python-frontend/json_utils.h>
-#include <python-frontend/lambda/python_lambda.h>
 
 #include <map>
 #include <optional>
@@ -185,72 +184,6 @@ std::string callee_name(const nlohmann::json &func)
   return "";
 }
 
-/// constant_type_name, except that bytes, complex and Ellipsis constants,
-/// which the AST also carries as JSON strings, are left untyped.
-std::string scalar_constant_type(const nlohmann::json &node)
-{
-  const std::string type = constant_type_name(node);
-  return type != "str" || node.value("esbmc_type_annotation", "") == "str"
-           ? type
-           : "";
-}
-
-/// Python type name of a scalar value typed by its own syntax: a literal, a
-/// signed numeric literal, or a nondet_int()/nondet_float() call. Empty when
-/// this pass cannot type it.
-std::string scalar_literal_type(const nlohmann::json &arg)
-{
-  if (is_node(arg, "UnaryOp"))
-  {
-    const std::string op = arg["op"].value("_type", "");
-    const std::string type = scalar_constant_type(arg["operand"]);
-    return (op == "USub" || op == "UAdd") && type != "str" ? type : "";
-  }
-
-  if (
-    is_node(arg, "Call") && is_node(arg["func"], "Name") && arg["args"].empty())
-  {
-    const nlohmann::json &id = arg["func"]["id"];
-    if (id == "nondet_int")
-      return "int";
-    return id == "nondet_float" ? "float" : "";
-  }
-
-  return scalar_constant_type(arg);
-}
-
-/// True when @p node holds `from <module> import <name>` or
-/// `from <module> import *`, at any depth.
-bool imports_from(
-  const nlohmann::json &node,
-  const std::string &module,
-  const std::string &name)
-{
-  if (
-    is_node(node, "ImportFrom") &&
-    node.value("module", nlohmann::json()) == module)
-  {
-    for (const auto &alias : node["names"])
-      if (alias["name"] == name || alias["name"] == "*")
-        return true;
-  }
-
-  if (!node.is_array() && !node.is_object())
-    return false;
-  for (const auto &child : node)
-    if (imports_from(child, module, name))
-      return true;
-  return false;
-}
-
-bool has_starred_arg(const nlohmann::json &call)
-{
-  for (const auto &arg : call["args"])
-    if (is_node(arg, "Starred"))
-      return true;
-  return false;
-}
-
 /// Identifies one parameter: its module, its function's name, its position.
 using param_key = std::tuple<size_t, std::string, size_t>;
 
@@ -258,47 +191,18 @@ using param_key = std::tuple<size_t, std::string, size_t>;
 /// call site disagrees with another or cannot be typed.
 using bindings = std::map<param_key, std::optional<nlohmann::json>>;
 
-/// The scalar type name inferred for a parameter, reset to empty once a call
-/// site disagrees with another or cannot be typed.
-using scalar_bindings = std::map<param_key, std::string>;
-
-class propagator
+/// Resolves a call site to the top-level function it reaches, across modules.
+class call_resolver
 {
-public:
-  explicit propagator(
+protected:
+  explicit call_resolver(
     const std::vector<python_param_annotations::module_ast> &modules)
     : modules_(modules)
   {
     for (const auto &module : modules_)
-    {
       collect_shadowing_names(module.read->at("body"), true);
-      collect_live_names(module.read->at("body"));
-      collect_escaping_names(module.read->at("body"));
-    }
   }
 
-  /// One pass over every call site. Returns true if an annotation changed.
-  bool run() const
-  {
-    bindings bound;
-    for (size_t module = 0; module < modules_.size(); ++module)
-      visit(modules_[module].read->at("body"), "", module, bound);
-    return apply(bound);
-  }
-
-  /// One pass over every call site, binding unannotated scalar parameters.
-  void run_scalars()
-  {
-    scalar_bindings bound;
-    for (size_t module = 0; module < modules_.size(); ++module)
-    {
-      const nlohmann::json &body = modules_[module].read->at("body");
-      visit_scalars(body, "", module, bound);
-    }
-    apply_scalars(bound);
-  }
-
-private:
   const std::vector<python_param_annotations::module_ast> &modules_;
 
   /// Names of functions defined anywhere below module scope (nested in another
@@ -324,89 +228,6 @@ private:
 
     if (is_function || is_node(node, "ClassDef"))
       collect_shadowing_names(node["body"], false);
-  }
-
-  /// Every name that is called, or mentioned as a value. A function whose name
-  /// never appears in either position is *assumed* unreachable, so the calls in
-  /// its body say nothing about what its callees receive. Dispatch through a
-  /// string (`getattr(m, "f")()`, `globals()["f"]()`) or through a decorator
-  /// alone hides the name and is not modelled — like the rest of this
-  /// monomorphic pass, such programs are out of scope.
-  ///
-  /// Operational models make this gate essential: heapq's `_siftup` is called
-  /// by `heapify` (with the caller's tuples) and also by the unused `heappop`,
-  /// whose own `heap` parameter is unbound — counting the latter would conflict
-  /// the former away and leave `_siftup` mis-typed.
-  ///
-  /// The set is keyed by bare name across every module, which
-  /// over-approximates: an unrelated variable named `f` marks a dead `f` live.
-  /// That direction only forgoes a binding; it never produces a wrong one.
-  std::set<std::string> live_names_;
-
-  void collect_live_names(const nlohmann::json &node)
-  {
-    if (node.is_array())
-    {
-      for (const auto &elem : node)
-        collect_live_names(elem);
-      return;
-    }
-    if (!node.is_object())
-      return;
-
-    if (is_node(node, "Call"))
-      live_names_.insert(callee_name(node["func"]));
-    // A bare mention (`f = heappop`) may call it later with unknown arguments.
-    if (is_node(node, "Name"))
-      live_names_.insert(node["id"].get<std::string>());
-
-    for (const auto &child : node)
-      collect_live_names(child);
-  }
-
-  /// Names that may be called without this pass seeing the call: mentioned as
-  /// a value (`g = f`, `map(f, xs)`, `m.f` uncalled), imported under another
-  /// name (`from m import f as g`), or called where the callee cannot be
-  /// resolved (`import m as n; n.f(...)`, `obj.f(...)`). Keyed by bare name,
-  /// which only over-approximates. A scalar parameter of such a function is
-  /// left alone, since a call site this pass misses could pass another type.
-  std::set<std::string> escaping_names_;
-
-  void collect_escaping_names(const nlohmann::json &node)
-  {
-    if (node.is_array())
-    {
-      for (const auto &elem : node)
-        collect_escaping_names(elem);
-      return;
-    }
-    if (!node.is_object())
-      return;
-
-    if (is_node(node, "Call"))
-    {
-      const nlohmann::json &func = node["func"];
-      if (is_node(func, "Attribute"))
-        collect_escaping_names(func["value"]);
-      else if (!is_node(func, "Name"))
-        collect_escaping_names(func);
-      for (const auto &[key, child] : node.items())
-        if (key != "func")
-          collect_escaping_names(child);
-      return;
-    }
-
-    if (is_node(node, "Name"))
-      escaping_names_.insert(node["id"].get<std::string>());
-    else if (is_node(node, "Attribute"))
-      escaping_names_.insert(node["attr"].get<std::string>());
-    else if (
-      is_node(node, "alias") &&
-      !node.value("asname", nlohmann::json()).is_null())
-      escaping_names_.insert(node["name"].get<std::string>());
-
-    for (const auto &child : node)
-      collect_escaping_names(child);
   }
 
   bool defines(size_t module, const std::string &func) const
@@ -449,6 +270,66 @@ private:
       found = i;
     }
     return found;
+  }
+};
+
+class propagator : call_resolver
+{
+public:
+  explicit propagator(
+    const std::vector<python_param_annotations::module_ast> &modules)
+    : call_resolver(modules)
+  {
+    for (const auto &module : modules_)
+      collect_live_names(module.read->at("body"));
+  }
+
+  /// One pass over every call site. Returns true if an annotation changed.
+  bool run() const
+  {
+    bindings bound;
+    for (size_t module = 0; module < modules_.size(); ++module)
+      visit(modules_[module].read->at("body"), "", module, bound);
+    return apply(bound);
+  }
+
+private:
+  /// Every name that is called, or mentioned as a value. A function whose name
+  /// never appears in either position is *assumed* unreachable, so the calls in
+  /// its body say nothing about what its callees receive. Dispatch through a
+  /// string (`getattr(m, "f")()`, `globals()["f"]()`) or through a decorator
+  /// alone hides the name and is not modelled — like the rest of this
+  /// monomorphic pass, such programs are out of scope.
+  ///
+  /// Operational models make this gate essential: heapq's `_siftup` is called
+  /// by `heapify` (with the caller's tuples) and also by the unused `heappop`,
+  /// whose own `heap` parameter is unbound — counting the latter would conflict
+  /// the former away and leave `_siftup` mis-typed.
+  ///
+  /// The set is keyed by bare name across every module, which
+  /// over-approximates: an unrelated variable named `f` marks a dead `f` live.
+  /// That direction only forgoes a binding; it never produces a wrong one.
+  std::set<std::string> live_names_;
+
+  void collect_live_names(const nlohmann::json &node)
+  {
+    if (node.is_array())
+    {
+      for (const auto &elem : node)
+        collect_live_names(elem);
+      return;
+    }
+    if (!node.is_object())
+      return;
+
+    if (is_node(node, "Call"))
+      live_names_.insert(callee_name(node["func"]));
+    // A bare mention (`f = heappop`) may call it later with unknown arguments.
+    if (is_node(node, "Name"))
+      live_names_.insert(node["id"].get<std::string>());
+
+    for (const auto &child : node)
+      collect_live_names(child);
   }
 
   /// The tuple element annotation of a call argument, when it is a list of
@@ -555,135 +436,6 @@ private:
       visit(child, func, module, bound);
   }
 
-  /// The scalar type of a call argument made in @p func, or empty when this
-  /// pass cannot type it. A name takes the type of the value its assignment
-  /// binds, and only when its module binds it nowhere else: another binding (a
-  /// loop or comprehension target, a lambda parameter, a same-named local) may
-  /// be the one the call reads. Annotations are not trusted, since Python does
-  /// not enforce them (`x: int = 2.5`).
-  std::string scalar_type_of(
-    const nlohmann::json &arg,
-    const std::string &func,
-    size_t caller) const
-  {
-    if (!is_node(arg, "Name"))
-      return scalar_literal_type(arg);
-
-    const std::string &name = arg["id"].get<std::string>();
-    const nlohmann::json &module = *modules_[caller].read;
-    if (count_bindings(module, name) != 1)
-      return "";
-
-    const nlohmann::json decl = json_utils::find_var_decl(name, func, module);
-    return decl.is_object() && decl.contains("value")
-             ? scalar_literal_type(decl["value"])
-             : "";
-  }
-
-  void visit_scalar_call(
-    const nlohmann::json &call,
-    const std::string &func,
-    size_t caller,
-    scalar_bindings &bound)
-  {
-    const std::optional<size_t> callee = resolve_callee(call["func"], caller);
-    const std::string name = callee_name(call["func"]);
-    // resolve_callee takes the only module defining a bare name, but a call to
-    // a builtin or an unimported name does not reach it.
-    if (
-      !callee ||
-      (*callee != caller && is_node(call["func"], "Name") &&
-       !imports_from(*modules_[caller].read, modules_[*callee].name, name)))
-    {
-      escaping_names_.insert(name);
-      return;
-    }
-
-    const nlohmann::json &params =
-      find_function(modules_[*callee].read->at("body"), name)
-        ->at("args")
-        .at("args");
-    const bool opaque =
-      !call.value("keywords", nlohmann::json::array()).empty() ||
-      has_starred_arg(call);
-
-    for (size_t i = 0; i < params.size(); ++i)
-    {
-      const std::string type = !opaque && i < call["args"].size()
-                                 ? scalar_type_of(call["args"][i], func, caller)
-                                 : "";
-      auto [entry, inserted] = bound.emplace(param_key{*callee, name, i}, type);
-      if (!inserted && entry->second != type)
-        entry->second.clear(); // call sites disagree
-    }
-  }
-
-  /// Walk every expression, including class bodies and functions this pass
-  /// assumes dead: unlike the tuple pass, a call site missed here could bind a
-  /// parameter to a type some caller does not pass.
-  void visit_scalars(
-    const nlohmann::json &node,
-    const std::string &func,
-    size_t module,
-    scalar_bindings &bound)
-  {
-    if (node.is_array())
-    {
-      for (const auto &elem : node)
-        visit_scalars(elem, func, module, bound);
-      return;
-    }
-    if (!node.is_object())
-      return;
-
-    if (is_node(node, "ClassDef") || is_node(node, "FunctionDef"))
-    {
-      const std::string &name = node["name"].get<std::string>();
-      const std::string inner = func.empty() ? name : func + "@F@" + name;
-      for (const auto &child : node)
-        visit_scalars(child, inner, module, bound);
-      return;
-    }
-
-    if (is_node(node, "Call"))
-      visit_scalar_call(node, func, module, bound);
-
-    for (const auto &child : node)
-      visit_scalars(child, func, module, bound);
-  }
-
-  void apply_scalars(const scalar_bindings &bound) const
-  {
-    for (const auto &[key, type] : bound)
-    {
-      const auto &[module, func, param] = key;
-      if (
-        type.empty() || modules_[module].write == nullptr ||
-        escaping_names_.count(func))
-        continue;
-
-      nlohmann::json &def =
-        *find_function(modules_[module].write->at("body"), func);
-      // A decorated function is called through its wrapper, and positional-
-      // only parameters shift the positions this pass matched.
-      if (
-        !def.value("decorator_list", nlohmann::json::array()).empty() ||
-        !def["args"].value("posonlyargs", nlohmann::json::array()).empty())
-        continue;
-
-      nlohmann::json &arg = def["args"]["args"][param];
-      if (!arg.value("annotation", nlohmann::json()).is_null())
-        continue;
-
-      arg["annotation"] = {
-        {"_type", "Name"}, {"id", type}, {"ctx", {{"_type", "Load"}}}};
-      for (const char *field :
-           {"lineno", "col_offset", "end_lineno", "end_col_offset"})
-        if (arg.contains(field))
-          arg["annotation"][field] = arg[field];
-    }
-  }
-
   bool apply(const bindings &bound) const
   {
     bool changed = false;
@@ -716,6 +468,227 @@ private:
     return changed;
   }
 };
+
+/// Python type name of a scalar argument that this pass can type without a
+/// symbol table: a literal, a negated numeric literal, or a nondet_<T>() call.
+std::string literal_scalar_type(const nlohmann::json &node)
+{
+  if (is_node(node, "Constant") && node["value"].is_boolean())
+    return "bool";
+
+  if (
+    is_node(node, "UnaryOp") &&
+    (is_node(node["op"], "USub") || is_node(node["op"], "UAdd")))
+  {
+    const std::string type = constant_type_name(node["operand"]);
+    return type == "int" || type == "float" ? type : "";
+  }
+
+  if (
+    is_node(node, "Call") && is_node(node["func"], "Name") &&
+    node["args"].empty() && node["keywords"].empty())
+  {
+    static const std::map<std::string, std::string> nondet = {
+      {"nondet_int", "int"},
+      {"nondet_float", "float"},
+      {"nondet_bool", "bool"},
+      {"nondet_str", "str"}};
+    const auto it = nondet.find(node["func"]["id"].get<std::string>());
+    return it == nondet.end() ? "" : it->second;
+  }
+
+  return constant_type_name(node);
+}
+
+bool has_star_import(const nlohmann::json &body)
+{
+  for (const auto &stmt : body)
+    if (is_node(stmt, "ImportFrom"))
+      for (const auto &alias : stmt["names"])
+        if (alias["name"] == "*")
+          return true;
+  return false;
+}
+
+/// Types the unannotated parameters of functions in imported modules from
+/// their call sites. Each module is annotated on its own and sees only its own
+/// calls, so `lib.f(2.5)` left `f`'s parameter as Any and the value was
+/// reinterpreted as a pointer (GitHub #8501). A parameter is annotated only
+/// when every call site passes the same type; any site this pass cannot type,
+/// or any use of the function's name other than as a callee, leaves it alone.
+class scalar_propagator : call_resolver
+{
+public:
+  explicit scalar_propagator(
+    const std::vector<python_param_annotations::module_ast> &modules)
+    : call_resolver(modules)
+  {
+  }
+
+  void run()
+  {
+    for (size_t module = 0; module < modules_.size(); ++module)
+      visit(modules_[module].read->at("body"), module, false);
+    apply();
+  }
+
+private:
+  struct binding
+  {
+    std::optional<std::string> type;
+    bool from_other_module;
+  };
+  std::map<param_key, binding> bound_;
+  std::set<std::string> poisoned_;
+
+  /// A Name argument is typed only when its module binds it exactly once, at
+  /// top level, to a value literal_scalar_type can type.
+  std::string name_type(const std::string &id, size_t module) const
+  {
+    const nlohmann::json &ast = *modules_[module].read;
+    if (
+      has_star_import(ast["body"]) ||
+      json_utils::count_name_bindings(ast, id) != 1)
+      return "";
+    const nlohmann::json *value = json_utils::top_level_value(ast, id);
+    return value ? literal_scalar_type(*value) : "";
+  }
+
+  std::string arg_type(const nlohmann::json &arg, size_t module) const
+  {
+    return is_node(arg, "Name") ? name_type(arg["id"], module)
+                                : literal_scalar_type(arg);
+  }
+
+  void bind(const param_key &key, const std::string &type, bool other_module)
+  {
+    std::optional<std::string> inferred;
+    if (!type.empty())
+      inferred = type;
+    auto [entry, inserted] =
+      bound_.emplace(key, binding{inferred, other_module});
+    if (inserted)
+      return;
+    if (entry->second.type != inferred)
+      entry->second.type = std::nullopt;
+    entry->second.from_other_module |= other_module;
+  }
+
+  static bool
+  binds_by_position_only(const nlohmann::json &call, const nlohmann::json &def)
+  {
+    if (!call["keywords"].empty() || !def["decorator_list"].empty())
+      return false;
+    if (!def["args"]["posonlyargs"].empty())
+      return false;
+    for (const auto &arg : call["args"])
+      if (is_node(arg, "Starred"))
+        return false;
+    return true;
+  }
+
+  void visit_call(const nlohmann::json &call, size_t caller)
+  {
+    const std::string name = callee_name(call["func"]);
+    const std::optional<size_t> callee = resolve_callee(call["func"], caller);
+    // A bare name the caller also binds otherwise (`from lib import f` beside
+    // its own `def f`) may reach a function resolve_callee did not pick.
+    const bool rebound =
+      is_node(call["func"], "Name") &&
+      json_utils::count_name_bindings(*modules_[caller].read, name) > 1;
+    if (!callee || rebound)
+    {
+      poisoned_.insert(name);
+      return;
+    }
+    if (modules_[*callee].write == nullptr)
+      return;
+
+    const nlohmann::json &def =
+      *find_function(modules_[*callee].read->at("body"), name);
+    if (!binds_by_position_only(call, def))
+    {
+      poisoned_.insert(name);
+      return;
+    }
+
+    const nlohmann::json &params = def["args"]["args"];
+    const size_t required = params.size() - def["args"]["defaults"].size();
+    if (call["args"].size() < required)
+    {
+      poisoned_.insert(name);
+      return;
+    }
+    for (size_t i = 0; i < required; ++i)
+      if (
+        !params[i].contains("annotation") || params[i]["annotation"].is_null())
+        bind(
+          param_key{*callee, name, i},
+          arg_type(call["args"][i], caller),
+          *callee != caller);
+  }
+
+  /// The function name @p node may carry outside callee position: a Name or
+  /// Attribute value, or an import that rebinds it (`from lib import f as g`).
+  static std::string escaped_name(const nlohmann::json &node)
+  {
+    if (is_node(node, "Name") || is_node(node, "Attribute"))
+      return callee_name(node);
+    if (
+      is_node(node, "alias") && !node["asname"].is_null() &&
+      node["asname"] != node["name"])
+      return node["name"].get<std::string>();
+    return "";
+  }
+
+  /// Walk every node, class and function bodies included. A Name or Attribute
+  /// outside callee position may carry the function anywhere, so its name is
+  /// poisoned.
+  void visit(const nlohmann::json &node, size_t module, bool is_callee)
+  {
+    if (node.is_array())
+    {
+      for (const auto &elem : node)
+        visit(elem, module, false);
+      return;
+    }
+    if (!node.is_object())
+      return;
+
+    if (!is_callee)
+      poisoned_.insert(escaped_name(node));
+
+    const bool is_call = is_node(node, "Call");
+    if (is_call)
+      visit_call(node, module);
+
+    for (auto it = node.begin(); it != node.end(); ++it)
+      visit(it.value(), module, is_call && it.key() == "func");
+  }
+
+  void apply() const
+  {
+    for (const auto &[key, entry] : bound_)
+    {
+      const auto &[module, func, param] = key;
+      // A function its module binds again (a second def in an `if`) is not
+      // the one find_function returns.
+      if (
+        !entry.type || !entry.from_other_module || poisoned_.count(func) ||
+        json_utils::count_name_bindings(*modules_[module].read, func) != 1)
+        continue;
+
+      nlohmann::json &arg = (*find_function(
+        modules_[module].write->at("body"), func))["args"]["args"][param];
+      nlohmann::json annotation{{"_type", "Name"}, {"id", *entry.type}};
+      for (const char *field :
+           {"lineno", "col_offset", "end_lineno", "end_col_offset"})
+        if (arg.contains(field))
+          annotation[field] = arg[field];
+      arg["annotation"] = annotation;
+    }
+  }
+};
 } // namespace
 
 namespace python_param_annotations
@@ -737,6 +710,6 @@ void propagate_tuple_list_params(const std::vector<module_ast> &modules)
 
 void propagate_scalar_params(const std::vector<module_ast> &modules)
 {
-  propagator(modules).run_scalars();
+  scalar_propagator(modules).run();
 }
 } // namespace python_param_annotations

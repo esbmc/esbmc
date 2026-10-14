@@ -854,13 +854,16 @@ protected:
    *  @param new_array The newly allocated array symbol.
    *  @param guard Guard condition for this assignment.
    *  @param realloc_size The size parameter passed to realloc.
+   *  @param alloc_fail Failure condition from model_allocation_failure, or
+   *  nil when realloc cannot fail.
    */
   void finalize_realloc_result(
     const expr2tc &lhs,
     const expr2tc &result,
     const expr2tc &new_array,
     const guard2tc &guard,
-    const expr2tc &realloc_size);
+    const expr2tc &realloc_size,
+    const expr2tc &alloc_fail);
 
   /**
    *  Update pointer validity information after realloc.
@@ -883,13 +886,16 @@ protected:
    *  @param result The result pointer from realloc attempt.
    *  @param old_ptr The original pointer being reallocated.
    *  @param guard Guard condition for this modeling.
+   *  @param alloc_fail Set to the failure condition, or nil when realloc
+   *  cannot fail.
    *  @return Expression representing the final result considering failure.
    */
   expr2tc model_allocation_failure(
     const expr2tc &result,
     const expr2tc &old_ptr,
     const guard2tc &guard,
-    const expr2tc &over_cap);
+    const expr2tc &over_cap,
+    expr2tc &alloc_fail);
 
   /**
    *  Bound at PTRDIFF_MAX the object size an assignment records, reporting a

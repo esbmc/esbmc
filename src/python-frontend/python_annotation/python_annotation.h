@@ -307,7 +307,16 @@ private:
   void annotate_function(Json &function_element);
   void annotate_class(Json &class_element);
   void infer_loop_variable_types(Json &while_stmt);
+  void annotate_branch_blocks(Json &element);
   void add_annotation(Json &body);
+  std::string widen_to_optional_scalar(
+    const Json &element,
+    const std::string &inferred_type);
+  std::string optional_scalar_of(const std::string &name, const Json &scope);
+  void collect_name_stores(
+    const std::string &name,
+    const Json &body,
+    std::vector<const Json *> &stores);
 
   // ----- state -----
   Json &ast_;
@@ -333,6 +342,10 @@ private:
   // calls the function), which the return-expression scan cannot see.
   std::set<std::string> functions_reentered_;
   std::set<std::string> resolving_rhs_vars_;
+  // Per (scope, name): the Optional[T] annotation of a name stored None and
+  // one scalar type T, decided before any of its stores is annotated.
+  std::map<std::pair<const Json *, std::string>, std::string>
+    optional_scalar_names_;
   std::string current_func_name_context_;
   std::string current_class_name_;
   struct pending_specializationt

@@ -345,6 +345,18 @@ exprt function_call_expr::isinstance_str_as_type(const exprt &obj_expr) const
   return unknown;
 }
 
+bool function_call_expr::is_class_object_operand(
+  const nlohmann::json &arg,
+  const exprt &obj) const
+{
+  if (python_converter::is_class_object(obj))
+    return true;
+  if (arg["_type"] != "Name" || !obj.is_symbol())
+    return false;
+  const std::string *name = converter_.class_object_name(obj.identifier());
+  return name && type_utils::is_type_identifier(*name);
+}
+
 exprt function_call_expr::handle_isinstance() const
 {
   const auto &args = call_["args"];
@@ -359,16 +371,8 @@ exprt function_call_expr::handle_isinstance() const
   std::vector<nlohmann::json> types;
   collect_classinfo(args[1], types);
 
-  // Check if the first argument is a type object (e.g., x = int; isinstance(x,
-  // str)) Type objects themselves are not instances of other types (except
-  // 'type')
-  if (obj_arg["_type"] == "Name" && obj_expr.is_symbol())
-  {
-    const std::string *name =
-      converter_.class_object_name(obj_expr.identifier());
-    if (name && type_utils::is_type_identifier(*name))
-      return gen_boolean(admits_class_object(types));
-  }
+  if (is_class_object_operand(obj_arg, obj_expr))
+    return gen_boolean(admits_class_object(types));
 
   // Extract type name from various AST node formats
   auto extract_type_name = [](const nlohmann::json &node) -> std::string {
