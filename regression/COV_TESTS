@@ -2989,6 +2989,8 @@ regression/python/github_8366_module_shadowed
 regression/python/github_8366_star_unannotated
 regression/python/github_8366_star_unannotated_fail
 regression/python/github_8366_star_private_call_fail
+regression/python/sv_verifier_module_nondet_list
+regression/python/sv_verifier_module_nondet_list_fail
 regression/python/isinstance_bool_is_int
 regression/python/isinstance_bool_is_int_any_fail
 regression/python/isinstance_bool_is_int_fail
