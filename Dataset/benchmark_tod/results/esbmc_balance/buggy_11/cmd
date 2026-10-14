@@ -1,1 +1,0 @@
-timeout 300 bash -c 'ulimit -v 4000000; ulimit -t 270; exec "/home/samson/workspace/esbmc/build/src/esbmc/esbmc" contract.sol --contract "ForTheBlockchain" --tod-balance-check=claimReward_TOD12,setReward_TOD12 --tod-jobs=1 --bound --unwind 3 --no-unwinding-assertions --cvc5'

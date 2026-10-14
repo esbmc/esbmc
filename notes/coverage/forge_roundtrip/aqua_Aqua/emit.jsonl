@@ -1,8 +1,0 @@
-{"tag": "BalanceLib__load", "exitCode": 0, "wallSeconds": 1.25, "killed": false, "emitted": [], "nonUnitFunctionsPresent": true}
-{"tag": "BalanceLib__store", "exitCode": 0, "wallSeconds": 1.21, "killed": false, "emitted": [], "nonUnitFunctionsPresent": true}
-{"tag": "Aqua__rawBalances", "exitCode": 1, "wallSeconds": 2.31, "killed": false, "emitted": ["Aqua.cov.t.sol"], "nonUnitFunctionsPresent": true, "cases": 1}
-{"tag": "Aqua__safeBalances", "exitCode": 1, "wallSeconds": 2.82, "killed": false, "emitted": ["Aqua.cov.t.sol"], "nonUnitFunctionsPresent": true, "cases": 1}
-{"tag": "Aqua__ship", "exitCode": -1, "wallSeconds": 180.43, "killed": true, "emitted": [], "nonUnitFunctionsPresent": true}
-{"tag": "Aqua__dock", "exitCode": 1, "wallSeconds": 10.92, "killed": false, "emitted": ["Aqua.cov.t.sol"], "defaultedCalls": 2, "defaultedArgs": 3, "defaultedByType": "ARRAY:ADDRESS x2, BYTES32 x1", "nonUnitFunctionsPresent": true, "cases": 2}
-{"tag": "Aqua__pull", "exitCode": 1, "wallSeconds": 10.06, "killed": false, "emitted": ["Aqua.cov.t.sol"], "defaultedCalls": 5, "defaultedArgs": 5, "defaultedByType": "ADDRESS x5", "nonUnitFunctionsPresent": true, "cases": 3}
-{"tag": "Aqua__push", "exitCode": 1, "wallSeconds": 3.49, "killed": false, "emitted": ["Aqua.cov.t.sol"], "nonUnitFunctionsPresent": true, "cases": 1}

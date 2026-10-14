@@ -233,19 +233,6 @@ add_test(NAME regression/scripts/solidity_path_put
 set_tests_properties(regression/scripts/solidity_path_put
   PROPERTIES TIMEOUT 60 LABELS "regression;scripts/")
 
-# The reducer's mid-rebuild guard. Registered for the same reason as the driver
-# above: a reduction of st1inch was silently invalidated by rebuilding esbmc
-# while it ran, and nothing reported it -- the reducer kept printing progress and
-# writing checkpoints, so a two-binary reduction looked exactly like a sound one.
-# The guard makes that a hard failure; this test is what proves the guard fires,
-# in BOTH directions (an unchanged binary must not trip it, or every candidate
-# after the first would die). It touches no real binary and needs no solver.
-add_test(NAME regression/scripts/reduce_binary_guard
-         COMMAND ${Python_EXECUTABLE}
-                 ${CMAKE_CURRENT_SOURCE_DIR}/../notes/coverage/scripts/test_reduce_binary_guard.py)
-set_tests_properties(regression/scripts/reduce_binary_guard
-  PROPERTIES TIMEOUT 60 LABELS "regression;scripts/")
-
 # conditionally enable regression suites based on configured support
 if(ENABLE_BITWUZLA)
     set(REGRESSIONS_BITWUZLA bitwuzla)

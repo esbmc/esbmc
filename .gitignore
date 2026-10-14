@@ -16,16 +16,11 @@ build*
 .settings/
 
 # others
-Testing/
 __pycache__
 .DS_Store
 tags
 .cache
 release
-release-bundle
-release-static
-dist
-*.log
 .gdbinit
 compile_commands.json
 .deps/

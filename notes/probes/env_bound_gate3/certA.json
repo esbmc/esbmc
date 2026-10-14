@@ -1,2 +1,0 @@
-{ "unit": "send", "enc": 2, "depth": 1,
-  "box": [ { "name": "msg.sender", "lo": "255", "hi": "255" } ] }

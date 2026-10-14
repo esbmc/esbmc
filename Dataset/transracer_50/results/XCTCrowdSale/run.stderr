@@ -1,7 +1,0 @@
-ESBMC version 8.2.0 64-bit x86_64 linux
-Target: 64-bit little-endian x86_64-unknown-linux with esbmclibc
-Warning: SPDX license identifier not provided in source file. Before publishing, consider adding a comment containing "SPDX-License-Identifier: <SPDX-License>" to each source file. Use "SPDX-License-Identifier: UNLICENSED" for non-open-source code. Please see https://spdx.org for more information.
---> contract.sol
-
---tod-race-check: discovered 0 candidate pair(s) in 'XCTCrowdSale'
---tod-race-check: no race TOD pairs detected — done.
