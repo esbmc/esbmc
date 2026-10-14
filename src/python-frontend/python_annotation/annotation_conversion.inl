@@ -1133,6 +1133,19 @@ std::string python_annotation<Json>::recover_list_type_from_appends(
 }
 
 template <class Json>
+std::string python_annotation<Json>::arg_dependent_call_type(const Json &call)
+{
+  const std::string &func_name = call["func"]["id"];
+  // hash() returns bytes only for the consensus spec's own hash(data: bytes)
+  // (mirrors get_argument_type).
+  if (
+    func_name == "hash" && call.contains("args") && !call["args"].empty() &&
+    get_argument_type(call["args"][0]) != "bytes")
+    return "int";
+  return func_name == "abs" ? get_builtin_call_type(call) : "";
+}
+
+template <class Json>
 std::string python_annotation<Json>::get_builtin_call_type(const Json &call)
 {
   const std::string &func_name = call["func"]["id"];
@@ -3377,15 +3390,11 @@ void python_annotation<Json>::collect_return_types(
       {
         const std::string &called_func = return_val["func"]["id"];
 
-        // hash() returns bytes only for the consensus spec's own
-        // hash(data: bytes); get_function_return_type has no access to this
-        // call's arguments, so check them here first (mirrors get_argument_type).
-        if (
-          called_func == "hash" && return_val.contains("args") &&
-          !return_val["args"].empty() &&
-          get_argument_type(return_val["args"][0]) != "bytes")
+        // get_function_return_type has no access to this call's arguments.
+        const std::string arg_dependent = arg_dependent_call_type(return_val);
+        if (!arg_dependent.empty())
         {
-          types.insert("int");
+          types.insert(arg_dependent);
           continue;
         }
 
