@@ -1,7 +1,7 @@
 class A:
     def unsupported(self, x: int) -> int:
         match x:
-            case 1:
+            case int():
                 return 1
         return 0
 

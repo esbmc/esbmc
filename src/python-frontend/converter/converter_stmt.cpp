@@ -9074,6 +9074,12 @@ exprt python_converter::get_block(
       break;
     case StatementType::UNKNOWN:
     default:
+      // The preprocessor lowers a match whose patterns are all literals,
+      // values, captures, wildcards or alternatives of these.
+      if (element["_type"] == "Match")
+        throw std::runtime_error(
+          "match statements with sequence, mapping or class patterns, or "
+          "with a guard that has a nested scope, are not supported");
       throw std::runtime_error(
         element["_type"].get<std::string>() + " statements are not supported");
     }
