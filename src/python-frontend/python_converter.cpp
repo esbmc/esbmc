@@ -421,6 +421,7 @@ void python_converter::convert_module_imports(code_blockt &all_imports_block)
   for (auto &entry : module_ast_pool_)
     modules.push_back({&entry.second, &entry.second, entry.first});
   python_param_annotations::propagate_tuple_list_params(modules);
+  python_param_annotations::propagate_scalar_params(modules);
 
   auto convert_import = [&](const nlohmann::json &node) {
     const std::string module_name = import_module_name(node);
