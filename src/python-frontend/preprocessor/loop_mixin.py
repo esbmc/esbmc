@@ -242,12 +242,11 @@ class LoopMixin:
                     break
                 <body>
 
-        Only for a constructor call of such a class, the one shape whose
-        class is known here, and without a for-else.
+        Only for a constructor call of such a class, or a name whose one
+        binding in its scope is such a call, and without a for-else.
         """
         it_expr = node.iter
-        if not (isinstance(it_expr, ast.Call) and isinstance(it_expr.func, ast.Name)
-                and it_expr.func.id in self.iterator_classes) or node.orelse:
+        if not self._constructs_iterator_class(it_expr) or node.orelse:
             return None
         self._iter_counter += 1
         it_name = f"ESBMC_iter_{self._iter_counter}"
@@ -278,6 +277,18 @@ class LoopMixin:
         ast.fix_missing_locations(init)
         ast.fix_missing_locations(loop)
         return [self.visit(init), self.visit(loop)]
+
+    def _constructs_iterator_class(self, expr):
+        """Whether `expr` is `Cls(...)`, or a name bound only by `x = Cls(...)`
+        in the scope being visited, for a class in `iterator_classes`."""
+        if isinstance(expr, ast.Name):
+            scope = id(self._vararg_scope_stack[-1]) if self._vararg_scope_stack else None
+            _, counts = self.scope_binding_counts.get(scope, (None, {}))
+            if counts.get(expr.id) != 1:
+                return False
+            expr = self._assignment_call_origins.get(expr.id)
+        return (isinstance(expr, ast.Call) and isinstance(expr.func, ast.Name)
+                and expr.func.id in self.iterator_classes)
 
     def _lower_for_else(self, node):
         """Lower `for ... else: <orelse>` into a did-not-break flag.
