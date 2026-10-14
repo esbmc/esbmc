@@ -828,9 +828,12 @@ bool solidity_convertert::get_new_mapping_index_access(
   // cross-contract write, `mapping(K=>Struct)` did not. `map_fixed_arr_get` is
   // the existing lazily-allocating, pointer-returning helper (it treats the
   // payload as an opaque byte slab, so it is value-type agnostic); routing
-  // STRUCT through it makes reads and writes hit the SAME slot.
+  // STRUCT through it makes reads and writes hit the SAME slot. A whole-value
+  // write `m[k] = S(...)` stays on map_generic_set: it stores the same
+  // pointer-to-slab representation that map_fixed_arr_get reads back.
   const bool struct_by_ref =
-    (val_flg == "generic" && val_sol_type == SolidityGrammar::SolType::STRUCT);
+    (val_flg == "generic" && !is_mapping_set &&
+     val_sol_type == SolidityGrammar::SolType::STRUCT);
   if (struct_by_ref)
     val_flg = "fixed_arr";
 
