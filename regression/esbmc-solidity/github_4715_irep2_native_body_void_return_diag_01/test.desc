@@ -1,4 +1,4 @@
 CORE
 contract.solast
 --sol contract.sol --contract C --goto-functions-only
-^WARNING: function should not return value$
+D_x \(sol:@C@C@F@D_x#\):\n[\s\S]*?\n\s+2: RETURN: \$return_newD_x\n
