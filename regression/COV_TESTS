@@ -2982,6 +2982,9 @@ regression/python/github_8366_module_shadowed
 regression/python/github_8366_star_unannotated
 regression/python/github_8366_star_unannotated_fail
 regression/python/github_8366_star_private_call_fail
+regression/python/isinstance_bool_is_int
+regression/python/isinstance_bool_is_int_any_fail
+regression/python/isinstance_bool_is_int_fail
 regression/python/isinstance_class_object
 regression/python/isinstance_class_object_fail
 regression/python/isinstance_class_object_user_fail
