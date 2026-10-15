@@ -477,6 +477,7 @@ class ModuleRewriteMixin:
         lower_match_statements(node)
         self.expand_unittest_main(node)
         self._rewrite_module_aliases(node)
+        self._rewrite_map_values(node)
         guard_unbound_locals(node)
         self.in_order_bindings.update(
             dispatch_rebound_methods(node, self._names_bound_by, self._variable_names(node),
