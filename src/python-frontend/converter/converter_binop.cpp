@@ -2755,8 +2755,10 @@ exprt python_converter::handle_array_operations(
       if (lhs_char != rhs_char)
       {
         const exprt &other = lhs_char ? rhs : lhs;
+        // Float ordering is already handled by handle_float_vs_string.
+        const bool other_is_float = other.type().is_floatbv();
         const std::string cat = get_python_type_category(other.type());
-        if (cat != "string" && !cat.empty())
+        if (cat != "string" && !cat.empty() && !(is_ordering && other_is_float))
         {
           const std::string lhs_name =
             type_handler_.get_python_type_name(lhs.type());
