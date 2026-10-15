@@ -149,6 +149,34 @@ bool is_literal_view_slice(const nlohmann::json &arg)
 }
 } // namespace
 
+// Maps each lambda parameter to its argument, which must be a name, a
+// constant or a literal slice so that inlining evaluates nothing twice.
+// Whether some argument names a view; nullopt when the call cannot be
+// inlined.
+std::optional<bool> python_converter::bind_lambda_arguments(
+  const nlohmann::json &signature,
+  const nlohmann::json &args,
+  std::map<std::string, nlohmann::json> &values) const
+{
+  const nlohmann::json &params = signature["args"];
+  if (
+    params.size() != args.size() || !signature["defaults"].empty() ||
+    !signature["vararg"].is_null() || !signature["kwarg"].is_null())
+    return std::nullopt;
+  bool passes_view = false;
+  for (std::size_t i = 0; i < params.size(); ++i)
+  {
+    const nlohmann::json &arg = args[i];
+    const std::string type = arg.value("_type", "");
+    if (type != "Name" && type != "Constant" && !is_literal_view_slice(arg))
+      return std::nullopt;
+    passes_view |= type == "Name" &&
+                   find_numpy_pointer_view_info(arg.value("id", "")) != nullptr;
+    values[params[i].value("arg", "")] = arg;
+  }
+  return passes_view;
+}
+
 // `f(v)` where the module binds `f` once to a lambda over its own
 // parameters: the body with the arguments in place. The arguments must be
 // names or constants, so inlining evaluates nothing twice.
@@ -164,29 +192,16 @@ python_converter::inline_numpy_view_lambda_call(const nlohmann::json &call)
   if (
     lambda == nullptr || !call.value("keywords", nlohmann::json::array()).empty())
     return std::nullopt;
-  const nlohmann::json &args = (*lambda)["args"];
-  const nlohmann::json &params = args["args"];
-  if (
-    params.size() != call["args"].size() || !args["defaults"].empty() ||
-    !args["vararg"].is_null() || !args["kwarg"].is_null())
-    return std::nullopt;
   std::map<std::string, nlohmann::json> values;
+  std::optional<bool> passes_view =
+    bind_lambda_arguments((*lambda)["args"], call["args"], values);
   std::set<std::string> names;
-  bool passes_view = false;
-  for (std::size_t i = 0; i < params.size(); ++i)
-  {
-    const nlohmann::json &arg = call["args"][i];
-    const std::string type = arg.value("_type", "");
-    if (type != "Name" && type != "Constant" && !is_literal_view_slice(arg))
-      return std::nullopt;
-    passes_view |=
-      type == "Name" &&
-      find_numpy_pointer_view_info(arg.value("id", "")) != nullptr;
-    names.insert(params[i].value("arg", ""));
-    values[params[i].value("arg", "")] = arg;
-  }
+  for (const auto &[name, value] : values)
+    names.insert(name);
   if (
-    (!passes_view && numpy_inlined_lambdas_.count(call["func"].value("id", "")) == 0) ||
+    !passes_view ||
+    (!*passes_view &&
+     numpy_inlined_lambdas_.count(call["func"].value("id", "")) == 0) ||
     !reads_only_parameters((*lambda)["body"], names, body))
     return std::nullopt;
   return substitute_names((*lambda)["body"], values);

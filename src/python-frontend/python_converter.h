@@ -2111,6 +2111,10 @@ private:
   std::optional<nlohmann::json>
   inline_numpy_view_lambda_call(const nlohmann::json &call);
   bool is_inlined_numpy_view_lambda(const nlohmann::json &statement);
+  std::optional<bool> bind_lambda_arguments(
+    const nlohmann::json &signature,
+    const nlohmann::json &args,
+    std::map<std::string, nlohmann::json> &values) const;
   std::set<std::string> numpy_inlined_lambdas_;
   const nlohmann::json &adapt_numpy_view_builtin_calls(
     const nlohmann::json &statement,
