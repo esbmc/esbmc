@@ -3019,3 +3019,4 @@ regression/python/self-ctor-arg-forward
 regression/python/github_8479
 regression/python/github_8479_inplace
 regression/python/dict_update_overwrite
+regression/python/dict_unpack_non_dict_unsupported_fail
