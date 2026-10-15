@@ -145,6 +145,7 @@ private:
   std::string subscript_type_from_call(const Json &subscript_node);
   bool
   is_imported_name_in_body(const std::string &name, const Json &stmts) const;
+  bool is_imported_name(const std::string &name) const;
   std::string infer_unpacked_element_type(const Json &rhs, size_t index);
   std::string resolve_object_class_name(const std::string &obj);
   std::string match_literal_argument(
