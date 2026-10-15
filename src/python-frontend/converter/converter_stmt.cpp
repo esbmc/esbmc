@@ -1054,7 +1054,11 @@ void python_converter::adopt_tagged_element(
 /// The user class whose instance a value of @p type is, or "".
 std::string python_converter::user_class_of(const typet &type)
 {
-  const typet &held = ns.follow(type.is_pointer() ? type.subtype() : type);
+  const typet &raw = type.is_pointer() ? type.subtype() : type;
+  // A class defined later in the module has no symbol yet.
+  if (raw.is_symbol() && !ns.lookup(raw))
+    return "";
+  const typet &held = ns.follow(raw);
   if (!held.is_struct())
     return "";
   const std::string name =
