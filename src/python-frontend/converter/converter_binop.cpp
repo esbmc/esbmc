@@ -1895,8 +1895,9 @@ exprt python_converter::get_binary_operator_expr(
       return set_result;
   }
 
-  if (exprt dict_result = handle_dict_bitwise(op, lhs, rhs, element);
-      dict_result.is_not_nil())
+  if (
+    exprt dict_result = handle_dict_bitwise(op, lhs, rhs, element);
+    dict_result.is_not_nil())
     return dict_result;
 
   // Handle membership operators
