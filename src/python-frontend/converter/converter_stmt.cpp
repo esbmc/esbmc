@@ -5658,9 +5658,8 @@ bool python_converter::is_numpy_array_to_view_rebind(
   const exprt &rhs,
   const std::string &lhs_id) const
 {
-  return block_nesting_ == function_body_depth_ + 1 &&
-         lhs.type().is_array() && rhs.type().is_pointer() &&
-         numpy_array_symbols_.count(lhs_id) != 0;
+  return block_nesting_ == function_body_depth_ + 1 && lhs.type().is_array() &&
+         rhs.type().is_pointer() && numpy_array_symbols_.count(lhs_id) != 0;
 }
 
 bool python_converter::is_attribute_store_of_numpy_view(

@@ -4188,7 +4188,8 @@ void python_converter::bind_runtime_numpy_view_arguments(
     return;
   // The receiver is evaluated after the stores too.
   if (
-    contains_call_node((*call)["args"]) || contains_call_node((*call)["func"]) ||
+    contains_call_node((*call)["args"]) ||
+    contains_call_node((*call)["func"]) ||
     contains_call_node(call->value("keywords", nlohmann::json::array())))
     throw std::runtime_error(runtime_view_call_error);
 
@@ -4203,7 +4204,8 @@ python_converter::runtime_numpy_view_params(const std::string &func_name)
 {
   std::vector<std::size_t> params;
   const nlohmann::json *def =
-    func_name.empty() ? nullptr : find_callee_def((*ast_json)["body"], func_name);
+    func_name.empty() ? nullptr
+                      : find_callee_def((*ast_json)["body"], func_name);
   if (def == nullptr || !def->contains("args"))
     return params;
   for (std::size_t i = 0; i < (*def)["args"]["args"].size(); ++i)
@@ -4328,11 +4330,7 @@ size_t python_converter::register_function_argument(
   const std::string callee = numpy_view_callee_name(id);
   const std::optional<numpy_scalar_pointer_view_infot> view_param =
     infer_numpy_view_param_type(
-      callee,
-      type.arguments().size(),
-      arg_name,
-      numpy_array_param,
-      arg_type);
+      callee, type.arguments().size(), arg_name, numpy_array_param, arg_type);
 
   // Same idea, but for a parameter fed a dynamically-typed local variable.
   if (

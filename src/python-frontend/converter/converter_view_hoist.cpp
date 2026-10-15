@@ -232,7 +232,8 @@ bool python_converter::hoist_numpy_view_arguments(
   {
     const json_pointer call = argument.parent_pointer().parent_pointer();
     if (
-      !takes_numpy_view_argument(statement[call], std::stoul(argument.back())) ||
+      !takes_numpy_view_argument(
+        statement[call], std::stoul(argument.back())) ||
       is_preceded_by_call(statement[key], statement[argument]))
       continue;
     rewritten[argument] = bind_numpy_view_temporary(
@@ -266,7 +267,8 @@ bool python_converter::needs_numpy_view_hoist(const nlohmann::json &node)
 {
   if (!node.is_object() && !node.is_array())
     return false;
-  if (needs_numpy_view_call_binding(node) || call_needs_view_argument_hoist(node))
+  if (
+    needs_numpy_view_call_binding(node) || call_needs_view_argument_hoist(node))
     return true;
   for (const auto &child : node)
     if (needs_numpy_view_hoist(child))
@@ -276,14 +278,17 @@ bool python_converter::needs_numpy_view_hoist(const nlohmann::json &node)
 
 // Whether `call` passes a view expression to a parameter that takes a view,
 // or a named view to a bound view parameter of a named function.
-bool python_converter::call_needs_view_argument_hoist(const nlohmann::json &call)
+bool python_converter::call_needs_view_argument_hoist(
+  const nlohmann::json &call)
 {
   if (!is_call_with_arguments(call))
     return false;
   for (std::size_t i = 0; i < call["args"].size(); ++i)
   {
     const nlohmann::json &arg = call["args"][i];
-    if (arg.value("_type", "") == "Subscript" && takes_numpy_view_argument(call, i))
+    if (
+      arg.value("_type", "") == "Subscript" &&
+      takes_numpy_view_argument(call, i))
       return true;
     if (
       is_name(arg) && is_named_call(call) &&
@@ -331,7 +336,8 @@ bool python_converter::needs_numpy_view_call_binding(const nlohmann::json &node)
 {
   if (!node.is_object() || node.value("_type", "") != "Call")
     return false;
-  return (is_named_call(node) && returned_numpy_view_argument(node) != nullptr) ||
+  return (is_named_call(node) &&
+          returned_numpy_view_argument(node) != nullptr) ||
          !runtime_numpy_view_params(numpy_view_callee_of(node)).empty();
 }
 

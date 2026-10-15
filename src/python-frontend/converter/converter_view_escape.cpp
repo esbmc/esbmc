@@ -1356,7 +1356,8 @@ bool python_converter::binds_every_numpy_view_argument(
   for (std::size_t i = 0; i < call["args"].size(); ++i)
     if (
       holds_numpy_view(call["args"][i]) &&
-      (!is_name(call["args"][i]) || !is_bound_numpy_view_param(name, i + offset)))
+      (!is_name(call["args"][i]) ||
+       !is_bound_numpy_view_param(name, i + offset)))
       return false;
   const std::size_t dot = name.find('.');
   const nlohmann::json def =
@@ -1371,7 +1372,9 @@ bool python_converter::binds_every_numpy_view_argument(
     for (const auto &member : def["body"])
       if (member.value("name", "") == name.substr(dot + 1))
         for (std::size_t p = 0; p < member["args"]["args"].size(); ++p)
-          if (member["args"]["args"][p].value("arg", "") == keyword.value("arg", ""))
+          if (
+            member["args"]["args"][p].value("arg", "") ==
+            keyword.value("arg", ""))
             index = p;
     if (!index || !is_bound_numpy_view_param(name, *index))
       return false;

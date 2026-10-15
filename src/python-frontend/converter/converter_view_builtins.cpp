@@ -190,7 +190,8 @@ python_converter::inline_numpy_view_lambda_call(const nlohmann::json &call)
       ? module_lambda(body, call["func"].value("id", ""))
       : nullptr;
   if (
-    lambda == nullptr || !call.value("keywords", nlohmann::json::array()).empty())
+    lambda == nullptr ||
+    !call.value("keywords", nlohmann::json::array()).empty())
     return std::nullopt;
   std::map<std::string, nlohmann::json> values;
   std::optional<bool> passes_view =
@@ -217,9 +218,10 @@ void collect_name_uses(
 {
   if (!node.is_object() && !node.is_array())
     return;
-  if (node.is_object() && node.value("_type", "") == "Call" &&
-      node["func"].value("_type", "") == "Name" &&
-      node["func"].value("id", "") == name)
+  if (
+    node.is_object() && node.value("_type", "") == "Call" &&
+    node["func"].value("_type", "") == "Name" &&
+    node["func"].value("id", "") == name)
     calls.push_back(&node);
   if (
     node.is_object() && node.value("_type", "") == "Name" &&
@@ -297,10 +299,10 @@ bool python_converter::names_python_builtin(const std::string &name) const
     if (stmt.value("_type", "") == "ImportFrom" && stmt.contains("names"))
       for (const auto &alias : stmt["names"])
       {
-        const std::string bound = alias.contains("asname") &&
-                                      !alias["asname"].is_null()
-                                    ? alias["asname"].get<std::string>()
-                                    : alias.value("name", "");
+        const std::string bound =
+          alias.contains("asname") && !alias["asname"].is_null()
+            ? alias["asname"].get<std::string>()
+            : alias.value("name", "");
         if (bound == name || bound == "*")
           return false;
       }
@@ -334,7 +336,8 @@ bool python_converter::consumes_numpy_view_as_list(
 
 // A list-consuming builtin, whatever its keywords, applied to a 1-D view or
 // array.
-bool python_converter::is_builtin_over_numpy_view(const nlohmann::json &node) const
+bool python_converter::is_builtin_over_numpy_view(
+  const nlohmann::json &node) const
 {
   return node.is_object() && node.value("_type", "") == "Call" &&
          node.contains("func") && node["func"].value("_type", "") == "Name" &&
@@ -381,13 +384,14 @@ bool python_converter::adapt_numpy_view_builtin_arguments(nlohmann::json &node)
     return false;
   bool changed = false;
   if (node.is_object())
-    if (std::optional<nlohmann::json> inlined = inline_numpy_view_lambda_call(node))
+    if (
+      std::optional<nlohmann::json> inlined =
+        inline_numpy_view_lambda_call(node))
     {
       node = std::move(*inlined);
       changed = true;
     }
-  if (
-    is_builtin_over_numpy_view(node) && !consumes_numpy_view_as_list(node))
+  if (is_builtin_over_numpy_view(node) && !consumes_numpy_view_as_list(node))
     throw std::runtime_error(
       "TypeError: passing a numpy view to " +
       node["func"]["id"].get<std::string>() +
