@@ -1489,8 +1489,12 @@ exprt python_dict_handler::handle_dict_update(
   exprt loop_cond =
     build_less_than(build_symbol(index_var), build_symbol(size_var));
 
-  // Rebuild the current key/value pair from the source lists.
+  // Rebuild the current key/value pair from the source lists. The key/value
+  // temporaries and the contains check go into loop_body, as in the dict
+  // comprehension loop; emitted before the loop they hold entry 0 throughout.
   code_blockt loop_body;
+  code_blockt *saved_block = converter_.current_block;
+  converter_.current_block = &loop_body;
   exprt key_obj = list_handler.build_list_at_call(
     keys_member, build_symbol(index_var), call_node);
   exprt key_expr = list_handler.extract_pyobject_value(key_obj, key_type);
@@ -1502,6 +1506,7 @@ exprt python_dict_handler::handle_dict_update(
   code_blockt pair_block;
   handle_dict_subscript_assign(
     dict_expr, key_expr, value_expr, location, call_node, pair_block);
+  converter_.current_block = saved_block;
   loop_body.copy_to_operands(pair_block);
 
   // Advance to the next source entry (V.3: build index + 1 in IREP2).
