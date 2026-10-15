@@ -29,6 +29,53 @@ static exprt normalize_positive_slice_bound_expr(
   return build_typecast(migrate_expr_back(upper_clamped), size_type());
 }
 
+// A bound of a negative-step slice: a negative value counts from the end and
+// the result is clamped to [-1, len - 1], as in CPython's
+// PySlice_AdjustIndices.
+static exprt
+normalize_reverse_slice_bound_expr(const exprt &bound, const exprt &logical_len)
+{
+  const typet signed_t = signed_size_type();
+  const type2tc signed_t2 = migrate_type(signed_t);
+  expr2tc bound2, len2;
+  migrate_expr(build_typecast(bound, signed_t), bound2);
+  migrate_expr(build_typecast(logical_len, signed_t), len2);
+  expr2tc zero = gen_zero(signed_t2);
+  expr2tc minus_one = constant_int2tc(signed_t2, BigInt(-1));
+  expr2tc last = sub2tc(signed_t2, len2, gen_one(signed_t2));
+  expr2tc shifted = add2tc(signed_t2, len2, bound2);
+  expr2tc normalized =
+    if2tc(signed_t2, lessthan2tc(bound2, zero), shifted, bound2);
+  expr2tc lower_clamped =
+    if2tc(signed_t2, lessthan2tc(normalized, minus_one), minus_one, normalized);
+  return migrate_expr_back(
+    if2tc(signed_t2, greaterthan2tc(lower_clamped, last), last, lower_clamped));
+}
+
+// Element count of a negative-step slice from its normalized bounds:
+// (start - stop - 1) / |step| + 1 when start > stop, otherwise 0.
+static exprt build_reverse_slice_length(
+  const exprt &start,
+  const exprt &stop,
+  long long abs_step)
+{
+  const typet signed_t = signed_size_type();
+  const type2tc signed_t2 = migrate_type(signed_t);
+  expr2tc start2, stop2;
+  migrate_expr(build_typecast(start, signed_t), start2);
+  migrate_expr(build_typecast(stop, signed_t), stop2);
+  expr2tc gap =
+    sub2tc(signed_t2, sub2tc(signed_t2, start2, stop2), gen_one(signed_t2));
+  expr2tc count = add2tc(
+    signed_t2,
+    div2tc(signed_t2, gap, constant_int2tc(signed_t2, BigInt(abs_step))),
+    gen_one(signed_t2));
+  return build_typecast(
+    migrate_expr_back(if2tc(
+      signed_t2, greaterthan2tc(start2, stop2), count, gen_zero(signed_t2))),
+    size_type());
+}
+
 static exprt
 build_nonnegative_slice_span(const exprt &lower, const exprt &upper)
 {
@@ -3234,40 +3281,6 @@ std::optional<exprt> python_list::try_build_flat_index_assignment_target(
   return build_dereference(elem_ptr, shape->elem_type);
 }
 
-exprt python_list::normalize_negative_slice_bound(
-  const nlohmann::json &operand_node,
-  const exprt &logical_len,
-  bool negative_step)
-{
-  exprt abs_value = converter_.get_expr(operand_node);
-  if (abs_value.type() != size_type())
-    abs_value = build_typecast(abs_value, size_type());
-  // Called only for "upper" when !negative_step (see handle_range_slice's
-  // call sites), so a negative_step here always means this is the "lower"
-  // bound of a reverse slice. When abs_value exceeds logical_len, e.g.
-  // a[-10:1:-1] on a 3-element array, the clamp must match
-  // literal_slice_length's own -1 "before the start" sentinel (there is
-  // nothing left to reverse-iterate from), not 0 (the first element) -- 0
-  // would be wrong here since it makes the length computation below
-  // (lower_expr + 1) count one spurious element instead of zero.
-  // Represented as the unsigned size_type()'s two's-complement -1 (its max
-  // value) specifically so that + 1 wraps to exactly 0, matching a
-  // genuinely empty slice, the same way pointer-offset arithmetic
-  // elsewhere in this file relies on wraparound being well-defined for
-  // unsigned types. (V.3: built in IREP2.)
-  const type2tc size_t2 = migrate_type(size_type());
-  expr2tc abs2, len2, converted2;
-  migrate_expr(abs_value, abs2);
-  migrate_expr(logical_len, len2);
-  migrate_expr(build_sub(logical_len, abs_value, size_type()), converted2);
-  exprt clamped =
-    negative_step ? from_integer(-1, size_type()) : gen_zero(size_type());
-  expr2tc clamped2;
-  migrate_expr(clamped, clamped2);
-  return migrate_expr_back(
-    if2tc(size_t2, greaterthan2tc(abs2, len2), clamped2, converted2));
-}
-
 /// A dict view (d.keys()[:] / d.values()[:]) is a member expression, so
 /// handle_range_slice's element-by-element copy never runs and its id-keyed
 /// fallbacks cannot reach it: the entries live under the dict's internal list
@@ -3491,48 +3504,28 @@ exprt python_list::handle_range_slice(
       e = remove_function_calls_recursive(e, slice_node);
       if (!negative_step)
         return normalize_positive_slice_bound_expr(e, logical_len);
-
-      // Check if negative index
-      if (bound["_type"] == "UnaryOp" && bound["op"]["_type"] == "USub")
-        return normalize_negative_slice_bound(
-          bound["operand"], logical_len, negative_step);
-
-      return to_size_expr(e);
+      return normalize_reverse_slice_bound_expr(e, logical_len);
     };
 
     // Process bounds: defaults depend on step direction
     exprt lower_expr, upper_expr;
     if (negative_step)
     {
-      // For negative step: default lower = len-1, default upper = -1 (before 0)
+      // Default lower = len - 1, default upper = -1 (before index 0).
       lower_expr =
         process_bound("lower", size_sub(logical_len, gen_one(size_type())));
+      upper_expr = process_bound("upper", from_integer(-1, signed_size_type()));
     }
     else
     {
       lower_expr = process_bound("lower", gen_zero(size_type()));
-    }
-
-    // Upper bound
-    if (!negative_step)
       upper_expr = process_bound("upper", logical_len);
+    }
 
     // Calculate slice length
     exprt slice_len;
     if (negative_step)
-    {
-      // For [::-1]: length = lower + 1 (e.g., lower=len-1 → length=len)
-      if (
-        (!slice_node.contains("lower") || slice_node["lower"].is_null()) &&
-        (!slice_node.contains("upper") || slice_node["upper"].is_null()))
-      {
-        slice_len = logical_len;
-      }
-      else
-      {
-        slice_len = size_add(lower_expr, gen_one(size_type()));
-      }
-    }
+      slice_len = build_reverse_slice_length(lower_expr, upper_expr, -step_val);
     else if (step_val != 1)
     {
       // For step > 1: length = ceil(max(upper - lower, 0) / step)
