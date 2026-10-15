@@ -65,9 +65,13 @@ static void reject_tagged_element(const type_handler &th, const exprt &elem)
       "supported");
 }
 
-list_elem_info
-python_list::get_list_element_info(const nlohmann::json &op, const exprt &elem)
+list_elem_info python_list::get_list_element_info(
+  const nlohmann::json &op,
+  const exprt &raw_elem)
 {
+  // A function is stored by its address; storing the code symbol itself
+  // aborts with "got invalid code for function" (#6640, #8371).
+  const exprt elem = decay_function_to_pointer(raw_elem);
   const type_handler type_handler_ = converter_.get_type_handler();
   reject_tagged_element(type_handler_, elem);
   locationt location = converter_.get_location_from_decl(op);
