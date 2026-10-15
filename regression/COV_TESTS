@@ -3019,3 +3019,14 @@ regression/python/github_8483
 regression/python/github_8483_fail
 regression/python/list_store_int_over_str
 regression/python/list_store_int_over_str_fail
+regression/python/github_8417_float_call_unsupported
+regression/python/github_8417_function_unsupported
+regression/python/github_8417_literal_unsupported_fail
+regression/python/github_8417_other_type
+regression/python/github_8417_same_kind
+regression/python/github_8417_same_kind_fail
+regression/python/github_8417_spine
+regression/python/github_8417_spine_fail
+regression/python/github_8417_unsupported
+regression/python/github_8417_float_of_int
+regression/python/github_8417_float_of_int_fail
