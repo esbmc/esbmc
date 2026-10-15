@@ -3015,3 +3015,8 @@ regression/python/github_8461_same_class
 regression/python/github_8461_same_class_fail
 regression/python/github_8461_subclass
 regression/python/self-ctor-arg-forward
+regression/python/github_8359_heappush_empty
+regression/python/github_8359_heappush_empty_fail
+regression/python/github_8359_heappop_assign
+regression/python/github_8359_heappop_assign_fail
+regression/python/github_8359_heappop_literal_fail
