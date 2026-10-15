@@ -1434,14 +1434,39 @@ exprt python_dict_handler::handle_dict_update(
     return nil_exprt();
   }
 
-  // For update(other_dict), iterate over the source keys/values lists and
-  // reinsert each pair into the destination dict.
   exprt other_dict = converter_.get_expr(arg);
   if (!is_dict_type(other_dict.type()))
     throw std::runtime_error("update() argument must be a dict in ESBMC model");
 
-  // Read entries from the source dict through its internal keys/values lists.
+  copy_dict_entries(dict_expr, other_dict, call_node);
+  apply_keyword_args();
+  return nil_exprt();
+}
+
+void python_dict_handler::copy_dict_entries(
+  const exprt &dict_expr,
+  const exprt &source,
+  const nlohmann::json &call_node)
+{
   locationt location = converter_.get_location_from_decl(call_node);
+
+  // A call returning a dict is a statement; bind its result to read members.
+  exprt other_dict = source;
+  if (source.is_function_call())
+  {
+    symbolt &result = converter_.create_tmp_symbol(
+      call_node, "$dict_source$", source.type(), exprt());
+    code_declt result_decl(build_symbol(result));
+    result_decl.location() = location;
+    converter_.add_instruction(result_decl);
+
+    code_function_callt call = to_code_function_call(to_code(source));
+    call.lhs() = build_symbol(result);
+    converter_.add_instruction(call);
+    other_dict = build_symbol(result);
+  }
+
+  // Read entries from the source dict through its internal keys/values lists.
   typet list_type = type_handler_.get_list_type();
   exprt keys_member = build_member(other_dict, "keys", list_type);
   exprt values_member = build_member(other_dict, "values", list_type);
@@ -1521,7 +1546,29 @@ exprt python_dict_handler::handle_dict_update(
   while_loop.copy_to_operands(loop_cond, loop_body);
   while_loop.location() = location;
   converter_.add_instruction(while_loop);
+}
 
-  apply_keyword_args();
-  return nil_exprt();
+exprt python_dict_handler::handle_dict_union(
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &element)
+{
+  locationt location = converter_.get_location_from_decl(element);
+  std::string dict_name = generate_unique_dict_name(element, location);
+
+  symbolt &dict_sym = converter_.create_tmp_symbol(
+    element, dict_name + "_union", get_dict_struct_type(), exprt());
+  code_declt dict_decl(build_symbol(dict_sym));
+  dict_decl.location() = location;
+  converter_.add_instruction(dict_decl);
+
+  nlohmann::json empty_dict = element;
+  empty_dict["_type"] = "Dict";
+  empty_dict["keys"] = nlohmann::json::array();
+  empty_dict["values"] = nlohmann::json::array();
+  create_dict_from_literal(empty_dict, build_symbol(dict_sym));
+
+  copy_dict_entries(build_symbol(dict_sym), lhs, element);
+  copy_dict_entries(build_symbol(dict_sym), rhs, element);
+  return build_symbol(dict_sym);
 }

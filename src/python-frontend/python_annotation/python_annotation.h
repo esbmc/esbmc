@@ -152,6 +152,7 @@ private:
 
   // ----- core inference dispatchers -----
   std::string get_argument_type(const Json &arg);
+  std::string get_dict_literal_type(const Json &dict_value);
   std::string get_builtin_call_type(const Json &call);
   std::string list_copy_type(const std::string &func_name, const Json &call);
   std::string get_type_from_binary_expr(const Json &stmt, const Json &body);
