@@ -2851,6 +2851,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         (instance_has_attr || symbol->is_parameter ||
          is_complex_type(class_type)))
       {
+        reject_maybe_unset_instance_attr(
+          instance_has_attr, *symbol, var_name, attr_name, obj_type_name);
         const typet &attr_type = class_type.get_component(attr_name).type();
         expr = build_member_expr_from_class(attr_type);
       }

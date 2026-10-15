@@ -750,6 +750,16 @@ private:
     const std::string &var_name,
     const std::string &class_tag);
 
+  /// Refuses a read of `obj.attr` through the instance field when the class
+  /// also has a class attribute `attr` and the instance write is not certain
+  /// to have run: on a path that skipped it, CPython reads the class's.
+  void reject_maybe_unset_instance_attr(
+    bool instance_written,
+    const symbolt &symbol,
+    const std::string &var_name,
+    const std::string &attr_name,
+    const std::string &obj_type_name);
+
   bool is_instance_attribute(
     const std::string &symbol_id,
     const std::string &attr_name,
@@ -3309,6 +3319,9 @@ private:
 
   /// Map object to list of instance attributes
   std::map<std::string, std::set<std::string>> instance_attr_map;
+  /// The subset of instance_attr_map written on the unconditional spine, so
+  /// set on every path that reaches a later read.
+  std::map<std::string, std::set<std::string>> certain_instance_attrs_;
   /// Map imported modules to their corresponding paths
   std::unordered_map<std::string, std::string> imported_modules;
 
