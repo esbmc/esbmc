@@ -691,8 +691,7 @@ std::optional<exprt> python_list::build_element_replacement(
   if (!set_at_sym)
     throw std::runtime_error("__ESBMC_list_set_at not found in the list model");
 
-  const list_elem_info info =
-    get_list_element_info(op, decay_function_to_pointer(rhs));
+  const list_elem_info info = get_list_element_info(op, rhs);
   const typet &value_type = info.elem_symbol->get_type();
   const exprt value_arg =
     value_type.is_pointer() && value_type.subtype() == char_type()
