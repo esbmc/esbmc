@@ -356,7 +356,16 @@ class ExpressionRewriteMixin:
         return node
 
     def visit_If(self, node):
+        # A literal one arm binds is not what the other arm, or the code after
+        # the join, reads: visit the else arm from the literals known before
+        # the if, then forget every name either arm changes (#8617).
+        before = (dict(self.list_literal_values), dict(self.dict_literal_values))
+        orelse, node.orelse = node.orelse, []
         node = self.generic_visit(node)
+        self.list_literal_values, self.dict_literal_values = (dict(before[0]), dict(before[1]))
+        else_arm = ast.Module(body=orelse, type_ignores=[])
+        node.orelse = self.generic_visit(else_arm).body
+        self._forget_literals_changed_in_loop(node)
         prefix, new_test, _ = self._lower_listcomp_in_expr(node.test)
         node.test = new_test
         node.test = self._transform_list_truthiness(node.test, node)
@@ -388,6 +397,15 @@ class ExpressionRewriteMixin:
         self.ensure_all_locations(comparison, source_node)
         return comparison
 
+    def visit_Try(self, node):
+        # A handler runs after any prefix of the body, and the code after the
+        # statement follows either, so no literal the statement changes is
+        # known inside it or after it (#8617).
+        self._forget_literals_changed_in_loop(node)
+        node = self.generic_visit(node)
+        self._forget_literals_changed_in_loop(node)
+        return node
+
     def visit_While(self, node):
         # Hoist generator initialisation (e.g. `j = 0`) for `var = next(gen)`
         # loop bodies out of the loop *before* visiting it, so the init runs
@@ -399,6 +417,9 @@ class ExpressionRewriteMixin:
         gen_pre_stmts = self._hoist_generator_inits(node.body, node)
         self._forget_literals_changed_in_loop(node)
         node = self.generic_visit(node)
+        # A break skips the else arm, so neither the body's literals nor the
+        # else arm's are known after the loop (#8617).
+        self._forget_literals_changed_in_loop(node)
         # Lower `while ... else: <orelse>` (the else runs when the loop ends
         # without break) into a did-not-break flag, the same desugaring used for
         # for-else. Without this the while node keeps its orelse, which the
