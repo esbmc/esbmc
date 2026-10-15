@@ -1759,7 +1759,7 @@ exprt python_converter::get_binary_operator_expr(
 
   // Handle type identity checks (e.g., y is int, x is str)
   exprt type_identity_result =
-    handle_type_identity_check(op, lhs, rhs, left, right);
+    handle_type_comparison(op, lhs, rhs, left, right);
   if (!type_identity_result.is_nil())
     return type_identity_result;
 

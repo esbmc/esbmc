@@ -200,6 +200,35 @@ std::string python_annotation<Json>::infer_dict_value_type(const Json &var_node)
 }
 
 template <class Json>
+std::string
+python_annotation<Json>::subscript_type_from_call(const Json &subscript_node)
+{
+  const Json &call = subscript_node["value"];
+  if (
+    call["_type"] != "Call" || call["func"]["_type"] != "Name" ||
+    config.options.get_bool_option("override-return-annotation"))
+    return "Any";
+
+  const Json func_def = find_function_recursive(
+    call["func"]["id"].template get<std::string>(), ast_["body"]);
+  if (func_def.empty() || !func_def.contains("returns"))
+    return "Any";
+
+  const Json &ret = func_def["returns"];
+  if (
+    !ret.is_object() || ret.value("_type", "") != "Subscript" ||
+    ret["value"].value("id", "") != "list" || !ret.contains("slice"))
+    return "Any";
+
+  const std::string elem = json_utils::render_annotation_type(ret["slice"]);
+  if (elem.empty())
+    return "Any";
+  return subscript_node["slice"].value("_type", "") == "Slice"
+           ? "list[" + elem + "]"
+           : elem;
+}
+
+template <class Json>
 std::string python_annotation<Json>::resolve_subscript_type(
   const Json &subscript_node,
   const Json &body)
@@ -210,9 +239,8 @@ std::string python_annotation<Json>::resolve_subscript_type(
   if (base["_type"] == "Subscript")
     return resolve_subscript_type(base, body);
 
-  // Only handle Name nodes
   if (base["_type"] != "Name")
-    return "Any";
+    return subscript_type_from_call(subscript_node);
 
   std::string var_name = base["id"];
   Json var_node =
@@ -331,6 +359,14 @@ bool python_annotation<Json>::is_imported_name_in_body(
   }
 
   return false;
+}
+
+template <class Json>
+bool python_annotation<Json>::is_imported_name(const std::string &name) const
+{
+  return is_imported_name_in_body(name, ast_["body"]) ||
+         (current_func != nullptr && (*current_func).contains("body") &&
+          is_imported_name_in_body(name, (*current_func)["body"]));
 }
 
 template <class Json>
@@ -2009,10 +2045,7 @@ std::string python_annotation<Json>::get_type_from_call(const Json &element)
         const nlohmann::json &body =
           static_cast<const nlohmann::json &>(ast_["body"]);
         // Keep imported names intact here; the converter resolves them later.
-        if (
-          is_imported_name_in_body(func_id, body) ||
-          (current_func != nullptr && (*current_func).contains("body") &&
-           is_imported_name_in_body(func_id, (*current_func)["body"])))
+        if (is_imported_name(func_id))
           return func_id;
         for (const auto &stmt : body)
         {
@@ -2690,6 +2723,11 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
       call["func"]["value"].contains("_type") &&
       call["func"]["value"]["_type"] == "Call")
       return "Any";
+
+    // A from-imported receiver has no declaration in this module; leave the
+    // type unknown so the converter resolves the call (#8375).
+    if (is_imported_name(obj))
+      return "";
 
     throw std::runtime_error("Object \"" + obj + "\" not found.");
   }

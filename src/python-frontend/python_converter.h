@@ -2464,6 +2464,23 @@ private:
     const nlohmann::json &left,
     const nlohmann::json &right);
 
+  /// handle_erased_type_comparison, else handle_type_identity_check.
+  exprt handle_type_comparison(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
+
+  exprt erased_type_argument(const nlohmann::json &node);
+
+  /// `type(x) is T`, `is not`, `==` or `!=` for a builtin scalar T when x's
+  /// static type was erased to `void *`; nil otherwise.
+  exprt handle_erased_type_comparison(
+    const std::string &op,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
+
   /// Runtime dispatch for a tagged-scalar (PyObject-shaped) operand, which none
   /// of the static-type-driven paths can handle. Throws for an operator this
   /// mode does not model.
