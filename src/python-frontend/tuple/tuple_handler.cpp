@@ -121,6 +121,10 @@ exprt tuple_handler::get_tuple_expr(const nlohmann::json &element)
   // to a value expression and spill it into a temporary, exactly as the list
   // literal path does in python_list::get() for issue #4699.
   auto materialize_tuple_elem = [&](const exprt &elem) -> exprt {
+    // A struct member cannot have code type, so a function decays to a
+    // function pointer, as it does when stored in a list.
+    if (elem.is_symbol() && elem.type().is_code())
+      return address_of_exprt(elem);
     if (elem.is_symbol())
       return elem;
 
