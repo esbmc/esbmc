@@ -162,8 +162,11 @@ bool clang_cpp_convertert::get_vft_binding_expr_function(
   std::string base_class_id, base_class_name;
   get_decl_name(*md->getParent(), base_class_name, base_class_id);
 
+  std::string md_name, md_id;
+  get_decl_name(*md, md_name, md_id);
+
   // if symbol in context, no need to try reconstructing it.
-  // TODO: Should this logic be moved to get_decl()?  
+  // TODO: Should this logic be moved to get_decl()?
   exprt comp;
   if (const symbolt *s = context.find_symbol(md_id))
   {
