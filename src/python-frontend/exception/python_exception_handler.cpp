@@ -113,7 +113,9 @@ void python_exception_handler::get_try_statement(
         h["body"] = inject_finally_before_escapes(h["body"], finalbody, false);
   }
 
+  ++converter_.try_body_depth_;
   exprt try_block = converter_.get_block(try_body);
+  --converter_.try_body_depth_;
 
   // The `else` clause runs after the try body completes without an exception.
   // Append it to the try body: on the normal path it runs right after the body,

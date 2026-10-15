@@ -657,6 +657,16 @@ public:
     const exprt &index,
     const nlohmann::json &element);
 
+  /**
+   * @brief Inside a try body, raises a catchable IndexError ahead of a pop()
+   * whose list is empty or whose index is out of range, before
+   * __ESBMC_list_pop asserts it
+   */
+  void guard_pop_index(
+    const symbolt &list,
+    const exprt &index,
+    const locationt &location);
+
   /// The __ESBMC_list_set_at call storing `rhs` into the list element `lhs`
   /// reads, when `rhs` changes the element's type; nullopt otherwise.
   std::optional<exprt> build_element_replacement(
