@@ -1284,6 +1284,14 @@ void python_converter::reject_numpy_view_method_call(
   const std::string receiver = root_name_from_subscript(func["value"]);
   const std::string id =
     receiver.empty() ? std::string() : resolve_name_symbol_id(receiver);
+  // Another module's function reads the view through its own model of the
+  // argument, a list.
+  if (
+    imported_modules.count(receiver) != 0 &&
+    !is_imported_numpy_module_alias(*ast_json, receiver))
+    throw std::runtime_error(
+      "TypeError: passing a numpy view to a function of module '" + receiver +
+      "' is not supported");
   if (
     receiver.empty() || imported_modules.count(receiver) != 0 ||
     numpy_array_symbols_.count(id) != 0 ||
