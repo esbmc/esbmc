@@ -1,4 +1,0 @@
-{ "unit": "f", "enc": 2, "depth": 1,
-  "region": [ { "name": "a", "lo": "11", "hi": "100" },
-              { "name": "state.bal", "lo": "1000", "hi": "1000" } ],
-  "vars": [ { "name": "bal", "delta_dir": "inc", "delta_lo": "1", "delta_hi": "10" } ] }

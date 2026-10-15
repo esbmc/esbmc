@@ -1,6 +1,0 @@
-{ "unit": "f",
-  "probes": 10,
-  "pin": [ { "name": "state.bal", "value": "50" } ],
-  "coords": [ { "name": "amt", "lo": "0", "hi": "100" } ],
-  "paths": [ { "enc": 2, "depth": 1, "ce": { "amt": "0" } },
-             { "enc": 3, "depth": 1, "ce": { "amt": "100" } } ] }

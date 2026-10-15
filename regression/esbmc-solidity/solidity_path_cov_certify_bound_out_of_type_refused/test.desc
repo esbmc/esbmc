@@ -1,7 +1,0 @@
-CORE
-contract.sol
---solidity-path-coverage --contract Gate2 --path-cov-certify certify.json --solidity-max-tx 1
-^ERROR: --path-cov-certify: unit 'sol:@C@Gate2@F@send#29' — REFUSING THE QUERY on coordinate 'to': the hi value 1461501637330902918203684832716283019655932542976 does not fit the coordinate's own type \(admissible range \[0, 1461501637330902918203684832716283019655932542975\]\)
-an out-of-range decimal WRAPS
-\A(?!(.|\n)*^VERIFICATION SUCCESSFUL$)
-\A(?!(.|\n)*^VERIFICATION FAILED$)

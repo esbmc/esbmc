@@ -1,9 +1,0 @@
-CORE
-contract.sol
---solidity-path-coverage --path-cov-certify cert.json --solidity-max-tx 1 --unwind 3
-^--path-cov-certify: unit 'sol:@C@C@F@a#22' — assumed 1 input bound\(s\) \(0 hole\(s\) punched\) at entry and asserted `tr == 2 && cnt == 1` at ALL 1 exit\(s\) of the unit
-^--path-cov-certify: RESULT: REFUTED — 1 of 1 exit assert\(s\) were refuted
-Non-vacuity WAS witnessed, so this is a genuine refutation and not an empty box
-^VERIFICATION FAILED$
-\A(?!(.|\n)*REFUSING THE QUERY)
-\A(?!(.|\n)*NAMED OBSTACLE)

@@ -1,6 +1,0 @@
-CORE
-contract.sol
---contract D10_WrapNotPanic --solidity-path-coverage --cov-report-json --solidity-max-tx 1 --overflow-check --path-cov-arith-resolve
-^Arithmetic Re-solve: 18 condition\(s\) seen, 3 claim\(s\) re-solved
-^Complete Paths : 3$
-^COVERAGE ANALYSIS COMPLETE$

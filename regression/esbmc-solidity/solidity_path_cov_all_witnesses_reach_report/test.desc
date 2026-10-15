@@ -1,5 +1,0 @@
-CORE
-contract.sol
---solidity-path-coverage --cov-report-json --solidity-max-tx 1 --all-witnesses --max-witnesses 3
-^Path Status: F 4, I 0, U 0$
-CE PAYLOADS published for ([5-9]|[1-9][0-9]+) witness\(es\) across 4 witnessed path\(s\); [1-9][0-9]* path\(s\) carry more than one \(--all-witnesses is on\)

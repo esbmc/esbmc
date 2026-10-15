@@ -8,26 +8,13 @@
 /// \brief The ONE place `--focus-function`'s value is interpreted.
 ///
 /// `--focus-function` names a SET of the target contract's public/external
-/// functions, not a single one. Three places have to agree on which functions a
+/// functions, not a single one. Two places have to agree on which functions a
 /// given value selects:
 ///
 ///   1. the Solidity frontend's validator (`solidity_convertert::convert`),
 ///      which fails the conversion when a named function does not exist;
 ///   2. the frontend's dispatcher filter (`get_unbound_function`), which
-///   decides
-///      which entries the harness may call;
-///   3. the path-coverage pass (`goto_coveraget::focus_selects_unit`), which
-///      decides which units are ENUMERATED AND INSTRUMENTED, and hence what the
-///      published denominator is.
-///
-/// They live in different modules, so the temptation is three small parsers.
-/// That would be a detector keyed on a condition its own branch does not state:
-/// if (2) and (3) disagreed, a unit the dispatcher can enter would carry no
-/// claims -- an invisible zero in the numerator -- or a unit nothing can enter
-/// would sit in the denominator, which is the 45x error the narrowing was
-/// written to remove in the first place. One parser, in `util` because both
-/// `solidity-frontend` and `goto-programs` already depend on it, makes the
-/// disagreement unrepresentable rather than merely unlikely.
+///      decides which entries the harness may call.
 ///
 /// SEPARATORS. Comma OR whitespace, and both may be mixed:
 ///

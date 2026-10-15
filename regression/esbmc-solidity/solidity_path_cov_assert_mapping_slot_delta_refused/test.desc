@@ -1,7 +1,0 @@
-CORE
-contract.sol
---contract SlotMin --solidity-path-coverage --solidity-max-tx 2 --focus-function put,take --path-cov-instrument-only take --path-cov-assert spec.json
-^--path-cov-assert: region NON-VACUITY witnessed
-^--path-cov-assert: bal\[k\]: pre - post in \[8, 8\] with pre >= post  REFUTED
-^--path-cov-assert: ladder summary -- 7 candidate\(s\): 3 HOLDS, 4 REFUTED, 0 no verdict \(solver unknown\), 0 no verdict \(never reached the solver\)
-\A(?!(.|\n)*INTERNAL DEFECT)

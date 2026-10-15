@@ -1,8 +1,0 @@
-CORE
-contract.sol
---solidity-path-coverage --solidity-max-tx 1 --coverage-covered-set cov_stale.json --skip-bmc
-^--coverage-covered-set: discarding .*cov_stale\.json . it was written for a different program/instrumentation \(fingerprint deadbeefdeadbeef != [0-9a-f]{16}\)
-Recomputing from scratch; no entries are carried over
-^--solidity-path-coverage: instrumented 8 complete path\(s\) across 2 unit\(s\)
-^--solidity-path-coverage: path distribution . 2 unit\(s\), 8 path\(s\) total
-\A(?!(?:.|\n)*already witnessed in a previous round)

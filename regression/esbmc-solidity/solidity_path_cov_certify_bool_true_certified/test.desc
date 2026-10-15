@@ -1,8 +1,0 @@
-CORE
-contract.sol
---solidity-path-coverage --contract Flag --path-cov-certify certify.json --solidity-max-tx 1
-^--path-cov-certify: unit 'sol:@C@Flag@F@f#34' — assumed 1 input bound\(s\) \(0 hole\(s\) punched\) at entry
-^--path-cov-certify: RESULT: CERTIFIED — every input the box admits walks path enc=2
-NON-VACUITY was witnessed
-^✗ FAILED: 'f:path:2#nonvacuous at file .*contract.sol line 48 function f'
-^VERIFICATION FAILED$

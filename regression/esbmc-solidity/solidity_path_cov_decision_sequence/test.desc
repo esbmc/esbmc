@@ -1,7 +1,0 @@
-CORE
-contract.sol
---solidity-path-coverage --solidity-max-tx 1 --cov-report-json
-^--solidity-path-coverage: instrumented 6 complete path\(s\) across 1 unit\(s\)
-^Path Status: F 5, I 0, U 1$
-^--solidity-path-coverage: DECISION SEQUENCES published for 5 of 5 witnessed path\(s\) \(15 step\(s\), 0 unrecorded, 5 synthesised ABI value gate\)
-^COVERAGE ANALYSIS COMPLETE$

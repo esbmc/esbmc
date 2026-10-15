@@ -1,7 +1,0 @@
-CORE
-contract.sol
---contract MultKey --solidity-path-coverage --solidity-max-tx 2 --focus-function put,take --path-cov-instrument-only take --path-cov-max-claim-solves 1
-^--path-cov-max-claim-solves 1: one claim key may be decided at most 1 time\(s\) this run, and the run is REFUSED beyond that\. Without this option nothing is enforced: tx 2 x unwind 4 = 8 is context, not a bound
-^ERROR: --solidity-path-coverage: INTERNAL DEFECT — claim key 'take:path:\d+[^']*' has now been handed to the solver 2 times, and at most 1 is allowed \(--path-cov-max-claim-solves set the ceiling to 1; nothing is enforced without it, because tx x unwind \(8 here\) is not a bound on instantiations\)
-\A(?!(.|\n)*^Claim Multiplicity:)
-\A(?!(.|\n)*^Path Status:)

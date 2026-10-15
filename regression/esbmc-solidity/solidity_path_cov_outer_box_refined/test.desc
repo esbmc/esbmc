@@ -1,9 +1,0 @@
-CORE
-contract.sol
---solidity-path-coverage --contract Box --path-cov-outer-box outer.json --solidity-max-tx 1
-^--path-cov-outer-box: 64 of 64 ladder probe\(s\) reached the solver
-^--path-cov-outer-box: path enc=2 depth=1 OUTER box \(D_path is CONTAINED in it\): a in \[11, 115792089237316195423570985008687907853269984665640564039457584007913129639935\]
-^--path-cov-outer-box: path enc=3 depth=1 OUTER box \(D_path is CONTAINED in it\): a in \[0, 10\]
-^--path-cov-outer-box: path enc=2 CERTIFIED region after subtracting sibling outer boxes \(zero queries\): a in \[11, 115792089237316195423570985008687907853269984665640564039457584007913129639935\]$
-^--path-cov-outer-box: path enc=3 CERTIFIED region after subtracting sibling outer boxes \(zero queries\): a in \[0, 10\]$
-^(?!(.|\n)*could not be separated)

@@ -1,7 +1,0 @@
-CORE
-contract.sol
---solidity-path-coverage --cov-report-json --solidity-max-tx 1 --path-cov-claim-timeout 1
-^Report Completeness: COMPLETE$
-^Claim Budget: 1s per claim . 0 claim\(s\) abandoned over budget \(
-^Path Status: F 4, I 0, U 0$
-\A(?!(?:.|\n)*claim budget exceeded)

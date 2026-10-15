@@ -1,6 +1,4 @@
 CORE
 contract.sol
---contract D13_Z3TupleNotWellFounded --solidity-path-coverage --cov-report-json --solidity-max-tx 1 --z3
-^Complete Paths : 2$
-^Path Coverage: 100%$
-^COVERAGE ANALYSIS COMPLETE$
+--contract D13_Z3TupleNotWellFounded --solidity-max-tx 1 --z3 --no-slice
+^VERIFICATION FAILED$

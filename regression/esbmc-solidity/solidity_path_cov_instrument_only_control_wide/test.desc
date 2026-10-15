@@ -1,9 +1,0 @@
-CORE
-contract.sol
---solidity-path-coverage --contract Tiny --focus-function withdraw,deposit --solidity-max-tx 2
-^--solidity-path-coverage: instrumented 8 complete path\(s\) across 2 unit\(s\)
-^Complete Paths : 8$
-^Reached : 8$
-^Path Coverage: 100%$
-^Path Status: F 8, I 0, U 0$
-^COVERAGE ANALYSIS COMPLETE$

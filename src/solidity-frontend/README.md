@@ -21,7 +21,6 @@ under `docs/claude/solidity/`.
 - [Property selection](#property-selection) — overflow, reentry, multi-property, standard checks
 - [Solver selection](#solver-selection) — automatic preference, `--16` word size, Z3/CVC5/Bitwuzla/Boolector
 - [TOD detection](#tod-transaction-order-dependence-detection) — `--tod-race-check`, `--tod-balance-check`, `--dump-harness`
-- [Violation oracle](#violation-oracle) — `--dump-violation-info`
 - [Structural coverage](#structural-coverage) — branch / condition / assertion coverage
 - [Externally exposed intrinsics](#externally-exposed-intrinsics) — `__ESOL_deep_copy`, `__ESOL_nondet_state_forward`, `__ESBMC_assert`, `__ESBMC_assume`, `__ESBMC_nondet_*`
 - [Approximations you should know about](#approximations-you-should-know-about)
@@ -737,18 +736,6 @@ Full pipeline (auto mode):
 
 See [`docs/claude/solidity/tod.md`](../../docs/claude/solidity/tod.md)
 for the algorithm details and the list of known limitations.
-
-## Violation oracle
-
-`--dump-violation-info <path>` writes a structured JSON description of the
-violation ESBMC found (contract, function, bug type, relative location,
-trace functions), for tools that post-process a counterexample:
-
-```sh
-esbmc contract.sol --contract C --overflow-check --cvc5 \
-      --incremental-bmc \
-      --dump-violation-info /tmp/violation.json
-```
 
 ## Structural coverage
 

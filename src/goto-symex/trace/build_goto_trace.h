@@ -4,14 +4,10 @@
 #include <goto-symex/trace/goto_trace.h>
 #include <goto-symex/equation/symex_target_equation.h>
 
-/// `keep_hidden_steps` retains the steps flagged hidden, which a trace
-/// otherwise drops. Only for consumers that harvest values from the trace
-/// instead of printing it: hidden steps carry frontend-synthesised state.
 void build_goto_trace(
   const symex_target_equationt &target,
   smt_convt &smt_conv,
-  goto_tracet &goto_trace,
-  bool keep_hidden_steps = false);
+  goto_tracet &goto_trace);
 
 void build_successful_goto_trace(
   const symex_target_equationt &target,

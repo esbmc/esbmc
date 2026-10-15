@@ -1,9 +1,0 @@
-CORE
-contract.sol
---solidity-path-coverage --solidity-max-tx 1
-^--solidity-path-coverage: instrumented 2 complete path\(s\) across 1 unit\(s\)
-^WARNING: --solidity-path-coverage: 1 folded short-circuit/ternary site\(s\) have more than 12 operands
-^Complete Paths : 2$
-^Reached : 2$
-^Path Status: F 2, I 0, U 0$
-^COVERAGE ANALYSIS COMPLETE$

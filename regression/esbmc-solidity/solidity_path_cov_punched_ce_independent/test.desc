@@ -1,8 +1,0 @@
-CORE
-contract.sol
---solidity-path-coverage --contract Gate2 --path-cov-outer-box outer.json --solidity-max-tx 1
-^--path-cov-outer-box: path enc=2 depth=1 OUTER box \(D_path is CONTAINED in it\): to in \[255, 255\]$
-^--path-cov-outer-box: path enc=3 depth=1 OUTER box \(D_path is CONTAINED in it\): to in \[0, 1461501637330902918203684832716283019655932542975\]$
-^--path-cov-outer-box: path enc=3 CERTIFIED region after subtracting sibling outer boxes \(zero queries\): to in \[0, 1461501637330902918203684832716283019655932542975\] \\ \{255\}$
-^--path-cov-outer-box: path enc=3 — 1 of the cut\(s\) above are HOLES \(Definition 5\), not side cuts
-^--path-cov-outer-box: path enc=2 CERTIFIED region after subtracting sibling outer boxes \(zero queries\): to in \[255, 255\] — WARNING: 1 sibling\(s\) could not be separated

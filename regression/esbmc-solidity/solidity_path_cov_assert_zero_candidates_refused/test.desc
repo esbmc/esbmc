@@ -1,8 +1,0 @@
-CORE
-contract.sol
---contract OnlyMap --solidity-path-coverage --solidity-max-tx 1 --path-cov-assert spec.json
-^ERROR: --path-cov-assert: unit '[^']*' -- REFUSING THE LADDER: NOT ONE candidate assertion could be formed. Every candidate this ladder could have formed was refused: balances \(a mapping or dynamic array
-the same output a fully successful ladder produces
-\A(?!(.|\n)*^VERIFICATION SUCCESSFUL$)
-\A(?!(.|\n)*^VERIFICATION FAILED$)
-\A(?!(.|\n)*^--path-cov-assert: ladder summary)

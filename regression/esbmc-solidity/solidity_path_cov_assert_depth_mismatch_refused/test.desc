@@ -1,7 +1,0 @@
-CORE
-contract.sol
---contract St --solidity-path-coverage --solidity-max-tx 1 --path-cov-assert spec.json
-^ERROR: --path-cov-assert: unit '[^']*' -- REFUSING THE LADDER: the spec says path enc=2 has depth=2, the enumeration says 1
-every candidate would hold vacuously
-\A(?!(.|\n)*^VERIFICATION SUCCESSFUL$)
-\A(?!(.|\n)*^VERIFICATION FAILED$)

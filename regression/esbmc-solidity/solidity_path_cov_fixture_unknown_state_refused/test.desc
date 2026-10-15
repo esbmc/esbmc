@@ -1,6 +1,0 @@
-CORE
-contract.sol
---contract Depl --solidity-path-coverage --solidity-max-tx 1 --focus-function setFeeReceiver --path-cov-fixture fixture.json
-^ERROR: --path-cov-fixture: contract Depl has no state variable 'ownerr'\. It has: Data, owner, feeReceiver, items, \$address, \$codehash, \$balance, \$code, \$dynamic_pool, _ESBMC_bind_cname
-\A(?!(.|\n)*^Path Status:)
-\A(?!(.|\n)*^VERIFICATION)

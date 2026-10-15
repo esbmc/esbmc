@@ -354,12 +354,9 @@ bool solidity_convertert::get_unbound_function(
     // function) keep their full nondet dispatch.
     //
     // The value names a SET, not one function: `--focus-function a,b` keeps
-    // both entries. Membership goes through focus_function_selects() -- the
-    // same parser the path-coverage pass narrows INSTRUMENTATION with -- so the
-    // two cannot disagree about which entries exist. A disagreement would be
-    // silent in the worst direction: an entry this loop kept but the pass did
-    // not instrument is a unit the harness can enter and no claim ever
-    // measures.
+    // both entries. Membership goes through focus_function_selects(), the
+    // same parser the validator in solidity_convertert::convert uses, so the
+    // two cannot disagree about which entries exist.
     const bool focus_applies = !focus_func.empty() && tgt_cnt_set.size() == 1 &&
                                c_name == *tgt_cnt_set.begin();
 

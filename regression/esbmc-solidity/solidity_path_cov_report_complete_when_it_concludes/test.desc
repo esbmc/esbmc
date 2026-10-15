@@ -1,7 +1,0 @@
-CORE
-contract.sol
---solidity-path-coverage --cov-report-json --solidity-max-tx 1
-^Report Completeness: COMPLETE$
-^Path Status: F 4, I 0, U 0$
-^Coverage report written to cov-report\.json$
-\A(?!(?:.|\n)*Report Completeness: PARTIAL)

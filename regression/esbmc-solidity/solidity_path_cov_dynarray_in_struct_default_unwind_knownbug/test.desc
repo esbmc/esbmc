@@ -1,8 +1,0 @@
-KNOWNBUG
-contract.sol
---solidity-path-coverage --contract C --focus-function setFeeReceiver --solidity-max-tx 1
-^--solidity-path-coverage: 3 of 3 instrumented path claim\(s\) reached the solver across 1 unit\(s\)
-^Complete Paths : 3$
-^Reached : 3$
-^Path Coverage: 100%$
-^VERIFICATION FAILED$

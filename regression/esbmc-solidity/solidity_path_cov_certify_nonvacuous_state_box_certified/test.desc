@@ -1,9 +1,0 @@
-CORE
-contract.sol
---solidity-path-coverage --contract Vac --path-cov-certify cert.json --solidity-max-tx 1
-^--path-cov-certify: RESULT: CERTIFIED — every input the box admits walks path enc=2
-NON-VACUITY was witnessed
-^✗ FAILED: 'f:path:2#nonvacuous at file .*contract.sol line 33 function f'
-^✓ PASSED: 'f:path:2#exit0 at file .*contract.sol line 33 function f'
-^✓ PASSED: 'f:path:2#exit1 at file .*contract.sol line 35 function f'
-^VERIFICATION FAILED$

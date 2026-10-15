@@ -1,8 +1,0 @@
-CORE
-contract.sol
---solidity-path-coverage --contract Box --path-cov-outer-box outer.json --solidity-max-tx 1
-^--path-cov-outer-box: unit 'sol:@C@Box@F@f#18' — emitted 88 ladder probe\(s\) as ONE batch
-^--path-cov-outer-box: path enc=2 depth=1 OUTER box \(D_path is CONTAINED in it\): a in \[9, 115792089237316195423570985008687907853269984665640564039457584007913129639935\]
-^--path-cov-outer-box: path enc=3 depth=1 OUTER box \(D_path is CONTAINED in it\): a in \[0, 14\]
-^--path-cov-outer-box: path enc=2 CERTIFIED region after subtracting sibling outer boxes \(zero queries\): a in \[15, 115792089237316195423570985008687907853269984665640564039457584007913129639935\]
-^--path-cov-outer-box: path enc=3 CERTIFIED region after subtracting sibling outer boxes \(zero queries\): a in \[0, 14\] — WARNING: 1 sibling\(s\) could not be separated

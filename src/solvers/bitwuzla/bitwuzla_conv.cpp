@@ -1,5 +1,4 @@
 #include <bitwuzla_conv.h>
-#include <solvers/solve.h>
 #include <cstdio>
 #include <optional>
 #include <sstream>
@@ -61,16 +60,6 @@ bitwuzla_convt::bitwuzla_convt(const namespacet &ns, const optionst &options)
   }
 
   bitw_options.set(bitwuzla::Option::PRODUCE_MODELS, 1);
-  // Per-query budget (--path-cov-claim-timeout). The limit is per
-  // satisfiability check and 0 disables it, matching the option's own
-  // "0 = unlimited".
-  if (const uint64_t ms = smt_per_query_timeout_ms(options))
-  {
-    bitw_options.set(bitwuzla::Option::TIME_LIMIT_PER, ms);
-    smt_record_timeout_mechanism(
-      "bitwuzla: native TIME_LIMIT_PER (per satisfiability check, "
-      "milliseconds)");
-  }
   bitw = std::make_unique<bitwuzla::Bitwuzla>(tm, bitw_options);
 }
 

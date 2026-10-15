@@ -1,8 +1,0 @@
-CORE
-contract.sol
---solidity-path-coverage --contract CA --path-cov-certify cert.json --solidity-max-tx 1
-^ERROR: --path-cov-certify: unit 'sol:@C@CA@F@f#39' — REFUSING THE QUERY: this unit is a NAMED OBSTACLE
-\(lost decision: yes; calls a gated unit: no\)
-\A(?!(.|\n)*^VERIFICATION SUCCESSFUL$)
-\A(?!(.|\n)*^VERIFICATION FAILED$)
-\A(?!(.|\n)*RESULT: CERTIFIED)

@@ -1,9 +1,0 @@
-CORE
-contract.sol
---solidity-path-coverage --contract St --path-cov-outer-box outer.json --solidity-max-tx 2
-^--path-cov-outer-box: every box and every region below is measured under the PIN state.bal == 50
-^--path-cov-outer-box: path enc=2 depth=1 OUTER box \(D_path is CONTAINED in it\): amt in \[0, 54\]
-^--path-cov-outer-box: path enc=3 depth=1 OUTER box \(D_path is CONTAINED in it\): amt in \[45, 115792089237316195423570985008687907853269984665640564039457584007913129639935\]
-^--path-cov-outer-box: path enc=2 CERTIFIED region after subtracting sibling outer boxes \(zero queries\): amt in \[0, 44\]$
-^--path-cov-outer-box: path enc=3 CERTIFIED region after subtracting sibling outer boxes \(zero queries\): amt in \[55, 115792089237316195423570985008687907853269984665640564039457584007913129639935\]$
-^(?!(.|\n)*could not be separated)

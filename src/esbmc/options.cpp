@@ -319,23 +319,7 @@ const struct group_opt_templ all_cmd_options[] = {
      "every name must exist -- a value naming a function the contract does not "
      "have fails the conversion and says which one, so a typo in a long list "
      "cannot silently narrow the run to the names that happened to be right. "
-     "Under --solidity-path-coverage this ALSO narrows what is enumerated and "
-     "instrumented, so the reported denominator is these units' own path count "
-     "rather than the whole contract's. Requires --contract when the source "
-     "declares more than one contract."},
-    {"path-cov-instrument-only",
-     boost::program_options::value<std::string>()->value_name("name[,name...]"),
-     "Under --solidity-path-coverage, ENUMERATE AND INSTRUMENT only these "
-     "units, while --focus-function keeps deciding which entries the harness "
-     "may CALL. Must be a subset of the --focus-function set, and the run is "
-     "refused otherwise: an instrumented unit the dispatcher cannot enter "
-     "reports every path 'unit-not-entered', which reads as 'nothing reaches "
-     "this code' and actually means 'nothing was asked to'. Use it when a "
-     "state-guarded path needs a second function in the dispatcher purely to "
-     "establish state -- adding that function to --focus-function alone also "
-     "adds ITS paths to the denominator (measured on aqua: dock's 63 became "
-     "2796 once ship was named, and the run no longer finished), which makes "
-     "the tx ladder's cells incomparable as well as unaffordable."},
+     "Requires --contract when the source declares more than one contract."},
     {"no-visibility",
      NULL,
      "Force to verify every function, even if it's an unreachable "
@@ -598,11 +582,6 @@ const struct group_opt_templ all_cmd_options[] = {
     {"generate-json-report",
      NULL,
      "If a violation is found, generates a JSON report"},
-    {"dump-violation-info",
-     boost::program_options::value<std::string>()->value_name("<path>"),
-     "If a violation is found, writes a structured JSON describing the "
-     "violation oracle (contract, function, bug_type, relative_loc), "
-     "trace functions, and locked symbols."},
     {"result-only", NULL, "Do not print the counter-example"}}},
   {"Function Contracts",
    {{"enforce-contract",
@@ -1219,155 +1198,6 @@ const struct group_opt_templ all_cmd_options[] = {
         "M"),
       "Per-function goal cap for --k-path-coverage; on overflow the "
       "instrumentation aborts rather than truncating (default 10000)"},
-     {"path-cov-max-goals",
-      boost::program_options::value<int>()->default_value(10000)->value_name(
-        "M"),
-      "Per-unit path budget for --solidity-path-coverage (default 10000). "
-      "TWO mechanisms are keyed off it, in this fixed order. (1) DEGRADATION: "
-      "a unit whose full expansion exceeds the budget has internal call points "
-      "withdrawn from its path identity — the callees still execute, they just "
-      "stop contributing decisions, so the path classes get coarser while "
-      "still partitioning the input space (sound, weaker assertions). Which "
-      "call points were withdrawn is reported per unit. (2) TRUNCATION: if "
-      "degradation cannot make a unit fit, enumeration stops at the cap and "
-      "the dropped paths are reported as an absolute count — never silently. "
-      "Truncation is the last-resort backstop; it firing at all is reported as "
-      "a signal that degradation was not aggressive enough"},
-     {"path-cov-claim-timeout",
-      boost::program_options::value<int>()->default_value(120)->value_name("N"),
-      "Per-CLAIM solver budget in seconds for --solidity-path-coverage "
-      "(default 120; 0 = unlimited). Path coverage decides one INDEPENDENT "
-      "claim per job, so without a per-claim bound a single pathological query "
-      "consumes the whole run and takes every already-decided result with it — "
-      "measured: one run decided 938 claims and refuted 5, then died and "
-      "produced nothing. A claim that exceeds the budget is ABANDONED, gets "
-      "its "
-      "own verdict token `claim-budget-exceeded` (it is not `solver-unknown`, "
-      "which is the solver answering 'I do not know'; not `bounded-holds`, "
-      "which is it answering 'no witness'; and not `not-solved-this-run`, "
-      "which "
-      "is never having asked), and the run CONTINUES to the next claim and "
-      "still writes its report. The budget is recorded in the report's "
-      "`summary.bound` because a capped run's U counts are not comparable with "
-      "an uncapped run's. This is a bound on cost, not a way around it: "
-      "raising "
-      "--memlimit or the outer timeout routes AROUND a query that does not "
-      "finish, this one refuses to pay for it"},
-     {"path-cov-arith-resolve",
-      NULL,
-      "When a complete path's counterexample is a value the CHAIN REJECTS -- a "
-      "wrapping add, a division by zero -- re-solve THAT ONE claim with the "
-      "verifier's own arithmetic-check conditions ASSUMED, and prefer the "
-      "non-wrapping witness when one exists. MEASURED: three of the RED tests "
-      "in the PoC set are exactly this, two Panic 0x11 and one Panic 0x12, and "
-      "the emitted case asserts a NORMAL exit for an execution that reverts on "
-      "chain. The alternative that was decided and then overturned (lowering "
-      "checked arithmetic to a two-exit branch) costs 2^k paths, and k is 29 "
-      "on "
-      "one real contract's constructor against a 10000-path per-unit cap; this "
-      "costs at most ONE extra query per WITNESSED path that carries a checked "
-      "operation, and witnessed paths are single digits per unit. If the "
-      "re-solve is UNSAT the path is reachable only by overflowing, which is a "
-      "DECIDED property and gets its own count -- it is never folded into U. "
-      "Requires --solidity-path-coverage, and requires --overflow-check and/or "
-      "--div-by-zero-check to have produced the conditions in the first place; "
-      "without either it REFUSES rather than silently doing nothing"},
-     {"path-cov-certify",
-      boost::program_options::value<std::string>()->value_name("file"),
-      "Run the CERTIFICATION QUERY instead of path enumeration: given a JSON "
-      "{unit, enc, depth, box} naming one enumerated path and a candidate "
-      "input box, assume the box at unit entry and assert `tr == enc && cnt == "
-      "depth` at EVERY exit of that unit. THE RESULT IS THE `RESULT:` LINE, "
-      "NOT the VERIFICATION verdict: a non-vacuity witness at the path's own "
-      "exit is REFUTED whenever the box is certified, so a certified run "
-      "prints "
-      "VERIFICATION FAILED. RESULT: CERTIFIED means every input in the box "
-      "walks that path; REFUTED gives a counterexample input that is inside "
-      "the "
-      "box but leaves the path, which is exactly the witness needed to shrink "
-      "the box; VACUOUS means the box admits no execution reaching that path "
-      "at "
-      "all, which the four syntactic gates on the box cannot detect and which "
-      "would otherwise have printed a certificate for a region holding no "
-      "input. The assert is on every "
-      "exit on purpose — placed only on the path's own exit, an escaping input "
-      "would leave elsewhere and never be checked, making the query vacuously "
-      "true. Expansion, the ABI gate, Phase-1 accounting and both censuses all "
-      "still run, and the query uses the SAME `tr` the enumeration does"},
-     {"path-cov-outer-box",
-      boost::program_options::value<std::string>()->value_name("file"),
-      "Measure each enumerated path's OUTER box in one batch, then subtract "
-      "the "
-      "siblings' boxes to get a certified region at zero further queries. "
-      "JSON: "
-      "{unit, probes, coords:[{name,lo,hi}], "
-      "paths:[{enc,depth,ce:{name:val}}]}. "
-      "For every path the assumption `tr == enc` is FIXED and only the "
-      "candidate "
-      "bounds vary, so an entire ladder — all paths, all coordinates, both "
-      "directions — is judged in a single run rather than one query per "
-      "widening "
-      "step. `lo`/`hi` are the ladder span, which the driver takes from the "
-      "nearest sibling counterexamples, and `ce` is the path's own "
-      "counterexample, used to reject a subtraction cut that would carve away "
-      "a "
-      "known member of the path's domain. Resolution is (hi-lo)/(probes+1): a "
-      "non-adaptive batch cannot give logarithmic precision, so refine with a "
-      "second batch on a narrower span"},
-     {"path-cov-assert",
-      boost::program_options::value<std::string>()->value_name("file"),
-      "Synthesise and CERTIFY post-state assertions for ONE enumerated path "
-      "over an input REGION. JSON: {unit, enc, depth, "
-      "region:[{name,lo,hi,holes}], "
-      "vars:[{name,abs_lo,abs_hi,delta_dir,delta_lo,delta_hi}]}. The region is "
-      "ASSUMED at entry (exactly the require/bound a generated Foundry test "
-      "would carry) and each candidate is asserted at THAT path's own exit "
-      "under the path-identity antecedent `tr != enc || cnt != depth`, so it "
-      "is "
-      "vacuous on every other path. The assumption is fixed and only the "
-      "assertions vary, so the whole ladder is judged in ONE run. A REFUTED "
-      "candidate is the ladder working, not a failure; the run's verdict line "
-      "is therefore NOT the result — the per-candidate HOLDS / REFUTED / "
-      "no-verdict table is. Mutually exclusive with --path-cov-certify and "
-      "--path-cov-outer-box"},
-     {"path-cov-fixture",
-      boost::program_options::value<std::string>()->value_name("file"),
-      "Replace the DEPLOYMENT of --contract with a recorded concrete state. "
-      "JSON: {contract, skip_constructor, state:{name:value}} where each value "
-      "is a decimal or 0x-hex literal for a scalar state variable (integer / "
-      "address / bool). With skip_constructor the constructor call is not "
-      "emitted into the entry function at all, and the named state variables "
-      "are assigned before the transaction driver runs. WHY IT IS NOT A LOOP "
-      "BOUND: the constructor and the unit under test are forced to share one "
-      "--unwind, because the path enumeration's loop bound and the symex "
-      "unwind "
-      "bound must agree. MEASURED on two PoC contracts whose constructor "
-      "pushes "
-      "to a dynamic array inside a struct: at the pass's own default bound of "
-      "4 "
-      "the library memcpy is truncated, symex produces `Generated 0 VCC(s)`, "
-      "not one of the 3 instrumented path claims reaches the solver and the "
-      "process aborts -- while at --unwind 64 the SAME query witnesses 3 of 3 "
-      "paths in 0.4s. Raising the shared bound pays for it in the unit's "
-      "enumeration, which is exponential in loop iterations; removing the "
-      "deployment from the query separates the two numbers instead. It is also "
-      "what makes an emitted test replayable: a symbolically-constructed entry "
-      "state is not something a Foundry test can reproduce, a recorded "
-      "concrete "
-      "one is. A named file that cannot be read, cannot be parsed, or names a "
-      "state variable the contract does not have is a HARD FAILURE -- an "
-      "ignored fixture would silently run the ordinary symbolic deployment "
-      "while the report claimed a concrete one"},
-     {"solidity-path-coverage",
-      NULL,
-      "Solidity complete-path coverage (entry->exit path coverage for test "
-      "generation). Instruments each public/external function body's complete "
-      "decision paths (ghost snapshots on decision edges + one exit-edge "
-      "assert "
-      "per enumerated path) and emits one Foundry testcase per feasible path. "
-      "Pair with --solidity-max-tx N for the transaction bound and "
-      "--generate-foundry-testcase to emit tests. Slice 1: loop-free "
-      "functions."},
      {"assign-param-nondet",
       NULL,
       "Explicitly assign every function parameters to NONDET in function "
@@ -1404,54 +1234,6 @@ const struct group_opt_templ all_cmd_options[] = {
      "Print a backtrace and memory map on a fatal signal"}}},
   {"DEBUG options",
    {
-     {"path-cov-fault-after",
-      boost::program_options::value<int>()->value_name("N"),
-      "FAULT INJECTION for --solidity-path-coverage: throw std::bad_alloc "
-      "once N path claims have been decided, to exercise the partial-report "
-      "and mid-solve-persistence paths. Ignored without "
-      "--solidity-path-coverage. It exists because those paths only run on a "
-      "run that does NOT reach a clean exit, and a regression cannot produce "
-      "one otherwise: the harness strips --timeout/--memlimit and a test "
-      "description is a single invocation with no environment of its own. An "
-      "untested rescue path is how this tool has already shipped a function "
-      "that was never called and a guard that was always true"},
-     {"path-cov-fault-sigterm",
-      boost::program_options::value<int>()->value_name("N"),
-      "FAULT INJECTION for --solidity-path-coverage: raise(SIGTERM) once N "
-      "path claims have been decided, to exercise the external-kill arm of the "
-      "signal handler. Same rationale as --path-cov-fault-after"},
-     {"path-cov-fault-mid-witness",
-      boost::program_options::value<int>()->value_name("N"),
-      "FAULT INJECTION for --solidity-path-coverage: throw std::bad_alloc from "
-      "INSIDE the counterexample harvest of the Nth refuted claim -- i.e. "
-      "after "
-      "the solver answered and the verdict was recorded, but before the "
-      "claim's "
-      "signature reaches reached_claims. --path-cov-fault-after cannot reach "
-      "that window: it fires at the START of a job, when every previous claim "
-      "has already completed all of its side effects. The window is real and "
-      "was measured, on a 30-line nested-mapping contract that ran out of "
-      "memory "
-      "in exactly it: the run printed `✗ FAILED: 'put:path:7'` and then "
-      "reported "
-      "`Path Status: F 0, I 0, U 8`, tripping the tool's own invariant because "
-      "a "
-      "witnessed path had been filed as undecided with no reason token. "
-      "Ignored "
-      "without --solidity-path-coverage"},
-     {"path-cov-max-claim-solves",
-      boost::program_options::value<int>()->value_name("N"),
-      "Override how many times ONE claim key may be handed to the solver under "
-      "--solidity-path-coverage (default: the transaction bound, since one "
-      "assert instruction is reached at most once per transaction). Exceeding "
-      "it aborts: a higher count means the same claim is instrumented at more "
-      "than one site, so the path gets several independent chances to be "
-      "witnessed and every figure published about it is the result of all of "
-      "them. It exists so the REFUSAL can be exercised -- with a sound "
-      "instrumentation the ceiling is never reached, so a check armed only "
-      "from the transaction count could never be shown to fire, and this pass "
-      "has already shipped a guard that was always true and a function that "
-      "was never called"},
      {"double-assign-check",
       NULL,
       "Check for duplicate SSA symbol assignments"},

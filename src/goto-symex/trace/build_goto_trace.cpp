@@ -280,8 +280,7 @@ static void record_violated_reads(
 void build_goto_trace(
   const symex_target_equationt &target,
   smt_convt &smt_conv,
-  goto_tracet &goto_trace,
-  bool keep_hidden_steps)
+  goto_tracet &goto_trace)
 {
   unsigned step_nr = 0;
 
@@ -296,7 +295,7 @@ void build_goto_trace(
     // location borrowed from a branch, so surfacing them in the trace yields
     // contradictory-looking states (see discussion #5701). They are never a
     // user-visible source assignment, so drop them regardless of slicing.
-    if (SSA_step.hidden && !keep_hidden_steps)
+    if (SSA_step.hidden)
       continue;
 
     // is_true() also drops steps whose guard the solver could not evaluate:

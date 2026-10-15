@@ -1,8 +1,0 @@
-CORE
-contract.sol
---contract Delta --solidity-path-coverage --solidity-max-tx 1 --path-cov-assert spec.json
-^--path-cov-assert: region NON-VACUITY witnessed
-^--path-cov-assert: bal: post < pre  HOLDS$
-^--path-cov-assert: bal: post > pre  REFUTED
-^--path-cov-assert: bal: post - pre in \[0, 115792089237316195423570985008687907853269984665640564039457584007913129639935\] with post >= pre  REFUTED
-^--path-cov-assert: ladder summary -- 7 candidate\(s\): 3 HOLDS, 4 REFUTED, 0 no verdict \(solver unknown\), 0 no verdict \(never reached the solver\)

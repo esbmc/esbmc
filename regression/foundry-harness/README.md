@@ -72,46 +72,12 @@ helper instead of as a refused test.
 `forge test` failing on that file means the environment no longer supports a
 claim the paper makes — which is exactly when we want to hear about it.
 
-## The validity gate
-
-`verify_generated.py` generates a suite for every `solidity_path_cov_*` case and
-RUNS it against the contract it came from. Section 5.3's only vetoing criterion
-is that a generated test passes on the unmodified contract, and checking that by
-hand — once, on whichever contract happened to be in front of you — is how a
-suite that reverts on the unmodified contract ships. That is the exact thing
-this work criticises other tools for, so emitting one is a liability, not a bug.
-
-It also yields a number the evaluation needs and never had: how many generated
-calls carry an assertion, and how many suites are green. Measured 2026-07-29
-over the 40-case regression corpus:
-
-```
-by status: green 39, contract-uncompilable 1, red 0
-tests passed / failed     : 171 / 0
-calls asserted / tolerant : 144 / 52     (73% of calls carry an assertion)
-```
-
-Read the buckets, not just the headline. `red` is the one that means an emitter
-defect. `contract-uncompilable` is a limit of the frozen profile, not of the
-tool: the single case is a synthetic 26-term `&&` chain that hits "stack too
-deep" with the optimizer off, and the optimizer is off deliberately because
-optimiser passes can merge or delete branches. Those two were one bucket in the
-first version of this script, which is the bottom-of-the-whitelist mistake
-again — a residual that means two opposite things about the tool.
-
-⚠ Scope: this corpus is the regression suite, not the benchmarks. The 1inch
-`aqua` contract is NOT in it and its suite is currently RED — a generated call
-whose dynamic-array argument could not be recovered was rendered as a defaulted
-all-zero array, so the emitted input is not the counterexample's input. That is
-tracked separately; do not read "0 red" as covering benchmarks.
-
 ## Usage
 
 ```
 ./setup.sh                              # fetch + verify the forge-std pin
 ./smoke.sh [regression_case_name]       # run a real generated test
 forge test --match-path 'test/env/*'    # environment self-test
-python3 verify_generated.py [filter…]   # the validity gate over the corpus
 ```
 
 Generated tests are produced by a run, not checked in for every case, so

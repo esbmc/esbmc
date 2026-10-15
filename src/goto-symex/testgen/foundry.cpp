@@ -1,9 +1,5 @@
 #include <goto-symex/testgen/foundry.h>
 #include <goto-symex/equation/slice.h>
-// The exit census (revert / rollback-revert / undetermined path sets) is what
-// lets a generated call carry an assertion instead of a try/catch. It is filled
-// at instrumentation time and costs no query.
-#include <goto-programs/goto_coverage.h>
 #include <ac_config.h>
 #include <util/base/prefix.h>
 #include <util/arith/mp_arith.h>
@@ -1163,28 +1159,8 @@ step_location_method(const symex_target_equationt::SSA_stept &step)
 foundry_generator::test_case foundry_generator::reconstruct(
   const symex_target_equationt &target,
   smt_convt &smt_conv,
-  const namespacet &ns,
-  std::string &out_claims) const
+  const namespacet &ns) const
 {
-  // PROVENANCE: which verification obligation this case comes from.
-  //
-  // The claim identity is the assert's `comment` (`<unit>:path:<id>`) — the
-  // same field the exit census is keyed on below, so no new plumbing and no new
-  // query. What needs care is WHICH assert.
-  //
-  // "Guard-true" is NOT enough, and the first version of this got it wrong. An
-  // equation contains every path claim of the whole contract, and on any given
-  // model a great many of them are guard-true: the ones that HOLD there are
-  // guard-true too. Recording all of them produced a case labelled with six
-  // claims across three different units, which says nothing about where the
-  // case came from.
-  //
-  // The obligation this counterexample REFUTES is the guard-true assert whose
-  // condition is FALSE under the model — that is what "reached" means for a
-  // coverage goal. Holding claims are collected separately and deliberately not
-  // emitted; they are context, not provenance.
-  std::set<std::string> claim_ids;   // refuted here: the actual provenance
-  std::set<std::string> claim_holds; // guard-true but satisfied: not provenance
   // Length of a nondet `string` argument recovered from the model (see
   // recover_nondet_string_length); used by build_call to render a string
   // literal that reproduces a `bytes(s).length` branch. A single value per
@@ -1472,7 +1448,6 @@ foundry_generator::test_case foundry_generator::reconstruct(
     std::string contract, method;
     std::map<std::string, sol_arg> args;
     bool reverts = false;
-    bool normal_confirmed = false;
     expr2tc msg_value;       // ③A0: solver-picked msg.value for this tx
     expr2tc block_timestamp; // ③A0: solver-picked block.timestamp for this tx
     bool reads_timestamp = false; // ③A0: this tx's body reads block.timestamp
@@ -1490,12 +1465,6 @@ foundry_generator::test_case foundry_generator::reconstruct(
     bool sender_dirty = false;
   };
   std::vector<segment> segs;
-  // This counterexample refutes a path claim that is a NAMED OBSTACLE, so the
-  // case reconstructed from it must not be shipped (see
-  // sol_call::named_obstacle and collect()). Kept per-reconstruction rather
-  // than per-segment: the flag has to survive every route by which `calls` can
-  // be built, including the fallback that has no segment.
-  bool path_named_obstacle = false;
 
   // ③A0 environment pinning. `_sol_per_tx_reseed` assigns the globals
   // `msg_value` / `block_timestamp` in the dispatcher prologue JUST BEFORE the
@@ -1710,170 +1679,25 @@ foundry_generator::test_case foundry_generator::reconstruct(
       step.source.pc->location.get_bool("sol_revert_edge"))
       segs.back().reverts = true;
 
-    // Complete-path coverage classifies every exit at INSTRUMENTATION time,
-    // with zero solver queries, into revert / normal / undetermined -- and it
-    // catches what `sol_revert_edge` above cannot, namely a failing
-    // `require(cond, ...)`, which lowers to a rollback restore rather than to a
-    // detectable terminator. Read that classification here, keyed the same way
-    // the census stores it, so a path-coverage run emits an assertion instead
-    // of a revert-tolerant try/catch.
-    //
-    // Why this is worth having: before it, EVERY generated test was
-    // assertion-free by construction, which is precisely the baseline this work
-    // exists to beat. The information to do better was already computed, in the
-    // same process, and simply never reached the emitter.
-    //
-    // Undetermined is deliberately left as neither: it keeps the try/catch. An
-    // undetermined exit is one where a failing `require` before any state write
-    // and a plain early `return` compile to the same shape, so calling it
-    // normal would assert that a reverted transaction succeeded.
-    // ONLY the normal direction is taken from the census. The reverting
-    // direction is deliberately NOT fed into `reverts`, and that restraint was
-    // measured rather than assumed:
-    //
-    //   Emitting `vm.expectRevert()` for census-classified revert paths made a
-    //   generated test go RED on an unmodified contract. The path was the ABI
-    //   non-payable gate, which reverts only when msg.value != 0 -- and the
-    //   emitter calls without value, so nothing reverted. Asserting a revert
-    //   the emitted call cannot cause is a WRONG assertion, which is worse than
-    //   the missing one it replaces.
-    //
-    // Rendering that path needs a low-level `call{value: N}` plus a failure
-    // check (a non-payable method cannot legally be given value through a typed
-    // call -- it will not even compile), which is real work and not done here.
-    // Until it is, revert paths keep the pre-existing try/catch: honest, and
-    // unchanged from before. Custom-error revert edges detected by
-    // `sol_revert_edge` above are untouched -- that path has 44 regressions
-    // behind it.
-    //
-    // Read the POSITIVE set, never absence from the failure sets. The first
-    // attempt here did the latter -- "in all_claims and in none of the three
-    // failure sets" -- and it turned three branch-coverage regressions red,
-    // because a branch claim is in no failure set either and was therefore
-    // called normal. Absence is not evidence; that is the rule this whole
-    // census exists to enforce, and it is embarrassing to have broken it in the
-    // consumer.
-    if (step.is_assert() && !segs.empty())
-    {
-      const std::pair<std::string, std::string> key{
-        step.comment.as_string(), step.source.pc->location.as_string()};
-      if (goto_coveraget::normal_exit_paths.count(key))
-        segs.back().normal_confirmed = true;
-      // ---- NAMED OBSTACLE: this path must not become a test at all ----
-      //
-      // Read with the SAME key, in the same place, for the same reason the
-      // normal/revert classification is read here: the census keys by
-      // (comment, location) and any other way of naming a path from this side
-      // has to reconstruct that name, which is where a silent mismatch lives.
-      //
-      // This is not "one more oracle we could add". goto_coverage.h makes it a
-      // rule -- a marked path "must not be turned into a test" -- and until now
-      // nothing in this file so much as mentioned the map. The two consumers
-      // that did read it (bmc.cpp's report) are both gated on the claim being
-      // UNDECIDED, so the refuted paths, which are exactly the ones that reach
-      // this generator, were never checked against it.
-      //
-      // Only the NORMAL CONFIRMATION is withdrawn here. The decision to refuse
-      // the case is taken at the refuted-claim site below instead, because THIS
-      // block is guarded on `!segs.empty()` and there is a whole second
-      // reconstruction route (the coverage-claim fallback, further down) that
-      // builds a call with no segment at all. A detector that only fires on one
-      // of two routes is a detector that reports zero on the other.
-      if (goto_coveraget::named_obstacle_paths.count(key))
-        segs.back().normal_confirmed = false;
-    }
-
-    // Provenance (see out_claims above). Recorded for EVERY guard-true
-    // path-claim assert, not only ones inside a segment, because the fallback
-    // reconstruction paths below build a case from an assert with no segment at
-    // all — and those are exactly the cases whose origin is hardest to check by
-    // eye.
-    // A coverage goal is `assert(tr != pi)`: REACHING the goal refutes it, so
-    // the model makes its condition false. This one predicate answers both
-    // "which obligation is this case's provenance" and "which method does the
-    // case call" — see the override below.
+    // A coverage goal is reached when the model makes its condition false.
     bool assert_refuted = false;
     if (step.is_assert())
     {
       const expr2tc v = smt_conv.get(step.cond);
       assert_refuted =
         v && is_constant_bool2t(v) && !to_constant_bool2t(v).value;
-      if (step.comment.as_string().find(":path:") != std::string::npos)
-        (assert_refuted ? claim_ids : claim_holds)
-          .insert(step.comment.as_string());
-      // ---- Is THIS case's provenance a NAMED OBSTACLE? ----
-      //
-      // Keyed off the REFUTED claim, which is exactly the obligation this case
-      // is reconstructed from (see out_claims), and read with the same
-      // (comment, location) pair the census stores. Placed here rather than on
-      // the segment because this site is reached on every reconstruction route:
-      // the segment route above is guarded on `!segs.empty()`, and the
-      // coverage-claim fallback below builds a call when there is no segment at
-      // all -- which is precisely the case a segment-attached flag would miss
-      // while still reporting a confident zero.
-      if (
-        assert_refuted &&
-        goto_coveraget::named_obstacle_paths.count(
-          {step.comment.as_string(), step.source.pc->location.as_string()}))
-        path_named_obstacle = true;
     }
 
     // The covered coverage claim (a guard-true assert) is AUTHORITATIVE for the
     // active transaction's method: its source location names the function whose
     // branch is covered. In a multi-function whole-unit dispatcher the
     // segment's method is otherwise guessed from the first recovered param /
-    // executed body and can latch onto the WRONG function (e.g. a dock claim
-    // mis-attributed to ship), so override the guess with the covered method
-    // here.
-    //
-    // THE REFUTED CLAIM NAMES THE METHOD, and it does so in its own identity
-    // rather than through its source location. This was a measured
-    // mis-attribution, and the first fix aimed at the wrong mechanism.
-    //
-    // Measured on 1inch aqua, whole-contract mode: 15 refuted obligations
-    // produced 4 cases, and 9 of them — all five of `pull`, both of `dock`,
-    // both of `push` — came out as `ship(...)` calls. A test standing for one
-    // method's obligation while naming another makes every coverage statement
-    // derived from the suite wrong, which is worse than emitting nothing.
-    //
-    // What the attribution trace showed, after a fix based on an inferred cause
-    // changed nothing: each counterexample refutes exactly ONE claim, `pull` IS
-    // dispatcher-callable, and yet the segment's method was already `ship`. The
-    // reason is that these complete-path claims carry NO source location — the
-    // solver line reads `'pull:path:63 at'` with nothing after `at` — so
-    // step_location_method returns empty, this override never fired, and the
-    // method stayed whatever the "first callable body that executed in this
-    // segment" fallback had set, which in a dispatcher is whichever body comes
-    // first.
-    //
-    // The claim's own identity does not depend on a location:
-    // `sol:@C@<C>@F@<m>#<id>:path:<n>` names the unit outright. Use it, and
-    // fall back to the location only when the identity does not parse.
+    // executed body and can latch onto the WRONG function, so override the
+    // guess with the covered method here.
     if (step.is_assert() && assert_refuted && !segs.empty())
     {
-      std::string named; // method named by the claim identity itself
-      const std::string &cmt = step.comment.as_string();
-      const size_t pp = cmt.find(":path:");
-      if (pp != std::string::npos && has_prefix(cmt, "sol:@C@"))
-      {
-        const std::string fid = cmt.substr(0, pp); // sol:@C@<C>@F@<m>#<id>
-        const size_t f = fid.find("@F@");
-        if (f != std::string::npos)
-        {
-          const std::string c = fid.substr(7, f - 7);
-          std::string m = fid.substr(f + 3);
-          const size_t h = m.find('#');
-          if (h != std::string::npos)
-            m = m.substr(0, h);
-          // Only accept a claim about the segment's own contract; a claim from
-          // another contract says nothing about which method THIS segment ran.
-          if (c == segs.back().contract && !m.empty())
-            named = resolve_dispatcher_method(c, m);
-        }
-      }
-      if (named.empty())
-        named = resolve_dispatcher_method(
-          segs.back().contract, step_location_method(step));
+      const std::string named = resolve_dispatcher_method(
+        segs.back().contract, step_location_method(step));
       if (!named.empty())
         segs.back().method = named;
     }
@@ -2312,7 +2136,6 @@ foundry_generator::test_case foundry_generator::reconstruct(
     {
       sol_call c = build_call(s.contract, s.method, s.args);
       c.reverts = s.reverts;
-      c.normal_confirmed = s.normal_confirmed;
       c.msg_value = s.msg_value; // ③A0: env pin (emitted only when c.payable)
       c.block_timestamp = s.block_timestamp;
       c.warp = s.reads_timestamp; // ③A0: warp only when the body reads time
@@ -2398,56 +2221,12 @@ foundry_generator::test_case foundry_generator::reconstruct(
         !step.is_assert() || step.ignore ||
         !smt_conv.l_get(step.guard).is_true())
         continue;
-      // THE CLAIM'S OWN IDENTITY NAMES THE METHOD; ITS LOCATION DOES NOT.
-      //
-      // This fallback used to read only `step_location_method(step)`, i.e. the
-      // assert's SOURCE LOCATION. A complete-path claim carries none -- the
-      // solver line reads `'dock:path:12 at'` with nothing after `at` -- so
-      // `raw_m` came back empty, every candidate was skipped, and the fallback
-      // reconstructed nothing while appearing to have tried. That is the same
-      // defect already fixed on the segment route above, where the comment
-      // records it in full; it was fixed there and not here, and the two
-      // routes are precisely the ones that cover for each other.
-      //
-      // MEASURED on aqua `dock`: with the guard repaired so this fallback
-      // actually runs, it still emitted no call, because of this. Two
-      // independent defects on one path, and fixing only the first produces a
-      // run that looks exactly like the broken one.
-      //
-      // `sol:@C@<C>@F@<m>#<id>:path:<enc>` names contract and method outright.
-      // The location stays as the fallback for a claim whose identity does not
-      // parse (e.g. a branch-coverage claim reaching this code).
       std::string c, m;
-      {
-        const std::string &cmt = step.comment.as_string();
-        const size_t pp = cmt.find(":path:");
-        if (pp != std::string::npos && has_prefix(cmt, "sol:@C@"))
-        {
-          const std::string fid = cmt.substr(0, pp);
-          const size_t f = fid.find("@F@");
-          if (f != std::string::npos)
-          {
-            const std::string cc = fid.substr(7, f - 7);
-            std::string mm = fid.substr(f + 3);
-            const size_t h = mm.find('#');
-            if (h != std::string::npos)
-              mm = mm.substr(0, h);
-            const std::string r = resolve_dispatcher_method(cc, mm);
-            if (!r.empty())
-            {
-              c = cc;
-              m = r;
-            }
-          }
-        }
-      }
       const std::string raw_m = step_location_method(step);
-      if (m.empty() && raw_m.empty())
+      if (raw_m.empty())
         continue;
-      if (m.empty())
-        c = config.options.get_option("contract");
-      if (m.empty())
-        m = c.empty() ? std::string() : resolve_dispatcher_method(c, raw_m);
+      c = config.options.get_option("contract");
+      m = c.empty() ? std::string() : resolve_dispatcher_method(c, raw_m);
       if (m.empty())
       {
         c.clear();
@@ -2557,24 +2336,12 @@ foundry_generator::test_case foundry_generator::reconstruct(
     return c.method == c.contract;
   });
 
-  // Stamp the obstacle onto every call of the case, AFTER all reconstruction
-  // routes have finished, so the mark cannot depend on which of them produced
-  // the calls. collect() then refuses the whole case on any one of them.
-  if (path_named_obstacle)
-    for (auto &c : calls)
-      c.named_obstacle = true;
-
-  out_claims.clear();
-  for (const auto &id : claim_ids)
-    out_claims += (out_claims.empty() ? "" : ", ") + id;
-
   // Attribution trace. Exists because a measured mis-attribution (aqua: `pull`
   // obligations emitted as `ship` calls) survived a fix aimed at the mechanism
   // that looked responsible, which means the mechanism had been INFERRED rather
   // than seen. Printing the decision is how the next one gets seen instead.
   {
-    std::string dbg =
-      "foundry attribution: refuted={" + out_claims + "} segs=[";
+    std::string dbg = "foundry attribution: segs=[";
     for (const auto &s : segs)
       dbg += s.contract + "." + (s.method.empty() ? "<none>" : s.method) + " ";
     // ---- THE CTOR-TIME SENDER DECISION, PRINTED ----
@@ -2631,8 +2398,6 @@ void foundry_generator::clear()
   non_instantiable.clear();
   libraries.clear();
   mock_specs.clear();
-  claims_by_fingerprint.clear();
-  suppressed_obstacle = 0;
   // suppressed_empty_body was NOT reset here, which would carry a previous
   // round's refusals into the next one's report. Every other accumulator in
   // this function is cleared; this one was simply missed.
@@ -2646,47 +2411,23 @@ void foundry_generator::collect(
   smt_convt &smt_conv,
   const namespacet &ns)
 {
-  std::string claims;
-  test_case tc = reconstruct(target, smt_conv, ns, claims);
+  test_case tc = reconstruct(target, smt_conv, ns);
   if (tc.empty())
     return;
 
   std::lock_guard<std::mutex> lock(data_mutex);
-  // ---- REFUSE a counterexample whose path is a NAMED OBSTACLE ----
-  //
-  // The obstacle means the model admits an execution the chain does not have.
-  // The counterexample is therefore not necessarily a description of anything
-  // that can happen, and a test replaying it is RED on the unmodified contract
-  // -- the single outcome this pipeline exists to never produce.
-  //
-  // Refused here rather than filtered at emission so the case never enters
-  // `test_cases` and so cannot be dedup'd together with a legitimate one: two
-  // counterexamples collapse onto one emitted case by fingerprint, and a
-  // fingerprint does not carry the obstacle. A clean case absorbing an
-  // obstructed one would then ship it under a clean provenance.
-  //
-  // Counted, and reported by generate(). A silent refusal is indistinguishable
-  // from a path that was never witnessed, and "we excluded N of them and here
-  // is why" is the entire value of the obstacle machinery over a shrug.
-  for (const auto &c : tc)
-    if (c.named_obstacle)
-    {
-      ++suppressed_obstacle;
-      return;
-    }
   // ---- REFUSE a case that would emit an EMPTY TEST BODY ----
   //
   // The emission loop skips any call whose method IS its contract
   // (`continue; // constructor -> setUp()`), so a case that reconstructed only
   // a constructor segment produces `function test_cov_N() public { }` -- a test
-  // that names witnessed paths in its comment and executes none of them, and
-  // that PASSES because it does nothing. MEASURED on aqua: two of the six
-  // emitted files were of exactly this shape, both green at 188 gas.
+  // that executes nothing and PASSES because it does nothing. MEASURED on aqua:
+  // two of the six emitted files were of exactly this shape, both green at 188
+  // gas.
   //
-  // Refused here rather than filtered at emission for the reason stated above
-  // the obstacle refusal: the case must never enter `test_cases`, or a
-  // fingerprint collision can collapse it onto a legitimate case and ship one
-  // under the other's provenance.
+  // Refused here rather than filtered at emission so the case never enters
+  // `test_cases`: a fingerprint collision could otherwise collapse it onto a
+  // legitimate case and ship one under the other's provenance.
   {
     bool any_call = false;
     for (const auto &c : tc)
@@ -2703,15 +2444,6 @@ void foundry_generator::collect(
   }
   if (source_file.empty())
     source_file = config.options.get_option("input-file");
-  // Provenance, keyed by the same fingerprint dedup uses. Several
-  // counterexamples that collapse onto one emitted case ACCUMULATE their claim
-  // ids here rather than the first winning: that collapse is information (it is
-  // how many obligations one shipped test actually stands for), and dropping it
-  // would make a case look like it came from one claim when it came from four.
-  const std::string fp = fingerprint(tc);
-  std::string &slot = claims_by_fingerprint[fp];
-  if (!claims.empty() && slot.find(claims) == std::string::npos)
-    slot += (slot.empty() ? "" : ", ") + claims;
   test_cases.push_back(std::move(tc));
 }
 
@@ -3166,19 +2898,6 @@ size_t foundry_generator::write_foundry_file(
 
     for (const auto *tcp : grp)
     {
-      // PROVENANCE LINE. Names the verification obligation(s) this case was
-      // reconstructed from, so the emitted suite can be checked against the
-      // report instead of taken on trust. When several claims share one case,
-      // all of them are listed -- the collapse is what the case actually stands
-      // for. "not recorded" is printed rather than nothing, because a case with
-      // no obligation and a case whose obligation was not read are different
-      // facts and must not look the same.
-      {
-        auto pit = claims_by_fingerprint.find(fingerprint(*tcp));
-        const bool known =
-          pit != claims_by_fingerprint.end() && !pit->second.empty();
-        f << "  // claim: " << (known ? pit->second : "not recorded") << "\n";
-      }
       f << "  function test_cov_" << fn++ << "() public {\n";
       for (const auto &call : *tcp)
       {
@@ -3331,18 +3050,6 @@ size_t foundry_generator::write_foundry_file(
           f << "    " << recv << "." << call.method << value_brace << "("
             << join_args(call) << ");\n";
         }
-        else if (call.normal_confirmed)
-        {
-          // The exit census confirmed this path returns normally, so the call
-          // is emitted BARE. The absence of the try/catch is the assertion: if
-          // the call reverts at run time, the test fails, which is exactly the
-          // divergence worth hearing about.
-          f << deal_line;
-          f << "    // [asserted] path exits normally; a revert fails the "
-               "test\n";
-          f << "    " << recv << "." << call.method << value_brace << "("
-            << join_args(call) << ");\n";
-        }
         else
         {
           // Outcome not confirmed: wrap in try/catch so an undetected revert
@@ -3371,38 +3078,16 @@ void foundry_generator::generate() const
 {
   std::lock_guard<std::mutex> lock(data_mutex);
 
-  // REPORTED BEFORE THE EMPTY CHECK, deliberately. If every witnessed path of a
-  // run is a named obstacle then `test_cases` is empty and the early return
-  // below fires -- and a run that refused N counterexamples would print the
-  // same "no test cases collected" line as a run that witnessed nothing at all.
-  // Those are opposite situations: one found counterexamples and threw them
-  // away on purpose, the other found none. Collapsing them is the shape of
-  // failure this whole change exists to remove, so the count goes out first.
-  //
-  // An absolute number, never a ratio, matching how the obstacle warning itself
-  // is reported in goto_coverage.cpp: an obstacle is not partial credit.
-  if (suppressed_obstacle)
-    log_warning(
-      "Foundry: {} counterexample(s) REFUSED -- their path is a NAMED "
-      "OBSTACLE, "
-      "i.e. the model admits an execution the chain does not have, so a test "
-      "replaying one is RED on the UNMODIFIED contract. The paths remain in "
-      "the "
-      "coverage denominator (they are real); what is refused is turning them "
-      "into tests. See the NAMED OBSTACLE report above for which units and why",
-      suppressed_obstacle);
-
-  // Same placement and the same reason: printed BEFORE the empty check, as an
-  // absolute number. A run that refused N empty-bodied cases and a run that
-  // witnessed nothing would otherwise print the identical line.
+  // Printed BEFORE the empty check, as an absolute number. A run that refused
+  // N empty-bodied cases and a run that witnessed nothing would otherwise print
+  // the identical line.
   if (suppressed_empty_body)
     log_warning(
       "Foundry: {} counterexample(s) REFUSED -- every call they reconstructed "
-      "is a CONSTRUCTOR, so the test function would have an EMPTY BODY: it "
-      "would name witnessed paths in its comment, execute none of them, and "
+      "is a CONSTRUCTOR, so the test function would have an EMPTY BODY and "
       "PASS because it does nothing. A green test that calls nothing is worse "
       "than a missing one -- it is counted as emitted and counted as passing, "
-      "and only reading the body tells them apart. The paths remain witnessed; "
+      "and only reading the body tells them apart. The goals remain covered; "
       "what is refused is shipping a test that does not exercise them",
       suppressed_empty_body);
 
@@ -3544,32 +3229,6 @@ void foundry_generator::generate() const
     size_t revert_tolerant = write_foundry_file(path, p, cs);
     log_status(
       "Generated Foundry coverage test with {} case(s): {}", cs.size(), path);
-    // PROVENANCE COVERAGE. How many emitted cases can name the verification
-    // obligation they were reconstructed from, and how many obligations they
-    // stand for in total.
-    //
-    // Reported rather than left to the file because a property only visible
-    // inside the artifact cannot be pinned by a regression, and this one has to
-    // be: a suite that stops carrying its provenance stops being auditable
-    // against the report, silently. The two numbers move independently on
-    // purpose -- cases falling while obligations hold means dedup is collapsing
-    // more counterexamples onto one test, which is information about the
-    // product, not noise.
-    size_t cases_with_claim = 0, obligations = 0;
-    for (const auto &tc : cs)
-    {
-      auto it = claims_by_fingerprint.find(fingerprint(tc));
-      if (it == claims_by_fingerprint.end() || it->second.empty())
-        continue;
-      ++cases_with_claim;
-      obligations += 1 + std::count(it->second.begin(), it->second.end(), ',');
-    }
-    log_status(
-      "Foundry: {} of {} case(s) name the obligation they were reconstructed "
-      "from, standing for {} refuted path claim(s)",
-      cases_with_claim,
-      cs.size(),
-      obligations);
     // Interface-arg mock synthesis: report the distinct interfaces for which an
     // `ESBMCMock_*` was emitted (their calls return fixed defaults — [approx]).
     std::set<std::string> mifaces;
@@ -3642,21 +3301,6 @@ void foundry_generator::generate() const
       log_status(
         "Foundry: {} call(s) wrapped in vm.expectRevert (detected revert edge)",
         revert_cases);
-    // Calls emitted BARE because the exit census confirmed a normal exit. This
-    // is the count that matters: it is how many calls carry an assertion at
-    // all. Reported next to the try/catch count on purpose -- the two move in
-    // opposite directions, so a change that only relabels is visible as one
-    // count rising without the other falling.
-    size_t asserted_normal = 0;
-    for (const auto &tc : cs)
-      for (const auto &call : tc)
-        if (call.normal_confirmed && !call.reverts)
-          ++asserted_normal;
-    if (asserted_normal)
-      log_status(
-        "Foundry: {} call(s) emitted bare (exit census confirmed normal; a "
-        "revert fails the test)",
-        asserted_normal);
     // Calls carrying an argument whose CONTENT the reconstruction cannot
     // recover. REPORTED ONLY -- nothing is refused on this basis yet, because
     // the size of the population is what decides whether recovering it is on
@@ -3667,9 +3311,9 @@ void foundry_generator::generate() const
     //           `new T[](4)` with zero elements, and the justification written
     //           beside it covers LENGTH-dependent branches only. Measured on
     //           1inch aqua: `ship` took four zero addresses, which alias to one
-    //           storage slot, so the emitted call reverts on a path the census
-    //           called normal -- the emitted input was simply not the
-    //           counterexample's input.
+    //           storage slot, so the emitted call reverts on a path the
+    //           counterexample did not take -- the emitted input was simply not
+    //           the counterexample's input.
     //   bytes / string   length is reconstructed, content is filler. Fine for a
     //           length-dependent branch, not for a content-dependent one.
     //
@@ -3764,16 +3408,13 @@ void foundry_generator::generate_single(
   if (source_file.empty())
     source_file = config.options.get_option("input-file");
 
-  std::string claims;
-  test_case tc = reconstruct(target, smt_conv, ns, claims);
+  test_case tc = reconstruct(target, smt_conv, ns);
   if (tc.empty())
   {
     log_warning(
       "No reconstructable transaction found. No Foundry test generated.");
     return;
   }
-  if (!claims.empty())
-    claims_by_fingerprint[fingerprint(tc)] = claims;
 
   std::string p = primary_contract(tc);
   if (p.empty())

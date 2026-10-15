@@ -1,6 +1,0 @@
-CORE
-contract.sol
---solidity-path-coverage --contract Gate2 --path-cov-certify certify.json --solidity-max-tx 1
-^VERIFICATION FAILED$
-assumed 1 input bound\(s\) \(0 hole\(s\) punched\) at entry
-\A(?!(.|\n)*the box is a PUNCHED interval)

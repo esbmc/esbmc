@@ -1,5 +1,0 @@
-CORE
-contract.sol
---solidity-path-coverage --contract Tiny --focus-function withdraw --path-cov-instrument-only deposit
-^ERROR: --path-cov-instrument-only names 'deposit', which --focus-function 'withdraw' does not select
-^ESBMC version

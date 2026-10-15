@@ -1,6 +1,0 @@
-CORE
-contract.sol
---contract SlotMin --solidity-path-coverage --solidity-max-tx 2 --focus-function put,take --path-cov-instrument-only take --path-cov-assert spec.json
-^ERROR: --path-cov-assert: unit 'sol:@C@SlotMin@F@take#\d+' -- REFUSING THE LADDER: the slot 'bal\[nosuch\]' names the key 'nosuch', which cannot be expressed: the key does not resolve to an input of this unit\.
-\A(?!(.|\n)*^--path-cov-assert: ladder summary)
-\A(?!(.|\n)*^--path-cov-assert: bal\[)

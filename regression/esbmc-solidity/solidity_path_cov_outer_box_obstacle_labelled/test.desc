@@ -1,6 +1,0 @@
-CORE
-contract.sol
---solidity-path-coverage --path-cov-outer-box outer.json --solidity-max-tx 1 --unwind 1
-^--path-cov-outer-box: path enc=2 CERTIFIED region after subtracting sibling outer boxes \(zero queries\): v in \[0, 1\] — NAMED OBSTACLE: the unit still calls another UNIT's own body unexpanded \(sol:@C@C@F@c#[0-9]+\)
-^--path-cov-outer-box: path enc=12 CERTIFIED region after subtracting sibling outer boxes \(zero queries\): .* — NAMED OBSTACLE: the unit still calls another UNIT's own body unexpanded
-this region must NOT be certified or turned into a test

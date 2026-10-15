@@ -272,7 +272,6 @@ protected:
   // msg.sender where the EVM would substitute the contract's own address),
   // and a source exit the frontend dropped leaves no trace at all. See the
   // definition in solidity_convert_decl.cpp.
-  void stamp_path_cov_ast_facts(const nlohmann::json &ast_node);
   bool get_var_decl(
     const nlohmann::json &ast_node,
     const nlohmann::json &initialValue,

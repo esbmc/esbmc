@@ -22,10 +22,6 @@ extern "C"
 #  include <solidity-frontend/solidity_tod_analysis.h>
 #  include <solidity-frontend/solidity_tod_harness.h>
 #endif
-// The one parser for --focus-function's value; --path-cov-instrument-only is
-// validated as a subset of it with the same matcher the frontend dispatcher
-// and the path-coverage pass use.
-#include <util/config/focus_function.h>
 #include <atomic>
 #include <mutex>
 #include <thread>
@@ -1609,8 +1605,7 @@ int esbmc_parseoptionst::doit()
   // result is the [Coverage] block closed by the completeness line. Printed
   // here, once, so it lands after the last block (k-induction prints one per
   // phase).
-  // A path-coverage query keeps the verdict it printed, and its exit code.
-  if (is_coverage && !goto_coveraget::path_cov_query_mode())
+  if (is_coverage)
   {
     report_coverage_completeness();
     return 0;

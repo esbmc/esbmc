@@ -1,6 +1,0 @@
-CORE
-contract.sol
---solidity-path-coverage --contract Box --path-cov-certify cert.json --cov-report-json --solidity-max-tx 1
-^--path-cov-certify: SHRINK SUGGESTION for 'sol:@C@Box@F@f#18:path:2#exit1' — the witness lies outside the path on coordinate 'a', .* retry with a in \[11, 100\]
-^  a = 10
-^VERIFICATION FAILED$

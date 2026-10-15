@@ -1,3 +1,0 @@
-{ "unit": "f", "enc": 2, "depth": 1,
-  "region": [ { "name": "a", "lo": "11", "hi": "100" } ],
-  "vars": [] }

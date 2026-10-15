@@ -1,7 +1,0 @@
-CORE
-contract.sol
---contract SlotMin --solidity-path-coverage --solidity-max-tx 2 --focus-function put,take --path-cov-certify spec.json
-REFUSING THE QUERY because coordinate 'state.bal\[nosuchnm\]' cannot be expressed
-ONE SLOT of such a store as
-\A(?!(.|\n)*RESULT: CERTIFIED)
-\A(?!(.|\n)*RESULT: VACUOUS)

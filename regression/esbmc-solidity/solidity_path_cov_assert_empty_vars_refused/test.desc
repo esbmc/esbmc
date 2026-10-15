@@ -1,8 +1,0 @@
-CORE
-contract.sol
---contract St --solidity-path-coverage --solidity-max-tx 1 --path-cov-assert spec.json
-^ERROR: --path-cov-assert: the spec contains an EMPTY "vars" array, so not one candidate assertion would be emitted
-Omit "vars" entirely to get the default ladder
-\A(?!(.|\n)*^VERIFICATION SUCCESSFUL$)
-\A(?!(.|\n)*^VERIFICATION FAILED$)
-\A(?!(.|\n)*^--path-cov-assert: ladder summary)

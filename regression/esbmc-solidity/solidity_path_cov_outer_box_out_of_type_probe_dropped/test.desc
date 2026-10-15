@@ -1,7 +1,0 @@
-CORE
-contract.sol
---solidity-path-coverage --contract Gate2 --path-cov-outer-box outer.json --solidity-max-tx 1
-^--path-cov-outer-box: coordinate 'to' has TYPE RANGE \[0, 1461501637330902918203684832716283019655932542975\] \(160-bit unsigned\)
-^WARNING: --path-cov-outer-box: coordinate 'to' — DROPPED 1 probe value\(s\) that do not fit its type; 1 probe value\(s\) remain
-^--path-cov-outer-box: path enc=2 depth=1 OUTER box \(D_path is CONTAINED in it\): to in \[255, 255\]$
-\A(?!(.|\n)*#ub_to_1606938044258990275541962092341162602522202993782792835301376)

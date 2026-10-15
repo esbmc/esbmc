@@ -1,6 +1,0 @@
-CORE
-contract.sol
---solidity-path-coverage --cov-report-json --solidity-max-tx 1 --path-cov-fault-after 1
-^--solidity-path-coverage: CE journal cov-ce-journal\.json updated after claim 1 of 4: 1 witnessed path\(s\) on disk, 1 with non-empty inputs \(complete=false\)$
-^ERROR: --path-cov-fault-after 1: injecting std::bad_alloc after 1 decided claim\(s\)
-^Report Completeness: PARTIAL . this run did not conclude \(std::bad_alloc

@@ -1,7 +1,0 @@
-CORE
-contract.sol
---solidity-path-coverage --contract Gate3 --path-cov-outer-box outer.json --solidity-max-tx 1
-^ERROR: --path-cov-outer-box: REFUSING coordinate 'to': hi < lo \(lo=100, hi=11\), so the span contains no probe value
-malformed span in the SPEC, not a property of the path
-\A(?!(.|\n)*^VERIFICATION SUCCESSFUL$)
-\A(?!(.|\n)*^VERIFICATION FAILED$)

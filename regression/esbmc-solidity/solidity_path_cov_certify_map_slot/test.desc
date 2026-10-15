@@ -1,6 +1,0 @@
-CORE
-contract.sol
---contract SlotMin --solidity-path-coverage --solidity-max-tx 2 --focus-function put,take --path-cov-certify spec.json
-^--path-cov-certify: RESULT: CERTIFIED
-\A(?!(.|\n)*REFUSING THE QUERY)
-\A(?!(.|\n)*INTERNAL DEFECT)

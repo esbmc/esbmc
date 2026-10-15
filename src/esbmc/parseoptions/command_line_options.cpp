@@ -129,45 +129,8 @@ struct sigbuf
   }
 };
 
-// Path coverage counts complete paths, not decision edges, so it gets its own
-// summary rather than borrowing the branch metric's heading. The number is a
-// lower bound and carries no counterexample payload; that lives in
-// cov-ce-journal.json when --cov-report-json was given.
-void emit_path_coverage_on_signal()
-{
-  if (!goto_coveraget::path_cov_active.load(std::memory_order_relaxed))
-    return;
-  const size_t total =
-    goto_coveraget::total_paths_atomic.load(std::memory_order_relaxed);
-  const size_t decided =
-    goto_coveraget::live_decided.load(std::memory_order_relaxed);
-  const size_t claims =
-    goto_coveraget::claims_total_atomic.load(std::memory_order_relaxed);
-  size_t f = goto_coveraget::live_F.load(std::memory_order_relaxed);
-  if (f > total && total) // the numerator can never exceed the universe
-    f = total;
-
-  sigbuf b;
-  b.put(
-    "\n[Coverage]\nReport Completeness: PARTIAL — terminated by signal "
-    "before verification concluded\nComplete Paths : ");
-  b.put_uint(total);
-  b.put("\nClaims Decided : ");
-  b.put_uint(decided);
-  b.put(" of ");
-  b.put_uint(claims);
-  b.put("\nPath Status: F ");
-  b.put_uint(f);
-  b.put(
-    " (partial: LOWER BOUND, no cov-report.json was written, and this line "
-    "carries no counterexample payload. The payload for these paths is in "
-    "cov-ce-journal.json when --cov-report-json was given)\n");
-  b.flush();
-}
-
 void emit_coverage_on_signal()
 {
-  emit_path_coverage_on_signal();
   if (!goto_coveraget::branch_cov_active.load(std::memory_order_relaxed))
     return;
   const size_t total =
@@ -1020,72 +983,6 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 
   if (cmdline.isset("ts-check"))
     options.set_option("k-induction", true);
-
-  if (cmdline.isset("dump-violation-info"))
-    options.set_option(
-      "dump-violation-info", cmdline.getval("dump-violation-info"));
-
-  // Solidity complete-path coverage needs REVERTS to be observable rather than
-  // path-pruned: a `require`/`revert` failure is one of the paths it
-  // enumerates, and the legacy lowering both erases it
-  // (`__ESBMC_assume(false)`) and leaves the surviving edge byte-identical to a
-  // plain early `return`, so the exit cannot be classified. Publish the flag as
-  // a boolean here — BEFORE `config.options` is captured — because the frontend
-  // runs long before the coverage dispatch, and `get_bool_option` on the raw
-  // NULL-valued CLI flag would read as false. Setting it enables the in-tree
-  // revert-observation gate (solidity_convert.cpp), which is regression-locked
-  // by the assert_revert_* suite and, unlike --bound, does not change
-  // external-call modelling.
-  if (cmdline.isset("solidity-path-coverage"))
-    options.set_option("solidity-path-coverage-enabled", true);
-
-  // ---- --path-cov-arith-resolve: REFUSE rather than silently do nothing ----
-  //
-  // The mechanism re-solves a witnessed path claim with goto_check's own
-  // arithmetic conditions assumed. Those conditions only EXIST if a check was
-  // enabled, so without one there is nothing to assume and the flag would be a
-  // no-op that looks like a fix. This tool has already shipped a function that
-  // was never called and a guard that was always true; a third mechanism whose
-  // absence is invisible is not acceptable.
-  //
-  // The dependency is stated rather than papered over. Setting the check
-  // options from here would have to survive whatever the Solidity
-  // standard-checks expansion does to them afterwards, and a mechanism that
-  // depends on option-application ORDER is one that breaks the day the order
-  // changes -- silently, in the direction of doing nothing.
-  if (cmdline.isset("path-cov-arith-resolve"))
-  {
-    if (!cmdline.isset("solidity-path-coverage"))
-    {
-      log_error(
-        "--path-cov-arith-resolve is only meaningful with "
-        "--solidity-path-coverage: it re-solves a COMPLETE PATH claim, "
-        "and no other mode emits one.");
-      abort();
-    }
-    if (
-      !cmdline.isset("overflow-check") && !cmdline.isset("div-by-zero-check") &&
-      !cmdline.isset("unsigned-overflow-check"))
-    {
-      log_error(
-        "--path-cov-arith-resolve needs the conditions it is supposed to "
-        "assume, and no arithmetic check is enabled. Add --overflow-check "
-        "and/or --div-by-zero-check. Refusing rather than running: with no "
-        "check enabled goto_check emits no overflow / division-by-zero claim, "
-        "so this flag would re-solve nothing and report a clean run -- "
-        "indistinguishable from the defect being fixed.");
-      abort();
-    }
-    options.set_option("path-cov-arith-resolve", true);
-    log_status(
-      "--path-cov-arith-resolve: a witnessed path whose counterexample "
-      "violates an enabled arithmetic check will be re-solved ONCE with that "
-      "check's own condition assumed. A non-wrapping witness replaces the "
-      "wrapping one; if none exists the path is reachable only through a "
-      "checked-arithmetic revert, which is counted in its own cell and NOT "
-      "folded into U. The cost -- claims re-solved and seconds spent -- is "
-      "printed at the end of the run rather than left to be inferred.");
-  }
 
   config.options = options;
 }

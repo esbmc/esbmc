@@ -1,9 +1,0 @@
-CORE
-contract.sol
---solidity-path-coverage --contract Box --path-cov-certify cert.json --cov-report-json --solidity-max-tx 1
-^--path-cov-certify: CERTIFICATION QUERY for unit 'f' path enc=2 depth=1 over 1 bounded input\(s\)
-^✓ PASSED: 'f:path:2#exit0 at file .*contract.sol line 34 function f'
-^✗ FAILED: 'f:path:2#exit1 at file .*contract.sol line 36 function f'
-^  a = 10
-^  path_tr\$0 = 3
-^VERIFICATION FAILED$

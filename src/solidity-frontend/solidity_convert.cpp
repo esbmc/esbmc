@@ -215,20 +215,11 @@ bool solidity_convertert::convert()
   // Foundry `vm.expectRevert(...)` reuses the same revert-observation machinery
   // (the next-call `assert(_ESBMC_sol_reverted_flag)` needs reverts to be
   // marked rather than path-pruned), so its presence also enables the gate.
-  // `--solidity-path-coverage` also enables the gate: a require/revert failure
-  // is one of the complete paths it enumerates, so that path must stay FEASIBLE
-  // (marked + returned) instead of being pruned by the legacy
-  // `__ESBMC_assume(false)`. The emitted `_ESBMC_sol_mark_revert()` is
-  // additionally the only positive evidence that separates a reverting exit
-  // from a plain early `return` — both of which otherwise lower to the very
-  // same `IF <guard> THEN GOTO <END_FUNCTION>`. The mark/clear calls are tagged
-  // `skipped` and live in a library file, so they add no coverage obligations.
   {
     const std::string ast_str = src_ast_json.dump();
     uses_revert_observation =
       ast_str.find("__ESBMC_reverted") != std::string::npos ||
-      ast_str.find("expectRevert") != std::string::npos ||
-      config.options.get_bool_option("solidity-path-coverage-enabled");
+      ast_str.find("expectRevert") != std::string::npos;
   }
 
   // AST rewrite: specialize internal function-pointer parameters whose

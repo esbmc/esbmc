@@ -168,19 +168,6 @@ void counterexample_value(
   const expr2tc &identifier,
   const expr2tc &value);
 
-// Dump a structured JSON description of the counter-example for tools
-// that post-process it. Extracts:
-//   - oracle tuple (contract, function, bug_type, in_function_offset_lines)
-//   - trace_methods: Solidity contract methods stepped through before the
-//     violation (derived from per-step source locations, not stderr text)
-//   - locked_symbols: mandatory-set seed (containing function, its
-//     constructors, referenced modifiers) for the external driver.
-// Returns true on successful write, false on I/O or extraction failure.
-bool dump_violation_info_json(
-  const std::string &path,
-  const class namespacet &ns,
-  const goto_tracet &goto_trace);
-
 void generate_html_report(
   const std::string_view uuid,
   const namespacet &ns,

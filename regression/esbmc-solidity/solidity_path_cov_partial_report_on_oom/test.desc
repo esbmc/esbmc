@@ -1,6 +1,0 @@
-CORE
-contract.sol
---solidity-path-coverage --cov-report-json --solidity-max-tx 1 --path-cov-fault-after 1
-^Report Completeness: PARTIAL . this run did not conclude \(std::bad_alloc
-^U Reasons: named-obstacle 0, unit-not-entered 0, bounded-holds 0, solver-unknown 0, not-solved-this-run 0, run-died-before-solving [1-9][0-9]*, claim-budget-exceeded 0$
-^Coverage report written to cov-report\.json$

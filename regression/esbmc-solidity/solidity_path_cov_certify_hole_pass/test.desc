@@ -1,9 +1,0 @@
-CORE
-contract.sol
---solidity-path-coverage --contract Gate2 --path-cov-certify certify.json --solidity-max-tx 1
-^--path-cov-certify: RESULT: CERTIFIED — every input the box admits walks path enc=3
-NON-VACUITY was witnessed
-^✗ FAILED: 'send:path:3#nonvacuous at file .*contract.sol line 37 function send'
-^VERIFICATION FAILED$
-^--path-cov-certify: the box is a PUNCHED interval \(Definition 5\) — 1 value\(s\) are removed across 1 coordinate\(s\)
-assumed 1 input bound\(s\) \(1 hole\(s\) punched\) at entry

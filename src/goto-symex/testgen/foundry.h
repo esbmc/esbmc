@@ -61,41 +61,6 @@ private:
     std::vector<sol_arg> args;
     bool supported = true; // false if any arg type could not be formatted
     bool reverts = false;  // covered edge reverts -> wrap in vm.expectRevert()
-    // The covered path's exit is CONFIRMED normal, so the call is emitted bare
-    // -- no try/catch. That bareness IS the assertion: a revert at run time
-    // fails the test. Distinct from `!reverts`, which until now meant only
-    // "not confirmed to revert" and was emitted revert-tolerantly, i.e. with no
-    // assertion at all.
-    //
-    // The three states must stay three. Collapsing "confirmed normal" into
-    // "not confirmed to revert" is what made every generated test
-    // assertion-free, and collapsing "not confirmed" into "normal" would assert
-    // that a reverting transaction succeeded. Only complete-path coverage
-    // supplies the distinction (goto_coveraget's revert / rollback_revert /
-    // undetermined_exit sets); branch coverage has no third state and leaves
-    // this false, keeping its output byte-identical.
-    bool normal_confirmed = false;
-    // This call's covered path is a NAMED OBSTACLE: the model admits an
-    // execution the chain does not have, so the counterexample behind it may
-    // describe something that cannot happen and a test built from it is RED on
-    // the UNMODIFIED contract.
-    //
-    // goto_coverage.h states the rule outright -- "a marked path ... must not
-    // be turned into a test. Marking without excluding would be worthless" --
-    // and the marking half was the only half implemented. MEASURED:
-    // named_obstacle_paths has exactly three readers and all three sit under
-    // `if (tri == "U")` in bmc.cpp, so a REFUTED path never reaches any of
-    // them. Refuted is the only kind that ever becomes a test. The regression
-    // solidity_path_cov_residual_unit_call_obstacle pins 5 obstacle paths of
-    // which just ONE shows as `named-obstacle` in the report -- the other four
-    // are F, and flowed straight through to this generator.
-    //
-    // Set from the SAME (comment, location) key the census stores, alongside
-    // the normal_exit_paths lookup, rather than by matching the prettified
-    // claim text later: a detector keyed on a string that does not round-trip
-    // is a detector that never fires, which is the failure this is fixing, one
-    // layer down.
-    bool named_obstacle = false;
     // ③A0 environment pinning: the msg.value the solver picked for this call's
     // transaction (recovered from the per-tx `_sol_per_tx_reseed`). Emitted as
     // `{value: N}` ONLY when `payable` — sending value to a non-payable method
@@ -142,40 +107,28 @@ private:
   std::string source_file;
   mutable std::mutex data_mutex;
 
-  /// Counterexamples REFUSED because their path is a named obstacle (see
-  /// sol_call::named_obstacle). Counted rather than silently dropped: a
-  /// suppression that leaves no trace is indistinguishable from a path that was
-  /// never witnessed, and the whole point of the obstacle machinery is that an
-  /// excluded path is excluded VISIBLY. Reported by generate() next to the
-  /// bare/try-catch counts, in the same absolute-number style the obstacle
-  /// warning already uses -- an obstacle is not partial credit.
-  size_t suppressed_obstacle = 0;
-
   /// Counterexamples REFUSED because every call they reconstructed is a
   /// CONSTRUCTOR, so the test function they would produce has an EMPTY BODY.
   ///
   /// MEASURED end to end on aqua: `dock` and `ship` each emitted
   ///
-  ///     // claim: sol:@C@Aqua@F@dock#3088:path:12, ...:path:2
   ///     function test_cov_0() public {
   ///     }
   ///
-  /// naming two witnessed paths and executing neither, and `forge test`
-  /// reported `[PASS] test_cov_0() (gas: 188)` -- it passes BECAUSE it does
-  /// nothing. That is worse than a missing test: it is counted as emitted,
-  /// counted as passing, and the only thing distinguishing it from a real test
-  /// is reading the body. Two of the six files the aqua round-trip produced
-  /// were of this shape.
+  /// and `forge test` reported `[PASS] test_cov_0() (gas: 188)` -- it passes
+  /// BECAUSE it does nothing. That is worse than a missing test: it is counted
+  /// as emitted, counted as passing, and the only thing distinguishing it from
+  /// a real test is reading the body. Two of the six files the aqua round-trip
+  /// produced were of this shape.
   ///
   /// The cause is structural rather than exotic: the emission loop skips a call
   /// whose method IS its contract (`continue; // constructor -> setUp()`), so a
   /// case that reconstructed only a constructor segment leaves nothing behind.
   ///
-  /// Refused in collect(), beside the obstacle refusal and for the same stated
-  /// reason: the case must never enter `test_cases`, or dedup can collapse it
-  /// onto a legitimate case by fingerprint and ship one under the other's
-  /// provenance. Counted, and reported by generate() -- a silent refusal is
-  /// indistinguishable from a path that was never witnessed.
+  /// Refused in collect(): the case must never enter `test_cases`, or dedup can
+  /// collapse it onto a legitimate case by fingerprint and ship one under the
+  /// other's provenance. Counted, and reported by generate() -- a silent
+  /// refusal is indistinguishable from a path that was never witnessed.
   size_t suppressed_empty_body = 0;
 
   /// WHY the body was empty. `suppressed_empty_body` says a case reconstructed
@@ -355,38 +308,10 @@ private:
     std::set<std::string> &out_imports);
 
   /// Reconstruct the ordered call sequence of one counterexample from its SSA.
-  ///
-  /// `out_claims` returns the VERIFICATION OBLIGATION(S) this case was
-  /// reconstructed from — the guard-true coverage claims' identities, e.g.
-  /// `pull:path:63`. Empty when none could be read.
   test_case reconstruct(
     const symex_target_equationt &target,
     smt_convt &smt_conv,
-    const namespacet &ns,
-    std::string &out_claims) const;
-
-  /// Originating claim identity per reconstructed case, keyed by the case's
-  /// dedup fingerprint.
-  ///
-  /// WHY THIS EXISTS. Until it did, a generated test could not say which
-  /// verification obligation produced it: every case was a bare `test_cov_N`
-  /// with a call and a comment. Measured consequence on aqua: the
-  /// whole-contract run witnesses 15 counterexamples across 6 units and emits 4
-  /// cases naming 3, with `pull` — witnessed under exactly the same path ids as
-  /// the focused run — absent entirely. Whether its counterexamples were
-  /// DROPPED or RENAMED as another method could not be decided from the
-  /// artifact, because the artifact carries no link back to the report.
-  ///
-  /// The link is worth having beyond that bug. Every acceptance criterion in
-  /// this project compares "what was measured" against "what was shipped", and
-  /// a test that cannot name its obligation cannot be audited against the
-  /// report it came from. "Verifier-derived" is a claim about provenance; this
-  /// is what makes it checkable rather than asserted.
-  ///
-  /// Keyed by fingerprint because dedup already keys on it, so several
-  /// counterexamples collapsing onto one emitted case are visible as several
-  /// claims on that case rather than silently losing all but the first.
-  std::map<std::string, std::string> claims_by_fingerprint;
+    const namespacet &ns) const;
 
   /// Deduplication fingerprint for a reconstructed test case.
   static std::string fingerprint(const test_case &tc);

@@ -763,7 +763,7 @@ bool esbmc_parseoptionst::is_solidity_input() const
 // and the two that carry Solidity meaning are opt-in via --bounds-check and
 // --div-by-zero-check.
 //
-// Under branch, condition or path coverage the user and library assertions
+// Under branch or condition coverage the user and library assertions
 // are dropped as well, so they are not counted as coverage goals. Must run
 // before goto_convert, which is where no-assertions is consumed.
 void esbmc_parseoptionst::set_solidity_check_defaults(optionst &options) const
@@ -781,8 +781,7 @@ void esbmc_parseoptionst::set_solidity_check_defaults(optionst &options) const
     cmdline.isset("condition-coverage") ||
     cmdline.isset("condition-coverage-claims") ||
     cmdline.isset("condition-coverage-rm") ||
-    cmdline.isset("condition-coverage-claims-rm") ||
-    cmdline.isset("solidity-path-coverage");
+    cmdline.isset("condition-coverage-claims-rm");
   if (branch_or_cond_cov)
     options.set_option("no-assertions", true);
 }

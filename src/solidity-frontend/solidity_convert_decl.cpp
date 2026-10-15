@@ -69,141 +69,6 @@ bool solidity_convertert::get_non_function_decl(
   return false;
 }
 
-// ---------------------------------------------------------------------------
-// AST-level facts that only the AST can supply, recorded on the function symbol
-// for later passes. Both come from ONE walk of the function body.
-//
-// (1) `this.f(...)` call sites.  On a real EVM this is an EXTERNAL call: it
-//     re-enters through the ABI, so inside `f` the value of `msg.sender` is the
-//     CONTRACT'S OWN ADDRESS, not the original caller. The frontend lowers it
-//     to the same direct call as a plain `f(a)` (measured), which keeps the
-//     caller's msg.sender — so the model is not merely missing a branch, it
-//     disagrees with the EVM. A `require(msg.sender == owner)` inside `f` fails
-//     on-chain when reached via `this.f()` and can pass in the model. Any test
-//     generated from such a path is red when run, while being labelled
-//     certified. Recording the site here lets the test emitter declare a NAMED
-//     OBSTACLE and refuse to emit, instead of emitting something wrong.
-//     Detection is syntactically trivial and must not wait for the emitter:
-//     otherwise the requirement lives only in prose and is lost at the next
-//     handover.
-//
-// (2) The number of VALUE-RETURNING `return` statements written in the source.
-//     The path enumeration works on the goto program; a source-level exit that
-//     the frontend dropped before goto conversion is invisible there, and this
-//     count is the only independent witness that such an exit existed.
-//
-//     Only value-returning returns are counted, and that restriction is load
-//     bearing: a bare `return;` lowers to a plain jump to END_FUNCTION and
-//     produces no RETURN instruction at all, so counting it made the consumer
-//     hard-fail on a correct program (measured on a function whose only exit
-//     statement is `return;`). Undercounting is the safe direction here — the
-//     check only ever asserts "if the source returns values, some enumerated
-//     path must end at a RETURN", which is what the value-returning case
-//     guarantees.
-static void collect_path_cov_ast_facts(
-  const nlohmann::json &node,
-  unsigned &return_sites,
-  std::vector<std::string> &this_call_names)
-{
-  if (node.is_array())
-  {
-    for (const auto &e : node)
-      collect_path_cov_ast_facts(e, return_sites, this_call_names);
-    return;
-  }
-  if (!node.is_object())
-    return;
-
-  if (node.contains("nodeType") && node["nodeType"].is_string())
-  {
-    const std::string nt = node["nodeType"].get<std::string>();
-    if (nt == "Return")
-    {
-      if (node.contains("expression") && !node["expression"].is_null())
-        ++return_sites;
-    }
-    // this.f(...) == FunctionCall( MemberAccess( Identifier "this", "f" ) )
-    else if (nt == "FunctionCall" && node.contains("expression"))
-    {
-      const nlohmann::json &callee = node["expression"];
-      if (
-        callee.is_object() && callee.value("nodeType", "") == "MemberAccess" &&
-        callee.contains("expression"))
-      {
-        const nlohmann::json &base = callee["expression"];
-        if (
-          base.is_object() && base.value("nodeType", "") == "Identifier" &&
-          base.value("name", "") == "this")
-          this_call_names.push_back(callee.value("memberName", "?"));
-      }
-    }
-  }
-
-  for (auto it = node.begin(); it != node.end(); ++it)
-    if (it.value().is_object() || it.value().is_array())
-      collect_path_cov_ast_facts(it.value(), return_sites, this_call_names);
-}
-
-void solidity_convertert::stamp_path_cov_ast_facts(
-  const nlohmann::json &ast_node)
-{
-  if (!ast_node.contains("body") || ast_node["body"].is_null())
-    return;
-
-  std::string name, id;
-  get_function_definition_name(ast_node, name, id);
-  symbolt *sym = context.find_symbol(id);
-  if (sym == nullptr)
-    return;
-
-  unsigned return_sites = 0;
-  std::vector<std::string> this_calls;
-  collect_path_cov_ast_facts(ast_node["body"], return_sites, this_calls);
-
-  // Only a function with EXACTLY ONE return parameter is guaranteed to lower a
-  // value-returning `return` to a RETURN instruction. With two or more, the
-  // frontend routes the values into the function's tuple_instance and emits a
-  // BARE `return;` — which lowers to a plain jump to END_FUNCTION, exactly like
-  // a valueless source return. The exits are still enumerated (at
-  // END_FUNCTION); only the instruction kind differs.
-  //
-  // Measured: this misfired on the real benchmark `Aqua::rawBalances` and was
-  // reproduced on a two-line contract (a `returns (uint256, uint256)` function
-  // trips it, the same body with one return parameter does not). Reporting zero
-  // for the multi-return case keeps the count on the safe side — the consumer's
-  // rule is "if the source returns values then some path must end at a RETURN",
-  // and undercounting only ever loses a check, never invents one.
-  unsigned ret_params = 0;
-  if (
-    ast_node.contains("returnParameters") &&
-    ast_node["returnParameters"].contains("parameters"))
-    ret_params = (unsigned)ast_node["returnParameters"]["parameters"].size();
-  if (ret_params != 1)
-    return_sites = 0;
-
-  {
-    typet t = sym->get_type();
-    t.set("#sol_ast_return_sites", std::to_string(return_sites));
-    sym->set_type(std::move(t));
-  }
-  if (!this_calls.empty())
-  {
-    std::string names;
-    for (const auto &n : this_calls)
-      names += (names.empty() ? "" : ";") + n;
-    {
-      typet t = sym->get_type();
-      t.set("#sol_this_call_count", std::to_string(this_calls.size()));
-      sym->set_type(std::move(t));
-    }
-    {
-      typet t = sym->get_type();
-      t.set("#sol_this_call_names", names);
-      sym->set_type(std::move(t));
-    }
-  }
-}
-
 bool solidity_convertert::get_function_decl(const nlohmann::json &ast_node)
 {
   if (!ast_node.contains("nodeType"))
@@ -225,13 +90,7 @@ bool solidity_convertert::get_function_decl(const nlohmann::json &ast_node)
   {
   case SolidityGrammar::ContractBodyElementT::FunctionDef:
   {
-    if (get_function_definition(ast_node)) // rule function-definition
-      return true;
-    // Record the AST-only facts on the symbol just created. Done here rather
-    // than inside get_function_definition so the walk sees the ORIGINAL body
-    // AST, before any lowering can drop a source-level exit.
-    stamp_path_cov_ast_facts(ast_node);
-    return false;
+    return get_function_definition(ast_node); // rule function-definition
   }
   case SolidityGrammar::ContractBodyElementT::VarDecl:
   case SolidityGrammar::ContractBodyElementT::StructDef:
@@ -1316,8 +1175,7 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &struct_def)
     // st1inch (4874 lines -> 17). The same file with the structs renamed
     // `AlphaData` / `BetaData` and nothing else changed completes normally;
     // that one-variable pair is the whole diagnosis. st1inch hits it through
-    // AddressArray.Data + AddressSet.Data, which is why the path-coverage
-    // collector has to carry `--z3 --tuple-node-flattener` as a workaround.
+    // AddressArray.Data + AddressSet.Data.
     //
     // WHY HERE AND NOT IN z3_conv: a sort name has to be STABLE across the
     // repeated mk_struct_sort calls for one type, so "make it unique" cannot

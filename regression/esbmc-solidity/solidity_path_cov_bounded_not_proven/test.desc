@@ -1,9 +1,0 @@
-CORE
-contract.sol
---solidity-path-coverage --solidity-max-tx 0 --unwind 2
-^--solidity-path-coverage: instrumented 4 complete path\(s\) across 1 unit\(s\)
-^Complete Paths : 4$
-^Reached : 3$
-^Path Exits: normal 3, revert 1, undetermined 0$
-^Path Status: F 3, I 0, U 1$
-^COVERAGE ANALYSIS COMPLETE$

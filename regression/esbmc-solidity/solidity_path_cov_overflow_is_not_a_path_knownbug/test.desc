@@ -1,7 +1,0 @@
-KNOWNBUG
-contract.sol
---solidity-path-coverage --contract C --solidity-max-tx 1 --overflow-check
-^--solidity-path-coverage: instrumented 4 complete path\(s\) across 1 unit\(s\)
-^Complete Paths : 4$
-^Path Exits: normal 1, revert 3, undetermined 0$
-^VERIFICATION FAILED$

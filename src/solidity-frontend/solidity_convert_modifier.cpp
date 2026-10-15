@@ -182,18 +182,11 @@ bool solidity_convertert::get_function_definition(
   // `mark + return` (a real branch) instead of legacy path-pruning.  See
   // build_revert_rollback_block.
   //
-  // Libraries and free functions used to be excluded, and that exclusion was
-  // measured to be the worst defect in the path-coverage pipeline. Their
-  // `require(c)` was lowered to a bare `assume(c)` with NO control flow, so the
-  // `!c` execution did not exist in the model at all while on-chain it reverts.
-  // The damage does not stop at an incomplete decision set: the `!c` inputs
-  // belong to no enumerated path, so the downstream subtraction can never
-  // remove them, the interval bound is a syntactic product that cannot carry
-  // `c`, and the certifying query itself runs under the same `assume(c)` — so a
-  // candidate gets certified over inputs the verifier never saw, and the
-  // emitted test reverts on the UNMODIFIED contract while claiming to be
-  // certified. `require` inside a library is the standard shape (OpenZeppelin
-  // SafeERC20, every SafeMath variant), so this was not a corner case.
+  // Libraries and free functions used to be excluded. Their `require(c)` was
+  // lowered to a bare `assume(c)` with NO control flow, so the `!c` execution
+  // did not exist in the model at all while on-chain it reverts. `require`
+  // inside a library is the standard shape (OpenZeppelin SafeERC20, every
+  // SafeMath variant), so this was not a corner case.
   //
   // Still excluded, for reasons that are about semantics rather than scope:
   //   * EventDefinition / ErrorDefinition — not real functions; their bodies
@@ -404,25 +397,6 @@ bool solidity_convertert::get_function_definition(
         code_returnt implicit_ret;
         implicit_ret.return_value() = named_ret_syms[0];
         implicit_ret.location() = location_begin;
-        // Falling off the end of a function with a named return IS a normal
-        // exit -- solc returns the named variable -- so this synthesised RETURN
-        // carries the same positive marker a written `return r;` would.
-        //
-        // Without it the path-coverage exit census has no witness at all here:
-        // symex ends the frame AT a RETURN and never reaches END_FUNCTION, so
-        // `saw_epilogue` is always false at a RETURN exit and the marker is the
-        // ONLY evidence such an exit can ever have. Measured before the fix:
-        // aqua's `Aqua.ship` -- named `returns(bytes32 strategyHash)` with no
-        // `return` statement anywhere -- produced 62 undetermined exits, all
-        // attributed to this location, and R0 can emit nothing on an
-        // undetermined exit.
-        //
-        // Safe against the case the census exists to prevent (calling a
-        // reverted run "normal"): classify_exit tests rollback FIRST, so a path
-        // that reverted before reaching here is still a rollback exit. The
-        // fixture pair for that is a named fall-off unit with a `require` on
-        // one path -- one path must stay revert while the other becomes normal.
-        implicit_ret.location().set("sol_source_return", true);
         new_body.copy_to_operands(implicit_ret);
       }
       else if (

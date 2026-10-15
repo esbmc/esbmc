@@ -1,8 +1,0 @@
-CORE
-contract.sol
---solidity-path-coverage --cov-report-json --solidity-max-tx 1 --path-cov-fault-sigterm 1
-^Report Completeness: PARTIAL . terminated by signal before verification concluded$
-^Complete Paths : 4$
-^Claims Decided : 1 of 4$
-^Path Status: F 1 \(partial: LOWER BOUND, no cov-report\.json was written, and this line carries no counterexample payload\. The payload for these paths is in cov-ce-journal\.json when --cov-report-json was given\)$
-\A(?!(?:.|\n)*Coverage report written to cov-report\.json)

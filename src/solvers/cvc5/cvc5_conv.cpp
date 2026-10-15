@@ -2,7 +2,6 @@
 #include <util/lang/c_types.h>
 #include <util/arith/mp_arith.h>
 #include <cvc5_conv.h>
-#include <solvers/solve.h>
 
 #define new_ast new_solver_ast<cvc5_smt_ast>
 
@@ -38,18 +37,6 @@ cvc5_convt::cvc5_convt(const namespacet &ns, const optionst &options)
   // Already initialized stuff in the constructor list,
   slv.setOption("produce-models", "true");
   slv.setOption("produce-assertions", "true");
-  // Per-query budget (--path-cov-claim-timeout). `tlimit-per` is cvc5's
-  // per-check-sat wall-clock limit in milliseconds, as opposed to `tlimit`,
-  // which is cumulative over the solver's whole lifetime -- the wrong one here,
-  // because a path-coverage run reuses one solver instance under
-  // --smt-during-symex and a cumulative limit would abandon every claim after
-  // the budget rather than each claim that exceeds it.
-  if (const uint64_t ms = smt_per_query_timeout_ms(options))
-  {
-    slv.setOption("tlimit-per", std::to_string(ms));
-    smt_record_timeout_mechanism(
-      "cvc5: native option `tlimit-per` (per check-sat, milliseconds)");
-  }
 }
 
 smt_resultt cvc5_convt::dec_solve()

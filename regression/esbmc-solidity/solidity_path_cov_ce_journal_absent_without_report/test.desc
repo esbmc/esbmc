@@ -1,6 +1,0 @@
-CORE
-contract.sol
---solidity-path-coverage --solidity-max-tx 1
-^Complete Paths : 4$
-^Path Status: F 4, I 0, U 0$
-\A(?!(?:.|\n)*CE journal)

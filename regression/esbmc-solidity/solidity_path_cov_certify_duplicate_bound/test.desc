@@ -1,5 +1,0 @@
-CORE
-contract.sol
---solidity-path-coverage --contract Box --path-cov-certify cert.json --solidity-max-tx 1
-^ERROR: --path-cov-certify: unit 'sol:@C@Box@F@f#18' — REFUSING THE QUERY on coordinate 'a': the coordinate is bounded TWICE in this spec
-REFUSING THE QUERY[^\n]*\s*\Z

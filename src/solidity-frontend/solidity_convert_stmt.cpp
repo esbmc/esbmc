@@ -311,15 +311,6 @@ bool solidity_convertert::get_block(
         }
         expr_frontBlockDecl.clear();
       }
-      // Carry the source-return marker across the location overwrite below.
-      // `cl` is rebuilt from the AST node, so assigning it would erase the flag
-      // that get_statement's ReturnStatement arm just stamped — silently, and
-      // only for returns that are direct children of a block (a brace-less
-      // `if (c) return x;` goes through a different arm and would keep it).
-      // A marker that survives in one syntactic position and not the other is
-      // worse than no marker at all.
-      if (statement.location().get_bool("sol_source_return"))
-        cl.set("sol_source_return", true);
       statement.location() = cl;
       convert_expression_to_code(statement);
       _block.operands().push_back(statement);
@@ -559,52 +550,6 @@ bool solidity_convertert::get_statement(
       return true;
     }
 
-    // FRONTEND CONTRACT: a normal exit must carry POSITIVE evidence.
-    //
-    // Downstream (complete-path coverage) has to tell an ordinary exit from a
-    // reverting one. The only positive evidence available was "did this path
-    // walk the function epilogue?", and the epilogue is emitted AFTER the
-    // RETURN — which a returning path never reaches. So every value-returning
-    // function's normal exit was classified `undetermined`, and since getters
-    // and views all return values, that is most of a real contract.
-    //
-    // The alternative that was rejected is the negative inference "no revert
-    // marker was seen, therefore normal". That is exactly the shape of
-    // reasoning that produced the RETURN-exit bug, and the revert-observation
-    // gate has declared scope gaps (constructors), so absence of a mark is not
-    // evidence.
-    //
-    // This is the positive half: the frontend knows which RETURNs it lowered
-    // from a source `return` and which it synthesised itself for a failing
-    // `require` (`{ *this = _sol_save_this; return [nondet]; }`). Only the
-    // former is marked. Downstream then has an affirmative fact rather than an
-    // absence.
-    //
-    // Deliberately a LOCATION FLAG rather than a marker CALL symmetric to
-    // `_ESBMC_sol_mark_revert`. A call is an extra instruction in a program
-    // whose paths are being counted: it would have to be excluded from the
-    // decision set, from the inliner's callee predicate and from the exit
-    // census, and each exclusion is a place to get it wrong. A location flag
-    // changes the goto program's SHAPE not at all, which for a pass that
-    // exists to count paths is worth more than the symmetry.
-    // Stamped in TWO places on purpose, because the location of a statement is
-    // reassigned twice on its way out and either assignment silently drops it:
-    // get_statement overwrites `new_expr.location()` with `loc` before
-    // returning, and get_block then overwrites it again with its own `cl`.
-    // MEASURED — the exprt-only stamp arrived as `flag=true` and was read back
-    // `false` one call later.
-    //
-    // So: mark `loc` (which get_statement's own assignment carries), mark the
-    // exprt (for the arms that `return false` early and never reach that
-    // assignment), and carry the flag across `cl` in get_block. Each covers a
-    // different exit route; a marker that survives only some of them is worse
-    // than none, because the resulting classification would depend on where the
-    // `return` happens to sit syntactically.
-    loc.set("sol_source_return", true);
-    auto mark_source_return = [](exprt &e) {
-      e.location().set("sol_source_return", true);
-    };
-
     // 1. get return type
     // TODO: Fix me! Assumptions:
     //  a). It's "return <expr>;" not "return;"
@@ -618,7 +563,6 @@ bool solidity_convertert::get_statement(
     {
       // "return;"
       code_returnt ret_expr;
-      mark_source_return(ret_expr);
       new_expr = ret_expr;
       return false;
     }
@@ -647,7 +591,6 @@ bool solidity_convertert::get_statement(
       convert_expression_to_code(inner);
       block.copy_to_operands(inner);
       code_returnt void_ret;
-      mark_source_return(void_ret);
       block.copy_to_operands(void_ret);
       new_expr = block;
       return false;
@@ -826,7 +769,6 @@ bool solidity_convertert::get_statement(
       }
       // do return in the end
       exprt return_expr = code_returnt();
-      mark_source_return(return_expr);
       move_to_back_block(return_expr);
 
       new_expr = code_skipt();
@@ -989,7 +931,6 @@ bool solidity_convertert::get_statement(
     else
       solidity_gen_typecast(ns, rhs, return_type);
     ret_expr.return_value() = rhs;
-    mark_source_return(ret_expr);
 
     new_expr = ret_expr;
 

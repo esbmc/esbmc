@@ -1,7 +1,0 @@
-CORE
-contract.sol
---contract St --solidity-path-coverage --solidity-max-tx 1 --path-cov-assert spec.json
-^ERROR: --path-cov-assert: unit '[^']*' -- REFUSING THE LADDER: path enc=99 is not among this unit's 2 enumerated path\(s\)
-would print VERIFICATION SUCCESSFUL for a ladder it never built
-\A(?!(.|\n)*^VERIFICATION SUCCESSFUL$)
-\A(?!(.|\n)*^VERIFICATION FAILED$)

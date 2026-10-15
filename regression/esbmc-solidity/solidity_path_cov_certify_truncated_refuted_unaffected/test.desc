@@ -1,7 +1,0 @@
-CORE
-contract.sol
---solidity-path-coverage --contract Trunc --path-cov-certify cert.json --solidity-max-tx 1
-^WARNING: Coverage may be UNDER-REPORTED: 1 loop\(s\) hit the unwind bound
-^--path-cov-certify: RESULT: REFUTED — 1 of 4 exit assert\(s\) were refuted
-^✗ FAILED: 'f:path:6#nonvacuous at file .*contract\.sol line 67 function f'
-\A(?!(.|\n)*RESULT: UNDECIDED-TRUNCATED)
