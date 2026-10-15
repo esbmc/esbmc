@@ -2960,6 +2960,13 @@ private:
     const nlohmann::json &value,
     const std::string &function) const;
   exprt list_argument_expr(const nlohmann::json &arg);
+  /// The return type of a function stored as a dict value: a lambda's
+  /// inferred type, or a named function's declared one. Empty otherwise.
+  typet stored_function_return_type(const nlohmann::json &value);
+  /// The return type every function stored into the dict `container` (a
+  /// literal or a name) shares; nothing when a stored value is not a function.
+  std::optional<typet>
+  dict_function_return_type(const nlohmann::json &container);
   typet subscript_call_return_type(
     const exprt &func_ptr,
     const nlohmann::json &func_node);

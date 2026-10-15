@@ -857,6 +857,104 @@ exprt python_converter::list_argument_expr(const nlohmann::json &arg)
   return elements ? *elements : get_expr(arg);
 }
 
+// Whether `node` is the name `name`.
+static bool is_name(const nlohmann::json &node, const std::string &name)
+{
+  return node.is_object() && node.value("_type", "") == "Name" &&
+         node.value("id", "") == name;
+}
+
+// Append every value of a dict literal, or `value` itself when it is not one.
+static void
+push_dict_values(const nlohmann::json &value, std::vector<nlohmann::json> &out)
+{
+  if (value.is_object() && value.value("_type", "") == "Dict")
+    for (const auto &v : value["values"])
+      out.push_back(v);
+  else
+    out.push_back(value);
+}
+
+// The values a store statement puts into the dict `name`: `name = {...}`,
+// `name[k] = v`, `name.update({...})` and `name.setdefault(k, v)`.
+static void collect_dict_stores(
+  const nlohmann::json &node,
+  const std::string &name,
+  std::vector<nlohmann::json> &out)
+{
+  const std::string type = node.value("_type", "");
+  if (type == "Assign" || type == "AnnAssign")
+  {
+    const nlohmann::json targets = type == "Assign"
+                                     ? node["targets"]
+                                     : nlohmann::json::array({node["target"]});
+    for (const auto &t : targets)
+      if (
+        is_name(t, name) ||
+        (t.value("_type", "") == "Subscript" && is_name(t["value"], name)))
+        push_dict_values(node["value"], out);
+    return;
+  }
+  if (
+    type != "Call" || node["func"].value("_type", "") != "Attribute" ||
+    !is_name(node["func"]["value"], name) || node["args"].empty())
+    return;
+  const std::string attr = node["func"].value("attr", "");
+  if (attr == "update")
+    push_dict_values(node["args"][0], out);
+  else if (attr == "setdefault" && node["args"].size() > 1)
+    out.push_back(node["args"][1]);
+}
+
+// Every value the program may store into the dict named `name`. Scoping is
+// ignored, so a same-named dict elsewhere only adds candidates.
+static void collect_dict_values(
+  const nlohmann::json &node,
+  const std::string &name,
+  std::vector<nlohmann::json> &out)
+{
+  if (node.is_object())
+    collect_dict_stores(node, name, out);
+  if (node.is_object() || node.is_array())
+    for (const auto &child : node)
+      collect_dict_values(child, name, out);
+}
+
+typet python_converter::stored_function_return_type(const nlohmann::json &value)
+{
+  if (value.value("_type", "") == "Lambda" && value.contains("body"))
+    return lambda_handler_->infer_lambda_return_type(value["body"]);
+  if (value.value("_type", "") != "Name")
+    return typet();
+  const exprt fn = get_expr(value);
+  const typet &t = fn.type().is_pointer() ? fn.type().subtype() : fn.type();
+  return t.is_code() ? to_code_type(t).return_type() : typet();
+}
+
+std::optional<typet>
+python_converter::dict_function_return_type(const nlohmann::json &container)
+{
+  std::vector<nlohmann::json> values;
+  if (container.value("_type", "") == "Dict")
+    push_dict_values(container, values);
+  else if (container.value("_type", "") == "Name")
+    collect_dict_values(*ast_json, container["id"], values);
+
+  std::optional<typet> shared;
+  for (const auto &v : values)
+  {
+    const typet ret = stored_function_return_type(v);
+    if (ret.is_nil() || ret.id().empty())
+      return std::nullopt;
+    if (shared && *shared != ret)
+      throw std::runtime_error(
+        "unsupported: a dict holds functions with different return types, "
+        "so the type of a call through it is not known");
+    shared = ret;
+  }
+  return shared;
+}
+
 typet python_converter::subscript_call_return_type(
   const exprt &func_ptr,
   const nlohmann::json &func_node)
@@ -870,6 +968,12 @@ typet python_converter::subscript_call_return_type(
     if (!ret.is_nil() && !ret.is_empty())
       return ret;
   }
+
+  // A dict holds its functions by a pointer with no return type, so take the
+  // one every function stored into that dict returns.
+  if (
+    std::optional<typet> stored = dict_function_return_type(func_node["value"]))
+    return *stored;
 
   // Otherwise prefer the current function's declared return type, then try
   // to infer from any lambda body in the dict literal.
