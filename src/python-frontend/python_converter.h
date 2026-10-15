@@ -1264,6 +1264,28 @@ private:
     const typet &type,
     const std::string &annotated_type) const;
 
+  // Attributes stored None that none_attribute_type could not type: those
+  // whose every write is a plain store carry a None flag per instance, the
+  // others are refused in arithmetic.
+  mutable std::set<std::string> untyped_none_attributes_;
+  mutable std::set<std::string> none_flagged_attributes_;
+
+  void add_none_flag_component(
+    struct_typet &clazz,
+    const std::string &attr_name) const;
+  exprt none_flag_of_attribute(const exprt &operand) const;
+  void guard_none_attribute_operands(
+    const std::string &op,
+    const nlohmann::json &left,
+    const nlohmann::json &right,
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &element);
+  void set_none_flag(
+    const exprt &lhs,
+    const nlohmann::json &ast_node,
+    codet &target_block) const;
+
   /**
    * @brief Build a tuple struct type from an AST value node when the annotation
    *        is bare `tuple`.
