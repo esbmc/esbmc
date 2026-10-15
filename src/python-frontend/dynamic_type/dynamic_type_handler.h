@@ -119,7 +119,8 @@ public:
    */
   bool scope_assigns_divergent_literal_types(
     const std::string &name,
-    const nlohmann::json &scope_body) const;
+    const nlohmann::json &scope_body,
+    const nlohmann::json &module_body = nlohmann::json()) const;
 
   /**
    * @brief Builds a tagged-object temporary from an already-converted

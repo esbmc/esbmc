@@ -125,7 +125,7 @@ std::unordered_set<std::string> dynamic_type_handler::detect_dynamic_type_names(
   }
 
   if (!collect_if_node_literal_kinds(
-        if_node, kinds, leaf_count, leaf_total, *scope_body))
+        if_node, kinds, leaf_count, leaf_total, *scope_body, module_body))
     return dynamic_type_names;
 
   for (const auto &[name, kind_set] : kinds)
@@ -896,10 +896,11 @@ bool dynamic_type_handler::detect_dynamic_return_type(
 
 bool dynamic_type_handler::scope_assigns_divergent_literal_types(
   const std::string &name,
-  const nlohmann::json &scope_body) const
+  const nlohmann::json &scope_body,
+  const nlohmann::json &module_body) const
 {
   return dynamic_type_detail::scope_assigns_divergent_literal_types(
-    name, scope_body);
+    name, scope_body, module_body);
 }
 
 exprt dynamic_type_handler::build_tagged_value(
