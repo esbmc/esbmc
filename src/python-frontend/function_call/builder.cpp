@@ -1323,6 +1323,7 @@ symbol_id function_call_builder::build_function_id() const
         {
           const struct_typet &struct_type = to_struct_type(var_type);
           class_name = struct_type.tag().as_string();
+          use_imported_class_file(function_id, *var_symbol, class_name);
         }
         else
           class_name = th.type_to_string(var_type);
@@ -1365,6 +1366,23 @@ symbol_id function_call_builder::build_function_id() const
   }
 
   return function_id;
+}
+
+// A receiver bound by `from m import obj` has its class defined in m, so its
+// methods live under m's file, not this one (#8375).
+void function_call_builder::use_imported_class_file(
+  symbol_id &function_id,
+  const symbolt &receiver,
+  const std::string &class_name) const
+{
+  if (
+    receiver.module == converter_.python_file() ||
+    !json_utils::find_class(converter_.ast()["body"], class_name).empty())
+    return;
+  const std::string module_path =
+    converter_.find_imported_class_module(class_name).second;
+  if (!module_path.empty())
+    function_id.set_filename(module_path);
 }
 
 bool function_call_builder::nested_function_exists(const symbol_id &sid) const
