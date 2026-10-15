@@ -6902,25 +6902,13 @@ void python_converter::get_var_assign(
         }
       }
 
-      // A tuple-struct variable (adopted from an explicit-Any binding) being
-      // rebound to a non-tuple value needs the same fresh slot: retyping the
-      // shared symbol would turn earlier member reads into member-of-scalar,
-      // which trips member2t's source-type assert at GOTO conversion.
-      // Code-typed and unknown (void*) rhs are excluded exactly as in the
-      // propagate branch of handle_assignment_type_adjustments: neither
-      // yields a usable alias slot type.
-      const bool tuple_to_nontuple_rebind =
-        tuple_handler_->is_tuple_type(lhs.type()) && !rhs.type().is_empty() &&
-        !tuple_handler_->is_tuple_type(rhs.type()) && !rhs.type().is_code() &&
-        !(rhs.type().is_pointer() && rhs.type().subtype().id() == "empty");
-
       if (
         is_scalar_retype(
           type_handler_,
           lhs.type(),
           rhs.type(),
           block_nesting_ == function_body_depth_ + 1) ||
-        tuple_to_nontuple_rebind)
+        needs_fresh_retype_slot(lhs, rhs, orig_id))
       {
         symbolt *new_symbol_ptr = mint_retyped_symbol(
           *lhs_symbol, orig_id, rhs.type(), location_begin, sid, target_block);

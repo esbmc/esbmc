@@ -3027,28 +3027,43 @@ static bool forwards_param_being_inferred(
 }
 
 // Element kind ("int" or "float") of the array a numpy constructor with
-// literal arguments builds; "" when it is not read here.
+// literal arguments builds; "" when it is not read here. Only the keywords
+// the conversion reflects in the array are accepted.
 static std::string
 filled_array_dtype(const std::string &ctor, const nlohmann::json &call)
 {
-  const nlohmann::json keywords =
-    call.value("keywords", nlohmann::json::array());
-  if (ctor == "zeros" || ctor == "ones")
-  {
-    if (keywords.empty())
-      return "float";
-    return keywords.size() == 1 && keywords[0].value("arg", "") == "dtype"
-             ? keywords[0]["value"].value("id", "")
-             : "";
-  }
-  if (!keywords.empty())
+  static const std::map<std::string, std::set<std::string>> keywords = {
+    {"zeros", {"dtype"}},
+    {"ones", {"dtype"}},
+    {"linspace", {}},
+    {"full", {"dtype"}},
+    {"eye", {"dtype", "M", "k"}},
+    {"identity", {"dtype"}}};
+  const auto allowed = keywords.find(ctor);
+  if (allowed == keywords.end())
     return "";
-  return "float";
+  for (const auto &kw : call.value("keywords", nlohmann::json::array()))
+  {
+    if (allowed->second.count(kw.value("arg", "")) == 0)
+      return "";
+    // `dtype=np.int64` and the like are not read here.
+    if (kw.value("arg", "") == "dtype")
+      return kw["value"].value("id", "");
+  }
+  if (ctor != "full")
+    return "float";
+  const nlohmann::json &fill =
+    call["args"].size() == 2 ? call["args"][1] : nlohmann::json();
+  if (!fill.is_object() || fill.value("_type", "") != "Constant")
+    return "";
+  return fill["value"].is_number_integer() ? "int"
+         : fill["value"].is_number_float() ? "float"
+                                           : "";
 }
 
 // Type of the array a numpy constructor other than `np.array` builds from
-// literal arguments: `zeros`, `ones`, `arange`, `linspace`. `np.full`,
-// `np.eye` and `np.identity` build a list, whose slices are copies.
+// literal arguments: `zeros`, `ones`, `arange`, `linspace`, `full`, `eye`
+// and `identity`.
 std::optional<typet> python_converter::numpy_filled_array_type(
   const nlohmann::json &value,
   const std::string &function) const
@@ -3090,19 +3105,18 @@ std::optional<typet> python_converter::numpy_arange_array_type(
   return type_handler_.get_typet(*list);
 }
 
-// Shape of the non-empty array `zeros`, `ones` or `linspace` builds.
+// Shape of the non-empty array such a constructor builds.
 std::optional<std::vector<std::size_t>>
 python_converter::numpy_filled_array_shape(const nlohmann::json &value) const
 {
-  static const std::set<std::string> filled = {"zeros", "ones", "linspace"};
+  static const std::set<std::string> filled = {
+    "zeros", "ones", "linspace", "full", "eye", "identity"};
   if (!is_numpy_array_constructor_expr(value) || value["args"].empty())
     return std::nullopt;
   const std::string ctor = value["func"].value("attr", "");
-  const bool zeros_or_ones = ctor == "zeros" || ctor == "ones";
-  const bool tuple_shape = value["args"][0].value("_type", "") == "Tuple";
   if (
-    filled.count(ctor) == 0 || (tuple_shape && !zeros_or_ones) ||
-    (zeros_or_ones && value["args"].size() != 1))
+    filled.count(ctor) == 0 ||
+    ((ctor == "zeros" || ctor == "ones") && value["args"].size() != 1))
     return std::nullopt;
   const std::optional<std::vector<std::size_t>> shape =
     get_numpy_constructor_shape(value);

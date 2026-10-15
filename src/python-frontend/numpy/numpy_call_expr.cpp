@@ -7399,20 +7399,118 @@ std::optional<nlohmann::json> numpy_call_expr::arange_literal(
 // Whether the literal list `np.arange` or `np.linspace` produced is bound
 // to a name as a static array: it must be non-empty and the call must take
 // no keyword, which the list form handles.
+// Whether the literal list a constructor produced is bound to a name as a
+// static array: it must be non-empty and every keyword must be one the
+// literal already reflects; any other keyword keeps the list form, which
+// handles it or reports it.
 bool numpy_call_expr::binds_static_array(const nlohmann::json &list) const
 {
-  const bool keywords =
-    call_.contains("keywords") && !call_["keywords"].empty();
+  const std::string function = function_id_.get_function();
+  static const std::map<std::string, std::set<std::string>> keywords = {
+    {"arange", {}},
+    {"linspace", {}},
+    {"full", {"dtype"}},
+    {"identity", {"dtype"}},
+    {"eye", {"dtype", "M", "k"}}};
+  const auto allowed = keywords.find(function);
+  if (allowed == keywords.end())
+    return false;
+  for (const auto &kw : call_.value("keywords", nlohmann::json::array()))
+    if (allowed->second.count(kw.value("arg", "")) == 0)
+      return false;
   return converter_.current_lhs != nullptr &&
-         converter_.current_lhs->is_symbol() && !keywords &&
-         list.contains("elts") && !list["elts"].empty();
+         converter_.current_lhs->is_symbol() && list.contains("elts") &&
+         !list["elts"].empty();
+}
+
+// The literal rows of `np.eye`/`np.identity`. Bound to a name it is an
+// ndarray of NumPy's default float64; in place it stays the integer list a
+// list literal compares with.
+nlohmann::json numpy_call_expr::eye_literal(
+  const std::string &function,
+  std::size_t rows,
+  std::size_t cols) const
+{
+  const long long k = eye_diagonal_offset(function);
+  const bool floats = binds_static_array(
+    nlohmann::json{{"elts", nlohmann::json::array({nlohmann::json()})}});
+  nlohmann::json out = {{"_type", "List"}, {"elts", nlohmann::json::array()}};
+  for (std::size_t i = 0; i < rows; ++i)
+  {
+    nlohmann::json row = {{"_type", "List"}, {"elts", nlohmann::json::array()}};
+    for (std::size_t j = 0; j < cols; ++j)
+    {
+      const bool one =
+        static_cast<long long>(j) - static_cast<long long>(i) == k;
+      nlohmann::json value =
+        floats ? nlohmann::json(one ? 1.0 : 0.0) : nlohmann::json(one ? 1 : 0);
+      row["elts"].push_back({{"_type", "Constant"}, {"value", value}});
+    }
+    out["elts"].push_back(row);
+  }
+  return out;
+}
+
+// A size of `np.full` evaluated once, into a temporary, so a call in it is
+// not left inside the list builder's expressions.
+exprt numpy_call_expr::full_size_temporary(exprt size_expr)
+{
+  symbolt &size = converter_.create_tmp_symbol(
+    call_, "$numpy_full_size$", size_expr.type(), exprt());
+  const exprt symbol = python_expr::build_symbol(size);
+  code_declt decl(symbol);
+  decl.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(decl);
+  if (size_expr.is_function_call())
+  {
+    code_function_callt &call = static_cast<code_function_callt &>(size_expr);
+    call.lhs() = symbol;
+    converter_.add_instruction(call);
+    return symbol;
+  }
+  code_assignt init(symbol, size_expr);
+  init.location() = decl.location();
+  converter_.add_instruction(init);
+  return symbol;
+}
+
+// A dimension of `np.eye`/`np.identity`, which must be a literal.
+std::size_t numpy_call_expr::eye_dimension(const nlohmann::json &node)
+{
+  numeric_value value;
+  if (!try_extract_numeric_constant(node, value) || !value.is_int)
+    throw std::runtime_error(
+      "TypeError: numpy.eye()/identity() requires literal integer dimensions");
+  if (value.int_value < 0)
+    throw std::runtime_error("ValueError: negative dimensions are not allowed");
+  return static_cast<std::size_t>(value.int_value);
+}
+
+// The diagonal `np.eye(..., k=...)` sets; 0 for `np.identity`.
+long long
+numpy_call_expr::eye_diagonal_offset(const std::string &function) const
+{
+  const nlohmann::json *k = function == "eye" ? find_keyword_arg("k") : nullptr;
+  if (k == nullptr)
+    return 0;
+  numeric_value value;
+  if (!try_extract_numeric_constant(*k, value) || !value.is_int)
+    throw std::runtime_error(
+      "TypeError: numpy.eye() requires a literal integer k");
+  return value.int_value;
 }
 
 exprt numpy_call_expr::literal_constructor_expr(const nlohmann::json &list)
 {
   if (binds_static_array(list))
-    return converter_.get_static_array(
-      list, type_handler_.get_typet(list["elts"]));
+  {
+    exprt array =
+      converter_.get_static_array(list, type_handler_.get_typet(list["elts"]));
+    // The model's annotation types the name as a list or Any.
+    converter_.current_lhs->type() = array.type();
+    converter_.update_symbol(*converter_.current_lhs);
+    return array;
+  }
   const bool old_build_static_lists = converter_.build_static_lists;
   converter_.build_static_lists = false;
   exprt expr = converter_.get_expr(list);
@@ -9407,6 +9505,10 @@ exprt numpy_call_expr::get()
         {
           try
           {
+            // A type probe only needs the result type; the size, which may
+            // call a function, is evaluated by the real conversion alone.
+            if (converter_.in_rhs_type_probe_)
+              return gen_zero(converter_.get_type_handler().get_list_type());
             exprt size_expr = converter_.get_expr(call_["args"][0]);
             if (
               size_expr.type().is_signedbv() ||
@@ -9420,7 +9522,7 @@ exprt numpy_call_expr::get()
               converter_.copy_location_fields_from_decl(call_, dummy);
               python_list lb(converter_, dummy);
               return lb.build_symbolic_fill_list(
-                size_expr, fill_expr, elem_type);
+                full_size_temporary(size_expr), fill_expr, elem_type);
             }
           }
           catch (const std::exception &)
@@ -9435,7 +9537,7 @@ exprt numpy_call_expr::get()
         std::vector<nlohmann::json> elts;
         for (std::size_t i = 0; i < dims[0]; ++i)
           elts.push_back(fill);
-        return to_list_expr(apply_constructor_dtype(make_list(elts)));
+        return to_array_expr(apply_constructor_dtype(make_list(elts)));
       }
       if (dims.size() == 2)
       {
@@ -9447,7 +9549,7 @@ exprt numpy_call_expr::get()
             row.push_back(fill);
           rows.push_back(make_list(row));
         }
-        return to_list_expr(apply_constructor_dtype(make_list(rows)));
+        return to_array_expr(apply_constructor_dtype(make_list(rows)));
       }
       throw std::runtime_error(
         "TypeError: numpy.full() currently supports up to 2D shapes");
@@ -9459,17 +9561,8 @@ exprt numpy_call_expr::get()
       auto n = get_arg(0);
       auto m = eye_column_arg_or_default(function, n);
       resolve_var(m);
-      const std::size_t rows = n["value"].get<std::size_t>();
-      const std::size_t cols = m["value"].get<std::size_t>();
-      std::vector<nlohmann::json> out_rows;
-      for (std::size_t i = 0; i < rows; ++i)
-      {
-        std::vector<nlohmann::json> row;
-        for (std::size_t j = 0; j < cols; ++j)
-          row.push_back(make_constant(i == j ? 1 : 0));
-        out_rows.push_back(make_list(row));
-      }
-      return to_list_expr(apply_constructor_dtype(make_list(out_rows)));
+      return to_array_expr(apply_constructor_dtype(
+        eye_literal(function, eye_dimension(n), eye_dimension(m))));
     }
 
     if (function == "linspace")
