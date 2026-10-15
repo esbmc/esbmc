@@ -413,6 +413,9 @@ public:
   view_element_count(const nlohmann::json &node, const strided_view_desc &view);
 
   /// sum / mean / min / max / any / all of a run-time-extent view, as loops.
+  std::optional<exprt> reduce_view_argextreme(
+    const std::string &function,
+    const nlohmann::json &arg);
   std::optional<exprt> try_reduce_symbolic_view(
     const std::string &function,
     const nlohmann::json &arg);

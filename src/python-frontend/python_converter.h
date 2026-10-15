@@ -2070,6 +2070,51 @@ private:
     nlohmann::json &rewritten,
     codet &target_block);
   bool needs_numpy_view_call_binding(const nlohmann::json &node);
+  std::string numpy_view_callee_name(const symbol_id &function) const;
+  std::optional<std::pair<std::string, std::size_t>>
+  numpy_view_method_callee(const nlohmann::json &call) const;
+  bool binds_every_numpy_view_argument(const nlohmann::json &call);
+  bool names_python_builtin(const std::string &name) const;
+  bool consumes_numpy_view_as_list(const nlohmann::json &node) const;
+  bool is_builtin_over_numpy_view(const nlohmann::json &node) const;
+  symbolt *find_symbol_in_import(
+    const nlohmann::json &obj,
+    const std::string &symbol_id,
+    const std::string &lookup_name) const;
+  symbolt *find_symbol_in_module(
+    const std::string &symbol_id,
+    const std::string &module_file,
+    const std::string &lookup_name,
+    const std::string &name) const;
+  bool import_hides_builtin(
+    const nlohmann::json &import,
+    const std::string &symbol_id,
+    const std::string &name) const;
+  bool needs_fresh_retype_slot(
+    const exprt &lhs,
+    const exprt &rhs,
+    const std::string &lhs_id) const;
+  bool is_numpy_array_to_view_rebind(
+    const exprt &lhs,
+    const exprt &rhs,
+    const std::string &lhs_id) const;
+  bool passes_numpy_view_anywhere(const nlohmann::json &call);
+  bool is_handled_numpy_view_call(const nlohmann::json &call);
+  bool is_attribute_store_of_numpy_view(
+    const nlohmann::json &target,
+    const nlohmann::json &value);
+  bool call_needs_view_argument_hoist(const nlohmann::json &call);
+  bool takes_numpy_view_argument(const nlohmann::json &call, std::size_t index);
+  bool is_rank1_numpy_view(const nlohmann::json &node) const;
+  bool is_rank1_numpy_array_name(const nlohmann::json &node) const;
+  bool adapt_numpy_view_builtin_arguments(nlohmann::json &node);
+  std::optional<nlohmann::json>
+  inline_numpy_view_lambda_call(const nlohmann::json &call);
+  bool is_inlined_numpy_view_lambda(const nlohmann::json &statement);
+  std::set<std::string> numpy_inlined_lambdas_;
+  const nlohmann::json &adapt_numpy_view_builtin_calls(
+    const nlohmann::json &statement,
+    nlohmann::json &rewritten);
   bool split_conditional_numpy_view_assignment(
     const nlohmann::json &statement,
     nlohmann::json &rewritten);
@@ -3169,8 +3214,10 @@ private:
     codet &target_block);
   void store_runtime_numpy_view_layout(
     const nlohmann::json &call,
+    const std::string &func_name,
     std::size_t param_index,
     codet &target_block);
+  std::string numpy_view_callee_of(const nlohmann::json &call);
   std::vector<std::size_t>
   runtime_numpy_view_params(const std::string &func_name);
   void reject_unbound_runtime_numpy_view_call(const nlohmann::json &call);
@@ -3180,6 +3227,10 @@ private:
   static std::optional<numpy_scalar_pointer_view_infot> subview_info(
     const numpy_scalar_pointer_view_infot &parent,
     const nlohmann::json &slice_node);
+  std::optional<std::pair<typet, numpy_scalar_pointer_view_infot>>
+  infer_diagonal_view_layout(
+    const nlohmann::json &call,
+    const std::string &function) const;
   std::optional<std::pair<typet, numpy_scalar_pointer_view_infot>>
   infer_branch_bound_view_layout(
     const nlohmann::json &node,

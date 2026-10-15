@@ -8897,7 +8897,7 @@ exprt numpy_call_expr::get()
 
   if (
     static const std::set<std::string> reductions =
-      {"sum", "mean", "min", "max", "any", "all"};
+      {"sum", "mean", "min", "max", "any", "all", "argmin", "argmax"};
     reductions.count(function) && call_["args"].size() == 1 &&
     !(call_.contains("keywords") && !call_["keywords"].empty()))
     if (
