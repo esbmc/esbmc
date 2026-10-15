@@ -1728,12 +1728,14 @@ exprt python_converter::handle_dict_bitwise(
     return nil_exprt();
 
   // `d |= other` updates d in place, so an alias of d sees the new entries.
-  if (op == "BitOr" && element.value("_type", "") == "AugAssign")
+  if (
+    op == "BitOr" && element.value("_type", "") == "AugAssign" &&
+    lhs.is_symbol())
   {
     dict_handler_->copy_dict_entries(lhs, rhs, element);
     return lhs;
   }
-  if (op == "BitOr")
+  if (op == "BitOr" && element.value("_type", "") != "AugAssign")
     return dict_handler_->handle_dict_union(lhs, rhs, element);
 
   // Not modeled. Falling through would reach build_binary_expression's bitwise

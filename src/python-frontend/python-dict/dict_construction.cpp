@@ -712,10 +712,7 @@ exprt python_dict_handler::create_dict_with_unpacking(
   const nlohmann::json &element,
   const exprt &target_symbol)
 {
-  nlohmann::json empty_dict = element;
-  empty_dict["keys"] = nlohmann::json::array();
-  empty_dict["values"] = nlohmann::json::array();
-  create_dict_from_literal(empty_dict, target_symbol);
+  create_empty_dict(element, target_symbol);
 
   const auto &keys = element["keys"];
   const auto &values = element["values"];
@@ -731,11 +728,12 @@ exprt python_dict_handler::create_dict_with_unpacking(
       continue;
     }
 
-    exprt value_expr = converter_.get_expr(values[i]);
+    const exprt key_expr = get_key_expr(keys[i]);
+    const exprt value_expr = converter_.get_expr(values[i]);
     code_blockt pair_block;
     handle_dict_subscript_assign(
       target_symbol,
-      get_key_expr(keys[i]),
+      key_expr,
       value_expr,
       converter_.get_location_from_decl(keys[i]),
       keys[i],
@@ -743,4 +741,15 @@ exprt python_dict_handler::create_dict_with_unpacking(
     converter_.add_instruction(pair_block);
   }
   return target_symbol;
+}
+
+void python_dict_handler::create_empty_dict(
+  const nlohmann::json &element,
+  const exprt &target_symbol)
+{
+  nlohmann::json empty_dict = element;
+  empty_dict["_type"] = "Dict";
+  empty_dict["keys"] = nlohmann::json::array();
+  empty_dict["values"] = nlohmann::json::array();
+  create_dict_from_literal(empty_dict, target_symbol);
 }

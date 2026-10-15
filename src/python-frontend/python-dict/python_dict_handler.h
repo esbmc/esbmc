@@ -186,6 +186,10 @@ public:
     const nlohmann::json &element,
     const exprt &target_symbol);
 
+  /// Initialises \p target_symbol as an empty dict located at \p element.
+  void
+  create_empty_dict(const nlohmann::json &element, const exprt &target_symbol);
+
   /// Builds a dict display holding a `**` unpack ({**a, "k": v, **b}) by
   /// applying its entries in order to an empty dict.
   exprt create_dict_with_unpacking(
@@ -519,6 +523,8 @@ public:
    */
   exprt
   handle_dict_update(const exprt &dict_expr, const nlohmann::json &call_node);
+
+  exprt bind_dict_source(const exprt &source, const nlohmann::json &node);
 
   /// Copies every entry of \p source into \p dict_expr, overwriting keys
   /// already present (dict.update(other) semantics).

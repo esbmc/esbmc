@@ -1443,28 +1443,34 @@ exprt python_dict_handler::handle_dict_update(
   return nil_exprt();
 }
 
+/// A call returning a dict is a statement; binds its result so its members
+/// can be read. Any other expression is returned as is.
+exprt python_dict_handler::bind_dict_source(
+  const exprt &source,
+  const nlohmann::json &node)
+{
+  if (!source.is_function_call())
+    return source;
+
+  symbolt &result = converter_.create_tmp_symbol(
+    node, "$dict_source$", source.type(), exprt());
+  code_declt result_decl(build_symbol(result));
+  result_decl.location() = converter_.get_location_from_decl(node);
+  converter_.add_instruction(result_decl);
+
+  code_function_callt call = to_code_function_call(to_code(source));
+  call.lhs() = build_symbol(result);
+  converter_.add_instruction(call);
+  return build_symbol(result);
+}
+
 void python_dict_handler::copy_dict_entries(
   const exprt &dict_expr,
   const exprt &source,
   const nlohmann::json &call_node)
 {
   locationt location = converter_.get_location_from_decl(call_node);
-
-  // A call returning a dict is a statement; bind its result to read members.
-  exprt other_dict = source;
-  if (source.is_function_call())
-  {
-    symbolt &result = converter_.create_tmp_symbol(
-      call_node, "$dict_source$", source.type(), exprt());
-    code_declt result_decl(build_symbol(result));
-    result_decl.location() = location;
-    converter_.add_instruction(result_decl);
-
-    code_function_callt call = to_code_function_call(to_code(source));
-    call.lhs() = build_symbol(result);
-    converter_.add_instruction(call);
-    other_dict = build_symbol(result);
-  }
+  const exprt other_dict = bind_dict_source(source, call_node);
 
   // Read entries from the source dict through its internal keys/values lists.
   typet list_type = type_handler_.get_list_type();
@@ -1514,9 +1520,8 @@ void python_dict_handler::copy_dict_entries(
   exprt loop_cond =
     build_less_than(build_symbol(index_var), build_symbol(size_var));
 
-  // Rebuild the current key/value pair from the source lists. The key/value
-  // temporaries and the contains check go into loop_body, as in the dict
-  // comprehension loop; emitted before the loop they hold entry 0 throughout.
+  // Rebuild the current key/value pair from the source lists. Its temporaries
+  // and the contains check must be emitted into loop_body, not before it.
   code_blockt loop_body;
   code_blockt *saved_block = converter_.current_block;
   converter_.current_block = &loop_body;
@@ -1562,13 +1567,11 @@ exprt python_dict_handler::handle_dict_union(
   dict_decl.location() = location;
   converter_.add_instruction(dict_decl);
 
-  nlohmann::json empty_dict = element;
-  empty_dict["_type"] = "Dict";
-  empty_dict["keys"] = nlohmann::json::array();
-  empty_dict["values"] = nlohmann::json::array();
-  create_dict_from_literal(empty_dict, build_symbol(dict_sym));
-
-  copy_dict_entries(build_symbol(dict_sym), lhs, element);
-  copy_dict_entries(build_symbol(dict_sym), rhs, element);
+  // Both operands are evaluated before either is copied, as in CPython.
+  const exprt lhs_dict = bind_dict_source(lhs, element);
+  const exprt rhs_dict = bind_dict_source(rhs, element);
+  create_empty_dict(element, build_symbol(dict_sym));
+  copy_dict_entries(build_symbol(dict_sym), lhs_dict, element);
+  copy_dict_entries(build_symbol(dict_sym), rhs_dict, element);
   return build_symbol(dict_sym);
 }
