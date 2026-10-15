@@ -109,11 +109,26 @@ bool python_class_builder::get_bases(struct_typet &st)
 
 /* Converts methods and annotated class-level attributes (AnnAssign)
  * into ESBMC symbols. Recursively processes referenced classes. */
+/// Converting a method adds a component to the class symbol for each
+/// `self.attr` store that add_self_attrs' straight-line scan misses, such as
+/// one inside an `if`. Take them over so finalising the class with \p st does
+/// not drop them and allocate an instance too small for its stores (#8503).
+static void adopt_symbol_components(const symbolt &sym, struct_typet &st)
+{
+  const typet sym_type = sym.get_type();
+  if (!sym_type.is_struct())
+    return;
+  for (const auto &c : to_struct_type(sym_type).components())
+    if (!st.has_component(c.get_name()))
+      st.components().push_back(c);
+}
+
 void python_class_builder::get_members(
   struct_typet &st,
   codet &out,
   bool has_ud_base)
 {
+  symbolt *const class_sym = ensure_sym(pc_.name());
   std::string saved_class_name = conv_.current_class_name_;
   if (conv_.current_class_name_.empty())
   {
@@ -139,6 +154,7 @@ void python_class_builder::get_members(
       conv_.current_func_name_ = "";
 
       conv_.get_function_definition(n);
+      adopt_symbol_components(*class_sym, st);
 
       std::string saved_func_for_lookup = conv_.current_func_name_;
       conv_.current_func_name_ = mname;

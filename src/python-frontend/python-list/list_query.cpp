@@ -94,6 +94,23 @@ std::optional<expr2tc> python_list::fast_elem_equality(
   return equality2tc(lhs_val2, rhs_val2);
 }
 
+expr2tc python_list::stored_element_is(
+  const symbolt &list,
+  std::size_t i,
+  const symbolt &elem)
+{
+  // A frontend temporary is assigned once, where the list was built, so only
+  // a user binding can have moved on since the append.
+  if (elem.file_local)
+    return gen_true_expr();
+  const exprt at = build_list_at_call(
+    build_symbol(list), from_integer(BigInt(i), size_type()), list_value_);
+  expr2tc stored, current;
+  migrate_expr(extract_pyobject_value(at, elem.get_type()), stored);
+  migrate_expr(build_symbol(elem), current);
+  return equality2tc(stored, current);
+}
+
 exprt python_list::compare(
   const exprt &l1,
   const exprt &l2,
@@ -449,6 +466,11 @@ exprt python_list::compare(
             if (!build_nested_equality(
                   lhs_nested, rhs_nested, depth + 1, elem_equal, sizes_ok))
               return false;
+            sizes_ok = and2tc(
+              sizes_ok,
+              and2tc(
+                stored_element_is(*lhs_list, i, *lhs_nested),
+                stored_element_is(*rhs_list, i, *rhs_nested)));
           }
         }
         else

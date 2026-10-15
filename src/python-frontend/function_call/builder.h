@@ -5,6 +5,7 @@
 
 class python_converter;
 class symbol_id;
+class symbolt;
 
 class function_call_builder
 {
@@ -68,6 +69,10 @@ private:
   /// None.
   bool receiver_is_bound_to_none() const;
   bool nested_function_exists(const symbol_id &sid) const;
+  void use_imported_class_file(
+    symbol_id &function_id,
+    const symbolt &receiver,
+    const std::string &class_name) const;
 
   /// Raises AttributeError ahead of `name.method(...)` when `name` is a str or
   /// class-instance reference holding None (a null pointer).

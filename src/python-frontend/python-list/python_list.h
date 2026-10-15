@@ -848,6 +848,13 @@ public:
    */
   BigInt uniform_elem_size(const exprt &list) const;
 
+  /// Whether the list stored at index @p i of @p list is the one @p elem holds
+  /// now. The type map names a nested element by the symbol it was appended
+  /// from, and a later assignment can rebind that symbol when it is a user
+  /// variable.
+  expr2tc
+  stored_element_is(const symbolt &list, std::size_t i, const symbolt &elem);
+
   // True when the list's recorded element types include a tagged scalar, whose
   // payload width is per-element and symbolic (#7716).
   bool has_tagged_elements(const exprt &list) const;

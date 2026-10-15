@@ -1054,7 +1054,11 @@ void python_converter::adopt_tagged_element(
 /// The user class whose instance a value of @p type is, or "".
 std::string python_converter::user_class_of(const typet &type)
 {
-  const typet &held = ns.follow(type.is_pointer() ? type.subtype() : type);
+  const typet &raw = type.is_pointer() ? type.subtype() : type;
+  // A class defined later in the module has no symbol yet.
+  if (raw.is_symbol() && !ns.lookup(raw))
+    return "";
+  const typet &held = ns.follow(raw);
   if (!held.is_struct())
     return "";
   const std::string name =
@@ -5880,6 +5884,55 @@ bool python_converter::module_scope_rhs_needs_type_probe(
          dynamic_type_handler_.is_tagged(value["id"].get<std::string>());
 }
 
+// The class `value` instantiates, or "" if it is not a constructor call.
+std::string
+python_converter::instantiated_class(const nlohmann::json &value) const
+{
+  if (
+    value.value("_type", "") != "Call" || !value.contains("func") ||
+    value["func"].value("_type", "") != "Name")
+    return "";
+  const std::string name = value["func"].value("id", "");
+  return json_utils::is_class(name, *ast_json) ? name : "";
+}
+
+static bool ctor_arms_share_class(
+  const nlohmann::json &ifexp,
+  const std::string &then_class,
+  const std::string &else_class)
+{
+  auto is_none = [](const nlohmann::json &v) {
+    return v.value("_type", "") == "Constant" && v.contains("value") &&
+           v["value"].is_null();
+  };
+  if (then_class.empty())
+    return is_none(ifexp["body"]);
+  if (else_class.empty())
+    return is_none(ifexp["orelse"]);
+  return then_class == else_class;
+}
+
+bool python_converter::ternary_needs_if_spelling(
+  const nlohmann::json &ifexp) const
+{
+  const std::string then_class = instantiated_class(ifexp["body"]);
+  const std::string else_class = instantiated_class(ifexp["orelse"]);
+  if (then_class.empty() && else_class.empty())
+  {
+    const std::string then_kind =
+      dynamic_type_detail::classify_literal_value_kind(ifexp["body"]);
+    const std::string else_kind =
+      dynamic_type_detail::classify_literal_value_kind(ifexp["orelse"]);
+    return !then_kind.empty() && !else_kind.empty() && then_kind != else_kind;
+  }
+  if (!ctor_arms_share_class(ifexp, then_class, else_class))
+    // A method call on the target would dispatch on one class only (#8408).
+    throw std::runtime_error(
+      "a conditional expression instantiating a class must pick that class "
+      "or None in its other branch");
+  return true;
+}
+
 bool python_converter::rewrite_divergent_conditional_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -5893,22 +5946,31 @@ bool python_converter::rewrite_divergent_conditional_assign(
     !value.contains("body") || !value.contains("orelse"))
     return false;
 
-  const std::string then_kind =
-    dynamic_type_detail::classify_literal_value_kind(value["body"]);
-  const std::string else_kind =
-    dynamic_type_detail::classify_literal_value_kind(value["orelse"]);
-  if (then_kind.empty() || else_kind.empty() || then_kind == else_kind)
-    return false;
-
   const nlohmann::json &target =
     ast_node.contains("targets") ? ast_node["targets"][0] : ast_node["target"];
   if (target.value("_type", "") != "Name")
     return false;
 
+  if (!ternary_needs_if_spelling(value))
+    return false;
+
   // Each arm keeps the assignment's own location, so a violation still points
-  // at the line the ternary is written on.
+  // at the line the ternary is written on. A constructor arm is annotated
+  // with its class, which it needs to allocate the instance through a
+  // pointer, as the annotation pass does for the `if` spelling.
   auto arm = [&](const nlohmann::json &branch) {
     nlohmann::json assign = ast_node;
+    const std::string cls = instantiated_class(branch);
+    if (!cls.empty())
+    {
+      assign["_type"] = "AnnAssign";
+      assign["target"] = target;
+      assign.erase("targets");
+      assign["annotation"] = {{"_type", "Name"}, {"id", cls}};
+      assign["simple"] = 1;
+      assign["value"] = branch;
+      return nlohmann::json::array({assign});
+    }
     assign["_type"] = "Assign";
     assign["targets"] = nlohmann::json::array({target});
     assign.erase("target");
