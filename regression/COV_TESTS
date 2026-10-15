@@ -3020,3 +3020,5 @@ regression/python/github_8359_heappush_empty_fail
 regression/python/github_8359_heappop_assign
 regression/python/github_8359_heappop_assign_fail
 regression/python/github_8359_heappop_literal_fail
+regression/python/github_8359_heap_untyped_stores
+regression/python/github_8359_heap_untyped_stores_fail
