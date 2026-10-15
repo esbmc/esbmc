@@ -1452,8 +1452,8 @@ exprt python_dict_handler::bind_dict_source(
   if (!source.is_function_call())
     return source;
 
-  symbolt &result = converter_.create_tmp_symbol(
-    node, "$dict_source$", source.type(), exprt());
+  symbolt &result =
+    converter_.create_tmp_symbol(node, "$dict_source$", source.type(), exprt());
   code_declt result_decl(build_symbol(result));
   result_decl.location() = converter_.get_location_from_decl(node);
   converter_.add_instruction(result_decl);
