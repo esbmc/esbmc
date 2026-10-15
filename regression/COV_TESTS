@@ -3137,3 +3137,7 @@ regression/python/github_8355_function_choice
 regression/python/github_8355_function_choice_fail
 regression/python/github_8475
 regression/python/github_8475_fail
+regression/python/github_8419
+regression/python/github_8419_factory_unsupported
+regression/python/github_8419_fail
+regression/python/github_8419_method_unsupported
