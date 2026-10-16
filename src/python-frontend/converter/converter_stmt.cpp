@@ -1051,6 +1051,21 @@ void python_converter::adopt_tagged_element(
   lhs.type() = rhs.type();
 }
 
+bool python_converter::annotation_yields_to_rhs(
+  const nlohmann::json &ast_node,
+  const exprt &rhs) const
+{
+  const bool inferred = ast_node.value("_inferred_annotation", false);
+  // A scalar guessed before an imported callee was retyped from its call
+  // sites, e.g. `a = heappop(h)` on a heap of tuples (#8359).
+  if (inferred && tuple_handler_->is_tuple_type(rhs.type()))
+    return true;
+
+  return ast_node["annotation"].value("id", std::string()) == "Any" &&
+         (inferred || ast_node.value("esbmc_synthesized", false) ||
+          !json_utils::is_imported_from(*ast_json, "typing", "Any"));
+}
+
 /// The user class whose instance a value of @p type is, or "".
 std::string python_converter::user_class_of(const typet &type)
 {
@@ -1329,11 +1344,7 @@ void python_converter::handle_assignment_type_adjustments(
     // a tuple dict-value read then misfolds every component access (#5444
     // latent item).
     else if (
-      (!has_annotation ||
-       (ast_node["annotation"].value("id", std::string()) == "Any" &&
-        (ast_node.value("_inferred_annotation", false) ||
-         ast_node.value("esbmc_synthesized", false) ||
-         !json_utils::is_imported_from(*ast_json, "typing", "Any")))) &&
+      (!has_annotation || annotation_yields_to_rhs(ast_node, rhs)) &&
       !rhs.type().is_empty() && lhs.type() != rhs.type() &&
       !rhs.type().is_code() &&
       !(rhs.type().is_pointer() && rhs.type().subtype().id() == "empty") &&
