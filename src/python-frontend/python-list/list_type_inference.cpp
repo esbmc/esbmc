@@ -242,6 +242,22 @@ typet infer_elem_type_from_call_return(
 
 } // namespace python_list_detail
 
+/// The type a list stores the module function \p elem names as: its address,
+/// as python_list::get stores it. \p fallback when \p elem names none.
+static typet function_element_type(
+  const python_converter &converter,
+  const nlohmann::json &elem,
+  const typet &fallback)
+{
+  if (!elem.is_object() || elem.value("_type", "") != "Name")
+    return fallback;
+  const symbolt *func = converter.find_symbol(
+    symbol_id(converter.python_file(), "", elem.value("id", "")).to_string());
+  if (!func || !func->get_type().is_code())
+    return fallback;
+  return pointer_typet(func->get_type());
+}
+
 typet python_list::infer_literal_element_type(
   const nlohmann::json &list_literal)
 {
@@ -272,5 +288,9 @@ typet python_list::infer_literal_element_type(
       return double_type();
   }
 
-  return th.get_typet(first_elem);
+  const typet first_type = th.get_typet(first_elem);
+  // A name with no variable binding may be a function
+  if (first_type.is_empty())
+    return function_element_type(converter_, first_elem, first_type);
+  return first_type;
 }
