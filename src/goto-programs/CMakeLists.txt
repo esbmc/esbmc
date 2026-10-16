@@ -26,5 +26,5 @@ target_link_libraries(gotoalgorithms PUBLIC gotoprograms PRIVATE abstract-interp
 if(ENABLE_GOTO_CONTRACTOR)
     target_link_libraries(gotocontractor PRIVATE abstract-interpretation)
 endif()
-target_link_libraries(gotoprograms PUBLIC esbmc_common pointeranalysis PRIVATE bigint usr_utils langapi)
+target_link_libraries(gotoprograms PUBLIC esbmc_common pointeranalysis PRIVATE bigint usr_utils langapi nlohmann_json::nlohmann_json)
 target_link_libraries(gotoalgorithms PUBLIC esbmc_common)
