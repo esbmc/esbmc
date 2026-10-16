@@ -268,6 +268,34 @@ migrate_arg_defaults(const code_typet::argumentst &old_args)
   return defaults;
 }
 
+static type2tc migrate_array_type(const typet &type)
+{
+  type2tc subtype = migrate_type(type.subtype());
+
+  expr2tc size;
+  bool is_infinite = false;
+
+  if (type.find(typet::a_size).id() == "infinity")
+  {
+    is_infinite = true;
+  }
+  else
+  {
+    exprt sz = static_cast<const exprt &>(type.find(typet::a_size));
+    migrate_expr(sz, size);
+    simplify(size);
+    size = fixup_containerof_in_sizeof(size);
+  }
+
+  // Preserve the explicit array domain width across IR migration.
+  unsigned index_width = 0;
+  irep_idt iw = type.get("#esbmc_index_width");
+  if (!iw.empty())
+    index_width = std::stoul(iw.as_string());
+
+  return array_type2tc(subtype, size, is_infinite, index_width);
+}
+
 static type2tc migrate_type0(const typet &type)
 {
   if (type.id() == typet::t_bool)
@@ -307,35 +335,7 @@ static type2tc migrate_type0(const typet &type)
     return unsignedbv_type2tc(config.ansi_c.capability_width());
 
   if (type.id() == typet::t_array)
-  {
-    type2tc subtype = migrate_type(type.subtype());
-
-    expr2tc size;
-    bool is_infinite = false;
-
-    if (type.find(typet::a_size).id() == "infinity")
-    {
-      is_infinite = true;
-    }
-    else
-    {
-      exprt sz = static_cast<const exprt &>(type.find(typet::a_size));
-      migrate_expr(sz, size);
-      simplify(size);
-      size = fixup_containerof_in_sizeof(size);
-    }
-
-    // Optional explicit index width (from `__ESBMC_inf_size:N` annotation
-    // on the C-level declaration; processed in clang-c-frontend). Used
-    // by the Solidity mapping storage to declare a 480-bit-indexed
-    // infinite array — closes ledger #22's 256→64 fold unsoundness.
-    unsigned index_width = 0;
-    irep_idt iw = type.get("#esbmc_index_width");
-    if (!iw.empty())
-      index_width = std::stoul(iw.as_string());
-
-    return array_type2tc(subtype, size, is_infinite, index_width);
-  }
+    return migrate_array_type(type);
   else if (type.id() == typet::t_vector)
   {
     type2tc subtype = migrate_type(type.subtype());

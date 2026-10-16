@@ -222,7 +222,7 @@ smt_sortt smt_tuple_sym_flattener::mk_struct_sort(const type2tc &type)
     const array_type2t &arrtype = to_array_type(type);
     unsigned int dom_width = array_domain_width_or_word_size(arrtype);
 
-    // 2C.2a: mirror smt_tuple_node_flattener::mk_struct_sort — recurse
+    // mirror smt_tuple_node_flattener::mk_struct_sort — recurse
     // through K array dimensions wrapping a struct leaf instead of
     // asserting single-dim.  K = 1 (struct subtype) does not take the
     // recursion branch and is byte-identical to the historical form.
