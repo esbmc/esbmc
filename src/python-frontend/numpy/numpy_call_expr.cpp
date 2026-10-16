@@ -97,6 +97,17 @@ static bool numpy_constant_folding_enabled()
   return !config.options.get_bool_option("python-no-fold");
 }
 
+// The array models hold numbers only; a string element would be read back
+// as an unrelated value.
+static void reject_string_full_fill(const nlohmann::json &fill)
+{
+  if (
+    fill.value("_type", "") == "Constant" && fill.contains("value") &&
+    fill["value"].is_string())
+    throw std::runtime_error(
+      "TypeError: numpy.full() with a string fill value is not supported");
+}
+
 static BigInt pow_bigint_non_negative(BigInt base, BigInt exponent)
 {
   assert(exponent >= 0);
@@ -5519,6 +5530,7 @@ exprt numpy_call_expr::create_expr_from_call()
       nlohmann::json fill_value = call_["args"][1];
       resolve_var(shape);
       resolve_var(fill_value);
+      reject_string_full_fill(fill_value);
 
       const auto dims = extract_shape_dims(shape);
       if (dims.empty())
@@ -8967,12 +8979,38 @@ exprt numpy_call_expr::retype_current_lhs_and_return(
   return value;
 }
 
+// `np.full(shape=..., fill_value=...)` as the positional call every reader
+// of `np.full` expects.
+static nlohmann::json positional_full_call(const nlohmann::json &call)
+{
+  nlohmann::json normalized = call;
+  nlohmann::json &args = normalized["args"];
+  nlohmann::json &keywords = normalized["keywords"];
+  for (const char *name : {"shape", "fill_value"})
+  {
+    auto kw = std::find_if(
+      keywords.begin(), keywords.end(), [name](const nlohmann::json &k) {
+        return k.contains("arg") && k["arg"] == name;
+      });
+    if (kw == keywords.end() || args.size() != (name[0] == 's' ? 0 : 1))
+      continue;
+    args.push_back((*kw)["value"]);
+    keywords.erase(kw);
+  }
+  return normalized;
+}
+
 exprt numpy_call_expr::build_result(
   const symbol_id &function_id,
   const nlohmann::json &call,
   python_converter &converter)
 {
-  numpy_call_expr instance(function_id, call, converter);
+  const nlohmann::json full_call =
+    function_id.get_function() == "full" && call.contains("keywords")
+      ? positional_full_call(call)
+      : nlohmann::json();
+  numpy_call_expr instance(
+    function_id, full_call.is_null() ? call : full_call, converter);
   if (
     std::optional<exprt> hoisted =
       instance.try_hoist_call_arg_for_view_method(function_id.get_function()))
@@ -9485,6 +9523,7 @@ exprt numpy_call_expr::get()
     {
       auto shape = get_arg(0);
       auto fill = get_arg(1);
+      reject_string_full_fill(fill);
       auto dims = parse_shape(shape);
       if (dims.empty())
       {
