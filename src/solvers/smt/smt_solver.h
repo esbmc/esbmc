@@ -1297,6 +1297,14 @@ type2tc make_array_domain_type(const array_type2t &arr);
  *  statically known, so the machine word size is returned as a safe default. */
 unsigned long array_domain_width_or_word_size(const array_type2t &arr);
 
+/** Walk an array nesting and return true if any level is infinite-sized.
+ *  Linearization (flatten_array_type / decompose_select_chain) requires every
+ *  level to have a constant size; an infinite middle (e.g. Solidity `T[N][]`
+ *  or `uint256[4][][2]`) makes the size product non-constant. Callers use
+ *  this guard to route such chains to per-level native array sorts instead of
+ *  attempting to flatten. */
+bool array_chain_has_infinite_level(const type2tc &type);
+
 // Define here to enable inlining
 inline smt_ast::smt_ast(smt_solver_baset *ctx, smt_sortt s)
   : sort(s), context(ctx)
