@@ -1166,12 +1166,39 @@ const struct group_opt_templ all_cmd_options[] = {
      {"branch-coverage-claims",
       NULL,
       "Enable branch-coverage and shows all reached claims"},
+     {"coverage-whole-unit",
+      NULL,
+      "With --contract C, keep C as the harness entry but count branch "
+      "coverage over the whole compilation unit instead of scoping the "
+      "denominator/numerator to C's own lexically-declared decisions "
+      "(opt-out of per-contract semantics A)"},
+     {"coverage-multi-tx",
+      NULL,
+      "Keep the multi-transaction dispatcher loop live in Solidity coverage "
+      "mode instead of neutralizing it to one call, so branches reachable only "
+      "through a state-building call sequence (e.g. deposit(); withdraw();) "
+      "are "
+      "covered and reconstructed into an ordered Foundry test. Requires a "
+      "global bound: use with --incremental-bmc (recommended; discovers the "
+      "transaction depth dynamically) or --unwind N (reaches up to ~N-1 tx). "
+      "Incompatible with --solidity-max-tx. Note: a state-building prefix "
+      "transaction can be lost under per-claim slicing, degrading that case to "
+      "a single call (under-coverage, never a wrong test)"},
      {"coverage-covered-set",
       boost::program_options::value<std::string>()->value_name("path"),
       "Cross-run persisted covered-set for --branch-coverage. Read at "
       "start (edges already witnessed are not re-instrumented, cutting "
       "SMT cost) and merge-written at end. The denominator stays the "
       "full static universe, so skipping never inflates coverage"},
+     {"coverage-exclude-contract",
+      boost::program_options::value<std::vector<std::string>>()->value_name(
+        "name"),
+      "Exclude a Solidity contract's own decisions from branch coverage "
+      "(repeatable). Decisions whose lexically-declaring contract is in "
+      "this set count in NEITHER the denominator NOR the numerator. Used "
+      "with --coverage-whole-unit to drop dependency code (e.g. "
+      "OpenZeppelin); a no-op in default per-contract mode, where foreign "
+      "decisions are already scoped out"},
      {"branch-function-coverage",
       NULL,
       "Show the coverage of branches and function entry"},

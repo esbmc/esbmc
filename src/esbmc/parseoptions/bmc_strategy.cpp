@@ -327,7 +327,7 @@ int esbmc_parseoptionst::do_bmc_strategy(
     if (options.get_bool_option("k-induction"))
     {
       const tvt base_case =
-        is_base_case_violated(options, goto_functions, k_step);
+        is_base_case_violated(options, goto_functions, k_step, &foundry_gen);
       if (
         base_case.is_true() && ends_at_violation(options, any_violation_found))
         return 1;
@@ -482,7 +482,7 @@ int esbmc_parseoptionst::do_bmc_strategy(
     if (options.get_bool_option("incremental-bmc"))
     {
       const tvt base_case =
-        is_base_case_violated(options, goto_functions, k_step);
+        is_base_case_violated(options, goto_functions, k_step, &foundry_gen);
       if (
         base_case.is_true() && ends_at_violation(options, any_violation_found))
         return 1;

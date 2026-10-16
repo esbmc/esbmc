@@ -220,8 +220,16 @@ static bool is_bounded_round(const optionst &options)
          strategy_owns_property_table(options);
 }
 
-bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
-  : options(opts), context(_context), ns(context), program(funcs)
+bmct::bmct(
+  goto_functionst &funcs,
+  optionst &opts,
+  contextt &_context,
+  foundry_generator *ext_foundry_gen)
+  : options(opts),
+    context(_context),
+    ns(context),
+    program(funcs),
+    foundry_gen_ext(ext_foundry_gen)
 {
   interleaving_number = 0;
   interleaving_failed = 0;
@@ -492,9 +500,7 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
   }
 
   if (options.get_bool_option("generate-foundry-testcase"))
-  {
     foundry_gen.generate_single(eq, smt_conv, ns);
-  }
 
   if (options.get_bool_option("generate-html-report"))
     generate_html_report("1", ns, goto_trace, options);
@@ -1506,6 +1512,7 @@ void report_coverage(
   const std::unordered_multiset<std::string> &reached_mul_claims,
   pytest_generator &pytest_gen,
   ctest_generator &ctest_gen,
+  foundry_generator &foundry_gen,
   const std::string &partial_reason)
 {
   // --dead-code-check reuses the coverage machinery for instrumentation but
@@ -1519,8 +1526,6 @@ void report_coverage(
   // interleaving (issue #4495).
   if (options.get_bool_option("dead-code-check"))
     return;
-
-  const bool is_partial = !partial_reason.empty();
 
   bool is_assert_cov = options.get_bool_option("assertion-coverage") ||
                        options.get_bool_option("assertion-coverage-claims");
@@ -1862,24 +1867,6 @@ void report_coverage(
     }
 
     json report;
-    // ---- PARTIAL, AT THE TOP LEVEL, IN BOTH DIRECTIONS ----
-    //
-    // A partial report is written to the same `cov-report.json` a complete one
-    // is, because that is where every consumer looks and the alternative --
-    // writing it somewhere else -- reproduces today's behaviour of keeping
-    // nothing. The marker is therefore the ONLY thing separating them, so it is
-    // emitted unconditionally: `false` on a complete run is what makes its
-    // absence a detectable defect rather than an assumed default. A consumer
-    // that reads `partial` with a default of false would otherwise treat a
-    // report from a build that forgot to set it as complete.
-    //
-    // Duplicated under `summary` on purpose. Every existing reader of these
-    // reports (report_summary.py, branch_gate.py, fset_cmp.py, gap_attribution
-    // .py) opens `summary` and several never look at the top level at all; a
-    // marker they cannot see is a marker that does not exist.
-    report["partial"] = is_partial;
-    if (is_partial)
-      report["partial_reason"] = partial_reason;
     report["coverage_type"] = cov_type;
     report["source_files"] = json::array();
     for (const auto &f : source_files)
@@ -1921,8 +1908,6 @@ void report_coverage(
   {
     ctest_gen.generate(ctest_output_dir(options));
   }
-
-  // Generate Foundry test cases from collected data (for coverage mode)
   if (options.get_bool_option("generate-foundry-testcase"))
     foundry_gen.generate();
 }
@@ -2610,8 +2595,14 @@ static void report_empty_coverage(const optionst &options)
     std::unordered_multiset<std::string> empty_mul_reached;
     pytest_generator empty_pytest;
     ctest_generator empty_ctest;
+    foundry_generator empty_foundry;
     report_coverage(
-      options, empty_reached, empty_mul_reached, empty_pytest, empty_ctest);
+      options,
+      empty_reached,
+      empty_mul_reached,
+      empty_pytest,
+      empty_ctest,
+      empty_foundry);
   }
 }
 
@@ -3131,6 +3122,7 @@ static void report_partial_coverage(
   const std::unordered_multiset<std::string> &reached_mul_claims,
   pytest_generator &pytest_gen,
   ctest_generator &ctest_gen,
+  foundry_generator &foundry_gen,
   const std::string &reason,
   size_t decided_claims,
   size_t remaining_claims)
@@ -3159,6 +3151,7 @@ static void report_partial_coverage(
         reached_mul_claims,
         pytest_gen,
         ctest_gen,
+        foundry_gen,
         reason);
   }
   catch (const std::bad_alloc &)
@@ -3813,11 +3806,7 @@ smt_resultt bmct::multi_property_check(
         if (want_ctest)
           ctest_gen.collect(local_eq, *solver_ptr, ns);
         if (want_foundry)
-        {
-          // Collect into the external strategy-level generator when threaded
-          // (--k-induction), else the owned member (plain BMC).
           foundry().collect(local_eq, *solver_ptr, ns);
-        }
 
         witnesses.push_back(std::move(w));
 
@@ -3951,6 +3940,7 @@ smt_resultt bmct::multi_property_check(
       reached_mul_claims,
       pytest_gen,
       ctest_gen,
+      foundry_gen,
       reason,
       decided_claims.load(),
       remaining_claims);

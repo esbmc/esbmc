@@ -8,8 +8,6 @@
 #include <solvers/smt/tuple/smt_tuple_node.h>
 #include <solvers/smt/tuple/smt_tuple_sym.h>
 
-#include <cstdlib>
-#include <string>
 #include <unordered_map>
 
 solver_creator create_new_smtlib_solver;

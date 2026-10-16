@@ -341,6 +341,7 @@ void report_coverage(
   const std::unordered_multiset<std::string> &reached_mul_claims,
   pytest_generator &pytest_gen,
   ctest_generator &ctest_gen,
+  foundry_generator &foundry_gen,
   const std::string &partial_reason = "");
 
 /// Record why a coverage measurement is not exhaustive; the reason is listed

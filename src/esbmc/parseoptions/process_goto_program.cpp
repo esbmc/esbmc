@@ -229,6 +229,19 @@ static void configure_branch_instrumentation(
     coverage.set_target(cmdline.getval("function"));
   if (cmdline.isset("coverage-covered-set"))
     coverage.covered_set_path = cmdline.getval("coverage-covered-set");
+  // Per-contract branch coverage (semantics A): scope the
+  // denominator/numerator to decisions lexically declared inside the
+  // --contract target only. --coverage-whole-unit opts out: keep the
+  // contract as the harness entry but count the whole compilation unit.
+  if (cmdline.isset("contract") && !cmdline.isset("coverage-whole-unit"))
+    coverage.scope_contract = cmdline.getval("contract");
+  // Dependency exclusion (Item 5-d): decisions whose declaring
+  // contract is in this set are dropped from BOTH denominator and
+  // numerator. Meaningful under --coverage-whole-unit (a no-op in
+  // default mode, where scope_contract already filters foreign code).
+  if (cmdline.isset("coverage-exclude-contract"))
+    for (const auto &c : cmdline.get_values("coverage-exclude-contract"))
+      coverage.exclude_contracts.insert(c);
   coverage.cov_assume_asserts = cmdline.isset("cov-assume-asserts");
 }
 
