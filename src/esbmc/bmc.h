@@ -264,6 +264,7 @@ private:
   /// k-step strategy, every row of the run's table Passed.
   bool proves_the_program() const;
   bool fc_cut_by_context_bound() const;
+  const char *bounded_round_note() const;
 
   /// Whether \p res establishes that *every* property holds, as opposed to a
   /// merely bounded round such as a k-induction base case. Must agree with the

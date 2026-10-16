@@ -1,0 +1,4 @@
+CORE
+main.py
+--multi-property --unwind 8 --no-unwinding-assertions
+^ERROR: a conditional expression instantiating a class must pick that class or None in its other branch$

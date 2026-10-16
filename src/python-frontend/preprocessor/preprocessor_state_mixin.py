@@ -16,6 +16,7 @@ class PreprocessorStateMixin:
         self.enumerate_loop_counter = 0
         self._iter_counter = 0
         self.iterator_classes = set()
+        self.iterator_params = set()
         self.helper_functions_added = False
         self.functionKwonlyParams = {}
         self.static_methods = set()
@@ -28,6 +29,7 @@ class PreprocessorStateMixin:
         self.functionVarargs = set()
         self._vararg_func_defs = {}
         self._vararg_module_defs = set()
+        self._vararg_callee_defs = {}
         self._vararg_specializations = {}
         self._vararg_dropped_defs = set()
         self._vararg_scope_stack = []
@@ -55,6 +57,7 @@ class PreprocessorStateMixin:
         self.generator_func_defs = {}
         self.generator_next_index = {}
         self.generator_emitted_init = set()
+        self._gen_next_blacklist = set()
         # Sequence-iterator protocol lowering (range_iter): maps a name bound to
         # a statically-sized sequence (range()/list/tuple literal) to that
         # length, an iterator var (from ``seq.__iter__()``) to its captured
@@ -94,6 +97,9 @@ class PreprocessorStateMixin:
         # nondet_list/nondet_dict the module defines itself, so the
         # rewrite to a typed builder must leave those calls alone.
         self.shadowed_nondet_collections = set()
+        # Names bound only by a module-level `import`, whose attributes may
+        # name nondet functions as the bare imported names do.
+        self.imported_module_names = set()
         self.list_literal_values = {}
         # Names bound to a dict literal, mapped to that literal; invalidated on
         # any mutation, scoped like list_literal_values.

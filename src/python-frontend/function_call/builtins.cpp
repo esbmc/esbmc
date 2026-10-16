@@ -345,6 +345,119 @@ exprt function_call_expr::isinstance_str_as_type(const exprt &obj_expr) const
   return unknown;
 }
 
+bool function_call_expr::is_class_object_operand(
+  const nlohmann::json &arg,
+  const exprt &obj) const
+{
+  if (python_converter::is_class_object(obj))
+    return true;
+  if (arg["_type"] != "Name" || !obj.is_symbol())
+    return false;
+  const std::string *name = converter_.class_object_name(obj.identifier());
+  return name && type_utils::is_type_identifier(*name);
+}
+
+namespace
+{
+/// Whether `stmt` assigns to `name`.
+bool assigns_name(const nlohmann::json &stmt, const std::string &name)
+{
+  const std::string kind = stmt.value("_type", "");
+  const nlohmann::json *target = nullptr;
+  if (kind == "AnnAssign")
+    target = &stmt["target"];
+  else if (kind == "Assign" && stmt["targets"].size() == 1)
+    target = &stmt["targets"][0];
+  return target && target->value("_type", "") == "Name" &&
+         target->value("id", "") == name;
+}
+
+/// The kind of number a binding of `name` stores: "int" (bool included),
+/// "float", or "" for anything else or another name.
+std::string
+numeric_binding_kind(const nlohmann::json &stmt, const std::string &name)
+{
+  if (!assigns_name(stmt, name))
+    return "";
+  const nlohmann::json &annotation = stmt.value("annotation", nlohmann::json());
+  const std::string type =
+    annotation.is_object() ? annotation.value("id", "") : "";
+  if (type == "int" || type == "bool")
+    return "int";
+  return type == "float" ? "float" : "";
+}
+
+/// Collects the number kinds bound to `name` in `body`, outside nested
+/// scopes, and whether any of those bindings sits inside a block. A binding
+/// on the straight-line spine before line `before` replaces every binding
+/// ahead of it on all paths, so those are dropped.
+void collect_numeric_bindings(
+  const nlohmann::json &body,
+  const std::string &name,
+  bool nested,
+  int before,
+  std::set<std::string> &kinds,
+  bool &in_block)
+{
+  for (const auto &stmt : body)
+  {
+    const std::string kind = stmt.value("_type", "");
+    if (kind == "FunctionDef" || kind == "ClassDef")
+      continue;
+    if (!nested && assigns_name(stmt, name) && stmt.value("lineno", 0) < before)
+    {
+      kinds.clear();
+      in_block = false;
+    }
+    const std::string number = numeric_binding_kind(stmt, name);
+    if (!number.empty())
+    {
+      kinds.insert(number);
+      in_block |= nested;
+    }
+    for (const char *key : {"body", "orelse", "finalbody", "handlers", "cases"})
+      if (stmt.contains(key) && stmt[key].is_array())
+        collect_numeric_bindings(
+          stmt[key], name, true, before, kinds, in_block);
+  }
+}
+} // namespace
+
+/// A name bound an int on one path and a float on another has one static C
+/// type, so isinstance would answer from that type on every path (#8417).
+void function_call_expr::refuse_isinstance_on_path_dependent_number(
+  const nlohmann::json &obj_arg,
+  const std::vector<nlohmann::json> &types) const
+{
+  const bool asks_number =
+    std::any_of(types.begin(), types.end(), [](const nlohmann::json &t) {
+      const std::string id = t.value("id", "");
+      return id == "int" || id == "float" || id == "bool";
+    });
+  if (!asks_number || obj_arg.value("_type", "") != "Name")
+    return;
+  const nlohmann::json function = json_utils::find_function_by_path(
+    converter_.ast(),
+    json_utils::split_function_path(converter_.current_function_name()));
+  const nlohmann::json &body = function.is_object() && function.contains("body")
+                                 ? function["body"]
+                                 : converter_.ast()["body"];
+  std::set<std::string> kinds;
+  bool in_block = false;
+  collect_numeric_bindings(
+    body,
+    obj_arg["id"].get<std::string>(),
+    false,
+    obj_arg.value("lineno", 0),
+    kinds,
+    in_block);
+  if (kinds.size() == 2 && in_block)
+    throw std::runtime_error(
+      "isinstance() on '" + obj_arg["id"].get<std::string>() +
+      "', which holds an int or a float depending on the path, is not "
+      "supported");
+}
+
 exprt function_call_expr::handle_isinstance() const
 {
   const auto &args = call_["args"];
@@ -358,17 +471,10 @@ exprt function_call_expr::handle_isinstance() const
   const auto &obj_arg = args[0];
   std::vector<nlohmann::json> types;
   collect_classinfo(args[1], types);
+  refuse_isinstance_on_path_dependent_number(obj_arg, types);
 
-  // Check if the first argument is a type object (e.g., x = int; isinstance(x,
-  // str)) Type objects themselves are not instances of other types (except
-  // 'type')
-  if (obj_arg["_type"] == "Name" && obj_expr.is_symbol())
-  {
-    const std::string *name =
-      converter_.class_object_name(obj_expr.identifier());
-    if (name && type_utils::is_type_identifier(*name))
-      return gen_boolean(admits_class_object(types));
-  }
+  if (is_class_object_operand(obj_arg, obj_expr))
+    return gen_boolean(admits_class_object(types));
 
   // Extract type name from various AST node formats
   auto extract_type_name = [](const nlohmann::json &node) -> std::string {
@@ -876,6 +982,109 @@ static bool attribute_decided(
          init_binds(*cls, attr, ast);
 }
 
+/// Whether @p node holds @p call where it runs as @p node runs, not in a
+/// nested function, class or generator that may run later.
+static bool runs_call(const nlohmann::json &node, const nlohmann::json &call)
+{
+  static const std::set<std::string> deferred{
+    "FunctionDef", "AsyncFunctionDef", "Lambda", "ClassDef", "GeneratorExp"};
+  if (node.is_object())
+  {
+    const std::string type = node.value("_type", "");
+    if (deferred.count(type))
+      return false;
+    if (
+      type == "Call" && node.value("lineno", -1) == call.value("lineno", -2) &&
+      node.value("col_offset", -1) == call.value("col_offset", -2))
+      return true;
+  }
+  if (!node.is_object() && !node.is_array())
+    return false;
+  return std::any_of(node.begin(), node.end(), [&](const auto &child) {
+    return runs_call(child, call);
+  });
+}
+
+/// Whether @p body binds @p name and then sets @p name.@p attr, each in a
+/// statement of its own, before the statement that runs @p call. With @p name
+/// bound nowhere else, the call reads the object that was given @p attr.
+static bool set_before_call(
+  const nlohmann::json &body,
+  const std::string &name,
+  const std::string &attr,
+  const nlohmann::json &call)
+{
+  bool bound = false;
+  bool set = false;
+  for (const auto &stmt : body)
+  {
+    if (runs_call(stmt, call))
+      return set;
+    const nlohmann::json *target = binding_target(stmt);
+    if (target && target->value("id", "") == name)
+      bound = true;
+    else if (bound && assigns_self_attribute(stmt, name, attr))
+      set = true;
+  }
+  return false;
+}
+
+/// Whether user code can intercept setting, reading or removing @p attr: a
+/// property or method of that name, a descriptor, or an attribute hook.
+static bool may_intercept(const nlohmann::json &node, const std::string &attr)
+{
+  static const std::set<std::string> hooks{
+    "__dict__",
+    "__getattribute__",
+    "__setattr__",
+    "__delattr__",
+    "__get__",
+    "__set__",
+    "delattr",
+    "vars"};
+  if (node.is_object())
+  {
+    const std::string type = node.value("_type", "");
+    const std::string name = type == "Name"        ? node.value("id", "")
+                             : type == "Attribute" ? node.value("attr", "")
+                                                   : node.value("name", "");
+    if (hooks.count(name) || (type == "FunctionDef" && name == attr))
+      return true;
+  }
+  if (!node.is_object() && !node.is_array())
+    return false;
+  return std::any_of(node.begin(), node.end(), [&](const auto &child) {
+    return may_intercept(child, attr);
+  });
+}
+
+/// Whether the plain name @p receiver, an instance of a program class, was
+/// given @p attr in the scope running @p call before the call (#8508).
+static bool receiver_given_attribute(
+  const nlohmann::json &receiver,
+  const typet &type,
+  const std::string &attr,
+  const nlohmann::json &call,
+  const python_converter &converter)
+{
+  const nlohmann::json &ast = converter.ast();
+  if (
+    receiver["_type"] != "Name" || !user_class_of(type, ast) ||
+    imports_other_modules(ast) || may_delete(ast, attr) ||
+    may_intercept(ast, attr))
+    return false;
+  const std::string name = receiver["id"].get<std::string>();
+  if (count_bindings(ast, name) != 1)
+    return false;
+  const std::string &function = converter.get_current_func_name();
+  if (function.empty())
+    return set_before_call(ast["body"], name, attr, call);
+  const nlohmann::json scope =
+    find_function_by_path(ast, split_function_path(function));
+  return scope.contains("body") &&
+         set_before_call(scope["body"], name, attr, call);
+}
+
 exprt function_call_expr::handle_getattr()
 {
   const auto &args = call_["args"];
@@ -886,7 +1095,11 @@ exprt function_call_expr::handle_getattr()
     type = type.subtype();
   bool present = false;
   if (!attribute_decided(type, attr, converter_.ast(), present))
-    return handle_general_function_call();
+  {
+    if (!receiver_given_attribute(args[0], type, attr, call_, converter_))
+      return handle_general_function_call();
+    present = true;
+  }
 
   if (!present && args.size() == 3)
     return converter_.get_expr(args[2]);
@@ -979,47 +1192,170 @@ exprt function_call_expr::handle_divmod() const
   return converter_.get_math_handler().handle_divmod(dividend, divisor, call_);
 }
 
-exprt function_call_expr::handle_issubclass() const
+static const std::string abc_prefix = "collections.abc.";
+
+/// The class a classinfo node names: a collections.abc class as
+/// "collections.abc.<name>", any other Name as its id, and otherwise empty.
+static std::string
+class_key(const nlohmann::json &node, const nlohmann::json &ast)
 {
-  const auto &args = call_["args"];
-  if (args.size() != 2)
-    return converter_.get_exception_handler().gen_exception_raise(
-      "TypeError", "issubclass() takes exactly 2 arguments");
+  const std::string name = json_utils::dotted_name(node);
+  const std::string abc = json_utils::collections_abc_class(ast, name);
+  if (!abc.empty())
+    return abc_prefix + abc;
+  return node["_type"] == "Name" ? name : "";
+}
 
-  // arg 1 must be a class, i.e. a Name referring to a class or builtin type.
-  if (args[0]["_type"] != "Name")
-    return converter_.get_exception_handler().gen_exception_raise(
-      "TypeError", "issubclass() arg 1 must be a class");
-  const std::string cls = args[0]["id"].get<std::string>();
+/// The collections.abc classes each builtin class and each such ABC is a
+/// subclass of, as CPython 3.14 reports them. Hashable here says whether the
+/// class itself is hashable, not whether Hashable is among its bases.
+static const std::vector<std::string> *abc_supers(const std::string &key)
+{
+  static const std::unordered_map<std::string, std::vector<std::string>>
+    supers = {
+      {"int", {"Hashable"}},
+      {"float", {"Hashable"}},
+      {"complex", {"Hashable"}},
+      {"bool", {"Hashable"}},
+      {"str",
+       {"Hashable",
+        "Iterable",
+        "Reversible",
+        "Container",
+        "Sized",
+        "Collection",
+        "Sequence"}},
+      {"bytes",
+       {"Hashable",
+        "Iterable",
+        "Reversible",
+        "Container",
+        "Sized",
+        "Collection",
+        "Sequence"}},
+      {"bytearray",
+       {"Iterable",
+        "Reversible",
+        "Container",
+        "Sized",
+        "Collection",
+        "Sequence",
+        "MutableSequence"}},
+      {"list",
+       {"Iterable",
+        "Reversible",
+        "Container",
+        "Sized",
+        "Collection",
+        "Sequence",
+        "MutableSequence"}},
+      {"tuple",
+       {"Hashable",
+        "Iterable",
+        "Reversible",
+        "Container",
+        "Sized",
+        "Collection",
+        "Sequence"}},
+      {"dict",
+       {"Iterable",
+        "Reversible",
+        "Container",
+        "Sized",
+        "Collection",
+        "Mapping",
+        "MutableMapping"}},
+      {"set",
+       {"Iterable", "Container", "Sized", "Collection", "Set", "MutableSet"}},
+      {"frozenset",
+       {"Hashable", "Iterable", "Container", "Sized", "Collection", "Set"}},
+      {"range",
+       {"Hashable",
+        "Iterable",
+        "Reversible",
+        "Container",
+        "Sized",
+        "Collection",
+        "Sequence"}},
+      {"object", {"Hashable"}},
+      {"type", {"Hashable", "Callable"}},
+      {"collections.abc.Hashable", {}},
+      {"collections.abc.Iterable", {"Hashable"}},
+      {"collections.abc.Iterator", {"Hashable", "Iterable"}},
+      {"collections.abc.Reversible", {"Hashable", "Iterable"}},
+      {"collections.abc.Generator", {"Hashable", "Iterable", "Iterator"}},
+      {"collections.abc.Container", {"Hashable"}},
+      {"collections.abc.Sized", {"Hashable"}},
+      {"collections.abc.Collection",
+       {"Hashable", "Iterable", "Container", "Sized"}},
+      {"collections.abc.Callable", {"Hashable"}},
+      {"collections.abc.Sequence",
+       {"Hashable",
+        "Iterable",
+        "Reversible",
+        "Container",
+        "Sized",
+        "Collection"}},
+      {"collections.abc.MutableSequence",
+       {"Hashable",
+        "Iterable",
+        "Reversible",
+        "Container",
+        "Sized",
+        "Collection",
+        "Sequence"}},
+      {"collections.abc.Set", {"Iterable", "Container", "Sized", "Collection"}},
+      {"collections.abc.MutableSet",
+       {"Iterable", "Container", "Sized", "Collection", "Set"}},
+      {"collections.abc.Mapping",
+       {"Iterable", "Container", "Sized", "Collection"}},
+      {"collections.abc.MutableMapping",
+       {"Iterable", "Container", "Sized", "Collection", "Mapping"}},
+  };
+  auto it = supers.find(key);
+  return it == supers.end() ? nullptr : &it->second;
+}
 
-  // arg 2 is a class, a tuple of classes or a union of classes.
-  std::vector<nlohmann::json> info;
-  collect_classinfo(args[1], info);
-  std::vector<std::string> targets;
-  for (const auto &n : info)
-    if (n["_type"] == "Name")
-      targets.push_back(n["id"].get<std::string>());
-    else if (n["_type"] == "Tuple")
-      return converter_.get_exception_handler().gen_exception_raise(
-        "TypeError", "unsupported operand type(s) for |");
+/// The methods by whose presence a structural collections.abc class
+/// (one with a __subclasshook__) admits a class that does not inherit it.
+static const std::vector<std::string> *abc_hook_methods(const std::string &key)
+{
+  static const std::unordered_map<std::string, std::vector<std::string>>
+    methods = {
+      {"collections.abc.Iterable", {"__iter__"}},
+      {"collections.abc.Iterator", {"__iter__", "__next__"}},
+      {"collections.abc.Reversible", {"__reversed__", "__iter__"}},
+      {"collections.abc.Generator",
+       {"__iter__", "__next__", "send", "throw", "close"}},
+      {"collections.abc.Container", {"__contains__"}},
+      {"collections.abc.Sized", {"__len__"}},
+      {"collections.abc.Collection", {"__len__", "__iter__", "__contains__"}},
+      {"collections.abc.Callable", {"__call__"}},
+  };
+  auto it = methods.find(key);
+  return it == methods.end() ? nullptr : &it->second;
+}
 
-  if (targets.empty())
-    return converter_.get_exception_handler().gen_exception_raise(
-      "TypeError", "issubclass() arg 2 must be a class or tuple of classes");
+static bool defines_method(const nlohmann::json &cls, const std::string &name)
+{
+  const auto &body = cls["body"];
+  return std::any_of(body.begin(), body.end(), [&name](const auto &stmt) {
+    return stmt["_type"] == "FunctionDef" && stmt["name"] == name;
+  });
+}
 
-  // Collect the ancestors of `cls` by walking the AST class hierarchy.
-  // Every class is implicitly a subclass of object; bool subclasses int.
-  const auto &ast = converter_.ast();
+/// `cls` and the classes it inherits, explicitly or implicitly, nearest
+/// first. For single inheritance this is the method resolution order.
+static std::vector<std::string>
+class_ancestors(const std::string &cls, const nlohmann::json &ast)
+{
   std::vector<std::string> ancestors;
   std::vector<std::string> work{cls};
-  auto seen = [&ancestors](const std::string &c) {
-    return std::find(ancestors.begin(), ancestors.end(), c) != ancestors.end();
-  };
   while (!work.empty())
   {
     std::string c = work.back();
     work.pop_back();
-    if (seen(c))
+    if (std::find(ancestors.begin(), ancestors.end(), c) != ancestors.end())
       continue;
     ancestors.push_back(c);
 
@@ -1028,13 +1364,113 @@ exprt function_call_expr::handle_issubclass() const
 
     const auto cls_node = json_utils::find_class(ast["body"], c);
     if (!cls_node.empty() && cls_node.contains("bases"))
-      for (const auto &b : cls_node["bases"])
-        if (b["_type"] == "Name")
-          work.push_back(b["id"].get<std::string>());
+    {
+      const auto &bases = cls_node["bases"];
+      for (auto b = bases.rbegin(); b != bases.rend(); ++b)
+      {
+        const std::string key = class_key(*b, ast);
+        if (!key.empty())
+          work.push_back(key);
+      }
+    }
+  }
+  return ancestors;
+}
+
+/// Whether instances of a class are hashable: the nearest class to define
+/// __hash__ or __eq__ decides, as defining __eq__ alone sets __hash__ to None.
+static bool is_hashable(
+  const std::vector<std::string> &ancestors,
+  const nlohmann::json &ast)
+{
+  for (const std::string &c : ancestors)
+  {
+    const auto cls_node = json_utils::find_class(ast["body"], c);
+    if (!cls_node.empty())
+    {
+      if (defines_method(cls_node, "__hash__"))
+        return true;
+      if (defines_method(cls_node, "__eq__"))
+        return false;
+    }
+    else if (const auto *supers = abc_supers(c))
+      return std::find(supers->begin(), supers->end(), "Hashable") !=
+             supers->end();
+  }
+  return true;
+}
+
+/// Whether a class with @p ancestors is a subclass of @p target: by
+/// inheritance, by a builtin's registration with a collections.abc class, or
+/// by defining the methods a structural collections.abc class looks for.
+static bool is_subclass(
+  const std::vector<std::string> &ancestors,
+  const std::string &target,
+  const nlohmann::json &ast)
+{
+  auto inherits = [&ancestors](const std::string &c) {
+    return std::find(ancestors.begin(), ancestors.end(), c) != ancestors.end();
+  };
+  if (target == "object" || inherits(target))
+    return true;
+  if (!target.starts_with(abc_prefix))
+    return false;
+  if (target == abc_prefix + "Hashable")
+    return is_hashable(ancestors, ast);
+
+  const std::string abc = target.substr(abc_prefix.size());
+  for (const std::string &c : ancestors)
+    if (const auto *supers = abc_supers(c))
+      if (std::find(supers->begin(), supers->end(), abc) != supers->end())
+        return true;
+
+  const auto *methods = abc_hook_methods(target);
+  return methods &&
+         std::all_of(methods->begin(), methods->end(), [&](const auto &m) {
+           return std::any_of(
+             ancestors.begin(), ancestors.end(), [&](const auto &c) {
+               const auto cls_node = json_utils::find_class(ast["body"], c);
+               return !cls_node.empty() && defines_method(cls_node, m);
+             });
+         });
+}
+
+exprt function_call_expr::handle_issubclass() const
+{
+  const auto &args = call_["args"];
+  if (args.size() != 2)
+    return converter_.get_exception_handler().gen_exception_raise(
+      "TypeError", "issubclass() takes exactly 2 arguments");
+
+  // arg 1 must be a class: a Name referring to a class or builtin type, or a
+  // collections.abc class.
+  const auto &ast = converter_.ast();
+  const std::string cls = class_key(args[0], ast);
+  if (cls.empty())
+    return converter_.get_exception_handler().gen_exception_raise(
+      "TypeError", "issubclass() arg 1 must be a class");
+
+  // arg 2 is a class, a tuple of classes or a union of classes.
+  std::vector<nlohmann::json> info;
+  collect_classinfo(args[1], info);
+  std::vector<std::string> targets;
+  for (const auto &n : info)
+  {
+    if (n["_type"] == "Tuple")
+      return converter_.get_exception_handler().gen_exception_raise(
+        "TypeError", "unsupported operand type(s) for |");
+    const std::string key = class_key(n, ast);
+    if (!key.empty())
+      targets.push_back(key);
   }
 
+  if (targets.empty())
+    return converter_.get_exception_handler().gen_exception_raise(
+      "TypeError", "issubclass() arg 2 must be a class or tuple of classes");
+
+  const std::vector<std::string> ancestors = class_ancestors(cls, ast);
   for (const std::string &t : targets)
-    if (t == "object" || seen(t))
+    if (is_subclass(ancestors, t, ast))
       return true_exprt();
   return false_exprt();
 }
@@ -2042,8 +2478,29 @@ exprt function_call_expr::handle_min_max(
   return migrate_expr_back(result2);
 }
 
+// Whether a print() `file=` target is a standard stream (None is stdout),
+// whose output no program state can observe.
+static bool is_std_stream(const nlohmann::json &target)
+{
+  if (target.value("_type", "") == "Constant")
+    return target.contains("value") && target["value"].is_null();
+  return target.value("_type", "") == "Attribute" &&
+         target["value"].value("_type", "") == "Name" &&
+         target["value"].value("id", "") == "sys" &&
+         (target["attr"] == "stdout" || target["attr"] == "stderr");
+}
+
 exprt function_call_expr::handle_print() const
 {
+  // Output written to any other file (e.g. an io.StringIO) can be read back,
+  // so dropping it could prove a program that fails.
+  if (call_.contains("keywords"))
+    for (const auto &kw : call_["keywords"])
+      if (kw["arg"] == "file" && !is_std_stream(kw["value"]))
+        throw std::runtime_error(
+          "print() to a file other than sys.stdout or sys.stderr is not "
+          "supported");
+
   // Materialize each argument as code so arithmetic checks and function-call
   // side effects are preserved even though print itself has no runtime output.
   const auto &args = call_["args"];

@@ -5,6 +5,7 @@
 
 class python_converter;
 class symbol_id;
+class symbolt;
 
 class function_call_builder
 {
@@ -68,6 +69,10 @@ private:
   /// None.
   bool receiver_is_bound_to_none() const;
   bool nested_function_exists(const symbol_id &sid) const;
+  void use_imported_class_file(
+    symbol_id &function_id,
+    const symbolt &receiver,
+    const std::string &class_name) const;
 
   /// Raises AttributeError ahead of `name.method(...)` when `name` is a str or
   /// class-instance reference holding None (a null pointer).
@@ -127,6 +132,15 @@ private:
    * no enclosing function.
    */
   typet enclosing_return_type() const;
+
+  /*
+   * The class of a method call's receiver that is not a plain name. For an
+   * item of a list of class instances (`xs[i].m()`) it is their class, so
+   * the call dispatches as `x = xs[i]; x.m()` does; otherwise "str". Throws
+   * when the list's items are not known to share one class, since no single
+   * method can then be chosen statically.
+   */
+  std::string subscript_receiver_class(const nlohmann::json &receiver) const;
 
   python_converter &converter_;
   const nlohmann::json &call_;
