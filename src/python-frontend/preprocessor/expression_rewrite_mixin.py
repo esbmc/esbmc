@@ -261,6 +261,7 @@ for {i} in range(0, len({seq})):
         class _Fill(ast.NodeTransformer):
 
             def visit_Name(self, node):
+                """The argument a template placeholder stands for, else @p node."""
                 hole = holes.get(node.id)
                 return copy.deepcopy(hole) if hole is not None else node
 
