@@ -3059,3 +3059,8 @@ regression/python/github_8408_other_binding_fail
 regression/python/github_8408_override_unsupported_fail
 regression/python/github_8408_spine_unsupported
 regression/python/github_8408_unsupported
+regression/python/arith_lost_type
+regression/python/arith_lost_type_default_fail
+regression/python/arith_lost_type_fail
+regression/python/arith_lost_type_lambda_fail
+regression/python/arith_lost_type_param_fail
