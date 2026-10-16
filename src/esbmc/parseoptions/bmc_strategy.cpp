@@ -719,41 +719,6 @@ int esbmc_parseoptionst::falsify_with_bounded_schedules(
   return result;
 }
 
-// A backend that answers UNKNOWN on a construct it does not support is a
-// solver limitation. The motivating case is the k-induction inductive step on
-// a Solidity contract: havocking a storage mapping equates a constant-array
-// global with a fresh symbol, which Bitwuzla rejects ("Equality over constant
-// arrays not fully supported yet"). When the backend was auto-selected, retry
-// the query once with CVC5, whose array engine handles the shape, and keep it
-// for the remaining k steps (bmct::options refers to the caller's option set).
-smt_resultt esbmc_parseoptionst::retry_with_cvc5(bmct &bmc)
-{
-  static bool attempted = false;
-  const bool user_picked_solver =
-    cmdline.isset("z3") || cmdline.isset("cvc5") || cmdline.isset("cvc4") ||
-    cmdline.isset("cvc") || cmdline.isset("bitwuzla") ||
-    cmdline.isset("boolector") || cmdline.isset("yices") ||
-    cmdline.isset("mathsat") || cmdline.isset("smtlib") ||
-    cmdline.isset("neurosym") || cmdline.isset("default-solver");
-  const bool cvc5_available =
-    (std::string(" ") + ESBMC_AVAILABLE_SOLVERS + " ").find(" cvc5 ") !=
-    std::string::npos;
-  if (
-    attempted || user_picked_solver || !cvc5_available ||
-    bmc.options.get_option("default-solver") == "cvc5")
-    return P_ERROR;
-
-  attempted = true;
-  log_warning(
-    "The auto-selected SMT backend could not decide this query "
-    "(unsupported construct or UNKNOWN). Retrying with 'cvc5' and "
-    "keeping it for the rest of the run; pass --bitwuzla / --z3 to "
-    "pin a backend explicitly.");
-  bmc.options.set_option("default-solver", "cvc5");
-  config.options.set_option("default-solver", "cvc5");
-  return bmc.start_bmc();
-}
-
 int esbmc_parseoptionst::do_bmc(bmct &bmc)
 {
   log_progress("Starting Bounded Model Checking");
@@ -766,10 +731,6 @@ int esbmc_parseoptionst::do_bmc(bmct &bmc)
   try
   {
     res = bmc.start_bmc();
-    // Only a P_ERROR the solver itself returned: the ones the catch arms
-    // below produce are not something a different backend can fix.
-    if (res == P_ERROR)
-      res = retry_with_cvc5(bmc);
   }
   catch (const inductive_step_disabled_exceptiont &e)
   {

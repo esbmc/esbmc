@@ -47,7 +47,6 @@ public:
 protected:
   virtual void get_command_line_options(optionst &options);
   virtual int do_bmc(bmct &bmc);
-  smt_resultt retry_with_cvc5(bmct &bmc);
   bool is_solidity_input() const;
   void set_solidity_check_defaults(optionst &options) const;
   void expand_no_standard_checks(optionst &options) const;
