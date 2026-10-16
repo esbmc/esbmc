@@ -717,6 +717,58 @@ python_annotation<Json>::get_dict_literal_type(const Json &dict_value)
 
 // ---------- dispatchers ----------
 
+// The type of the value a call such as abs(a - b), len(list) or A()
+// returns, or "" when unknown.
+template <class Json>
+std::string python_annotation<Json>::get_call_type(const Json &arg)
+{
+  // A module-qualified nondet call, such as _sv_verifier.nondet_float(),
+  // returns the type its name ends in, as the unqualified form does.
+  const std::string attr = arg["func"].value("attr", "");
+  if (arg["func"]["_type"] == "Attribute" && attr.rfind("nondet_", 0) == 0)
+    return attr.substr(attr.find_last_of('_') + 1);
+
+  if (arg["func"]["_type"] == "Name")
+  {
+    const std::string &func_name = arg["func"]["id"];
+
+    // Class constructor call: A() produces an instance of A
+    // Resolve possible import aliases before checking if this is a class
+    const std::string class_name =
+      json_utils::get_object_alias(ast_, func_name);
+    if (json_utils::is_class(class_name, ast_))
+      return class_name;
+
+    // hash() returns bytes only for the consensus spec's own
+    // hash(data: bytes); on any other argument it is the real builtin,
+    // which returns int (see is_generic_hash_call in function_call/expr.cpp).
+    if (
+      func_name == "hash" && arg.contains("args") && !arg["args"].empty() &&
+      get_argument_type(arg["args"][0]) != "bytes")
+      return "int";
+
+    const std::string copied = list_copy_type(func_name, arg);
+    if (!copied.empty())
+      return copied;
+
+    if (builtin_functions().count(func_name))
+      return get_builtin_call_type(arg);
+
+    // For user-defined functions, try to get return type
+    try
+    {
+      return get_function_return_type(func_name, ast_);
+    }
+    catch (std::runtime_error &)
+    {
+      // Function not found, return empty
+      return "";
+    }
+  }
+
+  return "";
+}
+
 template <class Json>
 std::string python_annotation<Json>::get_argument_type(const Json &arg)
 {
@@ -995,46 +1047,7 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
     return "bool";
   }
   else if (arg["_type"] == "Call")
-  {
-    // Handle function calls like abs(a - b), len(list), etc.
-    if (arg["func"]["_type"] == "Name")
-    {
-      const std::string &func_name = arg["func"]["id"];
-
-      // Class constructor call: A() produces an instance of A
-      // Resolve possible import aliases before checking if this is a class
-      const std::string class_name =
-        json_utils::get_object_alias(ast_, func_name);
-      if (json_utils::is_class(class_name, ast_))
-        return class_name;
-
-      // hash() returns bytes only for the consensus spec's own
-      // hash(data: bytes); on any other argument it is the real builtin,
-      // which returns int (see is_generic_hash_call in function_call/expr.cpp).
-      if (
-        func_name == "hash" && arg.contains("args") && !arg["args"].empty() &&
-        get_argument_type(arg["args"][0]) != "bytes")
-        return "int";
-
-      const std::string copied = list_copy_type(func_name, arg);
-      if (!copied.empty())
-        return copied;
-
-      if (builtin_functions().count(func_name))
-        return get_builtin_call_type(arg);
-
-      // For user-defined functions, try to get return type
-      try
-      {
-        return get_function_return_type(func_name, ast_);
-      }
-      catch (std::runtime_error &)
-      {
-        // Function not found, return empty
-        return "";
-      }
-    }
-  }
+    return get_call_type(arg);
 
   return ""; // Cannot determine type
 }
@@ -4407,19 +4420,9 @@ void python_annotation<Json>::infer_parameter_types(Json &function_element)
 
         if (
           parent_func == nullptr && call_types.size() > 1 &&
-          are_all_user_classes(call_types))
+          are_specializable_types(call_types))
         {
-          bool already_pending = false;
-          for (const auto &spec : pending_specializations_)
-          {
-            if (spec.function_name == func_name && spec.param_index == i)
-            {
-              already_pending = true;
-              break;
-            }
-          }
-
-          if (!already_pending)
+          if (!is_specialization_pending(func_name, i, call_types))
           {
             pending_specializations_.push_back(
               {func_name, i, std::move(call_types)});

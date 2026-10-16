@@ -158,6 +158,7 @@ private:
   // ----- core inference dispatchers -----
   std::string get_argument_type(const Json &arg);
   std::string get_dict_literal_type(const Json &dict_value);
+  std::string get_call_type(const Json &arg);
   std::string get_builtin_call_type(const Json &call);
   // Type of a builtin call whose result depends on its argument (abs, hash),
   // or empty for any other call.
@@ -248,6 +249,11 @@ private:
 
   // ----- class inheritance and specialisation (annotation_symbolic.inl) -----
   bool are_all_user_classes(const std::vector<std::string> &types) const;
+  bool are_specializable_types(const std::vector<std::string> &types) const;
+  bool is_specialization_pending(
+    const std::string &func_name,
+    size_t param_index,
+    const std::vector<std::string> &types) const;
   std::string build_specialized_function_name(
     const std::string &base_name,
     const std::string &class_name) const;
@@ -361,6 +367,11 @@ private:
     std::vector<std::string> class_types;
   };
   std::vector<pending_specializationt> pending_specializations_;
+  void retype_builtin_copy(
+    Json &fn,
+    const pending_specializationt &spec,
+    const std::string &type,
+    const std::vector<Json> &calls);
   std::vector<const Json *> extra_subscript_inference_asts_;
 };
 
