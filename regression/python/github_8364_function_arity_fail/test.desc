@@ -1,4 +1,5 @@
 CORE
 main.py
 
-^ERROR: .*main\.py:14:7: size\(\) takes 0 positional arguments but 1 was given$
+^VERIFICATION FAILED$
+^  uncaught exception: TypeError$

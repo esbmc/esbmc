@@ -4513,6 +4513,23 @@ std::optional<exprt> python_list::resolve_nested_list_element(
   return std::nullopt;
 }
 
+typet python_list::unrecorded_base_elem_type()
+{
+  if (!list_value_.contains("value") || !list_value_["value"].is_object())
+    return typet();
+  const nlohmann::json &base = list_value_["value"];
+
+  // A parameter or variable declares its element type in its annotation.
+  if (base.contains("id") && base["id"].is_string())
+    return get_elem_type_from_annotation(
+      json_utils::get_var_value(
+        base["id"], converter_.current_function_name(), converter_.ast()),
+      converter_.get_type_handler());
+
+  // An inline call, as in g()[0], declares it in g's return annotation.
+  return infer_elem_type_from_call_return(base, converter_);
+}
+
 /// The list's recorded element type when it is a tagged scalar and the index is
 /// not constant, else \p fallback unchanged. Kept out of handle_index_access so
 /// the dispatch adds no decision point to it.
@@ -4733,22 +4750,7 @@ exprt python_list::handle_index_access(
        slice_node["operand"]["_type"] == "Constant"))
     {
       if (!recorded)
-      {
-        /* Fall back to annotation for function parameters */
-        if (
-          list_value_.contains("value") && list_value_["value"].is_object() &&
-          list_value_["value"].contains("id") &&
-          list_value_["value"]["id"].is_string())
-        {
-          const nlohmann::json list_value_node = json_utils::get_var_value(
-            list_value_["value"]["id"],
-            converter_.current_function_name(),
-            converter_.ast());
-
-          elem_type = get_elem_type_from_annotation(
-            list_value_node, converter_.get_type_handler());
-        }
-      }
+        elem_type = unrecorded_base_elem_type();
       else
       {
         size_t type_index =
