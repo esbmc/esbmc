@@ -1,5 +1,6 @@
 #pragma once
 
+#include <deque>
 #include <functional>
 #include <nlohmann/json.hpp>
 #include <python-frontend/math/complex_handler.h>
@@ -1270,6 +1271,25 @@ private:
     module_locator &locator,
     code_blockt &code);
 
+  bool import_one_module(
+    const nlohmann::json &import_node,
+    module_locator &locator,
+    code_blockt &code);
+
+  std::vector<const nlohmann::json *>
+  import_nodes(std::deque<nlohmann::json> &submodules) const;
+
+  std::string module_source_file(
+    const std::string &module,
+    const module_locator &locator) const;
+
+  /// An `import <pkg>.<name> as <name>` node for each name that
+  /// `from <pkg> import <name>` binds to a submodule rather than to a
+  /// definition of <pkg> itself (#8375).
+  std::vector<nlohmann::json> submodule_imports(
+    const nlohmann::json &import_node,
+    const module_locator &locator) const;
+
   /// Binds an `import <mod> as <alias>` alias to the module's file, so the
   /// alias resolves like the module name does (#6296).
   void register_import_alias(
@@ -1323,6 +1343,7 @@ private:
   void pre_collect_module_asts(
     const nlohmann::json &module_ast,
     module_locator &locator);
+  void pre_collect_import(const nlohmann::json &node, module_locator &locator);
 
   symbolt *find_function_in_base_classes(
     const std::string &class_name,
