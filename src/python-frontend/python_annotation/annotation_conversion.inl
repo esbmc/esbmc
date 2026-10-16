@@ -2499,7 +2499,7 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
     }
   }
 
-  Json obj_node = json_utils::find_var_decl(obj, get_current_func_name(), ast_);
+  Json obj_node = find_receiver_decl(obj);
 
   // Check current function parameters if not found
   if (
@@ -3711,6 +3711,18 @@ const Json python_annotation<Json>::find_annotated_assign(
     }
   }
   return Json();
+}
+
+template <class Json>
+Json python_annotation<Json>::find_receiver_decl(const std::string &obj)
+{
+  Json node = json_utils::find_var_decl(obj, get_current_func_name(), ast_);
+  if (!node.empty())
+    return node;
+  // A name bound only by unpacking (`a, b = f()`) has no plain assignment.
+  const Json &body =
+    current_func != nullptr ? (*current_func)["body"] : ast_["body"];
+  return find_annotated_assign(obj, body);
 }
 
 template <class Json>
