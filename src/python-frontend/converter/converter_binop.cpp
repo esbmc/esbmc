@@ -1549,7 +1549,8 @@ exprt python_converter::handle_tagged_scalar_binop(
   const nlohmann::json &element)
 {
   if (op == "Eq" || op == "NotEq" || type_utils::is_ordered_comparison(op))
-    return dynamic_type_handler_.handle_comparison(op, lhs, rhs);
+    return dynamic_type_handler_.handle_comparison(
+      op, lhs, rhs, get_location_from_decl(element));
   if (op == "Add" || op == "Sub" || op == "Div")
     return dynamic_type_handler_.handle_arithmetic(
       op, lhs, rhs, get_location_from_decl(element));

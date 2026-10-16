@@ -1504,6 +1504,9 @@ exprt python_list::build_pop_list_call(
     converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_pop");
   assert(pop_func && "list_pop function not found in symbol table");
 
+  if (!converter_.in_rhs_type_probe_)
+    guard_pop_index(build_symbol(list), index, element);
+
   // Create side-effect function call
   const typet pyobject_ptr_type =
     pointer_typet(converter_.get_type_handler().get_list_element_type());
@@ -1570,6 +1573,64 @@ exprt python_list::build_pop_list_call(
 
   // Extract and dereference PyObject value
   return extract_pyobject_value(pop_call, elem_type);
+}
+
+void python_list::guard_pop_index(
+  const exprt &list,
+  const exprt &index,
+  const nlohmann::json &element)
+{
+  const locationt location = converter_.get_location_from_decl(element);
+
+  const symbolt *size_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
+  assert(size_func && "list_size function not found");
+
+  symbolt &size_var = converter_.create_tmp_symbol(
+    element, "$list_size$", size_type(), gen_zero(size_type()));
+  code_declt size_decl(build_symbol(size_var));
+  size_decl.location() = location;
+  converter_.add_instruction(size_decl);
+
+  code_function_callt size_call;
+  size_call.function() = build_symbol(*size_func);
+  size_call.arguments().push_back(list);
+  size_call.lhs() = build_symbol(size_var);
+  size_call.type() = size_type();
+  size_call.location() = location;
+  converter_.add_instruction(size_call);
+
+  const auto raise_if = [&](const expr2tc &cond, const std::string &message) {
+    code_ifthenelset guard;
+    guard.cond() = migrate_expr_back(cond);
+    guard.then_case() =
+      code_expressiont(converter_.get_exception_handler().gen_exception_raise(
+        "IndexError", message));
+    guard.location() = location;
+    guard.location().property("skipped");
+    converter_.add_instruction(guard);
+  };
+
+  expr2tc size2, index2;
+  migrate_expr(build_symbol(size_var), size2);
+  migrate_expr(index, index2);
+  const type2tc int64 = get_int64_type();
+  size2 = typecast2tc(int64, size2);
+  index2 = typecast2tc(int64, index2);
+
+  raise_if(equality2tc(size2, gen_zero(int64)), "pop from empty list");
+
+  // The index normalised as CPython does: a negative one counts from the end.
+  expr2tc normalised = if2tc(
+    int64,
+    lessthan2tc(index2, gen_zero(int64)),
+    add2tc(int64, size2, index2),
+    index2);
+  raise_if(
+    or2tc(
+      lessthan2tc(normalised, gen_zero(int64)),
+      greaterthanequal2tc(normalised, size2)),
+    "pop index out of range");
 }
 
 exprt python_list::build_copy_list_call(

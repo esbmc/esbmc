@@ -2,4 +2,4 @@ CORE
 main.py
 
 ^VERIFICATION FAILED$
-^.*unsupported operand type.*for -.*$
+uncaught exception: TypeError

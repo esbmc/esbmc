@@ -201,7 +201,8 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
   {
     std::string unary_op = element["op"]["_type"].get<std::string>();
     if (unary_op == "USub")
-      return dynamic_type_handler_.build_neg_tagged(unary_sub);
+      return dynamic_type_handler_.build_neg_tagged(
+        unary_sub, get_location_from_decl(element));
     throw std::runtime_error(
       "operator '" + unary_op +
       "' on a dynamically-typed variable is not yet supported");

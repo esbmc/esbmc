@@ -657,6 +657,13 @@ public:
     const exprt &index,
     const nlohmann::json &element);
 
+  /// Raise a catchable IndexError before list.pop(index) when the list is
+  /// empty or the index is out of range, as CPython does.
+  void guard_pop_index(
+    const exprt &list,
+    const exprt &index,
+    const nlohmann::json &element);
+
   /// The __ESBMC_list_set_at call storing `rhs` into the list element `lhs`
   /// reads, when `rhs` changes the element's type; nullopt otherwise.
   std::optional<exprt> build_element_replacement(

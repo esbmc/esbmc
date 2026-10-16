@@ -76,8 +76,11 @@ public:
    * @brief Dispatches Eq/NotEq/Lt/LtE/Gt/GtE between a tagged-scalar
    * operand and the other side
    */
-  exprt
-  handle_comparison(const std::string &op, const exprt &lhs, const exprt &rhs);
+  exprt handle_comparison(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const locationt &location);
 
   /**
    * @brief Dispatches Add/Sub/Div between a tagged-scalar operand and a
@@ -92,7 +95,7 @@ public:
   /**
    * @brief Builds unary minus on a tagged-scalar operand, as `0 - tagged`
    */
-  exprt build_neg_tagged(const exprt &tagged);
+  exprt build_neg_tagged(const exprt &tagged, const locationt &location);
 
   /**
    * @brief Builds isinstance(tagged, type_name). `type_is_user_class` says
@@ -196,24 +199,36 @@ private:
   exprt build_ordered_literal(
     const std::string &op,
     const exprt &tagged,
-    const exprt &literal);
-  exprt
-  build_ordered_obj(const std::string &op, const exprt &lhs, const exprt &rhs);
+    const exprt &literal,
+    const locationt &location);
+  exprt build_ordered_obj(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const locationt &location);
   exprt build_add_literal(
     const exprt &tagged,
     const exprt &literal,
-    bool tagged_is_left);
+    bool tagged_is_left,
+    const locationt &location);
   exprt build_sub_literal(
     const exprt &tagged,
     const exprt &literal,
-    bool tagged_is_left);
+    bool tagged_is_left,
+    const locationt &location);
   exprt build_div_literal(
     const exprt &tagged,
     const exprt &literal,
     bool tagged_is_left,
     const locationt &location);
-  exprt build_add_tagged(const exprt &lhs, const exprt &rhs);
-  exprt build_sub_tagged(const exprt &lhs, const exprt &rhs);
+  exprt build_add_tagged(
+    const exprt &lhs,
+    const exprt &rhs,
+    const locationt &location);
+  exprt build_sub_tagged(
+    const exprt &lhs,
+    const exprt &rhs,
+    const locationt &location);
   exprt build_div_tagged(
     const exprt &lhs,
     const exprt &rhs,
@@ -223,6 +238,15 @@ private:
    * @brief Emits a catchable ZeroDivisionError raise, guarded so it only
    * fires when `type_ok` holds and `divisor` is zero
    */
+  /**
+   * @brief Emits a catchable TypeError raise, guarded so it only fires when
+   * `type_ok` does not hold
+   */
+  void guard_type_error(
+    const exprt &type_ok,
+    const std::string &message,
+    const locationt &location);
+
   void guard_zero_division(
     const exprt &divisor,
     const exprt &type_ok,
