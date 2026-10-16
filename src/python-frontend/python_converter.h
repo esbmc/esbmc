@@ -634,6 +634,15 @@ private:
     exprt &rhs);
   exprt
   keep_operand_calls(const exprt &result, const exprt &lhs, const exprt &rhs);
+
+  /// An operand whose type was erased to `void *`, about to be read as an int
+  /// in arithmetic. When @p node may produce values of two known kinds, adds a
+  /// check that it holds an int, which fails as unsupported otherwise. Returns
+  /// the operand, held in a temporary when reading it has a side effect.
+  exprt checked_erased_int(
+    exprt operand,
+    const nlohmann::json &node,
+    const nlohmann::json &element);
   /// The right operand of @p element; a `str %` operand is only probed.
   exprt get_right_operand_expr(
     const nlohmann::json &element,
@@ -2495,6 +2504,10 @@ private:
    * @param target_block The code block to add generated code to.
    */
   std::string user_class_of(const typet &type);
+  void reject_attribute_added_on_some_paths(
+    const std::string &receiver,
+    const std::string &class_name,
+    const std::string &attr) const;
   void reject_attribute_class_change(
     const exprt &lhs,
     const exprt &rhs,

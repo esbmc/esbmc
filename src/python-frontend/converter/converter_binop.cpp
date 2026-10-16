@@ -1,4 +1,5 @@
 #include <python-frontend/converter/converter_internal.h>
+#include <python-frontend/converter/value_kinds.h>
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_converter.h>
@@ -1754,6 +1755,48 @@ exprt python_converter::handle_dict_bitwise(
   throw std::runtime_error("bitwise operations on dict are not supported");
 }
 
+exprt python_converter::checked_erased_int(
+  exprt operand,
+  const nlohmann::json &node,
+  const nlohmann::json &element)
+{
+  if (operand.type().subtype().id() != "empty" || !current_block)
+    return operand;
+  // Only a value that can come from sources of different known kinds can be
+  // anything but the int the cast below assumes.
+  value_kinds kinds(*ast_json);
+  if (!kinds.diverges(node, kinds.scope_of(current_func_name_)))
+    return operand;
+
+  const locationt location = get_location_from_decl(element);
+  if (operand.is_function_call() || has_side_effect(operand))
+  {
+    convert_function_call_to_side_effect(operand);
+    symbolt &tmp =
+      create_tmp_symbol(element, "$erased$", operand.type(), exprt());
+    code_declt decl(symbol_expr(tmp));
+    decl.location() = location;
+    current_block->copy_to_operands(decl);
+    code_assignt assign(symbol_expr(tmp), operand);
+    assign.location() = location;
+    current_block->copy_to_operands(assign);
+    operand = symbol_expr(tmp);
+  }
+
+  // Symex answers from what the value points to, and refuses, as #8315 does,
+  // when it cannot tell.
+  expr2tc value2, int2;
+  migrate_expr(operand, value2);
+  migrate_expr(gen_zero(type_handler_.get_typet("int", 0)), int2);
+  code_assertt check(migrate_expr_back(isinstance2tc(value2, int2)));
+  check.location() = location;
+  check.location().user_provided(true);
+  check.location().comment(
+    "Unsupported: arithmetic on a value whose type was lost");
+  current_block->copy_to_operands(check);
+  return operand;
+}
+
 exprt python_converter::get_binary_operator_expr(
   const nlohmann::json &element,
   const nlohmann::json &left,
@@ -1765,7 +1808,21 @@ exprt python_converter::get_binary_operator_expr(
   if (
     type_handler_.is_tagged_scalar_type(lhs.type()) ||
     type_handler_.is_tagged_scalar_type(rhs.type()))
+  {
+    // A tagged operand coming straight from a call (e.g. `f(x) + 1`) is still
+    // a raw call/side-effect node here, not an addressable lvalue; the
+    // dispatch below does member access on it directly, so copy it into a
+    // temp first.
+    if (current_block)
+    {
+      lhs =
+        tuple_handler_->prepare_rhs_for_unpacking(element, lhs, *current_block);
+      rhs =
+        tuple_handler_->prepare_rhs_for_unpacking(element, rhs, *current_block);
+    }
+
     return handle_tagged_scalar_binop(op, lhs, rhs, left, right, element);
+  }
 
   // Handle type identity checks (e.g., y is int, x is str)
   exprt type_identity_result =
@@ -2255,9 +2312,9 @@ exprt python_converter::get_binary_operator_expr(
       rhs = typecast_exprt(rhs, int_type);
     }
     else if (is_any_ptr(lhs) && is_integer(rhs))
-      lhs = typecast_exprt(lhs, rhs.type());
+      lhs = typecast_exprt(checked_erased_int(lhs, left, element), rhs.type());
     else if (is_any_ptr(rhs) && is_integer(lhs))
-      rhs = typecast_exprt(rhs, lhs.type());
+      rhs = typecast_exprt(checked_erased_int(rhs, right, element), lhs.type());
   }
 
   // Handle Any-typed (void*) operands in comparisons.

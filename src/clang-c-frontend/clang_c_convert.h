@@ -164,6 +164,8 @@ protected:
 
   virtual bool get_function(const clang::FunctionDecl &fd, exprt &new_expr);
 
+  bool get_function_signature(const clang::FunctionDecl &fd, code_typet &type);
+
   virtual bool get_function_body(
     const clang::FunctionDecl &fd,
     exprt &new_expr,
