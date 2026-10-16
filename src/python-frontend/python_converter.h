@@ -2529,6 +2529,14 @@ private:
     const nlohmann::json &right,
     const nlohmann::json &element);
 
+  /// `d1 | d2` (PEP 584) on two dicts; nil if either operand is not a dict.
+  /// Throws for the other bitwise operators on dicts.
+  exprt handle_dict_bitwise(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &element);
+
   exprt
   build_emptiness_check(const exprt &value, const nlohmann::json &element);
 

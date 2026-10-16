@@ -681,6 +681,40 @@ std::string python_annotation<Json>::list_copy_type(
   return source.rfind("list[", 0) == 0 ? source : "";
 }
 
+// Infer generic dict type from literal: {key: value, ...}
+template <class Json>
+std::string
+python_annotation<Json>::get_dict_literal_type(const Json &dict_value)
+{
+  if (
+    !dict_value.contains("keys") || !dict_value.contains("values") ||
+    dict_value["keys"].empty() || dict_value["values"].empty())
+    return "dict";
+
+  // A `**` unpack (null key) contributes another dict's entries, so the
+  // first entry does not stand for the rest.
+  const Json &keys = dict_value["keys"];
+  if (std::any_of(keys.begin(), keys.end(), [](const Json &key) {
+        return key.is_null();
+      }))
+    return "dict";
+
+  // Get types of first key and value
+  std::string key_type = get_argument_type(dict_value["keys"][0]);
+  std::string value_type = get_argument_type(dict_value["values"][0]);
+
+  // Only infer generic dict type for non-nested types
+  // Nested structures (such as list[dict]) are better handled
+  // with plain 'dict' so the converter can use dynamic type info
+  bool key_is_simple = key_type.find('[') == std::string::npos;
+  bool value_is_simple = value_type.find('[') == std::string::npos;
+  if (
+    !key_type.empty() && !value_type.empty() && key_is_simple &&
+    value_is_simple)
+    return "dict[" + key_type + ", " + value_type + "]";
+  return "dict";
+}
+
 // ---------- dispatchers ----------
 
 template <class Json>
@@ -709,8 +743,7 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
 
   // A `**` unpack inside a dict literal (e.g. {**m}) serialises its key as a
   // null entry — there is no AST node and hence no inferable type. Returning a
-  // safe default keeps the annotation pass from dereferencing a null json
-  // (the converter rejects dict unpacking with a clean diagnostic later).
+  // safe default keeps the annotation pass from dereferencing a null json.
   if (!arg.is_object())
     return "Any";
 
@@ -3070,33 +3103,7 @@ InferResult python_annotation<Json>::infer_type(
   else if (value_type == "Tuple")
     inferred_type = "tuple";
   else if (value_type == "Dict")
-  {
-    // Infer generic dict type from literal: {key: value, ...}
-    const Json &dict_value = stmt["value"];
-
-    if (
-      dict_value.contains("keys") && dict_value.contains("values") &&
-      !dict_value["keys"].empty() && !dict_value["values"].empty())
-    {
-      // Get types of first key and value
-      std::string key_type = get_argument_type(dict_value["keys"][0]);
-      std::string value_type = get_argument_type(dict_value["values"][0]);
-
-      // Only infer generic dict type for non-nested types
-      // Nested structures (such as list[dict]) are better handled
-      // with plain 'dict' so the converter can use dynamic type info
-      bool key_is_simple = key_type.find('[') == std::string::npos;
-      bool value_is_simple = value_type.find('[') == std::string::npos;
-      if (
-        !key_type.empty() && !value_type.empty() && key_is_simple &&
-        value_is_simple)
-        inferred_type = "dict[" + key_type + ", " + value_type + "]";
-      else
-        inferred_type = "dict";
-    }
-    else
-      inferred_type = "dict";
-  }
+    inferred_type = get_dict_literal_type(stmt["value"]);
   else if (value_type == "Compare")
     inferred_type = "bool";
   else if (value_type == "UnaryOp") // Handle negative numbers
