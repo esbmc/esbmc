@@ -707,13 +707,6 @@ const struct group_opt_templ all_cmd_options[] = {
     {"mathsat", NULL, "Use MathSAT"},
     {"cvc", NULL, "Alias for --cvc4; this may change in the future to --cvc5"},
     {"cvc4", NULL, "Use CVC4"},
-    {"cvc5-native-tuples",
-     NULL,
-     "[CVC5] Use CVC5's native datatype-based tuple/struct encoding instead "
-     "of the tuple_node_flattener fallback. Required to encode Solidity "
-     "nested-dynamic shapes (e.g. T[N][infinite]) under CVC5; can be slower "
-     "than the flattener for queries that only use plain pointer/struct "
-     "tuples."},
     {"cvc5", NULL, "Use CVC5"},
     {"yices", NULL, "Use Yices"},
     {"bitwuzla", NULL, "Use Bitwuzla (default)"},
@@ -792,6 +785,13 @@ const struct group_opt_templ all_cmd_options[] = {
     {"tuple-sym-flattener",
      NULL,
      "Encode tuples using our tuple to symbol API"},
+    {"cvc5-native-tuples",
+     NULL,
+     "[CVC5] Use CVC5's native datatype-based tuple/struct encoding instead "
+     "of the tuple_node_flattener fallback. Required to encode Solidity "
+     "nested-dynamic shapes (e.g. T[N][infinite]) under CVC5; can be slower "
+     "than the flattener for queries that only use plain pointer/struct "
+     "tuples."},
     {"array-flattener", NULL, "Encode arrays using our array API"},
     {"no-return-value-opt",
      NULL,
