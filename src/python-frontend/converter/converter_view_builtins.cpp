@@ -30,6 +30,17 @@ const std::set<std::string> &list_consuming_builtins()
   return names;
 }
 
+// A keyword of a list-consuming builtin whose meaning does not depend on the
+// elements.
+bool is_element_independent_keyword(
+  const std::string &builtin,
+  const std::string &keyword)
+{
+  return (builtin == "sum" && keyword == "start") ||
+         (builtin == "sorted" && keyword == "reverse") ||
+         ((builtin == "min" || builtin == "max") && keyword == "default");
+}
+
 bool is_block_key(const std::string &key)
 {
   return key == "body" || key == "orelse" || key == "handlers" ||
@@ -341,16 +352,11 @@ bool python_converter::consumes_numpy_view_as_list(
     !names_python_builtin(node["func"]["id"].get<std::string>()))
     return false;
   const std::string name = node["func"]["id"].get<std::string>();
-  for (const auto &kw : node.value("keywords", nlohmann::json::array()))
-  {
-    const std::string arg = kw.value("arg", "");
-    const bool allowed = (name == "sum" && arg == "start") ||
-                         (name == "sorted" && arg == "reverse") ||
-                         ((name == "min" || name == "max") && arg == "default");
-    if (!allowed)
-      return false;
-  }
-  return true;
+  const auto &keywords = node.value("keywords", nlohmann::json::array());
+  return std::all_of(
+    keywords.begin(), keywords.end(), [&name](const nlohmann::json &kw) {
+      return is_element_independent_keyword(name, kw.value("arg", ""));
+    });
 }
 
 // A list-consuming builtin, whatever its keywords, applied to a 1-D view or
