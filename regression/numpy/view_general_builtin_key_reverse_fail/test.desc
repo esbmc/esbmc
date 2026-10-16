@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: passing a numpy view to sorted\(\) with a key or another element-dependent keyword is not supported$
