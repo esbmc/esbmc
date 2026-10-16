@@ -1,21 +1,4 @@
-/* C-suite control case (companion to pointer_provenance_byte_heap_knownbug).
- *
- * Successive index writes through a STACK-allocated outer pointer-array
- * propagate correctly to subsequent reads. ESBMC encodes
- *   void *flags[3];
- * as a typed `void *[3]` SMT entity; `flags[1] = ptr` is a single
- * typed-element WITH that updates value-set's points-to set. Reads of
- * `flags[1]` consult points-to and resolve to the right object.
- *
- * The HEAP variant of this same logic fails -- see the
- * pointer_provenance_byte_heap_knownbug companion for the bug shape and
- * the SSA-level explanation.
- *
- * Originally pinned at
- *   regression/esbmc-solidity/value_set_byte_with_stack_pass/bug.c
- * (commit 1e3bd6e134); duplicated here as plain-C coverage in the default
- * regression suite.
- */
+/* Stack pointer-array control for pointer_provenance_byte_heap_pass. */
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
