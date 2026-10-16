@@ -260,6 +260,9 @@ public:
    * - "-".join(list_var) -> joined string
    */
   exprt handle_str_join(const nlohmann::json &call_json);
+  exprt join_unfoldable_iterable(
+    const exprt &separator,
+    const nlohmann::json &call_json);
 
   /// Convert a join() literal's elements into `elem_exprs`. Returns a TypeError
   /// raise for an element that is known not to be a str, nil otherwise.
