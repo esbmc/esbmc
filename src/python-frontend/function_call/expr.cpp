@@ -2808,21 +2808,43 @@ bool function_call_expr::receiver_is_binop_or_list_symbol() const
   return sym != nullptr && sym->get_type() == type_handler_.get_list_type();
 }
 
+bool function_call_expr::receiver_class_defines_method(
+  const std::string &method_name) const
+{
+  std::string cls = function_id_.get_class();
+  if (cls.rfind("tag-", 0) == 0)
+    cls = cls.substr(4);
+  const auto &ast = converter_.ast();
+  return is_class(cls, ast) &&
+         json_utils::class_defines_method(ast["body"], cls, method_name);
+}
+
 bool function_call_expr::is_list_method_call() const
 {
   if (call_["func"]["_type"] != "Attribute")
     return false;
 
-  const std::string &method_name = function_id_.get_function();
+  static const std::unordered_set<std::string> list_methods = {
+    "append",
+    "pop",
+    "insert",
+    "remove",
+    "clear",
+    "extend",
+    "copy",
+    "sort",
+    "reverse",
+    "popleft",
+    "appendleft",
+    "count",
+    "index"};
 
-  if (
-    method_name != "append" && method_name != "pop" &&
-    method_name != "insert" && method_name != "remove" &&
-    method_name != "clear" && method_name != "extend" &&
-    method_name != "copy" && method_name != "sort" &&
-    method_name != "reverse" && method_name != "popleft" &&
-    method_name != "appendleft" && method_name != "count" &&
-    method_name != "index")
+  const std::string &method_name = function_id_.get_function();
+  if (!list_methods.count(method_name))
+    return false;
+
+  // A user class's own method of the same name (`e.remove(1)`) wins.
+  if (receiver_class_defines_method(method_name))
     return false;
 
   // Tuples are claimed earlier; only claim count/index here when the receiver
