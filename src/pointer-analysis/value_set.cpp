@@ -1923,6 +1923,17 @@ void value_sett::do_end_function(const expr2tc &lhs)
   assign(lhs, rhs);
 }
 
+static bool is_null_pointer_constant(expr2tc expr)
+{
+  while (is_typecast2t(expr))
+    expr = to_typecast2t(expr).from;
+  if (is_constant_int2t(expr))
+    return to_constant_int2t(expr).value.is_zero();
+  if (is_symbol2t(expr))
+    return to_symbol2t(expr).thename == "NULL";
+  return is_null_object2t(expr);
+}
+
 void value_sett::apply_assume(const expr2tc &guard)
 {
   // Recognize `p != 0` / `0 != p` where `p` is a pointer-typed symbol (possibly
@@ -1941,22 +1952,9 @@ void value_sett::apply_assume(const expr2tc &guard)
   expr2tc lhs = ne.side_1;
   expr2tc rhs = ne.side_2;
 
-  auto is_zero = [](expr2tc e) {
-    // Unwrap typecasts — `(void *)0` / `(T *)0` wraps the literal 0.
-    while (is_typecast2t(e))
-      e = to_typecast2t(e).from;
-    if (is_constant_int2t(e) && to_constant_int2t(e).value.is_zero())
-      return true;
-    // Null pointer representations also count as "zero".
-    if (is_null_object2t(e))
-      return true;
-    if (is_symbol2t(e) && to_symbol2t(e).thename == "NULL")
-      return true;
-    return false;
-  };
-  if (is_zero(lhs))
+  if (is_null_pointer_constant(lhs))
     std::swap(lhs, rhs);
-  if (!is_zero(rhs))
+  if (!is_null_pointer_constant(rhs))
     return;
 
   // Strip typecasts (e.g. `(void *)block != (void *)0`).
