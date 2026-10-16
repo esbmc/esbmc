@@ -1,0 +1,5 @@
+CORE
+contract.solast
+--sol contract.sol --bound --contract C --focus-function check --no-standard-checks --k-induction --enable-forward-condition --max-k-step 8
+Disabling inductive step
+^VERIFICATION SUCCESSFUL$
