@@ -5009,6 +5009,73 @@ bool python_converter::function_may_be_called(
     });
 }
 
+// A Python local belongs to its whole function, but a declaration emitted
+// where the local is first assigned scopes it to that block, which then ends
+// with its DEAD. Moves the declaration of each local first assigned in a
+// nested block to the top of the body; one carrying a value becomes an
+// assignment where it was. Temporaries, named with a '$', stay block-scoped.
+static void collect_nested_local_decls(
+  exprt &code,
+  bool nested,
+  std::vector<codet> &hoisted,
+  std::set<irep_idt> &seen)
+{
+  for (exprt &op : code.operands())
+  {
+    if (op.id() != "code")
+      continue;
+    codet &stmt = to_code(op);
+    // An exception handler must start with its caught object's declaration,
+    // which exception lowering reads, so only the try body is entered.
+    if (stmt.get_statement() == "cpp-catch")
+    {
+      collect_nested_local_decls(stmt.op0(), true, hoisted, seen);
+      continue;
+    }
+    if (stmt.get_statement() != "decl")
+    {
+      collect_nested_local_decls(stmt, true, hoisted, seen);
+      continue;
+    }
+    const exprt &var = stmt.op0();
+    if (
+      !nested || !var.is_symbol() ||
+      id2string(var.identifier()).find('$') != std::string::npos)
+      continue;
+    if (seen.insert(var.identifier()).second)
+    {
+      code_declt decl(var);
+      decl.location() = stmt.location();
+      hoisted.push_back(decl);
+    }
+    if (stmt.operands().size() > 1)
+    {
+      code_assignt assign(var, stmt.op1());
+      assign.location() = stmt.location();
+      op = assign;
+    }
+    else
+      op = code_skipt();
+  }
+}
+
+exprt python_converter::hoist_local_declarations(exprt body)
+{
+  if (body.id() != "code" || to_code(body).get_statement() != "block")
+    return body;
+  std::vector<codet> hoisted;
+  std::set<irep_idt> seen;
+  for (const exprt &op : body.operands())
+    if (
+      op.id() == "code" && to_code(op).get_statement() == "decl" &&
+      op.op0().is_symbol())
+      seen.insert(op.op0().identifier());
+  collect_nested_local_decls(body, false, hoisted, seen);
+  exprt::operandst &ops = body.operands();
+  ops.insert(ops.begin(), hoisted.begin(), hoisted.end());
+  return body;
+}
+
 // A function whose body cannot be converted must not stop the conversion of
 // a program that never refers to it (#8391). Its body becomes the failing
 // assertion an unmodelled function gets at its call sites, and then an
@@ -5049,7 +5116,8 @@ exprt python_converter::get_function_body_or_unsupported(
     std::apply([](const auto &...v) { return std::make_tuple(v...); }, context);
   try
   {
-    return get_block(function_node["body"], /*is_function_body=*/true);
+    return hoist_local_declarations(
+      get_block(function_node["body"], /*is_function_body=*/true));
   }
   catch (const std::runtime_error &e)
   {
