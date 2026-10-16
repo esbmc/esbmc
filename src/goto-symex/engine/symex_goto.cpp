@@ -783,7 +783,18 @@ void goto_symext::phi_function(const statet::merge_statet &merge_state)
       continue;
 
     // changed!
-    const symbolt &symbol = *ns.lookup(variable.base_name);
+    const symbolt *symbol_ptr = ns.lookup(variable.base_name);
+    if (symbol_ptr == nullptr)
+    {
+      // Frontend bug: a renamed variable is referenced during phi
+      // merging but its base_name has no corresponding symbol in the
+      // context.  Skip with a diagnostic rather than deref-crashing.
+      log_warning(
+        "phi_function: no symbol for '{}', skipping",
+        variable.base_name.as_string());
+      continue;
+    }
+    const symbolt &symbol = *symbol_ptr;
 
     type2tc type = migrate_symbol_type(symbol);
 
@@ -862,6 +873,19 @@ void goto_symext::loop_bound_exceeded(const expr2tc &guard)
     cur_state->guard.guard_expr(guarded_expr);
     target->assumption(
       cur_state->guard.as_expr(), guarded_expr, cur_state->source, first_loop);
+
+    // This assumption SILENTLY discards every path that needed one more
+    // iteration -- there is no unwinding assertion to flag it, so a run
+    // whose harness is starved by the bound still ends in "VERIFICATION
+    // SUCCESSFUL" (and, in coverage mode, 0%). Record the loop so
+    // report_coverage can say the numbers are a lower bound and name the
+    // loops responsible. See report_coverage() in src/esbmc/bmc.cpp.
+    {
+      std::ostringstream oss;
+      oss << "loop " << loop_number << " at " << cur_state->source.pc->location;
+      std::lock_guard<std::mutex> lk(goto_functionst::truncated_loops_mutex);
+      goto_functionst::truncated_loops.insert(oss.str());
+    }
   }
 
   // add to state guard to prevent further assignments
