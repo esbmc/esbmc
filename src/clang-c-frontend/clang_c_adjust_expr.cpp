@@ -790,7 +790,22 @@ void clang_c_adjust::adjust_index(index_exprt &index)
       std::swap(array_expr, index_expr);
   }
 
-  gen_typecast(ns, index_expr, index_type());
+  // Honour an explicit index width annotation on the array's type
+  // (`__ESBMC_inf_size:N` parsed in clang_c_convert). Used by the
+  // Solidity mapping storage to declare a 480-bit-indexed infinite
+  // array — closes ledger #22's 256→64 fold unsoundness. Default
+  // (no annotation): cast to size_t-style index_type() as before.
+  {
+    const typet &final_array_type = ns.follow(array_expr.type());
+    irep_idt iw;
+    if (final_array_type.is_array())
+      iw = final_array_type.get("#esbmc_index_width");
+    if (!iw.empty())
+      gen_typecast(
+        ns, index_expr, unsignedbv_typet(std::stoul(iw.as_string())));
+    else
+      gen_typecast(ns, index_expr, index_type());
+  }
 
   const typet &final_array_type = ns.follow(array_expr.type());
   if (final_array_type.id() == "pointer")
