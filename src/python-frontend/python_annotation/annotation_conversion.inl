@@ -641,6 +641,18 @@ subscript_result_type(const std::string &container, bool is_slice)
   return "";
 }
 
+/// True when `node` binds the empty list literal `[]`, which is how a
+/// comprehension's result list starts before its appends.
+template <class Json>
+bool is_empty_list_literal(const Json &node)
+{
+  if (node.empty() || !node.contains("value") || node["value"].is_null())
+    return false;
+  const Json &value = node["value"];
+  return value.value("_type", "") == "List" &&
+         (!value.contains("elts") || value["elts"].empty());
+}
+
 /// True when `type` spells a tuple without its element types anywhere. A
 /// later round of call-site inference may still resolve the elements.
 inline bool has_bare_tuple(const std::string &type)
@@ -717,6 +729,58 @@ python_annotation<Json>::get_dict_literal_type(const Json &dict_value)
 
 // ---------- dispatchers ----------
 
+// The type of the value a call such as abs(a - b), len(list) or A()
+// returns, or "" when unknown.
+template <class Json>
+std::string python_annotation<Json>::get_call_type(const Json &arg)
+{
+  // A module-qualified nondet call, such as _sv_verifier.nondet_float(),
+  // returns the type its name ends in, as the unqualified form does.
+  const std::string attr = arg["func"].value("attr", "");
+  if (arg["func"]["_type"] == "Attribute" && attr.rfind("nondet_", 0) == 0)
+    return attr.substr(attr.find_last_of('_') + 1);
+
+  if (arg["func"]["_type"] == "Name")
+  {
+    const std::string &func_name = arg["func"]["id"];
+
+    // Class constructor call: A() produces an instance of A
+    // Resolve possible import aliases before checking if this is a class
+    const std::string class_name =
+      json_utils::get_object_alias(ast_, func_name);
+    if (json_utils::is_class(class_name, ast_))
+      return class_name;
+
+    // hash() returns bytes only for the consensus spec's own
+    // hash(data: bytes); on any other argument it is the real builtin,
+    // which returns int (see is_generic_hash_call in function_call/expr.cpp).
+    if (
+      func_name == "hash" && arg.contains("args") && !arg["args"].empty() &&
+      get_argument_type(arg["args"][0]) != "bytes")
+      return "int";
+
+    const std::string copied = list_copy_type(func_name, arg);
+    if (!copied.empty())
+      return copied;
+
+    if (builtin_functions().count(func_name))
+      return get_builtin_call_type(arg);
+
+    // For user-defined functions, try to get return type
+    try
+    {
+      return get_function_return_type(func_name, ast_);
+    }
+    catch (std::runtime_error &)
+    {
+      // Function not found, return empty
+      return "";
+    }
+  }
+
+  return "";
+}
+
 template <class Json>
 std::string python_annotation<Json>::get_argument_type(const Json &arg)
 {
@@ -764,6 +828,8 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
         return "";
 
       Json var_node = find_var_node_for_inference(var_name);
+      const bool is_slice =
+        arg.contains("slice") && arg["slice"].value("_type", "") == "Slice";
 
       if (has_annotation(var_node))
       {
@@ -792,7 +858,7 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
         }
         // Simple name annotation (e.g., list without subtype)
         if (annot.contains("id") && annot["id"] == "list")
-          return "Any";
+          return bare_list_subscript_type(var_node, var_name, is_slice);
       }
 
       // No annotation yet: this pass runs before plain assignments are
@@ -802,8 +868,6 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
         !var_node.empty() && var_node.contains("value") &&
         !var_node["value"].is_null())
       {
-        const bool is_slice =
-          arg.contains("slice") && arg["slice"].value("_type", "") == "Slice";
         return subscript_result_type(
           get_argument_type(var_node["value"]), is_slice);
       }
@@ -860,7 +924,7 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
               return full_type;
           }
         }
-        return base_type;
+        return refine_any_from_value(base_type, var_node);
       }
     }
 
@@ -872,10 +936,7 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
       // is how list comprehensions lower (`tmp = []; tmp.append(elt)`), so
       // recover `list[T]` from the first append before falling back to the
       // bare `list` the empty literal would otherwise yield (issue #5022).
-      const Json &value = var_node["value"];
-      if (
-        value.contains("_type") && value["_type"] == "List" &&
-        (!value.contains("elts") || value["elts"].empty()))
+      if (is_empty_list_literal(var_node))
       {
         std::string recovered = recover_list_type_from_appends(var_name);
         if (!recovered.empty())
@@ -995,46 +1056,7 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
     return "bool";
   }
   else if (arg["_type"] == "Call")
-  {
-    // Handle function calls like abs(a - b), len(list), etc.
-    if (arg["func"]["_type"] == "Name")
-    {
-      const std::string &func_name = arg["func"]["id"];
-
-      // Class constructor call: A() produces an instance of A
-      // Resolve possible import aliases before checking if this is a class
-      const std::string class_name =
-        json_utils::get_object_alias(ast_, func_name);
-      if (json_utils::is_class(class_name, ast_))
-        return class_name;
-
-      // hash() returns bytes only for the consensus spec's own
-      // hash(data: bytes); on any other argument it is the real builtin,
-      // which returns int (see is_generic_hash_call in function_call/expr.cpp).
-      if (
-        func_name == "hash" && arg.contains("args") && !arg["args"].empty() &&
-        get_argument_type(arg["args"][0]) != "bytes")
-        return "int";
-
-      const std::string copied = list_copy_type(func_name, arg);
-      if (!copied.empty())
-        return copied;
-
-      if (builtin_functions().count(func_name))
-        return get_builtin_call_type(arg);
-
-      // For user-defined functions, try to get return type
-      try
-      {
-        return get_function_return_type(func_name, ast_);
-      }
-      catch (std::runtime_error &)
-      {
-        // Function not found, return empty
-        return "";
-      }
-    }
-  }
+    return get_call_type(arg);
 
   return ""; // Cannot determine type
 }
@@ -1169,6 +1191,37 @@ python_annotation<Json>::get_list_type_from_literal(const Json &list_arg)
 
   // Return the full generic type notation
   return "list[" + element_type + "]";
+}
+
+/// Element type of `name[...]` when `name` is annotated as a bare `list`.
+/// A comprehension's result list is `[]` filled by appends, so the appends
+/// name the element type (#8630).
+template <class Json>
+std::string python_annotation<Json>::bare_list_subscript_type(
+  const Json &var_node,
+  const std::string &var_name,
+  bool is_slice)
+{
+  if (!is_empty_list_literal(var_node))
+    return "Any";
+  const std::string elem =
+    subscript_result_type(recover_list_type_from_appends(var_name), is_slice);
+  return elem.empty() ? "Any" : elem;
+}
+
+/// The comprehension and loop lowering annotate an element whose type it
+/// cannot see as `Any`; the bound value may still name it (#8630).
+template <class Json>
+std::string python_annotation<Json>::refine_any_from_value(
+  const std::string &annotated,
+  const Json &var_node)
+{
+  if (
+    annotated != "Any" || !var_node.contains("value") ||
+    var_node["value"].is_null())
+    return annotated;
+  const std::string value_type = get_argument_type(var_node["value"]);
+  return value_type.empty() ? annotated : value_type;
 }
 
 template <class Json>
@@ -4407,19 +4460,9 @@ void python_annotation<Json>::infer_parameter_types(Json &function_element)
 
         if (
           parent_func == nullptr && call_types.size() > 1 &&
-          are_all_user_classes(call_types))
+          are_specializable_types(call_types))
         {
-          bool already_pending = false;
-          for (const auto &spec : pending_specializations_)
-          {
-            if (spec.function_name == func_name && spec.param_index == i)
-            {
-              already_pending = true;
-              break;
-            }
-          }
-
-          if (!already_pending)
+          if (!is_specialization_pending(func_name, i, call_types))
           {
             pending_specializations_.push_back(
               {func_name, i, std::move(call_types)});

@@ -2166,6 +2166,18 @@ static bool resolve_join_iterable(
          seq.contains("elts");
 }
 
+static bool is_name_or_split_call(const nlohmann::json &arg)
+{
+  const std::string type = arg.value("_type", "");
+  if (type == "Name")
+    return true;
+  if (type != "Call" || !arg.contains("func"))
+    return false;
+  const auto &func = arg["func"];
+  return func.value("_type", "") == "Attribute" &&
+         func.value("attr", "") == "split";
+}
+
 // Fold a constant string-valued method call: `sep.join([...])` over a literal
 // list/tuple of constant strings, or `subject.replace(old, new[, count])`.
 // Only positional, constant-foldable arguments are handled; anything else
@@ -3543,6 +3555,32 @@ exprt string_handler::convert_join_items(
   return nil_exprt();
 }
 
+exprt string_handler::join_unfoldable_iterable(
+  const exprt &separator,
+  const nlohmann::json &call_json)
+{
+  // A list built at run time, such as s.split(" ") on a symbolic s, is read
+  // by the runtime join model rather than left nondet.
+  const nlohmann::json &list_arg = call_json["args"][0];
+  if (is_name_or_split_call(list_arg))
+  {
+    exprt list_expr = converter_.get_expr(list_arg);
+    if (list_expr.type() == type_handler_.get_list_type())
+      return string_builder_->build_runtime_str_join_call(separator, list_expr);
+  }
+
+  // Iterable arg isn't a literal `List` and couldn't be folded (e.g.
+  // a `sorted(...)`, list comprehension, or unannotated parameter).
+  // Fall back to a sound nondet `char *` instead of aborting GOTO
+  // conversion. Same pattern as PRs #4814 (splitlines), #4815
+  // (partition/format), #4818..#4826 (str.* runtime models).
+  log_debug(
+    "python-string",
+    "join() iterable arg not a foldable List literal: nondet fallback");
+  return build_nondet_string_fallback(
+    converter_.get_location_from_decl(call_json));
+}
+
 exprt string_handler::handle_str_join(const nlohmann::json &call_json)
 {
   // Validate JSON structure: ensure we have the required keys
@@ -3707,16 +3745,7 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
     ((*list_node)["_type"] != "List" && list_node != &list_arg) ||
     !list_node->contains("elts"))
   {
-    // Iterable arg isn't a literal `List` and couldn't be folded (e.g.
-    // a `sorted(...)`, list comprehension, or unannotated parameter).
-    // Fall back to a sound nondet `char *` instead of aborting GOTO
-    // conversion. Same pattern as PRs #4814 (splitlines), #4815
-    // (partition/format), #4818..#4826 (str.* runtime models).
-    log_debug(
-      "python-string",
-      "join() iterable arg not a foldable List literal: nondet fallback");
-    return build_nondet_string_fallback(
-      converter_.get_location_from_decl(call_json));
+    return join_unfoldable_iterable(separator, call_json);
   }
 
   // Get the list elements from the AST

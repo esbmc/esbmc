@@ -634,6 +634,15 @@ private:
     exprt &rhs);
   exprt
   keep_operand_calls(const exprt &result, const exprt &lhs, const exprt &rhs);
+
+  /// An operand whose type was erased to `void *`, about to be read as an int
+  /// in arithmetic. When @p node may produce values of two known kinds, adds a
+  /// check that it holds an int, which fails as unsupported otherwise. Returns
+  /// the operand, held in a temporary when reading it has a side effect.
+  exprt checked_erased_int(
+    exprt operand,
+    const nlohmann::json &node,
+    const nlohmann::json &element);
   /// The right operand of @p element; a `str %` operand is only probed.
   exprt get_right_operand_expr(
     const nlohmann::json &element,
@@ -1273,6 +1282,28 @@ private:
     const std::string &attr_name,
     const typet &type,
     const std::string &annotated_type) const;
+
+  // Attributes stored None that none_attribute_type could not type: those
+  // whose every write is a plain store carry a None flag per instance, the
+  // others are refused in arithmetic.
+  mutable std::set<std::string> untyped_none_attributes_;
+  mutable std::set<std::string> none_flagged_attributes_;
+
+  void add_none_flag_component(
+    struct_typet &clazz,
+    const std::string &attr_name) const;
+  exprt none_flag_of_attribute(const exprt &operand) const;
+  void guard_none_attribute_operands(
+    const std::string &op,
+    const nlohmann::json &left,
+    const nlohmann::json &right,
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &element);
+  void set_none_flag(
+    const exprt &lhs,
+    const nlohmann::json &ast_node,
+    codet &target_block) const;
 
   /**
    * @brief Build a tuple struct type from an AST value node when the annotation
@@ -2483,6 +2514,10 @@ private:
    * @param target_block The code block to add generated code to.
    */
   std::string user_class_of(const typet &type);
+  void reject_attribute_added_on_some_paths(
+    const std::string &receiver,
+    const std::string &class_name,
+    const std::string &attr) const;
   void reject_attribute_class_change(
     const exprt &lhs,
     const exprt &rhs,

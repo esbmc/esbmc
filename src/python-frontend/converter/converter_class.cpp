@@ -781,12 +781,19 @@ struct attribute_writest
   std::size_t writes = 0;
   std::size_t stores = 0;
   bool unknown = false;
+  bool setattr_call = false;
   std::string scalar;
 
-  void store(const nlohmann::json &value)
+  void store(const nlohmann::json &value, const std::string &annotated)
   {
     ++stores;
-    const std::string kind = literal_scalar_kind(value);
+    std::string kind = literal_scalar_kind(value);
+    // A value other than a literal, of the scalar type the annotation pass
+    // inferred for it (#8589 typed only literals).
+    if (
+      kind == "?" &&
+      (annotated == "int" || annotated == "float" || annotated == "bool"))
+      kind = annotated;
     if (kind.empty())
       return;
     unknown |= kind == "?" || (!scalar.empty() && kind != scalar);
@@ -797,10 +804,15 @@ struct attribute_writest
   {
     writes += is_attribute_named(n, attr_name) &&
               (!n.contains("ctx") || n["ctx"].value("_type", "") != "Load");
-    unknown |= n.value("_type", "") == "Call" && n.contains("func") &&
-               n["func"].is_object() && n["func"].value("id", "") == "setattr";
+    setattr_call |= n.value("_type", "") == "Call" && n.contains("func") &&
+                    n["func"].is_object() &&
+                    n["func"].value("id", "") == "setattr";
     if (const nlohmann::json *value = attribute_store_value(n, attr_name))
-      store(*value);
+      store(
+        *value,
+        n.value("annotation", nlohmann::json()).is_object()
+          ? n["annotation"].value("id", "")
+          : "");
   }
 
   void walk(const nlohmann::json &n, const std::string &attr_name)
@@ -833,8 +845,18 @@ typet python_converter::none_attribute_type(const std::string &attr_name) const
   attribute_writest found;
   for (const nlohmann::json *body : reachable_module_bodies())
     found.walk(*body, attr_name);
-  if (found.unknown || found.writes != found.stores)
+  if (found.setattr_call || found.writes != found.stores)
+  {
+    untyped_none_attributes_.insert(attr_name);
     return any_type();
+  }
+  if (found.unknown)
+  {
+    // Each store sets a companion flag, so arithmetic can raise TypeError
+    // on the instance that holds None.
+    none_flagged_attributes_.insert(attr_name);
+    return any_type();
+  }
   return found.scalar.empty() ? none_type()
                               : type_handler_.build_optional_type(
                                   type_handler_.get_typet(found.scalar));
@@ -856,6 +878,17 @@ bool python_converter::held_by_reference(
     if (stores_none_into(*body, attr_name))
       return true;
   return false;
+}
+
+/// The flag that records whether `attr_name` holds None on an instance.
+void python_converter::add_none_flag_component(
+  struct_typet &clazz,
+  const std::string &attr_name) const
+{
+  const std::string flag = attr_name + "$none";
+  if (none_flagged_attributes_.count(attr_name) && !clazz.has_component(flag))
+    clazz.components().push_back(
+      python_frontend::build_component(current_class_name_, flag, bool_type()));
 }
 
 void python_converter::get_attributes_from_self(
@@ -1034,6 +1067,7 @@ void python_converter::get_attributes_from_self(
             resolved = from_usage;
         }
         type = unset(resolved) ? none_attribute_type(attr_name) : resolved;
+        add_none_flag_component(clazz, attr_name);
       }
       else if (annotated_type == "tuple" || annotated_type == "Tuple")
       {

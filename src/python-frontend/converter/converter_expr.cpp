@@ -1945,6 +1945,85 @@ void python_converter::reject_method_value(
       "' as a value is not supported");
 }
 
+// Whether `node` contains a `self.<attr>` access.
+static bool
+mentions_self_attribute(const nlohmann::json &node, const std::string &attr)
+{
+  if (
+    node.is_object() && node.value("_type", "") == "Attribute" &&
+    node.value("attr", "") == attr && node["value"].value("id", "") == "self")
+    return true;
+  if (node.is_object() || node.is_array())
+    for (const auto &child : node)
+      if (mentions_self_attribute(child, attr))
+        return true;
+  return false;
+}
+
+// Whether a class body assigns `attr` as a class attribute.
+static bool
+assigns_class_attribute(const nlohmann::json &body, const std::string &attr)
+{
+  for (const auto &stmt : body)
+  {
+    const nlohmann::json targets = stmt.value("_type", "") == "Assign"
+                                     ? stmt["targets"]
+                                   : stmt.value("_type", "") == "AnnAssign"
+                                     ? nlohmann::json::array({stmt["target"]})
+                                     : nlohmann::json::array();
+    for (const auto &t : targets)
+      if (t.value("id", "") == attr)
+        return true;
+  }
+  return false;
+}
+
+// Whether `class_name` or a class it derives from binds `attr` itself. A
+// class not defined in this module, such as an imported one, is assumed to.
+static bool class_binds_attribute(
+  const nlohmann::json &ast,
+  const std::string &class_name,
+  const std::string &attr)
+{
+  if (class_name == "object")
+    return false;
+  for (const auto &stmt : ast["body"])
+  {
+    if (
+      stmt.value("_type", "") != "ClassDef" ||
+      stmt.value("name", "") != class_name)
+      continue;
+    if (
+      assigns_class_attribute(stmt["body"], attr) ||
+      mentions_self_attribute(stmt["body"], attr))
+      return true;
+    for (const auto &base : stmt["bases"])
+      if (class_binds_attribute(ast, base.value("id", ""), attr))
+        return true;
+    return false;
+  }
+  return true;
+}
+
+// A store `obj.attr = v` from outside the class, of an attribute the class
+// never binds, made on only some paths: a later read on another path raises
+// AttributeError in CPython, which the instance's struct cannot tell apart
+// from a read of the stored value. Refuse it (#8632).
+void python_converter::reject_attribute_added_on_some_paths(
+  const std::string &receiver,
+  const std::string &class_name,
+  const std::string &attr) const
+{
+  if (
+    receiver == "self" || block_nesting_ == function_body_depth_ + 1 ||
+    class_name.empty() || class_binds_attribute(*ast_json, class_name, attr))
+    return;
+  throw std::runtime_error(
+    "unsupported: attribute '" + attr + "' is added to a '" + class_name +
+    "' instance on only some paths; reading it on another path would raise "
+    "AttributeError, which is not modelled");
+}
+
 exprt python_converter::get_expr(const nlohmann::json &element)
 {
   get_expr_depth_guard depth_guard(*this);
@@ -2803,6 +2882,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
       if (is_converting_lhs)
       {
+        reject_attribute_added_on_some_paths(
+          var_name, extract_class_name_from_tag(obj_type_name), attr_name);
         // Add member in the class if not exists
         if (!class_type.has_component(attr_name))
         {

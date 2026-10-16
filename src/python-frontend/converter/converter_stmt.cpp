@@ -6945,6 +6945,7 @@ void python_converter::get_var_assign(
     // Handle type adjustments
     handle_assignment_type_adjustments(
       lhs_symbol, lhs, rhs, lhs_type, ast_node, is_ctor_call);
+    set_none_flag(lhs, ast_node, target_block);
 
     // Propagate $input_str$ → $input_len$ companion mapping so that len()
     // on any alias of an input() string can use the symbolic length directly.
