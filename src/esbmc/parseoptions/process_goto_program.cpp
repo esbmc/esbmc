@@ -713,6 +713,8 @@ bool esbmc_parseoptionst::process_goto_program(
       // for function mode
       if (cmdline.isset("function"))
         tmp.set_target(cmdline.getval("function"));
+      if (cmdline.isset("coverage-covered-set"))
+        tmp.covered_set_path = cmdline.getval("coverage-covered-set");
       tmp.cov_assume_asserts = cmdline.isset("cov-assume-asserts");
       tmp.branch_coverage();
     }

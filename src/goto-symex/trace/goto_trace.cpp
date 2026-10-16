@@ -10,6 +10,7 @@
 #include <util/arith/arith_tools.h>
 #include <util/base/cwe_mapping.h>
 #include <util/irep/std_types.h>
+#include <util/symtab/namespace.h>
 #include <optional>
 #include <ostream>
 
@@ -659,6 +660,16 @@ void show_simplified_location(std::ostream &out, const locationt &location)
   out << dest << "\n";
 }
 
+/// A call binds its arguments at the callee's first instruction, whatever
+/// that instruction is, so such a step cannot be recognised by its pc.
+static bool binds_parameter(const namespacet &ns, const goto_trace_stept &step)
+{
+  if (!is_symbol2t(step.original_lhs))
+    return false;
+  const symbolt *s = ns.lookup(to_symbol2t(step.original_lhs).thename);
+  return s != nullptr && s->is_parameter;
+}
+
 void show_goto_trace(
   std::ostream &out,
   const namespacet &ns,
@@ -712,6 +723,57 @@ void show_goto_trace(
             }
           }
         }
+        if (config.options.get_bool_option("show-funccall-trace"))
+        {
+          // Print chronological function-call trace.
+          // Each step carries the call stack at that point (innermost-first,
+          // outermost-last). Diff each step's stack against the previous to
+          // detect newly pushed frames and emit them in call order.
+          out << "Function call trace:" << std::endl;
+          std::vector<stack_framet> prev;
+          for (const auto &s : goto_trace.steps)
+          {
+            const auto &cur = s.stack_trace;
+            // Skip steps captured outside any function context (global
+            // initializers, per-tx reseed scaffolding, etc.). Their
+            // stack_trace is empty even though the program clearly has
+            // frames on the call stack at that moment; treating that as
+            // a reset would falsely re-emit the entire chain on the
+            // next non-empty step.
+            if (cur.empty())
+            {
+              if (&s == &step)
+                break;
+              continue;
+            }
+            // Common suffix length (outermost end of both vectors).
+            size_t common = 0;
+            while (common < prev.size() && common < cur.size() &&
+                   prev[prev.size() - 1 - common] ==
+                     cur[cur.size() - 1 - common])
+              ++common;
+            // New frames live at the front of `cur` (innermost end);
+            // emit outermost-of-new first to preserve call order.
+            size_t n_new = cur.size() - common;
+            for (size_t k = n_new; k-- > 0;)
+            {
+              const auto &it = cur[k];
+              if (it.src == nullptr)
+                out << "  " << it.function.as_string() << std::endl;
+              else
+              {
+                out << "  " << it.function.as_string();
+                if (it.src->pc->location.is_not_nil())
+                  out << " at " << it.src->pc->location << std::endl;
+                else
+                  out << std::endl;
+              }
+            }
+            prev = cur;
+            if (&s == &step)
+              break;
+          }
+        }
 
         out << "  " << step.comment << "\n";
         // A reached coverage probe carries no weakness: its guard is the
@@ -737,7 +799,7 @@ void show_goto_trace(
       if (
         step.pc->is_assign() || step.pc->is_return() ||
         (step.pc->is_other() && is_nil_expr(step.lhs)) ||
-        step.pc->is_function_call())
+        step.pc->is_function_call() || binds_parameter(ns, step))
       {
         if (simplify_trace)
         {
