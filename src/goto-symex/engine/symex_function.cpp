@@ -152,56 +152,9 @@ bool goto_symext::get_unwind_recursion(
     if (options.get_bool_option("abort-on-recursion"))
       abort();
 
-    // Solidity harness dispatch helpers re-enter when a contract method
-    // makes a cross-contract call back into the dispatch loop. This is
-    // not real recursion — each invocation is a distinct transaction in
-    // the synthesized while-nondet harness — so do not disable
-    // k-induction's inductive step on these synthesized helpers. The
-    // unwind bound below still caps depth, and real user-method
-    // recursion (function f() { f(); }) still triggers the warning.
-    auto matches_harness_helper = [](const std::string &s) {
-      return s.find("_ESBMC_Nondet_Extcall_") != std::string::npos ||
-             s.find("_ESBMC_Main_") != std::string::npos ||
-             s.find("@F@$call#") != std::string::npos ||
-             s.find("@F@$delegatecall#") != std::string::npos ||
-             s.find("@F@$staticcall#") != std::string::npos;
-    };
-    bool through_solidity_harness =
-      matches_harness_helper(id2string(identifier));
-    if (!through_solidity_harness && cur_state)
-    {
-      // The recursion is real (`function_unwind[id] != 0`). To
-      // distinguish Solidity harness re-entry (a cross-contract call
-      // bouncing back through the dispatch loop) from user-method
-      // self/mutual recursion, look at the frames *between* the
-      // identifier's existing frame and the current top: if any is a
-      // synthesized harness helper, the cycle goes through the harness
-      // and inductive step should remain enabled. If no harness helper
-      // sits between the two frames the recursion is direct and we keep
-      // the original warning.
-      auto stack_it = std::find_if(
-        cur_state->call_stack.rbegin(),
-        cur_state->call_stack.rend(),
-        [&](const goto_symex_statet::framet &f) {
-          return f.function_identifier == identifier;
-        });
-      if (stack_it != cur_state->call_stack.rend())
-      {
-        for (auto cur = cur_state->call_stack.rbegin(); cur != stack_it; ++cur)
-        {
-          if (matches_harness_helper(id2string(cur->function_identifier)))
-          {
-            through_solidity_harness = true;
-            break;
-          }
-        }
-      }
-    }
-
     if (
       (k_induction || inductive_step) &&
-      !options.get_bool_option("disable-inductive-step") &&
-      !through_solidity_harness)
+      !options.get_bool_option("disable-inductive-step"))
     {
       log_warning(
         "k-induction does not support recursion yet. Disabling inductive step");
