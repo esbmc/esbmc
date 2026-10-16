@@ -155,6 +155,18 @@ static void add_padding(struct_typet &type, const namespacet &ns)
         is_extint && !is_bitfield && !it->get_is_padding() &&
         !follows_ext_int_padding(it, components))
       {
+        auto next_it = std::next(it);
+        const bool already_padded = next_it != components.end() &&
+                                    next_it->get_is_padding() &&
+                                    next_it->type().get_bool("#extint");
+        if (already_padded)
+        {
+          // Skip: the trailing ext_int_pad inserted by a prior pass
+          // already aligns this extint, and the loop iterator will
+          // advance past it on the next `it++`.
+          continue;
+        }
+
         assert(bit_field_bits == 0);
 
         // Pad to nearest multiple of representation width
@@ -162,8 +174,23 @@ static void add_padding(struct_typet &type, const namespacet &ns)
         const std::size_t repr_bits = repr_bytes * config.ansi_c.char_width;
 
         const std::size_t unaligned_bits = w % repr_bits;
-        const std::size_t pad = unaligned_bits ? repr_bits - unaligned_bits : 0;
-        it = pad_ext_int_after(components, it, pad);
+        // Only insert padding when actual gap bytes exist. An extint
+        // whose width is already a multiple of the representation
+        // boundary (e.g. _BitInt(256) with repr_bytes=32) needs no
+        // padding; inserting a zero-width `ext_int_pad$N` member
+        // leaks into downstream passes and trips the symex LHS
+        // dispatch with "assignment to constant_int not handled"
+        // when a struct write field-walks onto the zero-width slot.
+        // Mirrors the pad_bit_field guard above (line 184) which
+        // only pads when the gap is non-zero. The sibling-pad lookup
+        // at padding.cpp:331-337 handles the missing-pad case
+        // correctly (the conditional-width-add is exactly what
+        // preserves offset arithmetic).
+        if (unaligned_bits != 0)
+        {
+          const std::size_t pad = repr_bits - unaligned_bits;
+          it = pad_ext_int_after(components, it, pad);
+        }
       }
     }
 

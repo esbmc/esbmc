@@ -425,12 +425,20 @@ public:
    *  @param subtype Type of elements in this array.
    *  @param size Size of this array.
    *  @param inf Whether or not this array is infinitely sized
+   *  @param w Explicit bit-width of the index sort; 0 means the machine
+   *    word size. Non-zero only for wide-BV-indexed infinite arrays (the
+   *    Solidity mapping storage, which is indexed by address ++ key).
    */
-  array_type2t(const type2tc &_subtype, const expr2tc &size, bool inf)
+  array_type2t(
+    const type2tc &_subtype,
+    const expr2tc &size,
+    bool inf,
+    unsigned int w = 0)
     : type2t(array_id),
       subtype(_subtype),
       array_size(size),
-      size_is_infinite(inf)
+      size_is_infinite(inf),
+      index_width(w)
   {
     // Constant-fold the size expression so identical array types compare
     // equal regardless of how their size was constructed. Skip the work
@@ -504,11 +512,13 @@ public:
   type2tc subtype;
   expr2tc array_size;
   bool size_is_infinite;
+  unsigned int index_width;
 
   static constexpr auto fields = std::make_tuple(
     &array_type2t::subtype,
     &array_type2t::array_size,
-    &array_type2t::size_is_infinite);
+    &array_type2t::size_is_infinite,
+    &array_type2t::index_width);
   static std::string field_names[esbmct::num_type_fields];
 };
 

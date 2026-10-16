@@ -8,11 +8,20 @@
 smt_solver_baset *create_new_cvc5_solver(
   const optionst &options,
   const namespacet &ns,
-  tuple_iface **tuple_api [[maybe_unused]],
+  tuple_iface **tuple_api,
   array_iface **array_api,
   fp_convt **fp_api)
 {
   cvc5_convt *conv = new cvc5_convt(ns, options);
+  // Native datatype-based tuple encoding is opt-in: defaulting to it
+  // regresses 256-bit BV-heavy queries (e.g. typedef_1, modifier_named_*)
+  // because CVC5's BV solver handles flattened pointer/struct tuples faster
+  // than the datatype theory. Users hitting the bare-smt_sort abort on
+  // Solidity nested-dynamic shapes (T[N][infinite]) opt in via
+  // --cvc5-native-tuples; without the flag CVC5 falls back to the
+  // smt_tuple_node_flattener for byte-identical pre-Stage-2 behavior.
+  if (options.get_bool_option("cvc5-native-tuples"))
+    *tuple_api = static_cast<tuple_iface *>(conv);
   *array_api = static_cast<array_iface *>(conv);
   *fp_api = static_cast<fp_convt *>(conv);
   return conv;
@@ -1253,10 +1262,29 @@ cvc5_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 {
   smt_sortt dom = mk_int_bv_sort(domain_width);
   smt_sortt arr = mk_array_sort(dom, init_val->sort);
+  cvc5::Sort arr_sort = to_solver_smt_sort<cvc5::Sort>(arr)->s;
+  cvc5::Term init_term = to_solver_smt_ast<cvc5_smt_ast>(init_val)->a;
 
-  cvc5::Term t = slv.mkConstArray(
-    to_solver_smt_sort<cvc5::Sort>(arr)->s,
-    to_solver_smt_ast<cvc5_smt_ast>(init_val)->a);
+  // CVC5's mkConstArray requires `val` to be a true SMT-LIB value (a literal),
+  // unlike Z3's Z3_mk_const_array which happily accepts any well-sorted Term
+  // including free constants and applied operators. When init_term is not a
+  // value (e.g. a fresh tuple constant for a `NULL` pointer, or a chain of
+  // `(store ...)` terms produced by tuple_array_create's finite fallback),
+  // mkConstArray throws `Invalid argument 'NULL'/'<term>' for 'val', expected
+  // a value`. Fall back to a fresh array constant in that case — the
+  // resulting array has unconstrained slot values rather than all-slots-equal,
+  // which is sound (more permissive) for default storage initialization where
+  // the symex dispatcher loop havocs the storage on every iteration anyway.
+  cvc5::Term t;
+  try
+  {
+    t = slv.mkConstArray(arr_sort, init_term);
+  }
+  catch (const cvc5::CVC5ApiException &)
+  {
+    std::string name = mk_fresh_name("cvc5_convt::convert_array_of_fresh");
+    t = slv.mkConst(arr_sort, name);
+  }
 
   return new_ast(t, arr);
 }
@@ -1401,4 +1429,302 @@ smt_astt cvc5_convt::mk_quantifier(
   }
 
   return new_ast(quantifier, rhs->sort);
+}
+
+// ---------------------------------------------------------------------------
+// Native tuple support via CVC5 datatype/tuple API.  Mirrors z3_conv.cpp's
+// implementation so cvc5_convt acts as its own tuple_iface (avoiding the
+// smt_tuple_node_flattener fallback that produces bare smt_sort instances).
+// ---------------------------------------------------------------------------
+
+cvc5::Term cvc5_convt::cvc5_tuple_select(const cvc5::Term &t, unsigned i)
+{
+  cvc5::Sort srt = t.getSort();
+  if (!srt.isTuple())
+  {
+    log_error("cvc5 conversion: argument must be a tuple");
+    abort();
+  }
+  cvc5::Datatype dt = srt.getDatatype();
+  // Tuples are single-constructor datatypes; field selectors live on dt[0].
+  cvc5::DatatypeSelector sel = dt[0][i];
+  return slv.mkTerm(cvc5::Kind::APPLY_SELECTOR, {sel.getTerm(), t});
+}
+
+cvc5::Term cvc5_convt::cvc5_tuple_update(
+  const cvc5::Term &t,
+  unsigned i,
+  const cvc5::Term &newval)
+{
+  cvc5::Sort srt = t.getSort();
+  if (!srt.isTuple())
+  {
+    log_error("cvc5 conversion: argument must be a tuple");
+    abort();
+  }
+  cvc5::Datatype dt = srt.getDatatype();
+  cvc5::DatatypeSelector sel = dt[0][i];
+  return slv.mkTerm(
+    cvc5::Kind::APPLY_UPDATER, {sel.getUpdaterTerm(), t, newval});
+}
+
+smt_astt cvc5_smt_ast::update(
+  smt_solver_baset *ctx,
+  smt_astt value,
+  unsigned int idx,
+  const expr2tc &idx_expr) const
+{
+  if (sort->id == SMT_SORT_ARRAY)
+    return smt_ast::update(ctx, value, idx, idx_expr);
+
+  assert(sort->id == SMT_SORT_STRUCT);
+  assert(is_nil_expr(idx_expr) && "Can only update constant index tuple elems");
+
+  cvc5_convt *cv = static_cast<cvc5_convt *>(ctx);
+  const cvc5_smt_ast *updateval = to_solver_smt_ast<cvc5_smt_ast>(value);
+  return cv->new_solver_ast<cvc5_smt_ast>(
+    cv->cvc5_tuple_update(a, idx, updateval->a), sort);
+}
+
+smt_astt cvc5_smt_ast::project(smt_solver_baset *ctx, unsigned int elem) const
+{
+  cvc5_convt *cv = static_cast<cvc5_convt *>(ctx);
+
+  assert(!is_nil_type(sort->get_tuple_type()));
+  const std::vector<type2tc> &members =
+    struct_union_members(sort->get_tuple_type());
+
+  assert(elem < members.size());
+  smt_sortt idx_sort = ctx->convert_sort(members[elem]);
+
+  cvc5::Term selected = cv->cvc5_tuple_select(a, elem);
+  return cv->new_solver_ast<cvc5_smt_ast>(selected, idx_sort);
+}
+
+smt_sortt cvc5_convt::mk_struct_sort(const type2tc &type)
+{
+  // Match z3_convt::mk_struct_sort: array-of-tuple gets emitted as a regular
+  // array sort, and the carve-out at smt_conv.cpp's array_id case routes us
+  // here on the tuple-typed range path.
+  if (is_array_type(type))
+  {
+    const array_type2t &arrtype = to_array_type(type);
+    smt_sortt subtypesort = convert_sort(arrtype.subtype);
+    smt_sortt d = mk_int_bv_sort(make_array_domain_type(arrtype)->get_width());
+    return mk_array_sort(d, subtypesort);
+  }
+
+  const std::vector<type2tc> &def_members =
+    struct_union_members(is_pointer_type(type) ? pointer_struct : type);
+  std::vector<cvc5::Sort> sorts;
+  sorts.reserve(def_members.size());
+  for (auto const &it : def_members)
+  {
+    smt_sortt s = convert_sort(it);
+    sorts.push_back(to_solver_smt_sort<cvc5::Sort>(s)->s);
+  }
+
+  cvc5::Sort tuple_sort = slv.mkTupleSort(sorts);
+  return new solver_smt_sort<cvc5::Sort>(SMT_SORT_STRUCT, tuple_sort, type);
+}
+
+smt_astt cvc5_convt::tuple_create(const expr2tc &structdef)
+{
+  const constant_struct2t &strct = to_constant_struct2t(structdef);
+  const std::vector<expr2tc> &members = strct.datatype_members;
+  const std::size_t n_members = struct_union_members(strct.type).size();
+
+  std::vector<cvc5::Term> args;
+  args.reserve(n_members);
+  for (std::size_t i = 0; i < n_members; ++i)
+    args.push_back(to_solver_smt_ast<cvc5_smt_ast>(convert_ast(members[i]))->a);
+
+  smt_sortt s = mk_struct_sort(structdef->type);
+  cvc5::Term t = slv.mkTuple(args);
+  return new_ast(t, s);
+}
+
+smt_astt cvc5_convt::tuple_fresh(smt_sortt s, std::string name)
+{
+  if (name.empty())
+    name = mk_fresh_name("cvc5_convt::tuple_fresh");
+  cvc5::Term t = slv.mkConst(to_solver_smt_sort<cvc5::Sort>(s)->s, name);
+  return new_ast(t, s);
+}
+
+smt_astt cvc5_convt::tuple_array_create(
+  const type2tc &arr_type,
+  smt_astt *input_args,
+  bool const_array,
+  smt_sortt domain)
+{
+  const array_type2t &arrtype = to_array_type(arr_type);
+
+  smt_sortt ssort = mk_struct_sort(arrtype.subtype);
+  smt_sortt asort = mk_array_sort(domain, ssort);
+  cvc5::Sort cvc5_arr_sort = to_solver_smt_sort<cvc5::Sort>(asort)->s;
+  std::size_t dom_w = domain->get_data_width();
+
+  if (const_array)
+  {
+    const cvc5_smt_ast *tmpast = to_solver_smt_ast<cvc5_smt_ast>(*input_args);
+    cvc5::Term value = tmpast->a;
+    if (is_bool_type(arrtype.subtype))
+      value = slv.mkBoolean(false);
+
+    // Z3 happily accepts non-value Terms (free constants, applied selectors)
+    // as the default for Z3_mk_const_array. CVC5's mkConstArray is stricter —
+    // it requires the default to actually be a value. For finite tuple arrays
+    // (the common case for Solidity nested-dynamic shapes after rewrite_ptrs_
+    // to_structs), iterate per-slot stores from a fresh array constant; this
+    // pins every reachable index to `value` without the value-vs-constant
+    // distinction.
+    if (
+      !arrtype.size_is_infinite && !is_nil_expr(arrtype.array_size) &&
+      is_constant_int2t(arrtype.array_size))
+    {
+      std::string name = mk_fresh_name("cvc5_convt::tuple_array_create_const");
+      cvc5::Term out = slv.mkConst(cvc5_arr_sort, name);
+      std::size_t N = to_constant_int2t(arrtype.array_size).as_ulong();
+      for (std::size_t i = 0; i < N; ++i)
+      {
+        cvc5::Term idx = slv.mkBitVector(dom_w, i);
+        out = slv.mkTerm(cvc5::Kind::STORE, {out, idx, value});
+      }
+      return new_ast(out, asort);
+    }
+
+    // Infinite-size const_array path: must use mkConstArray (no per-slot
+    // iteration possible). Same value-vs-free-constant strictness applies;
+    // fall back to a fresh array constant when CVC5 rejects `value` as a
+    // non-value Term. Sound (more permissive) for default storage init.
+    cvc5::Term t;
+    try
+    {
+      t = slv.mkConstArray(cvc5_arr_sort, value);
+    }
+    catch (const cvc5::CVC5ApiException &)
+    {
+      std::string name =
+        mk_fresh_name("cvc5_convt::tuple_array_create_inf_fresh");
+      t = slv.mkConst(cvc5_arr_sort, name);
+    }
+    return new_ast(t, asort);
+  }
+
+  assert(
+    !is_nil_expr(arrtype.array_size) &&
+    "Non-const tuple_array_create with infinite array size");
+  assert(
+    is_constant_int2t(arrtype.array_size) &&
+    "tuple_array_create sizes should be constant");
+
+  std::string name = mk_fresh_name("cvc5_convt::tuple_array_create");
+  cvc5::Term out = slv.mkConst(cvc5_arr_sort, name);
+  for (std::size_t i = 0; i < to_constant_int2t(arrtype.array_size).as_ulong();
+       ++i)
+  {
+    cvc5::Term idx = slv.mkBitVector(dom_w, i);
+    const cvc5_smt_ast *tmpast = to_solver_smt_ast<cvc5_smt_ast>(input_args[i]);
+    out = slv.mkTerm(cvc5::Kind::STORE, {out, idx, tmpast->a});
+  }
+
+  return new_ast(out, asort);
+}
+
+smt_astt cvc5_convt::mk_tuple_symbol(const std::string &name, smt_sortt s)
+{
+  return mk_smt_symbol(name, s);
+}
+
+smt_astt cvc5_convt::mk_tuple_array_symbol(const expr2tc &expr)
+{
+  const symbol2t &sym = to_symbol2t(expr);
+  return mk_smt_symbol(sym.get_symbol_name(), convert_sort(sym.type));
+}
+
+smt_astt
+cvc5_convt::tuple_array_of(const expr2tc &init, unsigned long domain_width)
+{
+  return convert_array_of(convert_ast(init), domain_width);
+}
+
+expr2tc cvc5_convt::tuple_get(const type2tc &type, smt_astt sym)
+{
+  const std::vector<type2tc> &members =
+    struct_union_members(is_pointer_type(type) ? pointer_struct : type);
+
+  if (is_pointer_type(type))
+  {
+    smt_astt object = new_ast(
+      cvc5_tuple_select(to_solver_smt_ast<cvc5_smt_ast>(sym)->a, 0),
+      convert_sort(members[0]));
+    smt_astt offset = new_ast(
+      cvc5_tuple_select(to_solver_smt_ast<cvc5_smt_ast>(sym)->a, 1),
+      convert_sort(members[1]));
+
+    unsigned int num = get_bv(object, is_signedbv_type(members[0])).to_uint64();
+    unsigned int offs =
+      get_bv(offset, is_signedbv_type(members[1])).to_uint64();
+    pointer_logict::pointert p(num, BigInt(offs));
+    return pointer_logic.back().pointer_expr(p, type);
+  }
+
+  std::vector<expr2tc> outmem;
+  unsigned int i = 0;
+  for (auto const &it : members)
+  {
+    outmem.push_back(get_by_ast(
+      it,
+      new_ast(
+        cvc5_tuple_select(to_solver_smt_ast<cvc5_smt_ast>(sym)->a, i),
+        convert_sort(it))));
+    i++;
+  }
+
+  return constant_struct2tc(type, std::move(outmem));
+}
+
+expr2tc cvc5_convt::tuple_get(const expr2tc &expr)
+{
+  const type2tc &t = is_pointer_type(expr->type) ? pointer_struct : expr->type;
+  const std::vector<type2tc> &members = struct_union_members(t);
+  const std::vector<irep_idt> &mnames = struct_union_member_names(t);
+
+  if (is_pointer_type(expr->type))
+  {
+    smt_astt sym = convert_ast(expr);
+
+    smt_astt object = new_ast(
+      cvc5_tuple_select(to_solver_smt_ast<cvc5_smt_ast>(sym)->a, 0),
+      convert_sort(members[0]));
+    smt_astt offset = new_ast(
+      cvc5_tuple_select(to_solver_smt_ast<cvc5_smt_ast>(sym)->a, 1),
+      convert_sort(members[1]));
+
+    unsigned int num = get_bv(object, is_signedbv_type(members[0])).to_uint64();
+    unsigned int offs =
+      get_bv(offset, is_signedbv_type(members[1])).to_uint64();
+    pointer_logict::pointert p(num, BigInt(offs));
+    return pointer_logic.back().pointer_expr(p, expr->type);
+  }
+
+  std::vector<expr2tc> outmem;
+  unsigned int i = 0;
+  for (auto const &it : members)
+  {
+    expr2tc memb = member2tc(it, expr, mnames[i]);
+    outmem.push_back(get(memb));
+    i++;
+  }
+
+  return constant_struct2tc(expr->type, std::move(outmem));
+}
+
+expr2tc cvc5_convt::tuple_get_array_elem(
+  smt_astt array,
+  uint64_t index,
+  const type2tc &subtype)
+{
+  return get_array_elem(array, index, get_flattened_array_subtype(subtype));
 }

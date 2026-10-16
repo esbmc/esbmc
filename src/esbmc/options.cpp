@@ -785,6 +785,13 @@ const struct group_opt_templ all_cmd_options[] = {
     {"tuple-sym-flattener",
      NULL,
      "Encode tuples using our tuple to symbol API"},
+    {"cvc5-native-tuples",
+     NULL,
+     "[CVC5] Use CVC5's native datatype-based tuple/struct encoding instead "
+     "of the tuple_node_flattener fallback. Required to encode Solidity "
+     "nested-dynamic shapes (e.g. T[N][infinite]) under CVC5; can be slower "
+     "than the flattener for queries that only use plain pointer/struct "
+     "tuples."},
     {"array-flattener", NULL, "Encode arrays using our array API"},
     {"no-return-value-opt",
      NULL,
