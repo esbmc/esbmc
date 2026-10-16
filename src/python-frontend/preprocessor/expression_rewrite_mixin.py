@@ -1,5 +1,6 @@
 import ast
 import copy
+from collections import Counter
 # pylint: disable=protected-access,too-many-locals,too-many-boolean-expressions,too-many-statements
 
 
@@ -25,6 +26,145 @@ class ExpressionRewriteMixin:
         ast.copy_location(listcomp, gen)
         ast.fix_missing_locations(listcomp)
         node.args[0] = listcomp
+
+    @staticmethod
+    def _is_map_call(node):
+        return (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                and node.func.id == "map" and len(node.args) == 2 and not node.keywords
+                and not any(isinstance(a, ast.Starred) for a in node.args))
+
+    def _map_as_listcomp(self, call):
+        """map(f, xs) -> [f(t) for t in xs], for a map consumed whole, once."""
+        func, iterable = call.args
+        if isinstance(func, ast.Lambda) and len(func.args.args) == 1:
+            target = ast.Name(id=func.args.args[0].arg, ctx=ast.Store())
+            elt = func.body
+        else:
+            tmp_id = f"ESBMC_map_elt_{self.listcomp_counter}"
+            self.listcomp_counter += 1
+            target = ast.Name(id=tmp_id, ctx=ast.Store())
+            elt = ast.Call(func=func, args=[ast.Name(id=tmp_id, ctx=ast.Load())], keywords=[])
+        listcomp = ast.ListComp(
+            elt=elt,
+            generators=[ast.comprehension(target=target, iter=iterable, ifs=[], is_async=0)])
+        ast.copy_location(listcomp, call)
+        return ast.fix_missing_locations(listcomp)
+
+    def _map_for_lowerable(self, node, call):
+        """Whether `for ... in call` can call f per element: f must be a name
+        the loop does not rebind."""
+        func = call.args[0]
+        return isinstance(func, ast.Name) and not self._binds_name(node, func.id)
+
+    def _map_for_as_plain_for(self, node):
+        """for v in map(f, xs): body -> for t in xs: v = f(t); body.
+
+        f is called once per element, when the element is reached, as the
+        lazy map calls it."""
+        func, iterable = node.iter.args
+        tmp_id = f"ESBMC_map_elt_{self.listcomp_counter}"
+        self.listcomp_counter += 1
+        call = ast.Call(func=func, args=[ast.Name(id=tmp_id, ctx=ast.Load())], keywords=[])
+        bind = ast.copy_location(ast.Assign(targets=[node.target], value=call), node)
+        node.target = ast.copy_location(ast.Name(id=tmp_id, ctx=ast.Store()), node.target)
+        node.iter = iterable
+        node.body.insert(0, ast.fix_missing_locations(bind))
+
+    @staticmethod
+    def _is_pure_operand(node):
+        if isinstance(node, (ast.Name, ast.Constant, ast.Lambda)):
+            return True
+        if isinstance(node, ast.Attribute):
+            return ExpressionRewriteMixin._is_pure_operand(node.value)
+        if isinstance(node, (ast.List, ast.Tuple, ast.Set)):
+            return all(map(ExpressionRewriteMixin._is_pure_operand, node.elts))
+        return False
+
+    @staticmethod
+    def _is_unpacking(node):
+        return (isinstance(node, ast.Assign) and len(node.targets) == 1
+                and isinstance(node.targets[0], (ast.Tuple, ast.List)))
+
+    @staticmethod
+    def _names(node, name):
+        return isinstance(node, ast.Name) and node.id == name
+
+    def _map_consumer_slot(self, stmt, name, call):
+        """A setter that puts @p call where @p stmt consumes the iterator
+        @p name whole, once and in a form lowered here or in visit_Call;
+        None when @p stmt does not."""
+        if isinstance(stmt, ast.For):
+            if self._names(stmt.iter, name) and self._map_for_lowerable(stmt, call):
+                return lambda: setattr(stmt, "iter", call)
+            return None
+        if self._is_unpacking(stmt) and self._names(stmt.value, name):
+            return lambda: setattr(stmt, "value", call)
+        call_site = self._list_call_on(stmt, name)
+        if call_site is None:
+            return None
+        return lambda: call_site.args.__setitem__(0, call)
+
+    def _list_call_on(self, stmt, name):
+        """The `list(name)` call @p stmt evaluates at most once, or None."""
+        if not isinstance(
+                stmt, (ast.Assign, ast.AnnAssign, ast.AugAssign, ast.Expr, ast.Assert, ast.Return)):
+            return None
+        nested = (ast.Lambda, ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
+        stack = [stmt]
+        while stack:
+            n = stack.pop()
+            if (isinstance(n, ast.Call) and self._names(n.func, "list") and len(n.args) == 1
+                    and not n.keywords and self._names(n.args[0], name)):
+                return n
+            if not isinstance(n, nested):
+                stack.extend(ast.iter_child_nodes(n))
+        return None
+
+    def _inline_single_use_map(self, stmts, i, name_counts):
+        """Move `r = map(f, xs)` into the next statement when that is r's only
+        use, so the map is consumed where it is built. A map is an iterator:
+        lowering a bound one to a list would let a second pass over it see the
+        elements again, where CPython sees none."""
+        stmt = stmts[i]
+        if not (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1
+                and isinstance(stmt.targets[0], ast.Name) and self._is_map_call(stmt.value)
+                and all(map(self._is_pure_operand, stmt.value.args))
+                and name_counts[stmt.targets[0].id] == 2):
+            return False
+        put = self._map_consumer_slot(stmts[i + 1], stmt.targets[0].id, stmt.value)
+        if put is None:
+            return False
+        put()
+        del stmts[i]
+        return True
+
+    def _inline_single_use_maps(self, module):
+        name_counts = Counter(n.id for n in ast.walk(module) if isinstance(n, ast.Name))
+        for n in ast.walk(module):
+            if isinstance(n, (ast.Global, ast.Nonlocal)):
+                name_counts.update({g: 2 for g in n.names})
+        for parent in list(ast.walk(module)):
+            for field in ("body", "orelse", "finalbody"):
+                stmts = getattr(parent, field, None)
+                i = 0
+                while isinstance(stmts, list) and i + 1 < len(stmts):
+                    if not self._inline_single_use_map(stmts, i, name_counts):
+                        i += 1
+
+    def _rewrite_map_values(self, module):
+        """Lower the map() uses whose result is consumed once, in full: as the
+        value of an unpacking, as a for-loop iterable, and through a name used
+        only by the next statement. list(map(...)) is lowered in visit_Call."""
+        if self._binds_name(module, "map"):
+            return
+        self._inline_single_use_maps(module)
+        for n in ast.walk(module):
+            if (self._is_unpacking(n) and self._is_map_call(n.value)
+                    and self._is_pure_operand(n.value.args[0])):
+                n.value = self._map_as_listcomp(n.value)
+            elif (isinstance(n, ast.For) and self._is_map_call(n.iter)
+                  and self._map_for_lowerable(n, n.iter)):
+                self._map_for_as_plain_for(n)
 
     class _ListCompExpressionLowerer(ast.NodeTransformer):
         """Utility transformer that lowers list comprehensions, any(genexpr), and all(genexpr) inside an expression."""
@@ -356,7 +496,16 @@ class ExpressionRewriteMixin:
         return node
 
     def visit_If(self, node):
+        # A literal one arm binds is not what the other arm, or the code after
+        # the join, reads: visit the else arm from the literals known before
+        # the if, then forget every name either arm changes (#8617).
+        before = (dict(self.list_literal_values), dict(self.dict_literal_values))
+        orelse, node.orelse = node.orelse, []
         node = self.generic_visit(node)
+        self.list_literal_values, self.dict_literal_values = (dict(before[0]), dict(before[1]))
+        else_arm = ast.Module(body=orelse, type_ignores=[])
+        node.orelse = self.generic_visit(else_arm).body
+        self._forget_literals_changed_in_loop(node)
         prefix, new_test, _ = self._lower_listcomp_in_expr(node.test)
         node.test = new_test
         node.test = self._transform_list_truthiness(node.test, node)
@@ -388,6 +537,15 @@ class ExpressionRewriteMixin:
         self.ensure_all_locations(comparison, source_node)
         return comparison
 
+    def visit_Try(self, node):
+        # A handler runs after any prefix of the body, and the code after the
+        # statement follows either, so no literal the statement changes is
+        # known inside it or after it (#8617).
+        self._forget_literals_changed_in_loop(node)
+        node = self.generic_visit(node)
+        self._forget_literals_changed_in_loop(node)
+        return node
+
     def visit_While(self, node):
         # Hoist generator initialisation (e.g. `j = 0`) for `var = next(gen)`
         # loop bodies out of the loop *before* visiting it, so the init runs
@@ -397,7 +555,11 @@ class ExpressionRewriteMixin:
         # progress (wedges into an unbounded loop). Mirrors the range-for path
         # in _visit_for_inner.
         gen_pre_stmts = self._hoist_generator_inits(node.body, node)
+        self._forget_literals_changed_in_loop(node)
         node = self.generic_visit(node)
+        # A break skips the else arm, so neither the body's literals nor the
+        # else arm's are known after the loop (#8617).
+        self._forget_literals_changed_in_loop(node)
         # Lower `while ... else: <orelse>` (the else runs when the loop ends
         # without break) into a did-not-break flag, the same desugaring used for
         # for-else. Without this the while node keeps its orelse, which the
@@ -406,13 +568,27 @@ class ExpressionRewriteMixin:
         # no orelse and clears node.orelse otherwise.
         while_else_pre, while_else_post = self._lower_for_else(node)
         prefix, new_test, _ = self._lower_listcomp_in_expr(node.test)
-        node.test = new_test
-        node.test = self._transform_list_truthiness(node.test, node)
-        result = (prefix or []) + [node]
+        node.test = self._transform_list_truthiness(new_test, node)
+        if prefix:
+            self._move_test_prefix_into_body(node, prefix)
+        result = [node]
         if while_else_pre or while_else_post:
             result = while_else_pre + result + while_else_post
         result = gen_pre_stmts + result
         return result if len(result) > 1 else node
+
+    def _move_test_prefix_into_body(self, node, prefix):
+        """Rewrite `while <test>` as `while True` whose body starts with
+        `<prefix>; if not <test>: break`, so the statements a comprehension in
+        the test lowers to run before every evaluation of the test, not once
+        before the loop. Breaks were already rewritten for while-else, so this
+        one still lets the else clause run."""
+        exit_test = ast.If(test=ast.UnaryOp(op=ast.Not(), operand=node.test),
+                           body=[ast.Break()],
+                           orelse=[])
+        self.ensure_all_locations(exit_test, node)
+        node.body = prefix + [exit_test] + node.body
+        node.test = self.create_constant_node(True, node)
 
     def _simplify_isinstance(self, node):
         if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)

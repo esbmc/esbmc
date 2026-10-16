@@ -40,6 +40,9 @@ class ImportResolverLike(Protocol):
     def process_collected_imports(self, output_dir: str, callbacks: object) -> None:
         ...
 
+    def split_submodule_imports(self, tree: ast.AST) -> None:
+        ...
+
     def detect_and_process_submodules(
         self,
         node: ast.AST,
@@ -186,6 +189,7 @@ def main(*, deps: CliDeps) -> int | None:
     select_threading_model(output_dir, deadlock_check)
 
     tree = _read_ast_from_file(filename)
+    import_resolver.split_submodule_imports(tree)
 
     preprocessor = deps.preprocessor_cls(filename)
     preprocessor.prepare_module(tree)

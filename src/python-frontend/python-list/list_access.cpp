@@ -1780,7 +1780,7 @@ constant_element_count(const std::vector<python_list::strided_axis> &axes)
 
 python_list::symbolic_slice_params python_list::emit_symbolic_slice_params(
   const nlohmann::json &slice_node,
-  long long n)
+  const exprt &extent)
 {
   const typet ll_type = signedbv_typet(64);
   const type2tc t = migrate_type(ll_type);
@@ -1837,20 +1837,22 @@ python_list::symbolic_slice_params python_list::emit_symbolic_slice_params(
 
   // CPython's PySlice_AdjustIndices: a given bound is wrapped once when
   // negative and clamped to [min, max]; an omitted one takes `fallback`.
+  const expr2tc n = to_ll(extent);
+  const expr2tc last = sub2tc(t, n, lit(1));
   auto adjust = [&](
                   const std::optional<expr2tc> &bound,
-                  long long min,
-                  long long max,
-                  long long fallback) {
+                  const expr2tc &min,
+                  const expr2tc &max,
+                  const expr2tc &fallback) {
     if (!bound)
-      return lit(fallback);
+      return fallback;
     const expr2tc wrapped =
-      if2tc(t, lessthan2tc(*bound, lit(0)), add2tc(t, *bound, lit(n)), *bound);
+      if2tc(t, lessthan2tc(*bound, lit(0)), add2tc(t, *bound, n), *bound);
     return if2tc(
       t,
-      lessthan2tc(wrapped, lit(min)),
-      lit(min),
-      if2tc(t, greaterthan2tc(wrapped, lit(max)), lit(max), wrapped));
+      lessthan2tc(wrapped, min),
+      min,
+      if2tc(t, greaterthan2tc(wrapped, max), max, wrapped));
   };
   const std::optional<expr2tc> lower = bound_temp("lower", "$numpy_lower$");
   const std::optional<expr2tc> upper = bound_temp("upper", "$numpy_upper$");
@@ -1858,10 +1860,17 @@ python_list::symbolic_slice_params python_list::emit_symbolic_slice_params(
   const expr2tc start = to_ll(emit_temp(
     "$numpy_slice_start$",
     if2tc(
-      t, forward, adjust(lower, 0, n, 0), adjust(lower, -1, n - 1, n - 1))));
+      t,
+      forward,
+      adjust(lower, lit(0), n, lit(0)),
+      adjust(lower, lit(-1), last, last))));
   const expr2tc stop = to_ll(emit_temp(
     "$numpy_slice_stop$",
-    if2tc(t, forward, adjust(upper, 0, n, n), adjust(upper, -1, n - 1, -1))));
+    if2tc(
+      t,
+      forward,
+      adjust(upper, lit(0), n, n),
+      adjust(upper, lit(-1), last, lit(-1)))));
 
   auto count = [&](const expr2tc &span, const expr2tc &magnitude) {
     return add2tc(t, div2tc(t, sub2tc(t, span, lit(1)), magnitude), lit(1));
@@ -2183,26 +2192,24 @@ std::optional<python_list::strided_axis> python_list::runtime_slice_axis(
   const nlohmann::json &node,
   exprt &offset)
 {
-  if (source.symbolic())
-    return std::nullopt;
   const typet ll_type = signedbv_typet(64);
+  const exprt source_stride = python_list::axis_stride(source);
   const symbolic_slice_params params =
-    emit_symbolic_slice_params(node, source.extent);
+    emit_symbolic_slice_params(node, python_list::axis_extent(source));
   strided_axis axis;
   axis.extent_expr = params.length;
   const slice_step_info step = get_slice_step_info(node);
-  if (step.literal)
+  if (step.literal && source.stride_expr.is_nil())
     axis.stride = source.stride * step.value;
   else
     axis.stride_expr = emit_ll_temp(
       node,
       "$numpy_axis_stride$",
-      build_mul(params.stride, from_integer(source.stride, ll_type), ll_type));
+      build_mul(params.stride, source_stride, ll_type));
   offset = build_add(
     offset,
     build_typecast(
-      build_mul(params.offset, from_integer(source.stride, ll_type), ll_type),
-      size_type()),
+      build_mul(params.offset, source_stride, ll_type), size_type()),
     size_type());
   return axis;
 }
@@ -2984,6 +2991,20 @@ python_list::try_build_ravel_pointer_view(const exprt &array)
     /*readonly=*/false);
 }
 
+// A slice of a pointer view: a view of the same storage when bound to a new
+// name, a copy of its elements otherwise.
+std::optional<exprt> python_list::try_build_numpy_view_subview(
+  const exprt &array,
+  const nlohmann::json &slice_node)
+{
+  if (
+    !array.is_symbol() || converter_.numpy_pointer_view_info_.count(
+                            array.identifier().as_string()) == 0)
+    return std::nullopt;
+  return try_build_strided_basic_view(
+    array, {slice_node}, /*allow_plain_array=*/true);
+}
+
 std::optional<exprt> python_list::try_copy_numpy_pointer_view_slice(
   const exprt &array,
   const typet &elem_type,
@@ -2991,6 +3012,10 @@ std::optional<exprt> python_list::try_copy_numpy_pointer_view_slice(
   long long step_val,
   bool literal_step)
 {
+  if (
+    std::optional<exprt> subview =
+      try_build_numpy_view_subview(array, slice_node))
+    return subview;
   if (!literal_step || !array.is_symbol())
     return std::nullopt;
 
@@ -3918,7 +3943,8 @@ exprt python_list::handle_range_slice(
 
       for (size_t i = begin; i < end; ++i)
       {
-        exprt element = converter_.get_expr(list_node["value"]["elts"][i]);
+        exprt element = decay_function_to_pointer(
+          converter_.get_expr(list_node["value"]["elts"][i]));
         if (!element.is_symbol())
         {
           symbolt &tmp = converter_.create_tmp_symbol(
@@ -4235,16 +4261,119 @@ void python_list::handle_slice_assignment(
   converter_.add_instruction(converter_.convert_expression_to_code(call));
 }
 
+void python_list::handle_subscript_assign_none(
+  const exprt &list_expr,
+  const nlohmann::json &slice_node)
+{
+  const symbolt *set_func =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_set_at");
+  if (!set_func)
+    return;
+
+  const locationt location = converter_.get_location_from_decl(slice_node);
+
+  exprt idx_expr = converter_.get_expr(slice_node);
+  idx_expr = converter_.unwrap_optional_if_needed(idx_expr);
+  if (idx_expr.type() != size_type())
+  {
+    const symbolt *size_func =
+      converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
+    if (size_func && !idx_expr.type().is_unsignedbv())
+    {
+      symbolt &size_var = converter_.create_tmp_symbol(
+        slice_node, "$list_size$", size_type(), gen_zero(size_type()));
+      code_declt size_decl(build_symbol(size_var));
+      size_decl.location() = location;
+      converter_.add_instruction(size_decl);
+
+      code_function_callt size_call;
+      size_call.function() = build_symbol(*size_func);
+      size_call.arguments().push_back(
+        list_expr.type().is_pointer() ? list_expr
+                                      : build_address_of(list_expr));
+      size_call.lhs() = build_symbol(size_var);
+      size_call.type() = size_type();
+      size_call.location() = location;
+      converter_.add_instruction(size_call);
+
+      exprt index_as_size = build_typecast(idx_expr, size_type());
+      expr2tc index2, index_as_size2, size_var2;
+      migrate_expr(idx_expr, index2);
+      migrate_expr(index_as_size, index_as_size2);
+      migrate_expr(build_symbol(size_var), size_var2);
+
+      expr2tc is_negative = lessthan2tc(index2, gen_zero(index2->type));
+      expr2tc positive_index =
+        add2tc(migrate_type(size_type()), size_var2, index_as_size2);
+      expr2tc converted = if2tc(
+        migrate_type(size_type()), is_negative, positive_index, index_as_size2);
+      idx_expr = migrate_expr_back(converted);
+    }
+    else
+    {
+      idx_expr = build_typecast(idx_expr, size_type());
+    }
+  }
+
+  exprt none_val = gen_zero(none_type());
+  list_elem_info elem_info = get_list_element_info(slice_node, none_val);
+
+  exprt call = build_call_expr(
+    *set_func,
+    bool_type(),
+    {list_expr.type().is_pointer() ? list_expr : build_address_of(list_expr),
+     idx_expr,
+     gen_zero(pointer_typet(empty_typet())),
+     build_symbol(*elem_info.elem_type_sym),
+     elem_info.elem_size,
+     from_integer(BigInt(0), size_type()),
+     from_integer(BigInt(0), int_type())});
+  call.location() = location;
+  converter_.add_instruction(converter_.convert_expression_to_code(call));
+
+  if (list_expr.is_symbol())
+  {
+    const std::string list_id = list_expr.identifier().as_string();
+    if (
+      slice_node.value("_type", "") == "Constant" &&
+      slice_node.contains("value") && slice_node["value"].is_number_integer())
+    {
+      size_t const_idx = slice_node["value"].get<size_t>();
+      elem_types().set_element_type(list_id, const_idx, none_type());
+    }
+    else if (
+      slice_node.value("_type", "") == "UnaryOp" && slice_node.contains("op") &&
+      slice_node["op"].value("_type", "") == "USub" &&
+      slice_node.contains("operand") &&
+      slice_node["operand"].value("_type", "") == "Constant" &&
+      slice_node["operand"]["value"].is_number_integer())
+    {
+      size_t neg_idx = slice_node["operand"]["value"].get<size_t>();
+      const auto *rec = elem_types().find(list_id);
+      if (rec && neg_idx <= rec->size())
+      {
+        size_t const_idx = rec->size() - neg_idx;
+        elem_types().set_element_type(list_id, const_idx, none_type());
+      }
+    }
+  }
+}
+
 /// A bare `list` annotation names no element type, so the read would carry
 /// none and neither arithmetic nor equality on it would behave. Recover what
 /// the call sites told us about this parameter, seeded when the function was
 /// converted (#7187). Returns `annotated` unchanged when this is not a
-/// bare-`list` parameter, or nothing was inferred for it.
+/// bare-`list` parameter, or nothing was inferred for it. Call sites that
+/// pass a list beside other types give each position its own type (#8472).
 typet python_list::bare_list_param_elem_type(
   const nlohmann::json &param_node,
   const std::string &param_id,
-  const typet &annotated)
+  const typet &annotated,
+  size_t index)
 {
+  if (mixes_list_and_other(param_id))
+    return elem_types().element_type(param_id, index);
+
   if (
     !param_node.contains("annotation") || !param_node["annotation"].is_object())
     return annotated;
@@ -4258,6 +4387,52 @@ typet python_list::bare_list_param_elem_type(
 
   const typet inferred = elem_types().element_type(param_id, 0);
   return inferred.is_empty() ? annotated : inferred;
+}
+
+bool python_list::mixes_list_and_other(const std::string &id) const
+{
+  const typet list_type = converter_.get_type_handler().get_list_type();
+  const auto *recorded = elem_types().find(id);
+  return recorded &&
+         std::any_of(
+           recorded->begin(),
+           recorded->end(),
+           [&](const auto &e) { return e.second == list_type; }) &&
+         elem_types().uniform_element_type(id) == typet();
+}
+
+/// A list whose elements mix a list with another type is read at one
+/// element's type only when the index is a constant and every list element
+/// carries its own id, which the call-site seeding gives a position it
+/// resolved. Any other read would pick one type for elements of several, so
+/// it is refused rather than misread (#8472).
+void python_list::reject_unresolved_element_read(
+  const exprt &array,
+  const nlohmann::json &slice_node) const
+{
+  if (!array.is_symbol())
+    return;
+  const std::string &id = array.identifier().as_string();
+  if (!mixes_list_and_other(id))
+    return;
+
+  const typet list_type = converter_.get_type_handler().get_list_type();
+  const auto &recorded = *elem_types().find(id);
+  const bool every_list_resolved =
+    std::none_of(recorded.begin(), recorded.end(), [&](const auto &e) {
+      return e.second == list_type && e.first.empty();
+    });
+  const bool constant_index = slice_node.value("_type", "") == "Constant" &&
+                              slice_node["value"].is_number_unsigned();
+  if (constant_index && every_list_resolved)
+    return;
+
+  const locationt l = converter_.get_location_from_decl(list_value_);
+  throw std::runtime_error(
+    "Reading an element of a list whose elements have different types is "
+    "supported only at a constant index into a list every call passes in one "
+    "shape (" +
+    l.get_file().as_string() + ":" + l.get_line().as_string() + ")");
 }
 
 std::optional<exprt> python_list::resolve_nested_list_element(
@@ -4336,6 +4511,23 @@ std::optional<exprt> python_list::resolve_nested_list_element(
     }
   }
   return std::nullopt;
+}
+
+typet python_list::unrecorded_base_elem_type()
+{
+  if (!list_value_.contains("value") || !list_value_["value"].is_object())
+    return typet();
+  const nlohmann::json &base = list_value_["value"];
+
+  // A parameter or variable declares its element type in its annotation.
+  if (base.contains("id") && base["id"].is_string())
+    return get_elem_type_from_annotation(
+      json_utils::get_var_value(
+        base["id"], converter_.current_function_name(), converter_.ast()),
+      converter_.get_type_handler());
+
+  // An inline call, as in g()[0], declares it in g's return annotation.
+  return infer_elem_type_from_call_return(base, converter_);
 }
 
 /// The list's recorded element type when it is a tagged scalar and the index is
@@ -4527,45 +4719,38 @@ exprt python_list::handle_index_access(
     // Handle list types (symbol-based)
     typet elem_type;
 
+    reject_unresolved_element_read(array, slice_node);
+
     if (
       std::optional<exprt> nested =
         resolve_nested_list_element(array, pos_expr, index, elem_type))
       return *nested;
 
     // Determine element type
-    if (list_node.contains("_type") && list_node["_type"] == "arg")
+    const std::string &list_name = array.identifier().as_string();
+    const auto *recorded = elem_types().find(list_name);
+
+    if (
+      recorded && index < recorded->size() &&
+      (*recorded)[index].second == none_type())
+    {
+      elem_type = none_type();
+    }
+    else if (list_node.contains("_type") && list_node["_type"] == "arg")
     {
       elem_type =
         get_elem_type_from_annotation(list_node, converter_.get_type_handler());
 
       elem_type = bare_list_param_elem_type(
-        list_node, array.identifier().as_string(), elem_type);
+        list_node, array.identifier().as_string(), elem_type, index);
     }
     else if (
       slice_node["_type"] == "Constant" || slice_node["_type"] == "BinOp" ||
       (slice_node["_type"] == "UnaryOp" &&
        slice_node["operand"]["_type"] == "Constant"))
     {
-      const std::string &list_name = array.identifier().as_string();
-
-      const auto *recorded = elem_types().find(list_name);
       if (!recorded)
-      {
-        /* Fall back to annotation for function parameters */
-        if (
-          list_value_.contains("value") && list_value_["value"].is_object() &&
-          list_value_["value"].contains("id") &&
-          list_value_["value"]["id"].is_string())
-        {
-          const nlohmann::json list_value_node = json_utils::get_var_value(
-            list_value_["value"]["id"],
-            converter_.current_function_name(),
-            converter_.ast());
-
-          elem_type = get_elem_type_from_annotation(
-            list_value_node, converter_.get_type_handler());
-        }
-      }
+        elem_type = unrecorded_base_elem_type();
       else
       {
         size_t type_index =

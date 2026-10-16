@@ -363,7 +363,11 @@ bool esbmc_parseoptionst::process_goto_program(
     // reported as an error rather than silently miscompiled (the legacy
     // imperative path in symex was removed once the lowered subset covered it).
     remove_exceptions(
-      goto_functions, context, ns, unreported_exceptions(options));
+      goto_functions,
+      context,
+      ns,
+      unreported_exceptions(options),
+      python_checked_exceptions(options));
 
     // do partial inlining
     if (!cmdline.isset("no-inlining"))

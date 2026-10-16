@@ -503,6 +503,69 @@ find_imported_function(const JsonType &ast, const std::string &func_name)
   throw std::runtime_error("Function " + func_name + " not found\n");
 }
 
+/// The dotted name a Name or Attribute node spells, e.g. "collections.abc.Set".
+inline std::string dotted_name(const nlohmann::json &node)
+{
+  if (!node.is_object())
+    return {};
+
+  const std::string type = node.value("_type", "");
+  if (type == "Name")
+    return node.value("id", "");
+
+  if (type == "Attribute")
+  {
+    std::string left =
+      dotted_name(node.value("value", nlohmann::json::object()));
+    std::string right = node.value("attr", "");
+    if (!left.empty() && !right.empty())
+      return left + "." + right;
+    return right.empty() ? left : right;
+  }
+
+  return {};
+}
+
+/// What dotted @p name denotes through the module's imports, e.g. "m.Set"
+/// after `import collections.abc as m` is "collections.abc.Set"; @p name
+/// itself when no import binds its head.
+inline std::string
+resolve_import(const nlohmann::json &ast, const std::string &name)
+{
+  for (const auto &node : ast["body"])
+  {
+    const std::string type = node.value("_type", "");
+    if (type != "Import" && type != "ImportFrom")
+      continue;
+    const std::string from = type == "ImportFrom" && node["module"].is_string()
+                               ? node["module"].get<std::string>() + "."
+                               : "";
+    for (const auto &alias : node["names"])
+    {
+      const std::string bound = alias["asname"].is_string()
+                                  ? alias["asname"].get<std::string>()
+                                  : alias["name"].get<std::string>();
+      if (name == bound || name.starts_with(bound + "."))
+        return from + alias["name"].get<std::string>() +
+               name.substr(bound.size());
+    }
+  }
+  return name;
+}
+
+/// The collections.abc class that dotted @p name denotes, or empty.
+inline std::string
+collections_abc_class(const nlohmann::json &ast, const std::string &name)
+{
+  const std::string prefix = "collections.abc.";
+  const std::string resolved = resolve_import(ast, name);
+  if (
+    !resolved.starts_with(prefix) ||
+    resolved.find('.', prefix.size()) != std::string::npos)
+    return {};
+  return resolved.substr(prefix.size());
+}
+
 template <typename JsonType>
 const std::string
 get_object_alias(const JsonType &ast, const std::string &obj_name)

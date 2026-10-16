@@ -234,6 +234,12 @@ const struct group_opt_templ all_cmd_options[] = {
       "Treat the program's own assert statements as assumptions, keeping the "
       "frontend's and the operational model's exception checks (unlike "
       "--no-assertions, which drops those too)"},
+     {"python-check-exceptions",
+      boost::program_options::value<std::string>()->value_name("types"),
+      "Report only an uncaught exception whose type is one of the "
+      "comma-separated types or a subclass of one. Any other uncaught "
+      "exception ends its path unreported, and the program's assert "
+      "statements become assumptions unless AssertionError is covered"},
      {"python-no-fold",
       NULL,
       "Disable NumPy constant folding in the Python frontend"},

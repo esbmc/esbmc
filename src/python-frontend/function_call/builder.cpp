@@ -557,6 +557,237 @@ static bool is_name_subscript(const nlohmann::json &arg, const char *slice_kind)
          arg["value"].value("_type", "") == "Name";
 }
 
+namespace
+{
+/// How a list's name is used across the module, as far as it decides whether
+/// the element types recorded for the list are all the list can hold.
+struct list_name_uses
+{
+  int bindings = 0;
+  /// The list[Class] element of each same-named parameter; "" when a
+  /// parameter is not annotated so.
+  std::set<std::string> params;
+  /// A use the registry cannot follow: an item store, an alias, an argument.
+  bool escapes = false;
+};
+} // namespace
+
+static bool is_name(const nlohmann::json &node, const std::string &name)
+{
+  return node.is_object() && node.value("_type", "") == "Name" &&
+         node.value("id", "") == name;
+}
+
+static void scan_list_uses(
+  const nlohmann::json &node,
+  const std::string &name,
+  list_name_uses &uses);
+
+static void scan_store_target(
+  const nlohmann::json &target,
+  const std::string &name,
+  list_name_uses &uses)
+{
+  if (is_name(target, name))
+    ++uses.bindings;
+  else if (
+    target.value("_type", "") == "Subscript" && is_name(target["value"], name))
+    uses.escapes = true;
+  else
+    scan_list_uses(target, name, uses);
+}
+
+static std::string list_param_class(const nlohmann::json &arg)
+{
+  if (!arg.contains("annotation"))
+    return std::string();
+  const nlohmann::json &annotation = arg["annotation"];
+  if (
+    annotation.is_object() && annotation.value("_type", "") == "Subscript" &&
+    is_name(annotation["value"], "list") &&
+    annotation["slice"].value("_type", "") == "Name")
+    return annotation["slice"].value("id", "");
+  return std::string();
+}
+
+/// Records a bare use of the list's name: a parameter, or an occurrence no
+/// enclosing node accounted for, which lets the list escape.
+static bool scan_name_use(
+  const nlohmann::json &node,
+  const std::string &name,
+  list_name_uses &uses)
+{
+  if (is_name(node, name))
+  {
+    uses.escapes = true;
+    return true;
+  }
+  if (node.value("_type", "") == "arg" && node.value("arg", "") == name)
+  {
+    uses.params.insert(list_param_class(node));
+    return true;
+  }
+  return false;
+}
+
+/// Whether the node reads an item of the list, calls a method on it or takes
+/// its length: the registry follows the first two and the last reads nothing.
+static bool scan_tracked_use(
+  const nlohmann::json &node,
+  const std::string &name,
+  list_name_uses &uses)
+{
+  const std::string type = node.value("_type", "");
+  if (
+    (type == "Subscript" || type == "Attribute") &&
+    is_name(node["value"], name))
+  {
+    if (node.contains("slice"))
+      scan_list_uses(node["slice"], name, uses);
+    return true;
+  }
+  return type == "Call" && is_name(node["func"], "len") &&
+         node["args"].size() == 1 && is_name(node["args"][0], name);
+}
+
+static void scan_list_uses(
+  const nlohmann::json &node,
+  const std::string &name,
+  list_name_uses &uses)
+{
+  if (node.is_array())
+  {
+    for (const auto &child : node)
+      scan_list_uses(child, name, uses);
+    return;
+  }
+  if (
+    !node.is_object() || scan_name_use(node, name, uses) ||
+    scan_tracked_use(node, name, uses))
+    return;
+
+  for (const auto &[key, child] : node.items())
+  {
+    if (key == "targets" && child.is_array())
+      for (const auto &target : child)
+        scan_store_target(target, name, uses);
+    else if (key == "target")
+      scan_store_target(child, name, uses);
+    else if (!(key == "iter" && is_name(child, name)))
+      scan_list_uses(child, name, uses);
+  }
+}
+
+/// The classes of the elements recorded for a list, "" standing for an
+/// element that is not a class instance.
+static std::set<std::string> recorded_element_classes(
+  const python_converter &converter,
+  const std::string &id)
+{
+  std::set<std::string> classes;
+  const auto *recorded = converter.get_element_type_registry().find(id);
+  if (!recorded)
+    return classes;
+
+  for (const auto &elem : *recorded)
+  {
+    typet type = elem.second.is_pointer() ? elem.second.subtype() : elem.second;
+    type = converter.name_space().follow(type);
+    std::string tag =
+      type.is_struct() ? to_struct_type(type).tag().as_string() : std::string();
+    if (tag.rfind("tag-", 0) == 0)
+      tag = tag.substr(4);
+    classes.insert(json_utils::is_class(tag, converter.ast()) ? tag : "");
+  }
+  return classes;
+}
+
+std::string function_call_builder::subscript_receiver_class(
+  const nlohmann::json &receiver) const
+{
+  if (
+    receiver.value("_type", "") != "Subscript" ||
+    receiver["value"].value("_type", "") != "Name")
+    return "str";
+
+  const std::string name = receiver["value"].value("id", "");
+  symbol_id base_sid(
+    converter_.python_file(),
+    converter_.current_classname(),
+    converter_.current_function_name());
+  base_sid.set_object(name);
+  const symbolt *base_sym = converter_.find_symbol(base_sid.to_string());
+  if (
+    !base_sym ||
+    base_sym->get_type() != converter_.get_type_handler().get_list_type())
+    return "str";
+
+  const std::string list_id = base_sym->id.as_string();
+  const std::set<std::string> classes =
+    recorded_element_classes(converter_, list_id);
+  if (classes.empty() || classes == std::set<std::string>{""})
+    return "str";
+
+  const std::string message = fmt::format(
+    "method call on an element of list '{}' at line {} is not supported: its "
+    "elements are not known to share one class",
+    name,
+    call_.value("lineno", 0));
+  if (classes.size() > 1)
+    throw std::runtime_error(message);
+
+  // The registry follows pushes as they are converted, so the class it
+  // reports holds only for a list that nothing else can fill: one binding (or
+  // a parameter annotated with that class), no item stores and no aliases.
+  const std::string &cls = *classes.begin();
+  list_name_uses uses;
+  scan_list_uses(converter_.ast()["body"], name, uses);
+  const bool tracked =
+    !uses.escapes &&
+    ((uses.bindings == 1 && uses.params.empty()) ||
+     (uses.bindings == 0 && uses.params == std::set<std::string>{cls}));
+  if (!tracked)
+    throw std::runtime_error(message);
+
+  // A push converted later, e.g. further down a loop body, must not change
+  // the class this call was dispatched on.
+  converter_.defer_check([&converter = converter_, list_id, cls, message]() {
+    if (recorded_element_classes(converter, list_id) != std::set{cls})
+      throw std::runtime_error(message);
+  });
+  return cls;
+}
+
+// The class whose bases super() searches: the class its first argument
+// names, as in super(C, self), or the enclosing class for a bare super().
+static std::string super_start_class(
+  const nlohmann::json &super_call,
+  const std::string &current_class,
+  const nlohmann::json &ast)
+{
+  if (!super_call.contains("args") || super_call["args"].empty())
+    return current_class;
+  const std::string named = super_call["args"][0].value("id", "");
+  return json_utils::is_class(named, ast) ? named : current_class;
+}
+
+// `id`, a method's symbol id under class `from`, rewritten to name the same
+// method under class `to`. A constructor is named after its class.
+static std::string rebase_method_id(
+  std::string id,
+  const std::string &from,
+  const std::string &to,
+  const std::string &method,
+  bool is_ctor)
+{
+  const std::string old_tail = "@C@" + from + "@F@" + (is_ctor ? from : method);
+  const std::size_t pos = id.rfind(old_tail);
+  if (from == to || pos == std::string::npos)
+    return id;
+  return id.replace(
+    pos, old_tail.size(), "@C@" + to + "@F@" + (is_ctor ? to : method));
+}
+
 symbol_id function_call_builder::build_function_id() const
 {
   const std::string &python_file = converter_.python_file();
@@ -786,8 +1017,18 @@ symbol_id function_call_builder::build_function_id() const
         // For __init__, use is_ctor=true: parent's __init__ is stored under
         // the class name (e.g. Vehicle::Vehicle), not the literal "__init__".
         bool is_init_call = (func_name == "__init__");
+        const std::string start =
+          super_start_class(inner_call, current_class_name, ast);
         symbolt *base_class_func = converter_.find_function_in_base_classes(
-          current_class_name, function_id.to_string(), func_name, is_init_call);
+          start,
+          rebase_method_id(
+            function_id.to_string(),
+            current_class_name,
+            start,
+            func_name,
+            is_init_call),
+          func_name,
+          is_init_call);
         if (base_class_func)
         {
           return symbol_id::from_string(base_class_func->id.as_string());
@@ -801,7 +1042,7 @@ symbol_id function_call_builder::build_function_id() const
         func_json["value"].contains("id"))
         obj_name = func_json["value"]["id"];
       else
-        obj_name = "str";
+        obj_name = subscript_receiver_class(func_json["value"]);
     }
 
     obj_name = json_utils::get_object_alias(ast, obj_name);
@@ -1122,6 +1363,7 @@ symbol_id function_call_builder::build_function_id() const
         {
           const struct_typet &struct_type = to_struct_type(var_type);
           class_name = struct_type.tag().as_string();
+          use_imported_class_file(function_id, *var_symbol, class_name);
         }
         else
           class_name = th.type_to_string(var_type);
@@ -1152,7 +1394,7 @@ symbol_id function_call_builder::build_function_id() const
       std::string nested_id = ctx + "@F@" + func_name;
       symbol_id sid(python_file, current_class_name, nested_id);
 
-      if (converter_.symbol_table().find_symbol(sid.to_string()))
+      if (nested_function_exists(sid))
       {
         function_id.set_function(nested_id);
         return function_id;
@@ -1164,6 +1406,33 @@ symbol_id function_call_builder::build_function_id() const
   }
 
   return function_id;
+}
+
+// A receiver bound by `from m import obj` has its class defined in m, so its
+// methods live under m's file, not this one (#8375).
+void function_call_builder::use_imported_class_file(
+  symbol_id &function_id,
+  const symbolt &receiver,
+  const std::string &class_name) const
+{
+  if (
+    receiver.module == converter_.python_file() ||
+    !json_utils::find_class(converter_.ast()["body"], class_name).empty())
+    return;
+  const std::string module_path =
+    converter_.find_imported_class_module(class_name).second;
+  if (!module_path.empty())
+    function_id.set_filename(module_path);
+}
+
+bool function_call_builder::nested_function_exists(const symbol_id &sid) const
+{
+  // A sibling defined later in the enclosing body is not converted yet.
+  return converter_.symbol_table().find_symbol(sid.to_string()) ||
+         !json_utils::find_function_by_path(
+            converter_.ast(),
+            json_utils::split_function_path(sid.get_function()))
+            .empty();
 }
 
 exprt function_call_builder::len_of_bitvector_operand(

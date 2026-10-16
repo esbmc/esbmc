@@ -1,0 +1,33 @@
+import collections.abc
+import collections.abc as cabc
+from collections import abc
+from collections.abc import Iterable, Sequence as Seq
+
+assert issubclass(list, collections.abc.Iterable)
+assert issubclass(list, cabc.MutableSequence)
+assert issubclass(list, abc.Sized)
+assert issubclass(list, Iterable)
+assert issubclass(tuple, Seq)
+assert not issubclass(tuple, collections.abc.MutableSequence)
+assert issubclass(dict, collections.abc.Mapping)
+assert issubclass(dict, collections.abc.MutableMapping)
+assert not issubclass(dict, collections.abc.Sequence)
+assert issubclass(str, collections.abc.Sequence)
+assert not issubclass(str, collections.abc.MutableSequence)
+assert issubclass(set, collections.abc.MutableSet)
+assert issubclass(frozenset, collections.abc.Set)
+assert not issubclass(frozenset, collections.abc.MutableSet)
+assert issubclass(range, collections.abc.Sequence)
+assert issubclass(bytes, collections.abc.Sequence)
+assert not issubclass(int, collections.abc.Iterable)
+assert not issubclass(float, collections.abc.Container)
+assert issubclass(bool, collections.abc.Hashable)
+assert issubclass(tuple, collections.abc.Hashable)
+assert not issubclass(list, collections.abc.Hashable)
+assert not issubclass(dict, collections.abc.Hashable)
+assert issubclass(type, collections.abc.Callable)
+assert not issubclass(list, collections.abc.Callable)
+assert not issubclass(list, collections.abc.Iterator)
+assert issubclass(list, (int, collections.abc.Collection))
+assert issubclass(collections.abc.MutableSequence, collections.abc.Iterable)
+assert not issubclass(collections.abc.Iterable, collections.abc.Sequence)

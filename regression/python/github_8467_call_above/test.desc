@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: .*main\.py:17:.*'f' is called above one of its method bindings$

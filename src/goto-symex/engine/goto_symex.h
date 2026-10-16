@@ -854,13 +854,16 @@ protected:
    *  @param new_array The newly allocated array symbol.
    *  @param guard Guard condition for this assignment.
    *  @param realloc_size The size parameter passed to realloc.
+   *  @param alloc_fail Failure condition from model_allocation_failure, or
+   *  nil when realloc cannot fail.
    */
   void finalize_realloc_result(
     const expr2tc &lhs,
     const expr2tc &result,
     const expr2tc &new_array,
     const guard2tc &guard,
-    const expr2tc &realloc_size);
+    const expr2tc &realloc_size,
+    const expr2tc &alloc_fail);
 
   /**
    *  Update pointer validity information after realloc.
@@ -883,13 +886,16 @@ protected:
    *  @param result The result pointer from realloc attempt.
    *  @param old_ptr The original pointer being reallocated.
    *  @param guard Guard condition for this modeling.
+   *  @param alloc_fail Set to the failure condition, or nil when realloc
+   *  cannot fail.
    *  @return Expression representing the final result considering failure.
    */
   expr2tc model_allocation_failure(
     const expr2tc &result,
     const expr2tc &old_ptr,
     const guard2tc &guard,
-    const expr2tc &over_cap);
+    const expr2tc &over_cap,
+    expr2tc &alloc_fail);
 
   /**
    *  Bound at PTRDIFF_MAX the object size an assignment records, reporting a
@@ -1440,15 +1446,26 @@ protected:
     const type2tc &char_type,
     std::vector<expr2tc> &chars);
   /** The length of an unrenamed printf-family call's output whose constant
-   *  format holds only text and %d, %i or %u conversions without flags,
+   *  format holds only text and %d, %i, %u or %s conversions without flags,
    *  width or precision, with its largest value in `max_len`; nil for any
    *  other format. */
   expr2tc printf_output_length(
     const code_printf2t &call,
     size_t fmt_idx,
     size_t &max_len);
-  /** Assume a printf-family call's return value equals the length of the
-   *  output stored, when both are known. */
+  /** The characters a %s conversion prints for the unrenamed char pointer
+   *  `ptr`, adding its largest value to `max_len`; nil unless `ptr` resolves
+   *  to one byte array at a constant offset. */
+  expr2tc string_length(const expr2tc &ptr, size_t &max_len);
+  /** Store an unrenamed sprintf-family call's output and return the length
+   *  that call returns: the stored length, or for printf, fprintf and dprintf
+   *  with a used result, printf_output_length. Nil when unknown. */
+  expr2tc printf_return_length(
+    const expr2tc &lhs,
+    const code_printf2t &call,
+    size_t fmt_idx);
+  /** Assume a printf-family call's return value equals the length of its
+   *  output, when both are known. */
   void assume_printf_length(const expr2tc &retval, const expr2tc &len);
   /** Run `formatter` over an unrenamed printf-family call; false when the
    *  format is not a constant. `constant_args` is set when every argument

@@ -75,9 +75,9 @@ class Property:
   py_dyntyping = 10
 
 # sv-benchmarks' python/properties/*.prp each state that one family of runtime
-# exceptions does not escape main(). ESBMC has no per-family scoping on the
-# Python side -- one run checks them all -- so which family a run falsified is
-# read off the violated-property comment instead of assumed from the flags.
+# exceptions does not escape main(). --python-check-exceptions scopes a run to
+# that family, and which family a run falsified is still read off the
+# violated-property comment instead of assumed from the flags.
 PYTHON_EXCEPTION_FAMILIES = {
   Property.py_assertion: ("AssertionError",),
   Property.py_arithmetic: ("ZeroDivisionError", "FloatingPointError"),
@@ -372,6 +372,14 @@ def strategy_flags(strat):
   exit(1)
 
 
+def python_exception_flags(prop):
+  """Report only the property's own exception family. Any other uncaught
+  exception ends its path unreported, as CPython stops there, and the
+  program's asserts become assumptions unless AssertionError is the family,
+  so a failure outside the family no longer hides the one asked about."""
+  return "--python-check-exceptions " + ",".join(PYTHON_EXCEPTION_FAMILIES[prop]) + " "
+
+
 def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, validate=False):
   if prop in PYTHON_EXCEPTION_FAMILIES:
     # A Python task is a whole program whose only specification is that an
@@ -390,7 +398,8 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci,
     # already carries --unlimited-k-steps in dargs.
     return (
       esbmc_path + "--sv-comp " + benchmark + " "
-      + strategy_flags(strat) + "--k-step 2 --unlimited-k-steps ")
+      + strategy_flags(strat) + "--k-step 2 --unlimited-k-steps "
+      + python_exception_flags(prop))
 
   command_line = esbmc_path + dargs
 

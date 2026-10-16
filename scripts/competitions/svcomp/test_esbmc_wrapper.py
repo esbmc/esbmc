@@ -275,6 +275,23 @@ class PythonPropertyTest(unittest.TestCase):
                          wrapper.Property.py_arithmetic), "TRUE")
 
 
+class PythonCommandLineTest(unittest.TestCase):
+    """Each run reports only its property's exception family."""
+
+    def command(self, prop):
+        return wrapper.get_command_line("kinduction", prop, None, "main.py", False, "", False)
+
+    def test_each_property_checks_its_own_family(self):
+        cases = (
+            (wrapper.Property.py_assertion, "AssertionError"),
+            (wrapper.Property.py_arithmetic, "ZeroDivisionError,FloatingPointError"),
+            (wrapper.Property.py_datalookup, "KeyError,IndexError"),
+            (wrapper.Property.py_dyntyping, "TypeError,AttributeError"),
+        )
+        for prop, family in cases:
+            self.assertIn("--python-check-exceptions " + family + " ", self.command(prop))
+
+
 class PythonPropertyFileTest(unittest.TestCase):
     """python/properties/*.prp in sv-benchmarks, verbatim."""
 
