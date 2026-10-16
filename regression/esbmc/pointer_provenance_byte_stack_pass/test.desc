@@ -1,0 +1,4 @@
+CORE
+main.c
+--k-induction --max-k-step 25 --k-step 2 --no-bounds-check --no-pointer-check --bitwuzla
+^VERIFICATION SUCCESSFUL$
