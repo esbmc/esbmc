@@ -1,0 +1,4 @@
+CORE
+main.c
+--no-bounds-check --no-pointer-check --bitwuzla
+^VERIFICATION SUCCESSFUL$
