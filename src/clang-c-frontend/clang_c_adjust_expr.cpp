@@ -1532,7 +1532,8 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       identifier == "__popcnt16" || identifier == "__popcnt" ||
       identifier == "__popcnt64" || identifier == "__builtin_popcount" ||
       identifier == "__builtin_popcountl" ||
-      identifier == "__builtin_popcountll")
+      identifier == "__builtin_popcountll" ||
+      identifier == "__builtin_popcountg")
     {
       exprt popcount_expr("popcount", int_type());
       popcount_expr.operands() = expr.arguments();
