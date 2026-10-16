@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 5 --no-unwinding-assertions
+main.py line 7 column 4 function main
+^VERIFICATION FAILED$
