@@ -823,6 +823,45 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   return false;
 }
 
+bool clang_c_convertert::get_function_signature(
+  const clang::FunctionDecl &fd,
+  code_typet &type)
+{
+  if (get_type(fd.getReturnType(), type.return_type()))
+    return true;
+
+  if (fd.isVariadic())
+    type.make_ellipsis();
+
+  if (fd.isInlined())
+    type.inlined(true);
+
+  if (get_function_params(fd, type.arguments()))
+    return true;
+
+  // Check for __ESBMC_contract annotation
+  if (fd.hasAttrs())
+  {
+    for (const auto *attr : fd.getAttrs())
+    {
+      if (const auto *annot = llvm::dyn_cast<clang::AnnotateAttr>(attr))
+      {
+        if (annot->getAnnotation().str() == "__ESBMC_contract")
+        {
+          type.set("#annotated_contract", true);
+          break;
+        }
+      }
+    }
+  }
+
+  // Record the C++ exception specification (noexcept / dynamic throw(...)) as
+  // function-boundary metadata on the type. No-op for C.
+  annotate_exception_specification(fd, type);
+
+  return false;
+}
+
 bool clang_c_convertert::get_function(
   const clang::FunctionDecl &fd,
   exprt &new_expr)
@@ -854,18 +893,9 @@ bool clang_c_convertert::get_function(
   // This will be reset every time a function is parsed
   current_scope_var_num = 1;
 
-  // Build function's type
   code_typet type;
-
-  // Return type
-  if (get_type(fd.getReturnType(), type.return_type()))
+  if (get_function_signature(fd, type))
     return true;
-
-  if (fd.isVariadic())
-    type.make_ellipsis();
-
-  if (fd.isInlined())
-    type.inlined(true);
 
   locationt location_begin;
   get_location_from_decl(fd, location_begin);
@@ -887,32 +917,8 @@ bool clang_c_convertert::get_function(
                      fd.getStorageClass() == clang::SC_PrivateExtern;
   symbol.file_local = (fd.getStorageClass() == clang::SC_Static);
 
+  // Publish the function only after its parameter types are complete.
   symbolt &added_symbol = *context.move_symbol_to_context(symbol);
-
-  // We convert the parameters first so their symbol are added to context
-  // before converting the body, as they may appear on the function body
-  if (get_function_params(fd, type.arguments()))
-    return true;
-
-  // Check for __ESBMC_contract annotation
-  if (fd.hasAttrs())
-  {
-    for (const auto *attr : fd.getAttrs())
-    {
-      if (const auto *annot = llvm::dyn_cast<clang::AnnotateAttr>(attr))
-      {
-        if (annot->getAnnotation().str() == "__ESBMC_contract")
-        {
-          type.set("#annotated_contract", true);
-          break;
-        }
-      }
-    }
-  }
-
-  // Record the C++ exception specification (noexcept / dynamic throw(...)) as
-  // function-boundary metadata on the type. No-op for C.
-  annotate_exception_specification(fd, type);
 
   // A bodyless re-declaration must not clobber the type of a function that is
   // already defined. The definition's argument list carries the parameter
