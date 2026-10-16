@@ -1,0 +1,6 @@
+CORE
+main.py
+--multi-property
+line\s+9\s+assertion
+^\*\* 1 of \d+ properties failed
+^VERIFICATION FAILED$
