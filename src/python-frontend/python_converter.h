@@ -1242,6 +1242,12 @@ private:
   // any_type() for any other write or a setattr call.
   typet none_attribute_type(const std::string &attr_name) const;
 
+  bool held_by_reference(
+    bool rhs_is_aliased_name,
+    const std::string &attr_name,
+    const typet &type,
+    const std::string &annotated_type) const;
+
   /**
    * @brief Build a tuple struct type from an AST value node when the annotation
    *        is bare `tuple`.

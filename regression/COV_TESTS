@@ -3016,6 +3016,8 @@ regression/python/github_8461_same_class
 regression/python/github_8461_same_class_fail
 regression/python/github_8461_subclass
 regression/python/self-ctor-arg-forward
+regression/python/class_attribute_none_store
+regression/python/class_attribute_none_store_fail
 regression/python/github_8479
 regression/python/github_8479_inplace
 regression/python/dict_update_overwrite
