@@ -76,6 +76,15 @@ static const std::string all_solvers[] = {
   "mathsat",
   "yices"};
 
+static std::string available_solver_names()
+{
+  std::string available;
+  for (const std::string &name : all_solvers)
+    if (esbmc_solvers.count(name))
+      available += (available.empty() ? "" : ", ") + name;
+  return available.empty() ? "(none)" : available;
+}
+
 static std::string pick_default_solver()
 {
   for (const std::string &name : all_solvers)
@@ -188,22 +197,11 @@ pick_solver(std::string &solver_name, const optionst &options)
   if (it != esbmc_solvers.end())
     return *it->second;
 
-  // A solver that was never compiled in is a *configuration* error, not an
-  // internal inconsistency: abort() here produced SIGABRT + a core dump
-  // (exit 134), which is indistinguishable from a genuine crash for any
-  // harness that only looks at the exit status. Name the backends that are
-  // actually available and exit cleanly instead.
-  {
-    std::string available;
-    for (const std::string &name : all_solvers)
-      if (esbmc_solvers.count(name))
-        available += (available.empty() ? "" : ", ") + name;
-    log_error(
-      "The {} solver has not been built into this version of ESBMC, sorry. "
-      "Available backends: {}",
-      solver_name,
-      available.empty() ? std::string("(none)") : available);
-  }
+  log_error(
+    "The {} solver has not been built into this version of ESBMC, sorry. "
+    "Available backends: {}",
+    solver_name,
+    available_solver_names());
   exit(1);
 }
 

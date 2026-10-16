@@ -712,6 +712,16 @@ clang_c_convertert::elided_copy_source(const clang::Expr &init)
   return init;
 }
 
+static void set_array_index_width(typet &type, const std::string &annotation)
+{
+  // The optional :N suffix declares the index width in bits.
+  if (annotation.size() > 16 && annotation[16] == ':')
+  {
+    const unsigned width = std::stoul(annotation.substr(17));
+    type.set("#esbmc_index_width", std::to_string(width));
+  }
+}
+
 bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
 {
   // Get type
@@ -732,15 +742,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
         {
           assert(t.is_array());
           t.size(exprt("infinity", size_type()));
-          // Optional `:N` suffix specifies an explicit index width in
-          // bits. Used by the Solidity mapping storage to declare a
-          // 480-bit-indexed infinite array (closes ledger #22 / #3
-          // 256→64 fold unsoundness).
-          if (name.size() > 16 && name[16] == ':')
-          {
-            unsigned w = static_cast<unsigned>(std::stoul(name.substr(17)));
-            t.set("#esbmc_index_width", std::to_string(w));
-          }
+          set_array_index_width(t, name);
         }
         else if (name == "__ESBMC_no_slice")
           no_slice = true;
