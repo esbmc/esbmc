@@ -625,6 +625,16 @@ public:
    *  @param code The statement to interpret. */
   void apply_code(const expr2tc &code);
 
+  /** Interpret an ASSUME guard and refine value-sets to reflect it. Currently
+   *  handles the common pointer-non-null pattern `p != 0` (and `0 != p`) by
+   *  stripping null/null-plus-offset entries from p's value-set. This is the
+   *  dataflow-time counterpart of symex's path constraint, so without it VSA
+   *  treats `assume(p != 0)` as a no-op and the null branch from e.g. calloc
+   *  stays in the points-to set forever.
+   *  @param guard The ASSUME instruction's guard expression.
+   */
+  void apply_assume(const expr2tc &guard);
+
   /** Interpret an assignment, and update value sets to reflect it.
    *  @param lhs Assignment target expression.
    *  @param rhs Assignment expression, to be interpreted, and its pointer
