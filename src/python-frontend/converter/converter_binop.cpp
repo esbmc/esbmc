@@ -578,6 +578,25 @@ exprt python_converter::hoist_side_effecting_operand(
   return symbol_expr(tmp);
 }
 
+void python_converter::guard_attribute_on_none(
+  const symbolt &symbol,
+  const std::string &var_name,
+  const std::string &attr_name,
+  const nlohmann::json &element)
+{
+  const typet &type = symbol.get_type();
+  if (var_name == "self" || !type.is_pointer() || !can_emit_runtime_guard())
+    return;
+
+  exprt is_none("=", bool_type());
+  is_none.copy_to_operands(symbol_expr(symbol), gen_zero(type));
+  emit_guarded_raise(
+    is_none,
+    "AttributeError",
+    "'NoneType' object has no attribute '" + attr_name + "'",
+    get_location_from_decl(element));
+}
+
 void python_converter::emit_guarded_raise(
   const exprt &cond,
   const std::string &exception,
