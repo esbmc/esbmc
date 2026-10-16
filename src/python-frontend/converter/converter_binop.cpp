@@ -1691,6 +1691,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   else if (element.contains("ops"))
     op = element["ops"][0]["_type"].get<std::string>();
   assert(!op.empty());
+  guard_none_attribute_operands(op, left, right, lhs, rhs, element);
 
   const exprt result =
     get_binary_operator_expr(element, left, right, op, lhs, rhs);

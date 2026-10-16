@@ -546,6 +546,88 @@ static std::string python_operator_symbol(const std::string &op)
   return it == symbols.end() ? op : it->second;
 }
 
+/// The None flag of the attribute `operand` reads, or nil when it has none.
+exprt python_converter::none_flag_of_attribute(const exprt &operand) const
+{
+  const exprt *read = &operand;
+  while (read->id() == "typecast")
+    read = &read->op0();
+  if (!read->is_member())
+    return nil_exprt();
+  const member_exprt &member = to_member_expr(*read);
+  const std::string attr = member.get_component_name().as_string();
+  if (!none_flagged_attributes_.count(attr))
+    return nil_exprt();
+  return member_exprt(member.struct_op(), attr + "$none", bool_type());
+}
+
+/// An attribute stored None and a value of unknown type is typed `void *`.
+/// Arithmetic on it raises TypeError where its None flag is set. With no
+/// flag, it is refused: reading the pointer as a number on the path where it
+/// holds None would not raise.
+void python_converter::guard_none_attribute_operands(
+  const std::string &op,
+  const nlohmann::json &left,
+  const nlohmann::json &right,
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &element)
+{
+  // The type probe of an assignment's value is converted again for real.
+  if (!raises_on_none_operand(op) || in_rhs_type_probe_)
+    return;
+  for (const nlohmann::json *operand : {&left, &right})
+  {
+    const std::string attr =
+      operand->is_object() && operand->value("_type", "") == "Attribute"
+        ? operand->value("attr", "")
+        : "";
+    if (
+      untyped_none_attributes_.count(attr) ||
+      (none_flagged_attributes_.count(attr) && !can_emit_runtime_guard()))
+      throw std::runtime_error(
+        "arithmetic on '" + attr +
+        "', which may hold None or a value whose type is not known, is not "
+        "supported");
+  }
+  const exprt lhs_none = none_flag_of_attribute(lhs);
+  const exprt rhs_none = none_flag_of_attribute(rhs);
+  const locationt location = get_location_from_decl(element);
+  const std::string symbol = python_operator_symbol(op);
+  if (lhs_none.is_not_nil())
+    emit_guarded_raise(
+      lhs_none,
+      "TypeError",
+      "unsupported operand type(s) for " + symbol + ": 'NoneType' and '" +
+        type_handler_.get_python_type_name(rhs.type()) + "'",
+      location);
+  if (rhs_none.is_not_nil())
+    emit_guarded_raise(
+      rhs_none,
+      "TypeError",
+      "unsupported operand type(s) for " + symbol + ": '" +
+        type_handler_.get_python_type_name(lhs.type()) + "' and 'NoneType'",
+      location);
+}
+
+/// Sets the None flag of an attribute store: whether it stores None.
+void python_converter::set_none_flag(
+  const exprt &lhs,
+  const nlohmann::json &ast_node,
+  codet &target_block) const
+{
+  const exprt flag = none_flag_of_attribute(lhs);
+  if (flag.is_nil())
+    return;
+  const nlohmann::json &value = ast_node.value("value", nlohmann::json());
+  const bool stores_none = value.is_object() &&
+                           value.value("_type", "") == "Constant" &&
+                           value["value"].is_null();
+  code_assignt assign(flag, gen_boolean(stores_none));
+  assign.location() = get_location_from_decl(ast_node);
+  target_block.copy_to_operands(assign);
+}
+
 /// Entry point for a binary operation with a None operand. Rejects the
 /// operators CPython rejects, and otherwise defers to the identity/equality
 /// handling. Kept separate from both callers so neither grows a decision
