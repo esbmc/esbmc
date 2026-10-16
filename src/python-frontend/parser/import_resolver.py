@@ -148,6 +148,7 @@ def _is_imported_model(module_name: str) -> bool:
         "collections",
         "dataclasses",
         "heapq",
+        "io",
         "typing",
         "time",
         "threading",

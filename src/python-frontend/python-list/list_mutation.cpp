@@ -1512,6 +1512,40 @@ exprt python_list::build_extend_list_call(
   return extend_func_call;
 }
 
+void python_list::guard_pop_index(
+  const symbolt &list,
+  const exprt &index,
+  const locationt &location)
+{
+  if (
+    !converter_.can_emit_catchable_guard() ||
+    !(index.is_constant() || index.is_symbol()))
+    return;
+
+  const signedbv_typet ll_type(64);
+  const exprt list_expr = build_symbol(list);
+  const exprt size =
+    build_typecast(build_deref_member(list_expr, "size", size_type()), ll_type);
+  const exprt not_null = build_notequal(list_expr, gen_zero(list_expr.type()));
+  const exprt zero = gen_zero(ll_type);
+  converter_.emit_guarded_raise(
+    build_and(not_null, build_equal(size, zero)),
+    "IndexError",
+    "pop from empty list",
+    location);
+
+  const exprt idx = build_typecast(index, ll_type);
+  const exprt out_of_range = build_if(
+    build_less_than(idx, zero),
+    build_less_than(build_add(size, idx, ll_type), zero),
+    build_greater_equal(idx, size));
+  converter_.emit_guarded_raise(
+    build_and(not_null, out_of_range),
+    "IndexError",
+    "pop index out of range",
+    location);
+}
+
 exprt python_list::build_pop_list_call(
   const symbolt &list,
   const exprt &index,
@@ -1528,6 +1562,7 @@ exprt python_list::build_pop_list_call(
   const typet pyobject_ptr_type =
     pointer_typet(converter_.get_type_handler().get_list_element_type());
 
+  guard_pop_index(list, index, location);
   exprt pop_call =
     build_call_expr(*pop_func, pyobject_ptr_type, {build_symbol(list), index});
   pop_call.location() = location;

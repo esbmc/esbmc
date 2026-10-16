@@ -304,12 +304,15 @@ class LoopMixin:
 
     def _constructs_iterator_class(self, expr):
         """Whether `expr` is `Cls(...)`, or a name bound only by `x = Cls(...)`
-        in the scope being visited, for a class in `iterator_classes`."""
+        in the scope being visited or a parameter every call passes such a
+        construction, for a class in `iterator_classes`."""
         if isinstance(expr, ast.Name):
             scope = id(self._vararg_scope_stack[-1]) if self._vararg_scope_stack else None
             _, counts = self.scope_binding_counts.get(scope, (None, {}))
             if counts.get(expr.id) != 1:
                 return False
+            if (scope, expr.id) in self.iterator_params:
+                return True
             expr = self._assignment_call_origins.get(expr.id)
         return (isinstance(expr, ast.Call) and isinstance(expr.func, ast.Name)
                 and expr.func.id in self.iterator_classes)

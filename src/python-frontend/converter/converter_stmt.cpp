@@ -1051,6 +1051,21 @@ void python_converter::adopt_tagged_element(
   lhs.type() = rhs.type();
 }
 
+bool python_converter::annotation_yields_to_rhs(
+  const nlohmann::json &ast_node,
+  const exprt &rhs) const
+{
+  const bool inferred = ast_node.value("_inferred_annotation", false);
+  // A scalar guessed before an imported callee was retyped from its call
+  // sites, e.g. `a = heappop(h)` on a heap of tuples (#8359).
+  if (inferred && tuple_handler_->is_tuple_type(rhs.type()))
+    return true;
+
+  return ast_node["annotation"].value("id", std::string()) == "Any" &&
+         (inferred || ast_node.value("esbmc_synthesized", false) ||
+          !json_utils::is_imported_from(*ast_json, "typing", "Any"));
+}
+
 /// The user class whose instance a value of @p type is, or "".
 std::string python_converter::user_class_of(const typet &type)
 {
@@ -1329,11 +1344,7 @@ void python_converter::handle_assignment_type_adjustments(
     // a tuple dict-value read then misfolds every component access (#5444
     // latent item).
     else if (
-      (!has_annotation ||
-       (ast_node["annotation"].value("id", std::string()) == "Any" &&
-        (ast_node.value("_inferred_annotation", false) ||
-         ast_node.value("esbmc_synthesized", false) ||
-         !json_utils::is_imported_from(*ast_json, "typing", "Any")))) &&
+      (!has_annotation || annotation_yields_to_rhs(ast_node, rhs)) &&
       !rhs.type().is_empty() && lhs.type() != rhs.type() &&
       !rhs.type().is_code() &&
       !(rhs.type().is_pointer() && rhs.type().subtype().id() == "empty") &&
@@ -4301,6 +4312,40 @@ typet python_converter::resolve_call_argument_array_type(
   return probed_type;
 }
 
+typet python_converter::resolve_lambda_call_result_type(
+  const nlohmann::json &ast_node,
+  const typet &current_type) const
+{
+  const nlohmann::json &call = ast_node["value"];
+  if (
+    !ast_node.value("_inferred_annotation", false) || !call.is_object() ||
+    call.value("_type", "") != "Call" ||
+    call["func"].value("_type", "") != "Name")
+    return current_type;
+
+  const std::string name = call["func"]["id"].get<std::string>();
+  const symbolt *var = symbol_table_.find_symbol(resolve_name_symbol_id(name));
+  if (
+    !var || !var->get_type().is_pointer() ||
+    !var->get_type().subtype().is_code())
+    return current_type;
+
+  const nlohmann::json scope = json_utils::find_function_by_path(
+    *ast_json, json_utils::split_function_path(current_func_name_));
+  if (
+    python_annotation_parser::find_lambda_in_body(name, (*ast_json)["body"])
+      .empty() &&
+    (!scope.contains("body") ||
+     python_annotation_parser::find_lambda_in_body(name, scope["body"])
+       .empty()))
+    return current_type;
+
+  const typet &ret = to_code_type(var->get_type().subtype()).return_type();
+  return ret.is_signedbv() || ret.is_unsignedbv() || ret.is_bool()
+           ? ret
+           : current_type;
+}
+
 typet python_converter::resolve_numpy_reducer_call_array_type(
   const nlohmann::json &ast_node,
   const typet &current_type)
@@ -6433,6 +6478,8 @@ void python_converter::get_var_assign(
       resolve_call_argument_array_type(ast_node, current_element_type);
     current_element_type =
       resolve_numpy_reducer_call_array_type(ast_node, current_element_type);
+    current_element_type =
+      resolve_lambda_call_result_type(ast_node, current_element_type);
 
     // Location and symbol lookup
     location_begin = get_location_from_decl(target);
