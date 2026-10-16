@@ -1548,11 +1548,20 @@ exprt python_converter::handle_tagged_scalar_binop(
   const nlohmann::json &right,
   const nlohmann::json &element)
 {
-  if (op == "Eq" || op == "NotEq" || type_utils::is_ordered_comparison(op))
+  if (op == "Eq" || op == "NotEq")
     return dynamic_type_handler_.handle_comparison(op, lhs, rhs);
-  if (op == "Add" || op == "Sub" || op == "Div")
-    return dynamic_type_handler_.handle_arithmetic(
+  if (type_utils::is_ordered_comparison(op))
+  {
+    dynamic_type_handler_.guard_type_error(
       op, lhs, rhs, get_location_from_decl(element));
+    return dynamic_type_handler_.handle_comparison(op, lhs, rhs);
+  }
+  if (op == "Add" || op == "Sub" || op == "Div")
+  {
+    const locationt location = get_location_from_decl(element);
+    dynamic_type_handler_.guard_type_error(op, lhs, rhs, location);
+    return dynamic_type_handler_.handle_arithmetic(op, lhs, rhs, location);
+  }
 
   // Tagging only ever stores a number or a string (get_var_assign rejects every
   // other rvalue), so a tagged operand is never None. Only a literal None

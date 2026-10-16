@@ -370,6 +370,14 @@ public:
            !in_lazy_operand_;
   }
 
+  // A raise lowers to a jump to the function's end, which every later state
+  // then merges with, so a guard that only replaces an operational-model
+  // assert is planted only where an enclosing `try` can catch it.
+  bool can_emit_catchable_guard() const
+  {
+    return try_body_depth_ > 0 && can_emit_runtime_guard();
+  }
+
   /// Bind a static cell, named under @p lambda_id, for each scalar free
   /// variable of @p lambda_node that is a local of the enclosing function, as
   /// create_capture_cells does for a nested `def`.
@@ -2926,6 +2934,8 @@ private:
   // clause either.
   bool in_contract_clause_ = false;
   bool in_lazy_operand_ = false;
+  // Number of try bodies enclosing the statement being converted.
+  unsigned try_body_depth_ = 0;
   // The test of the assert statement being converted; see
   // lower_short_circuit_boolop.
   const nlohmann::json *asserted_test_ = nullptr;
