@@ -574,6 +574,12 @@ public:
    */
   void retype_element_store(exprt &lhs, exprt &rhs);
 
+  /// Records @p elem_type as the type of the element @p subscript stores to.
+  void record_element_store(
+    const nlohmann::json &subscript,
+    const std::string &elem_id,
+    const typet &elem_type);
+
   /// Equality of two list elements read as @p lhs_type and @p rhs_type for
   /// compare()'s fast path, or nullopt when it cannot relate them. Both types
   /// are numeric, bool or tuple.
@@ -854,6 +860,11 @@ public:
   /// variable.
   expr2tc
   stored_element_is(const symbolt &list, std::size_t i, const symbolt &elem);
+
+  /// The element type a subscript's base declares when the type map has no
+  /// record of the list: a name's annotation, or a called function's return
+  /// annotation. Empty when neither gives one.
+  typet unrecorded_base_elem_type();
 
   // True when the list's recorded element types include a tagged scalar, whose
   // payload width is per-element and symbolic (#7716).
