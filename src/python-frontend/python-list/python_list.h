@@ -574,6 +574,12 @@ public:
    */
   void retype_element_store(exprt &lhs, exprt &rhs);
 
+  /// Records @p elem_type as the type of the element @p subscript stores to.
+  void record_element_store(
+    const nlohmann::json &subscript,
+    const std::string &elem_id,
+    const typet &elem_type);
+
   /// Equality of two list elements read as @p lhs_type and @p rhs_type for
   /// compare()'s fast path, or nullopt when it cannot relate them. Both types
   /// are numeric, bool or tuple.

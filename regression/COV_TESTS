@@ -3015,3 +3015,7 @@ regression/python/github_8461_same_class
 regression/python/github_8461_same_class_fail
 regression/python/github_8461_subclass
 regression/python/self-ctor-arg-forward
+regression/python/github_8483
+regression/python/github_8483_fail
+regression/python/list_store_int_over_str
+regression/python/list_store_int_over_str_fail
