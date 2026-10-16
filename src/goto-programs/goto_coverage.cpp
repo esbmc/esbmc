@@ -18,7 +18,6 @@
 #include <deque>
 #include <fstream>
 #include <functional>
-#include <iterator>
 #include <map>
 #include <set>
 #include <vector>
@@ -385,8 +384,17 @@ bool goto_coveraget::edge_reaches_error_revert(
   return false;
 }
 
-void goto_coveraget::load_covered_set()
+void goto_coveraget::branch_coverage()
 {
+  log_progress("Adding false assertions...");
+  total_branch = 0;
+  // all_claims is the no-skip static universe, rebuilt every call
+  // (Item 2c). covered_set/outpath start clean unless a path is given.
+  all_claims.clear();
+  claim_negation.clear();
+  covered_set.clear();
+  covered_set_outpath.clear();
+
   // Cross-run covered-set (Item 2): load the persisted edge keys. A
   // missing/unreadable/empty file is treated as "nothing covered yet"
   // (first run). The path is still recorded so the run-end report
@@ -415,152 +423,6 @@ void goto_coveraget::load_covered_set()
       }
     }
   }
-}
-
-void goto_coveraget::instrument_decision(
-  goto_programt &goto_program,
-  goto_programt::targett &it,
-  const expr2tc &cond,
-  bool cond_reverts,
-  bool neg_reverts)
-{
-  // Per-contract scoping (--contract C, Solidity): only instrument
-  // decisions lexically declared inside contract C. The frontend
-  // stamps each statement location with "sol_decl_contract" (its
-  // declaring ContractDefinition, invariant across inheritance
-  // merge-by-copy). Skipping the assert pair for C-foreign
-  // decisions auto-scopes BOTH the denominator
-  // (get_total_cond_assert counts instrumented asserts only) and
-  // the numerator (reached_claims can only hit instrumented
-  // asserts), so the percentage stays correct by construction.
-  if (
-    !scope_contract.empty() &&
-    it->location.get("sol_decl_contract").as_string() != scope_contract)
-    return;
-
-  // Item 5-d: dependency exclusion. Drop the decision BEFORE the
-  // all_claims.insert below, so an excluded contract's decisions
-  // leave BOTH the denominator (static universe) and the
-  // numerator (no assert => reached_claims can never hit it) —
-  // exactly the "OZ in no denominator, no numerator" property.
-  // Default mode never reaches here for foreign code (scope
-  // filter above already skipped it), so this is a no-op there.
-  if (
-    !exclude_contracts.empty() &&
-    exclude_contracts.count(it->location.get("sol_decl_contract").as_string()))
-    return;
-
-  // Edge keys (guard_str, location.as_string()) — exactly the
-  // identity get_total_cond_assert() and the numerator
-  // (bmc.cpp claim_sig) use, so universe / denominator /
-  // numerator stay key-aligned. as_string() excludes custom
-  // irep fields, so inheritance/modifier copies fold to one.
-  const expr2tc neg = gen_not_expr(cond);
-  const std::string loc = it->location.as_string();
-  const std::pair<std::string, std::string> k_g(from_expr(ns, "", cond), loc);
-  const std::pair<std::string, std::string> k_ng(from_expr(ns, "", neg), loc);
-
-  // Static universe (Item 2c): every in-scope edge counts in
-  // the denominator regardless of the covered-set skip below,
-  // so skipping can never inflate coverage.
-  all_claims.insert(k_g);
-  all_claims.insert(k_ng);
-  // The direction --dead-code-check reports dead when a probe is
-  // never violated, as get_total_cond_assert() records it.
-  claim_negation[k_g] = from_expr(ns, "", neg);
-  claim_negation[k_ng] = from_expr(ns, "", gen_not_expr(neg));
-
-  // Item 2b: an edge already witnessed P_SATISFIABLE in a prior
-  // run (covered_set) is not re-instrumented — fewer SMT
-  // obligations on re-runs. Sound: an instrumented assert is a
-  // property obligation, not a path constraint, so omitting it
-  // removes one observation only and perturbs no other branch;
-  // the cross-run cover is monotone-∃ (a real witness stays
-  // valid). Only true P_SATISFIABLE is ever written back.
-  if (!covered_set.count(k_g))
-  {
-    insert_assert(goto_program, it, cond);
-    if (cond_reverts)
-      std::prev(it)->location.set("sol_revert_edge", true);
-  }
-  if (!covered_set.count(k_ng))
-  {
-    insert_assert(goto_program, it, neg);
-    if (neg_reverts)
-      std::prev(it)->location.set("sol_revert_edge", true);
-  }
-}
-
-void goto_coveraget::instrument_branch_instruction(
-  goto_programt &goto_program,
-  goto_programt::targett &it)
-{
-  auto emit_decision = [&](
-                         const expr2tc &cond,
-                         bool cond_reverts = false,
-                         bool neg_reverts = false) {
-    instrument_decision(goto_program, it, cond, cond_reverts, neg_reverts);
-  };
-
-  // convert assertions to true (or assume)
-  if (
-    it->is_assert() &&
-    it->location.property().as_string() != "replaced assertion" &&
-    it->location.property().as_string() != "instrumented assertion")
-  {
-    if (cov_assume_asserts)
-      replace_assert_to_assume(it);
-    else
-      replace_assert_to_guard(gen_true_expr(), it, false);
-  }
-
-  // e.g. IF !(a > 1) THEN GOTO 3
-  else if (
-    it->is_goto() && !is_true(it->guard) && !guard_folds_to_constant(it->guard))
-  {
-    if (it->is_target())
-      target_num = it->target_number;
-    // Revert fidelity: classify which edge reverts BEFORE instrumenting
-    // (target/fall-through still point at the original successors). A
-    // probe assert(P) fails when P is false, so assert(it->guard) covers
-    // the FALL-THROUGH edge and assert(!it->guard) the GOTO-taken edge.
-    const bool taken_reverts = edge_reaches_error_revert(
-      it->get_target(), goto_program.instructions.end());
-    const bool fall_reverts =
-      edge_reaches_error_revert(std::next(it), goto_program.instructions.end());
-    // Only tag when exactly one edge reverts (both/neither -> no tag).
-    emit_decision(
-      it->guard,
-      /*cond_reverts=*/fall_reverts && !taken_reverts,
-      /*neg_reverts=*/taken_reverts && !fall_reverts);
-  }
-
-  // Pure short-circuit ||/&& folded into an ASSIGN rhs / RETURN
-  // operand (no GOTO — see collect_short_circuit_decisions above).
-  // solc instruments every such operator as a 2-arm decision;
-  // without this ESBMC reports "No branch detected" for e.g.
-  // `return a == 0 || b == 1;`.
-  else if (it->is_assign())
-    collect_short_circuit_decisions(
-      to_code_assign2t(it->code).source, emit_decision);
-
-  else if (it->is_return())
-    collect_short_circuit_decisions(
-      to_code_return2t(it->code).operand, emit_decision);
-}
-
-void goto_coveraget::branch_coverage()
-{
-  log_progress("Adding false assertions...");
-  total_branch = 0;
-  // all_claims is the no-skip static universe, rebuilt every call
-  // (Item 2c). covered_set/outpath start clean unless a path is given.
-  all_claims.clear();
-  claim_negation.clear();
-  covered_set.clear();
-  covered_set_outpath.clear();
-
-  load_covered_set();
 
   std::unordered_set<std::string> location_pool = {};
   // cmdline.arg[0]
@@ -589,7 +451,135 @@ void goto_coveraget::branch_coverage()
           // this stands for the auxiliary condition/branch we added.
           continue;
 
-        instrument_branch_instruction(goto_program, it);
+        // Emit one 2-arm decision (assert(cond) + assert(!cond)) for
+        // `cond` at the current instruction, under the exact scoping,
+        // edge-key, static-universe and cross-run covered-set rules the
+        // GOTO-guard path uses, so a folded short-circuit operator and
+        // a control-flow guard are counted identically.
+        // `cond_reverts`/`neg_reverts`: the covered edge behind the
+        // assert(cond) / assert(!cond) probe reverts (require failure / revert
+        // CustomError). Stamp `sol_revert_edge` on that probe so the Foundry
+        // generator emits vm.expectRevert(). Only set for GOTO decisions.
+        auto emit_decision = [&](
+                               const expr2tc &cond,
+                               bool cond_reverts = false,
+                               bool neg_reverts = false) {
+          // Per-contract scoping (--contract C, Solidity): only instrument
+          // decisions lexically declared inside contract C. The frontend
+          // stamps each statement location with "sol_decl_contract" (its
+          // declaring ContractDefinition, invariant across inheritance
+          // merge-by-copy). Skipping the assert pair for C-foreign
+          // decisions auto-scopes BOTH the denominator
+          // (get_total_cond_assert counts instrumented asserts only) and
+          // the numerator (reached_claims can only hit instrumented
+          // asserts), so the percentage stays correct by construction.
+          if (
+            !scope_contract.empty() &&
+            it->location.get("sol_decl_contract").as_string() != scope_contract)
+            return;
+
+          // Item 5-d: dependency exclusion. Drop the decision BEFORE the
+          // all_claims.insert below, so an excluded contract's decisions
+          // leave BOTH the denominator (static universe) and the
+          // numerator (no assert => reached_claims can never hit it) —
+          // exactly the "OZ in no denominator, no numerator" property.
+          // Default mode never reaches here for foreign code (scope
+          // filter above already skipped it), so this is a no-op there.
+          if (
+            !exclude_contracts.empty() &&
+            exclude_contracts.count(
+              it->location.get("sol_decl_contract").as_string()))
+            return;
+
+          // Edge keys (guard_str, location.as_string()) — exactly the
+          // identity get_total_cond_assert() and the numerator
+          // (bmc.cpp claim_sig) use, so universe / denominator /
+          // numerator stay key-aligned. as_string() excludes custom
+          // irep fields, so inheritance/modifier copies fold to one.
+          const expr2tc neg = gen_not_expr(cond);
+          const std::string loc = it->location.as_string();
+          const std::pair<std::string, std::string> k_g(
+            from_expr(ns, "", cond), loc);
+          const std::pair<std::string, std::string> k_ng(
+            from_expr(ns, "", neg), loc);
+
+          // Static universe (Item 2c): every in-scope edge counts in
+          // the denominator regardless of the covered-set skip below,
+          // so skipping can never inflate coverage.
+          all_claims.insert(k_g);
+          all_claims.insert(k_ng);
+          // The direction --dead-code-check reports dead when a probe is
+          // never violated, as get_total_cond_assert() records it.
+          claim_negation[k_g] = from_expr(ns, "", neg);
+          claim_negation[k_ng] = from_expr(ns, "", gen_not_expr(neg));
+
+          // Item 2b: an edge already witnessed P_SATISFIABLE in a prior
+          // run (covered_set) is not re-instrumented — fewer SMT
+          // obligations on re-runs. Sound: an instrumented assert is a
+          // property obligation, not a path constraint, so omitting it
+          // removes one observation only and perturbs no other branch;
+          // the cross-run cover is monotone-∃ (a real witness stays
+          // valid). Only true P_SATISFIABLE is ever written back.
+          if (!covered_set.count(k_g))
+          {
+            insert_assert(goto_program, it, cond);
+            if (cond_reverts)
+              std::prev(it)->location.set("sol_revert_edge", true);
+          }
+          if (!covered_set.count(k_ng))
+          {
+            insert_assert(goto_program, it, neg);
+            if (neg_reverts)
+              std::prev(it)->location.set("sol_revert_edge", true);
+          }
+        };
+
+        // convert assertions to true (or assume)
+        if (
+          it->is_assert() &&
+          it->location.property().as_string() != "replaced assertion" &&
+          it->location.property().as_string() != "instrumented assertion")
+        {
+          if (cov_assume_asserts)
+            replace_assert_to_assume(it);
+          else
+            replace_assert_to_guard(gen_true_expr(), it, false);
+        }
+
+        // e.g. IF !(a > 1) THEN GOTO 3
+        else if (
+          it->is_goto() && !is_true(it->guard) &&
+          !guard_folds_to_constant(it->guard))
+        {
+          if (it->is_target())
+            target_num = it->target_number;
+          // Revert fidelity: classify which edge reverts BEFORE instrumenting
+          // (target/fall-through still point at the original successors). A
+          // probe assert(P) fails when P is false, so assert(it->guard) covers
+          // the FALL-THROUGH edge and assert(!it->guard) the GOTO-taken edge.
+          const bool taken_reverts = edge_reaches_error_revert(
+            it->get_target(), goto_program.instructions.end());
+          const bool fall_reverts = edge_reaches_error_revert(
+            std::next(it), goto_program.instructions.end());
+          // Only tag when exactly one edge reverts (both/neither -> no tag).
+          emit_decision(
+            it->guard,
+            /*cond_reverts=*/fall_reverts && !taken_reverts,
+            /*neg_reverts=*/taken_reverts && !fall_reverts);
+        }
+
+        // Pure short-circuit ||/&& folded into an ASSIGN rhs / RETURN
+        // operand (no GOTO — see collect_short_circuit_decisions above).
+        // solc instruments every such operator as a 2-arm decision;
+        // without this ESBMC reports "No branch detected" for e.g.
+        // `return a == 0 || b == 1;`.
+        else if (it->is_assign())
+          collect_short_circuit_decisions(
+            to_code_assign2t(it->code).source, emit_decision);
+
+        else if (it->is_return())
+          collect_short_circuit_decisions(
+            to_code_return2t(it->code).operand, emit_decision);
       }
     }
 
@@ -1861,13 +1851,9 @@ void goto_coveraget::negating_asserts(const std::string &tgt_spec)
   std::vector<goto_programt::instructiont::targett> matched;
   if (!target_line.empty())
   {
-    std::copy_if(
-      candidates.begin(),
-      candidates.end(),
-      std::back_inserter(matched),
-      [&target_line](const auto &it) {
-        return it->location.get_line().as_string() == target_line;
-      });
+    for (auto &it : candidates)
+      if (it->location.get_line().as_string() == target_line)
+        matched.push_back(it);
     if (matched.empty())
     {
       log_debug(

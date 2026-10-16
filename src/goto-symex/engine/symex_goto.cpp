@@ -783,7 +783,18 @@ void goto_symext::phi_function(const statet::merge_statet &merge_state)
       continue;
 
     // changed!
-    const symbolt &symbol = *ns.lookup(variable.base_name);
+    const symbolt *symbol_ptr = ns.lookup(variable.base_name);
+    if (symbol_ptr == nullptr)
+    {
+      // Frontend bug: a renamed variable is referenced during phi
+      // merging but its base_name has no corresponding symbol in the
+      // context.  Skip with a diagnostic rather than deref-crashing.
+      log_warning(
+        "phi_function: no symbol for '{}', skipping",
+        variable.base_name.as_string());
+      continue;
+    }
+    const symbolt &symbol = *symbol_ptr;
 
     type2tc type = migrate_symbol_type(symbol);
 

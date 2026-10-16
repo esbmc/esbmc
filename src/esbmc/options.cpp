@@ -484,6 +484,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"generate-ctest-testcase",
      NULL,
      "If a solution is found, generates CTest testcases for C programs"},
+    {"generate-foundry-testcase",
+     NULL,
+     "If a solution is found, generates a Foundry (*.t.sol) testcase for "
+     "Solidity contracts"},
     {"ctest-output-dir",
      boost::program_options::value<std::string>()->value_name("<dir>"),
      "Directory for --generate-ctest-testcase output (default: esbmc-ctest)"},
