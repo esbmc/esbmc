@@ -1259,7 +1259,9 @@ static expr2tc zero_fill_aggregate(
       // upstream invariant violation and would silently truncate the
       // witness; refuse to mis-render. Symbolic sizes (VLAs, flexible
       // arrays) cannot be checked here.
-      if (is_constant_int2t(at.array_size))
+      if (
+        !at.size_is_infinite && !is_nil_expr(at.array_size) &&
+        is_constant_int2t(at.array_size))
       {
         [[maybe_unused]] const BigInt &n =
           to_constant_int2t(at.array_size).value;

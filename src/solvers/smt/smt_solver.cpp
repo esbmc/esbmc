@@ -1983,15 +1983,39 @@ smt_sortt smt_solver_baset::convert_sort(const type2tc &type)
   case type2t::vector_id:
   case type2t::array_id:
   {
-    // Nested infinite arrays (e.g. Solidity nested mappings): do NOT flatten.
-    // Create Array(BV64, Array(BV64, V)) with recursive convert_sort.
+    // Nested arrays with ANY infinite level (e.g. Solidity nested mappings,
+    // `T[N][]`, `uint256[4][][2]`): do NOT flatten — emit one solver-array
+    // sort per source-level array, with recursive convert_sort on the
+    // subtype.  This matches flatten_array_type / make_array_domain_type /
+    // convert_array_of_prep, which all keep such chains structural.
     // Only applicable to genuine array types — vectors are always finite,
     // and to_array_type(vector_type) throws std::bad_cast under -DNDEBUG-off
     // builds (where the type_macros' dynamic_cast is real, not static_cast).
+    // 2C.2d (NW1): an array whose (possibly nested) leaf is a tuple is
+    // owned by the tuple flattener — its sort is the recursive bare
+    // nested sort built by mk_struct_sort (2C.2a), never a backend
+    // mk_array_sort with a bare struct range.  This subsumes the K=1 /
+    // finite array-of-struct carve-out below (those already reach the
+    // identical mk_struct_sort path), so they stay byte-identical; the
+    // only behavioural change is the K>=2 infinite-nested case, which
+    // previously fell into the backend mk_array_sort branch and aborted
+    // with `bare smt_sort`.  Primitive-leaf nested arrays (struct leaf
+    // absent) skip this and keep the native backend array sort.
+    if (is_array_type(type) && is_tuple_array_ast_type(type))
+    {
+      type2tc thetype = flatten_array_type(type);
+      rewrite_ptrs_to_structs(thetype);
+      result = tuple_api->mk_struct_sort(thetype);
+      break;
+    }
+
     if (is_array_type(type))
     {
       const array_type2t &arrtype = to_array_type(type);
-      if (arrtype.size_is_infinite && is_array_type(arrtype.subtype))
+      if (
+        is_array_type(arrtype.subtype) &&
+        (arrtype.size_is_infinite ||
+         array_chain_has_infinite_level(arrtype.subtype)))
       {
         type2tc t = make_array_domain_type(arrtype);
         smt_sortt d = mk_int_bv_sort(t->get_width());
@@ -2231,15 +2255,16 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
       return tuple_api->mk_tuple_symbol(
         sym.get_symbol_name(), convert_sort(sym.type));
 
-    if (is_array_type(expr))
-    {
-      // Determine the range if we have arrays of arrays.
-      type2tc range = get_flattened_array_subtype(expr->type);
-
-      // If this is an array of structs, we have a tuple array sym.
-      if (is_tuple_ast_type(range))
-        return tuple_api->mk_tuple_array_symbol(expr);
-    }
+    // If this is an array whose (possibly nested) leaf is a tuple, we
+    // have a tuple-array sym.  2C.2b: is_tuple_array_ast_type walks every
+    // array dimension down to the leaf, so K>=2 nested arrays-of-struct
+    // route here too (NW0).  For K=1 (array<Struct,inf>) the leaf *is*
+    // the struct and this is byte-identical to the historical
+    //   is_tuple_ast_type(get_flattened_array_subtype(expr->type))
+    // (get_flattened_array_subtype returns the struct itself for K=1) —
+    // so the K=1 routing is unchanged.
+    if (is_tuple_array_ast_type(expr->type))
+      return tuple_api->mk_tuple_array_symbol(expr);
 
     // Just a normal symbol. Possibly an array symbol.
     std::string name = sym.get_symbol_name();
@@ -2701,6 +2726,12 @@ static unsigned long size_to_bit_width(unsigned long sz)
 
 unsigned long array_domain_width_or_word_size(const array_type2t &arr)
 {
+  // Explicit index width (set via the `__ESBMC_inf_size:N` annotation
+  // and round-tripped through migrate) takes precedence — used by the
+  // Solidity mapping storage to declare a 480-bit-indexed infinite
+  // array, closing ledger #22's 256→64 fold unsoundness.
+  if (arr.index_width > 0)
+    return arr.index_width;
   // For constant-size arrays compute the minimal index width; for dynamic/VLA
   // or infinite arrays the size is not known statically, so fall back to the
   // machine word size which is always a valid index width.
@@ -2734,6 +2765,13 @@ type2tc make_array_domain_type(const array_type2t &arr)
   // flattened — each level uses its own domain.  flatten_array_type()
   // already skips infinite arrays, so the domain must stay single-level.
   if (arr.size_is_infinite)
+    return get_uint_type(array_domain_width_or_word_size(arr));
+
+  // Finite outer with any infinite middle (e.g. `T[N][]` or `uint256[4][][2]`)
+  // is also not flattened — the size product is non-constant.  Mirror
+  // flatten_array_type's early-return: emit a single-level domain so each
+  // level keeps its own native sort.
+  if (array_chain_has_infinite_level(arr.subtype))
     return get_uint_type(array_domain_width_or_word_size(arr));
 
   // This is a finite array of arrays -- we're going to convert this into a
@@ -3144,13 +3182,36 @@ static expr2tc materialize_flattened_row(const expr2tc &row)
   return constant_array2tc(row->type, elements);
 }
 
+bool array_chain_has_infinite_level(const type2tc &type)
+{
+  type2tc t = type;
+  while (is_array_type(t))
+  {
+    const array_type2t &a = to_array_type(t);
+    if (a.size_is_infinite)
+      return true;
+    t = a.subtype;
+  }
+  return false;
+}
+
 // A subscript of a subscript selects another flattened dimension, except
-// through an infinite array or a vector (get_flattened_array_subtype).
+// through a vector (get_flattened_array_subtype) or a chain with an infinite
+// level anywhere. The latter covers `array<array<T, N>, inf>` (Solidity's
+// `T[N][]` and `mapping(K => T[N])`) and finite-of-infinite shapes such as
+// `uint256[4][][2]`: the size product is not constant, so a flat `i * N + j`
+// key would be applied against the wrong domain. Those keep one native array
+// sort per level.
 static bool selects_flattened_dimension(const index2t &index)
 {
-  const type2tc &src_type = index.source_value->type;
-  return is_index2t(index.source_value) && !is_vector_type(src_type) &&
-         !(is_array_type(src_type) && to_array_type(src_type).size_is_infinite);
+  if (
+    !is_index2t(index.source_value) || is_vector_type(index.source_value->type))
+    return false;
+
+  const expr2tc *root = &index.source_value;
+  while (is_index2t(*root))
+    root = &to_index2t(*root).source_value;
+  return !array_chain_has_infinite_level((*root)->type);
 }
 
 smt_astt smt_solver_baset::convert_array_index(const expr2tc &expr)
@@ -3214,11 +3275,12 @@ smt_astt smt_solver_baset::convert_array_store(const expr2tc &expr)
   if (
     is_array_type(with.type) &&
     is_array_type(to_array_type(with.type).subtype) &&
-    !to_array_type(with.type).size_is_infinite)
+    !array_chain_has_infinite_level(with.type))
   {
-    // Finite multi-dimensional arrays: flatten into a single array with an
-    // extended domain. Prefer the element-wise decomposition, which keeps
-    // every store a row carries; decompose_store_chain() keeps only the last.
+    // Finite multi-dimensional arrays (every level finite): flatten into a
+    // single array with an extended domain. Prefer the element-wise
+    // decomposition, which keeps every store a row carries;
+    // decompose_store_chain() keeps only the last.
     type2tc dom =
       make_array_domain_type(to_array_type(flatten_array_type(with.type)));
     std::vector<flat_storet> stores;
@@ -3283,6 +3345,13 @@ type2tc smt_solver_baset::flatten_array_type(const type2tc &type)
 
   // Don't touch these
   if (to_array_type(type).size_is_infinite)
+    return type;
+
+  // If any inner level is infinite (e.g. Solidity `T[N][]` finite-of-infinite,
+  // or `uint256[4][][2]` finite-of-infinite-of-finite), do NOT linearize —
+  // the size product is non-constant and the resulting domain bit-width is
+  // meaningless.  Each level keeps its own native solver array sort.
+  if (array_chain_has_infinite_level(to_array_type(type).subtype))
     return type;
 
   // No need to handle one dimensional arrays
@@ -3445,11 +3514,19 @@ smt_solver_baset::get_index_value(const expr2tc &expr, expr2tc &res)
       res = tuple_api->tuple_get_array_elem(
         array, to_constant_int2t(idx).value.to_uint64(), res->type);
     else
+    {
+      // convert_sort keeps one native sort per level of an array of arrays
+      // with an infinite level (e.g. Solidity's `uint256[3][]`), so a row
+      // read from it is the row array itself, not the flattened leaf.
+      const bool nested_sort = is_array_type(res->type) &&
+                               array_chain_has_infinite_level(src_value->type);
       res = array_api->get_array_elem(
         array,
         to_constant_int2t(idx).value.to_uint64(),
-        is_vector_type(res->type) ? res->type
-                                  : get_flattened_array_subtype(res->type));
+        is_vector_type(res->type) || nested_sort
+          ? res->type
+          : get_flattened_array_subtype(res->type));
+    }
 
     // If we got a nil result, return original expression
     if (is_nil_expr(res))
@@ -3989,6 +4066,16 @@ expr2tc smt_solver_baset::get_array(const type2tc &type, smt_astt array)
 {
   // XXX -- printing multidimensional arrays?
 
+  // 2C.2d: a K>=2 struct-of-arrays value (mk_tuple_array_symbol) is a
+  // tuple_node whose sort is the leaf STRUCT, not an array sort —
+  // get_domain_width()/the array_conv readback below would assert.
+  // Counterexample model extraction for nested tuple-arrays is
+  // unimplemented (same convention as tuple_get_array_elem /
+  // tuple_get_rec's is_tuple_array_ast_type member): return an empty
+  // model entry.  The verdict comes from the solver and is unaffected.
+  if (array->sort->id != SMT_SORT_ARRAY)
+    return expr2tc();
+
   // Fetch the array bounds, if it's huge then assume this is a 1024 element
   // array. Then fetch all elements and formulate a constant_array.
   size_t w = array->sort->get_domain_width();
@@ -4123,6 +4210,35 @@ smt_astt smt_solver_baset::array_create(const expr2tc &expr)
   return newsym_ast;
 }
 
+// Rebuild a K-dim array_type chain with its leaf replaced by `leaf_type`
+// (each dimension's size / size_is_infinite preserved).
+static type2tc
+caof_rebuild_array_leaf(const type2tc &t, const type2tc &leaf_type)
+{
+  if (!is_array_type(t))
+    return leaf_type;
+  const array_type2t &a = to_array_type(t);
+  return array_type2tc(
+    caof_rebuild_array_leaf(a.subtype, leaf_type),
+    a.array_size,
+    a.size_is_infinite,
+    a.index_width);
+}
+
+// Wrap `leaf_val` in a constant_array_of for every dimension of `arr_t`,
+// producing an `arr_t`-typed array whose every leaf slot equals `leaf_val`.
+// Used to broadcast a struct field's default value across its per-field
+// native array so unwritten slots read that default (0 for a
+// zero-initialised mapping) rather than nondet.
+static expr2tc
+caof_broadcast_leaf(const type2tc &arr_t, const expr2tc &leaf_val)
+{
+  if (!is_array_type(arr_t))
+    return leaf_val;
+  const array_type2t &a = to_array_type(arr_t);
+  return constant_array_of2tc(arr_t, caof_broadcast_leaf(a.subtype, leaf_val));
+}
+
 smt_astt smt_solver_baset::convert_array_of_prep(const expr2tc &expr)
 {
   const constant_array_of2t &arrof = to_constant_array_of2t(expr);
@@ -4130,12 +4246,69 @@ smt_astt smt_solver_baset::convert_array_of_prep(const expr2tc &expr)
   expr2tc base_init;
   unsigned long array_size = 0;
 
-  // Nested infinite arrays (e.g. Solidity nested mappings): do NOT flatten.
-  // Create Array(BV64, Array(BV64, V)) where the inner initializer is itself
-  // an array_of that will be recursively converted.
-  if (arrtype.size_is_infinite && is_array_type(arrtype.subtype))
+  // 2C.2d: K>=2 array-of-struct constant (immediate subtype is itself
+  // an array, struct leaf) — emit the struct-of-arrays representation so
+  // it equates field-wise with the 2C.2c symbol tuple_node and no bare
+  // nested array-of-struct sort ever reaches the backend.  Each field is a
+  // per-field native array broadcasting that field's init value across the
+  // whole domain, so an unwritten slot reads the struct's default (0 for a
+  // zero-initialised mapping) — matching EVM zero-init and the K=1
+  // tuple_array_of route.  (The historical code left each field a FRESH
+  // unconstrained symbol, which made unwritten deep struct-valued mapping
+  // slots read nondet — see deep_mapping_structval_*_zeroinit tests.)  K=1
+  // (immediate subtype is the struct) keeps the historical tuple_array_of
+  // route below -> byte-identical. Finite chains flatten instead, matching
+  // mk_tuple_array_symbol.
+  if (
+    is_array_type(arrtype.subtype) &&
+    array_chain_has_infinite_level(arrof.type))
   {
-    // Convert the inner array_of initializer directly (recursive)
+    type2tc leaf = arrof.type;
+    while (is_array_type(leaf))
+      leaf = to_array_type(leaf).subtype;
+
+    if (is_struct_type(leaf))
+    {
+      const std::vector<type2tc> &leaf_members = struct_union_members(leaf);
+      const std::vector<irep_idt> &leaf_names = struct_union_member_names(leaf);
+
+      // Walk the (possibly nested) array_of initializer down to the struct
+      // value being broadcast into every slot.
+      expr2tc leaf_init = arrof.initializer;
+      while (is_constant_array_of2t(leaf_init))
+        leaf_init = to_constant_array_of2t(leaf_init).initializer;
+
+      std::vector<expr2tc> fields;
+      fields.reserve(leaf_members.size());
+      for (unsigned int i = 0; i < leaf_members.size(); i++)
+      {
+        type2tc fld_arr = caof_rebuild_array_leaf(arrof.type, leaf_members[i]);
+
+        // Field i's value in the broadcast struct (default 0 for a
+        // zero-initialised mapping).
+        expr2tc fld_val =
+          is_constant_struct2t(leaf_init)
+            ? to_constant_struct2t(leaf_init).datatype_members[i]
+            : expr2tc(member2tc(leaf_members[i], leaf_init, leaf_names[i]));
+
+        fields.push_back(caof_broadcast_leaf(fld_arr, fld_val));
+      }
+      return tuple_api->tuple_create(
+        constant_struct2tc(leaf, std::move(fields)));
+    }
+  }
+
+  // Nested arrays with ANY infinite level (Solidity nested mappings,
+  // `T[N][]`, `uint256[4][][2]`): do NOT flatten or peel through.  Convert
+  // the inner array_of initializer recursively — that produces a per-level
+  // nested-array AST — then broadcast it across the outer slots so the
+  // resulting sort matches the structural type we keep in flatten_array_type
+  // and make_array_domain_type.
+  if (
+    is_array_type(arrtype.subtype) &&
+    (arrtype.size_is_infinite ||
+     array_chain_has_infinite_level(arrtype.subtype)))
+  {
     smt_astt inner = convert_ast(arrof.initializer);
     array_size = array_domain_width_or_word_size(arrtype);
     return array_api->convert_array_of(inner, array_size);

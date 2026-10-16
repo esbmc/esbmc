@@ -69,6 +69,10 @@ public:
   smt_astt mk_bvsle(smt_astt a, smt_astt b) override;
   smt_astt mk_bvuge(smt_astt a, smt_astt b) override;
   smt_astt mk_bvsge(smt_astt a, smt_astt b) override;
+  bitwuzla::Term mk_equality(
+    bitwuzla::Kind kind,
+    const bitwuzla::Term &a,
+    const bitwuzla::Term &b);
   smt_astt mk_eq(smt_astt a, smt_astt b) override;
   smt_astt mk_neq(smt_astt a, smt_astt b) override;
   smt_astt mk_store(smt_astt a, smt_astt b, smt_astt c) override;

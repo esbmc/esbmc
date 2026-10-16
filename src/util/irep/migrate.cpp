@@ -325,7 +325,16 @@ static type2tc migrate_type0(const typet &type)
       size = fixup_containerof_in_sizeof(size);
     }
 
-    return array_type2tc(subtype, size, is_infinite);
+    // Optional explicit index width (from `__ESBMC_inf_size:N` annotation
+    // on the C-level declaration; processed in clang-c-frontend). Used
+    // by the Solidity mapping storage to declare a 480-bit-indexed
+    // infinite array — closes ledger #22's 256→64 fold unsoundness.
+    unsigned index_width = 0;
+    irep_idt iw = type.get("#esbmc_index_width");
+    if (!iw.empty())
+      index_width = std::stoul(iw.as_string());
+
+    return array_type2tc(subtype, size, is_infinite, index_width);
   }
   else if (type.id() == typet::t_vector)
   {
@@ -3583,6 +3592,12 @@ static typet migrate_type_back_uncached(const type2tc &ref)
     {
       thetype.size() = migrate_expr_back(ref2.array_size);
     }
+    // Carry explicit index width back so an irept→irep2 round-trip
+    // preserves the wide-BV-index annotation. Default 0 means "use
+    // word_size" (legacy 64-bit) and is omitted to keep the irept
+    // representation minimal.
+    if (ref2.index_width > 0)
+      thetype.set("#esbmc_index_width", std::to_string(ref2.index_width));
 
     return thetype;
   }
