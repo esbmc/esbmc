@@ -1161,7 +1161,9 @@ void goto_symext::run_intrinsic(
     has_prefix(symname, "c:@F@__ESBMC_pthread_start_main_hook") ||
     has_prefix(symname, "c:@F@__ESBMC_pthread_end_main_hook") ||
     has_prefix(symname, "c:@F@__ESBMC_atexit_handler") ||
-    has_prefix(symname, "c:@F@__ESBMC_pylock_block_and_check"))
+    has_prefix(symname, "c:@F@__ESBMC_pylock_block_and_check") ||
+    // Revert observation is a library function with a normal body.
+    symname == "c:@F@__ESBMC_reverted")
   {
     bump_call(func_call, symname);
     return;
