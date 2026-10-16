@@ -322,28 +322,7 @@ bool esbmc_parseoptionst::process_goto_program(
     // Expand --no-standard-checks before goto_check (also expanded before
     // goto_convert in parse_goto_program; re-expanding here is idempotent
     // and covers the read_goto_binary path).
-    if (
-      cmdline.isset("no-standard-checks") ||
-      options.get_bool_option("no-standard-checks"))
-    {
-      auto set_neg_unless_pos = [&](const char *neg, const char *pos) {
-        if (!cmdline.isset(pos))
-          options.set_option(neg, true);
-      };
-      // See the goto_convert-side block above: --bounds-check re-enables the
-      // pointer-deref check so symbolic-size dynamic-array OOB (a dereference
-      // failure) is detectable. A contradictory `--bounds-check
-      // --no-bounds-check` keeps pointer-check disabled too.
-      if (!cmdline.isset("bounds-check") || cmdline.isset("no-bounds-check"))
-        options.set_option("no-pointer-check", true);
-      set_neg_unless_pos("no-div-by-zero-check", "div-by-zero-check");
-      options.set_option("no-pointer-relation-check", true);
-      options.set_option("no-unlimited-scanf-check", true);
-      options.set_option("no-vla-size-check", true);
-      options.set_option("no-align-check", true);
-      set_neg_unless_pos("no-bounds-check", "bounds-check");
-      set_neg_unless_pos("no-narrowing-check", "narrowing-check");
-    }
+    expand_no_standard_checks(options);
 
     // Must precede inlining: goto_inlinet relabels a hidden function's
     // instructions with the call site, after which the models' assertions

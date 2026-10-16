@@ -393,13 +393,13 @@ const struct group_opt_templ all_cmd_options[] = {
      "condition anyway (e.g. for diagnostic comparison)."},
     {"no-narrowing-check",
      NULL,
-     "Do not check narrowing typecasts (e.g. uint256 -> uint8) for "
-     "truncation overflow. Default is enabled as part of "
-     "standard checks, implied by --no-standard-checks"},
+     "Disable Solidity narrowing typecast overflow checks (e.g. uint256 "
+     "-> uint8); implied by --no-standard-checks. No effect on C/C++."},
     {"narrowing-check",
      NULL,
-     "Enable narrowing typecast overflow check (Solidity: opt-in, "
-     "default OFF; C/C++: default ON; overrides --no-standard-checks)"},
+     "Enable Solidity narrowing typecast overflow checks (default OFF; "
+     "overrides --no-standard-checks). For C/C++, use --int-encoding "
+     "with --overflow-check or --unsigned-overflow-check."},
     {"solidity-precise",
      NULL,
      "Opt into precise (sound) modelling for Solidity primitives that "

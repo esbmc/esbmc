@@ -50,6 +50,7 @@ protected:
   smt_resultt retry_with_cvc5(bmct &bmc);
   bool is_solidity_input() const;
   void set_solidity_check_defaults(optionst &options) const;
+  void expand_no_standard_checks(optionst &options) const;
 
   virtual bool
   get_goto_program(optionst &options, goto_functionst &goto_functions);
