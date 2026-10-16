@@ -728,10 +728,19 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
       if (const auto *a = llvm::dyn_cast<clang::AnnotateAttr>(attr))
       {
         const std::string &name = a->getAnnotation().str();
-        if (name == "__ESBMC_inf_size")
+        if (name.compare(0, 16, "__ESBMC_inf_size") == 0)
         {
           assert(t.is_array());
           t.size(exprt("infinity", size_type()));
+          // Optional `:N` suffix specifies an explicit index width in
+          // bits. Used by the Solidity mapping storage to declare a
+          // 480-bit-indexed infinite array (closes ledger #22 / #3
+          // 256→64 fold unsoundness).
+          if (name.size() > 16 && name[16] == ':')
+          {
+            unsigned w = static_cast<unsigned>(std::stoul(name.substr(17)));
+            t.set("#esbmc_index_width", std::to_string(w));
+          }
         }
         else if (name == "__ESBMC_no_slice")
           no_slice = true;

@@ -101,6 +101,13 @@ smt_resultt z3_convt::dec_solve()
   if (result == z3::unsat)
     return P_UNSATISFIABLE;
 
+  // z3 answered `unknown`. Every backend folds that into P_ERROR, so this is
+  // the only place the reason is still available: an exhausted resource
+  // bound and an incomplete fragment are different limitations.
+  log_warning(
+    "z3 returned `unknown` (reason: {}); this is NOT a proof that the "
+    "property holds",
+    solver.reason_unknown());
   return P_ERROR;
 }
 

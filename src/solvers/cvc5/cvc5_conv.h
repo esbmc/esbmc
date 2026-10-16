@@ -9,10 +9,22 @@ class cvc5_smt_ast : public solver_smt_ast<cvc5::Term>
 public:
   using solver_smt_ast<cvc5::Term>::solver_smt_ast;
   ~cvc5_smt_ast() override = default;
+
+  smt_astt update(
+    smt_solver_baset *ctx,
+    smt_astt value,
+    unsigned int idx,
+    const expr2tc &idx_expr) const override;
+
+  smt_astt project(smt_solver_baset *ctx, unsigned int elem) const override;
+
   void dump() const override;
 };
 
-class cvc5_convt : public smt_solver_baset, public array_iface, public fp_convt
+class cvc5_convt : public smt_solver_baset,
+                   public tuple_iface,
+                   public array_iface,
+                   public fp_convt
 {
 private:
   unsigned quantifier_counter = 0;
@@ -20,6 +32,11 @@ private:
 public:
   cvc5_convt(const namespacet &ns, const optionst &options);
   ~cvc5_convt() override = default;
+
+  // CVC5 tuple helpers (analogue of z3_convt::mk_tuple_{select,update}):
+  cvc5::Term cvc5_tuple_select(const cvc5::Term &t, unsigned i);
+  cvc5::Term
+  cvc5_tuple_update(const cvc5::Term &t, unsigned i, const cvc5::Term &newval);
 
   smt_resultt dec_solve() override;
   const std::string solver_text() override;
@@ -155,6 +172,26 @@ public:
 
   smt_astt
   convert_array_of(smt_astt init_val, unsigned long domain_width) override;
+
+  // tuple_iface overrides
+  smt_sortt mk_struct_sort(const type2tc &type) override;
+  smt_astt tuple_create(const expr2tc &structdef) override;
+  smt_astt tuple_fresh(smt_sortt s, std::string name = "") override;
+  smt_astt tuple_array_create(
+    const type2tc &array_type,
+    smt_astt *inputargs,
+    bool const_array,
+    smt_sortt domain) override;
+  smt_astt tuple_array_of(const expr2tc &init_value, unsigned long domain_width)
+    override;
+  smt_astt mk_tuple_symbol(const std::string &name, smt_sortt s) override;
+  smt_astt mk_tuple_array_symbol(const expr2tc &expr) override;
+  expr2tc tuple_get(const expr2tc &expr) override;
+  expr2tc tuple_get(const type2tc &type, smt_astt a) override;
+  expr2tc tuple_get_array_elem(
+    smt_astt array,
+    uint64_t index,
+    const type2tc &subtype) override;
 
   void assert_ast(smt_astt a) override;
 

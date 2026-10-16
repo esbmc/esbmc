@@ -65,15 +65,74 @@ smt_tuple_node_flattener::mk_tuple_symbol(const std::string &name, smt_sortt s)
   return new tuple_node_smt_ast(*this, ctx, s, name2);
 }
 
+// 2C.2c: rebuild a K-dim array_type chain with its leaf replaced by
+// `leaf` (each dimension's size / size_is_infinite preserved).  Used to
+// derive the per-field native array type array^K<fi> from array^K<S>.
+static type2tc rebuild_array_leaf(const type2tc &t, const type2tc &leaf_type)
+{
+  if (!is_array_type(t))
+    return leaf_type;
+  const array_type2t &a = to_array_type(t);
+  return array_type2tc(
+    rebuild_array_leaf(a.subtype, leaf_type),
+    a.array_size,
+    a.size_is_infinite,
+    a.index_width);
+}
+
 smt_astt smt_tuple_node_flattener::mk_tuple_array_symbol(const expr2tc &expr)
 {
-  // Exactly the same as creating a tuple symbol, but for arrays.
   const symbol2t &sym = to_symbol2t(expr);
   std::string name = sym.get_symbol_name() + "[]";
-  smt_sortt sort = ctx->convert_sort(ctx->flatten_array_type(sym.type));
-  smt_sortt subtype =
-    ctx->convert_sort(ctx->get_flattened_array_subtype(sym.type));
-  return array_conv.mk_array_symbol(name, sort, subtype);
+
+  // Walk the array dimensions to the leaf.  K = 1 (the immediate
+  // subtype is the struct itself, not an array) keeps the historical
+  // single-level array_conv route verbatim → byte-identical.
+  // Only a chain with an infinite level (Solidity's nested mappings) takes
+  // the struct-of-arrays route: a finite one, a VLA included, flattens to a
+  // single array like every other finite array of arrays.
+  const array_type2t &outer = to_array_type(sym.type);
+  bool k_ge_2 =
+    is_array_type(outer.subtype) && array_chain_has_infinite_level(sym.type);
+
+  type2tc leaf = sym.type;
+  while (is_array_type(leaf))
+    leaf = to_array_type(leaf).subtype;
+
+  if (!k_ge_2 || !is_struct_type(leaf))
+  {
+    // K=1 array-of-struct, or a non-struct leaf (pointer/code/complex
+    // nested array — out of scope for the SoA decomposition): unchanged.
+    smt_sortt sort = ctx->convert_sort(ctx->flatten_array_type(sym.type));
+    smt_sortt subtype =
+      ctx->convert_sort(ctx->get_flattened_array_subtype(sym.type));
+    return array_conv.mk_array_symbol(name, sort, subtype);
+  }
+
+  // 2C.2c — K>=2 struct leaf: struct-of-arrays representation.  A
+  // tuple_node whose sort is the leaf struct (project / eq / get walk
+  // its m members) and whose elements[i] is a solver-NATIVE array
+  // array^K<fi> (primitive fi ⇒ Branch A native, no bare sort, no
+  // array_conv; struct fi ⇒ convert_ast re-enters this builder and
+  // recurses).  No read/write semantics change here — that is 2C.2d.
+  smt_sortt tsort = ctx->convert_sort(leaf);
+  tuple_node_smt_ast *result = new tuple_node_smt_ast(*this, ctx, tsort, name);
+
+  const std::vector<type2tc> &leaf_members = struct_union_members(leaf);
+  result->elements.resize(leaf_members.size());
+
+  unsigned int i = 0;
+  for (auto const &it : leaf_members)
+  {
+    type2tc fld_arr_type = rebuild_array_leaf(sym.type, it);
+    std::string fname =
+      name + "." + struct_union_member_names(leaf)[i].as_string();
+    result->elements[i] =
+      ctx->convert_ast(symbol2tc(fld_arr_type, irep_idt(fname)));
+    i++;
+  }
+
+  return result;
 }
 
 smt_astt smt_tuple_node_flattener::tuple_array_create(
@@ -207,6 +266,17 @@ expr2tc smt_tuple_node_flattener::tuple_get_array_elem(
   uint64_t index,
   const type2tc &subtype)
 {
+  // 2C.2d: a K>=2 struct-of-arrays value (mk_tuple_array_symbol) is a
+  // tuple_node over solver-native per-field arrays, not an array_conv
+  // array_ast — array_conv.get_array_elem's downcast would assert.
+  // Counterexample model extraction for nested tuple-arrays is
+  // unimplemented (same convention as tuple_get_rec's
+  // is_tuple_array_ast_type member: return an empty expr); the verdict
+  // itself comes from the solver and is unaffected.  The historical K=1
+  // path passes a genuine array_conv array_ast and is unchanged.
+  if (dynamic_cast<const tuple_node_smt_ast *>(array) != nullptr)
+    return expr2tc();
+
   return array_conv.get_array_elem(
     array, index, ctx->get_flattened_array_subtype(subtype));
 }
@@ -229,14 +299,21 @@ smt_sortt smt_tuple_node_flattener::mk_struct_sort(const type2tc &type)
   if (is_array_type(type))
   {
     const array_type2t &arrtype = to_array_type(type);
-    assert(
-      !is_array_type(arrtype.subtype) &&
-      "Arrays dimensions should be flattened by the time they reach tuple "
-      "interface");
     unsigned int dom_width = array_domain_width_or_word_size(arrtype);
 
-    return new smt_sort(
-      SMT_SORT_ARRAY, type, dom_width, ctx->convert_sort(arrtype.subtype));
+    // 2C.2a: a tuple-array sort may carry K array dimensions wrapping a
+    // struct leaf (K >= 1; any dimension may be infinite).  Build the
+    // range sort recursively: an inner array dimension recurses here, a
+    // struct (or any non-array) leaf goes through convert_sort exactly as
+    // before.  For K = 1 the subtype is the struct, the recursion branch
+    // is not taken, and this is byte-identical to the historical
+    //   new smt_sort(SMT_SORT_ARRAY, type, dom_width, convert_sort(subtype))
+    // so every single-level array-of-struct sort is unchanged.
+    smt_sortt range_sort = is_array_type(arrtype.subtype)
+                             ? mk_struct_sort(arrtype.subtype)
+                             : ctx->convert_sort(arrtype.subtype);
+
+    return new smt_sort(SMT_SORT_ARRAY, type, dom_width, range_sort);
   }
 
   return new smt_sort(SMT_SORT_STRUCT, type);
