@@ -353,6 +353,23 @@ size_t literal_subscript_index(const nlohmann::json &subscript)
 }
 } // namespace
 
+void python_list::record_element_store(
+  const nlohmann::json &subscript,
+  const std::string &elem_id,
+  const typet &elem_type)
+{
+  const nlohmann::json &container = subscript["value"];
+  if (container.value("_type", "") != "Name")
+    return;
+  const exprt list = converter_.get_expr(container);
+  if (list.is_symbol())
+    elem_types().replace(
+      list.identifier().as_string(),
+      literal_subscript_index(subscript),
+      elem_id,
+      elem_type);
+}
+
 void python_list::retype_element_store(exprt &lhs, exprt &rhs)
 {
   const tuple_handler &tuples = converter_.get_tuple_handler();
@@ -377,17 +394,7 @@ void python_list::retype_element_store(exprt &lhs, exprt &rhs)
   const exprt fresh = build_list_at_call(
     holder, from_integer(BigInt(0), size_type()), list_value_);
 
-  const nlohmann::json &container = list_value_["value"];
-  if (container.value("_type", "") == "Name")
-  {
-    const exprt list = converter_.get_expr(container);
-    if (list.is_symbol())
-      elem_types().replace(
-        list.identifier().as_string(),
-        literal_subscript_index(list_value_),
-        stored.id.as_string(),
-        rhs.type());
-  }
+  record_element_store(list_value_, stored.id.as_string(), rhs.type());
 
   lhs = build_dereference(*item, obj_type);
   rhs = build_dereference(fresh, obj_type);
@@ -611,7 +618,8 @@ enum class store_kind
   integer,
   floating,
   string,
-  tuple
+  tuple,
+  function
 };
 
 store_kind kind_of(const typet &type, const python_converter &converter)
@@ -624,7 +632,15 @@ store_kind kind_of(const typet &type, const python_converter &converter)
     return store_kind::string;
   if (converter.get_tuple_handler().is_tuple_type(type))
     return store_kind::tuple;
+  if (type.is_code() || (type.is_pointer() && type.subtype().is_code()))
+    return store_kind::function;
   return store_kind::other;
+}
+
+/// The target of an Assign or AugAssign @p op.
+const nlohmann::json &assignment_target(const nlohmann::json &op)
+{
+  return op.contains("targets") ? op["targets"][0] : op["target"];
 }
 
 const side_effect_expr_function_callt *find_list_at_call(const exprt &expr)
@@ -698,6 +714,10 @@ std::optional<exprt> python_list::build_element_replacement(
     converter_.get_type_handler().ptr_free_arg(value_arg, value_type)};
   set_at.type() = bool_type();
   set_at.location() = info.location;
+
+  // A later constant-index read takes the slot's type from the registry.
+  record_element_store(
+    assignment_target(op), info.elem_symbol->id.as_string(), value_type);
   return set_at;
 }
 
@@ -1492,6 +1512,40 @@ exprt python_list::build_extend_list_call(
   return extend_func_call;
 }
 
+void python_list::guard_pop_index(
+  const symbolt &list,
+  const exprt &index,
+  const locationt &location)
+{
+  if (
+    !converter_.can_emit_catchable_guard() ||
+    !(index.is_constant() || index.is_symbol()))
+    return;
+
+  const signedbv_typet ll_type(64);
+  const exprt list_expr = build_symbol(list);
+  const exprt size =
+    build_typecast(build_deref_member(list_expr, "size", size_type()), ll_type);
+  const exprt not_null = build_notequal(list_expr, gen_zero(list_expr.type()));
+  const exprt zero = gen_zero(ll_type);
+  converter_.emit_guarded_raise(
+    build_and(not_null, build_equal(size, zero)),
+    "IndexError",
+    "pop from empty list",
+    location);
+
+  const exprt idx = build_typecast(index, ll_type);
+  const exprt out_of_range = build_if(
+    build_less_than(idx, zero),
+    build_less_than(build_add(size, idx, ll_type), zero),
+    build_greater_equal(idx, size));
+  converter_.emit_guarded_raise(
+    build_and(not_null, out_of_range),
+    "IndexError",
+    "pop index out of range",
+    location);
+}
+
 exprt python_list::build_pop_list_call(
   const symbolt &list,
   const exprt &index,
@@ -1504,13 +1558,11 @@ exprt python_list::build_pop_list_call(
     converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_pop");
   assert(pop_func && "list_pop function not found in symbol table");
 
-  if (!converter_.in_rhs_type_probe_)
-    guard_pop_index(build_symbol(list), index, element);
-
   // Create side-effect function call
   const typet pyobject_ptr_type =
     pointer_typet(converter_.get_type_handler().get_list_element_type());
 
+  guard_pop_index(list, index, location);
   exprt pop_call =
     build_call_expr(*pop_func, pyobject_ptr_type, {build_symbol(list), index});
   pop_call.location() = location;
@@ -1573,64 +1625,6 @@ exprt python_list::build_pop_list_call(
 
   // Extract and dereference PyObject value
   return extract_pyobject_value(pop_call, elem_type);
-}
-
-void python_list::guard_pop_index(
-  const exprt &list,
-  const exprt &index,
-  const nlohmann::json &element)
-{
-  const locationt location = converter_.get_location_from_decl(element);
-
-  const symbolt *size_func =
-    converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_size");
-  assert(size_func && "list_size function not found");
-
-  symbolt &size_var = converter_.create_tmp_symbol(
-    element, "$list_size$", size_type(), gen_zero(size_type()));
-  code_declt size_decl(build_symbol(size_var));
-  size_decl.location() = location;
-  converter_.add_instruction(size_decl);
-
-  code_function_callt size_call;
-  size_call.function() = build_symbol(*size_func);
-  size_call.arguments().push_back(list);
-  size_call.lhs() = build_symbol(size_var);
-  size_call.type() = size_type();
-  size_call.location() = location;
-  converter_.add_instruction(size_call);
-
-  const auto raise_if = [&](const expr2tc &cond, const std::string &message) {
-    code_ifthenelset guard;
-    guard.cond() = migrate_expr_back(cond);
-    guard.then_case() =
-      code_expressiont(converter_.get_exception_handler().gen_exception_raise(
-        "IndexError", message));
-    guard.location() = location;
-    guard.location().property("skipped");
-    converter_.add_instruction(guard);
-  };
-
-  expr2tc size2, index2;
-  migrate_expr(build_symbol(size_var), size2);
-  migrate_expr(index, index2);
-  const type2tc int64 = get_int64_type();
-  size2 = typecast2tc(int64, size2);
-  index2 = typecast2tc(int64, index2);
-
-  raise_if(equality2tc(size2, gen_zero(int64)), "pop from empty list");
-
-  // The index normalised as CPython does: a negative one counts from the end.
-  expr2tc normalised = if2tc(
-    int64,
-    lessthan2tc(index2, gen_zero(int64)),
-    add2tc(int64, size2, index2),
-    index2);
-  raise_if(
-    or2tc(
-      lessthan2tc(normalised, gen_zero(int64)),
-      greaterthanequal2tc(normalised, size2)),
-    "pop index out of range");
 }
 
 exprt python_list::build_copy_list_call(

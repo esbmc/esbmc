@@ -125,7 +125,7 @@ std::unordered_set<std::string> dynamic_type_handler::detect_dynamic_type_names(
   }
 
   if (!collect_if_node_literal_kinds(
-        if_node, kinds, leaf_count, leaf_total, *scope_body))
+        if_node, kinds, leaf_count, leaf_total, *scope_body, module_body))
     return dynamic_type_names;
 
   for (const auto &[name, kind_set] : kinds)
@@ -445,8 +445,7 @@ exprt dynamic_type_handler::build_eq_literal(
 exprt dynamic_type_handler::handle_comparison(
   const std::string &op,
   const exprt &lhs,
-  const exprt &rhs,
-  const locationt &location)
+  const exprt &rhs)
 {
   const bool lhs_tagged = type_handler_.is_tagged_scalar_type(lhs.type());
   const bool rhs_tagged = type_handler_.is_tagged_scalar_type(rhs.type());
@@ -455,7 +454,7 @@ exprt dynamic_type_handler::handle_comparison(
   if (lhs_tagged && rhs_tagged)
   {
     if (ordered)
-      return build_ordered_obj(op, lhs, rhs, location);
+      return build_ordered_obj(op, lhs, rhs);
 
     const symbolt *eq_obj_func =
       converter_.symbol_table().find_symbol("c:@F@__python_scalar_eq_obj");
@@ -478,8 +477,8 @@ exprt dynamic_type_handler::handle_comparison(
     static const std::unordered_map<std::string, std::string> mirrored_op = {
       {"Lt", "Gt"}, {"Gt", "Lt"}, {"LtE", "GtE"}, {"GtE", "LtE"}};
     const std::string effective_op = lhs_tagged ? op : mirrored_op.at(op);
-    return lhs_tagged ? build_ordered_literal(effective_op, lhs, rhs, location)
-                      : build_ordered_literal(effective_op, rhs, lhs, location);
+    return lhs_tagged ? build_ordered_literal(effective_op, lhs, rhs)
+                      : build_ordered_literal(effective_op, rhs, lhs);
   }
 
   exprt result =
@@ -491,16 +490,10 @@ exprt dynamic_type_handler::handle_comparison(
 exprt dynamic_type_handler::build_ordered_literal(
   const std::string &op,
   const exprt &tagged,
-  const exprt &literal,
-  const locationt &location)
+  const exprt &literal)
 {
   exprt cmp = build_literal_compare_call(
     "__python_scalar_cmp_num", "__python_scalar_cmp_str", tagged, literal);
-  guard_type_error(
-    type_handler_.tagged_scalar_type_matches(
-      build_member(tagged, "type_id", size_type()), literal.type()),
-    "comparison not supported between these types",
-    location);
 
   exprt zero = from_integer(BigInt(0), int_type());
   if (op == "Lt")
@@ -516,8 +509,7 @@ exprt dynamic_type_handler::build_ordered_literal(
 exprt dynamic_type_handler::build_ordered_obj(
   const std::string &op,
   const exprt &lhs,
-  const exprt &rhs,
-  const locationt &location)
+  const exprt &rhs)
 {
   const symbolt *cmp_obj_func =
     converter_.symbol_table().find_symbol("c:@F@__python_scalar_cmp_obj");
@@ -529,22 +521,6 @@ exprt dynamic_type_handler::build_ordered_obj(
      build_address_of(rhs),
      type_handler_.tagged_scalar_type_id(long_long_int_type()),
      type_handler_.tagged_scalar_type_id(bool_type())});
-
-  // Two numbers, or two values of one non-numeric type, are ordered.
-  exprt lhs_type_id = build_member(lhs, "type_id", size_type());
-  exprt rhs_type_id = build_member(rhs, "type_id", size_type());
-  exprt lhs_is_num =
-    type_handler_.tagged_scalar_type_matches(lhs_type_id, long_long_int_type());
-  exprt rhs_is_num =
-    type_handler_.tagged_scalar_type_matches(rhs_type_id, long_long_int_type());
-  guard_type_error(
-    build_or(
-      build_and(lhs_is_num, rhs_is_num),
-      build_and(
-        build_and(build_not(lhs_is_num), build_not(rhs_is_num)),
-        build_equal(lhs_type_id, rhs_type_id))),
-    "comparison not supported between these types",
-    location);
 
   exprt zero = from_integer(BigInt(0), int_type());
   if (op == "Lt")
@@ -560,18 +536,12 @@ exprt dynamic_type_handler::build_ordered_obj(
 exprt dynamic_type_handler::build_add_literal(
   const exprt &tagged,
   const exprt &literal,
-  bool tagged_is_left,
-  const locationt &location)
+  bool tagged_is_left)
 {
   exprt tagged_addr = build_address_of(tagged);
 
   if (literal.type().is_array())
   {
-    guard_type_error(
-      type_handler_.tagged_scalar_type_matches(
-        build_member(tagged, "type_id", size_type()), literal.type()),
-      "can only concatenate str (not other types) to str",
-      location);
     const symbolt *add_str_func =
       converter_.symbol_table().find_symbol("c:@F@__python_scalar_add_str");
     assert(add_str_func && "__python_scalar_add_str not found in symbol table");
@@ -600,10 +570,9 @@ exprt dynamic_type_handler::build_add_literal(
   exprt lit_value =
     build_typecast(literal, signedbv_typet(config.ansi_c.long_long_int_width));
   exprt tagged_type_id = build_member(tagged, "type_id", size_type());
-  exprt type_matches =
-    type_handler_.tagged_scalar_type_matches(tagged_type_id, literal.type());
-  guard_type_error(type_matches, "unsupported operand type(s) for +", location);
-  type_matches = build_typecast(type_matches, int_type());
+  exprt type_matches = build_typecast(
+    type_handler_.tagged_scalar_type_matches(tagged_type_id, literal.type()),
+    int_type());
 
   const symbolt *add_num_func =
     converter_.symbol_table().find_symbol("c:@F@__python_scalar_add_num");
@@ -617,8 +586,7 @@ exprt dynamic_type_handler::build_add_literal(
 exprt dynamic_type_handler::build_sub_literal(
   const exprt &tagged,
   const exprt &literal,
-  bool tagged_is_left,
-  const locationt &location)
+  bool tagged_is_left)
 {
   if (
     !literal.type().is_bool() && !literal.type().is_signedbv() &&
@@ -635,10 +603,9 @@ exprt dynamic_type_handler::build_sub_literal(
   exprt lit_value =
     build_typecast(literal, signedbv_typet(config.ansi_c.long_long_int_width));
   exprt tagged_type_id = build_member(tagged, "type_id", size_type());
-  exprt type_matches =
-    type_handler_.tagged_scalar_type_matches(tagged_type_id, literal.type());
-  guard_type_error(type_matches, "unsupported operand type(s) for -", location);
-  type_matches = build_typecast(type_matches, int_type());
+  exprt type_matches = build_typecast(
+    type_handler_.tagged_scalar_type_matches(tagged_type_id, literal.type()),
+    int_type());
 
   return build_call_expr(
     *sub_func,
@@ -680,7 +647,6 @@ exprt dynamic_type_handler::build_div_literal(
       build_member(tagged, "value", pointer_typet(empty_typet())),
       pointer_typet(signedbv_typet(config.ansi_c.long_long_int_width))),
     signedbv_typet(config.ansi_c.long_long_int_width));
-  guard_type_error(type_matches, "unsupported operand type(s) for /", location);
   exprt divisor = tagged_is_left ? lit_value : tagged_numeric_value;
   guard_zero_division(divisor, type_matches, location);
 
@@ -707,20 +673,20 @@ exprt dynamic_type_handler::handle_arithmetic(
   if (lhs_tagged && rhs_tagged)
   {
     if (op == "Add")
-      return build_add_tagged(lhs, rhs, location);
+      return build_add_tagged(lhs, rhs);
     if (op == "Sub")
-      return build_sub_tagged(lhs, rhs, location);
+      return build_sub_tagged(lhs, rhs);
     assert(op == "Div" && "unexpected operator routed to handle_arithmetic");
     return build_div_tagged(lhs, rhs, location);
   }
 
   if (op == "Add")
-    return lhs_tagged ? build_add_literal(lhs, rhs, true, location)
-                      : build_add_literal(rhs, lhs, false, location);
+    return lhs_tagged ? build_add_literal(lhs, rhs, /*tagged_is_left=*/true)
+                      : build_add_literal(rhs, lhs, /*tagged_is_left=*/false);
 
   if (op == "Sub")
-    return lhs_tagged ? build_sub_literal(lhs, rhs, true, location)
-                      : build_sub_literal(rhs, lhs, false, location);
+    return lhs_tagged ? build_sub_literal(lhs, rhs, /*tagged_is_left=*/true)
+                      : build_sub_literal(rhs, lhs, /*tagged_is_left=*/false);
 
   assert(op == "Div" && "unexpected operator routed to handle_arithmetic");
   return lhs_tagged ? build_div_literal(lhs, rhs, true, location)
@@ -732,13 +698,11 @@ exprt dynamic_type_handler::build_neg_tagged(
   const locationt &location)
 {
   exprt zero = from_integer(0, signedbv_typet(config.ansi_c.int_width));
-  return build_sub_literal(tagged, zero, /*tagged_is_left=*/false, location);
+  guard_type_error("Sub", zero, tagged, location);
+  return build_sub_literal(tagged, zero, /*tagged_is_left=*/false);
 }
 
-exprt dynamic_type_handler::build_add_tagged(
-  const exprt &lhs,
-  const exprt &rhs,
-  const locationt &location)
+exprt dynamic_type_handler::build_add_tagged(const exprt &lhs, const exprt &rhs)
 {
   const symbolt *add_func =
     converter_.symbol_table().find_symbol("c:@F@__python_scalar_add_obj_dyn");
@@ -758,18 +722,6 @@ exprt dynamic_type_handler::build_add_tagged(
     build_typecast(build_equal(lhs_type_id, str_type_id), int_type());
   exprt rhs_is_str =
     build_typecast(build_equal(rhs_type_id, str_type_id), int_type());
-  guard_type_error(
-    build_or(
-      build_and(
-        type_handler_.tagged_scalar_type_matches(
-          lhs_type_id, long_long_int_type()),
-        type_handler_.tagged_scalar_type_matches(
-          rhs_type_id, long_long_int_type())),
-      build_and(
-        build_equal(lhs_type_id, str_type_id),
-        build_equal(rhs_type_id, str_type_id))),
-    "unsupported operand type(s) for +",
-    location);
 
   return build_call_expr(
     *add_func,
@@ -784,10 +736,7 @@ exprt dynamic_type_handler::build_add_tagged(
      str_type_id});
 }
 
-exprt dynamic_type_handler::build_sub_tagged(
-  const exprt &lhs,
-  const exprt &rhs,
-  const locationt &location)
+exprt dynamic_type_handler::build_sub_tagged(const exprt &lhs, const exprt &rhs)
 {
   const symbolt *sub_func =
     converter_.symbol_table().find_symbol("c:@F@__python_scalar_sub_num_dyn");
@@ -795,16 +744,12 @@ exprt dynamic_type_handler::build_sub_tagged(
 
   exprt lhs_type_id = build_member(lhs, "type_id", size_type());
   exprt rhs_type_id = build_member(rhs, "type_id", size_type());
-  exprt lhs_is_num =
-    type_handler_.tagged_scalar_type_matches(lhs_type_id, long_long_int_type());
-  exprt rhs_is_num =
-    type_handler_.tagged_scalar_type_matches(rhs_type_id, long_long_int_type());
-  guard_type_error(
-    build_and(lhs_is_num, rhs_is_num),
-    "unsupported operand type(s) for -",
-    location);
-  lhs_is_num = build_typecast(lhs_is_num, int_type());
-  rhs_is_num = build_typecast(rhs_is_num, int_type());
+  exprt lhs_is_num = build_typecast(
+    type_handler_.tagged_scalar_type_matches(lhs_type_id, long_long_int_type()),
+    int_type());
+  exprt rhs_is_num = build_typecast(
+    type_handler_.tagged_scalar_type_matches(rhs_type_id, long_long_int_type()),
+    int_type());
 
   return build_call_expr(
     *sub_func,
@@ -833,10 +778,6 @@ exprt dynamic_type_handler::build_div_tagged(
       build_member(rhs, "value", pointer_typet(empty_typet())),
       pointer_typet(signedbv_typet(config.ansi_c.long_long_int_width))),
     signedbv_typet(config.ansi_c.long_long_int_width));
-  guard_type_error(
-    build_and(lhs_is_num, rhs_is_num),
-    "unsupported operand type(s) for /",
-    location);
   guard_zero_division(
     rhs_numeric_value, build_and(lhs_is_num, rhs_is_num), location);
 
@@ -849,19 +790,63 @@ exprt dynamic_type_handler::build_div_tagged(
      build_typecast(rhs_is_num, int_type())});
 }
 
+exprt dynamic_type_handler::operands_type_ok(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs) const
+{
+  const bool lhs_tagged = type_handler_.is_tagged_scalar_type(lhs.type());
+  const bool rhs_tagged = type_handler_.is_tagged_scalar_type(rhs.type());
+  if (!lhs_tagged || !rhs_tagged)
+  {
+    const exprt &tagged = lhs_tagged ? lhs : rhs;
+    const exprt &literal = lhs_tagged ? rhs : lhs;
+    return type_handler_.tagged_scalar_type_matches(
+      build_member(tagged, "type_id", size_type()), literal.type());
+  }
+
+  exprt lhs_type_id = build_member(lhs, "type_id", size_type());
+  exprt rhs_type_id = build_member(rhs, "type_id", size_type());
+  exprt lhs_is_num =
+    type_handler_.tagged_scalar_type_matches(lhs_type_id, long_long_int_type());
+  exprt rhs_is_num =
+    type_handler_.tagged_scalar_type_matches(rhs_type_id, long_long_int_type());
+  exprt both_num = build_and(lhs_is_num, rhs_is_num);
+  if (op == "Sub" || op == "Div")
+    return both_num;
+  if (op == "Add")
+  {
+    exprt str_type_id =
+      type_handler_.tagged_scalar_type_id(pointer_typet(char_type()));
+    return build_or(
+      both_num,
+      build_and(
+        build_equal(lhs_type_id, str_type_id),
+        build_equal(rhs_type_id, str_type_id)));
+  }
+  return build_and(
+    build_equal(lhs_is_num, rhs_is_num),
+    build_or(lhs_is_num, build_equal(lhs_type_id, rhs_type_id)));
+}
+
 void dynamic_type_handler::guard_type_error(
-  const exprt &type_ok,
-  const std::string &message,
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
   const locationt &location)
 {
-  code_ifthenelset guard;
-  guard.cond() = build_not(type_ok);
-  guard.then_case() =
-    code_expressiont(converter_.get_exception_handler().gen_exception_raise(
-      "TypeError", message));
-  guard.location() = location;
-  guard.location().property("skipped");
-  converter_.add_instruction(guard);
+  if (!converter_.can_emit_catchable_guard())
+    return;
+
+  static const std::unordered_map<std::string, std::string> symbols = {
+    {"Add", "+"}, {"Sub", "-"}, {"Div", "/"}};
+  auto symbol = symbols.find(op);
+  const std::string message =
+    symbol == symbols.end()
+      ? "comparison not supported between these types"
+      : "unsupported operand type(s) for " + symbol->second;
+  converter_.emit_guarded_raise(
+    build_not(operands_type_ok(op, lhs, rhs)), "TypeError", message, location);
 }
 
 void dynamic_type_handler::guard_zero_division(
@@ -973,10 +958,11 @@ bool dynamic_type_handler::detect_dynamic_return_type(
 
 bool dynamic_type_handler::scope_assigns_divergent_literal_types(
   const std::string &name,
-  const nlohmann::json &scope_body) const
+  const nlohmann::json &scope_body,
+  const nlohmann::json &module_body) const
 {
   return dynamic_type_detail::scope_assigns_divergent_literal_types(
-    name, scope_body);
+    name, scope_body, module_body);
 }
 
 exprt dynamic_type_handler::build_tagged_value(

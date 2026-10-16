@@ -5,4 +5,4 @@ main.py
 ^Reached : 1$
 ^- UNREACHED: '!py:.*main.py@return_value\$_boolop_result\$1 at file .*main.py line 2 
 ^COVERAGE ANALYSIS COMPLETE$
-\A(?![\s\S]*^(?!- UNREACHED:)[^\n]*IndexError)[\s\S]*\Z
+\A(?![\s\S]*IndexError)[\s\S]*\Z
