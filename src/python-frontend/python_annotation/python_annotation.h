@@ -5,6 +5,7 @@
 #include <python-frontend/module/global_scope.h>
 #include <python-frontend/module/module_manager.h>
 #include <python-frontend/module/module.h>
+#include <python-frontend/python_converter.h>
 #include <python-frontend/type/type_utils.h>
 #include <python-frontend/python_annotation/annotation_intrinsics.h>
 #include <python-frontend/python_annotation/annotation_parser.h>
@@ -138,8 +139,13 @@ private:
   std::string infer_dict_value_type(const Json &var_node);
   std::string
   resolve_subscript_type(const Json &subscript_node, const Json &body);
+
+  // The type of `f(...)[i]` read from f's `list[T]` return annotation, or "Any"
+  // when the subscript's base is not such a call.
+  std::string subscript_type_from_call(const Json &subscript_node);
   bool
   is_imported_name_in_body(const std::string &name, const Json &stmts) const;
+  bool is_imported_name(const std::string &name) const;
   std::string infer_unpacked_element_type(const Json &rhs, size_t index);
   std::string resolve_object_class_name(const std::string &obj);
   std::string match_literal_argument(
@@ -151,6 +157,7 @@ private:
 
   // ----- core inference dispatchers -----
   std::string get_argument_type(const Json &arg);
+  std::string get_builtin_call_type(const Json &call);
   std::string list_copy_type(const std::string &func_name, const Json &call);
   std::string get_type_from_binary_expr(const Json &stmt, const Json &body);
   std::string get_type_from_rhs_variable(const Json &element, const Json &body);
@@ -274,6 +281,11 @@ private:
     const std::string &name,
     const Json &enclosing_func);
   std::string resolve_wildcard_import_func(const std::string &func_name);
+  /// Whether @p use, a read of @p name, provably reads a binding an import
+  /// made, by the scoping the converter applies to module names (#8470). A
+  /// star import must provably bind @p name to a function the module defines,
+  /// and a nested function is not decided.
+  bool reads_import(const std::string &name, const Json &use) const;
   std::string
   resolve_expr_in_enclosing_func(const Json &elt, const Json &enclosing_func);
   std::vector<std::string> infer_tuple_element_types(
@@ -297,7 +309,16 @@ private:
   void annotate_function(Json &function_element);
   void annotate_class(Json &class_element);
   void infer_loop_variable_types(Json &while_stmt);
+  void annotate_branch_blocks(Json &element);
   void add_annotation(Json &body);
+  std::string widen_to_optional_scalar(
+    const Json &element,
+    const std::string &inferred_type);
+  std::string optional_scalar_of(const std::string &name, const Json &scope);
+  void collect_name_stores(
+    const std::string &name,
+    const Json &body,
+    std::vector<const Json *> &stores);
 
   // ----- state -----
   Json &ast_;
@@ -323,6 +344,10 @@ private:
   // calls the function), which the return-expression scan cannot see.
   std::set<std::string> functions_reentered_;
   std::set<std::string> resolving_rhs_vars_;
+  // Per (scope, name): the Optional[T] annotation of a name stored None and
+  // one scalar type T, decided before any of its stores is annotated.
+  std::map<std::pair<const Json *, std::string>, std::string>
+    optional_scalar_names_;
   std::string current_func_name_context_;
   std::string current_class_name_;
   struct pending_specializationt

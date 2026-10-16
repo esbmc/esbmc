@@ -164,7 +164,12 @@ typet get_elem_type_from_annotation(
 
   // Case 3: Direct type annotation such as str, int
   if (annotation.contains("id") && annotation["id"].is_string())
-    return type_handler_.get_typet(annotation["id"].get<std::string>());
+  {
+    std::string id = annotation["id"].get<std::string>();
+    if (id == "list" || id == "dict" || id == "set" || id == "tuple")
+      return typet();
+    return type_handler_.get_typet(id);
+  }
 
   // Return empty type if annotation structure is not recognized
   return typet();

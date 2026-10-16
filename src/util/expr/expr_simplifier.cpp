@@ -3451,9 +3451,17 @@ expr2tc bitcast2t::do_simplify() const
   // and offset components (without it, every pointer-as-pointer use stays
   // an array index, which generates a much larger case-split tree).
 
-  /* A pointer bitcast must stay a bitcast: it reinterprets the bits ESBMC
-   * stored, which convert_bitcast() models as an injection, while a typecast
-   * means the numeric address, which does not identify a pointer (#7855). */
+  /* Between two pointer types a bitcast keeps the (object, offset) pair, as
+   * a typecast does, and only the typecast is seen through by the null,
+   * same-object and constant-propagation rules: a pointer read back through
+   * a pointer to another pointer type otherwise names no object. */
+  if (is_pointer_type(type) && is_pointer_type(from->type))
+    return typecast2tc(type, from);
+
+  /* A bitcast between a pointer and a bit-vector must stay a bitcast: it
+   * reinterprets the bits ESBMC stored, which convert_bitcast() models as an
+   * injection, while a typecast means the numeric address, which does not
+   * identify a pointer (#7855). */
   if (is_pointer_type(type) || is_pointer_type(from->type))
     return expr2tc();
 
@@ -3494,6 +3502,9 @@ static bool address_of_is_provably_non_null(const expr2tc &e)
  * to a pointer; a null-guard rule has to accept either. */
 static bool is_null_pointer_value(const expr2tc &expr)
 {
+  // `p != NULL` against a `T *` reaches here as (T *)NULL.
+  if (is_typecast2t(expr) && is_pointer_type(expr->type))
+    return is_null_pointer_value(to_typecast2t(expr).from);
   return is_null_pointer(expr) || is_null_pointer_constant(expr);
 }
 

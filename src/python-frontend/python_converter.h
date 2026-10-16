@@ -400,6 +400,24 @@ public:
     bool by_other = false;
     bool declared_outer = false;
   };
+  /// The bindings of @p name in @p module's own scope, with declared_outer
+  /// meaning that a function rebinds it through `global`.
+  static scope_bindings
+  module_scope_bindings(const nlohmann::json &module, const std::string &name);
+  /// Whether @p name, read at @p use inside @p function (null at module or
+  /// class level), reads a binding made by an import (true), another binding
+  /// (false), or none in this module (empty). @p global is
+  /// module_scope_bindings for @p name. With @p in_order, @p use runs in source
+  /// order at module level, and an import must complete before it. Throws when
+  /// the bindings leave that undecided.
+  static std::optional<bool> binding_is_import(
+    const nlohmann::json &module,
+    const scope_bindings &global,
+    const nlohmann::json *function,
+    bool in_class,
+    bool in_order,
+    const std::string &name,
+    const nlohmann::json &use);
   /// Whether @p receiver, a Name read by the call at @p use, is bound in its
   /// scope by something other than an import, so that it is not the module
   /// of the same name. Throws when the bindings leave that undecided.
@@ -447,6 +465,13 @@ public:
   /// A class used as a value (`x = int`, `type(v)`): its name as a char array,
   /// also held in `value` for the folds that read it back.
   exprt make_class_object(const std::string &name);
+
+  /// The category get_expr converts @p element as; CLASS_MRO for
+  /// `Cls.__mro__` on a class whose MRO is known.
+  ExpressionType expression_type(const nlohmann::json &element) const;
+
+  /// `Cls.__mro__` as a tuple of class objects.
+  exprt class_mro_tuple(const nlohmann::json &element);
 
   static bool is_class_object(const exprt &expr)
   {
@@ -839,11 +864,18 @@ private:
    * code, so the dynamic-type tagging that spelling already gets applies
    * here too. Tagging the target around the ternary instead would store the
    * already-collapsed value under a single type id, which is what hid the
-   * TypeError obligation (github #8263). True if it rewrote the assignment.
+   * TypeError obligation (github #8263). A branch instantiating a class is
+   * rewritten too: its constructor initialises the target in place and
+   * yields no value for the ternary to select (github #8502). True if it
+   * rewrote the assignment.
    */
   bool rewrite_divergent_conditional_assign(
     const nlohmann::json &ast_node,
     codet &target_block);
+
+  std::string instantiated_class(const nlohmann::json &value) const;
+
+  bool ternary_needs_if_spelling(const nlohmann::json &ifexp) const;
 
   bool is_coverage_mode() const;
 
@@ -1201,6 +1233,14 @@ private:
     const std::string &class_name,
     const std::string &attr_name);
 
+  // The entry module, every imported module and the current one, each once.
+  std::vector<const nlohmann::json *> reachable_module_bodies() const;
+
+  // None when every write to an attribute named `attr_name` stores None, and
+  // Optional[T] when they store None and literals of one scalar type T.
+  // any_type() for any other write or a setattr call.
+  typet none_attribute_type(const std::string &attr_name) const;
+
   /**
    * @brief Build a tuple struct type from an AST value node when the annotation
    *        is bare `tuple`.
@@ -1318,12 +1358,8 @@ private:
     const std::string &base_class,
     const std::string &sym_id) const;
 
-  std::optional<bool> function_shadows_module(
-    const std::string &name,
-    const nlohmann::json &use) const;
-  /// The module's own bindings of @p name, with declared_outer meaning that a
-  /// function rebinds it through `global`. Memoised: a module call reads
-  /// them at every dispatch site, and each read walks the whole module.
+  /// module_scope_bindings for @p name. Memoised: a module call reads them at
+  /// every dispatch site, and each read walks the whole module.
   const scope_bindings &module_bindings(const std::string &name) const;
   mutable std::
     map<std::pair<const nlohmann::json *, std::string>, scope_bindings>
@@ -2371,6 +2407,12 @@ private:
    * @param is_ctor_call Whether this is a constructor call.
    * @param target_block The code block to add generated code to.
    */
+  std::string user_class_of(const typet &type);
+  void reject_attribute_class_change(
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &ast_node,
+    bool is_ctor_call);
   void handle_function_call_rhs(
     const nlohmann::json &ast_node,
     symbolt *lhs_symbol,
@@ -2419,6 +2461,23 @@ private:
     const std::string &op,
     const exprt &lhs,
     const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
+
+  /// handle_erased_type_comparison, else handle_type_identity_check.
+  exprt handle_type_comparison(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
+
+  exprt erased_type_argument(const nlohmann::json &node);
+
+  /// `type(x) is T`, `is not`, `==` or `!=` for a builtin scalar T when x's
+  /// static type was erased to `void *`; nil otherwise.
+  exprt handle_erased_type_comparison(
+    const std::string &op,
     const nlohmann::json &left,
     const nlohmann::json &right);
 
@@ -2618,6 +2677,10 @@ private:
   void process_forward_reference(
     const nlohmann::json &annotation,
     codet &target_block);
+
+  // Build the class a `tag-<Name>` symbol type refers to when it is defined
+  // later in the module, so the type can be followed.
+  void build_forward_class(const typet &type);
 
   // =========================================================================
   // Optional type helpers
@@ -2897,6 +2960,9 @@ private:
     const nlohmann::json &value,
     const std::string &function) const;
   exprt list_argument_expr(const nlohmann::json &arg);
+  typet subscript_call_return_type(
+    const exprt &func_ptr,
+    const nlohmann::json &func_node);
   std::optional<std::vector<std::size_t>>
   numpy_filled_array_shape(const nlohmann::json &value) const;
   const std::optional<std::pair<typet, numpy_scalar_pointer_view_infot>> &

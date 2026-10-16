@@ -625,6 +625,14 @@ exprt python_converter::handle_none_comparison(
     // Check if the non-None side is a different type
     const exprt &non_none = lhs_is_none ? rhs : lhs;
 
+    // If the non-none side is an Optional struct, check its is_none field
+    // directly
+    if (type_utils::is_optional_struct(non_none.type()))
+    {
+      exprt flag = member_exprt(non_none, "is_none", bool_type());
+      return is_eq ? flag : not_exprt(flag);
+    }
+
     // If comparing with a constant integer, string, or other non-None constant
     // exclude pointer to array (strings), as they could be Optional[str]
     // parameters
@@ -845,6 +853,71 @@ exprt python_converter::handle_string_type_mismatch(
   }
 
   return nil_exprt(); // No action taken for other operators
+}
+
+/// The argument of @p node when it is `type(x)` on a name whose static type
+/// was erased to `void *`; nil otherwise.
+exprt python_converter::erased_type_argument(const nlohmann::json &node)
+{
+  if (
+    node["_type"] != "Call" || node["func"]["_type"] != "Name" ||
+    node["func"]["id"] != "type" || node["args"].size() != 1 ||
+    node["args"][0]["_type"] != "Name")
+    return nil_exprt();
+
+  exprt value = get_expr(node["args"][0]);
+  if (!value.type().is_pointer() || value.type().subtype().id() != "empty")
+    return nil_exprt();
+  return value;
+}
+
+exprt python_converter::handle_erased_type_comparison(
+  const std::string &op,
+  const nlohmann::json &left,
+  const nlohmann::json &right)
+{
+  if (op != "Is" && op != "IsNot" && op != "Eq" && op != "NotEq")
+    return nil_exprt();
+
+  static const std::set<std::string> scalars = {"int", "float", "bool", "str"};
+  auto scalar_name = [](const nlohmann::json &n) -> std::string {
+    return n["_type"] == "Name" && scalars.count(n["id"].get<std::string>())
+             ? n["id"].get<std::string>()
+             : "";
+  };
+  const bool type_on_right = !scalar_name(right).empty();
+  const std::string name = scalar_name(type_on_right ? right : left);
+  if (name.empty())
+    return nil_exprt();
+  const exprt value = erased_type_argument(type_on_right ? left : right);
+  if (value.is_nil())
+    return nil_exprt();
+
+  // The static type says nothing, so let symex resolve the object as it does
+  // for isinstance(), refusing when it cannot. bool is int's only builtin
+  // subclass.
+  auto isinstance_of = [&](const std::string &type_name) {
+    expr2tc value2, type2;
+    migrate_expr(value, value2);
+    migrate_expr(gen_zero(type_handler_.get_typet(type_name, 0)), type2);
+    return migrate_expr_back(isinstance2tc(value2, type2));
+  };
+  exprt result = isinstance_of(name);
+  if (name == "int")
+    result = and_exprt(result, not_exprt(isinstance_of("bool")));
+  return op == "Is" || op == "Eq" ? result : not_exprt(result);
+}
+
+exprt python_converter::handle_type_comparison(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &left,
+  const nlohmann::json &right)
+{
+  const exprt erased = handle_erased_type_comparison(op, left, right);
+  return erased.is_nil() ? handle_type_identity_check(op, lhs, rhs, left, right)
+                         : erased;
 }
 
 exprt python_converter::handle_type_identity_check(

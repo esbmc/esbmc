@@ -50,7 +50,8 @@ enum class ExpressionType
   UNKNOWN,
   FSTRING,
   TUPLE,
-  SLICE
+  SLICE,
+  CLASS_MRO
 };
 
 struct TypeFlags
@@ -158,7 +159,9 @@ public:
       "PermissionError",   "NotImplementedError",
       "ImportError",       "ModuleNotFoundError",
       "RuntimeError",      "StopIteration",
-      "EOFError",          "UnboundLocalError"};
+      "EOFError",          "UnboundLocalError",
+      "ArithmeticError",   "FloatingPointError",
+      "LookupError"};
     return exceptions.count(name) != 0;
   }
 

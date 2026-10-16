@@ -276,19 +276,20 @@ class PythonPropertyTest(unittest.TestCase):
 
 
 class PythonCommandLineTest(unittest.TestCase):
-    """The program's asserts are a property only for AssertionError."""
+    """Each run reports only its property's exception family."""
 
     def command(self, prop):
         return wrapper.get_command_line("kinduction", prop, None, "main.py", False, "", False)
 
-    def test_assertion_property_keeps_the_asserts(self):
-        self.assertNotIn("--python-ignore-assertions",
-                         self.command(wrapper.Property.py_assertion))
-
-    def test_other_properties_ignore_the_asserts(self):
-        for prop in (wrapper.Property.py_arithmetic, wrapper.Property.py_datalookup,
-                     wrapper.Property.py_dyntyping):
-            self.assertIn("--python-ignore-assertions", self.command(prop))
+    def test_each_property_checks_its_own_family(self):
+        cases = (
+            (wrapper.Property.py_assertion, "AssertionError"),
+            (wrapper.Property.py_arithmetic, "ZeroDivisionError,FloatingPointError"),
+            (wrapper.Property.py_datalookup, "KeyError,IndexError"),
+            (wrapper.Property.py_dyntyping, "TypeError,AttributeError"),
+        )
+        for prop, family in cases:
+            self.assertIn("--python-check-exceptions " + family + " ", self.command(prop))
 
 
 class PythonPropertyFileTest(unittest.TestCase):

@@ -857,6 +857,39 @@ exprt python_converter::list_argument_expr(const nlohmann::json &arg)
   return elements ? *elements : get_expr(arg);
 }
 
+typet python_converter::subscript_call_return_type(
+  const exprt &func_ptr,
+  const nlohmann::json &func_node)
+{
+  // A function read from a list keeps its code type, so its own return type
+  // is known; the enclosing function's return type is only a guess.
+  const typet &ptr_type = func_ptr.type();
+  if (ptr_type.is_pointer() && ptr_type.subtype().is_code())
+  {
+    const typet &ret = to_code_type(ptr_type.subtype()).return_type();
+    if (!ret.is_nil() && !ret.is_empty())
+      return ret;
+  }
+
+  // Otherwise prefer the current function's declared return type, then try
+  // to infer from any lambda body in the dict literal.
+  typet ret_type = current_func_return_type_;
+  if (ret_type.is_empty() && func_node["value"]["_type"] == "Dict")
+  {
+    for (const auto &val : func_node["value"]["values"])
+    {
+      if (val["_type"] == "Lambda" && val.contains("body"))
+      {
+        ret_type = lambda_handler_->infer_lambda_return_type(val["body"]);
+        break;
+      }
+    }
+  }
+  if (ret_type.is_empty())
+    ret_type = double_type();
+  return ret_type;
+}
+
 exprt python_converter::get_function_call(const nlohmann::json &element)
 {
   if (!element.contains("func") || element["_type"] != "Call")
@@ -1264,27 +1297,10 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     else
       func_ptr = get_expr(element["func"]);
 
-    // Determine return type: prefer current function's declared return type,
-    // then try to infer from any lambda body in the dict literal.
-    typet ret_type = current_func_return_type_;
-    if (ret_type.is_empty() && func_node["value"]["_type"] == "Dict")
-    {
-      for (const auto &val : func_node["value"]["values"])
-      {
-        if (val["_type"] == "Lambda" && val.contains("body"))
-        {
-          ret_type = lambda_handler_->infer_lambda_return_type(val["body"]);
-          break;
-        }
-      }
-    }
-    if (ret_type.is_empty())
-      ret_type = double_type();
-
     side_effect_expr_function_callt call;
     call.location() = get_location_from_decl(element);
     call.function() = func_ptr;
-    call.type() = ret_type;
+    call.type() = subscript_call_return_type(func_ptr, func_node);
     if (element.contains("args"))
       for (const auto &arg : element["args"])
       {
