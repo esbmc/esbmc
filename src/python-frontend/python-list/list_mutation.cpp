@@ -42,6 +42,14 @@ list_elem_info python_list::get_tagged_element_info(
   return tagged_info;
 }
 
+list_elem_info
+python_list::get_lookup_key_info(const nlohmann::json &op, const exprt &key)
+{
+  if (converter_.get_type_handler().is_tagged_scalar_type(key.type()))
+    return get_tagged_element_info(op, key);
+  return get_list_element_info(op, key);
+}
+
 // The tag stamps a float payload with the hash of `double`, the same hash the
 // non-tagged push path passes as float_type_id, so the model can route it
 // through __ESBMC_float_buf.
@@ -52,10 +60,11 @@ exprt python_list::tagged_float_type_id(bool enable_float_path) const
   return converter_.get_type_handler().tagged_scalar_type_id(double_type());
 }
 
-// Only build_push_list_call and build_insert_list_call handle a tagged element;
-// they call get_tagged_element_info directly. Every other caller stamps the
-// hash of the wrapper's static C type, which never matches the element's
-// runtime type_id, so list.count() answered 0 and proved `count(x) == 0`.
+// Only build_push_list_call, build_insert_list_call and get_lookup_key_info
+// handle a tagged element; they call get_tagged_element_info directly. Every
+// other caller stamps the hash of the wrapper's static C type, which never
+// matches the element's runtime type_id, so list.count() answered 0 and proved
+// `count(x) == 0`.
 // Refuse the way `operator In` already does rather than answer wrongly.
 static void reject_tagged_element(const type_handler &th, const exprt &elem)
 {
