@@ -786,10 +786,15 @@ bool python_converter::contains_unnamed_numpy_view_argument(
 }
 
 // A call whose views need no escape tracking: a value builtin, one folded
-// into the caller, or one whose callee binds every view as a parameter.
+// into the caller, one whose callee binds every view as a parameter, or a
+// builtin that only reads its iterable. A copied view stays equal to its
+// source while it is live (writes to the source are rejected), so reading
+// it is sound; `list()` is excluded because its result aliases the copy.
 bool python_converter::is_handled_numpy_view_call(const nlohmann::json &call)
 {
-  return is_value_builtin(call["func"]["id"].get<std::string>()) ||
+  const std::string name = call["func"]["id"].get<std::string>();
+  return is_value_builtin(name) ||
+         (name != "list" && consumes_numpy_view_as_list(call)) ||
          fold_numpy_view_call(call) || binds_every_numpy_view_argument(call);
 }
 

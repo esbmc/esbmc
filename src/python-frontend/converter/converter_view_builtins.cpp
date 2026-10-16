@@ -67,6 +67,24 @@ std::string assigned_name(const nlohmann::json &stmt)
   return "";
 }
 
+// The iterable a `key=` scan of sorted/min/max (preprocessor
+// generator_mixin.py) copies into its working sequence. The copy is `it[:]`
+// or `it`, which for a NumPy iterable is a view of it, not a list.
+const nlohmann::json *key_scan_iterable(const nlohmann::json &stmt)
+{
+  const std::string name = assigned_name(stmt);
+  if (
+    !stmt.contains("value") || stmt["value"].is_null() ||
+    (name.rfind("ESBMC_srt_", 0) != 0 && name.rfind("ESBMC_mmseq_", 0) != 0))
+    return nullptr;
+  const nlohmann::json &value = stmt["value"];
+  if (
+    value.value("_type", "") == "Subscript" &&
+    value["slice"].value("_type", "") == "Slice")
+    return &value["value"];
+  return &value;
+}
+
 // The lambda the module binds to `name` by its only assignment of it.
 const nlohmann::json *
 module_lambda(const nlohmann::json &body, const std::string &name)
@@ -327,6 +345,7 @@ bool python_converter::consumes_numpy_view_as_list(
   {
     const std::string arg = kw.value("arg", "");
     const bool allowed = (name == "sum" && arg == "start") ||
+                         (name == "sorted" && arg == "reverse") ||
                          ((name == "min" || name == "max") && arg == "default");
     if (!allowed)
       return false;
@@ -421,6 +440,15 @@ const nlohmann::json &python_converter::adapt_numpy_view_builtin_calls(
          {"lineno", "col_offset", "end_lineno", "end_col_offset"})
       if (statement.contains(key))
         rewritten[key] = statement[key];
+    return rewritten;
+  }
+  const nlohmann::json *scanned = key_scan_iterable(statement);
+  if (
+    scanned != nullptr &&
+    (is_rank1_numpy_view(*scanned) || is_rank1_numpy_array_name(*scanned)))
+  {
+    rewritten = statement;
+    rewritten["value"] = tolist_call(*scanned);
     return rewritten;
   }
   nlohmann::json copy = statement;
