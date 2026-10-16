@@ -46,7 +46,6 @@ add_library(symex
 
   testgen/pytest.cpp
   testgen/ctest.cpp
-  testgen/foundry.cpp
 
   symex_invariant.cpp)
 
