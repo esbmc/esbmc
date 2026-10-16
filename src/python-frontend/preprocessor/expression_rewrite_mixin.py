@@ -211,6 +211,7 @@ for {i} in range(0, len({seq})):
         self.functools_module_names = found["module"]
 
     def _is_functools_reduce_call(self, node):
+        """Whether @p node calls functools.reduce in a form the fold lowers."""
         func = node.func
         named = isinstance(func, ast.Name) and func.id in self.functools_reduce_names
         qualified = (isinstance(func, ast.Attribute) and func.attr == "reduce"
@@ -265,7 +266,7 @@ for {i} in range(0, len({seq})):
 
         tree = ast.parse(template.format(**names))
         for node in ast.walk(tree):
-            if "lineno" in node._attributes:
+            if isinstance(node, (ast.stmt, ast.expr)):
                 ast.copy_location(node, call)
         prefix = []
         for stmt in _Fill().visit(tree).body:
@@ -285,6 +286,7 @@ for {i} in range(0, len({seq})):
             self.conditional_depth = 0
 
         def _visit_conditionally(self, node):
+            """Visit @p node, whose operands may go unevaluated."""
             self.conditional_depth += 1
             try:
                 return self.generic_visit(node)
@@ -294,6 +296,7 @@ for {i} in range(0, len({seq})):
         visit_IfExp = visit_BoolOp = visit_Lambda = _visit_conditionally
 
         def _lower_functools_reduce_call(self, node):
+            """The lowered fold for a functools.reduce call, else None."""
             if self.conditional_depth or not self.preprocessor._is_functools_reduce_call(node):
                 return None
             return self.preprocessor._lower_functools_reduce(self.generic_visit(node))
