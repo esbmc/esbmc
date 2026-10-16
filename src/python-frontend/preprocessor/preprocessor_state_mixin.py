@@ -16,6 +16,7 @@ class PreprocessorStateMixin:
         self.enumerate_loop_counter = 0
         self._iter_counter = 0
         self.iterator_classes = set()
+        self.iterator_params = set()
         self.helper_functions_added = False
         self.functionKwonlyParams = {}
         self.static_methods = set()
@@ -28,6 +29,7 @@ class PreprocessorStateMixin:
         self.functionVarargs = set()
         self._vararg_func_defs = {}
         self._vararg_module_defs = set()
+        self._vararg_callee_defs = {}
         self._vararg_specializations = {}
         self._vararg_dropped_defs = set()
         self._vararg_scope_stack = []

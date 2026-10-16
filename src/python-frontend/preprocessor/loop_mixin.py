@@ -304,12 +304,15 @@ class LoopMixin:
 
     def _constructs_iterator_class(self, expr):
         """Whether `expr` is `Cls(...)`, or a name bound only by `x = Cls(...)`
-        in the scope being visited, for a class in `iterator_classes`."""
+        in the scope being visited or a parameter every call passes such a
+        construction, for a class in `iterator_classes`."""
         if isinstance(expr, ast.Name):
             scope = id(self._vararg_scope_stack[-1]) if self._vararg_scope_stack else None
             _, counts = self.scope_binding_counts.get(scope, (None, {}))
             if counts.get(expr.id) != 1:
                 return False
+            if (scope, expr.id) in self.iterator_params:
+                return True
             expr = self._assignment_call_origins.get(expr.id)
         return (isinstance(expr, ast.Call) and isinstance(expr.func, ast.Name)
                 and expr.func.id in self.iterator_classes)
@@ -814,6 +817,8 @@ class LoopMixin:
         target_info = self._parse_enumerate_target(node.target)
 
         if target_info["type"] == "nested":
+            if self._resolve_list_literal_iterable(enumerate_call.args[0]) is None:
+                return self._count_nested_enumerate_for(node, target_info)
             return self._unroll_nested_enumerate_for(node, target_info)
 
         if target_info["type"] == "unpacking":
@@ -913,9 +918,7 @@ class LoopMixin:
         start = self._static_int_value(start_value)
 
         blocker = None
-        if literal is None:
-            blocker = "the iterable is not a list literal"
-        elif start is None:
+        if start is None:
             blocker = "the start argument is not a constant integer"
         elif not self._can_safely_unroll_list_literal_for(node, literal):
             blocker = "the loop body contains break/continue/return"
@@ -931,6 +934,48 @@ class LoopMixin:
             self._reject_unsupported_loop(
                 node, f"enumerate() with a nested unpacking target is unsupported here: {blocker}")
         return literal, start
+
+    def _count_nested_enumerate_for(self, node, target_info):
+        """Lower `for i, (a, b) in enumerate(xs, s)` to a plain loop with a counter.
+
+            ESBMC_enum_count = s
+            for (a, b) in xs:
+                i = ESBMC_enum_count
+                ESBMC_enum_count = ESBMC_enum_count + 1
+                <body>
+        """
+        iterable, start_value = self._parse_enumerate_arguments(node.iter, node)
+        counter = f"ESBMC_enum_count_{self.enumerate_loop_counter}"
+        self.enumerate_loop_counter += 1
+
+        init = ast.AnnAssign(
+            target=self.create_name_node(counter, ast.Store(), node),
+            annotation=self.create_name_node("int", ast.Load(), node),
+            value=start_value,
+            simple=1,
+        )
+        index_assign = ast.AnnAssign(
+            target=self.create_name_node(target_info["index_var"], ast.Store(), node),
+            annotation=self.create_name_node("int", ast.Load(), node),
+            value=self.create_name_node(counter, ast.Load(), node),
+            simple=1,
+        )
+        increment = ast.Assign(
+            targets=[self.create_name_node(counter, ast.Store(), node)],
+            value=ast.BinOp(left=self.create_name_node(counter, ast.Load(), node),
+                            op=ast.Add(),
+                            right=self.create_constant_node(1, node)),
+        )
+        loop = ast.For(target=target_info["value_target"],
+                       iter=iterable,
+                       body=[index_assign, increment] + node.body,
+                       orelse=[])
+        for stmt in (init, loop):
+            self.ensure_all_locations(stmt, node)
+            ast.fix_missing_locations(stmt)
+
+        lowered = self.visit(loop)
+        return [self.visit(init)] + (lowered if isinstance(lowered, list) else [lowered])
 
     def _tuple_literal_enumerate_source(self, node):
         """Return (list literal, start) when unrolling would preserve tuple shape.

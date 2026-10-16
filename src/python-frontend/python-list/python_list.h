@@ -574,6 +574,12 @@ public:
    */
   void retype_element_store(exprt &lhs, exprt &rhs);
 
+  /// Records @p elem_type as the type of the element @p subscript stores to.
+  void record_element_store(
+    const nlohmann::json &subscript,
+    const std::string &elem_id,
+    const typet &elem_type);
+
   /// Equality of two list elements read as @p lhs_type and @p rhs_type for
   /// compare()'s fast path, or nullopt when it cannot relate them. Both types
   /// are numeric, bool or tuple.
@@ -656,6 +662,16 @@ public:
     const symbolt &list,
     const exprt &index,
     const nlohmann::json &element);
+
+  /**
+   * @brief Inside a try body, raises a catchable IndexError ahead of a pop()
+   * whose list is empty or whose index is out of range, before
+   * __ESBMC_list_pop asserts it
+   */
+  void guard_pop_index(
+    const symbolt &list,
+    const exprt &index,
+    const locationt &location);
 
   /// The __ESBMC_list_set_at call storing `rhs` into the list element `lhs`
   /// reads, when `rhs` changes the element's type; nullopt otherwise.
@@ -847,6 +863,18 @@ public:
    *  list to look up, so it has no single width and yields 0.
    */
   BigInt uniform_elem_size(const exprt &list) const;
+
+  /// Whether the list stored at index @p i of @p list is the one @p elem holds
+  /// now. The type map names a nested element by the symbol it was appended
+  /// from, and a later assignment can rebind that symbol when it is a user
+  /// variable.
+  expr2tc
+  stored_element_is(const symbolt &list, std::size_t i, const symbolt &elem);
+
+  /// The element type a subscript's base declares when the type map has no
+  /// record of the list: a name's annotation, or a called function's return
+  /// annotation. Empty when neither gives one.
+  typet unrecorded_base_elem_type();
 
   // True when the list's recorded element types include a tagged scalar, whose
   // payload width is per-element and symbolic (#7716).

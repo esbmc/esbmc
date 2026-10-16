@@ -477,6 +477,7 @@ class ModuleRewriteMixin:
         lower_match_statements(node)
         self.expand_unittest_main(node)
         self._rewrite_module_aliases(node)
+        self._rewrite_map_values(node)
         guard_unbound_locals(node)
         self.in_order_bindings.update(
             dispatch_rebound_methods(node, self._names_bound_by, self._variable_names(node),
@@ -495,6 +496,7 @@ class ModuleRewriteMixin:
         self._scan_imported_module_names(node)
 
         self.iterator_classes = self._scan_iterator_classes(node)
+        self.iterator_params = self._scan_iterator_params(node)
 
         for stmt in node.body:
             if isinstance(stmt, ast.Assign):
@@ -542,6 +544,41 @@ class ModuleRewriteMixin:
                     iterable.add(c.name)
                     grew = True
         return {name for name in iterable if bind_counts.get(name) == 1}
+
+    def _scan_iterator_params(self, node):
+        """`(id(def), param)` for each parameter of a module function that
+        every reference to the function passes a `Cls(...)` of an iterator
+        class, so a for loop over the parameter can use `__iter__` (#8628).
+
+        The function name must be bound once and only ever called directly,
+        so no call goes unseen."""
+        counts = Counter(name for n in ast.walk(node) for name in self._names_bound_by(n))
+        loads = Counter(n.id for n in ast.walk(node)
+                        if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load))
+        calls = {}
+        for n in ast.walk(node):
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
+                calls.setdefault(n.func.id, []).append(n)
+        return {(id(func), param)
+                for func in node.body if isinstance(func, ast.FunctionDef)
+                and counts[func.name] == 1 and loads[func.name] == len(calls.get(func.name, ())) > 0
+                for param in self._iterator_params_of(func, calls[func.name])}
+
+    def _iterator_params_of(self, func, calls):
+        """The plain positional parameters of `func` that each of `calls`
+        passes positionally as a `Cls(...)` of an iterator class."""
+        if func.args.vararg or func.args.kwarg or func.decorator_list or any(
+                c.keywords or any(isinstance(a, ast.Starred) for a in c.args) for c in calls):
+            return []
+        params = func.args.posonlyargs + func.args.args
+        return [
+            p.arg for i, p in enumerate(params)
+            if all(i < len(c.args) and self._is_iterator_construction(c.args[i]) for c in calls)
+        ]
+
+    def _is_iterator_construction(self, expr):
+        return (isinstance(expr, ast.Call) and isinstance(expr.func, ast.Name)
+                and expr.func.id in self.iterator_classes)
 
     @staticmethod
     def _has_iter(cls, iterable):

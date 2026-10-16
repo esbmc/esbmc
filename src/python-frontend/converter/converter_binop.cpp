@@ -1548,11 +1548,20 @@ exprt python_converter::handle_tagged_scalar_binop(
   const nlohmann::json &right,
   const nlohmann::json &element)
 {
-  if (op == "Eq" || op == "NotEq" || type_utils::is_ordered_comparison(op))
+  if (op == "Eq" || op == "NotEq")
     return dynamic_type_handler_.handle_comparison(op, lhs, rhs);
-  if (op == "Add" || op == "Sub" || op == "Div")
-    return dynamic_type_handler_.handle_arithmetic(
+  if (type_utils::is_ordered_comparison(op))
+  {
+    dynamic_type_handler_.guard_type_error(
       op, lhs, rhs, get_location_from_decl(element));
+    return dynamic_type_handler_.handle_comparison(op, lhs, rhs);
+  }
+  if (op == "Add" || op == "Sub" || op == "Div")
+  {
+    const locationt location = get_location_from_decl(element);
+    dynamic_type_handler_.guard_type_error(op, lhs, rhs, location);
+    return dynamic_type_handler_.handle_arithmetic(op, lhs, rhs, location);
+  }
 
   // Tagging only ever stores a number or a string (get_var_assign rejects every
   // other rvalue), so a tagged operand is never None. Only a literal None
@@ -1714,6 +1723,36 @@ exprt python_converter::keep_operand_calls(
   return kept;
 }
 
+exprt python_converter::handle_dict_bitwise(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &element)
+{
+  if (
+    (op != "BitOr" && op != "BitAnd" && op != "BitXor") ||
+    !lhs.type().is_struct() || !rhs.type().is_struct() ||
+    !dict_handler_->is_dict_type(lhs.type()) ||
+    !dict_handler_->is_dict_type(rhs.type()))
+    return nil_exprt();
+
+  // `d |= other` updates d in place, so an alias of d sees the new entries.
+  if (
+    op == "BitOr" && element.value("_type", "") == "AugAssign" &&
+    lhs.is_symbol())
+  {
+    dict_handler_->copy_dict_entries(lhs, rhs, element);
+    return lhs;
+  }
+  if (op == "BitOr" && element.value("_type", "") != "AugAssign")
+    return dict_handler_->handle_dict_union(lhs, rhs, element);
+
+  // Not modeled. Falling through would reach build_binary_expression's bitwise
+  // path, which emits a bitvector op over struct operands and SIGSEGVs in the
+  // SMT backend (a struct irep is handed to bitwuzla_mk_term2 as a term).
+  throw std::runtime_error("bitwise operations on dict are not supported");
+}
+
 exprt python_converter::get_binary_operator_expr(
   const nlohmann::json &element,
   const nlohmann::json &left,
@@ -1729,7 +1768,7 @@ exprt python_converter::get_binary_operator_expr(
 
   // Handle type identity checks (e.g., y is int, x is str)
   exprt type_identity_result =
-    handle_type_identity_check(op, lhs, rhs, left, right);
+    handle_type_comparison(op, lhs, rhs, left, right);
   if (!type_identity_result.is_nil())
     return type_identity_result;
 
@@ -1865,18 +1904,10 @@ exprt python_converter::get_binary_operator_expr(
       return set_result;
   }
 
-  // Python dict union (PEP 584: `d1 | d2`) and bitwise operations on dicts are
-  // not modeled. Reject them with a clean diagnostic: otherwise both dict
-  // structs fall through to build_binary_expression's bitwise path, which emits
-  // a bitvector BitOr over struct operands and SIGSEGVs in the SMT backend
-  // (a struct irep is handed to bitwuzla_mk_term2 as a term pointer).
   if (
-    (op == "BitOr" || op == "BitAnd" || op == "BitXor") &&
-    lhs.type().is_struct() && rhs.type().is_struct() &&
-    dict_handler_->is_dict_type(lhs.type()) &&
-    dict_handler_->is_dict_type(rhs.type()))
-    throw std::runtime_error(
-      "dict union '|' and bitwise operations on dict are not supported");
+    exprt dict_result = handle_dict_bitwise(op, lhs, rhs, element);
+    dict_result.is_not_nil())
+    return dict_result;
 
   // Handle membership operators
   if (op == "In")
