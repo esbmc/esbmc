@@ -837,7 +837,8 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     }
     else if (int_encoding)
     {
-      a = mk_div(args[0], args[1]);
+      a = args[0]->sort->id == SMT_SORT_INT ? mk_truncated_div(args[0], args[1])
+                                            : mk_div(args[0], args[1]);
     }
     else if (is_unsignedbv_type(d.side_1) && is_unsignedbv_type(d.side_2))
     {
@@ -1837,7 +1838,7 @@ smt_astt
 smt_solver_baset::convert_modulus(const modulus2t &m, smt_astt a, smt_astt b)
 {
   if (int_encoding)
-    return mk_mod(a, b);
+    return a->sort->id == SMT_SORT_INT ? mk_truncated_rem(a, b) : mk_mod(a, b);
   if (is_fixedbv_type(m.side_1) && is_fixedbv_type(m.side_2))
     return mk_bvsmod(a, b);
 
@@ -1850,6 +1851,32 @@ smt_solver_baset::convert_modulus(const modulus2t &m, smt_astt a, smt_astt b)
     return mk_bvsub(a, mk_bvmul(quot, b));
   }
   return both_unsigned ? mk_bvumod(a, b) : mk_bvsmod(a, b);
+}
+
+/// SMT-LIB integer div/mod are Euclidean (0 <= mod < |b|); C11 6.5.5p6
+/// truncates toward zero. They differ only when a < 0 and b does not divide a.
+smt_astt smt_solver_baset::needs_truncation(smt_astt a, smt_astt b)
+{
+  smt_astt zero = mk_smt_int(BigInt(0));
+  return mk_and(mk_lt(a, zero), mk_not(mk_eq(mk_mod(a, b), zero)));
+}
+
+smt_astt smt_solver_baset::mk_truncated_div(smt_astt a, smt_astt b)
+{
+  smt_astt toward_zero = mk_ite(
+    mk_gt(b, mk_smt_int(BigInt(0))),
+    mk_smt_int(BigInt(1)),
+    mk_smt_int(BigInt(-1)));
+  smt_astt q = mk_div(a, b);
+  return mk_ite(needs_truncation(a, b), mk_add(q, toward_zero), q);
+}
+
+smt_astt smt_solver_baset::mk_truncated_rem(smt_astt a, smt_astt b)
+{
+  smt_astt zero = mk_smt_int(BigInt(0));
+  smt_astt abs_b = mk_ite(mk_ge(b, zero), b, mk_neg(b));
+  smt_astt r = mk_mod(a, b);
+  return mk_ite(needs_truncation(a, b), mk_sub(r, abs_b), r);
 }
 
 void smt_solver_baset::note_division_operands(const expr2tc &expr)
