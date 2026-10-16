@@ -3059,3 +3059,5 @@ regression/python/github_8408_other_binding_fail
 regression/python/github_8408_override_unsupported_fail
 regression/python/github_8408_spine_unsupported
 regression/python/github_8408_unsupported
+regression/python/github_8652
+regression/python/github_8652_fail

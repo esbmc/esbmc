@@ -604,6 +604,10 @@ private:
 
   exprt get_function_body_or_unsupported(const nlohmann::json &function_node);
 
+  /// Moves the declaration of each local first assigned in a nested block of
+  /// @p body to the top, as a Python local belongs to its whole function.
+  static exprt hoist_local_declarations(exprt body);
+
   bool function_may_be_called(const nlohmann::json &function_node) const;
 
   void
