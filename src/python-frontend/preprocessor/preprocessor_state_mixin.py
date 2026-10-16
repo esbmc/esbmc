@@ -28,6 +28,7 @@ class PreprocessorStateMixin:
         self.functionVarargs = set()
         self._vararg_func_defs = {}
         self._vararg_module_defs = set()
+        self._vararg_callee_defs = {}
         self._vararg_specializations = {}
         self._vararg_dropped_defs = set()
         self._vararg_scope_stack = []
