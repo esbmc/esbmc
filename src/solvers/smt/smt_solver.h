@@ -894,7 +894,6 @@ public:
   smt_astt convert_modulus(const modulus2t &m, smt_astt a, smt_astt b);
   /** C's / and % on Int-sorted operands, from the solver's Euclidean
    *  div/mod (#8662). */
-  smt_astt needs_truncation(smt_astt a, smt_astt b);
   smt_astt mk_truncated_div(smt_astt a, smt_astt b);
   smt_astt mk_truncated_rem(smt_astt a, smt_astt b);
   /** Convert constant_array2tc's and constant_array_of2tc's */

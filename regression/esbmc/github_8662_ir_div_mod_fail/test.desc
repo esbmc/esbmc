@@ -2,3 +2,4 @@ CORE
 main.c
 --ir
 ^VERIFICATION FAILED$
+Euclidean rounding
