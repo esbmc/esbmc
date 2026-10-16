@@ -20,6 +20,7 @@ option(ENABLE_WERROR "All warnings are treated as errors during compilation (def
 option(BUILD_STATIC "Build ESBMC in static mode (default: OFF)" OFF)
 option(BUILD_DOC "Build ESBMC documentation" OFF)
 option(ENABLE_REGRESSION "Add Regressions Tests (default: OFF)" OFF)
+option(ENABLE_TRACE_REPLAY "Build interactive terminal counterexample replay (default: OFF)" OFF)
 option(ENABLE_COVERAGE "Generate Coverage Report (default: OFF)" OFF)
 option(ENABLE_SOLIDITY_FRONTEND "Enable Solidity language frontend (default: OFF)" OFF)
 option(ENABLE_GOTO_CONTRACTOR "Enable IBEX in the build (default: OFF)" OFF)

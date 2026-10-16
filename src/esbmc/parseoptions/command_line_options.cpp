@@ -842,5 +842,30 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   if (ts_strategy_requested())
     options.set_option("k-induction", true);
 
+  if (cmdline.isset("trace-replay"))
+  {
+#ifndef ENABLE_TRACE_REPLAY
+    log_error("--trace-replay requires a build with ENABLE_TRACE_REPLAY=ON");
+    exit(1);
+#else
+    if (
+      options.get_bool_option("k-induction-parallel") ||
+      options.get_bool_option("multi-property") ||
+      options.get_bool_option("result-only") ||
+      options.get_bool_option("ltl") ||
+      options.get_bool_option("smt-during-symex") ||
+      cmdline.isset("file-output"))
+    {
+      log_error(
+        "--trace-replay does not support parallel k-induction, "
+        "multi-property, --result-only, --ltl, --smt-during-symex "
+        "or --file-output");
+      exit(1);
+    }
+    // Replay needs assignments that formula slicing would otherwise discard.
+    options.set_option("no-slice", true);
+#endif
+  }
+
   config.options = options;
 }

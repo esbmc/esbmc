@@ -407,7 +407,7 @@ TEST_CASE(
   program prog =
     goto_factory::get_goto_functions(src, goto_factory::Architecture::BIT_64);
   goto_functionst &functions = prog.functions;
-  mark_decl_as_non_det(prog.context).run(functions);
+  mark_decl_as_non_det(prog.context, false).run(functions);
   andersent andersen;
   andersen(functions);
 
@@ -439,7 +439,7 @@ TEST_CASE(
   program prog =
     goto_factory::get_goto_functions(src, goto_factory::Architecture::BIT_64);
   goto_functionst &functions = prog.functions;
-  mark_decl_as_non_det(prog.context).run(functions);
+  mark_decl_as_non_det(prog.context, false).run(functions);
   andersent andersen;
   andersen(functions);
 

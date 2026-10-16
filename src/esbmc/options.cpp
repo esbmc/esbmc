@@ -82,6 +82,10 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Enable --no-slice and hide internal symbols from the trace"},
     {"symex-trace", NULL, "Print instructions during symbolic execution"},
+    {"trace-replay",
+     NULL,
+     "Interactively replay a C counterexample in the terminal "
+     "(requires ENABLE_TRACE_REPLAY)"},
     {"ssa-trace", NULL, "Print SSA during SMT encoding"},
     {"ssa-smt-trace", NULL, "Print generated SMT during SMT encoding"},
     {"ssa-features-dump",

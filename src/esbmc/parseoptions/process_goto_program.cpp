@@ -248,6 +248,12 @@ bool esbmc_parseoptionst::process_goto_program(
                   cmdline.isset("k-path-coverage-claims") ||
                   cmdline.isset("dead-code-check");
 
+    if (cmdline.isset("trace-replay") && is_coverage)
+    {
+      log_error("--trace-replay does not support coverage modes");
+      return true;
+    }
+
     // Single source of truth for "this run measures coverage", read back by
     // bmc.cpp. --dead-code-check borrows the same instrumentation but keeps a
     // verdict and reports CWE-561 advisories, so it is deliberately excluded:

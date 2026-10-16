@@ -51,6 +51,22 @@ else()
   endif()
 endif()
 
+if(ENABLE_TRACE_REPLAY)
+  if(DOWNLOAD_DEPENDENCIES)
+    include(FetchContent)
+    set(FTXUI_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(FTXUI_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(FTXUI_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+    set(FTXUI_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+    fetchcontent_declare(ftxui
+      GIT_REPOSITORY https://github.com/ArthurSonzogni/FTXUI.git
+      GIT_TAG 5cfed50702f52d51c1b189b5f97f8beaf5eaa2a6) # v6.1.9
+    fetchcontent_makeavailable(ftxui)
+  else()
+    find_package(ftxui 6.1.9 CONFIG REQUIRED)
+  endif()
+endif()
+
 if(ESBMC_CHERI_CLANG)
   include(FetchContent)
   fetchcontent_declare(cheri_compressed_cap

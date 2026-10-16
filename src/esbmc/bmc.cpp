@@ -27,6 +27,9 @@
 #include <ac_config.h>
 #include <esbmc/bmc.h>
 #include <esbmc/property_report.h>
+#ifdef ENABLE_TRACE_REPLAY
+#  include <esbmc/trace_replay/trace_replay.h>
+#endif
 #include <fstream>
 #include <goto-programs/goto_loops.h>
 #include <goto-symex/trace/build_goto_trace.h>
@@ -471,6 +474,30 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
   log_fail("\n[Counterexample]\n");
   show_goto_trace(oss, ns, goto_trace);
   log_result("{}", oss.str());
+#ifdef ENABLE_TRACE_REPLAY
+  if (options.get_bool_option("trace-replay"))
+  {
+    std::string context = "BMC";
+    if (options.get_bool_option("k-induction"))
+      context = "K-induction";
+    else if (options.get_bool_option("incremental-bmc"))
+      context = "Incremental BMC";
+
+    const bool proof_model = options.get_bool_option("forward-condition") ||
+                             options.get_bool_option("inductive-step");
+    if (options.get_bool_option("inductive-step"))
+      context += " / inductive step";
+    else if (options.get_bool_option("forward-condition"))
+      context += " / forward condition";
+    else if (options.get_bool_option("base-case"))
+      context += " / base case";
+
+    const auto unwind = options.get_option("unwind");
+    if (!unwind.empty())
+      context += " / k = " + unwind;
+    replay_goto_trace(ns, goto_trace, context, proof_model);
+  }
+#endif
 }
 
 void bmct::generate_smt_from_equation(

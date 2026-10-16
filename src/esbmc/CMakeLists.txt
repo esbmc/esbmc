@@ -76,6 +76,12 @@ target_link_libraries(esbmc-driver PUBLIC
                             solvers clibs gotoalgorithms cache ESBMC::boost goto2c ${OS_INCLUDE_LIBS}
                             nlohmann_json::nlohmann_json)
 
+if(ENABLE_TRACE_REPLAY)
+  target_sources(esbmc-driver PRIVATE trace_replay/trace_replay.cpp)
+  target_compile_definitions(esbmc-driver PRIVATE ENABLE_TRACE_REPLAY)
+  target_link_libraries(esbmc-driver PRIVATE ftxui::component ftxui::dom ftxui::screen)
+endif()
+
 add_executable(esbmc main.cpp globals.cpp ${CMAKE_CURRENT_BINARY_DIR}/buildidobj.c)
 target_link_libraries(esbmc PRIVATE esbmc-driver)
 if(MSVC)
