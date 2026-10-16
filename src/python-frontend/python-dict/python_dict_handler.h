@@ -186,6 +186,16 @@ public:
     const nlohmann::json &element,
     const exprt &target_symbol);
 
+  /// Initialises \p target_symbol as an empty dict located at \p element.
+  void
+  create_empty_dict(const nlohmann::json &element, const exprt &target_symbol);
+
+  /// Builds a dict display holding a `**` unpack ({**a, "k": v, **b}) by
+  /// applying its entries in order to an empty dict.
+  exprt create_dict_with_unpacking(
+    const nlohmann::json &element,
+    const exprt &target_symbol);
+
   /**
    * @brief Handles dictionary subscript access (e.g., `dict['key']`).
    *
@@ -513,6 +523,22 @@ public:
    */
   exprt
   handle_dict_update(const exprt &dict_expr, const nlohmann::json &call_node);
+
+  exprt bind_dict_source(const exprt &source, const nlohmann::json &node);
+
+  /// Copies every entry of \p source into \p dict_expr, overwriting keys
+  /// already present (dict.update(other) semantics).
+  void copy_dict_entries(
+    const exprt &dict_expr,
+    const exprt &source,
+    const nlohmann::json &call_node);
+
+  /// Builds `lhs | rhs` (PEP 584) as a new dict holding lhs's entries updated
+  /// with rhs's.
+  exprt handle_dict_union(
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &element);
 
   /**
    * @brief Handles dict.copy() method calls.

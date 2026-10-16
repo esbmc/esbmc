@@ -1,0 +1,4 @@
+CORE
+main.py
+--unwind 4
+^ERROR: bitwise operations on dict are not supported$

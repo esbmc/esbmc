@@ -1,5 +1,6 @@
 #pragma once
 
+#include <deque>
 #include <functional>
 #include <nlohmann/json.hpp>
 #include <python-frontend/math/complex_handler.h>
@@ -278,6 +279,14 @@ public:
   /// The current function as the AST lookups in json_utils name it: a method
   /// is "Cls@C@m", so a same-named method of another class is not found.
   std::string current_ast_scope() const;
+
+  /// Whether @p symbol is one of the converter's own temporaries, which are
+  /// assigned once where they are made. A Python local is file-local too, so
+  /// that flag does not tell the two apart.
+  bool is_frontend_temporary(const symbolt &symbol) const
+  {
+    return has_prefix(symbol.id.as_string(), sym_generator_.prefix);
+  }
 
   const namespacet &name_space() const
   {
@@ -1241,6 +1250,12 @@ private:
   // any_type() for any other write or a setattr call.
   typet none_attribute_type(const std::string &attr_name) const;
 
+  bool held_by_reference(
+    bool rhs_is_aliased_name,
+    const std::string &attr_name,
+    const typet &type,
+    const std::string &annotated_type) const;
+
   /**
    * @brief Build a tuple struct type from an AST value node when the annotation
    *        is bare `tuple`.
@@ -1269,6 +1284,25 @@ private:
     const nlohmann::json &import_node,
     module_locator &locator,
     code_blockt &code);
+
+  bool import_one_module(
+    const nlohmann::json &import_node,
+    module_locator &locator,
+    code_blockt &code);
+
+  std::vector<const nlohmann::json *>
+  import_nodes(std::deque<nlohmann::json> &submodules) const;
+
+  std::string module_source_file(
+    const std::string &module,
+    const module_locator &locator) const;
+
+  /// An `import <pkg>.<name> as <name>` node for each name that
+  /// `from <pkg> import <name>` binds to a submodule rather than to a
+  /// definition of <pkg> itself (#8375).
+  std::vector<nlohmann::json> submodule_imports(
+    const nlohmann::json &import_node,
+    const module_locator &locator) const;
 
   /// Binds an `import <mod> as <alias>` alias to the module's file, so the
   /// alias resolves like the module name does (#6296).
@@ -1323,6 +1357,7 @@ private:
   void pre_collect_module_asts(
     const nlohmann::json &module_ast,
     module_locator &locator);
+  void pre_collect_import(const nlohmann::json &node, module_locator &locator);
 
   symbolt *find_function_in_base_classes(
     const std::string &class_name,
@@ -1721,6 +1756,22 @@ private:
   typet resolve_numpy_reducer_call_array_type(
     const nlohmann::json &ast_node,
     const typet &current_type);
+
+  /**
+   * @brief The return type of the lambda an inferred-annotation RHS calls.
+   *
+   * The annotator guesses a lambda call's result type from the shape of its
+   * body (a BinOp is taken to be a float), while the converter declares the
+   * type the body actually returns (#7745), so the guess loses an int result
+   * (#8403).
+   *
+   * @return The lambda's integral or bool return type when the RHS is
+   *   `name(...)` with `name` bound to a lambda, as the annotator sees it,
+   *   and to a function pointer; otherwise `current_type`.
+   */
+  typet resolve_lambda_call_result_type(
+    const nlohmann::json &ast_node,
+    const typet &current_type) const;
 
   std::string resolve_name_symbol_id(const std::string &name) const;
   symbolt *find_enclosing_scope_symbol(symbol_id sid) const;
@@ -2496,6 +2547,14 @@ private:
     const exprt &rhs,
     const nlohmann::json &left,
     const nlohmann::json &right,
+    const nlohmann::json &element);
+
+  /// `d1 | d2` (PEP 584) on two dicts; nil if either operand is not a dict.
+  /// Throws for the other bitwise operators on dicts.
+  exprt handle_dict_bitwise(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
     const nlohmann::json &element);
 
   exprt

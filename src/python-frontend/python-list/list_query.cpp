@@ -101,7 +101,7 @@ expr2tc python_list::stored_element_is(
 {
   // A frontend temporary is assigned once, where the list was built, so only
   // a user binding can have moved on since the append.
-  if (elem.file_local)
+  if (converter_.is_frontend_temporary(elem))
     return gen_true_expr();
   const exprt at = build_list_at_call(
     build_symbol(list), from_integer(BigInt(i), size_type()), list_value_);

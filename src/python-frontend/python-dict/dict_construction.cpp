@@ -511,6 +511,13 @@ exprt python_dict_handler::create_dict_from_literal(
   const nlohmann::json &element,
   const exprt &target_symbol)
 {
+  // A `**` unpack serialises the unpacked source with a null key.
+  const auto &entry_keys = element["keys"];
+  if (std::any_of(entry_keys.begin(), entry_keys.end(), [](const auto &key) {
+        return key.is_null();
+      }))
+    return create_dict_with_unpacking(element, target_symbol);
+
   locationt location = converter_.get_location_from_decl(element);
 
   // Generate unique name based on location
@@ -561,14 +568,6 @@ exprt python_dict_handler::create_dict_from_literal(
   // Push initial key-value pairs
   const auto &keys = element["keys"];
   const auto &values = element["values"];
-
-  // A `**` unpack inside a dict literal (e.g. {**a, "b": 2}) serialises the
-  // unpacked source with a null key. Dict unpacking is not modelled, so reject
-  // it with a clean diagnostic rather than crashing on get_expr(null) below
-  // (mirrors the dict-union '|' guard in converter_binop.cpp).
-  for (const auto &key_node : keys)
-    if (key_node.is_null())
-      throw std::runtime_error("dict unpacking ({**d}) is not supported");
 
   python_list list_handler(converter_, element);
 
@@ -707,4 +706,50 @@ exprt python_dict_handler::create_dict_from_literal(
   }
 
   return target_symbol;
+}
+
+exprt python_dict_handler::create_dict_with_unpacking(
+  const nlohmann::json &element,
+  const exprt &target_symbol)
+{
+  create_empty_dict(element, target_symbol);
+
+  const auto &keys = element["keys"];
+  const auto &values = element["values"];
+  for (size_t i = 0; i < keys.size(); ++i)
+  {
+    if (keys[i].is_null())
+    {
+      exprt source = converter_.get_expr(values[i]);
+      if (!is_dict_type(source.type()))
+        throw std::runtime_error(
+          "dict unpacking ({**d}) is only supported for a dict");
+      copy_dict_entries(target_symbol, source, values[i]);
+      continue;
+    }
+
+    const exprt key_expr = get_key_expr(keys[i]);
+    const exprt value_expr = converter_.get_expr(values[i]);
+    code_blockt pair_block;
+    handle_dict_subscript_assign(
+      target_symbol,
+      key_expr,
+      value_expr,
+      converter_.get_location_from_decl(keys[i]),
+      keys[i],
+      pair_block);
+    converter_.add_instruction(pair_block);
+  }
+  return target_symbol;
+}
+
+void python_dict_handler::create_empty_dict(
+  const nlohmann::json &element,
+  const exprt &target_symbol)
+{
+  nlohmann::json empty_dict = element;
+  empty_dict["_type"] = "Dict";
+  empty_dict["keys"] = nlohmann::json::array();
+  empty_dict["values"] = nlohmann::json::array();
+  create_dict_from_literal(empty_dict, target_symbol);
 }
