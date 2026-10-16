@@ -65,7 +65,7 @@ smt_tuple_node_flattener::mk_tuple_symbol(const std::string &name, smt_sortt s)
   return new tuple_node_smt_ast(*this, ctx, s, name2);
 }
 
-// 2C.2c: rebuild a K-dim array_type chain with its leaf replaced by
+// rebuild a K-dim array_type chain with its leaf replaced by
 // `leaf` (each dimension's size / size_is_infinite preserved).  Used to
 // derive the per-field native array type array^K<fi> from array^K<S>.
 static type2tc rebuild_array_leaf(const type2tc &t, const type2tc &leaf_type)
@@ -109,12 +109,12 @@ smt_astt smt_tuple_node_flattener::mk_tuple_array_symbol(const expr2tc &expr)
     return array_conv.mk_array_symbol(name, sort, subtype);
   }
 
-  // 2C.2c — K>=2 struct leaf: struct-of-arrays representation.  A
+  // K>=2 struct leaf: struct-of-arrays representation.  A
   // tuple_node whose sort is the leaf struct (project / eq / get walk
   // its m members) and whose elements[i] is a solver-NATIVE array
   // array^K<fi> (primitive fi ⇒ Branch A native, no bare sort, no
   // array_conv; struct fi ⇒ convert_ast re-enters this builder and
-  // recurses).  No read/write semantics change here — that is 2C.2d.
+  // recurses).
   smt_sortt tsort = ctx->convert_sort(leaf);
   tuple_node_smt_ast *result = new tuple_node_smt_ast(*this, ctx, tsort, name);
 
@@ -331,7 +331,7 @@ expr2tc smt_tuple_node_flattener::tuple_get_array_elem(
   uint64_t index,
   const type2tc &subtype)
 {
-  // 2C.2d: a K>=2 struct-of-arrays value (mk_tuple_array_symbol) is a
+  // a K>=2 struct-of-arrays value (mk_tuple_array_symbol) is a
   // tuple_node over solver-native per-field arrays, not an array_conv
   // array_ast — array_conv.get_array_elem's downcast would assert.
   // Counterexample model extraction for nested tuple-arrays is
@@ -366,7 +366,7 @@ smt_sortt smt_tuple_node_flattener::mk_struct_sort(const type2tc &type)
     const array_type2t &arrtype = to_array_type(type);
     unsigned int dom_width = array_domain_width_or_word_size(arrtype);
 
-    // 2C.2a: a tuple-array sort may carry K array dimensions wrapping a
+    // a tuple-array sort may carry K array dimensions wrapping a
     // struct leaf (K >= 1; any dimension may be infinite).  Build the
     // range sort recursively: an inner array dimension recurses here, a
     // struct (or any non-array) leaf goes through convert_sort exactly as
