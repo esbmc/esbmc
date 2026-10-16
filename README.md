@@ -64,7 +64,7 @@ on regardless of `--no-standard-checks`.
 | Pointer alignment | (default on) | `--no-align-check` | on | off |
 | Pointer relations (`p < q` on unrelated objects) | (default on) | `--no-pointer-relation-check` | on | off |
 | VLA size overflow | (default on) | `--no-vla-size-check` | on | off |
-| Narrowing cast | (default on) | `--no-narrowing-check` | on | off (covered by Solidity 0.8 built-in) |
+| Narrowing cast | C/C++: `--int-encoding` with `--overflow-check` or `--unsigned-overflow-check`; Solidity: `--narrowing-check` | Solidity: `--no-narrowing-check` | off | off (opt-in) |
 | `scanf` unlimited-width overflow | (default on) | `--no-unlimited-scanf-check` | on | off |
 | Signed integer over/underflow | `--overflow-check` | (default off) | off | off |
 | Unsigned integer over/underflow | `--unsigned-overflow-check` | (default off) | off | off |

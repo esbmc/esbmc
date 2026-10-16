@@ -344,15 +344,9 @@ void goto_checkt::cast_overflow_check(
   bool is_solidity = (config.language.lid == language_idt::SOLIDITY);
   if (is_solidity)
   {
-    // Narrowing check has its own dedicated toggle; it is NO LONGER gated
-    // on --overflow-check / --unsigned-overflow-check. Those two flags
-    // implicitly enabling narrowing was the source of a long-standing
-    // footgun — users asking for arithmetic overflow on uint256 got four
-    // spurious claims per mapping access for free. Under the new regime,
-    // the check is on by default as part of the standard-check set and is
-    // silenced by either --no-narrowing-check (individual toggle) or
-    // --no-standard-checks (bulk, expanded in esbmc_parseoptions to set
-    // no-narrowing-check).
+    // Solidity narrowing is opt-in via --narrowing-check, independent of
+    // arithmetic overflow checks. The CLI disables it by default through
+    // --no-standard-checks; --no-narrowing-check also disables it directly.
     if (disable_narrowing_check)
       return;
     // Only check casts in .sol files, not C library models

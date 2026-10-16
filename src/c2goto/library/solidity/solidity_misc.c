@@ -205,7 +205,7 @@ __ESBMC_HIDE:;
   block_prevrandao = nondet_uint256();
 }
 
-/* Revert observation (docs/claude/solidity/revert-observation.md): a
+/* Revert observation: a
  * verification-only readable flag recording whether the most recent external
  * (public/external) call reverted.
  *

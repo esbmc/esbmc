@@ -723,8 +723,7 @@ static void warn_undefined_external_symbols(const contextt &context)
 // Expand --no-standard-checks into the individual checks it stands for. Must
 // run before goto_convert, because VLA size checks are generated during goto
 // conversion.
-static void
-expand_no_standard_checks(const cmdlinet &cmdline, optionst &options)
+void esbmc_parseoptionst::expand_no_standard_checks(optionst &options) const
 {
   if (
     !cmdline.isset("no-standard-checks") &&
@@ -746,6 +745,8 @@ expand_no_standard_checks(const cmdlinet &cmdline, optionst &options)
   options.set_option("no-align-check", true);
   if (!cmdline.isset("bounds-check"))
     options.set_option("no-bounds-check", true);
+  if (!cmdline.isset("narrowing-check"))
+    options.set_option("no-narrowing-check", true);
 }
 
 bool esbmc_parseoptionst::is_solidity_input() const
@@ -849,7 +850,7 @@ bool esbmc_parseoptionst::parse_goto_program(
     }
 
     set_solidity_check_defaults(options);
-    expand_no_standard_checks(cmdline, options);
+    expand_no_standard_checks(options);
     expand_python_check_exceptions(context, options);
 
     log_progress("Generating GOTO Program");
