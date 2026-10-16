@@ -1,9 +1,3 @@
-Warning: Unused local variable.
-  --> contract.sol:14:9:
-   |
-14 |         uint256 bad = safeDiv(10, 0);
-   |         ^^^^^^^^^^^
-
 JSON AST (compact format):
 
 

@@ -1,4 +1,4 @@
 CORE
-contract.sol
---contract InvMutTest --bound --no-standard-checks --unwind 4 --no-unwinding-assertions --cvc5
+contract.solast
+--sol contract.sol --contract InvMutTest --bound --no-standard-checks --unwind 4 --no-unwinding-assertions --cvc5
 ^VERIFICATION FAILED$

@@ -127,6 +127,13 @@ if(NOT WIN32)
     endif()
 endif()
 
+# A `solc` executable is on PATH. Most Solidity tests ship a precompiled .solast,
+# but the TOD checks generate a harness contract at run time and compile it.
+find_program(ESBMC_TEST_SOLC_BINARY solc)
+if(ESBMC_TEST_SOLC_BINARY)
+    list(APPEND ESBMC_TEST_CAPABILITIES solc_binary)
+endif()
+
 # The per-test budget is long enough for a test that takes minutes to solve.
 # ESBMC_REGRESS_TIMEOUT is one global number, so a test needing more than a
 # short leg allows has no way to ask for more; without this it is reported as

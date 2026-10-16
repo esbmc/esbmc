@@ -1,4 +1,4 @@
 CORE
-contract.sol
---contract Harness
+contract.solast
+--sol contract.sol --contract Harness
 ^VERIFICATION SUCCESSFUL$

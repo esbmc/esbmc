@@ -1,4 +1,4 @@
 KNOWNBUG
-contract.sol
---contract C --unbound --no-standard-checks --incremental-bmc
+contract.solast
+--sol contract.sol --contract C --unbound --no-standard-checks --incremental-bmc
 ^VERIFICATION SUCCESSFUL$

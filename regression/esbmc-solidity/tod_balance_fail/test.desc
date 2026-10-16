@@ -1,4 +1,5 @@
 CORE
-contract.sol
---contract Bal --tod-balance-check=payFixed,payIfRich --k-induction --max-k-step 20 --k-step 3
+contract.solast
+--sol contract.sol --contract Bal --tod-balance-check=payFixed,payIfRich --k-induction --max-k-step 20 --k-step 3
+REQUIRES solc_binary
 ^VERIFICATION FAILED$

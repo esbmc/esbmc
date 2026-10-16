@@ -1,5 +1,5 @@
 CORE
-contract.sol
---contract C --no-standard-checks --unwind 2 --no-unwinding-assertions --negating-property C:f:5:extra
+contract.solast
+--sol contract.sol --contract C --no-standard-checks --unwind 2 --no-unwinding-assertions --negating-property C:f:5:extra
 ^WARNING: --negating-property: malformed spec 'C:f:5:extra'
 ^VERIFICATION SUCCESSFUL$

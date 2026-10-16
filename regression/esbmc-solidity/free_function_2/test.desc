@@ -1,4 +1,4 @@
 CORE
-contract.sol
---contract FreeFuncTest --div-by-zero-check --k-induction --max-k-step 20 --k-step 3
+contract.solast
+--sol contract.sol --contract FreeFuncTest --div-by-zero-check --k-induction --max-k-step 20 --k-step 3
 ^VERIFICATION FAILED$

@@ -1,5 +1,5 @@
 CORE
-contract.sol
+contract.solast
 --sol contract.sol --no-standard-checks --k-induction --k-step 2 --max-k-step 5
 ^Solving with solver Bitwuzla
 ^VERIFICATION SUCCESSFUL$

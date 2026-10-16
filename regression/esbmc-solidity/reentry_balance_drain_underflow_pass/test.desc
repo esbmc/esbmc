@@ -1,4 +1,4 @@
 CORE
-contract.sol
+contract.solast
 --sol contract.sol --contract Pay --reentry-balance-drain-check --unwind 4 --no-unwinding-assertions
 ^VERIFICATION SUCCESSFUL$

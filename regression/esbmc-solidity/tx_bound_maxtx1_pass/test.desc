@@ -1,4 +1,4 @@
 CORE
-contract.sol
---contract C --no-standard-checks --k-induction --solidity-max-tx 1
+contract.solast
+--sol contract.sol --contract C --no-standard-checks --k-induction --solidity-max-tx 1
 ^VERIFICATION SUCCESSFUL$

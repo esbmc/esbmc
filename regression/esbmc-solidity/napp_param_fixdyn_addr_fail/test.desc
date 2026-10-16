@@ -1,4 +1,4 @@
 CORE
-contract.sol
---contract C --unbound --no-standard-checks --k-induction --max-k-step 25 --k-step 2
+contract.solast
+--sol contract.sol --contract C --unbound --no-standard-checks --k-induction --max-k-step 25 --k-step 2
 ^VERIFICATION FAILED$

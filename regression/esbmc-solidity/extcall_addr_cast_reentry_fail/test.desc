@@ -1,4 +1,4 @@
 CORE
-contract.sol
---contract Attacker --bound --no-standard-checks --incremental-bmc
+contract.solast
+--sol contract.sol --contract Attacker --bound --no-standard-checks --incremental-bmc
 ^VERIFICATION FAILED$

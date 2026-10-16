@@ -1,5 +1,5 @@
 CORE
-contract.sol
---contract Fund --tod-race-check=auto --k-induction --max-k-step 20 --k-step 3
+contract.solast
+--sol contract.sol --contract Fund --tod-race-check=auto --k-induction --max-k-step 20 --k-step 3
 ^--tod-race-check: discovered 0 candidate pair\(s\) in 'Fund'$
 ^--tod-race-check: no race TOD pairs detected — done\.$

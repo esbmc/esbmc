@@ -1,4 +1,4 @@
 KNOWNBUG
-contract.sol
---contract C --no-standard-checks --unwind 2 --no-unwinding-assertions
+contract.solast
+--sol contract.sol --contract C --no-standard-checks --unwind 2 --no-unwinding-assertions
 ^VERIFICATION SUCCESSFUL$

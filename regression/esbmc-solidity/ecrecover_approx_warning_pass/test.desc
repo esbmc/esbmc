@@ -1,5 +1,5 @@
 CORE
-contract.sol
---contract C --no-standard-checks --unwind 1 --no-unwinding-assertions
+contract.solast
+--sol contract.sol --contract C --no-standard-checks --unwind 1 --no-unwinding-assertions
 ^WARNING: \[approx\] ecrecover at .*: \(v,r,s\) ignored, returns nondet address.*$
 ^VERIFICATION SUCCESSFUL$

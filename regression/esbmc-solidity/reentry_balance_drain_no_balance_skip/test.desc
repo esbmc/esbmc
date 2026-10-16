@@ -1,5 +1,5 @@
 CORE
-contract.sol
+contract.solast
 --sol contract.sol --contract C --reentry-balance-drain-check --unwind 4 --no-unwinding-assertions
 ^VERIFICATION SUCCESSFUL$
 ^WARNING: \[approx\] --reentry-balance-drain-check skipped: C has no outbound value-transfer call sites$

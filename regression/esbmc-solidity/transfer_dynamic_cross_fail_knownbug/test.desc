@@ -1,4 +1,4 @@
 KNOWNBUG
-contract.sol
---contract Probe --bound --k-induction --max-k-step 10 --base-k-step 4 --solidity-max-tx 1 --memlimit 4096
+contract.solast
+--sol contract.sol --contract Probe --bound --k-induction --max-k-step 10 --base-k-step 4 --solidity-max-tx 1 --memlimit 4096
 ^VERIFICATION FAILED$

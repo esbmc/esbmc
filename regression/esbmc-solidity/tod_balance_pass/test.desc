@@ -1,4 +1,5 @@
 CORE
-contract.sol
---contract Bal --tod-balance-check=payA,payB --unwind 5 --no-unwinding-assertions
+contract.solast
+--sol contract.sol --contract Bal --tod-balance-check=payA,payB --unwind 5 --no-unwinding-assertions
+REQUIRES solc_binary
 ^VERIFICATION SUCCESSFUL$

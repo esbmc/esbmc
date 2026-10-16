@@ -1,5 +1,5 @@
 CORE
-contract.sol
+contract.solast
 --sol contract.sol --contract H --div-by-zero-check --unwind 4 --no-unwinding-assertions
 ^VERIFICATION FAILED$
 division by zero

@@ -1,4 +1,4 @@
 CORE
-contract.sol
---contract C --no-standard-checks --k-induction --multi-property
+contract.solast
+--sol contract.sol --contract C --no-standard-checks --k-induction --multi-property
 ^VERIFICATION SUCCESSFUL$

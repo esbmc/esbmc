@@ -1,6 +1,6 @@
 CORE
-contract.sol
---contract C --focus-function reachable --solidity-max-tx 1
+contract.solast
+--sol contract.sol --contract C --focus-function reachable --solidity-max-tx 1
 ^Violated property:$
 ^  assertion this->tag != 1$
 ^VERIFICATION FAILED$

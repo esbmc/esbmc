@@ -1,4 +1,4 @@
 KNOWNBUG
-contract.sol
---contract InvMutTest --bound --k-induction --max-k-step 10 --solidity-max-tx 1 --memlimit 4096
+contract.solast
+--sol contract.sol --contract InvMutTest --bound --k-induction --max-k-step 10 --solidity-max-tx 1 --memlimit 4096
 ^VERIFICATION SUCCESSFUL$

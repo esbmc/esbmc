@@ -1,5 +1,5 @@
 CORE
-contract.sol
---contract C --no-standard-checks --unwind 2 --no-unwinding-assertions --negating-property C:
+contract.solast
+--sol contract.sol --contract C --no-standard-checks --unwind 2 --no-unwinding-assertions --negating-property C:
 ^WARNING: --negating-property: empty function name in spec 'C:'
 ^VERIFICATION SUCCESSFUL$

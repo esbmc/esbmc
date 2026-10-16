@@ -1,5 +1,5 @@
 CORE
-contract.sol
---contract C --no-standard-checks --k-induction
+contract.solast
+--sol contract.sol --contract C --no-standard-checks --k-induction
 ^WARNING: Solidity harness: transaction sequence bounded to 2 tx.*$
 ^VERIFICATION FAILED$

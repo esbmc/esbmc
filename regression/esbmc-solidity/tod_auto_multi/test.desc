@@ -1,5 +1,6 @@
 CORE
-contract.sol
---contract MultiTod --tod-race-check=auto --unwind 2 --no-unwinding-assertions
+contract.solast
+--sol contract.sol --contract MultiTod --tod-race-check=auto --unwind 2 --no-unwinding-assertions
+REQUIRES solc_binary
 ^--tod-race-check: discovered 2 candidate pair\(s\) in 'MultiTod'$
 ^--tod-race-check summary: 2 pair\(s\) — 0 clean, 2 TOD found, 0 error$

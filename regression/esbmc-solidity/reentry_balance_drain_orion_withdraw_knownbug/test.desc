@@ -1,4 +1,4 @@
 KNOWNBUG
-contract.sol
+contract.solast
 --sol contract.sol --contract Exchange --reentry-balance-drain-check --bound --unwind 4 --no-unwinding-assertions
 ^VERIFICATION SUCCESSFUL$
