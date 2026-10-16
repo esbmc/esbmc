@@ -156,6 +156,14 @@ bool names_alias(const nlohmann::json &body, const nlohmann::json &annotation)
   return false;
 }
 
+/// True when two annotations spell the same type, ignoring source locations.
+bool same_type(const nlohmann::json &a, const nlohmann::json &b)
+{
+  if (is_node(a, "Name") && is_node(b, "Name"))
+    return a["id"] == b["id"];
+  return a == b;
+}
+
 /// Rewrite @p def's scalar parameters and return annotated @p placeholder to
 /// @p elem.
 void retype_placeholder(
@@ -360,9 +368,147 @@ private:
     }
 
     if (decl.contains("value") && is_node(decl["value"], "List"))
-      return tuple_annotation_of_list(decl["value"]);
+      return decl["value"]["elts"].empty()
+               ? stored_elem_annotation(arg["id"].get<std::string>(), caller)
+               : tuple_annotation_of_list(decl["value"]);
 
     return nlohmann::json();
+  }
+
+  /// The tuple annotation of every item stored into the list variable @p var,
+  /// declared empty in module @p module. Items arrive through `var.append(x)`
+  /// or `f(var, x)` whose callee annotates the list `list[_Elem]` and the item
+  /// `_Elem` (`heappush(h, (2, 20))`). Null when there is no such item, items
+  /// disagree, or the list may be filled some other way. Every scope of the
+  /// module is searched, which only ever forgoes a binding.
+  nlohmann::json
+  stored_elem_annotation(const std::string &var, size_t module) const
+  {
+    std::vector<nlohmann::json> items;
+    collect_stored_items(modules_[module].read->at("body"), var, module, items);
+
+    if (items.empty())
+      return nlohmann::json();
+    for (const auto &item : items)
+      if (item.is_null() || item != items[0])
+        return nlohmann::json();
+    return items[0];
+  }
+
+  /// Push onto @p items the tuple annotation of each item stored into @p var,
+  /// or null for a store this pass cannot type.
+  void collect_stored_items(
+    const nlohmann::json &node,
+    const std::string &var,
+    size_t module,
+    std::vector<nlohmann::json> &items) const
+  {
+    if (node.is_array())
+    {
+      for (const auto &elem : node)
+        collect_stored_items(elem, var, module, items);
+      return;
+    }
+    if (!node.is_object())
+      return;
+
+    if (is_untyped_store(node, var))
+      items.push_back(nlohmann::json());
+    else if (is_node(node, "Call"))
+    {
+      const std::optional<nlohmann::json> item = stored_item(node, var, module);
+      if (item)
+        items.push_back(
+          is_node(*item, "Tuple") ? tuple_annotation_of(*item)
+                                  : nlohmann::json());
+    }
+
+    for (const auto &child : node)
+      collect_stored_items(child, var, module, items);
+  }
+
+  /// The item a call stores into @p var, or none when it stores nothing.
+  std::optional<nlohmann::json> stored_item(
+    const nlohmann::json &call,
+    const std::string &var,
+    size_t module) const
+  {
+    const nlohmann::json &func = call["func"];
+    const nlohmann::json &args = call["args"];
+    if (is_node(func, "Attribute") && names_var(func["value"], var))
+    {
+      const std::string &method = func["attr"].get<std::string>();
+      if (method == "append" && args.size() == 1)
+        return args[0];
+      if (method == "extend" || method == "insert" || method == "append")
+        return nlohmann::json();
+      return std::nullopt;
+    }
+
+    for (size_t i = 0; i < args.size(); ++i)
+      if (names_var(args[i], var))
+        return item_param_arg(call, i, module);
+    return std::nullopt;
+  }
+
+  /// The argument a call passes for the `_Elem` item parameter of a callee
+  /// whose parameter @p list_pos is `list[_Elem]`. None for any other callee.
+  std::optional<nlohmann::json> item_param_arg(
+    const nlohmann::json &call,
+    size_t list_pos,
+    size_t caller) const
+  {
+    const std::optional<size_t> callee = resolve_callee(call["func"], caller);
+    if (!callee)
+      return std::nullopt;
+
+    const nlohmann::json &body = modules_[*callee].read->at("body");
+    const nlohmann::json &params =
+      find_function(body, callee_name(call["func"]))->at("args").at("args");
+    if (list_pos >= params.size())
+      return std::nullopt;
+
+    const nlohmann::json placeholder = list_elem_annotation(
+      params[list_pos].value("annotation", nlohmann::json()));
+    if (!names_alias(body, placeholder) && !is_tuple_annotation(placeholder))
+      return std::nullopt;
+
+    for (size_t i = 0; i < params.size() && i < call["args"].size(); ++i)
+      if (
+        same_type(params[i].value("annotation", nlohmann::json()), placeholder))
+        return call["args"][i];
+    return std::nullopt;
+  }
+
+  static bool names_var(const nlohmann::json &node, const std::string &var)
+  {
+    return is_node(node, "Name") && node["id"] == var;
+  }
+
+  /// True for `var += ...`, `var[i] = ...` and a rebinding of @p var to
+  /// anything but `[]`, which may store items this pass does not see.
+  static bool
+  is_untyped_store(const nlohmann::json &node, const std::string &var)
+  {
+    if (is_node(node, "AugAssign"))
+      return names_var(node["target"], var);
+
+    nlohmann::json targets;
+    if (is_node(node, "Assign"))
+      targets = node["targets"];
+    else if (is_node(node, "AnnAssign"))
+      targets = nlohmann::json::array({node["target"]});
+    else
+      return false;
+
+    const nlohmann::json &value = node.value("value", nlohmann::json());
+    const bool empty_list = is_node(value, "List") && value["elts"].empty();
+    for (const auto &target : targets)
+      if (
+        (is_node(target, "Subscript") && names_var(target["value"], var)) ||
+        (names_var(target, var) && !empty_list))
+        return true;
+    return false;
   }
 
   void visit_call(

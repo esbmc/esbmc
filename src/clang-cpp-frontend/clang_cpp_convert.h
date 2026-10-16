@@ -43,6 +43,10 @@ protected:
 
   bool get_method(const clang::CXXMethodDecl &md, exprt &new_expr);
 
+  bool get_method_declaration(
+    const clang::CXXMethodDecl &md,
+    const symbolt *&symbol);
+
   void annotate_exception_specification(
     const clang::FunctionDecl &fd,
     typet &type) override;

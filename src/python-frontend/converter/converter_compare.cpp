@@ -1,6 +1,7 @@
 #include <python-frontend/string/char_utils.h>
 #include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/json_utils.h>
+#include <python-frontend/lambda/python_lambda.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/string/string_handler.h>
@@ -920,6 +921,43 @@ exprt python_converter::handle_type_comparison(
                          : erased;
 }
 
+static bool is_type_call(const nlohmann::json &node)
+{
+  return node["_type"] == "Call" && node["func"]["_type"] == "Name" &&
+         node["func"]["id"] == "type";
+}
+
+std::optional<std::string> python_converter::class_identity_operand(
+  const nlohmann::json &node,
+  const exprt &expr) const
+{
+  // type(x) is T (GitHub #5936). An unrecognised name leaves this side
+  // unresolved, so the fold stays as conservative as it was.
+  if (is_type_call(node))
+  {
+    if (!expr.is_constant())
+      return std::nullopt;
+    const std::string name = expr.get_string("value");
+    return type_utils::is_type_identifier(name) ? std::optional(name)
+                                                : std::nullopt;
+  }
+
+  if (is_class_object(expr))
+    return expr.get_string("value");
+
+  if (node["_type"] != "Name" || !expr.is_symbol())
+    return std::nullopt;
+  const std::string *held = class_object_name(expr.identifier());
+  if (!held)
+    return std::nullopt;
+  const std::string name = node["id"].get<std::string>();
+  if (count_bindings(*ast_json, name) != 1)
+    throw std::runtime_error(
+      "Unsupported: identity of '" + name +
+      "', which holds a class and is bound more than once");
+  return *held;
+}
+
 exprt python_converter::handle_type_identity_check(
   const std::string &op,
   const exprt &lhs,
@@ -927,86 +965,21 @@ exprt python_converter::handle_type_identity_check(
   const nlohmann::json &left,
   const nlohmann::json &right)
 {
-  // Only handle identity operators
   if (op != "Is" && op != "IsNot")
     return nil_exprt();
 
-  // Resolve type identifiers from direct names, symbol values, or a type()
-  // call, whose value is the compile-time name of its argument's type
-  auto resolve_type_identifier = [&](
-                                   const nlohmann::json &node,
-                                   const exprt &expr,
-                                   std::string &out_name) -> bool {
-    // type(x) is T (GitHub #5936). An unrecognised name leaves this side
-    // unresolved, so the fold below stays as conservative as it was.
-    if (
-      node["_type"] == "Call" && node["func"]["_type"] == "Name" &&
-      node["func"]["id"] == "type" && expr.is_constant())
-    {
-      const std::string name = expr.get_string("value");
-      if (!type_utils::is_type_identifier(name))
-        return false;
-      out_name = name;
-      return true;
-    }
-
-    if (node["_type"] == "Name" && node.contains("id"))
-    {
-      std::string name = node["id"].get<std::string>();
-      // Check if it's a direct type identifier (e.g., int, str, float)
-      if (type_utils::is_type_identifier(name))
-      {
-        out_name = name;
-        return true;
-      }
-      // Check if it's a variable holding a type object (e.g., x = int)
-      if (expr.is_symbol())
-      {
-        const std::string *val = class_object_name(expr.identifier());
-        if (val && type_utils::is_type_identifier(*val))
-        {
-          out_name = *val;
-          return true;
-        }
-      }
-    }
-
-    return false;
-  };
-
-  std::string lhs_type_name;
-  std::string rhs_type_name;
-  bool lhs_is_type = resolve_type_identifier(left, lhs, lhs_type_name);
-  bool rhs_is_type = resolve_type_identifier(right, rhs, rhs_type_name);
-
-  // If neither operand is a type identifier, not a type identity check
-  if (!lhs_is_type && !rhs_is_type)
+  const std::optional<std::string> lhs_class =
+    class_identity_operand(left, lhs);
+  const std::optional<std::string> rhs_class =
+    class_identity_operand(right, rhs);
+  // An unresolved type(x) still denotes a class, so it is left to the
+  // comparison paths that follow.
+  if (
+    (!lhs_class && !rhs_class) || (!lhs_class && is_type_call(left)) ||
+    (!rhs_class && is_type_call(right)))
     return nil_exprt();
 
-  // If both are type identifiers, compare them
-  if (lhs_is_type && rhs_is_type)
-  {
-    bool same_type = (lhs_type_name == rhs_type_name);
-    if (op == "Is")
-    {
-      if (same_type)
-        return true_exprt();
-      else
-        return false_exprt();
-    }
-    else // op == "IsNot"
-    {
-      if (same_type)
-        return false_exprt();
-      else
-        return true_exprt();
-    }
-  }
-
-  // If only one side is a type identifier, they can never be identical
-  // (a value can't be identical to a type object)
-  if (op == "Is")
-    return false_exprt();
-  else // op == "IsNot"
-    return true_exprt();
+  // A value is never identical to a class object.
+  const bool same = lhs_class && rhs_class && *lhs_class == *rhs_class;
+  return gen_bool(same == (op == "Is"));
 }

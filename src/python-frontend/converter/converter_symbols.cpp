@@ -1010,6 +1010,47 @@ import_lookup_name(const std::string &id, const ::symbol_id &parsed)
   return parsed.get_object();
 }
 
+/// The imports of the module being converted, top-level ones first and then
+/// those directly inside its functions. `from pkg import mod` names pkg's own
+/// file, so each submodule it binds follows it as an import of that
+/// submodule's file, held in @p submodules (#8375).
+std::vector<const nlohmann::json *>
+python_converter::import_nodes(std::deque<nlohmann::json> &submodules) const
+{
+  std::vector<const nlohmann::json *> imports;
+  auto add = [&](const nlohmann::json &node) {
+    const std::string type = node.value("_type", "");
+    if (type != "Import" && type != "ImportFrom")
+      return;
+    imports.push_back(&node);
+    if (type != "ImportFrom" || node["module"].is_null())
+      return;
+    for (const auto &alias : node["names"])
+    {
+      const auto submodule = imported_modules.find(
+        node["module"].get<std::string>() + "." +
+        alias["name"].get<std::string>());
+      if (submodule == imported_modules.end())
+        continue;
+      nlohmann::json &import = submodules.emplace_back();
+      import["_type"] = "Import";
+      import["full_path"] = submodule->second;
+      imports.push_back(&import);
+    }
+  };
+
+  const nlohmann::json &body = (*ast_json)["body"];
+  for (const auto &node : body)
+    add(node);
+  for (const auto &node : body)
+    if (
+      node["_type"] == "FunctionDef" && node.contains("body") &&
+      node["body"].is_array())
+      for (const auto &stmt : node["body"])
+        add(stmt);
+  return imports;
+}
+
 symbolt *
 python_converter::find_imported_symbol(const std::string &symbol_id) const
 {
@@ -1117,26 +1158,10 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
     return nullptr;
   };
 
-  for (const auto &obj : (*ast_json)["body"])
-  {
-    if (symbolt *func_symbol = find_in_import(obj))
+  std::deque<nlohmann::json> submodules;
+  for (const nlohmann::json *import : import_nodes(submodules))
+    if (symbolt *func_symbol = find_in_import(*import))
       return func_symbol;
-  }
-
-  // Also check imports inside function bodies.
-  for (const auto &obj : (*ast_json)["body"])
-  {
-    if (
-      obj["_type"] == "FunctionDef" && obj.contains("body") &&
-      obj["body"].is_array())
-    {
-      for (const auto &stmt : obj["body"])
-      {
-        if (symbolt *func_symbol = find_in_import(stmt))
-          return func_symbol;
-      }
-    }
-  }
 
   return nullptr;
 }

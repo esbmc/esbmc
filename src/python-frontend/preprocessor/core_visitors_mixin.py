@@ -6,6 +6,10 @@ import keyword
 # pylint: disable=import-outside-toplevel
 
 
+class CallBindingError(TypeError):
+    """The arguments of a call do not bind to its callee's parameters."""
+
+
 class CoreVisitorsMixin:
 
     _MUTATING_LIST_METHODS = {
@@ -926,10 +930,10 @@ class CoreVisitorsMixin:
             return
         display_name = self._display_name(function_name)
         if len(missing_kwonly) == 1:
-            raise TypeError(
+            raise CallBindingError(
                 f"{display_name}() missing 1 required keyword-only argument: '{missing_kwonly[0]}'")
         args_str = " and ".join([f"'{arg}'" for arg in missing_kwonly])
-        raise TypeError(
+        raise CallBindingError(
             f"{display_name}() missing {len(missing_kwonly)} required keyword-only arguments: {args_str}"
         )
 
@@ -943,7 +947,7 @@ class CoreVisitorsMixin:
                 total_params, total_given = len(expected_args) + 1, len(node.args) + 1
             else:
                 total_params, total_given = len(expected_args), len(node.args)
-            raise TypeError(
+            raise CallBindingError(
                 f"{display_name}() takes {total_params} positional argument{'s' if total_params != 1 else ''} "
                 f"but {total_given} {'were' if total_given != 1 else 'was'} given")
 
@@ -1099,10 +1103,10 @@ class CoreVisitorsMixin:
         if missing_args:
             display_name = self._display_name(function_name)
             if len(missing_args) == 1:
-                raise TypeError(
+                raise CallBindingError(
                     f"{display_name}() missing 1 required positional argument: '{missing_args[0]}'")
             args_str = " and ".join([f"'{arg}'" for arg in missing_args])
-            raise TypeError(
+            raise CallBindingError(
                 f"{display_name}() missing {len(missing_args)} required positional arguments: {args_str}"
             )
         consumed = set()
@@ -1840,7 +1844,9 @@ class CoreVisitorsMixin:
         self._normalize_math_gcd_lcm_variadic(node)
 
         guard = self._lower_starred_call_argument(node)
-        self._apply_call_signature_defaults(node)
+        raising = self._bind_call_arguments(node)
+        if raising is not None:
+            return raising
         self._specialize_vararg_call(node)
         self.generic_visit(node)
         if guard is None:
@@ -1848,6 +1854,37 @@ class CoreVisitorsMixin:
         guard.test = self.visit(guard.test)
         guard.orelse = self.visit(guard.orelse)
         return guard
+
+    def _bind_call_arguments(self, node):
+        """Bind the arguments of `node`, or return it lowered to a raising call."""
+        try:
+            self._apply_call_signature_defaults(node)
+        except CallBindingError as error:
+            if any(isinstance(arg, ast.Starred) for arg in node.args):
+                raise
+            return self.visit(self._raising_call(node, str(error)))
+        return None
+
+    @staticmethod
+    def _raising_call(node, message):
+        """Spell a call that cannot bind its arguments as `(a1, ..., e(msg))[n]`.
+
+        CPython raises the TypeError only when the call runs, after evaluating
+        the callee and its arguments, so an unreached or guarded bad call is
+        not an error of the whole program (#8365).
+        """
+        evaluated = list(node.args) + [kw.value for kw in node.keywords]
+        if isinstance(node.func, ast.Attribute) and not isinstance(node.func.value, ast.Name):
+            evaluated.insert(0, node.func.value)
+        error = ast.Call(func=ast.Name(id="_call_type_error", ctx=ast.Load()),
+                         args=[ast.Constant(value=message)],
+                         keywords=[])
+        raising = ast.Subscript(value=ast.Tuple(elts=evaluated + [error], ctx=ast.Load()),
+                                slice=ast.Constant(value=len(evaluated)),
+                                ctx=ast.Load())
+        ast.copy_location(raising, node)
+        ast.fix_missing_locations(raising)
+        return raising
 
     def _lower_starred_call_argument(self, node):
         """Spell `f(a, *xs)` out as `f(a, xs[0], ..., xs[k-1]) if len(xs) == k else e()`.

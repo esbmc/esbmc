@@ -51,6 +51,10 @@ public:
    */
   virtual exprt get();
 
+  /// super(C, self) in a class that is not a C, where self can never be a C,
+  /// raises TypeError (#8631).
+  std::optional<exprt> check_explicit_super() const;
+
   const symbol_id &get_function_id() const
   {
     return function_id_;
@@ -299,6 +303,9 @@ private:
    */
   const symbolt *lookup_python_symbol(const std::string &var_name) const;
 
+  void refuse_isinstance_on_path_dependent_number(
+    const nlohmann::json &obj_arg,
+    const std::vector<nlohmann::json> &types) const;
   exprt handle_isinstance() const;
 
   /// Whether isinstance's first argument is a class object: a class named

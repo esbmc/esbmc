@@ -357,6 +357,107 @@ bool function_call_expr::is_class_object_operand(
   return name && type_utils::is_type_identifier(*name);
 }
 
+namespace
+{
+/// Whether `stmt` assigns to `name`.
+bool assigns_name(const nlohmann::json &stmt, const std::string &name)
+{
+  const std::string kind = stmt.value("_type", "");
+  const nlohmann::json *target = nullptr;
+  if (kind == "AnnAssign")
+    target = &stmt["target"];
+  else if (kind == "Assign" && stmt["targets"].size() == 1)
+    target = &stmt["targets"][0];
+  return target && target->value("_type", "") == "Name" &&
+         target->value("id", "") == name;
+}
+
+/// The kind of number a binding of `name` stores: "int" (bool included),
+/// "float", or "" for anything else or another name.
+std::string
+numeric_binding_kind(const nlohmann::json &stmt, const std::string &name)
+{
+  if (!assigns_name(stmt, name))
+    return "";
+  const nlohmann::json &annotation = stmt.value("annotation", nlohmann::json());
+  const std::string type =
+    annotation.is_object() ? annotation.value("id", "") : "";
+  if (type == "int" || type == "bool")
+    return "int";
+  return type == "float" ? "float" : "";
+}
+
+/// Collects the number kinds bound to `name` in `body`, outside nested
+/// scopes, and whether any of those bindings sits inside a block. A binding
+/// on the straight-line spine before line `before` replaces every binding
+/// ahead of it on all paths, so those are dropped.
+void collect_numeric_bindings(
+  const nlohmann::json &body,
+  const std::string &name,
+  bool nested,
+  int before,
+  std::set<std::string> &kinds,
+  bool &in_block)
+{
+  for (const auto &stmt : body)
+  {
+    const std::string kind = stmt.value("_type", "");
+    if (kind == "FunctionDef" || kind == "ClassDef")
+      continue;
+    if (!nested && assigns_name(stmt, name) && stmt.value("lineno", 0) < before)
+    {
+      kinds.clear();
+      in_block = false;
+    }
+    const std::string number = numeric_binding_kind(stmt, name);
+    if (!number.empty())
+    {
+      kinds.insert(number);
+      in_block |= nested;
+    }
+    for (const char *key : {"body", "orelse", "finalbody", "handlers", "cases"})
+      if (stmt.contains(key) && stmt[key].is_array())
+        collect_numeric_bindings(
+          stmt[key], name, true, before, kinds, in_block);
+  }
+}
+} // namespace
+
+/// A name bound an int on one path and a float on another has one static C
+/// type, so isinstance would answer from that type on every path (#8417).
+void function_call_expr::refuse_isinstance_on_path_dependent_number(
+  const nlohmann::json &obj_arg,
+  const std::vector<nlohmann::json> &types) const
+{
+  const bool asks_number =
+    std::any_of(types.begin(), types.end(), [](const nlohmann::json &t) {
+      const std::string id = t.value("id", "");
+      return id == "int" || id == "float" || id == "bool";
+    });
+  if (!asks_number || obj_arg.value("_type", "") != "Name")
+    return;
+  const nlohmann::json function = json_utils::find_function_by_path(
+    converter_.ast(),
+    json_utils::split_function_path(converter_.current_function_name()));
+  const nlohmann::json &body = function.is_object() && function.contains("body")
+                                 ? function["body"]
+                                 : converter_.ast()["body"];
+  std::set<std::string> kinds;
+  bool in_block = false;
+  collect_numeric_bindings(
+    body,
+    obj_arg["id"].get<std::string>(),
+    false,
+    obj_arg.value("lineno", 0),
+    kinds,
+    in_block);
+  if (kinds.size() == 2 && in_block)
+    throw std::runtime_error(
+      "isinstance() on '" + obj_arg["id"].get<std::string>() +
+      "', which holds an int or a float depending on the path, is not "
+      "supported");
+}
+
 exprt function_call_expr::handle_isinstance() const
 {
   const auto &args = call_["args"];
@@ -370,6 +471,7 @@ exprt function_call_expr::handle_isinstance() const
   const auto &obj_arg = args[0];
   std::vector<nlohmann::json> types;
   collect_classinfo(args[1], types);
+  refuse_isinstance_on_path_dependent_number(obj_arg, types);
 
   if (is_class_object_operand(obj_arg, obj_expr))
     return gen_boolean(admits_class_object(types));
@@ -2376,8 +2478,29 @@ exprt function_call_expr::handle_min_max(
   return migrate_expr_back(result2);
 }
 
+// Whether a print() `file=` target is a standard stream (None is stdout),
+// whose output no program state can observe.
+static bool is_std_stream(const nlohmann::json &target)
+{
+  if (target.value("_type", "") == "Constant")
+    return target.contains("value") && target["value"].is_null();
+  return target.value("_type", "") == "Attribute" &&
+         target["value"].value("_type", "") == "Name" &&
+         target["value"].value("id", "") == "sys" &&
+         (target["attr"] == "stdout" || target["attr"] == "stderr");
+}
+
 exprt function_call_expr::handle_print() const
 {
+  // Output written to any other file (e.g. an io.StringIO) can be read back,
+  // so dropping it could prove a program that fails.
+  if (call_.contains("keywords"))
+    for (const auto &kw : call_["keywords"])
+      if (kw["arg"] == "file" && !is_std_stream(kw["value"]))
+        throw std::runtime_error(
+          "print() to a file other than sys.stdout or sys.stderr is not "
+          "supported");
+
   // Materialize each argument as code so arithmetic checks and function-call
   // side effects are preserved even though print itself has no runtime output.
   const auto &args = call_["args"];
