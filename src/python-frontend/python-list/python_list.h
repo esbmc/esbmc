@@ -638,6 +638,12 @@ public:
     const exprt &array,
     const nlohmann::json &slice_node) const;
 
+  /// Refuses an index other than a non-negative constant into a list
+  /// attribute whose recorded elements have different types (#8666).
+  void reject_mixed_member_element_read(
+    const exprt &array,
+    const nlohmann::json &slice_node) const;
+
   /**
    * @brief Create an empty set
    * @return Expression representing the empty set

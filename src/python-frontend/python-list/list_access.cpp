@@ -4411,7 +4411,10 @@ void python_list::reject_unresolved_element_read(
   const nlohmann::json &slice_node) const
 {
   if (!array.is_symbol())
+  {
+    reject_mixed_member_element_read(array, slice_node);
     return;
+  }
   const std::string &id = array.identifier().as_string();
   if (!mixes_list_and_other(id))
     return;
@@ -4432,6 +4435,30 @@ void python_list::reject_unresolved_element_read(
     "Reading an element of a list whose elements have different types is "
     "supported only at a constant index into a list every call passes in one "
     "shape (" +
+    l.get_file().as_string() + ":" + l.get_line().as_string() + ")");
+}
+
+/// A list attribute such as self.tab has no symbol of its own, so its element
+/// types are recorded under the empty id. An index other than a non-negative
+/// constant reads element 0's type, which misreads every element of another
+/// type (#8666).
+void python_list::reject_mixed_member_element_read(
+  const exprt &array,
+  const nlohmann::json &slice_node) const
+{
+  if (array.id() != exprt::member)
+    return;
+  const std::string &id = array.identifier().as_string();
+  if (
+    !elem_types().find(id) || elem_types().uniform_element_type(id) != typet())
+    return;
+  if (slice_node.value("_type", "") == "Constant")
+    return;
+
+  const locationt l = converter_.get_location_from_decl(list_value_);
+  throw std::runtime_error(
+    "Reading a list attribute whose elements have different types is "
+    "supported only at a non-negative constant index (" +
     l.get_file().as_string() + ":" + l.get_line().as_string() + ")");
 }
 
