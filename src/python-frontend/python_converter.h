@@ -2473,6 +2473,10 @@ private:
    * @param target_block The code block to add generated code to.
    */
   std::string user_class_of(const typet &type);
+  void reject_attribute_added_on_some_paths(
+    const std::string &receiver,
+    const std::string &class_name,
+    const std::string &attr) const;
   void reject_attribute_class_change(
     const exprt &lhs,
     const exprt &rhs,
