@@ -4928,6 +4928,22 @@ void python_converter::copy_elem_types_from_reordering_builtin(
   copy_homogeneous_elem_types(element_type_registry_, src, lhs_id);
 }
 
+// A float returned into an int-typed name widens the name, as a float
+// expression assigned to it does in adjust_statement_types. Binding the call's
+// result to the int slot would truncate it (#8417).
+void python_converter::widen_int_target_for_float_call(
+  exprt &lhs,
+  const exprt &rhs,
+  bool is_ctor_call)
+{
+  if (
+    is_ctor_call || !lhs.is_symbol() || !rhs.type().is_floatbv() ||
+    !type_utils::is_integer_type(lhs.type()))
+    return;
+  lhs.type() = rhs.type();
+  update_symbol(lhs);
+}
+
 void python_converter::handle_function_call_rhs(
   const nlohmann::json &ast_node,
   symbolt *lhs_symbol,
@@ -5016,6 +5032,8 @@ void python_converter::handle_function_call_rhs(
     lhs.type() = rhs.type();
     lhs_symbol->set_type(migrate_type(rhs.type()));
   }
+
+  widen_int_target_for_float_call(lhs, rhs, is_ctor_call);
 
   // Set return destination
   if (rhs.type().is_pointer() && !is_ctor_call)

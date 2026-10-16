@@ -3048,6 +3048,9 @@ regression/python/github_8417_spine_fail
 regression/python/github_8417_unsupported
 regression/python/github_8417_float_of_int
 regression/python/github_8417_float_of_int_fail
+regression/python/github_8418
+regression/python/github_8418_fail
+regression/python/github_8418_unsupported
 regression/python/github_8408_factory_unsupported
 regression/python/github_8408_inherited
 regression/python/github_8408_inherited_fail
