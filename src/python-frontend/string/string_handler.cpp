@@ -3566,8 +3566,7 @@ exprt string_handler::join_unfoldable_iterable(
   {
     exprt list_expr = converter_.get_expr(list_arg);
     if (list_expr.type() == type_handler_.get_list_type())
-      return string_builder_->build_runtime_str_join_call(
-        separator, list_expr);
+      return string_builder_->build_runtime_str_join_call(separator, list_expr);
   }
 
   // Iterable arg isn't a literal `List` and couldn't be folded (e.g.
