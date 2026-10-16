@@ -18,6 +18,7 @@
 #include <deque>
 #include <fstream>
 #include <functional>
+#include <iterator>
 #include <map>
 #include <set>
 #include <vector>
@@ -1860,9 +1861,13 @@ void goto_coveraget::negating_asserts(const std::string &tgt_spec)
   std::vector<goto_programt::instructiont::targett> matched;
   if (!target_line.empty())
   {
-    for (auto &it : candidates)
-      if (it->location.get_line().as_string() == target_line)
-        matched.push_back(it);
+    std::copy_if(
+      candidates.begin(),
+      candidates.end(),
+      std::back_inserter(matched),
+      [&target_line](const auto &it) {
+        return it->location.get_line().as_string() == target_line;
+      });
     if (matched.empty())
     {
       log_debug(
