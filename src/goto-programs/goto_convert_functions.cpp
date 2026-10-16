@@ -1546,7 +1546,10 @@ bool goto_convert_functionst::convert_native_rec(
         targets.cases_map.insert(std::make_pair(target, --targets.cases.end()))
           .first;
     }
-    entry->second->second.push_back(migrate_expr_back(sc.case_op));
+    entry->second->second.push_back(case_label(
+      migrate_expr_back(sc.case_op),
+      is_nil_expr(sc.case_op_hi) ? nil_exprt()
+                                 : migrate_expr_back(sc.case_op_hi)));
     return true;
   }
 
