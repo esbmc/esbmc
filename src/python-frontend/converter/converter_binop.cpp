@@ -1764,7 +1764,21 @@ exprt python_converter::get_binary_operator_expr(
   if (
     type_handler_.is_tagged_scalar_type(lhs.type()) ||
     type_handler_.is_tagged_scalar_type(rhs.type()))
+  {
+    // A tagged operand coming straight from a call (e.g. `f(x) + 1`) is still
+    // a raw call/side-effect node here, not an addressable lvalue; the
+    // dispatch below does member access on it directly, so copy it into a
+    // temp first.
+    if (current_block)
+    {
+      lhs =
+        tuple_handler_->prepare_rhs_for_unpacking(element, lhs, *current_block);
+      rhs =
+        tuple_handler_->prepare_rhs_for_unpacking(element, rhs, *current_block);
+    }
+
     return handle_tagged_scalar_binop(op, lhs, rhs, left, right, element);
+  }
 
   // Handle type identity checks (e.g., y is int, x is str)
   exprt type_identity_result =
