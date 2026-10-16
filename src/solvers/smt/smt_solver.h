@@ -1071,6 +1071,7 @@ public:
   /** Prepare an array_of expression by flattening its dimensions, if it
    *  has more than one. */
   smt_astt convert_array_of_prep(const expr2tc &expr);
+  smt_astt convert_nested_array_of(const constant_array_of2t &arrof);
   /** Create an array of pointers; expects the init_val to be null, because
    *  there's no other way to initialize a pointer array in C, AFAIK. */
   smt_astt pointer_array_of(const expr2tc &init_val, unsigned long array_width);
