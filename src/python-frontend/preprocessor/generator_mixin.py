@@ -1215,11 +1215,13 @@ class GeneratorMixin:
     def _pack_min_max_key_args(call_node):
         """``min``/``max(a, b, ..., key=f)`` as ``min``/``max([a, b, ...], key=f)``,
         which CPython defines to be the same, so the key lowerings see their
-        one-iterable form."""
+        one-iterable form. A call argument is left alone: the element type of
+        a list literal holding it cannot be inferred when the callee has no
+        return annotation."""
         is_min_max = isinstance(call_node.func, ast.Name) and call_node.func.id in ("min", "max")
-        starred = any(isinstance(arg, ast.Starred) for arg in call_node.args)
+        unpackable = any(isinstance(arg, (ast.Starred, ast.Call)) for arg in call_node.args)
         only_key = [kw.arg for kw in call_node.keywords] == ["key"]
-        if not is_min_max or len(call_node.args) < 2 or starred or not only_key:
+        if not is_min_max or len(call_node.args) < 2 or unpackable or not only_key:
             return call_node
         packed = ast.List(elts=call_node.args, ctx=ast.Load())
         ast.copy_location(packed, call_node.args[0])
