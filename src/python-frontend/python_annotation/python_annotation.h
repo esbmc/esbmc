@@ -130,6 +130,12 @@ private:
   // lists (issue #5022). Returns "" when no append is found or the element
   // type does not resolve concretely (then the caller keeps the bare list).
   std::string recover_list_type_from_appends(const std::string &var_name);
+  std::string bare_list_subscript_type(
+    const Json &var_node,
+    const std::string &var_name,
+    bool is_slice);
+  std::string
+  refine_any_from_value(const std::string &annotated, const Json &var_node);
   std::string get_object_name(const Json &call, const std::string &prefix);
   std::string get_string_method_return_type(const std::string &method) const;
   bool extract_type_info(
