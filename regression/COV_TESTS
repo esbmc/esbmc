@@ -3020,3 +3020,7 @@ regression/python/github_8479
 regression/python/github_8479_inplace
 regression/python/dict_update_overwrite
 regression/python/dict_unpack_non_dict_unsupported_fail
+regression/python/github_8483
+regression/python/github_8483_fail
+regression/python/list_store_int_over_str
+regression/python/list_store_int_over_str_fail

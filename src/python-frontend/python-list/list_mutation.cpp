@@ -353,6 +353,23 @@ size_t literal_subscript_index(const nlohmann::json &subscript)
 }
 } // namespace
 
+void python_list::record_element_store(
+  const nlohmann::json &subscript,
+  const std::string &elem_id,
+  const typet &elem_type)
+{
+  const nlohmann::json &container = subscript["value"];
+  if (container.value("_type", "") != "Name")
+    return;
+  const exprt list = converter_.get_expr(container);
+  if (list.is_symbol())
+    elem_types().replace(
+      list.identifier().as_string(),
+      literal_subscript_index(subscript),
+      elem_id,
+      elem_type);
+}
+
 void python_list::retype_element_store(exprt &lhs, exprt &rhs)
 {
   const tuple_handler &tuples = converter_.get_tuple_handler();
@@ -377,17 +394,7 @@ void python_list::retype_element_store(exprt &lhs, exprt &rhs)
   const exprt fresh = build_list_at_call(
     holder, from_integer(BigInt(0), size_type()), list_value_);
 
-  const nlohmann::json &container = list_value_["value"];
-  if (container.value("_type", "") == "Name")
-  {
-    const exprt list = converter_.get_expr(container);
-    if (list.is_symbol())
-      elem_types().replace(
-        list.identifier().as_string(),
-        literal_subscript_index(list_value_),
-        stored.id.as_string(),
-        rhs.type());
-  }
+  record_element_store(list_value_, stored.id.as_string(), rhs.type());
 
   lhs = build_dereference(*item, obj_type);
   rhs = build_dereference(fresh, obj_type);
@@ -611,7 +618,8 @@ enum class store_kind
   integer,
   floating,
   string,
-  tuple
+  tuple,
+  function
 };
 
 store_kind kind_of(const typet &type, const python_converter &converter)
@@ -624,7 +632,15 @@ store_kind kind_of(const typet &type, const python_converter &converter)
     return store_kind::string;
   if (converter.get_tuple_handler().is_tuple_type(type))
     return store_kind::tuple;
+  if (type.is_code() || (type.is_pointer() && type.subtype().is_code()))
+    return store_kind::function;
   return store_kind::other;
+}
+
+/// The target of an Assign or AugAssign @p op.
+const nlohmann::json &assignment_target(const nlohmann::json &op)
+{
+  return op.contains("targets") ? op["targets"][0] : op["target"];
 }
 
 const side_effect_expr_function_callt *find_list_at_call(const exprt &expr)
@@ -698,6 +714,10 @@ std::optional<exprt> python_list::build_element_replacement(
     converter_.get_type_handler().ptr_free_arg(value_arg, value_type)};
   set_at.type() = bool_type();
   set_at.location() = info.location;
+
+  // A later constant-index read takes the slot's type from the registry.
+  record_element_store(
+    assignment_target(op), info.elem_symbol->id.as_string(), value_type);
   return set_at;
 }
 
