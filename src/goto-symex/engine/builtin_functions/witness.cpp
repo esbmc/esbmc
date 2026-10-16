@@ -166,15 +166,16 @@ void goto_symext::symex_witness_branching(
           break;
         }
 
+      // A flipped dispatch goto is taken when its case does not match
       if (is_avoid)
       {
         if (!case_matches)
           continue;
-        force_goto(false);
+        force_goto(instruction.flipped_guard);
       }
       else
       {
-        force_goto(case_matches);
+        force_goto(case_matches != instruction.flipped_guard);
         if (case_matches)
           cur_state->advance_witness_position();
       }

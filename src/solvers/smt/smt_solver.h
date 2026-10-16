@@ -251,6 +251,12 @@ public:
     struct expr_op_convert ops);
 
   smt_astt convert_assign(const expr2tc &expr);
+  /** Bind the symbol on the left of an equality to its right-hand side
+   *  without asserting anything: later conversions of the symbol yield the
+   *  right-hand side, so only definitions something asserted depends on reach
+   *  the solver. Falls back to convert_assign for aggregates or a symbol that
+   *  was already converted. */
+  void define(const expr2tc &expr);
 
   /** Convert @p expr and dump the resulting SMT AST in SMT format. Used by
    *  --ssa-smt-trace so callers outside the solver layer can request the
@@ -285,6 +291,14 @@ public:
    *  an error occurred.
    *  @return Result code of the call to the solver. */
   virtual smt_resultt dec_solve() = 0;
+
+  /** Solve with each boolean ast in @p assumptions held true for this query
+   *  only. Backends without support abort; check supports_assumptions(). */
+  virtual smt_resultt dec_solve_assuming(const ast_vec &assumptions);
+  virtual bool supports_assumptions() const
+  {
+    return false;
+  }
 
   void pre_solve();
 
@@ -770,6 +784,11 @@ public:
    *  multiplications or casting is required to honor the C semantics of
    *  pointer arith. */
   smt_astt convert_pointer_arith(const expr2tc &expr, const type2tc &t);
+  /** The quotient of a signed byte difference by an element size, truncated
+   *  toward zero. A size of 2^k is an arithmetic shift of the difference,
+   *  biased by 2^k - 1 when negative since the shift rounds toward -inf;
+   *  k < width - 1 keeps the divisor positive when read signed. */
+  smt_astt divide_by_element_size(const expr2tc &diff, const expr2tc &size);
   /** Compare two pointers. This attempts to optimize cases where we can avoid
    *  comparing the integer representation of a pointer, as that's hugely
    *  inefficient sometimes (and gets bitblasted).
@@ -885,13 +904,16 @@ public:
    *  convert_modulus lowers a remainder compositionally only when its
    *  operands appear here; unconditional lowering costs 3-5x on
    *  rem-heavy proofs. */
-  void note_division_operands(const expr2tc &expr);
   void note_division_operands(
     const expr2tc &expr,
     std::unordered_set<const expr2t *> &seen);
   /** Encode a remainder: compositional via the matching division when
    *  one exists in the formula, the solver's rem primitive otherwise. */
   smt_astt convert_modulus(const modulus2t &m, smt_astt a, smt_astt b);
+  /** C's / and % of signed @p type on Int-sorted operands, from the
+   *  solver's Euclidean div/mod (#8662). */
+  smt_astt mk_truncated_div(const type2tc &type, smt_astt a, smt_astt b);
+  smt_astt mk_truncated_rem(const type2tc &type, smt_astt a, smt_astt b);
   /** Convert constant_array2tc's and constant_array_of2tc's */
   smt_astt array_create(const expr2tc &expr);
 
@@ -910,6 +932,27 @@ public:
   void bump_addrspace_array(unsigned int idx, const expr2tc &val);
   /** Get the symbol name for the current address-allocation record array. */
   std::string get_cur_addrspace_ident();
+  /** The address-space version every other one is stored over. */
+  expr2tc base_addrspace_array() const;
+  void tie_base_addrspace(unsigned int idx, const expr2tc &val);
+  /** Gives the base version every object's range, now and on registration,
+   *  for convert_typecast_to_ptr(), the only reader of a slot before it is
+   *  stored. */
+  void tie_base_addrspace_to_objects();
+  /** The context level the base version was tied at; empty when no cast to a
+   *  pointer needed it. */
+  std::optional<unsigned int> base_addrspace_tied;
+  /** The object of a pointer convert_typecast_to_ptr() made, the context
+   *  level it was made at, and the one close_int_to_ptr_objects() closed it
+   *  at. */
+  struct int_to_ptr_objectt
+  {
+    smt_astt object;
+    unsigned int level;
+    std::optional<unsigned int> closed_at;
+  };
+  std::vector<int_to_ptr_objectt> int_to_ptr_objects;
+  void close_int_to_ptr_objects();
 
   /** Operand pairs of every division seen by note_division_operands. */
   std::set<std::pair<expr2tc, expr2tc>> divided_operand_pairs;
@@ -933,6 +976,16 @@ public:
   smt_astt convert_typecast_to_ints_from_bool(const typecast2t &cast);
   /** Typecast something (i.e. an integer) to a pointer */
   smt_astt convert_typecast_to_ptr(const typecast2t &cast);
+  smt_astt name_object_by_value(
+    const expr2tc &ptr,
+    const expr2tc &target,
+    smt_astt not_matched,
+    bool from_byte_update);
+  smt_astt address_holds(
+    const expr2tc &ptr,
+    const expr2tc &addrspace,
+    const expr2tc &target,
+    bool in_range);
   /** Typecast a pointer to an integer */
   smt_astt convert_typecast_from_ptr(const typecast2t &cast);
   /** Typecast structs to other structs */
@@ -971,9 +1024,6 @@ public:
    *  array. This works by concatenating the domain widths together into one
    *  large domain. */
   type2tc flatten_array_type(const type2tc &type);
-  /** For a multi-dimensional constant array, flatten the actual definition of
-   *  it down to a single dimension */
-  expr2tc flatten_array_body(const expr2tc &expr);
   /** Get the base subtype of an array, delving through any intermediate
    *  multidimensional arrays. */
   type2tc get_flattened_array_subtype(const type2tc &type);
@@ -1002,9 +1052,9 @@ public:
 
   /** Name every element of a row being written whole as a store of the
    *  corresponding read out of it, at @p offset in the flattened array.
-   *  Requires the row's flattened size to be a compile-time constant, which
-   *  both call sites establish; false when a nested row's is not. */
-  bool expand_row_stores(
+   *  Requires the row's stride to be a compile-time constant, which both
+   *  call sites establish. */
+  void expand_row_stores(
     const expr2tc &row,
     const expr2tc &offset,
     std::vector<flat_storet> &stores);

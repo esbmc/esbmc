@@ -3,5 +3,5 @@ def used() -> int:
 
 
 match used():
-    case 1:
+    case int():
         assert used() == 1

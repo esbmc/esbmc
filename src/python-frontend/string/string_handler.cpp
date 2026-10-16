@@ -8,6 +8,7 @@
 #include <python-frontend/string/string_handler.h>
 #include <algorithm>
 #include <charconv>
+#include <optional>
 #include <python-frontend/string/string_handler_utils.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/exception/python_exception_handler.h>
@@ -38,12 +39,10 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <iomanip>
 #include <limits>
 #include <optional>
 #include <set>
 #include <functional>
-#include <sstream>
 #include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
@@ -734,6 +733,73 @@ exprt string_handler::build_fstring_conversion(
   return make_char_array_expr(chars, string_type);
 }
 
+namespace
+{
+// Default length used for nondeterministic strings when the user has
+// not provided an explicit value via --nondet-str-length.
+constexpr int DEFAULT_NONDET_STR_LENGTH = 16;
+
+int get_nondet_str_length()
+{
+  std::string opt_value = config.options.get_option("nondet-str-length");
+  if (!opt_value.empty())
+  {
+    try
+    {
+      int length = std::stoi(opt_value);
+      if (length > 0)
+        return length;
+    }
+    catch (...)
+    {
+    }
+  }
+  return DEFAULT_NONDET_STR_LENGTH;
+}
+} // namespace
+
+// +1 for the NUL: --nondet-str-length N promises len() can reach N (#7377).
+int string_handler::nondet_str_buffer_size()
+{
+  const int length = get_nondet_str_length();
+  return length < std::numeric_limits<int>::max() ? length + 1 : length;
+}
+
+exprt string_handler::build_nondet_string(const locationt &location)
+{
+  const int max_str_length = nondet_str_buffer_size();
+
+  typet char_array_type =
+    array_typet(char_type(), from_integer(max_str_length, size_type()));
+
+  symbolt &nondet_str_symbol = converter_.create_tmp_symbol(
+    location, "$nondet_str$", char_array_type, exprt());
+
+  code_declt decl(symbol_expr(nondet_str_symbol));
+  decl.location() = location;
+  converter_.add_instruction(decl);
+
+  exprt nondet_value("sideeffect", char_array_type);
+  nondet_value.statement("nondet");
+
+  code_assignt nondet_assign(symbol_expr(nondet_str_symbol), nondet_value);
+  nondet_assign.location() = location;
+  converter_.add_instruction(nondet_assign);
+
+  // Ensure null terminator at the last position
+  exprt last_elem = build_index(
+    symbol_expr(nondet_str_symbol),
+    from_integer(max_str_length - 1, size_type()));
+  code_assignt null_assign(last_elem, from_integer(0, char_type()));
+  null_assign.location() = location;
+  converter_.add_instruction(null_assign);
+
+  // Return address of first element: &arr[0] which is char*
+  exprt first_elem =
+    build_index(symbol_expr(nondet_str_symbol), from_integer(0, size_type()));
+  return build_address_of(first_elem);
+}
+
 exprt string_handler::build_nondet_string_fallback(const locationt &location)
 {
   // Sound over-approximation when a str.*() handler cannot extract a
@@ -775,23 +841,68 @@ exprt string_handler::build_nondet_string_fallback(const locationt &location)
     return nondet;
   }
 
-  symbolt &tmp =
-    converter_.create_tmp_symbol(location, "$nondet_str$", ptr_type, exprt());
+  return build_nondet_string(location);
+}
 
-  code_declt decl(symbol_expr(tmp));
-  decl.location() = location;
-  converter_.add_instruction(decl);
+exprt string_handler::build_default_object_repr(
+  const std::string &prefix,
+  const locationt &location)
+{
+  constexpr int max_digits = 16;
+  const int start = prefix.size();
+  const typet array_type =
+    array_typet(char_type(), from_integer(start + max_digits + 2, size_type()));
+  symbolt &repr = converter_.create_tmp_symbol(
+    location, "$object_repr$", array_type, exprt());
+  const exprt text = symbol_expr(repr);
 
-  side_effect_expr_nondett nondet(ptr_type);
-  nondet.location() = location;
+  auto add = [&](codet code) {
+    code.location() = location;
+    converter_.add_instruction(code);
+  };
+  auto at = [&](const exprt &index) { return build_index(text, index); };
+  auto chr = [](char c) { return from_integer(c, char_type()); };
 
-  code_assignt assign(symbol_expr(tmp), nondet);
-  assign.location() = location;
-  converter_.add_instruction(assign);
+  add(code_declt(text));
+  add(code_assignt(text, side_effect_expr_nondett(array_type)));
+  for (int i = 0; i < start; ++i)
+    add(code_assignt(at(from_integer(i, size_type())), chr(prefix[i])));
 
-  exprt result = symbol_expr(tmp);
-  result.location() = location;
-  return result;
+  symbolt &count = converter_.create_tmp_symbol(
+    location, "$repr_digits$", size_type(), exprt());
+  const exprt digits = symbol_expr(count);
+  add(code_declt(digits));
+  add(code_assignt(digits, side_effect_expr_nondett(size_type())));
+  add(code_assumet(and_exprt(
+    binary_relation_exprt(digits, ">=", from_integer(1, size_type())),
+    binary_relation_exprt(
+      digits, "<=", from_integer(max_digits, size_type())))));
+
+  // Concrete indices only, so a terminator stays at a known position and a
+  // later strlen() stops unwinding.
+  for (int i = 0; i <= max_digits; ++i)
+  {
+    const exprt pos = from_integer(i, size_type());
+    const exprt c = at(from_integer(start + i, size_type()));
+    auto in = [&](char lo, char hi) {
+      return and_exprt(
+        binary_relation_exprt(c, ">=", chr(lo)),
+        binary_relation_exprt(c, "<=", chr(hi)));
+    };
+    const exprt is_digit = binary_relation_exprt(pos, "<", digits);
+    if (i < max_digits)
+      add(code_assumet(
+        or_exprt(not_exprt(is_digit), or_exprt(in('0', '9'), in('a', 'f')))));
+    add(code_assignt(
+      c,
+      if_exprt(
+        is_digit,
+        c,
+        if_exprt(equality_exprt(pos, digits), chr('>'), chr('\0')))));
+  }
+  add(code_assignt(
+    at(from_integer(start + max_digits + 1, size_type())), chr('\0')));
+  return build_address_of(at(from_integer(0, size_type())));
 }
 
 BigInt string_handler::get_string_size(const exprt &expr)
@@ -867,9 +978,9 @@ std::string string_handler::float_to_string(
   std::size_t width,
   int precision)
 {
-  // std::pow/std::round and the ostream conversion below honour the host FP
-  // rounding mode, which the pipeline can leave non-default; pin FE_TONEAREST
-  // so the decimal fold matches CPython regardless of the host's mode.
+  // snprintf honours the host FP rounding mode, which the pipeline can leave
+  // non-default; pin FE_TONEAREST so the decimal fold matches CPython
+  // regardless of the host's mode.
   const host_rounding_mode rounding_guard(FE_TONEAREST);
   double val = 0.0;
 
@@ -900,13 +1011,16 @@ std::string string_handler::float_to_string(
     throw std::runtime_error("Invalid float bit width");
   }
 
-  // Use proper rounding to avoid IEEE 754 precision issues
-  double multiplier = std::pow(10.0, precision);
-  double rounded = std::round(val * multiplier) / multiplier;
-
-  std::ostringstream oss;
-  oss << std::fixed << std::setprecision(precision) << rounded;
-  return oss.str();
+  // CPython rounds the exact binary value half-to-even, as printf does:
+  // f"{0.125:.2f}" is "0.12" and f"{2.675:.2f}" is "2.67".
+  if (std::isnan(val))
+    return "nan";
+  const int n = std::snprintf(nullptr, 0, "%.*f", precision, val);
+  if (n < 0)
+    throw std::runtime_error("float formatting failed");
+  std::string out(static_cast<std::size_t>(n), '\0');
+  std::snprintf(&out[0], out.size() + 1, "%.*f", precision, val);
+  return out;
 }
 
 std::string string_handler::cpython_float_str(double d)
@@ -1074,7 +1188,7 @@ exprt string_handler::apply_format_specification(
     if (v.is_symbol())
     {
       const symbolt *sym =
-        find_cached_symbol(to_symbol_expr(v).get_identifier().as_string());
+        find_foldable_symbol(to_symbol_expr(v).get_identifier().as_string());
       if (sym && !sym->get_value().is_nil())
         v = sym->get_value();
     }
@@ -1143,7 +1257,7 @@ exprt string_handler::apply_format_specification(
     exprt fmt_expr = expr;
     if (fmt_expr.is_symbol())
     {
-      const symbolt *sym = find_cached_symbol(
+      const symbolt *sym = find_foldable_symbol(
         to_symbol_expr(fmt_expr).get_identifier().as_string());
       if (sym && !sym->get_value().is_nil())
       {
@@ -1213,7 +1327,7 @@ exprt string_handler::apply_format_specification(
     if (v.is_symbol())
     {
       const symbolt *sym =
-        find_cached_symbol(to_symbol_expr(v).get_identifier().as_string());
+        find_foldable_symbol(to_symbol_expr(v).get_identifier().as_string());
       if (sym && !sym->get_value().is_nil())
         v = sym->get_value();
     }
@@ -1238,7 +1352,7 @@ exprt string_handler::apply_format_specification(
     if (v.is_symbol())
     {
       const symbolt *sym =
-        find_cached_symbol(to_symbol_expr(v).get_identifier().as_string());
+        find_foldable_symbol(to_symbol_expr(v).get_identifier().as_string());
       if (sym && !sym->get_value().is_nil())
         v = sym->get_value();
     }
@@ -1317,7 +1431,7 @@ exprt string_handler::apply_format_specification(
           {
             const symbol_exprt &sym_expr = to_symbol_expr(expr);
             const symbolt *symbol =
-              find_cached_symbol(sym_expr.get_identifier().as_string());
+              find_foldable_symbol(sym_expr.get_identifier().as_string());
 
             if (symbol && symbol->get_value().is_constant())
               float_bits = &symbol->get_value().value().as_string();
@@ -1369,6 +1483,41 @@ exprt string_handler::apply_format_specification(
     }
   }
 
+  return format_runtime_value(expr, format);
+}
+
+// The precision of a bare "f" or ".<digits>f" spec of at most 15 digits.
+static std::optional<long long> fixed_point_precision(const std::string &format)
+{
+  if (format == "f")
+    return 6;
+  if (
+    format.size() < 3 || format.size() > 4 || format.front() != '.' ||
+    format.back() != 'f')
+    return std::nullopt;
+  const std::string digits = format.substr(1, format.size() - 2);
+  if (!std::all_of(digits.begin(), digits.end(), [](unsigned char c) {
+        return std::isdigit(c);
+      }))
+    return std::nullopt;
+  const long long precision = std::stoll(digits);
+  return precision <= 15 ? std::optional<long long>(precision) : std::nullopt;
+}
+
+exprt string_handler::format_runtime_value(
+  const exprt &expr,
+  const std::string &format)
+{
+  const std::optional<long long> precision = fixed_point_precision(format);
+  symbolt *fixed_symbol =
+    find_cached_c_function_symbol("c:@F@__python_float_to_fixed_str");
+  if (expr.type().is_floatbv() && precision && fixed_symbol)
+    return build_call_expr(
+      *fixed_symbol,
+      gen_pointer_type(char_type()),
+      {build_typecast(expr, double_type()),
+       from_integer(*precision, long_long_int_type())});
+
   // Any other spec (e.g. "x", ",", combined width+precision) changes the
   // rendered text; folding to the unformatted value would be a wrong value
   // that can satisfy a false assertion. Fall back to a sound nondet string.
@@ -1389,6 +1538,96 @@ exprt string_handler::make_char_array_expr(
   return arr;
 }
 
+exprt string_handler::char_to_string(const exprt &expr)
+{
+  const typet str_type = type_handler_.build_array(char_type(), 2);
+  if (expr.is_constant())
+    return make_char_array_expr(
+      {static_cast<unsigned char>(
+         binary2integer(expr.value().as_string(), true).to_int64()),
+       '\0'},
+      str_type);
+  symbolt &tmp = converter_.create_tmp_symbol(
+    expr.location(), "$char_to_str$", str_type, exprt());
+  const exprt str = build_symbol(tmp);
+  converter_.add_instruction(code_declt(str));
+  converter_.add_instruction(
+    code_assignt(build_index(str, from_integer(0, size_type())), expr));
+  converter_.add_instruction(code_assignt(
+    build_index(str, from_integer(1, size_type())), gen_zero(char_type())));
+  return str;
+}
+
+/// The str of a constant int, float or bool, or nil for any other constant.
+exprt string_handler::constant_to_string(const exprt &expr)
+{
+  const typet &t = expr.type();
+  if (type_utils::is_integer_type(t))
+  {
+    BigInt value = binary2integer(expr.value().as_string(), t.is_signedbv());
+    std::string str_value = std::to_string(value.to_int64());
+
+    typet string_type =
+      type_handler_.build_array(char_type(), str_value.size() + 1);
+    std::vector<unsigned char> chars(str_value.begin(), str_value.end());
+    chars.push_back('\0'); // null terminator
+
+    return make_char_array_expr(chars, string_type);
+  }
+  else if (t.is_floatbv())
+  {
+    // Fold to CPython's shortest round-trip repr. Only a 64-bit double with a
+    // concrete value is rendered; a 32-bit float or an empty (nondet) value
+    // stays a sound nondet string.
+    std::optional<std::string> folded;
+    if (!expr.value().empty() && bv_width(t) == 64)
+    {
+      ieee_floatt f;
+      f.from_expr(to_constant_expr(expr));
+      folded = cpython_float_str(f.to_double());
+    }
+    if (!folded)
+      return build_nondet_string_fallback(expr.location());
+
+    typet string_type =
+      type_handler_.build_array(char_type(), folded->size() + 1);
+    std::vector<unsigned char> chars(folded->begin(), folded->end());
+    chars.push_back('\0');
+
+    return make_char_array_expr(chars, string_type);
+  }
+  else if (t.is_bool())
+  {
+    // Convert boolean to string
+    bool value = expr.is_true();
+    std::string str_value = value ? "True" : "False";
+
+    typet string_type =
+      type_handler_.build_array(char_type(), str_value.size() + 1);
+    std::vector<unsigned char> chars(str_value.begin(), str_value.end());
+    chars.push_back('\0');
+
+    return make_char_array_expr(chars, string_type);
+  }
+  return nil_exprt();
+}
+
+/// A str symbol itself, the str of a foldable constant value, or nil.
+exprt string_handler::symbol_to_string(const exprt &expr)
+{
+  const symbolt *symbol = find_cached_symbol(expr.identifier().as_string());
+  if (symbol == nullptr)
+    return nil_exprt();
+  if (
+    symbol->get_type().is_array() &&
+    symbol->get_type().subtype() == char_type())
+    return expr;
+  const symbolt *foldable = find_foldable_symbol(expr.identifier().as_string());
+  if (foldable != nullptr && foldable->get_value().is_constant())
+    return convert_to_string(foldable->get_value());
+  return nil_exprt();
+}
+
 exprt string_handler::convert_to_string(const exprt &expr)
 {
   const typet &t = expr.type();
@@ -1397,74 +1636,22 @@ exprt string_handler::convert_to_string(const exprt &expr)
   if (t.is_array() && t.subtype() == char_type())
     return expr;
 
-  // Handle symbol references
+  // A char is a one-character str (an element of a str), not an int.
+  if (t == char_type())
+    return char_to_string(expr);
+
   if (expr.is_symbol())
   {
-    const symbolt *symbol = find_cached_symbol(expr.identifier().as_string());
-    if (symbol)
-    {
-      // If symbol has string type, return it
-      if (
-        symbol->get_type().is_array() &&
-        symbol->get_type().subtype() == char_type())
-        return expr;
-
-      // If symbol has a constant value, convert that
-      if (symbol->get_value().is_constant())
-        return convert_to_string(symbol->get_value());
-    }
+    const exprt from_symbol = symbol_to_string(expr);
+    if (from_symbol.is_not_nil())
+      return from_symbol;
   }
 
-  // Handle constants
   if (expr.is_constant())
   {
-    if (type_utils::is_integer_type(t))
-    {
-      BigInt value = binary2integer(expr.value().as_string(), t.is_signedbv());
-      std::string str_value = std::to_string(value.to_int64());
-
-      typet string_type =
-        type_handler_.build_array(char_type(), str_value.size() + 1);
-      std::vector<unsigned char> chars(str_value.begin(), str_value.end());
-      chars.push_back('\0'); // null terminator
-
-      return make_char_array_expr(chars, string_type);
-    }
-    else if (t.is_floatbv())
-    {
-      // Fold to CPython's shortest round-trip repr. Only a 64-bit double with a
-      // concrete value is rendered; a 32-bit float or an empty (nondet) value
-      // stays a sound nondet string.
-      std::optional<std::string> folded;
-      if (!expr.value().empty() && bv_width(t) == 64)
-      {
-        ieee_floatt f;
-        f.from_expr(to_constant_expr(expr));
-        folded = cpython_float_str(f.to_double());
-      }
-      if (!folded)
-        return build_nondet_string_fallback(expr.location());
-
-      typet string_type =
-        type_handler_.build_array(char_type(), folded->size() + 1);
-      std::vector<unsigned char> chars(folded->begin(), folded->end());
-      chars.push_back('\0');
-
-      return make_char_array_expr(chars, string_type);
-    }
-    else if (t.is_bool())
-    {
-      // Convert boolean to string
-      bool value = expr.is_true();
-      std::string str_value = value ? "True" : "False";
-
-      typet string_type =
-        type_handler_.build_array(char_type(), str_value.size() + 1);
-      std::vector<unsigned char> chars(str_value.begin(), str_value.end());
-      chars.push_back('\0');
-
-      return make_char_array_expr(chars, string_type);
-    }
+    exprt folded = constant_to_string(expr);
+    if (folded.is_not_nil())
+      return folded;
   }
 
   // Handle pointer types from struct member access (e.g. self.name).
@@ -1771,6 +1958,13 @@ exprt string_handler::get_array_base_address(const exprt &arr)
 {
   if (arr.type().is_pointer())
     return arr;
+  // `c ? "a" : "b"` addresses the chosen array, not an element of the choice,
+  // which the solver cannot take the address of (#8784).
+  if (arr.id() == "if")
+    return build_if(
+      arr.op0(),
+      get_array_base_address(arr.op1()),
+      get_array_base_address(arr.op2()));
   // arr is non-pointer (array) here; index2t source ok, address_of of a
   // non-constant/non-address_of expr is a valid address_of2t source.
   exprt index = build_index(arr, from_integer(0, index_type()));
@@ -2100,6 +2294,23 @@ symbolt *string_handler::find_cached_symbol(const std::string &symbol_id)
   return symbol;
 }
 
+// A symbol's value is its last static assignment, which is the value a read
+// sees only when the name is bound once and is not a parameter.
+const symbolt *
+string_handler::find_foldable_symbol(const std::string &symbol_id)
+{
+  const symbolt *symbol = find_cached_symbol(symbol_id);
+  if (symbol == nullptr || symbol->get_value().is_nil())
+    return nullptr;
+  const std::string name = symbol->name.as_string();
+  const std::string &function = converter_.get_current_func_name();
+  const nlohmann::json &ast = converter_.get_ast_json();
+  if (json_utils::has_multiple_assignments_in_scope(name, function, ast))
+    return nullptr;
+  const nlohmann::json decl = json_utils::find_var_decl(name, function, ast);
+  return decl.value("_type", "") == "arg" ? nullptr : symbol;
+}
+
 symbolt *
 string_handler::find_cached_c_function_symbol(const std::string &symbol_id)
 {
@@ -2164,6 +2375,18 @@ static bool resolve_join_iterable(
   return seq.contains("_type") &&
          (seq["_type"] == "List" || seq["_type"] == "Tuple") &&
          seq.contains("elts");
+}
+
+static bool is_name_binop_or_split_call(const nlohmann::json &arg)
+{
+  const std::string type = arg.value("_type", "");
+  if (type == "Name" || type == "BinOp")
+    return true;
+  if (type != "Call" || !arg.contains("func"))
+    return false;
+  const auto &func = arg["func"];
+  return func.value("_type", "") == "Attribute" &&
+         func.value("attr", "") == "split";
 }
 
 // Fold a constant string-valued method call: `sep.join([...])` over a literal
@@ -2392,6 +2615,26 @@ exprt string_handler::handle_string_to_int(
     throw std::runtime_error("__python_int function not found in symbol table");
   }
 
+  // int() of an invalid literal raises a catchable ValueError (#8705), as
+  // float() does; the model's own assertion stays for unguarded callers.
+  if (
+    const symbolt *is_int =
+      find_cached_c_function_symbol("c:@F@__python_str_is_int"))
+  {
+    exprt valid = build_call_expr(*is_int, bool_type(), {str_addr, base_expr});
+    valid.location() = location;
+    codet throw_code("expression");
+    throw_code.operands().push_back(
+      converter_.get_exception_handler().gen_exception_raise(
+        "ValueError", "invalid literal for int()"));
+    code_ifthenelset guard;
+    guard.cond() = not_exprt(valid);
+    guard.then_case() = throw_code;
+    guard.location() = location;
+    guard.location().property("skipped");
+    converter_.add_instruction(guard);
+  }
+
   // Call __python_int(str, base). The result is a 64-bit Python int (matching
   // the model's `long long` return); a 32-bit result type here would make the
   // assigned-to variable 32-bit and truncate a string pointer rebound through
@@ -2445,13 +2688,14 @@ exprt string_handler::handle_int_conversion(
     return handle_string_to_int_base10(arg, location);
   }
 
-  // If argument is a pointer to char (string pointer)
-  if (arg.type().is_pointer() && arg.type().subtype() == char_type())
-  {
-    // Create a wrapper to ensure null-termination handling
-    exprt string_copy = arg;
-    return handle_string_to_int(string_copy, nil_exprt(), location);
-  }
+  // A str pointer: char*, or the char(*)[N] of an Optional[str]
+  if (arg.type().is_pointer() && type_utils::is_string_type(arg.type()))
+    return handle_string_to_int(
+      build_typecast(arg, pointer_typet(char_type())), nil_exprt(), location);
+
+  if (type_handler_.is_tagged_scalar_type(arg.type()))
+    return converter_.dynamic_type_handler_.build_numeric_conversion(
+      arg, long_long_int_type(), location);
 
   // For other types, attempt a typecast
   return build_typecast(arg, int_type());
@@ -2648,25 +2892,29 @@ exprt string_handler::try_handle_len_string_fast_path(
     }
   }
 
+  return char_array_type_length(arg_expr);
+}
+
+// The length a char array's type gives @p arg_expr, or nil. An element of a
+// numpy string array is NUL-padded to the array's width, so only strlen
+// knows its length.
+exprt string_handler::char_array_type_length(const exprt &arg_expr) const
+{
+  if (arg_expr.id() == "index" && arg_expr.op0().type().is_array())
+    return nil_exprt();
   typet actual_type = arg_expr.type();
   if (actual_type.is_pointer())
     actual_type = actual_type.subtype();
   if (actual_type.id() == "symbol")
     actual_type = converter_.ns.follow(actual_type);
-
-  if (actual_type.id() == "array")
-  {
-    const array_typet &arr_type = to_array_type(actual_type);
-    if (
-      type_utils::is_char_type(arr_type.subtype()) &&
-      arr_type.size().is_constant())
-    {
-      BigInt sz;
-      if (!to_integer(arr_type.size(), sz) && sz > 0)
-        return from_integer(sz - 1, size_type());
-    }
-  }
-
+  if (actual_type.id() != "array")
+    return nil_exprt();
+  const array_typet &arr_type = to_array_type(actual_type);
+  BigInt sz;
+  if (
+    type_utils::is_char_type(arr_type.subtype()) &&
+    arr_type.size().is_constant() && !to_integer(arr_type.size(), sz) && sz > 0)
+    return from_integer(sz - 1, size_type());
   return nil_exprt();
 }
 
@@ -2871,6 +3119,36 @@ static bool names_imported_module(
          !converter.name_shadows_module(receiver, use);
 }
 
+exprt string_handler::read_tagged_str_receiver(
+  const exprt &receiver,
+  const std::string &method,
+  const nlohmann::json &call_json)
+{
+  if (!converter_.get_type_handler().is_tagged_scalar_type(receiver.type()))
+    return receiver;
+
+  // The receiver is read twice, so only a symbol qualifies, and the guard
+  // must run exactly where the call is evaluated.
+  if (
+    !receiver.is_symbol() || !type_utils::is_str_only_method(method) ||
+    !converter_.can_emit_runtime_guard())
+    throw std::runtime_error(
+      "calling '" + method +
+      "' on a dynamically-typed variable is not yet supported");
+
+  const exprt is_str = converter_.dynamic_type_handler_.build_isinstance_check(
+    receiver, "str", false);
+  converter_.emit_guarded_raise(
+    build_not(is_str),
+    "AttributeError",
+    "object has no attribute '" + method + "'",
+    converter_.get_location_from_decl(call_json));
+
+  return build_typecast(
+    build_member(receiver, "value", pointer_typet(empty_typet())),
+    pointer_typet(char_type()));
+}
+
 exprt string_handler::handle_string_attribute_call(
   const nlohmann::json &call_json)
 {
@@ -2910,8 +3188,10 @@ exprt string_handler::handle_string_attribute_call(
   std::optional<exprt> cached_receiver_expr;
   auto get_receiver_expr = [&]() -> exprt {
     if (!cached_receiver_expr.has_value())
-      cached_receiver_expr =
-        to_value_expr(converter_.get_expr(receiver_json), converter_.ns);
+      cached_receiver_expr = to_value_expr(
+        read_tagged_str_receiver(
+          converter_.get_expr(receiver_json), method_name, call_json),
+        converter_.ns);
     return *cached_receiver_expr;
   };
 
@@ -3543,6 +3823,32 @@ exprt string_handler::convert_join_items(
   return nil_exprt();
 }
 
+exprt string_handler::join_unfoldable_iterable(
+  const exprt &separator,
+  const nlohmann::json &call_json)
+{
+  // A list built at run time, such as s.split(" ") on a symbolic s, is read
+  // by the runtime join model rather than left nondet.
+  const nlohmann::json &list_arg = call_json["args"][0];
+  if (is_name_binop_or_split_call(list_arg))
+  {
+    exprt list_expr = converter_.get_expr(list_arg);
+    if (list_expr.type() == type_handler_.get_list_type())
+      return string_builder_->build_runtime_str_join_call(separator, list_expr);
+  }
+
+  // Iterable arg isn't a literal `List` and couldn't be folded (e.g.
+  // a `sorted(...)`, list comprehension, or unannotated parameter).
+  // Fall back to a sound nondet `char *` instead of aborting GOTO
+  // conversion. Same pattern as PRs #4814 (splitlines), #4815
+  // (partition/format), #4818..#4826 (str.* runtime models).
+  log_debug(
+    "python-string",
+    "join() iterable arg not a foldable List literal: nondet fallback");
+  return build_nondet_string_fallback(
+    converter_.get_location_from_decl(call_json));
+}
+
 exprt string_handler::handle_str_join(const nlohmann::json &call_json)
 {
   // Validate JSON structure: ensure we have the required keys
@@ -3707,16 +4013,7 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
     ((*list_node)["_type"] != "List" && list_node != &list_arg) ||
     !list_node->contains("elts"))
   {
-    // Iterable arg isn't a literal `List` and couldn't be folded (e.g.
-    // a `sorted(...)`, list comprehension, or unannotated parameter).
-    // Fall back to a sound nondet `char *` instead of aborting GOTO
-    // conversion. Same pattern as PRs #4814 (splitlines), #4815
-    // (partition/format), #4818..#4826 (str.* runtime models).
-    log_debug(
-      "python-string",
-      "join() iterable arg not a foldable List literal: nondet fallback");
-    return build_nondet_string_fallback(
-      converter_.get_location_from_decl(call_json));
+    return join_unfoldable_iterable(separator, call_json);
   }
 
   // Get the list elements from the AST

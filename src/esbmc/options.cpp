@@ -247,6 +247,11 @@ const struct group_opt_templ all_cmd_options[] = {
      {"python-no-fold",
       NULL,
       "Disable NumPy constant folding in the Python frontend"},
+     {"python-math-ulps",
+      boost::program_options::value<int>()->value_name("n"),
+      "How many ulps a math or NumPy transcendental function's result may "
+      "lie from the C library's value (default 8); 0 assumes a correctly "
+      "rounded library"},
      {"python-typecheck",
       NULL,
       "Type-check the input with mypy --strict and print the report."},
@@ -660,7 +665,24 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Extract the main loop as a transition system, print one TS-CHECK line "
      "saying whether it is one, and stop"},
-    {"ts-dump", NULL, "With --ts-check, also print the transition system"}}},
+    {"ts-dump",
+     NULL,
+     "With another --ts option, also print the extracted transition system"},
+    {"ts-bmc", NULL, "Bounded model checking over the transition system"},
+    {"ts-no-fallback",
+     NULL,
+     "Report UNKNOWN instead of falling back when the program is not a "
+     "transition system"},
+    {"ts-no-live-filter",
+     NULL,
+     "Keep every havocked variable as state instead of slicing to the "
+     "properties' cone of influence"},
+    {"ts-fresh-solver",
+     NULL,
+     "With --ts-bmc, solve each bound as one formula in a new solver"},
+    {"ts-push-pop",
+     NULL,
+     "Use push/pop instead of assumptions in --ts-bmc (cross-check)"}}},
   {"k-induction",
    {{"base-case", NULL, "Check the base case"},
     {"forward-condition", NULL, "Check the forward condition"},
@@ -782,6 +804,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"cvc5", NULL, "Use CVC5"},
     {"yices", NULL, "Use Yices"},
     {"bitwuzla", NULL, "Use Bitwuzla (default)"},
+    {"bitwuzla-opt",
+     boost::program_options::value<std::vector<std::string>>()->value_name(
+       "name=value"),
+     "Set a Bitwuzla option, e.g. rewrite-level=1 (repeatable)"},
     {"bitwuzllob",
      NULL,
      "Use Bitwuzllob (Bitwuzla on the massively parallel Mallob platform) by "
@@ -886,6 +912,10 @@ const struct group_opt_templ all_cmd_options[] = {
    {{"multi-property",
      NULL,
      "Verify satisfiability of all claims of the current bound"},
+    {"report-unreached-claims",
+     NULL,
+     "List each claim no path reaches within the bound in the property "
+     "table, as passed vacuously"},
     {"multi-property-interleavings",
      boost::program_options::value<int>()->value_name("n"),
      "In multi-property mode, keep exploring thread interleavings after a "
@@ -1136,39 +1166,12 @@ const struct group_opt_templ all_cmd_options[] = {
      {"branch-coverage-claims",
       NULL,
       "Enable branch-coverage and shows all reached claims"},
-     {"coverage-whole-unit",
-      NULL,
-      "With --contract C, keep C as the harness entry but count branch "
-      "coverage over the whole compilation unit instead of scoping the "
-      "denominator/numerator to C's own lexically-declared decisions "
-      "(opt-out of per-contract semantics A)"},
-     {"coverage-multi-tx",
-      NULL,
-      "Keep the multi-transaction dispatcher loop live in Solidity coverage "
-      "mode instead of neutralizing it to one call, so branches reachable only "
-      "through a state-building call sequence (e.g. deposit(); withdraw();) "
-      "are "
-      "covered and reconstructed into an ordered Foundry test. Requires a "
-      "global bound: use with --incremental-bmc (recommended; discovers the "
-      "transaction depth dynamically) or --unwind N (reaches up to ~N-1 tx). "
-      "Incompatible with --solidity-max-tx. Note: a state-building prefix "
-      "transaction can be lost under per-claim slicing, degrading that case to "
-      "a single call (under-coverage, never a wrong test)"},
      {"coverage-covered-set",
       boost::program_options::value<std::string>()->value_name("path"),
       "Cross-run persisted covered-set for --branch-coverage. Read at "
       "start (edges already witnessed are not re-instrumented, cutting "
       "SMT cost) and merge-written at end. The denominator stays the "
       "full static universe, so skipping never inflates coverage"},
-     {"coverage-exclude-contract",
-      boost::program_options::value<std::vector<std::string>>()->value_name(
-        "name"),
-      "Exclude a Solidity contract's own decisions from branch coverage "
-      "(repeatable). Decisions whose lexically-declaring contract is in "
-      "this set count in NEITHER the denominator NOR the numerator. Used "
-      "with --coverage-whole-unit to drop dependency code (e.g. "
-      "OpenZeppelin); a no-op in default per-contract mode, where foreign "
-      "decisions are already scoped out"},
      {"branch-function-coverage",
       NULL,
       "Show the coverage of branches and function entry"},
@@ -1243,6 +1246,10 @@ const struct group_opt_templ all_cmd_options[] = {
       "object (unsound)"},
      {"abort-on-recursion", NULL, "Abort if the program contains recursion"},
      {"ltl", NULL, "Enable Linear Temporal Logic property checking"},
+     {"ltl-sample-points",
+      NULL,
+      "Step the LTL monitor only at __ESBMC_ltl_sample() calls, not after "
+      "every update of a global its propositions read"},
      {"break-at",
       boost::program_options::value<std::string>(),
       "Trigger a breakpoint at the given GOTO instruction number"},

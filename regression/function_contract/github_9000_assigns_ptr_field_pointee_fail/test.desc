@@ -1,0 +1,5 @@
+CORE
+main.c
+--enforce-contract f
+^  assigns compliance: c:@g not in assigns clause$
+^VERIFICATION FAILED$

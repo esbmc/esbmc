@@ -91,6 +91,11 @@ public:
     const nlohmann::json &type_node,
     codet &block);
 
+  // Class named by a raise's exception expression, or "" when unknown.
+  std::string raised_class_name(const nlohmann::json &exc) const;
+  // `E` for `mod.E` when `mod` is an imported module defining class `E`.
+  std::string module_class_name(const nlohmann::json &node) const;
+
   // -----------------------------------------------------------------------
   // Assertion helpers (previously python_converter private methods)
   // -----------------------------------------------------------------------
@@ -185,6 +190,14 @@ private:
 
   /// Names the spill temporaries inject_finally_before_escapes introduces.
   unsigned finally_spill_count_ = 0;
+
+  exprt make_finally_rethrow_handler(const nlohmann::json &element);
+
+  void emit_else_clause(
+    const nlohmann::json &element,
+    exprt else_block,
+    const exprt &no_raise,
+    codet &block);
 
   /** Create a temporary boolean symbol used by assertion helpers. */
   symbolt create_assert_temp_variable(const locationt &location) const;

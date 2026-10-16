@@ -89,6 +89,39 @@ exprt python_converter::make_enum_member_struct_expr(
   return struct_val;
 }
 
+symbolt *python_converter::find_class_attribute_symbol(
+  const std::string &class_name,
+  const std::string &attr_name)
+{
+  auto lookup = [&](const std::string &cls) {
+    symbol_id sid = create_symbol_id();
+    sid.set_function("");
+    sid.set_class(cls);
+    sid.set_object(attr_name);
+    symbolt *symbol =
+      follow_retype_alias(symbol_table_.find_symbol(sid.to_string()));
+    if (symbol)
+      dynamic_type_handler_.resolve_read(symbol);
+    return symbol;
+  };
+
+  if (symbolt *found = lookup(class_name))
+    return found;
+
+  // Not found in the direct class — walk base classes (Python MRO).
+  auto class_node = json_utils::find_class((*ast_json)["body"], class_name);
+  if (class_node.empty() || !class_node.contains("bases"))
+    return nullptr;
+  for (const auto &base_node : class_node["bases"])
+  {
+    if (!base_node.contains("id"))
+      continue;
+    if (symbolt *found = lookup(base_node["id"].get<std::string>()))
+      return found;
+  }
+  return nullptr;
+}
+
 std::string
 python_converter::extract_class_name_from_tag(const std::string &tag_name)
 {
@@ -150,6 +183,8 @@ void python_converter::register_instance_attribute(
 {
   // Add to regular instance attribute map
   instance_attr_map[symbol_id].insert(attr_name);
+  if (block_nesting_ == function_body_depth_ + 1)
+    certain_instance_attrs_[symbol_id].insert(attr_name);
 
   // For 'self' parameters, also track with normalized key for cross-method
   // access
@@ -185,6 +220,140 @@ bool python_converter::is_instance_attribute(
   return false;
 }
 
+// Appends what each plain assignment to `name` under `node` assigns, outside
+// nested scopes. A binding these miss is still counted by count_name_bindings,
+// which then forces the fallback.
+static void collect_assigned_values(
+  const nlohmann::json &node,
+  const std::string &name,
+  std::vector<const nlohmann::json *> &values)
+{
+  if (node.is_object())
+  {
+    const std::string kind = node.value("_type", "");
+    if (
+      kind == "FunctionDef" || kind == "AsyncFunctionDef" ||
+      kind == "ClassDef" || kind == "Lambda")
+      return;
+    if (
+      const nlohmann::json *value =
+        json_utils::plain_assigned_value(node, name))
+      values.push_back(value);
+  }
+  for (const auto &child : node)
+    if (child.is_structured())
+      collect_assigned_values(child, name, values);
+}
+
+// `value`, or every value assigned to the local it names when plain
+// assignments are all of that local's bindings in `method` (#9073).
+static std::vector<const nlohmann::json *>
+assigned_values(const nlohmann::json &value, const nlohmann::json &method)
+{
+  if (!value.is_object() || value.value("_type", "") != "Name")
+    return {&value};
+  const std::string name = value["id"].get<std::string>();
+  std::vector<const nlohmann::json *> values;
+  collect_assigned_values(method["body"], name, values);
+  if (
+    values.empty() ||
+    values.size() != json_utils::count_name_bindings(method, name))
+    return {&value};
+  return values;
+}
+
+typet python_converter::shared_tuple_struct(
+  const nlohmann::json &value,
+  const nlohmann::json &method,
+  const std::unordered_map<std::string, nlohmann::json> &param_annotations)
+{
+  const auto values = assigned_values(value, method);
+  const typet shape =
+    infer_tuple_struct_from_value(*values.front(), param_annotations);
+  for (auto it = std::next(values.begin()); it != values.end(); ++it)
+    if (infer_tuple_struct_from_value(**it, param_annotations) != shape)
+      return empty_typet();
+  return shape;
+}
+
+// Whether gen_ctor builds this class's constructor, which seeds each class
+// attribute into the instance: no __init__ of its own and no base class.
+static bool seeds_class_attributes(const nlohmann::json &class_node)
+{
+  if (
+    class_node.empty() ||
+    !class_node.value("bases", nlohmann::json::array()).empty())
+    return false;
+  for (const auto &stmt : class_node["body"])
+    if (
+      stmt.value("_type", "") == "FunctionDef" &&
+      stmt.value("name", "") == "__init__")
+      return false;
+  return true;
+}
+
+// Whether any statement under @p node assigns `class_name.attr_name`.
+static bool rebinds_class_attribute(
+  const nlohmann::json &node,
+  const std::string &class_name,
+  const std::string &attr_name)
+{
+  if (
+    node.is_object() && node.value("_type", "") == "Attribute" &&
+    node.value("attr", "") == attr_name && node.contains("value") &&
+    node["value"].value("_type", "") == "Name" &&
+    node["value"].value("id", "") == class_name && node.contains("ctx") &&
+    node["ctx"].value("_type", "") != "Load")
+    return true;
+  for (const auto &child : node)
+    if (
+      child.is_structured() &&
+      rebinds_class_attribute(child, class_name, attr_name))
+      return true;
+  return false;
+}
+
+void python_converter::reject_maybe_unset_instance_attr(
+  bool instance_written,
+  const symbolt &symbol,
+  const std::string &var_name,
+  const std::string &attr_name,
+  const std::string &obj_type_name)
+{
+  // self and parameters are written in other functions, so this function's
+  // spine says nothing about them.
+  if (!instance_written || var_name == "self" || symbol.is_parameter)
+    return;
+  auto certain = certain_instance_attrs_.find(symbol.id.as_string());
+  if (
+    certain != certain_instance_attrs_.end() &&
+    certain->second.count(attr_name))
+    return;
+
+  const std::string class_name = extract_class_name_from_tag(obj_type_name);
+  symbol_id class_sid = create_symbol_id();
+  class_sid.set_function("");
+  class_sid.set_class(class_name);
+  class_sid.set_object(attr_name);
+  if (!symbol_table_.find_symbol(class_sid.to_string()))
+    return;
+
+  // The generated constructor seeds the field with the class body's value,
+  // which is right until something rebinds the class attribute.
+  const nlohmann::json class_node =
+    json_utils::find_class((*ast_json)["body"], class_name);
+  if (
+    seeds_class_attributes(class_node) &&
+    !rebinds_class_attribute(*ast_json, class_name, attr_name))
+    return;
+
+  throw std::runtime_error(
+    "Unsupported: '" + var_name + "." + attr_name +
+    "' is read after an instance write that may not have run, and the class "
+    "also has '" +
+    attr_name + "'");
+}
+
 void python_converter::copy_instance_attributes(
   const std::string &src_obj_id,
   const std::string &target_obj_id)
@@ -196,6 +365,11 @@ void python_converter::copy_instance_attributes(
     std::set<std::string> &target_attrs = instance_attr_map[target_obj_id];
     target_attrs.insert(src_attrs->second.begin(), src_attrs->second.end());
   }
+
+  auto certain = certain_instance_attrs_.find(src_obj_id);
+  if (certain != certain_instance_attrs_.end())
+    certain_instance_attrs_[target_obj_id].insert(
+      certain->second.begin(), certain->second.end());
 }
 
 void python_converter::update_instance_from_self(
@@ -206,6 +380,256 @@ void python_converter::update_instance_from_self(
   symbol_id sid(current_python_file, class_name, func_name);
   sid.set_object("self");
   copy_instance_attributes(sid.to_string(), obj_symbol_id);
+}
+
+/// The struct a `self` argument or parameter of type \p t points to, or null.
+static const struct_typet *self_struct(const typet &t, const namespacet &ns)
+{
+  if (!t.is_pointer())
+    return nullptr;
+  const typet &pointee = ns.follow(t.subtype());
+  return pointee.is_struct() ? &to_struct_type(pointee) : nullptr;
+}
+
+static const code_function_callt *as_function_call(const exprt &e)
+{
+  return e.is_code() && to_code(e).get_statement() == "function_call"
+           ? &to_code_function_call(to_code(e))
+           : nullptr;
+}
+
+static const symbolt *
+called_function(const code_function_callt &call, const contextt &symbols)
+{
+  const symbolt *callee = call.function().is_symbol()
+                            ? symbols.find_symbol(call.function().identifier())
+                            : nullptr;
+  return callee && callee->get_type().is_code() ? callee : nullptr;
+}
+
+/// The call's first argument with its casts stripped, or nil.
+static exprt call_receiver(const code_function_callt &call)
+{
+  exprt arg = call.arguments().empty() ? exprt() : call.arguments().front();
+  while (arg.id() == "typecast")
+    arg = arg.op0();
+  return arg;
+}
+
+static bool is_member_through(const exprt &e, const irep_idt &self)
+{
+  return e.id() == "member" && e.op0().id() == "dereference" &&
+         e.op0().op0().is_symbol() && e.op0().op0().identifier() == self;
+}
+
+static void collect_self_members(
+  const exprt &body,
+  const irep_idt &self,
+  const contextt &symbols,
+  std::set<irep_idt> &visited,
+  std::set<irep_idt> &names);
+
+/// The attributes \p method reads or writes through its first parameter.
+static void collect_method_self_members(
+  const symbolt &method,
+  const contextt &symbols,
+  std::set<irep_idt> &visited,
+  std::set<irep_idt> &names)
+{
+  const auto &params = to_code_type(method.get_type()).arguments();
+  if (!params.empty())
+    collect_self_members(
+      method.get_value(),
+      params.front().get_identifier(),
+      symbols,
+      visited,
+      names);
+}
+
+/// The attributes \p body reads or writes through the pointer \p self,
+/// including in the methods it passes \p self on to.
+static void collect_self_members(
+  const exprt &body,
+  const irep_idt &self,
+  const contextt &symbols,
+  std::set<irep_idt> &visited,
+  std::set<irep_idt> &names)
+{
+  if (is_member_through(body, self))
+    names.insert(body.component_name());
+  if (const code_function_callt *call = as_function_call(body))
+  {
+    const exprt arg = call_receiver(*call);
+    const symbolt *callee = called_function(*call, symbols);
+    if (
+      arg.is_symbol() && arg.identifier() == self && callee &&
+      visited.insert(callee->id).second)
+      collect_method_self_members(*callee, symbols, visited, names);
+  }
+  for (const exprt &op : body.operands())
+    collect_self_members(op, self, symbols, visited, names);
+}
+
+static std::optional<std::size_t>
+component_index(const struct_typet &st, const irep_idt &name)
+{
+  const auto &comps = st.components();
+  for (std::size_t i = 0; i < comps.size(); ++i)
+    if (comps[i].get_name() == name)
+      return i;
+  return std::nullopt;
+}
+
+static bool same_slot(
+  const struct_typet &own,
+  const struct_typet &given,
+  const irep_idt &name)
+{
+  const auto at = component_index(given, name);
+  return at && at == component_index(own, name);
+}
+
+static std::runtime_error misaligned_call_error(
+  const code_function_callt &call,
+  const symbolt &callee,
+  const struct_typet &own,
+  const struct_typet &given,
+  const irep_idt &name)
+{
+  const std::string cls = own.tag().as_string();
+  const std::string method =
+    callee.name == cls ? "__init__" : callee.name.as_string();
+  return std::runtime_error(
+    call.location().as_string() + ": calling " + cls + "." + method +
+    " on an instance of " + given.tag().as_string() + ", whose '" +
+    name.as_string() + "' is not where " + cls + " keeps it, is not supported");
+}
+
+void python_converter::refuse_misaligned_self_call(
+  const code_function_callt &call,
+  const namespacet &ns) const
+{
+  const symbolt *callee = called_function(call, symbol_table_);
+  if (!callee)
+    return;
+  const code_typet::argumentst &params =
+    to_code_type(callee->get_type()).arguments();
+  if (params.empty() || params.front().get_base_name() != "self")
+    return;
+  const struct_typet *own = self_struct(params.front().type(), ns);
+  const struct_typet *given = self_struct(call_receiver(call).type(), ns);
+  if (!own || !given || own->tag() == given->tag())
+    return;
+  const auto mro = class_mro(given->tag().as_string());
+  if (
+    !mro ||
+    std::find(mro->begin(), mro->end(), own->tag().as_string()) == mro->end())
+    return;
+
+  std::set<irep_idt> visited{callee->id}, accessed;
+  collect_method_self_members(*callee, symbol_table_, visited, accessed);
+  for (const irep_idt &name : accessed)
+    if (!same_slot(*own, *given, name))
+      throw misaligned_call_error(call, *callee, *own, *given, name);
+}
+
+/// A method receives an instance of a subclass as a pointer to its own class,
+/// so it reads and writes that instance at its own class's field offsets.
+/// Under multiple inheritance only the first base's fields lead the subclass;
+/// a method of a later base would touch another attribute's slot and prove a
+/// wrong result, so refuse the call instead (#8408).
+void python_converter::refuse_misaligned_self_calls() const
+{
+  const namespacet ns(symbol_table_);
+  std::function<void(const exprt &)> visit = [&](const exprt &e) {
+    for (const exprt &op : e.operands())
+      visit(op);
+    if (const code_function_callt *call = as_function_call(e))
+      refuse_misaligned_self_call(*call, ns);
+  };
+  symbol_table_.foreach_operand_in_order([&](const symbolt &s) {
+    if (s.get_type().is_code())
+      visit(s.get_value());
+  });
+}
+
+// Record `owner` for each `class_name(...)` call under `node` whose argument
+// `param_idx` is `self`. Nested scopes are skipped: `self` may name another
+// object there.
+static void collect_self_ctor_args(
+  const nlohmann::json &node,
+  const std::string &class_name,
+  size_t param_idx,
+  const std::string &owner,
+  std::set<std::string> &classes)
+{
+  if (node.is_array())
+  {
+    for (const auto &child : node)
+      collect_self_ctor_args(child, class_name, param_idx, owner, classes);
+    return;
+  }
+  if (!node.is_object())
+    return;
+  const std::string kind = node.value("_type", "");
+  if (kind == "FunctionDef" || kind == "Lambda" || kind == "ClassDef")
+    return;
+  if (
+    kind == "Call" && node["func"].value("id", "") == class_name &&
+    node.contains("args") && param_idx < node["args"].size() &&
+    node["args"][param_idx].value("_type", "") == "Name" &&
+    node["args"][param_idx].value("id", "") == "self")
+    classes.insert(owner);
+  for (const auto &child : node)
+    collect_self_ctor_args(child, class_name, param_idx, owner, classes);
+}
+
+// The type `self` gives `class_name`'s constructor argument `param_idx` when
+// a method of some class passes it, as in `Square(self, p)` inside a `Board`
+// method (#8510): `tag-Owner*` for one such class, Any for several, unset for
+// none.
+static typet self_ctor_arg_type(
+  const std::vector<const nlohmann::json *> &module_bodies,
+  const std::string &class_name,
+  int param_idx)
+{
+  std::set<std::string> classes;
+  for (const auto *body : module_bodies)
+    for (const auto &cls : *body)
+    {
+      if (cls.value("_type", "") != "ClassDef")
+        continue;
+      for (const auto &m : cls["body"])
+        if (
+          m.value("_type", "") == "FunctionDef" && !m["args"]["args"].empty() &&
+          m["args"]["args"][0].value("arg", "") == "self")
+          collect_self_ctor_args(
+            m["body"],
+            class_name,
+            param_idx,
+            cls["name"].get<std::string>(),
+            classes);
+    }
+  if (classes.empty())
+    return typet();
+  if (classes.size() > 1)
+    return any_type();
+  return gen_pointer_type(symbol_typet("tag-" + *classes.begin()));
+}
+
+// The tagged type for an attribute set from a constructor parameter that
+// call sites feed a dynamically-typed name, else what `self` passed as that
+// argument gives it.
+typet python_converter::ctor_param_attr_type(
+  const std::vector<const nlohmann::json *> &module_bodies,
+  const std::string &class_name,
+  const std::string &param_name,
+  int param_idx) const
+{
+  return try_infer_dynamic_param_type(
+           class_name + ".__init__", param_name, param_idx + 1)
+           ? type_handler_.get_tagged_object_type()
+           : self_ctor_arg_type(module_bodies, class_name, param_idx);
 }
 
 typet python_converter::infer_attr_type_from_usage(
@@ -368,21 +792,8 @@ typet python_converter::infer_attr_type_from_usage(
   // stay any_type() and nested reads inside functions abort ("Cannot resolve
   // nested attribute"), e.g. quixbugs detect_cycle's
   // `node.successor.successor`.
-  std::vector<const nlohmann::json *> module_bodies;
-  auto add_body = [&](const nlohmann::json &mod) {
-    if (!mod.is_object() || !mod.contains("body") || !mod["body"].is_array())
-      return;
-    const nlohmann::json *b = &mod["body"];
-    for (const auto *seen : module_bodies)
-      if (seen == b)
-        return;
-    module_bodies.push_back(b);
-  };
-  add_body(*ast_json);
-  if (entry_ast_)
-    add_body(*entry_ast_);
-  for (const auto &kv : module_ast_pool_)
-    add_body(kv.second);
+  const std::vector<const nlohmann::json *> module_bodies =
+    reachable_module_bodies();
 
   // Locate the class definition across all reachable modules. Accept only an
   // unambiguous single definition; if two modules define the same class name,
@@ -502,7 +913,8 @@ typet python_converter::infer_attr_type_from_usage(
       // in, so rebuild var_to_class per body before scanning it.
       if (param_idx >= 0)
       {
-        typet ctor_unified;
+        typet ctor_unified = ctor_param_attr_type(
+          module_bodies, class_name, param_name, param_idx);
         for (const auto *b : module_bodies)
         {
           populate_var_map(*b);
@@ -575,6 +987,201 @@ typet python_converter::infer_attr_type_from_usage(
   }
 
   return typet();
+}
+
+std::vector<const nlohmann::json *>
+python_converter::reachable_module_bodies() const
+{
+  std::vector<const nlohmann::json *> module_bodies;
+  auto add_body = [&](const nlohmann::json &mod) {
+    if (!mod.is_object() || !mod.contains("body") || !mod["body"].is_array())
+      return;
+    const nlohmann::json *b = &mod["body"];
+    for (const auto *seen : module_bodies)
+      if (seen == b)
+        return;
+    module_bodies.push_back(b);
+  };
+  add_body(*ast_json);
+  if (entry_ast_)
+    add_body(*entry_ast_);
+  for (const auto &kv : module_ast_pool_)
+    add_body(kv.second);
+  return module_bodies;
+}
+
+namespace
+{
+bool is_attribute_named(const nlohmann::json &n, const std::string &attr_name)
+{
+  return n.is_object() && n.value("_type", "") == "Attribute" &&
+         n.value("attr", "") == attr_name;
+}
+
+/// The value `n` stores into an attribute named `attr_name`, if `n` is a
+/// single-target assignment to one; nullptr otherwise.
+const nlohmann::json *
+attribute_store_value(const nlohmann::json &n, const std::string &attr_name)
+{
+  const std::string kind = n.value("_type", "");
+  if (
+    kind == "Assign" && n["targets"].size() == 1 &&
+    is_attribute_named(n["targets"][0], attr_name))
+    return &n["value"];
+  if (
+    kind == "AnnAssign" && is_attribute_named(n["target"], attr_name) &&
+    !n["value"].is_null())
+    return &n["value"];
+  return nullptr;
+}
+
+/// "" for a None literal, the scalar type of a bool, int or float literal,
+/// "?" for anything else.
+std::string literal_scalar_kind(const nlohmann::json &value)
+{
+  if (value.value("_type", "") != "Constant")
+    return "?";
+  const nlohmann::json &literal = value["value"];
+  if (literal.is_null())
+    return "";
+  if (literal.is_boolean())
+    return "bool";
+  if (literal.is_number_integer())
+    return "int";
+  return literal.is_number_float() ? "float" : "?";
+}
+
+struct attribute_writest
+{
+  std::size_t writes = 0;
+  std::size_t stores = 0;
+  bool unknown = false;
+  bool setattr_call = false;
+  std::string scalar;
+
+  void store(const nlohmann::json &value, const std::string &annotated)
+  {
+    ++stores;
+    std::string kind = literal_scalar_kind(value);
+    // A value other than a literal, of the scalar type the annotation pass
+    // inferred for it (#8589 typed only literals).
+    if (
+      kind == "?" &&
+      (annotated == "int" || annotated == "float" || annotated == "bool"))
+      kind = annotated;
+    if (kind.empty())
+      return;
+    unknown |= kind == "?" || (!scalar.empty() && kind != scalar);
+    scalar = kind;
+  }
+
+  void visit(const nlohmann::json &n, const std::string &attr_name)
+  {
+    writes += is_attribute_named(n, attr_name) &&
+              (!n.contains("ctx") || n["ctx"].value("_type", "") != "Load");
+    setattr_call |= n.value("_type", "") == "Call" && n.contains("func") &&
+                    n["func"].is_object() &&
+                    n["func"].value("id", "") == "setattr";
+    if (const nlohmann::json *value = attribute_store_value(n, attr_name))
+      store(
+        *value,
+        n.value("annotation", nlohmann::json()).is_object()
+          ? n["annotation"].value("id", "")
+          : "");
+  }
+
+  void walk(const nlohmann::json &n, const std::string &attr_name)
+  {
+    if (n.is_object())
+      visit(n, attr_name);
+    for (const auto &child : n)
+      if (child.is_structured())
+        walk(child, attr_name);
+  }
+};
+
+bool stores_none_into(const nlohmann::json &n, const std::string &attr_name)
+{
+  if (n.is_object())
+    if (const nlohmann::json *value = attribute_store_value(n, attr_name))
+      if (literal_scalar_kind(*value).empty())
+        return true;
+  for (const auto &child : n)
+    if (child.is_structured() && stores_none_into(child, attr_name))
+      return true;
+  return false;
+}
+} // namespace
+
+/// An attribute only ever stored None, or None and one scalar type, is typed
+/// so that arithmetic on it raises TypeError where it holds None (#8248).
+typet python_converter::none_attribute_type(const std::string &attr_name) const
+{
+  attribute_writest found;
+  for (const nlohmann::json *body : reachable_module_bodies())
+    found.walk(*body, attr_name);
+  if (found.setattr_call || found.writes != found.stores)
+  {
+    untyped_none_attributes_.insert(attr_name);
+    return any_type();
+  }
+  if (found.unknown)
+  {
+    // Each store sets a companion flag, so arithmetic can raise TypeError
+    // on the instance that holds None.
+    none_flagged_attributes_.insert(attr_name);
+    return any_type();
+  }
+  return found.scalar.empty() ? none_type()
+                              : type_handler_.build_optional_type(
+                                  type_handler_.get_typet(found.scalar));
+}
+
+/// A class instance is held in place unless the attribute is bound to an
+/// existing instance or is stored None somewhere: both need a reference.
+bool python_converter::held_by_reference(
+  bool rhs_is_aliased_name,
+  const std::string &attr_name,
+  const typet &type,
+  const std::string &annotated_type) const
+{
+  if (type.id() != "symbol" || !json_utils::is_class(annotated_type, *ast_json))
+    return false;
+  if (rhs_is_aliased_name)
+    return true;
+  for (const nlohmann::json *body : reachable_module_bodies())
+    if (stores_none_into(*body, attr_name))
+      return true;
+  return false;
+}
+
+/// The flag that records whether `attr_name` holds None on an instance.
+void python_converter::add_none_flag_component(
+  struct_typet &clazz,
+  const std::string &attr_name) const
+{
+  const std::string flag = attr_name + "$none";
+  if (none_flagged_attributes_.count(attr_name) && !clazz.has_component(flag))
+    clazz.components().push_back(
+      python_frontend::build_component(current_class_name_, flag, bool_type()));
+}
+
+/// The type of `self.<attr_name>`, annotated `Any` by @p stmt: the instance
+/// itself for `self.attr = self` (#8927), else the class every use agrees on,
+/// else Any.
+typet python_converter::any_attribute_type(
+  const nlohmann::json &stmt,
+  const std::string &attr_name)
+{
+  const nlohmann::json &value = stmt.value("value", nlohmann::json());
+  if (
+    value.is_object() && value.value("_type", "") == "Name" &&
+    value.value("id", "") == "self")
+    return gen_pointer_type(type_handler_.get_typet(current_class_name_));
+  typet from_usage = infer_attr_type_from_usage(current_class_name_, attr_name);
+  return (from_usage.id().as_string().empty() || from_usage.is_nil())
+           ? type_handler_.get_typet(std::string("Any"))
+           : from_usage;
 }
 
 void python_converter::get_attributes_from_self(
@@ -752,16 +1359,18 @@ void python_converter::get_attributes_from_self(
           if (!unset(from_usage))
             resolved = from_usage;
         }
-        type = unset(resolved) ? any_type() : resolved;
+        type = unset(resolved) ? none_attribute_type(attr_name) : resolved;
+        add_none_flag_component(clazz, attr_name);
       }
       else if (annotated_type == "tuple" || annotated_type == "Tuple")
       {
         // Bare `tuple` annotation: recover element types from the assigned
-        // value when it is a Tuple literal so later `obj.attr` reads carry the
-        // struct shape needed for unpacking (GitHub #4515).
+        // value when it is a Tuple literal, or a local bound only to Tuples
+        // of one shape, so later `obj.attr` reads carry the struct shape
+        // needed for unpacking (GitHub #4515).
         if (stmt.contains("value"))
           type =
-            infer_tuple_struct_from_value(stmt["value"], param_annotations);
+            shared_tuple_struct(stmt["value"], func_node, param_annotations);
         if (type.is_nil() || type.is_empty())
           type = type_handler_.get_typet(annotated_type);
       }
@@ -775,11 +1384,7 @@ void python_converter::get_attributes_from_self(
         // the same way: if every construction/assignment of this attribute
         // across all reachable modules agrees on one class, adopt it; on any
         // conflict infer_attr_type_from_usage returns unset and we keep Any.
-        typet from_usage =
-          infer_attr_type_from_usage(current_class_name_, attr_name);
-        type = (from_usage.id().as_string().empty() || from_usage.is_nil())
-                 ? type_handler_.get_typet(annotated_type)
-                 : from_usage;
+        type = any_attribute_type(stmt, attr_name);
       }
       else
       {
@@ -798,8 +1403,8 @@ void python_converter::get_attributes_from_self(
                                    stmt["value"].is_object() &&
                                    stmt["value"].value("_type", "") == "Name";
         if (
-          rhs_is_aliased_name && type.id() == "symbol" &&
-          json_utils::is_class(annotated_type, *ast_json))
+          held_by_reference(
+            rhs_is_aliased_name, attr_name, type, annotated_type))
           type = gen_pointer_type(type);
 
         // A bare `Callable` is what the annotation pass infers for an
@@ -904,6 +1509,19 @@ void python_converter::process_forward_reference(
     current_class_name_ = saved_class;
     current_func_name_ = saved_func;
   }
+}
+
+void python_converter::build_forward_class(const typet &type)
+{
+  const std::string tag = type.identifier().as_string();
+  if (
+    type.id() != "symbol" || tag.rfind("tag-", 0) != 0 ||
+    symbol_table_.find_symbol(tag))
+    return;
+
+  nlohmann::json ref = {{"_type", "Name"}, {"id", tag.substr(4)}};
+  code_blockt class_block;
+  process_forward_reference(ref, class_block);
 }
 
 void python_converter::get_class_definition(

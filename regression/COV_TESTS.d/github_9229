@@ -1,0 +1,3 @@
+regression/smtlib/github_9229_formula
+regression/z3/github_9229
+regression/z3/github_9229_fail

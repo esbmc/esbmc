@@ -5,6 +5,7 @@
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/type/type_handler.h>
 #include <util/irep/expr.h>
+#include <functional>
 #include <map>
 #include <set>
 #include <unordered_map>
@@ -50,6 +51,10 @@ public:
    * Converts the function from the AST into an exprt.
    */
   virtual exprt get();
+
+  /// super(C, self) in a class that is not a C, where self can never be a C,
+  /// raises TypeError (#8631).
+  std::optional<exprt> check_explicit_super() const;
 
   const symbol_id &get_function_id() const
   {
@@ -99,6 +104,13 @@ private:
    * Returns TypeError exception if type mismatch is detected, nil_exprt
    * otherwise.
    */
+  /// The TypeError CPython raises when an instance method is called on its
+  /// class with no instance (`C.func()`), or nil.
+  exprt unbound_method_error(const symbolt &func_symbol) const;
+
+  /// The TypeError this call's arguments raise, or nil.
+  exprt call_argument_error(const symbolt &func_symbol) const;
+
   exprt check_argument_types(
     const symbolt *func_symbol,
     const nlohmann::json &args,
@@ -149,6 +161,13 @@ private:
   /// The TypeError CPython raises on instantiating an abstract class.
   exprt abstract_instantiation_error(const nlohmann::json &ctor_call) const;
 
+  bool is_unmodelled_base_instantiation() const;
+
+  /// Refuse creating \p class_name, which derives from a class that has no
+  /// model: its instances lack whatever that base provides.
+  [[noreturn]] void
+  refuse_unmodelled_base_instance(const std::string &class_name) const;
+
   static void collect_method_abstractness(
     const python_converter &converter,
     const std::string &class_name,
@@ -180,6 +199,16 @@ private:
    * Creates a constant expression from function argument.
    */
   exprt build_constant_from_arg() const;
+
+  /// str() of @p value, converted from @p arg, when it is a class object or
+  /// has a __str__; nil otherwise.
+  exprt str_of_object(exprt &value, const nlohmann::json &arg) const;
+
+  /*
+   * object(): a pointer to a fresh heap object, so each call has its own
+   * identity and is never None.
+   */
+  exprt build_fresh_object() const;
 
   std::optional<BigInt>
   try_fold_constant_arith_json(const nlohmann::json &node) const;
@@ -299,7 +328,38 @@ private:
    */
   const symbolt *lookup_python_symbol(const std::string &var_name) const;
 
+  void refuse_isinstance_on_path_dependent_number(
+    const nlohmann::json &obj_arg,
+    const std::vector<nlohmann::json> &types) const;
   exprt handle_isinstance() const;
+
+  /// Binds a call operand of isinstance to a temporary, so it runs exactly
+  /// once even when the check reads it per type or folds without reading it.
+  /// Returns the binding to evaluate first and retargets @p obj_expr to the
+  /// temporary; nil when @p obj_expr is not a call.
+  exprt bind_isinstance_call(exprt &obj_expr) const;
+  std::optional<exprt>
+  list_isinstance(const exprt &obj, const std::string &type_name) const;
+
+  /// isinstance's test against the classinfo @p node: @p build of its
+  /// @p type_name, or, for a variable holding a runtime class value (#8390),
+  /// @p build of each class it may hold, guarded by that class's id.
+  exprt isinstance_operand(
+    const nlohmann::json &node,
+    const std::function<exprt(const std::string &)> &build,
+    const std::function<std::string(const nlohmann::json &)> &type_name) const;
+
+  /// isinstance decided without naming a type: on a class object, or
+  /// against typing.Any (a TypeError); nil otherwise.
+  exprt isinstance_without_type_name(
+    const nlohmann::json &obj_arg,
+    const exprt &obj_expr,
+    const std::vector<nlohmann::json> &types) const;
+
+  /// Whether isinstance's first argument is a class object: a class named
+  /// directly (`int`, `A`) or a variable last assigned a builtin type.
+  bool
+  is_class_object_operand(const nlohmann::json &arg, const exprt &obj) const;
 
   /// isinstance(obj, type) for a str-typed `obj` that is not a known class
   /// object: a type object and a string share the char-array model.
@@ -337,6 +397,9 @@ private:
   exprt handle_callable() const;
 
   exprt handle_type_call() const;
+  exprt tagged_scalar_class(const exprt &tagged) const;
+  bool is_str_of_type_call() const;
+  exprt handle_str_of_type_call() const;
   std::string
   exact_instance_class(const nlohmann::json &arg, const exprt &expr) const;
 
@@ -389,9 +452,19 @@ private:
 
   /*
    * Raises OverflowError (infinity) or ValueError (NaN) before int() truncates
-   * a float @p operand given without a @p base; returns the operand to convert.
+   * a float @p operand given without a @p base, and TypeError when a pointer
+   * @p operand is None; returns the operand to convert.
    */
   exprt guard_nonfinite_float_to_int(exprt operand, const exprt &base) const;
+
+  /// Raises TypeError before float() converts a None-typed @p operand that
+  /// holds None; returns the operand to convert.
+  exprt guard_none_to_float(exprt operand) const;
+
+  /// float(@p operand) for a non-float operand; a tagged str-or-number
+  /// converts by its runtime tag.
+  exprt
+  build_float_conversion(const exprt &operand, const typet &float_type) const;
 
   /*
    * Handles int-to-float conversions (e.g., float(3)) by generating
@@ -520,6 +593,8 @@ private:
   // List method detection and handling
   bool receiver_is_tracked_numpy_view(const std::string &recv_type) const;
   bool receiver_is_binop_or_list_symbol() const;
+  bool receiver_class_defines_method(const std::string &method_name) const;
+  void reject_unresolved_user_method(const std::string &method_name) const;
   bool is_list_method_call() const;
   exprt handle_list_method() const;
   exprt handle_list_append() const;
@@ -659,6 +734,7 @@ private:
   // float.hex() on a constant float-literal receiver.
   bool is_float_hex_literal_call() const;
   // __iter__ on a builtin iterable (range/list/tuple/str/set/...).
+  bool is_builtin_name_call(const std::string &name) const;
   bool is_iter_on_builtin_call() const;
   // x.__str__() with no args on a builtin scalar (int/float/bool/str).
   bool is_str_on_builtin_scalar_call() const;
@@ -674,7 +750,11 @@ private:
   exprt handle_cmath_inverse_fast_path();
   // Real-valued math module functions (sin/cos/sqrt/exp/log/etc.).
   bool is_math_function_dispatch_call() const;
+  exprt dispatch_math_call();
   exprt handle_math_function_dispatch();
+  std::optional<std::string> bounded_math_import() const;
+  bool takes_bounded_math(const std::string &function) const;
+  std::optional<exprt> try_bounded_math_call(const std::string &func_name);
 
   // General function call handler
   exprt handle_general_function_call();
@@ -888,6 +968,24 @@ private:
 
   /// Indirect call through a function pointer held in an instance field.
   std::optional<exprt> try_indirect_member_call();
+  /// Refuse `x.attr(...)` on a @p class_name receiver when every store of
+  /// @p attr puts a method on `self` and no class in the MRO binds it: only
+  /// a subclass instance holds it, and the receiver's runtime class is not
+  /// tracked (#8956).
+  void refuse_unheld_attribute(
+    const std::string &class_name,
+    const std::string &attr) const;
+  /// Refuse `x.attr(...)` when @p attr is an untyped field no class in the MRO
+  /// of @p class_name binds: it is set on the instance, so the method lookup
+  /// a call falls back to would raise a false AttributeError (#9255).
+  void refuse_untyped_attribute(
+    const std::string &class_name,
+    const std::string &attr,
+    const typet &field_type) const;
+  /// Whether a class in the MRO of @p class_name may bind @p attr, or the MRO
+  /// is not known.
+  bool
+  mro_may_bind(const std::string &class_name, const std::string &attr) const;
   /// The functions field @p attr of @p class_name holds, when it is untyped
   /// and no class in its MRO binds @p attr too.
   const python_converter::attribute_functions *held_functions(
@@ -948,7 +1046,15 @@ private:
     const typet &param_type,
     const locationt &location) const;
 
+  void refuse_float_to_int_argument(
+    const exprt &arg,
+    const typet &param_type,
+    const symbolt &callee) const;
+
   typet dict_param_value_type(const symbolt *func, size_t idx) const;
+  bool is_size_builtin() const;
+  bool is_list_typed(const typet &type) const;
+  exprt build_dict_size_call(const exprt &dict);
   std::optional<exprt> build_positional_arguments(
     code_function_callt &call,
     size_t param_offset,
@@ -956,6 +1062,15 @@ private:
     const symbolt *func_symbol);
   std::optional<exprt>
   raise_positional_oversupply(const symbolt &func_symbol) const;
+  void reject_numpy_layout_mismatch(
+    const typet &arg_type,
+    const symbolt &callee,
+    size_t param_idx,
+    bool is_bytes_literal) const;
+  void reject_list_for_numpy_parameter(
+    const typet &arg_type,
+    const code_typet::argumentst &params,
+    size_t param_idx) const;
   exprt finalize_call(
     code_function_callt &call,
     size_t param_offset,

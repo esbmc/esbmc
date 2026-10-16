@@ -3,6 +3,30 @@
 #include <util/irep/migrate.h>
 #include <util/symtab/symbol.h>
 
+#include <atomic>
+#include <mutex>
+
+namespace
+{
+// --parallel-solving reads the shared symbol table from several threads, so
+// the first read of a lazy cache fills it under a lock and publishes it
+// (#8565). Recursive: a migration may read another symbol's cache.
+std::recursive_mutex lazy_cache_mutex;
+static_assert(std::atomic_ref<bool>::is_always_lock_free);
+
+template <typename Fill>
+void fill_once(bool &valid, Fill fill)
+{
+  if (std::atomic_ref(valid).load(std::memory_order_acquire))
+    return;
+  std::lock_guard lock(lazy_cache_mutex);
+  if (std::atomic_ref(valid).load(std::memory_order_relaxed))
+    return;
+  fill();
+  std::atomic_ref(valid).store(true, std::memory_order_release);
+}
+} // namespace
+
 symbolt::symbolt()
 {
   clear();
@@ -81,36 +105,31 @@ void symbolt::set_value(const expr2tc &v)
 
 const typet &symbolt::get_type() const
 {
-  if (!legacy_type_valid_)
-  {
+  fill_once(legacy_type_valid_, [this] {
     // A nil IREP2 source must not be fed to migrate_type_back (it derefs
     // the held pointer). Return a default `typet` instead; this matches
     // the pre-S5a behaviour of a freshly-cleared symbolt whose legacy
     // `type` field was default-constructed.
     legacy_type_cache_ =
       is_nil_type(type_) ? typet() : migrate_type_back(type_);
-    legacy_type_valid_ = true;
-  }
+  });
   return legacy_type_cache_;
 }
 
 const type2tc &symbolt::get_type2() const
 {
-  if (!type2_valid_)
-  {
+  fill_once(type2_valid_, [this] {
     // Symmetric to get_type(): an empty-id legacy typet is the only safe
     // input migrate_type cannot consume, so it maps to a nil IREP2 form.
     type_ = legacy_type_cache_.id().empty() ? type2tc()
                                             : migrate_type(legacy_type_cache_);
-    type2_valid_ = true;
-  }
+  });
   return type_;
 }
 
 const exprt &symbolt::get_value() const
 {
-  if (!legacy_value_valid_)
-  {
+  fill_once(legacy_value_valid_, [this] {
     // Mirror of get_type(): a nil IREP2 value must not be fed to
     // migrate_expr_back (it derefs the held pointer). Return a nil exprt
     // instead -- the shape a freshly-cleared symbolt has on the legacy
@@ -120,23 +139,20 @@ const exprt &symbolt::get_value() const
       legacy_value_cache_.make_nil();
     else
       legacy_value_cache_ = migrate_expr_back(value_);
-    legacy_value_valid_ = true;
-  }
+  });
   return legacy_value_cache_;
 }
 
 const expr2tc &symbolt::get_value2() const
 {
-  if (!value2_valid_)
-  {
+  fill_once(value2_valid_, [this] {
     // Symmetric to get_type2(). A nil or empty-id legacy exprt maps to a
     // nil IREP2 value -- the only inputs migrate_expr cannot consume.
     if (legacy_value_cache_.is_nil() || legacy_value_cache_.id().empty())
       value_ = expr2tc();
     else
       migrate_expr(legacy_value_cache_, value_);
-    value2_valid_ = true;
-  }
+  });
   return value_;
 }
 

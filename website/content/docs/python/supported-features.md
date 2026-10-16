@@ -12,7 +12,9 @@ This page is a reference of all Python language constructs, data structures, and
 - **Logical operations**: `and`, `or`, `not`
 - **Identity comparisons**: `is`, `is not` (including `x is None`, `x is not None`)
 - **Tuple-unpacking assignment**: `a, b = b, a` and cross-binding forms like `a, b = b, a % b` evaluate the entire right-hand side before binding any target (Python's parallel-assignment semantics), so swaps and idioms such as the Euclidean-GCD loop `while b: a, b = b, a % b` are lowered correctly. The simple non-cross-binding shape (`x, y = 1, 2`) uses direct assignment. Unpacking targets may be subscripts or attributes (`a[i], b.x = ...`), and may be **nested** (`(a, b), c = ((1, 2), 3)`, including over a runtime right-hand side such as a for-loop element or function return: `for (u, v), w in items:`).
-- **Walrus operator** (PEP 572 `:=`): assignment expressions in the contexts where the target is evaluated exactly once — an `if`/`elif` condition (`if (n := len(data)) > 2:`), a standalone assignment expression (`x = (y := 5)`), and a comprehension filter (`[d for v in data if (d := v * 2) > 4]`). The expression evaluates to the bound value. Use inside `and`/`or` operands and `while`-loop conditions is refused with a clear diagnostic (see [Limitations](/docs/python/limitations#walrus-operator)).
+- **Walrus operator** (PEP 572 `:=`): assignment expressions in the contexts where the target is evaluated exactly once — an `if`/`elif` condition (`if (n := len(data)) > 2:`), a standalone assignment expression (`x = (y := 5)`), and a comprehension filter (`[d for v in data if (d := v * 2) > 4]`). The expression evaluates to the bound value. A `while` condition may bind one too (`while (m := n - k) > 0:`, `while words and (w := words.pop()):`): the binding is evaluated before every test of the condition, as in CPython. An `and`/`or` operand of an `if` condition may bind one as well. A walrus in an `and`/`or` operand elsewhere (`x = a and (b := 3)`), and one inside a lambda or comprehension in a `while` condition, are refused with a clear diagnostic (see [Limitations](/docs/python/limitations#walrus-operator)).
+- **`match` statements**: a `match` whose patterns are literals, values, `None`/`True`/`False`, captures, the wildcard `_`, `as` or `|` alternatives, with optional guards, is lowered to an `if`/`elif` chain that evaluates the subject once. Sequence, mapping and class patterns are refused with a message naming them
+- **`nonlocal`**: a nested function that is only called may rebind an enclosing function's local by plain assignment, including under recursion. A nested function that is returned, stored, passed or decorated, or that rebinds the name other than by plain assignment, is refused
 - **None handling**: Proper type distinction from `int`, `bool`, `str`, etc.; correctly falsy in boolean contexts (`None and True` → `None`, `None or 1` → `1`)
 - **Global variables**: The `global` keyword for accessing and modifying global scope from within functions
 - **Context managers**: `with` and `async with` statements via preprocessor desugaring into explicit `__enter__`/`__exit__` calls:
@@ -25,7 +27,9 @@ This page is a reference of all Python language constructs, data structures, and
 ## Functions and Methods
 
 - **Function definitions**: Parameters, return values, and calls
-- **Variadic parameters**: `*args` syntax for variable-length positional argument lists
+- **Variadic parameters**: `*args` syntax for variable-length positional argument lists, and `**kwargs`: each direct call gets a specialised copy of the function in which `kwargs` is a dict of the extra keywords in call order. Calls that cannot be specialised — methods, calls through a function value, `**` splats at the call — are refused
+- **Generators with `yield from`**: a `yield from it` statement is rewritten to `for v in it: yield v`, in recursive and delegating generators alike. The expression form (`r = yield from g()`) is refused, since `send()`/`throw()` are not modelled
+- **Iterator protocol**: a `for` loop or comprehension over an instance of a class that defines or inherits `__iter__` — a constructor call, a name bound only to one, or a module-function parameter whose every call passes one — runs through `__iter__()`/`__next__()` until `StopIteration`. `g = iter(xs)` over a list or a user iterator, read only by `next(g)`, is lowered the same way
 - **Type annotations**: Basic types (`int`, `float`, `bool`, `str`), `Any`, `Union[T1, T2]`, PEP 604 `T1 | T2` syntax (including `T | None` on class attributes), subscripted forms (`list[int]`), **string forward references** (`node: 'Foo'`) and **dotted** annotations (`node: pkg.mod.Robot`, resolved on the last component). An annotation that cannot be resolved degrades to a clean error rather than a crash
 - **Union types**: Both `Union[int, bool]` and `int | bool` syntax are supported, including chained unions with multiple members
 - **Type widening**: ESBMC selects the widest type from Union members using the hierarchy `float > int > bool`
@@ -60,6 +64,10 @@ This page is a reference of all Python language constructs, data structures, and
 - **Constructor temporaries**: calling a method directly on a fresh instance (`C().get()`) works without binding the instance to a name first — `__init__` runs on the temporary, its own methods win over same-named ones from other classes, and dunder methods (e.g. `C() == x`, `len(C())`) dispatch on it
 - **Classes as first-class values**: a class name passed as a bare value (`register(Twist)`) — the class object itself, not an instance — is modelled as an opaque placeholder for inert uses (storing/forwarding the class), while normal construction through the name (`Twist()`) is unaffected
 - **Class-method defaults**: `Name` defaults referencing `ESBMC_default_*` helpers are hoisted past the enclosing `ClassDef` so they remain visible at call sites
+- **Abstract base classes**: a class derived from `abc.ABC` converts, and constructing one whose methods still resolve to an `@abstractmethod` raises `TypeError`, as CPython does
+- **`Cls.__mro__`**: a tuple of the classes in C3 order, ending in `object`
+- **`getattr` and `hasattr`** with a literal attribute name: `getattr(obj, "a")` reads the attribute when every instance of the class binds it, and the three-argument form returns the default when none does. Where the attribute is set on only some paths, the three-argument `getattr` and `hasattr` answer per path. Dunder names, subclasses, `del` and receivers from other modules are refused
+- **`type(None)`** is the `NoneType` class object, so `t is type(None)` compares classes
 
 ## String Formatting and Literals
 
@@ -115,7 +123,7 @@ This page is a reference of all Python language constructs, data structures, and
 
 **Formatting**: `format()` with `{}`, `{0}`, `{name}` placeholders, including **format specs** on any positional, indexed, or keyword field (`"{:.2f}"`, `"{:>5}"`, `"{:^6}"`, `"{:05d}"`, `"{:+d}"`, `"{:08.2f}"` — fill/alignment, width, zero-pad, sign, and precision, applied to the original constant value); `format_map()` with constant dicts
 
-**Printf-style `%` operator**: bare conversions (`"%s=%d" % ("x", 5)`, `"%x" % 255`), flags/width/precision (`"%.2f" % 3.14159`, `"%05d" % 7`, `"%-5d" % 42`, `"%+d" % 5`, `"%8.2f"`, `"%e"`, sign-aware zero padding `"%07.2f" % -3.1`), integer precision as a minimum digit count (`"%.3d" % 5` → `"005"`), string width/precision truncation (`"%10s"`, `"%.3s"`), and the `%(name)s` mapping form against a right-hand dict (`"%(n)d" % {"n": 5}`, repeated keys, `%%` literal percent)
+**Printf-style `%` operator**: bare conversions (`"%s=%d" % ("x", 5)`, `"%x" % 255`), flags/width/precision (`"%.2f" % 3.14159`, `"%05d" % 7`, `"%-5d" % 42`, `"%+d" % 5`, `"%8.2f"`, `"%e"`, sign-aware zero padding `"%07.2f" % -3.1`), integer precision as a minimum digit count (`"%.3d" % 5` → `"005"`), string width/precision truncation (`"%10s"`, `"%.3s"`), and the `%(name)s` mapping form against a right-hand dict (`"%(n)d" % {"n": 5}`, repeated keys, `%%` literal percent). With **non-constant operands**, a literal format using only flag-free `%s`, `%d`, `%i` and `%%` is lowered as the matching f-string (`"id %d" % i`); the operand may be a name, an attribute, a call or a subscript, and calls and subscripts are evaluated once, in order. `%d` accepts only an `int` or `bool` there
 
 **Slicing**: `s[start:end]`, omitted bounds (`s[:end]`, `s[start:]`), negative indices (`s[-3:]`), empty slices
 
@@ -171,7 +179,9 @@ This page is a reference of all Python language constructs, data structures, and
 - **`clear()`**: Remove all entries in place; the dict stays usable afterwards (`len(d) == 0`)
 - **Nested dicts**: `dict[int, dict[int, int]]`
 - **`Optional[T]` values**: `dict[str, Optional[T]]` storage and retrieval
-- **Dict comprehensions**: `{k: v for ...}` is lowered to an empty dict plus a population loop. Supported iterables include `range(...)` (constant or symbolic bound), a list of tuples, and `d.items()` with a `(key, value)` tuple target (`{k: v + 1 for k, v in d.items()}`), with optional `if` filters. Subsequent key lookups return the populated values rather than raising `KeyError`.
+- **Dict comprehensions**: `{k: v for ...}` is lowered to an empty dict plus a population loop. Supported iterables include `range(...)` (constant or symbolic bound), a list of tuples, and `d.items()` with a `(key, value)` tuple target (`{k: v + 1 for k, v in d.items()}`), with optional `if` filters. Subsequent key lookups return the populated values rather than raising `KeyError`. A comprehension over a dict may appear in any expression (`return {v: 0 for u, v in g}`) and its targets do not rebind names in the enclosing scope; a tuple target may also range over a list parameter or an `enumerate`/`zip` call
+- **Merging**: `{**a, **b}` applies the entries in order to a new dict, `a | b` builds a new dict from both operands, and `a |= b` updates `a` in place, so its aliases see the change
+- **`dict(zip(keys, values))`** is lowered to a loop that fills an empty dict, so it works over nondeterministic lists as well
 
 ## Complex Numbers
 
@@ -224,7 +234,9 @@ Byte sequences and integer class methods:
 - **`ImportError` guards**: Imports inside `try/except ImportError` are handled statically
 
 **Built-in exception hierarchy**:
-- `BaseException` → `Exception` → `AssertionError`, `ValueError`, `TypeError`, `IndexError`, `KeyError`, `ZeroDivisionError`, `ImportError`
+- `BaseException` → `Exception` → `AssertionError`, `ValueError`, `TypeError`, `ArithmeticError`, `LookupError`, `ImportError`
+- `ArithmeticError` → `ZeroDivisionError`, `OverflowError`, `FloatingPointError`
+- `LookupError` → `IndexError`, `KeyError`
 - `BaseException` → `KeyboardInterrupt` (raisable and catchable; like `BaseException` itself, its `__init__` takes a required argument)
 - `OSError` → `FileNotFoundError`, `FileExistsError`, `PermissionError`
 
@@ -312,7 +324,8 @@ are lowered for `--enforce-contract` and `--replace-call-with-contract`, with
 `__ESBMC_return_value` typed from the return annotation; the clauses are inert
 under a plain BMC run. Malformed clauses (calls or subscripts inside the
 condition, untypeable references, `__ESBMC_return_value` in `requires` or on a
-`-> None` function) are rejected with a named diagnostic. See
+`-> None` function) are rejected with a named diagnostic. `__ESBMC_assigns(...)`
+declares the modification frame over module globals and attributes. See
 [Function Contracts](/docs/function-contracts#contracts-in-python).
 
 ## Cover Properties and Reachability
@@ -418,9 +431,12 @@ The `--strict-types` flag enables type compatibility validation for function arg
 | `zip(a, b, ...)` | Lowered to an index-based `while` loop in `for` form, mirroring `enumerate` |
 | `reversed(iter)` | Lowered to an index-based `while` loop in `for` form; `reversed(range(...))` is rewritten to an equivalent forward `range(...)` |
 | `filter(pred, iter)` | Lowered to an index-based `while` loop guarded by `pred` in `for` form |
+| `map(f, iter)` | Lowered when the map is consumed whole and once — by `list()`, by unpacking (`a, b = map(int, xs)`) or by a `for` loop — including a map bound to a name whose only use is the next statement. A map read twice is refused, because a second pass over CPython's exhausted iterator yields nothing |
+| `hash(x)` | Equal arguments hash equally: an `int` hashes as CPython does (`n mod 2**61 - 1`, with `-1` mapped to `-2`) and a `str` through a deterministic model |
 | `list()` | Zero-arg constructor lowers to an empty list literal. `list(iterable)` over a list, `range`, or tuple (`list((2, 3))`, `list(t)`) builds a real list; `list("abc")` over a constant string yields a list of single-character strings. `list(bytes)` is rejected with a clean diagnostic (CPython would produce a list of ints). |
 | `isinstance(obj, type)` | Runtime type checking, including over a [dynamically-typed](#dynamic-typing) variable |
 | `float("nan")`, `float("inf")` | Special values (case-insensitive, whitespace-tolerant) |
+| `int(s)` | An invalid literal raises a catchable `ValueError`, as `float()` does |
 | `input()` | Modelled as nondeterministic string, max 256 chars |
 | `print(...)` | Arguments evaluated for side effects; no output produced |
 
@@ -464,6 +480,9 @@ All functions accept `complex`, `float`, `int`, or `bool` arguments. Real inputs
 
 **Advanced**: `cbrt(x)`, `erf(x)`, `erfc(x)`, `gamma(x)`, `lgamma(x)`, `frexp(x)` → `(mantissa, exponent)`, `ldexp(x, i)`, `nextafter(x, y)`, `ulp(x)`, `sumprod(a, b)` (expects `list[float]`), `fsum(values)` (expects `list[float]`)
 
+**Transcendental functions of run-time arguments**: `exp`, `log`, `log2`, `log10`, `sqrt`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `sinh`, `cosh` and `tanh` — in `math` and in NumPy (`np.arcsin` and so on), on scalars and element by element on arrays or views of constant shape — return any double within `--python-math-ulps` ulps (default 8) of the C library's value, clamped to the function's range (`sin` in [-1, 1], `cosh >= 1`). NaN propagates, an argument outside the domain gives NaN, infinities and signed zeros give exact results, and `sqrt` stays the correctly rounded root. `math.*` raises `ValueError("math domain error")` and `OverflowError("math range error")` where CPython does. An argument that is constant after propagation gets an exact result for `math.*` and the ulp band for NumPy. `--python-math-ulps 0` assumes a correctly rounded C library, which is unsound where NumPy uses SVML. `from math import exp` dispatches like `math.exp`; `cmath` and the functions the operational models compute internally (`gamma`, `lgamma`, `erf`) keep the C models
+([#9198](https://github.com/esbmc/esbmc/pull/9198))
+
 ## Regular Expression Module (`re`)
 
 **Functions**: `re.match(pattern, string)`, `re.search(pattern, string)`, `re.fullmatch(pattern, string)`
@@ -475,6 +494,8 @@ All functions accept `complex`, `float`, `int`, or `bool` arguments. Real inputs
 - Digit sequences: `\d+`, `\d*`
 - Alternation: `(x|y)z*`
 - Prefix-with-wildcard: patterns ending with `.*`
+
+**Flags**: the flag constants (`re.IGNORECASE`, `re.I`, …) exist and may be passed positionally or as `flags=`. `IGNORECASE` lower-cases pattern and string (a pattern with a backslash escape gives a nondeterministic result), `ASCII` and `UNICODE` change nothing, and `MULTILINE`, `DOTALL` and `VERBOSE` give a nondeterministic result.
 
 **Match results**: Usable for Boolean/`None` testing (`if re.match(...)`, `re.search(...) is not None`). Group-capture methods (`.group()`, `.groups()`, `.span()`) are not supported.
 
@@ -504,6 +525,7 @@ See also: [Random Operational Model](/docs/python/random-operational-model)
 - **`Counter`**: Mapping of elements to integer counts; supports `__getitem__`, `__setitem__`, `values()`, and boolean truthiness
 - **`deque`**: List-backed double-ended queue; supports construction, indexing, `__setitem__`, `append()`, and the FIFO-front methods `popleft()` (front pop) and `appendleft()` (front insert), enabling FIFO/BFS patterns. Aliased imports such as `from collections import deque as Queue` resolve correctly
 - **`OrderedDict`**: Supports construction and basic indexing / `append` / `__setitem__`
+- **`namedtuple`**: a module-level `namedtuple` class is lowered to plain tuples: each constructor call becomes the tuple of its arguments in field order (keywords and constant `defaults=` included), and a field read on a name bound only by that constructor becomes a subscript. Other uses of the class, and field reads on values whose class is unknown, are refused
 
 `defaultdict`, `deque` and `OrderedDict` are classes in CPython but functions returning a dict or list in the operational model, so a variable *annotated* with one (`d: deque = deque()`, in either the dotted or the `from collections import …` spelling) resolves to the model function's return type rather than raising `NameError`.
 
@@ -594,7 +616,9 @@ Functions use a monotonic counter model.
 
 All `os` functions use nondeterministic modelling to verify both success and failure paths.
 
-**Path**: `os.path.exists(path)`, `os.path.basename(path)`
+**Path**: `os.path.exists(path)`, `os.path.basename(path)`, `os.path.join(a, b)` (exact for two arguments), `os.path.realpath`, `os.path.relpath` and `os.path.commonpath` (raise CPython's `ValueError`s, otherwise return an unknown string), `os.path.islink` (nondeterministic)
+
+**`os.walk(top)`**: yields either nothing or `top` as an empty directory; iterating the result needs `--unwind`, as for any list of nondeterministic length
 
 **Directory operations**:
 - `os.makedirs(path, exist_ok=False)`: Creates directory tree; supports `exist_ok`
@@ -603,8 +627,33 @@ All `os` functions use nondeterministic modelling to verify both success and fai
 - `os.listdir(path)`: Lists directory contents
 
 **File operations**:
-- `os.remove(path)`: Removes file; may raise `FileNotFoundError`
+- `os.remove(path)`, `os.unlink(path)`: Removes file; may raise `FileNotFoundError`
 - `os.popen(cmd)`: Opens a pipe (modelled for verification)
+
+## Subprocess Module (`subprocess`)
+
+`subprocess.run(...)` returns a `CompletedProcess` whose exit status and piped
+output are nondeterministic. Output that is not piped (no `capture_output`, no
+`PIPE`) is `None`, as in CPython, and `check=True` or `check_returncode()` raises
+`CalledProcessError` on a nonzero status.
+
+## IO Module (`io`)
+
+`io.StringIO` supports `write()`, `read()` and `getvalue()`; `write()` overwrites
+from the stream position, as in CPython. `print(..., file=s)` to anything other
+than `sys.stdout`/`sys.stderr` is refused, since dropping the output would prove
+programs that read it back.
+
+## Functools and Itertools
+
+- `functools.reduce(f, iterable[, initial])`, with a named function or a
+  two-parameter lambda, is lowered to a left fold over `list(iterable)`; an
+  empty iterable with no initial value raises `TypeError`. A call in a
+  conditionally evaluated expression is not lowered
+- `itertools.chain(...)` and `itertools.repeat(x, n)` are lowered to a list
+  when `list`, `tuple`, `sorted`, `set`, `sum`, `min` or `max` drains them at
+  once, directly or through a name drained by the next statement. Any other use,
+  such as a `for` loop or a second drain, is refused
 
 ## NumPy Module (`numpy`)
 
@@ -612,29 +661,35 @@ Partial executable support for list-backed arrays, element-wise arithmetic, sele
 
 **Array construction**: `np.array(l)`, `np.zeros(shape)`, `np.ones(shape)` for 1-D, 2-D, and 3-D shapes, including explicit constructor `dtype` coercion for literal `bool`, `int`, and `float` inputs (a `dtype=` keyword is carried through to later `transpose`, `flatten`, `sort` and reducer calls, and the `*_like` constructors accept a `dtype=` override); `np.arange([start, ]stop[, step])`, `np.full(shape, value)`, `np.eye(N[, M])`, `np.identity(n)`, and `np.linspace(start, stop, num)`. **Symbolic shapes** are handled: a nondeterministic dimension such as `np.zeros(n)` with a constrained `n` yields an array of the corresponding length (`len(a) == 0` when `n == 0`)
 
+**dtypes**: `dtype=` is normalised the same way for `array`, `zeros`, `ones`, `full`, `eye`, `identity`, `arange` and `linspace`, and accepts builtin, `np.*` and string names (`"int32"`, `np.int_`, `np.str_`). Constructor casts follow NumPy: floats truncate to integers, and an out-of-range integer raises `OverflowError`. String arrays are fixed-width (`<U{n}`) and support element reads and writes (truncated to the width), comparison, `len`, copies and iteration; complex arrays keep their imaginary part through element access, `.real`/`.imag`, copies, slices and iteration. `np.arange` takes `start=`/`stop=`/`step=`/`dtype=` and computes its elements in the dtype, and `np.linspace` honours `endpoint=False` and `retstep=True`. The `object` dtype, structured dtypes, `np.dtype(...)` objects and a dtype held in a variable are rejected
+
+**`numpy.random`**: `random` (and `rand`, `random_sample`, `ranf`, `sample`), `standard_normal` (and `randn`), `normal`, `uniform`, `exponential`, `poisson`, `binomial`, `geometric`, `lognormal`, `beta`, `gamma`, `weibull`, `chisquare`, `randint` (with `dtype=`) and `choice` (over a literal sequence, an array or a view, with `size=` and `replace=False`). Each sample is a fresh nondeterministic value assumed into the distribution's support, and invalid parameters raise NumPy's `ValueError`/`TypeError`. A literal `size` of up to 1024 samples is supported. `seed`, `Generator`/`default_rng` and `choice(p=...)` raise `TypeError`
+
 **Indexing**: n-D tuple indexing `a[i, j, k]` on 2-D and 3-D arrays (`a[0, 0, 0]`, `a[1, 1, 1]`); supplying more indices than the array has dimensions is rejected. **Boolean-mask selection** `a[mask]` returns the elements where a same-length boolean array is `True` (an all-`False` mask yields an empty array); a non-boolean or symbolic mask is rejected
 
 **Slicing**: bounded 1-D slicing `a[i:j]` on a list-backed array returns a new `list[T]` (bounded, open-ended `a[i:]`/`a[:j]`, and full-copy `a[:]` forms), with the slice typed as the element type rather than collapsing to a scalar. **2-D slicing** selects whole rows (`a[i, :]`) and whole columns (`a[:, j]`)
 
-**Views**: a slice or selection with literal bounds assigned to a bare name is a real **view** onto `a`'s own buffer, so writes through either side are observed by the other, and `len(v)`, `v.shape` and `v.ndim` report the view's own extent: 1-D slices with any step (`a[1:3]`, `a[::2]`, `a[::-1]`), 2-D row views (`a[0]`, `a[-1]`) and column views (`a[:, j]`), `np.ravel(a)` / `a.ravel()` / `a.flat[i]` (writable, contiguous), and `np.diagonal(a, offset=k)` / `a.diagonal()` (read-only). `np.trace(a)` and `np.fill_diagonal(a, v)` reuse the same offset arithmetic as a reduction and an in-place write. Rebinding the base array detaches its live views. A slice with a symbolic bound still copies
+**Views**: a slice or selection assigned to a bare name is a real **view** onto `a`'s own buffer, so writes through either side are observed by the other, and `len(v)`, `v.shape` and `v.ndim` report the view's own extent: 1-D slices with any step (`a[1:3]`, `a[::2]`, `a[::-1]`), row views (`a[0]`, `a[-1]`) and column views (`a[:, j]`), `np.ravel(a)` / `a.ravel()` / `a.flat[i]` (writable, contiguous), and `np.diagonal(a, offset=k)` / `a.diagonal()` (read-only). Each view is a pointer into its source's storage with a per-axis shape and stride, so views of arrays of rank 3 or higher, and views whose bounds, steps or indices are run-time values, alias too. Reads and writes through a view apply Python's negative-index and slice-clamping rules and raise a catchable `IndexError`. `np.trace(a)` and `np.fill_diagonal(a, v)` reuse the same offset arithmetic as a reduction and an in-place write. Rebinding the base array leaves its live views sharing one snapshot of the old storage, as NumPy does; rebinding it inside a branch or loop while views of it are alive raises `TypeError`
 
-**Shape/stride descriptors**: a fixed-shape view carries its own shape and strides, so 2-D `np.transpose(a)` / `a.T`, `np.swapaxes` and `np.moveaxis`, a contiguous `np.reshape`, `np.squeeze` / `np.expand_dims` and a read-only `np.broadcast_to` are views over the base buffer rather than copies. A descriptor iterates with `np.nditer`, materialises through `np.copy(v)` / `v.copy()` / `np.array(v)` / `v.tolist()`, and answers the flattened reducers `sum`, `mean`, `min`, `max` plus `v.any()` / `v.all()`. Shapes outside that set — escaping a view into a container, advanced indexing — are rejected explicitly rather than silently copied
+**Views across calls and containers**: a view passed to or returned from a user function — single-expression or multi-statement, nested or recursive, called with different layouts — keeps aliasing the caller's array. A 1-D view passed to `sum`, `any`, `all`, `min`, `max`, `tuple`, `reversed`, `print`, `list` or `sorted` is read as `view.tolist()`, and views may be passed to methods, class constructors and lambdas. A literal list, tuple or dict holding views binds each element to its own view, read back by literal index, and `alias = view` keeps the shape, strides and read-only state. Other escapes are refused with a `TypeError` naming them
+
+**Shape/stride descriptors**: a fixed-shape view carries its own shape and strides, so 2-D `np.transpose(a)` / `a.T`, `np.swapaxes` and `np.moveaxis`, a contiguous `np.reshape`, `np.squeeze` / `np.expand_dims` and a read-only `np.broadcast_to` are views over the base buffer rather than copies. A descriptor iterates with `np.nditer`, materialises through `np.copy(v)` / `v.copy()` / `np.array(v)` / `v.tolist()`, and answers the flattened reducers `sum`, `mean`, `min`, `max` plus `v.any()` / `v.all()`. Shapes outside that set, such as advanced indexing, are rejected explicitly rather than silently copied
 
 **Shape manipulation**: `np.reshape(a, shape)` (2-D and 3-D targets; an incompatible element count is rejected), `np.flatten(a)` / `np.ravel(a)` (row-major 1-D view), `np.squeeze(a)` (drop unit-length axes; a non-unit axis is rejected), `np.stack([a, b, ...])` (join arrays along a new leading axis, e.g. 1-D → 2-D), `np.concatenate([a, b, ...])` (join along the existing axis), and `a.astype(dtype)` (dtype conversion; `astype` to a complex dtype is rejected)
 
 **Reductions**: `np.sum(a)`, `np.prod(a)`, `np.min(a)`, `np.max(a)`, `np.mean(a)`, `np.std(a)`, `np.var(a)`, `np.argmin(a)`, `np.argmax(a)` over list-backed arrays. The reductions, `transpose` and `flatten` accept arrays built by any constructor (`zeros`, `ones`, `full`, `eye`, `identity`, `linspace`, `arange`), not only `np.array(<literal>)`. The method spellings (`a.sum()`, `a.min()`, `a.prod()`, `a.transpose()`, `a.flatten()`, …) are rewritten to the module form in any expression context — e.g. `assert a.min() == 0` — not just on the right-hand side of an assignment
 
-**Arrays returned from user functions**: a function may return a concrete `np.array` / `np.zeros` / `np.ones` / `np.full`, a bare array parameter, a subarray or view, or a supported descriptor call over a parameter (`np.transpose(a)`), and the result keeps its metadata — reducers, `argmin`/`argmax` and the method forms below all work on it. Statements before the `return` and calls in its arguments execute exactly once; an incompatible-type branch, and a view or descriptor that escapes into a container, are rejected explicitly
+**Arrays returned from user functions**: a function may return a concrete `np.array` / `np.zeros` / `np.ones` / `np.full`, a bare array parameter, a subarray or view, or a supported descriptor call over a parameter (`np.transpose(a)`), and the result keeps its metadata — reducers, `argmin`/`argmax` and the method forms below all work on it. Statements before the `return` and calls in its arguments execute exactly once; an incompatible-type branch, and a view that escapes other than in the ways listed under *Views across calls and containers*, are rejected explicitly
 
 **`ndarray` methods on a concrete variable**: `a.tolist()`, `a.any()` / `a.all()`, `a.sum()` / `a.mean()` / `a.min()` / `a.max()`, `a.argmin()` / `a.argmax()` (flattened and `axis=0`/`axis=1`), the in-place `a.sort()` and `a.argsort()`, and `np.sort` / `np.argsort` / `np.searchsorted` / `a.searchsorted()` accept an array *variable* — including one returned by a pure user function — not only an inline literal. `sort`/`argsort` accept `kind='stable'`/`'mergesort'`/`None`, and `searchsorted` a vector or symbolic value and a `sorter=` argument. `.T`, `.transpose()`, `.flatten()`, `.ravel()`, `.reshape()`, `.diagonal()`, the reducers `.sum()`/`.mean()`/`.min()`/`.max()`/`.prod()`/`.std()`/`.var()`/`.argmin()`/`.argmax()`, `.argsort()`, `.searchsorted()` and `.size` may also be chained directly on a constructor call (`np.eye(3).transpose()`, `np.full((2, 4), 7).size`)
 
 **Comparison and logical ufuncs**: `np.greater`, `np.greater_equal`, `np.less`, `np.less_equal`, `np.equal`, `np.not_equal`, `np.logical_and`, `np.logical_or`, `np.logical_not`, and `np.where(cond, a, b)` (element-wise select; also the scalar-condition form `np.where(False, 1, 2)`). One of these may be **chained** as another numpy call's argument, nested directly or through an intermediate variable, instead of the inner result being silently substituted
 
-**Element-wise arithmetic**: `np.add(a, b)`, `np.subtract(a, b)`, `np.multiply(a, b)`, `np.divide(a, b)`, `np.power(a, b)` on literal list-backed inputs, with NumPy-style broadcasting for 1D/2D shapes
+**Element-wise arithmetic**: `np.add(a, b)`, `np.subtract(a, b)`, `np.multiply(a, b)`, `np.divide(a, b)`, `np.power(a, b)` on literal list-backed inputs, with NumPy-style broadcasting for 1D/2D shapes. The operators `+ - * / // ** & | ^ << >>` work between a numeric array and a number on either side, or between arrays of the same shape (N-D included). The result dtype follows NumPy (float64 for `/` and for any float operand), integer `//` and `%` by zero give 0, a bitwise operator with a float operand raises `TypeError`, and an in-place `int_array += 0.5` raises NumPy's `same_kind` `TypeError`
 
 **Complex elements**: element-wise complex arithmetic (`add`/`subtract`/`multiply`/`divide`) on complex scalars and arrays, plus `np.conjugate(z)` and `.real`/`.imag` on complex results; division by zero is reported. Complex determinants are rejected (see [Limitations](/docs/python/limitations#numpy-module))
 
-**Math**: `np.ceil(x)`, `np.floor(x)`, `np.fabs(x)`, `np.sqrt(x)`, `np.trunc(x)`, `np.round(x)`, `np.rint(x)`, `np.copysign(x, y)`, `np.fmin(x, y)`, `np.fmax(x, y)`, `np.remainder(x, y)`, `np.nextafter(x, y)`, `np.sin(x)`, `np.cos(x)`, `np.tan(x)`, `np.arcsin(x)`, `np.arctan(x)`, `np.arccos(x)`, `np.sinh(x)`, `np.cosh(x)`, `np.tanh(x)`, `np.exp(x)`, `np.log(x)`, `np.log2(x)`, `np.log10(x)`, `np.isclose(a, b)` on scalar or literal list-backed 1D/2D inputs. `np.arccos` additionally lowers a runtime 1D array through the libm operational model; a runtime 2D `arccos` is still rejected. The two-output helpers `np.modf(x)` → `(frac, int)` and `np.frexp(x)` → `(mantissa, exponent)` are also supported.
+**Math**: `np.ceil(x)`, `np.floor(x)`, `np.fabs(x)`, `np.sqrt(x)`, `np.trunc(x)`, `np.round(x)`, `np.rint(x)`, `np.copysign(x, y)`, `np.fmin(x, y)`, `np.fmax(x, y)`, `np.remainder(x, y)`, `np.nextafter(x, y)`, `np.sin(x)`, `np.cos(x)`, `np.tan(x)`, `np.arcsin(x)`, `np.arctan(x)`, `np.arccos(x)`, `np.sinh(x)`, `np.cosh(x)`, `np.tanh(x)`, `np.exp(x)`, `np.log(x)`, `np.log2(x)`, `np.log10(x)`, `np.isclose(a, b)` on scalar or literal list-backed 1D/2D inputs. The transcendental functions also take run-time scalars and arrays or views of constant shape, element by element, with results bounded as described under [Math Module](#math-module-math). The two-output helpers `np.modf(x)` → `(frac, int)` and `np.frexp(x)` → `(mantissa, exponent)` are also supported.
 
 **Modulo**: `np.fmod(x, y)` on scalars and on literal list-backed 1D/2D inputs with NumPy-style broadcasting. Operands wrapped in `np.array(...)` are rejected with `Unsupported operation: numpy.fmod on array operands` rather than mis-folded to a scalar.
 
@@ -644,8 +699,12 @@ Partial executable support for list-backed arrays, element-wise arithmetic, sele
 
 - `np.dot(a, b)`, `np.matmul(a, b)`: 1D/2D inputs with both integer and float backends (via `linalg.c`), including symbolic elements. The integer path carries the operand dtype width and asserts each result element fits the dtype range, so narrow dtypes (`int16`/`int32`) flag accumulation overflow (trivially satisfied for the default 64-bit `int`; combine with `--overflow-check` for int64-level overflow)
 - `np.transpose(a)`: 2D arrays, including runtime array variables (1D is the identity); higher-rank transpose is rejected
-- `np.linalg.det(a)`: constant numeric 2x2 and 3x3 matrices (complex-valued matrices are rejected)
+- `np.linalg.det(a)`: constant numeric matrices up to 4x4 (complex-valued matrices are rejected)
 - `np.linalg.inv(a)`: matrix inverse of a constant numeric 2x2 matrix
 - `np.linalg.norm(a)`: Euclidean (L2) norm of a 1-D array (`np.linalg.norm(np.array([3.0, 4.0]))` → `5.0`)
-- `np.linalg.eig(a)`: eigenvalues of a constant numeric 2x2 matrix (returned as a list)
-- `np.linalg.svd(a)`: singular values of a constant numeric 2x2 matrix (returned as a list)
+- `np.linalg.eigvals(a)`: eigenvalues of a constant numeric 2x2 matrix, complex and in LAPACK's order. `np.linalg.eig(a)` returns eigenvectors too and is rejected
+- `np.linalg.svd(a, compute_uv=False)`: singular values of a constant numeric 2x2 matrix. Without `compute_uv=False` it is rejected, since the `U` and `Vh` factors are not modelled
+
+The results of `det`, `inv` and `solve` are bounded around LAPACK's rounding rather than exact, unless the factors are exact, so assert a tolerance rather than equality.
+
+**Iteration with `np.nditer`**: the flags `multi_index`, `c_index`, `f_index`, `external_loop`, `buffered`, `grow_inner`, `zerosize_ok` and `refs_ok`; several operands with broadcasting and per-operand `op_flags`; `op_dtypes` with `casting`, `op_axes` and orders C/F/A/K; and the protocol (`next`, `iternext()`, `iter(it)`, `value`, `finished`, `iterindex`, `index`, `multi_index`, `shape`, `ndim`, `itersize`, `nop`, `operands`, `reset`, `close`, `with`). A buffered write-back through a cast becomes visible at exhaustion or close, as in NumPy

@@ -1,0 +1,5 @@
+CORE
+main.c
+--bitwuzla --no-pointer-check --no-bounds-check --ts-bmc --max-k-step 12
+^Transition system extracted
+^VERIFICATION FAILED$

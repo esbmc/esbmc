@@ -312,14 +312,15 @@ void clang_c_adjust_irep2::adjust_sole_arms(expr2tc &expr)
 }
 
 /// One of a family of spellings differing only by the argument's width:
-/// `__builtin_popcount`, `...l`, `...ll`. The lowering is the same node for all
-/// three, so the suffix carries no information here.
+/// `__builtin_popcount`, `...l`, `...ll` and the type-generic `...g`. The
+/// lowering is the same node for all of them, so the suffix carries no
+/// information here.
 static bool is_width_suffixed(const std::string &name, const std::string &stem)
 {
   if (name.compare(0, stem.size(), stem) != 0)
     return false;
   const std::string suffix = name.substr(stem.size());
-  return suffix.empty() || suffix == "l" || suffix == "ll";
+  return suffix.empty() || suffix == "l" || suffix == "ll" || suffix == "g";
 }
 
 /// The ordered-comparison builtins, which differ from the plain operators only
@@ -1007,8 +1008,8 @@ void clang_c_adjust_irep2::adjust_plain_assignment(expr2tc &expr)
       sideeffect_assign2tc(target, a.op, a.lhs, rhs, a.location, a.member_init);
 }
 
-/// The shift spellings clang_c_adjust returns early on: it promotes only the
-/// right operand there, which the corpus shows is already the migrated shape.
+/// The shift spellings clang_c_adjust promotes operand by operand (C11 6.5.7p3)
+/// instead of applying the usual arithmetic conversions.
 static bool is_shift_assignment(const irep_idt &op)
 {
   return op == "assign_shl" || op == "assign_shr" || op == "assign_lshr" ||
@@ -1035,10 +1036,19 @@ void clang_c_adjust_irep2::adjust_compound_assignment(expr2tc &expr)
     }
   }
 
-  if (a.op == "assign" || is_shift_assignment(a.op))
+  if (a.op == "assign" || is_nil_expr(a.lhs) || is_nil_expr(a.rhs))
     return;
-  if (is_nil_expr(a.lhs) || is_nil_expr(a.rhs))
+
+  if (is_shift_assignment(a.op))
+  {
+    // The converter already promoted the count; promote E1 too (#9436).
+    expr2tc lhs = a.lhs;
+    c_typecastt(ns).implicit_typecast_arithmetic(lhs);
+    if (lhs != a.lhs)
+      expr = sideeffect_assign2tc(
+        expr->type, a.op, lhs, a.rhs, a.location, a.member_init);
     return;
+  }
 
   if (is_complex_type(a.lhs->type) || is_complex_type(a.rhs->type))
   {

@@ -1,0 +1,5 @@
+CORE
+main.c
+--loop-invariant-check --k-induction-parallel --max-k-step 8
+^Bug found by the base case \(k = [0-9]+\)$
+^VERIFICATION FAILED$

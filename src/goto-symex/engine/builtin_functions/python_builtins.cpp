@@ -44,6 +44,17 @@ static bool class_has_method(
   return false;
 }
 
+/// Whether a scalar of type @p type is an instance of the Python type that
+/// @p expected represents. bool is a subclass of int.
+static bool is_python_scalar_instance(
+  const type2tc &type,
+  const type2tc &expected,
+  const namespacet &ns)
+{
+  return base_type_eq(type, expected, ns) ||
+         (is_bool_type(type) && expected == long_long_int_type2());
+}
+
 /// Whether an object of type @p type has the attribute @p name: an instance
 /// member or a method of its class.
 static bool has_python_attribute(
@@ -74,6 +85,29 @@ same_class(const type2tc &expected, const type2tc &value, const namespacet &ns)
   return base_type_eq(expected, value, ns);
 }
 
+/// Whether @p type is how a Python int, float or bool is held.
+static bool is_python_number_type(const type2tc &type)
+{
+  return is_floatbv_type(type) || is_bool_type(type) ||
+         (is_signedbv_type(type) && type->get_width() == 64);
+}
+
+/// The value isinstance inspects: the one traced from @p operand, with its
+/// casts stripped to reach the object a pointer refers to. A number converted
+/// to another number is answered from @p operand's own type instead:
+/// `a = float(x)` holds `(double)x`, whose operand is an int.
+static expr2tc isinstance_subject(expr2tc value, const expr2tc &operand)
+{
+  while (is_typecast2t(value))
+    value = to_typecast2t(value).from;
+  return is_python_number_type(operand->type) &&
+             (is_python_number_type(value->type) ||
+              (is_unsignedbv_type(value->type) &&
+               value->type->get_width() == 64))
+           ? operand
+           : value;
+}
+
 // An untyped (`void *`) operand that neither constant propagation nor the
 // value set traced back to its object carries no Python type, so no answer is
 // sound: comparing `void *` itself would say "no" to every type. Fail only if
@@ -86,6 +120,31 @@ void goto_symext::reject_untyped_isinstance(const expr2tc &value)
     return;
   claim(gen_false_expr(), "isinstance() on a value whose type was lost");
   assume(gen_false_expr());
+}
+
+/// Whether @p value is an element of a tuple, whose static type is exact.
+static bool is_tuple_element(const expr2tc &value)
+{
+  return is_member2t(value) &&
+         is_struct_type(to_member2t(value).source_value) &&
+         to_struct_type(to_member2t(value).source_value->type)
+           .name.as_string()
+           .starts_with("tag-tuple");
+}
+
+/// The object a value set names for @p value, or @p current when the object
+/// says nothing about it: a Python number has one exact static type, whatever
+/// object the value set pairs it with (a NULL-object or the string a zip
+/// merged it with), and a tuple element's NULL-object is no object at all.
+static expr2tc points_to_object(
+  const expr2tc &value,
+  const expr2tc &object,
+  const expr2tc &current)
+{
+  const bool says_nothing =
+    is_python_number_type(value->type) ||
+    (is_tuple_element(value) && is_null_object2t(object));
+  return says_nothing ? current : object;
 }
 
 void goto_symext::simplify_python_builtins(expr2tc &expr)
@@ -138,14 +197,12 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
       if (is_object_descriptor2t(obj))
       {
         const object_descriptor2t &o = to_object_descriptor2t(obj);
-        value = o.object;
+        value = points_to_object(l1_value, o.object, value);
       }
     }
 
     cur_state->rename(value);
-    // Remove all typecast to get the original type
-    while (is_typecast2t(value))
-      value = to_typecast2t(value).from;
+    value = isinstance_subject(value, obj.side_1);
 
     if (is_address_of2t(value))
       value = to_address_of2t(value).ptr_obj;
@@ -202,7 +259,7 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
     else
       t = value->type;
 
-    if (base_type_eq(t, expect_type->type, ns))
+    if (is_python_scalar_instance(t, expect_type->type, ns))
       expr = gen_true_expr();
     else
       expr = gen_false_expr();

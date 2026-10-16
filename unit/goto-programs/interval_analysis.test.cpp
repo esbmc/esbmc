@@ -912,14 +912,15 @@ TEST_CASE("Interval Analysis - Typecast (unsigned)", "[ai][interval-analysis]")
     "unsigned char a = 0;\n"
     "if(nondet_int()) a = 250;"
     "unsigned  b = (unsigned ) a;\n"
-    "return a;\n" // a: [0, 250], b: [0,250]
+    "return a;\n" // a: [250, 0], b: [0, 255]
     "}";
 
   T.property["4"].push_back({"@F@main@a", 0, true});
   T.property["4"].push_back({"@F@main@a", 250, true});
+  T.property["4"].push_back({"@F@main@a", 100, false});
   T.property["5"].push_back({"@F@main@b", 0, true});
   T.property["5"].push_back({"@F@main@b", 250, true});
-  T.property["5"].push_back({"@F@main@b", 251, false});
+  T.property["5"].push_back({"@F@main@b", 256, false});
 
   T.run_configs(true);
 }
@@ -983,14 +984,15 @@ TEST_CASE(
     "char a = 100;\n"
     "if(nondet_int()) a = -2;"
     "unsigned char  b = (unsigned char ) a;\n"
-    "return a;\n" // a: [-1, 5], b: [5,128]
+    "return a;\n" // a: [-2, 100], b: [254, 100]
     "}";
 
   T.property["4"].push_back({"@F@main@a", -2, true});
   T.property["4"].push_back({"@F@main@a", 100, true});
+  T.property["4"].push_back({"@F@main@a", 101, false});
   T.property["5"].push_back({"@F@main@b", 100, true});
   T.property["5"].push_back({"@F@main@b", 254, true});
-  T.property["5"].push_back({"@F@main@b", 255, false});
+  T.property["5"].push_back({"@F@main@b", 200, false});
 
   T.run_configs(true);
 }

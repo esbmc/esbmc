@@ -660,6 +660,13 @@ void show_simplified_location(std::ostream &out, const locationt &location)
   out << dest << "\n";
 }
 
+static const irep_idt &
+frame_function_name(const namespacet &ns, const irep_idt &id)
+{
+  const symbolt *fn = ns.lookup(id);
+  return fn ? fn->name : id;
+}
+
 /// A call binds its arguments at the callee's first instruction, whatever
 /// that instruction is, so such a step cannot be recognised by its pc.
 static bool binds_parameter(const namespacet &ns, const goto_trace_stept &step)
@@ -668,6 +675,105 @@ static bool binds_parameter(const namespacet &ns, const goto_trace_stept &step)
     return false;
   const symbolt *s = ns.lookup(to_symbol2t(step.original_lhs).thename);
   return s != nullptr && s->is_parameter;
+}
+
+static void show_stack_frame(
+  std::ostream &out,
+  const irep_idt &name,
+  const stack_framet &frame)
+{
+  out << "  " << name;
+  if (frame.src != nullptr && frame.src->pc->location.is_not_nil())
+    out << " at " << frame.src->pc->location;
+  out << std::endl;
+}
+
+static void show_function_call_trace(
+  std::ostream &out,
+  const goto_tracet &goto_trace,
+  const goto_trace_stept &last_step)
+{
+  // Print chronological function-call trace.
+  // Each step carries the call stack at that point (innermost-first,
+  // outermost-last). Diff each step's stack against the previous to
+  // detect newly pushed frames and emit them in call order.
+  out << "Function call trace:" << std::endl;
+  std::vector<stack_framet> prev;
+  for (const auto &s : goto_trace.steps)
+  {
+    const auto &cur = s.stack_trace;
+    // Skip steps captured outside any function context (global
+    // initializers, per-tx reseed scaffolding, etc.). Their
+    // stack_trace is empty even though the program clearly has
+    // frames on the call stack at that moment; treating that as
+    // a reset would falsely re-emit the entire chain on the
+    // next non-empty step.
+    if (cur.empty())
+    {
+      if (&s == &last_step)
+        break;
+      continue;
+    }
+    // Common suffix length (outermost end of both vectors).
+    size_t common = 0;
+    while (common < prev.size() && common < cur.size() &&
+           prev[prev.size() - 1 - common] == cur[cur.size() - 1 - common])
+      ++common;
+    // New frames live at the front of `cur` (innermost end);
+    // emit outermost-of-new first to preserve call order.
+    size_t n_new = cur.size() - common;
+    for (size_t k = n_new; k-- > 0;)
+      show_stack_frame(out, cur[k].function, cur[k]);
+    prev = cur;
+    if (&s == &last_step)
+      break;
+  }
+}
+
+static void show_failed_property(
+  std::ostream &out,
+  const namespacet &ns,
+  const goto_tracet &goto_trace,
+  const goto_trace_stept &step,
+  bool reachability_trace,
+  bool simplify_trace)
+{
+  show_state_header(out, step, step.pc->location, step.step_nr, simplify_trace);
+  out << (reachability_trace ? "Reached:" : "Violated property:") << "\n";
+  if (!step.pc->location.is_nil())
+  {
+    if (simplify_trace)
+    {
+      out << "  ";
+      show_simplified_location(out, step.pc->location);
+    }
+    else
+      out << "  " << step.pc->location << "\n";
+  }
+  if (config.options.get_bool_option("show-stacktrace"))
+  {
+    // Print stack trace
+    out << "Stack trace:" << std::endl;
+    for (const auto &frame : step.stack_trace)
+      show_stack_frame(out, frame_function_name(ns, frame.function), frame);
+  }
+  if (config.options.get_bool_option("show-funccall-trace"))
+    show_function_call_trace(out, goto_trace, step);
+
+  out << "  " << step.comment << "\n";
+  // A reached coverage probe carries no weakness: its guard is the
+  // constant `false` the instrumentation put there, not the program's
+  // own condition, so neither a CWE nor the guard text says anything
+  // about the program.
+  if (!reachability_trace)
+  {
+    std::string cwes = format_cwe_list(cwe_for(step.comment));
+    if (!cwes.empty())
+      out << "  CWE: " << cwes << "\n";
+
+    if (step.pc->is_assert())
+      out << "  " << from_expr(ns, "", step.pc->guard) << "\n";
+  }
 }
 
 void show_goto_trace(
@@ -692,103 +798,8 @@ void show_goto_trace(
     case symex_targett::ASSERT:
       if (!step.guard)
       {
-        show_state_header(
-          out, step, step.pc->location, step.step_nr, simplify_trace);
-        out << (reachability_trace ? "Reached:" : "Violated property:") << "\n";
-        if (!step.pc->location.is_nil())
-        {
-          if (simplify_trace)
-          {
-            out << "  ";
-            show_simplified_location(out, step.pc->location);
-          }
-          else
-            out << "  " << step.pc->location << "\n";
-        }
-        if (config.options.get_bool_option("show-stacktrace"))
-        {
-          // Print stack trace
-          out << "Stack trace:" << std::endl;
-          for (const auto &it : step.stack_trace)
-          {
-            if (it.src == nullptr)
-              out << "  " << it.function.as_string() << std::endl;
-            else
-            {
-              out << "  " << it.function.as_string();
-              if (it.src->pc->location.is_not_nil())
-                out << " at " << it.src->pc->location << std::endl;
-              else
-                out << std::endl;
-            }
-          }
-        }
-        if (config.options.get_bool_option("show-funccall-trace"))
-        {
-          // Print chronological function-call trace.
-          // Each step carries the call stack at that point (innermost-first,
-          // outermost-last). Diff each step's stack against the previous to
-          // detect newly pushed frames and emit them in call order.
-          out << "Function call trace:" << std::endl;
-          std::vector<stack_framet> prev;
-          for (const auto &s : goto_trace.steps)
-          {
-            const auto &cur = s.stack_trace;
-            // Skip steps captured outside any function context (global
-            // initializers, per-tx reseed scaffolding, etc.). Their
-            // stack_trace is empty even though the program clearly has
-            // frames on the call stack at that moment; treating that as
-            // a reset would falsely re-emit the entire chain on the
-            // next non-empty step.
-            if (cur.empty())
-            {
-              if (&s == &step)
-                break;
-              continue;
-            }
-            // Common suffix length (outermost end of both vectors).
-            size_t common = 0;
-            while (common < prev.size() && common < cur.size() &&
-                   prev[prev.size() - 1 - common] ==
-                     cur[cur.size() - 1 - common])
-              ++common;
-            // New frames live at the front of `cur` (innermost end);
-            // emit outermost-of-new first to preserve call order.
-            size_t n_new = cur.size() - common;
-            for (size_t k = n_new; k-- > 0;)
-            {
-              const auto &it = cur[k];
-              if (it.src == nullptr)
-                out << "  " << it.function.as_string() << std::endl;
-              else
-              {
-                out << "  " << it.function.as_string();
-                if (it.src->pc->location.is_not_nil())
-                  out << " at " << it.src->pc->location << std::endl;
-                else
-                  out << std::endl;
-              }
-            }
-            prev = cur;
-            if (&s == &step)
-              break;
-          }
-        }
-
-        out << "  " << step.comment << "\n";
-        // A reached coverage probe carries no weakness: its guard is the
-        // constant `false` the instrumentation put there, not the program's
-        // own condition, so neither a CWE nor the guard text says anything
-        // about the program.
-        if (!reachability_trace)
-        {
-          std::string cwes = format_cwe_list(cwe_for(step.comment));
-          if (!cwes.empty())
-            out << "  CWE: " << cwes << "\n";
-
-          if (step.pc->is_assert())
-            out << "  " << from_expr(ns, "", step.pc->guard) << "\n";
-        }
+        show_failed_property(
+          out, ns, goto_trace, step, reachability_trace, simplify_trace);
 
         // The trace ends at the assert that terminated it.
         return;

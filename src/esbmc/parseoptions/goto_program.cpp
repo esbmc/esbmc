@@ -232,6 +232,9 @@ static bool retarget_esbmc_main(
       to_symbol2t(call.function).thename == "c:@F@main")
     {
       call.function = symbol2tc(get_empty_type(), target);
+      // main's argc/argv must not bind the target's parameters, which symex
+      // leaves nondet when the call supplies no argument.
+      call.operands.clear();
       entry->second.body.destructive_insert(it, init);
     }
   }
@@ -271,6 +274,14 @@ static exprt cbmc_static_init_value(const symbolt &sym, const namespacet &ns)
   return migrate_expr_back(gen_zero(type, true));
 }
 
+static bool is_cbmc_constructor(const symbolt &sym)
+{
+  if (!sym.get_type().is_code())
+    return false;
+  const code_typet &type = to_code_type(sym.get_type());
+  return type.return_type().id() == "constructor" && type.arguments().empty();
+}
+
 // CBMC builds __CPROVER_initialize when it picks the entry point, so a goto
 // binary keeps its globals' initial values in the symbol table only.
 // __CPROVER__start runs that function; a --function harness skips it, so these
@@ -282,9 +293,12 @@ static goto_programt cbmc_static_init(
 {
   const namespacet ns(context);
   code_blockt block;
+  std::set<std::string> constructors;
   context.foreach_operand_in_order([&](const symbolt &sym) {
     if (preexisting.count(sym.id))
       return;
+    if (is_cbmc_constructor(sym))
+      constructors.insert(sym.id.as_string());
     const exprt value = cbmc_static_init_value(sym, ns);
     if (value.is_nil())
       return;
@@ -292,6 +306,16 @@ static goto_programt cbmc_static_init(
     assign.location() = sym.location;
     block.move_to_operands(assign);
   });
+
+  // CBMC then calls each parameterless constructor, in symbol-name order.
+  for (const std::string &id : constructors)
+  {
+    const symbolt &sym = *ns.lookup(id);
+    code_function_callt call;
+    call.function() = symbol_expr(sym);
+    call.location() = sym.location;
+    block.move_to_operands(call);
+  }
 
   // A value can carry a side effect -- Kani builds each vtable with a statement
   // expression -- so it is goto-converted, as __CPROVER_initialize is in CBMC.
@@ -319,8 +343,19 @@ static bool bridge_binary_entry_point(
     goto_programt init;
     if (cbmc_additions)
       init = cbmc_static_init(context, options, preexisting);
-    return retarget_esbmc_main(
-      goto_functions, cmdline.getval("function"), init);
+    irep_idt target = cmdline.getval("function");
+    if (!cbmc_additions)
+    {
+      // ESBMC names a C function by its clang USR, a CBMC binary plainly.
+      const irep_idt usr = "c:@F@" + id2string(target);
+      if (
+        !goto_functions.function_map.count(target) &&
+        goto_functions.function_map.count(usr))
+        target = usr;
+      if (target == "c:@F@main")
+        return false;
+    }
+    return retarget_esbmc_main(goto_functions, target, init);
   }
 
   if (cbmc_additions && goto_functions.function_map.count("__CPROVER__start"))

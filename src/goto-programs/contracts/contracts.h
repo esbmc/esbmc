@@ -119,6 +119,11 @@ public:
   /// \param to_replace Set of function names to replace with contracts
   void replace_calls(const std::set<std::string> &to_replace);
 
+  /// \brief Drop the requires/ensures ASSUMEs of every function the passes
+  /// above left in place: a clause of a function that is neither enforced nor
+  /// replaced states nothing, as outside contract mode.
+  void remove_inactive_clauses();
+
   /// \brief Quick check if function has any contracts
   /// \param function_body Function goto program
   /// \return True if function has any contract clauses
@@ -682,6 +687,12 @@ private:
     const std::vector<expr2tc> &actual_args,
     goto_programt &replacement,
     const locationt &call_location) const;
+
+  /// Only ensures reads a call-site snapshot; one a loop_invariant alone uses
+  /// is never read, so its extent is not resolved and cannot abort (#7627).
+  static void drop_unread_region_snapshots(
+    std::vector<old_snapshot_t> &snapshots,
+    const expr2tc &ensures_clause);
 
   /// \brief Find the __ESBMC_is_fresh(ptr, size) call in \p function_body
   ///        whose ptr operand names \p target_param and which \p

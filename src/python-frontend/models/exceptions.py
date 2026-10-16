@@ -42,6 +42,17 @@ class ValueError(Exception):
         return self.message
 
 
+# numpy.linalg.LinAlgError, which NumPy derives from ValueError.
+class LinAlgError(ValueError):
+    message: str = ""
+
+    def __init__(self, message: str = ""):
+        self.message: str = message
+
+    def __str__(self) -> str:
+        return self.message
+
+
 class TypeError(Exception):
     message: str = ""
 
@@ -62,7 +73,7 @@ class AttributeError(Exception):
         return self.message
 
 
-class IndexError(Exception):
+class ArithmeticError(Exception):
     message: str = ""
 
     def __init__(self, message: str = ""):
@@ -72,7 +83,7 @@ class IndexError(Exception):
         return self.message
 
 
-class KeyError(Exception):
+class FloatingPointError(ArithmeticError):
     message: str = ""
 
     def __init__(self, message: str = ""):
@@ -82,7 +93,7 @@ class KeyError(Exception):
         return self.message
 
 
-class ZeroDivisionError(Exception):
+class LookupError(Exception):
     message: str = ""
 
     def __init__(self, message: str = ""):
@@ -92,7 +103,37 @@ class ZeroDivisionError(Exception):
         return self.message
 
 
-class OverflowError(Exception):
+class IndexError(LookupError):
+    message: str = ""
+
+    def __init__(self, message: str = ""):
+        self.message: str = message
+
+    def __str__(self) -> str:
+        return self.message
+
+
+class KeyError(LookupError):
+    message: str = ""
+
+    def __init__(self, message: str = ""):
+        self.message: str = message
+
+    def __str__(self) -> str:
+        return self.message
+
+
+class ZeroDivisionError(ArithmeticError):
+    message: str = ""
+
+    def __init__(self, message: str = ""):
+        self.message: str = message
+
+    def __str__(self) -> str:
+        return self.message
+
+
+class OverflowError(ArithmeticError):
     message: str = ""
 
     def __init__(self, message: str = ""):

@@ -221,6 +221,17 @@ static std::set<irep_idt> unreported_exceptions(const optionst &options)
   return {};
 }
 
+static void configure_branch_instrumentation(
+  const cmdlinet &cmdline,
+  goto_coveraget &coverage)
+{
+  if (cmdline.isset("function"))
+    coverage.set_target(cmdline.getval("function"));
+  if (cmdline.isset("coverage-covered-set"))
+    coverage.covered_set_path = cmdline.getval("coverage-covered-set");
+  coverage.cov_assume_asserts = cmdline.isset("cov-assume-asserts");
+}
+
 bool esbmc_parseoptionst::process_goto_program(
   optionst &options,
   goto_functionst &goto_functions)
@@ -353,7 +364,7 @@ bool esbmc_parseoptionst::process_goto_program(
       !(cmdline.isset("no-remove-unreachable") || checks_past_violation) ||
       cmdline.isset("condition-coverage-rm") ||
       cmdline.isset("condition-coverage-claims-rm"))
-      remove_unreachable(goto_functions);
+      remove_unreachable(goto_functions, checks_past_violation);
 
     // Apply all the initialized algorithms
     for (auto &algorithm : goto_preprocess_algorithms)
@@ -404,7 +415,7 @@ bool esbmc_parseoptionst::process_goto_program(
     // goto_k_induction must not also run (#6031).
     bool is_k_induction =
       (cmdline.isset("inductive-step") || cmdline.isset("k-induction") ||
-       cmdline.isset("k-induction-parallel") || cmdline.isset("ts-check")) &&
+       cmdline.isset("k-induction-parallel") || ts_strategy_requested()) &&
       !options.get_bool_option("termination");
 
     // --termination reuses k-induction's havoc machinery via
@@ -602,7 +613,7 @@ bool esbmc_parseoptionst::process_goto_program(
 
     if (!(cmdline.isset("no-remove-unreachable") || checks_past_violation ||
           skip_cleanup_for_termination))
-      remove_unreachable(goto_functions);
+      remove_unreachable(goto_functions, false);
 
     goto_functions.update();
 
@@ -729,28 +740,7 @@ bool esbmc_parseoptionst::process_goto_program(
 
       std::string filename = cmdline.args[0];
       goto_coveraget tmp(ns, goto_functions, filename);
-      // for function mode
-      if (cmdline.isset("function"))
-        tmp.set_target(cmdline.getval("function"));
-      // Per-contract branch coverage (semantics A): scope the
-      // denominator/numerator to decisions lexically declared inside the
-      // --contract target only. --coverage-whole-unit opts out: keep the
-      // contract as the harness entry but count the whole compilation unit.
-      if (cmdline.isset("contract") && !cmdline.isset("coverage-whole-unit"))
-        tmp.scope_contract = cmdline.getval("contract");
-      // Cross-run persisted covered-set: edges already witnessed in a
-      // prior run are not re-instrumented (the denominator is still the
-      // full static universe, so % is never inflated).
-      if (cmdline.isset("coverage-covered-set"))
-        tmp.covered_set_path = cmdline.getval("coverage-covered-set");
-      // Dependency exclusion (Item 5-d): decisions whose declaring
-      // contract is in this set are dropped from BOTH denominator and
-      // numerator. Meaningful under --coverage-whole-unit (a no-op in
-      // default mode, where scope_contract already filters foreign code).
-      if (cmdline.isset("coverage-exclude-contract"))
-        for (const auto &c : cmdline.get_values("coverage-exclude-contract"))
-          tmp.exclude_contracts.insert(c);
-      tmp.cov_assume_asserts = cmdline.isset("cov-assume-asserts");
+      configure_branch_instrumentation(cmdline, tmp);
       tmp.branch_coverage();
     }
     if (

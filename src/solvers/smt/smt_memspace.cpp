@@ -101,6 +101,32 @@ smt_astt smt_solver_baset::convert_ptr_cmp(
   return convert_ast(op);
 }
 
+smt_astt smt_solver_baset::divide_by_element_size(
+  const expr2tc &diff,
+  const expr2tc &size)
+{
+  const type2tc &type = diff->type;
+  smt_astt d = convert_ast(diff);
+  if (is_constant_int2t(size) && is_power_of_two(to_constant_int2t(size).value))
+  {
+    const unsigned int k = to_constant_int2t(size).value.floorPow2();
+    const unsigned int w = type->get_width();
+    if (k == 0)
+      return d;
+
+    if (!int_encoding && k + 1 < w)
+    {
+      smt_astt zero = mk_smt_bv(BigInt(0), w);
+      smt_astt bias =
+        mk_ite(mk_bvslt(d, zero), mk_smt_bv(BigInt::power2(k) - 1, w), zero);
+      return mk_bvashr(mk_bvadd(d, bias), mk_smt_bv(BigInt(k), w));
+    }
+  }
+
+  smt_astt s = convert_ast(typecast2tc(type, size));
+  return int_encoding ? mk_truncated_div(type, d, s) : mk_bvsdiv(d, s);
+}
+
 smt_astt smt_solver_baset::convert_pointer_arith(
   const expr2tc &expr,
   const type2tc &type)
@@ -173,10 +199,7 @@ smt_astt smt_solver_baset::convert_pointer_arith(
       assert(
         !is_constant_int2t(type_size) || !is_constant_int2t(side2_size) ||
         type_size == side2_size);
-      type_size = typecast2tc(the_ptr_offs->type, type_size); // diff is signed
-      expr2tc ptr_diff = div2tc(the_ptr_offs->type, the_ptr_offs, type_size);
-
-      return convert_ast(ptr_diff);
+      return divide_by_element_size(the_ptr_offs, type_size);
     }
     else
     {
@@ -455,7 +478,17 @@ smt_astt smt_solver_baset::init_pointer_obj(
      * leaves unconstrained, no longer reads as aligned there (#7707). */
     const BigInt a = object_base_alignment(*type, size, ns);
 
-    if (a > 1)
+    if (
+      a > 1 && !int_encoding && is_power_of_two(a) &&
+      a.floorPow2() < ptr_loc_type->get_width())
+    {
+      // start % 2^k == 0 exactly when the low k bits of start are zero.
+      const unsigned int k = a.floorPow2();
+      const type2tc low_type = get_uint_type(k);
+      assert_expr(equality2tc(
+        extract2tc(low_type, start_sym, k - 1, 0), gen_zero(low_type)));
+    }
+    else if (a > 1)
     {
       expr2tc mod =
         modulus2tc(ptr_loc_type, start_sym, constant_int2tc(ptr_loc_type, a));
@@ -722,6 +755,36 @@ void smt_solver_baset::bump_addrspace_array(
     addr_space_arr_type,
     "__ESBMC_addrspace_arr_" + std::to_string(addr_space_sym_num.back()));
   convert_assign(equality2tc(newname, store));
+  if (base_addrspace_tied)
+    tie_base_addrspace(idx, val);
+}
+
+expr2tc smt_solver_baset::base_addrspace_array() const
+{
+  // init_addr_space_array() starts the version count at 1.
+  return symbol2tc(addr_space_arr_type, "__ESBMC_addrspace_arr_1");
+}
+
+void smt_solver_baset::tie_base_addrspace(unsigned int idx, const expr2tc &val)
+{
+  assert_expr(equality2tc(
+    index2tc(
+      addr_space_type,
+      base_addrspace_array(),
+      constant_int2tc(machine_ptr, BigInt(idx))),
+    val));
+}
+
+void smt_solver_baset::tie_base_addrspace_to_objects()
+{
+  if (base_addrspace_tied)
+    return;
+  for (const auto &[id, may_be_freed] : addr_space_data.back())
+    tie_base_addrspace(
+      id,
+      symbol2tc(
+        addr_space_type, "__ESBMC_ptr_addr_range_" + std::to_string(id)));
+  base_addrspace_tied = ctx_level;
 }
 
 std::string smt_solver_baset::get_cur_addrspace_ident()

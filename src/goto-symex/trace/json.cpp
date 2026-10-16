@@ -4,6 +4,7 @@
 #include <util/lang/language.h>
 #include <langapi/language_util.h>
 #include <nlohmann/json.hpp>
+#include <charconv>
 #include <filesystem>
 #include <fstream>
 #include <regex>
@@ -299,7 +300,10 @@ void add_coverage_to_json(const goto_tracet &goto_trace, const namespacet &ns)
 
       try
       {
-        int line = std::stoi(line_str);
+        // Synthesized steps (e.g. Python exception plumbing) carry no line.
+        int line = 0;
+        std::from_chars(
+          line_str.data(), line_str.data() + line_str.size(), line);
 
         if (line > 0)
         {

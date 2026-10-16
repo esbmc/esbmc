@@ -1,0 +1,4 @@
+CORE
+main.c
+--replace-call-with-contract bump --unwind 8
+^ERROR: bump: __ESBMC_old\(.*r\[\.\.\.\]\) needs its pointer parameter.s extent stated by an unconditional

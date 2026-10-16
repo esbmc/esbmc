@@ -1,0 +1,5 @@
+CORE
+main.c
+--replace-call-with-contract bump --unwind 8
+^VERIFICATION FAILED$
+arr\[0\] is not 3

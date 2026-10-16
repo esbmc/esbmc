@@ -72,13 +72,6 @@ void python_exception_handler::get_try_statement(
   const bool has_finally =
     element.contains("finalbody") && !element["finalbody"].empty();
 
-  // The `else` clause runs only when the try body completes without an
-  // exception; it is appended to the try body below so it runs on the normal
-  // path and is skipped when the body raises. This composes with the finally
-  // lowering below (else in the try body runs before the appended finally on
-  // the normal path, and is skipped along with the rest of the try body on the
-  // exception path), so try/except/else/finally is handled too.
-
   // Python's `finally` runs on every exit path: normal completion, a caught
   // exception, an *uncaught* exception (run finally, then re-raise), and a
   // return/break/continue that leaves the try. The first three are modelled by
@@ -113,19 +106,31 @@ void python_exception_handler::get_try_statement(
         h["body"] = inject_finally_before_escapes(h["body"], finalbody, false);
   }
 
+  ++converter_.try_body_depth_;
   exprt try_block = converter_.get_block(try_body);
+  --converter_.try_body_depth_;
 
-  // The `else` clause runs after the try body completes without an exception.
-  // Append it to the try body: on the normal path it runs right after the body,
-  // and if the body raises, control transfers to a handler before reaching it,
-  // so it is correctly skipped. (An exception raised inside the else itself is
-  // caught by this try's handlers here rather than propagating, a minor
-  // deviation from CPython that is out of scope.)
+  // The `else` clause runs only when the try body completes without an
+  // exception, and outside this try's handlers: an exception it raises
+  // propagates (after the finally). A flag set at the end of the try body
+  // guards it after the cpp-catch.
+  const locationt location = converter_.get_location_from_decl(element);
+  exprt else_block;
+  exprt no_raise;
   if (!else_body.empty())
   {
-    exprt else_block = converter_.get_block(else_body);
-    for (const auto &op : else_block.operands())
-      try_block.copy_to_operands(op);
+    else_block = converter_.get_block(else_body);
+    no_raise = symbol_expr(converter_.create_tmp_symbol(
+      element, "$try_no_raise$", bool_type(), false_exprt()));
+    code_declt decl(no_raise);
+    decl.location() = location;
+    block.move_to_operands(decl);
+    code_assignt init(no_raise, false_exprt());
+    init.location() = location;
+    block.move_to_operands(init);
+    code_assignt set(no_raise, true_exprt());
+    set.location() = location;
+    try_block.move_to_operands(set);
   }
 
   exprt handler = converter_.get_block(handlers);
@@ -147,22 +152,7 @@ void python_exception_handler::get_try_statement(
   std::vector<exprt> handler_ops(
     handler.operands().begin(), handler.operands().end());
   if (has_finally && !has_catch_all)
-  {
-    exprt finally_handler = converter_.get_block(element["finalbody"]);
-    finally_handler.type().set("ellipsis", true); // catch-all
-    // Same flip-blocker-2 pre-set as emit_catch_block: this handler is built
-    // outside that path, and migration reads the attribute per handler — an
-    // unset id migrates empty and fails remove_exceptions' handler-shape
-    // check once the legacy adjust_catch (which would derive "ellipsis" from
-    // the type above) no longer runs.
-    finally_handler.set("exception_id", "ellipsis");
-    side_effect_exprt rethrow("cpp-throw", empty_typet());
-    rethrow.location() = converter_.get_location_from_decl(element);
-    codet rethrow_code("expression");
-    rethrow_code.operands().push_back(rethrow);
-    finally_handler.copy_to_operands(rethrow_code);
-    handler_ops.push_back(finally_handler);
-  }
+    handler_ops.push_back(make_finally_rethrow_handler(element));
 
   // A valid Python `try` always has at least one handler or a finally, so
   // handler_ops is non-empty and the cpp-catch has the >= 2 operands it needs
@@ -173,6 +163,9 @@ void python_exception_handler::get_try_statement(
     new_expr.copy_to_operands(op);
   block.move_to_operands(new_expr);
 
+  if (!else_body.empty())
+    emit_else_clause(element, else_block, no_raise, block);
+
   // finally on the normal-completion path (and after a caught exception).
   if (has_finally)
   {
@@ -180,6 +173,49 @@ void python_exception_handler::get_try_statement(
     for (const auto &op : final_block.operands())
       block.copy_to_operands(op);
   }
+}
+
+/// A catch-all handler `{ finally; re-raise; }` for @p element's finally.
+exprt python_exception_handler::make_finally_rethrow_handler(
+  const nlohmann::json &element)
+{
+  exprt finally_handler = converter_.get_block(element["finalbody"]);
+  finally_handler.type().set("ellipsis", true); // catch-all
+  // Same flip-blocker-2 pre-set as emit_catch_block: this handler is built
+  // outside that path, and migration reads the attribute per handler — an
+  // unset id migrates empty and fails remove_exceptions' handler-shape
+  // check once the legacy adjust_catch (which would derive "ellipsis" from
+  // the type above) no longer runs.
+  finally_handler.set("exception_id", "ellipsis");
+  side_effect_exprt rethrow("cpp-throw", empty_typet());
+  rethrow.location() = converter_.get_location_from_decl(element);
+  codet rethrow_code("expression");
+  rethrow_code.operands().push_back(rethrow);
+  finally_handler.copy_to_operands(rethrow_code);
+  return finally_handler;
+}
+
+/// Run a try's else clause after its cpp-catch, only when @p no_raise was set
+/// by the try body; with a finally, an exception it raises still runs the
+/// finally before propagating.
+void python_exception_handler::emit_else_clause(
+  const nlohmann::json &element,
+  exprt else_block,
+  const exprt &no_raise,
+  codet &block)
+{
+  if (element.contains("finalbody") && !element["finalbody"].empty())
+  {
+    codet else_catch("cpp-catch");
+    else_catch.move_to_operands(else_block);
+    else_catch.copy_to_operands(make_finally_rethrow_handler(element));
+    else_block = else_catch;
+  }
+  code_ifthenelset run_else;
+  run_else.cond() = no_raise;
+  run_else.then_case() = to_code(else_block);
+  run_else.location() = converter_.get_location_from_decl(element);
+  block.move_to_operands(run_else);
 }
 
 namespace
@@ -458,17 +494,7 @@ void python_exception_handler::get_raise_statement(
     return;
   }
 
-  std::string exc_name;
-
-  // Try to extract the exception name from different AST shapes
-  if (element["exc"].contains("func") && element["exc"]["func"].contains("id"))
-    exc_name = element["exc"]["func"]["id"].get<std::string>();
-  else if (element["exc"].contains("id"))
-    exc_name = element["exc"]["id"].get<std::string>();
-  else if (element["exc"].is_string())
-    exc_name = element["exc"].get<std::string>();
-  else
-    exc_name = ""; // fallback
+  const std::string exc_name = raised_class_name(element["exc"]);
 
   typet type;
   exprt raise;
@@ -574,6 +600,33 @@ void python_exception_handler::get_raise_statement(
   block.move_to_operands(code_expr);
 }
 
+std::string
+python_exception_handler::raised_class_name(const nlohmann::json &exc) const
+{
+  const nlohmann::json &target = exc.contains("func") ? exc["func"] : exc;
+  if (target.contains("id"))
+    return target["id"].get<std::string>();
+  if (target.is_string())
+    return target.get<std::string>();
+  return module_class_name(target);
+}
+
+std::string
+python_exception_handler::module_class_name(const nlohmann::json &node) const
+{
+  // Imported modules' classes are converted under their bare names, which is
+  // what both a raise and an except clause match on.
+  if (node.value("_type", "") != "Attribute")
+    return "";
+  const nlohmann::json &value = node["value"];
+  if (
+    value.value("_type", "") != "Name" ||
+    !converter_.is_module_receiver(value["id"].get<std::string>(), value, node))
+    return "";
+  const std::string attr = node["attr"].get<std::string>();
+  return json_utils::is_class(attr, converter_.ast()) ? attr : "";
+}
+
 // Emit a single catch block for `type_node` (an exception-type Name node, or
 // null for a bare `except:`), running the handler body. Appends it to `block`.
 void python_exception_handler::emit_catch_block(
@@ -587,15 +640,19 @@ void python_exception_handler::emit_catch_block(
   // Create exception variable symbol before processing body
   if (!type_node.is_null())
   {
-    // Only a bare name (`except ValueError:`) is modelled. A dotted type such
-    // as `except socket.error:` is an Attribute node with no "id"; reject it
-    // with a clean diagnostic rather than crashing on the missing json key.
-    if (!type_node.contains("id"))
+    // numpy.linalg.LinAlgError is two attributes deep, past what
+    // module_class_name reads.
+    const bool linalg_error = type_node.value("attr", "") == "LinAlgError" &&
+                              type_node["value"].value("attr", "") == "linalg";
+    const std::string class_name =
+      type_node.contains("id") ? type_node["id"].get<std::string>()
+      : linalg_error           ? "LinAlgError"
+                               : module_class_name(type_node);
+    if (class_name.empty())
       throw std::runtime_error(
         "except with a dotted/attribute exception type is not supported");
 
-    exception_type =
-      type_handler_.get_typet(type_node["id"].get<std::string>());
+    exception_type = type_handler_.get_typet(class_name);
 
     std::string name;
     symbol_id sid = converter_.create_symbol_id();

@@ -134,6 +134,20 @@ public:
     const struct_typet &tuple_type,
     size_t idx) const;
 
+  /**
+   * @brief Convert tuple @p value to the annotation-built tuple type @p target
+   *
+   * A str element held as a char* (e.g. from nondet_str() or a str parameter)
+   * is copied into the fixed-width char array member a tuple[str, ...]
+   * annotation declares, and an integer member is cast to the declared width.
+   * Any other member mismatch leaves @p value unchanged.
+   */
+  exprt coerce_to_tuple_type(
+    const exprt &value,
+    const typet &target,
+    const locationt &loc,
+    codet &target_block);
+
 private:
   /**
    * @brief Build a unique tag name for a tuple based on element types
@@ -156,9 +170,21 @@ private:
   /// Index of the Starred node in @p targets, or targets.size() if none.
   size_t starred_target_index(const nlohmann::json &targets) const;
 
-  /// The symbol a Name unpacking target denotes, created with @p type if new.
-  symbolt &
-  unpack_target_symbol(const nlohmann::json &name_node, const typet &type);
+  /// The symbol a Name unpacking target denotes, created with @p type if new
+  /// and then declared in @p target_block when it is a function local.
+  symbolt &unpack_target_symbol(
+    const nlohmann::json &name_node,
+    const typet &type,
+    codet &target_block);
+
+  typet unpack_target_type(const exprt &rhs, const typet &member_type) const;
+
+  /// Store the tuple element @p member_access in the unpacking @p target.
+  void assign_unpacked_element(
+    const exprt &target,
+    const exprt &member_access,
+    const locationt &loc,
+    codet &target_block);
 
   /// Bind a starred target to a list of elements [first, first + count) of
   /// the tuple @p rhs, as CPython always makes a list.
@@ -168,6 +194,14 @@ private:
     const exprt &rhs,
     size_t first,
     size_t count,
+    codet &target_block);
+
+  /// Copy the str that @p str points to into a fresh char array of type
+  /// @p member_type, asserting that it fits.
+  exprt copy_str_to_member(
+    const exprt &str,
+    const array_typet &member_type,
+    const locationt &loc,
     codet &target_block);
 
   /// The member type a tuple[...] annotation element @p node denotes.

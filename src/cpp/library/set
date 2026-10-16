@@ -1213,6 +1213,7 @@ public:
       buf[i++] = *v1++;
     _size = i;
     std::sort(buf, buf + _size /*,rule*/);
+    _size = std::unique(buf, buf + _size) - buf;
   }
 
   template <class Iterator>
@@ -1232,6 +1233,7 @@ public:
     }
     _size = i;
     std::sort(buf, buf + _size /*,rule*/);
+    _size = std::unique(buf, buf + _size) - buf;
   }
 
   set() : _size(0), rule(Compare())

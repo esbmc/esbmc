@@ -16,24 +16,45 @@ class PreprocessorStateMixin:
         self.enumerate_loop_counter = 0
         self._iter_counter = 0
         self.iterator_classes = set()
+        self.iterator_params = set()
         self.helper_functions_added = False
         self.functionKwonlyParams = {}
         self.static_methods = set()
         self.is_entry_module = False
-        self._hoisted_classes = {}
+        self.hoisted_classes = {}
         self._builtin_shadow_names = None
         self._unobservable_builtin_keys = frozenset()
         self._closed_lambda_bindings = {}
         self._fixed_length_starred = {}
+        self._vararg_alias_calls = {}
+        self._vararg_alias_stmts = []
+        self._redefined_names = set()
         self.functionVarargs = set()
         self._vararg_func_defs = {}
         self._vararg_module_defs = set()
+        self._vararg_callee_defs = {}
         self._vararg_specializations = {}
         self._vararg_dropped_defs = set()
         self._vararg_scope_stack = []
         self._vararg_def_owners = {}
         self._vararg_owner_specs = {}
+        # (name, arity) -> copy of a variadic def an importer calls; see
+        # _specialize_external_varargs and _call_imported_vararg_spec.
+        self.external_vararg_arities = {}
+        self.exported_vararg_specs = {}
+        self._imported_vararg_specs = {}
+        self._used_imported_vararg_specs = {}
+        self._vararg_once_bound = set()
+        # Calls the entry module makes into a def of this module, by def name,
+        # and the names that module binds; see _specialise_requested_function.
+        self.external_type_calls = {}
+        self.blocked_type_functions = set()
+        self.external_bound_names = set()
+        self.exported_type_specs = {}
         self.listcomp_counter = 0
+        self.comprehension_targets = set()
+        self.functools_reduce_names = set()
+        self.functools_module_names = set()
         self.minmax_key_counter = 0
         self.variable_annotations = {}
         self.function_return_annotations = {}
@@ -48,6 +69,8 @@ class PreprocessorStateMixin:
         self.defaultdict_alias = None
         self.collections_module_imported = False
         self.collections_module_alias = None
+        self.numpy_module_names = set()
+        self.numpy_constructor_names = {}
         self._subscript_inferred_vars = set()
         self.generator_funcs = set()
         self.early_return_generator_funcs = set()
@@ -92,9 +115,13 @@ class PreprocessorStateMixin:
         self.scope_binding_counts = {}
         self.in_order_bindings = set()
         self.called_names = set()
+        self.referenced_names = set()
         # nondet_list/nondet_dict the module defines itself, so the
         # rewrite to a typed builder must leave those calls alone.
         self.shadowed_nondet_collections = set()
+        # Names bound only by a module-level `import`, whose attributes may
+        # name nondet functions as the bare imported names do.
+        self.imported_module_names = set()
         self.list_literal_values = {}
         # Names bound to a dict literal, mapped to that literal; invalidated on
         # any mutation, scoped like list_literal_values.

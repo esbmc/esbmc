@@ -1,0 +1,11 @@
+format_version: "0.1"
+properties:
+  # The reset coil and the hit coil each sense the edge on v at their own
+  # evaluation. With go held, scan 1 resets v. In scan 2 the reset coil's
+  # sample sees no edge, but the hit coil's, last taken after the reset, does,
+  # so hit is set while v is high.
+  - id: P1
+    kind: invariant
+    expression: "!hit || !v"
+    description: "hit is never set while v is high"
+    justification: "False: each coil re-reads the edge contact"

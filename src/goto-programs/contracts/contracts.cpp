@@ -1270,6 +1270,162 @@ void code_contractst::havoc_globals_for_entry_harness(
     havoc_static_globals(dest, location);
 }
 
+// --- Stack-exhaustion ghost support (CWE-674) -------------------------------
+// A contract may constrain the built-in ghost __ESBMC_stack_used (cumulative
+// stack bits of the recursive frames on the current path). The enforce side
+// charges each function's real frame size on entry; the replace side havocs the
+// ghost so the callee's ensures bounds the folded subtree. The amount is taken
+// from the same per-local bit count ESBMC's own --stack-limit accounting uses
+// (framet::grow_stack_frame at each DECL). The ghost is otherwise an ordinary
+// global, so __ESBMC_old() over it needs no special threading.
+
+// The exact symbol a clause uses for the ghost, or nil. Matching on the base
+// name keeps this independent of the frontend's mangling, and reusing the
+// clause's own symbol2tc guarantees the injected update writes what the clause
+// reads. Old-snapshot variables are named __ESBMC_old_snapshot_* and so never
+// match, so this picks the bare current-value reference even in a clause that
+// also reads __ESBMC_old(__ESBMC_stack_used).
+static expr2tc find_stack_used_symbol(const expr2tc &e)
+{
+  if (is_nil_expr(e))
+    return expr2tc();
+  if (
+    is_symbol2t(e) && to_symbol2t(e).thename.as_string().find(
+                        "__ESBMC_stack_used") != std::string::npos)
+    return e;
+
+  expr2tc found;
+  e->foreach_operand([&found](const expr2tc &op) {
+    if (is_nil_expr(found))
+      found = find_stack_used_symbol(op);
+  });
+  return found;
+}
+
+// Bits of stack the callee's frame occupies: sum of type_byte_size * 8 over its
+// declared locals, mirroring framet::grow_stack_frame at each DECL.
+static BigInt callee_frame_bits(const goto_programt &body, const namespacet &ns)
+{
+  BigInt bits(0);
+  forall_goto_program_instructions (it, body)
+    if (it->is_decl() && is_code_decl2t(it->code))
+      bits += type_byte_size(to_code_decl2t(it->code).type, &ns) * 8;
+  return bits;
+}
+
+// Substitute the built-in __ESBMC_frame_size with the function's real frame
+// size in bits, so a contract can scale a depth bound by the exact amount the
+// enforce-side entry charge adds; the literal and the charge then always agree.
+static expr2tc substitute_frame_size(const expr2tc &e, const BigInt &bits)
+{
+  if (is_nil_expr(e))
+    return e;
+  if (
+    is_symbol2t(e) && to_symbol2t(e).thename.as_string().find(
+                        "__ESBMC_frame_size") != std::string::npos)
+    return constant_int2tc(e->type, bits);
+
+  expr2tc result = e->clone();
+  result->Foreach_operand(
+    [&bits](expr2tc &op) { op = substitute_frame_size(op, bits); });
+  return result;
+}
+
+// Append `ghost = value(ghost)` when either clause reads __ESBMC_stack_used.
+template <typename Value>
+static void assign_stack_used(
+  goto_programt &dest,
+  const expr2tc &first,
+  const expr2tc &second,
+  Value value,
+  const locationt &location,
+  const char *comment)
+{
+  expr2tc ghost = find_stack_used_symbol(first);
+  if (is_nil_expr(ghost))
+    ghost = find_stack_used_symbol(second);
+  if (is_nil_expr(ghost))
+    return;
+  goto_programt::targett t = dest.add_instruction(ASSIGN);
+  t->code = code_assign2tc(ghost, value(ghost));
+  t->location = location;
+  t->location.comment(comment);
+}
+
+static bool is_clause_assume(const goto_programt::instructiont &i)
+{
+  if (!i.is_assume())
+    return false;
+  const irep_idt &comment = i.location.comment();
+  return comment == "contract::ensures" || comment == "contract::requires";
+}
+
+/// The GOTO pointer/arithmetic-safety pass emits auto-generated ASSERTs (e.g.
+/// SAME-OBJECT for a pointer comparison) from a clause expression, immediately
+/// preceding its ASSUME; for an ensures clause they reference
+/// __ESBMC_return_value, which is unbound in the original body, yielding a
+/// spurious violation (#5043). goto_check gives each of them the clause's own
+/// location. A user assertion can share it when it comes from the same macro
+/// expansion, so it is told apart by its property.
+static bool is_clause_check(
+  const goto_programt::instructiont &i,
+  const goto_programt::instructiont &clause)
+{
+  const irep_idt &property = i.location.property();
+  return i.is_assert() && property != "assertion" &&
+         property != "error label" &&
+         i.location.get_file() == clause.location.get_file() &&
+         i.location.get_line() == clause.location.get_line() &&
+         i.location.get_column() == clause.location.get_column();
+}
+
+/// Erase \p doomed from \p body, retargeting jumps to the next survivor.
+static void erase_instructions(
+  goto_programt &body,
+  const std::set<goto_programt::targett> &doomed)
+{
+  std::map<goto_programt::targett, goto_programt::targett> retarget;
+  for (auto it : doomed)
+  {
+    auto next_it = std::next(it);
+    while (next_it != body.instructions.end() && doomed.count(next_it) > 0)
+      next_it = std::next(next_it);
+    retarget[it] = next_it;
+  }
+
+  for (auto &inst : body.instructions)
+  {
+    if (!inst.is_goto() && !inst.is_catch())
+      continue;
+    for (auto &target : inst.targets)
+    {
+      auto map_it = retarget.find(target);
+      if (map_it != retarget.end())
+        target = map_it->second;
+    }
+  }
+
+  for (auto it : doomed)
+    body.instructions.erase(it);
+}
+
+/// Remove the requires/ensures ASSUMEs goto_convert emitted into \p body,
+/// with the safety assertions generated from each.
+static void remove_clause_assumes(goto_programt &body)
+{
+  std::set<goto_programt::targett> doomed;
+  for (auto it = body.instructions.begin(); it != body.instructions.end(); ++it)
+  {
+    if (!is_clause_assume(*it))
+      continue;
+    doomed.insert(it);
+    for (auto p = it;
+         p != body.instructions.begin() && is_clause_check(*std::prev(p), *it);)
+      doomed.insert(--p);
+  }
+  erase_instructions(body, doomed);
+}
+
 std::set<std::string> code_contractst::enforce_contracts(
   const std::set<std::string> &to_enforce,
   const std::string &entry_function,
@@ -1327,6 +1483,14 @@ std::set<std::string> code_contractst::enforce_contracts(
     expr2tc requires_clause = extract_requires_from_body(original_body_copy);
     expr2tc ensures_clause = extract_ensures_from_body(original_body_copy);
 
+    // Resolve __ESBMC_frame_size to this function's real frame bits, the same
+    // amount the stack-used entry charge adds in generate_checking_wrapper.
+    {
+      BigInt frame_bits = callee_frame_bits(original_body_copy, ns);
+      requires_clause = substitute_frame_size(requires_clause, frame_bits);
+      ensures_clause = substitute_frame_size(ensures_clause, frame_bits);
+    }
+
     // Skip if no contracts found and no annotation
     // For annotated functions, we use default contracts (requires(true),
     // ensures(true)) A contract exists if it's not a constant bool, or if it's
@@ -1377,88 +1541,8 @@ std::set<std::string> code_contractst::enforce_contracts(
     // contracts_original causes:
     // 1. Ensures: forcing postconditions as preconditions (wrong semantics)
     // 2. Requires with __ESBMC_old: dereference of void* value as pointer →
-    // alignment error We need to properly update GOTO targets before removing
-    // instructions
-    {
-      auto &renamed_func = goto_functions.function_map[original_name_id];
-      goto_programt &renamed_body = renamed_func.body;
-
-      // Collect all contract requires/ensures instructions to remove
-      std::set<goto_programt::targett> instructions_to_remove;
-      for (auto it = renamed_body.instructions.begin();
-           it != renamed_body.instructions.end();
-           ++it)
-      {
-        if (it->is_assume())
-        {
-          std::string comment = id2string(it->location.comment());
-          if (comment == "contract::ensures" || comment == "contract::requires")
-          {
-            instructions_to_remove.insert(it);
-
-            // The GOTO pointer/arithmetic-safety pass emits auto-generated
-            // ASSERTs (e.g. SAME-OBJECT for a pointer comparison) from the
-            // clause expression, immediately preceding this ASSUME. They are
-            // ASSERTs, not ASSUMEs, so the comment scan misses them; for an
-            // ensures clause they reference __ESBMC_return_value, which is
-            // unbound in the original body, yielding a spurious violation
-            // (#5043). The wrapper re-checks the clause with return_value
-            // properly bound, so drop the contiguous run of safety asserts
-            // belonging to this clause. Contract clauses precede the function
-            // body, so a real body assertion never sits directly before a
-            // clause ASSUME; walking back over asserts cannot reach body code.
-            for (auto p = it; p != renamed_body.instructions.begin();)
-            {
-              --p;
-              if (!p->is_assert())
-                break;
-              instructions_to_remove.insert(p);
-            }
-          }
-        }
-      }
-
-      // Build a map of instructions to remove -> their replacement target
-      // The replacement target must NOT be an instruction that will also be
-      // removed
-      typedef std::map<goto_programt::targett, goto_programt::targett>
-        targets_mapt;
-      targets_mapt targets_to_update;
-
-      for (auto it : instructions_to_remove)
-      {
-        // Find the next instruction that will NOT be removed
-        auto next_it = std::next(it);
-        while (next_it != renamed_body.instructions.end() &&
-               instructions_to_remove.count(next_it) > 0)
-        {
-          next_it = std::next(next_it);
-        }
-        targets_to_update[it] = next_it;
-      }
-
-      // Update all GOTO targets that point to removed instructions
-      for (auto &inst : renamed_body.instructions)
-      {
-        if (inst.is_goto() || inst.is_catch())
-        {
-          for (auto &target : inst.targets)
-          {
-            auto map_it = targets_to_update.find(target);
-            if (map_it != targets_to_update.end())
-            {
-              target = map_it->second;
-            }
-          }
-        }
-      }
-
-      // Remove the instructions
-      for (auto it : instructions_to_remove)
-      {
-        renamed_body.instructions.erase(it);
-      }
-    }
+    // alignment error
+    remove_clause_assumes(goto_functions.function_map[original_name_id].body);
 
     // Recursive self-calls: under enforcement the function body is executed by
     // the checking wrapper, and a self-call resolves to that same wrapper, so
@@ -1902,6 +1986,30 @@ goto_programt code_contractst::generate_checking_wrapper(
       replace_old_in_expr(requires_clause, old_snapshots),
       ASSUME,
       "contract requires");
+
+  // 2.c Charge this function's own frame to the __ESBMC_stack_used ghost, when
+  // a contract constrains it. The amount is this function's real frame size in
+  // bits, the same quantity ESBMC charges natively at DECL
+  // (framet::grow_stack_frame), so a contract that bounds the ghost is checked
+  // against genuine, byte-accurate per-level stack growth. After the
+  // old-snapshots and the requires ASSUME, so __ESBMC_old() reads the value on
+  // entry and the charge starts from a state the precondition admits. Deeper
+  // levels are reached through replaced recursive calls in the body, whose
+  // havoc + ensures ASSUME (section 3.c of generate_replacement_at_call) admit
+  // the folded subtree. Together these make the stack-exhaustion property
+  // provable compositionally, without unwinding the recursion.
+  assign_stack_used(
+    wrapper,
+    requires_clause,
+    ensures_clause,
+    [&](const expr2tc &ghost) {
+      return add2tc(
+        ghost->type,
+        ghost,
+        constant_int2tc(ghost->type, callee_frame_bits(original_body, ns)));
+    },
+    location,
+    "contract stack-used entry charge");
 
   // 3b. Snapshot globals and ptr->field targets for assigns compliance
   //     (before function call).
@@ -5148,6 +5256,14 @@ void code_contractst::replace_calls(const std::set<std::string> &to_replace)
   goto_functions.update();
 }
 
+void code_contractst::remove_inactive_clauses()
+{
+  Forall_goto_functions (it, goto_functions)
+    if (it->second.body_available)
+      remove_clause_assumes(it->second.body);
+  goto_functions.update();
+}
+
 /// The __ESBMC_is_fresh call at \p it, or nullptr if it is not one.
 static const code_function_call2t *
 as_is_fresh_call(goto_programt::const_targett it)
@@ -5546,8 +5662,9 @@ expr2tc code_contractst::declare_call_result(
   // Unlike the three havoc sites, this one does not skip a pointer under
   // --add-symex-value-sets. They leave existing state alone; this one is the
   // result's only definition, and omitting it puts the ensures back over the
-  // caller's stale value. A pointer result therefore carries no value set, so
-  // a write through it is lost (github_7009_pointer_result_knownbug).
+  // caller's stale value. A pointer result therefore carries no value set; a
+  // write through it reaches an object only when an ensures pins the result to
+  // it (github_7009_pointer_result).
   static size_t counter = 0;
   expr2tc result = declare_local_symbol(
     "__ESBMC_return_value$" + std::to_string(counter++), result_type);
@@ -5583,6 +5700,32 @@ static void write_back_call_result(
   t->location.comment("contract call result written back");
 }
 
+static bool contains_symbol(const expr2tc &e, const irep_idt &name)
+{
+  if (is_nil_expr(e))
+    return false;
+  if (is_symbol2t(e) && to_symbol2t(e).thename == name)
+    return true;
+
+  bool found = false;
+  e->foreach_operand([&found, &name](const expr2tc &op) {
+    if (!found)
+      found = contains_symbol(op, name);
+  });
+  return found;
+}
+
+void code_contractst::drop_unread_region_snapshots(
+  std::vector<old_snapshot_t> &snapshots,
+  const expr2tc &ensures_clause)
+{
+  std::erase_if(snapshots, [&ensures_clause](const old_snapshot_t &s) {
+    return s.is_ptr_region &&
+           !contains_symbol(
+             ensures_clause, to_symbol2t(s.snapshot_var).thename);
+  });
+}
+
 void code_contractst::generate_replacement_at_call(
   const symbolt &function_symbol,
   const goto_programt &function_body,
@@ -5594,6 +5737,14 @@ void code_contractst::generate_replacement_at_call(
   expr2tc ensures_clause = extract_ensures_from_body(function_body);
   std::vector<expr2tc> assigns_target_exprs =
     extract_assigns_from_body(function_body);
+
+  // Resolve __ESBMC_frame_size to the replaced callee's real frame bits, so a
+  // clause scales depth by the same per-frame amount the enforce side charges.
+  {
+    BigInt frame_bits = callee_frame_bits(function_body, ns);
+    requires_clause = substitute_frame_size(requires_clause, frame_bits);
+    ensures_clause = substitute_frame_size(ensures_clause, frame_bits);
+  }
 
   // Debug: log extracted clauses
   log_debug(
@@ -5662,6 +5813,7 @@ void code_contractst::generate_replacement_at_call(
   // moves the snapshots to the call site instead of a wrapper function.
   std::vector<old_snapshot_t> body_snapshots =
     collect_old_snapshots_from_body(function_body);
+  drop_unread_region_snapshots(body_snapshots, ensures_clause);
   std::vector<old_snapshot_t> callsite_snapshots =
     materialize_old_snapshots_at_callsite(
       body_snapshots,
@@ -5896,6 +6048,23 @@ void code_contractst::generate_replacement_at_call(
       ensures_guard ? get_type_id(*ensures_guard->type) : "nil");
   }
 
+  // 3.c When a contract constrains __ESBMC_stack_used, the replaced callee may
+  // have grown it by its whole (possibly deep) subtree, which replacement folds
+  // into one step. Havoc the ghost here so the ensures ASSUME below is its only
+  // constraint and the subtree's peak is admitted (for a safety check the
+  // solver then takes the worst case the ensures permits). The per-level growth
+  // is charged on the enforce side (generate_checking_wrapper). This is needed
+  // even with an assigns clause, which would not otherwise havoc this global.
+  // Done after the call-site __ESBMC_old() snapshots (above), so the ensures'
+  // old() still reads the pre-call value.
+  assign_stack_used(
+    replacement,
+    ensures_guard,
+    requires_clause,
+    [](const expr2tc &ghost) { return gen_nondet(ghost->type); },
+    call_location,
+    "contract stack-used havoc");
+
   // 4. Assume ensures clause (assume postcondition at call site)
   add_contract_clause(
     ensures_guard, ASSUME, "contract ensures", "contract ensures");
@@ -5940,21 +6109,6 @@ void code_contractst::generate_replacement_at_call(
 }
 
 // ========== Pointer validity assumptions support ==========
-
-static bool contains_symbol(const expr2tc &e, const irep_idt &name)
-{
-  if (is_nil_expr(e))
-    return false;
-  if (is_symbol2t(e) && to_symbol2t(e).thename == name)
-    return true;
-
-  bool found = false;
-  e->foreach_operand([&found, &name](const expr2tc &op) {
-    if (!found)
-      found = contains_symbol(op, name);
-  });
-  return found;
-}
 
 /// Whether \p e reads or writes through \p name rather than merely naming it.
 static bool dereferences_symbol(const expr2tc &e, const irep_idt &name)

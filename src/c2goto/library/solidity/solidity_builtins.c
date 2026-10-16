@@ -15,7 +15,9 @@
 #include <stdbool.h>
 #include "solidity_types.h"
 
-/* integer power: base**exp using binary exponentiation */
+/* integer power: base**exp using binary exponentiation. base is not squared
+ * after the last exponent bit, so a multiplication overflows only when the
+ * result does. */
 uint256_t sol_pow_uint(uint256_t base, uint256_t exp)
 {
 __ESBMC_HIDE:;
@@ -24,8 +26,24 @@ __ESBMC_HIDE:;
   {
     if (exp & 1)
       result *= base;
-    base *= base;
     exp >>= 1;
+    if (exp > 0)
+      base *= base;
+  }
+  return result;
+}
+
+int256_t sol_pow_int(int256_t base, uint256_t exp)
+{
+__ESBMC_HIDE:;
+  int256_t result = 1;
+  while (exp > 0)
+  {
+    if (exp & 1)
+      result *= base;
+    exp >>= 1;
+    if (exp > 0)
+      base *= base;
   }
   return result;
 }
@@ -51,6 +69,23 @@ uint256_t mulmod(uint256_t x, uint256_t y, uint256_t k)
 __ESBMC_HIDE:;
   uint512_t wide = (uint512_t)x * (uint512_t)y;
   return (uint256_t)(wide % (uint512_t)k);
+}
+
+/* base**exp modulo 2^256, for an unchecked block: no 512-bit product of two
+ * 256-bit values overflows. Signed operands wrap to the same bits. */
+uint256_t sol_pow_wrap(uint256_t base, uint256_t exp)
+{
+__ESBMC_HIDE:;
+  uint256_t result = 1;
+  while (exp > 0)
+  {
+    if (exp & 1)
+      result = (uint256_t)((uint512_t)result * base);
+    exp >>= 1;
+    if (exp > 0)
+      base = (uint256_t)((uint512_t)base * base);
+  }
+  return result;
 }
 
 /*

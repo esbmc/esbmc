@@ -1247,10 +1247,9 @@ int pthread_setspecific(pthread_key_t key, const void *value)
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   insert_key_value(key, value);
-  // The key value is invalid when value is NULL.
-  int result = (value == NULL) ? EINVAL : 0;
   __ESBMC_atomic_end();
-  return result;
+  // A NULL value is valid; POSIX's only mandatory error is ENOMEM.
+  return 0;
 }
 
 // The pthread_equal() function compares two thread identifiers.

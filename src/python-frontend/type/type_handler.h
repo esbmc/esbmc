@@ -7,6 +7,7 @@
 #include <util/irep/migrate.h>
 #include <irep2/irep2_utils.h>
 #include <nlohmann/json.hpp>
+#include <optional>
 
 class python_converter;
 
@@ -130,11 +131,17 @@ public:
   bool is_pointer_free(const typet &t) const;
 
   /*
+   * True iff `t` is a struct whose every component is a pointer.
+   */
+  bool is_pointer_record(const typet &t) const;
+
+  /*
    * The `ptr_free` argument of a list-model store whose payload argument is
    * `payload` and whose element has type `elem_type`. 2 when the payload is
    * the address of a pointer -- a nested list or an object reference -- so
    * the model copies it as a pointer and the stored element still names its
-   * object; otherwise is_pointer_free(elem_type) as 1 or 0.
+   * object; 1 when is_pointer_free(elem_type); 3 when
+   * is_pointer_record(elem_type); otherwise 0.
    */
   exprt ptr_free_arg(const exprt &payload, const typet &elem_type) const;
 
@@ -179,6 +186,12 @@ public:
    */
   typet get_typet(const std::string &ast_type, size_t type_size = 0) const;
 
+  /// A class used as a value that is not known statically, as a variable
+  /// bound to one of several classes is: a struct holding the class's id, so
+  /// two such values compare by id (#8390).
+  static typet class_value_type();
+  static bool is_class_value_type(const typet &type);
+
   /**
    * Lowering for Python `int` — arbitrarily large in the language spec.
    * Default (bitvector backends): int64 approximation via long_long_int_type().
@@ -199,6 +212,11 @@ public:
    * @return The corresponding typet.
    */
   typet get_typet(const nlohmann::json &elem) const;
+
+  // The element type of `a[i]` when `a` names an array of non-char scalars or
+  // a pointer to one (a NumPy view).
+  std::optional<typet>
+  scalar_array_element_type(const nlohmann::json &elem) const;
 
   /*
    * Checks if a container contains elements of different types.

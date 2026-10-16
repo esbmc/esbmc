@@ -1,4 +1,5 @@
 #include <cassert>
+#include <cctype>
 #include <climits>
 #include <goto-symex/engine/goto_symex.h>
 #include <goto-symex/trace/printf_formatter.h>
@@ -247,15 +248,17 @@ bool goto_symext::format_printf_output(
   return true;
 }
 
-// The characters a %d, %i or %u conversion prints for `v`: C11 7.21.6.1p8
-// gives no leading zeros and a '-' only for a negative value.
-static expr2tc decimal_length(expr2tc v, bool as_unsigned, size_t &max_len)
+// The most output characters a sprintf call stores one by one.
+static const size_t max_stored_output = 1024;
+
+// The characters an integer conversion prints in `base` for `v`, already
+// converted to the conversion's type: C11 7.21.6.1p8 gives no leading zeros
+// and a '-' only for a negative value.
+static expr2tc digits_length(expr2tc v, unsigned base, size_t &max_len)
 {
   if (v->type->get_width() < int_type2()->get_width())
     v = typecast2tc(int_type2(), v);
   const unsigned width = v->type->get_width();
-  if (as_unsigned && is_signedbv_type(v))
-    v = typecast2tc(unsignedbv_type2tc(width), v);
   const bool is_signed = is_signedbv_type(v);
   const BigInt top = power(2, is_signed ? width - 1 : width) - 1;
 
@@ -269,7 +272,7 @@ static expr2tc decimal_length(expr2tc v, bool as_unsigned, size_t &max_len)
       len_type,
       len,
       if2tc(len_type, lessthan2tc(v, gen_zero(v->type)), one, zero));
-  for (BigInt p = 10; p <= top; p *= 10)
+  for (BigInt p = base; p <= top; p *= base)
   {
     expr2tc wide = greaterthanequal2tc(v, constant_int2tc(v->type, p));
     if (is_signed)
@@ -278,6 +281,95 @@ static expr2tc decimal_length(expr2tc v, bool as_unsigned, size_t &max_len)
     max_len++;
   }
   return len;
+}
+
+// The characters the %d, %i, %u, %o, %x or %X conversion `conv` with length
+// modifier `mod` prints for the renamed argument `v`, nil when it cannot be
+// measured. The formatter prints `v` converted to the conversion's type,
+// whatever type was passed (C11 7.21.6.1p9), so that is the value measured.
+static expr2tc integer_length(
+  const expr2tc &v,
+  char conv,
+  const std::string &mod,
+  size_t &max_len)
+{
+  const bool is_signed = conv == 'd' || conv == 'i';
+  const unsigned base = conv == 'o'                    ? 8
+                        : (conv == 'x' || conv == 'X') ? 16
+                                                       : 10;
+  const type2tc target = printf_int_type(is_signed, mod);
+  if (
+    is_nil_type(target) || is_signedbv_type(target) != is_signed ||
+    !is_bv_type(v))
+    return expr2tc();
+  return digits_length(typecast2tc(target, v), base, max_len);
+}
+
+// Skip the '-' and '0' flags and read the field width of the conversion at
+// `i`, false when the width is past what a sprintf call stores. The flags
+// only choose the padding (C11 7.21.6.1p4).
+static bool parse_field_width(const std::string &f, size_t &i, size_t &width)
+{
+  while (i < f.size() && (f[i] == '-' || f[i] == '0'))
+    i++;
+  width = 0;
+  while (i < f.size() && std::isdigit((unsigned char)f[i]))
+    if ((width = width * 10 + (f[i++] - '0')) > max_stored_output)
+      return false;
+  return true;
+}
+
+// A field width is the least number of characters a conversion prints
+// (C11 7.21.6.1p4); `max_before` is the bound before the conversion was
+// measured into `max_len`.
+static expr2tc pad_to_width(
+  const expr2tc &len,
+  size_t width,
+  size_t max_before,
+  size_t &max_len)
+{
+  if (width == 0)
+    return len;
+  max_len = std::max(max_len, max_before + width);
+  const expr2tc min_len = constant_int2tc(len->type, BigInt(width));
+  return if2tc(len->type, lessthan2tc(len, min_len), min_len, len);
+}
+
+expr2tc goto_symext::string_length(const expr2tc &ptr, size_t &max_len)
+{
+  expr2tc object;
+  uint64_t offset, avail;
+  if (
+    !memcmp_resolve_operand(ptr, 0, object, offset, avail) || avail == 0 ||
+    max_len + avail > max_stored_output || !is_array_type(object) ||
+    !is_byte_type(to_array_type(object->type).subtype))
+    return expr2tc();
+  // The resolver drops NULL and invalid targets; this guard is false on them.
+  expr2tc points_here = internal_deref_items.front().guard;
+  cur_state->rename(points_here);
+  do_simplify(points_here);
+
+  // Off the object, or with no NUL in it (C11 7.24.1p1), the length is only
+  // bounded the way the formatter bounds it.
+  const type2tc len_type = int_type2();
+  expr2tc unknown = gen_nondet(len_type);
+  replace_nondet(unknown);
+  assume(and2tc(
+    greaterthanequal2tc(unknown, gen_zero(len_type)),
+    lessthan2tc(unknown, constant_int2tc(len_type, BigInt(avail)))));
+
+  const type2tc &elem = to_array_type(object->type).subtype;
+  expr2tc len = unknown;
+  for (uint64_t k = avail; k-- > 0;)
+    len = if2tc(
+      len_type,
+      equality2tc(
+        index2tc(elem, object, gen_ulong(offset + k)), gen_zero(elem)),
+      constant_int2tc(len_type, BigInt(k)),
+      len);
+  max_len += avail - 1;
+  return is_true(points_here) ? len
+                              : if2tc(len_type, points_here, len, unknown);
 }
 
 expr2tc goto_symext::printf_output_length(
@@ -308,17 +400,30 @@ expr2tc goto_symext::printf_output_length(
       text++;
       continue;
     }
+    const size_t spec = i;
+    size_t width;
+    if (!parse_field_width(f, i, width))
+      return expr2tc();
+    const size_t conv = i;
     while (i < f.size() && std::string("jlzt").find(f[i]) != std::string::npos)
       i++;
-    if (
-      i == f.size() || std::string("diu").find(f[i]) == std::string::npos ||
-      arg == printf_args_end(call))
+    if (i == f.size() || arg == printf_args_end(call))
       return expr2tc();
     expr2tc v = call.operands[arg++];
-    cur_state->rename(v);
-    if (!is_bv_type(v))
+    expr2tc conv_len;
+    const size_t max_before = max_len;
+    // A length modifier on %s makes it a wide string.
+    if (f[i] == 's' && i == spec)
+      conv_len = string_length(v, max_len);
+    else if (std::string("diuoxX").find(f[i]) != std::string::npos)
+    {
+      cur_state->rename(v);
+      conv_len = integer_length(v, f[i], f.substr(conv, i - conv), max_len);
+    }
+    if (is_nil_expr(conv_len))
       return expr2tc();
-    len = add2tc(len->type, len, decimal_length(v, f[i] == 'u', max_len));
+    len = add2tc(
+      len->type, len, pad_to_width(conv_len, width, max_before, max_len));
   }
   max_len += text;
   len = add2tc(len->type, len, constant_int2tc(len->type, BigInt(text)));
@@ -364,10 +469,9 @@ expr2tc goto_symext::sprintf_output(
     return len;
   }
 
-  // Any other output the formatter bounds, up to max_stored: its length is
-  // within those bounds and its characters may include a NUL (%c of 0).
-  const size_t max_stored = 1024;
-  if (!sound || formatter.max_outlen > max_stored)
+  // Any other output the formatter bounds, up to max_stored_output: its length
+  // is within those bounds and its characters may include a NUL (%c of 0).
+  if (!sound || formatter.max_outlen > max_stored_output)
     return expr2tc();
   for (size_t i = 0; i < formatter.max_outlen; i++)
   {
@@ -446,12 +550,101 @@ expr2tc goto_symext::symex_sprintf_store(const code_printf2t &call)
   return len;
 }
 
+expr2tc goto_symext::printf_return_length(
+  const expr2tc &lhs,
+  const code_printf2t &call,
+  size_t fmt_idx)
+{
+  const expr2tc stored = symex_sprintf_store(call);
+  if (!is_nil_expr(stored) || is_nil_expr(lhs))
+    return stored;
+  // asprintf returns -1 when allocation fails, and a v* call's arguments are
+  // behind its va_list, so only the direct stream forms return the length.
+  switch (call.kind)
+  {
+  case printf_kindt::PRINTF:
+  case printf_kindt::FPRINTF:
+  case printf_kindt::DPRINTF:
+    break;
+  case printf_kindt::SPRINTF:
+  case printf_kindt::SNPRINTF:
+  case printf_kindt::ASPRINTF:
+  case printf_kindt::VPRINTF:
+  case printf_kindt::VFPRINTF:
+  case printf_kindt::VSPRINTF:
+  case printf_kindt::VSNPRINTF:
+  case printf_kindt::VASPRINTF:
+    return expr2tc();
+  }
+  size_t max_len;
+  return printf_output_length(call, fmt_idx, max_len);
+}
+
 void goto_symext::assume_printf_length(
   const expr2tc &retval,
   const expr2tc &len)
 {
   if (!is_nil_expr(retval) && !is_nil_expr(len))
     assume(equality2tc(retval, len));
+}
+
+void goto_symext::assume_printf_range(
+  const expr2tc &retval,
+  const BigInt &lo,
+  const BigInt &hi,
+  bool may_fail)
+{
+  expr2tc in_range = and2tc(
+    greaterthanequal2tc(retval, constant_int2tc(retval->type, lo)),
+    lessthanequal2tc(retval, constant_int2tc(retval->type, hi)));
+  // asprintf still returns -1 when its allocation fails.
+  if (may_fail)
+    in_range =
+      or2tc(in_range, equality2tc(retval, constant_int2tc(retval->type, -1)));
+  assume(in_range);
+}
+
+void goto_symext::symex_asprintf_buffer(
+  const expr2tc &strp,
+  const expr2tc &retval)
+{
+  // Only the success path allocates. POSIX leaves *strp undefined when the
+  // call fails, so the caller owns nothing and correctly returns without
+  // freeing; allocating unconditionally orphans the buffer on that path and
+  // trips --memory-leak-check (GitHub #6966). The guard reaches the object's
+  // allocation guard via symex_mem, so the leak check is scoped too.
+  guard2tc alloc_guard;
+  expr2tc alloc_size = constant_int2tc(size_type2(), BigInt(1));
+  if (!is_nil_expr(retval))
+  {
+    alloc_guard.add(greaterthanequal2tc(retval, gen_zero(retval->type)));
+    alloc_size =
+      add2tc(size_type2(), typecast2tc(size_type2(), retval), alloc_size);
+  }
+
+  // Derive char * from strp's declared type (char **) so the dereference
+  // width matches what the value-set analysis and SMT encoding expect.
+  type2tc char_ptr_type = to_pointer_type(strp->type).subtype;
+  expr2tc deref_strp = dereference2tc(char_ptr_type, strp);
+  expr2tc malloc_se = sideeffect2tc(
+    char_ptr_type,
+    expr2tc(),
+    alloc_size,
+    std::vector<expr2tc>(),
+    char_type2(),
+    sideeffect2t::allockind::malloc);
+  symex_assign(code_assign2tc(deref_strp, malloc_se), false, alloc_guard);
+
+  if (is_nil_expr(retval))
+    return;
+
+  // A non-negative return means the allocation succeeded, so the buffer
+  // cannot be the NULL that malloc may hand back.
+  expr2tc buf = dereference2tc(char_ptr_type, strp);
+  dereference(buf, dereferencet::READ);
+  assume(or2tc(
+    lessthan2tc(retval, gen_zero(retval->type)),
+    notequal2tc(buf, symbol2tc(char_ptr_type, "NULL"))));
 }
 
 void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
@@ -660,7 +853,8 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     !is_nil_expr(lhs) && format_is_constant &&
     recover_va_list_args(to_code_printf2t(rhs), fmt_idx, recovered_args);
 
-  const expr2tc stored_len = symex_sprintf_store(to_code_printf2t(rhs));
+  const expr2tc output_len =
+    printf_return_length(lhs, to_code_printf2t(rhs), fmt_idx);
 
   // Now we pop the format
   for (size_t i = 0; i < idx; i++)
@@ -780,7 +974,8 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     //    would risk masking real overflows; see also GitHub #4976-#4979.
     const bool sound_bound = format_is_constant && printf_formatter.bounded;
     if (
-      sound_bound && printf_formatter.min_outlen == printf_formatter.max_outlen)
+      sound_bound && !is_allocating &&
+      printf_formatter.min_outlen == printf_formatter.max_outlen)
     {
       retval =
         constant_int2tc(int_type2(), BigInt(printf_formatter.max_outlen));
@@ -798,22 +993,14 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
       replace_nondet(nondet);
       retval = nondet;
       if (sound_bound)
-      {
-        expr2tc lo =
-          constant_int2tc(int_type2(), BigInt(printf_formatter.min_outlen));
-        expr2tc hi =
-          constant_int2tc(int_type2(), BigInt(printf_formatter.max_outlen));
-        assume(and2tc(
-          greaterthanequal2tc(nondet, lo), lessthanequal2tc(nondet, hi)));
-      }
+        assume_printf_range(
+          nondet,
+          printf_formatter.min_outlen,
+          printf_formatter.max_outlen,
+          is_allocating);
       else if (is_allocating)
-      {
         // -1 on allocation failure; cap success side at INT_MAX/2.
-        expr2tc lo = constant_int2tc(int_type2(), BigInt(-1));
-        expr2tc hi = constant_int2tc(int_type2(), BigInt(INT_MAX / 2));
-        assume(and2tc(
-          greaterthanequal2tc(nondet, lo), lessthanequal2tc(nondet, hi)));
-      }
+        assume_printf_range(nondet, -1, INT_MAX / 2, false);
       else
         assume(
           greaterthanequal2tc(nondet, constant_int2tc(int_type2(), BigInt(0))));
@@ -821,39 +1008,10 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     }
   }
 
-  assume_printf_length(retval, stored_len);
+  assume_printf_length(retval, output_len);
 
-  // Model *strp for asprintf/vasprintf: assign a fresh tracked heap allocation.
-  // The buffer size is modelled as 1 byte; exact sizing would need the
-  // recovered format length (va_list recovery exists — see
-  // recover_va_list_args — but is not yet wired into this allocation's size).
-  // With --no-bounds-check this is sufficient to eliminate the false alarms
-  // while exact size analysis is deferred. Users running with --bounds-check
-  // should be aware of this limitation.
   if (is_allocating && !is_nil_expr(strp) && is_pointer_type(strp->type))
-  {
-    // Only the success path allocates. POSIX leaves *strp undefined when the
-    // call fails, so the caller owns nothing and correctly returns without
-    // freeing; allocating unconditionally orphans the buffer on that path and
-    // trips --memory-leak-check (GitHub #6966). The guard reaches the object's
-    // allocation guard via symex_mem, so the leak check is scoped too.
-    guard2tc alloc_guard;
-    if (!is_nil_expr(retval))
-      alloc_guard.add(greaterthanequal2tc(retval, gen_zero(retval->type)));
-
-    // Derive char * from strp's declared type (char **) so the dereference
-    // width matches what the value-set analysis and SMT encoding expect.
-    type2tc char_ptr_type = to_pointer_type(strp->type).subtype;
-    expr2tc deref_strp = dereference2tc(char_ptr_type, strp);
-    expr2tc malloc_se = sideeffect2tc(
-      char_ptr_type,
-      expr2tc(),
-      constant_int2tc(size_type2(), BigInt(1)),
-      std::vector<expr2tc>(),
-      char_type2(),
-      sideeffect2t::allockind::malloc);
-    symex_assign(code_assign2tc(deref_strp, malloc_se), false, alloc_guard);
-  }
+    symex_asprintf_buffer(strp, retval);
 
   target->output(
     cur_state->guard.as_expr(), cur_state->source, fmt.as_string(), args);

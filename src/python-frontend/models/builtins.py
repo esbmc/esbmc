@@ -427,3 +427,8 @@ def _starred_arity_error() -> int:
     # The frontend calls this when a starred argument does not fill the
     # callee's remaining parameters.
     raise TypeError("starred argument does not match the parameter count")
+
+
+def _call_type_error(message: str) -> int:
+    # The frontend calls this in place of a call whose arguments do not bind.
+    raise TypeError(message)

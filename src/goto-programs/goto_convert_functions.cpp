@@ -636,6 +636,9 @@ bool goto_convert_functionst::convert_native_rec(
       to_sideeffect2t(assign.source).kind ==
         sideeffect2t::allockind::function_call)
     {
+      if (options.get_bool_option("validate-violation-witness"))
+        return delegate_to_legacy();
+
       const sideeffect2t &se = to_sideeffect2t(assign.source);
       if (has_sideeffect(se.operand) || is_ternary(se.operand))
         return delegate_to_legacy();
@@ -1103,9 +1106,11 @@ bool goto_convert_functionst::convert_native_rec(
 
     //    while(c) P;
     //--------------------
-    // v: if(!c) goto z;
+    // v: if(!c) goto z0;
+    //    DEADs of c's temporaries
     // x: P;
     // y: goto v;          <-- continue target
+    // z0: DEADs of c's temporaries
     // z: ;                <-- break target
     goto_programt tmp_z;
     goto_programt::targett z = tmp_z.add_instruction();
@@ -1141,8 +1146,10 @@ bool goto_convert_functionst::convert_native_rec(
       const locationt &stamp = effective_location(w.location, inherited);
       if (!stamp.get_file().empty())
         stamp_value_locations(cond_legacy, stamp);
+      const std::size_t stack_size = targets.destructor_stack.size();
       generate_conditional_branch(
         gen_not(cond_legacy), z, location, tmp_branch);
+      kill_condition_temporaries(stack_size, location, tmp_branch, tmp_z);
     }
     else
     {
@@ -1308,10 +1315,12 @@ bool goto_convert_functionst::convert_native_rec(
     //--------------------
     //    A;
     // u: sideeffects in c  <-- back-edge target, collapsing onto v when empty
-    // v: if(!c) goto z;
+    // v: if(!c) goto z0;
+    //    DEADs of c's temporaries
     // w: P;
     // x: B;                <-- continue target
     // y: goto u;
+    // z0: DEADs of c's temporaries
     // z: ;                 <-- break target
 
     // convert_for emits the init straight into dest, before it saves the
@@ -1329,6 +1338,7 @@ bool goto_convert_functionst::convert_native_rec(
     // observable, so the order is kept.
     goto_programt sideeffects;
     expr2tc guard = normalise_native_code(f.cond, here, ns);
+    const std::size_t stack_size = targets.destructor_stack.size();
     if (has_sideeffect(f.cond) || is_ternary(f.cond))
     {
       exprt cond = migrate_expr_back(f.cond);
@@ -1346,6 +1356,10 @@ bool goto_convert_functionst::convert_native_rec(
     goto_programt tmp_z;
     goto_programt::targett z = tmp_z.add_instruction(SKIP);
     z->location = f.location;
+
+    // before B is converted, which pushes its own temporaries
+    v->make_goto(z);
+    kill_condition_temporaries(stack_size, f.location, tmp_v, tmp_z);
 
     // convert_for converts the iteration statement *before* the body and
     // before installing the loop targets. Keep that order: both may allocate
@@ -1385,7 +1399,6 @@ bool goto_convert_functionst::convert_native_rec(
     targets.set_break(z);
     targets.set_continue(tmp_x.instructions.begin());
 
-    v->make_goto(z);
     v->guard = not2tc(guard);
     v->location = f.location;
 
@@ -1469,6 +1482,7 @@ bool goto_convert_functionst::convert_native_rec(
     targets.set_break(z);
     targets.set_default(z);
     targets.cases.clear();
+    targets.case_stacks.clear();
 
     goto_programt tmp;
     bool body_ok = convert_native_rec(sw.body, tmp, here);
@@ -1480,14 +1494,15 @@ bool goto_convert_functionst::convert_native_rec(
       return false;
     }
 
-    goto_programt tmp_cases;
+    goto_programt tmp_cases, stubs;
     for (auto &it : targets.cases)
     {
       exprt guard_expr;
       case_guard(argument, it.second, guard_expr);
 
       goto_programt::targett x = tmp_cases.add_instruction();
-      x->make_goto(it.first);
+      x->make_goto(
+        case_entry(it.first, stack_before.size(), sw.location, stubs));
       migrate_expr(guard_expr, x->guard);
       x->location = sw.location;
       if (
@@ -1502,11 +1517,13 @@ bool goto_convert_functionst::convert_native_rec(
     }
 
     goto_programt::targett d_jump = tmp_cases.add_instruction();
-    d_jump->make_goto(targets.default_target);
+    d_jump->make_goto(case_entry(
+      targets.default_target, stack_before.size(), sw.location, stubs));
     d_jump->location = targets.default_target->location;
 
     dest.destructive_append(sideeffects);
     dest.destructive_append(tmp_cases);
+    dest.destructive_append(stubs);
     dest.destructive_append(tmp);
     dest.destructive_append(tmp_z);
 
@@ -1518,6 +1535,7 @@ bool goto_convert_functionst::convert_native_rec(
   {
     const code_switch_case2t &sc = to_code_switch_case2t(code2);
 
+    const destructor_stackt stack = targets.destructor_stack;
     goto_programt tmp;
     if (!convert_native_rec(
           sc.code, tmp, effective_location(sc.location, inherited)))
@@ -1529,6 +1547,7 @@ bool goto_convert_functionst::convert_native_rec(
     target->make_skip();
     target->location = statement_location(sc.code);
     dest.destructive_append(tmp);
+    targets.case_stacks[target] = stack;
 
     if (sc.is_default)
     {
@@ -1546,7 +1565,8 @@ bool goto_convert_functionst::convert_native_rec(
         targets.cases_map.insert(std::make_pair(target, --targets.cases.end()))
           .first;
     }
-    entry->second->second.push_back(migrate_expr_back(sc.case_op));
+    entry->second->second.push_back(case_label(
+      migrate_expr_back(sc.case_op), migrate_expr_back(sc.case_op_hi)));
     return true;
   }
 

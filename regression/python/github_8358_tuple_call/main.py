@@ -1,5 +1,5 @@
-# tuple() over an iterable has no element shape the frontend can carry into
-# the parameter, so the unpacking is refused rather than typed as a list.
+# A tuple() argument reaches the parameter as the list the model builds,
+# so the unpacking reads it (#8777).
 
 
 def f(t):

@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <optional>
 #include <regex>
 #include <set>
 #include <utility>
@@ -513,22 +514,55 @@ static bool module_level_binding_is_import(
   return *is_import;
 }
 
-/// How the function being converted binds @p name: as a parameter or local
-/// (true), by an import alone (false), or not at all (empty).
-std::optional<bool> python_converter::function_shadows_module(
+/// How @p function binds @p name: by an import alone (true), as a parameter or
+/// another local (false), or not at all (empty).
+static std::optional<bool> function_binding_is_import(
+  const nlohmann::json &function,
   const std::string &name,
-  const nlohmann::json &use) const
+  const nlohmann::json &use)
 {
-  const nlohmann::json &function = *enclosing_function_node_;
   if (may_bind_name(function["args"], name, true))
-    return true;
+    return false;
   scope_bindings local;
   collect_scope_bindings(function["body"], name, local);
   if (local.declared_outer || (!local.by_import && !local.by_other))
     return std::nullopt;
   if (local.by_import && local.by_other)
     throw undecided_module_binding(name, use);
-  return local.by_other;
+  return local.by_import;
+}
+
+std::optional<bool> python_converter::binding_is_import(
+  const nlohmann::json &module,
+  const scope_bindings &global,
+  const nlohmann::json *function,
+  bool in_class,
+  bool in_order,
+  const std::string &name,
+  const nlohmann::json &use)
+{
+  if (function)
+    if (const auto local = function_binding_is_import(*function, name, use))
+      return local;
+
+  const bool rebound = global.by_other || global.declared_outer;
+  if (!global.by_import)
+    return rebound ? std::optional<bool>(false) : std::nullopt;
+  if (!rebound && !in_order)
+    return true;
+  if (global.declared_outer || function || in_class)
+    throw undecided_module_binding(name, use);
+  return module_level_binding_is_import(module["body"], name, use);
+}
+
+python_converter::scope_bindings python_converter::module_scope_bindings(
+  const nlohmann::json &module,
+  const std::string &name)
+{
+  scope_bindings found;
+  collect_scope_bindings(module["body"], name, found);
+  found.declared_outer = declares_global(module, name);
+  return found;
 }
 
 bool python_converter::name_shadows_module(
@@ -541,20 +575,15 @@ bool python_converter::name_shadows_module(
     return false;
   const std::string name = receiver["id"].get<std::string>();
 
-  if (enclosing_function_node_)
-    if (const std::optional<bool> local = function_shadows_module(name, use))
-      return *local;
-
-  const scope_bindings &global = module_bindings(name);
-  if (!global.by_other && !global.declared_outer)
-    return false;
-  if (!global.by_import)
-    return true;
-  if (
-    global.declared_outer || enclosing_function_node_ ||
-    !current_class_name_.empty())
-    throw undecided_module_binding(name, use);
-  return !module_level_binding_is_import((*ast_json)["body"], name, use);
+  const std::optional<bool> is_import = binding_is_import(
+    *ast_json,
+    module_bindings(name),
+    enclosing_function_node_,
+    !current_class_name_.empty(),
+    false,
+    name,
+    use);
+  return is_import && !*is_import;
 }
 
 const python_converter::scope_bindings &
@@ -563,10 +592,7 @@ python_converter::module_bindings(const std::string &name) const
   const auto [entry, inserted] =
     module_bindings_memo_.try_emplace({ast_json, name});
   if (inserted)
-  {
-    collect_scope_bindings((*ast_json)["body"], name, entry->second);
-    entry->second.declared_outer = declares_global(*ast_json, name);
-  }
+    entry->second = module_scope_bindings(*ast_json, name);
   return entry->second;
 }
 
@@ -919,6 +945,19 @@ symbolt *python_converter::find_function_in_base_classes(
   const std::size_t span =
     std::string("@C@" + class_name + "@F@" + current_func_name).length();
 
+  // Under multiple inheritance the bases are searched in C3 order, which a
+  // depth-first walk breaks: `class D(B, C)` with `B(A)`, `C(A)` must find
+  // C's method before A's.
+  if (const auto mro = class_mro(class_name))
+    for (auto cls = std::next(mro->begin()); cls != mro->end(); ++cls)
+    {
+      std::string sym_id = symbol_id;
+      sym_id.replace(
+        pos, span, "@C@" + *cls + "@F@" + (is_ctor ? *cls : method_name));
+      if (symbolt *func = symbol_table_.find_symbol(sym_id.c_str()))
+        return func;
+    }
+
   // Search the method in every base class, transitively (walk the MRO).
   // Python enforces acyclic inheritance, so this recursion terminates.
   for (const auto &base_class_node : class_node["bases"])
@@ -985,6 +1024,159 @@ import_lookup_name(const std::string &id, const ::symbol_id &parsed)
   return parsed.get_object();
 }
 
+/// The imports of the module being converted, top-level ones first and then
+/// those directly inside its functions. `from pkg import mod` names pkg's own
+/// file, so each submodule it binds follows it as an import of that
+/// submodule's file, held in @p submodules (#8375).
+std::vector<const nlohmann::json *>
+python_converter::import_nodes(std::deque<nlohmann::json> &submodules) const
+{
+  std::vector<const nlohmann::json *> imports;
+  auto add = [&](const nlohmann::json &node) {
+    const std::string type = node.value("_type", "");
+    if (type != "Import" && type != "ImportFrom")
+      return;
+    imports.push_back(&node);
+    if (type != "ImportFrom" || node["module"].is_null())
+      return;
+    for (const auto &alias : node["names"])
+    {
+      const auto submodule = imported_modules.find(
+        node["module"].get<std::string>() + "." +
+        alias["name"].get<std::string>());
+      if (submodule == imported_modules.end())
+        continue;
+      nlohmann::json &import = submodules.emplace_back();
+      import["_type"] = "Import";
+      import["full_path"] = submodule->second;
+      imports.push_back(&import);
+    }
+  };
+
+  const nlohmann::json &body = (*ast_json)["body"];
+  for (const auto &node : body)
+    add(node);
+  for (const auto &node : body)
+    if (
+      node["_type"] == "FunctionDef" && node.contains("body") &&
+      node["body"].is_array())
+      for (const auto &stmt : node["body"])
+        add(stmt);
+  return imports;
+}
+
+// In user code, `import numpy` binds only the name `numpy`: a bare `sum`,
+// `min` or `max` is the builtin, not the operational model's function of
+// that name, reached as `numpy.sum` under the model's own file. The numpy
+// models themselves call each other by bare name.
+bool python_converter::import_hides_builtin(
+  const nlohmann::json &import,
+  const std::string &symbol_id,
+  const std::string &name) const
+{
+  const std::string module_file = import["full_path"].get<std::string>();
+  const std::string numpy_model = "/models/numpy.py";
+  return import["_type"] == "Import" &&
+         symbol_id.find("/models/") == std::string::npos &&
+         symbol_table_.find_symbol(
+           "py:/esbmc-vfs/python/models/builtins.py@F@" + name) &&
+         module_file.size() >= numpy_model.size() &&
+         module_file.compare(
+           module_file.size() - numpy_model.size(),
+           numpy_model.size(),
+           numpy_model) == 0 &&
+         symbol_id.rfind("py:" + module_file + "@", 0) != 0;
+}
+
+// The name the import statement `obj` binds `lookup_name` to in its module:
+// `lookup_name` itself, or for `from m import orig as alias` the original
+// name. nullopt when the statement does not import it: a `from m import`
+// only binds the names it lists, so `from other import sum` does not also
+// hijack `max`.
+static std::optional<std::string>
+imported_module_name(const nlohmann::json &obj, const std::string &lookup_name)
+{
+  if (
+    obj["_type"] != "ImportFrom" || !obj.contains("names") ||
+    lookup_name.empty())
+    return lookup_name;
+  for (const auto &name : obj["names"])
+  {
+    const std::string &n = name["name"].get<std::string>();
+    if (n == "*" || n == lookup_name)
+      return lookup_name;
+    if (
+      name.contains("asname") && !name["asname"].is_null() &&
+      name["asname"].get<std::string>() == lookup_name)
+      return n;
+  }
+  return std::nullopt;
+}
+
+// The symbol `symbol_id` names in the module file `module_file`, where the
+// module defines it as `name`.
+symbolt *python_converter::find_symbol_in_module(
+  const std::string &symbol_id,
+  const std::string &module_file,
+  const std::string &lookup_name,
+  const std::string &name) const
+{
+  std::regex pattern("py:(.*?)@");
+  std::string imported_symbol =
+    std::regex_replace(symbol_id, pattern, "py:" + module_file + "@");
+
+  // For an aliased import the trailing component of symbol_id is the alias;
+  // swap it for the original name so the direct lookup targets the real
+  // symbol (e.g. py:<collections>@deque, not py:<collections>@Queue).
+  if (name != lookup_name && !lookup_name.empty())
+  {
+    const std::size_t at = imported_symbol.rfind('@');
+    if (at != std::string::npos)
+      imported_symbol.replace(at + 1, std::string::npos, name);
+  }
+
+  if (symbolt *func_symbol = symbol_table_.find_symbol(imported_symbol.c_str()))
+    return func_symbol;
+  if (name.empty())
+    return nullptr;
+
+  // Imported free functions are often looked up as object symbols in the
+  // caller scope (e.g., py:main@replace). Also probe the equivalent
+  // function-id form in the imported module (py:module@F@replace).
+  ::symbol_id imported_sid = ::symbol_id::from_string(imported_symbol);
+  imported_sid.set_class("");
+  imported_sid.set_object("");
+  imported_sid.set_attribute("");
+  imported_sid.set_function(name);
+  if (
+    symbolt *func_symbol =
+      symbol_table_.find_symbol(imported_sid.to_string().c_str()))
+    return func_symbol;
+
+  imported_sid.set_function("");
+  imported_sid.set_object(name);
+  return symbol_table_.find_symbol(imported_sid.to_string().c_str());
+}
+
+// The symbol `symbol_id` names in the module the import statement `obj`
+// imports, as `lookup_name`; nullptr when it does not import it.
+symbolt *python_converter::find_symbol_in_import(
+  const nlohmann::json &obj,
+  const std::string &symbol_id,
+  const std::string &lookup_name) const
+{
+  if (
+    (obj["_type"] != "ImportFrom" && obj["_type"] != "Import") ||
+    !obj.contains("full_path") || obj["full_path"].is_null())
+    return nullptr;
+  const std::optional<std::string> name =
+    imported_module_name(obj, lookup_name);
+  if (!name || import_hides_builtin(obj, symbol_id, lookup_name))
+    return nullptr;
+  return find_symbol_in_module(
+    symbol_id, obj["full_path"].get<std::string>(), lookup_name, *name);
+}
+
 symbolt *
 python_converter::find_imported_symbol(const std::string &symbol_id) const
 {
@@ -1009,109 +1201,18 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
   }
 
   auto find_in_import = [&](const nlohmann::json &obj) -> symbolt * {
-    if (
-      (obj["_type"] == "ImportFrom" || obj["_type"] == "Import") &&
-      obj.contains("full_path") && !obj["full_path"].is_null())
-    {
-      // For ImportFrom, only match if the specific name was imported.
-      // This prevents "from other import sum" from also hijacking "max".
-      // When the import is aliased (`from m import orig as alias`), the caller
-      // looks up `alias`, but the imported module defines `orig` — so probe the
-      // module with the original name, not the alias.
-      std::string resolved_name = lookup_name;
-      if (
-        obj["_type"] == "ImportFrom" && obj.contains("names") &&
-        !lookup_name.empty())
-      {
-        bool name_imported = false;
-        for (const auto &name : obj["names"])
-        {
-          const std::string &n = name["name"].get<std::string>();
-          if (n == "*" || n == lookup_name)
-          {
-            name_imported = true;
-            break;
-          }
-          if (
-            name.contains("asname") && !name["asname"].is_null() &&
-            name["asname"].get<std::string>() == lookup_name)
-          {
-            name_imported = true;
-            resolved_name = n;
-            break;
-          }
-        }
-        if (!name_imported)
-          return nullptr;
-      }
-
-      std::regex pattern("py:(.*?)@");
-      std::string imported_symbol = std::regex_replace(
-        symbol_id, pattern, "py:" + obj["full_path"].get<std::string>() + "@");
-
-      // For an aliased import the trailing component of symbol_id is the alias;
-      // swap it for the original name so the direct lookup targets the real
-      // symbol (e.g. py:<collections>@deque, not py:<collections>@Queue).
-      if (resolved_name != lookup_name && !lookup_name.empty())
-      {
-        const std::size_t at = imported_symbol.rfind('@');
-        if (at != std::string::npos)
-          imported_symbol.replace(at + 1, std::string::npos, resolved_name);
-      }
-
-      if (
-        symbolt *func_symbol =
-          symbol_table_.find_symbol(imported_symbol.c_str()))
-        return func_symbol;
-
-      // Imported free functions are often looked up as object symbols in the
-      // caller scope (e.g., py:main@replace). Also probe the equivalent
-      // function-id form in the imported module (py:module@F@replace).
-      if (!resolved_name.empty())
-      {
-        ::symbol_id imported_sid = ::symbol_id::from_string(imported_symbol);
-        imported_sid.set_class("");
-        imported_sid.set_object("");
-        imported_sid.set_attribute("");
-        imported_sid.set_function(resolved_name);
-
-        if (
-          symbolt *func_symbol =
-            symbol_table_.find_symbol(imported_sid.to_string().c_str()))
-          return func_symbol;
-
-        imported_sid.set_function("");
-        imported_sid.set_object(resolved_name);
-        if (
-          symbolt *obj_symbol =
-            symbol_table_.find_symbol(imported_sid.to_string().c_str()))
-          return obj_symbol;
-      }
-    }
-
-    return nullptr;
+    return find_symbol_in_import(obj, symbol_id, lookup_name);
   };
 
-  for (const auto &obj : (*ast_json)["body"])
-  {
-    if (symbolt *func_symbol = find_in_import(obj))
-      return func_symbol;
-  }
-
-  // Also check imports inside function bodies.
-  for (const auto &obj : (*ast_json)["body"])
-  {
-    if (
-      obj["_type"] == "FunctionDef" && obj.contains("body") &&
-      obj["body"].is_array())
-    {
-      for (const auto &stmt : obj["body"])
-      {
-        if (symbolt *func_symbol = find_in_import(stmt))
+  // A `from m import name` binds the name itself, so it takes precedence over
+  // a plain `import m`, which reaches it only through the module (#9046).
+  std::deque<nlohmann::json> submodules;
+  const std::vector<const nlohmann::json *> imports = import_nodes(submodules);
+  for (const bool from_import : {true, false})
+    for (const nlohmann::json *import : imports)
+      if (((*import)["_type"] == "ImportFrom") == from_import)
+        if (symbolt *func_symbol = find_in_import(*import))
           return func_symbol;
-      }
-    }
-  }
 
   return nullptr;
 }
@@ -1142,23 +1243,37 @@ python_converter::find_nested_function_symbol(const std::string &name) const
   return nullptr;
 }
 
+symbolt *
+python_converter::find_symbol_through_module(const std::string &sym_id) const
+{
+  // Imports bind names in the module being converted only: an id in another
+  // module's file names that module's symbol (#9046).
+  const std::string file = symbol_id::from_string(sym_id).get_filename();
+  const std::size_t at = sym_id.rfind('@');
+  if (!file.empty() && file != current_python_file && at != std::string::npos)
+  {
+    const std::string name = sym_id.substr(at + 1);
+    return find_symbol_in_module(sym_id, file, name, name);
+  }
+
+  // User imports (e.g. "from other import sum") shadow builtin model
+  // functions that are registered in the main file's namespace. Don't let
+  // model-module stubs (e.g. esbmc.py's nondet_list stub) shadow operational
+  // models (e.g. nondet.py's nondet_list).
+  symbolt *imported = find_imported_symbol(sym_id);
+  if (
+    imported &&
+    imported->id.as_string().find("/models/") != std::string::npos &&
+    symbol_table_.find_symbol(sym_id))
+    return nullptr;
+  return imported;
+}
+
 symbolt *python_converter::find_symbol(const std::string &sym_id) const
 {
-  // When not loading models, check imports first so that user imports
-  // (e.g. "from other import sum") shadow builtin model functions that
-  // are registered in the main file's namespace.
-  // Don't let model-module stubs (e.g. esbmc.py's nondet_list
-  // stub) shadow operational models (e.g. nondet.py's nondet_list).
   if (!is_loading_models)
-  {
-    if (symbolt *imported = find_imported_symbol(sym_id))
-    {
-      const std::string &imp_id = imported->id.as_string();
-      bool is_model_stub = imp_id.find("/models/") != std::string::npos;
-      if (!is_model_stub || !symbol_table_.find_symbol(sym_id))
-        return imported;
-    }
-  }
+    if (symbolt *symbol = find_symbol_through_module(sym_id))
+      return symbol;
 
   if (symbolt *symbol = symbol_table_.find_symbol(sym_id))
     return symbol;

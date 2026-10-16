@@ -7,6 +7,19 @@ static BigInt type_max_value(const type2tc &type)
   return BigInt::power2(is_signedbv_type(type) ? width - 1 : width) - 1;
 }
 
+/// The result of @p sum is >= both operands. An unsigned sum wraps exactly
+/// when it ends up below one of them, so one comparison suffices there.
+static expr2tc sum_not_below_operands(const expr2tc &sum)
+{
+  const add2t &add = to_add2t(sum);
+  expr2tc ge1 = greaterthanequal2tc(sum, add.side_1);
+  if (
+    is_unsignedbv_type(sum) && add.side_1->type == sum->type &&
+    add.side_2->type == sum->type)
+    return ge1;
+  return and2tc(ge1, greaterthanequal2tc(sum, add.side_2));
+}
+
 smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
 {
   const overflow2t &overflow = to_overflow2t(expr);
@@ -30,14 +43,16 @@ smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
       expr2tc op2pos = lessthan2tc(zero, side2);
       expr2tc both_pos = and2tc(op1pos, op2pos);
 
-      expr2tc negop1 = not2tc(op1pos);
-      expr2tc negop2 = not2tc(op2pos);
+      expr2tc negop1 = lessthan2tc(side1, zero);
+      expr2tc negop2 = lessthan2tc(side2, zero);
       expr2tc both_neg = and2tc(negop1, negop2);
 
+      // INT_MIN + INT_MIN wraps to 0, so a negative/negative sum that does
+      // not underflow must be strictly negative.
       expr2tc nooverflow =
         implies2tc(both_pos, greaterthanequal2tc(overflow.operand, zero));
       expr2tc nounderflow =
-        implies2tc(both_neg, lessthanequal2tc(overflow.operand, zero));
+        implies2tc(both_neg, lessthan2tc(overflow.operand, zero));
       return mk_not(mk_and(convert_ast(nooverflow), convert_ast(nounderflow)));
     }
     else if (int_encoding)
@@ -91,10 +106,7 @@ smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
       }
     }
 
-    // Just ensure the result is >= both operands.
-    expr2tc ge1 = greaterthanequal2tc(overflow.operand, side1);
-    expr2tc ge2 = greaterthanequal2tc(overflow.operand, side2);
-    return mk_not(mk_and(convert_ast(ge1), convert_ast(ge2)));
+    return mk_not(convert_ast(sum_not_below_operands(overflow.operand)));
   }
 
   case expr2t::sub_id:
@@ -107,12 +119,13 @@ smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
       // Compute the subtraction result
       expr2tc sub_result = sub2tc(side1->type, side1, side2);
 
-      // Overflow condition: (a > 0 && b < 0 && result < 0) || (a < 0 && b > 0
-      // && result > 0)
-      expr2tc a_pos = greaterthan2tc(side1, zero);        // a > 0
-      expr2tc b_neg = lessthan2tc(side2, zero);           // b < 0
-      expr2tc result_neg = lessthan2tc(sub_result, zero); // result < 0
-      expr2tc pos_minus_neg_overflow = and2tc(a_pos, and2tc(b_neg, result_neg));
+      // Overflow condition: (a >= 0 && b < 0 && result < 0) || (a < 0 && b > 0
+      // && result > 0). a >= 0 rather than a > 0: 0 - INT_MIN overflows.
+      expr2tc a_nonneg = greaterthanequal2tc(side1, zero); // a >= 0
+      expr2tc b_neg = lessthan2tc(side2, zero);            // b < 0
+      expr2tc result_neg = lessthan2tc(sub_result, zero);  // result < 0
+      expr2tc pos_minus_neg_overflow =
+        and2tc(a_nonneg, and2tc(b_neg, result_neg));
 
       expr2tc a_neg = lessthan2tc(side1, zero);              // a < 0
       expr2tc b_pos = greaterthan2tc(side2, zero);           // b > 0
@@ -323,20 +336,23 @@ smt_astt smt_solver_baset::overflow_cast(const expr2tc &expr)
   if (is_bool_type(ocast.operand->type))
     return mk_smt_bool(false);
 
-  // Define unsigned bounds for the destination width
-  expr2tc lower_bound = constant_int2tc(ocast.operand->type, 0);
-
   /* 2^bits - 1 has to be representable in the operand's type. At equal widths
    * a signed operand cannot hold it, and constant_int2tc wraps it to -1, which
-   * leaves `operand < 0 || operand > -1` -- a tautology. A bound the type
-   * cannot reach is never exceeded, so clamp it to the type's own max (#7324).
+   * leaves `operand < 0 || operand > -1` -- a tautology. That shape comes only
+   * from --ir, where goto_check passes the cast itself, so the destination is
+   * the operand's own signed type: test against its range (#7324, #8661).
    */
   const BigInt type_max = type_max_value(ocast.operand->type);
-  BigInt bound = BigInt::power2(dst_width) - 1;
-  if (bound > type_max)
-    bound = type_max;
+  BigInt lower = 0;
+  BigInt upper = BigInt::power2(dst_width) - 1;
+  if (upper > type_max)
+  {
+    lower = -type_max - 1;
+    upper = type_max;
+  }
 
-  expr2tc upper_bound = constant_int2tc(ocast.operand->type, bound);
+  expr2tc lower_bound = constant_int2tc(ocast.operand->type, lower);
+  expr2tc upper_bound = constant_int2tc(ocast.operand->type, upper);
 
   // Check if the operand is within bounds
   expr2tc overflow_check = or2tc(

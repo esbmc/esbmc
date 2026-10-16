@@ -220,6 +220,8 @@ const static std::vector<std::string> solidity_c_models = {
   "gasleft",
   // builtins (solidity_builtins.c)
   "sol_pow_uint",
+  "sol_pow_int",
+  "sol_pow_wrap",
   "addmod",
   "mulmod",
   "llc_nondet_bytes",

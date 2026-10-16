@@ -30,16 +30,15 @@ struct equation_conversion_statet
 };
 
 void pre_register_addresses(
+  const namespacet &ns,
   smt_convt &smt_conv,
   symex_target_equationt::SSA_stepst::iterator begin,
   symex_target_equationt::SSA_stepst::iterator end)
 {
-  // Only pre-register address_of of compile-time constants (string and
-  // array literals).  These have static lifetime and exist throughout the
-  // program, so including them early in the address space cannot produce
-  // spurious candidate matches for int-to-ptr casts -- any int-to-ptr
-  // cast could legitimately reach them regardless of where the literal's
-  // use happens to appear in the source.  Dynamic/automatic objects keep
+  // Only pre-register address_of of objects with static storage duration
+  // (literals, static variables and functions).  They exist throughout the
+  // program, so any int-to-ptr cast could legitimately reach them regardless of
+  // where their address first appears (#1539).  Dynamic/automatic objects keep
   // their original lazy registration to avoid exposing later-allocated
   // memory to earlier casts.
   // Shared subexpressions make an SSA step a DAG, not a tree -- a propagated
@@ -58,7 +57,12 @@ void pre_register_addresses(
       while (is_index2t(obj) || is_member2t(obj))
         obj = is_index2t(obj) ? to_index2t(obj).source_value
                               : to_member2t(obj).source_value;
-      if (is_constant_string2t(obj) || is_constant_array2t(obj))
+      const symbolt *sym =
+        is_symbol2t(obj) ? ns.lookup(to_symbol2t(obj).thename) : nullptr;
+      if (
+        is_constant_string2t(obj) || is_constant_array2t(obj) ||
+        (sym && (sym->static_lifetime || is_code_type(obj)) &&
+         !sym->is_thread_local))
         smt_conv.convert_ast(e);
     }
     e->foreach_operand([&](const expr2tc &op) { walk(op); });
@@ -811,19 +815,26 @@ void symex_target_equationt::renumber(
 
 void symex_target_equationt::convert(smt_convt &smt_conv, assertion_modet mode)
 {
-  // Pre-register address-of'd string/array literals so int-to-ptr casts see
-  // them regardless of source-level declaration order (see
+  // Pre-register address-of'd static objects so int-to-ptr casts see them
+  // regardless of source-level declaration order (see
   // pre_register_addresses for scope).
-  pre_register_addresses(smt_conv, SSA_steps.begin(), SSA_steps.end());
+  pre_register_addresses(ns, smt_conv, SSA_steps.begin(), SSA_steps.end());
 
   // Show the solver every division's operand pair up front: the
   // modulus conversion lowers a remainder compositionally only when
-  // the same operands are divided somewhere in the formula.
-  for (const auto &SSA_step : SSA_steps)
+  // the same operands are divided somewhere in the formula. One visited set
+  // for all steps, as they share subterms and extend each other's guards
+  // (#9150).
   {
-    smt_conv.note_division_operands(SSA_step.guard);
-    smt_conv.note_division_operands(SSA_step.rhs);
-    smt_conv.note_division_operands(SSA_step.cond);
+    std::unordered_set<const expr2t *> division_seen;
+    for (const auto &SSA_step : SSA_steps)
+    {
+      if (SSA_step.ignore)
+        continue;
+      smt_conv.note_division_operands(SSA_step.guard, division_seen);
+      smt_conv.note_division_operands(SSA_step.rhs, division_seen);
+      smt_conv.note_division_operands(SSA_step.cond, division_seen);
+    }
   }
 
   equation_conversion_statet state;
@@ -1074,10 +1085,10 @@ void runtime_encoded_equationt::flush_latest_instructions()
     }
   }
 
-  // Pre-register address-of'd string/array literals so int-to-ptr casts see
-  // them regardless of source-level declaration order (see
+  // Pre-register address-of'd static objects so int-to-ptr casts see them
+  // regardless of source-level declaration order (see
   // pre_register_addresses for scope).
-  pre_register_addresses(conv, run_it, SSA_steps.end());
+  pre_register_addresses(ns, conv, run_it, SSA_steps.end());
 
   // Now iterate from the start insn to convert, to the end of the list.
   for (; run_it != SSA_steps.end(); ++run_it)

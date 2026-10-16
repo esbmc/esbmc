@@ -5,6 +5,7 @@
 
 class python_converter;
 class symbol_id;
+class symbolt;
 
 class function_call_builder
 {
@@ -50,7 +51,9 @@ public:
    * len() of an operand that lowered to a bitvector: length 1 for a single
    * character, TypeError for a number, which defines no __len__ (#6261).
    */
-  exprt len_of_bitvector_operand(const nlohmann::json &arg) const;
+  exprt len_of_bitvector_operand(
+    const nlohmann::json &arg,
+    const typet &lowered_type) const;
 
   /*
    * Checks if a NumPy function is being invoked.
@@ -59,8 +62,8 @@ public:
 
 private:
   /*
-   * Validates a call to __ESBMC_requires / __ESBMC_ensures; a no-op for any
-   * other callee.
+   * Validates a call to __ESBMC_requires / __ESBMC_ensures / __ESBMC_assigns;
+   * a no-op for any other callee.
    */
   void check_contract_call(const symbol_id &function_id) const;
 
@@ -68,6 +71,10 @@ private:
   /// None.
   bool receiver_is_bound_to_none() const;
   bool nested_function_exists(const symbol_id &sid) const;
+  void use_imported_class_file(
+    symbol_id &function_id,
+    const symbolt &receiver,
+    const std::string &class_name) const;
 
   /// Raises AttributeError ahead of `name.method(...)` when `name` is a str or
   /// class-instance reference holding None (a null pointer).
@@ -85,6 +92,10 @@ private:
   /// str-method lowering, or nil when neither applies.
   exprt build_method_call_on_receiver() const;
 
+  /// AttributeError for a str-only method called on an int, float or bool,
+  /// which would otherwise lower as a 1-char str (#8379); nil otherwise.
+  exprt str_method_on_number_error() const;
+
   /*
    * Rejects a contract clause that does not lower to a pure expression.
    * Throws with a diagnostic naming the offending construct.
@@ -96,6 +107,13 @@ private:
    */
   void check_clause_name(const nlohmann::json &node, const std::string &clause)
     const;
+
+  const symbolt *clause_name_symbol(const std::string &name) const;
+
+  bool is_pure_list_query(const nlohmann::json &node) const;
+
+  void
+  check_clause_planted_nothing(const std::string &clause, size_t planted) const;
 
   void check_contract_clause(
     const nlohmann::json &node,
@@ -114,6 +132,12 @@ private:
    * ran. Throws when x is not a scalar the frontend can snapshot.
    */
   exprt build_old_snapshot() const;
+
+  /// Rejects an __ESBMC_assigns target the caller cannot observe.
+  void check_assigns_targets() const;
+
+  /// __ESBMC_assigns(t, ...) as the call goto_convert reads a frame from.
+  exprt build_assigns_call() const;
 
   /*
    * Whether the name is a parameter of the function being converted, or a
@@ -136,6 +160,15 @@ private:
    * method can then be chosen statically.
    */
   std::string subscript_receiver_class(const nlohmann::json &receiver) const;
+
+  /**
+   * The type of a method call's receiver that is the call @p inner_call. For
+   * `d.pop(k)` on a dict name whose values are class instances it is their
+   * class: pop without a default returns a stored value or raises KeyError,
+   * while a default or get() may yield None or another type. Otherwise it is
+   * the type get_operand_type infers.
+   */
+  std::string call_receiver_class(const nlohmann::json &inner_call) const;
 
   python_converter &converter_;
   const nlohmann::json &call_;

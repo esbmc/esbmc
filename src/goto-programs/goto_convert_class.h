@@ -337,9 +337,33 @@ protected:
     std::size_t stack_size,
     goto_programt &dest,
     destructor_stackt &stack);
+  /// Declares the locals @p stack holds past its first @p from entries: a jump
+  /// to where @p stack is live skips their declarations.
+  void declare_skipped_locals(
+    const destructor_stackt &stack,
+    std::size_t from,
+    const locationt &location,
+    goto_programt &dest);
+  /// Where a switch dispatch jumps to reach @p target: the target itself, or a
+  /// stub in @p stubs that first declares the locals the jump skips.
+  goto_programt::targett case_entry(
+    goto_programt::targett target,
+    std::size_t switch_stack_size,
+    const locationt &location,
+    goto_programt &stubs);
   /// A destructor call on the destructor stack, possibly guarded by
   /// guard_arm_destructors; the other entries are DEADs.
   static bool is_destructor_entry(const codet &entry);
+  /// End a loop condition's temporaries, pushed since @p stack_size, on
+  /// both edges of its @p branch, so each iteration's instance dies in that
+  /// iteration (#9150): after @p branch, and ahead of the break target that
+  /// starts @p exit, where the branch's jumps to it now land. Leaves
+  /// everything alone if one of them has a destructor.
+  void kill_condition_temporaries(
+    std::size_t stack_size,
+    const locationt &location,
+    goto_programt &branch,
+    goto_programt &exit);
   void guard_arm_destructors(
     exprt &cond,
     std::size_t true_size,
@@ -371,6 +395,7 @@ protected:
   typedef exprt::operandst caset;
   typedef std::list<std::pair<goto_programt::targett, caset>> casest;
   typedef std::map<goto_programt::targett, casest::iterator> cases_mapt;
+  typedef std::map<goto_programt::targett, destructor_stackt> case_stackst;
 
   struct targetst
   {
@@ -384,6 +409,8 @@ protected:
 
     casest cases;
     cases_mapt cases_map;
+    /// The destructor stack at each case and default label
+    case_stackst case_stacks;
 
     goto_programt::targett return_target, break_target, continue_target,
       default_target, throw_target, leave_target;
@@ -457,19 +484,26 @@ protected:
       continue_set = targets.continue_set;
       break_target = targets.break_target;
       continue_target = targets.continue_target;
+      break_stack_size = targets.break_stack_size;
+      continue_stack_size = targets.continue_stack_size;
     }
 
+    // An outer break or continue after this construct must unwind to the
+    // outer depth, not to this one's.
     void restore(targetst &targets)
     {
       targets.break_set = break_set;
       targets.continue_set = continue_set;
       targets.break_target = break_target;
       targets.continue_target = continue_target;
+      targets.break_stack_size = break_stack_size;
+      targets.continue_stack_size = continue_stack_size;
     }
 
     goto_programt::targett break_target;
     goto_programt::targett continue_target;
     bool break_set, continue_set;
+    std::size_t break_stack_size, continue_stack_size;
   };
 
   struct break_switch_targetst
@@ -482,9 +516,10 @@ protected:
       default_set = targets.default_set;
       break_target = targets.break_target;
       default_target = targets.default_target;
-      break_stack_size = targets.destructor_stack.size();
+      break_stack_size = targets.break_stack_size;
       cases = targets.cases;
       cases_map = targets.cases_map;
+      case_stacks = targets.case_stacks;
     }
 
     void restore(targetst &targets)
@@ -493,8 +528,10 @@ protected:
       targets.default_set = default_set;
       targets.break_target = break_target;
       targets.default_target = default_target;
+      targets.break_stack_size = break_stack_size;
       targets.cases = cases;
       targets.cases_map = cases_map;
+      targets.case_stacks = case_stacks;
     }
 
     goto_programt::targett break_target;
@@ -504,6 +541,7 @@ protected:
 
     casest cases;
     cases_mapt cases_map;
+    case_stackst case_stacks;
   };
 
   struct throw_targett
@@ -529,6 +567,7 @@ protected:
   };
 
   void case_guard(const exprt &value, const caset &case_op, exprt &dest);
+  static exprt case_label(const exprt &lo, const exprt &hi);
 
   // if(cond) { true_case } else { false_case }
   void generate_ifthenelse(

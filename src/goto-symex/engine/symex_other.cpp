@@ -1,7 +1,9 @@
 #include <cassert>
 #include <goto-symex/engine/goto_symex.h>
+#include <goto-symex/scheduler/reachability_tree.h>
 #include <util/expr/expr_util.h>
 #include <irep2/irep2.h>
+#include <irep2/irep2_utils.h>
 #include <util/symtab/pretty.h>
 
 void goto_symext::symex_other(const expr2tc &code)
@@ -44,6 +46,29 @@ void goto_symext::symex_other(const expr2tc &code)
     throw "goto_symext: unexpected statement: " + get_expr_id(code2);
 }
 
+/// Numbers, or fixed-size aggregates of them. A pointer is left out: a
+/// reused one would carry every iteration's targets into its value set. So
+/// is a variable-length array, which may get another size each time.
+static bool reusable_type(const type2tc &type)
+{
+  if (is_number_type(type))
+    return true;
+  if (is_array_type(type))
+  {
+    const array_type2t &arr = to_array_type(type);
+    return !arr.size_is_infinite && is_constant_int2t(arr.array_size) &&
+           reusable_type(arr.subtype);
+  }
+  if (is_struct_type(type) || is_union_type(type))
+  {
+    for (const type2tc &member : struct_union_members(type))
+      if (!reusable_type(member))
+        return false;
+    return true;
+  }
+  return false;
+}
+
 void goto_symext::symex_decl(const expr2tc &code)
 {
   assert(is_code_decl2t(code));
@@ -62,21 +87,30 @@ void goto_symext::symex_decl(const expr2tc &code)
 
   const code_decl2t &decl_code = to_code_decl2t(code2);
 
-  // allocate a fresh level-1 instance of the declared variable to preserve
-  // locality
   const irep_idt &identifier = decl_code.value;
 
   // Generate dummy symbol as a vehicle for renaming.
   expr2tc l1_sym = symbol2tc(get_empty_type(), identifier);
 
-  // Keep the instance the frame gave this local on entry, unless the frame
-  // has declared it already
+  // Keep the instance the frame gave this local on entry; a re-declaration
+  // gets a fresh level-1 instance to preserve locality, unless its address
+  // is never taken (array decay included, which ESBMC lowers to an explicit
+  // address_of). No pointer can tell two instances of that apart, reaching a
+  // declaration again re-initialises the same object (C11 6.2.4p6), and one
+  // instance per loop iteration makes every later merge diff the stale ones
+  // (#9150).
   statet::framet &frame = cur_state->top();
   frame.level1.get_ident_name(l1_sym);
+  const renaming::level2t::name_record rec(to_symbol2t(l1_sym));
+  const bool redeclared = frame.declaration_history.count(rec) != 0;
+  const bool reused = redeclared && reusable_type(decl_code.type) &&
+                      !art1->is_address_taken_local(identifier);
+  if (reused)
+    cur_state->value_set.erase_object(
+      to_symbol2t(l1_sym).get_symbol_name(), decl_code.type);
   if (
     to_symbol2t(l1_sym).rlevel != symbol_renaming_level::level1 ||
-    frame.declaration_history.count(
-      renaming::level2t::name_record(to_symbol2t(l1_sym))))
+    (redeclared && !reused))
   {
     unsigned &index = cur_state->variable_instance_nums[identifier];
     frame.level1.rename(l1_sym, ++index);
@@ -89,8 +123,9 @@ void goto_symext::symex_decl(const expr2tc &code)
   frame.local_variables.insert(l);
 
   // seen it before?
-  // it should get a fresh value
-  if (cur_state->level2.current_number(l1_sym) != 0)
+  // it should get a fresh value, even a reused instance its previous
+  // lifetime never assigned (a call's result whose call was cut off)
+  if (reused || cur_state->level2.current_number(l1_sym) != 0)
   {
     // Dummy assignment - blank constant value isn't considered for const
     // propagation, variable number will be bumped to result in a new free
@@ -108,10 +143,6 @@ void goto_symext::symex_dead(const expr2tc &code)
   replace_nondet(code2);
   dereference(code2, dereferencet::INTERNAL);
 
-  // check whether either stack limit check has been activated.
-  if (stack_checks_enabled())
-    cur_state->top().decrease_stack_frame_size(code2);
-
   const code_dead2t &dead_code = to_code_dead2t(code2);
 
   // drop the variable's L1 identity from value-set tracking and the
@@ -123,17 +154,14 @@ void goto_symext::symex_dead(const expr2tc &code)
 
   // Rename it to level 1
   cur_state->top().level1.get_ident_name(l1_sym);
+  const renaming::level2t::name_record rec(to_symbol2t(l1_sym));
 
-  // Call free on alloca'd objects.  See is_alloca_return_value_name() —
-  // substring matching here previously fired on any user identifier
-  // containing `_alloca$`.
-  if (goto_symex_utils::is_alloca_return_value_name(identifier.as_string()))
-    symex_free(code_free2tc(l1_sym));
+  // A DEAD can run where its local is not live: on a short-circuit path that
+  // never declared a loop condition's temporary, or twice on one path. Only
+  // a live local still occupies stack.
+  const bool live = cur_state->top().local_variables.erase(rec);
+  if (live && stack_checks_enabled())
+    cur_state->top().decrease_stack_frame_size(code2);
 
-  // Erase from level 1 propagation
   cur_state->value_set.erase(to_symbol2t(l1_sym).get_symbol_name());
-
-  // Erase from local_variables map
-  cur_state->top().local_variables.erase(
-    renaming::level2t::name_record(to_symbol2t(l1_sym)));
 }

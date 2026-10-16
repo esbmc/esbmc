@@ -1006,22 +1006,7 @@ public:
    * the count is min(n, size() - pos), so n is clamped rather than required
    * to fit -- npos, the default, means "to the end". */
   basic_string<CharT, Traits, Alloc>
-  substr(size_t pos = 0, size_t n = npos) const
-  {
-  __ESBMC_HIDE:
-    size_t len = this->length();
-    __ESBMC_assert(pos <= len, "basic_string::substr position out of range");
-    size_t rlen = n < (len - pos) ? n : (len - pos);
-    size_t k;
-    char one[STRING_CAPACITY];
-    for (k = 0; k < rlen; k++)
-    {
-      one[k] = this->str[pos + k];
-    }
-    one[k] = '\0';
-    basic_string<CharT, Traits, Alloc> tmp(one);
-    return tmp;
-  }
+  substr(size_t pos = 0, size_t n = npos) const;
 
   basic_string<CharT, Traits, Alloc>::iterator begin() const
   {
@@ -1527,6 +1512,27 @@ void basic_string<CharT, Traits, Alloc>::reserve(size_t n)
 {
 __ESBMC_HIDE:
   __ESBMC_assert(n < STRING_CAPACITY, "String capacity exceeded");
+}
+
+// Defined here rather than in the class: the throw needs out_of_range (#8698).
+template <typename CharT, typename Traits, typename Alloc>
+basic_string<CharT, Traits, Alloc>
+basic_string<CharT, Traits, Alloc>::substr(size_t pos, size_t n) const
+{
+__ESBMC_HIDE:
+  size_t len = this->length();
+  if (pos > len)
+    throw std::out_of_range();
+  size_t rlen = n < (len - pos) ? n : (len - pos);
+  size_t k;
+  char one[STRING_CAPACITY];
+  for (k = 0; k < rlen; k++)
+  {
+    one[k] = this->str[pos + k];
+  }
+  one[k] = '\0';
+  basic_string<CharT, Traits, Alloc> tmp(one);
+  return tmp;
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -2313,7 +2319,8 @@ __ESBMC_HIDE:
   /* [string.erase]: out_of_range only if pos > size(); the count removed is
    * min(n, size() - pos), so npos -- the default -- erases to the end. */
   size_t len = this->length();
-  __ESBMC_assert(pos <= len, "basic_string::erase position out of range");
+  if (pos > len)
+    throw std::out_of_range();
   size_t xlen = n < (len - pos) ? n : (len - pos);
   size_t i;
   for (i = pos; i + xlen < len; i++)
@@ -3382,46 +3389,53 @@ getline(istream &is, basic_string<CharT, Traits, Alloc> &str, char delim);
 template <typename CharT, typename Traits, typename Alloc>
 istream &getline(istream &is, basic_string<CharT, Traits, Alloc> &str);
 
-std::string to_string(int value)
+// N4659 [string.conversions]/7: the value printed as by sprintf with the
+// overload's own length modifier, so no overload narrows through int.
+static std::string
+__esbmc_integer_to_string(unsigned long long magnitude, bool negative)
 {
-  char buffer[50];
-  itoa(value, buffer, 10);
-  return string(buffer);
-}
-
-std::string to_string(long value)
-{
-  char buffer[50];
-  itoa(value, buffer, 10);
-  return string(buffer);
+  char buffer[22];
+  int i = sizeof(buffer) - 1;
+  buffer[i] = '\0';
+  do
+  {
+    buffer[--i] = '0' + magnitude % 10;
+    magnitude /= 10;
+  } while (magnitude != 0);
+  if (negative)
+    buffer[--i] = '-';
+  return string(&buffer[i]);
 }
 
 std::string to_string(long long value)
 {
-  char buffer[50];
-  itoa(value, buffer, 10);
-  return string(buffer);
+  return __esbmc_integer_to_string(
+    value < 0 ? 0ULL - (unsigned long long)value : value, value < 0);
 }
 
-std::string to_string(unsigned value)
+std::string to_string(int value)
 {
-  char buffer[50];
-  itoa(value, buffer, 10);
-  return string(buffer);
+  return to_string((long long)value);
 }
 
-std::string to_string(unsigned long value)
+std::string to_string(long value)
 {
-  char buffer[50];
-  itoa(value, buffer, 10);
-  return string(buffer);
+  return to_string((long long)value);
 }
 
 std::string to_string(unsigned long long value)
 {
-  char buffer[50];
-  itoa(value, buffer, 10);
-  return string(buffer);
+  return __esbmc_integer_to_string(value, false);
+}
+
+std::string to_string(unsigned value)
+{
+  return to_string((unsigned long long)value);
+}
+
+std::string to_string(unsigned long value)
+{
+  return to_string((unsigned long long)value);
 }
 
 std::string to_string(float value)

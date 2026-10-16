@@ -1522,56 +1522,62 @@ OutIt merge(
   return source;
 }
 
+// Insert each element of [mid, last) after its equivalents in [first, mid):
+// [alg.merge]/8 requires a stable merge, which sort() is not.
 template <class BidIt>
 void inplace_merge(BidIt first, BidIt mid, BidIt last)
 {
-  sort(first, last);
+  for (; mid != last; ++mid)
+    for (BidIt j = mid; j != first;)
+    {
+      BidIt prev = j;
+      --prev;
+      if (!(*j < *prev))
+        break;
+      swap(*j, *prev);
+      j = prev;
+    }
 }
 
 template <class BidIt, class Pr>
 void inplace_merge(BidIt first, BidIt mid, BidIt last, Pr pred)
 {
-  sort(first, last, pred);
+  for (; mid != last; ++mid)
+    for (BidIt j = mid; j != first;)
+    {
+      BidIt prev = j;
+      --prev;
+      if (!pred(*j, *prev))
+        break;
+      swap(*j, *prev);
+      j = prev;
+    }
 }
 
 template <class InIt1, class InIt2>
 bool includes(InIt1 first1, InIt1 last1, InIt2 first2, InIt2 last2)
 {
-  while (first1 != last1)
+  for (; first2 != last2; ++first1)
   {
-    if (*first2 < *first1)
-      break;
-    else if (*first1 < *first2)
-      ++first1;
-    else
-    {
-      ++first1;
+    if (first1 == last1 || *first2 < *first1)
+      return false;
+    if (!(*first1 < *first2))
       ++first2;
-    }
-    if (first2 == last2)
-      return true;
   }
-  return false;
+  return true;
 }
 
 template <class InIt1, class InIt2, class Pr>
 bool includes(InIt1 first1, InIt1 last1, InIt2 first2, InIt2 last2, Pr pred)
 {
-  while (first1 != last1)
+  for (; first2 != last2; ++first1)
   {
-    if (pred(*first2, *first1))
-      break;
-    else if (pred(*first1, *first2))
-      ++first1;
-    else
-    {
-      ++first1;
+    if (first1 == last1 || pred(*first2, *first1))
+      return false;
+    if (!pred(*first1, *first2))
       ++first2;
-    }
-    if (first2 == last2)
-      return true;
   }
-  return false;
+  return true;
 }
 
 template <class InIt1, class InIt2, class OutIt>

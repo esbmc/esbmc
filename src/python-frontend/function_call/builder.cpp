@@ -3,6 +3,7 @@
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/numpy/numpy_call_expr.h>
+#include <python-frontend/python-dict/python_dict_handler.h>
 #include <python-frontend/python-list/python_list.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/symbol_id.h>
@@ -80,6 +81,30 @@ static bool is_pylist_object_type(const typet &type, const namespacet &ns)
   return try_get_pylist_struct_type(type, ns).has_value();
 }
 
+/// `len(list)`. A contract clause cannot name the result of a call, so there it
+/// reads the size field directly.
+static exprt list_length(
+  const exprt &list,
+  const struct_typet &list_struct,
+  bool in_contract_clause)
+{
+  if (in_contract_clause && list.type().is_pointer())
+    return build_deref_member(list, "size", size_type());
+
+  code_typet list_size_type;
+  list_size_type.return_type() = size_type();
+  code_typet::argumentt arg_type;
+  arg_type.type() = pointer_typet(list_struct);
+  list_size_type.arguments().push_back(arg_type);
+
+  symbol_exprt list_size_func("c:@F@__ESBMC_list_size", list_size_type);
+
+  return build_call(
+    list_size_func,
+    size_type(),
+    {list.type().is_pointer() ? list : build_address_of(list)});
+}
+
 /// Python types that define no __len__. Named rather than tested inline so the
 /// len() lowering stays one decision point wide.
 static bool is_unsized_python_type(const std::string &python_type)
@@ -140,8 +165,8 @@ static bool needs_bool_intrinsic_symbol(const std::string &name)
 // impure and leaving the reader to guess which call was the problem.
 static bool is_unsupported_contract_intrinsic(const std::string &name)
 {
-  return name == "__ESBMC_assigns" || name == "__ESBMC_is_fresh" ||
-         name == "__ESBMC_forall" || name == "__ESBMC_exists";
+  return name == "__ESBMC_is_fresh" || name == "__ESBMC_forall" ||
+         name == "__ESBMC_exists";
 }
 
 void function_call_builder::check_contract_call(
@@ -149,17 +174,11 @@ void function_call_builder::check_contract_call(
 {
   const std::string &clause = function_id.get_function();
 
-  // Only `assigns` is reported from here: it is a statement in its own right,
-  // so nothing else sees it. The other unsupported intrinsics are meaningful
-  // only inside a clause, where check_contract_clause already rejects them by
-  // name. Reporting them here would fire on any call sharing the name, outside
-  // any clause, and blame contracts for it.
   if (clause == kEsbmcAssigns)
-    throw std::runtime_error(
-      fmt::format(
-        "{} at line {} is not supported by the Python frontend yet",
-        clause,
-        call_.value("lineno", 0)));
+  {
+    check_assigns_targets();
+    return;
+  }
 
   if (clause != kEsbmcRequires && clause != kEsbmcEnsures)
     return;
@@ -230,6 +249,9 @@ std::optional<exprt> function_call_builder::build_contract_intrinsic(
   if (function_id.get_function() == kEsbmcOld)
     return build_old_snapshot();
 
+  if (function_id.get_function() == kEsbmcAssigns)
+    return build_assigns_call();
+
   // Loop invariants and function-contract clauses share one shape: a bodiless
   // `void f(bool)` whose call goto_convert lowers into a LOOP_INVARIANT or a
   // marked ASSUME. The symbol must stay valueless: builtin_functions.cpp
@@ -255,6 +277,58 @@ std::optional<exprt> function_call_builder::build_contract_intrinsic(
     code_type);
   converter_.add_symbol(symbol);
   return std::nullopt;
+}
+
+// A frame names places the caller can observe: a module-level global, or an
+// attribute of an object the function reaches. A local or a parameter is
+// invisible to the caller, so naming one states nothing.
+void function_call_builder::check_assigns_targets() const
+{
+  for (const auto &target : call_["args"])
+  {
+    const std::string kind = target.value("_type", "");
+    const std::string name = target.value("id", "");
+    if (kind == "Attribute")
+      continue;
+    if (
+      kind == "Name" && names_module_global(name) &&
+      !names_enclosing_parameter(name))
+      continue;
+    throw std::runtime_error(
+      fmt::format(
+        "{} at line {} names {}; a frame target must be a module-level "
+        "global or an attribute",
+        kEsbmcAssigns,
+        call_.value("lineno", 0),
+        kind == "Name" ? "'" + name + "'" : describe_clause_node(kind)));
+  }
+}
+
+// Lowered as the C macro spells it: __ESBMC_assigns_impl(&t1, &t2, ...), or
+// __ESBMC_assigns_impl((void *)0) for an empty frame.
+exprt function_call_builder::build_assigns_call() const
+{
+  const std::string impl_id = "c:@F@__ESBMC_assigns_impl";
+  const locationt location = converter_.get_location_from_decl(call_);
+  const symbolt *impl = converter_.symbol_table().find_symbol(impl_id);
+  if (impl == nullptr)
+  {
+    code_typet code_type;
+    code_type.return_type() = empty_typet();
+    code_type.make_ellipsis();
+    symbolt symbol = converter_.create_symbol(
+      "", "__ESBMC_assigns_impl", impl_id, location, code_type);
+    impl = converter_.add_symbol_and_get_ptr(symbol);
+  }
+
+  code_function_callt call;
+  call.function() = symbol_expr(*impl);
+  call.location() = location;
+  for (const auto &target : call_["args"])
+    call.arguments().push_back(address_of_exprt(converter_.get_expr(target)));
+  if (call.arguments().empty())
+    call.arguments().push_back(gen_zero(pointer_typet(empty_typet())));
+  return call;
 }
 
 // Whether \p name is a parameter of the function being converted. Only a
@@ -383,6 +457,53 @@ exprt function_call_builder::build_old_snapshot() const
   return snapshot;
 }
 
+const symbolt *
+function_call_builder::clause_name_symbol(const std::string &name) const
+{
+  symbol_id sid(
+    converter_.python_file(),
+    converter_.current_classname(),
+    converter_.current_function_name());
+  sid.set_object(name);
+
+  // A clause may also name a module-level global, which is not in the
+  // function's scope.
+  const symbolt *sym = converter_.symbol_table().find_symbol(sid.to_string());
+  if (!sym)
+    sym = converter_.symbol_table().find_symbol(sid.global_to_string());
+  return sym;
+}
+
+static bool is_int_literal(const nlohmann::json &node)
+{
+  if (
+    node.value("_type", "") == "UnaryOp" &&
+    node["op"].value("_type", "") == "USub")
+    return is_int_literal(node["operand"]);
+  return node.value("_type", "") == "Constant" &&
+         node["value"].is_number_integer();
+}
+
+// `len(l)` and `l[k]`, for a list `l` and an int literal `k`, lower to reads
+// of the list object with no call or branch, so a clause may use them (#7629).
+bool function_call_builder::is_pure_list_query(const nlohmann::json &node) const
+{
+  const std::string kind = node.value("_type", "");
+  const nlohmann::json *base = nullptr;
+  if (
+    kind == "Call" && node["func"].value("id", "") == "len" &&
+    node["args"].size() == 1 &&
+    node.value("keywords", nlohmann::json()).empty())
+    base = &node["args"][0];
+  else if (kind == "Subscript" && is_int_literal(node["slice"]))
+    base = &node["value"];
+
+  if (base == nullptr || base->value("_type", "") != "Name")
+    return false;
+  const symbolt *sym = clause_name_symbol(base->value("id", ""));
+  return sym && is_pylist_object_type(sym->get_type(), converter_.ns);
+}
+
 void function_call_builder::check_clause_name(
   const nlohmann::json &node,
   const std::string &clause) const
@@ -410,17 +531,7 @@ void function_call_builder::check_clause_name(
           converter_.current_function_name()));
   }
 
-  symbol_id sid(
-    converter_.python_file(),
-    converter_.current_classname(),
-    converter_.current_function_name());
-  sid.set_object(name);
-
-  // A clause may also name a module-level global, which is not in the
-  // function's scope.
-  const symbolt *sym = converter_.symbol_table().find_symbol(sid.to_string());
-  if (!sym)
-    sym = converter_.symbol_table().find_symbol(sid.global_to_string());
+  const symbolt *sym = clause_name_symbol(name);
   if (sym && sym->get_type() == any_type())
     throw std::runtime_error(
       fmt::format(
@@ -439,7 +550,8 @@ void function_call_builder::check_clause_name(
 // could not be inferred is a `void *`, so `o > 0` compares a pointer rather
 // than the value the source reads as. Reject all three instead of verifying a
 // different property than the one written. A parameter whose type *is* known,
-// including a list or str, stays allowed.
+// including a list or str, stays allowed, as do `len(l)` and `l[k]` over a
+// list, which lower without a temporary or a branch.
 void function_call_builder::check_contract_clause(
   const nlohmann::json &node,
   const std::string &clause) const
@@ -461,7 +573,7 @@ void function_call_builder::check_contract_clause(
   // ran, and lowers to a snapshot taken there.
   if (
     !node_type.empty() && !is_pure_clause_node(node_type) &&
-    callee != kEsbmcOld)
+    callee != kEsbmcOld && !is_pure_list_query(node))
   {
     throw std::runtime_error(
       fmt::format(
@@ -492,6 +604,23 @@ void function_call_builder::check_contract_clause(
 
   for (const auto &child : node)
     check_contract_clause(child, clause);
+}
+
+// A statement planted while converting a clause runs in the body, not where
+// the clause is checked, so the clause would read a value it never computed.
+void function_call_builder::check_clause_planted_nothing(
+  const std::string &clause,
+  size_t planted) const
+{
+  if (
+    (clause == kEsbmcRequires || clause == kEsbmcEnsures) &&
+    converter_.current_block_statement_count() != planted)
+    throw std::runtime_error(
+      fmt::format(
+        "{} clause at line {} needs a statement to evaluate; a contract clause "
+        "must be a pure expression",
+        clause,
+        call_.value("lineno", 0)));
 }
 
 function_call_builder::function_call_builder(
@@ -758,6 +887,76 @@ std::string function_call_builder::subscript_receiver_class(
   return cls;
 }
 
+std::string function_call_builder::call_receiver_class(
+  const nlohmann::json &inner_call) const
+{
+  const auto inferred = [&]() {
+    return converter_.get_type_handler().get_operand_type(inner_call);
+  };
+  const nlohmann::json &func = inner_call["func"];
+  if (
+    func.value("_type", "") != "Attribute" || func.value("attr", "") != "pop" ||
+    inner_call["args"].size() != 1 || !inner_call["keywords"].empty() ||
+    func["value"].value("_type", "") != "Name")
+    return inferred();
+
+  const std::string name = func["value"].value("id", "");
+  symbol_id sid(
+    converter_.python_file(),
+    converter_.current_classname(),
+    converter_.current_function_name());
+  sid.set_object(name);
+  const symbolt *sym = converter_.find_symbol(sid.to_string());
+  if (!sym)
+    sym = converter_.find_symbol("py:" + converter_.python_file() + "@" + name);
+  python_dict_handler *dict_handler = converter_.get_dict_handler();
+  if (!sym || !dict_handler->is_dict_type(sym->get_type()))
+    return inferred();
+
+  typet value_type =
+    dict_handler->resolve_expected_type_for_dict_subscript(build_symbol(*sym));
+  if (value_type.is_pointer())
+    value_type = value_type.subtype();
+  value_type = converter_.ns.follow(value_type);
+  if (!value_type.is_struct())
+    return inferred();
+
+  std::string tag = to_struct_type(value_type).tag().as_string();
+  if (tag.rfind("tag-", 0) == 0)
+    tag = tag.substr(4);
+  return json_utils::is_class(tag, converter_.ast()) ? tag : inferred();
+}
+
+// The class whose bases super() searches: the class its first argument
+// names, as in super(C, self), or the enclosing class for a bare super().
+static std::string super_start_class(
+  const nlohmann::json &super_call,
+  const std::string &current_class,
+  const nlohmann::json &ast)
+{
+  if (!super_call.contains("args") || super_call["args"].empty())
+    return current_class;
+  const std::string named = super_call["args"][0].value("id", "");
+  return json_utils::is_class(named, ast) ? named : current_class;
+}
+
+// `id`, a method's symbol id under class `from`, rewritten to name the same
+// method under class `to`. A constructor is named after its class.
+static std::string rebase_method_id(
+  std::string id,
+  const std::string &from,
+  const std::string &to,
+  const std::string &method,
+  bool is_ctor)
+{
+  const std::string old_tail = "@C@" + from + "@F@" + (is_ctor ? from : method);
+  const std::size_t pos = id.rfind(old_tail);
+  if (from == to || pos == std::string::npos)
+    return id;
+  return id.replace(
+    pos, old_tail.size(), "@C@" + to + "@F@" + (is_ctor ? to : method));
+}
+
 symbol_id function_call_builder::build_function_id() const
 {
   const std::string &python_file = converter_.python_file();
@@ -973,7 +1172,7 @@ symbol_id function_call_builder::build_function_id() const
         // Nested calls (e.g., u.encode(...).decode(...)) do not always have
         // func.id. Use inferred call result type instead of indexing JSON
         // fields that may be null.
-        obj_name = th.get_operand_type(inner_call);
+        obj_name = call_receiver_class(inner_call);
       }
 
       if (obj_name.empty())
@@ -987,8 +1186,18 @@ symbol_id function_call_builder::build_function_id() const
         // For __init__, use is_ctor=true: parent's __init__ is stored under
         // the class name (e.g. Vehicle::Vehicle), not the literal "__init__".
         bool is_init_call = (func_name == "__init__");
+        const std::string start =
+          super_start_class(inner_call, current_class_name, ast);
         symbolt *base_class_func = converter_.find_function_in_base_classes(
-          current_class_name, function_id.to_string(), func_name, is_init_call);
+          start,
+          rebase_method_id(
+            function_id.to_string(),
+            current_class_name,
+            start,
+            func_name,
+            is_init_call),
+          func_name,
+          is_init_call);
         if (base_class_func)
         {
           return symbol_id::from_string(base_class_func->id.as_string());
@@ -1283,7 +1492,8 @@ symbol_id function_call_builder::build_function_id() const
       // Look up variable type from symbol table instead of AST
       symbol_id var_sid(python_file, current_class_name, current_function_name);
       var_sid.set_object(obj_name);
-      symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
+      symbolt *var_symbol = converter_.follow_retype_alias(
+        converter_.find_symbol(var_sid.to_string()));
 
       if (!var_symbol)
       {
@@ -1323,6 +1533,7 @@ symbol_id function_call_builder::build_function_id() const
         {
           const struct_typet &struct_type = to_struct_type(var_type);
           class_name = struct_type.tag().as_string();
+          use_imported_class_file(function_id, *var_symbol, class_name);
         }
         else
           class_name = th.type_to_string(var_type);
@@ -1367,6 +1578,23 @@ symbol_id function_call_builder::build_function_id() const
   return function_id;
 }
 
+// A receiver bound by `from m import obj` has its class defined in m, so its
+// methods live under m's file, not this one (#8375).
+void function_call_builder::use_imported_class_file(
+  symbol_id &function_id,
+  const symbolt &receiver,
+  const std::string &class_name) const
+{
+  if (
+    receiver.module == converter_.python_file() ||
+    !json_utils::find_class(converter_.ast()["body"], class_name).empty())
+    return;
+  const std::string module_path =
+    converter_.find_imported_class_module(class_name).second;
+  if (!module_path.empty())
+    function_id.set_filename(module_path);
+}
+
 bool function_call_builder::nested_function_exists(const symbol_id &sid) const
 {
   // A sibling defined later in the enclosing body is not converted yet.
@@ -1378,15 +1606,19 @@ bool function_call_builder::nested_function_exists(const symbol_id &sid) const
 }
 
 exprt function_call_builder::len_of_bitvector_operand(
-  const nlohmann::json &arg) const
+  const nlohmann::json &arg,
+  const typet &lowered_type) const
 {
   // A single character also lowers to a bitvector and does have length 1, so
   // tell the two apart by the Python type. Anything the annotator could not
   // type keeps the historical answer: get_operand_type reports a BinOp as its
   // left operand's type, so `3 * "x,"` looks like an int, and refusing on that
-  // alone would reject a real str/list.
-  const std::string arg_py_type =
-    converter_.get_type_handler().get_operand_type(arg);
+  // alone would reject a real str/list. A value wider than a character is no
+  // character, so an untyped one, such as the result of an imported function,
+  // is an int (#9336).
+  std::string arg_py_type = converter_.get_type_handler().get_operand_type(arg);
+  if (arg_py_type.empty() && bv_width(lowered_type) > bv_width(char_type()))
+    arg_py_type = "int";
 
   if (is_unsized_python_type(arg_py_type))
     return converter_.get_exception_handler().gen_exception_raise(
@@ -1559,7 +1791,64 @@ exprt function_call_builder::build_method_call_on_receiver() const
   raise_if_none_receiver();
   if (receiver_class_defines_method())
     return nil_exprt();
+  exprt number_error = str_method_on_number_error();
+  if (!number_error.is_nil())
+    return number_error;
   return converter_.get_string_handler().handle_string_attribute_call(call_);
+}
+
+static std::string constant_number_type_name(const nlohmann::json &value)
+{
+  if (value.is_boolean())
+    return "bool";
+  if (value.is_number_float())
+    return "float";
+  return value.is_number() ? "int" : "";
+}
+
+exprt function_call_builder::str_method_on_number_error() const
+{
+  const std::string method = call_["func"]["attr"].get<std::string>();
+  if (!type_utils::is_str_only_method(method))
+    return nil_exprt();
+
+  const nlohmann::json &recv = call_["func"]["value"];
+  std::string type_name;
+  if (recv.value("_type", "") == "Constant")
+    type_name = constant_number_type_name(recv["value"]);
+  else if (recv.value("_type", "") == "Name")
+  {
+    symbol_id sid = converter_.create_symbol_id();
+    sid.set_object(recv["id"].get<std::string>());
+    const symbolt *symbol = converter_.find_symbol(sid.to_string());
+    const type_handler &types = converter_.get_type_handler();
+    // get_expr follows a retype to str (`x = 3; x = "ab"`), the raw symbol not.
+    if (symbol && types.is_numeric_scalar_type(symbol->get_type()))
+    {
+      const typet current = converter_.get_expr(recv).type();
+      if (types.is_numeric_scalar_type(current))
+        type_name = types.get_python_type_name(current);
+    }
+  }
+  if (type_name.empty())
+    return nil_exprt();
+
+  exprt raise = converter_.get_exception_handler().gen_exception_raise(
+    "AttributeError",
+    "'" + type_name + "' object has no attribute '" + method + "'");
+  raise.location() = converter_.get_location_from_decl(call_);
+  return raise;
+}
+
+// np.round keeps the numpy model: C's round rounds halves away from zero and
+// has no decimals. The models' own `round(x)` is a Name call.
+static bool
+reuses_c_model(const nlohmann::json &call, const symbol_id &function_id)
+{
+  const std::string &function = function_id.get_function();
+  return type_utils::is_c_model_func(function) &&
+         !(function == "round" &&
+           call["func"].value("_type", "") == "Attribute");
 }
 
 exprt function_call_builder::build() const
@@ -1588,26 +1877,13 @@ exprt function_call_builder::build() const
         auto list_struct =
           try_get_pylist_struct_type(arg_symbol->get_type(), converter_.ns);
         if (list_struct)
-        {
-          code_typet list_size_type;
-          list_size_type.return_type() = size_type();
-          code_typet::argumentt arg_type;
-          arg_type.type() = pointer_typet(*list_struct);
-          list_size_type.arguments().push_back(arg_type);
-
-          symbol_exprt list_size_func("c:@F@__ESBMC_list_size", list_size_type);
-
-          return build_call(
-            list_size_func,
-            size_type(),
-            {arg_expr.type().is_pointer() ? arg_expr
-                                          : build_address_of(arg_expr)});
-        }
+          return list_length(
+            arg_expr, *list_struct, converter_.in_contract_clause());
       }
     }
 
     if (arg_expr.type().is_signedbv() || arg_expr.type().is_unsignedbv())
-      return len_of_bitvector_operand(call_["args"][0]);
+      return len_of_bitvector_operand(call_["args"][0], arg_expr.type());
 
     typet len_arg_type = converter_.ns.follow(arg_expr.type());
     if (len_arg_type.is_array() && len_arg_type.subtype() != char_type())
@@ -1954,7 +2230,7 @@ exprt function_call_builder::build() const
   if (is_numpy_call(function_id))
   {
     // Adjust the function ID when reusing functions from the C models
-    if (type_utils::is_c_model_func(function_id.get_function()))
+    if (reuses_c_model(call_, function_id))
     {
       function_id.set_prefix("c:");
       function_id.set_filename("");
@@ -1965,8 +2241,10 @@ exprt function_call_builder::build() const
 
   const bool saved = converter_.enter_contract_clause(
     needs_bool_intrinsic_symbol(function_id.get_function()));
+  const size_t planted = converter_.current_block_statement_count();
   function_call_expr call_expr(function_id, call_, converter_);
   exprt result = call_expr.get();
   converter_.restore_contract_clause(saved);
+  check_clause_planted_nothing(function_id.get_function(), planted);
   return result;
 }

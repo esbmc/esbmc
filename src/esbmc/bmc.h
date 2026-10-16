@@ -72,9 +72,14 @@ public:
   virtual smt_resultt run(std::shared_ptr<symex_target_equationt> &eq);
   virtual ~bmct();
 
+  /// Whether every violation found refutes only the --loop-invariant-check
+  /// abstraction, so the run neither refutes nor proves the program (#7480).
+  bool violates_only_the_abstraction() const;
+
 protected:
   const contextt &context;
   namespacet ns;
+  const goto_functionst &program;
 
   std::unique_ptr<smt_convt> runtime_solver;
   std::unique_ptr<reachability_treet> symex;
@@ -239,6 +244,8 @@ private:
   /// the report covers the whole program rather than only those properties
   /// some phase happened to reach a verdict on (discussion #7023).
   void seed_property_verdicts(const symex_target_equationt &eq) const;
+  /// Records each assertion of the program that no step of \p eq raised.
+  void seed_unreached_claims(const symex_target_equationt &eq) const;
 
   /// Record the verdict a satisfiable answer earns for one claim: Failed, or
   /// Unknown when the model witnesses only the invariant abstraction rather
@@ -334,7 +341,6 @@ void report_coverage(
   const std::unordered_multiset<std::string> &reached_mul_claims,
   pytest_generator &pytest_gen,
   ctest_generator &ctest_gen,
-  foundry_generator &foundry_gen,
   const std::string &partial_reason = "");
 
 /// Record why a coverage measurement is not exhaustive; the reason is listed
