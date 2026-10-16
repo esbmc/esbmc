@@ -212,6 +212,16 @@ public:
   size_t k_path_max_goals = 10000;
 
 protected:
+  void load_covered_set();
+  void instrument_branch_instruction(
+    goto_programt &goto_program,
+    goto_programt::targett &it);
+  void instrument_decision(
+    goto_programt &goto_program,
+    goto_programt::targett &it,
+    const expr2tc &cond,
+    bool cond_reverts,
+    bool neg_reverts);
   expr2tc handle_single_guard(const expr2tc &expr, bool top_level);
   void handle_operands_guard(
     const expr2tc &expr,
