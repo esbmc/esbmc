@@ -4345,8 +4345,62 @@ function_call_expr::get_dispatch_table()
      "re module functions"}};
 }
 
+// Whether some class of the program derives from both `a` and `b`.
+static bool has_common_subclass(
+  const type_handler &th,
+  const nlohmann::json &ast,
+  const std::string &a,
+  const std::string &b)
+{
+  for (const auto &stmt : ast["body"])
+  {
+    if (stmt.value("_type", "") != "ClassDef")
+      continue;
+    const std::string name = stmt.value("name", "");
+    if (th.class_derives_from(name, a) && th.class_derives_from(name, b))
+      return true;
+  }
+  return false;
+}
+
+std::optional<exprt> function_call_expr::check_explicit_super() const
+{
+  const nlohmann::json &func = call_["func"];
+  if (
+    func.value("_type", "") != "Attribute" ||
+    func["value"].value("_type", "") != "Call" ||
+    func["value"]["func"].value("id", "") != "super" ||
+    func["value"]["args"].empty())
+    return std::nullopt;
+
+  // In a method of `current`, self is an instance of `current` or of one of
+  // its subclasses. super(named, self) is valid only when that instance is a
+  // `named`, which holds for every such instance when `current` derives from
+  // `named`, and for none when no class derives from both.
+  const std::string named = func["value"]["args"][0].value("id", "");
+  const std::string &current = converter_.current_classname();
+  const nlohmann::json &ast = converter_.ast();
+  if (
+    current.empty() || !json_utils::is_class(named, ast) ||
+    type_handler_.class_derives_from(current, named))
+    return std::nullopt;
+  if (has_common_subclass(type_handler_, ast, current, named))
+    throw std::runtime_error(
+      "unsupported: super(" + named + ", self) in class " + current +
+      ", where self is a " + named + " only for some subclasses");
+
+  exprt raise = converter_.get_exception_handler().gen_exception_raise(
+    "TypeError",
+    "super(type, obj): obj must be an instance or subtype of type");
+  raise.location() = converter_.get_location_from_decl(call_);
+  return raise;
+}
+
 exprt function_call_expr::get()
 {
+  if (std::optional<exprt> raise = check_explicit_super())
+    return *raise;
+
   // Use dispatch table to handle special function types
   auto dispatch_table = get_dispatch_table();
 
