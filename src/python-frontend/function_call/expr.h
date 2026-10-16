@@ -301,6 +301,11 @@ private:
 
   exprt handle_isinstance() const;
 
+  /// Whether isinstance's first argument is a class object: a class named
+  /// directly (`int`, `A`) or a variable last assigned a builtin type.
+  bool
+  is_class_object_operand(const nlohmann::json &arg, const exprt &obj) const;
+
   /// isinstance(obj, type) for a str-typed `obj` that is not a known class
   /// object: a type object and a string share the char-array model.
   exprt isinstance_str_as_type(const exprt &obj_expr) const;

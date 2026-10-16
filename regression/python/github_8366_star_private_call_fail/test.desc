@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: Function "_hidden" not found \(.*main.py line 3\)$

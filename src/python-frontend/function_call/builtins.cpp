@@ -345,6 +345,18 @@ exprt function_call_expr::isinstance_str_as_type(const exprt &obj_expr) const
   return unknown;
 }
 
+bool function_call_expr::is_class_object_operand(
+  const nlohmann::json &arg,
+  const exprt &obj) const
+{
+  if (python_converter::is_class_object(obj))
+    return true;
+  if (arg["_type"] != "Name" || !obj.is_symbol())
+    return false;
+  const std::string *name = converter_.class_object_name(obj.identifier());
+  return name && type_utils::is_type_identifier(*name);
+}
+
 exprt function_call_expr::handle_isinstance() const
 {
   const auto &args = call_["args"];
@@ -359,16 +371,8 @@ exprt function_call_expr::handle_isinstance() const
   std::vector<nlohmann::json> types;
   collect_classinfo(args[1], types);
 
-  // Check if the first argument is a type object (e.g., x = int; isinstance(x,
-  // str)) Type objects themselves are not instances of other types (except
-  // 'type')
-  if (obj_arg["_type"] == "Name" && obj_expr.is_symbol())
-  {
-    const std::string *name =
-      converter_.class_object_name(obj_expr.identifier());
-    if (name && type_utils::is_type_identifier(*name))
-      return gen_boolean(admits_class_object(types));
-  }
+  if (is_class_object_operand(obj_arg, obj_expr))
+    return gen_boolean(admits_class_object(types));
 
   // Extract type name from various AST node formats
   auto extract_type_name = [](const nlohmann::json &node) -> std::string {
@@ -876,6 +880,109 @@ static bool attribute_decided(
          init_binds(*cls, attr, ast);
 }
 
+/// Whether @p node holds @p call where it runs as @p node runs, not in a
+/// nested function, class or generator that may run later.
+static bool runs_call(const nlohmann::json &node, const nlohmann::json &call)
+{
+  static const std::set<std::string> deferred{
+    "FunctionDef", "AsyncFunctionDef", "Lambda", "ClassDef", "GeneratorExp"};
+  if (node.is_object())
+  {
+    const std::string type = node.value("_type", "");
+    if (deferred.count(type))
+      return false;
+    if (
+      type == "Call" && node.value("lineno", -1) == call.value("lineno", -2) &&
+      node.value("col_offset", -1) == call.value("col_offset", -2))
+      return true;
+  }
+  if (!node.is_object() && !node.is_array())
+    return false;
+  return std::any_of(node.begin(), node.end(), [&](const auto &child) {
+    return runs_call(child, call);
+  });
+}
+
+/// Whether @p body binds @p name and then sets @p name.@p attr, each in a
+/// statement of its own, before the statement that runs @p call. With @p name
+/// bound nowhere else, the call reads the object that was given @p attr.
+static bool set_before_call(
+  const nlohmann::json &body,
+  const std::string &name,
+  const std::string &attr,
+  const nlohmann::json &call)
+{
+  bool bound = false;
+  bool set = false;
+  for (const auto &stmt : body)
+  {
+    if (runs_call(stmt, call))
+      return set;
+    const nlohmann::json *target = binding_target(stmt);
+    if (target && target->value("id", "") == name)
+      bound = true;
+    else if (bound && assigns_self_attribute(stmt, name, attr))
+      set = true;
+  }
+  return false;
+}
+
+/// Whether user code can intercept setting, reading or removing @p attr: a
+/// property or method of that name, a descriptor, or an attribute hook.
+static bool may_intercept(const nlohmann::json &node, const std::string &attr)
+{
+  static const std::set<std::string> hooks{
+    "__dict__",
+    "__getattribute__",
+    "__setattr__",
+    "__delattr__",
+    "__get__",
+    "__set__",
+    "delattr",
+    "vars"};
+  if (node.is_object())
+  {
+    const std::string type = node.value("_type", "");
+    const std::string name = type == "Name"        ? node.value("id", "")
+                             : type == "Attribute" ? node.value("attr", "")
+                                                   : node.value("name", "");
+    if (hooks.count(name) || (type == "FunctionDef" && name == attr))
+      return true;
+  }
+  if (!node.is_object() && !node.is_array())
+    return false;
+  return std::any_of(node.begin(), node.end(), [&](const auto &child) {
+    return may_intercept(child, attr);
+  });
+}
+
+/// Whether the plain name @p receiver, an instance of a program class, was
+/// given @p attr in the scope running @p call before the call (#8508).
+static bool receiver_given_attribute(
+  const nlohmann::json &receiver,
+  const typet &type,
+  const std::string &attr,
+  const nlohmann::json &call,
+  const python_converter &converter)
+{
+  const nlohmann::json &ast = converter.ast();
+  if (
+    receiver["_type"] != "Name" || !user_class_of(type, ast) ||
+    imports_other_modules(ast) || may_delete(ast, attr) ||
+    may_intercept(ast, attr))
+    return false;
+  const std::string name = receiver["id"].get<std::string>();
+  if (count_bindings(ast, name) != 1)
+    return false;
+  const std::string &function = converter.get_current_func_name();
+  if (function.empty())
+    return set_before_call(ast["body"], name, attr, call);
+  const nlohmann::json scope =
+    find_function_by_path(ast, split_function_path(function));
+  return scope.contains("body") &&
+         set_before_call(scope["body"], name, attr, call);
+}
+
 exprt function_call_expr::handle_getattr()
 {
   const auto &args = call_["args"];
@@ -886,7 +993,11 @@ exprt function_call_expr::handle_getattr()
     type = type.subtype();
   bool present = false;
   if (!attribute_decided(type, attr, converter_.ast(), present))
-    return handle_general_function_call();
+  {
+    if (!receiver_given_attribute(args[0], type, attr, call_, converter_))
+      return handle_general_function_call();
+    present = true;
+  }
 
   if (!present && args.size() == 3)
     return converter_.get_expr(args[2]);
@@ -2265,8 +2376,29 @@ exprt function_call_expr::handle_min_max(
   return migrate_expr_back(result2);
 }
 
+// Whether a print() `file=` target is a standard stream (None is stdout),
+// whose output no program state can observe.
+static bool is_std_stream(const nlohmann::json &target)
+{
+  if (target.value("_type", "") == "Constant")
+    return target.contains("value") && target["value"].is_null();
+  return target.value("_type", "") == "Attribute" &&
+         target["value"].value("_type", "") == "Name" &&
+         target["value"].value("id", "") == "sys" &&
+         (target["attr"] == "stdout" || target["attr"] == "stderr");
+}
+
 exprt function_call_expr::handle_print() const
 {
+  // Output written to any other file (e.g. an io.StringIO) can be read back,
+  // so dropping it could prove a program that fails.
+  if (call_.contains("keywords"))
+    for (const auto &kw : call_["keywords"])
+      if (kw["arg"] == "file" && !is_std_stream(kw["value"]))
+        throw std::runtime_error(
+          "print() to a file other than sys.stdout or sys.stderr is not "
+          "supported");
+
   // Materialize each argument as code so arithmetic checks and function-call
   // side effects are preserved even though print itself has no runtime output.
   const auto &args = call_["args"];

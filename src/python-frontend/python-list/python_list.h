@@ -548,6 +548,10 @@ public:
     const nlohmann::json &slice_node,
     const nlohmann::json &value_node);
 
+  void handle_subscript_assign_none(
+    const exprt &list_expr,
+    const nlohmann::json &slice_node);
+
   exprt compare(const exprt &l1, const exprt &l2, const std::string &op);
 
   exprt contains(const exprt &item, const exprt &list);
@@ -569,6 +573,12 @@ public:
    * gets the new value, type_id and size. Otherwise both are left unchanged.
    */
   void retype_element_store(exprt &lhs, exprt &rhs);
+
+  /// Records @p elem_type as the type of the element @p subscript stores to.
+  void record_element_store(
+    const nlohmann::json &subscript,
+    const std::string &elem_id,
+    const typet &elem_type);
 
   /// Equality of two list elements read as @p lhs_type and @p rhs_type for
   /// compare()'s fast path, or nullopt when it cannot relate them. Both types
@@ -843,6 +853,18 @@ public:
    *  list to look up, so it has no single width and yields 0.
    */
   BigInt uniform_elem_size(const exprt &list) const;
+
+  /// Whether the list stored at index @p i of @p list is the one @p elem holds
+  /// now. The type map names a nested element by the symbol it was appended
+  /// from, and a later assignment can rebind that symbol when it is a user
+  /// variable.
+  expr2tc
+  stored_element_is(const symbolt &list, std::size_t i, const symbolt &elem);
+
+  /// The element type a subscript's base declares when the type map has no
+  /// record of the list: a name's annotation, or a called function's return
+  /// annotation. Empty when neither gives one.
+  typet unrecorded_base_elem_type();
 
   // True when the list's recorded element types include a tagged scalar, whose
   // payload width is per-element and symbolic (#7716).
