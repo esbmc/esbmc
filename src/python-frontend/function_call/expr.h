@@ -303,6 +303,9 @@ private:
    */
   const symbolt *lookup_python_symbol(const std::string &var_name) const;
 
+  void refuse_isinstance_on_path_dependent_number(
+    const nlohmann::json &obj_arg,
+    const std::vector<nlohmann::json> &types) const;
   exprt handle_isinstance() const;
 
   /// Whether isinstance's first argument is a class object: a class named

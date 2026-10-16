@@ -85,6 +85,27 @@ same_class(const type2tc &expected, const type2tc &value, const namespacet &ns)
   return base_type_eq(expected, value, ns);
 }
 
+/// Whether @p type is how a Python int, float or bool is held.
+static bool is_python_number_type(const type2tc &type)
+{
+  return is_floatbv_type(type) || is_bool_type(type) ||
+         (is_signedbv_type(type) && type->get_width() == 64);
+}
+
+/// The value isinstance inspects: the one traced from @p operand, with its
+/// casts stripped to reach the object a pointer refers to. A number converted
+/// to another number is answered from @p operand's own type instead:
+/// `a = float(x)` holds `(double)x`, whose operand is an int.
+static expr2tc isinstance_subject(expr2tc value, const expr2tc &operand)
+{
+  while (is_typecast2t(value))
+    value = to_typecast2t(value).from;
+  return is_python_number_type(operand->type) &&
+             is_python_number_type(value->type)
+           ? operand
+           : value;
+}
+
 // An untyped (`void *`) operand that neither constant propagation nor the
 // value set traced back to its object carries no Python type, so no answer is
 // sound: comparing `void *` itself would say "no" to every type. Fail only if
@@ -154,9 +175,7 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
     }
 
     cur_state->rename(value);
-    // Remove all typecast to get the original type
-    while (is_typecast2t(value))
-      value = to_typecast2t(value).from;
+    value = isinstance_subject(value, obj.side_1);
 
     if (is_address_of2t(value))
       value = to_address_of2t(value).ptr_obj;
