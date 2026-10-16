@@ -1,4 +1,4 @@
 CORE
 main.py
 --unwind 8 --no-unwinding-assertions
-^ERROR: Function "f" not found
+^ERROR: .*main\.py:4:8: unsupported: this call may be 'inc' or 'show', which return different types \(int and str\)$
