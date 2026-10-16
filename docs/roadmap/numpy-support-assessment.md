@@ -78,11 +78,7 @@ and its stages, ADR-NP-004 the SMT-array scalability decision, and "principle
    the branch.** `if c: b = [1, 2]` followed by `b[0]` gives a false alarm
    for any pointer-typed local. NumPy view names are declared at the top
    of the function and are not affected; lists and other objects are.
-10. **A negative-step slice subscripted without a name reads an
-    unconstrained value**: `a[::-2][0] == 5` gives a false alarm, while
-    `v = a[::-2]; v[0]` is right. Builtins and lambdas over such a slice
-    bind it to a name first and are not affected.
-11. **A generator over a NumPy array inside `sum()` reads wrong values**
+10. **A generator over a NumPy array inside `sum()` reads wrong values**
    (`sum(v for v in a)` gives a false alarm; the plain `for` loop is
    correct), and `np.transpose` of an array with a run-time shape fails with
    a raw JSON exception instead of a diagnostic.
