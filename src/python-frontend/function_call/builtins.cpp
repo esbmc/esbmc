@@ -2376,8 +2376,29 @@ exprt function_call_expr::handle_min_max(
   return migrate_expr_back(result2);
 }
 
+// Whether a print() `file=` target is a standard stream (None is stdout),
+// whose output no program state can observe.
+static bool is_std_stream(const nlohmann::json &target)
+{
+  if (target.value("_type", "") == "Constant")
+    return target.contains("value") && target["value"].is_null();
+  return target.value("_type", "") == "Attribute" &&
+         target["value"].value("_type", "") == "Name" &&
+         target["value"].value("id", "") == "sys" &&
+         (target["attr"] == "stdout" || target["attr"] == "stderr");
+}
+
 exprt function_call_expr::handle_print() const
 {
+  // Output written to any other file (e.g. an io.StringIO) can be read back,
+  // so dropping it could prove a program that fails.
+  if (call_.contains("keywords"))
+    for (const auto &kw : call_["keywords"])
+      if (kw["arg"] == "file" && !is_std_stream(kw["value"]))
+        throw std::runtime_error(
+          "print() to a file other than sys.stdout or sys.stderr is not "
+          "supported");
+
   // Materialize each argument as code so arithmetic checks and function-call
   // side effects are preserved even though print itself has no runtime output.
   const auto &args = call_["args"];
