@@ -275,7 +275,77 @@ void python_converter::register_import_alias(
   imported_modules.emplace(first["asname"].get<std::string>(), module_file);
 }
 
+/// The source file of the AST emitted for @p module, or "" when there is none.
+std::string python_converter::module_source_file(
+  const std::string &module,
+  const module_locator &locator) const
+{
+  const auto pooled = module_ast_pool_.find(module);
+  if (pooled != module_ast_pool_.end())
+    return pooled->second.value("filename", "");
+
+  std::ifstream f = locator.open_module_file(module);
+  if (!f.is_open())
+    return "";
+  const nlohmann::json ast = nlohmann::json::parse(f, nullptr, false);
+  return ast.is_object() ? ast.value("filename", "") : "";
+}
+
+std::vector<nlohmann::json> python_converter::submodule_imports(
+  const nlohmann::json &import_node,
+  const module_locator &locator) const
+{
+  std::vector<nlohmann::json> imports;
+  if (import_node["_type"] != "ImportFrom" || import_node["module"].is_null())
+    return imports;
+
+  const std::string package = import_node["module"].get<std::string>();
+  const auto pooled = module_ast_pool_.find(package);
+  if (pooled == module_ast_pool_.end())
+    return imports;
+
+  for (const auto &alias : import_node["names"])
+  {
+    const std::string name = alias["name"].get<std::string>();
+    // CPython binds an attribute the package defines in preference to a
+    // submodule of the same name.
+    if (name == "*" || json_utils::count_name_bindings(pooled->second, name))
+      continue;
+
+    // For a name that is not a submodule the parser still emits <pkg>.<name>,
+    // holding the package's own AST.
+    const std::string qualified = package + "." + name;
+    const std::string file = module_source_file(qualified, locator);
+    if (file.empty() || file == pooled->second.value("filename", ""))
+      continue;
+
+    nlohmann::json import;
+    import["_type"] = "Import";
+    import["names"] = nlohmann::json::array(
+      {{{"name", qualified},
+        {"asname",
+         alias["asname"].is_null() ? alias["name"] : alias["asname"]}}});
+    imports.push_back(std::move(import));
+  }
+  return imports;
+}
+
 bool python_converter::import_module_into_block(
+  const nlohmann::json &import_node,
+  module_locator &locator,
+  code_blockt &block)
+{
+  const bool imported = import_one_module(import_node, locator, block);
+  for (const auto &submodule : submodule_imports(import_node, locator))
+  {
+    const std::string saved_file = current_python_file;
+    import_one_module(submodule, locator, block);
+    current_python_file = saved_file;
+  }
+  return imported;
+}
+
+bool python_converter::import_one_module(
   const nlohmann::json &import_node,
   module_locator &locator,
   code_blockt &block)
@@ -357,36 +427,45 @@ void python_converter::process_module_imports(
   }
 }
 
+void python_converter::pre_collect_import(
+  const nlohmann::json &node,
+  module_locator &locator)
+{
+  if (node["_type"] != "ImportFrom" && node["_type"] != "Import")
+    return;
+  if (
+    node.value("module_not_found", false) ||
+    node.value("module_unmodelled", false))
+    return;
+  const std::string module_name = import_module_name(node);
+  if (module_ast_pool_.count(module_name))
+    return;
+  std::ifstream f = locator.open_module_file(module_name);
+  if (!f.is_open())
+    return;
+  nlohmann::json parsed;
+  try
+  {
+    f >> parsed;
+  }
+  catch (const nlohmann::json::exception &)
+  {
+    // Treat a malformed AST as an unresolvable import; the subsequent
+    // import_module_into_block lookup will return false the same way.
+    return;
+  }
+  auto [it, _] = module_ast_pool_.emplace(module_name, std::move(parsed));
+  pre_collect_module_asts(it->second, locator);
+}
+
 void python_converter::pre_collect_module_asts(
   const nlohmann::json &module_ast,
   module_locator &locator)
 {
   auto try_collect = [&](const nlohmann::json &node) {
-    if (node["_type"] != "ImportFrom" && node["_type"] != "Import")
-      return;
-    if (
-      node.value("module_not_found", false) ||
-      node.value("module_unmodelled", false))
-      return;
-    const std::string module_name = import_module_name(node);
-    if (module_ast_pool_.count(module_name))
-      return;
-    std::ifstream f = locator.open_module_file(module_name);
-    if (!f.is_open())
-      return;
-    nlohmann::json parsed;
-    try
-    {
-      f >> parsed;
-    }
-    catch (const nlohmann::json::exception &)
-    {
-      // Treat a malformed AST as an unresolvable import; the subsequent
-      // import_module_into_block lookup will return false the same way.
-      return;
-    }
-    auto [it, _] = module_ast_pool_.emplace(module_name, std::move(parsed));
-    pre_collect_module_asts(it->second, locator);
+    pre_collect_import(node, locator);
+    for (const auto &submodule : submodule_imports(node, locator))
+      pre_collect_import(submodule, locator);
   };
 
   if (!module_ast.contains("body") || !module_ast["body"].is_array())
@@ -421,6 +500,7 @@ void python_converter::convert_module_imports(code_blockt &all_imports_block)
   for (auto &entry : module_ast_pool_)
     modules.push_back({&entry.second, &entry.second, entry.first});
   python_param_annotations::propagate_tuple_list_params(modules);
+  python_param_annotations::propagate_scalar_params(modules);
 
   auto convert_import = [&](const nlohmann::json &node) {
     const std::string module_name = import_module_name(node);
@@ -980,6 +1060,11 @@ void python_converter::convert()
       user_code = combined_user_code;
     }
   }
+
+  std::for_each(
+    deferred_checks_.begin(), deferred_checks_.end(), [](const auto &check) {
+      check();
+    });
 
   /*
    * Create three-function architecture for coverage support (similar to

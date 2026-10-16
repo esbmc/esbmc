@@ -44,6 +44,17 @@ static bool class_has_method(
   return false;
 }
 
+/// Whether a scalar of type @p type is an instance of the Python type that
+/// @p expected represents. bool is a subclass of int.
+static bool is_python_scalar_instance(
+  const type2tc &type,
+  const type2tc &expected,
+  const namespacet &ns)
+{
+  return base_type_eq(type, expected, ns) ||
+         (is_bool_type(type) && expected == long_long_int_type2());
+}
+
 /// Whether an object of type @p type has the attribute @p name: an instance
 /// member or a method of its class.
 static bool has_python_attribute(
@@ -72,6 +83,27 @@ same_class(const type2tc &expected, const type2tc &value, const namespacet &ns)
   if (is_struct_type(expected))
     return to_struct_type(expected).name == to_struct_type(value).name;
   return base_type_eq(expected, value, ns);
+}
+
+/// Whether @p type is how a Python int, float or bool is held.
+static bool is_python_number_type(const type2tc &type)
+{
+  return is_floatbv_type(type) || is_bool_type(type) ||
+         (is_signedbv_type(type) && type->get_width() == 64);
+}
+
+/// The value isinstance inspects: the one traced from @p operand, with its
+/// casts stripped to reach the object a pointer refers to. A number converted
+/// to another number is answered from @p operand's own type instead:
+/// `a = float(x)` holds `(double)x`, whose operand is an int.
+static expr2tc isinstance_subject(expr2tc value, const expr2tc &operand)
+{
+  while (is_typecast2t(value))
+    value = to_typecast2t(value).from;
+  return is_python_number_type(operand->type) &&
+             is_python_number_type(value->type)
+           ? operand
+           : value;
 }
 
 // An untyped (`void *`) operand that neither constant propagation nor the
@@ -143,9 +175,7 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
     }
 
     cur_state->rename(value);
-    // Remove all typecast to get the original type
-    while (is_typecast2t(value))
-      value = to_typecast2t(value).from;
+    value = isinstance_subject(value, obj.side_1);
 
     if (is_address_of2t(value))
       value = to_address_of2t(value).ptr_obj;
@@ -202,7 +232,7 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
     else
       t = value->type;
 
-    if (base_type_eq(t, expect_type->type, ns))
+    if (is_python_scalar_instance(t, expect_type->type, ns))
       expr = gen_true_expr();
     else
       expr = gen_false_expr();

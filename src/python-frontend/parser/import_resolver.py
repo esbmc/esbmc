@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import importlib
+import importlib.util
 import os
 import sys
 from dataclasses import dataclass
@@ -27,6 +28,7 @@ __all__ = [
     "reset_state",
     "resolve_module_file",
     "rewrite_relative_import",
+    "split_submodule_imports",
 ]
 
 
@@ -146,6 +148,7 @@ def _is_imported_model(module_name: str) -> bool:
         "collections",
         "dataclasses",
         "heapq",
+        "io",
         "typing",
         "time",
         "threading",
@@ -338,6 +341,63 @@ def process_imports(node: ast.Import | ast.ImportFrom, output_dir: str) -> None:
                     node.module_unmodelled = True
             continue
         _mark_import_resolution(node, ok=True, full_path=filename)
+
+
+def _is_submodule_import(package_name: str, name: str) -> bool:
+    """Whether `from package_name import name` binds the submodule `package_name.name`."""
+    if _is_imported_model(_base_module_name(package_name)):
+        return False
+    try:
+        package = importlib.import_module(package_name)
+    except Exception:  # pylint: disable=broad-except
+        # process_imports reports an unimportable module.
+        return False
+    if not hasattr(package, "__path__"):
+        return False
+    qualname = f"{package_name}.{name}"
+    # CPython reads the package attribute first; only a missing one, or the
+    # submodule itself, falls through to importing `package_name.name`.
+    attr = getattr(package, name, None)
+    if attr is not None and getattr(attr, "__name__", None) != qualname:
+        return False
+    try:
+        spec = importlib.util.find_spec(qualname)
+    except (ImportError, ValueError):
+        return False
+    return spec is not None and _module_filename(spec.origin) is not None
+
+
+class _SubmoduleImportSplitter(ast.NodeTransformer):
+    """Rewrite `from pkg import mod` to `import pkg.mod as mod` for a submodule `mod`.
+
+    The converter binds a module only through an `import` alias, so the
+    `from` form leaves `mod` undefined (#8375).
+    """
+
+    def visit_ImportFrom(  # pylint: disable=invalid-name,missing-function-docstring
+            self, node: ast.ImportFrom) -> ast.stmt | list[ast.stmt]:
+        if node.level or not node.module:
+            return node
+        submodules = [
+            a for a in node.names if a.name != '*' and _is_submodule_import(node.module, a.name)
+        ]
+        if not submodules:
+            return node
+        imports: list[ast.stmt] = [
+            ast.copy_location(
+                ast.Import(names=[
+                    ast.copy_location(
+                        ast.alias(name=f"{node.module}.{a.name}", asname=a.asname or a.name), a)
+                ]), node) for a in submodules
+        ]
+        node.names = [a for a in node.names if a not in submodules]
+        return ([node] if node.names else []) + imports
+
+
+def split_submodule_imports(tree: ast.AST) -> None:
+    """Bind each submodule named by a `from pkg import ...` through `import pkg.mod as mod`."""
+    _SubmoduleImportSplitter().visit(tree)
+    ast.fix_missing_locations(tree)
 
 
 def resolve_module_file(module_qualname: str, output_dir: str) -> str | None:

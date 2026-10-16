@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: Type inference failed at line 3. Variable _hidden not found$

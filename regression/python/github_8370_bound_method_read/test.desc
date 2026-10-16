@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: reading attribute 'child', which holds a bound method, as a value is not supported$

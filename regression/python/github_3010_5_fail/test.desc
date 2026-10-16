@@ -1,4 +1,5 @@
 CORE
 main.py
 --unwind 1
-^ERROR: .*foo\(\) missing 1 required keyword-only argument: \'b\'$
+^VERIFICATION FAILED$
+^  uncaught exception: TypeError$

@@ -188,10 +188,11 @@ exprt python_list::get()
   // floating-point values. Python promotes such a list to a homogeneous float
   // list (e.g. [4.0, 3] is [4.0, 3.0]); storing the ints unconverted would
   // leave their float_buf slot unset and read back as a stale float (issue
-  // #5156).
+  // #5156). A literal holding any other kind is heterogeneous and keeps each
+  // element's own type (#8629).
   std::vector<exprt> elems;
   elems.reserve(list_value_["elts"].size());
-  bool has_int = false, has_float = false;
+  bool has_int = false, has_float = false, has_other = false;
   for (auto &e : list_value_["elts"])
   {
     // Clear current_lhs so that constructor calls inside list elements
@@ -207,9 +208,11 @@ exprt python_list::get()
       has_float = true;
     else if (t.is_signedbv() || t.is_unsignedbv() || t.is_bool())
       has_int = true; // bool is int-like in Python (True == 1)
+    else
+      has_other = true;
   }
 
-  const bool promote_ints = has_int && has_float;
+  const bool promote_ints = has_int && has_float && !has_other;
 
   for (exprt &elem : elems)
   {

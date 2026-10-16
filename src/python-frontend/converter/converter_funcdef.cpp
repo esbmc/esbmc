@@ -3485,7 +3485,7 @@ returned_function_names(const nlohmann::json &function_node)
   return names;
 }
 
-static bool same_signature(const code_typet &a, const code_typet &b)
+bool python_converter::same_signature(const code_typet &a, const code_typet &b)
 {
   if (
     a.return_type() != b.return_type() ||
@@ -3650,7 +3650,7 @@ bool python_converter::try_infer_dynamic_param_type(
       const nlohmann::json *scope_body = scope_body_for(site);
       return scope_body != nullptr &&
              dynamic_type_handler_.scope_assigns_divergent_literal_types(
-               value_node.value("id", ""), *scope_body);
+               value_node.value("id", ""), *scope_body, module_body);
     };
 
   for (const numpy_param_call_site &site : call_sites)

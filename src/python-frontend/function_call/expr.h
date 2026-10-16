@@ -51,6 +51,10 @@ public:
    */
   virtual exprt get();
 
+  /// super(C, self) in a class that is not a C, where self can never be a C,
+  /// raises TypeError (#8631).
+  std::optional<exprt> check_explicit_super() const;
+
   const symbol_id &get_function_id() const
   {
     return function_id_;
@@ -299,7 +303,15 @@ private:
    */
   const symbolt *lookup_python_symbol(const std::string &var_name) const;
 
+  void refuse_isinstance_on_path_dependent_number(
+    const nlohmann::json &obj_arg,
+    const std::vector<nlohmann::json> &types) const;
   exprt handle_isinstance() const;
+
+  /// Whether isinstance's first argument is a class object: a class named
+  /// directly (`int`, `A`) or a variable last assigned a builtin type.
+  bool
+  is_class_object_operand(const nlohmann::json &arg, const exprt &obj) const;
 
   /// isinstance(obj, type) for a str-typed `obj` that is not a known class
   /// object: a type object and a string share the char-array model.
@@ -679,6 +691,12 @@ private:
   // General function call handler
   exprt handle_general_function_call();
 
+  /// The symbol of a method call's named receiver; null when it has no name.
+  symbolt *find_receiver_symbol(symbol_id &obj_symbol_id) const;
+
+  /// The value of a method call's receiver expression, passed as self.
+  exprt build_value_receiver(const symbolt &method) const;
+
   // --- handle_general_function_call() decomposition helpers ---
   // Each "try_"/optional-returning helper extracts a self-contained block of
   // handle_general_function_call(). A returned value is the result the caller
@@ -882,6 +900,21 @@ private:
 
   /// Indirect call through a function pointer held in an instance field.
   std::optional<exprt> try_indirect_member_call();
+  /// The functions field @p attr of @p class_name holds, when it is untyped
+  /// and no class in its MRO binds @p attr too.
+  const python_converter::attribute_functions *held_functions(
+    const std::string &class_name,
+    const std::string &attr,
+    const typet &field_type) const;
+  /// The one signature of the functions @p held, which this call must match.
+  code_typet
+  held_signature(const python_converter::attribute_functions &held) const;
+  /// A call through field @p member of @p recv, which holds @p held when not
+  /// typed as a function pointer.
+  exprt call_field(
+    const python_converter::attribute_functions *held,
+    const exprt &recv,
+    const exprt &member) const;
 
   /*
    * Resolves the callee when the direct symbol lookup failed: dataclass

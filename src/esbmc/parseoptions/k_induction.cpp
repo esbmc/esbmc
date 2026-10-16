@@ -128,6 +128,14 @@ static void report_no_answer(int pipe_fd, resultt &r, uint64_t max_k_step)
 // This is the parallel version of k-induction algorithm.
 // This is an old implementation and should be revisited sometime in the
 // future.
+// A pruned forward condition recurs at every k, so it can never prove the
+// program under this context bound (#8555).
+static bool forward_condition_gave_up(const optionst &options, const bmct &bmc)
+{
+  return options.get_bool_option("disable-forward-condition") ||
+         bmc.cs_bound_pruned;
+}
+
 int esbmc_parseoptionst::doit_k_induction_parallel()
 {
 #ifdef _WIN32
@@ -595,9 +603,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         return false;
       }
 
-      if (
-        options.get_bool_option("disable-forward-condition") ||
-        bmc.cs_bound_pruned)
+      if (forward_condition_gave_up(options, bmc))
         break;
 
       // Send information to parent if no bug was found

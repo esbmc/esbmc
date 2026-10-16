@@ -75,9 +75,9 @@ class Property:
   py_dyntyping = 10
 
 # sv-benchmarks' python/properties/*.prp each state that one family of runtime
-# exceptions does not escape main(). ESBMC has no per-family scoping on the
-# Python side -- one run checks them all -- so which family a run falsified is
-# read off the violated-property comment instead of assumed from the flags.
+# exceptions does not escape main(). --python-check-exceptions scopes a run to
+# that family, and which family a run falsified is still read off the
+# violated-property comment instead of assumed from the flags.
 PYTHON_EXCEPTION_FAMILIES = {
   Property.py_assertion: ("AssertionError",),
   Property.py_arithmetic: ("ZeroDivisionError", "FloatingPointError"),
@@ -372,14 +372,12 @@ def strategy_flags(strat):
   exit(1)
 
 
-def python_assertion_flags(prop):
-  """For any property but AssertionError, the program's own asserts are not
-  the question, yet a failing one stops the run before the property is
-  checked. --python-ignore-assertions turns each into an assume that ends its
-  path, as CPython stops there, so the other families are decided."""
-  if prop == Property.py_assertion:
-    return ""
-  return "--python-ignore-assertions "
+def python_exception_flags(prop):
+  """Report only the property's own exception family. Any other uncaught
+  exception ends its path unreported, as CPython stops there, and the
+  program's asserts become assumptions unless AssertionError is the family,
+  so a failure outside the family no longer hides the one asked about."""
+  return "--python-check-exceptions " + ",".join(PYTHON_EXCEPTION_FAMILIES[prop]) + " "
 
 
 def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, validate=False):
@@ -401,7 +399,7 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci,
     return (
       esbmc_path + "--sv-comp " + benchmark + " "
       + strategy_flags(strat) + "--k-step 2 --unlimited-k-steps "
-      + python_assertion_flags(prop))
+      + python_exception_flags(prop))
 
   command_line = esbmc_path + dargs
 

@@ -1112,6 +1112,7 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
       }
       else
         t = empty_typet();
+
       // Phase 4.3 (Part IV §5): build the pointer type IREP2-internal and lower
       // at the seam. The pointee arrives as a legacy typet, so migrate it in.
       return lower_to_seam(pointer_type2tc(migrate_type(t)));
