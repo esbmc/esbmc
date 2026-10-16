@@ -7550,6 +7550,19 @@ bool python_converter::contains_nested_scope_named_expr(
   return false;
 }
 
+// Whether a str array constant is empty, reading it as strlen does; nullopt for
+// any other value. Symex never ends strlen's loop over the address of an array
+// constant (#8713), so a literal's truth value is folded instead.
+static std::optional<bool> constant_string_is_empty(const exprt &str)
+{
+  if (!str.is_constant() || !str.type().is_array() || str.operands().empty())
+    return std::nullopt;
+  const exprt &first = str.operands().front();
+  if (!first.is_constant())
+    return std::nullopt;
+  return first.is_zero();
+}
+
 exprt python_converter::apply_string_truthiness(
   const exprt &str,
   const locationt &location)
@@ -7557,14 +7570,20 @@ exprt python_converter::apply_string_truthiness(
   if (!type_utils::is_string_type(str.type()))
     return str;
 
+  if (const auto empty = constant_string_is_empty(str))
+  {
+    exprt cond = *empty ? exprt(false_exprt()) : exprt(true_exprt());
+    cond.location() = location;
+    return cond;
+  }
+
   const symbolt *strlen_sym = symbol_table_.find_symbol("c:@F@strlen");
   if (!strlen_sym)
     throw std::runtime_error("strlen not found for string truthiness check");
 
-  // V.3: build `strlen(s) != 0` in IREP2, back-migrating once (mirrors the
-  // string-truthiness path at converter_unop.cpp). The call is built directly
-  // in IREP2; it carries no IREP2 location, so the location is re-attached to
-  // the back-migrated operand below.
+  // V.3: build `strlen(s) != 0` in IREP2, back-migrating once. The call is
+  // built directly in IREP2; it carries no IREP2 location, so the location is
+  // re-attached to the back-migrated operand below.
   expr2tc strlen_arg2;
   migrate_expr(string_handler_.get_array_base_address(str), strlen_arg2);
   expr2tc strlen_call2 = side_effect_function_call2tc(
