@@ -758,6 +758,36 @@ std::string function_call_builder::subscript_receiver_class(
   return cls;
 }
 
+// The class whose bases super() searches: the class its first argument
+// names, as in super(C, self), or the enclosing class for a bare super().
+static std::string super_start_class(
+  const nlohmann::json &super_call,
+  const std::string &current_class,
+  const nlohmann::json &ast)
+{
+  if (!super_call.contains("args") || super_call["args"].empty())
+    return current_class;
+  const std::string named = super_call["args"][0].value("id", "");
+  return json_utils::is_class(named, ast) ? named : current_class;
+}
+
+// `id`, a method's symbol id under class `from`, rewritten to name the same
+// method under class `to`. A constructor is named after its class.
+static std::string rebase_method_id(
+  std::string id,
+  const std::string &from,
+  const std::string &to,
+  const std::string &method,
+  bool is_ctor)
+{
+  const std::string old_tail = "@C@" + from + "@F@" + (is_ctor ? from : method);
+  const std::size_t pos = id.rfind(old_tail);
+  if (from == to || pos == std::string::npos)
+    return id;
+  return id.replace(
+    pos, old_tail.size(), "@C@" + to + "@F@" + (is_ctor ? to : method));
+}
+
 symbol_id function_call_builder::build_function_id() const
 {
   const std::string &python_file = converter_.python_file();
@@ -987,8 +1017,18 @@ symbol_id function_call_builder::build_function_id() const
         // For __init__, use is_ctor=true: parent's __init__ is stored under
         // the class name (e.g. Vehicle::Vehicle), not the literal "__init__".
         bool is_init_call = (func_name == "__init__");
+        const std::string start =
+          super_start_class(inner_call, current_class_name, ast);
         symbolt *base_class_func = converter_.find_function_in_base_classes(
-          current_class_name, function_id.to_string(), func_name, is_init_call);
+          start,
+          rebase_method_id(
+            function_id.to_string(),
+            current_class_name,
+            start,
+            func_name,
+            is_init_call),
+          func_name,
+          is_init_call);
         if (base_class_func)
         {
           return symbol_id::from_string(base_class_func->id.as_string());
@@ -1323,6 +1363,7 @@ symbol_id function_call_builder::build_function_id() const
         {
           const struct_typet &struct_type = to_struct_type(var_type);
           class_name = struct_type.tag().as_string();
+          use_imported_class_file(function_id, *var_symbol, class_name);
         }
         else
           class_name = th.type_to_string(var_type);
@@ -1365,6 +1406,23 @@ symbol_id function_call_builder::build_function_id() const
   }
 
   return function_id;
+}
+
+// A receiver bound by `from m import obj` has its class defined in m, so its
+// methods live under m's file, not this one (#8375).
+void function_call_builder::use_imported_class_file(
+  symbol_id &function_id,
+  const symbolt &receiver,
+  const std::string &class_name) const
+{
+  if (
+    receiver.module == converter_.python_file() ||
+    !json_utils::find_class(converter_.ast()["body"], class_name).empty())
+    return;
+  const std::string module_path =
+    converter_.find_imported_class_module(class_name).second;
+  if (!module_path.empty())
+    function_id.set_filename(module_path);
 }
 
 bool function_call_builder::nested_function_exists(const symbol_id &sid) const

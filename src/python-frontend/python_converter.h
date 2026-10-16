@@ -1,5 +1,6 @@
 #pragma once
 
+#include <deque>
 #include <functional>
 #include <nlohmann/json.hpp>
 #include <python-frontend/math/complex_handler.h>
@@ -279,6 +280,14 @@ public:
   /// is "Cls@C@m", so a same-named method of another class is not found.
   std::string current_ast_scope() const;
 
+  /// Whether @p symbol is one of the converter's own temporaries, which are
+  /// assigned once where they are made. A Python local is file-local too, so
+  /// that flag does not tell the two apart.
+  bool is_frontend_temporary(const symbolt &symbol) const
+  {
+    return has_prefix(symbol.id.as_string(), sym_generator_.prefix);
+  }
+
   const namespacet &name_space() const
   {
     return ns;
@@ -359,6 +368,14 @@ public:
   {
     return current_block && safe_to_emit_side_effecting_statement() &&
            !in_lazy_operand_;
+  }
+
+  // A raise lowers to a jump to the function's end, which every later state
+  // then merges with, so a guard that only replaces an operational-model
+  // assert is planted only where an enclosing `try` can catch it.
+  bool can_emit_catchable_guard() const
+  {
+    return try_body_depth_ > 0 && can_emit_runtime_guard();
   }
 
   /// Bind a static cell, named under @p lambda_id, for each scalar free
@@ -864,11 +881,18 @@ private:
    * code, so the dynamic-type tagging that spelling already gets applies
    * here too. Tagging the target around the ternary instead would store the
    * already-collapsed value under a single type id, which is what hid the
-   * TypeError obligation (github #8263). True if it rewrote the assignment.
+   * TypeError obligation (github #8263). A branch instantiating a class is
+   * rewritten too: its constructor initialises the target in place and
+   * yields no value for the ternary to select (github #8502). True if it
+   * rewrote the assignment.
    */
   bool rewrite_divergent_conditional_assign(
     const nlohmann::json &ast_node,
     codet &target_block);
+
+  std::string instantiated_class(const nlohmann::json &value) const;
+
+  bool ternary_needs_if_spelling(const nlohmann::json &ifexp) const;
 
   bool is_coverage_mode() const;
 
@@ -1226,6 +1250,20 @@ private:
     const std::string &class_name,
     const std::string &attr_name);
 
+  // The entry module, every imported module and the current one, each once.
+  std::vector<const nlohmann::json *> reachable_module_bodies() const;
+
+  // None when every write to an attribute named `attr_name` stores None, and
+  // Optional[T] when they store None and literals of one scalar type T.
+  // any_type() for any other write or a setattr call.
+  typet none_attribute_type(const std::string &attr_name) const;
+
+  bool held_by_reference(
+    bool rhs_is_aliased_name,
+    const std::string &attr_name,
+    const typet &type,
+    const std::string &annotated_type) const;
+
   /**
    * @brief Build a tuple struct type from an AST value node when the annotation
    *        is bare `tuple`.
@@ -1254,6 +1292,25 @@ private:
     const nlohmann::json &import_node,
     module_locator &locator,
     code_blockt &code);
+
+  bool import_one_module(
+    const nlohmann::json &import_node,
+    module_locator &locator,
+    code_blockt &code);
+
+  std::vector<const nlohmann::json *>
+  import_nodes(std::deque<nlohmann::json> &submodules) const;
+
+  std::string module_source_file(
+    const std::string &module,
+    const module_locator &locator) const;
+
+  /// An `import <pkg>.<name> as <name>` node for each name that
+  /// `from <pkg> import <name>` binds to a submodule rather than to a
+  /// definition of <pkg> itself (#8375).
+  std::vector<nlohmann::json> submodule_imports(
+    const nlohmann::json &import_node,
+    const module_locator &locator) const;
 
   /// Binds an `import <mod> as <alias>` alias to the module's file, so the
   /// alias resolves like the module name does (#6296).
@@ -1308,6 +1365,7 @@ private:
   void pre_collect_module_asts(
     const nlohmann::json &module_ast,
     module_locator &locator);
+  void pre_collect_import(const nlohmann::json &node, module_locator &locator);
 
   symbolt *find_function_in_base_classes(
     const std::string &class_name,
@@ -1592,6 +1650,12 @@ private:
 
   void set_assigned_value(symbolt &symbol, const exprt &rhs);
 
+  /// True when an assignment's annotation is only a guess that the rhs type
+  /// should replace.
+  bool annotation_yields_to_rhs(
+    const nlohmann::json &ast_node,
+    const exprt &rhs) const;
+
   void handle_assignment_type_adjustments(
     symbolt *lhs_symbol,
     exprt &lhs,
@@ -1706,6 +1770,22 @@ private:
   typet resolve_numpy_reducer_call_array_type(
     const nlohmann::json &ast_node,
     const typet &current_type);
+
+  /**
+   * @brief The return type of the lambda an inferred-annotation RHS calls.
+   *
+   * The annotator guesses a lambda call's result type from the shape of its
+   * body (a BinOp is taken to be a float), while the converter declares the
+   * type the body actually returns (#7745), so the guess loses an int result
+   * (#8403).
+   *
+   * @return The lambda's integral or bool return type when the RHS is
+   *   `name(...)` with `name` bound to a lambda, as the annotator sees it,
+   *   and to a function pointer; otherwise `current_type`.
+   */
+  typet resolve_lambda_call_result_type(
+    const nlohmann::json &ast_node,
+    const typet &current_type) const;
 
   std::string resolve_name_symbol_id(const std::string &name) const;
   symbolt *find_enclosing_scope_symbol(symbol_id sid) const;
@@ -2392,6 +2472,12 @@ private:
    * @param is_ctor_call Whether this is a constructor call.
    * @param target_block The code block to add generated code to.
    */
+  std::string user_class_of(const typet &type);
+  void reject_attribute_class_change(
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &ast_node,
+    bool is_ctor_call);
   void handle_function_call_rhs(
     const nlohmann::json &ast_node,
     symbolt *lhs_symbol,
@@ -2443,6 +2529,29 @@ private:
     const nlohmann::json &left,
     const nlohmann::json &right);
 
+  /// handle_erased_type_comparison, else handle_type_identity_check.
+  exprt handle_type_comparison(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
+
+  exprt erased_type_argument(const nlohmann::json &node);
+
+  /// `type(x) is T`, `is not`, `==` or `!=` for a builtin scalar T when x's
+  /// static type was erased to `void *`; nil otherwise.
+  exprt handle_erased_type_comparison(
+    const std::string &op,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
+
+  /// The class an `is` operand certainly denotes, or nullopt for one that is
+  /// not a class. Throws for a variable holding a class when its name is bound
+  /// more than once, since which class it holds then depends on the path.
+  std::optional<std::string>
+  class_identity_operand(const nlohmann::json &node, const exprt &expr) const;
+
   /// Runtime dispatch for a tagged-scalar (PyObject-shaped) operand, which none
   /// of the static-type-driven paths can handle. Throws for an operator this
   /// mode does not model.
@@ -2452,6 +2561,14 @@ private:
     const exprt &rhs,
     const nlohmann::json &left,
     const nlohmann::json &right,
+    const nlohmann::json &element);
+
+  /// `d1 | d2` (PEP 584) on two dicts; nil if either operand is not a dict.
+  /// Throws for the other bitwise operators on dicts.
+  exprt handle_dict_bitwise(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
     const nlohmann::json &element);
 
   exprt
@@ -2640,6 +2757,10 @@ private:
     const nlohmann::json &annotation,
     codet &target_block);
 
+  // Build the class a `tag-<Name>` symbol type refers to when it is defined
+  // later in the module, so the type can be followed.
+  void build_forward_class(const typet &type);
+
   // =========================================================================
   // Optional type helpers
   // =========================================================================
@@ -2819,6 +2940,8 @@ private:
   // clause either.
   bool in_contract_clause_ = false;
   bool in_lazy_operand_ = false;
+  // Number of try bodies enclosing the statement being converted.
+  unsigned try_body_depth_ = 0;
   // The test of the assert statement being converted; see
   // lower_short_circuit_boolop.
   const nlohmann::json *asserted_test_ = nullptr;
@@ -2918,6 +3041,16 @@ private:
     const nlohmann::json &value,
     const std::string &function) const;
   exprt list_argument_expr(const nlohmann::json &arg);
+  /// The return type of a function stored as a dict value: a lambda's
+  /// inferred type, or a named function's declared one. Empty otherwise.
+  typet stored_function_return_type(const nlohmann::json &value);
+  /// The return type every function stored into the dict `container` (a
+  /// literal or a name) shares; nothing when a stored value is not a function.
+  std::optional<typet>
+  dict_function_return_type(const nlohmann::json &container);
+  typet subscript_call_return_type(
+    const exprt &func_ptr,
+    const nlohmann::json &func_node);
   std::optional<std::vector<std::size_t>>
   numpy_filled_array_shape(const nlohmann::json &value) const;
   const std::optional<std::pair<typet, numpy_scalar_pointer_view_infot>> &

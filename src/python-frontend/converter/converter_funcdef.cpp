@@ -3650,7 +3650,7 @@ bool python_converter::try_infer_dynamic_param_type(
       const nlohmann::json *scope_body = scope_body_for(site);
       return scope_body != nullptr &&
              dynamic_type_handler_.scope_assigns_divergent_literal_types(
-               value_node.value("id", ""), *scope_body);
+               value_node.value("id", ""), *scope_body, module_body);
     };
 
   for (const numpy_param_call_site &site : call_sites)

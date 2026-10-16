@@ -3,6 +3,11 @@
 
 #include <irep2/irep2_expr.h>
 
+/** The type a %d or %i (`is_signed`) or %u conversion converts its argument
+ *  to under the length modifier `mod`: one of "", "hh", "h", "l", "ll", "j",
+ *  "z" or "t". Nil for any other modifier. */
+type2tc printf_int_type(bool is_signed, const std::string &mod);
+
 class printf_formattert
 {
 public:
