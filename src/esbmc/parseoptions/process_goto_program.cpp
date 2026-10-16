@@ -687,6 +687,8 @@ bool esbmc_parseoptionst::process_goto_program(
         else
           tmp.replace_all_asserts_to_guard(gen_true_expr());
       }
+      if (cmdline.isset("coverage-covered-set"))
+        tmp.covered_set_path = cmdline.getval("coverage-covered-set");
       tmp.cov_assume_asserts = cmdline.isset("cov-assume-asserts");
       tmp.condition_coverage();
 
@@ -721,7 +723,12 @@ bool esbmc_parseoptionst::process_goto_program(
 
       std::string filename = cmdline.args[0];
       goto_coveraget tmp(ns, goto_functions, filename);
-      configure_branch_instrumentation(cmdline, tmp);
+      // for function mode
+      if (cmdline.isset("function"))
+        tmp.set_target(cmdline.getval("function"));
+      if (cmdline.isset("coverage-covered-set"))
+        tmp.covered_set_path = cmdline.getval("coverage-covered-set");
+      tmp.cov_assume_asserts = cmdline.isset("cov-assume-asserts");
       tmp.branch_coverage();
     }
     if (
@@ -740,6 +747,8 @@ bool esbmc_parseoptionst::process_goto_program(
 
       std::string filename = cmdline.args[0];
       goto_coveraget tmp(ns, goto_functions, filename);
+      if (cmdline.isset("coverage-covered-set"))
+        tmp.covered_set_path = cmdline.getval("coverage-covered-set");
       tmp.cov_assume_asserts = cmdline.isset("cov-assume-asserts");
       tmp.branch_function_coverage();
     }
@@ -774,6 +783,8 @@ bool esbmc_parseoptionst::process_goto_program(
       goto_coveraget tmp(ns, goto_functions, filename);
       if (cmdline.isset("function"))
         tmp.set_target(cmdline.getval("function"));
+      if (cmdline.isset("coverage-covered-set"))
+        tmp.covered_set_path = cmdline.getval("coverage-covered-set");
       tmp.cov_assume_asserts = cmdline.isset("cov-assume-asserts");
 
       // Resolve N: explicit --k-path-coverage=N > --unwind > fallback 4.
