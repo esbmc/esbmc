@@ -2770,6 +2770,54 @@ exprt python_converter::handle_array_operations(
     }
   }
 
+  // `str` has no arithmetic beyond `+` (below) or ordering against anything
+  // but `str`; `*` is string repetition and is handled elsewhere. Reaching
+  // generic arithmetic with a char-array operand otherwise asserts
+  // internally or silently verifies a program CPython rejects.
+  {
+    static const std::map<std::string, std::string> arith_symbols = {
+      {"Sub", "-"}, {"Div", "/"}, {"FloorDiv", "//"}, {"Pow", "**"}};
+    auto arith_it = arith_symbols.find(op);
+    bool is_ordering = op == "Lt" || op == "LtE" || op == "Gt" || op == "GtE";
+    if (arith_it != arith_symbols.end() || is_ordering)
+    {
+      const bool lhs_char = is_char_array(lhs.type());
+      const bool rhs_char = is_char_array(rhs.type());
+      if (lhs_char != rhs_char)
+      {
+        const exprt &other = lhs_char ? rhs : lhs;
+        // Float ordering is already handled by handle_float_vs_string.
+        const bool other_is_float = other.type().is_floatbv();
+        const std::string cat = get_python_type_category(other.type());
+        if (cat != "string" && !cat.empty() && !(is_ordering && other_is_float))
+        {
+          const std::string lhs_name =
+            type_handler_.get_python_type_name(lhs.type());
+          const std::string rhs_name =
+            type_handler_.get_python_type_name(rhs.type());
+          if (is_ordering)
+          {
+            std::string lower_op = op;
+            std::transform(
+              lower_op.begin(),
+              lower_op.end(),
+              lower_op.begin(),
+              [](unsigned char c) { return std::tolower(c); });
+            const auto &sym = python_frontend::operator_map().at(lower_op);
+            return get_exception_handler().gen_exception_raise(
+              "TypeError",
+              "'" + sym + "' not supported between instances of '" + lhs_name +
+                "' and '" + rhs_name + "'");
+          }
+          return get_exception_handler().gen_exception_raise(
+            "TypeError",
+            "unsupported operand type(s) for " + arith_it->second + ": '" +
+              lhs_name + "' and '" + rhs_name + "'");
+        }
+      }
+    }
+  }
+
   // Handle string concatenation -- only valid for char-arrays. Numeric
   // arrays (e.g. ``np.array([1, 2, 3])``, modelled as ``long int [N]``)
   // reaching this path via ``a + n`` previously got force-cast to char*
