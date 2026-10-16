@@ -20,7 +20,8 @@
 
 typedef unsigned _ExtInt(256) u256;
 
-struct S {
+struct S
+{
   u256 data;
   unsigned long length;
 };
@@ -35,7 +36,8 @@ static struct S make(u256 v, unsigned long n)
 
 static int eq(const struct S *a, const struct S *b)
 {
-  if (a->length != b->length) return 0;
+  if (a->length != b->length)
+    return 0;
   return a->data == b->data;
 }
 

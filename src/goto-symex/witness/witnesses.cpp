@@ -1164,6 +1164,22 @@ bool find_nondet_in_expr(const expr2tc &expr)
 #include <goto-symex/equation/slice.h>
 #include <irep2/irep2_utils.h>
 
+static void check_array_value_size(
+  const array_type2t &type,
+  [[maybe_unused]] const constant_array2t &value)
+{
+  // A concrete array value must include every declared element.
+  if (
+    !type.size_is_infinite && !is_nil_expr(type.array_size) &&
+    is_constant_int2t(type.array_size))
+  {
+    assert(
+      to_constant_int2t(type.array_size).value ==
+        BigInt(value.datatype_members.size()) &&
+      "constant_array2t element count != array_type2t::array_size");
+  }
+}
+
 // Replace nil and missing aggregate components with zero (and
 // re-query the solver for partially-resolved aggregates) so every
 // witness renders a complete initialiser. SMT models leave
@@ -1253,22 +1269,7 @@ static expr2tc zero_fill_aggregate(
     if (effective && is_constant_array2t(effective))
     {
       const constant_array2t &ca = to_constant_array2t(effective);
-      // For concrete-size arrays the SMT layer (smt_convt::get_array) and
-      // frontend migrators populate one element per declared index, so
-      // datatype_members.size() must match array_size. A shortfall is an
-      // upstream invariant violation and would silently truncate the
-      // witness; refuse to mis-render. Symbolic sizes (VLAs, flexible
-      // arrays) cannot be checked here.
-      if (
-        !at.size_is_infinite && !is_nil_expr(at.array_size) &&
-        is_constant_int2t(at.array_size))
-      {
-        [[maybe_unused]] const BigInt &n =
-          to_constant_int2t(at.array_size).value;
-        assert(
-          n == BigInt(ca.datatype_members.size()) &&
-          "constant_array2t element count != array_type2t::array_size");
-      }
+      check_array_value_size(at, ca);
       std::vector<expr2tc> members;
       members.reserve(ca.datatype_members.size());
       for (size_t i = 0; i < ca.datatype_members.size(); ++i)

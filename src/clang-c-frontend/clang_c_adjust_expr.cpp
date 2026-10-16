@@ -793,7 +793,7 @@ void clang_c_adjust::adjust_index(index_exprt &index)
   // Honour an explicit index width annotation on the array's type
   // (`__ESBMC_inf_size:N` parsed in clang_c_convert). Used by the
   // Solidity mapping storage to declare a 480-bit-indexed infinite
-  // array — closes ledger #22's 256→64 fold unsoundness. Default
+  // array. Default
   // (no annotation): cast to size_t-style index_type() as before.
   {
     const typet &final_array_type = ns.follow(array_expr.type());

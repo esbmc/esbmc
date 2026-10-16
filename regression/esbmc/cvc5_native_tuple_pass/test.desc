@@ -1,0 +1,4 @@
+CORE
+main.c
+--cvc5 --cvc5-native-tuples --no-slice
+^VERIFICATION SUCCESSFUL$

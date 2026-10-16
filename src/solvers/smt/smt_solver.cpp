@@ -1943,9 +1943,9 @@ smt_sortt smt_solver_baset::convert_sort(const type2tc &type)
     // Only applicable to genuine array types — vectors are always finite,
     // and to_array_type(vector_type) throws std::bad_cast under -DNDEBUG-off
     // builds (where the type_macros' dynamic_cast is real, not static_cast).
-    // 2C.2d (NW1): an array whose (possibly nested) leaf is a tuple is
+    // An array whose (possibly nested) leaf is a tuple is
     // owned by the tuple flattener — its sort is the recursive bare
-    // nested sort built by mk_struct_sort (2C.2a), never a backend
+    // nested sort built by mk_struct_sort, never a backend
     // mk_array_sort with a bare struct range.  This subsumes the K=1 /
     // finite array-of-struct carve-out below (those already reach the
     // identical mk_struct_sort path), so they stay byte-identical; the
@@ -2208,9 +2208,9 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
         sym.get_symbol_name(), convert_sort(sym.type));
 
     // If this is an array whose (possibly nested) leaf is a tuple, we
-    // have a tuple-array sym.  2C.2b: is_tuple_array_ast_type walks every
+    // have a tuple-array sym.  is_tuple_array_ast_type walks every
     // array dimension down to the leaf, so K>=2 nested arrays-of-struct
-    // route here too (NW0).  For K=1 (array<Struct,inf>) the leaf *is*
+    // route here too.  For K=1 (array<Struct,inf>) the leaf *is*
     // the struct and this is byte-identical to the historical
     //   is_tuple_ast_type(get_flattened_array_subtype(expr->type))
     // (get_flattened_array_subtype returns the struct itself for K=1) —
@@ -2666,7 +2666,7 @@ unsigned long array_domain_width_or_word_size(const array_type2t &arr)
   // Explicit index width (set via the `__ESBMC_inf_size:N` annotation
   // and round-tripped through migrate) takes precedence — used by the
   // Solidity mapping storage to declare a 480-bit-indexed infinite
-  // array, closing ledger #22's 256→64 fold unsoundness.
+  // array, preserving distinct indices above the machine word width.
   if (arr.index_width > 0)
     return arr.index_width;
   // For constant-size arrays compute the minimal index width; for dynamic/VLA
@@ -3975,7 +3975,7 @@ expr2tc smt_solver_baset::get_array(const type2tc &type, smt_astt array)
 {
   // XXX -- printing multidimensional arrays?
 
-  // 2C.2d: a K>=2 struct-of-arrays value (mk_tuple_array_symbol) is a
+  // A K>=2 struct-of-arrays value (mk_tuple_array_symbol) is a
   // tuple_node whose sort is the leaf STRUCT, not an array sort —
   // get_domain_width()/the array_conv readback below would assert.
   // Counterexample model extraction for nested tuple-arrays is
@@ -4115,6 +4115,56 @@ caof_broadcast_leaf(const type2tc &arr_t, const expr2tc &leaf_val)
   return constant_array_of2tc(arr_t, caof_broadcast_leaf(a.subtype, leaf_val));
 }
 
+smt_astt
+smt_solver_baset::convert_nested_array_of(const constant_array_of2t &arrof)
+{
+  const array_type2t &arrtype = to_array_type(arrof.type);
+  if (
+    !is_array_type(arrtype.subtype) ||
+    !array_chain_has_infinite_level(arrof.type))
+    return nullptr;
+
+  // Represent nested arrays of structs as one native array per field.
+  // Broadcasting the initializer preserves defaults in unwritten slots.
+  type2tc leaf = arrof.type;
+  while (is_array_type(leaf))
+    leaf = to_array_type(leaf).subtype;
+
+  if (is_struct_type(leaf))
+  {
+    const std::vector<type2tc> &leaf_members = struct_union_members(leaf);
+    const std::vector<irep_idt> &leaf_names = struct_union_member_names(leaf);
+
+    // Walk the (possibly nested) array_of initializer down to the struct
+    // value being broadcast into every slot.
+    expr2tc leaf_init = arrof.initializer;
+    while (is_constant_array_of2t(leaf_init))
+      leaf_init = to_constant_array_of2t(leaf_init).initializer;
+
+    std::vector<expr2tc> fields;
+    fields.reserve(leaf_members.size());
+    for (unsigned int i = 0; i < leaf_members.size(); i++)
+    {
+      type2tc fld_arr = caof_rebuild_array_leaf(arrof.type, leaf_members[i]);
+
+      // Field i's value in the broadcast struct (default 0 for a
+      // zero-initialised mapping).
+      expr2tc fld_val =
+        is_constant_struct2t(leaf_init)
+          ? to_constant_struct2t(leaf_init).datatype_members[i]
+          : expr2tc(member2tc(leaf_members[i], leaf_init, leaf_names[i]));
+
+      fields.push_back(caof_broadcast_leaf(fld_arr, fld_val));
+    }
+    return tuple_api->tuple_create(constant_struct2tc(leaf, std::move(fields)));
+  }
+
+  // Keep primitive-leaf arrays structural when any dimension is infinite.
+  smt_astt inner = convert_ast(arrof.initializer);
+  const unsigned long array_size = array_domain_width_or_word_size(arrtype);
+  return array_api->convert_array_of(inner, array_size);
+}
+
 smt_astt smt_solver_baset::convert_array_of_prep(const expr2tc &expr)
 {
   const constant_array_of2t &arrof = to_constant_array_of2t(expr);
@@ -4122,73 +4172,8 @@ smt_astt smt_solver_baset::convert_array_of_prep(const expr2tc &expr)
   expr2tc base_init;
   unsigned long array_size = 0;
 
-  // 2C.2d: K>=2 array-of-struct constant (immediate subtype is itself
-  // an array, struct leaf) — emit the struct-of-arrays representation so
-  // it equates field-wise with the 2C.2c symbol tuple_node and no bare
-  // nested array-of-struct sort ever reaches the backend.  Each field is a
-  // per-field native array broadcasting that field's init value across the
-  // whole domain, so an unwritten slot reads the struct's default (0 for a
-  // zero-initialised mapping) — matching EVM zero-init and the K=1
-  // tuple_array_of route.  (The historical code left each field a FRESH
-  // unconstrained symbol, which made unwritten deep struct-valued mapping
-  // slots read nondet — see deep_mapping_structval_*_zeroinit tests.)  K=1
-  // (immediate subtype is the struct) keeps the historical tuple_array_of
-  // route below -> byte-identical. Finite chains flatten instead, matching
-  // mk_tuple_array_symbol.
-  if (
-    is_array_type(arrtype.subtype) &&
-    array_chain_has_infinite_level(arrof.type))
-  {
-    type2tc leaf = arrof.type;
-    while (is_array_type(leaf))
-      leaf = to_array_type(leaf).subtype;
-
-    if (is_struct_type(leaf))
-    {
-      const std::vector<type2tc> &leaf_members = struct_union_members(leaf);
-      const std::vector<irep_idt> &leaf_names = struct_union_member_names(leaf);
-
-      // Walk the (possibly nested) array_of initializer down to the struct
-      // value being broadcast into every slot.
-      expr2tc leaf_init = arrof.initializer;
-      while (is_constant_array_of2t(leaf_init))
-        leaf_init = to_constant_array_of2t(leaf_init).initializer;
-
-      std::vector<expr2tc> fields;
-      fields.reserve(leaf_members.size());
-      for (unsigned int i = 0; i < leaf_members.size(); i++)
-      {
-        type2tc fld_arr = caof_rebuild_array_leaf(arrof.type, leaf_members[i]);
-
-        // Field i's value in the broadcast struct (default 0 for a
-        // zero-initialised mapping).
-        expr2tc fld_val =
-          is_constant_struct2t(leaf_init)
-            ? to_constant_struct2t(leaf_init).datatype_members[i]
-            : expr2tc(member2tc(leaf_members[i], leaf_init, leaf_names[i]));
-
-        fields.push_back(caof_broadcast_leaf(fld_arr, fld_val));
-      }
-      return tuple_api->tuple_create(
-        constant_struct2tc(leaf, std::move(fields)));
-    }
-  }
-
-  // Nested arrays with ANY infinite level (Solidity nested mappings,
-  // `T[N][]`, `uint256[4][][2]`): do NOT flatten or peel through.  Convert
-  // the inner array_of initializer recursively — that produces a per-level
-  // nested-array AST — then broadcast it across the outer slots so the
-  // resulting sort matches the structural type we keep in flatten_array_type
-  // and make_array_domain_type.
-  if (
-    is_array_type(arrtype.subtype) &&
-    (arrtype.size_is_infinite ||
-     array_chain_has_infinite_level(arrtype.subtype)))
-  {
-    smt_astt inner = convert_ast(arrof.initializer);
-    array_size = array_domain_width_or_word_size(arrtype);
-    return array_api->convert_array_of(inner, array_size);
-  }
+  if (smt_astt nested = convert_nested_array_of(arrof))
+    return nested;
 
   // So: we have an array_of, that we have to convert into a bunch of stores.
   // However, it might be a nested array. If that's the case, then we're

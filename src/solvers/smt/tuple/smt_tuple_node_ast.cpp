@@ -105,7 +105,7 @@ void tuple_node_smt_ast::assign(smt_solver_baset *ctx, smt_astt sym) const
 
   tuple_node_smt_astt target = to_tuple_node_ast(sym);
 
-  // 2C.2d: a struct-of-arrays symbol target (mk_tuple_array_symbol) has
+  // a struct-of-arrays symbol target (mk_tuple_array_symbol) has
   // its per-field native arrays already materialised — it is not a free
   // placeholder, so the copy-elements fast path does not apply.  Assert
   // the field-wise equality instead (exactly what tuple_node::eq emits;
@@ -170,7 +170,7 @@ smt_astt tuple_node_smt_ast::update(
   unsigned int idx,
   const expr2tc &idx_expr [[maybe_unused]] /*ndebug*/) const
 {
-  // 2C.2d: struct-of-arrays array store.  A non-nil idx_expr on a
+  // struct-of-arrays array store.  A non-nil idx_expr on a
   // tuple_node whose elements are solver-native arrays is an array
   // `with` into the K>=2 per-field representation built by
   // mk_tuple_array_symbol / the constant builder: distribute the store
@@ -221,13 +221,13 @@ smt_astt tuple_node_smt_ast::update(
 smt_astt
 tuple_node_smt_ast::select(smt_solver_baset *ctx, const expr2tc &idx) const
 {
-  // 2C.2d: struct-of-arrays array select.  A select on a tuple_node
+  // struct-of-arrays array select.  A select on a tuple_node
   // whose elements are solver-native arrays is an array index into the
   // K>=2 per-field representation: distribute the select over each
   // per-field native array, yielding a tuple_node of the same leaf
   // struct whose fields are the one-dimension-lower native arrays (or
   // the scalar leaf at the innermost level).  Projection-before-select
-  // therefore never aborts.  Reached only via the 2C.2c/2C.2d K>=2
+  // therefore never aborts.  Reached only via the K>=2
   // representation; the historical K=1 array-of-struct path uses
   // array_conv (not a tuple_node) and never enters here.
   if (!elements.empty() && elements[0]->sort->id == SMT_SORT_ARRAY)
