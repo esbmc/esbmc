@@ -10,6 +10,7 @@
 #include <python-frontend/python_annotation/annotation_intrinsics.h>
 #include <python-frontend/python_annotation/annotation_parser.h>
 #include <python-frontend/python_annotation/annotation_utils.h>
+#include <python-frontend/python_annotation/function_values.h>
 #include <util/message/message.h>
 
 #include <map>
@@ -76,6 +77,14 @@ public:
   }
   /// @return true if this pass wrote at least one parameter annotation.
   bool preprocess_function_calls(Json &root);
+  std::string
+  promote_to_float_operand(const Json &stmt, const std::string &type);
+  bool annotate_from_call_sites(
+    Json &root,
+    Json &param,
+    const std::pair<std::string, size_t> &key,
+    std::set<std::string> types,
+    const std::set<std::string> &top_level_funcs);
   void collect_function_call_arg_types(
     Json &node,
     std::map<std::pair<std::string, size_t>, std::set<std::string>>
@@ -106,6 +115,7 @@ private:
   find_annotated_assign(const std::string &node_name, const Json &body);
   Json
   match_unpacking_assignment(const Json &elem, const std::string &node_name);
+  Json find_receiver_decl(const std::string &obj);
   std::vector<Json>
   find_function_calls(const std::string &func_name, const Json &body);
   void find_function_calls_recursive(
@@ -149,6 +159,9 @@ private:
   // The type of `f(...)[i]` read from f's `list[T]` return annotation, or "Any"
   // when the subscript's base is not such a call.
   std::string subscript_type_from_call(const Json &subscript_node);
+
+  // The type every element of the literal in `[a, b, ...][i]` shares, or "Any".
+  std::string subscript_type_from_list_literal(const Json &subscript_node);
   bool
   is_imported_name_in_body(const std::string &name, const Json &stmts) const;
   bool is_imported_name(const std::string &name) const;
@@ -178,6 +191,10 @@ private:
     const Json &ifexp_node,
     const Json &body,
     std::string &inferred_type);
+  std::optional<std::pair<Json, std::string>>
+  function_signature(const function_values::candidate &function);
+  std::string
+  function_value_return_type(const Json &value, const Json *call = nullptr);
   InferResult
   infer_type(const Json &stmt, const Json &body, std::string &inferred_type);
   // True for a `np.<ctor>(...)` call node (module or aliased), where <ctor>
@@ -325,6 +342,8 @@ private:
   void annotate_function(Json &function_element);
   void annotate_class(Json &class_element);
   void infer_loop_variable_types(Json &while_stmt);
+  Json list_element_annotation(const Json &iter_node);
+  Json self_attr_list_element(const std::string &attr);
   void annotate_branch_blocks(Json &element);
   void add_annotation(Json &body);
   std::string widen_to_optional_scalar(

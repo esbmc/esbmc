@@ -1389,6 +1389,80 @@ exprt string_handler::make_char_array_expr(
   return arr;
 }
 
+exprt string_handler::char_to_string(const exprt &expr)
+{
+  const typet str_type = type_handler_.build_array(char_type(), 2);
+  if (expr.is_constant())
+    return make_char_array_expr(
+      {static_cast<unsigned char>(
+         binary2integer(expr.value().as_string(), true).to_int64()),
+       '\0'},
+      str_type);
+  symbolt &tmp = converter_.create_tmp_symbol(
+    expr.location(), "$char_to_str$", str_type, exprt());
+  const exprt str = build_symbol(tmp);
+  converter_.add_instruction(code_declt(str));
+  converter_.add_instruction(
+    code_assignt(build_index(str, from_integer(0, size_type())), expr));
+  converter_.add_instruction(code_assignt(
+    build_index(str, from_integer(1, size_type())), gen_zero(char_type())));
+  return str;
+}
+
+/// The str of a constant int, float or bool, or nil for any other constant.
+exprt string_handler::constant_to_string(const exprt &expr)
+{
+  const typet &t = expr.type();
+  if (type_utils::is_integer_type(t))
+  {
+    BigInt value = binary2integer(expr.value().as_string(), t.is_signedbv());
+    std::string str_value = std::to_string(value.to_int64());
+
+    typet string_type =
+      type_handler_.build_array(char_type(), str_value.size() + 1);
+    std::vector<unsigned char> chars(str_value.begin(), str_value.end());
+    chars.push_back('\0'); // null terminator
+
+    return make_char_array_expr(chars, string_type);
+  }
+  else if (t.is_floatbv())
+  {
+    // Fold to CPython's shortest round-trip repr. Only a 64-bit double with a
+    // concrete value is rendered; a 32-bit float or an empty (nondet) value
+    // stays a sound nondet string.
+    std::optional<std::string> folded;
+    if (!expr.value().empty() && bv_width(t) == 64)
+    {
+      ieee_floatt f;
+      f.from_expr(to_constant_expr(expr));
+      folded = cpython_float_str(f.to_double());
+    }
+    if (!folded)
+      return build_nondet_string_fallback(expr.location());
+
+    typet string_type =
+      type_handler_.build_array(char_type(), folded->size() + 1);
+    std::vector<unsigned char> chars(folded->begin(), folded->end());
+    chars.push_back('\0');
+
+    return make_char_array_expr(chars, string_type);
+  }
+  else if (t.is_bool())
+  {
+    // Convert boolean to string
+    bool value = expr.is_true();
+    std::string str_value = value ? "True" : "False";
+
+    typet string_type =
+      type_handler_.build_array(char_type(), str_value.size() + 1);
+    std::vector<unsigned char> chars(str_value.begin(), str_value.end());
+    chars.push_back('\0');
+
+    return make_char_array_expr(chars, string_type);
+  }
+  return nil_exprt();
+}
+
 exprt string_handler::convert_to_string(const exprt &expr)
 {
   const typet &t = expr.type();
@@ -1396,6 +1470,10 @@ exprt string_handler::convert_to_string(const exprt &expr)
   // Already a string/char array - return as is
   if (t.is_array() && t.subtype() == char_type())
     return expr;
+
+  // A char is a one-character str (an element of a str), not an int.
+  if (t == char_type())
+    return char_to_string(expr);
 
   // Handle symbol references
   if (expr.is_symbol())
@@ -1415,56 +1493,11 @@ exprt string_handler::convert_to_string(const exprt &expr)
     }
   }
 
-  // Handle constants
   if (expr.is_constant())
   {
-    if (type_utils::is_integer_type(t))
-    {
-      BigInt value = binary2integer(expr.value().as_string(), t.is_signedbv());
-      std::string str_value = std::to_string(value.to_int64());
-
-      typet string_type =
-        type_handler_.build_array(char_type(), str_value.size() + 1);
-      std::vector<unsigned char> chars(str_value.begin(), str_value.end());
-      chars.push_back('\0'); // null terminator
-
-      return make_char_array_expr(chars, string_type);
-    }
-    else if (t.is_floatbv())
-    {
-      // Fold to CPython's shortest round-trip repr. Only a 64-bit double with a
-      // concrete value is rendered; a 32-bit float or an empty (nondet) value
-      // stays a sound nondet string.
-      std::optional<std::string> folded;
-      if (!expr.value().empty() && bv_width(t) == 64)
-      {
-        ieee_floatt f;
-        f.from_expr(to_constant_expr(expr));
-        folded = cpython_float_str(f.to_double());
-      }
-      if (!folded)
-        return build_nondet_string_fallback(expr.location());
-
-      typet string_type =
-        type_handler_.build_array(char_type(), folded->size() + 1);
-      std::vector<unsigned char> chars(folded->begin(), folded->end());
-      chars.push_back('\0');
-
-      return make_char_array_expr(chars, string_type);
-    }
-    else if (t.is_bool())
-    {
-      // Convert boolean to string
-      bool value = expr.is_true();
-      std::string str_value = value ? "True" : "False";
-
-      typet string_type =
-        type_handler_.build_array(char_type(), str_value.size() + 1);
-      std::vector<unsigned char> chars(str_value.begin(), str_value.end());
-      chars.push_back('\0');
-
-      return make_char_array_expr(chars, string_type);
-    }
+    exprt folded = constant_to_string(expr);
+    if (folded.is_not_nil())
+      return folded;
   }
 
   // Handle pointer types from struct member access (e.g. self.name).

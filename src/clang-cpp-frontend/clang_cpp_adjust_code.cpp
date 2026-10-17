@@ -1,4 +1,5 @@
 #include <functional>
+#include <utility>
 
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <clang-c-frontend/typecast.h>
@@ -118,6 +119,9 @@ void clang_cpp_adjust::adjust_switch_case_ops(
     code_switch_caset &sc = to_code_switch_case(c);
     if (!sc.is_default() && sc.case_op().type() != switch_type)
       gen_typecast(ns, sc.case_op(), switch_type);
+    const exprt &range_hi = std::as_const(sc).case_range_hi();
+    if (range_hi.is_not_nil() && range_hi.type() != switch_type)
+      gen_typecast(ns, sc.case_range_hi(), switch_type);
 
     adjust_switch_case_ops(sc.code(), switch_type);
     return;

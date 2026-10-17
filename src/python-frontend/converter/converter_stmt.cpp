@@ -4834,6 +4834,22 @@ symbolt *python_converter::create_symbol_for_unannotated_assign(
   return symbol_table_.move_symbol_to_context(symbol);
 }
 
+/// A choice between two functions of one type is a pointer to either. The
+/// result of a choice between types would have no single type (#8404).
+static void decay_function_choice(exprt &then, exprt &else_expr)
+{
+  if (
+    !then.type().is_code() || !else_expr.type().is_code() ||
+    !then.is_symbol() || !else_expr.is_symbol())
+    return;
+  if (then.type() != else_expr.type())
+    throw std::runtime_error(
+      "a conditional expression choosing between functions of different "
+      "types is not supported");
+  then = python_expr::decay_function_to_pointer(then);
+  else_expr = python_expr::decay_function_to_pointer(else_expr);
+}
+
 /// The bare name an AST node denotes: `id` for a Name, `attr` for an Attribute
 /// -- a qualified `module.Class`, which is what a base inherited from an
 /// operational model looks like. \p fallback covers any other shape.
@@ -5155,6 +5171,147 @@ bool python_converter::is_global_variable(const symbol_id &sid) const
       return true;
   }
   return false;
+}
+
+static bool is_name(const nlohmann::json &node, const std::string &name)
+{
+  return node.is_object() && node.value("_type", "") == "Name" &&
+         node.value("id", "") == name;
+}
+
+static bool any_child(
+  const nlohmann::json &node,
+  const std::string &name,
+  bool (*pred)(const nlohmann::json &, const std::string &))
+{
+  return node.is_structured() &&
+         std::any_of(node.begin(), node.end(), [&](const auto &child) {
+           return pred(child, name);
+         });
+}
+
+/// `name = v`, `name: T = v` or `name op= v`: the forms whose target resolves
+/// through redirect_nonlocal.
+static bool is_plain_rebind(const nlohmann::json &node, const std::string &name)
+{
+  const std::string kind = node.value("_type", "");
+  if (kind == "Assign")
+    return node.value("targets", nlohmann::json()).size() == 1 &&
+           is_name(node["targets"][0], name);
+  return (kind == "AnnAssign" || kind == "AugAssign") &&
+         is_name(node.value("target", nlohmann::json()), name);
+}
+
+/// Whether @p node binds @p name through a string field: a def, class, except
+/// handler, import alias or match capture.
+static bool binds_by_field(const nlohmann::json &node, const std::string &name)
+{
+  for (const char *key : {"name", "asname"})
+    if (node.contains(key) && node[key].is_string() && node[key] == name)
+      return true;
+  return false;
+}
+
+/// Whether @p node binds @p name other than by a plain rebind. Nested defs,
+/// classes and lambdas are scopes of their own.
+static bool
+binds_name_otherwise(const nlohmann::json &node, const std::string &name)
+{
+  if (node.is_object())
+  {
+    const std::string kind = node.value("_type", "");
+    if (
+      kind == "FunctionDef" || kind == "AsyncFunctionDef" || kind == "ClassDef")
+      return binds_by_field(node, name);
+    if (kind == "Lambda")
+      return false;
+    if (is_plain_rebind(node, name))
+      return binds_name_otherwise(node.value("value", nlohmann::json()), name);
+    if (kind == "Name")
+      return node.value("id", "") == name &&
+             node.value("ctx", nlohmann::json::object()).value("_type", "") !=
+               "Load";
+    if (binds_by_field(node, name))
+      return true;
+  }
+  return any_child(node, name, binds_name_otherwise);
+}
+
+static bool mentions_name(const nlohmann::json &node, const std::string &name)
+{
+  return is_name(node, name) || any_child(node, name, mentions_name);
+}
+
+/// Whether @p node uses @p func other than by calling it, so that it may run
+/// after the frame owning its nonlocal names has returned. Another nested
+/// scope may itself outlive the frame, so any mention there counts.
+static bool used_uncalled(const nlohmann::json &node, const std::string &func)
+{
+  if (is_name(node, func))
+    return true;
+  const std::string kind = node.is_object() ? node.value("_type", "") : "";
+  if (
+    kind == "Lambda" ||
+    ((kind == "FunctionDef" || kind == "AsyncFunctionDef") &&
+     node.value("name", "") != func))
+    return mentions_name(node, func);
+  if (kind == "Call" && is_name(node.value("func", nlohmann::json()), func))
+    return used_uncalled(node.value("args", nlohmann::json()), func) ||
+           used_uncalled(node.value("keywords", nlohmann::json()), func);
+  return any_child(node, func, used_uncalled);
+}
+
+void python_converter::declare_nonlocal(const nlohmann::json &element)
+{
+  const std::size_t sep = current_func_name_.rfind("@F@");
+  if (
+    sep == std::string::npos || !current_class_name_.empty() ||
+    enclosing_function_node_ == nullptr)
+    throw std::runtime_error(
+      "nonlocal statements are only supported in a function nested directly "
+      "in another function");
+
+  const std::string outer = current_func_name_.substr(0, sep);
+  const std::string inner = current_func_name_.substr(sep + 3);
+  const nlohmann::json &inner_node = *enclosing_function_node_;
+  const nlohmann::json outer_node = json_utils::find_function_by_path(
+    *ast_json, json_utils::split_function_path(outer));
+  // The enclosing local lives in the enclosing frame, so a function that can
+  // outlive that frame has nothing to write to.
+  if (
+    !outer_node.is_object() ||
+    !inner_node.value("decorator_list", nlohmann::json()).empty() ||
+    used_uncalled(outer_node.value("body", nlohmann::json()), inner))
+    throw std::runtime_error(
+      "nonlocal statements are only supported in a nested function that is "
+      "only called, not decorated, stored, passed or returned");
+
+  for (const auto &item : element["names"])
+  {
+    const std::string name = item.get<std::string>();
+    symbol_id local = create_symbol_id();
+    local.set_object(name);
+    symbol_id target(current_python_file, "", outer);
+    target.set_object(name);
+    if (!symbol_table_.find_symbol(target.to_string()))
+      throw std::runtime_error(
+        "nonlocal '" + name +
+        "' is only supported for a variable the enclosing function binds "
+        "before the nested def");
+    if (binds_name_otherwise(inner_node.value("body", nlohmann::json()), name))
+      throw std::runtime_error(
+        "nonlocal '" + name +
+        "' is only supported when the nested function rebinds it by plain "
+        "assignment");
+    nonlocal_scopes_[local.to_string()] = outer;
+  }
+}
+
+void python_converter::redirect_nonlocal(symbol_id &sid) const
+{
+  auto it = nonlocal_scopes_.find(sid.to_string());
+  if (it != nonlocal_scopes_.end())
+    sid.set_function(it->second);
 }
 
 // np.ravel(a): the array is the call's first argument (this is the shape
@@ -5629,6 +5786,44 @@ std::string python_converter::call_return_class(const nlohmann::json &rhs) const
     cls = ret["value"].get<std::string>();
 
   return json_utils::is_class(cls, *ast_json) ? cls : std::string();
+}
+
+// A tuple-struct variable (adopted from an explicit-Any binding) being
+// rebound to a non-tuple value needs the same fresh slot: retyping the
+// shared symbol would turn earlier member reads into member-of-scalar,
+// which trips member2t's source-type assert at GOTO conversion.
+// Code-typed and unknown (void*) rhs are excluded exactly as in the
+// propagate branch of handle_assignment_type_adjustments: neither
+// yields a usable alias slot type.
+bool python_converter::needs_fresh_retype_slot(
+  const exprt &lhs,
+  const exprt &rhs,
+  const std::string &lhs_id) const
+{
+  const bool tuple_to_nontuple_rebind =
+    tuple_handler_->is_tuple_type(lhs.type()) && !rhs.type().is_empty() &&
+    !tuple_handler_->is_tuple_type(rhs.type()) && !rhs.type().is_code() &&
+    !(rhs.type().is_pointer() && rhs.type().subtype().id() == "empty");
+  return tuple_to_nontuple_rebind ||
+         is_numpy_array_to_view_rebind(lhs, rhs, lhs_id);
+}
+
+// A NumPy array rebound to a view of itself, `x = x[1]`: retyping x in
+// place would turn the view's own `&x` into the address of a pointer.
+bool python_converter::is_numpy_array_to_view_rebind(
+  const exprt &lhs,
+  const exprt &rhs,
+  const std::string &lhs_id) const
+{
+  return block_nesting_ == function_body_depth_ + 1 && lhs.type().is_array() &&
+         rhs.type().is_pointer() && numpy_array_symbols_.count(lhs_id) != 0;
+}
+
+bool python_converter::is_attribute_store_of_numpy_view(
+  const nlohmann::json &target,
+  const nlohmann::json &value)
+{
+  return target.value("_type", "") == "Attribute" && passes_numpy_view(value);
 }
 
 symbolt *python_converter::mint_retyped_symbol(
@@ -6128,7 +6323,8 @@ void python_converter::get_var_assign(
     ast_node.contains("value") && ast_node["value"].is_object() &&
     contains_tracked_numpy_view_name(ast_node["value"]))
   {
-    if (target.value("_type", "") == "Attribute")
+    // `self.n = len(v)` or `self.x = v[0]` stores a scalar read of it.
+    if (is_attribute_store_of_numpy_view(target, ast_node["value"]))
       throw std::runtime_error(
         "TypeError: storing a copied numpy view in an attribute is not "
         "supported");
@@ -6379,6 +6575,7 @@ void python_converter::get_var_assign(
     // Extract name and set in symbol ID
     std::string name = extract_target_name(target);
     sid.set_object(name);
+    redirect_nonlocal(sid);
     annotated_name = name;
 
     // Check if this is a forward declaration with union type and no value
@@ -6603,6 +6800,7 @@ void python_converter::get_var_assign(
     // Normal assignment handling
     std::string name = extract_target_name(target);
     sid.set_object(name);
+    redirect_nonlocal(sid);
     lhs_symbol = resolve_subscript_base_symbol(
       target, name, symbol_table_.find_symbol(sid.to_string()));
 
@@ -6862,25 +7060,13 @@ void python_converter::get_var_assign(
         }
       }
 
-      // A tuple-struct variable (adopted from an explicit-Any binding) being
-      // rebound to a non-tuple value needs the same fresh slot: retyping the
-      // shared symbol would turn earlier member reads into member-of-scalar,
-      // which trips member2t's source-type assert at GOTO conversion.
-      // Code-typed and unknown (void*) rhs are excluded exactly as in the
-      // propagate branch of handle_assignment_type_adjustments: neither
-      // yields a usable alias slot type.
-      const bool tuple_to_nontuple_rebind =
-        tuple_handler_->is_tuple_type(lhs.type()) && !rhs.type().is_empty() &&
-        !tuple_handler_->is_tuple_type(rhs.type()) && !rhs.type().is_code() &&
-        !(rhs.type().is_pointer() && rhs.type().subtype().id() == "empty");
-
       if (
         is_scalar_retype(
           type_handler_,
           lhs.type(),
           rhs.type(),
           block_nesting_ == function_body_depth_ + 1) ||
-        tuple_to_nontuple_rebind)
+        needs_fresh_retype_slot(lhs, rhs, orig_id))
       {
         symbolt *new_symbol_ptr = mint_retyped_symbol(
           *lhs_symbol, orig_id, rhs.type(), location_begin, sid, target_block);
@@ -7550,6 +7736,19 @@ bool python_converter::contains_nested_scope_named_expr(
   return false;
 }
 
+// Whether a str array constant is empty, reading it as strlen does; nullopt for
+// any other value. Symex never ends strlen's loop over the address of an array
+// constant (#8713), so a literal's truth value is folded instead.
+static std::optional<bool> constant_string_is_empty(const exprt &str)
+{
+  if (!str.is_constant() || !str.type().is_array() || str.operands().empty())
+    return std::nullopt;
+  const exprt &first = str.operands().front();
+  if (!first.is_constant())
+    return std::nullopt;
+  return first.is_zero();
+}
+
 exprt python_converter::apply_string_truthiness(
   const exprt &str,
   const locationt &location)
@@ -7557,14 +7756,20 @@ exprt python_converter::apply_string_truthiness(
   if (!type_utils::is_string_type(str.type()))
     return str;
 
+  if (const auto empty = constant_string_is_empty(str))
+  {
+    exprt cond = *empty ? exprt(false_exprt()) : exprt(true_exprt());
+    cond.location() = location;
+    return cond;
+  }
+
   const symbolt *strlen_sym = symbol_table_.find_symbol("c:@F@strlen");
   if (!strlen_sym)
     throw std::runtime_error("strlen not found for string truthiness check");
 
-  // V.3: build `strlen(s) != 0` in IREP2, back-migrating once (mirrors the
-  // string-truthiness path at converter_unop.cpp). The call is built directly
-  // in IREP2; it carries no IREP2 location, so the location is re-attached to
-  // the back-migrated operand below.
+  // V.3: build `strlen(s) != 0` in IREP2, back-migrating once. The call is
+  // built directly in IREP2; it carries no IREP2 location, so the location is
+  // re-attached to the back-migrated operand below.
   expr2tc strlen_arg2;
   migrate_expr(string_handler_.get_array_base_address(str), strlen_arg2);
   expr2tc strlen_call2 = side_effect_function_call2tc(
@@ -8296,6 +8501,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     // that migration to irep2 preserves the correct return type in if2t.
     then = to_value_expr(then, ns);
     else_expr = to_value_expr(else_expr, ns);
+    decay_function_choice(then, else_expr);
 
     bool then_is_none = (then.type() == none_type());
     bool else_is_none = (else_expr.type() == none_type());
@@ -8891,11 +9097,13 @@ exprt python_converter::get_block(
   // Iterate over block statements
   for (auto &raw_element : ast_block)
   {
-    nlohmann::json rewritten_element, hoisted_element;
-    const nlohmann::json &element = hoist_unnamed_numpy_view_arguments(
-      resolve_numpy_view_containers(raw_element, rewritten_element),
-      hoisted_element,
-      block);
+    nlohmann::json rewritten_element, adapted_element, hoisted_element;
+    const nlohmann::json &element = adapt_numpy_view_builtin_calls(
+      hoist_unnamed_numpy_view_arguments(
+        resolve_numpy_view_containers(raw_element, rewritten_element),
+        hoisted_element,
+        block),
+      adapted_element);
     check_numpy_view_statement(element);
     bind_runtime_numpy_view_arguments(element, block);
     StatementType type = python_frontend::get_statement_type(element);
@@ -9200,6 +9408,11 @@ exprt python_converter::get_block(
         sid.set_object(item);
         global_declarations.push_back(sid.global_to_string());
       }
+      break;
+    }
+    case StatementType::NONLOCAL:
+    {
+      declare_nonlocal(element);
       break;
     }
     case StatementType::TRY:

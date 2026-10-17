@@ -2118,6 +2118,8 @@ std::string c_expr2stringt::convert_code_switch_case(
     labels_string += indent_str(indent);
     labels_string += "case ";
     labels_string += convert(src.case_op());
+    if (src.case_range_hi().is_not_nil())
+      labels_string += " ... " + convert(src.case_range_hi());
     labels_string += ":\n";
   }
 

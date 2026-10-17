@@ -1388,6 +1388,12 @@ void goto_checkt::clz_zero_check(const expr2tc &code, const locationt &loc)
     guard);
 }
 
+static bool has_checked_operand(const expr2tc &code)
+{
+  return is_code_expression2t(code) || is_code_free2t(code) ||
+         is_code_cpp_delete2t(code) || is_code_cpp_del_array2t(code);
+}
+
 void goto_checkt::goto_check(goto_programt &goto_program)
 {
   // Not a ranged loop because we need it to be an iterator :/
@@ -1406,7 +1412,7 @@ void goto_checkt::goto_check(goto_programt &goto_program)
 
     if (i.is_other())
     {
-      if (is_code_expression2t(i.code))
+      if (has_checked_operand(i.code))
       {
         check(i.code, loc);
       }
