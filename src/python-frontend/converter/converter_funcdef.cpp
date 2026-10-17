@@ -3163,6 +3163,15 @@ std::optional<typet> python_converter::numpy_filled_array_type(
   return type;
 }
 
+static bool has_only_dtype_keyword(const nlohmann::json &call)
+{
+  const auto &keywords = call.value("keywords", nlohmann::json::array());
+  return std::all_of(
+    keywords.begin(), keywords.end(), [](const nlohmann::json &kw) {
+      return kw.value("arg", std::string()) == "dtype";
+    });
+}
+
 // Type of the array `np.arange` builds when bound to a name in `function`:
 // that of the literal its constant arguments materialize to, read the way
 // the conversion reads them.
@@ -3173,10 +3182,10 @@ std::optional<typet> python_converter::numpy_arange_array_type(
   if (
     !is_numpy_array_constructor_expr(value) ||
     value["func"].value("attr", "") != "arange" ||
-    !value.value("keywords", nlohmann::json::array()).empty())
+    !has_only_dtype_keyword(value))
     return std::nullopt;
   const std::optional<nlohmann::json> list =
-    numpy_call_expr::arange_literal(value["args"], function, *ast_json);
+    numpy_call_expr::arange_literal(value, function, *ast_json);
   if (!list || !list->contains("elts") || (*list)["elts"].empty())
     return std::nullopt;
   return type_handler_.get_typet(*list);

@@ -7867,11 +7867,13 @@ static nlohmann::json resolve_arange_call_args(
 }
 
 std::optional<nlohmann::json> numpy_call_expr::arange_literal(
-  const nlohmann::json &args,
+  const nlohmann::json &call,
   const std::string &function,
   const nlohmann::json &ast)
 {
-  return materialize_arange(resolve_arange_call_args(args, function, ast));
+  return materialize_arange_dtype(
+    resolve_arange_call_args(call["args"], function, ast),
+    constructor_dtype_name(call, ast));
 }
 
 // Whether the literal list `np.arange` or `np.linspace` produced is bound
