@@ -83,6 +83,13 @@ public:
 
 private:
   bool binds_static_array(const nlohmann::json &list) const;
+  long long eye_diagonal_offset(const std::string &function) const;
+  static std::size_t eye_dimension(const nlohmann::json &node);
+  nlohmann::json eye_literal(
+    const std::string &function,
+    std::size_t rows,
+    std::size_t cols) const;
+  exprt full_size_temporary(exprt size_expr);
   exprt literal_constructor_expr(const nlohmann::json &list);
 
   bool is_math_function() const;

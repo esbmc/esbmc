@@ -269,6 +269,9 @@ class CoreVisitorsMixin:
         node.value = lowered_value
         if not prefix:
             return None
+        # These assigns skip visit_Assign's own bookkeeping, so a literal the
+        # target held must be forgotten here or later reads fold to it.
+        self._invalidate_list_literals_for_assign_targets(node.targets)
         assigns = []
         for target in node.targets:
             assign = ast.Assign(targets=[target], value=node.value)
@@ -277,6 +280,7 @@ class CoreVisitorsMixin:
             ast.fix_missing_locations(assign)
             if isinstance(target, ast.Name):
                 self.known_variable_types[target.id] = lowered_type
+                self._track_literal_binding(target.id, node.value)
             assigns.append(assign)
         return prefix + assigns
 

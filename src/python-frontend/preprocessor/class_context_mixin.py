@@ -1,6 +1,7 @@
 import ast
+import builtins
 import copy
-from collections import Counter
+from collections import Counter, defaultdict
 # pylint: disable=too-many-boolean-expressions
 
 
@@ -520,6 +521,118 @@ class ClassContextMixin:
                                    (n.lineno, n.col_offset) < (binding.lineno, binding.col_offset)):
                 continue
             n.func = ast.copy_location(ast.Name(id=binding.value.id, ctx=ast.Load()), n.func)
+
+    def _bind_type_values(self, module):
+        """Replace a parameter or local that only ever holds one known class by
+        that class's name, which the converter resolves statically (#8389).
+
+        A known class is a top-level class bound only by its definition or a
+        builtin class the module never binds, so its name denotes the same
+        object wherever it is read. A local qualifies when a statement `t = C`
+        directly in its function's body is its only binding: the reads after
+        that statement become `C`. A parameter qualifies when, in the entry
+        module, every reference to its undecorated top-level function is a
+        call passing a known class for it and nothing rebinds it; each
+        distinct combination of such classes gets its own copy of the function,
+        and the calls keep their arguments, so they are still evaluated."""
+        while True:
+            counts = Counter(name for n in ast.walk(module) for name in self._names_bound_by(n))
+            if counts["*"]:
+                return
+            known = self._known_classes(module, counts)
+            self._bind_local_type_values(module, known)
+            if not self.is_entry_module or not self._specialise_one_function(module, known, counts):
+                return
+
+    @staticmethod
+    def _known_classes(module, counts):
+        defined = {
+            s.name
+            for s in module.body if isinstance(s, ast.ClassDef) and counts[s.name] == 1
+        }
+        builtin = {n for n, v in vars(builtins).items() if isinstance(v, type) and not counts[n]}
+        return defined | builtin
+
+    def _specialise_one_function(self, module, known, counts):
+        """Specialise the first top-level function that only ever is called
+        directly by name; whether one was."""
+        loads = Counter(n.id for n in ast.walk(module) if isinstance(n, ast.Name))
+        calls = defaultdict(list)
+        for n in ast.walk(module):
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
+                calls[n.func.id].append(n)
+        taken = counts.keys() | loads.keys()
+        return any(
+            self._specialise_type_parameters(module, f, known, calls[f.name], taken)
+            for f in module.body if isinstance(f, ast.FunctionDef) and not f.decorator_list
+            and counts[f.name] == 1 and loads[f.name] == len(calls[f.name]))
+
+    @staticmethod
+    def _replace_reads(nodes, name, value):
+        for stmt in nodes:
+            for n in ast.walk(stmt):
+                if isinstance(n, ast.Name) and n.id == name and isinstance(n.ctx, ast.Load):
+                    n.id = value
+
+    def _bind_local_type_values(self, module, known):
+        for func in ast.walk(module):
+            if not isinstance(func, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            for i, stmt in enumerate(func.body):
+                if (self._is_name_copy(stmt) and stmt.value.id in known
+                        and not self._binds_name(func, stmt.targets[0].id, stmt.targets[0])):
+                    self._replace_reads(func.body[i + 1:], stmt.targets[0].id, stmt.value.id)
+
+    @staticmethod
+    def _class_argument(call, func, index, known):
+        """The known class `call` passes for `func`'s positional parameter
+        `index`, else None."""
+        if any(isinstance(a, ast.Starred) for a in call.args) or any(k.arg is None
+                                                                     for k in call.keywords):
+            return None
+        param = (func.args.posonlyargs + func.args.args)[index].arg
+        by_keyword = index >= len(func.args.posonlyargs)
+        arg = call.args[index] if index < len(call.args) else next(
+            (k.value for k in call.keywords if by_keyword and k.arg == param), None)
+        return arg.id if isinstance(arg, ast.Name) and arg.id in known else None
+
+    def _type_parameters(self, func, known, calls):
+        """The indexes of the parameters `func` reads and never rebinds, for
+        which every one of `calls` passes a known class."""
+        reads = {n.id for s in func.body for n in ast.walk(s) if isinstance(n, ast.Name)}
+        return [
+            i for i, p in enumerate(func.args.posonlyargs + func.args.args)
+            if p.arg in reads and not self._binds_name(func, p.arg, p) and all(
+                self._class_argument(c, func, i, known) for c in calls)
+        ]
+
+    def _type_copy(self, func, name, bindings):
+        """A copy of `func` called `name` that reads each `(param, cls)` in
+        `bindings` as `cls`."""
+        spec = copy.deepcopy(func)
+        spec.name = name
+        for param, cls in bindings:
+            self._replace_reads(spec.body, param, cls)
+        return spec
+
+    def _specialise_type_parameters(self, module, func, known, calls, taken):
+        """Copy `func` once per combination of known classes its `calls` pass
+        for its type parameters, naming no copy after a name in `taken`;
+        whether it did."""
+        indexes = self._type_parameters(func, known, calls)
+        keys = [tuple(self._class_argument(c, func, i, known) for i in indexes) for c in calls]
+        names = {key: f"{func.name}__esbmc_type{n}" for n, key in enumerate(dict.fromkeys(keys))}
+        if not calls or not indexes or not taken.isdisjoint(names.values()):
+            return False
+        for call, key in zip(calls, keys):
+            call.func.id = names[key]
+        params = [p.arg for p in func.args.posonlyargs + func.args.args]
+        at = module.body.index(func)
+        module.body[at:at + 1] = [
+            self._type_copy(func, name, [(params[i], cls) for i, cls in zip(indexes, key)])
+            for key, name in names.items()
+        ]
+        return True
 
     @staticmethod
     def _construction(stmt):
