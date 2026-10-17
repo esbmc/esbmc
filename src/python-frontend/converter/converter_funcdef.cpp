@@ -2378,6 +2378,83 @@ void python_converter::reject_if_symbolic_shape_param(
       ".shape/.ndim/.size/transpose()/sort()/argsort()");
 }
 
+// Argument is a module-level variable: look for its defining
+// `Assign`/`AnnAssign` among the module's top-level statements. The
+// typechecking pre-pass rewrites plain `Assign` nodes to `AnnAssign`
+// once it infers a type, so both forms need to be recognised.
+static const nlohmann::json *module_numpy_literal(
+  const nlohmann::json &module_body,
+  const std::string &arg_name)
+{
+  for (const auto &stmt : module_body)
+  {
+    const std::string stmt_type = stmt.value("_type", "");
+    std::string target_name;
+    if (
+      stmt_type == "Assign" && stmt.contains("targets") &&
+      !stmt["targets"].empty())
+      target_name = stmt["targets"][0].value("id", "");
+    else if (stmt_type == "AnnAssign" && stmt.contains("target"))
+      target_name = stmt["target"].value("id", "");
+
+    if (
+      target_name == arg_name &&
+      is_numpy_array_literal_call(stmt.value("value", nlohmann::json())))
+      return &stmt["value"];
+  }
+  return nullptr;
+}
+
+static std::size_t
+count_name_stores(const nlohmann::json &node, const std::string &name)
+{
+  if (node.is_array())
+  {
+    std::size_t stores = 0;
+    for (const auto &child : node)
+      stores += count_name_stores(child, name);
+    return stores;
+  }
+  if (!node.is_object())
+    return 0;
+  const std::string kind = node.value("_type", "");
+  if (
+    (kind == "Global" || kind == "Nonlocal") && node.contains("names") &&
+    std::find(node["names"].begin(), node["names"].end(), name) !=
+      node["names"].end())
+    return 2;
+  std::size_t stores =
+    (kind == "arg" && node.value("arg", "") == name) ||
+    (kind == "Name" && node.value("id", "") == name && node.contains("ctx") &&
+     node["ctx"].value("_type", "") != "Load");
+  for (const auto &child : node)
+    stores += count_name_stores(child, name);
+  return stores;
+}
+
+// The `np.array([...])` call a local of `def` is bound to, when a top-level
+// statement of its body is the only binding of that name, parameters
+// included: any other could give the argument another shape.
+static const nlohmann::json *
+sole_local_numpy_literal(const nlohmann::json &def, const std::string &name)
+{
+  if (count_name_stores(def, name) != 1)
+    return nullptr;
+  for (const auto &stmt : def["body"])
+  {
+    const nlohmann::json *target = nullptr;
+    if (stmt.value("_type", "") == "Assign" && stmt["targets"].size() == 1)
+      target = &stmt["targets"][0];
+    else if (stmt.value("_type", "") == "AnnAssign")
+      target = &stmt["target"];
+    if (
+      target != nullptr && is_name_target(*target, name) &&
+      is_numpy_array_literal_call(stmt.value("value", nlohmann::json())))
+      return &stmt["value"];
+  }
+  return nullptr;
+}
+
 bool python_converter::try_infer_numpy_param_type(
   const std::string &func_name,
   size_t param_index,
@@ -2436,40 +2513,29 @@ bool python_converter::try_infer_numpy_param_type(
 
     if (site.enclosing_function.empty())
     {
-      // Argument is a module-level variable: look for its defining
-      // `Assign`/`AnnAssign` among the module's top-level statements. The
-      // typechecking pre-pass rewrites plain `Assign` nodes to `AnnAssign`
-      // once it infers a type, so both forms need to be recognised.
-      for (const auto &stmt : module_body)
-      {
-        const std::string stmt_type = stmt.value("_type", "");
-        std::string target_name;
-        if (
-          stmt_type == "Assign" && stmt.contains("targets") &&
-          !stmt["targets"].empty())
-          target_name = stmt["targets"][0].value("id", "");
-        else if (stmt_type == "AnnAssign" && stmt.contains("target"))
-          target_name = stmt["target"].value("id", "");
+      if (
+        const nlohmann::json *literal =
+          module_numpy_literal(module_body, arg_name))
+        record(type_handler_.get_typet((*literal)["args"][0]));
+      continue;
+    }
 
-        if (
-          target_name == arg_name &&
-          is_numpy_array_literal_call(stmt.value("value", nlohmann::json())))
-        {
-          record(type_handler_.get_typet(stmt["value"]["args"][0]));
-          break;
-        }
-      }
+    const nlohmann::json *enclosing_def =
+      find_function_def(module_body, site.enclosing_function);
+    if (enclosing_def == nullptr)
+      continue;
+
+    if (
+      const nlohmann::json *literal =
+        sole_local_numpy_literal(*enclosing_def, arg_name))
+    {
+      record(type_handler_.get_typet((*literal)["args"][0]));
       continue;
     }
 
     // Argument is a name local to the caller: if it is itself one of the
     // caller's own parameters, resolve that parameter recursively (the
     // "forwarded through an intermediate function" case).
-    const nlohmann::json *enclosing_def =
-      find_function_def(module_body, site.enclosing_function);
-    if (enclosing_def == nullptr)
-      continue;
-
     const nlohmann::json &enclosing_params = (*enclosing_def)["args"]["args"];
     for (size_t i = 0; i < enclosing_params.size(); i++)
     {
