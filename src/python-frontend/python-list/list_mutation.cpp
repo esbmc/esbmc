@@ -662,24 +662,40 @@ const side_effect_expr_function_callt *find_list_at_call(const exprt &expr)
 
 // Writing through the slot reinterprets `rhs` as the old element's type, so a
 // store that changes the element's type replaces the element instead (#8131).
-std::optional<exprt> python_list::build_element_replacement(
-  const exprt &lhs,
-  const exprt &rhs,
-  const nlohmann::json &op)
+bool python_list::store_replaces_element(
+  const typet &old_type,
+  const typet &new_type) const
 {
-  const store_kind old_kind = kind_of(lhs.type(), converter_);
-  const store_kind new_kind = kind_of(rhs.type(), converter_);
+  // A list or instance reference may sit in a cell a shallow copy of the list
+  // shares, so a store of one replaces the cell rather than writing into it.
+  const auto is_shared_reference = [this](const typet &type) {
+    return type == converter_.get_type_handler().get_list_type() ||
+           converter_.is_user_class_pointer(type);
+  };
+  if (is_shared_reference(old_type) && is_shared_reference(new_type))
+    return true;
+
+  const store_kind old_kind = kind_of(old_type, converter_);
+  const store_kind new_kind = kind_of(new_type, converter_);
   // retype_element_store() replaces a tuple over an int or another tuple, and
   // an int over a tuple (#8133).
   const auto int_or_tuple = [](store_kind kind) {
     return kind == store_kind::integer || kind == store_kind::tuple;
   };
   // An int stored into a float slot keeps its value as a float.
-  if (
+  return !(
     old_kind == store_kind::other || new_kind == store_kind::other ||
     old_kind == new_kind ||
     (int_or_tuple(old_kind) && int_or_tuple(new_kind)) ||
-    (old_kind == store_kind::floating && new_kind == store_kind::integer))
+    (old_kind == store_kind::floating && new_kind == store_kind::integer));
+}
+
+std::optional<exprt> python_list::build_element_replacement(
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &op)
+{
+  if (!store_replaces_element(lhs.type(), rhs.type()))
     return std::nullopt;
 
   const side_effect_expr_function_callt *list_at = find_list_at_call(lhs);
@@ -715,9 +731,11 @@ std::optional<exprt> python_list::build_element_replacement(
   set_at.type() = bool_type();
   set_at.location() = info.location;
 
-  // A later constant-index read takes the slot's type from the registry.
-  record_element_store(
-    assignment_target(op), info.elem_symbol->id.as_string(), value_type);
+  // A later constant-index read takes the slot's type from the registry. A
+  // reference of the slot's own type leaves the slot types as they were.
+  const nlohmann::json &target = assignment_target(op);
+  if (lhs.type() != rhs.type() || literal_subscript_index(target) != SIZE_MAX)
+    record_element_store(target, info.elem_symbol->id.as_string(), value_type);
   return set_at;
 }
 
