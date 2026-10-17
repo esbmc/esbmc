@@ -330,6 +330,21 @@ void goto_checkt::fp_to_int_range_check(
     guard);
 }
 
+/// What must fit a cast to `dst`: for a signed destination, the integer source
+/// widened losslessly to a signed type, so the check sees its value rather than
+/// a result --ir constant folding may already have wrapped (#8661).
+static expr2tc cast_overflow_operand(const expr2tc &cast, const type2tc &dst)
+{
+  const expr2tc &from = to_typecast2t(cast).from;
+  if (
+    !is_signedbv_type(dst) ||
+    !(is_signedbv_type(from->type) || is_unsignedbv_type(from->type)))
+    return cast;
+  const unsigned width =
+    std::max(from->type->get_width(), dst->get_width()) + 1;
+  return typecast2tc(signedbv_type2tc(width), from);
+}
+
 void goto_checkt::cast_overflow_check(
   const expr2tc &expr,
   const guard2tc &guard,
@@ -381,7 +396,8 @@ void goto_checkt::cast_overflow_check(
   }
   else
   {
-    cast_overflow = overflow_cast2tc(expr, dst_width);
+    cast_overflow =
+      overflow_cast2tc(cast_overflow_operand(expr, resolved_type), dst_width);
     claim_msg = "Cast arithmetic overflow on ";
   }
 
