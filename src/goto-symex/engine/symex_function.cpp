@@ -1,6 +1,6 @@
 #include <algorithm>
 #include <cassert>
-#include <cstring>
+#include <string_view>
 #include <unordered_set>
 #include <goto-symex/scheduler/execution_state.h>
 #include <goto-symex/engine/goto_symex.h>
@@ -18,13 +18,13 @@
 
 bool goto_symex_utils::is_alloca_return_value_name(const std::string &name)
 {
-  for (const char *prefix :
+  for (std::string_view prefix :
        {"return_value$_alloca$", "return_value$___builtin_alloca$"})
   {
     size_t pos = name.rfind(prefix);
     if (pos == std::string::npos)
       continue;
-    size_t rest = pos + strlen(prefix);
+    size_t rest = pos + prefix.size();
     if (
       rest != name.size() &&
       name.find_first_not_of("0123456789", rest) == std::string::npos)
