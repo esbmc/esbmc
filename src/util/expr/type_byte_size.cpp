@@ -620,6 +620,12 @@ std::size_t ext_int_representation_bytes(const typet &type)
   return result;
 }
 
+/// An array, or a _Complex T, which is laid out as T[2] (C17 6.2.5p13).
+static bool aligns_as_subtype(const typet &type)
+{
+  return type.id() == typet::t_array || type.id() == typet::t_complex;
+}
+
 BigInt alignment(const typet &type, const namespacet &ns)
 {
   // we need to consider a number of different cases:
@@ -654,7 +660,7 @@ BigInt alignment(const typet &type, const namespacet &ns)
   // compute default
   BigInt result = 0;
 
-  if (type.id() == typet::t_array)
+  if (aligns_as_subtype(type))
     result = alignment(type.subtype(), ns);
   else if (type.id() == typet::t_struct || type.id() == typet::t_union)
   {
