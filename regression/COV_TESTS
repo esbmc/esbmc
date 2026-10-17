@@ -3115,3 +3115,5 @@ regression/python/github_8670_forwarded
 regression/python/github_8670_forwarded_fail
 regression/python/github_8670_str_element
 regression/python/github_8670_str_element_fail
+regression/esbmc-cpp/cpp/github_8743_enum_unsigned_fail
+regression/esbmc-cpp/cpp/github_8743_enum_unsigned
