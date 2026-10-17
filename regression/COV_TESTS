@@ -3079,6 +3079,8 @@ regression/python/arith_lost_type_default_fail
 regression/python/arith_lost_type_fail
 regression/python/arith_lost_type_lambda_fail
 regression/python/arith_lost_type_param_fail
+regression/esbmc/builtin_popcountg
+regression/esbmc/irep2_only_builtin_popcountg
 regression/python/nested_comprehension_call_float
 regression/python/return_int_times_float
 regression/python/return_int_times_float_fail
