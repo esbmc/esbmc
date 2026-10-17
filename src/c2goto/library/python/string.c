@@ -1232,13 +1232,12 @@ __ESBMC_HIDE:;
 
     if (digit_value < 0)
     {
+      /* Whitespace may only follow the digits; the check below rejects
+       * anything after it. */
       if (
         c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' ||
         c == '\r')
-      {
-        s++;
-        continue;
-      }
+        break;
       __ESBMC_assert(0, "invalid literal for int() - invalid character");
       return 0;
     }
