@@ -2,6 +2,7 @@
 #include <solvers/smt_conv.h>
 #include <solvers/smt_solver.h>
 #include <solver_config.h>
+#include <string_view>
 
 namespace
 {
@@ -80,14 +81,13 @@ std::string user_choice(const optionst &options)
   return chosen.empty() ? options.get_option("default-solver") : chosen;
 }
 
-const backendt &pick_solver(const optionst &options)
+/* The first backend built in and usable without configuration, preferring an
+ * integer/real-capable one under int-encoding. */
+std::string default_backend(bool int_encoding)
 {
-  const bool int_encoding = options.get_bool_option("int-encoding");
-  std::string name = user_choice(options);
-
   /* --ir and --ir-ieee both set int-encoding; keying off that rather than the
    * raw flag is what lets --ir-ieee auto-select too (issue #5179). */
-  if (name.empty() && int_encoding)
+  if (int_encoding)
   {
     for (const backendt &b : backends)
       if (b.built_in && !b.needs_config && b.int_real)
@@ -95,47 +95,39 @@ const backendt &pick_solver(const optionst &options)
         log_status(
           "Using integer/real arithmetic mode; defaulting to {}",
           b.display_name);
-        name = b.name;
-        break;
+        return b.name;
       }
-    if (name.empty())
-      log_warning(
-        "No integer/real-capable solver built into this version of ESBMC; "
-        "using default solver for integer/real mode");
+    log_warning(
+      "No integer/real-capable solver built into this version of ESBMC; "
+      "using default solver for integer/real mode");
   }
 
-  if (name.empty())
-    for (const backendt &b : backends)
-      if (b.built_in && !b.needs_config)
-      {
-        log_status("No solver specified; defaulting to {}", b.display_name);
-        name = b.name;
-        break;
-      }
+  for (const backendt &b : backends)
+    if (b.built_in && !b.needs_config)
+    {
+      log_status("No solver specified; defaulting to {}", b.display_name);
+      return b.name;
+    }
 
-  if (name.empty())
-  {
-    log_error(
-      "No solver backends built into ESBMC; please either build "
-      "some in, or explicitly configure the smtlib backend");
-    abort();
-  }
+  log_error(
+    "No solver backends built into ESBMC; please either build "
+    "some in, or explicitly configure the smtlib backend");
+  abort();
+}
 
-  const backendt *b = find_backend(name);
-  if (!b || !b->built_in)
-    not_built_in(name);
-
+void check_int_encoding(const optionst &options, const backendt &b)
+{
   /* Fail with a clear message instead of letting the backend abort() at
    * construction time (issue #5179). Reachable when a bit-vector-only solver
    * is forced via --default-solver together with --ir / --ir-ieee. */
-  if (int_encoding && !b->int_real)
+  if (!b.int_real)
   {
     log_error(
       "Integer/real arithmetic (--ir / --ir-ieee) requires a solver that "
       "supports the Int/Real sorts (e.g. Z3); the '{}' backend is "
       "bit-vector-only. Re-run with an integer/real-capable solver, or build "
       "Z3 into ESBMC.",
-      name);
+      b.name);
     exit(1);
   }
 
@@ -143,19 +135,34 @@ const backendt &pick_solver(const optionst &options)
    * quantifier-free bit-vector one cannot express the Int sorts --ir emits.
    * Reject the combination rather than hand the solver a script it will not
    * parse. */
-  if (int_encoding && name == "smtlib")
+  const std::string logic = options.get_option("smtlib-logic");
+  if (
+    std::string_view(b.name) == "smtlib" && !logic.empty() &&
+    logic.find('I') == std::string::npos)
   {
-    const std::string logic = options.get_option("smtlib-logic");
-    if (!logic.empty() && logic.find('I') == std::string::npos)
-    {
-      log_error(
-        "Integer/real arithmetic (--ir / --ir-ieee) needs a logic with the "
-        "Int sort, but --smtlib-logic is '{}'. Drop --smtlib-logic to let the "
-        "encoding pick one, or name an integer-capable logic.",
-        logic);
-      exit(1);
-    }
+    log_error(
+      "Integer/real arithmetic (--ir / --ir-ieee) needs a logic with the "
+      "Int sort, but --smtlib-logic is '{}'. Drop --smtlib-logic to let the "
+      "encoding pick one, or name an integer-capable logic.",
+      logic);
+    exit(1);
   }
+}
+
+const backendt &pick_solver(const optionst &options)
+{
+  const bool int_encoding = options.get_bool_option("int-encoding");
+  std::string name = user_choice(options);
+
+  if (name.empty())
+    name = default_backend(int_encoding);
+
+  const backendt *b = find_backend(name);
+  if (!b || !b->built_in)
+    not_built_in(name);
+
+  if (int_encoding)
+    check_int_encoding(options, *b);
 
   return *b;
 }

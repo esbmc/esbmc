@@ -407,7 +407,8 @@ smt_astt smt_solver_baset::convert_typecast_to_ptr(const typecast2t &cast)
     assert_ast(ast_eq(other_cap_ast, output_cap));
   }
 
-  ast_vec guards;
+  /* Empty address space cannot match anything. */
+  smt_astt was_matched = solver->mkBool(false);
   for (i = 0; i < addr_space_data.back().size(); i++)
   {
     if (i == 1)
@@ -425,17 +426,12 @@ smt_astt smt_solver_baset::convert_typecast_to_ptr(const typecast2t &cast)
     smt_astt is_eq = solver->mkAnd(obj_eq, offs_eq);
 
     smt_astt in_range = is_in_range[i];
-    guards.push_back(in_range);
+    was_matched = solver->mkOr(was_matched, in_range);
     smt_astt imp = mk_implies(in_range, is_eq);
     assert_ast(imp);
   }
 
   // If none of the above, match invalid.
-  /* Empty address space cannot match anything. */
-  smt_astt was_matched =
-    guards.empty() ? solver->mkBool(false) : guards.front();
-  for (std::size_t g = 1; g < guards.size(); ++g)
-    was_matched = solver->mkOr(was_matched, guards[g]);
   smt_astt not_matched = mk_not(was_matched);
 
   smt_astt id = convert_terminal(
