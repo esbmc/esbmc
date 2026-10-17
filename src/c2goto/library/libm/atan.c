@@ -61,6 +61,16 @@ double atan2(double v, double u)
 __ESBMC_HIDE:;
   double au, av, f;
 
+  // C11 F.10.1.4: the sign of a zero and the infinities are handled first.
+  if (isnan(u) || isnan(v))
+    return u + v;
+  if (v == 0.0)
+    return signbit(u) ? copysign(M_PI, v) : v;
+  if (isinf(v))
+    return copysign(isinf(u) ? (u > 0.0 ? M_PI_4 : 3 * M_PI_4) : M_PI_2, v);
+  if (isinf(u))
+    return u > 0.0 ? copysign(0.0, v) : copysign(M_PI, v);
+
   av = v < 0.0 ? -v : v;
   au = u < 0.0 ? -u : u;
   if (u != 0.0)
