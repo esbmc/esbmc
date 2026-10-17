@@ -1844,6 +1844,9 @@ class CoreVisitorsMixin:
         if rewritten_ratio is not None:
             return rewritten_ratio
 
+        raising = self._bind_numpy_constructor_call(node)
+        if raising is not None:
+            return raising
         self._normalize_builtin_keyword_args(node)
         self._normalize_math_gcd_lcm_variadic(node)
 
