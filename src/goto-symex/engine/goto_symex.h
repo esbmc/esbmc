@@ -1423,6 +1423,11 @@ protected:
     const type2tc &new_type,
     const guard2tc &guard,
     const expr2tc &size = expr2tc());
+  /** Records an alloca'd object on the current frame, to die when it returns */
+  void record_frame_alloca(
+    const expr2tc &lhs,
+    const expr2tc &object,
+    bool is_malloc);
   /** Symbolic implementation of free */
   void symex_free(const expr2tc &expr);
   /** Clear the valid bit of the object \p ptr points to, with no free checks */
