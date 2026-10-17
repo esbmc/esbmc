@@ -162,8 +162,12 @@ static void add_padding(struct_typet &type, const namespacet &ns)
         const std::size_t repr_bits = repr_bytes * config.ansi_c.char_width;
 
         const std::size_t unaligned_bits = w % repr_bits;
-        const std::size_t pad = unaligned_bits ? repr_bits - unaligned_bits : 0;
-        it = pad_ext_int_after(components, it, pad);
+        // Aligned extended integers need no synthetic padding component.
+        if (unaligned_bits != 0)
+        {
+          const std::size_t pad = repr_bits - unaligned_bits;
+          it = pad_ext_int_after(components, it, pad);
+        }
       }
     }
 

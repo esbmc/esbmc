@@ -383,7 +383,7 @@ std::string signedbv_type2t::field_names[esbmct::num_type_fields] =
 std::string code_type2t::field_names[esbmct::num_type_fields] =
   {"arguments", "ret_type", "argument_names", "ellipsis", ""};
 std::string array_type2t::field_names[esbmct::num_type_fields] =
-  {"subtype", "array_size", "size_is_infinite", "", ""};
+  {"subtype", "array_size", "size_is_infinite", "index_width", ""};
 std::string vector_type2t::field_names[esbmct::num_type_fields] =
   {"subtype", "array_size", "size_is_infinite", "", ""};
 std::string pointer_type2t::field_names[esbmct::num_type_fields] =
