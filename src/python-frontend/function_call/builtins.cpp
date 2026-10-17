@@ -10,6 +10,7 @@
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/math/complex_handler.h>
 #include <python-frontend/math/complex_handler_utils.h>
+#include <python-frontend/python-list/python_list.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/lambda/python_lambda.h>
 #include <python-frontend/exception/python_exception_handler.h>
@@ -316,6 +317,30 @@ void function_call_expr::refuse_isinstance_on_path_dependent_number(
       "supported");
 }
 
+/// isinstance(obj, list) or isinstance(obj, tuple) when either answer comes
+/// from the list model: a list that tuple(x) built is marked as a tuple
+/// (#8777), and None is neither. Empty for any other check.
+std::optional<exprt> function_call_expr::list_isinstance(
+  const exprt &obj,
+  const std::string &type_name) const
+{
+  const bool list_typed = obj.type() == type_handler_.get_list_type();
+  if (!list_typed)
+    return type_name == "list" ? std::optional<exprt>(false_exprt())
+                               : std::nullopt;
+  if (type_name != "list" && type_name != "tuple")
+    return std::nullopt;
+  const exprt is_tuple =
+    python_list(converter_, call_).build_is_tuple_call(obj);
+  if (type_name == "tuple")
+    return is_tuple;
+  expr2tc obj2, tuple2;
+  migrate_expr(obj, obj2);
+  migrate_expr(is_tuple, tuple2);
+  return migrate_expr_back(
+    and2tc(notequal2tc(obj2, gen_zero(obj2->type)), not2tc(tuple2)));
+}
+
 exprt function_call_expr::handle_isinstance() const
 {
   const auto &args = call_["args"];
@@ -430,16 +455,8 @@ exprt function_call_expr::handle_isinstance() const
     // are incompatible. When the static type is a list pointer, emit a
     // runtime null check so that Optional[list] parameters (None at runtime)
     // correctly return False.
-    if (type_name == "list")
-    {
-      if (obj_expr.type() == type_handler_.get_list_type())
-      {
-        expr2tc obj2;
-        migrate_expr(obj_expr, obj2);
-        return migrate_expr_back(notequal2tc(obj2, gen_zero(obj2->type)));
-      }
-      return false_exprt();
-    }
+    if (std::optional<exprt> listed = list_isinstance(obj_expr, type_name))
+      return *listed;
 
     // String special case: get_typet("str") returns char[0], which the
     // generic encoding lowers to gen_zero(char[0]) — an empty array
