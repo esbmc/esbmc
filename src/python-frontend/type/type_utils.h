@@ -31,6 +31,7 @@ enum class StatementType
   RAISE,
   UNKNOWN,
   GLOBAL,
+  NONLOCAL,
   TRY,
   EXCEPTHANDLER,
   DELETE_STATEMENT

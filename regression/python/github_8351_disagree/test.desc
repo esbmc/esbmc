@@ -1,0 +1,4 @@
+CORE
+main.py
+--unwind 8 --no-unwinding-assertions
+^ERROR: .*main\.py:15:4: unsupported: this call may be 'f1' or 'f2', which return different types \(int and str\)$
