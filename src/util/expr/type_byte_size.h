@@ -73,6 +73,10 @@ std::size_t ext_int_representation_bytes(const typet &type);
  * type's layout. */
 BigInt alignment(const typet &type, const namespacet &ns);
 
+/* The alignment an access of `bytes` bytes needs: 8-byte scalars take the
+ * target's ABI alignment, which i386 puts at 4 (#8694). */
+BigInt access_alignment(const BigInt &bytes);
+
 /* Whether `v` is a positive power of two, i.e. whether it can serve as an
  * alignment at all. */
 bool is_power_of_two(const BigInt &v);
