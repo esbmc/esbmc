@@ -6085,6 +6085,23 @@ bool clang_c_convertert::is_member_decl_static(const clang::MemberExpr &member)
   return false;
 }
 
+/// An unsigned APSInt keeps its signedness: reading it as signed turned an
+/// `unsigned char` enumerator 200 into -56 (#8743).
+static exprt apsint_constant(const llvm::APSInt &Int)
+{
+  const unsigned width = Int.getBitWidth();
+  assert(width <= 64);
+  if (Int.isUnsigned())
+  {
+    const BigInt v(Int.getZExtValue());
+    return constant_exprt(
+      integer2binary(v, width), integer2string(v), unsignedbv_typet(width));
+  }
+  const BigInt v(Int.getSExtValue());
+  return constant_exprt(
+    integer2binary(v, width), integer2string(v), signedbv_typet(width));
+}
+
 bool clang_c_convertert::get_APValue_expr(
   const clang::APValue &value,
   exprt &new_expr,
@@ -6105,15 +6122,8 @@ bool clang_c_convertert::get_APValue_expr(
   }
 
   case clang::APValue::Int:
-  {
-    const llvm::APSInt &Int = value.getInt();
-    int width = Int.getBitWidth();
-    assert(width <= 64);
-    int64_t v = Int.getSExtValue();
-    new_expr = constant_exprt(
-      integer2binary(v, width), integer2string(v), signedbv_typet(width));
+    new_expr = apsint_constant(value.getInt());
     break;
-  }
 
   case clang::APValue::Struct:
   {
