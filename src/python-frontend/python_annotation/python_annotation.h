@@ -114,6 +114,7 @@ private:
   find_annotated_assign(const std::string &node_name, const Json &body);
   Json
   match_unpacking_assignment(const Json &elem, const std::string &node_name);
+  Json find_receiver_decl(const std::string &obj);
   std::vector<Json>
   find_function_calls(const std::string &func_name, const Json &body);
   void find_function_calls_recursive(
