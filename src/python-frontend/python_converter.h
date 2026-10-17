@@ -3392,6 +3392,9 @@ private:
   // searchsorted, reducers) read the pre-decay shape from here instead.
   std::unordered_map<std::string, std::vector<std::size_t>> numpy_param_shapes_;
   std::unordered_set<std::string> numpy_ambiguous_shape_symbols_;
+  // List parameters mixing strings and numbers whose call sites agree on
+  // each position's type, so a constant index reads that type (#8670).
+  std::unordered_set<std::string> positional_list_params_;
   // Keys are "func_name#param_index" for parameters that receive numpy views
   // and have registered view metadata in numpy_pointer_view_info_.
   std::set<std::string> numpy_view_params_;

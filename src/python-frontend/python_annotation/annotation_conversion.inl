@@ -1120,6 +1120,10 @@ python_annotation<Json>::get_list_type_from_literal(const Json &list_arg)
   // Get the type of the first element
   std::string element_type = get_argument_type(list_arg["elts"][0]);
 
+  // An inner list left untyped above leaves the outer one to its call sites
+  if (element_type.empty() && list_arg["elts"][0].value("_type", "") == "List")
+    return "";
+
   if (element_type.empty())
   {
     log_warning(
@@ -1161,15 +1165,17 @@ python_annotation<Json>::get_list_type_from_literal(const Json &list_arg)
         element_type.rfind("tuple", 0) == 0 ||
         current_type.rfind("tuple", 0) == 0)
         return "";
-      // Nor does a list element beside a scalar: claiming list[int] reads the
-      // inner list as an int (#8472). The converter types such a parameter
-      // from its call sites instead.
+      // Nor does a list element beside a scalar, or a str beside another
+      // type: claiming list[int] reads the inner list or the str as an int
+      // (#8472, #8670). The converter types such a parameter from its call
+      // sites instead.
       if (
         (element_type.rfind("list", 0) == 0) !=
-        (current_type.rfind("list", 0) == 0))
+          (current_type.rfind("list", 0) == 0) ||
+        (element_type == "str") != (current_type == "str"))
         return "";
-      // Non-numeric heterogeneity (e.g. str vs int) has no common element
-      // type we can represent, so keep the historical int fallback.
+      // Other non-numeric heterogeneity (e.g. None vs int) has no common
+      // element type we can represent, so keep the historical int fallback.
       if (!all_numeric)
       {
         log_warning(
