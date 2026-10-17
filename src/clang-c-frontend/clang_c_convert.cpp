@@ -4135,10 +4135,13 @@ bool clang_c_convertert::get_enum_value(
 
   if (!e->getInitExpr())
   {
-    new_expr = constant_exprt(
-      integer2binary(e->getInitVal().getSExtValue(), bv_width(int_type())),
-      integer2string(e->getInitVal().getSExtValue()),
-      int_type());
+    typet t;
+    if (get_type(e->getType(), t))
+      return true;
+
+    const llvm::APSInt &v = e->getInitVal();
+    new_expr = from_integer(
+      v.isUnsigned() ? BigInt(v.getZExtValue()) : BigInt(v.getSExtValue()), t);
     return false;
   }
 
@@ -6109,9 +6112,11 @@ bool clang_c_convertert::get_APValue_expr(
     const llvm::APSInt &Int = value.getInt();
     int width = Int.getBitWidth();
     assert(width <= 64);
-    int64_t v = Int.getSExtValue();
-    new_expr = constant_exprt(
-      integer2binary(v, width), integer2string(v), signedbv_typet(width));
+    const BigInt v = Int.isUnsigned() ? BigInt(Int.getZExtValue())
+                                      : BigInt(Int.getSExtValue());
+    const typet t = Int.isUnsigned() ? typet(unsignedbv_typet(width))
+                                     : typet(signedbv_typet(width));
+    new_expr = constant_exprt(integer2binary(v, width), integer2string(v), t);
     break;
   }
 

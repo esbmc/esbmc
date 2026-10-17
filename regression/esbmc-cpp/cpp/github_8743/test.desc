@@ -1,0 +1,10 @@
+CORE
+main.cpp
+--std c++17 --multi-property
+^\s*PASSED\s+\[main\.assertion\.1\]
+^\s*PASSED\s+\[main\.assertion\.2\]
+^\s*PASSED\s+\[main\.assertion\.3\]
+^\s*PASSED\s+\[main\.assertion\.4\]
+^\s*PASSED\s+\[main\.assertion\.5\]
+^\s*PASSED\s+\[main\.assertion\.6\]
+^VERIFICATION SUCCESSFUL$
