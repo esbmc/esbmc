@@ -378,6 +378,7 @@ class ExpressionRewriteMixin:
                 ast.fix_missing_locations(formula)
                 return self.visit(formula)
 
+            node = self.preprocessor._pack_min_max_key_args(node)
             # Ordered: each constant fold gets first refusal, then the scan
             # that handles what it could not fold.
             for lower in (

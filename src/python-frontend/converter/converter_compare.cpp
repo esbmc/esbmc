@@ -875,6 +875,78 @@ expr2tc python_converter::build_is_equality(
   return equality2tc(lhs2, rhs2);
 }
 
+std::optional<std::pair<exprt, std::string>>
+python_converter::bound_method_operand(const nlohmann::json &operand)
+{
+  if (
+    operand.value("_type", "") != "Attribute" ||
+    operand["value"].value("_type", "") != "Name")
+    return std::nullopt;
+  const std::string &attr = operand["attr"].get_ref<const std::string &>();
+  const nlohmann::json &body = (*ast_json)["body"];
+  if (std::none_of(body.begin(), body.end(), [&](const nlohmann::json &stmt) {
+        return stmt.value("_type", "") == "ClassDef" &&
+               sole_method_def(stmt["name"].get<std::string>(), attr);
+      }))
+    return std::nullopt;
+  const exprt receiver = get_expr(operand["value"]);
+  if (!receiver.type().is_pointer())
+    return std::nullopt;
+  const typet &pointed = ns.follow(receiver.type().subtype());
+  if (!pointed.is_struct())
+    return std::nullopt;
+  const struct_typet &instance = to_struct_type(pointed);
+  const std::string class_name =
+    extract_class_name_from_tag(instance.tag().as_string());
+  const auto mro = class_mro(class_name);
+  if (
+    !mro || instance.has_component(attr) || overridden_below(class_name, attr))
+    return std::nullopt;
+  for (const std::string &cls : *mro)
+    if (class_binds_name(cls, attr))
+    {
+      // A decorator (staticmethod, classmethod, property) may not bind the
+      // receiver at all.
+      const nlohmann::json *def = sole_method_def(cls, attr);
+      if (!def || !def->value("decorator_list", nlohmann::json()).empty())
+        return std::nullopt;
+      return std::make_pair(receiver, cls + "." + attr);
+    }
+  return std::nullopt;
+}
+
+/// Two bound methods are equal when they bind the same function to the same
+/// object (#8457). No subclass overrides either method, so the class that
+/// defines it on the static type is the one the object runs.
+std::optional<exprt>
+python_converter::try_bound_method_compare(const nlohmann::json &element)
+{
+  if (
+    element.value("_type", "") != "Compare" || element["ops"].size() != 1 ||
+    element["comparators"].size() != 1)
+    return std::nullopt;
+  const std::string op = element["ops"][0]["_type"].get<std::string>();
+  if (op != "Eq" && op != "NotEq")
+    return std::nullopt;
+  const nlohmann::json &left = element["left"];
+  const nlohmann::json &right = element["comparators"][0];
+  if (
+    left.value("_type", "") != "Attribute" ||
+    right.value("_type", "") != "Attribute")
+    return std::nullopt;
+  const auto lhs = bound_method_operand(left);
+  const auto rhs = lhs ? bound_method_operand(right) : std::nullopt;
+  if (!lhs || !rhs)
+    return std::nullopt;
+  const typet object = pointer_typet(empty_typet());
+  exprt same = lhs->second != rhs->second
+                 ? gen_bool(false)
+                 : exprt(equality_exprt(
+                     typecast_exprt(lhs->first, object),
+                     typecast_exprt(rhs->first, object)));
+  return op == "Eq" ? same : exprt(not_exprt(same));
+}
+
 /// Construct the expression for Python 'is' operator
 exprt python_converter::get_binary_operator_expr_for_is(
   const exprt &lhs,
