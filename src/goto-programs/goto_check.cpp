@@ -391,6 +391,15 @@ void goto_checkt::cast_overflow_check(
     cast_overflow, claim_msg + get_expr_id(expr), "overflow", loc, guard);
 }
 
+/* Solidity checks no arithmetic inside an unchecked block, and never checks a
+ * shift: its result is truncated (Solidity docs, Types, "Shifts"). */
+static bool
+solidity_skips_overflow_check(const expr2tc &expr, const locationt &loc)
+{
+  return config.language.lid == language_idt::SOLIDITY &&
+         (loc.get("#sol_unchecked") == "1" || is_shl2t(expr));
+}
+
 static expr2tc overflow_expr(const expr2tc &expr)
 {
   if (is_neg2t(expr))
@@ -415,15 +424,7 @@ void goto_checkt::overflow_check(
   if (is_lshr2t(expr) || is_ashr2t(expr))
     return;
 
-  // Skip overflow checks inside Solidity unchecked blocks
-  if (
-    config.language.lid == language_idt::SOLIDITY &&
-    loc.get("#sol_unchecked") == "1")
-    return;
-
-  // Solidity never checks a shift for overflow: the result is truncated
-  // (Solidity docs, Types, "Shifts").
-  if (config.language.lid == language_idt::SOLIDITY && is_shl2t(expr))
+  if (solidity_skips_overflow_check(expr, loc))
     return;
 
   // First, check type.
