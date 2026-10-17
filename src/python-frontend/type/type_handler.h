@@ -7,6 +7,7 @@
 #include <util/irep/migrate.h>
 #include <irep2/irep2_utils.h>
 #include <nlohmann/json.hpp>
+#include <optional>
 
 class python_converter;
 
@@ -199,6 +200,11 @@ public:
    * @return The corresponding typet.
    */
   typet get_typet(const nlohmann::json &elem) const;
+
+  // The element type of `a[i]` when `a` names an array of non-char scalars or
+  // a pointer to one (a NumPy view).
+  std::optional<typet>
+  scalar_array_element_type(const nlohmann::json &elem) const;
 
   /*
    * Checks if a container contains elements of different types.
