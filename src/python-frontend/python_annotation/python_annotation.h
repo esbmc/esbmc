@@ -76,6 +76,14 @@ public:
   }
   /// @return true if this pass wrote at least one parameter annotation.
   bool preprocess_function_calls(Json &root);
+  std::string
+  promote_to_float_operand(const Json &stmt, const std::string &type);
+  bool annotate_from_call_sites(
+    Json &root,
+    Json &param,
+    const std::pair<std::string, size_t> &key,
+    std::set<std::string> types,
+    const std::set<std::string> &top_level_funcs);
   void collect_function_call_arg_types(
     Json &node,
     std::map<std::pair<std::string, size_t>, std::set<std::string>>

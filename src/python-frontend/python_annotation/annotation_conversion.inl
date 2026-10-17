@@ -862,14 +862,14 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
       }
 
       // No annotation yet: this pass runs before plain assignments are
-      // rewritten to annotated ones, so recover the element type from the
-      // bound value the way the Name arm below does (GitHub #7359).
+      // rewritten to annotated ones, so let the Name arm below recover the
+      // type from the bound value, including the element type of an empty
+      // list built by appends (GitHub #7359).
       if (
         !var_node.empty() && var_node.contains("value") &&
         !var_node["value"].is_null())
       {
-        return subscript_result_type(
-          get_argument_type(var_node["value"]), is_slice);
+        return subscript_result_type(get_argument_type(val), is_slice);
       }
     }
     return "";
@@ -1460,7 +1460,31 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
     }
   }
 
-  return type;
+  return promote_to_float_operand(stmt, type);
+}
+
+/// True division of an int or bool yields a float, and so does other
+/// arithmetic with a float operand, but the type above is read from the left
+/// operand alone (`n / 2` or `n * 0.5` with an int `n`).
+template <class Json>
+std::string python_annotation<Json>::promote_to_float_operand(
+  const Json &stmt,
+  const std::string &type)
+{
+  static const std::set<std::string> arithmetic{
+    "Add", "Sub", "Mult", "FloorDiv", "Mod", "Pow"};
+  const Json &expr = stmt.contains("value") ? stmt["value"] : stmt;
+  if (
+    (type != "int" && type != "bool") || !expr.is_object() ||
+    !expr.contains("op") || !expr["op"].is_object())
+    return type;
+  const std::string op = expr["op"].value("_type", "");
+  if (op == "Div")
+    return "float";
+  return arithmetic.count(op) != 0 &&
+             get_argument_type(expr["right"]) == "float"
+           ? "float"
+           : type;
 }
 
 template <class Json>
@@ -4729,15 +4753,43 @@ bool python_annotation<Json>::preprocess_function_calls(Json &root)
       if (dynamically_typed_params.count({fname, i}) != 0)
         continue;
       auto it = param_types.find({fname, i});
-      if (
-        it == param_types.end() || it->second.size() != 1 ||
-        *it->second.begin() == unresolved_arg_type())
-        continue;
-      add_parameter_annotation(param, *it->second.begin());
-      annotated = true;
+      if (it != param_types.end())
+        annotated |= annotate_from_call_sites(
+          root, param, {fname, i}, it->second, top_level_funcs);
     }
   }
   return annotated;
+}
+
+/// Annotates `param` when its call sites agree on one type. A site whose
+/// argument is unresolved may depend on the function itself, as an element
+/// of a list built from its own results does. Such a parameter is annotated
+/// with the one type the other sites agree on only if, under that
+/// annotation, every site resolves to it.
+template <class Json>
+bool python_annotation<Json>::annotate_from_call_sites(
+  Json &root,
+  Json &param,
+  const std::pair<std::string, size_t> &key,
+  std::set<std::string> types,
+  const std::set<std::string> &top_level_funcs)
+{
+  const bool has_unresolved = types.erase(unresolved_arg_type()) != 0;
+  if (types.size() != 1)
+    return false;
+  const Json unannotated = param;
+  add_parameter_annotation(param, *types.begin());
+  if (!has_unresolved)
+    return true;
+
+  std::map<std::pair<std::string, size_t>, std::set<std::string>> rechecked;
+  std::set<std::pair<std::string, size_t>> dynamically_typed;
+  collect_function_call_arg_types(
+    root, rechecked, top_level_funcs, dynamically_typed);
+  if (rechecked[key] == types)
+    return true;
+  param = unannotated;
+  return false;
 }
 
 template <class Json>
