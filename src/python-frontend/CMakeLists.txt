@@ -23,6 +23,7 @@ add_library(pythonfrontend STATIC
             converter/converter_funcdef.cpp
             converter/converter_stmt.cpp
             converter/converter_view_escape.cpp
+            converter/converter_view_builtins.cpp
             converter/converter_view_hoist.cpp
             converter/converter_view_rebind.cpp
             converter/converter_symbols.cpp

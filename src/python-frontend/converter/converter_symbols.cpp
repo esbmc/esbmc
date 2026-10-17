@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <optional>
 #include <regex>
 #include <set>
 #include <utility>
@@ -1051,6 +1052,118 @@ python_converter::import_nodes(std::deque<nlohmann::json> &submodules) const
   return imports;
 }
 
+// In user code, `import numpy` binds only the name `numpy`: a bare `sum`,
+// `min` or `max` is the builtin, not the operational model's function of
+// that name, reached as `numpy.sum` under the model's own file. The numpy
+// models themselves call each other by bare name.
+bool python_converter::import_hides_builtin(
+  const nlohmann::json &import,
+  const std::string &symbol_id,
+  const std::string &name) const
+{
+  const std::string module_file = import["full_path"].get<std::string>();
+  const std::string numpy_model = "/models/numpy.py";
+  return import["_type"] == "Import" &&
+         symbol_id.find("/models/") == std::string::npos &&
+         symbol_table_.find_symbol(
+           "py:/esbmc-vfs/python/models/builtins.py@F@" + name) &&
+         module_file.size() >= numpy_model.size() &&
+         module_file.compare(
+           module_file.size() - numpy_model.size(),
+           numpy_model.size(),
+           numpy_model) == 0 &&
+         symbol_id.rfind("py:" + module_file + "@", 0) != 0;
+}
+
+// The name the import statement `obj` binds `lookup_name` to in its module:
+// `lookup_name` itself, or for `from m import orig as alias` the original
+// name. nullopt when the statement does not import it: a `from m import`
+// only binds the names it lists, so `from other import sum` does not also
+// hijack `max`.
+static std::optional<std::string>
+imported_module_name(const nlohmann::json &obj, const std::string &lookup_name)
+{
+  if (
+    obj["_type"] != "ImportFrom" || !obj.contains("names") ||
+    lookup_name.empty())
+    return lookup_name;
+  for (const auto &name : obj["names"])
+  {
+    const std::string &n = name["name"].get<std::string>();
+    if (n == "*" || n == lookup_name)
+      return lookup_name;
+    if (
+      name.contains("asname") && !name["asname"].is_null() &&
+      name["asname"].get<std::string>() == lookup_name)
+      return n;
+  }
+  return std::nullopt;
+}
+
+// The symbol `symbol_id` names in the module file `module_file`, where the
+// module defines it as `name`.
+symbolt *python_converter::find_symbol_in_module(
+  const std::string &symbol_id,
+  const std::string &module_file,
+  const std::string &lookup_name,
+  const std::string &name) const
+{
+  std::regex pattern("py:(.*?)@");
+  std::string imported_symbol =
+    std::regex_replace(symbol_id, pattern, "py:" + module_file + "@");
+
+  // For an aliased import the trailing component of symbol_id is the alias;
+  // swap it for the original name so the direct lookup targets the real
+  // symbol (e.g. py:<collections>@deque, not py:<collections>@Queue).
+  if (name != lookup_name && !lookup_name.empty())
+  {
+    const std::size_t at = imported_symbol.rfind('@');
+    if (at != std::string::npos)
+      imported_symbol.replace(at + 1, std::string::npos, name);
+  }
+
+  if (symbolt *func_symbol = symbol_table_.find_symbol(imported_symbol.c_str()))
+    return func_symbol;
+  if (name.empty())
+    return nullptr;
+
+  // Imported free functions are often looked up as object symbols in the
+  // caller scope (e.g., py:main@replace). Also probe the equivalent
+  // function-id form in the imported module (py:module@F@replace).
+  ::symbol_id imported_sid = ::symbol_id::from_string(imported_symbol);
+  imported_sid.set_class("");
+  imported_sid.set_object("");
+  imported_sid.set_attribute("");
+  imported_sid.set_function(name);
+  if (
+    symbolt *func_symbol =
+      symbol_table_.find_symbol(imported_sid.to_string().c_str()))
+    return func_symbol;
+
+  imported_sid.set_function("");
+  imported_sid.set_object(name);
+  return symbol_table_.find_symbol(imported_sid.to_string().c_str());
+}
+
+// The symbol `symbol_id` names in the module the import statement `obj`
+// imports, as `lookup_name`; nullptr when it does not import it.
+symbolt *python_converter::find_symbol_in_import(
+  const nlohmann::json &obj,
+  const std::string &symbol_id,
+  const std::string &lookup_name) const
+{
+  if (
+    (obj["_type"] != "ImportFrom" && obj["_type"] != "Import") ||
+    !obj.contains("full_path") || obj["full_path"].is_null())
+    return nullptr;
+  const std::optional<std::string> name =
+    imported_module_name(obj, lookup_name);
+  if (!name || import_hides_builtin(obj, symbol_id, lookup_name))
+    return nullptr;
+  return find_symbol_in_module(
+    symbol_id, obj["full_path"].get<std::string>(), lookup_name, *name);
+}
+
 symbolt *
 python_converter::find_imported_symbol(const std::string &symbol_id) const
 {
@@ -1075,87 +1188,7 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
   }
 
   auto find_in_import = [&](const nlohmann::json &obj) -> symbolt * {
-    if (
-      (obj["_type"] == "ImportFrom" || obj["_type"] == "Import") &&
-      obj.contains("full_path") && !obj["full_path"].is_null())
-    {
-      // For ImportFrom, only match if the specific name was imported.
-      // This prevents "from other import sum" from also hijacking "max".
-      // When the import is aliased (`from m import orig as alias`), the caller
-      // looks up `alias`, but the imported module defines `orig` — so probe the
-      // module with the original name, not the alias.
-      std::string resolved_name = lookup_name;
-      if (
-        obj["_type"] == "ImportFrom" && obj.contains("names") &&
-        !lookup_name.empty())
-      {
-        bool name_imported = false;
-        for (const auto &name : obj["names"])
-        {
-          const std::string &n = name["name"].get<std::string>();
-          if (n == "*" || n == lookup_name)
-          {
-            name_imported = true;
-            break;
-          }
-          if (
-            name.contains("asname") && !name["asname"].is_null() &&
-            name["asname"].get<std::string>() == lookup_name)
-          {
-            name_imported = true;
-            resolved_name = n;
-            break;
-          }
-        }
-        if (!name_imported)
-          return nullptr;
-      }
-
-      std::regex pattern("py:(.*?)@");
-      std::string imported_symbol = std::regex_replace(
-        symbol_id, pattern, "py:" + obj["full_path"].get<std::string>() + "@");
-
-      // For an aliased import the trailing component of symbol_id is the alias;
-      // swap it for the original name so the direct lookup targets the real
-      // symbol (e.g. py:<collections>@deque, not py:<collections>@Queue).
-      if (resolved_name != lookup_name && !lookup_name.empty())
-      {
-        const std::size_t at = imported_symbol.rfind('@');
-        if (at != std::string::npos)
-          imported_symbol.replace(at + 1, std::string::npos, resolved_name);
-      }
-
-      if (
-        symbolt *func_symbol =
-          symbol_table_.find_symbol(imported_symbol.c_str()))
-        return func_symbol;
-
-      // Imported free functions are often looked up as object symbols in the
-      // caller scope (e.g., py:main@replace). Also probe the equivalent
-      // function-id form in the imported module (py:module@F@replace).
-      if (!resolved_name.empty())
-      {
-        ::symbol_id imported_sid = ::symbol_id::from_string(imported_symbol);
-        imported_sid.set_class("");
-        imported_sid.set_object("");
-        imported_sid.set_attribute("");
-        imported_sid.set_function(resolved_name);
-
-        if (
-          symbolt *func_symbol =
-            symbol_table_.find_symbol(imported_sid.to_string().c_str()))
-          return func_symbol;
-
-        imported_sid.set_function("");
-        imported_sid.set_object(resolved_name);
-        if (
-          symbolt *obj_symbol =
-            symbol_table_.find_symbol(imported_sid.to_string().c_str()))
-          return obj_symbol;
-      }
-    }
-
-    return nullptr;
+    return find_symbol_in_import(obj, symbol_id, lookup_name);
   };
 
   std::deque<nlohmann::json> submodules;

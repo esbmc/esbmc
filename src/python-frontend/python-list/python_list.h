@@ -413,6 +413,9 @@ public:
   view_element_count(const nlohmann::json &node, const strided_view_desc &view);
 
   /// sum / mean / min / max / any / all of a run-time-extent view, as loops.
+  std::optional<exprt> reduce_view_argextreme(
+    const std::string &function,
+    const nlohmann::json &arg);
   std::optional<exprt> try_reduce_symbolic_view(
     const std::string &function,
     const nlohmann::json &arg);
@@ -1023,20 +1026,10 @@ private:
   exprt
   handle_range_slice(const exprt &array, const nlohmann::json &slice_node);
 
-  // Propagate a dict view's element types onto its slice result. Split out for
-  // the same reason as normalize_negative_slice_bound below.
+  // Propagate a dict view's element types onto its slice result. Split out to
+  // keep handle_range_slice's own decision count from growing further.
   void
   copy_dict_view_elem_types(const exprt &array, const std::string &sliced_id);
-
-  // handle_range_slice's process_bound: normalizes a literal negative bound
-  // (-k) to logical_len - k, clamped for an out-of-range k -- see the call
-  // site's own comment for why the clamp differs by step direction. Split
-  // out to keep handle_range_slice's own decision count from growing
-  // further.
-  exprt normalize_negative_slice_bound(
-    const nlohmann::json &operand_node,
-    const exprt &logical_len,
-    bool negative_step);
 
   // Shared core of every ADR-NP-003 scalar pointer view producer; see
   // list_access.cpp for the full rationale, including when this declines.
