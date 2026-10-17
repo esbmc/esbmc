@@ -882,13 +882,21 @@ expr2tc goto_symext::symex_mem(
   alloc_guard.append(guard);
   dynamic_memory.emplace_back(
     rhs_copy, alloc_guard, !is_malloc, symbol.name.as_string());
+  record_frame_alloca(lhs, rhs_copy, is_malloc);
+
+  return to_address_of2t(rhs_addrof).ptr_obj;
+}
+
+void goto_symext::record_frame_alloca(
+  const expr2tc &lhs,
+  const expr2tc &object,
+  bool is_malloc)
+{
   if (
     !is_malloc && is_symbol2t(lhs) &&
     goto_symex_utils::is_alloca_return_value_name(
       to_symbol2t(lhs).thename.as_string()))
-    cur_state->top().alloca_objects.push_back(rhs_copy);
-
-  return to_address_of2t(rhs_addrof).ptr_obj;
+    cur_state->top().alloca_objects.push_back(object);
 }
 
 void goto_symext::track_new_pointer(

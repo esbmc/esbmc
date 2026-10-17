@@ -361,8 +361,8 @@ void goto_convertt::do_mem(
   if (!is_malloc && callee != "__ESBMC_alloca")
   {
     const std::string frame_temp = "return_value$_" + callee + "$";
-    const symbolt *lhs_sym = lhs.is_symbol() ? ns.lookup(lhs.identifier())
-                                             : nullptr;
+    const symbolt *lhs_sym =
+      lhs.is_symbol() ? ns.lookup(lhs.identifier()) : nullptr;
     if (!lhs_sym || !has_prefix(id2string(lhs_sym->name), frame_temp))
     {
       const typet ptr_type = pointer_typet(empty_typet());
