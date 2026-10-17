@@ -571,11 +571,18 @@ public:
    *
    * @p lhs is the subscript target `*(T *)item->value` of the list subscript
    * this handler was built for. When @p rhs is a tuple of another type than T
-   * (or T is a tuple and @p rhs is not), the pair is rewritten into
-   * `*item = *list_at(tmp, 0)`, with tmp a list holding @p rhs, so the slot
-   * gets the new value, type_id and size. Otherwise both are left unchanged.
+   * (or T is a tuple and @p rhs is not), or T is a non-scalar a list copy may
+   * share, the pair is rewritten into `*item = *list_at(tmp, 0)`, with tmp a
+   * list holding @p rhs, so the slot gets the new value, type_id and size.
+   * Otherwise both are left unchanged.
    */
   void retype_element_store(exprt &lhs, exprt &rhs);
+
+  bool has_shared_payload(const typet &type) const;
+
+  /// Allocates the instance a constructor stores to @p lhs and returns the
+  /// pointer to pass as `self`.
+  exprt allocate_constructed_object(const exprt &lhs);
 
   /// Records @p elem_type as the type of the element @p subscript stores to.
   void record_element_store(
