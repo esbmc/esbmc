@@ -411,11 +411,21 @@ nlohmann::json ast_node(const char *type, const nlohmann::json &loc)
   return node;
 }
 
-// The f-string part for one %s/%d/%i conversion of `value`.
+// The f-string part for one %s/%d/%i/%f conversion of `value`.
 std::optional<nlohmann::json>
 formatted_part(char conversion, nlohmann::json value, const typet &type)
 {
-  if (conversion == 'd' || conversion == 'i')
+  nlohmann::json format_spec;
+  if (conversion == 'f')
+  {
+    if (!type.is_floatbv())
+      return std::nullopt;
+    nlohmann::json precision = ast_node("Constant", value);
+    precision["value"] = ".6f";
+    format_spec = ast_node("JoinedStr", value);
+    format_spec["values"] = nlohmann::json::array({precision});
+  }
+  else if (conversion == 'd' || conversion == 'i')
   {
     if (!percent_d_accepts(type))
       return std::nullopt;
@@ -432,6 +442,8 @@ formatted_part(char conversion, nlohmann::json value, const typet &type)
   nlohmann::json part = ast_node("FormattedValue", value);
   part["value"] = value;
   part["conversion"] = -1;
+  if (!format_spec.is_null())
+    part["format_spec"] = format_spec;
   return part;
 }
 
@@ -477,7 +489,7 @@ bool is_literal_percent_format(const nlohmann::json &element, const exprt &lhs)
 }
 
 // `"id %d" % i` with a non-constant `i` as the f-string `f"id {int(i)}"`
-// (#8224). Only flag-free %s/%d/%i/%% are rewritten.
+// (#8224). Only flag-free %s/%d/%i/%f/%% are rewritten.
 std::optional<nlohmann::json> percent_format_as_fstring(
   const nlohmann::json &left,
   const std::vector<nlohmann::json> &args,

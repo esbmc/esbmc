@@ -38,12 +38,10 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <iomanip>
 #include <limits>
 #include <optional>
 #include <set>
 #include <functional>
-#include <sstream>
 #include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
@@ -734,6 +732,73 @@ exprt string_handler::build_fstring_conversion(
   return make_char_array_expr(chars, string_type);
 }
 
+namespace
+{
+// Default length used for nondeterministic strings when the user has
+// not provided an explicit value via --nondet-str-length.
+constexpr int DEFAULT_NONDET_STR_LENGTH = 16;
+
+int get_nondet_str_length()
+{
+  std::string opt_value = config.options.get_option("nondet-str-length");
+  if (!opt_value.empty())
+  {
+    try
+    {
+      int length = std::stoi(opt_value);
+      if (length > 0)
+        return length;
+    }
+    catch (...)
+    {
+    }
+  }
+  return DEFAULT_NONDET_STR_LENGTH;
+}
+} // namespace
+
+// +1 for the NUL: --nondet-str-length N promises len() can reach N (#7377).
+int string_handler::nondet_str_buffer_size()
+{
+  const int length = get_nondet_str_length();
+  return length < std::numeric_limits<int>::max() ? length + 1 : length;
+}
+
+exprt string_handler::build_nondet_string(const locationt &location)
+{
+  const int max_str_length = nondet_str_buffer_size();
+
+  typet char_array_type =
+    array_typet(char_type(), from_integer(max_str_length, size_type()));
+
+  symbolt &nondet_str_symbol = converter_.create_tmp_symbol(
+    location, "$nondet_str$", char_array_type, exprt());
+
+  code_declt decl(symbol_expr(nondet_str_symbol));
+  decl.location() = location;
+  converter_.add_instruction(decl);
+
+  exprt nondet_value("sideeffect", char_array_type);
+  nondet_value.statement("nondet");
+
+  code_assignt nondet_assign(symbol_expr(nondet_str_symbol), nondet_value);
+  nondet_assign.location() = location;
+  converter_.add_instruction(nondet_assign);
+
+  // Ensure null terminator at the last position
+  exprt last_elem = build_index(
+    symbol_expr(nondet_str_symbol),
+    from_integer(max_str_length - 1, size_type()));
+  code_assignt null_assign(last_elem, from_integer(0, char_type()));
+  null_assign.location() = location;
+  converter_.add_instruction(null_assign);
+
+  // Return address of first element: &arr[0] which is char*
+  exprt first_elem =
+    build_index(symbol_expr(nondet_str_symbol), from_integer(0, size_type()));
+  return build_address_of(first_elem);
+}
+
 exprt string_handler::build_nondet_string_fallback(const locationt &location)
 {
   // Sound over-approximation when a str.*() handler cannot extract a
@@ -775,23 +840,7 @@ exprt string_handler::build_nondet_string_fallback(const locationt &location)
     return nondet;
   }
 
-  symbolt &tmp =
-    converter_.create_tmp_symbol(location, "$nondet_str$", ptr_type, exprt());
-
-  code_declt decl(symbol_expr(tmp));
-  decl.location() = location;
-  converter_.add_instruction(decl);
-
-  side_effect_expr_nondett nondet(ptr_type);
-  nondet.location() = location;
-
-  code_assignt assign(symbol_expr(tmp), nondet);
-  assign.location() = location;
-  converter_.add_instruction(assign);
-
-  exprt result = symbol_expr(tmp);
-  result.location() = location;
-  return result;
+  return build_nondet_string(location);
 }
 
 BigInt string_handler::get_string_size(const exprt &expr)
@@ -867,9 +916,9 @@ std::string string_handler::float_to_string(
   std::size_t width,
   int precision)
 {
-  // std::pow/std::round and the ostream conversion below honour the host FP
-  // rounding mode, which the pipeline can leave non-default; pin FE_TONEAREST
-  // so the decimal fold matches CPython regardless of the host's mode.
+  // snprintf honours the host FP rounding mode, which the pipeline can leave
+  // non-default; pin FE_TONEAREST so the decimal fold matches CPython
+  // regardless of the host's mode.
   const host_rounding_mode rounding_guard(FE_TONEAREST);
   double val = 0.0;
 
@@ -900,13 +949,16 @@ std::string string_handler::float_to_string(
     throw std::runtime_error("Invalid float bit width");
   }
 
-  // Use proper rounding to avoid IEEE 754 precision issues
-  double multiplier = std::pow(10.0, precision);
-  double rounded = std::round(val * multiplier) / multiplier;
-
-  std::ostringstream oss;
-  oss << std::fixed << std::setprecision(precision) << rounded;
-  return oss.str();
+  // CPython rounds the exact binary value half-to-even, as printf does:
+  // f"{0.125:.2f}" is "0.12" and f"{2.675:.2f}" is "2.67".
+  if (std::isnan(val))
+    return "nan";
+  const int n = std::snprintf(nullptr, 0, "%.*f", precision, val);
+  if (n < 0)
+    throw std::runtime_error("float formatting failed");
+  std::string out(static_cast<std::size_t>(n), '\0');
+  std::snprintf(&out[0], out.size() + 1, "%.*f", precision, val);
+  return out;
 }
 
 std::string string_handler::cpython_float_str(double d)
@@ -1050,6 +1102,44 @@ apply_padding(const std::string &input, char fill, char align, int width)
   default:
     return std::string(pad, fill) + input;
   }
+}
+
+// The IEEE bits of a float constant, or of a variable bound to one. A
+// variable's stored value is only its last static assignment, so a name
+// assigned more than once in scope is not folded.
+std::optional<std::string>
+string_handler::constant_float_bits(const exprt &expr)
+{
+  if (expr.is_constant())
+    return expr.value().as_string();
+  if (!expr.is_symbol())
+    return std::nullopt;
+
+  const symbolt *symbol =
+    find_cached_symbol(to_symbol_expr(expr).get_identifier().as_string());
+  if (
+    !symbol || json_utils::has_multiple_assignments_in_scope(
+                 symbol->name.as_string(),
+                 converter_.get_current_func_name(),
+                 converter_.get_ast_json()))
+    return std::nullopt;
+
+  const exprt &val = symbol->get_value();
+  if (val.is_constant())
+    return val.value().as_string();
+
+  // A negative float literal is stored as unary- over a constant; IEEE
+  // negation is a sign-bit flip (MSB first).
+  if (
+    val.id() == "unary-" && val.operands().size() == 1 &&
+    val.op0().is_constant() && val.op0().type().is_floatbv())
+  {
+    std::string bits = val.op0().value().as_string();
+    if (!bits.empty())
+      bits[0] = bits[0] == '0' ? '1' : '0';
+    return bits;
+  }
+  return std::nullopt;
 }
 
 exprt string_handler::apply_format_specification(
@@ -1306,39 +1396,8 @@ exprt string_handler::apply_format_specification(
         // Support common floating point widths
         if (t.is_floatbv() && (float_width == 32 || float_width == 64))
         {
-          const std::string *float_bits = nullptr;
-          std::string negated_bits;
-
-          // Handle constant expressions
-          if (expr.is_constant())
-            float_bits = &expr.value().as_string();
-          // Handle symbol expressions
-          else if (expr.is_symbol())
-          {
-            const symbol_exprt &sym_expr = to_symbol_expr(expr);
-            const symbolt *symbol =
-              find_cached_symbol(sym_expr.get_identifier().as_string());
-
-            if (symbol && symbol->get_value().is_constant())
-              float_bits = &symbol->get_value().value().as_string();
-            else if (symbol)
-            {
-              // A negative float literal is stored as unary- over a
-              // constant; IEEE negation is a sign-bit flip (MSB first).
-              const exprt &val = symbol->get_value();
-              if (
-                val.id() == "unary-" && val.operands().size() == 1 &&
-                val.op0().is_constant() && val.op0().type().is_floatbv())
-              {
-                negated_bits = val.op0().value().as_string();
-                if (negated_bits.length() == float_width)
-                {
-                  negated_bits[0] = negated_bits[0] == '0' ? '1' : '0';
-                  float_bits = &negated_bits;
-                }
-              }
-            }
-          }
+          const std::optional<std::string> float_bits =
+            constant_float_bits(expr);
 
           if (float_bits && float_bits->length() == float_width)
           {
