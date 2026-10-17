@@ -2082,6 +2082,17 @@ bool python_converter::seed_mixed_call_site_elements(
   // where the strings and numbers sit (#8472).
   if (!complete || !mixes_str_and_number(param_id + "$mixed_probe", pooled))
     return false;
+  if (
+    direct && param_keeps_positions(func_name, param_index) &&
+    std::all_of(
+      kinds.begin(),
+      kinds.end(),
+      [&](const auto &k) { return k == kinds[0]; }) &&
+    record_literal_positions(param_id, literals, kinds[0]))
+  {
+    positional_list_params_.insert(param_id);
+    return true;
+  }
   for (const typet &t : pooled)
     element_type_registry_.record(param_id, "", t);
   return true;

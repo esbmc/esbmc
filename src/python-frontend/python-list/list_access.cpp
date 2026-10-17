@@ -4364,7 +4364,9 @@ typet python_list::bare_list_param_elem_type(
   const typet &annotated,
   size_t index)
 {
-  if (mixes_list_and_other(param_id))
+  if (
+    mixes_list_and_other(param_id) ||
+    converter_.positional_list_params_.count(param_id))
     return elem_types().element_type(param_id, index);
 
   if (
@@ -4564,7 +4566,11 @@ typet python_list::tagged_elem_type_or(
   const bool literal_backed =
     list_node.is_object() && list_node.contains("value") &&
     list_node["value"].is_object() && list_node["value"].contains("elts");
-  if ((constant_index && literal_backed) || !array.is_symbol())
+  if (
+    !array.is_symbol() ||
+    (constant_index &&
+     (literal_backed || converter_.positional_list_params_.count(
+                          array.identifier().as_string()))))
     return fallback;
   // A list mixing strings and numbers has no single static element type
   // either: read its element as a tagged scalar too (#4797).
