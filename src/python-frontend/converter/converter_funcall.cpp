@@ -575,7 +575,8 @@ std::optional<exprt> python_converter::try_get_numpy_subscript_pointer_view_len(
     return std::nullopt;
 
   const symbolt *source = symbol_table_.find_symbol(source_id);
-  if (!source)
+  // The characters of a numpy string array are not one of its axes.
+  if (!source || type_utils::is_string_type(source->get_type().subtype()))
     return std::nullopt;
 
   const namespacet ns(symbol_table_);

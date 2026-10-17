@@ -210,6 +210,9 @@ exprt python_list::index(const exprt &array, const nlohmann::json &slice_node)
 {
   if (slice_node["_type"] == "Slice") // arr[lower:upper]
   {
+    if (type_utils::is_numpy_string_array(array.type()))
+      throw std::runtime_error(
+        "TypeError: slicing a numpy string array is not supported");
     return handle_range_slice(array, slice_node);
   }
   else

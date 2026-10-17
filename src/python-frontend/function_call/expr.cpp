@@ -6842,6 +6842,23 @@ typet function_call_expr::dict_param_value_type(const symbolt *func, size_t idx)
   return converter_.get_type_from_annotation(ann["slice"]["elts"][1], ann);
 }
 
+// A numpy string or complex array is read only element by element; a callee
+// would read its storage as numbers.
+static void reject_unmodelled_numpy_array_argument(const typet &type)
+{
+  if (type_utils::is_numpy_string_array(type))
+    throw std::runtime_error(
+      "TypeError: passing a numpy string array to a function is not "
+      "supported");
+  typet scalar = type;
+  while (scalar.is_array())
+    scalar = scalar.subtype();
+  if (type.is_array() && is_complex_type(scalar))
+    throw std::runtime_error(
+      "TypeError: passing a numpy complex array to a function is not "
+      "supported");
+}
+
 std::optional<exprt> function_call_expr::build_positional_arguments(
   code_function_callt &call,
   size_t param_offset,
@@ -7189,6 +7206,8 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
       arg_index++;
       continue;
     }
+
+    reject_unmodelled_numpy_array_argument(arg.type());
 
     // All array function arguments (e.g. bytes type) are handled as pointers.
     if (arg.type().is_array())
