@@ -216,6 +216,24 @@ class ParseResultTest(unittest.TestCase):
             "TRUE")
 
 
+# The scalar model's own TypeError on `r + 1`, where `r` is an int on one path
+# and a str on the other.
+PY_MODEL_TYPEERROR = """
+Violated property:
+  file scalar.c line 218 column 3 function __python_scalar_add_num
+  TypeError: unsupported operand type(s) for +
+  (_Bool)tagged && (_Bool)type_matches
+
+
+** Results:
+scalar.c, function __python_scalar_add_num
+  FAILED       [__python_scalar_add_num.assertion.1]  line 218  TypeError: unsupported operand type(s) for +
+
+** 1 of 12 properties failed, 6 passed, 5 not checked
+
+VERIFICATION FAILED
+"""
+
 class PythonPropertyTest(unittest.TestCase):
     """The Python track scores one exception family per property file.
 
@@ -250,6 +268,18 @@ class PythonPropertyTest(unittest.TestCase):
     def test_typeerror_says_nothing_about_arithmetic(self):
         self.assertEqual(
             self.verdict(PY_TYPEERROR, wrapper.Property.py_arithmetic), "Unknown")
+
+    def test_model_typeerror_falsifies_dynamic_typing(self):
+        self.assertEqual(
+            self.verdict(PY_MODEL_TYPEERROR, wrapper.Property.py_dyntyping), "FALSE")
+
+    def test_model_typeerror_says_nothing_about_arithmetic(self):
+        self.assertEqual(
+            self.verdict(PY_MODEL_TYPEERROR, wrapper.Property.py_arithmetic), "Unknown")
+
+    def test_internal_len_failure_is_not_a_typeerror(self):
+        self.assertEqual(
+            self.verdict(PY_MODEL_FAILURE, wrapper.Property.py_dyntyping), "Unknown")
 
     def test_assert_falsifies_assertion_safety(self):
         self.assertEqual(

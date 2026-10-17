@@ -56,6 +56,13 @@ bool is_conditional_operand(const std::string &type, const std::string &key)
   return type == "IfExp" && key != "test";
 }
 
+bool is_call_with_arguments(const nlohmann::json &node)
+{
+  return node.is_object() && node.value("_type", "") == "Call" &&
+         node.contains("func") && node.contains("args") &&
+         node["args"].is_array();
+}
+
 // Pointers to every `name[...]` argument of a named call that is evaluated
 // exactly once when the expression at `path` is.
 void collect_subscript_arguments(
@@ -71,7 +78,7 @@ void collect_subscript_arguments(
   if (type == "BoolOp")
     return collect_subscript_arguments(
       node["values"][0], json_pointer(path.to_string() + "/values/0"), out);
-  if (is_named_call(node))
+  if (is_call_with_arguments(node))
     for (std::size_t i = 0; i < node["args"].size(); ++i)
       if (
         node["args"][i].value("_type", "") == "Subscript" &&
@@ -86,16 +93,23 @@ void collect_subscript_arguments(
   }
 }
 
-void collect_calls(
+// The calls of `node` other than `target`'s own and those enclosing it:
+// these run while `target` is evaluated, not before it.
+bool collect_calls(
   const nlohmann::json &node,
+  const nlohmann::json &target,
   std::vector<const nlohmann::json *> &out)
 {
+  if (&node == &target)
+    return true;
   if (!node.is_object() && !node.is_array())
-    return;
-  if (node.is_object() && node.value("_type", "") == "Call")
-    out.push_back(&node);
+    return false;
+  bool encloses = false;
   for (const auto &child : node)
-    collect_calls(child, out);
+    encloses |= collect_calls(child, target, out);
+  if (!encloses && node.is_object() && node.value("_type", "") == "Call")
+    out.push_back(&node);
+  return encloses;
 }
 
 bool starts_before(const nlohmann::json &a, const nlohmann::json &b)
@@ -115,16 +129,16 @@ bool ends_before_end_of(const nlohmann::json &a, const nlohmann::json &b)
 }
 
 // Whether some call of `expression` runs before `node` is evaluated: one
-// that starts before it without enclosing it. A node without a source
-// position counts as preceded.
+// that starts before it, neither inside nor around it. Without source
+// positions to order them, any such call counts as preceding.
 bool is_preceded_by_call(
   const nlohmann::json &expression,
   const nlohmann::json &node)
 {
-  if (node.value("lineno", 0) == 0)
-    return true;
   std::vector<const nlohmann::json *> calls;
-  collect_calls(expression, calls);
+  collect_calls(expression, node, calls);
+  if (!calls.empty() && node.value("lineno", 0) == 0)
+    return true;
   for (const nlohmann::json *call : calls)
     if (
       call->value("lineno", 0) == 0 ||
@@ -183,6 +197,18 @@ nlohmann::json python_converter::bind_numpy_view_temporary(
   binding["targets"] = nlohmann::json::array({name});
   binding["targets"][0]["ctx"] = {{"_type", "Store"}};
   binding["value"] = value;
+  // An unannotated assignment is typed by converting its value once more,
+  // which would run the calls in a slice bound twice; a view is typed by
+  // its own conversion instead.
+  if (value.value("_type", "") == "Subscript")
+  {
+    binding["_type"] = "AnnAssign";
+    binding["target"] = binding["targets"][0];
+    binding.erase("targets");
+    binding["annotation"] = {
+      {"_type", "Name"}, {"id", "Any"}, {"ctx", {{"_type", "Load"}}}};
+    binding["simple"] = 1;
+  }
   bind_runtime_numpy_view_arguments(binding, target_block);
   get_folded_var_assign(binding, target_block);
   return name;
@@ -206,9 +232,8 @@ bool python_converter::hoist_numpy_view_arguments(
   {
     const json_pointer call = argument.parent_pointer().parent_pointer();
     if (
-      !is_bound_numpy_view_param(
-        statement[call]["func"]["id"].get<std::string>(),
-        std::stoul(argument.back())) ||
+      !takes_numpy_view_argument(
+        statement[call], std::stoul(argument.back())) ||
       is_preceded_by_call(statement[key], statement[argument]))
       continue;
     rewritten[argument] = bind_numpy_view_temporary(
@@ -218,6 +243,23 @@ bool python_converter::hoist_numpy_view_arguments(
   return changed;
 }
 
+// Whether argument `index` of the named call `call` receives a view as one:
+// a bound view parameter, or the iterable of a list-consuming builtin.
+bool python_converter::takes_numpy_view_argument(
+  const nlohmann::json &call,
+  std::size_t index)
+{
+  const auto method = numpy_view_method_callee(call);
+  if (method)
+    return is_bound_numpy_view_param(method->first, index + method->second);
+  if (!is_named_call(call))
+    return false;
+  const std::string func = call["func"]["id"].get<std::string>();
+  return is_bound_numpy_view_param(func, index) ||
+         numpy_inlined_lambdas_.count(func) != 0 ||
+         (index == 0 && consumes_numpy_view_as_list(call));
+}
+
 // Whether `node` holds something that must not run before the operands to
 // its left are read: a call that needs binding, or a call passing a view to
 // a bound view parameter, through which the callee may write.
@@ -225,18 +267,34 @@ bool python_converter::needs_numpy_view_hoist(const nlohmann::json &node)
 {
   if (!node.is_object() && !node.is_array())
     return false;
-  if (needs_numpy_view_call_binding(node))
+  if (
+    needs_numpy_view_call_binding(node) || call_needs_view_argument_hoist(node))
     return true;
-  if (is_named_call(node))
-    for (std::size_t i = 0; i < node["args"].size(); ++i)
-      if (
-        (node["args"][i].value("_type", "") == "Subscript" ||
-         is_name(node["args"][i])) &&
-        is_bound_numpy_view_param(node["func"]["id"].get<std::string>(), i))
-        return true;
   for (const auto &child : node)
     if (needs_numpy_view_hoist(child))
       return true;
+  return false;
+}
+
+// Whether `call` passes a view expression to a parameter that takes a view,
+// or a named view to a bound view parameter of a named function.
+bool python_converter::call_needs_view_argument_hoist(
+  const nlohmann::json &call)
+{
+  if (!is_call_with_arguments(call))
+    return false;
+  for (std::size_t i = 0; i < call["args"].size(); ++i)
+  {
+    const nlohmann::json &arg = call["args"][i];
+    if (
+      arg.value("_type", "") == "Subscript" &&
+      takes_numpy_view_argument(call, i))
+      return true;
+    if (
+      is_name(arg) && is_named_call(call) &&
+      is_bound_numpy_view_param(call["func"]["id"].get<std::string>(), i))
+      return true;
+  }
   return false;
 }
 
@@ -276,10 +334,11 @@ bool python_converter::freeze_numpy_view_operand(
 // callee reads a view layout the caller stores right before the call.
 bool python_converter::needs_numpy_view_call_binding(const nlohmann::json &node)
 {
-  return is_named_call(node) &&
-         (returned_numpy_view_argument(node) != nullptr ||
-          !runtime_numpy_view_params(node["func"]["id"].get<std::string>())
-             .empty());
+  if (!node.is_object() || node.value("_type", "") != "Call")
+    return false;
+  return (is_named_call(node) &&
+          returned_numpy_view_argument(node) != nullptr) ||
+         !runtime_numpy_view_params(numpy_view_callee_of(node)).empty();
 }
 
 // `f(v)[0]`, `len(f(v))`, `f(v).tolist()` where f returns its view
@@ -339,10 +398,17 @@ bool python_converter::split_conditional_numpy_view_assignment(
     statement["value"].value("_type", "") != "IfExp")
     return false;
   const nlohmann::json &choice = statement["value"];
-  std::vector<json_pointer> arguments;
+  bool passes_view_expression = false;
   for (const char *branch : {"body", "orelse"})
+  {
+    std::vector<json_pointer> arguments;
     collect_subscript_arguments(choice[branch], json_pointer(), arguments);
-  if (arguments.empty())
+    for (const json_pointer &argument : arguments)
+      passes_view_expression |= takes_numpy_view_argument(
+        choice[branch][argument.parent_pointer().parent_pointer()],
+        std::stoul(argument.back()));
+  }
+  if (!passes_view_expression)
     return false;
   nlohmann::json taken = statement, other = statement;
   taken["value"] = choice["body"];
