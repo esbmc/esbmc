@@ -76,6 +76,24 @@ expr2tc select_by_object(
       fallback = if2tc(size_type2(), item.guard, size, fallback);
   return fallback;
 }
+
+/// The size `size_of` gives the object `ptr` addresses. A pointer that may
+/// address several objects takes the size of the one it addresses, not of
+/// whichever the value set lists first; an `&x` operand or a single candidate
+/// keeps that object's size unguarded.
+template <class SizeOf>
+expr2tc size_by_object(
+  const std::list<dereference_callbackt::internal_item> &items,
+  const expr2tc &ptr,
+  const expr2tc &fallback,
+  SizeOf size_of)
+{
+  if (items.empty())
+    return fallback;
+  if (items.size() == 1 || !is_nil_type(address_of_object_type(ptr)))
+    return size_of(items.front());
+  return select_by_object(items, fallback, size_of);
+}
 } // namespace
 
 void goto_symext::intrinsic_builtin_object_size(
@@ -152,19 +170,11 @@ void goto_symext::intrinsic_builtin_object_size(
                 ? std::function(total_size_of)
                 : std::function(remaining_in_object);
 
-  expr2tc obj_size = create_fallback_size(use_zero_for_unknown);
-  if (!internal_deref_items.empty())
-  {
-    // A pointer that may address several objects takes the size of the one it
-    // addresses, not of whichever the value set lists first. An `&x` operand
-    // or a single candidate keeps that object's size unguarded, as before.
-    if (
-      internal_deref_items.size() == 1 ||
-      !is_nil_type(address_of_object_type(ptr)))
-      obj_size = size_of(internal_deref_items.front());
-    else
-      obj_size = select_by_object(internal_deref_items, obj_size, size_of);
-  }
+  expr2tc obj_size = size_by_object(
+    internal_deref_items,
+    ptr,
+    create_fallback_size(use_zero_for_unknown),
+    size_of);
 
   // Type 1 or 3: the bytes remaining after the pointer's offset.
   if (!internal_deref_items.empty() && consider_offset)
