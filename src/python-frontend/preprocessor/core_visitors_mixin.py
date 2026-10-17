@@ -1,8 +1,13 @@
 import ast
 import copy
+import keyword
 # pylint: disable=too-many-locals,too-many-branches,too-many-statements,too-many-return-statements
 # pylint: disable=too-many-nested-blocks,too-many-boolean-expressions,no-else-return,no-else-raise
 # pylint: disable=import-outside-toplevel
+
+
+class CallBindingError(TypeError):
+    """The arguments of a call do not bind to its callee's parameters."""
 
 
 class CoreVisitorsMixin:
@@ -28,6 +33,7 @@ class CoreVisitorsMixin:
         "round": ("number", "ndigits"),
         "str": ("object", ),
     }
+    _SHADOW_TRACKED_BUILTINS = set(_BUILTIN_POSITIONAL_PARAMS) | {"getattr"}
     _PURE_LIST_CONSUMERS = {
         "abs",
         "all",
@@ -263,6 +269,9 @@ class CoreVisitorsMixin:
         node.value = lowered_value
         if not prefix:
             return None
+        # These assigns skip visit_Assign's own bookkeeping, so a literal the
+        # target held must be forgotten here or later reads fold to it.
+        self._invalidate_list_literals_for_assign_targets(node.targets)
         assigns = []
         for target in node.targets:
             assign = ast.Assign(targets=[target], value=node.value)
@@ -271,6 +280,7 @@ class CoreVisitorsMixin:
             ast.fix_missing_locations(assign)
             if isinstance(target, ast.Name):
                 self.known_variable_types[target.id] = lowered_type
+                self._track_literal_binding(target.id, node.value)
             assigns.append(assign)
         return prefix + assigns
 
@@ -487,12 +497,9 @@ class CoreVisitorsMixin:
         elif isinstance(target, ast.Name) and target.id in self.newtype_vars:
             self.newtype_vars.discard(target.id)
 
-        if (isinstance(target, ast.Name) and isinstance(node.value, ast.Attribute)
-                and isinstance(node.value.value, ast.Name) and target.id in self.called_names):
-            self.bound_method_vars[target.id] = node.value
-            return None
-        if isinstance(target, ast.Name) and target.id in self.bound_method_vars:
-            del self.bound_method_vars[target.id]
+        captured = self._track_bound_method(target, node.value)
+        if captured is not None:
+            return captured
 
         self._update_variable_types_simple(target, node.value)
 
@@ -675,12 +682,80 @@ class CoreVisitorsMixin:
             return self.visit(node.args[0])
         return None
 
+    def _track_bound_method(self, target, value, resolvable=True):
+        """Replace `target = obj.attr` when the module calls `target`, so that
+        each later `target(...)` becomes `obj.attr(...)`, and forget a
+        `target` bound to anything else. Where `_captures_receiver` holds,
+        `obj` is first stored in a fresh name, so each call acts on the object
+        `obj` gave at the binding (#8439). Returns the statements replacing
+        the binding, or None if it stays."""
+        captures = self._captures_receiver(target, value)
+        if not (resolvable and isinstance(target, ast.Name) and isinstance(value, ast.Attribute) and
+                (captures or isinstance(value.value, ast.Name)) and target.id in self.called_names):
+            if isinstance(target, ast.Name):
+                self.bound_method_vars.pop(target.id, None)
+            return None
+        if not captures:
+            self.bound_method_vars[target.id] = value
+            return []
+        receiver = f"ESBMC_bound_receiver_{self._next_unpack_tmp_id()}"
+        self.bound_method_vars[target.id] = ast.Attribute(value=ast.Name(id=receiver,
+                                                                         ctx=ast.Load()),
+                                                          attr=value.attr,
+                                                          ctx=ast.Load())
+        capture = ast.Assign(targets=[ast.Name(id=receiver, ctx=ast.Store())], value=value.value)
+        self._update_variable_types_simple(capture.targets[0], value.value)
+        return [ast.fix_missing_locations(ast.copy_location(capture, value))]
+
+    def _captures_receiver(self, target, value):
+        """Whether `target = obj.attr` stores `obj` for the calls of `target`:
+        nothing else binds `target` in the scope being visited, or its bindings
+        run in source order (#8467), so each call sees the last binding above
+        it, and `obj` is a call or a name that is not only bound by an import,
+        a definition or a builtin."""
+        if not (isinstance(target, ast.Name) and isinstance(value, ast.Attribute)):
+            return False
+        scope = id(self._vararg_scope_stack[-1]) if self._vararg_scope_stack else None
+        _, counts = self.scope_binding_counts.get(scope, (None, {}))
+        return (counts.get(target.id) == 1 or (scope, target.id) in self.in_order_bindings) and (
+            isinstance(value.value, ast.Call) or
+            (isinstance(value.value, ast.Name) and value.value.id in self.variable_names))
+
+    def _is_resolvable_unpacked_method(self, target, value, statement):
+        """Whether unpacking `obj.m` into `target` may be resolved at each call
+        of `target`: the statement is top-level, `target` is bound nowhere
+        else, and `obj.m` is a method of a fixed instance (#8354)."""
+        return (id(statement) in self.module_statements and target.id in self.once_bound_names
+                and isinstance(value, ast.Attribute) and isinstance(value.value, ast.Name)
+                and value.attr in self.fixed_receivers.get(value.value.id, ()))
+
     def _maybe_rewrite_bound_method_call(self, node):
         if isinstance(node.func, ast.Name) and node.func.id in self.bound_method_vars:
             node.func = self.bound_method_vars[node.func.id]
             self.generic_visit(node)
             return node
         return None
+
+    def _maybe_rewrite_getattr_call(self, node):
+        """Call `getattr(o, "m")(...)` as `o.m(...)`, which it is exactly (#8457).
+
+        A name with `__` is left alone: the frontend stores a private `__m`
+        unmangled, so neither `__m` nor `_C__m` would resolve.
+        """
+        getter = node.func
+        if not (isinstance(getter, ast.Call) and isinstance(getter.func, ast.Name)
+                and getter.func.id == "getattr" and len(getter.args) == 2 and not getter.keywords
+                and not isinstance(getter.args[0], ast.Starred)
+                and not self._builtin_is_shadowed("getattr")):
+            return None
+        name = getter.args[1]
+        if not (isinstance(name, ast.Constant) and isinstance(name.value, str)
+                and name.value.isidentifier() and not keyword.iskeyword(name.value)
+                and "__" not in name.value):
+            return None
+        node.func = ast.copy_location(
+            ast.Attribute(value=getter.args[0], attr=name.value, ctx=ast.Load()), getter)
+        return self.visit(node)
 
     def _record_staticmethod(self, node, qualified_name):
         """Note a @staticmethod, whose call binds no receiver (#7546)."""
@@ -723,10 +798,6 @@ class CoreVisitorsMixin:
                 function_name = qualified_name
                 expected_args = self._params_without_implicit_self(qualified_name)
                 kwonly_args = self.functionKwonlyParams.get(qualified_name, [])
-            elif method_name in self.functionParams:
-                function_name = method_name
-                expected_args = self._params_without_implicit_self(method_name)
-                kwonly_args = self.functionKwonlyParams.get(method_name, [])
         elif isinstance(node.func, ast.Name):
             func_name = node.func.id
             init_name = f"{func_name}.__init__"
@@ -780,7 +851,7 @@ class CoreVisitorsMixin:
                 bound.add(n.name)
             elif isinstance(n, (ast.Import, ast.ImportFrom)):
                 bound.update(a.asname or a.name.split(".")[0] for a in n.names)
-        return bound & set(self._BUILTIN_POSITIONAL_PARAMS)
+        return bound & self._SHADOW_TRACKED_BUILTINS
 
     def _scan_builtin_shadow_names(self, module_node):
         """Builtin names bound at module scope, which every scope inherits."""
@@ -788,7 +859,7 @@ class CoreVisitorsMixin:
         for n in ast.walk(module_node):
             if isinstance(n, ast.Global):
                 # `global int` binds the module-level name from a function.
-                bound.update(set(n.names) & set(self._BUILTIN_POSITIONAL_PARAMS))
+                bound.update(set(n.names) & self._SHADOW_TRACKED_BUILTINS)
         return bound
 
     def _enter_builtin_shadow_scope(self, node):
@@ -863,10 +934,10 @@ class CoreVisitorsMixin:
             return
         display_name = self._display_name(function_name)
         if len(missing_kwonly) == 1:
-            raise TypeError(
+            raise CallBindingError(
                 f"{display_name}() missing 1 required keyword-only argument: '{missing_kwonly[0]}'")
         args_str = " and ".join([f"'{arg}'" for arg in missing_kwonly])
-        raise TypeError(
+        raise CallBindingError(
             f"{display_name}() missing {len(missing_kwonly)} required keyword-only arguments: {args_str}"
         )
 
@@ -880,7 +951,7 @@ class CoreVisitorsMixin:
                 total_params, total_given = len(expected_args) + 1, len(node.args) + 1
             else:
                 total_params, total_given = len(expected_args), len(node.args)
-            raise TypeError(
+            raise CallBindingError(
                 f"{display_name}() takes {total_params} positional argument{'s' if total_params != 1 else ''} "
                 f"but {total_given} {'were' if total_given != 1 else 'was'} given")
 
@@ -1036,10 +1107,10 @@ class CoreVisitorsMixin:
         if missing_args:
             display_name = self._display_name(function_name)
             if len(missing_args) == 1:
-                raise TypeError(
+                raise CallBindingError(
                     f"{display_name}() missing 1 required positional argument: '{missing_args[0]}'")
             args_str = " and ".join([f"'{arg}'" for arg in missing_args])
-            raise TypeError(
+            raise CallBindingError(
                 f"{display_name}() missing {len(missing_args)} required positional arguments: {args_str}"
             )
         consumed = set()
@@ -1069,6 +1140,11 @@ class CoreVisitorsMixin:
         if function_name == "__unknown__" or function_name is None or expected_args is None:
             return False
 
+        if (function_name not in self.functionVarargs
+                and any(isinstance(arg, ast.Starred) for arg in node.args)):
+            raise NotImplementedError(
+                f"Unpacking *x into {self._display_name(function_name)}() is supported only "
+                "when x is a list or tuple of statically known length")
         keywords = self._build_keyword_map(node)
         self._validate_kwonly_args(function_name, kwonly_args, keywords)
         self._validate_positional_call_arity(node, function_name, expected_args)
@@ -1404,7 +1480,8 @@ class CoreVisitorsMixin:
                 self.functionDefaults[(qualified_name, arg_name)] = default_node.value
             elif isinstance(default_node, (ast.Name, ast.List, ast.Dict, ast.Set)):
                 assignment_node, target_var = self.generate_variable_copy(
-                    qualified_name, node.args.args[-i], default_node)
+                    qualified_name, node.args.args[-i],
+                    self.class_scope_default(default_node, node) if is_method else default_node)
                 self.functionDefaults[(qualified_name, arg_name)] = target_var
                 self.hoisted_default_names.add(target_var.id)
                 if is_method:
@@ -1421,7 +1498,8 @@ class CoreVisitorsMixin:
                 self.functionDefaults[(qualified_name, kwarg_name)] = default.value
             elif isinstance(default, (ast.Name, ast.List, ast.Dict, ast.Set)):
                 assignment_node, target_var = self.generate_variable_copy(
-                    qualified_name, node.args.kwonlyargs[i], default)
+                    qualified_name, node.args.kwonlyargs[i],
+                    self.class_scope_default(default, node) if is_method else default)
                 self.functionDefaults[(qualified_name, kwarg_name)] = target_var
                 self.hoisted_default_names.add(target_var.id)
                 if is_method:
@@ -1727,6 +1805,7 @@ class CoreVisitorsMixin:
         return self.visit(rewritten)
 
     def visit_Call(self, node):  # pylint: disable=too-many-locals,too-many-branches,too-many-statements,import-outside-toplevel,no-else-raise
+        self._expand_starred_call_args(node)
         self._invalidate_list_literals_for_call(node)
         rewritten_nondet = self._rewrite_nondet_collection_call(node)
         if rewritten_nondet is not None:
@@ -1753,6 +1832,10 @@ class CoreVisitorsMixin:
         if rewritten_bound is not None:
             return rewritten_bound
 
+        rewritten_getattr = self._maybe_rewrite_getattr_call(node)
+        if rewritten_getattr is not None:
+            return rewritten_getattr
+
         rewritten_decimal = self._maybe_rewrite_decimal_call(node)
         if rewritten_decimal is not None:
             return rewritten_decimal
@@ -1764,10 +1847,183 @@ class CoreVisitorsMixin:
         self._normalize_builtin_keyword_args(node)
         self._normalize_math_gcd_lcm_variadic(node)
 
-        self._apply_call_signature_defaults(node)
+        guard = self._lower_starred_call_argument(node)
+        raising = self._bind_call_arguments(node)
+        if raising is not None:
+            return raising
         self._specialize_vararg_call(node)
         self.generic_visit(node)
-        return node
+        if guard is None:
+            return node
+        guard.test = self.visit(guard.test)
+        guard.orelse = self.visit(guard.orelse)
+        return guard
+
+    def _bind_call_arguments(self, node):
+        """Bind the arguments of `node`, or return it lowered to a raising call."""
+        try:
+            self._apply_call_signature_defaults(node)
+        except CallBindingError as error:
+            if any(isinstance(arg, ast.Starred) for arg in node.args):
+                raise
+            return self.visit(self._raising_call(node, str(error)))
+        return None
+
+    @staticmethod
+    def _raising_call(node, message):
+        """Spell a call that cannot bind its arguments as `(a1, ..., e(msg))[n]`.
+
+        CPython raises the TypeError only when the call runs, after evaluating
+        the callee and its arguments, so an unreached or guarded bad call is
+        not an error of the whole program (#8365).
+        """
+        evaluated = list(node.args) + [kw.value for kw in node.keywords]
+        if isinstance(node.func, ast.Attribute) and not isinstance(node.func.value, ast.Name):
+            evaluated.insert(0, node.func.value)
+        error = ast.Call(func=ast.Name(id="_call_type_error", ctx=ast.Load()),
+                         args=[ast.Constant(value=message)],
+                         keywords=[])
+        raising = ast.Subscript(value=ast.Tuple(elts=evaluated + [error], ctx=ast.Load()),
+                                slice=ast.Constant(value=len(evaluated)),
+                                ctx=ast.Load())
+        ast.copy_location(raising, node)
+        ast.fix_missing_locations(raising)
+        return raising
+
+    def _lower_starred_call_argument(self, node):
+        """Spell `f(a, *xs)` out as `f(a, xs[0], ..., xs[k-1]) if len(xs) == k else e()`.
+
+        Only for a call _scan_starred_calls marked, to a known function with a
+        fixed positional signature (no *args, no defaults among the starred
+        slots). CPython raises TypeError when len(xs) does not fill the k
+        remaining parameters; _starred_arity_error raises it before any
+        element is read. The frontend has no Starred expression, so without
+        this every such call was refused. Constant indices let the frontend
+        type each element on its own (#8472). Returns the guarding IfExp,
+        whose body is `node`, or None.
+        """
+        if not getattr(node, "esbmc_starred_sequence", False):
+            return None
+        operand = node.args[-1].value
+        function_name, expected_args, _ = self._resolve_function_signature(node)
+        if function_name in (None, "__unknown__") or expected_args is None:
+            return None
+        if function_name in self.functionVarargs:
+            return None
+        fixed = len(node.args) - 1
+        slots = expected_args[fixed:]
+        if not slots or any((function_name, arg) in self.functionDefaults for arg in slots):
+            return None
+        length_ok = ast.Compare(left=ast.Call(func=ast.Name(id="len", ctx=ast.Load()),
+                                              args=[ast.Name(id=operand.id, ctx=ast.Load())],
+                                              keywords=[]),
+                                ops=[ast.Eq()],
+                                comparators=[ast.Constant(value=len(slots))])
+        arity_error = ast.Call(func=ast.Name(id="_starred_arity_error", ctx=ast.Load()),
+                               args=[],
+                               keywords=[])
+        node.args = node.args[:-1] + [
+            ast.Subscript(value=ast.Name(id=operand.id, ctx=ast.Load()),
+                          slice=ast.Constant(value=i),
+                          ctx=ast.Load()) for i in range(len(slots))
+        ]
+        ast.copy_location(length_ok, node)
+        ast.fix_missing_locations(node)
+        # The raising arm reads as `(e(), f(...))[1]` so both arms carry
+        # f's result type; e() raises before f is reached.
+        unreached = copy.deepcopy(node)
+        unreached.esbmc_starred_sequence = False
+        raising = ast.Subscript(value=ast.Tuple(elts=[arity_error, unreached], ctx=ast.Load()),
+                                slice=ast.Constant(value=1),
+                                ctx=ast.Load())
+        guard = ast.IfExp(test=length_ok, body=node, orelse=raising)
+        ast.copy_location(guard, node)
+        ast.fix_missing_locations(guard)
+        return guard
+
+    def _scan_starred_calls(self, node):
+        """Mark each `f(..., *xs)` on a parameter xs that _lower_starred_call_argument
+        may spell out.
+
+        _expand_starred_call_args already splices a name of statically known
+        length; a parameter's length is not known, so the lowering checks it at
+        run time. Indexing spells out a list or tuple, not a dict or set, so xs
+        must be annotated as one, or every call of its function must pass a
+        list or tuple display, and xs must not be rebound. A callee bound in the
+        calling scope is not the global function whose signature the lowering
+        reads."""
+        calls_to, loads = {}, {}
+        for n in ast.walk(node):
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
+                calls_to.setdefault(n.func.id, []).append(n)
+            elif isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load):
+                loads[n.id] = loads.get(n.id, 0) + 1
+        methods = {id(m) for c in ast.walk(node) if isinstance(c, ast.ClassDef) for m in c.body}
+        for scope in ast.walk(node):
+            if isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                self._mark_starred_calls(scope, id(scope) in methods, calls_to, loads)
+
+    def _mark_starred_calls(self, scope, is_method, calls_to, loads):
+        positional = {a.arg: i for i, a in enumerate(scope.args.args)}
+        annotations = {
+            a.arg: a.annotation
+            for a in scope.args.posonlyargs + scope.args.args + scope.args.kwonlyargs
+        }
+        stored = {
+            n.id
+            for n in self._own_scope(scope)
+            if isinstance(n, ast.Name) and not isinstance(n.ctx, ast.Load)
+        }
+        sequence_params = {
+            xs
+            for xs, ann in annotations.items()
+            if xs not in stored and (self._is_sequence_annotation(ann) or (
+                xs in positional and not is_method
+                and self._passed_sequence(scope.name, positional[xs], calls_to, loads)))
+        }
+        shadowed = stored | annotations.keys()
+        for n in self._own_scope(scope):
+            if self._starred_name_operand(n) in sequence_params and n.func.id not in shadowed:
+                n.esbmc_starred_sequence = True
+
+    @staticmethod
+    def _own_scope(root):
+        """Unlike _iter_own_scope_nodes, this skips lambdas and class bodies,
+        whose own names may shadow a parameter."""
+        nested = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
+        todo = list(ast.iter_child_nodes(root))
+        while todo:
+            n = todo.pop()
+            yield n
+            if not isinstance(n, nested):
+                todo.extend(ast.iter_child_nodes(n))
+
+    @staticmethod
+    def _starred_name_operand(n):
+        """The name xs in a call `f(..., *xs)` with no other star or keyword."""
+        if (isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.args and not n.keywords
+                and isinstance(n.args[-1], ast.Starred) and isinstance(n.args[-1].value, ast.Name)
+                and not any(isinstance(a, ast.Starred) for a in n.args[:-1])):
+            return n.args[-1].value.id
+        return None
+
+    @staticmethod
+    def _is_sequence_annotation(ann):
+        if isinstance(ann, ast.Subscript):
+            ann = ann.value
+        return isinstance(ann, ast.Name) and ann.id in ("list", "tuple", "List", "Tuple")
+
+    @staticmethod
+    def _passed_sequence(func_name, index, calls_to, loads):
+        calls = calls_to.get(func_name, [])
+        # Every load of the name must be one of these calls, so the
+        # function is never called through another name. A list at one
+        # call and a tuple at another give the parameter no single type.
+        kinds = {
+            type(c.args[index]) if not c.keywords and index < len(c.args) else None
+            for c in calls
+        }
+        return loads.get(func_name, 0) == len(calls) and kinds in ({ast.List}, {ast.Tuple})
 
     def _locally_bound_names(self, node):
         """Names this function scope binds, ignoring nested scopes and globals."""

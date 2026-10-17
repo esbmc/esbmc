@@ -391,6 +391,16 @@ void goto_checkt::cast_overflow_check(
     cast_overflow, claim_msg + get_expr_id(expr), "overflow", loc, guard);
 }
 
+static expr2tc overflow_expr(const expr2tc &expr)
+{
+  if (is_neg2t(expr))
+    return overflow_neg2tc(to_neg2t(expr).value);
+  // abs overflows exactly when negating its operand does (C11 7.22.6.1p2).
+  if (is_abs2t(expr))
+    return overflow_neg2tc(to_abs2t(expr).value);
+  return overflow2tc(expr);
+}
+
 void goto_checkt::overflow_check(
   const expr2tc &expr,
   const guard2tc &guard,
@@ -437,8 +447,7 @@ void goto_checkt::overflow_check(
     return;
 
   // add overflow subgoal
-  expr2tc overflow =
-    is_neg2t(expr) ? overflow_neg2tc(to_neg2t(expr).value) : overflow2tc(expr);
+  expr2tc overflow = overflow_expr(expr);
   make_not(overflow);
 
   add_guarded_claim(
@@ -505,7 +514,8 @@ void goto_checkt::input_overflow_check(
   const std::string fmt = to_constant_string2t(base_expr).value.as_string();
 
   // obtain the length limits in the format string
-  // TODO: A specific class for the scanf/fscanf format string(e.g scanf_formattert)
+  // TODO: A specific class for the scanf/fscanf format string(e.g
+  // scanf_formattert)
   long unsigned int pos = 0;
   std::vector<std::string> limits;
 
@@ -1272,8 +1282,8 @@ void goto_checkt::check_rec(
   case expr2t::exists_id:
     // A quantifier binds a fresh logical variable ranging over its whole type;
     // its body is a pure predicate, not executed code. Runtime safety checks
-    // (bounds, overflow, div-by-zero) over the bound variable are meaningless --
-    // e.g. a[i] inside `forall i . (0 <= i < n) ==> a[i] == 0` is not a real
+    // (bounds, overflow, div-by-zero) over the bound variable are meaningless
+    // -- e.g. a[i] inside `forall i . (0 <= i < n) ==> a[i] == 0` is not a real
     // out-of-bounds access, since i is universally quantified, not a concrete
     // index. CBMC likewise emits no such checks inside a quantifier body. Skip
     // the whole node so the array theory (not goto_check) models the body.
@@ -1305,6 +1315,7 @@ void goto_checkt::check_rec(
     /* fallthrough */
 
   case expr2t::neg_id:
+  case expr2t::abs_id:
   case expr2t::add_id:
   case expr2t::sub_id:
   case expr2t::mul_id:
@@ -1356,10 +1367,11 @@ void goto_checkt::clz_zero_check(const expr2tc &code, const locationt &loc)
 
   // A zero argument is undefined for __builtin_clz*/ctz* (GCC); assert it is
   // non-zero. The two-argument clzg/ctzg name their own result at zero, so the
-  // arity test below leaves them alone, and ffs is defined there outright.
+  // arity test below leaves them alone, and ffs and clrsb are defined there
+  // outright.
   const std::string name = to_symbol2t(call.function).thename.as_string();
   const bit_scan_endt kind = bit_scan_builtin(name);
-  if (kind == bit_scan_endt::none || kind == bit_scan_endt::first_set)
+  if (kind != bit_scan_endt::leading && kind != bit_scan_endt::trailing)
     return;
 
   if (call.operands.size() != 1)
@@ -1374,6 +1386,12 @@ void goto_checkt::clz_zero_check(const expr2tc &code, const locationt &loc)
     "undef-behavior",
     loc,
     guard);
+}
+
+static bool has_checked_operand(const expr2tc &code)
+{
+  return is_code_expression2t(code) || is_code_free2t(code) ||
+         is_code_cpp_delete2t(code) || is_code_cpp_del_array2t(code);
 }
 
 void goto_checkt::goto_check(goto_programt &goto_program)
@@ -1394,7 +1412,7 @@ void goto_checkt::goto_check(goto_programt &goto_program)
 
     if (i.is_other())
     {
-      if (is_code_expression2t(i.code))
+      if (has_checked_operand(i.code))
       {
         check(i.code, loc);
       }

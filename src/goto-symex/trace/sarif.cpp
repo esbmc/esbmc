@@ -264,7 +264,7 @@ void sarif_goto_trace(
 
   for (const auto &step : goto_trace.steps)
   {
-    if (step.type != goto_trace_stept::ASSERT || step.guard)
+    if (step.type != symex_targett::ASSERT || step.guard)
       continue;
 
     const cwe_rule_t &rule = cwe_rule_for(step.comment);

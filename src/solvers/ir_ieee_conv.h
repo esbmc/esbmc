@@ -57,8 +57,8 @@ public:
     const floatbv_type2t &fbv_type);
 
   /** Look up the tracked interval for t; fall back to the point interval {t,
-   * t}.
-   *  Used by both encode_ieee_* methods and the sqrt case in smt_solver.cpp. */
+   * t}. Used by both encode_ieee_* methods and the sqrt case in smt_solver.cpp.
+   */
   ra_interval_t get_interval(smt_astt t) const;
 
   /** Store an interval for t in the map.

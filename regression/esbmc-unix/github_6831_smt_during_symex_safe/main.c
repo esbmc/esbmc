@@ -10,7 +10,7 @@ pthread_mutex_t m;
 
 // Same array-of-pointers select as github_6831_smt_during_symex_crash, but
 // the write is ordered, so rebuilding tuple elements after a context pop must
-// not lose the facts that make this provable (issue #6831, W3.3).
+// not lose the facts that make this provable (issue #6831, #7049).
 void *writer(void *arg)
 {
   (void)arg;

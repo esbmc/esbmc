@@ -29,11 +29,12 @@ namespace loop_invariant
 bool is_inert_scan_instruction(goto_programt::const_targett t);
 } // namespace loop_invariant
 
-// Forward declaration: full definition is in frame_enforcer.h (included in .cpp)
+// Forward declaration: full definition is in frame_enforcer.h (included in
+// .cpp)
 class frame_enforcert;
 
 /// \brief Entry point: process loop invariants for all functions.
-/// When use_frame_rule is true, enables the Operational Frame Rule
+/// When use_frame_rule is true, enables the observational frame rule
 /// (Snapshot → Havoc → Assume) for enhanced inductive verification.
 void goto_loop_invariant(
   goto_functionst &goto_functions,
@@ -93,7 +94,8 @@ protected:
   /// convert_loop_with_invariant after insert_inductive_step_and_termination.
   frame_enforcert *active_frame_enforcer = nullptr;
   /// Assigns targets for the current loop (mirrors loop_assigns passed to
-  /// insert_havoc_and_assume_before_condition, kept for use in the ASSERT step).
+  /// insert_havoc_and_assume_before_condition, kept for use in the ASSERT
+  /// step).
   std::vector<expr2tc> active_loop_assigns;
   /// Largest pointee, in bits, the havoc will cover. Measured on
   /// quantified_array_invariant: 128 bits is free, 4096 costs eight seconds and
@@ -131,14 +133,19 @@ protected:
     const std::vector<expr2tc> &invariants,
     const goto_programt &side_effects);
 
+  static type2tc havoc_pointee_type(const expr2tc &ptr, const namespacet &ns);
+
+  /// False when a pointee the loop writes is out of the havoc's reach, which
+  /// leaves the loop to the unwinder.
+  bool pointees_havocable(const loopst &loop) const;
+
   // Insert HAVOC and ASSUME at \p loop_head, which must be the loop head's own
   // instruction, so that everything the guard evaluates runs after the havoc
   // (inserts side_effects between the HAVOC block and the ASSUME).
   // side_effects is non-const: if frame rule is active, old_snapshot assigns
   // are patched in-place so insert_inductive_step_and_termination (called
   // after this) sees the patched version too.
-  /// Havoc the objects the loop writes through a pointer. See the definition
-  /// for why a large aggregate pointee is left alone (issue #7502).
+  /// Havoc the objects the loop writes through a pointer.
   void havoc_pointees(
     const loopst &loop,
     const locationt &loc,
@@ -176,9 +183,10 @@ protected:
  *   ASSUME(INV)
  *   ASSUME(loop_entry_cond)
  *   <copy of one loop-body iteration>
- *   ASSERT(INV)          [step case – tagged property="invariant-inductive-step"]
- *   ASSUME(false)        [terminate Branch 1 – never fall through]
- *   original_loop_head:  [unchanged; k-induction will transform this]
+ *   ASSERT(INV)          [step case – tagged
+ * property="invariant-inductive-step"] ASSUME(false)        [terminate Branch 1
+ * – never fall through] original_loop_head:  [unchanged; k-induction will
+ * transform this]
  *
  * The branch uses std::list::splice() rather than insert_swap() so that
  * existing backward-GOTO targets (which point to original_loop_head) are

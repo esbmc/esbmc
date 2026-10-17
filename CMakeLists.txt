@@ -12,7 +12,7 @@ endforeach()
 # VERSION also sets ESBMC_VERSION and ESBMC_VERSION_{MAJOR,MINOR,PATCH}, which
 # cmake_config.in and CPack read.
 project(ESBMC
-  VERSION 8.5.0
+  VERSION 8.6.0
   DESCRIPTION "Efficient SMT-based Context-Bounded Model Checker"
   HOMEPAGE_URL "https://github.com/esbmc/esbmc"
   LANGUAGES C CXX)

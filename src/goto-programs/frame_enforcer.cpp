@@ -1,8 +1,8 @@
 /// \file frame_enforcer.cpp
-/// \brief Implementation of the Operational Frame Rule for verification.
+/// \brief Implementation of the observational frame rule.
 ///
-/// This implements the core "Snapshot → Havoc/Call → Assume/Assert(Unchanged == Snapshot)"
-/// mechanism. See frame_enforcer.h for detailed documentation.
+/// This implements the core "Snapshot → Havoc/Call → Assume/Assert(Unchanged ==
+/// Snapshot)" mechanism. See frame_enforcer.h for detailed documentation.
 
 #include "frame_enforcer.h"
 #include <util/irep/migrate.h>
@@ -475,7 +475,8 @@ void frame_enforcert::enforce_frame_rule(
     // In ASSERT mode, add aliasing disjunctions for pointer targets.
     // For each pointer p in pointer_targets whose pointed-to type matches
     // var's type, add: guard = guard || (p == &var)
-    // This means: "var is unchanged OR some pointer in the assigns set aliases it"
+    // This means: "var is unchanged OR some pointer in the assigns set aliases
+    // it"
     if (mode == frame_modet::ASSERT)
     {
       for (const auto &ptr : classified.pointer_targets)

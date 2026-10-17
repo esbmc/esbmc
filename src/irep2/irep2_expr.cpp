@@ -36,11 +36,12 @@ void irep2_bad_expr_cast(unsigned actual, unsigned expected, const char *target)
     (actual < expr2t::end_expr_id) ? expr_names[actual] : "<out-of-range>";
   const char *expected_name =
     (expected < expr2t::end_expr_id) ? expr_names[expected] : "<out-of-range>";
-  throw irep2_cast_error(fmt::format(
-    "irep2: to_{}2t() called on expr whose expr_id is {} (target {})",
-    expected_name,
-    actual_name,
-    target));
+  throw irep2_cast_error(
+    fmt::format(
+      "irep2: to_{}2t() called on expr whose expr_id is {} (target {})",
+      expected_name,
+      actual_name,
+      target));
 }
 
 /*************************** Base expr2t definitions **************************/
@@ -952,7 +953,7 @@ std::string code_continue2t::field_names[esbmct::num_type_fields] =
 std::string code_label2t::field_names[esbmct::num_type_fields] =
   {"label", "code", "", "", ""};
 std::string code_switch_case2t::field_names[esbmct::num_type_fields] =
-  {"is_default", "case_op", "code", "", ""};
+  {"is_default", "case_op", "case_op_hi", "code", ""};
 std::string code_assert2t::field_names[esbmct::num_type_fields] =
   {"guard", "", "", "", ""};
 std::string code_assume2t::field_names[esbmct::num_type_fields] =

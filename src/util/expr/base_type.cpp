@@ -104,8 +104,9 @@ bool base_type_eqt::base_type_eq_rec(const type2tc &type1, const type2tc &type2)
   if (is_symbol_type(type1) && is_symbol_type(type2))
   {
     // already in same set?
-    if (identifiers.make_union(
-          to_symbol_type(type1).symbol_name, to_symbol_type(type2).symbol_name))
+    if (
+      identifiers.make_union(
+        to_symbol_type(type1).symbol_name, to_symbol_type(type2).symbol_name))
       return true;
   }
 

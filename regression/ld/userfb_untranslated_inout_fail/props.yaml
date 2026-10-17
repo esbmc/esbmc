@@ -1,0 +1,7 @@
+properties:
+  # IO is an in/out pin of an untranslated body, so it takes any value each
+  # scan. Leaving it at its initial FALSE would make this hold.
+  - id: P1
+    kind: invariant
+    expression: "!Q"
+    description: "Unprovable: the untranslated body may set its in/out pin"

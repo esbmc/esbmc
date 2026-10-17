@@ -5,6 +5,7 @@
 
 class python_converter;
 class symbol_id;
+class symbolt;
 
 class function_call_builder
 {
@@ -21,7 +22,8 @@ public:
   symbol_id build_function_id() const;
 
   /*
-   * Checks if assume (__ESBMC_assume or __VERIFIER_assume) function is being invoked.
+   * Checks if assume (__ESBMC_assume or __VERIFIER_assume) function is being
+   * invoked.
    */
   bool is_assume_call(const symbol_id &function_id) const;
 
@@ -62,6 +64,31 @@ private:
    * other callee.
    */
   void check_contract_call(const symbol_id &function_id) const;
+
+  /// Whether the receiver of `name.method(...)` is a name bound only once, to
+  /// None.
+  bool receiver_is_bound_to_none() const;
+  bool nested_function_exists(const symbol_id &sid) const;
+  void use_imported_class_file(
+    symbol_id &function_id,
+    const symbolt &receiver,
+    const std::string &class_name) const;
+
+  /// Raises AttributeError ahead of `name.method(...)` when `name` is a str or
+  /// class-instance reference holding None (a null pointer).
+  void raise_if_none_receiver() const;
+
+  /// The class an instance expression holds, read from the symbol table so
+  /// that no instruction is emitted; empty when it is not statically known.
+  std::string instance_class_name(const nlohmann::json &node) const;
+
+  /// Whether the receiver of `recv.method(...)` is an instance of a class that
+  /// defines `method`, which then wins over a str method of the same name.
+  bool receiver_class_defines_method() const;
+
+  /// For `recv.method(...)`: the AttributeError of a None receiver or the
+  /// str-method lowering, or nil when neither applies.
+  exprt build_method_call_on_receiver() const;
 
   /*
    * Rejects a contract clause that does not lower to a pure expression.
@@ -105,6 +132,15 @@ private:
    * no enclosing function.
    */
   typet enclosing_return_type() const;
+
+  /*
+   * The class of a method call's receiver that is not a plain name. For an
+   * item of a list of class instances (`xs[i].m()`) it is their class, so
+   * the call dispatches as `x = xs[i]; x.m()` does; otherwise "str". Throws
+   * when the list's items are not known to share one class, since no single
+   * method can then be chosen statically.
+   */
+  std::string subscript_receiver_class(const nlohmann::json &receiver) const;
 
   python_converter &converter_;
   const nlohmann::json &call_;

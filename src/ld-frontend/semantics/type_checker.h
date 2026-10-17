@@ -4,6 +4,7 @@
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 struct TypeCheckError : std::runtime_error
 {
@@ -21,6 +22,7 @@ public:
 
 private:
   std::unordered_map<std::string, VarKind> var_types_;
+  std::unordered_set<std::string> inputs_;
 
   void build_var_type_map(const LdAst &ast);
   void check_rung_element(const RungElement &elem);
@@ -29,6 +31,12 @@ private:
   void check_arith_fb(const ArithFBNode &fb);
 
   VarKind lookup_type(const std::string &var, const LdLocation &loc) const;
+  void require_distinct(
+    const std::string &instance,
+    const char *ports,
+    const std::string &a,
+    const std::string &b,
+    const LdLocation &loc) const;
   void require_port(
     const std::string &instance,
     const char *port,

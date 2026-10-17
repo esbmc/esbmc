@@ -9,6 +9,7 @@
 #include <util/irep/std_code.h>
 #include <util/irep/std_types.h>
 #include <util/symtab/symbol_generator.h>
+#include <unordered_map>
 
 // Forward dec, to avoid bringing in clang headers
 namespace clang
@@ -47,6 +48,7 @@ class APValue;
 class AlignedAttr;
 class InitListExpr;
 class TemplateParamObjectDecl;
+class Expr;
 } // namespace clang
 
 std::string
@@ -64,15 +66,15 @@ public:
   bool convert();
 
   /**
- * @brief Perform the typecast by creating a tmp variable on RHS
- *
- * The idea is to look for all components of the union and match
- * the type. If not found, throws an error
- *
- * @param ns Namespace for looking up the union components
- * @param dest RHS dest
- * @param type Union type
- */
+   * @brief Perform the typecast by creating a tmp variable on RHS
+   *
+   * The idea is to look for all components of the union and match
+   * the type. If not found, throws an error
+   *
+   * @param ns Namespace for looking up the union components
+   * @param dest RHS dest
+   * @param type Union type
+   */
   static void
   gen_typecast_to_union(const namespacet &ns, exprt &dest, const typet &type);
 
@@ -111,6 +113,13 @@ protected:
    */
   code_blockt *current_block;
 
+  /** A block-scope VLA's size, bound to a local just before its declarator
+   *  (C11 6.7.6.2p5, 6.7.8p3). Keyed by clang's size expression, which every
+   *  expression typed by that declarator shares. */
+  std::unordered_map<const clang::Expr *, exprt> vla_size_snapshots;
+  bool snapshot_vla_sizes(const clang::Decl &decl, codet &dest);
+  bool get_vla_size(const clang::Expr &size, exprt &new_expr);
+
   clang::SourceManager *sm;
 
   const clang::FunctionDecl *current_functionDecl;
@@ -131,11 +140,13 @@ protected:
 
   /**
    *  Since this class is inherited by clang-cpp-frontend,
-   *  some get_* functions are made `virtual' to deal with clang CXX declarations
+   *  some get_* functions are made `virtual' to deal with clang CXX
+   * declarations
    */
   virtual bool get_decl(const clang::Decl &decl, exprt &new_expr);
 
   virtual bool get_var(const clang::VarDecl &vd, exprt &new_expr);
+  virtual const clang::Expr &elided_copy_source(const clang::Expr &init);
   bool has_dynamic_local_init(const clang::VarDecl &vd) const;
   void add_init_guard(const symbolt &var);
   bool get_static_var_init(
@@ -145,7 +156,15 @@ protected:
     const locationt &location_begin,
     exprt &new_expr);
 
+  std::string header_internal_suffix(const clang::NamedDecl &nd);
+  /// Internal-linkage functions and variables sharing a USR, in the order they
+  /// were first named; see header_internal_suffix.
+  std::unordered_map<std::string, std::vector<const clang::Decl *>>
+    internal_copies;
+
   virtual bool get_function(const clang::FunctionDecl &fd, exprt &new_expr);
+
+  bool get_function_signature(const clang::FunctionDecl &fd, code_typet &type);
 
   virtual bool get_function_body(
     const clang::FunctionDecl &fd,
@@ -176,14 +195,13 @@ protected:
    */
   bool get_function_param(const clang::ParmVarDecl &pd, exprt &param);
   /*
-   * This function determines whether we should name an unnamed function parameter
-   * and continue to add its symbol.
+   * This function determines whether we should name an unnamed function
+   * parameter and continue to add its symbol.
    *
    * Params:
-   *  pd: the clang AST node for the function parameter we are currently dealing with
-   *  id: id for this function parameter
-   *  name: name for this function parameter
-   *  param: ESBMC's IR representing the function parameter
+   *  pd: the clang AST node for the function parameter we are currently dealing
+   * with id: id for this function parameter name: name for this function
+   * parameter param: ESBMC's IR representing the function parameter
    */
   virtual void name_param_and_continue(
     const clang::ParmVarDecl &pd,
@@ -248,6 +266,10 @@ protected:
   bool get_base_flattened_inits(
     const clang::InitListExpr &init,
     std::vector<exprt> &flat);
+
+  /* The value `init`'s array filler gives each element past its explicit
+   * initialisers, or nil where that value is zero. */
+  bool get_array_filler(const clang::InitListExpr &init, exprt &filler);
 
   bool get_enum_value(const clang::EnumConstantDecl *e, exprt &new_expr);
 
@@ -353,11 +375,10 @@ protected:
   process_record_layout_attributes(const clang::RecordDecl &rd, typet &t) const;
 
   /*
-   * add additional annotations if a class/struct/union field has alignment attribute
-   * Arguments:
-   *   field: clang AST representing the class/struct/union field we are dealing with
-   *   comp: a `component` in class/struct/union's symbol type
-   *   type: a class/struct/union's symbol type
+   * add additional annotations if a class/struct/union field has alignment
+   * attribute Arguments: field: clang AST representing the class/struct/union
+   * field we are dealing with comp: a `component` in class/struct/union's
+   * symbol type type: a class/struct/union's symbol type
    */
   bool check_alignment_attributes(
     const clang::FieldDecl *field,
@@ -367,7 +388,8 @@ protected:
    * check if a class/struct/union's field has global storage
    * (e.g. static)
    * Arguments:
-   *   field: clang AST representing the class/struct/union field we are dealing with
+   *   field: clang AST representing the class/struct/union field we are dealing
+   * with
    */
   bool is_field_global_storage(const clang::FieldDecl *field);
 
@@ -384,11 +406,8 @@ protected:
   virtual bool perform_virtual_dispatch(const clang::MemberExpr &member);
 
   /*
-   * Function to get the ESBMC IR representing a virtual function table dynamic binding for "->" operator
-   * Turning
-   *  x->F
-   * into
-   *  x->X@vtable_pointer->F
+   * Function to get the ESBMC IR representing a virtual function table dynamic
+   * binding for "->" operator Turning x->F into x->X@vtable_pointer->F
    *
    * Params:
    *  - member: the method to which this MemberExpr refers
@@ -429,9 +448,9 @@ protected:
 
   /**
    * Rewrites references to builtin functions to their ESBMC counterparts.
-   * Clang provides builtins for e.g. malloc, memcpy, etc. Instead of re-implementing
-   * these functions in ESBMC, we rewrite references to e.g. `__builtin_memcpy` to
-   * just `memcpy`.
+   * Clang provides builtins for e.g. malloc, memcpy, etc. Instead of
+   * re-implementing these functions in ESBMC, we rewrite references to e.g.
+   * `__builtin_memcpy` to just `memcpy`.
    *
    * @param d declaration to rewrite (if it refers to a builtin function)
    * @param name name of the declaration
@@ -441,6 +460,8 @@ protected:
     const clang::Decl &d,
     std::string &name,
     std::string &id) const;
+
+  bool is_unlowered_math_builtin(const std::string &name) const;
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

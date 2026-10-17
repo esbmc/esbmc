@@ -54,8 +54,8 @@ static bool is_unresolved_cpp_throw(const expr2tc &expr)
 }
 
 #define ARM(member)                                                            \
-#  member,                                                                     \
-    +[](clang_cpp_adjust_irep2 & self, expr2tc & expr) { self.member(expr); }
+  #member,                                                                     \
+    +[](clang_cpp_adjust_irep2 &self, expr2tc &expr) { self.member(expr); }
 
 /// Inherited arms only, in the C pass's order. What C++ adds goes here as the
 /// divergence census names it (scope-clang-cpp-irep2.md §3.1).

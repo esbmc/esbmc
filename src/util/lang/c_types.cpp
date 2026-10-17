@@ -279,6 +279,34 @@ type2tc ptraddr_type2()
   return get_uint_type(config.ansi_c.address_width);
 }
 
+// Largest request malloc may succeed for. PTRDIFF_MAX, as glibc >= 2.30: above
+// it pointer subtraction overflows, and an object's offset -- stored in
+// ptraddr_type2() but read signed by the bounds checks, pointer subtraction and
+// the relational comparator -- becomes indistinguishable from a below-base
+// pointer (R37). alloca bounds a symbolic request by assumption and reports a
+// constant one; realloc joins the cap to its failure condition (R38, R39).
+BigInt max_object_size()
+{
+  return BigInt::power2m1(ptraddr_type2()->get_width() - 1);
+}
+
+// Lowest address smt_memspace.cpp places an object at. Reserving the first
+// page is opt-in: SV-COMP's LDV tasks accept an allocation only at an address
+// at or below 2012, so a default floor makes every such path infeasible.
+BigInt first_object_address()
+{
+  return config.ansi_c.reserve_first_page ? 4096 : 0;
+}
+
+// Largest object smt_memspace.cpp can lay out at all: it places each object at
+// [start, start + size] over ptraddr_type2, start at or above
+// first_object_address(), and the sum must not wrap.
+BigInt max_layable_size()
+{
+  return BigInt::power2m1(ptraddr_type2()->get_width()) -
+         first_object_address() - config.ansi_c.max_alignment();
+}
+
 type2tc bitsize_type2()
 {
   return get_uint_type(config.ansi_c.address_width + 3);

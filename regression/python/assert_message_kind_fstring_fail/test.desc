@@ -1,0 +1,6 @@
+CORE
+main.py
+--unwind 1
+^  assertion x != 3: <formatted string message>$
+^  FAILED\s+\[check\.assertion\.1\]\s+line 2\s+assertion x != 3: <formatted string message>$
+^VERIFICATION FAILED$

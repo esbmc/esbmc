@@ -1,0 +1,7 @@
+properties:
+  # The preset "2.0" is read as 2; only a literal that is not an integer is
+  # refused (graphical_preset_decimal_fail).
+  - id: P1
+    kind: invariant
+    expression: "!x || a"
+    description: "A TON output is on only while its input is"

@@ -181,10 +181,11 @@ public:
   // json nodes that always empty
   // used as the return value for find_constructor_ref when
   // dealing with the implicit constructor call
-  // this is to avoid reference to stack memory associated with local variable returned
+  // this is to avoid reference to stack memory associated with local variable
+  // returned
   static const nlohmann::json empty_json;
-  //! Be careful of using 'current_contractName'. This might lead to trouble in inheritance.
-  //! If you are not sure, use 'get_current_contract_name' instead.
+  //! Be careful of using 'current_contractName'. This might lead to trouble in
+  //! inheritance. If you are not sure, use 'get_current_contract_name' instead.
   static std::string current_baseContractName;
 
   // json for Solidity AST. Use object for contract
@@ -335,7 +336,8 @@ protected:
     const nlohmann::json &expr,
     const nlohmann::json &callee_expr_json);
 
-  // handle the non-contract definition, including struct/enum/error/event/abstract/...
+  // handle the non-contract definition, including
+  // struct/enum/error/event/abstract/...
   bool get_noncontract_defition(nlohmann::json &ast_node);
   bool
   get_noncontract_decl_ref(const nlohmann::json &ast_node, exprt &new_expr);
@@ -402,8 +404,8 @@ protected:
     struct_typet::componentt &comp);
   bool get_block(
     const nlohmann::json &expr,
-    exprt &
-      new_expr); // For Solidity's mutually inclusive: rule block and rule statement
+    exprt &new_expr); // For Solidity's mutually inclusive: rule block and rule
+                      // statement
   bool get_statement(const nlohmann::json &block, exprt &new_expr);
   bool get_expr(const nlohmann::json &expr, exprt &new_expr);
   bool get_expr(
@@ -937,7 +939,7 @@ protected:
   // dispatches only this public/external function (constructor + state
   // init still run). Empty means feature disabled.
   std::string focus_func;
-  //smart contract source file
+  // smart contract source file
   const std::string &contract_path;
 
   std::string absolute_path;
@@ -953,10 +955,13 @@ protected:
   // for tuple
   bool current_lhsDecl;
   bool current_rhsDecl;
-  // Use current level of BinOp type as the "anchor" type for numerical literal conversion:
-  // In order to remove the unnecessary implicit IntegralCast. We need type of current level of BinaryOperator.
-  // All numeric literals will be implicitly converted to this type. Pop it when finishing the current level of BinaryOperator.
-  // TODO: find a better way to deal with implicit type casting if it's not able to cope with complex rules
+  // Use current level of BinOp type as the "anchor" type for numerical literal
+  // conversion: In order to remove the unnecessary implicit IntegralCast. We
+  // need type of current level of BinaryOperator. All numeric literals will be
+  // implicitly converted to this type. Pop it when finishing the current level
+  // of BinaryOperator.
+  // TODO: find a better way to deal with implicit type casting if it's not able
+  // to cope with complex rules
   std::stack<const nlohmann::json *> current_BinOp_type;
   std::string current_functionName;
   // Track whether we are inside a Solidity "unchecked { ... }" block.
@@ -1016,7 +1021,8 @@ protected:
   // The prefix for the id of each class (Solidity-defined structs)
   std::string prefix = "tag-";
 
-  // The prefix for c2goto library struct types (C frontend uses "struct" in tag)
+  // The prefix for c2goto library struct types (C frontend uses "struct" in
+  // tag)
   std::string lib_prefix = "tag-struct ";
 
   // for auxiliary var name
@@ -1025,9 +1031,10 @@ protected:
   // bound setting
   bool is_bound;
 
-  // Check if a contract should use "new" expression semantics (dynamic allocation).
-  // In unbound mode with a single verification target, new-expressions are optimized
-  // away (treated as static instances) to reduce state space.
+  // Check if a contract should use "new" expression semantics (dynamic
+  // allocation). In unbound mode with a single verification target,
+  // new-expressions are optimized away (treated as static instances) to reduce
+  // state space.
   bool should_treat_as_new(const std::string &contract_name) const
   {
     if (!newContractSet.count(contract_name))
@@ -1071,7 +1078,8 @@ private:
 
   // RAII scope guards for global state variables.
   // Usage: ScopeGuard<T> guard(member, new_value);
-  // Restores original value on destruction (including early returns/exceptions).
+  // Restores original value on destruction (including early
+  // returns/exceptions).
   template <typename T>
   class ScopeGuard
   {

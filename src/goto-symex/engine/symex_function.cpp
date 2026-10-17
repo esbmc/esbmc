@@ -64,6 +64,17 @@ bool is_terminating_call(const irep_idt &identifier)
   return terminators.count(trailing_symbol_name(identifier)) != 0;
 }
 
+// The interval domain never sees a callee's parameter bindings (#8055).
+void havoc_parameters(
+  std::optional<interval_domaint> &domain,
+  const code_type2t &type)
+{
+  if (!domain)
+    return;
+  for (std::size_t i = 0; i < type.arguments.size(); ++i)
+    domain->havoc_rec(symbol2tc(type.arguments[i], type.argument_names[i]));
+}
+
 // A recursive function has a *reachable base case* iff some path from its
 // entry leaves the function — reaching END_FUNCTION or a terminating call
 // (exit/abort/...) — without going through a direct recursive self-call. If no
@@ -170,6 +181,63 @@ bool goto_symext::get_unwind_recursion(
   return this_loop_max_unwind != 0 && unwind >= this_loop_max_unwind;
 }
 
+expr2tc goto_symext::argument_value(
+  const type2tc &arg_type,
+  const expr2tc &rhs,
+  const irep_idt &identifier)
+{
+  if (base_type_eq(arg_type, rhs->type, ns))
+    return rhs;
+
+  // we are willing to do some limited conversion
+  if (
+    (is_number_type(arg_type) || is_pointer_type(arg_type)) &&
+    (is_number_type(rhs->type) || is_pointer_type(rhs->type)))
+    return typecast2tc(arg_type, rhs);
+
+  // Special handling for Python object semantics:
+  // Allow pointer types to match struct parameter types since Python
+  // objects are always passed by reference (pointer), but type
+  // annotations declare parameters with struct types (e.g., def
+  // __init__(self, f: Foo))
+  if (is_pointer_type(rhs->type) && is_struct_type(arg_type))
+  {
+    type2tc ptr_subtype = to_pointer_type(rhs->type).subtype;
+
+    // Resolve symbol types
+    while (is_symbol_type(ptr_subtype))
+    {
+      const symbol_type2t &sym_type = to_symbol_type(ptr_subtype);
+      symbolt const *sym = ns.lookup(sym_type.symbol_name);
+      if (sym)
+        ptr_subtype = migrate_symbol_type(*sym);
+      else
+        break;
+    }
+
+    // Type is compatible (pointer to struct), dereference pointer for
+    // assignment
+    if (base_type_eq(arg_type, ptr_subtype, ns))
+      return dereference2tc(arg_type, rhs);
+  }
+
+  // Python has no such undefined behaviour; the mismatch is a frontend defect.
+  if (config.language.lid == language_idt::PYTHON)
+  {
+    log_error(
+      "function call: argument \"{}\" type mismatch: got {}, expected {}",
+      id2string(identifier),
+      get_type_id(rhs->type),
+      get_type_id(arg_type));
+    abort();
+  }
+
+  // C11 6.3.2.3p8: calling through an incompatible type is undefined.
+  claim(gen_false_expr(), "function called through an incompatible type");
+  return symbol2tc(
+    arg_type, "nondet$symex::nondet" + i2string(get_nondet_counter()++));
+}
+
 unsigned goto_symext::argument_assignments(
   const irep_idt &function_identifier,
   const code_type2t &function_type,
@@ -235,68 +303,8 @@ unsigned goto_symext::argument_assignments(
     {
       expr2tc rhs = *it1;
 
-      // it should be the same exact type
       auto const &arg_type = function_type.arguments[name_idx];
-      if (!base_type_eq(arg_type, rhs->type, ns))
-      {
-        const type2tc &f_arg_type = arg_type;
-        const type2tc &f_rhs_type = rhs->type;
-
-        // we are willing to do some limited conversion
-        if (
-          (is_number_type(f_arg_type) || is_pointer_type(f_arg_type)) &&
-          (is_number_type(f_rhs_type) || is_pointer_type(f_rhs_type)))
-        {
-          rhs = typecast2tc(arg_type, rhs);
-        }
-        // Special handling for Python object semantics:
-        // Allow pointer types to match struct parameter types since Python
-        // objects are always passed by reference (pointer), but type
-        // annotations declare parameters with struct types (e.g., def
-        // __init__(self, f: Foo))
-        else if (is_pointer_type(f_rhs_type) && is_struct_type(f_arg_type))
-        {
-          // Check if the pointer points to the expected struct type
-          const pointer_type2t &ptr_type = to_pointer_type(f_rhs_type);
-          type2tc ptr_subtype = ptr_type.subtype;
-
-          // Resolve symbol types
-          while (is_symbol_type(ptr_subtype))
-          {
-            const symbol_type2t &sym_type = to_symbol_type(ptr_subtype);
-            symbolt const *sym = ns.lookup(sym_type.symbol_name);
-            if (sym)
-              ptr_subtype = migrate_symbol_type(*sym);
-            else
-              break;
-          }
-
-          // If pointer points to the expected struct type, allow it
-          if (!base_type_eq(f_arg_type, ptr_subtype, ns))
-          {
-            log_error(
-              "function call: argument \"{}\" type mismatch: got {}, expected "
-              "{}",
-              id2string(identifier),
-              get_type_id((*it1)->type),
-              get_type_id(arg_type));
-            abort();
-          }
-
-          // Type is compatible (pointer to struct), dereference pointer for
-          // assignment
-          rhs = dereference2tc(f_arg_type, rhs);
-        }
-        else
-        {
-          log_error(
-            "function call: argument \"{}\" type mismatch: got {}, expected {}",
-            id2string(identifier),
-            get_type_id((*it1)->type),
-            get_type_id(arg_type));
-          abort();
-        }
-      }
+      rhs = argument_value(arg_type, rhs, identifier);
 
       // 'Declare' the argument before assigning a value to it
       expr2tc lhs = symbol2tc(function_type.arguments[name_idx], identifier);
@@ -502,6 +510,24 @@ bool goto_symext::symex_uninterpreted_function(
   return true;
 }
 
+// A local lives from entry to its block (C11 6.2.4p6), and a jump past its
+// declaration must not leave it naming the caller's instance or a global.
+// Its DECL may be gone as unreachable, as in `switch (k) { int y; ... }`.
+static void give_locals_fresh_instances(
+  const goto_functiont &goto_function,
+  goto_symex_statet &state,
+  goto_symex_statet::framet &frame)
+{
+  std::set<irep_idt> locals;
+  get_local_identifiers(goto_function, locals);
+  for (const auto &instruction : goto_function.body.instructions)
+    if (instruction.type == DEAD)
+      locals.insert(to_code_dead2t(instruction.code).value);
+  for (const irep_idt &id : locals)
+    frame.level1.rename(
+      symbol2tc(get_empty_type(), id), ++state.variable_instance_nums[id]);
+}
+
 void goto_symext::symex_function_call_code(const expr2tc &expr)
 {
   const code_function_call2t &call = to_code_function_call2t(expr);
@@ -646,6 +672,8 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
   frame.level1 = cur_state->previous_frame().level1;
   frame.level1.thread_id = cur_state->source.thread_nr;
 
+  give_locals_fresh_instances(goto_function, *cur_state, frame);
+
   frame.calling_location = cur_state->source;
   frame.entry_guard = cur_state->guard;
 
@@ -661,9 +689,11 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
   cur_state->source.prog = &goto_function.body;
 
   // assign arguments (goto_function.type is already IREP2)
-  frame.va_index = argument_assignments(
-    identifier, to_code_type(goto_function.type), arguments);
+  const code_type2t &function_type = to_code_type(goto_function.type);
+  frame.va_index = argument_assignments(identifier, function_type, arguments);
   frame.va_cursor = frame.va_index;
+
+  havoc_parameters(interval_domain_state, function_type);
 }
 
 // True if a function of type `candidate` may be called through a function
@@ -935,6 +965,7 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
 
     merge_state_list.emplace_back(*cur_state);
     statet::merge_statet &new_state = merge_state_list.back();
+    snapshot_interval_domain(new_state);
     expr2tc guardexpr = it.first.as_expr();
     cur_state->rename(guardexpr);
     new_state.guard.add(guardexpr);
@@ -973,6 +1004,7 @@ bool goto_symext::run_next_function_ptr_target(bool first)
       cur_state->top()
         .merge_state_map[cur_state->top().function_ptr_combine_target];
     merge_state_list.emplace_back(*cur_state);
+    snapshot_interval_domain(merge_state_list.back());
   }
 
   // Take one function ptr target out of the list and jump to it. A previously
@@ -1056,6 +1088,12 @@ void goto_symext::pop_frame()
   // retire locals from L2 renaming
   for (auto const &it : frame.local_variables)
   {
+    // The interval domain is keyed by L0 name, so a recursive callee's
+    // locals would otherwise overwrite its caller's instances (#8055).
+    if (interval_domain_state)
+      interval_domain_state->havoc_rec(
+        symbol2tc(get_empty_type(), it.base_name));
+
     // Python objects are garbage-collected (issue #4773): keep user class
     // instances alive past their defining frame so references captured into a
     // returned/escaping aggregate stay valid. Skip tearing down their L2 and
@@ -1137,9 +1175,14 @@ void goto_symext::symex_return(const expr2tc &code)
   statet::merge_state_listt &merge_state_list =
     cur_state->top().merge_state_map[cur_state->top().end_of_function];
 
+  // The interval domain does not see the write to the caller's lhs (#8055).
+  if (interval_domain_state && !is_nil_expr(cur_state->top().return_value))
+    interval_domain_state->havoc_rec(cur_state->top().return_value);
+
   merge_state_list.emplace_back(*cur_state);
   record_parked_path(
     cur_state->top().end_of_function, std::prev(merge_state_list.end()));
+  snapshot_interval_domain(merge_state_list.back());
 
   // check whether the stack limit and return
   // value optimization have been activated.

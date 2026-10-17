@@ -1,7 +1,7 @@
 #pragma once
 
 #include <unordered_set>
-#include <util/ssa/algorithms.h>
+#include <goto-symex/equation/ssa_step_algorithm.h>
 #include <goto-symex/equation/symex_target_equation.h>
 
 enum class SSA_FEATURES
@@ -17,7 +17,7 @@ enum class SSA_FEATURES
 class ssa_features : public ssa_step_algorithm
 {
 public:
-  ssa_features() : ssa_step_algorithm(false){};
+  ssa_features() : ssa_step_algorithm(false) {};
   bool run(symex_target_equationt::SSA_stepst &) override;
 
   std::unordered_set<SSA_FEATURES> features;

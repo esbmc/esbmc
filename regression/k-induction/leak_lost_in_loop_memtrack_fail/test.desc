@@ -1,0 +1,5 @@
+CORE
+main.c
+--k-induction --max-inductive-step 3 --k-step 2 --unlimited-k-steps --memory-leak-check --no-reachable-memory-leak --no-assertions
+cannot check for leaks the objects a loop allocated
+^VERIFICATION FAILED$

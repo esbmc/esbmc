@@ -81,7 +81,8 @@ public:
         run_test<0>(baseline);
       }
 
-      // Wrapped Intervals logic (see "Interval Analysis and Machine Arithmetic 2015" paper)
+      // Wrapped Intervals logic (see "Interval Analysis and Machine Arithmetic
+      // 2015" paper)
       SECTION("Wrapped Intervals")
       {
         log_status("Wrapped");
@@ -152,7 +153,8 @@ public:
 
               const auto &value = property_it->v;
 
-              // we need to find the actual interval however... getting the original name is hard
+              // we need to find the actual interval however... getting the
+              // original name is hard
               auto interval_it = state->begin();
               for (; interval_it != state->end(); interval_it++)
               {
@@ -162,8 +164,9 @@ public:
                 if (var_name.size() > real_name.size())
                   continue;
 
-                if (std::equal(
-                      var_name.rbegin(), var_name.rend(), real_name.rbegin()))
+                if (
+                  std::equal(
+                    var_name.rbegin(), var_name.rend(), real_name.rbegin()))
                   break;
               }
 
@@ -237,6 +240,81 @@ TEST_CASE("Interval Analysis - Base Unsigned", "[ai][interval-analysis]")
 
   T.property["3"].push_back({"@F@main@a", 0, true});
   T.property["3"].push_back({"@F@main@a", (long)pow(2, 8) - 1, true});
+
+  T.run_configs();
+}
+
+TEST_CASE(
+  "Interval Analysis - Unsigned negation wraps",
+  "[ai][interval-analysis]")
+{
+  test_program T;
+  T.code =
+    "int main() {\n"
+    "unsigned int one = 1;\n"
+    "unsigned int a = -one;\n"
+    "int b;\n"
+    "return a;\n"
+    "}";
+
+  T.property["4"].push_back({"@F@main@a", (long)pow(2, 32) - 1, true});
+
+  T.run_configs();
+}
+
+TEST_CASE(
+  "Interval Analysis - Unsigned negation of a range wraps",
+  "[ai][interval-analysis]")
+{
+  test_program T;
+  T.code =
+    "int main() {\n"
+    "unsigned int a = nondet_uint() ? 1 : 5;\n"
+    "unsigned int b = -a;\n"
+    "int c;\n"
+    "return b;\n"
+    "}";
+
+  T.property["4"].push_back({"@F@main@b", (long)pow(2, 32) - 1, true});
+  T.property["4"].push_back({"@F@main@b", (long)pow(2, 32) - 5, true});
+
+  T.run_configs();
+}
+
+TEST_CASE(
+  "Interval Analysis - Unsigned negation of a range containing zero",
+  "[ai][interval-analysis]")
+{
+  test_program T;
+  T.code =
+    "int main() {\n"
+    "unsigned int a = nondet_uint() ? 0 : 5;\n"
+    "unsigned int b = -a;\n"
+    "int c;\n"
+    "return b;\n"
+    "}";
+
+  T.property["4"].push_back({"@F@main@b", 0, true});
+  T.property["4"].push_back({"@F@main@b", (long)pow(2, 32) - 5, true});
+
+  T.run_configs();
+}
+
+TEST_CASE(
+  "Interval Analysis - Negation of a half-bounded range",
+  "[ai][interval-analysis]")
+{
+  test_program T;
+  T.code =
+    "int main() {\n"
+    "int a = nondet_int();\n"
+    "if (a < 0) return 0;\n"
+    "int b = -a;\n"
+    "int c;\n"
+    "return b;\n"
+    "}";
+
+  T.property["5"].push_back({"@F@main@b", -2147483647, true});
 
   T.run_configs();
 }
@@ -322,7 +400,7 @@ TEST_CASE(
   T.property["4"].push_back({"@F@main@a", 49, true});
   T.property["4"].push_back({"@F@main@a", 51, false});
   // TODO: ESBMC needs to convert < into <=
-  //T.property["4"].push_back({"@F@main@a", 50, false});
+  // T.property["4"].push_back({"@F@main@a", 50, false});
   T.property["6"].push_back({"@F@main@a", 52, true});
   T.property["6"].push_back({"@F@main@a", 53, false});
   T.property["6"].push_back({"@F@main@a", 51, false});
@@ -334,7 +412,7 @@ TEST_CASE(
   T.property["12"].push_back({"@F@main@a", 51, true});
   T.property["12"].push_back({"@F@main@a", 52, true});
   T.property["12"].push_back({"@F@main@a", 53, false});
-  //T.property["12"].push_back({"@F@main@a", 50, false});
+  // T.property["12"].push_back({"@F@main@a", 50, false});
 
   T.run_configs();
 }

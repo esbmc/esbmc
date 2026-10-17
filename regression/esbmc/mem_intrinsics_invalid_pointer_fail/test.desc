@@ -1,0 +1,9 @@
+CORE
+main.c
+--multi-property
+^VERIFICATION FAILED$
+FAILED.*dereference failure: invalid pointer on memcmp$
+FAILED.*dereference failure: invalid pointer on memset$
+FAILED.*dereference failure: invalid pointer on memchr$
+FAILED.*dereference failure: invalid pointer on SRC$
+FAILED.*dereference failure: invalid pointer on DST$

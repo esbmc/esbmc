@@ -8,6 +8,8 @@ typedef struct { int x; } S;
 
 void f(S *p, S *q)
 {
+  __ESBMC_requires(__ESBMC_is_fresh(p, sizeof(*p)));
+  __ESBMC_requires(__ESBMC_is_fresh(q, sizeof(*q)));
   __ESBMC_requires(p != NULL && q != NULL);
   __ESBMC_ensures(p->x == q->x); /* 10 != 20 */
 

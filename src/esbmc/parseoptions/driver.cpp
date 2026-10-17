@@ -212,10 +212,8 @@ static bool incompatible_flags(const cmdlinet &cmdline)
   // --termination havocs every loop head k-induction-style (goto_termination),
   // and the standalone schema has already rewritten those heads: goto_loop_
   // invariant uses insert_swap, which leaves the establishment ASSERT in the
-  // head's slot, and havoc_slot then aborts on `loop_head->is_goto()`
-  // (goto_k_induction.cpp). Composing the two would be meaningless even if it
-  // did not abort -- a loop the schema has cut no longer has the iteration
-  // behaviour --termination asks about.
+  // head's slot. Composing the two is meaningless -- a loop the schema has cut
+  // no longer has the iteration behaviour --termination asks about.
   //
   // Combined mode is exempt, and so is --validate-correctness-witness, which
   // routes to it: goto_loop_invariant_combined splices its verification branch
@@ -315,6 +313,9 @@ int esbmc_parseoptionst::run_chosen_strategy(
 {
   if (cmdline.isset("incremental-context-bound"))
     return do_context_bound_deepening(options, goto_functions);
+
+  if (cmdline.isset("ts-check"))
+    return do_ts_strategy(options, goto_functions);
 
   if (
     cmdline.isset("termination") || cmdline.isset("incremental-bmc") ||

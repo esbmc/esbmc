@@ -1,5 +1,37 @@
 # Scope — relational/equality reconciliation over mixed float and integer operands
 
+## Status at 2026-10-01 (`791ed8d1b8`)
+
+The narrowed arms shipped in #6702 (bool equality, float/int ordering), and the
+IREP2 `get_c_type` and `check_c_implicit_typecast` floatbv gaps were fixed in
+#6688 and #6775. The header below ("REOPENED … before it is shippable") and
+§18's "nothing from §17 has been shipped" predate those merges. The
+array-typed assignment this scope ran beside is closed: #6700 for the
+`github_5571` pair, and #7760 (`decay_scalar_decl_init`) for the array-into-
+scalar shape behind `class10`/`class12`. Its scope document was deleted on
+2026-10-01 and is in git history.
+
+What is still open, measured on a Debug build with Z3 under
+`--python-irep2-adjust-only`:
+
+- **`precedence2` aborts** (`Sorts (_ FloatingPoint 11 53) and (_ BitVec 64)
+  are incompatible`). Its only GOTO difference from legacy is `assert x is not
+  b`: legacy `!(x == (double)b)`, the flag `!(x == b)`. `python_adjust`'s
+  equality arm admits only bool against a number, so the float/int equality
+  half of §4 was never implemented. §19.1's "SUCCESSFUL" reading does not hold
+  on Z3.
+- Of §19.4's unexamined rows: `github_3866`, `github_3866_fail` and
+  `return13-fail` abort on the `z3_conv.cpp` `mk_eq` width assertion, and
+  `missing-return14_fail` on `Unexpected type in int/ptr typecast`.
+  `github_3866_2`, `min_max_multi_args`, `github_3658_7` and
+  `dictcomp_over_items` agree. `del_list_slice` and `dict24_fail` time out on
+  both paths, so they say nothing about the flag.
+- G2 (gap-2) and G5 (both solvers) are not discharged; G5 fails on `precedence2`.
+
+These five aborts are the flip's current blocker list (`scope-python-irep2.md`
+status block). The `gap-2` reference in §5 is to `scope-v1k-adjuster.md`,
+deleted 2026-08-03.
+
 > **Status: Phase 0 run 2026-08-03 — §4 confirmed for three of the four
 > witnesses, refuted for `sum_tuple`, which needs re-homing (§11); the
 > traffic-volume half is partially answered and lowers the gap-2 prior (§12);
@@ -11,7 +43,7 @@
 > `docs/roadmap/scope-coupled-arith-assign-conversion.md` §9.4 named the
 > "second mechanism" and §7 explicitly disowned:
 > `chained-comparison2_fail`, `lambda15`, `precedence2`, `sum_tuple`. With
-> `scope-array-assignment-conversion.md`, this closes the last of the two
+> the array-assignment scope, this closes the last of the two
 > unowned blockers on the `python_adjust` flip.
 >
 > **Verification status.** §2 (test sources) and §3 (the guards, with line
@@ -157,7 +189,8 @@ trusting a zero.**
 
 ## 9. Non-goals
 
-- The array-typed assignment (`scope-array-assignment-conversion.md`).
+- The array-typed assignment (closed by #6700 and #7760; its scope document is
+  in git history).
 - The coupled scope's own gates — discharged, see its §13.1.
 - `frontends-to-irep2.md` Phase 1 — that is the shared `goto_convert`
   dispatcher, a different pass.
@@ -670,7 +703,7 @@ The five divergences split into two kinds, and only one is established:
 
 | test | legacy | hop-off | status |
 |---|---|---|---|
-| `class10`, `class12` | SUCCESSFUL | `rc=134` | **real** — root-caused to an array-into-scalar assignment, `scope-array-assignment-conversion.md` §13 |
+| `class10`, `class12` | SUCCESSFUL | `rc=134` | **real** — root-caused to an array-into-scalar assignment (fixed by #7760) |
 | `del_list_slice`, `dictcomp_over_items` | SUCCESSFUL | TIMEOUT | **unconfirmed** |
 | `dict24_fail` | FAILED | TIMEOUT | **unconfirmed** |
 
@@ -756,7 +789,7 @@ the **pre-fix** baseline:
 | class | count | status |
 |---|---:|---|
 | cleared by §19's fix | 3 | done |
-| `rc=134` abort | 7 | `class10`/`class12` root-caused (`scope-array-assignment-conversion.md` §13); `github_3866`×3, `missing-return14_fail`, `min_max_multi_args` unexamined |
+| `rc=134` abort | 7 | `class10`/`class12` root-caused (fixed by #7760); `github_3866`×3, `missing-return14_fail`, `min_max_multi_args` unexamined |
 | `rc=139` segfault | 2 | `github_3658_7`, `return13-fail` — unexamined |
 | hop-off-only TIMEOUT | 6 | **unconfirmed**, see §18.4 — needs a serial re-run |
 

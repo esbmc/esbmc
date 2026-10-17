@@ -187,7 +187,8 @@ public:
    * @param lhs Left operand
    * @param rhs Right operand
    * @param element JSON element with location info
-   * @return Comparison expression or nil_exprt to continue with standard comparison
+   * @return Comparison expression or nil_exprt to continue with standard
+   * comparison
    */
   exprt handle_string_comparison(
     const std::string &op,
@@ -259,6 +260,15 @@ public:
    * - "-".join(list_var) -> joined string
    */
   exprt handle_str_join(const nlohmann::json &call_json);
+  exprt join_unfoldable_iterable(
+    const exprt &separator,
+    const nlohmann::json &call_json);
+
+  /// Convert a join() literal's elements into `elem_exprs`. Returns a TypeError
+  /// raise for an element that is known not to be a str, nil otherwise.
+  exprt convert_join_items(
+    const nlohmann::json &elements,
+    std::vector<exprt> &elem_exprs);
 
   /**
    * @brief Dispatch and handle string attribute method calls.
@@ -416,7 +426,8 @@ public:
    * @brief Handle Python's str.islower() method
    * @param string_obj Expression representing the string or character to check
    * @param location Source location for error reporting
-   * @return Boolean expression: true if all cased chars are lowercase, false otherwise
+   * @return Boolean expression: true if all cased chars are lowercase, false
+   * otherwise
    */
   exprt
   handle_string_islower(const exprt &string_obj, const locationt &location);
@@ -892,6 +903,11 @@ private:
   exprt make_char_array_expr(
     const std::vector<unsigned char> &chars,
     const typet &type);
+
+  /// A one-character str holding the char `expr`.
+  exprt char_to_string(const exprt &expr);
+
+  exprt constant_to_string(const exprt &expr);
 
   exprt build_string_index_result(
     const nlohmann::json &call,

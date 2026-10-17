@@ -22,6 +22,7 @@ CC_DIAGNOSTIC_POP()
 
 #include <ac_config.h>
 #include <clang-c-frontend/clang_c_convert.h>
+#include <clang-c-frontend/builtin_names.h>
 #include <clang-c-frontend/typecast.h>
 #include <irep2/irep2_utils.h>
 #include <util/arith/arith_tools.h>
@@ -366,11 +367,12 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
 
     symbol.is_type = true;
 
-    // We have to add the struct/union/class to the context before converting its
-    // fields because there might be recursive struct/union/class (pointers) and
-    // the code at get_type, case clang::Type::Record, needs to find the correct
-    // type (itself). Note that the type is incomplete at this stage, it doesn't
-    // contain the fields, which are added to the symbol later on this method.
+    // We have to add the struct/union/class to the context before converting
+    // its fields because there might be recursive struct/union/class (pointers)
+    // and the code at get_type, case clang::Type::Record, needs to find the
+    // correct type (itself). Note that the type is incomplete at this stage, it
+    // doesn't contain the fields, which are added to the symbol later on this
+    // method.
 
     sym = context.move_symbol_to_context(symbol);
   }
@@ -409,6 +411,9 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   struct_union_typet t(c_tag);
   t.tag(name);
 
+  /* Struct not complete yet. Still need methods. */
+  t.incomplete(true);
+
   /* update location with that of the type's definition */
   get_location_from_decl(*rd_def, t.location());
 
@@ -437,9 +442,10 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   sym = context.find_symbol(id);
   assert(sym && "symbol disappeared from context during field conversion");
 
-  /* That recursion can also re-enter this very record and complete it (#2323).
-   * Completing it again would run the method pass a second time and add the
-   * vtable variable symbol twice, which aborts conversion (#7643). */
+  /* Recursive field conversion can re-enter this record and complete it.
+   * The incomplete flag is removed only after all fields and methods have
+   * been processed, so a complete type here means another invocation has
+   * already completed this type. */
   if (!holds_incomplete_record(sym->get_type()))
     return false;
 
@@ -453,6 +459,8 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
       sym->set_type(std::move(t));
       return true;
     }
+    // Struct is complete
+    t.remove(irept::a_incomplete);
     sym->set_type(std::move(t));
   }
 
@@ -494,14 +502,12 @@ bool clang_c_convertert::get_struct_union_class_methods_decls(
 
 /// A C++ function-local static whose initializer is not a constant runs it
 /// on the first pass through the declaration ([stmt.dcl]/3), so it must not be
-/// hoisted into static_lifetime_init. Arrays keep the hoisted form, and the
-/// IREP2 adjuster, which drops the declaration's marker, keeps it too.
+/// hoisted into static_lifetime_init. The IREP2 adjuster, which drops the
+/// declaration's marker, keeps the hoisted form.
 bool clang_c_convertert::has_dynamic_local_init(const clang::VarDecl &vd) const
 {
   return ASTContext->getLangOpts().CPlusPlus && vd.isStaticLocal() &&
-         vd.hasInit() && !vd.getType()->isArrayType() &&
-         !vd.getInit()->isConstantInitializer(
-           *ASTContext, vd.getType()->isReferenceType()) &&
+         vd.hasInit() && !vd.hasConstantInitialization() &&
          !config.options.get_bool_option("clang-cpp-irep2-adjust-only");
 }
 
@@ -549,7 +555,7 @@ bool clang_c_convertert::get_static_var_init(
    * pass through the declaration, so a dynamic one is lowered there by
    * goto_convert (see has_dynamic_local_init) and converted in the
    * function's scope. */
-  const clang::Stmt *stmt = vd.getInit();
+  const clang::Stmt *stmt = &elided_copy_source(*vd.getInit());
   code_blockt *orig = current_block;
   if (!dynamic_local_init)
     current_block = nullptr;
@@ -633,6 +639,77 @@ void clang_c_convertert::add_init_guard(const symbolt &var)
   guard.is_thread_local = var.is_thread_local;
   guard.set_value(gen_false_expr());
   context.move_symbol_to_context(guard);
+}
+
+bool clang_c_convertert::snapshot_vla_sizes(
+  const clang::Decl &decl,
+  codet &dest)
+{
+  clang::QualType type;
+  if (const auto *vd = llvm::dyn_cast<clang::VarDecl>(&decl))
+    type = vd->getType();
+  else if (const auto *td = llvm::dyn_cast<clang::TypedefNameDecl>(&decl))
+    type = td->getUnderlyingType();
+  if (!current_block || type.isNull())
+    return false;
+
+  locationt loc;
+  get_location_from_decl(decl, loc);
+  const clang::Type *t = type.getTypePtr();
+  while (t)
+  {
+    t = t->getUnqualifiedDesugaredType();
+    if (const auto *ptr = llvm::dyn_cast<clang::PointerType>(t))
+    {
+      t = ptr->getPointeeType().getTypePtr();
+      continue;
+    }
+    const auto *arr = llvm::dyn_cast<clang::ArrayType>(t);
+    if (!arr)
+      break;
+    t = arr->getElementType().getTypePtr();
+
+    const auto *vla = llvm::dyn_cast<clang::VariableArrayType>(arr);
+    const clang::Expr *size = vla ? vla->getSizeExpr() : nullptr;
+    if (!size || vla_size_snapshots.count(size))
+      continue;
+
+    exprt value;
+    if (get_expr(*size, value))
+      return true;
+
+    const std::string path = loc.file().as_string();
+    symbolt &sym = anon_symbol.new_symbol(
+      context,
+      value.type(),
+      path + ":" + loc.get_line().as_string() + "$vla-size$");
+    get_default_symbol(
+      sym, get_modulename_from_path(path), value.type(), sym.name, sym.id, loc);
+    sym.file_local = true;
+    sym.lvalue = true;
+
+    code_declt decl(symbol_expr(sym));
+    decl.copy_to_operands(value);
+    decl.location() = loc;
+    dest.move_to_operands(decl);
+    vla_size_snapshots.emplace(size, symbol_expr(sym));
+  }
+  return false;
+}
+
+bool clang_c_convertert::get_vla_size(const clang::Expr &size, exprt &new_expr)
+{
+  auto snap = vla_size_snapshots.find(&size);
+  if (snap == vla_size_snapshots.end())
+    return get_expr(size, new_expr);
+  new_expr = snap->second;
+  return false;
+}
+
+const clang::Expr &
+clang_c_convertert::elided_copy_source(const clang::Expr &init)
+{
+  return init;
 }
 
 bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
@@ -733,7 +810,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   if (vd.hasInit() && !vd.isExceptionVariable())
   {
     exprt val;
-    if (get_expr(*vd.getInit(), val))
+    if (get_expr(elided_copy_source(*vd.getInit()), val))
       return true;
 
     gen_typecast(ns, val, t);
@@ -746,40 +823,10 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   return false;
 }
 
-bool clang_c_convertert::get_function(
+bool clang_c_convertert::get_function_signature(
   const clang::FunctionDecl &fd,
-  exprt &new_expr)
+  code_typet &type)
 {
-  // If the function is not defined but this is not the definition, skip it
-  if (fd.isDefined() && !fd.isThisDeclarationADefinition())
-  {
-    // Continue for virtual method as we need its type to make virtual function table
-    if (!is_fd_virtual_or_overriding(fd))
-      return false;
-  }
-
-  // per https://eel.is/c++draft/dcl.spec.auto#general-14 return types of template functions are
-  // only deduced when they are instantiated (i.e. used).
-  // We skip all functions with undeduced return types as they should always be unused anyway
-  // and the rest of esbmc can't handle undeduced types.
-  if (fd.getReturnType()->isUndeducedType())
-    return false;
-
-  // Save old_functionDecl, to be restored at the end of this method
-  const clang::FunctionDecl *old_functionDecl = current_functionDecl;
-  current_functionDecl = &fd;
-
-  // TODO: use fd.isMain to flag and check the flag on clang_c_adjust_expr
-  // to saner way to add argc/argv/envp
-
-  // Set initial variable name, it will be used for variables' name
-  // This will be reset every time a function is parsed
-  current_scope_var_num = 1;
-
-  // Build function's type
-  code_typet type;
-
-  // Return type
   if (get_type(fd.getReturnType(), type.return_type()))
     return true;
 
@@ -789,30 +836,6 @@ bool clang_c_convertert::get_function(
   if (fd.isInlined())
     type.inlined(true);
 
-  locationt location_begin;
-  get_location_from_decl(fd, location_begin);
-
-  std::string id, name;
-  get_decl_name(fd, name, id);
-
-  symbolt symbol;
-  get_default_symbol(
-    symbol,
-    get_modulename_from_path(location_begin.file().as_string()),
-    type,
-    name,
-    id,
-    location_begin);
-
-  symbol.lvalue = true;
-  symbol.is_extern = fd.getStorageClass() == clang::SC_Extern ||
-                     fd.getStorageClass() == clang::SC_PrivateExtern;
-  symbol.file_local = (fd.getStorageClass() == clang::SC_Static);
-
-  symbolt &added_symbol = *context.move_symbol_to_context(symbol);
-
-  // We convert the parameters first so their symbol are added to context
-  // before converting the body, as they may appear on the function body
   if (get_function_params(fd, type.arguments()))
     return true;
 
@@ -835,6 +858,67 @@ bool clang_c_convertert::get_function(
   // Record the C++ exception specification (noexcept / dynamic throw(...)) as
   // function-boundary metadata on the type. No-op for C.
   annotate_exception_specification(fd, type);
+
+  return false;
+}
+
+bool clang_c_convertert::get_function(
+  const clang::FunctionDecl &fd,
+  exprt &new_expr)
+{
+  // If the function is not defined but this is not the definition, skip it
+  if (fd.isDefined() && !fd.isThisDeclarationADefinition())
+  {
+    // Continue for virtual method as we need its type to make virtual function
+    // table
+    if (!is_fd_virtual_or_overriding(fd))
+      return false;
+  }
+
+  // per https://eel.is/c++draft/dcl.spec.auto#general-14 return types of
+  // template functions are only deduced when they are instantiated (i.e. used).
+  // We skip all functions with undeduced return types as they should always be
+  // unused anyway and the rest of esbmc can't handle undeduced types.
+  if (fd.getReturnType()->isUndeducedType())
+    return false;
+
+  // Save old_functionDecl, to be restored at the end of this method
+  const clang::FunctionDecl *old_functionDecl = current_functionDecl;
+  current_functionDecl = &fd;
+
+  // TODO: use fd.isMain to flag and check the flag on clang_c_adjust_expr
+  // to saner way to add argc/argv/envp
+
+  // Set initial variable name, it will be used for variables' name
+  // This will be reset every time a function is parsed
+  current_scope_var_num = 1;
+
+  code_typet type;
+  if (get_function_signature(fd, type))
+    return true;
+
+  locationt location_begin;
+  get_location_from_decl(fd, location_begin);
+
+  std::string id, name;
+  get_decl_name(fd, name, id);
+
+  symbolt symbol;
+  get_default_symbol(
+    symbol,
+    get_modulename_from_path(location_begin.file().as_string()),
+    type,
+    name,
+    id,
+    location_begin);
+
+  symbol.lvalue = true;
+  symbol.is_extern = fd.getStorageClass() == clang::SC_Extern ||
+                     fd.getStorageClass() == clang::SC_PrivateExtern;
+  symbol.file_local = (fd.getStorageClass() == clang::SC_Static);
+
+  // Publish the function only after its parameter types are complete.
+  symbolt &added_symbol = *context.move_symbol_to_context(symbol);
 
   // A bodyless re-declaration must not clobber the type of a function that is
   // already defined. The definition's argument list carries the parameter
@@ -1230,7 +1314,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     if (auto const *s = arr.getSizeExpr())
     {
       exprt size_expr;
-      if (get_expr(*s, size_expr))
+      if (get_vla_size(*s, size_expr))
         return true;
 
       typet subtype;
@@ -1368,8 +1452,9 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
 #if CLANG_VERSION_MAJOR >= 22
   case clang::Type::PredefinedSugar:
   {
-    if (get_type(
-          *the_type.getLocallyUnqualifiedSingleStepDesugaredType(), new_type))
+    if (
+      get_type(
+        *the_type.getLocallyUnqualifiedSingleStepDesugaredType(), new_type))
       return true;
     break;
   }
@@ -2127,9 +2212,9 @@ bool clang_c_convertert::get_bitfield_type(
   }
 
   /* TODO: remove this recursive call. `width` is not used. However, there
-       * are side-effects that cause re-ordering in the GOTO for pthread_lib.c
-       * and that also negatively affect Boolector run times, see #764. These
-       * should be investigated before removing it. */
+   * are side-effects that cause re-ordering in the GOTO for pthread_lib.c
+   * and that also negatively affect Boolector run times, see #764. These
+   * should be investigated before removing it. */
   exprt width;
   if (get_expr(*fd.getBitWidth(), width))
     return true;
@@ -2148,6 +2233,24 @@ bool clang_c_convertert::get_bitfield_type(
   new_type.set("#bitfield", true);
   new_type.subtype() = orig_type;
   return false;
+}
+
+bool clang_c_convertert::get_array_filler(
+  const clang::InitListExpr &init,
+  exprt &filler)
+{
+  filler.make_nil();
+  const clang::Expr *e = init.getArrayFiller();
+  if (e == nullptr || llvm::isa<clang::ImplicitValueInitExpr>(e))
+    return false;
+
+  // Value-initialising a class whose default constructor is trivial zeroes it
+  // ([dcl.init]/8).
+  if (const auto *ce = llvm::dyn_cast<clang::CXXConstructExpr>(e))
+    if (ce->getConstructor()->isTrivial())
+      return false;
+
+  return get_expr(*e, filler);
 }
 
 // Flatten Clang's InitListExpr for a struct into a linear sequence of exprt
@@ -2300,12 +2403,12 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::Decl &dcl = static_cast<const clang::Decl &>(*decl.getDecl());
 
     // pull in the type that is used to qualify the decl. This is needed so that
-    // `C<0>::f()` where `C<0>` is a template specialization and `f` is a static member function
-    // works correctly when `C<0>::f` is the only use of `C<0>`.
-    // When parsing the template `C` we do not parse the specializations, so there
-    // is no other code that could parse the type of `C<0>`.
-    // (Yes, clang allows us to get all specializations of a template, but that leads to other problems.
-    // See #1782 or #2284)
+    // `C<0>::f()` where `C<0>` is a template specialization and `f` is a static
+    // member function works correctly when `C<0>::f` is the only use of `C<0>`.
+    // When parsing the template `C` we do not parse the specializations, so
+    // there is no other code that could parse the type of `C<0>`. (Yes, clang
+    // allows us to get all specializations of a template, but that leads to
+    // other problems. See #1782 or #2284)
 
     if (const auto nns = decl.getQualifier())
     {
@@ -2679,6 +2782,12 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     typet type;
     clang::QualType qtype = function_call.getCallReturnType(*ASTContext);
+    // Sema types a custom-typechecked builtin's call itself: on an unsigned
+    // char, __sync_fetch_and_add calls the char-returning _1 variant.
+    if (
+      const unsigned id = function_call.getBuiltinCallee();
+      id && ASTContext->BuiltinInfo.hasCustomTypechecking(id))
+      qtype = function_call.getType();
     if (get_type(qtype, type))
       return true;
 
@@ -2689,7 +2798,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     for (const clang::Expr *arg : function_call.arguments())
     {
       exprt single_arg;
-      if (get_expr(*arg, single_arg))
+      if (get_expr(elided_copy_source(*arg), single_arg))
         return true;
 
       call.arguments().push_back(single_arg);
@@ -2765,11 +2874,17 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     {
       /* The underlying storage is automatic here, i.e., local. In order for
        * it to be recognized as being local in ESBMC, it requires a declaration,
-       * see, e.g., goto_programt::get_decl_identifiers(). So we'll add one. */
-      code_declt decl(new_expr);
-      decl.operands().push_back(initializer);
+       * see, e.g., goto_programt::get_decl_identifiers(). So we'll add one.
+       * It goes before the enclosing statement, which may be a loop or a
+       * labelled statement, so the object is initialised where the literal is
+       * evaluated, each time it is (C17 6.5.2.5p5). */
+      current_block->operands().push_back(code_declt(new_expr));
 
-      current_block->operands().push_back(decl);
+      side_effect_exprt assign("assign", t);
+      assign.copy_to_operands(new_expr, initializer);
+      exprt comma("comma", t);
+      comma.copy_to_operands(assign, new_expr);
+      new_expr = comma;
     }
     else
     {
@@ -3000,6 +3115,15 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     t = get_complete_type(t, ns);
 
+    // `char a[4] = {"ab"}` initialises the whole array from the literal
+    // (C11 6.7.9p14), which clang has already typed as `char[4]`.
+    if (init_stmt.isStringLiteralInit())
+    {
+      if (get_expr(*init_stmt.getInit(0), new_expr))
+        return true;
+      break;
+    }
+
     // Structs/unions/arrays put the initializer on operands
     if (t.is_struct() || t.is_array() || t.is_vector())
     {
@@ -3039,6 +3163,22 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
         gen_typecast(ns, init, elem_type);
         inits.operands().at(i) = init;
+      }
+
+      // The elements past the list are initialised by the filler
+      // ([dcl.init.aggr]/5), which runs a constructor or a default member
+      // initializer where the class has one.
+      if (t.is_array())
+      {
+        exprt filler;
+        if (get_array_filler(init_stmt, filler))
+          return true;
+        if (filler.is_not_nil())
+        {
+          gen_typecast(ns, filler, to_array_type(t).subtype());
+          for (std::size_t i = num; i < inits.operands().size(); ++i)
+            inits.operands()[i] = filler;
+        }
       }
     }
     else if (t.is_union())
@@ -3083,12 +3223,11 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       /* We have a list initializer with no elements.
        * So per https://en.cppreference.com/w/cpp/language/list_initialization
        * we perform value-initialization.
-       * > Otherwise, if the braced-init-list has no elements, T is value-initialized.
-       * And per https://en.cppreference.com/w/cpp/language/value_initialization
-       * > The effects of value-initialization are:
-       * > ...
-       * > - Otherwise, the object is zero-initialized.
-       * So we just zero-initialize the object.
+       * > Otherwise, if the braced-init-list has no elements, T is
+       * value-initialized. And per
+       * https://en.cppreference.com/w/cpp/language/value_initialization > The
+       * effects of value-initialization are: > ... > - Otherwise, the object is
+       * zero-initialized. So we just zero-initialize the object.
        */
       /* The rule is the type's, not the scalar types' alone, but gen_zero
        * answers nil for a type it cannot build a value of (an incomplete
@@ -3217,6 +3356,12 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
           elem_type = to_vector_type(t).subtype();
 
         gen_typecast(ns, init, elem_type);
+        // Unlike a braced list, this does not extend the lifetime of a
+        // temporary bound to a reference member ([class.temporary]/6);
+        // the cast keeps goto_convert from treating it as extended.
+        if (
+          init.id() == "address_of" && is_lvalue_or_rvalue_reference(elem_type))
+          init = typecast_exprt(init, elem_type);
         inits.operands().at(i) = init;
       }
     }
@@ -3315,7 +3460,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     for (auto it : declgroup)
     {
       exprt single_decl;
-      if (get_decl(*it, single_decl))
+      if (snapshot_vla_sizes(*it, decls) || get_decl(*it, single_decl))
         return true;
 
       decls.operands().push_back(single_decl);
@@ -3361,8 +3506,11 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::CaseStmt &case_stmt =
       static_cast<const clang::CaseStmt &>(stmt);
 
-    exprt value;
-    if (get_expr(*case_stmt.getLHS(), value))
+    exprt value, range_hi = nil_exprt();
+    if (
+      get_expr(*case_stmt.getLHS(), value) ||
+      (case_stmt.caseStmtIsGNURange() &&
+       get_expr(*case_stmt.getRHS(), range_hi)))
       return true;
 
     exprt sub_stmt;
@@ -3371,6 +3519,8 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     code_switch_caset switch_case;
     switch_case.case_op() = value;
+    if (range_hi.is_not_nil())
+      switch_case.case_range_hi() = range_hi;
 
     convert_expression_to_code(sub_stmt);
     switch_case.code() = to_code(sub_stmt);
@@ -3797,7 +3947,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       const clang::Expr &retval = *ret.getRetValue();
 
       exprt val;
-      if (get_expr(retval, val))
+      if (get_expr(elided_copy_source(retval), val))
         return true;
 
       gen_typecast(ns, val, return_type);
@@ -4016,10 +4166,11 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     // __builtin_bit_cast / std::bit_cast must reinterpret the value's
     // byte-level representation, NOT perform an arithmetic conversion.  Using
-    // gen_typecast here would, e.g., turn `bit_cast<float>(uint32_t{0xFFFFFFFF})`
-    // into the float value 4.29e9 rather than the IEEE-NaN whose bits match
-    // the input.  Use the irep1 "bitcast" node, which migrates to bitcast2tc
-    // and is handled by symex as a byte-level reinterpret.  See #4191.
+    // gen_typecast here would, e.g., turn
+    // `bit_cast<float>(uint32_t{0xFFFFFFFF})` into the float value 4.29e9
+    // rather than the IEEE-NaN whose bits match the input.  Use the irep1
+    // "bitcast" node, which migrates to bitcast2tc and is handled by symex as a
+    // byte-level reinterpret.  See #4191.
     make_bitcast(new_expr, t);
     break;
   }
@@ -4112,8 +4263,9 @@ bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
 
     typet type;
 
-    // Special handling for __ESBMC_return_value: use function return type if available
-    // This allows __ESBMC_return_value to have a semi-dynamic type matching the function
+    // Special handling for __ESBMC_return_value: use function return type if
+    // available This allows __ESBMC_return_value to have a semi-dynamic type
+    // matching the function
     if (name == "__ESBMC_return_value" && current_functionDecl)
     {
       // Use the current function's return type instead of the declared type
@@ -4150,6 +4302,24 @@ bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
   log_error("{}", oss.str());
   return true;
 }
+
+/// `__builtin_copysign` and the other `__builtin_` spellings of a <math.h>
+/// function have no body; the plain name has an operational model. Those
+/// that clang_c_adjust lowers by their own spelling keep it.
+bool clang_c_convertert::is_unlowered_math_builtin(
+  const std::string &name) const
+{
+  llvm::StringRef lib_name(name);
+  if (
+    is_name_matched_builtin(name) || compare_unscore_builtin(name, "nan") ||
+    !lib_name.consume_front("__builtin_"))
+    return false;
+
+  unsigned lib_id = ASTContext->Idents.get(lib_name).getBuiltinID();
+  return lib_id && llvm::StringRef(
+                     ASTContext->BuiltinInfo.getHeaderName(lib_id)) == "math.h";
+}
+
 void clang_c_convertert::rewrite_builtin_ref(
   const clang::Decl &d,
   std::string &name,
@@ -4173,8 +4343,10 @@ void clang_c_convertert::rewrite_builtin_ref(
     unsigned builtin_id = fd->getBuiltinID();
     if (
       builtin_id && ASTContext->BuiltinInfo.isLibFunction(builtin_id) &&
-      std::find(builtins_to_rewrite.begin(), builtins_to_rewrite.end(), name) !=
-        builtins_to_rewrite.end())
+      (std::find(
+         builtins_to_rewrite.begin(), builtins_to_rewrite.end(), name) !=
+         builtins_to_rewrite.end() ||
+       is_unlowered_math_builtin(name)))
     {
       boost::replace_all(name, "__builtin_", "");
       boost::replace_all(id, "__builtin_", "");
@@ -4915,8 +5087,10 @@ static bool atomic_has_value_operand(clang::AtomicExpr::AtomicOp op)
   {
   case clang::AtomicExpr::AO__c11_atomic_load:
   case clang::AtomicExpr::AO__atomic_load_n:
+#if CLANG_VERSION_MAJOR >= 20
   case clang::AtomicExpr::AO__atomic_test_and_set:
   case clang::AtomicExpr::AO__atomic_clear:
+#endif
     return false;
   default:
     return true;
@@ -5064,6 +5238,7 @@ bool clang_c_convertert::get_atomic_expr(
     name = "__atomic_nand_fetch";
     break;
 
+#if CLANG_VERSION_MAJOR >= 20
   case clang::AtomicExpr::AO__atomic_test_and_set:
     name = "__atomic_test_and_set";
     break;
@@ -5071,6 +5246,7 @@ bool clang_c_convertert::get_atomic_expr(
   case clang::AtomicExpr::AO__atomic_clear:
     name = "__atomic_clear";
     break;
+#endif
 
   default:
     log_error("Unknown Atomic expression");
@@ -5349,6 +5525,38 @@ bool clang_c_convertert::get_mangled_id(
   return true;
 }
 
+/// Several C files are merged into one AST, and every file that includes a
+/// header gets its own copy of an internal-linkage function or variable the
+/// header defines -- the importer does not merge those -- but the USR names
+/// the header, so the copies and their locals shared one symbol. The first
+/// copy keeps its id, so single-file programs are unchanged; each later one
+/// is numbered, and its locals follow it.
+std::string
+clang_c_convertert::header_internal_suffix(const clang::NamedDecl &nd)
+{
+  const clang::DeclContext *fn_ctx = nd.getParentFunctionOrMethod();
+  const auto *owner = fn_ctx ? llvm::dyn_cast<clang::NamedDecl>(
+                                 clang::Decl::castFromDeclContext(fn_ctx))
+                             : &nd;
+  const auto *var = llvm::dyn_cast_or_null<clang::VarDecl>(owner);
+  if (
+    !owner || (!llvm::isa<clang::FunctionDecl>(owner) && !var) ||
+    (var && var->isLocalVarDecl()) || owner->isExternallyVisible())
+    return "";
+
+  clang::SmallString<128> owner_usr;
+  if (clang::index::generateUSRForDecl(owner, owner_usr))
+    return "";
+  std::vector<const clang::Decl *> &copies =
+    internal_copies[owner_usr.str().str()];
+  const clang::Decl *canon = owner->getCanonicalDecl();
+  auto it = std::find(copies.begin(), copies.end(), canon);
+  const std::size_t index = it - copies.begin();
+  if (it == copies.end())
+    copies.push_back(canon);
+  return index == 0 ? "" : "@tu" + std::to_string(index);
+}
+
 void clang_c_convertert::get_decl_name(
   const clang::NamedDecl &nd,
   std::string &name,
@@ -5394,8 +5602,8 @@ void clang_c_convertert::get_decl_name(
     const clang::RecordDecl &rd = static_cast<const clang::RecordDecl &>(nd);
     std::string kind_name = rd.getKindName().str();
 
-    // Checking if it is not a typedef, but the tag name is empty. If so we give it a new
-    // unique name based on its location
+    // Checking if it is not a typedef, but the tag name is empty. If so we give
+    // it a new unique name based on its location
     if (
       rd.getCanonicalDecl()->getNameAsString().empty() &&
       !rd.getCanonicalDecl()->getTypedefNameForAnonDecl())
@@ -5574,7 +5782,7 @@ void clang_c_convertert::get_decl_name(
   clang::SmallString<128> DeclUSR;
   if (!clang::index::generateUSRForDecl(&nd, DeclUSR))
   {
-    id = DeclUSR.str().str();
+    id = DeclUSR.str().str() + header_internal_suffix(nd);
     /* A local variable's USR is its expansion offset, so two declared by one
      * macro expansion shared a symbol. The spelling offset does not separate
      * an inner macro expanded twice inside one outer expansion, but each
@@ -5816,8 +6024,9 @@ bool clang_c_convertert::process_record_layout_attributes(
     }
 
     case clang::attr::Aligned:
-      if (process_aligned_attribute(
-            static_cast<const clang::AlignedAttr &>(*attr), t))
+      if (
+        process_aligned_attribute(
+          static_cast<const clang::AlignedAttr &>(*attr), t))
         return true;
       break;
 
@@ -5835,8 +6044,9 @@ bool clang_c_convertert::process_aligned_attribute(
 {
   unsigned alignment_bits = aattr.getAlignment(*ASTContext);
 
-  // Clang should report alignment in bits; require a non-zero multiple of `char_width`
-  // to safely convert to bytes. If this is not the case, emit a diagnostic.
+  // Clang should report alignment in bits; require a non-zero multiple of
+  // `char_width` to safely convert to bytes. If this is not the case, emit a
+  // diagnostic.
   if (alignment_bits == 0 || alignment_bits % config.ansi_c.char_width != 0)
   {
     log_error(

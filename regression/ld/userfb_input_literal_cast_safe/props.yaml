@@ -1,0 +1,8 @@
+properties:
+  # 5 wired to a BOOL input converts to TRUE, and to a REAL input to 5.0, so OK
+  # holds in every scan. A literal too wide for 64 bits stays nondeterministic
+  # with a warning rather than aborting the run (#7580).
+  - id: P1
+    kind: invariant
+    expression: "Y"
+    description: "A is TRUE and R is 5.0"

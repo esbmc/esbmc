@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cassert>
 #include <map>
 #include <goto-programs/destructor.h>
@@ -203,8 +204,8 @@ void goto_convertt::convert_switch_case(
           .first;
     }
 
-    exprt::operandst &case_op_dest = cases_entry->second->second;
-    case_op_dest.push_back(code.case_op());
+    cases_entry->second->second.push_back(
+      case_label(code.case_op(), code.case_range_hi()));
   }
 }
 
@@ -304,32 +305,135 @@ static irep_idt destructor_entry_symbol(const codet &entry)
   return irep_idt();
 }
 
+/// The symbols \p e reads as whole objects: a member, an element or an address
+/// of one copies a part or none of it, so its temporary is still destroyed.
+static void collect_whole_reads(const expr2tc &e, std::set<irep_idt> &sources)
+{
+  if (is_nil_expr(e) || is_address_of2t(e) || is_member2t(e) || is_index2t(e))
+    return;
+  if (is_symbol2t(e))
+  {
+    sources.insert(to_symbol2t(e).thename);
+    return;
+  }
+  e->foreach_operand(
+    [&sources](const expr2tc &op) { collect_whole_reads(op, sources); });
+}
+
+/// The objects \p value is a bitwise copy of: the symbols it names and,
+/// transitively, those \p sideeffects assigns into them or into their parts
+/// (`H{C(1)}` lowers to `tmp$2 = { .c=tmp$1 }`).
+static std::set<irep_idt>
+value_sources(const exprt &value, const goto_programt &sideeffects)
+{
+  expr2tc value2;
+  migrate_expr(value, value2);
+  std::set<irep_idt> sources;
+  collect_whole_reads(value2, sources);
+
+  for (auto it = sideeffects.instructions.rbegin();
+       it != sideeffects.instructions.rend();
+       ++it)
+  {
+    if (!it->is_assign())
+      continue;
+    const code_assign2t &assign = to_code_assign2t(it->code);
+    const expr2tc &target = get_base_object(assign.target);
+    if (!is_symbol2t(target) || !sources.count(to_symbol2t(target).thename))
+      continue;
+    collect_whole_reads(assign.source, sources);
+  }
+  return sources;
+}
+
+/// The object a constructor call builds: the symbol its `this` argument points
+/// to. Empty for any other call.
+static irep_idt constructed_symbol(const expr2tc &code, const namespacet &ns)
+{
+  const code_function_call2t &call = to_code_function_call2t(code);
+  if (
+    !is_symbol2t(call.function) || call.operands.empty() ||
+    is_nil_expr(call.operands[0]) || !is_address_of2t(call.operands[0]))
+    return irep_idt();
+  const symbolt *callee = ns.lookup(to_symbol2t(call.function).thename);
+  const expr2tc &obj = to_address_of2t(call.operands[0]).ptr_obj;
+  if (
+    !callee || !callee->get_type().is_code() ||
+    to_code_type(callee->get_type()).return_type().id() != "constructor" ||
+    !is_symbol2t(obj))
+    return irep_idt();
+  return to_symbol2t(obj).thename;
+}
+
+/// Attach to \p call the cleanup an exception leaving it runs: the automatic
+/// objects constructed since the nearest enclosing try, newest first
+/// ([except.ctor]/1), as convert_throw unwinds for a throw in this function.
+/// remove_exceptions emits it on the call's exceptional edge. The object a
+/// constructor call builds is left out: it was never constructed.
+void goto_convertt::record_exception_unwind(goto_programt::instructiont &call)
+{
+  const destructor_stackt &stack = targets.destructor_stack;
+  const irep_idt constructed = constructed_symbol(call.code, ns);
+  irept unwind;
+  bool has_destructor = false;
+  for (std::size_t i = stack.size(); i > targets.throw_stack_size; --i)
+  {
+    const codet &entry = stack[i - 1];
+    if (!constructed.empty() && destructor_entry_symbol(entry) == constructed)
+      continue;
+    const irep_idt &statement = entry.get_statement();
+    if (statement != "dead" && statement != "function_call")
+      return;
+    has_destructor |= statement == "function_call";
+    unwind.get_sub().push_back(entry);
+  }
+  if (has_destructor)
+    call.location.add("#exception_unwind").swap(unwind);
+}
+
+/// Whether a side effect sits under `?:`, `&&` or `||`, so the temporaries it
+/// creates exist on one path only.
+static bool
+has_conditional_sideeffect(const exprt &expr, bool conditional = false)
+{
+  if (conditional && expr.id() == "sideeffect")
+    return true;
+  conditional |= expr.id() == "if" || expr.is_and() || expr.is_or();
+  forall_operands (it, expr)
+    if (has_conditional_sideeffect(*it, conditional))
+      return true;
+  return false;
+}
+
 void goto_convertt::convert_throw(const exprt &expr_in, goto_programt &dest)
 {
   // The thrown operand may still carry side effects — most importantly a
   // `temporary_object` that constructs the thrown value — when convert_throw is
   // reached through the code-statement path (a codet("cpp-throw"), as produced
-  // by the --irep2-bodies body round-trip) instead of the side_effect_exprt path
-  // in remove_sideeffects, which lowers operands before dispatching here. Lower
-  // them now so the thrown value is a plain symbol, matching the legacy flag-off
-  // GOTO; otherwise the constructor never runs and the handler reads an
-  // unconstructed object. A no-op when the operand is already side-effect-free.
+  // by the --irep2-bodies body round-trip) instead of the side_effect_exprt
+  // path in remove_sideeffects, which lowers operands before dispatching here.
+  // Lower them now so the thrown value is a plain symbol, matching the legacy
+  // flag-off GOTO; otherwise the constructor never runs and the handler reads
+  // an unconstructed object. A no-op when the operand is already
+  // side-effect-free.
   exprt expr = expr_in;
   Forall_operands (it, expr)
     remove_sideeffects(*it, dest);
 
   // C++ stack unwinding: before the throw, run the destructors of the automatic
   // objects constructed since the nearest enclosing try block, in reverse
-  // construction order ([except.ctor]). throw_stack_size is the destructor-stack
-  // level at that try's entry — or 0 when the throw is not in any try, so an
-  // exception propagating out of the function destroys all of its locals.
+  // construction order ([except.ctor]). throw_stack_size is the
+  // destructor-stack level at that try's entry — or 0 when the throw is not in
+  // any try, so an exception propagating out of the function destroys all of
+  // its locals.
   //
   // The thrown object itself must NOT be unwound: its lifetime is owned by the
-  // exception machinery and it has to survive the throw. It is the most-recently
-  // constructed full-expression temporary, so its destructor entries sit on top
-  // of the stack (above the enclosing try's locals). Detach them, run the
-  // (non-destructive) unwind of the try-block locals, then restore them so the
-  // normal fall-through cleanup after the throw is unchanged.
+  // exception machinery and it has to survive the throw. It is the
+  // most-recently constructed full-expression temporary, so its destructor
+  // entries sit on top of the stack (above the enclosing try's locals). Detach
+  // them, run the (non-destructive) unwind of the try-block locals, then
+  // restore them so the normal fall-through cleanup after the throw is
+  // unchanged.
   destructor_stackt &stack = targets.destructor_stack;
   const irep_idt thrown_id =
     expr.operands().empty() || expr.op0().id() != "symbol"
@@ -440,7 +544,10 @@ void goto_convertt::convert_block(const codet &code, goto_programt &dest)
     }
 
     const codet &code_it = to_code(it);
-    convert(code_it, dest);
+    if (code_it.get_statement() == "expression")
+      convert_full_expression(code_it, dest);
+    else
+      convert(code_it, dest);
   }
 
   // see if we need to do any destructors -- may have been processed
@@ -461,10 +568,10 @@ void goto_convertt::convert_block(const codet &code, goto_programt &dest)
 void goto_convertt::convert_controlled(const codet &code, goto_programt &dest)
 {
   // A braced block gets its own destructor scope via convert_block; a bare
-  // controlled substatement (e.g. `if (c) throw std::bad_alloc();`) does not, so
-  // full-expression temporaries created in it would leak their destructors onto
-  // the enclosing block's stack and run on sibling paths where the object was
-  // never constructed -> spurious use-after-free (#5950). Wrap a non-block
+  // controlled substatement (e.g. `if (c) throw std::bad_alloc();`) does not,
+  // so full-expression temporaries created in it would leak their destructors
+  // onto the enclosing block's stack and run on sibling paths where the object
+  // was never constructed -> spurious use-after-free (#5950). Wrap a non-block
   // substatement so it is scoped identically to a braced one.
   if (code.get_statement() == "block")
   {
@@ -492,8 +599,8 @@ void goto_convertt::convert_expression(const codet &code, goto_programt &dest)
   // An IREP2 body round-trip (--irep2-bodies, esbmc/esbmc#4715) strips the
   // source location from a side_effect_exprt: sideeffect2t carries no location
   // field, unlike the enclosing code_expression statement (whose location does
-  // survive). remove_function_call copies expr.location() into the lowered call,
-  // so for the function_call side effect that backs the void builtins
+  // survive). remove_function_call copies expr.location() into the lowered
+  // call, so for the function_call side effect that backs the void builtins
   // (__ESBMC_assert / assert, __ESBMC_assume / __VERIFIER_assume, the
   // loop-invariant / requires / ensures contracts) this yields a location-less
   // ASSERT/ASSUME — which in turn makes --assertion-coverage's filename-gated
@@ -540,6 +647,15 @@ void goto_convertt::convert_expression(const codet &code, goto_programt &dest)
       copy(tmp, OTHER, dest);
     }
   }
+}
+
+void goto_convertt::convert_full_expression(
+  const codet &code,
+  goto_programt &dest)
+{
+  const std::size_t stack_size = targets.destructor_stack.size();
+  convert(code, dest);
+  destroy_full_expression_temporaries(stack_size, code.location(), dest);
 }
 
 bool goto_convertt::rewrite_vla_decl_size(exprt &size, goto_programt &dest)
@@ -613,7 +729,8 @@ bool goto_convertt::rewrite_vla_decl(typet &var_type, goto_programt &dest)
 void goto_convertt::generate_dynamic_size_vla(
   exprt &var,
   const locationt &loc,
-  goto_programt &dest)
+  goto_programt &dest,
+  bool allow_zero_size)
 {
   assert(var.type().is_array());
 
@@ -649,10 +766,11 @@ void goto_convertt::generate_dynamic_size_vla(
 
   array_typet arr_type = to_array_type(var.type());
   // Use arr_type.size() directly -- rewrite_vla_decl_size has already run and
-  // materialised any side-effecting size expression into an __ESBMC_tmp_ symbol,
-  // so arr_type.size() is a plain symbol (no side effects).  We keep a copy
-  // of the pre-cast expression so the zero-size check operates on the original
-  // (possibly signed) type and correctly catches both zero and negative dimensions.
+  // materialised any side-effecting size expression into an __ESBMC_tmp_
+  // symbol, so arr_type.size() is a plain symbol (no side effects).  We keep a
+  // copy of the pre-cast expression so the zero-size check operates on the
+  // original (possibly signed) type and correctly catches both zero and
+  // negative dimensions.
   exprt dim_expr = arr_type.size();
   exprt size = typecast_exprt(dim_expr, size_type());
 
@@ -661,14 +779,20 @@ void goto_convertt::generate_dynamic_size_vla(
   assert_not(ovfl_cast_id, size);
 
   // Zero-size and negative-size VLAs are undefined behaviour (C11 §6.7.6.2p1).
+  // Python arrays may be empty (e.g. a slice with symbolic bounds), so only
+  // negative sizes are rejected there.
   if (!disable_check)
   {
     expr2tc dim2;
     migrate_expr(dim_expr, dim2);
     goto_programt::targett gt_tgt = dest.add_instruction(ASSERT);
-    gt_tgt->guard = greaterthan2tc(dim2, gen_zero(dim2->type));
+    gt_tgt->guard = allow_zero_size
+                      ? greaterthanequal2tc(dim2, gen_zero(dim2->type))
+                      : greaterthan2tc(dim2, gen_zero(dim2->type));
     gt_tgt->location = loc;
-    gt_tgt->location.comment("VLA array dimension must be greater than zero");
+    gt_tgt->location.comment(
+      allow_zero_size ? "VLA array dimension must not be negative"
+                      : "VLA array dimension must be greater than zero");
   }
 
   // First, if it's a multidimensional vla, the size will be the
@@ -714,6 +838,59 @@ void goto_convertt::generate_dynamic_size_vla(
   t_s_s->location = loc;
 }
 
+static const exprt *find_constructor_call(const exprt &e)
+{
+  if (
+    e.id() == "sideeffect" && e.statement() == "function_call" &&
+    e.get_bool("constructor"))
+    return &e;
+
+  if (e.id() == "sideeffect" && e.statement() == "temporary_object")
+    if (
+      const exprt *c =
+        find_constructor_call(static_cast<const exprt &>(e.initializer())))
+      return c;
+
+  forall_operands (it, e)
+    if (const exprt *c = find_constructor_call(*it))
+      return c;
+
+  return nullptr;
+}
+
+/// The frontend gives an array of a class one constructor call; every element
+/// is constructed by it, in increasing index order ([dcl.init]/7).
+void goto_convertt::construct_array_elements(
+  const exprt &base,
+  const typet &type,
+  const side_effect_expr_function_callt &ctor,
+  goto_programt &dest)
+{
+  const typet &elem = ns.follow(type.subtype());
+  BigInt count;
+  if (to_integer(to_array_type(type).size(), count))
+  {
+    log_error("cannot determine array size for static ctor init");
+    abort();
+  }
+
+  for (BigInt i = 0; i < count; i = i + 1)
+  {
+    index_exprt element(base, from_integer(i, index_type()), type.subtype());
+    if (elem.is_array())
+      construct_array_elements(element, elem, ctor, dest);
+    else
+    {
+      code_function_callt call;
+      call.location() = ctor.location();
+      call.function() = ctor.function();
+      call.arguments() = ctor.arguments();
+      call.arguments()[0] = address_of_exprt(element);
+      convert_function_call(call, dest);
+    }
+  }
+}
+
 /// A C++ function-local static with a dynamic initializer is initialized the
 /// first time control passes its declaration, and concurrent callers wait for
 /// it ([stmt.dcl]/3): `atomic { if (!guard) { init; guard = 1; } }`. The guard
@@ -735,8 +912,21 @@ void goto_convertt::convert_dynamic_static_init(
 
   const exprt var = decl.op0();
   exprt initializer = decl.op1();
-  codet new_code(decl);
-  convert_decl_initializer(var, initializer, new_code, s, dest);
+  const exprt *ctor =
+    initializer.id() == "sideeffect" && ns.follow(var.type()).is_array()
+      ? find_constructor_call(initializer)
+      : nullptr;
+  if (ctor)
+    construct_array_elements(
+      var,
+      ns.follow(var.type()),
+      to_side_effect_expr_function_call(*ctor),
+      dest);
+  else
+  {
+    codet new_code(decl);
+    convert_decl_initializer(var, initializer, new_code, s, dest);
+  }
 
   code_assignt set(flag, true_exprt());
   set.location() = decl.location();
@@ -745,6 +935,152 @@ void goto_convertt::convert_dynamic_static_init(
   goto_programt::targett end = dest.add_instruction(ATOMIC_END);
   end->location = decl.location();
   skip->make_goto(end, flag2);
+}
+
+/// Construct @p object from @p initializer directly when it is a class
+/// temporary: a constructor call retargeted at @p object, or a call returning
+/// by value made with @p object as its lhs. Constructing the temporary and
+/// copying it would leave it with its own scope-exit destructor, a second
+/// destructor for what is semantically one object (github #2306). Returns
+/// false, emitting nothing, for any other initializer.
+bool goto_convertt::construct_in_place(
+  const exprt &object,
+  const exprt &initializer,
+  goto_programt &dest)
+{
+  if (
+    initializer.id() != "sideeffect" ||
+    initializer.statement() != "temporary_object")
+    return false;
+
+  const exprt &ctor = static_cast<const exprt &>(initializer.initializer());
+  if (ctor.is_not_nil())
+  {
+    exprt code = ctor;
+    replace_new_object(object, code);
+    convert(to_code(code), dest);
+    return true;
+  }
+
+  if (
+    initializer.operands().size() != 1 ||
+    initializer.op0().id() != "sideeffect" ||
+    initializer.op0().statement() != "function_call")
+    return false;
+
+  const exprt &call_expr = initializer.op0();
+  code_function_callt call;
+  call.location() = call_expr.location();
+  call.lhs() = object;
+  call.function() = call_expr.op0();
+  call.arguments() = call_expr.op1().operands();
+  convert_function_call(call, dest);
+  return true;
+}
+
+/// Remove the side effects of @p initializer, the value of @p object. A class
+/// element of a braced list is a subobject of @p object and is initialised in
+/// place ([dcl.init.aggr]/4, [dcl.init]/17.6.1).
+void goto_convertt::remove_initializer_sideeffects(
+  const exprt &object,
+  exprt &initializer,
+  goto_programt &dest)
+{
+  if (!has_sideeffect(initializer))
+    return;
+
+  const typet &type = ns.follow(initializer.type());
+  const bool is_list =
+    (initializer.id() == "struct" || initializer.id() == "array" ||
+     initializer.id() == "constant") &&
+    (type.is_array() ||
+     (type.is_struct() && to_struct_type(type).components().size() ==
+                            initializer.operands().size()));
+  if (!is_list)
+  {
+    remove_sideeffects(initializer, dest);
+    return;
+  }
+
+  for (std::size_t i = 0; i < initializer.operands().size(); ++i)
+  {
+    exprt element;
+    if (type.is_array())
+      element =
+        index_exprt(object, from_integer(i, index_type()), type.subtype());
+    else
+    {
+      const auto &c = to_struct_type(type).components()[i];
+      element = member_exprt(object, c.name(), c.type());
+    }
+
+    exprt &op = initializer.operands()[i];
+    if (construct_in_place(element, op, dest))
+      op = element;
+    else
+      remove_initializer_sideeffects(element, op, dest);
+  }
+}
+
+/// A braced aggregate or a lambda's closure of the declared class initialises
+/// the variable itself ([dcl.init]/17.6.1): the temporary clang binds it to
+/// never exists, and copying out of it destroyed the value twice.
+static void elide_prvalue_temporary(exprt &initializer)
+{
+  if (
+    initializer.id() == "sideeffect" &&
+    initializer.statement() == "temporary_object" &&
+    static_cast<const exprt &>(initializer.initializer()).is_nil() &&
+    initializer.operands().size() == 1 &&
+    initializer.op0().id() != "sideeffect")
+  {
+    exprt value = initializer.op0();
+    initializer.swap(value);
+  }
+}
+
+/// A comma's left operands are discarded-value expressions and its right
+/// operand is its result ([expr.comma]/1), so that operand initialises the
+/// variable: a class prvalue there is the variable, not a copied temporary.
+void goto_convertt::discard_comma_operands(
+  exprt &initializer,
+  goto_programt &dest)
+{
+  while (initializer.id() == "comma")
+  {
+    exprt::operandst &operands = initializer.operands();
+    for (auto it = operands.begin(); std::next(it) != operands.end(); ++it)
+      remove_comma_operand(*it, dest);
+    exprt result = operands.back();
+    initializer.swap(result);
+  }
+}
+
+/// A comma's operand is a discarded-value expression ([expr.comma]/1), but a
+/// temporary object it creates lives until the end of the enclosing
+/// full-expression ([class.temporary]/4). Lowering it as a used value leaves
+/// its scope-exit entries for the full-expression to emit.
+void goto_convertt::remove_comma_operand(exprt &operand, goto_programt &dest)
+{
+  const exprt *value = &operand;
+  while (value->id() == "typecast")
+    value = &value->op0();
+  const bool is_temporary =
+    value->id() == "sideeffect" && value->statement() == "temporary_object";
+  const auto &stack = targets.destructor_stack;
+  const std::size_t stack_size = stack.size();
+  remove_sideeffects(operand, dest, is_temporary);
+  for (auto it = stack.begin() + stack_size; it != stack.end(); ++it)
+    if (const irep_idt id = destructor_entry_symbol(*it); !id.empty())
+      comma_operand_temporaries.insert(id);
+
+  // remember as expression statement for later checks
+  if (operand.is_not_nil())
+  {
+    code_expressiont discarded(operand);
+    discarded.location() = operand.location();
+    convert(discarded, dest);
+  }
 }
 
 /// Lower the initializer of a declaration into @p dest. Kept out of
@@ -756,88 +1092,95 @@ void goto_convertt::convert_decl_initializer(
   const symbolt &s,
   goto_programt &dest)
 {
-  // A temporary_object initializer carrying a constructor (C++ `T t;` or
-  // `T t = T(...)`) constructs the object in place: retarget the
-  // constructor's new_object to `var` and emit it directly, instead of
-  // constructing a separate temporary and copying it. The copy path would
-  // leave that temporary with its own scope-exit destructor -- a spurious
-  // second destructor for what is semantically a single object.
-  if (
-    initializer.id() == "sideeffect" &&
-    initializer.statement() == "temporary_object" &&
-    static_cast<const exprt &>(initializer.initializer()).is_not_nil())
-  {
-    exprt ctor_code = static_cast<const exprt &>(initializer.initializer());
-    replace_new_object(var, ctor_code);
-    convert(to_code(ctor_code), dest);
-  }
-  else if (
-    initializer.id() == "sideeffect" &&
-    initializer.statement() == "temporary_object" &&
-    initializer.operands().size() == 1 &&
-    initializer.op0().id() == "sideeffect" &&
-    initializer.op0().statement() == "function_call")
-  {
-    // A temporary_object wrapping a plain (non-constructor) function call
-    // (C++ `T t = f(...);` where f returns T by value): call it with `var`
-    // as the lhs directly instead of routing the result through a fresh
-    // return_value$ temporary. The generic path below would give that
-    // temporary its own scope-exit destructor for what is semantically the
-    // same object as `var` (github #2306). `var`'s own destructor is
-    // scheduled below via targets.destructor_stack regardless of which
-    // branch above ran; if that destructor appears to not fire for a
-    // function ending in an explicit `return <expr>;`, look at
-    // convert_return's handling of its local unwind program instead of
-    // here -- that path is a separate, pre-existing gap.
-    const exprt &call_expr = initializer.op0();
-    code_function_callt call;
-    call.location() = call_expr.location();
-    call.lhs() = var;
-    call.function() = call_expr.op0();
-    call.arguments() = call_expr.op1().operands();
-    convert_function_call(call, dest);
-  }
-  else
-  {
-    std::size_t stack_size = targets.destructor_stack.size();
+  const std::size_t stack_size = targets.destructor_stack.size();
+  discard_comma_operands(initializer, dest);
+  elide_prvalue_temporary(initializer);
 
+  // `T t;`, `T t = T(...)` and `T t = f(...)` construct `t` itself.
+  // convert_decl schedules `t`'s destructor either way; if it appears to not
+  // fire for a function ending in an explicit `return <expr>;`, look at
+  // convert_return's handling of its local unwind program instead of here --
+  // that path is a separate, pre-existing gap.
+  if (!construct_in_place(var, initializer, dest))
+  {
     goto_programt sideeffects;
     // the side effect is not just removed. Actually, it's converted and
     // removed.
-    remove_sideeffects(initializer, sideeffects);
+    remove_initializer_sideeffects(var, initializer, sideeffects);
     dest.destructive_append(sideeffects);
 
     code_assignt assign(var, initializer);
     assign.location() = new_code.location();
     copy(assign, ASSIGN, dest);
-
-    // Temporaries materialized while lowering the initializer die at the
-    // end of the full expression (C++ [class.temporary]/4, github #6075):
-    // emit their pending scope-exit entries (destructor then DEAD) right
-    // after the assignment. A reference declaration extends its
-    // temporary's lifetime to the scope ([class.temporary]/6) and a
-    // destructor-free tail (plain DEADs of C-style temps) keeps
-    // block-level scope, so both retain the old shape.
-    if (!is_lvalue_or_rvalue_reference(s.get_type()))
-    {
-      bool have_destructor = false;
-      for (std::size_t i = stack_size; i < targets.destructor_stack.size(); i++)
-        if (targets.destructor_stack[i].get_statement() == "function_call")
-        {
-          have_destructor = true;
-          break;
-        }
-
-      if (have_destructor)
-        while (targets.destructor_stack.size() > stack_size)
-        {
-          codet d_code = targets.destructor_stack.back();
-          targets.destructor_stack.pop_back();
-          d_code.location() = new_code.location();
-          convert(d_code, dest);
-        }
-    }
   }
+
+  // Temporaries materialized while lowering the initializer, including a
+  // constructor's or a call's arguments, die at the end of the full
+  // expression (C++ [class.temporary]/4, github #6075): emit their pending
+  // scope-exit entries (destructor then DEAD) right after the
+  // initialization. A reference declaration extends its temporary's
+  // lifetime to the scope ([class.temporary]/6) and a destructor-free tail
+  // (plain DEADs of C-style temps) keeps block-level scope, so both retain
+  // the old shape.
+  if (!is_lvalue_or_rvalue_reference(s.get_type()))
+    destroy_full_expression_temporaries(
+      keep_reference_member_temporaries(initializer, stack_size),
+      new_code.location(),
+      dest);
+  else
+    destroy_comma_operand_temporaries(stack_size, new_code.location(), dest);
+}
+
+/// A reference declaration keeps its initializer's temporaries to the end of
+/// the scope, but those of a discarded comma operand still die with it.
+void goto_convertt::destroy_comma_operand_temporaries(
+  std::size_t stack_size,
+  const locationt &location,
+  goto_programt &dest)
+{
+  auto &stack = targets.destructor_stack;
+  const auto kept = std::stable_partition(
+    stack.begin() + stack_size, stack.end(), [&](const codet &entry) {
+      return comma_operand_temporaries.count(destructor_entry_symbol(entry)) ==
+             0;
+    });
+  destroy_full_expression_temporaries(kept - stack.begin(), location, dest);
+}
+
+/// The temporaries a braced aggregate initialiser binds to reference members,
+/// at any depth of nested aggregates.
+static void collect_reference_member_temporaries(
+  const exprt &init,
+  std::set<irep_idt> &temporaries)
+{
+  if (init.id() != "struct" && !(init.is_constant() && init.type().is_array()))
+    return;
+
+  forall_operands (it, init)
+  {
+    if (it->id() == "address_of" && it->op0().is_symbol())
+      temporaries.insert(it->op0().identifier());
+    else
+      collect_reference_member_temporaries(*it, temporaries);
+  }
+}
+
+/// A temporary bound to a reference member of a declared aggregate lives as
+/// long as the aggregate ([class.temporary]/6). Moves its scope-exit entries
+/// to the bottom of those pushed above \p stack_size and returns the stack
+/// size the full-expression's other temporaries are destroyed down to.
+std::size_t goto_convertt::keep_reference_member_temporaries(
+  const exprt &initializer,
+  std::size_t stack_size)
+{
+  std::set<irep_idt> temporaries;
+  collect_reference_member_temporaries(initializer, temporaries);
+  auto &stack = targets.destructor_stack;
+  const auto kept = std::stable_partition(
+    stack.begin() + stack_size, stack.end(), [&](const codet &entry) {
+      return temporaries.count(destructor_entry_symbol(entry)) != 0;
+    });
+  return kept - stack.begin();
 }
 
 void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
@@ -900,7 +1243,8 @@ void goto_convertt::convert_decl(const codet &code, goto_programt &dest)
   copy(new_code, DECL, dest);
 
   if (is_vla)
-    generate_dynamic_size_vla(var, new_code.location(), dest);
+    generate_dynamic_size_vla(
+      var, new_code.location(), dest, s->mode == "Python");
 
   if (!initializer.is_nil())
     convert_decl_initializer(var, initializer, new_code, *s, dest);
@@ -1062,9 +1406,9 @@ void goto_convertt::convert_assign_atomic(
   }
   subst.replace(working_rhs);
 
-  // Phase 2: emit the store, wrapped in ATOMIC_BEGIN/END only when lhs is _Atomic.
-  // A context switch is allowed between Phase 1 and Phase 2 (between the
-  // ATOMIC_END above and the ATOMIC_BEGIN below), which is exactly the C11
+  // Phase 2: emit the store, wrapped in ATOMIC_BEGIN/END only when lhs is
+  // _Atomic. A context switch is allowed between Phase 1 and Phase 2 (between
+  // the ATOMIC_END above and the ATOMIC_BEGIN below), which is exactly the C11
   // requirement that atomic load and atomic store are separate operations.
   bool lhs_atomic = is_atomic_symbol(lhs, ns);
   if (lhs_atomic)
@@ -1136,7 +1480,10 @@ void goto_convertt::convert_assign(
   }
   else
   {
-    remove_sideeffects(rhs, dest);
+    if (lhs.get_bool("#member_init"))
+      remove_initializer_sideeffects(lhs, rhs, dest);
+    else
+      remove_sideeffects(rhs, dest);
 
     // to_code() asserts on the expression id, so test that rather than the
     // type: a dereferenced function pointer is code-*typed* but is not a
@@ -1210,8 +1557,16 @@ void goto_convertt::convert_cpp_delete(const codet &code, goto_programt &dest)
       // the allocation for such a class is itself zero bytes, so its element
       // count comes out as zero and no destructor runs -- see the limitation
       // noted on #6584.
-      BigInt esz =
-        type_byte_size(migrate_type(ns.follow(tmp_op.type().subtype())));
+      // `new T[n][m]` built n * m class elements: step through them with a
+      // pointer to the class, not to a row.
+      typet leaf = tmp_op.type().subtype();
+      while (ns.follow(leaf).is_array())
+        leaf = ns.follow(leaf).subtype();
+      exprt base = tmp_op;
+      if (leaf != tmp_op.type().subtype())
+        base = typecast_exprt(tmp_op, pointer_typet(leaf));
+
+      BigInt esz = type_byte_size(migrate_type(ns.follow(leaf)), &ns);
       if (esz == 0)
         esz = 1;
       exprt elem_size = from_integer(esz, size_type());
@@ -1220,25 +1575,26 @@ void goto_convertt::convert_cpp_delete(const codet &code, goto_programt &dest)
       count.copy_to_operands(byte_size, elem_size);
 
       symbol_exprt index(new_tmp_symbol(size_type()).id, size_type());
+      exprt prev("-", size_type());
+      prev.copy_to_operands(index, from_integer(1, size_type()));
 
-      // *(p + i). As in the scalar arm the destructor is retargeted at the
-      // pointee, since a virtually-bound destructor reads the vtable pointer
-      // out of that dereference.
-      exprt element_addr("+", tmp_op.type());
-      element_addr.copy_to_operands(tmp_op, index);
-      exprt element("dereference", ns.follow(tmp_op.type().subtype()));
+      // *(p + i - 1), from the last element down: [expr.delete]/6 destroys
+      // the elements in decreasing order of address. As in the scalar arm the
+      // destructor is retargeted at the pointee, since a virtually-bound
+      // destructor reads the vtable pointer out of that dereference.
+      exprt element_addr("+", base.type());
+      element_addr.copy_to_operands(base, prev);
+      exprt element("dereference", ns.follow(leaf));
       element.copy_to_operands(element_addr);
 
       codet tmp_code = to_code(destructor);
       replace_new_object(element, tmp_code);
 
-      exprt next("+", size_type());
-      next.copy_to_operands(index, from_integer(1, size_type()));
-
       code_fort loop;
-      loop.init() = code_assignt(index, from_integer(0, size_type()));
-      loop.cond() = binary_relation_exprt(index, "<", count);
-      loop.iter() = code_assignt(index, next);
+      loop.init() = code_assignt(index, count);
+      loop.cond() =
+        binary_relation_exprt(index, "notequal", from_integer(0, size_type()));
+      loop.iter() = code_assignt(index, prev);
       loop.body() = tmp_code;
       loop.location() = code.location();
 
@@ -1313,11 +1669,15 @@ void goto_convertt::convert_cpp_delete(const codet &code, goto_programt &dest)
     call.arguments().back().make_typecast(params[0].type());
 
     // The C++14 sized form takes the object's byte count as its second
-    // argument ([basic.stc.dynamic.deallocation]).
-    if (params.size() == 2)
+    // argument ([basic.stc.dynamic.deallocation]), before any alignment.
+    const exprt &alignment =
+      static_cast<const exprt &>(code.find("dealloc_alignment"));
+    if (params.size() == (alignment.is_nil() ? 2 : 3))
       call.arguments().push_back(from_integer(
         type_byte_size(migrate_type(ns.follow(tmp_op.type().subtype()))),
         params[1].type()));
+    if (alignment.is_not_nil())
+      call.arguments().push_back(alignment);
 
     call.location() = code.location();
 
@@ -1349,16 +1709,47 @@ void goto_convertt::convert_assert(const codet &code, goto_programt &dest)
 
   remove_sideeffects(cond, dest);
 
-  if (options.get_bool_option("no-assertions"))
-    return;
-
-  goto_programt::targett t = dest.add_instruction(ASSERT);
   expr2tc tmp_cond;
   migrate_expr(cond, tmp_cond);
-  t->guard = tmp_cond;
-  t->location = code.location();
-  t->location.property("assertion");
-  t->location.user_provided(true);
+
+  if (emits_assert(code.location()))
+  {
+    goto_programt::targett t = dest.add_instruction(ASSERT);
+    t->guard = tmp_cond;
+    t->location = code.location();
+    t->location.property("assertion");
+    t->location.user_provided(true);
+  }
+
+  assume_if_ends_path(tmp_cond, code.location(), dest);
+}
+
+// --no-assertions drops every assert. --python-ignore-assertions drops only a
+// Python program's own, which still end the path through the assume below.
+bool goto_convertt::emits_assert(const locationt &location) const
+{
+  if (options.get_bool_option("no-assertions"))
+    return false;
+  return !location.get_bool("ends_path") ||
+         !options.get_bool_option("python-ignore-assertions");
+}
+
+// A Python assert raises AssertionError, which ends the program, so nothing
+// after a failing assert runs. Assume the already evaluated guard, so the
+// condition's calls run once.
+void goto_convertt::assume_if_ends_path(
+  const expr2tc &guard,
+  const locationt &location,
+  goto_programt &dest)
+{
+  if (!location.get_bool("ends_path"))
+    return;
+  goto_programt::targett t = dest.add_instruction(ASSUME);
+  t->guard = guard;
+  t->location = location;
+  // With no assert to check the guard first, this is a plain assume.
+  if (!emits_assert(location))
+    t->location.remove("ends_path");
 }
 
 void goto_convertt::convert_skip(const codet &code, goto_programt &dest)
@@ -1417,7 +1808,7 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
   exprt cond = tmp;
   goto_programt sideeffects;
 
-  remove_sideeffects(cond, sideeffects);
+  remove_condition_sideeffects(cond, sideeffects);
 
   // save break/continue targets
   break_continue_targetst old_targets(targets);
@@ -1444,7 +1835,7 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
   else
   {
     exprt tmp_B = code.op2();
-    convert(to_code(code.op2()), tmp_x);
+    convert_full_expression(to_code(code.op2()), tmp_x);
   }
 
   // optimize the v label
@@ -1568,7 +1959,7 @@ void goto_convertt::convert_dowhile(const codet &code, goto_programt &dest)
   exprt cond = code.op0();
 
   goto_programt sideeffects;
-  remove_sideeffects(cond, sideeffects);
+  remove_condition_sideeffects(cond, sideeffects);
 
   //    do P while(c);
   //--------------------
@@ -1624,6 +2015,15 @@ void goto_convertt::convert_dowhile(const codet &code, goto_programt &dest)
   old_targets.restore(targets);
 }
 
+exprt goto_convertt::case_label(const exprt &lo, const exprt &hi)
+{
+  if (hi.is_nil())
+    return lo;
+  exprt range("case_range");
+  range.copy_to_operands(lo, hi);
+  return range;
+}
+
 void goto_convertt::case_guard(
   const exprt &value,
   const exprt::operandst &case_op,
@@ -1634,6 +2034,14 @@ void goto_convertt::case_guard(
 
   forall_expr (it, case_op)
   {
+    if (it->id() == "case_range")
+    {
+      dest.copy_to_operands(and_exprt(
+        binary_relation_exprt(value, ">=", it->op0()),
+        binary_relation_exprt(value, "<=", it->op1())));
+      continue;
+    }
+
     equality_exprt eq_expr;
     eq_expr.lhs() = value;
     eq_expr.rhs() = *it;
@@ -1682,7 +2090,7 @@ void goto_convertt::convert_switch(const codet &code, goto_programt &dest)
   exprt argument = code.op0();
 
   goto_programt sideeffects;
-  remove_sideeffects(argument, sideeffects);
+  remove_condition_sideeffects(argument, sideeffects);
 
   // save break/default/cases targets
   break_switch_targetst old_targets(targets);
@@ -1758,6 +2166,44 @@ void goto_convertt::convert_break(const code_breakt &code, goto_programt &dest)
   t->location = code.location();
 }
 
+void goto_convertt::remove_return_value_sideeffects(
+  exprt &value,
+  goto_programt &dest)
+{
+  // A temporary under `?:`, `&&` or `||` exists on one path only, so every
+  // entry is dropped; a conditional inside a temporary's initializer escapes
+  // has_conditional_sideeffect, so a class-type value that branches drops them
+  // too. Otherwise a class-type value drops the entries of its sources, the
+  // temporaries it is copied bitwise from (`return A(n);`, `return H{q};`).
+  const typet &type = ns.follow(value.type());
+  const bool is_class = type.id() == "struct" || type.id() == "union";
+  const bool conditional = has_conditional_sideeffect(value);
+  destructor_stackt &stack = targets.destructor_stack;
+  const std::size_t stack_size = stack.size();
+  goto_programt sideeffects;
+  remove_sideeffects(value, sideeffects);
+  const bool branches = std::any_of(
+    sideeffects.instructions.begin(),
+    sideeffects.instructions.end(),
+    [](const goto_programt::instructiont &i) { return i.is_goto(); });
+  if (conditional || (is_class && branches))
+    stack.resize(stack_size);
+  else if (is_class)
+  {
+    const std::set<irep_idt> sources = value_sources(value, sideeffects);
+    stack.erase(
+      std::remove_if(
+        stack.begin() + stack_size,
+        stack.end(),
+        [&sources](const codet &entry) {
+          const irep_idt id = destructor_entry_symbol(entry);
+          return id.empty() || sources.count(id);
+        }),
+      stack.end());
+  }
+  dest.destructive_append(sideeffects);
+}
+
 void goto_convertt::convert_return(
   const code_returnt &code,
   goto_programt &dest)
@@ -1768,6 +2214,10 @@ void goto_convertt::convert_return(
     abort();
   }
 
+  // Entries pushed while lowering the return value belong to its
+  // full-expression temporaries; they are unwound below with the locals and
+  // then dropped, so the enclosing block's fall-through unwind skips them.
+  const std::size_t value_stack_size = targets.destructor_stack.size();
   code_returnt new_code(code);
   if (new_code.has_return_value())
   {
@@ -1784,17 +2234,7 @@ void goto_convertt::convert_return(
       convert(to_code(new_code.return_value()), dest);
       return;
     }
-    // Scope-exit entries pushed while lowering the return value are dropped
-    // wholesale: a materialized return temporary (e.g. `return A(n);`) is the
-    // return slot itself and must survive both this return's unwind and the
-    // enclosing block's fall-through unwind. This also skips destructors of
-    // other full-expression temporaries (e.g. `return A(n).num;`), matching
-    // pre-existing behaviour (github #6075/#6076).
-    std::size_t value_stack_size = targets.destructor_stack.size();
-    goto_programt sideeffects;
-    remove_sideeffects(new_code.return_value(), sideeffects);
-    dest.destructive_append(sideeffects);
-    targets.destructor_stack.resize(value_stack_size);
+    remove_return_value_sideeffects(new_code.return_value(), dest);
   }
 
   // C++ [stmt.return]: the return value is computed before the local
@@ -1826,6 +2266,7 @@ void goto_convertt::convert_return(
     }
     unwind_destructor_stack(code.location(), 0, dest);
   }
+  targets.destructor_stack.resize(value_stack_size);
 
   if (targets.has_return_value)
   {
@@ -1834,8 +2275,8 @@ void goto_convertt::convert_return(
       log_warning(
         "The return of the function {} is missing",
         id2string(code.location().function()));
-      // This might be because the remove_sideeffect removed the undefined function
-      // We replaced it with nondet
+      // This might be because the remove_sideeffect removed the undefined
+      // function We replaced it with nondet
       exprt ret = exprt("sideeffect", code.op0().type());
       ret.statement("nondet");
       new_code.return_value() = ret;
@@ -2083,6 +2524,13 @@ void goto_convertt::generate_ifthenelse(
   dest.destructive_append(tmp_z);
 }
 
+bool goto_convertt::splits_and_condition(const exprt &cond)
+{
+  return cond.is_and() && cond.operands().size() == 2 &&
+         (has_sideeffect(cond.op0()) || has_sideeffect(cond.op1())) &&
+         !has_destructible_sideeffect(cond);
+}
+
 void goto_convertt::convert_ifthenelse(const codet &c, goto_programt &dest)
 {
   const code_ifthenelset &code = to_code_ifthenelse(c);
@@ -2099,10 +2547,7 @@ void goto_convertt::convert_ifthenelse(const codet &c, goto_programt &dest)
 
   // We do a bit of special treatment for && in the condition
   // in case cleaning would be needed otherwise.
-  if (
-    code.cond().is_and() && code.cond().operands().size() == 2 &&
-    (has_sideeffect(code.cond().op0()) || has_sideeffect(code.cond().op1())) &&
-    !has_else)
+  if (!has_else && splits_and_condition(code.cond()))
   {
     // if(a && b) XX --> if(a) if(b) XX
     code_ifthenelset new_if0, new_if1;
@@ -2110,6 +2555,8 @@ void goto_convertt::convert_ifthenelse(const codet &c, goto_programt &dest)
     new_if1.op0() = code.cond().op1();
     new_if0.location() = location;
     new_if1.location() = location;
+    new_if0.set("#short_circuit", true);
+    new_if1.set("#short_circuit", true);
     new_if1.op1() = code.then_case();
     new_if0.op1() = new_if1;
     return convert_ifthenelse(to_code(new_if0), dest);
@@ -2135,7 +2582,10 @@ void goto_convertt::convert_ifthenelse(const codet &c, goto_programt &dest)
       options.get_bool_option("condition-coverage-claims-rm")) ||
     options.get_bool_option("goto-instrumented"))
   {
-    remove_sideeffects(tmp_guard, dest);
+    const bool outer_short_circuit = in_short_circuit;
+    in_short_circuit = code.get_bool("#short_circuit");
+    remove_condition_sideeffects(tmp_guard, dest);
+    in_short_circuit = outer_short_circuit;
   }
 
   generate_ifthenelse(tmp_guard, tmp_op1, tmp_op2, location, dest);
@@ -2220,7 +2670,11 @@ void goto_convertt::generate_conditional_branch(
     return;
   }
 
-  if (guard.is_and())
+  // Splitting would leave the temporaries of a short-circuit operand alive
+  // past the condition, which is one full-expression ([class.temporary]/4).
+  const bool split = !has_destructible_sideeffect(guard);
+
+  if (split && guard.is_and())
   {
     // turn
     //   if(a && b) goto target_true; else goto target_false;
@@ -2232,8 +2686,11 @@ void goto_convertt::generate_conditional_branch(
     std::list<exprt> op;
     collect_operands(guard, guard.id(), op);
 
+    const bool outer_short_circuit = in_short_circuit;
+    in_short_circuit = true;
     forall_expr_list (it, op)
       generate_conditional_branch(gen_not(*it), target_false, location, dest);
+    in_short_circuit = outer_short_circuit;
 
     goto_programt::targett t_true = dest.add_instruction();
     t_true->make_goto(target_true);
@@ -2242,7 +2699,7 @@ void goto_convertt::generate_conditional_branch(
 
     return;
   }
-  if (guard.id() == "or")
+  if (split && guard.id() == "or")
   {
     // turn
     //   if(a || b) goto target_true; else goto target_false;
@@ -2254,8 +2711,11 @@ void goto_convertt::generate_conditional_branch(
     std::list<exprt> op;
     collect_operands(guard, guard.id(), op);
 
+    const bool outer_short_circuit = in_short_circuit;
+    in_short_circuit = true;
     forall_expr_list (it, op)
       generate_conditional_branch(*it, target_true, location, dest);
+    in_short_circuit = outer_short_circuit;
 
     goto_programt::targett t_false = dest.add_instruction();
     t_false->make_goto(target_false);
@@ -2266,7 +2726,7 @@ void goto_convertt::generate_conditional_branch(
   }
 
   exprt cond = guard;
-  remove_sideeffects(cond, dest);
+  remove_condition_sideeffects(cond, dest);
 
   goto_programt::targett t_true = dest.add_instruction();
   t_true->make_goto(target_true);
@@ -2282,6 +2742,21 @@ void goto_convertt::generate_conditional_branch(
 symbolt &goto_convertt::new_tmp_symbol(const typet &type)
 {
   return tmp_symbol.new_symbol(context, type, "tmp$");
+}
+
+bool goto_convertt::destroy_full_expression_temporaries(
+  std::size_t stack_size,
+  const locationt &location,
+  goto_programt &dest)
+{
+  const destructor_stackt &stack = targets.destructor_stack;
+  if (
+    std::none_of(stack.begin() + stack_size, stack.end(), is_destructor_entry))
+    return false;
+
+  unwind_destructor_stack(location, stack_size, dest);
+  targets.destructor_stack.resize(stack_size);
+  return true;
 }
 
 void goto_convertt::unwind_destructor_stack(

@@ -160,6 +160,11 @@ const struct group_opt_templ all_cmd_options[] = {
     {"no-cprover-additions",
      NULL,
      "Do not auto-link ESBMC additions when reading a CBMC goto-binary"},
+    {"ignore-property-class",
+     boost::program_options::value<std::vector<std::string>>()->value_name(
+       "class"),
+     "Skip the assertions a CBMC goto-binary tags with this property class "
+     "(repeatable), e.g. Kani's reachability_check and cover"},
     {"dont-care-about-missing-extensions",
      NULL,
      "Don't crash on unsupported extensions"},
@@ -224,6 +229,17 @@ const struct group_opt_templ all_cmd_options[] = {
       NULL,
       "Enforce strict type checking for function arguments during "
       "verification"},
+     {"python-ignore-assertions",
+      NULL,
+      "Treat the program's own assert statements as assumptions, keeping the "
+      "frontend's and the operational model's exception checks (unlike "
+      "--no-assertions, which drops those too)"},
+     {"python-check-exceptions",
+      boost::program_options::value<std::string>()->value_name("types"),
+      "Report only an uncaught exception whose type is one of the "
+      "comma-separated types or a subclass of one. Any other uncaught "
+      "exception ends its path unreported, and the program's assert "
+      "statements become assumptions unless AssertionError is covered"},
      {"python-no-fold",
       NULL,
       "Disable NumPy constant folding in the Python frontend"},
@@ -260,9 +276,13 @@ const struct group_opt_templ all_cmd_options[] = {
     {"ld-sound-mode",
      NULL,
      "Translate user function-block ST bodies in sound Boolean/integer mode: "
-     "unsupported constructs (function calls, member access) make the FB body "
-     "fall back to a no-op instead of being over-approximated as "
-     "nondeterministic (no over-approximation, zero false positives)"},
+     "unsupported constructs (function calls, member access) leave the body "
+     "untranslated, so the block's outputs take any value each scan, instead "
+     "of only those constructs being over-approximated"},
+    {"ld-closed-world",
+     NULL,
+     "Assume only the program writes its VAR_IN_OUT, VAR_EXTERNAL and %M "
+     "variables; by default they take any value at the start of each scan"},
     {"ld-scan-watchdog",
      NULL,
      "Instrument WHILE loops in user function-block bodies with a "
@@ -537,6 +557,12 @@ const struct group_opt_templ all_cmd_options[] = {
     {"termination",
      NULL,
      "Incremental loop unwinding assertion verification"}}},
+  {"Transition system (experimental)",
+   {{"ts-check",
+     NULL,
+     "Extract the main loop as a transition system, print one TS-CHECK line "
+     "saying whether it is one, and stop"},
+    {"ts-dump", NULL, "With --ts-check, also print the transition system"}}},
   {"k-induction",
    {{"base-case", NULL, "Check the base case"},
     {"forward-condition", NULL, "Check the forward condition"},
@@ -862,6 +888,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"force-malloc-success", NULL, "Do not check for malloc/new failure"},
     {"force-realloc-success", NULL, "Do not check for realloc failure"},
     {"malloc-zero-is-null", NULL, "Also explore malloc(0) returning NULL"},
+    {"reserve-first-page",
+     NULL,
+     "Place no object below address 4096, as CBMC does, so a pointer made "
+     "from a small integer never aliases one"},
     {"max-symbolic-realloc-copy",
      boost::program_options::value<int>()->default_value(128)->value_name("nr"),
      "Set maximum number of elements to copy symbolically in realloc (default "

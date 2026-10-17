@@ -1,0 +1,8 @@
+properties:
+  # A load puts CV at the preset (2), which takes Empty low. A CTD whose LD input
+  # is never read starts at 0 and only counts down, so Empty would hold in
+  # every scan and this invariant would pass (#7353).
+  - id: P1
+    kind: invariant
+    expression: "Empty"
+    description: "Deliberately false: a load clears Empty"

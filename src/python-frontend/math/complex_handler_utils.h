@@ -31,7 +31,8 @@ exprt raise_math_real_type_error_expr(python_converter &converter);
 
 /**
  * Generates a TypeError expression for functions that require an integer
- * but received a complex: "'complex' object cannot be interpreted as an integer".
+ * but received a complex: "'complex' object cannot be interpreted as an
+ * integer".
  */
 exprt raise_math_int_type_error_expr(python_converter &converter);
 

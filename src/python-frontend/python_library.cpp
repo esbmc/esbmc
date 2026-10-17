@@ -24,8 +24,9 @@ void add_cpython_library(contextt &context)
 
   contextt models_ctx, ignored_ctx;
   goto_binary_reader reader;
-  if (reader.read_goto_binary_array(
-        pysrc64_buf, pysrc64_buf_size, models_ctx, ignored_ctx, &model_bodies))
+  if (
+    reader.read_goto_binary_array(
+      pysrc64_buf, pysrc64_buf_size, models_ctx, ignored_ctx, &model_bodies))
     abort();
 
   models_ctx.foreach_operand([&context](const symbolt &s) {

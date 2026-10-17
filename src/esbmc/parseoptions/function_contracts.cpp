@@ -24,7 +24,8 @@ bool esbmc_parseoptionst::process_function_contracts(
 
   // Lambda function to collect all functions with contracts
   // This includes functions with:
-  // 1. Explicit contract clauses (__ESBMC_requires, __ESBMC_ensures, __ESBMC_assigns)
+  // 1. Explicit contract clauses (__ESBMC_requires, __ESBMC_ensures,
+  // __ESBMC_assigns)
   // 2. __attribute__((annotate("__ESBMC_contract"))) annotation
   auto collect_functions_with_contracts =
     [&contracts, &goto_functions, &ctx]() {

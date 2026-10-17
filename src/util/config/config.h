@@ -117,6 +117,7 @@ public:
     }
 
     bool char_is_unsigned;
+    bool reserve_first_page = false;
 
     enum cheri_flavor
     {
@@ -139,6 +140,9 @@ public:
     endianesst endianess;
 
     triple target;
+
+    /** Whether --big-endian or --little-endian contradicts the target. */
+    bool endianess_overrides_target() const;
 
     /* TODO: make this configurable.
      *

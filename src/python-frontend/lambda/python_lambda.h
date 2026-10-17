@@ -18,8 +18,11 @@ public:
     contextt &context,
     type_handler &type_handler);
 
-  // Main method to create lambda expression from AST
-  exprt get_lambda_expr(const nlohmann::json &element);
+  // Main method to create lambda expression from AST. Parameters take
+  // `argument_types` when given, those of the lambda's one call.
+  exprt get_lambda_expr(
+    const nlohmann::json &element,
+    const std::vector<std::optional<typet>> &argument_types);
 
   // Check if a variable assignment involves a lambda
   bool is_lambda_assignment(const nlohmann::json &ast_node) const;
@@ -48,10 +51,12 @@ private:
     const nlohmann::json &body_node,
     const std::vector<std::optional<typet>> &call_site_types);
 
-  // Per-parameter type taken from a call through the name this lambda is bound
-  // to; an entry is empty when no such call pins that argument down (#7328).
-  std::vector<std::optional<typet>>
-  call_site_argument_types(const nlohmann::json &element) const;
+  // Per-parameter type taken from `argument_types` when given, else from a
+  // call through the name this lambda is bound to; an entry is empty when no
+  // such call pins that argument down (#7328).
+  std::vector<std::optional<typet>> call_site_argument_types(
+    const nlohmann::json &element,
+    const std::vector<std::optional<typet>> &argument_types) const;
 
   exprt process_lambda_body(
     const nlohmann::json &body_node,
@@ -68,5 +73,11 @@ private:
     bool file_local,
     bool is_parameter = false);
 };
+
+/// The one name target a plain `x = v` or `x: T = v` statement binds, or null.
+const nlohmann::json *binding_target(const nlohmann::json &stmt);
+
+/// Every construct under @p node that binds @p name, in any nested scope too.
+size_t count_bindings(const nlohmann::json &node, const std::string &name);
 
 #endif // ESBMC_PYTHON_LAMBDA_H

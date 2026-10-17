@@ -1,0 +1,5 @@
+CORE
+main.c
+--data-races-check --no-assertions --lock-order-check
+^VERIFICATION FAILED$
+W/W data race on c:@global

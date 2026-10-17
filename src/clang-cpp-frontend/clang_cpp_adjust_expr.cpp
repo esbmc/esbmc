@@ -43,11 +43,13 @@ void clang_cpp_adjust::gen_implicit_union_copy_move_constructor(symbolt &symbol)
   }
   code_blockt &ctor_body = to_code_block(to_code(value));
   /* https://en.cppreference.com/w/cpp/language/copy_constructor#Implicitly-defined_copy_constructor
-   * > If the implicitly-declared copy constructor is not deleted, it is defined (that is, a function body is generated and compiled)
-   * > by the compiler if odr-used or needed for constant evaluation(since C++11).
-   * > **For union types, the implicitly-defined copy constructor copies the object representation (as by std::memmove).**
-   * We don't call std::memmove here, we should be able to just assign the union.
-   * (The wording is similar for https://en.cppreference.com/w/cpp/language/move_constructor#Implicitly-defined_move_constructor)
+   * > If the implicitly-declared copy constructor is not deleted, it is defined
+   * (that is, a function body is generated and compiled) > by the compiler if
+   * odr-used or needed for constant evaluation(since C++11). > **For union
+   * types, the implicitly-defined copy constructor copies the object
+   * representation (as by std::memmove).** We don't call std::memmove here, we
+   * should be able to just assign the union. (The wording is similar for
+   * https://en.cppreference.com/w/cpp/language/move_constructor#Implicitly-defined_move_constructor)
    */
 
   code_assignt copy_ctor_assign;
@@ -167,6 +169,20 @@ void clang_cpp_adjust::adjust_new(exprt &expr)
     exprt new_size = static_cast<const exprt &>(expr.size_irep());
     adjust_expr(new_size);
     expr.size(new_size);
+  }
+
+  if (expr.find("alloc_arguments").is_not_nil())
+  {
+    const code_typet::argumentst &params =
+      to_code_type(
+        static_cast<const exprt &>(expr.find("alloc_function")).type())
+        .arguments();
+    exprt &args = static_cast<exprt &>(expr.add("alloc_arguments"));
+    for (std::size_t i = 0; i < args.operands().size(); ++i)
+    {
+      adjust_expr(args.operands()[i]);
+      gen_typecast(ns, args.operands()[i], params[i + 1].type());
+    }
   }
 
   // Note: the cpp_new allocation size flows via size_irep() (the array count)

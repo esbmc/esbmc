@@ -4,7 +4,8 @@
 #include <string.h>
 #include "python_types.h"
 
-// Python character isalpha - handles ASCII letters only in a single-byte context.
+// Python character isalpha - handles ASCII letters only in a single-byte
+// context.
 _Bool __python_char_isalpha(int c)
 {
 __ESBMC_HIDE:;
@@ -26,7 +27,8 @@ __ESBMC_HIDE:;
   return max_len;
 }
 
-// Python string isalpha - handles ASCII and common two-byte UTF-8 Latin letters.
+// Python string isalpha - handles ASCII and common two-byte UTF-8 Latin
+// letters.
 _Bool __python_str_isalpha(const char *s)
 {
 __ESBMC_HIDE:;
@@ -1230,13 +1232,12 @@ __ESBMC_HIDE:;
 
     if (digit_value < 0)
     {
+      /* Whitespace may only follow the digits; the check below rejects
+       * anything after it. */
       if (
         c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' ||
         c == '\r')
-      {
-        s++;
-        continue;
-      }
+        break;
       __ESBMC_assert(0, "invalid literal for int() - invalid character");
       return 0;
     }
@@ -1593,14 +1594,19 @@ __ESBMC_HIDE:;
 }
 
 // Python str.join - concatenates the elements of `list` separated by `sep`.
-// Empty / NULL list returns "". NULL sep is treated as "". An element whose
-// `value` is NULL is silently skipped; CPython raises TypeError there, but the
-// rest of the str.* OM family takes the same lenient stance and well-typed
-// `List[str]` programs never hit this path. Mirrors the 511-byte fixed-buffer
-// pattern used by __python_str_concat: overflow is detected by checking that
-// the input was fully drained when an inner loop exits, not by inspecting the
-// final pos.
-char *__python_str_join(const char *sep, struct __ESBMC_PyListObj *list)
+// Empty / NULL list returns "". NULL sep is treated as "". An int, float or
+// bool element is a TypeError, as in CPython. An element whose `value` is NULL
+// is silently skipped; CPython raises TypeError there too, but the rest of the
+// str.* OM family takes the same lenient stance. Mirrors the 511-byte
+// fixed-buffer pattern used by __python_str_concat: overflow is detected by
+// checking that the input was fully drained when an inner loop exits, not by
+// inspecting the final pos.
+char *__python_str_join(
+  const char *sep,
+  struct __ESBMC_PyListObj *list,
+  size_t int_type_id,
+  size_t float_type_id,
+  size_t bool_type_id)
 {
 __ESBMC_HIDE:;
   char *buffer = __ESBMC_alloca(512);
@@ -1627,6 +1633,12 @@ __ESBMC_HIDE:;
       }
       __ESBMC_assert(sep[j] == '\0', "join: result exceeds 511 characters");
     }
+
+    size_t type_id = list->items[i].type_id;
+    __ESBMC_assert(
+      type_id != int_type_id && type_id != float_type_id &&
+        type_id != bool_type_id,
+      "TypeError: sequence item: expected str instance");
 
     const char *s = (const char *)list->items[i].value;
     if (s)

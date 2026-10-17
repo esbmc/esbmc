@@ -178,14 +178,14 @@ public:
   }
 
   // disabled by DK: makes operators ambigous
-  //operator llong_t() const;
-  //operator ullong_t() const;
+  // operator llong_t() const;
+  // operator ullong_t() const;
   uint64_t to_uint64() const;
   int64_t to_int64() const;
 
 #ifndef bool
   // Like int: non-zero is true. Equivalent to !is_zero().
-  //operator bool() const			{ return length != 0; }
+  // operator bool() const			{ return length != 0; }
 #endif
 
   // All comparisions are done with these primitives.
@@ -488,4 +488,4 @@ COMPARISON_OPERATORS(int)
 COMPARISON_OPERATORS(unsigned)
 #undef COMPARISON_OPERATORS
 
-#endif //ndef BIGINT_HH
+#endif // ndef BIGINT_HH

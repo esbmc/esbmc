@@ -11,7 +11,7 @@ template <class T>
 class sc_inout
 {
 public:
-  sc_inout(){}; //not implemented
+  sc_inout() {}; // not implemented
 
   void write(T arg)
   {

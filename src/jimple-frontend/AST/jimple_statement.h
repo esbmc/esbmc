@@ -197,4 +197,4 @@ class jimple_throw : public jimple_statement
   std::shared_ptr<jimple_expr> expr;
 };
 
-#endif //ESBMC_JIMPLE_STATEMENT_H
+#endif // ESBMC_JIMPLE_STATEMENT_H

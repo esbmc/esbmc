@@ -1,5 +1,6 @@
 #include <python-frontend/dynamic_type/dynamic_type_handler.h>
 #include <python-frontend/dynamic_type/literal_divergence.h>
+#include <python-frontend/json_utils.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/symbol_id.h>
@@ -19,9 +20,32 @@ namespace
 {
 using dynamic_type_detail::collect_if_node_literal_kinds;
 
-// Classifies a single `return <literal>` statement: "num", "str", or "" if
-// it isn't a literal return.
-std::string classify_return_literal_kind(const nlohmann::json &ret_stmt)
+using param_kinds_t = std::unordered_map<std::string, std::string>;
+
+// Kinds of the parameters annotated (or inferred from call sites) as int,
+// bool or str, so `return x` counts like a literal of that kind (#8523).
+param_kinds_t collect_param_kinds(const nlohmann::json &function_node)
+{
+  param_kinds_t kinds;
+  if (!function_node.contains("args") || !function_node["args"].is_object())
+    return kinds;
+  for (const auto &arg : function_node["args"].value("args", nlohmann::json()))
+  {
+    const auto &ann = arg.value("annotation", nlohmann::json());
+    const std::string type = ann.is_object() ? ann.value("id", "") : "";
+    if (type == "int" || type == "bool")
+      kinds[arg["arg"].get<std::string>()] = "num";
+    else if (type == "str")
+      kinds[arg["arg"].get<std::string>()] = "str";
+  }
+  return kinds;
+}
+
+// Classifies a single `return <literal>` or `return <param>` statement:
+// "num", "str", or "" if neither applies.
+std::string classify_return_literal_kind(
+  const nlohmann::json &ret_stmt,
+  const param_kinds_t &param_kinds)
 {
   if (!ret_stmt.is_object() || ret_stmt.value("_type", "") != "Return")
     return "";
@@ -29,6 +53,11 @@ std::string classify_return_literal_kind(const nlohmann::json &ret_stmt)
     return "";
 
   const auto &value = ret_stmt["value"];
+  if (value.value("_type", "") == "Name")
+  {
+    auto it = param_kinds.find(value.value("id", ""));
+    return it == param_kinds.end() ? "" : it->second;
+  }
   if (value.value("_type", "") != "Constant" || !value.contains("value"))
     return "";
 
@@ -45,6 +74,7 @@ std::string classify_return_literal_kind(const nlohmann::json &ret_stmt)
 // both of their arms.
 void collect_branch_return_kinds(
   const nlohmann::json &block,
+  const param_kinds_t &param_kinds,
   std::unordered_set<std::string> &kinds)
 {
   if (!block.is_array() || block.empty())
@@ -54,13 +84,13 @@ void collect_branch_return_kinds(
   if (last.is_object() && last.value("_type", "") == "If")
   {
     if (last.contains("body"))
-      collect_branch_return_kinds(last["body"], kinds);
+      collect_branch_return_kinds(last["body"], param_kinds, kinds);
     if (last.contains("orelse"))
-      collect_branch_return_kinds(last["orelse"], kinds);
+      collect_branch_return_kinds(last["orelse"], param_kinds, kinds);
     return;
   }
 
-  const std::string kind = classify_return_literal_kind(last);
+  const std::string kind = classify_return_literal_kind(last, param_kinds);
   if (!kind.empty())
     kinds.insert(kind);
 }
@@ -82,7 +112,20 @@ std::unordered_set<std::string> dynamic_type_handler::detect_dynamic_type_names(
   std::unordered_map<std::string, int> leaf_count;
   int leaf_total = 0;
 
-  if (!collect_if_node_literal_kinds(if_node, kinds, leaf_count, leaf_total))
+  // Module scope by default, or the current function's body.
+  const nlohmann::json &module_body = converter_.ast()["body"];
+  nlohmann::json func_def;
+  const nlohmann::json *scope_body = &module_body;
+  if (!converter_.current_function_name().empty())
+  {
+    func_def = json_utils::try_find_function(
+      module_body, converter_.current_function_name());
+    if (!func_def.empty() && func_def.contains("body"))
+      scope_body = &func_def["body"];
+  }
+
+  if (!collect_if_node_literal_kinds(
+        if_node, kinds, leaf_count, leaf_total, *scope_body, module_body))
     return dynamic_type_names;
 
   for (const auto &[name, kind_set] : kinds)
@@ -650,9 +693,12 @@ exprt dynamic_type_handler::handle_arithmetic(
                     : build_div_literal(rhs, lhs, false, location);
 }
 
-exprt dynamic_type_handler::build_neg_tagged(const exprt &tagged)
+exprt dynamic_type_handler::build_neg_tagged(
+  const exprt &tagged,
+  const locationt &location)
 {
   exprt zero = from_integer(0, signedbv_typet(config.ansi_c.int_width));
+  guard_type_error("Sub", zero, tagged, location);
   return build_sub_literal(tagged, zero, /*tagged_is_left=*/false);
 }
 
@@ -744,6 +790,65 @@ exprt dynamic_type_handler::build_div_tagged(
      build_typecast(rhs_is_num, int_type())});
 }
 
+exprt dynamic_type_handler::operands_type_ok(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs) const
+{
+  const bool lhs_tagged = type_handler_.is_tagged_scalar_type(lhs.type());
+  const bool rhs_tagged = type_handler_.is_tagged_scalar_type(rhs.type());
+  if (!lhs_tagged || !rhs_tagged)
+  {
+    const exprt &tagged = lhs_tagged ? lhs : rhs;
+    const exprt &literal = lhs_tagged ? rhs : lhs;
+    return type_handler_.tagged_scalar_type_matches(
+      build_member(tagged, "type_id", size_type()), literal.type());
+  }
+
+  exprt lhs_type_id = build_member(lhs, "type_id", size_type());
+  exprt rhs_type_id = build_member(rhs, "type_id", size_type());
+  exprt lhs_is_num =
+    type_handler_.tagged_scalar_type_matches(lhs_type_id, long_long_int_type());
+  exprt rhs_is_num =
+    type_handler_.tagged_scalar_type_matches(rhs_type_id, long_long_int_type());
+  exprt both_num = build_and(lhs_is_num, rhs_is_num);
+  if (op == "Sub" || op == "Div")
+    return both_num;
+  if (op == "Add")
+  {
+    exprt str_type_id =
+      type_handler_.tagged_scalar_type_id(pointer_typet(char_type()));
+    return build_or(
+      both_num,
+      build_and(
+        build_equal(lhs_type_id, str_type_id),
+        build_equal(rhs_type_id, str_type_id)));
+  }
+  return build_and(
+    build_equal(lhs_is_num, rhs_is_num),
+    build_or(lhs_is_num, build_equal(lhs_type_id, rhs_type_id)));
+}
+
+void dynamic_type_handler::guard_type_error(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  const locationt &location)
+{
+  if (!converter_.can_emit_catchable_guard())
+    return;
+
+  static const std::unordered_map<std::string, std::string> symbols = {
+    {"Add", "+"}, {"Sub", "-"}, {"Div", "/"}};
+  auto symbol = symbols.find(op);
+  const std::string message =
+    symbol == symbols.end()
+      ? "comparison not supported between these types"
+      : "unsupported operand type(s) for " + symbol->second;
+  converter_.emit_guarded_raise(
+    build_not(operands_type_ok(op, lhs, rhs)), "TypeError", message, location);
+}
+
 void dynamic_type_handler::guard_zero_division(
   const exprt &divisor,
   const exprt &type_ok,
@@ -814,10 +919,12 @@ exprt dynamic_type_handler::build_isinstance_check(
 }
 
 bool dynamic_type_handler::detect_dynamic_return_type(
-  const nlohmann::json &function_body) const
+  const nlohmann::json &function_node) const
 {
+  const nlohmann::json &function_body = function_node["body"];
   if (!function_body.is_array())
     return false;
+  const param_kinds_t param_kinds = collect_param_kinds(function_node);
 
   for (size_t i = 0; i < function_body.size(); ++i)
   {
@@ -828,16 +935,16 @@ bool dynamic_type_handler::detect_dynamic_return_type(
       continue;
 
     std::unordered_set<std::string> kinds;
-    collect_branch_return_kinds(stmt["body"], kinds);
+    collect_branch_return_kinds(stmt["body"], param_kinds, kinds);
 
     if (stmt.contains("orelse") && !stmt["orelse"].empty())
-      collect_branch_return_kinds(stmt["orelse"], kinds);
+      collect_branch_return_kinds(stmt["orelse"], param_kinds, kinds);
     else if (i + 1 < function_body.size())
     {
       // No else: an idiomatic early return falls through to the next
       // statement at this level.
       const std::string next_kind =
-        classify_return_literal_kind(function_body[i + 1]);
+        classify_return_literal_kind(function_body[i + 1], param_kinds);
       if (!next_kind.empty())
         kinds.insert(next_kind);
     }
@@ -851,10 +958,11 @@ bool dynamic_type_handler::detect_dynamic_return_type(
 
 bool dynamic_type_handler::scope_assigns_divergent_literal_types(
   const std::string &name,
-  const nlohmann::json &scope_body) const
+  const nlohmann::json &scope_body,
+  const nlohmann::json &module_body) const
 {
   return dynamic_type_detail::scope_assigns_divergent_literal_types(
-    name, scope_body);
+    name, scope_body, module_body);
 }
 
 exprt dynamic_type_handler::build_tagged_value(

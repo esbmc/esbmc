@@ -35,9 +35,10 @@ not a corpus defect.
 Measured with jbmc 6.8.0, JDK 26.0.1, `--unwind 6`, lazy class loading against
 `core-models.jar`. JBMC matches the intended verdict on **10/10**.
 
-ESBMC (8.4.0, `24cdc4da31`) currently reaches **0/10**: every program is
-blocked by the same construct, `@class_identifier` typed `string`
-(plan §2.3.1). One construct, ten programs — that is the Phase 1 work-list.
+ESBMC at 8.4.0 (`24cdc4da31`) reached **0/10**: every program was blocked by
+the same construct, `@class_identifier` typed `string` (plan §2.3.1). Since
+#6206, `T4Virtual` and `T4VirtualFail` verify and agree with JBMC (plan §4.1.7,
+§4.1.8). The plan records no result for the other eight.
 
 ## Why lazy class loading
 

@@ -138,7 +138,8 @@ typedef enum cudnnnanpropagation cudnnNanPropagation_t;
 
 float sigmoidFunction(float u)
 {
-  // lookup table of the sigmoid function over u in [-20, 20] with 0.01 resolution (4000 entries)
+  // lookup table of the sigmoid function over u in [-20, 20] with 0.01
+  // resolution (4000 entries)
   float lookup[4000] = {
     0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000,
     0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000,

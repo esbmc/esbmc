@@ -30,14 +30,16 @@ smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
       expr2tc op2pos = lessthan2tc(zero, side2);
       expr2tc both_pos = and2tc(op1pos, op2pos);
 
-      expr2tc negop1 = not2tc(op1pos);
-      expr2tc negop2 = not2tc(op2pos);
+      expr2tc negop1 = lessthan2tc(side1, zero);
+      expr2tc negop2 = lessthan2tc(side2, zero);
       expr2tc both_neg = and2tc(negop1, negop2);
 
+      // INT_MIN + INT_MIN wraps to 0, so a negative/negative sum that does
+      // not underflow must be strictly negative.
       expr2tc nooverflow =
         implies2tc(both_pos, greaterthanequal2tc(overflow.operand, zero));
       expr2tc nounderflow =
-        implies2tc(both_neg, lessthanequal2tc(overflow.operand, zero));
+        implies2tc(both_neg, lessthan2tc(overflow.operand, zero));
       return mk_not(
         solver->mkAnd(convert_ast(nooverflow), convert_ast(nounderflow)));
     }
@@ -108,12 +110,13 @@ smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
       // Compute the subtraction result
       expr2tc sub_result = sub2tc(side1->type, side1, side2);
 
-      // Overflow condition: (a > 0 && b < 0 && result < 0) || (a < 0 && b > 0
-      // && result > 0)
-      expr2tc a_pos = greaterthan2tc(side1, zero);        // a > 0
-      expr2tc b_neg = lessthan2tc(side2, zero);           // b < 0
-      expr2tc result_neg = lessthan2tc(sub_result, zero); // result < 0
-      expr2tc pos_minus_neg_overflow = and2tc(a_pos, and2tc(b_neg, result_neg));
+      // Overflow condition: (a >= 0 && b < 0 && result < 0) || (a < 0 && b > 0
+      // && result > 0). a >= 0 rather than a > 0: 0 - INT_MIN overflows.
+      expr2tc a_nonneg = greaterthanequal2tc(side1, zero); // a >= 0
+      expr2tc b_neg = lessthan2tc(side2, zero);            // b < 0
+      expr2tc result_neg = lessthan2tc(sub_result, zero);  // result < 0
+      expr2tc pos_minus_neg_overflow =
+        and2tc(a_nonneg, and2tc(b_neg, result_neg));
 
       expr2tc a_neg = lessthan2tc(side1, zero);              // a < 0
       expr2tc b_pos = greaterthan2tc(side2, zero);           // b > 0

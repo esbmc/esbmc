@@ -1,0 +1,4 @@
+CORE
+st.ld
+--ld-props props.yaml --goto-functions-only
+^WARNING: user FB 'LOOP' body not translated

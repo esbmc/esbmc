@@ -31,6 +31,7 @@ enum class StatementType
   RAISE,
   UNKNOWN,
   GLOBAL,
+  NONLOCAL,
   TRY,
   EXCEPTHANDLER,
   DELETE_STATEMENT
@@ -50,7 +51,8 @@ enum class ExpressionType
   UNKNOWN,
   FSTRING,
   TUPLE,
-  SLICE
+  SLICE,
+  CLASS_MRO
 };
 
 struct TypeFlags
@@ -147,15 +149,21 @@ public:
 
   static bool is_python_exceptions(const std::string &name)
   {
-    return (
-      name == "BaseException" || name == "Exception" || name == "ValueError" ||
-      name == "TypeError" || name == "AttributeError" || name == "IndexError" ||
-      name == "KeyError" || name == "ZeroDivisionError" ||
-      name == "AssertionError" || name == "NameError" || name == "OSError" ||
-      name == "FileNotFoundError" || name == "FileExistsError" ||
-      name == "PermissionError" || name == "NotImplementedError" ||
-      name == "ImportError" || name == "ModuleNotFoundError" ||
-      name == "RuntimeError" || name == "StopIteration" || name == "EOFError");
+    static const std::unordered_set<std::string> exceptions = {
+      "BaseException",     "Exception",
+      "ValueError",        "TypeError",
+      "AttributeError",    "IndexError",
+      "KeyError",          "ZeroDivisionError",
+      "OverflowError",     "AssertionError",
+      "NameError",         "OSError",
+      "FileNotFoundError", "FileExistsError",
+      "PermissionError",   "NotImplementedError",
+      "ImportError",       "ModuleNotFoundError",
+      "RuntimeError",      "StopIteration",
+      "EOFError",          "UnboundLocalError",
+      "ArithmeticError",   "FloatingPointError",
+      "LookupError"};
+    return exceptions.count(name) != 0;
   }
 
   static bool is_c_model_func(const std::string &func_name)
@@ -216,6 +224,20 @@ public:
   static void remove_member_name(typet &t)
   {
     t.remove_member_name();
+  }
+
+  // A scalar T whose `Optional[T]` is the Optional<T> struct, not a T*.
+  static bool is_optional_scalar(const typet &t)
+  {
+    return t == long_long_int_type() || t == long_long_uint_type() ||
+           t == double_type() || t == bool_type();
+  }
+
+  // The Optional<T> struct type_handler::build_optional_type makes.
+  static bool is_optional_struct(const typet &t)
+  {
+    return t.is_struct() &&
+           to_struct_type(t).tag().as_string().starts_with("tag-Optional_");
   }
 
   static bool is_char_type(const typet &t)
@@ -322,6 +344,25 @@ public:
     }
 
     return flags;
+  }
+
+  // Whether an annotation spells a union with None (`T | None`,
+  // `Union[T, None]`).
+  static bool annotation_admits_none(const nlohmann::json &ann)
+  {
+    if (!ann.is_object())
+      return false;
+    if (ann.value("_type", "") == "BinOp")
+      return type_utils::extract_binop_union_types(ann).has_none;
+    if (
+      ann.value("_type", "") != "Subscript" ||
+      ann["value"].value("id", "") != "Union")
+      return false;
+    const nlohmann::json &slice = ann["slice"];
+    for (const auto &elt : slice.value("elts", nlohmann::json::array()))
+      if (elt.value("_type", "") == "Constant" && elt["value"].is_null())
+        return true;
+    return false;
   }
 
   static bool is_integer_type(const typet &type)

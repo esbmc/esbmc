@@ -1,0 +1,4 @@
+CORE
+cbmc_kani_dyn_vtable.goto
+--binary --function _RNvCsiso5PAmQglS_8dyn_call7harness --ignore-property-class reachability_check --ignore-property-class cover
+^VERIFICATION SUCCESSFUL$

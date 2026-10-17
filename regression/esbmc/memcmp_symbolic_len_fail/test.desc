@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^  FAILED .*dereference failure: memcmp length exceeds object bounds$
+^VERIFICATION FAILED$

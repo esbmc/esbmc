@@ -40,7 +40,7 @@ bool clang_cpp_convertert::perform_virtual_dispatch(
   switch (decl.getKind())
   {
   // TODO: dtor might be virtual too
-  //case clang::Decl::CXXDestructor:
+  // case clang::Decl::CXXDestructor:
   case clang::Decl::CXXMethod:
   {
     const clang::CXXMethodDecl &cxxmd =
@@ -146,7 +146,8 @@ void clang_cpp_convertert::get_vft_binding_expr_vtable_ptr(
   pointer_typet member_type(vtable_type);
   member_exprt deref_member(base_deref, vtable_ptr_name, member_type);
 
-  // we've got the deref type and member. Now we are ready to make the deref new_expr
+  // we've got the deref type and member. Now we are ready to make the deref
+  // new_expr
   new_expr = dereference_exprt(deref_member, member_type);
 }
 
@@ -161,8 +162,8 @@ bool clang_cpp_convertert::get_vft_binding_expr_function(
   std::string base_class_id, base_class_name;
   get_decl_name(*md->getParent(), base_class_name, base_class_id);
 
-  exprt comp;
-  if (get_decl(*member.getMemberDecl(), comp))
+  const symbolt *symbol;
+  if (get_method_declaration(*md, symbol))
     return true;
 
   /*
@@ -170,8 +171,8 @@ bool clang_cpp_convertert::get_vft_binding_expr_function(
    * e.g. virtual_table::tag.Bird::c:@S@Bird@F@do_something#
    */
   std::string member_comp_name =
-    vtable_type_prefix + base_class_id + "::" + comp.name().as_string();
-  pointer_typet member_type(comp.type());
+    vtable_type_prefix + base_class_id + "::" + symbol->id.as_string();
+  pointer_typet member_type(symbol->get_type());
   member_exprt deref_member(vtable_ptr_deref, member_comp_name, member_type);
 
   new_expr = dereference_exprt(deref_member, member_type);

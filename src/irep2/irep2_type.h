@@ -111,7 +111,9 @@ public:
     bool _packed = false,
     const std::vector<irep_idt> &memb_base_names = {},
     const BigInt &_alignment = 0,
-    const irep_idt &_python_aggregate = irep_idt())
+    const irep_idt &_python_aggregate = irep_idt(),
+    bool _has_bases = false,
+    const std::vector<irep_idt> &_bases = {})
     : type2t(struct_id),
       members(_members),
       member_names(memb_names),
@@ -119,8 +121,10 @@ public:
       member_base_names(memb_base_names),
       name(_name),
       packed(_packed),
+      has_bases(_has_bases),
       alignment(_alignment),
-      python_aggregate(_python_aggregate)
+      python_aggregate(_python_aggregate),
+      bases(_bases)
   {
     assert(
       memb_base_names.empty() || memb_base_names.size() == _members.size());
@@ -139,6 +143,9 @@ public:
   std::vector<irep_idt> member_base_names;
   irep_idt name;
   bool packed;
+  /// Whether the legacy type had a `bases` list at all, which an empty one is
+  /// not the same as: the key takes part in legacy type equality.
+  bool has_bases;
 
   /// An explicit `alignas`, in bytes; zero when the record has none. IREP2 does
   /// not otherwise represent it, and add_padding reads it to decide a record's
@@ -156,18 +163,25 @@ public:
   /// prefix (docs/roadmap/scope-python-irep2.md §10.4).
   irep_idt python_aggregate;
 
+  /// The class ids `bases` lists, as the C++ and Python frontends write it.
+  /// Unreflected, like `alignment`. Carried because exception dispatch
+  /// (exception_typeid.cpp) and base_type.cpp read the class hierarchy from it
+  /// (docs/roadmap/scope-python-irep2.md §15).
+  std::vector<irep_idt> bases;
+
   static constexpr auto fields = std::make_tuple(
     &struct_type2t::members,
     &struct_type2t::member_names,
     &struct_type2t::member_pretty_names,
     &struct_type2t::name,
     &struct_type2t::packed);
-  /// Covers the three deliberately unreflected members: `member_base_names` (a
+  /// Covers the deliberately unreflected members: `member_base_names` (a
   /// member's spelling is no part of the struct's identity), `alignment` (two
-  /// records differing only in `alignas` must still compare equal) and
-  /// `python_aggregate`.
+  /// records differing only in `alignas` must still compare equal),
+  /// `python_aggregate`, `has_bases` and `bases`.
   static constexpr std::size_t excluded_field_bytes =
-    sizeof(std::vector<irep_idt>) + sizeof(BigInt) + sizeof(irep_idt);
+    2 * sizeof(std::vector<irep_idt>) + sizeof(BigInt) + sizeof(irep_idt) +
+    sizeof(bool);
   static std::string field_names[esbmct::num_type_fields];
 };
 

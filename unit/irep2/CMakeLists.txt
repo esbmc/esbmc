@@ -14,6 +14,7 @@ new_unit_test(irep2withtypetest "with_type.test.cpp" "util_esbmc")
 new_unit_test(irep2serialisationtest "serialisation.test.cpp" "util_esbmc")
 new_unit_test(irep2guardalgebratest "guard_algebra.test.cpp" "util_esbmc")
 new_unit_test(irep2nullcmpfoldtest "null_cmp_fold.test.cpp" "util_esbmc")
+new_unit_test(irep2sameobjectfoldtest "same_object_fold.test.cpp" "util_esbmc")
 new_unit_test(irep2pointeroffsetarithtest "pointer_offset_arith.test.cpp" "util_esbmc")
 
 # What the simplifier hook is handed (issue #7260). Only meaningful where the

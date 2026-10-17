@@ -24,28 +24,29 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
 }
 
 /**
-     * @brief Populate the out parameter with the expression based on
-     * the solidity expression grammar. 
-     * 
-     * More specifically, parse each expression in the AST json and
-     * convert it to a exprt ("new_expr"). The expression may have sub-expression
-     * 
-     * !Always check if the expression is a Literal before calling get_expr
-     * !Unless you are 100% sure it will not be a constant
-     * 
-     * This function is called through two paths:
-     * 1. get_non_function_decl => get_var_decl => get_expr
-     * 2. get_non_function_decl => get_function_definition => get_statement => get_expr
-     * 
-     * @param expr The expression that is to be converted to the IR
-     * @param literal_type Type information ast to create the the literal
-     * type in the IR (only needed for when the expression is a literal).
-     * A literal_type is a "typeDescriptions" ast_node.
-     * we need this due to some info is missing in the child node.
-     * @param new_expr Out parameter to hold the conversion
-     * @return true iff the conversion has failed
-     * @return false iff the conversion was successful
-     */
+ * @brief Populate the out parameter with the expression based on
+ * the solidity expression grammar.
+ *
+ * More specifically, parse each expression in the AST json and
+ * convert it to a exprt ("new_expr"). The expression may have sub-expression
+ *
+ * !Always check if the expression is a Literal before calling get_expr
+ * !Unless you are 100% sure it will not be a constant
+ *
+ * This function is called through two paths:
+ * 1. get_non_function_decl => get_var_decl => get_expr
+ * 2. get_non_function_decl => get_function_definition => get_statement =>
+ * get_expr
+ *
+ * @param expr The expression that is to be converted to the IR
+ * @param literal_type Type information ast to create the the literal
+ * type in the IR (only needed for when the expression is a literal).
+ * A literal_type is a "typeDescriptions" ast_node.
+ * we need this due to some info is missing in the child node.
+ * @param new_expr Out parameter to hold the conversion
+ * @return true iff the conversion has failed
+ * @return false iff the conversion was successful
+ */
 bool solidity_convertert::get_expr(
   const nlohmann::json &expr,
   const nlohmann::json &literal_type,
@@ -53,7 +54,8 @@ bool solidity_convertert::get_expr(
 {
   assert(literal_type.is_null() || !literal_type.contains("typeDescriptions"));
   // For rule expression
-  // We need to do location settings to match clang C's number of times to set the locations when recurring
+  // We need to do location settings to match clang C's number of times to set
+  // the locations when recurring
   locationt location;
   get_start_location_from_stmt(expr, location);
 
@@ -162,8 +164,8 @@ bool solidity_convertert::get_expr(
   {
     // e.g.
     // 1.
-    // address(tmp).call{gas: 1000000, value: 1 ether}(abi.encodeWithSignature("register(string)", "MyName"));
-    // 2.
+    // address(tmp).call{gas: 1000000, value: 1
+    // ether}(abi.encodeWithSignature("register(string)", "MyName")); 2.
     // function foo(uint a, uint b) public pure returns (uint) {
     //   return a + b;
     // }
@@ -174,8 +176,9 @@ bool solidity_convertert::get_expr(
     nlohmann::json callee_expr_json = expr["expression"];
 
     // Extract only the "value" option by matching names[].
-    // The AST has parallel arrays: names=["value","gas"], options=[expr1,expr2].
-    // We look up "value" by name so the order doesn't matter.
+    // The AST has parallel arrays: names=["value","gas"],
+    // options=[expr1,expr2]. We look up "value" by name so the order doesn't
+    // matter.
     nlohmann::json value_opts = empty_json;
     if (expr.contains("names") && expr.contains("options"))
     {
@@ -402,15 +405,18 @@ bool solidity_convertert::get_expr(
     //    x.balance;
     //    msg.sender.balance;
     //! Note that member call like msg.sender will not be handled here
-    // The main difference is that, for case 1 we do not need to guess the contract instance
-    // While in case 2, we need to utilize over-approximate modelling to bind the all possible instance
+    // The main difference is that, for case 1 we do not need to guess the
+    // contract instance While in case 2, we need to utilize over-approximate
+    // modelling to bind the all possible instance
     //
     // algo:
-    // 1. we add the property and function to the contract definition (not handled here)
-    // 2. we create an auxiliary mapping to store the <addr, contract-instance-ptr> pair (not handled here)
-    // 3. For case 2, where we only have the address, we need to obtain the object from the mapping
-    // For case 1: => this->balance
-    // For case 3: => tmp.balance
+    // 1. we add the property and function to the contract definition (not
+    // handled here)
+    // 2. we create an auxiliary mapping to store the <addr,
+    // contract-instance-ptr> pair (not handled here)
+    // 3. For case 2, where we only have the address, we need to obtain the
+    // object from the mapping For case 1: => this->balance For case 3: =>
+    // tmp.balance
     const nlohmann::json &caller_expr_json = expr["expression"];
     const std::string mem_name = expr["memberName"].get<std::string>();
 
@@ -463,8 +469,9 @@ bool solidity_convertert::get_expr(
       }
       else
       {
-        if (get_bound_low_level_call(
-              expr, literal_type, mem_name, base, new_expr))
+        if (
+          get_bound_low_level_call(
+            expr, literal_type, mem_name, base, new_expr))
           return true;
       }
     }
@@ -733,7 +740,8 @@ bool solidity_convertert::get_decl_ref_expr(
          it = storage_ref_aliases.find(ref_id))
       ref_id = it->second;
 
-    // Solidity uses +ve odd numbers to refer to var or functions declared in the contract
+    // Solidity uses +ve odd numbers to refer to var or functions declared in
+    // the contract
     nlohmann::json decl = find_decl_ref(ref_id);
     if (decl.empty())
     {
@@ -813,8 +821,8 @@ bool solidity_convertert::get_decl_ref_expr(
     }
     else
     {
-      // Solidity uses -ve odd numbers to refer to built-in var or functions that
-      // are NOT declared in the contract
+      // Solidity uses -ve odd numbers to refer to built-in var or functions
+      // that are NOT declared in the contract
       if (get_esbmc_builtin_ref(expr, new_expr))
         return true;
     }
@@ -1136,7 +1144,7 @@ bool solidity_convertert::get_tuple_expr(
       we assume there are three types of tuple expr:
       0. dump: (x,y);
       1. fixed: (x,y) = (y,x);
-      2. function-related: 
+      2. function-related:
           2.1. (x,y) = func();
           2.2. return (x,y);
 
@@ -1171,10 +1179,9 @@ bool solidity_convertert::get_tuple_expr(
            make the function return void instead, and create a struct type
         2. when parsing the return statement, if the return value is a tuple,
            create a struct type instance, do assignments,  and return empty;
-        3. when the lhs is tuple and rhs is func_call, get_tuple_instance_expr based 
-           on the func_call, and do case 1.
-        e.g.
-        function test() returns (uint, uint)
+        3. when the lhs is tuple and rhs is func_call, get_tuple_instance_expr
+      based on the func_call, and do case 1. e.g. function test() returns (uint,
+      uint)
         {
           return (1,2);
         }
@@ -1222,7 +1229,7 @@ bool solidity_convertert::get_tuple_expr(
       if (get_tuple_definition(expr))
         return true;
 
-      //2. construct struct_type instance
+      // 2. construct struct_type instance
       if (get_tuple_instance(expr, new_expr))
         return true;
     }
@@ -1336,14 +1343,16 @@ bool solidity_convertert::get_call_expr(
       if (func_id == "c:@F@_ESBMC_array_push")
       {
         // signed short _tmpzero#5 = 0;
-        // this->data1 = _ESBMC_array_push((void *)this->data1, (void *)&_tmpzero#5, 2);
+        // this->data1 = _ESBMC_array_push((void *)this->data1, (void
+        // *)&_tmpzero#5, 2);
         exprt base;
         if (get_expr(callee_expr_json["expression"], base))
           return true;
 
         typet base_t;
-        if (get_type_description(
-              callee_expr_json["expression"]["typeDescriptions"], base_t))
+        if (
+          get_type_description(
+            callee_expr_json["expression"]["typeDescriptions"], base_t))
           return true;
 
         exprt tmp = side_effect_exprt("assign", base_t);
@@ -1381,10 +1390,11 @@ bool solidity_convertert::get_call_expr(
       // __ESBMC_assume only handle one param.
       // drop the potential second param.
       exprt single_arg;
-      if (get_expr(
-            expr["arguments"].at(0),
-            expr["arguments"].at(0)["typeDescriptions"],
-            single_arg))
+      if (
+        get_expr(
+          expr["arguments"].at(0),
+          expr["arguments"].at(0)["typeDescriptions"],
+          single_arg))
         return true;
       call.function() = new_expr;
       call.type() = to_code_type(new_expr.type()).return_type();
@@ -1452,8 +1462,9 @@ bool solidity_convertert::get_call_expr(
       }
       else
       {
-        if (get_library_function_call(
-              new_expr, new_expr.type(), empty_json, expr, call))
+        if (
+          get_library_function_call(
+            new_expr, new_expr.type(), empty_json, expr, call))
           return true;
       }
     }
@@ -1491,7 +1502,8 @@ bool solidity_convertert::get_call_expr(
     return false;
   }
 
-  // wrap it in an ImplicitCastExpr to perform conversion of FunctionToPointerDecay
+  // wrap it in an ImplicitCastExpr to perform conversion of
+  // FunctionToPointerDecay
   nlohmann::json implicit_cast_expr =
     make_implicit_cast_expr(callee_expr_json, "FunctionToPointerDecay");
   exprt callee_expr;
@@ -1575,8 +1587,9 @@ bool solidity_convertert::get_call_expr(
   // * check if it's the function inside library node
   // Library functions have no this-pointer parameter, so use
   // get_library_function_call instead of get_non_library_function_call.
-  if (SolidityGrammar::is_sol_library_function(
-        callee_expr_json["referencedDeclaration"].get<int>()))
+  if (
+    SolidityGrammar::is_sol_library_function(
+      callee_expr_json["referencedDeclaration"].get<int>()))
   {
     log_debug("solidity", "\t\t@@@ got library-internal function call");
     assert(expr.contains("arguments"));
@@ -1628,8 +1641,9 @@ bool solidity_convertert::get_contract_member_call_expr(
   // - x.setAddress();
   // - x.address();
   // - x.val(); ==> property
-  // The later one is quite special, as in Solidity variables behave like functions from the perspective of other contracts.
-  // e.g. b._addr is not an address, but a function that returns an address.
+  // The later one is quite special, as in Solidity variables behave like
+  // functions from the perspective of other contracts. e.g. b._addr is not an
+  // address, but a function that returns an address.
 
   // find the parent json which contains arguments
   const auto &func_call_json = find_last_parent(src_ast_json["nodes"], expr);
@@ -1667,8 +1681,8 @@ bool solidity_convertert::get_contract_member_call_expr(
   const nlohmann::json &base_expr_json =
     find_decl_ref(contract_var_id); // contract
 
-  // contract C{ Base x; x.call();} where base.contractname != current_ContractName;
-  // therefore, we need to extract the based contract name
+  // contract C{ Base x; x.call();} where base.contractname !=
+  // current_ContractName; therefore, we need to extract the based contract name
   exprt base;
   std::string base_cname = "";
   if (base_expr_json.empty())
@@ -1740,18 +1754,20 @@ bool solidity_convertert::get_contract_member_call_expr(
       assert(member_decl_ref.contains("typeName"));
       assert(member_decl_ref["typeName"].contains("valueType"));
       exprt pos;
-      if (get_expr(
-            func_call_json["arguments"][0],
-            member_decl_ref["typeName"]["valueType"]["typeDescriptions"],
-            pos))
+      if (
+        get_expr(
+          func_call_json["arguments"][0],
+          member_decl_ref["typeName"]["valueType"]["typeDescriptions"],
+          pos))
         return true;
 
       bool is_new_expr = should_treat_as_new(base_cname);
       // get key/value type
       typet key_t, value_t;
       SolidityGrammar::SolType key_sol_type, val_sol_type;
-      if (get_mapping_key_value_type(
-            member_decl_ref, key_t, value_t, key_sol_type, val_sol_type))
+      if (
+        get_mapping_key_value_type(
+          member_decl_ref, key_t, value_t, key_sol_type, val_sol_type))
       {
         log_error("cannot get mapping key/value type");
         return true;
@@ -1775,14 +1791,15 @@ bool solidity_convertert::get_contract_member_call_expr(
       {
         bool is_mapping_set = false;
         auto _mem_call = member_exprt(base, comp.name(), comp.type());
-        if (get_new_mapping_index_access(
-              value_t,
-              val_sol_type,
-              is_mapping_set,
-              _mem_call,
-              pos,
-              location,
-              new_expr))
+        if (
+          get_new_mapping_index_access(
+            value_t,
+            val_sol_type,
+            is_mapping_set,
+            _mem_call,
+            pos,
+            location,
+            new_expr))
           return true;
       }
 
@@ -1800,8 +1817,9 @@ bool solidity_convertert::get_contract_member_call_expr(
     {
       assert(!comp.is_member());
       auto _mem_call = member_exprt(base, comp_name, comp.type());
-      if (get_high_level_member_access(
-            func_call_json, base, comp, _mem_call, false, new_expr))
+      if (
+        get_high_level_member_access(
+          func_call_json, base, comp, _mem_call, false, new_expr))
         return true;
     }
 
@@ -1822,10 +1840,10 @@ bool solidity_convertert::get_contract_member_call_expr(
 
     if (current_contractName == base_cname)
     {
-      // this.init(); we know the implementation thus cannot model it as unbound_harness
-      // note that here is comp.identifier not comp.name
-      // in unbound mode, we cannot determine the sender
-      // wrap with msg_sender update:
+      // this.init(); we know the implementation thus cannot model it as
+      // unbound_harness note that here is comp.identifier not comp.name in
+      // unbound mode, we cannot determine the sender wrap with msg_sender
+      // update:
       //  old_sender = msg_sender
       //  msg_sender = this.address
       //  ...
@@ -1880,8 +1898,9 @@ bool solidity_convertert::get_contract_member_call_expr(
     else
     {
       assert(!comp.is_member());
-      if (get_high_level_member_access(
-            func_call_json, literal_type, base, comp, call, true, new_expr))
+      if (
+        get_high_level_member_access(
+          func_call_json, literal_type, base, comp, call, true, new_expr))
         return true;
     }
 
@@ -1965,8 +1984,9 @@ bool solidity_convertert::get_index_access_expr(
       // get key/value type
       typet key_t, value_t;
       SolidityGrammar::SolType key_sol_type, val_sol_type;
-      if (get_mapping_key_value_type(
-            map_node, key_t, value_t, key_sol_type, val_sol_type))
+      if (
+        get_mapping_key_value_type(
+          map_node, key_t, value_t, key_sol_type, val_sol_type))
       {
         log_error("cannot get mapping key/value type");
         return true;
@@ -1984,14 +2004,15 @@ bool solidity_convertert::get_index_access_expr(
       else
       {
         bool is_mapping_set = is_mapping_set_lvalue(expr);
-        if (get_new_mapping_index_access(
-              value_t,
-              val_sol_type,
-              is_mapping_set,
-              array,
-              pos,
-              location,
-              new_expr))
+        if (
+          get_new_mapping_index_access(
+            value_t,
+            val_sol_type,
+            is_mapping_set,
+            array,
+            pos,
+            location,
+            new_expr))
           return true;
       }
     }
@@ -2221,10 +2242,11 @@ bool solidity_convertert::get_new_object_expr(
       // same process in case SolidityGrammar::ExpressionT::Literal
       assert(expr.contains("arguments") && expr["arguments"].size() == 1);
       exprt size_expr;
-      if (get_expr(
-            expr["arguments"][0],
-            expr["expression"]["argumentTypes"][0],
-            size_expr))
+      if (
+        get_expr(
+          expr["arguments"][0],
+          expr["expression"]["argumentTypes"][0],
+          size_expr))
         return true;
 
       // Prepare function call: bytes_dynamic_init_zero(len, pool)
@@ -2296,14 +2318,15 @@ bool solidity_convertert::get_new_object_expr(
         }
         exprt front_block = code_blockt();
         exprt back_block = code_blockt();
-        if (model_transaction(
-              expr,
-              this_expr,
-              new_expr,
-              value_expr,
-              location,
-              front_block,
-              back_block))
+        if (
+          model_transaction(
+            expr,
+            this_expr,
+            new_expr,
+            value_expr,
+            location,
+            front_block,
+            back_block))
           return true;
 
         // Remove the last front_block operand (base.$balance += value).
@@ -2365,8 +2388,8 @@ bool solidity_convertert::get_init_expr(
   return false;
 }
 
-// get the name of the contract that contains the target ast_node, including library
-// note that the contract_name might be empty
+// get the name of the contract that contains the target ast_node, including
+// library note that the contract_name might be empty
 void solidity_convertert::get_current_contract_name(
   const nlohmann::json &ast_node,
   std::string &contract_name)
@@ -2381,7 +2404,7 @@ void solidity_convertert::get_current_contract_name(
   if (!ast_node.contains("id"))
   {
     // this could be manually created json.
-    //TODO: avoid this kind of implementation
+    // TODO: avoid this kind of implementation
     if (ast_node.is_object() && ast_node["nodeType"] == "ImplicitCastExprClass")
     {
       get_current_contract_name(ast_node["subExpr"], contract_name);
@@ -2424,7 +2447,8 @@ bool solidity_convertert::get_binary_operator_expr(
 
   // 1. Convert LHS and RHS
   // For "Assignment" expression, it's called "leftHandSide" or "rightHandSide".
-  // For "BinaryOperation" expression, it's called "leftExpression" or "rightExpression"
+  // For "BinaryOperation" expression, it's called "leftExpression" or
+  // "rightExpression"
   exprt lhs, rhs;
   nlohmann::json rhs_json;
   locationt l;
@@ -2684,7 +2708,8 @@ bool solidity_convertert::get_binary_operator_expr(
   case SolidityGrammar::ExpressionT::BO_Assign:
   {
     // Nested tuple assignment: ((a,b), c) = (f(), 3)
-    // Detect by checking if the LHS TupleExpression contains nested TupleExpressions
+    // Detect by checking if the LHS TupleExpression contains nested
+    // TupleExpressions
     if (
       expr.contains("leftHandSide") &&
       expr["leftHandSide"].value("nodeType", "") == "TupleExpression" &&
@@ -2701,8 +2726,9 @@ bool solidity_convertert::get_binary_operator_expr(
       }
       if (has_nested)
       {
-        if (flatten_nested_tuple_assignment(
-              expr, expr["leftHandSide"], expr["rightHandSide"]))
+        if (
+          flatten_nested_tuple_assignment(
+            expr, expr["leftHandSide"], expr["rightHandSide"]))
           return true;
         new_expr = code_skipt();
         return false;
@@ -2733,10 +2759,11 @@ bool solidity_convertert::get_binary_operator_expr(
         for (unsigned i = 0; i < rhs_json["components"].size(); i++)
         {
           exprt val;
-          if (get_expr(
-                rhs_json["components"][i],
-                rhs_json["components"][i]["typeDescriptions"],
-                val))
+          if (
+            get_expr(
+              rhs_json["components"][i],
+              rhs_json["components"][i]["typeDescriptions"],
+              val))
             return true;
           solidity_gen_typecast(ns, val, elem_type);
           exprt idx = constant_exprt(
@@ -3019,7 +3046,8 @@ bool solidity_convertert::get_binary_operator_expr(
       new_rhs = new_rhs.op0();
     if (new_lhs.is_constant() && new_rhs.is_constant())
     {
-      //? it seems the solc cannot generate ast_json for constant power like 2**20
+      //? it seems the solc cannot generate ast_json for constant power like
+      // 2**20
       BigInt base;
       if (to_integer(new_lhs, base))
       {
@@ -3237,7 +3265,8 @@ bool solidity_convertert::get_unary_operator_expr(
     SolidityGrammar::expression_to_str(opcode));
 
   // Handle delete specially: its type is tuple() (void), not the operand type.
-  // Solidity `delete x` resets x to its default value (0, false, address(0), etc.)
+  // Solidity `delete x` resets x to its default value (0, false, address(0),
+  // etc.)
   if (opcode == SolidityGrammar::ExpressionT::UO_Delete)
   {
     exprt unary_sub;
@@ -3376,8 +3405,9 @@ bool solidity_convertert::get_cast_expr(
     // Array's cast_expr will have cast_expr["subExpr"]["typeDescriptions"]:
     //  "typeIdentifier": "t_array$_t_uint8_$2_memory_ptr"
     //  "typeString": "uint8[2] memory"
-    // For the data above, SolidityGrammar::get_type_name_t will return ArrayTypeName.
-    // But we want Pointer type. Hence, adjusting the type manually to make it like:
+    // For the data above, SolidityGrammar::get_type_name_t will return
+    // ArrayTypeName. But we want Pointer type. Hence, adjusting the type
+    // manually to make it like:
     //   "typeIdentifier": "ArrayToPtr",
     //   "typeString": "uint8[2] memory"
     nlohmann::json adjusted_type =
@@ -3385,7 +3415,9 @@ bool solidity_convertert::get_cast_expr(
     if (get_type_description(adjusted_type, type))
       return true;
   }
-  // TODO: Maybe can just type = expr.type() for other types as well. Need to make sure types are all set in get_expr (many functions are called multiple times to perform the same action).
+  // TODO: Maybe can just type = expr.type() for other types as well. Need to
+  // make sure types are all set in get_expr (many functions are called multiple
+  // times to perform the same action).
   else
   {
     type = expr.type();

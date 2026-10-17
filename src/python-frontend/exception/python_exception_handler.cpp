@@ -1,5 +1,6 @@
 #include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/exception/exception_utils.h>
+#include <python-frontend/json_utils.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python-list/python_list.h>
 #include <python-frontend/string/string_builder.h>
@@ -112,7 +113,9 @@ void python_exception_handler::get_try_statement(
         h["body"] = inject_finally_before_escapes(h["body"], finalbody, false);
   }
 
+  ++converter_.try_body_depth_;
   exprt try_block = converter_.get_block(try_body);
+  --converter_.try_body_depth_;
 
   // The `else` clause runs after the try body completes without an exception.
   // Append it to the try body: on the normal path it runs right after the body,
@@ -391,6 +394,52 @@ bool python_exception_handler::body_has_escaping_control_flow(
   return false;
 }
 
+bool python_exception_handler::raises_instance_variable(
+  const nlohmann::json &exc,
+  const std::string &exc_name) const
+{
+  return exc.value("_type", "") == "Name" &&
+         !type_utils::is_python_exceptions(exc_name) &&
+         !json_utils::is_class(exc_name, converter_.ast()) &&
+         converter_.find_symbol("tag-" + exc_name) == nullptr;
+}
+
+exprt python_exception_handler::build_builtin_exception(
+  const nlohmann::json &exc,
+  const typet &type) const
+{
+  // Construct a constant struct to throw: raise { .message=&"Error message" }
+  exprt arg;
+  if (exc.contains("args") && !exc["args"].empty() && !exc["args"][0].is_null())
+  {
+    const auto &json_arg = exc["args"][0];
+    exprt tmp = converter_.get_expr(json_arg);
+    if (tmp.type().is_array())
+      arg = build_address_of(string_constantt(
+        converter_.get_string_handler().process_format_spec(json_arg),
+        tmp.type(),
+        string_constantt::k_default));
+    else
+      // tmp is already the char* built for a message we can't know up
+      // front (e.g. an f-string with a variable in it). string_constantt
+      // needs a fixed-size array type, so just reuse tmp instead of
+      // rebuilding one with the wrong type.
+      arg = tmp;
+  }
+  else
+  {
+    // No arguments: create default empty message
+    arg = build_address_of(string_constantt(
+      "",
+      type_handler_.build_array(char_type(), 1),
+      string_constantt::k_default));
+  }
+
+  exprt raise("struct", type);
+  raise.copy_to_operands(arg);
+  return raise;
+}
+
 void python_exception_handler::get_raise_statement(
   const nlohmann::json &element,
   codet &block)
@@ -423,71 +472,24 @@ void python_exception_handler::get_raise_statement(
   else
     exc_name = ""; // fallback
 
-  typet type = type_handler_.get_typet(exc_name);
-
-  // AssertionError is special-cased to a clean assert(false)
-  if (exc_name == "AssertionError")
-  {
-    code_assertt assert_code{false_exprt()};
-    assert_code.location() = location;
-    if (
-      element["exc"].contains("args") && !element["exc"]["args"].empty() &&
-      !element["exc"]["args"][0].is_null())
-    {
-      const std::string msg =
-        converter_.get_string_handler().process_format_spec(
-          element["exc"]["args"][0]);
-      assert_code.location().comment(msg);
-    }
-    block.move_to_operands(assert_code);
-    return;
-  }
-
+  typet type;
   exprt raise;
-  if (type_utils::is_python_exceptions(exc_name))
+  if (raises_instance_variable(element["exc"], exc_name))
   {
-    // Construct a constant struct to throw: raise { .message=&"Error message" }
-    exprt arg;
-    bool arg_is_already_addressed = false;
-    const auto &exc = element["exc"];
-    if (
-      exc.contains("args") && !exc["args"].empty() && !exc["args"][0].is_null())
-    {
-      const auto &json_arg = exc["args"][0];
-      exprt tmp = converter_.get_expr(json_arg);
-      if (tmp.type().is_array())
-      {
-        arg = string_constantt(
-          converter_.get_string_handler().process_format_spec(json_arg),
-          tmp.type(),
-          string_constantt::k_default);
-      }
-      else
-      {
-        // tmp is already the char* built for a message we can't know up
-        // front (e.g. an f-string with a variable in it). string_constantt
-        // needs a fixed-size array type, so just reuse tmp instead of
-        // rebuilding one with the wrong type.
-        arg = tmp;
-        arg_is_already_addressed = true;
-      }
-    }
-    else
-    {
-      // No arguments: create default empty message
-      arg = string_constantt(
-        "",
-        type_handler_.build_array(char_type(), 1),
-        string_constantt::k_default);
-    }
-
-    raise.id("struct");
-    raise.type() = type;
-    raise.copy_to_operands(
-      arg_is_already_addressed ? arg : build_address_of(arg));
+    raise = converter_.get_expr(element["exc"]);
+    // A class instance is held by pointer; except clauses match the class.
+    if (raise.type().is_pointer())
+      raise = build_dereference(raise, raise.type().subtype());
+    type = raise.type();
+  }
+  else if (type_utils::is_python_exceptions(exc_name))
+  {
+    type = type_handler_.get_typet(exc_name);
+    raise = build_builtin_exception(element["exc"], type);
   }
   else
   {
+    type = type_handler_.get_typet(exc_name);
     // For custom exceptions:
     // DECL MyException return_value;
     // FUNCTION_CALL:  MyException(&return_value, &"message");

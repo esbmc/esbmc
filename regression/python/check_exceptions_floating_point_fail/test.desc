@@ -1,0 +1,5 @@
+CORE
+main.py
+--python-check-exceptions ZeroDivisionError,FloatingPointError
+^VERIFICATION FAILED$
+uncaught exception: ZeroDivisionError

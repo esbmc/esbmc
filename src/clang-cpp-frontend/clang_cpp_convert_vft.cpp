@@ -194,7 +194,16 @@ std::string clang_cpp_convertert::rtti_type_name(const clang::CXXRecordDecl &rd)
   // reading as it did before.
   clang::PrintingPolicy pp = rd.getASTContext().getPrintingPolicy();
   pp.SuppressTagKeyword = true;
-  return qtype.getAsString(pp);
+  std::string name = qtype.getAsString(pp);
+  // A local class prints without its enclosing function, so two of one name
+  // would share a type_info; its record id tells them apart.
+  if (rd.getParentFunctionOrMethod())
+  {
+    std::string tag_name, tag_id;
+    get_decl_name(rd, tag_name, tag_id);
+    name += "@" + tag_id;
+  }
+  return name;
 }
 
 irep_idt
@@ -224,7 +233,8 @@ symbolt *clang_cpp_convertert::add_vtable_type_symbol(
    *      void (*do_something)(Base*);
    *    } VftTag_Base;
    * Later, we will instantiate a virtual table as:
-   *  VftTag_Base vtable_TagBase@TagBase = { .do_something = &TagBase::do_someting(); }
+   *  VftTag_Base vtable_TagBase@TagBase = { .do_something =
+   * &TagBase::do_someting(); }
    *
    *  Vtable type has the id in the form of `virtual_table::tag-BLAH`.
    */
@@ -264,9 +274,11 @@ void clang_cpp_convertert::add_vptr(struct_typet &type)
 {
   /*
    * We model the virtual pointer as a `component` to the parent class' type.
-   * This will be the vptr pointing to the vtable that contains the overriden functions.
+   * This will be the vptr pointing to the vtable that contains the overriden
+   * functions.
    *
-   * Vptr has the name in the form of `tag-BLAH@vtable_pointer`, where BLAH is the class name.
+   * Vptr has the name in the form of `tag-BLAH@vtable_pointer`, where BLAH is
+   * the class name.
    */
 
   irep_idt vt_name = vtable_type_prefix + tag_prefix + type.tag().as_string();
@@ -298,7 +310,8 @@ void clang_cpp_convertert::add_vtable_type_entry(
    * We model this entry as a function pointer, pointing to the
    * virtual or overriding method in this class.
    *
-   * Vtable entry's name is of the form ``virtual_table::tag.BLAH::do_something().
+   * Vtable entry's name is of the form
+   * ``virtual_table::tag.BLAH::do_something().
    */
 
   irep_idt vt_name = vtable_type_prefix + tag_prefix + type.tag().as_string();
@@ -348,16 +361,20 @@ void clang_cpp_convertert::add_thunk_method(
    * Suppose Penguin derives Bird, we have the following vtables for Penguin:
    *  virtual_table::Bird@Penguin =
    *    {
-   *      .do_it() = &thunk::c:@S@Penguin@F@do_something#::tag-Bird; // this is the thunk redirecting call to the overriding function
+   *      .do_it() = &thunk::c:@S@Penguin@F@do_something#::tag-Bird; // this is
+   * the thunk redirecting call to the overriding function
    *    };
    *
    *  virtual_table::Penguin@Penguin =
    *    {
-   *      .do_it() = &c:@S@Penguin@F@do_something#::do_it(); // this is the overriding function
+   *      .do_it() = &c:@S@Penguin@F@do_something#::do_it(); // this is the
+   * overriding function
    *    };
    *
-   *  The thunk function's symbol id is of the form - "thunk::c:@S@Penguin@F@do_something#::tag-Bird"
-   *  meaning "a thunk to Penguin's overriding function `do_something` taking a `this` parameter of the type Bird*"
+   *  The thunk function's symbol id is of the form -
+   * "thunk::c:@S@Penguin@F@do_something#::tag-Bird" meaning "a thunk to
+   * Penguin's overriding function `do_something` taking a `this` parameter of
+   * the type Bird*"
    */
 
   /*
@@ -366,7 +383,8 @@ void clang_cpp_convertert::add_thunk_method(
    *  2. its arguments in the symbol table
    *  3. its body
    *
-   *  also need to add this thunk method to the list of components of the derived class' type
+   *  also need to add this thunk method to the list of components of the
+   * derived class' type
    */
 
   std::string base_class_id, base_class_name;
@@ -410,7 +428,8 @@ void clang_cpp_convertert::add_thunk_method(
   // signature from several bases (e.g. every derived destructor, or C::f with
   // A::f and B::f), get_ultimate_overridden_method() cannot pick a unique base
   // and keys `component` by the derived method itself. Recover the correct key
-  // per overridden base here so each base's slot is actually overridden (#6198).
+  // per overridden base here so each base's slot is actually overridden
+  // (#6198).
   std::string base_virtual_name, base_virtual_id;
   get_decl_name(
     *get_ultimate_overridden_method(&md), base_virtual_name, base_virtual_id);
@@ -462,9 +481,11 @@ void clang_cpp_convertert::add_thunk_method_arguments(symbolt &thunk_func_symb)
   /*
    * Loop through the arguments of the thunk methods,
    * and add symbol for each argument. We need to
-   * update the identifier field in each argument to indicate it "belongs" to the thunk function.
+   * update the identifier field in each argument to indicate it "belongs" to
+   * the thunk function.
    *
-   * Each argument symbol's id is of the form - "<thunk_func_symbol_ID>::<argument_base_name>"
+   * Each argument symbol's id is of the form -
+   * "<thunk_func_symbol_ID>::<argument_base_name>"
    */
 
   const code_type2t &code_type = to_code_type(thunk_func_symb.get_type2());
@@ -472,10 +493,15 @@ void clang_cpp_convertert::add_thunk_method_arguments(symbolt &thunk_func_symb)
   // from it (frontends-to-irep2.md §44).
   assert(code_type.argument_base_names.size() == code_type.arguments.size());
   std::vector<irep_idt> identifiers = code_type.argument_names;
+  std::vector<irep_idt> base_names = code_type.argument_base_names;
 
   for (std::size_t i = 0; i < code_type.arguments.size(); i++)
   {
-    const irep_idt &base_name = code_type.argument_base_names[i];
+    // An override declared with unnamed parameters has empty base names,
+    // which would collapse every argument onto one symbol (github #8090).
+    irep_idt &base_name = base_names[i];
+    if (base_name.empty())
+      base_name = "__anon_arg" + std::to_string(i);
 
     symbolt arg_symb;
     arg_symb.id = thunk_func_symb.id.as_string() + "::" + base_name.as_string();
@@ -514,7 +540,7 @@ void clang_cpp_convertert::add_thunk_method_arguments(symbolt &thunk_func_symb)
     code_type.ret_type,
     identifiers,
     code_type.ellipsis,
-    code_type.argument_base_names));
+    base_names));
 }
 
 void clang_cpp_convertert::add_thunk_method_body(
@@ -715,7 +741,8 @@ void clang_cpp_convertert::add_vtable_variable_symbols(
   {
     const function_switch &switch_map = vft_switch_kv_pair.second;
 
-    // To create the vtable variable symbol we need to get the corresponding type
+    // To create the vtable variable symbol we need to get the corresponding
+    // type
     const symbolt *late_cast_symb = ns.lookup(vft_switch_kv_pair.first);
     assert(late_cast_symb);
     const symbolt *vt_symb_type =
@@ -784,11 +811,9 @@ void clang_cpp_convertert::add_vtable_variable_symbols(
 
     if (context.move(vt_symb_var))
     {
-      log_error(
-        "Failed to add vtable variable symbol {} for class {}",
-        vt_symb_var.id,
-        class_id);
-      abort();
+      // Symbol has already been processed further up
+      // in the call stack. Skip to unprocessed symbols
+      continue;
     }
 
     // Record (vptr-class V → concrete class D) so build_dynamic_cast can
@@ -805,7 +830,8 @@ void clang_cpp_convertert::get_overriden_methods(
   overriden_map &map)
 {
   /*
-   * This function gets all the overriden methods to which we need to create a thunk
+   * This function gets all the overriden methods to which we need to create a
+   * thunk
    */
   for (const auto &md_overriden : md.overridden_methods())
   {

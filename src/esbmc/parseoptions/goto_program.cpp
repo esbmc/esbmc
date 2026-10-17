@@ -19,7 +19,12 @@
 #  include <malloc.h>
 #endif
 #include <limits>
+#include <util/base/prefix.h>
+#include <util/expr/base_type.h>
 #include <util/expr/expr_util.h>
+#include <util/irep/migrate.h>
+#include <set>
+#include <unordered_set>
 #include <iostream>
 #include <fstream>
 #include <goto-programs/add_race_assertions.h>
@@ -27,7 +32,9 @@
 #include <goto-programs/goto_atomicity_check.h>
 #include <goto-programs/goto_check.h>
 #include <goto-programs/lift_call_expressions.h>
+#include <goto-programs/goto_convert_class.h>
 #include <goto-programs/goto_convert_functions.h>
+#include <goto-programs/exception_typeid.h>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
 #include <goto-programs/goto_termination.h>
@@ -193,11 +200,14 @@ bool esbmc_parseoptionst::get_goto_program(
 // loaded --binary onto the program's real entry: a CBMC goto-binary's
 // __CPROVER__start, or a user-selected --function harness. Without this,
 // __ESBMC_main would run the empty boilerplate main and report a verdict over
-// essentially no program. No-op if __ESBMC_main was not synthesised.
+// essentially no program. `init` is spliced in ahead of the call. No-op if
+// __ESBMC_main was not synthesised.
 // Returns true when `target` names no function in the program, so the caller
 // reports it instead of the inliner aborting on the dangling call.
-static bool
-retarget_esbmc_main(goto_functionst &goto_functions, const irep_idt &target)
+static bool retarget_esbmc_main(
+  goto_functionst &goto_functions,
+  const irep_idt &target,
+  goto_programt init = {})
 {
   auto entry = goto_functions.function_map.find("__ESBMC_main");
   if (entry == goto_functions.function_map.end())
@@ -219,10 +229,74 @@ retarget_esbmc_main(goto_functionst &goto_functions, const irep_idt &target)
     if (
       is_symbol2t(call.function) &&
       to_symbol2t(call.function).thename == "c:@F@main")
+    {
       call.function = symbol2tc(get_empty_type(), target);
+      entry->second.body.destructive_insert(it, init);
+    }
   }
 
   return false;
+}
+
+// The assignment CBMC's static_lifetime_init (src/linking/) makes for `sym`, or
+// nil when it leaves the symbol unassigned, so nondet.
+static exprt cbmc_static_init_value(const symbolt &sym, const namespacet &ns)
+{
+  static const std::set<std::string> special = {
+    "__CPROVER_constant_infinity_uint",
+    "__CPROVER_memory",
+    "__func__",
+    "__FUNCTION__",
+    "__PRETTY_FUNCTION__",
+    "argc'",
+    "argv'",
+    "envp'",
+    "envp_size'"};
+  const std::string &id = sym.id.as_string();
+  if (
+    !sym.static_lifetime || sym.is_type || sym.is_macro ||
+    sym.get_type().is_code() || sym.get_type().is_empty() ||
+    special.count(id) || has_prefix(id, "__CPROVER_architecture_"))
+    return nil_exprt();
+
+  if (sym.get_value().is_not_nil())
+    return sym.get_value();
+
+  if (sym.is_extern)
+    return nil_exprt();
+
+  type2tc type = migrate_type(sym.get_type());
+  base_type(type, ns);
+  return migrate_expr_back(gen_zero(type, true));
+}
+
+// CBMC builds __CPROVER_initialize when it picks the entry point, so a goto
+// binary keeps its globals' initial values in the symbol table only.
+// __CPROVER__start runs that function; a --function harness skips it, so these
+// assignments stand in for it.
+static goto_programt cbmc_static_init(
+  contextt &context,
+  optionst &options,
+  const std::unordered_set<irep_idt, irep_id_hash> &preexisting)
+{
+  const namespacet ns(context);
+  code_blockt block;
+  context.foreach_operand_in_order([&](const symbolt &sym) {
+    if (preexisting.count(sym.id))
+      return;
+    const exprt value = cbmc_static_init_value(sym, ns);
+    if (value.is_nil())
+      return;
+    code_assignt assign(symbol_expr(sym), value);
+    assign.location() = sym.location;
+    block.move_to_operands(assign);
+  });
+
+  // A value can carry a side effect -- Kani builds each vtable with a statement
+  // expression -- so it is goto-converted, as __CPROVER_initialize is in CBMC.
+  goto_programt init;
+  goto_convertt(context, options).goto_convert(block, init);
+  return init;
 }
 
 // Bridge the synthesised __ESBMC_main, which wraps the boilerplate c:@F@main,
@@ -233,11 +307,20 @@ retarget_esbmc_main(goto_functionst &goto_functions, const irep_idt &target)
 // the run cannot continue.
 static bool bridge_binary_entry_point(
   const cmdlinet &cmdline,
+  contextt &context,
+  optionst &options,
   goto_functionst &goto_functions,
-  bool cbmc_additions)
+  bool cbmc_additions,
+  const std::unordered_set<irep_idt, irep_id_hash> &preexisting)
 {
   if (cmdline.isset("function"))
-    return retarget_esbmc_main(goto_functions, cmdline.getval("function"));
+  {
+    goto_programt init;
+    if (cbmc_additions)
+      init = cbmc_static_init(context, options, preexisting);
+    return retarget_esbmc_main(
+      goto_functions, cmdline.getval("function"), init);
+  }
 
   if (cbmc_additions && goto_functions.function_map.count("__CPROVER__start"))
     retarget_esbmc_main(goto_functions, "__CPROVER__start");
@@ -259,6 +342,8 @@ static bool bridge_binary_entry_point(
 // \param options - options to be passed through,
 // \param goto_functions - this is where the created GOTO program is stored.
 static void link_cbmc_libc_bodies(goto_functionst &goto_functions);
+static void
+skip_property_classes(const cmdlinet &cmdline, goto_functionst &goto_functions);
 
 bool esbmc_parseoptionst::create_goto_program(
   optionst &options,
@@ -301,6 +386,10 @@ bool esbmc_parseoptionst::create_goto_program(
           return true;
       }
 
+      std::unordered_set<irep_idt, irep_id_hash> preexisting;
+      context.foreach_operand(
+        [&preexisting](const symbolt &s) { preexisting.insert(s.id); });
+
       if (read_goto_binary(goto_functions))
         return true;
 
@@ -310,13 +399,25 @@ bool esbmc_parseoptionst::create_goto_program(
       if (cbmc_additions)
         link_cbmc_libc_bodies(goto_functions);
 
+      if (
+        bridge_binary_entry_point(
+          cmdline,
+          context,
+          options,
+          goto_functions,
+          cbmc_additions,
+          preexisting))
+        return true;
+
       // CBMC serialises some intrinsics (object_size) as expressions that
       // migrate to calls; goto_convert never runs on a loaded binary, so
-      // nothing else lifts them out to statement level.
+      // nothing else lifts them out to statement level. After the bridge, so
+      // the static initialisers it splices into __ESBMC_main are lifted too.
       lift_call_expressions(context, goto_functions);
 
-      if (bridge_binary_entry_point(cmdline, goto_functions, cbmc_additions))
-        return true;
+      // After the bridge, so the asserts of the spliced initialisers are
+      // filtered too.
+      skip_property_classes(cmdline, goto_functions);
 
       goto_functions.update();
     }
@@ -387,6 +488,27 @@ bool esbmc_parseoptionst::has_cbmc_binary_input()
   return false;
 }
 
+// CBMC tags each ASSERT with a property class in its location. Kani's
+// reachability_check and cover assertions are informational: CBMC reports them
+// as failures and Kani's driver discounts them, so skipping them is opt-in.
+static void
+skip_property_classes(const cmdlinet &cmdline, goto_functionst &goto_functions)
+{
+  if (!cmdline.isset("ignore-property-class"))
+    return;
+  const std::list<std::string> &classes =
+    cmdline.get_values("ignore-property-class");
+  std::set<irep_idt> ignored(classes.begin(), classes.end());
+  // An ASSERT without a class reads back as the empty id; never match it.
+  ignored.erase(irep_idt());
+  for (auto &[name, function] : goto_functions.function_map)
+    for (auto &instruction : function.body.instructions)
+      if (
+        instruction.is_assert() &&
+        ignored.count(instruction.location.get("property_class")))
+        instruction.make_skip();
+}
+
 // Bridge CBMC's plain-named bodyless libc externals (e.g. `ceil`, `strlen`) to
 // the operational-model bodies the additions link under the C-frontend-mangled
 // id (`c:@F@ceil`). CBMC emits libm (ceil/floor/trunc/round, float/long-double
@@ -449,25 +571,27 @@ bool esbmc_parseoptionst::synthesize_cprover_additions(
   file_operations::tmp_file tf =
     file_operations::create_tmp_file("esbmc-cprover-%%%%-%%%%-%%%%.c");
   // Taking the addresses of the bodied libc functions marks them referenced, so
-  // add_cprover_library links their operational-model bodies into the additions;
-  // link_cbmc_libc_bodies then bridges the CBMC binary's plain-named bodyless
-  // declarations to them. Unlike sqrt/fabs (operators rewritten in cbmc_adapter)
-  // these have no ESBMC expression form and must run the C library body -- that
-  // includes the string.h query functions (strlen/strcmp/strncmp), whose bodies
-  // are byte loops. Referencing memcpy/memmove/memset/memcmp additionally
-  // force-links string.c, whose bodies pull in
+  // add_cprover_library links their operational-model bodies into the
+  // additions; link_cbmc_libc_bodies then bridges the CBMC binary's plain-named
+  // bodyless declarations to them. Unlike sqrt/fabs (operators rewritten in
+  // cbmc_adapter) these have no ESBMC expression form and must run the C
+  // library body -- that includes the string.h query functions
+  // (strlen/strcmp/strncmp), whose bodies are byte loops. Referencing
+  // memcpy/memmove/memset/memcmp additionally force-links string.c, whose
+  // bodies pull in
   // __memcpy_impl/__memmove_impl/__memset_impl/__memcmp_impl -- the byte-loop
   // fallbacks intrinsic_memcpy/memmove/memset/memcmp bump to when a size or
   // pointer is symbolic (and, for memmove, when the regions overlap). The
-  // cbmc_adapter retargets CBMC's memcpy/memset/memmove/memcmp calls straight to
-  // the c:@F@__ESBMC_* intrinsics, but those intrinsics still need the *_impl
-  // bodies present for the bump path, so the boilerplate must link them here.
-  // The <ctype.h> classifiers/case-mappers (isdigit/toupper/...) are the same
-  // bodyless-external shape; their ctype.c bodies are straight-line (no unwind).
-  // The <stdlib.h> string-to-integer parsers atoi/atol/strtol likewise bridge
-  // to stdlib.c bodies -- these are byte loops, so they need `--unwind` like the
-  // string.h family. CBMC 6.8.0 models atoi/atol/strtol but not atoll/strtoll,
-  // which stay bodyless (their nondet return already matches CBMC's verdict).
+  // cbmc_adapter retargets CBMC's memcpy/memset/memmove/memcmp calls straight
+  // to the c:@F@__ESBMC_* intrinsics, but those intrinsics still need the
+  // *_impl bodies present for the bump path, so the boilerplate must link them
+  // here. The <ctype.h> classifiers/case-mappers (isdigit/toupper/...) are the
+  // same bodyless-external shape; their ctype.c bodies are straight-line (no
+  // unwind). The <stdlib.h> string-to-integer parsers atoi/atol/strtol likewise
+  // bridge to stdlib.c bodies -- these are byte loops, so they need `--unwind`
+  // like the string.h family. CBMC 6.8.0 models atoi/atol/strtol but not
+  // atoll/strtoll, which stay bodyless (their nondet return already matches
+  // CBMC's verdict).
   static const char boilerplate[] =
     "/* Auto-generated: bundle all ESBMC additions for CBMC gotos. */\n"
     "#include <math.h>\n"
@@ -615,6 +739,25 @@ expand_no_standard_checks(const cmdlinet &cmdline, optionst &options)
   options.set_option("no-bounds-check", true);
 }
 
+// --python-check-exceptions reports only the listed exception types and their
+// subtypes. A Python assert raises AssertionError, so when no listed type
+// covers it, the asserts become assumptions as under
+// --python-ignore-assertions. Run before goto_convert, which decides whether an
+// assert is emitted.
+static void
+expand_python_check_exceptions(const contextt &context, optionst &options)
+{
+  const std::vector<irep_idt> checked = python_checked_exceptions(options);
+  if (checked.empty())
+    return;
+  const exception_typeidt types{namespacet(context)};
+  for (const irep_idt &name : checked)
+    if (!types.is_registered(name))
+      throw "--python-check-exceptions: no type named " + name.as_string();
+  if (!checks_exception(types, "AssertionError", checked))
+    options.set_option("python-ignore-assertions", true);
+}
+
 // This method creates a GOTO program by parsing the input program files.
 //
 // \param options - options to be passed to the program parser,
@@ -659,6 +802,7 @@ bool esbmc_parseoptionst::parse_goto_program(
     }
 
     expand_no_standard_checks(cmdline, options);
+    expand_python_check_exceptions(context, options);
 
     log_progress("Generating GOTO Program");
     goto_convert(context, options, goto_functions);

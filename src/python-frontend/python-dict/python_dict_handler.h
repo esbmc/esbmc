@@ -20,7 +20,8 @@
  * @endcode
  *
  * Dictionary values are stored as PyObject instances with type information
- * (type_id) that allows runtime type identification for proper value extraction.
+ * (type_id) that allows runtime type identification for proper value
+ * extraction.
  *
  * @section nested_dict_support Nested Dictionary Support
  *
@@ -114,8 +115,10 @@ public:
   /**
    * @brief Constructs a new dictionary handler.
    *
-   * @param converter Reference to the main Python converter for expression handling.
-   * @param symbol_table Reference to the symbol table (context) for symbol management.
+   * @param converter Reference to the main Python converter for expression
+   * handling.
+   * @param symbol_table Reference to the symbol table (context) for symbol
+   * management.
    * @param type_handler Reference to the type handler for type operations.
    */
   python_dict_handler(
@@ -183,6 +186,16 @@ public:
     const nlohmann::json &element,
     const exprt &target_symbol);
 
+  /// Initialises \p target_symbol as an empty dict located at \p element.
+  void
+  create_empty_dict(const nlohmann::json &element, const exprt &target_symbol);
+
+  /// Builds a dict display holding a `**` unpack ({**a, "k": v, **b}) by
+  /// applying its entries in order to an empty dict.
+  exprt create_dict_with_unpacking(
+    const nlohmann::json &element,
+    const exprt &target_symbol);
+
   /**
    * @brief Handles dictionary subscript access (e.g., `dict['key']`).
    *
@@ -217,7 +230,8 @@ public:
     const typet &expected_type = typet());
 
   /**
-   * @brief Handles dictionary subscript assignment (e.g., `dict['key'] = value`).
+   * @brief Handles dictionary subscript assignment (e.g., `dict['key'] =
+   * value`).
    *
    * Generates GOTO instructions to update or insert a key-value pair:
    * - If key exists: updates the existing value at that index
@@ -364,6 +378,11 @@ public:
    */
   typet resolve_expected_type_for_dict_subscript(const exprt &dict_expr);
 
+  /// The value type a dict literal not bound to an annotated name takes, such
+  /// as one passed straight to an annotated parameter (#8016).
+  typet literal_value_type_hint;
+  typet literal_value_type(const exprt &target);
+
   /**
    * @brief Stored tuple struct type of a literal dict's values, recorded at
    * construction; empty unless every value has the same tuple type.
@@ -464,8 +483,9 @@ public:
    * @brief Returns true for dict methods that return a value and emit IR.
    *
    * Used to avoid double-evaluation during type inference: these methods
-   * must not be called via get_expr() in create_symbol_for_unannotated_assign(),
-   * because they already emit GOTO instructions as a side-effect.
+   * must not be called via get_expr() in
+   * create_symbol_for_unannotated_assign(), because they already emit GOTO
+   * instructions as a side-effect.
    *
    * Keep in sync with handle_dict_method() when adding new value-returning
    * dict methods.
@@ -504,6 +524,22 @@ public:
   exprt
   handle_dict_update(const exprt &dict_expr, const nlohmann::json &call_node);
 
+  exprt bind_dict_source(const exprt &source, const nlohmann::json &node);
+
+  /// Copies every entry of \p source into \p dict_expr, overwriting keys
+  /// already present (dict.update(other) semantics).
+  void copy_dict_entries(
+    const exprt &dict_expr,
+    const exprt &source,
+    const nlohmann::json &call_node);
+
+  /// Builds `lhs | rhs` (PEP 584) as a new dict holding lhs's entries updated
+  /// with rhs's.
+  exprt handle_dict_union(
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &element);
+
   /**
    * @brief Handles dict.copy() method calls.
    * Returns a shallow copy of the dictionary: a new dict whose keys and
@@ -534,7 +570,8 @@ public:
    * Implements dict.fromkeys(iterable, value=None):
    * - Creates a new dict whose keys come from iterable and whose values
    *   all share the same given value (None by default).
-   * - Only supports iterable passed as a list literal (e.g. dict.fromkeys([1, 2, 3])).
+   * - Only supports iterable passed as a list literal (e.g. dict.fromkeys([1,
+   * 2, 3])).
    *
    * @param call_node The function call AST node.
    * @return Expression for the resulting dict symbol.
@@ -641,8 +678,9 @@ private:
 
   /**
    * @brief Generate a unique type hash for nested dictionary types
-   * Creates a stable hash based on the full type structure including key/value types.
-   * This ensures type safety when retrieving nested dicts from the generic list.
+   * Creates a stable hash based on the full type structure including key/value
+   * types. This ensures type safety when retrieving nested dicts from the
+   * generic list.
    * @param dict_type The dictionary type to hash
    * @return A unique hash value for this specific dict type
    */

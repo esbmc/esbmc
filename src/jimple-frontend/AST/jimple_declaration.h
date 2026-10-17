@@ -27,4 +27,4 @@ public:
   std::string name;
 };
 
-#endif //ESBMC_JIMPLE_DECLARATION_H
+#endif // ESBMC_JIMPLE_DECLARATION_H

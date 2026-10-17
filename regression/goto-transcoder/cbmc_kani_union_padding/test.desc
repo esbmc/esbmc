@@ -1,0 +1,4 @@
+CORE
+cbmc_kani_union_padding.goto
+--binary --function _RNvCs14ajDqEZVlG_9union_pad7harness --ignore-property-class reachability_check --ignore-property-class cover --no-slice
+^VERIFICATION SUCCESSFUL$

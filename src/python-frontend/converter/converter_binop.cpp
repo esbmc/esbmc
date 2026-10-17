@@ -1,4 +1,5 @@
 #include <python-frontend/converter/converter_internal.h>
+#include <python-frontend/converter/value_kinds.h>
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_converter.h>
@@ -7,7 +8,7 @@
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/python-list/python_list.h>
 #include <python-frontend/math/python_math.h>
-#include <python-frontend/math/round_to_nearest_guard.h>
+#include <util/base/host_rounding_mode.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/tuple/tuple_handler.h>
 #include <python-frontend/dynamic_type/dynamic_type_handler.h>
@@ -249,7 +250,7 @@ std::string py_percent_format(
       // printf rounds %f/%e/%g per the host FP rounding mode, which the
       // pipeline can leave non-default; pin FE_TONEAREST across both snprintf
       // passes so the fold matches CPython's round-half-to-even.
-      const round_to_nearest_guard guard;
+      const host_rounding_mode guard(FE_TONEAREST);
       std::string b;
       int n = 0;
       if (conv == 'f' || conv == 'F')
@@ -385,7 +386,378 @@ std::string py_percent_format(
       "TypeError: not all arguments converted during string formatting");
   return out;
 }
+
+// `%d` takes an int or bool only: int() of a float does not raise on inf/nan.
+bool percent_d_accepts(const typet &t)
+{
+  return t.is_signedbv() || t.is_unsignedbv() || t.is_bool();
+}
+
+// `%s` is limited to the types whose f-string lowering matches str().
+bool percent_s_accepts(const typet &t)
+{
+  return percent_d_accepts(t) || t.is_floatbv() ||
+         type_utils::is_string_type(t);
+}
+
+nlohmann::json ast_node(const char *type, const nlohmann::json &loc)
+{
+  nlohmann::json node = {{"_type", type}};
+  for (const char *f : {"lineno", "col_offset", "end_lineno", "end_col_offset"})
+    if (loc.contains(f))
+      node[f] = loc[f];
+  return node;
+}
+
+// The f-string part for one %s/%d/%i conversion of `value`.
+std::optional<nlohmann::json>
+formatted_part(char conversion, nlohmann::json value, const typet &type)
+{
+  if (conversion == 'd' || conversion == 'i')
+  {
+    if (!percent_d_accepts(type))
+      return std::nullopt;
+    nlohmann::json call = ast_node("Call", value);
+    call["func"] = ast_node("Name", value);
+    call["func"]["id"] = "int";
+    call["func"]["ctx"] = {{"_type", "Load"}};
+    call["args"] = nlohmann::json::array({value});
+    call["keywords"] = nlohmann::json::array();
+    value = call;
+  }
+  else if (conversion != 's' || !percent_s_accepts(type))
+    return std::nullopt;
+  nlohmann::json part = ast_node("FormattedValue", value);
+  part["value"] = value;
+  part["conversion"] = -1;
+  return part;
+}
+
+// At least one variable and nothing else but constants: all-constant formats
+// fold exactly.
+bool names_and_constants(const std::vector<nlohmann::json> &args)
+{
+  bool has_name = false;
+  for (const nlohmann::json &a : args)
+  {
+    const std::string kind = a.value("_type", "");
+    if (kind == "Constant")
+      continue;
+    if (
+      kind != "Name" && kind != "Attribute" && kind != "Call" &&
+      kind != "Subscript")
+      return false;
+    has_name = true;
+  }
+  return has_name;
+}
+
+// An attribute (a property getter), a call or a subscript (which may raise)
+// may run code.
+bool may_run_code(const std::vector<nlohmann::json> &args)
+{
+  return std::any_of(args.begin(), args.end(), [](const nlohmann::json &a) {
+    const std::string kind = a.value("_type", "");
+    return kind == "Attribute" || kind == "Call" || kind == "Subscript";
+  });
+}
+
+// `"..." % right`, which converts `right` again from its AST (as an f-string
+// or a constant fold) and formats an Optional operand itself.
+bool is_literal_percent_format(const nlohmann::json &element, const exprt &lhs)
+{
+  if (!element.contains("left") || !element.contains("op"))
+    return false;
+  const nlohmann::json &left = element["left"];
+  return element["op"].value("_type", "") == "Mod" &&
+         left.value("_type", "") == "Constant" && left.contains("value") &&
+         left["value"].is_string() && type_utils::is_string_type(lhs.type());
+}
+
+// `"id %d" % i` with a non-constant `i` as the f-string `f"id {int(i)}"`
+// (#8224). Only flag-free %s/%d/%i/%% are rewritten.
+std::optional<nlohmann::json> percent_format_as_fstring(
+  const nlohmann::json &left,
+  const std::vector<nlohmann::json> &args,
+  const std::vector<typet> &arg_types)
+{
+  if (args.size() != arg_types.size() || !names_and_constants(args))
+    return std::nullopt;
+
+  const std::string fmt = left["value"].get<std::string>();
+  nlohmann::json joined = ast_node("JoinedStr", left);
+  joined["values"] = nlohmann::json::array();
+  std::string literal;
+  auto flush = [&]() {
+    if (literal.empty())
+      return;
+    nlohmann::json part = ast_node("Constant", left);
+    part["value"] = literal;
+    joined["values"].push_back(part);
+    literal.clear();
+  };
+  size_t argi = 0;
+  for (size_t i = 0; i < fmt.size(); ++i)
+  {
+    if (fmt[i] != '%')
+    {
+      literal.push_back(fmt[i]);
+      continue;
+    }
+    const char c = i + 1 < fmt.size() ? fmt[++i] : '\0';
+    if (c == '%')
+    {
+      literal.push_back('%');
+      continue;
+    }
+    if (argi >= args.size())
+      return std::nullopt;
+    std::optional<nlohmann::json> part =
+      formatted_part(c, args[argi], arg_types[argi]);
+    if (!part)
+      return std::nullopt;
+    ++argi;
+    flush();
+    joined["values"].push_back(*part);
+  }
+  flush();
+  if (argi != args.size())
+    return std::nullopt;
+  return joined;
+}
 } // namespace
+
+static bool has_side_effect(const exprt &e)
+{
+  if (e.id() == "sideeffect")
+    return true;
+  for (const exprt &sub : e.operands())
+    if (has_side_effect(sub))
+      return true;
+  return false;
+}
+
+static exprt *find_subexpr(exprt &e, const exprt &what)
+{
+  if (e == what)
+    return &e;
+  Forall_operands (it, e)
+    if (exprt *found = find_subexpr(*it, what))
+      return found;
+  return nullptr;
+}
+
+// The str comparison rebuilds its operands through irep2, which can change
+// their legacy form, so normalise both sides before matching.
+static exprt *find_normalised_subexpr(exprt &e, exprt &what)
+{
+  expr2tc e2, what2;
+  migrate_expr(e, e2);
+  migrate_expr(what, what2);
+  e = migrate_expr_back(e2);
+  what = migrate_expr_back(what2);
+  return find_subexpr(e, what);
+}
+
+exprt python_converter::hoist_side_effecting_operand(
+  const exprt &operand,
+  const nlohmann::json &element,
+  const std::string &prefix)
+{
+  if (!has_side_effect(operand))
+    return operand;
+
+  const locationt loc = get_location_from_decl(element);
+  symbolt &tmp = create_tmp_symbol(element, prefix, operand.type(), exprt());
+  code_declt decl(symbol_expr(tmp));
+  decl.location() = loc;
+  add_instruction(decl);
+  code_assignt assign(symbol_expr(tmp), operand);
+  assign.location() = loc;
+  add_instruction(assign);
+  return symbol_expr(tmp);
+}
+
+void python_converter::emit_guarded_raise(
+  const exprt &cond,
+  const std::string &exception,
+  const std::string &message,
+  const locationt &location)
+{
+  code_expressiont throw_code(
+    get_exception_handler().gen_exception_raise(exception, message));
+  code_ifthenelset guard;
+  guard.cond() = cond;
+  guard.then_case() = throw_code;
+  guard.location() = location;
+  guard.location().property("skipped");
+  add_instruction(guard);
+}
+
+exprt python_converter::guard_nonfinite_float_to_int(
+  exprt operand,
+  const nlohmann::json &element)
+{
+  if (
+    !operand.type().is_floatbv() || !current_block ||
+    !safe_to_emit_side_effecting_statement())
+    return operand;
+
+  // In an and/or tail or a while test the guard must run where the operand is
+  // evaluated, not once ahead of the statement.
+  const bool lazy = in_lazy_operand_;
+  code_blockt lazy_block;
+  code_blockt *const saved_block = current_block;
+  if (lazy)
+    current_block = &lazy_block;
+
+  const locationt loc = get_location_from_decl(element);
+  operand = store_call_result(operand, loc, "int_arg");
+  operand = hoist_side_effecting_operand(operand, element, "$int_arg$");
+  expr2tc value;
+  migrate_expr(operand, value);
+
+  emit_guarded_raise(
+    migrate_expr_back(isinf2tc(value)),
+    "OverflowError",
+    "cannot convert float infinity to integer",
+    loc);
+  emit_guarded_raise(
+    migrate_expr_back(isnan2tc(value)),
+    "ValueError",
+    "cannot convert float NaN to integer",
+    loc);
+  current_block = saved_block;
+  if (!lazy)
+    return operand;
+
+  code_expressiont result(operand);
+  result.location() = loc;
+  lazy_block.copy_to_operands(result);
+  side_effect_exprt guarded("statement_expression", operand.type());
+  guarded.copy_to_operands(lazy_block);
+  guarded.location() = loc;
+  return guarded;
+}
+
+/// Converts one and/or operand. An operand after the first runs only when the
+/// earlier ones did not decide the result, so the statements its conversion
+/// plants (an exception guard, a hoisted temporary) go into its own block in
+/// \p effects for lower_short_circuit_boolop to place.
+exprt python_converter::get_boolop_operand(
+  const nlohmann::json &operand,
+  std::vector<code_blockt> &effects)
+{
+  effects.emplace_back();
+  code_blockt *saved_block = current_block;
+  if (current_block && effects.size() > 1)
+    current_block = &effects.back();
+  exprt operand_expr = get_expr(operand);
+  current_block = saved_block;
+
+  if (!operand_expr.is_code() || operand_expr.statement() != "function_call")
+    return operand_expr;
+
+  const code_function_callt &code_call =
+    to_code_function_call(to_code(operand_expr));
+  typet return_type = code_call.type();
+  if (return_type.is_empty() || return_type.id() == typet::t_empty)
+    return_type = type_handler_.get_typet("int", 0);
+  side_effect_expr_function_callt side_effect_call;
+  side_effect_call.function() = code_call.function();
+  side_effect_call.arguments() = code_call.arguments();
+  side_effect_call.type() = return_type;
+  side_effect_call.location() = code_call.location();
+  return side_effect_call;
+}
+
+/// When a later and/or operand planted statements, lowers the operation into
+/// a result temporary updated by one guarded block per operand, so each
+/// operand's statements run only when Python evaluates it (#8275). Returns nil
+/// when nothing was planted, or, after emitting the planted statements
+/// unconditionally as before, when the operation is itself evaluated lazily
+/// (a while test), is an `and` asserted directly, or the operands do not share
+/// a type whose truthiness is a plain condition. An asserted `and` fails anyway
+/// when a later operand is skipped, so its early guard matters only when the
+/// exception is caught; guarding it made dict_update_kwargs' k-induction
+/// forward condition go from 28s to over 20 minutes.
+exprt python_converter::lower_short_circuit_boolop(
+  const exprt &logical_expr,
+  const std::vector<code_blockt> &effects,
+  const std::function<exprt(const exprt &)> &truthy,
+  const nlohmann::json &element)
+{
+  const auto planted = [](const code_blockt &b) {
+    return !b.operands().empty();
+  };
+  if (std::none_of(effects.begin(), effects.end(), planted))
+    return nil_exprt();
+
+  const exprt::operandst &operands = logical_expr.operands();
+  const typet &type = operands.front().type();
+  const auto same_type = [&](const exprt &e) { return e.type() == type; };
+  const typet cond_type = truthy(operands.front()).type();
+  const bool plain_cond = cond_type.is_bool() || cond_type.is_floatbv() ||
+                          type_utils::is_integer_type(cond_type);
+  const bool asserted_and = logical_expr.is_and() && &element == asserted_test_;
+  if (
+    asserted_and || !plain_cond || !can_emit_runtime_guard() ||
+    !std::all_of(operands.begin(), operands.end(), same_type))
+  {
+    for (const code_blockt &block : effects)
+      for (const exprt &statement : block.operands())
+        current_block->copy_to_operands(statement);
+    return nil_exprt();
+  }
+
+  return emit_guarded_boolop(
+    logical_expr, effects, truthy, get_location_from_decl(element));
+}
+
+/// Lowers the and/or \p logical_expr into a result temporary that each later
+/// operand updates in its own guarded block, after the statements its
+/// conversion planted in \p effects.
+exprt python_converter::emit_guarded_boolop(
+  const exprt &logical_expr,
+  const std::vector<code_blockt> &effects,
+  const std::function<exprt(const exprt &)> &truthy,
+  const locationt &location)
+{
+  const exprt::operandst &operands = logical_expr.operands();
+  symbolt result_symbol = create_return_temp_variable(
+    operands.front().type(), location, "boolop_result");
+  symbol_table_.add(result_symbol);
+  const exprt result = symbol_expr(result_symbol);
+
+  code_declt result_decl(result);
+  result_decl.location() = location;
+  current_block->copy_to_operands(result_decl);
+  code_assignt result_init(result, operands.front());
+  result_init.location() = location;
+  current_block->copy_to_operands(result_init);
+
+  exprt cond = truthy(result);
+  if (!cond.type().is_bool())
+    cond = typecast_exprt(cond, bool_type());
+  if (!logical_expr.is_and())
+    cond = not_exprt(cond);
+
+  for (std::size_t i = 1; i < operands.size(); ++i)
+  {
+    code_blockt branch = effects[i];
+    code_assignt update(result, operands[i]);
+    update.location() = location;
+    branch.copy_to_operands(update);
+
+    code_ifthenelset short_circuit;
+    short_circuit.cond() = cond;
+    short_circuit.then_case() = branch;
+    short_circuit.location() = location;
+    short_circuit.location().property("skipped");
+    current_block->copy_to_operands(short_circuit);
+  }
+  return result;
+}
 
 exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
 {
@@ -434,34 +806,25 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
   };
 
   // Mark that we're processing operands in an expression context
-  // This ensures boolean-returning function calls are converted to side-effect expressions
+  // This ensures boolean-returning function calls are converted to side-effect
+  // expressions
   bool old_is_converting_rhs = is_converting_rhs;
   is_converting_rhs = true;
+  const bool old_in_lazy_operand = in_lazy_operand_;
+  std::vector<code_blockt> operand_effects;
 
   // Iterate over operands of logical operations (and/or)
   for (const auto &operand : element["values"])
   {
-    exprt operand_expr = get_expr(operand);
-    if (operand_expr.is_code() && operand_expr.statement() == "function_call")
-    {
-      const code_function_callt &code_call =
-        to_code_function_call(to_code(operand_expr));
-      typet return_type = code_call.type();
-      if (return_type.is_empty() || return_type.id() == typet::t_empty)
-        return_type = type_handler_.get_typet("int", 0);
-      side_effect_expr_function_callt side_effect_call;
-      side_effect_call.function() = code_call.function();
-      side_effect_call.arguments() = code_call.arguments();
-      side_effect_call.type() = return_type;
-      side_effect_call.location() = code_call.location();
-      operand_expr = side_effect_call;
-    }
+    exprt operand_expr = get_boolop_operand(operand, operand_effects);
+    in_lazy_operand_ = true;
     logical_expr.copy_to_operands(operand_expr);
     contains_non_boolean |= !operand_expr.is_boolean();
   }
 
   // Restore the original flag state
   is_converting_rhs = old_is_converting_rhs;
+  in_lazy_operand_ = old_in_lazy_operand;
 
   // A BoolOp must have at least two values, but AST rewrites (e.g. lowering
   // `x == []` to `len(x) == 0`) can produce a degenerate one-value node. A
@@ -470,6 +833,11 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
   // which is the correct result for a one-value boolean operation.
   if (logical_expr.operands().size() == 1)
     return logical_expr.operands().front();
+
+  exprt lowered = lower_short_circuit_boolop(
+    logical_expr, operand_effects, get_truthy_condition, element);
+  if (lowered.is_not_nil())
+    return lowered;
 
   // V.3: build the boolean `and`/`or` as the left-nested IREP2 and2t/or2t
   // chain that migrate splices the legacy n-ary node into (cf.
@@ -538,6 +906,24 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
   }
   return build_boolean_chain(logical_expr);
 }
+
+// An unmodelled call stands for a nondet of no type. In arithmetic with a
+// number it is an unknown number of that type; left untyped, it builds an
+// arithmetic expression whose operand widths IREP2 cannot check.
+static void
+type_untyped_nondet_operand(const std::string &op, exprt &lhs, exprt &rhs)
+{
+  auto untyped_nondet = [](const exprt &e) {
+    return e.type().is_empty() && e.statement() == "nondet";
+  };
+  if (type_utils::is_relational_op(op))
+    return;
+  if (untyped_nondet(lhs) && is_number(rhs.type()))
+    lhs.type() = rhs.type();
+  else if (untyped_nondet(rhs) && is_number(lhs.type()))
+    rhs.type() = lhs.type();
+}
+
 // Sound over-approximation for a relational comparison that cannot be lowered
 // to a typed binop. Returns nil when the comparison lowers normally.
 static exprt relational_nondet_fallback(
@@ -721,13 +1107,15 @@ exprt python_converter::handle_chained_comparisons_logic(
   std::vector<exprt> conjuncts;
   conjuncts.push_back(bin_expr); // bin_expr compares left and comparators[0]
 
+  // Each later comparison runs only if the earlier ones held.
+  const bool old_in_lazy_operand = in_lazy_operand_;
+  in_lazy_operand_ = true;
+  exprt reuse = nil_exprt();
   for (size_t i = 0; i + 1 < element["comparators"].size(); ++i)
   {
     std::string op(element["ops"][i + 1]["_type"].get<std::string>());
-    exprt op1 = get_expr(element["comparators"][i]);
-    exprt op2 = get_expr(element["comparators"][i + 1]);
-
-    convert_function_calls_to_side_effects(op1, op2);
+    auto [op1, op2] =
+      chained_pair_operands(element, i, conjuncts.front(), reuse);
 
     std::string op1_type = type_handler_.type_to_string(op1.type());
     std::string op2_type = type_handler_.type_to_string(op2.type());
@@ -757,9 +1145,9 @@ exprt python_converter::handle_chained_comparisons_logic(
       // (get_binary_operator_expr, "cast void* to integer"). Restricted to
       // integers: a float bound is reconciled differently there (the float is
       // bitcast to the pointer type), so folding it in here would make the two
-      // conjuncts of `a <= x <= b` reconstruct x inconsistently. A float-bounded
-      // chained comparison over an unannotated param stays a pre-existing
-      // crash, unchanged by this patch.
+      // conjuncts of `a <= x <= b` reconstruct x inconsistently. A
+      // float-bounded chained comparison over an unannotated param stays a
+      // pre-existing crash, unchanged by this patch.
       auto is_integer = [](const typet &t) {
         return t.is_signedbv() || t.is_unsignedbv();
       };
@@ -773,6 +1161,7 @@ exprt python_converter::handle_chained_comparisons_logic(
       conjuncts.push_back(logical_expr);
     }
   }
+  in_lazy_operand_ = old_in_lazy_operand;
 
   expr2tc acc;
   migrate_expr(conjuncts.front(), acc);
@@ -783,6 +1172,203 @@ exprt python_converter::handle_chained_comparisons_logic(
     acc = and2tc(acc, c2);
   }
   return migrate_expr_back(acc);
+}
+
+std::pair<exprt, exprt> python_converter::chained_pair_operands(
+  const nlohmann::json &element,
+  size_t i,
+  exprt &first_pair,
+  exprt &reuse)
+{
+  // A comparator is read by two adjacent pairs but evaluated once in Python.
+  const nlohmann::json &comparators = element["comparators"];
+  exprt op1 = reuse;
+  if (op1.is_nil())
+  {
+    op1 = get_expr(comparators[i]);
+    convert_function_call_to_side_effect(op1);
+    // first_pair already evaluates comparators[0]; bind it there.
+    exprt *first = i == 0 ? find_normalised_subexpr(first_pair, op1) : nullptr;
+    exprt bound =
+      first ? bind_chained_comparator(op1, element, reuse) : nil_exprt();
+    if (bound.is_not_nil())
+    {
+      *first = bound;
+      op1 = reuse;
+    }
+  }
+
+  exprt op2 = get_expr(comparators[i + 1]);
+  convert_function_call_to_side_effect(op2);
+  reuse = nil_exprt();
+  if (i + 2 < comparators.size())
+  {
+    exprt bound = bind_chained_comparator(op2, element, reuse);
+    if (bound.is_not_nil())
+      op2 = bound;
+  }
+  return {op1, op2};
+}
+
+exprt python_converter::bind_chained_comparator(
+  const exprt &operand,
+  const nlohmann::json &element,
+  exprt &reuse)
+{
+  if (
+    !current_block || !safe_to_emit_side_effecting_statement() ||
+    operand.type().is_array() || !has_side_effect(operand))
+    return nil_exprt();
+
+  const locationt loc = get_location_from_decl(element);
+  symbolt &tmp =
+    create_tmp_symbol(element, "$cmp_operand$", operand.type(), exprt());
+  code_declt decl(symbol_expr(tmp));
+  decl.location() = loc;
+  add_instruction(decl);
+
+  code_assignt assign(symbol_expr(tmp), operand);
+  assign.location() = loc;
+  code_blockt block;
+  block.copy_to_operands(assign, code_expressiont(symbol_expr(tmp)));
+  side_effect_exprt bound("statement_expression", operand.type());
+  bound.copy_to_operands(block);
+  bound.location() = loc;
+  reuse = symbol_expr(tmp);
+  return bound;
+}
+
+exprt python_converter::bind_operand_read_twice(
+  const exprt &operand,
+  const nlohmann::json &element,
+  exprt &reread)
+{
+  reread = operand;
+  if (!has_side_effect(operand))
+    return operand;
+  return bind_chained_comparator(operand, element, reread);
+}
+
+/// The `range(...)` call a membership test of x can evaluate arithmetically:
+/// x an integer variable or constant, at most three positional arguments,
+/// and no call in them (they are converted again). Null otherwise.
+static const nlohmann::json *
+arithmetic_range_operand(const exprt &x, const nlohmann::json &element)
+{
+  if (
+    element.value("_type", "") != "Compare" ||
+    element["comparators"].size() != 1 || !(x.is_symbol() || x.is_constant()) ||
+    !type_utils::is_integer_type(x.type()))
+    return nullptr;
+  const nlohmann::json &call = element["comparators"][0];
+  if (
+    call.value("_type", "") != "Call" ||
+    call["func"].value("id", "") != "range" || !call["keywords"].empty() ||
+    call["args"].empty() || call["args"].size() > 3 ||
+    json_utils::ast_contains_call(call["args"]))
+    return nullptr;
+  return &call;
+}
+
+/// `x in range(...)` as arithmetic, so the range's elements need not exist
+/// (#8199). Nil unless arithmetic_range_operand accepts the call and any step
+/// is a non-zero integer constant.
+exprt python_converter::range_membership(
+  const exprt &x,
+  const nlohmann::json &element)
+{
+  const nlohmann::json *call = arithmetic_range_operand(x, element);
+  if (!call)
+    return nil_exprt();
+
+  const nlohmann::json &args = (*call)["args"];
+  const typet &t = x.type();
+  const std::optional<long long> step =
+    args.size() == 3 ? python_frontend::literal_int_value(args[2]) : 1;
+  if (!step || *step == 0)
+    return nil_exprt();
+
+  const exprt start =
+    args.size() == 1 ? gen_zero(t) : typecast_exprt(get_expr(args[0]), t);
+  const exprt stop =
+    typecast_exprt(get_expr(args[args.size() == 1 ? 0 : 1]), t);
+  exprt in_bounds = *step > 0 ? and_exprt(
+                                  binary_relation_exprt(start, "<=", x),
+                                  binary_relation_exprt(x, "<", stop))
+                              : and_exprt(
+                                  binary_relation_exprt(stop, "<", x),
+                                  binary_relation_exprt(x, "<=", start));
+  if (*step == 1 || *step == -1)
+    return in_bounds;
+  const exprt rem = python_expr::build_mod(
+    python_expr::build_sub(x, start, t), from_integer(*step, t), t);
+  return and_exprt(in_bounds, python_expr::build_equal(rem, gen_zero(t)));
+}
+
+exprt python_converter::list_or_range_contains(
+  exprt &lhs,
+  exprt &rhs,
+  const nlohmann::json &element)
+{
+  exprt in_range = range_membership(lhs, element);
+  if (in_range.is_not_nil())
+    return in_range;
+  python_list list(*this, element);
+  return list.contains(lhs, rhs);
+}
+
+/// The dict an Optional[dict] pointer refers to (NULL for None), or an empty
+/// type when @p t is no such pointer.
+typet python_converter::nullable_dict_pointee(const typet &t) const
+{
+  if (!t.is_pointer())
+    return typet();
+  const typet pointee =
+    t.subtype().id() == "symbol" ? ns.follow(t.subtype()) : t.subtype();
+  return dict_handler_->is_dict_type(pointee) ? pointee : typet();
+}
+
+bool python_converter::keeps_pointer_type_on_none(const typet &t)
+{
+  return is_user_class_pointer(t) || !nullable_dict_pointee(t).id().empty();
+}
+
+/// True when the container of membership test @p element is a variable or
+/// attribute, the only list operand that can hold None.
+static bool container_is_name(const nlohmann::json &element)
+{
+  if (element.value("_type", "") != "Compare")
+    return false;
+  const std::string type = element["comparators"][0].value("_type", "");
+  return type == "Name" || type == "Attribute";
+}
+
+/// A list, or an Optional[dict] pointer, is NULL for None: membership on it
+/// raises CPython's TypeError, and otherwise tests the container itself.
+void python_converter::guard_none_container(
+  exprt &rhs,
+  typet &rhs_type,
+  const nlohmann::json &element)
+{
+  const typet dict_type = nullable_dict_pointee(rhs_type);
+  const bool nullable_list =
+    rhs.type() == type_handler_.get_list_type() && container_is_name(element);
+  if (dict_type.id().empty() && !nullable_list)
+    return;
+
+  if (can_emit_runtime_guard())
+  {
+    rhs = hoist_side_effecting_operand(rhs, element, "$in_rhs$");
+    emit_guarded_raise(
+      python_expr::build_equal(rhs, gen_zero(rhs.type())),
+      "TypeError",
+      "argument of type 'NoneType' is not iterable",
+      get_location_from_decl(element));
+  }
+  if (dict_type.id().empty())
+    return;
+  rhs = python_expr::build_dereference(rhs, dict_type);
+  rhs_type = dict_type;
 }
 
 exprt python_converter::handle_membership_operator(
@@ -802,6 +1388,8 @@ exprt python_converter::handle_membership_operator(
 
   if (rhs_resolved_type.id() == "symbol")
     rhs_resolved_type = ns.follow(rhs_resolved_type);
+
+  guard_none_container(rhs, rhs_resolved_type, element);
 
   if (rhs_resolved_type.is_struct())
   {
@@ -889,8 +1477,7 @@ exprt python_converter::handle_membership_operator(
   // "item" in [list/set] or "item" not in [list/set]
   if (rhs.type() == list_type)
   {
-    python_list list(*this, element);
-    exprt contains_expr = list.contains(lhs, rhs);
+    exprt contains_expr = list_or_range_contains(lhs, rhs, element);
     if (!invert)
       return contains_expr;
     // V.3: build the "not in" negation in IREP2.
@@ -903,7 +1490,8 @@ exprt python_converter::handle_membership_operator(
   std::string lhs_type = type_handler_.type_to_string(lhs.type());
   std::string rhs_type = type_handler_.type_to_string(rhs.type());
 
-  // Handle string membership testing: "substr" in "string" or "substr" not in "string"
+  // Handle string membership testing: "substr" in "string" or "substr" not in
+  // "string"
   if (
     lhs.type().is_pointer() || rhs.type().is_pointer() ||
     lhs.type().is_array() || rhs.type().is_array() || lhs_type == "str" ||
@@ -964,11 +1552,20 @@ exprt python_converter::handle_tagged_scalar_binop(
   const nlohmann::json &right,
   const nlohmann::json &element)
 {
-  if (op == "Eq" || op == "NotEq" || type_utils::is_ordered_comparison(op))
+  if (op == "Eq" || op == "NotEq")
     return dynamic_type_handler_.handle_comparison(op, lhs, rhs);
-  if (op == "Add" || op == "Sub" || op == "Div")
-    return dynamic_type_handler_.handle_arithmetic(
+  if (type_utils::is_ordered_comparison(op))
+  {
+    dynamic_type_handler_.guard_type_error(
       op, lhs, rhs, get_location_from_decl(element));
+    return dynamic_type_handler_.handle_comparison(op, lhs, rhs);
+  }
+  if (op == "Add" || op == "Sub" || op == "Div")
+  {
+    const locationt location = get_location_from_decl(element);
+    dynamic_type_handler_.guard_type_error(op, lhs, rhs, location);
+    return dynamic_type_handler_.handle_arithmetic(op, lhs, rhs, location);
+  }
 
   // Tagging only ever stores a number or a string (get_var_assign rejects every
   // other rvalue), so a tagged operand is never None. Only a literal None
@@ -990,8 +1587,85 @@ exprt python_converter::handle_tagged_scalar_binop(
     "' on a dynamically-typed variable is not yet supported");
 }
 
+exprt python_converter::get_percent_format_expr(
+  const nlohmann::json &left,
+  const std::vector<nlohmann::json> &args,
+  const std::map<std::string, nlohmann::json> &mapping,
+  const std::vector<typet> &arg_types)
+{
+  std::optional<nlohmann::json> joined =
+    percent_format_as_fstring(left, args, arg_types);
+  // A name runs no code, and a discarded type probe only needs the type.
+  if (joined && (!may_run_code(args) || in_rhs_type_probe_))
+    return get_expr(*joined);
+  // An attribute or a call runs once, in order, ahead of the statement. Where
+  // that is not when Python runs it (a while test, an and/or tail), refuse.
+  if (joined && can_emit_runtime_guard())
+    return get_fstring_in_order(*joined);
+  // Re-enter conversion through a synthesised Constant node so the folded
+  // string flows through the exact same path as a string literal (e.g.
+  // len("ab")), which materialises it correctly when consumed inline by
+  // len()/==. Building the array directly left it unaddressable inline.
+  nlohmann::json folded = left;
+  folded["value"] =
+    py_percent_format(left["value"].get<std::string>(), args, mapping);
+  return get_expr(folded);
+}
+
+exprt python_converter::get_fstring_in_order(const nlohmann::json &joined)
+{
+  exprt result = nil_exprt();
+  for (const nlohmann::json &value : joined["values"])
+  {
+    exprt part =
+      get_expr(value["_type"] == "Constant" ? value : value["value"]);
+    if (value["_type"] != "Constant")
+    {
+      convert_function_call_to_side_effect(part);
+      symbolt &tmp =
+        create_tmp_symbol(joined, "$str_mod$", part.type(), exprt());
+      add_instruction(code_declt(symbol_expr(tmp)));
+      add_instruction(code_assignt(symbol_expr(tmp), part));
+      part = string_handler_.convert_to_string(symbol_expr(tmp));
+    }
+    result = result.is_nil()
+               ? part
+               : string_handler_.handle_string_concatenation(
+                   result, part, nlohmann::json(), nlohmann::json());
+  }
+  return result;
+}
+
+std::vector<typet> python_converter::percent_arg_types(
+  const nlohmann::json &right,
+  const exprt &rhs) const
+{
+  // A tuple-valued operand spreads over the conversions; not rewritten.
+  if (right.value("_type", "") != "Tuple")
+    return tuple_handler_->is_tuple_type(rhs.type())
+             ? std::vector<typet>{}
+             : std::vector<typet>{rhs.type()};
+  std::vector<typet> types;
+  if (rhs.operands().size() == right["elts"].size())
+    for (const exprt &op : rhs.operands())
+      types.push_back(op.type());
+  return types;
+}
+
+exprt python_converter::get_right_operand_expr(
+  const nlohmann::json &element,
+  const nlohmann::json &right,
+  const exprt &lhs)
+{
+  return is_literal_percent_format(element, lhs) ? probe_expr(right)
+                                                 : get_expr(right);
+}
+
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
+  if (std::optional<exprt> bound = try_bound_method_compare(element))
+    return *bound;
+
   // Extract left and right operands from AST
   auto left = element.contains("left") ? element["left"] : element["target"];
 
@@ -1010,7 +1684,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   exprt *saved_lhs = current_lhs;
   current_lhs = nullptr;
   exprt lhs = get_expr(left);
-  exprt rhs = get_expr(right);
+  exprt rhs = get_right_operand_expr(element, right, lhs);
   current_lhs = saved_lhs;
 
   // Resolve dictionary subscript types for proper comparison
@@ -1023,25 +1697,152 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   else if (element.contains("ops"))
     op = element["ops"][0]["_type"].get<std::string>();
   assert(!op.empty());
+  guard_none_attribute_operands(op, left, right, lhs, rhs, element);
 
+  const exprt result =
+    get_binary_operator_expr(element, left, right, op, lhs, rhs);
+  return keep_operand_calls(result, lhs, rhs);
+}
+
+/// A comparison decided from its operand types alone still evaluates its
+/// operands, so a call in one of them must run (#8447).
+exprt python_converter::keep_operand_calls(
+  const exprt &result,
+  const exprt &lhs,
+  const exprt &rhs)
+{
+  if (!result.is_constant() || !result.type().is_bool())
+    return result;
+
+  code_blockt block;
+  for (const exprt *operand : {&lhs, &rhs})
+  {
+    if (operand->is_function_call())
+      block.copy_to_operands(*operand);
+    else if (has_side_effect(*operand))
+      block.copy_to_operands(code_expressiont(*operand));
+  }
+  if (block.operands().empty())
+    return result;
+
+  block.copy_to_operands(code_expressiont(result));
+  side_effect_exprt kept("statement_expression", result.type());
+  kept.copy_to_operands(block);
+  return kept;
+}
+
+exprt python_converter::handle_dict_bitwise(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &element)
+{
+  if (
+    (op != "BitOr" && op != "BitAnd" && op != "BitXor") ||
+    !lhs.type().is_struct() || !rhs.type().is_struct() ||
+    !dict_handler_->is_dict_type(lhs.type()) ||
+    !dict_handler_->is_dict_type(rhs.type()))
+    return nil_exprt();
+
+  // `d |= other` updates d in place, so an alias of d sees the new entries.
+  if (
+    op == "BitOr" && element.value("_type", "") == "AugAssign" &&
+    lhs.is_symbol())
+  {
+    dict_handler_->copy_dict_entries(lhs, rhs, element);
+    return lhs;
+  }
+  if (op == "BitOr" && element.value("_type", "") != "AugAssign")
+    return dict_handler_->handle_dict_union(lhs, rhs, element);
+
+  // Not modeled. Falling through would reach build_binary_expression's bitwise
+  // path, which emits a bitvector op over struct operands and SIGSEGVs in the
+  // SMT backend (a struct irep is handed to bitwuzla_mk_term2 as a term).
+  throw std::runtime_error("bitwise operations on dict are not supported");
+}
+
+exprt python_converter::checked_erased_int(
+  exprt operand,
+  const nlohmann::json &node,
+  const nlohmann::json &element)
+{
+  if (operand.type().subtype().id() != "empty" || !current_block)
+    return operand;
+  // Only a value that can come from sources of different known kinds can be
+  // anything but the int the cast below assumes.
+  value_kinds kinds(*ast_json);
+  if (!kinds.diverges(node, kinds.scope_of(current_func_name_)))
+    return operand;
+
+  const locationt location = get_location_from_decl(element);
+  if (operand.is_function_call() || has_side_effect(operand))
+  {
+    convert_function_call_to_side_effect(operand);
+    symbolt &tmp =
+      create_tmp_symbol(element, "$erased$", operand.type(), exprt());
+    code_declt decl(symbol_expr(tmp));
+    decl.location() = location;
+    current_block->copy_to_operands(decl);
+    code_assignt assign(symbol_expr(tmp), operand);
+    assign.location() = location;
+    current_block->copy_to_operands(assign);
+    operand = symbol_expr(tmp);
+  }
+
+  // Symex answers from what the value points to, and refuses, as #8315 does,
+  // when it cannot tell.
+  expr2tc value2, int2;
+  migrate_expr(operand, value2);
+  migrate_expr(gen_zero(type_handler_.get_typet("int", 0)), int2);
+  code_assertt check(migrate_expr_back(isinstance2tc(value2, int2)));
+  check.location() = location;
+  check.location().user_provided(true);
+  check.location().comment(
+    "Unsupported: arithmetic on a value whose type was lost");
+  current_block->copy_to_operands(check);
+  return operand;
+}
+
+exprt python_converter::get_binary_operator_expr(
+  const nlohmann::json &element,
+  const nlohmann::json &left,
+  const nlohmann::json &right,
+  const std::string &op,
+  exprt &lhs,
+  exprt &rhs)
+{
   if (
     type_handler_.is_tagged_scalar_type(lhs.type()) ||
     type_handler_.is_tagged_scalar_type(rhs.type()))
+  {
+    // A tagged operand coming straight from a call (e.g. `f(x) + 1`) is still
+    // a raw call/side-effect node here, not an addressable lvalue; the
+    // dispatch below does member access on it directly, so copy it into a
+    // temp first.
+    if (current_block)
+    {
+      lhs =
+        tuple_handler_->prepare_rhs_for_unpacking(element, lhs, *current_block);
+      rhs =
+        tuple_handler_->prepare_rhs_for_unpacking(element, rhs, *current_block);
+    }
+
     return handle_tagged_scalar_binop(op, lhs, rhs, left, right, element);
+  }
 
   // Handle type identity checks (e.g., y is int, x is str)
   exprt type_identity_result =
-    handle_type_identity_check(op, lhs, rhs, left, right);
+    handle_type_comparison(op, lhs, rhs, left, right);
   if (!type_identity_result.is_nil())
     return type_identity_result;
 
   // Handle None comparisons (don't unwrap optionals for identity checks)
-  bool is_none_check = handle_none_check_setup(op, lhs, rhs);
-  if (!is_none_check)
-  {
-    lhs = unwrap_optional_if_needed(lhs, element);
-    rhs = unwrap_optional_if_needed(rhs, element);
-  }
+  // Optionals are unwrapped here, except for an identity check against None.
+  if (
+    exprt optional_result = resolve_optional_operands(
+      op, lhs, rhs, element, handle_none_check_setup(op, lhs, rhs));
+    optional_result.is_not_nil())
+    return optional_result;
 
   if (lhs.type() == none_type() || rhs.type() == none_type())
   {
@@ -1063,6 +1864,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   attach_symbol_location(lhs, symbol_table());
   attach_symbol_location(rhs, symbol_table());
+  type_untyped_nondet_operand(op, lhs, rhs);
 
   // Python rule: cross-type `==`/`!=` returns False/True without coercion,
   // except within the numeric tower (bool/int/float/complex). Fold here, before
@@ -1166,18 +1968,10 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       return set_result;
   }
 
-  // Python dict union (PEP 584: `d1 | d2`) and bitwise operations on dicts are
-  // not modeled. Reject them with a clean diagnostic: otherwise both dict
-  // structs fall through to build_binary_expression's bitwise path, which emits
-  // a bitvector BitOr over struct operands and SIGSEGVs in the SMT backend
-  // (a struct irep is handed to bitwuzla_mk_term2 as a term pointer).
   if (
-    (op == "BitOr" || op == "BitAnd" || op == "BitXor") &&
-    lhs.type().is_struct() && rhs.type().is_struct() &&
-    dict_handler_->is_dict_type(lhs.type()) &&
-    dict_handler_->is_dict_type(rhs.type()))
-    throw std::runtime_error(
-      "dict union '|' and bitwise operations on dict are not supported");
+    exprt dict_result = handle_dict_bitwise(op, lhs, rhs, element);
+    dict_result.is_not_nil())
+    return dict_result;
 
   // Handle membership operators
   if (op == "In")
@@ -1246,14 +2040,8 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     else
       args.push_back(right);
 
-    // Re-enter conversion through a synthesised Constant node so the folded
-    // string flows through the exact same path as a string literal (e.g.
-    // len("ab")), which materialises it correctly when consumed inline by
-    // len()/==. Building the array directly left it unaddressable inline.
-    nlohmann::json folded = left;
-    folded["value"] =
-      py_percent_format(left["value"].get<std::string>(), args, mapping);
-    return get_expr(folded);
+    return get_percent_format_expr(
+      left, args, mapping, percent_arg_types(right, rhs));
   }
 
   // Handle array/string operations
@@ -1343,12 +2131,12 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   // value flowing from it, including a function's return — is modelled as a
   // pointer-width unsigned integer handle (value 0 for None; see
   // type_handler `NoneType`/`Optional`). A freshly constructed instance such as
-  // `Node(0)` is stored by value (tag-Node). Comparing the two fed a struct sort
-  // and a pointer-width scalar to the solver's mk_eq, whose operand-width assert
-  // is elided under NDEBUG -> SIGSEGV in release builds (github #4796). The
-  // tag-matched pointer case above does not fire because the handle carries no
-  // class tag. Reinterpret the struct as its address cast to the handle type so
-  // both sides compare as object references.
+  // `Node(0)` is stored by value (tag-Node). Comparing the two fed a struct
+  // sort and a pointer-width scalar to the solver's mk_eq, whose operand-width
+  // assert is elided under NDEBUG -> SIGSEGV in release builds (github #4796).
+  // The tag-matched pointer case above does not fire because the handle carries
+  // no class tag. Reinterpret the struct as its address cast to the handle type
+  // so both sides compare as object references.
   if (op == "Eq" || op == "NotEq" || op == "Is" || op == "IsNot")
   {
     // A None-able object handle: a pointer-width unsigned integer (how
@@ -1415,9 +2203,9 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   // Handle identity comparisons
   if (op == "Is")
-    return get_binary_operator_expr_for_is(lhs, rhs);
+    return get_binary_operator_expr_for_is(lhs, rhs, left, right);
   if (op == "IsNot")
-    return get_negated_is_expr(lhs, rhs);
+    return get_negated_is_expr(lhs, rhs, left, right);
 
   // Handle relational operation type mismatches
   if (type_utils::is_relational_op(op))
@@ -1517,7 +2305,8 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   };
 
   // For arithmetic operations (Sub, Add, Mult, etc.) on an any_type (void*)
-  // operand combined with an integer operand, cast the void* to the integer type.
+  // operand combined with an integer operand, cast the void* to the integer
+  // type.
   if (
     !type_utils::is_relational_op(op) && op != "Is" && op != "IsNot" &&
     op != "In" && op != "NotIn")
@@ -1529,9 +2318,9 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       rhs = typecast_exprt(rhs, int_type);
     }
     else if (is_any_ptr(lhs) && is_integer(rhs))
-      lhs = typecast_exprt(lhs, rhs.type());
+      lhs = typecast_exprt(checked_erased_int(lhs, left, element), rhs.type());
     else if (is_any_ptr(rhs) && is_integer(lhs))
-      rhs = typecast_exprt(rhs, lhs.type());
+      rhs = typecast_exprt(checked_erased_int(rhs, right, element), lhs.type());
   }
 
   // Handle Any-typed (void*) operands in comparisons.
@@ -1551,9 +2340,9 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     };
     // An operand with no concrete type is an unmodelled value (e.g. the result
     // of calling a generator function, whose type stays "empty"). Coercing it —
-    // in particular wrapping it in a typecast — yields a null-typed operand that
-    // crashes expression simplification. Leave such a comparison untouched so it
-    // lowers like any other (the assertion is simply not satisfied).
+    // in particular wrapping it in a typecast — yields a null-typed operand
+    // that crashes expression simplification. Leave such a comparison untouched
+    // so it lowers like any other (the assertion is simply not satisfied).
     auto has_concrete_type = [](const exprt &e) {
       return !e.type().is_nil() && !e.type().is_empty();
     };
@@ -1630,52 +2419,66 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       return fallback;
   }
 
-  if (needs_zero_division_guard(op, rhs))
-  {
-    // The divisor is referenced by both the zero-check guard and the division
-    // itself. If it carries a side effect (a call, or a nondet) it would be
-    // evaluated twice -- `x / f()` calling f twice, and `x / nondet()` guarding
-    // a different value than the one divided by. Hoist a side-effecting divisor
-    // into a temporary so it is evaluated exactly once.
-    std::function<bool(const exprt &)> has_side_effect =
-      [&](const exprt &e) -> bool {
-      if (e.id() == "sideeffect")
-        return true;
-      for (const exprt &sub : e.operands())
-        if (has_side_effect(sub))
-          return true;
-      return false;
-    };
+  return build_division_guarded_binop(op, lhs, rhs, element);
+}
 
-    locationt div_loc = get_location_from_decl(element);
-    if (has_side_effect(rhs))
-    {
-      symbolt &tmp =
-        create_tmp_symbol(element, "$div_rhs$", rhs.type(), exprt());
-      code_declt decl(symbol_expr(tmp));
-      decl.location() = div_loc;
-      add_instruction(decl);
-      code_assignt assign(symbol_expr(tmp), rhs);
-      assign.location() = div_loc;
-      add_instruction(assign);
-      rhs = symbol_expr(tmp);
-    }
+exprt python_converter::build_division_guarded_binop(
+  const std::string &op,
+  exprt lhs,
+  exprt rhs,
+  const nlohmann::json &element)
+{
+  if (!needs_zero_division_guard(op, rhs))
+    return build_arithmetic_binop(op, lhs, rhs, element);
 
-    exprt is_zero("=", bool_type());
-    is_zero.copy_to_operands(rhs, gen_zero(rhs.type()));
+  // An and/or tail, a chained-comparison tail or a while test is evaluated
+  // conditionally or repeatedly, so a guard planted ahead of the statement
+  // would raise on a path Python never takes. There the hoist and the guard
+  // go into a statement expression that is evaluated with the division.
+  code_blockt lazy_block;
+  code_blockt *const saved_block = current_block;
+  if (in_lazy_operand_)
+    current_block = &lazy_block;
 
-    exprt raise = get_exception_handler().gen_exception_raise(
-      "ZeroDivisionError", "division by zero");
-    code_expressiont throw_code(raise);
+  // The divisor is referenced by both the zero-check guard and the division
+  // itself. If it carries a side effect (a call, or a nondet) it would be
+  // evaluated twice -- `x / f()` calling f twice, and `x / nondet()` guarding
+  // a different value than the one divided by. Hoist a side-effecting divisor
+  // into a temporary so it is evaluated exactly once. The integer `//` and `%`
+  // lowerings read the dividend more than once too, and Python evaluates it
+  // before the divisor, so hoist it first.
+  lhs = hoist_side_effecting_operand(lhs, element, "$div_lhs$");
+  rhs = hoist_side_effecting_operand(rhs, element, "$div_rhs$");
 
-    code_ifthenelset guard;
-    guard.cond() = is_zero;
-    guard.then_case() = throw_code;
-    guard.location() = div_loc;
-    guard.location().property("skipped");
-    add_instruction(guard);
-  }
+  exprt is_zero("=", bool_type());
+  is_zero.copy_to_operands(rhs, gen_zero(rhs.type()));
+  emit_guarded_raise(
+    is_zero,
+    "ZeroDivisionError",
+    "division by zero",
+    get_location_from_decl(element));
+  current_block = saved_block;
 
+  exprt result = build_arithmetic_binop(op, lhs, rhs, element);
+  if (!in_lazy_operand_)
+    return result;
+
+  const locationt loc = get_location_from_decl(element);
+  code_expressiont value(result);
+  value.location() = loc;
+  lazy_block.copy_to_operands(value);
+  side_effect_exprt stmt_expr("statement_expression", result.type());
+  stmt_expr.copy_to_operands(lazy_block);
+  stmt_expr.location() = loc;
+  return stmt_expr;
+}
+
+exprt python_converter::build_arithmetic_binop(
+  const std::string &op,
+  exprt lhs,
+  exprt rhs,
+  const nlohmann::json &element)
+{
   // Build the binary expression
   exprt bin_expr = build_binary_expression(op, lhs, rhs);
 
@@ -1700,6 +2503,49 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     return handle_chained_comparisons_logic(element, bin_expr);
 
   return bin_expr;
+}
+
+/// Replace Optional<T> operands by their values (#8016). `==`/`!=` also compare
+/// the None flags, so None equals only None. Returns the finished comparison,
+/// or nil once \p lhs and \p rhs hold plain values.
+exprt python_converter::resolve_optional_operands(
+  const std::string &op,
+  exprt &lhs,
+  exprt &rhs,
+  const nlohmann::json &element,
+  bool is_none_check)
+{
+  if (is_none_check || is_literal_percent_format(element, lhs))
+    return nil_exprt();
+  auto none_flag = [&](exprt &operand) -> exprt {
+    if (!type_utils::is_optional_struct(operand.type()))
+      return false_exprt();
+    operand = materialize_optional(operand, element);
+    exprt flag = member_exprt(operand, "is_none", bool_type());
+    operand = unwrap_optional_if_needed(operand, element);
+    return flag;
+  };
+  const bool any_optional = type_utils::is_optional_struct(lhs.type()) ||
+                            type_utils::is_optional_struct(rhs.type());
+  const exprt lhs_none = none_flag(lhs);
+  const exprt rhs_none = none_flag(rhs);
+  raise_on_optional_none(op, lhs_none, rhs_none, lhs, rhs, element);
+  if (!any_optional || (op != "Eq" && op != "NotEq"))
+    return nil_exprt();
+
+  auto is_scalar = [](const typet &t) {
+    return t.is_signedbv() || t.is_unsignedbv() || t.is_floatbv() ||
+           t.is_bool();
+  };
+  if (!is_scalar(lhs.type()) || !is_scalar(rhs.type()))
+    return nil_exprt();
+  const exprt values_equal =
+    equality_exprt(lhs, typecast_exprt(rhs, lhs.type()));
+  const exprt equal = or_exprt(
+    and_exprt(lhs_none, rhs_none),
+    and_exprt(
+      and_exprt(not_exprt(lhs_none), not_exprt(rhs_none)), values_equal));
+  return op == "Eq" ? equal : exprt(not_exprt(equal));
 }
 
 bool python_converter::handle_none_check_setup(
@@ -1988,6 +2834,54 @@ exprt python_converter::handle_array_operations(
     }
   }
 
+  // `str` has no arithmetic beyond `+` (below) or ordering against anything
+  // but `str`; `*` is string repetition and is handled elsewhere. Reaching
+  // generic arithmetic with a char-array operand otherwise asserts
+  // internally or silently verifies a program CPython rejects.
+  {
+    static const std::map<std::string, std::string> arith_symbols = {
+      {"Sub", "-"}, {"Div", "/"}, {"FloorDiv", "//"}, {"Pow", "**"}};
+    auto arith_it = arith_symbols.find(op);
+    bool is_ordering = op == "Lt" || op == "LtE" || op == "Gt" || op == "GtE";
+    if (arith_it != arith_symbols.end() || is_ordering)
+    {
+      const bool lhs_char = is_char_array(lhs.type());
+      const bool rhs_char = is_char_array(rhs.type());
+      if (lhs_char != rhs_char)
+      {
+        const exprt &other = lhs_char ? rhs : lhs;
+        // Float ordering is already handled by handle_float_vs_string.
+        const bool other_is_float = other.type().is_floatbv();
+        const std::string cat = get_python_type_category(other.type());
+        if (cat != "string" && !cat.empty() && !(is_ordering && other_is_float))
+        {
+          const std::string lhs_name =
+            type_handler_.get_python_type_name(lhs.type());
+          const std::string rhs_name =
+            type_handler_.get_python_type_name(rhs.type());
+          if (is_ordering)
+          {
+            std::string lower_op = op;
+            std::transform(
+              lower_op.begin(),
+              lower_op.end(),
+              lower_op.begin(),
+              [](unsigned char c) { return std::tolower(c); });
+            const auto &sym = python_frontend::operator_map().at(lower_op);
+            return get_exception_handler().gen_exception_raise(
+              "TypeError",
+              "'" + sym + "' not supported between instances of '" + lhs_name +
+                "' and '" + rhs_name + "'");
+          }
+          return get_exception_handler().gen_exception_raise(
+            "TypeError",
+            "unsupported operand type(s) for " + arith_it->second + ": '" +
+              lhs_name + "' and '" + rhs_name + "'");
+        }
+      }
+    }
+  }
+
   // Handle string concatenation -- only valid for char-arrays. Numeric
   // arrays (e.g. ``np.array([1, 2, 3])``, modelled as ``long int [N]``)
   // reaching this path via ``a + n`` previously got force-cast to char*
@@ -2131,8 +3025,8 @@ exprt python_converter::handle_tuple_operations(
   }
 
   // Lexicographic ordering for tuples, lowered to element-wise comparisons
-  // (the SMT backend has no struct ordering -- a raw `>` on a tuple struct trips
-  // an is_signedbv assertion):
+  // (the SMT backend has no struct ordering -- a raw `>` on a tuple struct
+  // trips an is_signedbv assertion):
   //   (a0,a1,..) < (b0,b1,..)
   //     == a0<b0 or (a0==b0 and (a1<b1 or (a1==b1 and ...)))
   // Components may be integer/bool/float scalars (mixed int/float promote to
@@ -2455,12 +3349,13 @@ exprt python_converter::handle_relational_type_mismatches(
   // Single character comparisons (including equality/inequality)
   if (type_utils::is_ordered_comparison(op) || op == "Eq" || op == "NotEq")
   {
-    // Special handling. Reject cases where both operands are character arrays (like chr(65) == "A")
-    // Todo: we should change the all expression to a correct format in future.
+    // Special handling. Reject cases where both operands are character arrays
+    // (like chr(65) == "A") Todo: we should change the all expression to a
+    // correct format in future.
     bool both_arrays = lhs.type().is_array() && rhs.type().is_array();
 
-    // If both operands are strings (including char pointers), skip single-char comparison
-    // and let the string comparison path handle it (strcmp).
+    // If both operands are strings (including char pointers), skip single-char
+    // comparison and let the string comparison path handle it (strcmp).
     bool both_strings = type_utils::is_string_type(lhs.type()) &&
                         type_utils::is_string_type(rhs.type());
 

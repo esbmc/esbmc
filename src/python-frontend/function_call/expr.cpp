@@ -7,7 +7,7 @@
 #include <python-frontend/math/python_int_overflow.h>
 #include <python-frontend/math/python_math.h>
 #include <python-frontend/numpy/numpy_reducer_shared.h>
-#include <python-frontend/math/round_to_nearest_guard.h>
+#include <util/base/host_rounding_mode.h>
 #include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/python-list/python_list.h>
 #include <python-frontend/set/python_set.h>
@@ -243,8 +243,12 @@ exprt function_call_expr::build_temporary_receiver(
   const nlohmann::json &ctor_call) const
 {
   const std::string &class_name = ctor_call["func"]["id"].get<std::string>();
+  const bool is_abstract = !unimplemented_abstract_method(ctor_call).empty();
+  if (is_abstract)
+    converter_.add_instruction(
+      code_expressiont(abstract_instantiation_error(ctor_call)));
 
-  if (!class_defines_init(converter_.ast(), class_name))
+  if (is_abstract || !class_defines_init(converter_.ast(), class_name))
   {
     // No __init__ anywhere in the MRO: there is no constructor symbol to call,
     // so an uninitialised instance is all the receiver can be.
@@ -398,7 +402,7 @@ void function_call_expr::get_function_type()
   {
     function_type_ = FunctionType::ClassMethod;
   }
-  else if (!converter_.is_imported_module(caller))
+  else if (!converter_.is_module_receiver(caller, func_value, call_))
   {
     // A @staticmethod takes no receiver, so an instance call binds its
     // arguments exactly as a class-name call does. Classifying it as an
@@ -413,12 +417,23 @@ void function_call_expr::get_function_type()
       func_node.contains("attr") && func_node["attr"].is_string()
         ? func_node["attr"].template get<std::string>()
         : std::string();
-    const nlohmann::json class_node =
-      find_class_node(type_handler_.get_var_type(caller));
+    // Ask the class the call resolved to, not the receiver's annotation,
+    // which `C()`, `self` and attribute chains lack (#8409).
+    const nlohmann::json class_node = find_class_node(function_id_.get_class());
     function_type_ = resolves_to_staticmethod(class_node, method)
                        ? FunctionType::ClassMethod
                        : FunctionType::InstanceMethod;
   }
+}
+
+exprt function_call_expr::build_value_receiver(const symbolt &method) const
+{
+  exprt receiver = converter_.get_expr(call_["func"]["value"]);
+  // Nothing, or a constant, stands in for an item that has already raised
+  // IndexError (`ps[3].m()`); a null self keeps the dead call well typed.
+  if (receiver.is_nil() || receiver.is_constant())
+    return gen_zero(to_code_type(method.get_type()).arguments()[0].type());
+  return receiver;
 }
 
 bool function_call_expr::is_nondet_call() const
@@ -465,6 +480,103 @@ exprt function_call_expr::handle_generic_hash()
   converter_.add_instruction(nondet_assign);
 
   return build_symbol(tmp);
+}
+
+static std::string node_name(const nlohmann::json &node)
+{
+  return node.contains("id") ? node.value("id", "") : node.value("attr", "");
+}
+
+static bool is_abstract_method(const nlohmann::json &member)
+{
+  for (const auto &decorator : member.value("decorator_list", nlohmann::json()))
+    if (node_name(decorator) == "abstractmethod")
+      return true;
+  return false;
+}
+
+static bool has_abcmeta_metaclass(const nlohmann::json &class_node)
+{
+  for (const auto &kw : class_node.value("keywords", nlohmann::json()))
+    if (
+      kw.value("arg", "") == "metaclass" && node_name(kw["value"]) == "ABCMeta")
+      return true;
+  return false;
+}
+
+/// Record, for each method @p class_name resolves, whether that definition is
+/// abstract. A derived definition wins, so bases are visited after the class
+/// and only fill in names it leaves open. @p is_abc is set when the class
+/// derives from abc.ABC, without which @abstractmethod has no effect.
+void function_call_expr::collect_method_abstractness(
+  const python_converter &converter,
+  const std::string &class_name,
+  std::map<std::string, bool> &methods,
+  std::set<std::string> &visited,
+  bool &is_abc)
+{
+  if (class_name == "ABC")
+  {
+    is_abc = true;
+    return;
+  }
+  if (!visited.insert(class_name).second)
+    return;
+
+  nlohmann::json class_node =
+    json_utils::find_class(converter.ast()["body"], class_name);
+  if (class_node.is_null())
+  {
+    const nlohmann::json *module_ast =
+      converter.find_imported_class_module(class_name).first;
+    if (!module_ast)
+      return;
+    class_node = json_utils::find_class((*module_ast)["body"], class_name);
+  }
+
+  for (const auto &member : class_node["body"])
+    if (member.value("_type", "") == "FunctionDef")
+      methods.emplace(member["name"], is_abstract_method(member));
+
+  is_abc = is_abc || has_abcmeta_metaclass(class_node);
+  for (const auto &base : class_node["bases"])
+    collect_method_abstractness(
+      converter, node_name(base), methods, visited, is_abc);
+}
+
+std::string function_call_expr::unimplemented_abstract_method(
+  const nlohmann::json &ctor_call) const
+{
+  std::map<std::string, bool> methods;
+  std::set<std::string> visited;
+  bool is_abc = false;
+  collect_method_abstractness(
+    converter_, node_name(ctor_call["func"]), methods, visited, is_abc);
+  if (!is_abc)
+    return "";
+
+  for (const auto &[name, is_abstract] : methods)
+    if (is_abstract)
+      return name;
+  return "";
+}
+
+bool function_call_expr::is_abstract_instantiation() const
+{
+  return function_type_ == FunctionType::Constructor &&
+         !unimplemented_abstract_method(call_).empty();
+}
+
+exprt function_call_expr::abstract_instantiation_error(
+  const nlohmann::json &ctor_call) const
+{
+  exprt raise = converter_.get_exception_handler().gen_exception_raise(
+    "TypeError",
+    "Can't instantiate abstract class " + node_name(ctor_call["func"]) +
+      " without an implementation for abstract method '" +
+      unimplemented_abstract_method(ctor_call) + "'");
+  raise.location() = converter_.get_location_from_decl(ctor_call);
+  return raise;
 }
 
 bool function_call_expr::is_input_call() const
@@ -877,12 +989,13 @@ exprt function_call_expr::build_constant_from_arg() const
   {
     // First try to extract complex parts directly from the JSON AST.
     double real_val = 0.0, imag_val = 0.0;
-    if (try_extract_complex_parts_from_json(
-          arg,
-          converter_.ast(),
-          converter_.current_function_name(),
-          real_val,
-          imag_val))
+    if (
+      try_extract_complex_parts_from_json(
+        arg,
+        converter_.ast(),
+        converter_.current_function_name(),
+        real_val,
+        imag_val))
     {
       return converter_.get_string_builder().build_string_literal(
         format_complex_string(real_val, imag_val));
@@ -937,6 +1050,7 @@ exprt function_call_expr::build_constant_from_arg() const
     // Evaluate the operand once so that method-call arguments (e.g.
     // int(d.copy_abs())) are not lowered twice by the branches below.
     exprt operand_expr = converter_.get_expr(first_arg);
+    operand_expr = guard_nonfinite_float_to_int(operand_expr, base_expr);
 
     // Dispatch int() to the operand's __int__ when the operand is a class
     // instance (e.g. Decimal). Under the object-model migration (#3067/#4773)
@@ -993,54 +1107,28 @@ exprt function_call_expr::build_constant_from_arg() const
       }
     }
 
+    // A statement-form call left under the conversion's typecast crashes
+    // symex (#8274).
+    operand_expr = to_value_expr(operand_expr, converter_.ns);
+
     // Handle Name type (variable reference)
     if (first_arg["_type"] == "Name")
     {
-      const symbolt *sym = lookup_python_symbol(first_arg["id"]);
-      // The compile-time fast path below decodes the symbol's stored value as
-      // a string; it is only valid for constant *string* symbols. For numeric
-      // symbols (int/float/bool) extract_string_from_symbol misreads the value
-      // — an int 65 decodes to the character 'A' (rejected as non-digit) and a
-      // float yields no string at all — so int(x) wrongly folds to 0. Route
-      // numeric symbols through the general numeric conversion instead, which
-      // truncates floats toward zero and treats ints as identity. (GitHub
-      // #4770)
-      if (
-        sym && sym->get_value().is_constant() &&
-        type_utils::is_string_type(sym->get_type()))
-      {
-        if (base_expr.is_nil())
-        {
-          return handle_str_symbol_to_int(sym);
-        }
-        else
-        {
-          // Convert symbol to expression and use with base
-          exprt value_expr = build_symbol(*sym);
-          return converter_.get_string_handler()
-            .handle_int_conversion_with_base(
-              value_expr, base_expr, converter_.get_location_from_decl(call_));
-        }
-      }
-      else
-      {
-        // Reuse the already-evaluated operand (see hoist above).
-        exprt expr = operand_expr;
+      // Numeric symbols must not take the string fold: an int 65 decodes to
+      // 'A' and a float to no string at all (GitHub #4770).
+      const std::string name = first_arg["id"].get<std::string>();
+      const symbolt *sym = lookup_python_symbol(name);
+      if (base_expr.is_nil() && is_single_assignment_str_symbol(sym, name))
+        if (const auto folded = handle_str_symbol_to_int(sym))
+          return *folded;
 
-        if (base_expr.is_nil())
-        {
-          // No base provided, use general conversion
-          return converter_.get_string_handler().handle_int_conversion(
-            expr, converter_.get_location_from_decl(call_));
-        }
-        else
-        {
-          // Base provided, use conversion with base
-          return converter_.get_string_handler()
-            .handle_int_conversion_with_base(
-              expr, base_expr, converter_.get_location_from_decl(call_));
-        }
-      }
+      // Reuse the already-evaluated operand (see hoist above).
+      const exprt &expr = operand_expr;
+      if (base_expr.is_nil())
+        return converter_.get_string_handler().handle_int_conversion(
+          expr, converter_.get_location_from_decl(call_));
+      return converter_.get_string_handler().handle_int_conversion_with_base(
+        expr, base_expr, converter_.get_location_from_decl(call_));
     }
     // Handle other types (Constant, etc.)
     else
@@ -1154,56 +1242,49 @@ exprt function_call_expr::build_constant_from_arg() const
   // Handle float(): convert string (from symbol) to float
   else if (func_name == "float" && arg["_type"] == "Name")
   {
-    const symbolt *sym = lookup_python_symbol(arg["id"]);
-    // Only take the constant-string fast path when the variable is genuinely
-    // string-typed here. A numeric variable conditionally reassigned a string
-    // (e.g. `if isinstance(x, str): x = x.replace(...)`) leaves a stale string
-    // value on its symbol even on paths where it stays numeric; keying off the
-    // value alone would mis-route float(x) into string parsing and fold it to
-    // 0.0 (#5161). Gate on the declared type so such cases fall through to the
-    // numeric typecast in the else branch.
-    if (
-      sym && sym->get_value().is_constant() &&
-      type_utils::is_string_type(sym->get_type()) &&
-      type_utils::is_string_type(sym->get_value().type()))
-      return handle_str_symbol_to_float(sym);
-    else
+    // A numeric variable conditionally reassigned a string leaves a stale
+    // string value on its symbol (#5161), and a string chosen on a branch
+    // leaves only one of its values (#8251), so fold only a string assigned
+    // once; anything else takes the runtime conversion below.
+    const std::string name = arg["id"].get<std::string>();
+    const symbolt *sym = lookup_python_symbol(name);
+    if (is_single_assignment_str_symbol(sym, name))
+      if (const auto folded = handle_str_symbol_to_float(sym))
+        return *folded;
+    // Try to get the expression type directly, even if symbol lookup failed
+    exprt expr = converter_.get_expr(arg);
+    if (type_utils::is_string_type(expr.type()))
     {
-      // Try to get the expression type directly, even if symbol lookup failed
-      exprt expr = converter_.get_expr(arg);
-      if (type_utils::is_string_type(expr.type()))
-      {
-        // Runtime string -> float. float("10") must succeed, but float() of an
-        // arbitrary string may raise ValueError. Gate the conversion on a
-        // runtime validity check so a concrete valid literal folds away while a
-        // genuinely non-float string still raises a reachable ValueError (the
-        // same exception path used by the string-literal case above).
-        auto &sh = converter_.get_string_handler();
-        auto loc = converter_.get_location_from_decl(call_);
+      // Runtime string -> float. float("10") must succeed, but float() of an
+      // arbitrary string may raise ValueError. Gate the conversion on a
+      // runtime validity check so a concrete valid literal folds away while a
+      // genuinely non-float string still raises a reachable ValueError (the
+      // same exception path used by the string-literal case above).
+      auto &sh = converter_.get_string_handler();
+      auto loc = converter_.get_location_from_decl(call_);
 
-        exprt valid = sh.handle_string_is_float(expr, loc);
-        exprt raise = converter_.get_exception_handler().gen_exception_raise(
-          "ValueError", "could not convert string to float");
-        codet throw_code("expression");
-        throw_code.operands().push_back(raise);
-        code_ifthenelset guard;
-        // V.3: build the "not valid" guard condition in IREP2.
-        expr2tc valid2;
-        migrate_expr(valid, valid2);
-        guard.cond() = migrate_expr_back(not2tc(valid2));
-        guard.then_case() = throw_code;
-        guard.location() = loc;
-        guard.location().property("skipped");
-        converter_.add_instruction(guard);
+      exprt valid = sh.handle_string_is_float(expr, loc);
+      exprt raise = converter_.get_exception_handler().gen_exception_raise(
+        "ValueError", "could not convert string to float");
+      codet throw_code("expression");
+      throw_code.operands().push_back(raise);
+      code_ifthenelset guard;
+      // V.3: build the "not valid" guard condition in IREP2.
+      expr2tc valid2;
+      migrate_expr(valid, valid2);
+      guard.cond() = migrate_expr_back(not2tc(valid2));
+      guard.then_case() = throw_code;
+      guard.location() = loc;
+      guard.location().property("skipped");
+      converter_.add_instruction(guard);
 
-        return sh.handle_string_to_float(expr, loc);
-      }
-      // Numeric variable: emit a proper typecast to avoid mislabeled IR
-      typet float_t = type_handler_.get_typet("float", 0);
-      if (!expr.type().is_floatbv())
-        return build_typecast(expr, float_t);
-      return expr;
+      return sh.handle_string_to_float(expr, loc);
     }
+    // Numeric variable: emit a proper typecast to avoid mislabeled IR
+    typet float_t = type_handler_.get_typet("float", 0);
+    if (!expr.type().is_floatbv())
+      return build_typecast(expr, float_t);
+    return expr;
   }
 
   // Handle float(): convert bool to float
@@ -1261,7 +1342,8 @@ exprt function_call_expr::build_constant_from_arg() const
       const typet &vt = value_expr.type();
       if (
         vt.is_bool() || type_utils::is_integer_type(vt) || vt.is_floatbv() ||
-        type_utils::is_string_type(vt))
+        type_utils::is_string_type(vt) ||
+        type_handler_.is_tagged_scalar_type(vt))
         return converter_.get_string_handler().convert_to_string(value_expr);
 
       // Element of a list whose element type could not be statically resolved
@@ -1475,7 +1557,7 @@ exprt function_call_expr::handle_float_fromhex() const
     throw std::runtime_error(
       "float.fromhex() only supports the 0x...p... hexadecimal form");
 
-  const round_to_nearest_guard rounding_guard;
+  const host_rounding_mode rounding_guard(FE_TONEAREST);
   char *end = nullptr;
   const double d = std::strtod(t.c_str(), &end);
   if (end != t.c_str() + t.size() || !std::isfinite(d))
@@ -1598,8 +1680,8 @@ std::string function_call_expr::get_object_name() const
     // temporary value, not a named symbol, so resolving obj_name to the base
     // variable (e.g. 'd' from d["k"]) would cause method handlers to operate
     // on the wrong object.  For-loop uses of dict.items() are rewritten by the
-    // preprocessor into a named temp before reaching here; other methods on
-    // subscript results are not yet supported.
+    // preprocessor into a named temp before reaching here; a method on an item
+    // of a list of instances dispatches on the class build_function_id found.
   }
   else
   {
@@ -2182,6 +2264,12 @@ bool function_call_expr::receiver_is_non_dict_object() const
     return !cls.empty() && cls != "__python_dict__";
   }
 
+  // A list element (`ps[0].get()`) whose class build_function_id resolved is
+  // an instance; any other subscript (`d["k"].get()`) stays with the dict
+  // handler, since an unresolved receiver defaults to "str".
+  if (node_type_of(recv) == "Subscript")
+    return is_class(function_id_.get_class(), converter_.ast());
+
   // A constructor call as the receiver (`C().get()`) is a class instance, so
   // the class's own method must win over the same-named dict method. Without
   // this the dict handler claims the call and then fails looking `C` up as a
@@ -2446,7 +2534,7 @@ exprt function_call_expr::handle_list_sort() const
 
   // sort() supports a `reverse=` keyword. `key=` is not handled yet; reject
   // explicitly rather than dropping it silently.
-  bool reverse = false;
+  exprt reverse = false_exprt();
   if (call_.contains("keywords"))
   {
     for (const auto &kw : call_["keywords"])
@@ -2454,11 +2542,9 @@ exprt function_call_expr::handle_list_sort() const
       const std::string name = kw.value("arg", "");
       if (name == "reverse")
       {
-        exprt v = converter_.get_expr(kw["value"]);
-        if (!v.is_constant())
-          throw std::runtime_error(
-            "sort(reverse=...) requires a constant boolean");
-        reverse = v.is_true();
+        reverse = converter_.get_expr(kw["value"]);
+        if (!reverse.type().is_bool())
+          reverse = typecast_exprt(reverse, bool_typet());
       }
       else
         throw std::runtime_error(
@@ -2508,8 +2594,15 @@ exprt function_call_expr::handle_list_sort() const
 
   // For reverse=True, sort ascending then reverse in place via the existing
   // __ESBMC_list_reverse model. Wrap both calls in a code_blockt.
-  if (!reverse)
+  if (reverse.is_false())
     return sort_call;
+  // The element type registry is reversed at conversion time, so a reverse
+  // known only at run time needs elements of one type, which it leaves
+  // unchanged.
+  if (!reverse.is_true() && type_flag == 3)
+    throw std::runtime_error(
+      "sort(reverse=...) over a mixed int/float list requires a constant "
+      "boolean");
 
   const symbolt *reverse_func =
     converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_reverse");
@@ -2523,11 +2616,20 @@ exprt function_call_expr::handle_list_sort() const
   reverse_call.type() = empty_typet();
   reverse_call.location() = converter_.get_location_from_decl(call_);
 
-  converter_.get_element_type_registry().reverse(list_id);
-
   code_blockt block;
   block.copy_to_operands(sort_call);
-  block.copy_to_operands(reverse_call);
+  if (reverse.is_true())
+  {
+    converter_.get_element_type_registry().reverse(list_id);
+    block.copy_to_operands(reverse_call);
+  }
+  else
+  {
+    code_ifthenelset reverse_if;
+    reverse_if.cond() = reverse;
+    reverse_if.then_case() = reverse_call;
+    block.copy_to_operands(reverse_if);
+  }
   return block;
 }
 
@@ -2696,7 +2798,9 @@ bool function_call_expr::receiver_is_tracked_numpy_view(
 
   const std::string root_id = converter_.resolve_name_symbol_id(
     call_["func"]["value"]["id"].get<std::string>());
-  return !root_id.empty() && converter_.is_tracked_numpy_view_id(root_id);
+  return !root_id.empty() &&
+         (converter_.is_tracked_numpy_view_id(root_id) ||
+          converter_.numpy_pointer_view_info_.count(root_id) != 0);
 }
 
 // pop()/copy()/clear() are each shared between list and dict; disambiguate
@@ -2718,21 +2822,43 @@ bool function_call_expr::receiver_is_binop_or_list_symbol() const
   return sym != nullptr && sym->get_type() == type_handler_.get_list_type();
 }
 
+bool function_call_expr::receiver_class_defines_method(
+  const std::string &method_name) const
+{
+  std::string cls = function_id_.get_class();
+  if (cls.rfind("tag-", 0) == 0)
+    cls = cls.substr(4);
+  const auto &ast = converter_.ast();
+  return is_class(cls, ast) &&
+         json_utils::class_defines_method(ast["body"], cls, method_name);
+}
+
 bool function_call_expr::is_list_method_call() const
 {
   if (call_["func"]["_type"] != "Attribute")
     return false;
 
-  const std::string &method_name = function_id_.get_function();
+  static const std::unordered_set<std::string> list_methods = {
+    "append",
+    "pop",
+    "insert",
+    "remove",
+    "clear",
+    "extend",
+    "copy",
+    "sort",
+    "reverse",
+    "popleft",
+    "appendleft",
+    "count",
+    "index"};
 
-  if (
-    method_name != "append" && method_name != "pop" &&
-    method_name != "insert" && method_name != "remove" &&
-    method_name != "clear" && method_name != "extend" &&
-    method_name != "copy" && method_name != "sort" &&
-    method_name != "reverse" && method_name != "popleft" &&
-    method_name != "appendleft" && method_name != "count" &&
-    method_name != "index")
+  const std::string &method_name = function_id_.get_function();
+  if (!list_methods.count(method_name))
+    return false;
+
+  // A user class's own method of the same name (`e.remove(1)`) wins.
+  if (receiver_class_defines_method(method_name))
     return false;
 
   // Tuples are claimed earlier; only claim count/index here when the receiver
@@ -3169,6 +3295,17 @@ exprt function_call_expr::validate_re_module_args() const
 
   return nil_exprt(); // Validation passed
 }
+// `re.match(p, s, flags)` goes to the model's `_match_flags`, which keeps
+// the flag handling out of the matchers themselves (#8223).
+void function_call_expr::route_re_flags_call()
+{
+  bool has_flags = call_["args"].size() > 2;
+  for (const auto &kw : call_.value("keywords", nlohmann::json::array()))
+    has_flags |= kw.value("arg", "") == "flags";
+  if (has_flags)
+    function_id_.set_function("_" + function_id_.get_function() + "_flags");
+}
+
 bool function_call_expr::is_any_call() const
 {
   const std::string &func_name = function_id_.get_function();
@@ -3618,8 +3755,9 @@ exprt function_call_expr::handle_math_function_dispatch()
   if (args.size() == 1)
   {
     exprt arg_expr = require_one_arg();
-    if (std::optional<exprt> type_error = validate_real_arg(arg_expr);
-        type_error.has_value())
+    if (
+      std::optional<exprt> type_error = validate_real_arg(arg_expr);
+      type_error.has_value())
 
       return *type_error;
 
@@ -3632,9 +3770,9 @@ exprt function_call_expr::handle_math_function_dispatch()
   if (args.size() == 2)
   {
     auto [lhs_expr, rhs_expr] = require_two_args();
-    if (std::optional<exprt> type_error =
-          validate_real_args(lhs_expr, rhs_expr);
-        type_error.has_value())
+    if (
+      std::optional<exprt> type_error = validate_real_args(lhs_expr, rhs_expr);
+      type_error.has_value())
 
       return *type_error;
 
@@ -3649,8 +3787,9 @@ exprt function_call_expr::handle_math_function_dispatch()
   if (converter_.get_math_handler().is_unary_dispatch_function(func_name))
   {
     exprt arg_expr = require_one_arg();
-    if (std::optional<exprt> type_error = validate_real_arg(arg_expr);
-        type_error.has_value())
+    if (
+      std::optional<exprt> type_error = validate_real_arg(arg_expr);
+      type_error.has_value())
 
       return *type_error;
     return converter_.get_math_handler().handle(func_name, arg_expr, call_);
@@ -3658,9 +3797,9 @@ exprt function_call_expr::handle_math_function_dispatch()
   if (converter_.get_math_handler().is_binary_dispatch_function(func_name))
   {
     auto [lhs_expr, rhs_expr] = require_two_args();
-    if (std::optional<exprt> type_error =
-          validate_real_args(lhs_expr, rhs_expr);
-        type_error.has_value())
+    if (
+      std::optional<exprt> type_error = validate_real_args(lhs_expr, rhs_expr);
+      type_error.has_value())
 
       return *type_error;
     return converter_.get_math_handler().handle(
@@ -3670,8 +3809,9 @@ exprt function_call_expr::handle_math_function_dispatch()
   if (func_name == "sin")
   {
     exprt arg_expr = require_one_arg();
-    if (std::optional<exprt> type_error = validate_real_arg(arg_expr);
-        type_error.has_value())
+    if (
+      std::optional<exprt> type_error = validate_real_arg(arg_expr);
+      type_error.has_value())
 
       return *type_error;
     return converter_.get_math_handler().handle_sin(arg_expr, call_);
@@ -3679,8 +3819,9 @@ exprt function_call_expr::handle_math_function_dispatch()
   else if (func_name == "cos")
   {
     exprt arg_expr = require_one_arg();
-    if (std::optional<exprt> type_error = validate_real_arg(arg_expr);
-        type_error.has_value())
+    if (
+      std::optional<exprt> type_error = validate_real_arg(arg_expr);
+      type_error.has_value())
 
       return *type_error;
     return converter_.get_math_handler().handle_cos(arg_expr, call_);
@@ -3688,8 +3829,9 @@ exprt function_call_expr::handle_math_function_dispatch()
   else if (func_name == "exp")
   {
     exprt arg_expr = require_one_arg();
-    if (std::optional<exprt> type_error = validate_real_arg(arg_expr);
-        type_error.has_value())
+    if (
+      std::optional<exprt> type_error = validate_real_arg(arg_expr);
+      type_error.has_value())
 
       return *type_error;
     return converter_.get_math_handler().handle_exp(arg_expr, call_);
@@ -3697,8 +3839,9 @@ exprt function_call_expr::handle_math_function_dispatch()
   else if (func_name == "sqrt")
   {
     exprt arg_expr = require_one_arg();
-    if (std::optional<exprt> type_error = validate_real_arg(arg_expr);
-        type_error.has_value())
+    if (
+      std::optional<exprt> type_error = validate_real_arg(arg_expr);
+      type_error.has_value())
 
       return *type_error;
     // Domain check for sqrt: operand must be >= 0.
@@ -3759,8 +3902,9 @@ exprt function_call_expr::handle_math_function_dispatch()
   else if (func_name == "log")
   {
     exprt arg_expr = require_one_arg();
-    if (std::optional<exprt> type_error = validate_real_arg(arg_expr);
-        type_error.has_value())
+    if (
+      std::optional<exprt> type_error = validate_real_arg(arg_expr);
+      type_error.has_value())
 
       return *type_error;
     // Domain check for log: operand must be > 0 (V.3: built in IREP2).
@@ -3789,8 +3933,9 @@ exprt function_call_expr::handle_math_function_dispatch()
   else if (func_name == "acos")
   {
     exprt arg_expr = require_one_arg();
-    if (std::optional<exprt> type_error = validate_real_arg(arg_expr);
-        type_error.has_value())
+    if (
+      std::optional<exprt> type_error = validate_real_arg(arg_expr);
+      type_error.has_value())
 
       return *type_error;
     // Domain check for acos: operand must be in [-1.0, 1.0]
@@ -3832,8 +3977,9 @@ exprt function_call_expr::handle_math_function_dispatch()
     math_guard_utils::math_guard_real_general_functions().count(func_name) != 0)
   {
     exprt arg_expr = require_one_arg();
-    if (std::optional<exprt> type_error = validate_real_arg(arg_expr);
-        type_error.has_value())
+    if (
+      std::optional<exprt> type_error = validate_real_arg(arg_expr);
+      type_error.has_value())
 
       return *type_error;
     return handle_general_function_call();
@@ -3842,8 +3988,9 @@ exprt function_call_expr::handle_math_function_dispatch()
     math_guard_utils::math_guard_int_general_functions().count(func_name) != 0)
   {
     exprt throw_expr;
-    if (math_guard_utils::call_first_cpp_throw_in_args_or_keywords(
-          call_, converter_, throw_expr))
+    if (
+      math_guard_utils::call_first_cpp_throw_in_args_or_keywords(
+        call_, converter_, throw_expr))
       return throw_expr;
     if (call_has_complex())
       return raise_math_int_type_error();
@@ -3854,8 +4001,9 @@ exprt function_call_expr::handle_math_function_dispatch()
       func_name) != 0)
   {
     exprt throw_expr;
-    if (math_guard_utils::call_first_cpp_throw_in_args_or_keywords(
-          call_, converter_, throw_expr))
+    if (
+      math_guard_utils::call_first_cpp_throw_in_args_or_keywords(
+        call_, converter_, throw_expr))
       return throw_expr;
     if (call_has_complex())
       return raise_math_real_type_error();
@@ -3864,15 +4012,16 @@ exprt function_call_expr::handle_math_function_dispatch()
   else if (func_name == "dist")
   {
     exprt throw_expr;
-    if (math_guard_utils::call_first_cpp_throw_in_args_or_keywords(
-          call_, converter_, throw_expr))
+    if (
+      math_guard_utils::call_first_cpp_throw_in_args_or_keywords(
+        call_, converter_, throw_expr))
       return throw_expr;
     if (call_has_complex())
       return raise_math_real_type_error();
     auto [lhs_expr, rhs_expr] = require_two_args();
-    if (std::optional<exprt> type_error =
-          validate_real_args(lhs_expr, rhs_expr);
-        type_error.has_value())
+    if (
+      std::optional<exprt> type_error = validate_real_args(lhs_expr, rhs_expr);
+      type_error.has_value())
 
       return *type_error;
     // Native handler for tuple arguments; lists use the model
@@ -3902,8 +4051,9 @@ exprt function_call_expr::handle_math_function_dispatch()
   else if (func_name == "fsum")
   {
     exprt throw_expr;
-    if (math_guard_utils::call_first_cpp_throw_in_args_or_keywords(
-          call_, converter_, throw_expr))
+    if (
+      math_guard_utils::call_first_cpp_throw_in_args_or_keywords(
+        call_, converter_, throw_expr))
       return throw_expr;
     if (call_has_complex())
       return raise_math_real_type_error();
@@ -3921,6 +4071,10 @@ std::vector<function_call_expr::FunctionHandler>
 function_call_expr::get_dispatch_table()
 {
   return {
+    {[this]() { return is_abstract_instantiation(); },
+     [this]() { return abstract_instantiation_error(call_); },
+     "instantiating an abstract class"},
+
     // hash() on a non-bytes argument: Python's real hash(), not the
     // consensus spec's bytes-returning one, which only applies to bytes.
     {[this]() { return is_generic_hash_call(); },
@@ -3946,6 +4100,10 @@ function_call_expr::get_dispatch_table()
          return handle_hasattr();
      },
      "isinstance/hasattr"},
+
+    {[this]() { return is_getattr_call(); },
+     [this]() { return handle_getattr(); },
+     "getattr()"},
 
     // Input function
     {[this]() { return is_input_call(); },
@@ -4156,12 +4314,13 @@ function_call_expr::get_dispatch_table()
      [this]() {
        const auto &arg = call_["args"][0];
        double real_val = 0.0, imag_val = 0.0;
-       if (try_extract_complex_parts_from_json(
-             arg,
-             converter_.ast(),
-             converter_.current_function_name(),
-             real_val,
-             imag_val))
+       if (
+         try_extract_complex_parts_from_json(
+           arg,
+           converter_.ast(),
+           converter_.current_function_name(),
+           real_val,
+           imag_val))
        {
          return converter_.get_string_builder().build_string_literal(
            format_complex_string(real_val, imag_val));
@@ -4214,6 +4373,7 @@ function_call_expr::get_dispatch_table()
        exprt validation_result = validate_re_module_args();
        if (!validation_result.is_nil())
          return validation_result;
+       route_re_flags_call();
 
        // If validation passes, handle as general function call
        return handle_general_function_call();
@@ -4221,8 +4381,62 @@ function_call_expr::get_dispatch_table()
      "re module functions"}};
 }
 
+// Whether some class of the program derives from both `a` and `b`.
+static bool has_common_subclass(
+  const type_handler &th,
+  const nlohmann::json &ast,
+  const std::string &a,
+  const std::string &b)
+{
+  for (const auto &stmt : ast["body"])
+  {
+    if (stmt.value("_type", "") != "ClassDef")
+      continue;
+    const std::string name = stmt.value("name", "");
+    if (th.class_derives_from(name, a) && th.class_derives_from(name, b))
+      return true;
+  }
+  return false;
+}
+
+std::optional<exprt> function_call_expr::check_explicit_super() const
+{
+  const nlohmann::json &func = call_["func"];
+  if (
+    func.value("_type", "") != "Attribute" ||
+    func["value"].value("_type", "") != "Call" ||
+    func["value"]["func"].value("id", "") != "super" ||
+    func["value"]["args"].empty())
+    return std::nullopt;
+
+  // In a method of `current`, self is an instance of `current` or of one of
+  // its subclasses. super(named, self) is valid only when that instance is a
+  // `named`, which holds for every such instance when `current` derives from
+  // `named`, and for none when no class derives from both.
+  const std::string named = func["value"]["args"][0].value("id", "");
+  const std::string &current = converter_.current_classname();
+  const nlohmann::json &ast = converter_.ast();
+  if (
+    current.empty() || !json_utils::is_class(named, ast) ||
+    type_handler_.class_derives_from(current, named))
+    return std::nullopt;
+  if (has_common_subclass(type_handler_, ast, current, named))
+    throw std::runtime_error(
+      "unsupported: super(" + named + ", self) in class " + current +
+      ", where self is a " + named + " only for some subclasses");
+
+  exprt raise = converter_.get_exception_handler().gen_exception_raise(
+    "TypeError",
+    "super(type, obj): obj must be an instance or subtype of type");
+  raise.location() = converter_.get_location_from_decl(call_);
+  return raise;
+}
+
 exprt function_call_expr::get()
 {
+  if (std::optional<exprt> raise = check_explicit_super())
+    return *raise;
+
   // Use dispatch table to handle special function types
   auto dispatch_table = get_dispatch_table();
 
@@ -4234,6 +4448,18 @@ exprt function_call_expr::get()
 
   // General function call handling
   return handle_general_function_call();
+}
+
+symbolt *
+function_call_expr::find_receiver_symbol(symbol_id &obj_symbol_id) const
+{
+  const std::string caller = get_object_name();
+  // A receiver with no name (`ps[0].m()`) has no symbol: looking one up would
+  // find the enclosing function, whose id is what an empty object leaves.
+  if (caller.empty())
+    return nullptr;
+  obj_symbol_id.set_object(caller);
+  return converter_.find_symbol(obj_symbol_id.to_string());
 }
 
 exprt function_call_expr::handle_general_function_call()
@@ -4283,11 +4509,7 @@ exprt function_call_expr::handle_general_function_call()
   symbol_id obj_symbol_id = converter_.create_symbol_id();
 
   if (call_["func"]["_type"] == "Attribute")
-  {
-    std::string caller = get_object_name();
-    obj_symbol_id.set_object(caller);
-    obj_symbol = converter_.find_symbol(obj_symbol_id.to_string());
-  }
+    obj_symbol = find_receiver_symbol(obj_symbol_id);
 
   // Indirect call through a variable holding a function pointer, e.g.:
   // times3 = make_multiplier(3); times3(4)
@@ -4348,6 +4570,51 @@ exprt function_call_expr::handle_general_function_call()
     return *early;
 
   return finalize_call(call, param_offset, location, func_symbol, obj_symbol);
+}
+
+/// The TypeError CPython raises when this method call passes more positional
+/// arguments than \p func_symbol accepts (#8385). Only a method declared in
+/// the program under verification is checked: an operational model may
+/// declare fewer parameters than CPython does, *args takes any surplus, a
+/// decorator may rebind the method, and a subclass override may be the one
+/// that runs.
+std::optional<exprt> function_call_expr::raise_positional_oversupply(
+  const symbolt &func_symbol) const
+{
+  if (function_type_ != FunctionType::InstanceMethod)
+    return std::nullopt;
+
+  const symbol_id sid = symbol_id::from_string(func_symbol.id.as_string());
+  const std::string &cls = sid.get_class();
+  const std::string &method = sid.get_function();
+  if (
+    sid.get_filename() != converter_.python_file() ||
+    !converter_.is_program_file(sid.get_filename()))
+    return std::nullopt;
+
+  const nlohmann::json *def = converter_.sole_method_def(cls, method);
+  if (
+    def == nullptr || !def->value("decorator_list", nlohmann::json()).empty() ||
+    !def->at("args").value("vararg", nlohmann::json()).is_null())
+    return std::nullopt;
+
+  const nlohmann::json &params = def->at("args");
+  const size_t accepted =
+    params.value("posonlyargs", nlohmann::json::array()).size() +
+    params["args"].size();
+  const size_t given = call_["args"].size() + 1;
+  if (given <= accepted || converter_.overridden_below(cls, method))
+    return std::nullopt;
+
+  std::ostringstream msg;
+  msg << cls << "." << method << "() takes " << accepted
+      << " positional argument" << (accepted == 1 ? "" : "s") << " but "
+      << given << (given == 1 ? " was" : " were") << " given";
+  exprt exception = converter_.get_exception_handler().gen_exception_raise(
+    "TypeError", msg.str());
+  exception.location() = converter_.get_location_from_decl(call_);
+  exception.location().user_provided(true);
+  return exception;
 }
 
 // === handle_general_function_call() decomposition helpers (see expr.h) ===
@@ -4535,6 +4802,14 @@ std::optional<exprt> function_call_expr::try_reduce_numpy_descriptor_method()
     (func_name != "any" && func_name != "all") ||
     call_["func"]["_type"] != "Attribute" || !call_["func"].contains("value"))
     return std::nullopt;
+
+  const nlohmann::json &reduced_operand =
+    call_["args"].empty() ? call_["func"]["value"] : call_["args"][0];
+  if (
+    std::optional<exprt> runtime_result =
+      python_list(converter_, call_)
+        .try_reduce_symbolic_view(func_name, reduced_operand))
+    return runtime_result;
 
   std::optional<any_all_receiver> receiver =
     resolve_any_all_receiver(func_name);
@@ -5631,7 +5906,9 @@ std::optional<exprt> function_call_expr::try_indirect_member_call()
   // regular method is not a component of the struct at all, so ordinary
   // dispatch is untouched.
   const typet &field_type = st.get_component(attr).type();
-  if (!field_type.is_pointer() || !field_type.subtype().is_code())
+  const python_converter::attribute_functions *held =
+    held_functions(class_name, attr, field_type);
+  if (!held && (!field_type.is_pointer() || !field_type.subtype().is_code()))
     return std::nullopt;
 
   exprt recv = converter_.get_expr(func_json["value"]);
@@ -5649,11 +5926,73 @@ std::optional<exprt> function_call_expr::try_indirect_member_call()
     recv2 = dereference2tc(migrate_type(recv_type), recv2);
   exprt member =
     migrate_expr_back(member2tc(migrate_type(field_type), recv2, attr));
+  return call_field(held, recv, member);
+}
 
+const python_converter::attribute_functions *function_call_expr::held_functions(
+  const std::string &class_name,
+  const std::string &attr,
+  const typet &field_type) const
+{
+  const auto mro = converter_.class_mro(class_name);
+  if (
+    field_type != any_type() || !mro ||
+    std::any_of(mro->begin(), mro->end(), [&](const auto &cls) {
+      return converter_.class_binds_name(cls, attr);
+    }))
+    return nullptr;
+  return converter_.function_attribute(attr);
+}
+
+code_typet function_call_expr::held_signature(
+  const python_converter::attribute_functions &held) const
+{
+  const std::string unsupported =
+    "calling attribute '" + call_["func"]["attr"].get<std::string>() + "'";
+  std::optional<code_typet> signature;
+  for (const std::string &id : held.ids)
+  {
+    const symbolt *fn = converter_.find_symbol(id);
+    if (!fn || !fn->get_type().is_code())
+      throw std::runtime_error(
+        unsupported +
+        " before the functions it holds are defined is not supported");
+    if (!signature)
+      signature = to_code_type(fn->get_type());
+    else if (!python_converter::same_signature(
+               *signature, to_code_type(fn->get_type())))
+      throw std::runtime_error(
+        unsupported +
+        ", which holds functions of different signatures, is not supported");
+  }
+
+  if (
+    !call_["keywords"].empty() ||
+    call_["args"].size() + held.bound != signature->arguments().size())
+    throw std::runtime_error(
+      unsupported +
+      " with arguments other than its functions' parameters is not supported");
+  return *signature;
+}
+
+exprt function_call_expr::call_field(
+  const python_converter::attribute_functions *held,
+  const exprt &recv,
+  const exprt &member) const
+{
   side_effect_expr_function_callt call;
   call.location() = converter_.get_location_from_decl(call_);
   call.function() = member;
-  call.type() = to_code_type(field_type.subtype()).return_type();
+  if (held)
+  {
+    const code_typet signature = held_signature(*held);
+    call.function() = typecast_exprt(member, gen_pointer_type(signature));
+    if (held->bound)
+      call.arguments().push_back(typecast_exprt(
+        recv.type().is_pointer() ? recv : build_address_of(recv),
+        signature.arguments()[0].type()));
+  }
+  call.type() = to_code_type(call.function().type().subtype()).return_type();
 
   for (const auto &arg_node : call_["args"])
   {
@@ -5665,19 +6004,35 @@ std::optional<exprt> function_call_expr::try_indirect_member_call()
   return call;
 }
 
-/// The base-class declaration of a ClassMethod call the derived class does not
-/// declare itself, or a null pointer when there is none (#7546).
+/// The declaration a ClassMethod call resolves to when the called class's own
+/// symbol does not exist, or a null pointer when there is none. Throws when
+/// the declaration the MRO selects has no converted symbol (#7546).
 const symbolt *function_call_expr::find_inherited_classmethod(
   const std::string &func_symbol_id) const
 {
   if (function_type_ != FunctionType::ClassMethod)
     return nullptr;
 
+  const std::string &method = function_id_.get_function();
+  if (const auto mro = converter_.class_mro(function_id_.get_class()))
+    for (const std::string &cls : *mro)
+    {
+      if (!converter_.class_binds_name(cls, method))
+        continue;
+      if (
+        const symbolt *declared = converter_.symbol_table().find_symbol(
+          symbol_id(converter_.python_file(), cls, method).to_string()))
+        return declared;
+      // No function symbol: the call precedes the definition in the source, or
+      // the binding is not one converted to a function. Binding a declaration
+      // further along the MRO would prove that one's result instead.
+      throw std::runtime_error(
+        "calling " + cls + "." + method +
+        " without a converted definition is not yet supported");
+    }
+
   return converter_.find_function_in_base_classes(
-    function_id_.get_class(),
-    func_symbol_id,
-    function_id_.get_function(),
-    false);
+    function_id_.get_class(), func_symbol_id, method, false);
 }
 
 /// A forward-reference call for `Class.__post_init__(...)`, which a dataclass's
@@ -5707,6 +6062,39 @@ std::optional<exprt> function_call_expr::build_post_init_forward_call(
   }
 
   return exprt(call);
+}
+
+/// The FunctionDef for a call's callee: a module-level name, or a nested path
+/// such as "outer@F@b" for a sibling the enclosing body defines later.
+static nlohmann::json
+forward_function_node(const nlohmann::json &ast, const std::string &name)
+{
+  if (name.find("@F@") == std::string::npos)
+    return json_utils::try_find_function(ast["body"], name);
+  return json_utils::find_function_by_path(
+    ast, json_utils::split_function_path(name));
+}
+
+/// The constant a forward-referenced function always returns, or nil. Only a
+/// body that is a lone `return <constant>` is converted: the callee's
+/// statements would otherwise be converted in the caller's scope.
+exprt function_call_expr::forward_constant_return(
+  const nlohmann::json &func_node) const
+{
+  const nlohmann::json &body = func_node["body"];
+  if (
+    body.size() != 1 || body[0].value("_type", "") != "Return" ||
+    !body[0]["value"].is_object() ||
+    body[0]["value"].value("_type", "") != "Constant")
+    return nil_exprt();
+  return converter_.get_function_constant_return(converter_.get_block(body));
+}
+
+static bool defines_function(const nlohmann::json &ast, const std::string &name)
+{
+  if (name.find("@F@") == std::string::npos)
+    return json_utils::search_function_in_ast(ast, name);
+  return !forward_function_node(ast, name).empty();
 }
 
 std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
@@ -5942,8 +6330,7 @@ std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
       // module attribute is unresolved, not user code (#6742).
       const bool is_forward_reference =
         function_id_.get_filename() == converter_.python_file() &&
-        json_utils::search_function_in_ast(
-          converter_.ast(), function_id_.get_function());
+        defines_function(converter_.ast(), function_id_.get_function());
 
       if (is_forward_reference)
       {
@@ -5959,8 +6346,8 @@ std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
 
         // Extract return type from function definition in AST
         typet return_type = empty_typet();
-        const auto &func_node = try_find_function(
-          converter_.ast()["body"], function_id_.get_function());
+        const nlohmann::json func_node =
+          forward_function_node(converter_.ast(), function_id_.get_function());
         if (!func_node.empty())
         {
           if (func_node.contains("returns") && !func_node["returns"].is_null())
@@ -5984,8 +6371,7 @@ std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
                 return_type = gen_pointer_type(return_type);
             }
           }
-          exprt body = converter_.get_block(func_node["body"]);
-          exprt const_return = converter_.get_function_constant_return(body);
+          exprt const_return = forward_constant_return(func_node);
           if (!const_return.is_nil())
             return const_return;
         }
@@ -6195,9 +6581,10 @@ size_t function_call_expr::bind_call_receiver(
       // For constructor calls without assignment, delay creating temp var
       // get_return_statements() will handle return statements, we only handle
       // standalone calls (e.g., Positive(2))
-      // Self parameter will be added later if needed (see end of function)
-      // param_offset is 1 because first user arg maps to param[1] (skipping
-      // self)
+      // A nil placeholder holds self's slot until the end of finalize_call
+      // fills it, so keyword and default arguments, which are stored by
+      // parameter index, land in their own slots.
+      call.arguments().push_back(nil_exprt());
       param_offset = 1;
     }
   }
@@ -6261,8 +6648,8 @@ size_t function_call_expr::bind_call_receiver(
         {
           // Member/variable receiver (e.g., self.builder.build()): use the
           // actual receiver expression instead of a nondet temporary.
-          exprt obj_expr = converter_.get_expr(func_value);
-          call.arguments().push_back(bind_instance_receiver(obj_expr));
+          call.arguments().push_back(
+            bind_instance_receiver(build_value_receiver(*func_symbol)));
         }
       }
       else
@@ -6335,7 +6722,23 @@ size_t function_call_expr::bind_call_receiver(
       const std::string recv_type =
         obj_symbol ? type_handler_.get_var_type(obj_symbol->name.as_string())
                    : std::string();
+      // Tagged receiver takes priority: recv_type is a static guess that
+      // can be stale (e.g. it names the first branch's type after a join).
       if (
+        obj_symbol && call_["args"].empty() &&
+        type_handler_.is_tagged_scalar_type(obj_symbol->get_type()) &&
+        func_type.arguments().size() > 1)
+      {
+        // isinstance() already narrowed the type_id; unbox instead of
+        // passing the tagged struct.
+        const typet &param_type = func_type.arguments()[1].type();
+        exprt value_ptr = build_typecast(
+          build_member(
+            build_symbol(*obj_symbol), "value", pointer_typet(empty_typet())),
+          pointer_typet(param_type));
+        call.arguments().push_back(build_dereference(value_ptr, param_type));
+      }
+      else if (
         obj_symbol && call_["args"].empty() &&
         (recv_type == "int" || recv_type == "float"))
       {
@@ -6382,80 +6785,11 @@ exprt function_call_expr::coerce_tagged_argument(
     "yet supported");
 }
 
-// Whether `node` itself binds `name`, other than as a Store/Del Name.
-static std::size_t binds_by_field(
-  const nlohmann::json &node,
-  const std::string &kind,
-  const std::string &name)
-{
-  static const std::map<std::string, std::string> name_field = {
-    {"arg", "arg"},
-    {"FunctionDef", "name"},
-    {"AsyncFunctionDef", "name"},
-    {"ClassDef", "name"},
-    {"ExceptHandler", "name"},
-    {"MatchAs", "name"},
-    {"MatchStar", "name"},
-    {"Global", "names"},
-    {"Nonlocal", "names"}};
-  const auto it = name_field.find(kind);
-  if (it == name_field.end() || !node.contains(it->second))
-    return 0;
-  const nlohmann::json &field = node[it->second];
-  return field.is_array() ? std::count(field.begin(), field.end(), name)
-                          : field == name;
-}
-
-// Counts every construct under `node` that binds `name`, in any scope: a
-// Store/Del Name (assignment, walrus, loop and with targets), a
-// global/nonlocal declaration, a parameter, a def/class, an import alias.
-static std::size_t
-count_name_bindings(const nlohmann::json &node, const std::string &name)
-{
-  std::size_t n = 0;
-  if (node.is_object())
-  {
-    const std::string kind = node.value("_type", "");
-    if (kind == "Name")
-      n += node.value("id", "") == name &&
-           node["ctx"].value("_type", "") != "Load";
-    else if (kind == "alias")
-      n += (node["asname"].is_null() ? node["name"] : node["asname"]) == name;
-    else
-      n += binds_by_field(node, kind, name);
-  }
-  for (const auto &child : node)
-    if (child.is_structured())
-      n += count_name_bindings(child, name);
-  return n;
-}
-
 static std::optional<std::string> string_literal(const nlohmann::json &node)
 {
   if (node.value("_type", "") == "Constant" && node["value"].is_string())
     return node["value"].get<std::string>();
   return std::nullopt;
-}
-
-// The value a top-level `name = ...` or `name: T = ...` statement assigns.
-static const nlohmann::json *
-top_level_value(const nlohmann::json &module, const std::string &name)
-{
-  auto binds = [&](const nlohmann::json &target) {
-    return target.value("_type", "") == "Name" && target["id"] == name;
-  };
-  for (const auto &stmt : module["body"])
-  {
-    const std::string type = stmt.value("_type", "");
-    if (
-      type == "Assign" && stmt["targets"].size() == 1 &&
-      binds(stmt["targets"][0]))
-      return &stmt["value"];
-    if (
-      type == "AnnAssign" && binds(stmt["target"]) && !stmt["value"].is_null())
-      return &stmt["value"];
-  }
-  return nullptr;
 }
 
 // The string a byteorder argument denotes: a literal, or a module-level name
@@ -6468,9 +6802,9 @@ constant_byteorder(const nlohmann::json &node, const nlohmann::json &module)
     return string_literal(node);
 
   const std::string name = node["id"].get<std::string>();
-  if (count_name_bindings(module, name) != 1)
+  if (json_utils::count_name_bindings(module, name) != 1)
     return std::nullopt;
-  const nlohmann::json *value = top_level_value(module, name);
+  const nlohmann::json *value = json_utils::top_level_value(module, name);
   return value ? string_literal(*value) : std::nullopt;
 }
 
@@ -6497,6 +6831,24 @@ exprt function_call_expr::fold_from_bytes_byteorder(
   return *byteorder == "big" ? exprt(true_exprt()) : exprt(false_exprt());
 }
 
+/// The value type of \p func's `dict[K, V]` parameter \p idx, or an empty
+/// type (#8016).
+typet function_call_expr::dict_param_value_type(const symbolt *func, size_t idx)
+  const
+{
+  const nlohmann::json fn = json_utils::try_find_function(
+    converter_.ast()["body"], func->name.as_string());
+  if (fn.empty() || idx >= fn["args"]["args"].size())
+    return typet();
+  const nlohmann::json &ann =
+    fn["args"]["args"][idx].value("annotation", nlohmann::json());
+  if (
+    !ann.is_object() || ann.value("_type", "") != "Subscript" ||
+    !ann["slice"].contains("elts") || ann["slice"]["elts"].size() != 2)
+    return typet();
+  return converter_.get_type_from_annotation(ann["slice"]["elts"][1], ann);
+}
+
 std::optional<exprt> function_call_expr::build_positional_arguments(
   code_function_callt &call,
   size_t param_offset,
@@ -6514,11 +6866,15 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
     // (GitHub #4552).
     exprt *saved_lhs = converter_.current_lhs;
     converter_.current_lhs = nullptr;
+    size_t param_idx = arg_index + param_offset;
+    // A dict literal argument stores its values as the parameter's dict does.
+    typet &value_hint = converter_.get_dict_handler()->literal_value_type_hint;
+    value_hint = dict_param_value_type(func_symbol, param_idx);
     exprt arg = converter_.get_expr(arg_node);
+    value_hint = typet();
     converter_.current_lhs = saved_lhs;
 
     // Check if the corresponding parameter is Optional / tagged.
-    size_t param_idx = arg_index + param_offset;
 
     if (param_idx < params.size())
       arg = coerce_tagged_argument(arg, params[param_idx].type(), location);
@@ -6586,18 +6942,16 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
         arg = build_address_of(build_symbol(temp_symbol));
       }
 
-      // Check if parameter is an Optional type
-      if (param_type.is_struct())
-      {
-        const struct_typet &struct_type = to_struct_type(param_type);
-        std::string tag = struct_type.tag().as_string();
-
-        if (tag.starts_with("tag-Optional_"))
-        {
-          // Wrap the argument in Optional struct
-          arg = converter_.wrap_in_optional(arg, param_type);
-        }
-      }
+      // An Optional parameter takes the argument wrapped; any other takes an
+      // optional argument's value, since the caller narrowed it first.
+      if (
+        param_type.is_struct() && to_struct_type(param_type)
+                                    .tag()
+                                    .as_string()
+                                    .starts_with("tag-Optional_"))
+        arg = converter_.wrap_in_optional(arg, param_type);
+      else
+        arg = converter_.unwrap_optional_if_needed(arg, call_);
 
       // Handle struct argument passed to a union-typed parameter (e.g. str |
       // T). Union parameters are stored as pointer(char[0]). When the actual
@@ -6902,7 +7256,7 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
 
     arg_index++;
   }
-  return std::nullopt;
+  return raise_positional_oversupply(*func_symbol);
 }
 
 exprt function_call_expr::finalize_call(
@@ -6959,11 +7313,16 @@ exprt function_call_expr::finalize_call(
 
     if (obj_symbol)
     {
-      std::string var_type =
-        type_handler_.get_var_type(obj_symbol->name.as_string());
-
-      if (var_type == "int" || var_type == "float")
+      if (type_handler_.is_tagged_scalar_type(obj_symbol->get_type()))
         will_add_object = true;
+      else
+      {
+        std::string var_type =
+          type_handler_.get_var_type(obj_symbol->name.as_string());
+
+        if (var_type == "int" || var_type == "float")
+          will_add_object = true;
+      }
     }
 
     if (call_["func"]["value"]["_type"] == "BinOp")
@@ -7134,10 +7493,8 @@ exprt function_call_expr::finalize_call(
   // needed
   if (function_type_ == FunctionType::Constructor && !converter_.current_lhs)
   {
-    size_t num_provided_args = call_["args"].size();
-
-    // Only add self if arguments size matches user args (no self added yet)
-    if (call.arguments().size() == num_provided_args)
+    // Only add self if its placeholder is still unfilled
+    if (call.arguments().front().is_nil())
     {
       // Create temporary object as self parameter
       const std::string requested_class = function_id_.get_class();
@@ -7154,9 +7511,7 @@ exprt function_call_expr::finalize_call(
       temp_decl.location() = location;
       converter_.current_block->copy_to_operands(temp_decl);
 
-      // Insert self as first argument
-      call.arguments().insert(
-        call.arguments().begin(), gen_address_of(build_symbol(temp_self)));
+      call.arguments().front() = gen_address_of(build_symbol(temp_self));
 
       // Emit the constructor call directly as a FUNCTION_CALL instruction so
       // ESBMC inlines it (codet("expression") would produce OTHER and be

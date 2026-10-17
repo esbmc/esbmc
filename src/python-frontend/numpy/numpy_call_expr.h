@@ -1,6 +1,7 @@
 #pragma once
 
 #include <python-frontend/function_call/expr.h>
+#include <python-frontend/python-list/python_list.h>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <utility>
@@ -71,6 +72,26 @@ private:
   // get() to keep that function's own decision count from growing further.
   exprt get_arange_expr();
 
+public:
+  /// The literal list `np.arange` builds from @p args, a Name among them
+  /// read from its declaration for code in @p function; nullopt when the
+  /// arguments are not constants.
+  static std::optional<nlohmann::json> arange_literal(
+    const nlohmann::json &args,
+    const std::string &function,
+    const nlohmann::json &ast);
+
+private:
+  bool binds_static_array(const nlohmann::json &list) const;
+  long long eye_diagonal_offset(const std::string &function) const;
+  static std::size_t eye_dimension(const nlohmann::json &node);
+  nlohmann::json eye_literal(
+    const std::string &function,
+    std::size_t rows,
+    std::size_t cols) const;
+  exprt full_size_temporary(exprt size_expr);
+  exprt literal_constructor_expr(const nlohmann::json &list);
+
   bool is_math_function() const;
 
   void broadcast_check(const nlohmann::json &operands) const;
@@ -97,6 +118,12 @@ private:
   // out-of-scope keyword arguments.
   const nlohmann::json *find_keyword_arg(const std::string &name) const;
 
+  void reject_invalid_eye_identity_args(const std::string &function) const;
+
+  nlohmann::json eye_column_arg_or_default(
+    const std::string &function,
+    const nlohmann::json &default_arg) const;
+
   // Routes to the below for "diagonal"/"trace"/"fill_diagonal"/"ravel",
   // std::nullopt otherwise. Split out of get() for the same reason as
   // get_arange_expr(): keeping that function's own decision count from
@@ -115,6 +142,12 @@ private:
   exprt handle_fill_diagonal_call();
   std::optional<exprt> handle_ravel_pointer_view_attempt();
   exprt handle_axis_permutation_view_call(const std::string &function);
+
+  exprt return_retyped_or_temp(exprt value);
+
+  exprt build_default_axis_transpose_expr(
+    const exprt &source_expr,
+    const std::string &error_message);
 
   // numpy.transpose()'s parameter-shaped fast path: when `t` (the single-
   // pointer-unwrapped type of `arg`) isn't a fully nested 2-D array -- most
@@ -162,6 +195,28 @@ private:
   exprt handle_broadcast_to_call();
   std::optional<exprt>
   try_build_nditer_descriptor_list(const nlohmann::json &arg);
+  std::vector<std::size_t>
+  resolve_reshape_shape(std::optional<std::size_t> total) const;
+  std::optional<exprt> try_build_reshape_pointer_view();
+  std::optional<exprt> reshape_strided_view(
+    python_list &list,
+    const python_list::strided_view_desc &strided,
+    const nlohmann::json &arg,
+    bool as_view) const;
+  static bool
+  axes_are_symbolic(const std::vector<python_list::strided_axis> &axes);
+  bool describe_view_operand(
+    const nlohmann::json &arg,
+    python_list &list,
+    std::optional<python_list::strided_view_desc> &source);
+  exprt emit_strided_result(
+    python_list &list,
+    const python_list::strided_view_desc &source,
+    const std::vector<python_list::strided_axis> &axes,
+    bool readonly);
+  std::optional<exprt> try_build_view_flatten_copy();
+  std::optional<exprt> try_build_axis_permutation_view();
+  std::optional<exprt> try_build_shape_only_view();
   std::optional<exprt> try_materialize_descriptor_copy_call();
   std::optional<exprt>
   try_materialize_descriptor_array_call(nlohmann::json &array_arg);
@@ -291,6 +346,17 @@ private:
   // handle_searchsorted_call's final step over an AST-literal `search_space`.
   exprt handle_searchsorted_call_over_literal(
     nlohmann::json search_space,
+    bool right);
+
+  std::optional<exprt> try_searchsorted_sorter_descriptor_fallback(
+    const nlohmann::json *sorter_node,
+    const std::string &array_name,
+    bool right);
+
+  exprt finish_searchsorted_call(
+    std::optional<nlohmann::json> literal_arg,
+    const nlohmann::json *sorter_node,
+    const std::string &array_name,
     bool right);
 
   // np.sum(identity(x))/np.argmin(identity(x)): a reducer's argument reaches
