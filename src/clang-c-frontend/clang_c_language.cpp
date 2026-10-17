@@ -238,7 +238,6 @@ void clang_c_languaget::build_compiler_args(
   for (auto const &inc : config.ansi_c.warnings)
     compiler_args.push_back("-W" + inc);
 
-  compiler_args.emplace_back("-D__ESBMC_alloca=__builtin_alloca");
 
   // Lets a source tree tell an ESBMC run from an ordinary compile, and gates
   // include/esbmc.h so including it anywhere else is an error rather than a
@@ -569,6 +568,9 @@ extern __SIZE_TYPE__ __ESBMC_alloc_size[1];
 
 // Get object size
 __SIZE_TYPE__ __ESBMC_get_object_size(const void *);
+
+// alloca whose storage outlives the calling function, for the models
+void *__ESBMC_alloca(__SIZE_TYPE__);
 
 /* CBMC memory primitives (esbmc/esbmc#2457). Without these declarations the
  * names are implicitly declared as int-returning functions and havoc'd, so a
