@@ -388,9 +388,11 @@ std::string py_percent_format(
 }
 
 // `%d` takes an int or bool only: int() of a float does not raise on inf/nan.
+// A char is a one-character str (`s[i]`), not an int.
 bool percent_d_accepts(const typet &t)
 {
-  return t.is_signedbv() || t.is_unsignedbv() || t.is_bool();
+  return (t.is_signedbv() || t.is_unsignedbv() || t.is_bool()) &&
+         !type_utils::is_char_type(t);
 }
 
 // `%s` is limited to the types whose f-string lowering matches str().
@@ -443,19 +445,21 @@ bool names_and_constants(const std::vector<nlohmann::json> &args)
     const std::string kind = a.value("_type", "");
     if (kind == "Constant")
       continue;
-    if (kind != "Name" && kind != "Attribute" && kind != "Call")
+    if (
+      kind != "Name" && kind != "Attribute" && kind != "Call" &&
+      kind != "Subscript")
       return false;
     has_name = true;
   }
   return has_name;
 }
 
-// An attribute (a property getter) or a call may run code.
+// An attribute (a property getter), a call or a subscript (which may raise)
+// may run code.
 bool may_run_code(const std::vector<nlohmann::json> &args)
 {
   return std::any_of(args.begin(), args.end(), [](const nlohmann::json &a) {
-    return a.value("_type", "") == "Attribute" ||
-           a.value("_type", "") == "Call";
+    return a.value("_type", "") != "Name" && a.value("_type", "") != "Constant";
   });
 }
 
