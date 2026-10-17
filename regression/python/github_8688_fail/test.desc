@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^  FAILED .*invalid literal for int\(\) - trailing characters$
+^VERIFICATION FAILED$

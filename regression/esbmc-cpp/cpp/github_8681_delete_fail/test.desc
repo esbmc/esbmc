@@ -1,0 +1,6 @@
+CORE
+main.cpp
+--multi-property
+^\s+FAILED\s+\[main\.array-bounds-violated\.1\]\s+line\s+7\s
+^\s+FAILED\s+\[main\.division-by-zero\.1\]\s+line\s+7\s
+^VERIFICATION FAILED$

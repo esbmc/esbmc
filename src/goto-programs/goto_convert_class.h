@@ -529,6 +529,7 @@ protected:
   };
 
   void case_guard(const exprt &value, const caset &case_op, exprt &dest);
+  static exprt case_label(const exprt &lo, const exprt &hi);
 
   // if(cond) { true_case } else { false_case }
   void generate_ifthenelse(

@@ -3439,8 +3439,11 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::CaseStmt &case_stmt =
       static_cast<const clang::CaseStmt &>(stmt);
 
-    exprt value;
-    if (get_expr(*case_stmt.getLHS(), value))
+    exprt value, range_hi = nil_exprt();
+    if (
+      get_expr(*case_stmt.getLHS(), value) ||
+      (case_stmt.caseStmtIsGNURange() &&
+       get_expr(*case_stmt.getRHS(), range_hi)))
       return true;
 
     exprt sub_stmt;
@@ -3449,6 +3452,8 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     code_switch_caset switch_case;
     switch_case.case_op() = value;
+    if (range_hi.is_not_nil())
+      switch_case.case_range_hi() = range_hi;
 
     convert_expression_to_code(sub_stmt);
     switch_case.code() = to_code(sub_stmt);

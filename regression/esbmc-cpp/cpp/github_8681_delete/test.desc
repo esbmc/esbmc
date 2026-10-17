@@ -1,0 +1,6 @@
+CORE
+main.cpp
+--multi-property
+^\s+PASSED\s+\[main\.array-bounds-violated\.1\]\s+line\s+9\s
+^\s+PASSED\s+\[main\.array-bounds-violated\.3\]\s+line\s+10\s
+^VERIFICATION SUCCESSFUL$
