@@ -421,6 +421,11 @@ void goto_checkt::overflow_check(
     loc.get("#sol_unchecked") == "1")
     return;
 
+  // Solidity never checks a shift for overflow: the result is truncated
+  // (Solidity docs, Types, "Shifts").
+  if (config.language.lid == language_idt::SOLIDITY && is_shl2t(expr))
+    return;
+
   // First, check type.
   const type2tc &type = ns.follow(expr->type);
   if (config.language.lid == language_idt::SOLIDITY)
