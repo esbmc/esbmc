@@ -1,0 +1,4 @@
+CORE
+program.ld
+--ld-props props.yaml --incremental-bmc
+^ERROR: property 'P1': expressions use C operators.*$
