@@ -1,7 +1,9 @@
 #include <cassert>
+#include <functional>
 #include <goto-symex/engine/goto_symex.h>
 #include <goto-symex/scheduler/reachability_tree.h>
 #include <util/arith/arith_tools.h>
+#include <util/lang/c_builtins.h>
 #include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
 #include <util/expr/type_byte_size.h>
@@ -91,8 +93,8 @@ void goto_symext::intrinsic_builtin_object_size(
   if (is_constant_int2t(type_param))
   {
     int64_t param_val = to_constant_int2t(type_param).value.to_int64();
-    // Invalid type parameter (outside 0..3): keep default 0 (GCC behavior).
-    if (param_val >= 0 && param_val <= 3)
+    // Outside 0..3 (and ESBMC's internal whole-object mode): 0, as GCC does.
+    if (param_val >= 0 && param_val <= esbmc_object_size_whole)
       type_value = static_cast<size_t>(param_val);
   }
 
@@ -129,6 +131,27 @@ void goto_symext::intrinsic_builtin_object_size(
     return size;
   };
 
+  // Type 0 or 2: the bytes from the pointer to the end of the whole object it
+  // points into, taken per object so its size and the offset agree (#8660).
+  auto remaining_in_object =
+    [&](const dereference_callbackt::internal_item &item) {
+      expr2tc total = typecast2tc(
+        get_int64_type(), type_byte_size_expr(item.object->type, &ns));
+      expr2tc offset = typecast2tc(get_int64_type(), item.offset);
+      cur_state->rename(total);
+      cur_state->rename(offset);
+      return if2tc(
+        size_type2(),
+        greaterthan2tc(total, offset),
+        typecast2tc(size_type2(), sub2tc(get_int64_type(), total, offset)),
+        gen_zero(size_type2()));
+    };
+
+  const std::function<expr2tc(const dereference_callbackt::internal_item &)>
+    size_of = consider_offset || type_value == esbmc_object_size_whole
+                ? std::function(total_size_of)
+                : std::function(remaining_in_object);
+
   expr2tc obj_size = create_fallback_size(use_zero_for_unknown);
   if (!internal_deref_items.empty())
   {
@@ -138,25 +161,24 @@ void goto_symext::intrinsic_builtin_object_size(
     if (
       internal_deref_items.size() == 1 ||
       !is_nil_type(address_of_object_type(ptr)))
-      obj_size = total_size_of(internal_deref_items.front());
+      obj_size = size_of(internal_deref_items.front());
     else
-      obj_size =
-        select_by_object(internal_deref_items, obj_size, total_size_of);
-
-    // Type 1 or 3: the bytes remaining after the pointer's offset.
-    if (consider_offset)
-    {
-      expr2tc offset = pointer_offset2tc(get_int64_type(), ptr);
-      cur_state->rename(offset);
-      const expr2tc total = typecast2tc(get_int64_type(), obj_size);
-      obj_size = if2tc(
-        size_type2(),
-        greaterthan2tc(total, offset),
-        typecast2tc(size_type2(), sub2tc(get_int64_type(), total, offset)),
-        gen_zero(size_type2()));
-    }
-    do_simplify(obj_size);
+      obj_size = select_by_object(internal_deref_items, obj_size, size_of);
   }
+
+  // Type 1 or 3: the bytes remaining after the pointer's offset.
+  if (!internal_deref_items.empty() && consider_offset)
+  {
+    expr2tc offset = pointer_offset2tc(get_int64_type(), ptr);
+    cur_state->rename(offset);
+    const expr2tc total = typecast2tc(get_int64_type(), obj_size);
+    obj_size = if2tc(
+      size_type2(),
+      greaterthan2tc(total, offset),
+      typecast2tc(size_type2(), sub2tc(get_int64_type(), total, offset)),
+      gen_zero(size_type2()));
+  }
+  do_simplify(obj_size);
 
   expr2tc ret_ref = func_call.ret;
   if (!is_nil_expr(ret_ref))
