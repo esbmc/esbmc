@@ -1,6 +1,0 @@
-import numpy as np
-
-a = np.array([[1, 3, 5], [2, 4, 6]])
-row = a[0]
-idx = np.searchsorted(row, 4)
-assert idx == 2
