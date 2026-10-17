@@ -1168,6 +1168,26 @@ static bool undecided_side(
                   (node["_type"] == "Name" && may_hold_class(expr)));
 }
 
+// An operand of `is` against a class that did not resolve to one, but has
+// the char-array model a class object shares, may hold a class the frontend
+// lost track of (a loop variable over classes, say), and the paths that
+// follow would fold it to "not identical", so it is refused. A string
+// literal never holds one, and an unresolved type(x) is left to those paths.
+static void refuse_possible_class(
+  const std::optional<std::string> &resolved,
+  const nlohmann::json &node,
+  const exprt &expr)
+{
+  const typet &type = expr.type();
+  const std::string kind = node.value("_type", "");
+  if (
+    !resolved && (type.is_array() || type.is_pointer()) &&
+    type.subtype() == char_type() && kind != "Constant" &&
+    kind != "JoinedStr" && !is_type_call(node))
+    throw std::runtime_error(
+      "Unsupported: 'is' between a class and a value that may hold one");
+}
+
 exprt python_converter::handle_type_identity_check(
   const std::string &op,
   const exprt &lhs,
@@ -1182,12 +1202,16 @@ exprt python_converter::handle_type_identity_check(
     class_identity_operand(left, lhs);
   const std::optional<std::string> rhs_class =
     class_identity_operand(right, rhs);
+  if (!lhs_class && !rhs_class)
+    return nil_exprt();
+  refuse_possible_class(lhs_class, left, lhs);
+  refuse_possible_class(rhs_class, right, rhs);
   if (
-    (!lhs_class && !rhs_class) || undecided_side(lhs_class, left, lhs) ||
+    undecided_side(lhs_class, left, lhs) ||
     undecided_side(rhs_class, right, rhs))
     return nil_exprt();
 
-  // A value is never identical to a class object.
+  // A value that cannot hold a class is never identical to one.
   const bool same = lhs_class && rhs_class && *lhs_class == *rhs_class;
   return gen_bool(same == (op == "Is"));
 }
