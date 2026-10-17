@@ -24,32 +24,13 @@ CC_DIAGNOSTIC_POP()
 #include <util/base/filesystem.h>
 #include <unordered_set>
 #include <unordered_map>
+#include <cstdio>
 #include <cstdlib>
 #include <regex>
 
-// Use boost::process v1 on macOS or when Boost >= 1.87. The umbrella
-// header layout differs between Boost releases:
-//
-//   - Boost <= 1.86: `boost/process.hpp` IS v1 (v2 not yet shipped),
-//                    namespace `boost::process`.
-//   - Boost == 1.87: `boost/process/v1.hpp` umbrella exists; the
-//                    default `boost/process.hpp` switched to v2.
-//                    Use the umbrella, namespace `boost::process::v1`.
-//   - Boost >= 1.88: the `boost/process/v1.hpp` umbrella was removed;
-//                    v1 is still shipped under `boost/process/v1/*.hpp`
-//                    subheaders. Include the ones we use.
-#if defined(__APPLE__) || (BOOST_VERSION == 108700)
-#  include <boost/process/v1.hpp>
-namespace bp = boost::process::v1;
-#elif BOOST_VERSION >= 108800
-#  include <boost/process/v1/child.hpp>
-#  include <boost/process/v1/io.hpp>
-#  include <boost/process/v1/pipe.hpp>
-#  include <boost/process/v1/search_path.hpp>
-namespace bp = boost::process::v1;
-#else
-#  include <boost/process.hpp>
-namespace bp = boost::process;
+#ifdef _WIN32
+#  define popen _popen
+#  define pclose _pclose
 #endif
 
 languaget *new_solidity_language()
@@ -130,7 +111,7 @@ std::string solidity_languaget::find_solc() const
   }
 
   const char *env = std::getenv("SOLC");
-  if (env && env[0] != '\0')
+  if (env && std::strlen(env) > 0)
   {
     if (!boost::filesystem::exists(env))
     {
@@ -140,37 +121,39 @@ std::string solidity_languaget::find_solc() const
     return env;
   }
 
-  // Search $PATH for solc via boost::process (portable replacement for `which`)
-  boost::filesystem::path found = bp::search_path("solc");
-  if (!found.empty())
-    return found.string();
+  // Search $PATH via "which solc"
+  FILE *pipe = popen("which solc 2>/dev/null", "r");
+  if (pipe)
+  {
+    char buf[512];
+    std::string result;
+    while (fgets(buf, sizeof(buf), pipe))
+      result += buf;
+    pclose(pipe);
+
+    // Trim trailing newline
+    while (!result.empty() && (result.back() == '\n' || result.back() == '\r'))
+      result.pop_back();
+
+    if (!result.empty() && boost::filesystem::exists(result))
+      return result;
+  }
 
   return "";
 }
 
 std::string solidity_languaget::get_solc_version(const std::string &solc) const
 {
-  // Run `solc --version`; merge stdout+stderr by reading both streams.
-  bp::ipstream out_stream;
-  bp::ipstream err_stream;
-  std::string output;
-  try
-  {
-    bp::child proc(
-      solc, "--version", bp::std_out > out_stream, bp::std_err > err_stream);
-
-    std::string line;
-    while (out_stream && std::getline(out_stream, line))
-      output += line + "\n";
-    while (err_stream && std::getline(err_stream, line))
-      output += line + "\n";
-
-    proc.wait();
-  }
-  catch (const std::exception &)
-  {
+  std::string cmd = solc + " --version 2>&1";
+  FILE *pipe = popen(cmd.c_str(), "r");
+  if (!pipe)
     return "unknown";
-  }
+
+  char buf[512];
+  std::string output;
+  while (fgets(buf, sizeof(buf), pipe))
+    output += buf;
+  pclose(pipe);
 
   // Extract version number (e.g. "0.8.28+commit...")
   std::regex ver_re(R"((\d+\.\d+\.\d+))");
@@ -322,12 +305,6 @@ bool solidity_languaget::convert_intrinsics(contextt &context)
   clang_cpp_convertert converter(context, AST, "C++");
   if (converter.convert())
     return true;
-
-  // The C++ contract-intrinsic header defines __ESBMC_return_value as a
-  // C++ definition. The Solidity operational-model goto binary (sol64)
-  // also carries it as a C-mode symbol. Drop the C++ version here so the
-  // phase-2 add_cprover_library merge does not see a duplicate.
-  context.erase_symbol("c:@__ESBMC_return_value");
 
   return false;
 }

@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.0;
 
-// Test: inline assembly havoc over-approximation (VERIFICATION FAILED)
-// Assembly havocs x to nondet, so asserting a concrete value should fail.
+// Pre-T2.4 this asserted x == 6 under havoc-mode and was expected FAILED.
+// Post-T2.4 the precise Yul lowerer deterministically computes x = 6, so
+// the assertion holds and the test flipped to SUCCESSFUL. Contract name
+// kept for git-history continuity; the new name would be AssemblyAdd.
 contract AssemblyFail {
     function test() public pure {
         uint x = 5;
         assembly {
             x := add(x, 1)
         }
-        // x is havoc'd to nondet, so x == 6 cannot be guaranteed
         assert(x == 6);
     }
 }

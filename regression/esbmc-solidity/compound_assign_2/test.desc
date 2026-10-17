@@ -1,4 +1,4 @@
 CORE
 contract.solast
---sol contract.sol --unsigned-overflow-check --contract CompoundOverflow --unwind 1 --no-unwinding-assertions
+--sol contract.sol --unsigned-overflow-check --contract CompoundOverflow --k-induction --max-k-step 20 --k-step 3
 ^VERIFICATION FAILED$

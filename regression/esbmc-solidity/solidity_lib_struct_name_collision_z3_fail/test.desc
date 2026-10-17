@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--sol contract.sol --contract D13_Z3TupleNotWellFounded --solidity-max-tx 1 --z3 --no-slice
+^VERIFICATION FAILED$

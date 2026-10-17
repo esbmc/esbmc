@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--sol contract.sol --contract M2N --unwind 2
+^VERIFICATION FAILED$

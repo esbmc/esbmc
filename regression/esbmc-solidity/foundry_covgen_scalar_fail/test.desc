@@ -1,0 +1,5 @@
+CORE
+contract.solast
+--sol contract.sol --contract Cov --branch-coverage --generate-foundry-testcase --no-assertions
+^Generated Foundry coverage test with 2 case\(s\)
+^COVERAGE ANALYSIS COMPLETE$

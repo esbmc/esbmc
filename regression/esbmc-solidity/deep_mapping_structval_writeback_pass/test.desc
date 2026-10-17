@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--sol contract.sol --contract W3 --unwind 2
+^VERIFICATION SUCCESSFUL$

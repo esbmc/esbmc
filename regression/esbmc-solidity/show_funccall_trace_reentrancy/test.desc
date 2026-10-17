@@ -1,0 +1,8 @@
+CORE
+contract.solast
+--sol contract.sol --contract Ext --k-induction --show-funccall-trace
+^Function call trace:$
+^  sol:@C@Ext@F@withdraw#.*$
+^  sol:@C@Ext@_ESBMC_Nondet_Extcall_Ext# at .*contract\.sol line 15.*$
+^  sol:@C@Ext@F@deposit#.*$
+^VERIFICATION FAILED$

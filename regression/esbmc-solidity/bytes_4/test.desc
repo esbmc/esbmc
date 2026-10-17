@@ -1,4 +1,4 @@
-THOROUGH
+CORE
 contract.solast
---contract Dreive --sol contract.sol --unwind 3 --no-unwinding-assertions --no-standard-checks --bound
+--contract Dreive --sol contract.sol --no-standard-checks --bound --unwind 20 --no-unwinding-assertions
 ^VERIFICATION SUCCESSFUL$

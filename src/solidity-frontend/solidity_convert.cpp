@@ -12,10 +12,12 @@
 #include <util/arith/bitvector.h>
 #include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
+#include <util/config/focus_function.h>
 #include <util/base/i2string.h>
 #include <util/arith/mp_arith.h>
 #include <util/irep/std_expr.h>
 #include <util/message/message.h>
+#include <limits>
 #include <regex>
 #include <optional>
 
@@ -26,6 +28,8 @@ const nlohmann::json solidity_convertert::empty_json = nlohmann::json::object();
 std::string solidity_convertert::current_baseContractName = "";
 nlohmann::json solidity_convertert::src_ast_json = empty_json;
 std::unordered_map<std::string, typet> solidity_convertert::UserDefinedVarMap;
+std::unordered_map<std::string, const nlohmann::json *>
+  solidity_convertert::fpc_memo;
 
 solidity_convertert::solidity_convertert(
   contextt &_context,
@@ -55,9 +59,12 @@ solidity_convertert::solidity_convertert(
     aux_counter(0),
     is_bound(false),
     is_reentry_check(false),
+    is_reentry_balance_drain_check(false),
+    outbound_drain_site_count(),
     is_pointer_check(true),
     nondet_bool_expr(),
     nondet_uint_expr(),
+    nondet_uint256_expr(),
     nondet_bytes_dynamic_expr()
 {
   std::ifstream in(_contract_path);
@@ -72,6 +79,11 @@ solidity_convertert::solidity_convertert(
   const std::string reentry_check = config.options.get_option("reentry-check");
   if (!reentry_check.empty())
     is_reentry_check = true;
+
+  const std::string reentry_balance_drain_check =
+    config.options.get_option("reentry-balance-drain-check");
+  if (!reentry_balance_drain_check.empty())
+    is_reentry_balance_drain_check = true;
 
   // solidity does not have pointer
   // however, in esbmc some array bounds check is related to the pointer check
@@ -100,9 +112,19 @@ solidity_convertert::solidity_convertert(
     "nondet_bool", "c:@F@nondet_bool", bool_t, l, nondet_bool_expr);
   get_library_function_call_no_args(
     "nondet_uint", "c:@F@nondet_uint", uint_type(), l, nondet_uint_expr);
+  // 256-bit nondet for fields that legitimately span uint256 (balance,
+  // codehash, code). Distinct from nondet_uint_expr so 32-bit uses
+  // (e.g. switch case selectors) don't accidentally widen.
+  get_library_function_call_no_args(
+    "nondet_uint256",
+    "c:@F@nondet_uint256",
+    unsignedbv_typet(256),
+    l,
+    nondet_uint256_expr);
 
   set_sol_type(nondet_bool_expr.type(), SolidityGrammar::SolType::BOOL);
   set_sol_type(nondet_uint_expr.type(), SolidityGrammar::SolType::UINT256);
+  set_sol_type(nondet_uint256_expr.type(), SolidityGrammar::SolType::UINT256);
 
   addr_t = unsignedbv_typet(160);
   set_sol_type(addr_t, SolidityGrammar::SolType::ADDRESS);
@@ -134,9 +156,44 @@ solidity_convertert::solidity_convertert(
   set_sol_type(byte_static_t, SolidityGrammar::SolType::BYTES_STATIC);
 }
 
+// Recursively erase all JSON-null object fields. solc 0.6.x emits many
+// optional fields (subdenomination, falseBody, body for interface methods,
+// arguments for parent specifiers, overrides, length, contractScope,
+// inner typeIdentifier/typeString on ElementaryTypeName, ...) as JSON null,
+// whereas 0.8.x omits them. The whole frontend is sprinkled with
+// `if (x.contains("k")) ... = x["k"]` which assumes "contains() implies
+// non-null"; that assumption only holds for 0.8.x. Stripping nulls up
+// front lets every existing `contains()` check behave identically across
+// solc versions without spreading null guards through every accessor.
+static void strip_nulls(nlohmann::json &n)
+{
+  if (n.is_object())
+  {
+    for (auto it = n.begin(); it != n.end();)
+    {
+      if (it.value().is_null())
+        it = n.erase(it);
+      else
+      {
+        strip_nulls(it.value());
+        ++it;
+      }
+    }
+  }
+  else if (n.is_array())
+  {
+    for (auto &el : n)
+      strip_nulls(el);
+  }
+}
+
 // Convert smart contracts into symbol tables
 bool solidity_convertert::convert()
 {
+  // Normalize 0.6.x AST quirks (see strip_nulls).
+  for (auto &j : src_ast_json_array)
+    strip_nulls(j);
+
   // merge the input files
   merge_multi_files();
 
@@ -148,11 +205,38 @@ bool solidity_convertert::convert()
     return true;
 
   absolute_path = src_ast_json["absolutePath"].get<std::string>();
+
+  // Revert-observation feature gate: enable the mark/clear injection and the
+  // relaxed no-snapshot revert lowering only when the source references
+  // `__ESBMC_reverted` (the user must declare a stub of that name to compile
+  // under solc, so its mere presence is a reliable signal).  A single string
+  // scan of the merged AST keeps non-using units byte-for-byte unchanged.
+  // See docs/claude/solidity/revert-observation.md.
+  // Foundry `vm.expectRevert(...)` reuses the same revert-observation machinery
+  // (the next-call `assert(_ESBMC_sol_reverted_flag)` needs reverts to be
+  // marked rather than path-pruned), so its presence also enables the gate.
+  {
+    const std::string ast_str = src_ast_json.dump();
+    uses_revert_observation =
+      ast_str.find("__ESBMC_reverted") != std::string::npos ||
+      ast_str.find("expectRevert") != std::string::npos;
+  }
+
+  // AST rewrite: specialize internal function-pointer parameters whose
+  // callback is statically known at the call site. Runs before symbol
+  // registration so clones participate in the normal conversion pipeline.
+  if (monomorphize_fn_ptr_params())
+    return true;
+
   nlohmann::json &nodes = src_ast_json["nodes"];
 
   // store auxiliary info
   if (populate_auxiliary_vars())
     return true;
+
+  // Fresh run: drop any find_parent_contract memo carried over from a
+  // previous convert() (the map is static, may persist in-process).
+  fpc_memo.clear();
 
   // --focus-function validation: must identify a single target contract.
   // If the source declares exactly one (non-library, non-interface) contract
@@ -198,32 +282,59 @@ bool solidity_convertert::convert()
     }
 
     const std::string &focus_cnt = *tgt_cnt_set.begin();
-    bool found = false;
-    auto it = funcSignatures.find(focus_cnt);
-    if (it != funcSignatures.end())
-    {
-      for (const auto &m : it->second)
-      {
-        if (m.name != focus_func)
-          continue;
-        if (
-          m.visibility != "public" && m.visibility != "external" &&
-          config.options.get_option("no-visibility").empty())
-          continue;
-        if (m.name == focus_cnt)
-          continue;
-        if (m.name == "receive" || m.name == "fallback")
-          continue;
-        found = true;
-        break;
-      }
-    }
-    if (!found)
+
+    // --focus-function names a SET (comma- or space-separated); see
+    // util/config/focus_function.h for why the parsing lives there rather than
+    // here. EVERY name is checked, and every name that matched nothing is
+    // reported in ONE message. Reporting only the first would make a user with
+    // a ten-function list fix one typo per run, and -- worse -- a list whose
+    // first name is right and whose second is wrong would pass this check
+    // entirely if the loop stopped at the first success.
+    const std::vector<std::string> focus_names =
+      focus_function_names(focus_func);
+    if (focus_names.empty())
     {
       log_error(
-        "--focus-function '{}' is not a public/external function of "
-        "contract '{}'.",
+        "--focus-function was given the value '{}', which names no function at "
+        "all. Pass one or more public/external function names of contract "
+        "'{}', separated by commas or spaces.",
         focus_func,
+        focus_cnt);
+      return true;
+    }
+
+    std::string missing;
+    for (const auto &want : focus_names)
+    {
+      bool found = false;
+      auto it = funcSignatures.find(focus_cnt);
+      if (it != funcSignatures.end())
+      {
+        for (const auto &m : it->second)
+        {
+          if (m.name != want)
+            continue;
+          if (
+            m.visibility != "public" && m.visibility != "external" &&
+            config.options.get_option("no-visibility").empty())
+            continue;
+          if (m.name == focus_cnt)
+            continue;
+          if (m.name == "receive" || m.name == "fallback")
+            continue;
+          found = true;
+          break;
+        }
+      }
+      if (!found)
+        missing += (missing.empty() ? "" : ", ") + ("'" + want + "'");
+    }
+    if (!missing.empty())
+    {
+      log_error(
+        "--focus-function {} is not a public/external function of "
+        "contract '{}'.",
+        missing,
         focus_cnt);
       return true;
     }
@@ -243,6 +354,40 @@ bool solidity_convertert::convert()
   add_unique(absolute_path);
 
   std::string old_path = absolute_path;
+
+  // Pre-round: walk every interface and register its nested
+  // struct / enum / error / event symbols up front. Libraries processed
+  // later in round 1 can have function signatures referencing
+  // `IFoo.Bar` types, and those references would otherwise be unresolved
+  // (the interface itself is only fully processed in round 2). Without
+  // this pass, a library returning an interface-nested struct crashes on
+  // named-return declaration. Order-independent: the interface body is
+  // not fully converted here, only type-child symbols are registered.
+  for (nlohmann::json::iterator itr = nodes.begin(); itr != nodes.end(); ++itr)
+  {
+    if (
+      (*itr)["nodeType"] == "ContractDefinition" &&
+      (*itr).contains("contractKind") &&
+      (*itr)["contractKind"] == "interface" && (*itr).contains("nodes"))
+    {
+      std::string if_name = (*itr)["name"].get<std::string>();
+      std::string old = current_baseContractName;
+      current_baseContractName = if_name;
+      for (auto &sub : (*itr)["nodes"])
+      {
+        const std::string nt = sub["nodeType"].get<std::string>();
+        if (
+          nt == "ErrorDefinition" || nt == "EventDefinition" ||
+          nt == "StructDefinition" || nt == "EnumDefinition")
+        {
+          if (get_noncontract_defition(sub))
+            return true;
+        }
+      }
+      current_baseContractName = old;
+    }
+  }
+
   // first round: handle definitions that can be outside of the contract
   // including struct, enum, interface, event, error, library, constant...
   // noted that some can also be inside the contract, e.g. struct, enum...
@@ -295,8 +440,71 @@ bool solidity_convertert::convert()
   // note that we populate the static instance in the end
   // this is to ensure that we have populated other auxiliary static variables
   // before them
+  // Base contracts of the --contract target are registered but NOT
+  // deployed.
+  //
+  // In Solidity, deploying `Derived` runs `Base`'s constructor *as part of*
+  // `Derived`'s construction; it does not create a second, independent
+  // `Base` instance.  ESBMC models a contract's mapping state variables as
+  // one static-lifetime global per contract *type*
+  // (`sol:@C@<Base>@<var>#<id>`), and the inherited constructor body that
+  // `Derived`'s constructor invokes writes exactly those globals.  So
+  // deploying `_ESBMC_Object_<Base>` in addition to `_ESBMC_Object_<Derived>`
+  // executes the base constructor TWICE against the same storage.
+  //
+  // A base constructor that is not idempotent w.r.t. its own storage then
+  // kills the entire verification path: OpenZeppelin's `MinterRole()` calls
+  // `_addMinter(msg.sender)` -> `Roles.add`, whose
+  // `require(!has(role, account))` lowers to `ASSUME !bearer[msg.sender]`.
+  // The first deployment sets `bearer[msg.sender] = true`, so the second
+  // execution assumes `false`.  Everything after it — the target's own
+  // constructor, `_ESBMC_Main_<T>`, and the whole public-function
+  // dispatcher — becomes infeasible, and coverage collapses to the
+  // base-constructor prefix regardless of --unwind.
+  // (Reproducer: Dataset/transracer_50/sources/Aavio/contract.sol with
+  // --contract Aavio; minimal form in
+  // papers_to_write/esbmc_cov_test_gen/measure/repro/d2_min_sharedmap.sol.)
+  //
+  // Trade-off: an undeployed singleton keeps its `$address` unconstrained
+  // instead of a fresh unique one. That is closer to reality (the contract
+  // was never deployed), but it does mean the address-dispatch ladder can
+  // no longer rule it out by construction. Restricted to the single
+  // `--contract` target case; whole-file mode verifies every contract in
+  // turn and keeps deploying all of them (byte-identical behaviour).
   for (const auto &c_name : contractNamesList)
-    add_static_contract_instance(c_name);
+    add_static_contract_instance(c_name, !is_strict_base_of_target(c_name));
+
+  // --reentry-balance-drain-check: emit one [approx] warning per
+  // contract that the user opted into the check on but had no
+  // outbound transfer/send/call{value:} call sites for the helper to
+  // wrap.  (Pure-deposit / payable-only contracts and pure
+  // computational contracts both fall into this bucket — neither
+  // needs the assert.)  Skip non-tracked contracts (interfaces,
+  // libraries) since the conversion path doesn't reach them anyway.
+  if (is_reentry_balance_drain_check)
+  {
+    for (const auto &c_name : contractNamesList)
+    {
+      if (nonContractNamesList.count(c_name) != 0)
+        continue;
+      if (outbound_drain_site_count[c_name] == 0)
+        log_warning(
+          "[approx] --reentry-balance-drain-check skipped: {} has no "
+          "outbound value-transfer call sites",
+          c_name);
+    }
+  }
+
+  // Emit the enclosing-debit helper NOW — after every contract's
+  // `_ESBMC_Object_<C>` static instance is registered and ctor
+  // resolved.  Library $transfer/$call#1/$send bodies parsed
+  // earlier already reference the helper by its symbol id (forward
+  // declaration); only the BODY needs all contract instances
+  // visible.  Skip if no contracts are tracked (the helper would
+  // have nothing to dispatch to, but library bodies still reference
+  // it, so emit an empty stub).
+  if (build_enclosing_debit_helper())
+    return true;
 
   // Do Verification
   // single contract verification: where the option "--contract" is set.
@@ -367,7 +575,7 @@ void solidity_convertert::merge_multi_files()
   // Path to JSON object mapping
   std::unordered_map<std::string, nlohmann::json> path_to_json;
   // Constructing an import relationship diagram
-  for (auto &ast_json : src_ast_json_array)
+  for (const auto &ast_json : src_ast_json_array)
   {
     std::string path = ast_json["absolutePath"];
     path_to_json[path] = ast_json;
@@ -439,10 +647,7 @@ void solidity_convertert::topological_sort(
   // relationships Calculate the in-degree for each node
   for (const auto &pair : graph)
   {
-    if (in_degree.find(pair.first) == in_degree.end())
-    {
-      in_degree[pair.first] = 0;
-    }
+    in_degree.try_emplace(pair.first, 0);
     for (const auto &neighbor : pair.second)
     {
       if (pair.first != neighbor)
@@ -462,25 +667,61 @@ void solidity_convertert::topological_sort(
     }
   }
   // Process nodes in the queue
-  while (!zero_in_degree_queue.empty())
-  {
-    std::string node = zero_in_degree_queue.front();
-    zero_in_degree_queue.pop();
-    // add the node's corresponding JSON file to the sorted result
-    sorted_files.push_back(path_to_json[node]);
-    // Update the in-degree of neighbouring nodes and add the new node with
-    // in-degree 0 to the queue
-    for (const auto &neighbor : graph[node])
+  std::unordered_set<std::string> visited;
+  auto drain_queue = [&]() {
+    while (!zero_in_degree_queue.empty())
     {
-      if (node != neighbor)
-      { // Ignore the case of importing itself.
-        in_degree[neighbor]--;
-        if (in_degree[neighbor] == 0)
-        {
-          zero_in_degree_queue.push(neighbor);
+      std::string node = zero_in_degree_queue.front();
+      zero_in_degree_queue.pop();
+      if (!visited.insert(node).second)
+        continue;
+      // add the node's corresponding JSON file to the sorted result
+      sorted_files.push_back(path_to_json[node]);
+      // Update the in-degree of neighbouring nodes and add the new node with
+      // in-degree 0 to the queue
+      for (const auto &neighbor : graph[node])
+      {
+        if (node != neighbor)
+        { // Ignore the case of importing itself.
+          in_degree[neighbor]--;
+          if (in_degree[neighbor] == 0)
+          {
+            zero_in_degree_queue.push(neighbor);
+          }
         }
       }
     }
+  };
+  drain_queue();
+
+  // Cycle handling: Kahn's algorithm leaves nodes that participate in an
+  // import cycle stuck at in_degree > 0, silently dropping them from the
+  // merged AST. Modern Solidity idioms routinely produce such cycles
+  // (interface Foo holds a struct used by library Bar; library Bar returns
+  // Foo's types → Foo ↔ Bar). Break the deadlock by repeatedly forcing the
+  // remaining node with the lowest residual in_degree into the queue and
+  // re-draining. The order within a cycle does not matter for later symbol
+  // resolution: find_decl_ref walks all top-level nodes regardless.
+  while (visited.size() < graph.size())
+  {
+    std::string pick;
+    int best = std::numeric_limits<int>::max();
+    for (const auto &pair : graph)
+    {
+      if (visited.count(pair.first))
+        continue;
+      int d = in_degree[pair.first];
+      if (d < best)
+      {
+        best = d;
+        pick = pair.first;
+      }
+    }
+    if (pick.empty())
+      break;
+    in_degree[pick] = 0;
+    zero_in_degree_queue.push(pick);
+    drain_queue();
   }
 }
 
@@ -683,16 +924,30 @@ bool solidity_convertert::check_sol_ver()
 
   if (min_version < v050)
   {
-    log_error(
-      "The minimum Solidity version ({}.{}.{}) < 0.5.0 is not supported. It is "
-      "recommended "
-      "to use a more recent Solidity version",
+    // The pragma's *lower* bound is pre-0.5. That alone isn't a
+    // hard failure: if the pragma also has an upper bound allowing
+    // 0.5+ (e.g. `pragma solidity >=0.4.0 <0.9.0;`), solc has
+    // already compiled it with a modern compiler and the AST is
+    // fine to ingest. Only reject when the contract is *pinned*
+    // to pre-0.5 (no upper bound ≥ 0.5).
+    if (!upper_bound.has_value() || upper_bound.value() < v050)
+    {
+      log_error(
+        "The minimum Solidity version ({}.{}.{}) < 0.5.0 is not supported. It "
+        "is recommended to use a more recent Solidity version",
+        min_version.major,
+        min_version.minor,
+        min_version.patch);
+      return true;
+    }
+    log_warning(
+      "The Solidity pragma lower bound ({}.{}.{}) is pre-0.5; accepting "
+      "because the upper bound permits a modern compiler.",
       min_version.major,
       min_version.minor,
       min_version.patch);
-    return true;
   }
-  else if (min_version >= v050 && min_version < v070)
+  else if (min_version < v070)
   {
     log_warning(
       "The minimum solidity version ({}.{}.{}) < 0.7.0 may cause unexpected "
@@ -720,9 +975,13 @@ bool solidity_convertert::populate_auxiliary_vars()
       bool is_abstract = (*itr)["abstract"].get<bool>();
       if (kind == "interface" || kind == "library" || is_abstract)
         nonContractNamesList.insert(c_name);
-
+      if (kind == "interface")
+        interfaceNamesList.insert(c_name);
       if (kind == "library")
+      {
+        libraryNamesList.insert(c_name);
         continue;
+      }
       auto c_id = (*itr)["id"].get<int>();
 
       // store contract name
@@ -769,12 +1028,13 @@ bool solidity_convertert::populate_auxiliary_vars()
     {
       for (auto inherit_id : j.second)
       {
+        std::string base_cname = j.first;
+
         auto c_def = find_decl_ref(inherit_id);
         assert(!c_def.empty());
 
         if (cname == c_def["name"].get<std::string>())
         {
-          const std::string base_cname = j.first;
           inheritanceMap[cname].insert(base_cname);
           break;
         }
@@ -783,17 +1043,61 @@ bool solidity_convertert::populate_auxiliary_vars()
   }
 
   // setUp UserDefinedVarMap
+  //
+  // UserDefinedValueTypeDefinition nodes can appear either at file level
+  // (`type MyInt is int;`) or nested inside a contract/library/interface
+  // (`contract C { type MyInt is int; ... }`). References to the former
+  // use the bare name (`MyInt`) while contract-scoped UDVTs are referred
+  // to via the fully-qualified form (`C.MyInt`) in `typeDescriptions`.
+  // Register both keys for contract-scoped UDVTs so that
+  //   - UserDefinedTypeName resolution in solidity_grammar.cpp (which
+  //     keys by the reference's typeString, `C.MyInt`) succeeds, and
+  //   - MemberAccess lookup in solidity_convert_ref.cpp (which keys by
+  //     the identifier name used in `MyInt.wrap(...)`, just `MyInt`)
+  //     also succeeds.
+  auto register_udvt =
+    [&](const nlohmann::json &def, const std::string &scope) -> bool {
+    typet t;
+    if (get_type_description(def["underlyingType"]["typeDescriptions"], t))
+      return true;
+    const std::string name = def["name"].get<std::string>();
+    // Record the source UDVT name on the underlying type so the Foundry
+    // coverage-test generator can render `Name.wrap(<literal>)` (a bare
+    // underlying literal is not assignable to a UDVT parameter). Inert for
+    // symex/solver — it is a `#sol_*` attribute only. Scope-qualified for a
+    // contract-nested UDVT (referred to as `Scope.Name`).
+    t.set("#sol_udvt_name", scope.empty() ? name : scope + "." + name);
+    UserDefinedVarMap[name] = t;
+    if (!scope.empty())
+      UserDefinedVarMap[scope + "." + name] = t;
+    return false;
+  };
+
   for (auto &t_node : nodes)
   {
-    if (
-      t_node.contains("nodeType") &&
-      t_node["nodeType"] == "UserDefinedValueTypeDefinition")
+    if (!t_node.contains("nodeType"))
+      continue;
+    const std::string nt = t_node["nodeType"].get<std::string>();
+    if (nt == "UserDefinedValueTypeDefinition")
     {
-      typet t;
-      if (get_type_description(t_node["underlyingType"]["typeDescriptions"], t))
+      if (register_udvt(t_node, /*scope=*/""))
         return true;
-      std::string udv = t_node["name"].get<std::string>();
-      UserDefinedVarMap[udv] = t;
+    }
+    else if (
+      (nt == "ContractDefinition") && t_node.contains("nodes") &&
+      t_node.contains("name"))
+    {
+      const std::string cname = t_node["name"].get<std::string>();
+      for (auto &inner : t_node["nodes"])
+      {
+        if (
+          inner.contains("nodeType") &&
+          inner["nodeType"] == "UserDefinedValueTypeDefinition")
+        {
+          if (register_udvt(inner, cname))
+            return true;
+        }
+      }
     }
   }
 
@@ -1088,41 +1392,127 @@ void solidity_convertert::get_cname_expr(
   new_expr = symbol_expr(*context.find_symbol("sol:@" + cname));
 }
 
-bool solidity_convertert::populate_low_level_functions(const std::string &cname)
+bool solidity_convertert::build_enclosing_debit_helper()
+{
+  const std::string helper_id = "c:@F@_ESBMC_enclosing_debit";
+  if (context.find_symbol(helper_id) != nullptr)
+    return false; // already emitted
+
+  typet addr_t_local = unsignedbv_typet(160);
+  typet val_t = unsignedbv_typet(256);
+  typet void_ptr_t = pointer_typet(empty_typet());
+
+  code_typet helper_ft;
+  helper_ft.return_type() = empty_typet();
+  code_typet::argumentt val_arg;
+  val_arg.type() = val_t;
+  val_arg.cmt_base_name("val");
+  val_arg.cmt_identifier(helper_id + "::val");
+  helper_ft.arguments().push_back(val_arg);
+
+  std::string dbgmod = get_modulename_from_path(absolute_path);
+  locationt loc;
+  symbolt helper_sym;
+  get_default_symbol(
+    helper_sym, dbgmod, helper_ft, "_ESBMC_enclosing_debit", helper_id, loc);
+  helper_sym.lvalue = true;
+  helper_sym.file_local = true;
+  symbolt &added_helper = *move_symbol_to_context(helper_sym);
+
+  symbolt val_sym;
+  get_default_symbol(val_sym, dbgmod, val_t, "val", helper_id + "::val", loc);
+  val_sym.lvalue = true;
+  val_sym.is_parameter = true;
+  val_sym.file_local = true;
+  move_symbol_to_context(val_sym);
+
+  code_blockt body;
+  code_labelt label;
+  label.set_label("__ESBMC_HIDE");
+  label.code() = code_skipt();
+  body.move_to_operands(label);
+
+  exprt val_expr = symbol_expr(*context.find_symbol(helper_id + "::val"));
+  exprt encl_this =
+    symbol_expr(*context.find_symbol("c:@_ESBMC_enclosing_contract_this"));
+
+  // Emit one `if (encl_this == (void*)&_ESBMC_Object_<C>) { ...$balance -= val;
+  // }` per known contract.  No `else` chaining — each branch short- circuits on
+  // its own equality check, and at most one branch fires at runtime (pointer
+  // equality is exclusive).
+  for (const auto &cn : contractNamesList)
+  {
+    if (nonContractNamesList.count(cn) != 0)
+      continue; // skip libraries, interfaces, abstract contracts
+
+    exprt static_ins;
+    get_static_contract_instance_ref(cn, static_ins);
+
+    // (void*)&_ESBMC_Object_<cn>
+    exprt addr_of = exprt("address_of", pointer_typet(static_ins.type()));
+    addr_of.copy_to_operands(static_ins);
+    exprt casted = addr_of;
+    solidity_gen_typecast(ns, casted, void_ptr_t);
+
+    exprt eq = exprt("=", bool_t);
+    eq.copy_to_operands(encl_this, casted);
+
+    exprt target_balance = member_exprt(static_ins, "$balance", val_t);
+    exprt sub_assign = side_effect_exprt("assign-", val_t);
+    sub_assign.copy_to_operands(target_balance, val_expr);
+    convert_expression_to_code(sub_assign);
+
+    code_blockt then_block;
+    then_block.move_to_operands(sub_assign);
+
+    codet if_expr("ifthenelse");
+    if_expr.copy_to_operands(eq, then_block);
+    body.move_to_operands(if_expr);
+  }
+
+  added_helper.set_value(body);
+  added_helper.set_type(helper_ft);
+  return false;
+}
+
+bool solidity_convertert::populate_low_level_functions(
+  const std::string &cname,
+  bool is_library)
 {
   log_debug(
     "solidity",
-    "Populating low-level function definition for contract {}",
+    "Populating low-level function definition for {} {}",
+    is_library ? "library" : "contract",
     cname);
 
   exprt new_expr;
   // call("")
-  if (get_call_definition(cname, new_expr))
+  if (get_call_definition(cname, new_expr, is_library))
     return true;
   move_builtin_to_contract(cname, new_expr, true);
 
   // call{}("")
-  if (get_call_value_definition(cname, new_expr))
+  if (get_call_value_definition(cname, new_expr, is_library))
     return true;
   move_builtin_to_contract(cname, new_expr, true);
 
   // transfer()
-  if (get_transfer_definition(cname, new_expr))
+  if (get_transfer_definition(cname, new_expr, is_library))
     return true;
   move_builtin_to_contract(cname, new_expr, true);
 
   // send()
-  if (get_send_definition(cname, new_expr))
+  if (get_send_definition(cname, new_expr, is_library))
     return true;
   move_builtin_to_contract(cname, new_expr, true);
 
   // staticcall()
-  if (get_staticcall_definition(cname, new_expr))
+  if (get_staticcall_definition(cname, new_expr, is_library))
     return true;
   move_builtin_to_contract(cname, new_expr, true);
 
   // delegatecall()
-  if (get_delegatecall_definition(cname, new_expr))
+  if (get_delegatecall_definition(cname, new_expr, is_library))
     return true;
   move_builtin_to_contract(cname, new_expr, true);
 
@@ -1233,6 +1623,10 @@ bool solidity_convertert::convert_ast_nodes(
   // parse constructor
   if (get_constructor(contract_def, cname))
     return true;
+
+  // flag the ctor of abstract/interface/library contracts as non-instantiable
+  // so the Foundry coverage-test generator never emits `new <Abstract>(...)`
+  mark_ctor_instantiability(cname);
 
   size_t index = 0;
   nlohmann::json ast_nodes = contract_def["nodes"];

@@ -282,6 +282,9 @@ STATIC_CAPABILITIES = {
     # (--smtlib-solver-prog); a build that links z3 need not also ship the
     # executable, and Windows has no implementation of that pipe at all.
     "z3_binary",
+    # A `solc` executable is on PATH. The TOD checks generate a harness contract
+    # at run time and compile it, so a precompiled .solast is not enough.
+    "solc_binary",
     # The per-test budget (ESBMC_REGRESS_TIMEOUT) is at least 600s. For tests
     # whose solve genuinely takes minutes: the PR leg caps every test at 120s,
     # where such a test can only ever report a timeout.
@@ -543,10 +546,18 @@ class TestCase:
         self.test_args = None
         self.test_file = None
         self.test_mode = "CORE"
+        self.mem_limit_bytes = None
         self.check_json = []
         self.check_file = []
         self.seed_file = []
         self._initialize_test_case()
+        # Optional per-test memory cap override.  When a `mem_limit_mb` file
+        # is present in the test directory, its integer value (in MB) is
+        # used as the RLIMIT_AS for that test instead of the global default.
+        mem_limit_path = os.path.join(test_dir, "mem_limit_mb")
+        if os.path.isfile(mem_limit_path):
+            with open(mem_limit_path) as f:
+                self.mem_limit_bytes = int(f.read().strip()) * 1024 * 1024
 
     def save_test(self):
         """Replaces original test with the current configuration"""
@@ -574,16 +585,17 @@ class TestCase:
     UNSUPPORTED_OPTIONS = ["--timeout", "--memlimit"]
 
 
-def _prepare_child():
-    """preexec_fn: new process group + memory cap."""
-    os.setpgrp()
-    if RegressionBase.MEMORY_LIMIT:
-        import resource
-        limit = RegressionBase.MEMORY_LIMIT
-        try:
-            resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
-        except (ValueError, OSError):
-            pass  # macOS does not support RLIMIT_AS
+def _make_prepare_child(limit_bytes):
+    """Build a preexec_fn closure: new process group + given memory cap."""
+    def _preexec():
+        os.setpgrp()
+        if limit_bytes:
+            import resource
+            try:
+                resource.setrlimit(resource.RLIMIT_AS, (limit_bytes, limit_bytes))
+            except (ValueError, OSError):
+                pass  # macOS does not support RLIMIT_AS
+    return _preexec
 # Seconds to wait between SIGTERM and SIGKILL
 # when cleaning up timed-out process group.
 _TERM_GRACE = 3
@@ -601,7 +613,9 @@ class Executor:
     def run(self, test_case: TestCase, cwd=None):
         """Execute the test case. `cwd` isolates ESBMC's output files."""
         cmd = test_case.generate_run_argument_list(*self.tool)
-        preexec = _prepare_child if os.name == "posix" else None
+        # Per-test override (mem_limit_mb file) wins over the global env cap.
+        limit_bytes = test_case.mem_limit_bytes or RegressionBase.MEMORY_LIMIT
+        preexec = _make_prepare_child(limit_bytes) if os.name == "posix" else None
 
         with subprocess.Popen(
             cmd,

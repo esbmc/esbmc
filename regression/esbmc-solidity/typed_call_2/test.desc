@@ -1,4 +1,4 @@
 CORE
 contract.solast
---sol contract.sol --contract TypedCallBadValue --unwind 2 --no-unwinding-assertions --no-standard-checks --bound
+--sol contract.sol --contract TypedCallBadValue --no-standard-checks --bound --k-induction --max-k-step 20 --k-step 3
 ^VERIFICATION FAILED$

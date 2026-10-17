@@ -1,4 +1,4 @@
-THOROUGH
+CORE
 contract.solast
---sol contract.sol --unwind 5 --no-unwinding-assertions --no-standard-checks --contract Mutex --reentry-check --unbound
+--sol contract.sol --no-standard-checks --contract Mutex --reentry-check --unbound --unwind 20 --no-unwinding-assertions
 ^VERIFICATION SUCCESSFUL$

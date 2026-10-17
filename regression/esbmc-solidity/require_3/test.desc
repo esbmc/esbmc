@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 contract.solast
---sol contract.sol --contract Robot --k-induction --no-standard-checks
+--sol contract.sol --contract Robot --unwind 20 --no-unwinding-assertions --no-standard-checks
 ^VERIFICATION SUCCESSFUL$

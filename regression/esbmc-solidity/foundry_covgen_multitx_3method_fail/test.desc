@@ -1,0 +1,5 @@
+CORE
+contract.solast
+--sol contract.sol --contract Multi3 --branch-coverage-claims --generate-foundry-testcase --no-assertions --coverage-multi-tx --incremental-bmc
+^Reached : 2$
+^Generated Foundry coverage test with 2 case\(s\)

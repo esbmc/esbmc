@@ -28,25 +28,95 @@ bool solidity_convertert::convert_integer_literal(
   the_value.erase(
     std::remove(the_value.begin(), the_value.end(), '_'), the_value.end());
 
+  // Handle decimal-with-exponent literals like `2.5e1`. Move the decimal
+  // point right by `exponent` digits when the result lands on an integer
+  // boundary; otherwise leave the value untouched and fall through to the
+  // generic parser, which will reject the dot. Same idea covers `0.0e0`
+  // and similar Solidity rationals that solc has already pre-evaluated to
+  // an integer in the typeIdentifier (`t_rational_..._by_1`).
+  {
+    std::size_t e_pos_d = the_value.find_first_of("eE");
+    std::size_t dot = the_value.find('.');
+    if (dot != std::string::npos)
+    {
+      long exp_val = 0;
+      if (e_pos_d != std::string::npos)
+      {
+        try
+        {
+          exp_val = std::stol(the_value.substr(e_pos_d + 1));
+        }
+        catch (...)
+        {
+          return true;
+        }
+      }
+      std::string mantissa = (e_pos_d == std::string::npos)
+                               ? the_value
+                               : the_value.substr(0, e_pos_d);
+      bool neg = !mantissa.empty() && mantissa[0] == '-';
+      if (neg)
+        mantissa.erase(mantissa.begin());
+      std::size_t mdot = mantissa.find('.');
+      std::string int_part = mantissa.substr(0, mdot);
+      std::string frac_part = mantissa.substr(mdot + 1);
+      if (exp_val >= (long)frac_part.size())
+      {
+        // shift dot right `exp_val` places, padding with zeros
+        std::string shifted = int_part + frac_part;
+        long pad = exp_val - (long)frac_part.size();
+        if (pad > 0)
+          shifted += std::string(pad, '0');
+        // strip leading zeros (keep at least one)
+        std::size_t nz = shifted.find_first_not_of('0');
+        if (nz == std::string::npos)
+          shifted = "0";
+        else
+          shifted = shifted.substr(nz);
+        the_value = (neg ? "-" : "") + shifted;
+      }
+      // else: fractional remainder cannot be represented as an integer
+      // — bail and let the dot-check below reject it.
+    }
+  }
+
   if (the_value.find(".") != std::string::npos)
     return true;
 
-  // Handle scientific notation, e.g., "1e2" -> "100"
+  // Handle scientific notation, e.g., "1e2" -> "100", "200e-2" -> "2".
+  // Negative exponents are only legal here when the source actually
+  // collapses to an integer (e.g. solc has already reduced the rational
+  // to `t_rational_X_by_1`). For an integer mantissa M and exponent -k,
+  // M / 10^k is exact iff M % 10^k == 0; otherwise we cannot represent
+  // it as an integer and bail out to the generic int parser, which will
+  // reject the malformed value.
   std::size_t e_pos = the_value.find_first_of("eE");
   if (e_pos != std::string::npos)
   {
     std::string base_part = the_value.substr(0, e_pos);
     std::string exp_part = the_value.substr(e_pos + 1);
 
-    // Convert base and exponent to BigInt
     BigInt base = string2integer(base_part);
     BigInt exponent = string2integer(exp_part);
 
-    // Calculate base * (10 ^ exponent)
-    BigInt scale = ::power(BigInt(10), exponent);
-    BigInt result = base * scale;
-
-    the_value = integer2string(result);
+    if (exponent >= 0)
+    {
+      BigInt scale = ::power(BigInt(10), exponent);
+      BigInt result = base * scale;
+      the_value = integer2string(result);
+    }
+    else
+    {
+      BigInt scale = ::power(BigInt(10), -exponent);
+      // exact integer division only — `power(...)` loops forever on a
+      // negative exponent, so we mustn't fall back to it. If the
+      // mantissa doesn't divide evenly, give up and let the caller
+      // surface a conversion error.
+      if (scale == 0 || (base % scale) != 0)
+        return true;
+      BigInt result = base / scale;
+      the_value = integer2string(result);
+    }
   }
 
   exprt the_val;

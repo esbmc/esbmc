@@ -1,4 +1,4 @@
-THOROUGH
+CORE
 contract.solast
---sol contract.sol --contract Reproduction --k-induction --bound
+--sol contract.sol --contract Reproduction --incremental-bmc --bound --cvc5
 ^VERIFICATION FAILED$

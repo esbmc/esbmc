@@ -1,4 +1,4 @@
 CORE
 contract.solast
---sol contract.sol --contract AbiEncodeWithSignatureUnbound --unwind 1 --no-unwinding-assertions --no-standard-checks
+--sol contract.sol --contract AbiEncodeWithSignatureUnbound --no-standard-checks --k-induction --max-k-step 20 --k-step 3
 ^VERIFICATION SUCCESSFUL$

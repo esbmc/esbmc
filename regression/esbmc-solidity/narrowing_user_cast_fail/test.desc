@@ -1,0 +1,5 @@
+CORE
+contract.solast
+--sol contract.sol --cvc5 --narrowing-check --k-induction --max-k-step 20 --k-step 3
+Narrowing cast overflow on typecast
+^VERIFICATION FAILED$

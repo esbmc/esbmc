@@ -96,6 +96,80 @@ extern "C"
 #define BT_BUF_SIZE 256
 
 #ifndef _WIN32
+// "Data even on UNKNOWN": a run killed mid-solve never reaches
+// report_coverage, so the handlers below emit the partial coverage summary
+// first. Async-signal-safe: atomic loads, a stack buffer and write(2) only.
+namespace
+{
+struct sigbuf
+{
+  char buf[512];
+  size_t n = 0;
+  void put(const char *s)
+  {
+    while (*s && n < sizeof(buf))
+      buf[n++] = *s++;
+  }
+  void put_uint(size_t v)
+  {
+    char tmp[24];
+    size_t t = 0;
+    do
+    {
+      tmp[t++] = static_cast<char>('0' + v % 10);
+      v /= 10;
+    } while (v && t < sizeof(tmp));
+    while (t && n < sizeof(buf))
+      buf[n++] = tmp[--t];
+  }
+  void flush()
+  {
+    signal_safe_write(STDOUT_FILENO, buf, n);
+    n = 0;
+  }
+};
+
+void emit_coverage_on_signal()
+{
+  if (!goto_coveraget::branch_cov_active.load(std::memory_order_relaxed))
+    return;
+  const size_t total =
+    goto_coveraget::total_branch_atomic.load(std::memory_order_relaxed);
+  if (total == 0)
+    return;
+  // Covered-set runs count |all_claims ∩ (covered_set ∪ reached)|; default
+  // runs count reached_claims. Both are re-synced at every report_coverage,
+  // so this is exact after the first report and a lower bound before it.
+  size_t reached =
+    goto_coveraget::covered_set_mode.load(std::memory_order_relaxed)
+      ? goto_coveraget::covered_run.load(std::memory_order_relaxed)
+      : goto_coveraget::live_reached.load(std::memory_order_relaxed);
+  if (reached > total) // the numerator can never exceed the universe
+    reached = total;
+
+  // Same shape as report_coverage's branch block, so stdout consumers parse
+  // a killed run and a concluded one identically.
+  sigbuf b;
+  b.put("\n[Coverage]\nBranches : ");
+  b.put_uint(total);
+  b.put("\nReached : ");
+  b.put_uint(reached);
+  b.put("\nBranch Coverage: ");
+  b.put_uint(reached * 100 / total);
+  b.put("% (partial: run terminated before verification concluded)\n");
+  b.flush();
+}
+} // namespace
+
+// External bounders (the regression harness, timeout(1), CI runners) kill
+// with SIGTERM or SIGINT rather than ESBMC's own SIGALRM. Emit the partial
+// coverage in the grace window before SIGKILL, then shut down as usual.
+void term_handler(int sig)
+{
+  emit_coverage_on_signal();
+  signal_catcher(sig);
+}
+
 // Runs on SIGALRM, on whatever the main thread was doing — quite possibly
 // inside malloc holding the arena lock, which is why every call here is from
 // POSIX's async-signal-safe set (#6201). has_violation() is an atomic load.
@@ -104,6 +178,7 @@ void timeout_handler(int)
   static const char timed_out[] = "ERROR: Timed out\n";
   static const char failed[] = "VERIFICATION FAILED\n";
 
+  emit_coverage_on_signal();
   signal_safe_write(STDERR_FILENO, timed_out, sizeof(timed_out) - 1);
   // Under --multi-property the run keeps exploring interleavings after a
   // violation, to reach the properties only later schedules touch. A timeout
@@ -532,6 +607,67 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     }
   }
 
+  if (cmdline.isset("coverage-multi-tx"))
+  {
+    // --coverage-multi-tx keeps the multi-transaction dispatcher loop LIVE in
+    // Solidity coverage mode (see the neutralization site below), and the
+    // Foundry generator reconstructs the ordered call sequence from that loop's
+    // per-iteration dispatcher-guard markers.
+    //
+    // --solidity-max-tx N instead makes get_tx_bound() emit a DETERMINISTIC
+    // unroll of N transaction bodies (no loop). That reconstructs unreliably —
+    // the generator can mis-attribute which method ran in each transaction (it
+    // emitted `fire(); fire();` where `arm(); fire();` was needed) — so the two
+    // flags are incompatible: route the transaction bound through the live
+    // loop.
+    if (cmdline.isset("solidity-max-tx"))
+    {
+      log_error(
+        "--coverage-multi-tx is incompatible with --solidity-max-tx: an "
+        "explicit tx bound forces a deterministic unroll whose Foundry "
+        "reconstruction is unreliable. Bound the live dispatcher loop with "
+        "--incremental-bmc (recommended) or --unwind N instead.");
+      abort();
+    }
+    // The live loop is an unbounded `while(nondet_bool())`; symex needs a
+    // whole-program bounding strategy or it diverges. Loop-specific bounds
+    // (--unwindset / --unwindsetname) are NOT accepted here: they target a
+    // named loop, not necessarily the dispatcher, so they cannot guarantee the
+    // loop is bounded. Require an explicit global strategy rather than
+    // guessing.
+    if (
+      !cmdline.isset("unwind") && !cmdline.isset("incremental-bmc") &&
+      !cmdline.isset("k-induction") && !cmdline.isset("k-induction-parallel") &&
+      !cmdline.isset("termination") && !cmdline.isset("base-case") &&
+      !cmdline.isset("forward-condition") && !cmdline.isset("inductive-step"))
+    {
+      log_error(
+        "--coverage-multi-tx keeps the unbounded multi-transaction dispatcher "
+        "loop live; it needs a global bounding strategy. Add --incremental-bmc "
+        "(recommended: discovers the transaction depth dynamically) or "
+        "--unwind N (N reaches up to ~N-1 transactions).");
+      abort();
+    }
+  }
+
+  // The deterministic-unroll path (--solidity-max-tx N, N>=2) reconstructs a
+  // multi-transaction Foundry sequence UNRELIABLY: the generator can
+  // mis-attribute which method ran in each transaction (emitting fire();fire();
+  // where arm();fire(); was needed). Surface it and point at the reliable path.
+  if (
+    cmdline.isset("generate-foundry-testcase") &&
+    cmdline.isset("solidity-max-tx") && !cmdline.isset("coverage-multi-tx"))
+  {
+    const long n = strtol(cmdline.getval("solidity-max-tx"), nullptr, 10);
+    if (n >= 2)
+      log_warning(
+        "--solidity-max-tx {} with --generate-foundry-testcase reconstructs "
+        "multi-transaction sequences unreliably (methods can be mis-attributed "
+        "across transactions). For reliable ordered sequences use "
+        "--coverage-multi-tx --incremental-bmc instead.",
+        n);
+  }
+
   if (cmdline.isset("base-case"))
   {
     options.set_option("base-case", true);
@@ -674,6 +810,14 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     alarm(timeout);
 #endif
   }
+
+#ifndef _WIN32
+  // Unconditional (independent of --timeout, which external harnesses
+  // strip): emit partial branch coverage on external SIGTERM/SIGINT
+  // before the killer's SIGKILL. See term_handler.
+  signal(SIGTERM, term_handler);
+  signal(SIGINT, term_handler);
+#endif
 
   if (cmdline.isset("memlimit"))
   {

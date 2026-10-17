@@ -8,6 +8,8 @@
 #include <solvers/smt/tuple/smt_tuple_node.h>
 #include <solvers/smt/tuple/smt_tuple_sym.h>
 
+#include <cstdlib>
+#include <string>
 #include <unordered_map>
 
 solver_creator create_new_smtlib_solver;
@@ -73,6 +75,15 @@ static const std::string all_solvers[] = {
   "cvc5",
   "mathsat",
   "yices"};
+
+static std::string available_solver_names()
+{
+  std::string available;
+  for (const std::string &name : all_solvers)
+    if (esbmc_solvers.count(name))
+      available += (available.empty() ? "" : ", ") + name;
+  return available.empty() ? "(none)" : available;
+}
 
 static std::string pick_default_solver()
 {
@@ -187,9 +198,11 @@ pick_solver(std::string &solver_name, const optionst &options)
     return *it->second;
 
   log_error(
-    "The {} solver has not been built into this version of ESBMC, sorry",
-    solver_name);
-  abort();
+    "The {} solver has not been built into this version of ESBMC, sorry. "
+    "Available backends: {}",
+    solver_name,
+    available_solver_names());
+  exit(1);
 }
 
 smt_convt *create_solver(

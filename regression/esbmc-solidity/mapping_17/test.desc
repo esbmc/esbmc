@@ -1,4 +1,4 @@
 CORE
 contract.solast
---sol contract.sol --k-induction --contract Derived --unbound
-^VERIFICATION FAILED$
+--sol contract.sol --contract Derived --unbound --k-induction --max-k-step 20 --k-step 3
+^VERIFICATION SUCCESSFUL$

@@ -1,0 +1,6 @@
+CORE
+contract.solast
+--sol contract.sol --contract Vault --branch-coverage --generate-foundry-testcase --no-assertions --unwind 3
+^Generated Foundry coverage test with 2 case\(s\)
+^Foundry: 2 interface mock\(s\) synthesized
+^COVERAGE ANALYSIS COMPLETE$

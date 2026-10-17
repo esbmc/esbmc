@@ -1,4 +1,4 @@
 CORE
 contract.solast
---sol contract.sol --contract B --bound --no-standard-checks --unwind 2 --no-unwinding-assertions --multi-property
+--sol contract.sol --contract B --bound --no-standard-checks --multi-property --k-induction --max-k-step 20 --k-step 3
 ^VERIFICATION SUCCESSFUL$

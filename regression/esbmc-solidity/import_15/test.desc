@@ -1,4 +1,4 @@
 THOROUGH
 contract.solast
---sol contract.sol --unwind 3 --no-unwinding-assertions --no-standard-checks --contract A --bound --z3
+--sol contract.sol --no-standard-checks --contract A --bound --z3 --k-induction --max-k-step 20 --k-step 3
 ^VERIFICATION FAILED$

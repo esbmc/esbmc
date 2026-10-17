@@ -1,0 +1,5 @@
+CORE
+contract.solast
+--sol contract.sol --contract C --no-standard-checks --unwind 1 --no-unwinding-assertions
+^WARNING: \[approx\] calldata bytes\[\] element access at .*: repeated reads.*$
+^VERIFICATION SUCCESSFUL$

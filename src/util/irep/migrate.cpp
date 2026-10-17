@@ -267,6 +267,34 @@ migrate_arg_defaults(const code_typet::argumentst &old_args)
   return defaults;
 }
 
+static type2tc migrate_array_type(const typet &type)
+{
+  type2tc subtype = migrate_type(type.subtype());
+
+  expr2tc size;
+  bool is_infinite = false;
+
+  if (type.find(typet::a_size).id() == "infinity")
+  {
+    is_infinite = true;
+  }
+  else
+  {
+    exprt sz = static_cast<const exprt &>(type.find(typet::a_size));
+    migrate_expr(sz, size);
+    simplify(size);
+    size = fixup_containerof_in_sizeof(size);
+  }
+
+  // Preserve the explicit array domain width across IR migration.
+  unsigned index_width = 0;
+  irep_idt iw = type.get("#esbmc_index_width");
+  if (!iw.empty())
+    index_width = std::stoul(iw.as_string());
+
+  return array_type2tc(subtype, size, is_infinite, index_width);
+}
+
 static type2tc migrate_type0(const typet &type)
 {
   if (type.id() == typet::t_bool)
@@ -306,26 +334,7 @@ static type2tc migrate_type0(const typet &type)
     return unsignedbv_type2tc(config.ansi_c.capability_width());
 
   if (type.id() == typet::t_array)
-  {
-    type2tc subtype = migrate_type(type.subtype());
-
-    expr2tc size;
-    bool is_infinite = false;
-
-    if (type.find(typet::a_size).id() == "infinity")
-    {
-      is_infinite = true;
-    }
-    else
-    {
-      exprt sz = static_cast<const exprt &>(type.find(typet::a_size));
-      migrate_expr(sz, size);
-      simplify(size);
-      size = fixup_containerof_in_sizeof(size);
-    }
-
-    return array_type2tc(subtype, size, is_infinite);
-  }
+    return migrate_array_type(type);
   else if (type.id() == typet::t_vector)
   {
     type2tc subtype = migrate_type(type.subtype());
@@ -3463,6 +3472,12 @@ static typet migrate_type_back_uncached(const type2tc &ref)
     {
       thetype.size() = migrate_expr_back(ref2.array_size);
     }
+    // Carry explicit index width back so an irept→irep2 round-trip
+    // preserves the wide-BV-index annotation. Default 0 means "use
+    // word_size" (legacy 64-bit) and is omitted to keep the irept
+    // representation minimal.
+    if (ref2.index_width > 0)
+      thetype.set("#esbmc_index_width", std::to_string(ref2.index_width));
 
     return thetype;
   }

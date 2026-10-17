@@ -1,0 +1,7 @@
+out/
+cache/
+lib/
+broadcast/
+# smoke.sh copies a case in here; the originals live in ../esbmc-solidity/.
+# A second copy would drift and the smoke test would certify the wrong file.
+test/*.sol

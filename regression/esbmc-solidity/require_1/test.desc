@@ -1,4 +1,4 @@
-THOROUGH
+CORE
 contract.solast
---sol contract.sol --contract Robot --unwind 15
+--sol contract.sol --contract Robot --k-induction --max-k-step 20 --k-step 3 --solidity-precise
 ^VERIFICATION FAILED$

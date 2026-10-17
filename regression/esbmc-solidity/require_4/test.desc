@@ -1,4 +1,4 @@
 THOROUGH
 contract.solast
---sol contract.sol --contract Robot --function test2 --unwind 3 --no-unwinding-assertions
+--sol contract.sol --contract Robot --function test2 --k-induction --max-k-step 20 --k-step 3
 ^VERIFICATION FAILED$

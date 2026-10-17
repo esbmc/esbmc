@@ -14,3 +14,6 @@ contract test {
         assert(data1[1] == 1);
     }
 }
+// KNOWNBUG: the inductive step cannot prove this without the inductive
+// invariants the local k-induction inferred (loop-entry invariants,
+// counted-loop skip, per-field havoc), which upstream's rewrite dropped.

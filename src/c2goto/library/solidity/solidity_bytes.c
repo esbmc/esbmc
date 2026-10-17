@@ -20,6 +20,54 @@ typedef struct BytesStatic
   size_t length;
 } BytesStatic;
 
+/* Hard cap for BytesStatic loop unrolling. Solidity's bytes1..bytes32
+ * never exceed 32 bytes, so using the static array size as the concrete
+ * loop bound lets symex unwind deterministically even when .length is
+ * symbolic (e.g. when a BytesStatic flows in from a nondet parameter). */
+#define _ESBMC_BYTES_STATIC_MAX 32
+
+/* Compile-time 32-step unroll. Each STEP(i) macro receives a literal
+ * constant i so b->data[i] resolves to a concrete memory offset and
+ * symex never has to unwind a symbolic-bound loop.  Used by every
+ * BytesStatic helper that previously had a `for (i < 32; if (i >=
+ * length) break)` loop — that pattern relied on `--unwind` to
+ * statically resolve, which (a) flooded stderr with "Not unwinding"
+ * messages on every visit and (b) silently truncated the result for
+ * `--unwind < length`. */
+#define _ESBMC_BS_UNROLL_32(STEP)                                              \
+  STEP(0);                                                                     \
+  STEP(1);                                                                     \
+  STEP(2);                                                                     \
+  STEP(3);                                                                     \
+  STEP(4);                                                                     \
+  STEP(5);                                                                     \
+  STEP(6);                                                                     \
+  STEP(7);                                                                     \
+  STEP(8);                                                                     \
+  STEP(9);                                                                     \
+  STEP(10);                                                                    \
+  STEP(11);                                                                    \
+  STEP(12);                                                                    \
+  STEP(13);                                                                    \
+  STEP(14);                                                                    \
+  STEP(15);                                                                    \
+  STEP(16);                                                                    \
+  STEP(17);                                                                    \
+  STEP(18);                                                                    \
+  STEP(19);                                                                    \
+  STEP(20);                                                                    \
+  STEP(21);                                                                    \
+  STEP(22);                                                                    \
+  STEP(23);                                                                    \
+  STEP(24);                                                                    \
+  STEP(25);                                                                    \
+  STEP(26);                                                                    \
+  STEP(27);                                                                    \
+  STEP(28);                                                                    \
+  STEP(29);                                                                    \
+  STEP(30);                                                                    \
+  STEP(31)
+
 void bytes_dynamic_init_check(const int initialized)
 {
 __ESBMC_HIDE:;
@@ -52,33 +100,64 @@ __ESBMC_HIDE:;
   BytesStatic b = {0};
   size_t hex_len = len - 2;
   b.length = hex_len / 2;
-  for (size_t i = 0; i < b.length; i++)
-  {
-    unsigned char high = hex_char_to_nibble(hex_str[2 + i * 2]);
-    unsigned char low = hex_char_to_nibble(hex_str[2 + i * 2 + 1]);
-    b.data[i] = (high << 4) | low;
-  }
+#define STEP(i)                                                                \
+  do                                                                           \
+  {                                                                            \
+    if (b.length > (i))                                                        \
+    {                                                                          \
+      unsigned char _high = hex_char_to_nibble(hex_str[2 + (i) * 2]);          \
+      unsigned char _low = hex_char_to_nibble(hex_str[2 + (i) * 2 + 1]);       \
+      b.data[i] = (_high << 4) | _low;                                         \
+    }                                                                          \
+  } while (0)
+  _ESBMC_BS_UNROLL_32(STEP);
+#undef STEP
   return b;
 }
 
 BytesStatic bytes_static_from_string(const char *str, size_t len)
 {
 __ESBMC_HIDE:;
+  /* Constant-index unroll instead of memcpy/memset — generic memcpy/
+   * memset decay to symbolic-bound `__memcpy_impl`/`__memset_impl`
+   * byte-loops that k-induction unwinds 1..32 times per call,
+   * blowing up the VCC count under bytes16/bytes32 init. Same
+   * pattern as `bytes_static_from_hex` (line 63). Pinned by
+   * `bytes_1` (90s solver timeout pre-fix). */
   BytesStatic b = {0};
   if (len > 32)
     len = 32;
-  size_t copy_len = strnlen(str, len);
-  memcpy(b.data, str, copy_len);
+  size_t copy_len = strlen(str);
+  if (copy_len > len)
+    copy_len = len;
   b.length = len;
+#define STEP(i)                                                                \
+  do                                                                           \
+  {                                                                            \
+    if ((i) < copy_len)                                                        \
+      b.data[i] = (unsigned char)str[i];                                       \
+    else if ((i) < len)                                                        \
+      b.data[i] = 0;                                                           \
+  } while (0)
+  _ESBMC_BS_UNROLL_32(STEP);
+#undef STEP
   return b;
 }
 
 BytesStatic bytes_static_truncate(const BytesStatic *src, size_t new_len)
 {
 __ESBMC_HIDE:;
+  /* Constant-index unroll — see `bytes_static_from_string` rationale. */
   BytesStatic b = {0};
-  memcpy(b.data, src->data, new_len);
   b.length = new_len;
+#define STEP(i)                                                                \
+  do                                                                           \
+  {                                                                            \
+    if ((i) < new_len)                                                         \
+      b.data[i] = src->data[i];                                                \
+  } while (0)
+  _ESBMC_BS_UNROLL_32(STEP);
+#undef STEP
   return b;
 }
 
@@ -86,10 +165,11 @@ BytesStatic bytes_static_and(const BytesStatic *a, const BytesStatic *b)
 {
 __ESBMC_HIDE:;
   BytesStatic r = {0};
-  for (size_t i = 0; i < a->length; i++)
-  {
-    r.data[i] = a->data[i] & b->data[i];
-  }
+#define STEP(i)                                                                \
+  if (a->length > (i))                                                         \
+  r.data[i] = a->data[i] & b->data[i]
+  _ESBMC_BS_UNROLL_32(STEP);
+#undef STEP
   r.length = a->length;
   return r;
 }
@@ -98,10 +178,11 @@ BytesStatic bytes_static_or(const BytesStatic *a, const BytesStatic *b)
 {
 __ESBMC_HIDE:;
   BytesStatic r = {0};
-  for (size_t i = 0; i < a->length; i++)
-  {
-    r.data[i] = a->data[i] | b->data[i];
-  }
+#define STEP(i)                                                                \
+  if (a->length > (i))                                                         \
+  r.data[i] = a->data[i] | b->data[i]
+  _ESBMC_BS_UNROLL_32(STEP);
+#undef STEP
   r.length = a->length;
   return r;
 }
@@ -110,34 +191,47 @@ BytesStatic bytes_static_xor(const BytesStatic *a, const BytesStatic *b)
 {
 __ESBMC_HIDE:;
   BytesStatic r = {0};
-  for (size_t i = 0; i < a->length; i++)
-  {
-    r.data[i] = a->data[i] ^ b->data[i];
-  }
+#define STEP(i)                                                                \
+  if (a->length > (i))                                                         \
+  r.data[i] = a->data[i] ^ b->data[i]
+  _ESBMC_BS_UNROLL_32(STEP);
+#undef STEP
   r.length = a->length;
   return r;
 }
 
+/* Big-endian decode of a BytesStatic into a uint256, valid for any
+ * `b->length` in [0, 32].  Each STEP(i) uses a literal index so
+ * b->data[i] is a constant memory offset; the conditional preserves
+ * the accumulator past length, exactly equivalent to the original
+ * `for (i < length)` loop.  No symbolic-bound loop, so symex never
+ * has to unwind and stderr stays clean even when the caller's
+ * `--unwind` is below 32 (which used to truncate the result and
+ * flood the log with "Not unwinding" lines per visit). */
 uint256_t bytes_static_to_uint(const BytesStatic *b)
 {
 __ESBMC_HIDE:;
-  uint256_t result = 0;
-  for (size_t i = 0; i < b->length; i++)
-  {
-    result = (result << 8) | b->data[i];
-  }
-  return result;
+  uint256_t r = 0;
+#define STEP(i) r = (b->length > (i)) ? ((r << 8) | b->data[i]) : r
+  _ESBMC_BS_UNROLL_32(STEP);
+#undef STEP
+  return r;
 }
 
+/* Big-endian encode of a uint256 into a BytesStatic, valid for any
+ * `len` in [0, 32].  Symmetric with bytes_static_to_uint: STEP(j)
+ * uses literal index j and writes b.data[j] = (val >> (8 * (len-1-j)))
+ * & 0xFF when j < len.  The shift amount is symbolic but symex
+ * handles symbolic-shift bitvector ops directly without unwinding. */
 BytesStatic bytes_static_from_uint(uint256_t val, size_t len)
 {
 __ESBMC_HIDE:;
   BytesStatic b = {0};
-  for (size_t i = 0; i < len; i++)
-  {
-    b.data[len - 1 - i] = val & 0xFF;
-    val >>= 8;
-  }
+#define STEP(j)                                                                \
+  if (len > (j))                                                               \
+  b.data[j] = (unsigned char)(val >> (8 * (len - 1 - (j))))
+  _ESBMC_BS_UNROLL_32(STEP);
+#undef STEP
   b.length = len;
   return b;
 }
@@ -167,9 +261,12 @@ __ESBMC_HIDE:;
 BytesStatic bytes_static_init_zero(size_t len)
 {
 __ESBMC_HIDE:;
+  /* `BytesStatic b = {0}` already zero-inits the 32-byte data array
+   * at compile time; no runtime memset needed. The prior memset(b.data,
+   * 0, len) was redundant AND triggered __memset_impl unrolling
+   * 1..len times on every visit. */
   BytesStatic b = {0};
   b.length = len;
-  memset(b.data, 0, len);
   return b;
 }
 
@@ -232,9 +329,18 @@ __ESBMC_HIDE:;
 BytesDynamic bytes_dynamic_from_string(const char *str, BytesPool *pool)
 {
 __ESBMC_HIDE:;
+  /* NULL str = Solidity's default empty string (`""`), length 0.
+   * Mapping/struct reads of unset `string`-typed fields lower to NULL
+   * char* in our IR; without this guard, strlen(NULL) is UB and
+   * `--no-standard-checks` lets symex pick a nondet length, breaking
+   * `bytes(default_string).length == 0`. Pinned by `bytes_string_1`. */
   BytesDynamic b = {0};
-  bytes_dynamic_init(
-    &b, (const unsigned char *)str, strnlen(str, SIZE_MAX - 1), pool);
+  if (str == 0)
+  {
+    b.initialized = 1;
+    return b;
+  }
+  bytes_dynamic_init(&b, (const unsigned char *)str, strlen(str), pool);
   return b;
 }
 
@@ -348,7 +454,27 @@ bool bytes_static_equal(const BytesStatic *a, const BytesStatic *b)
 __ESBMC_HIDE:;
   if (a->length != b->length)
     return false;
-  return memcmp(a->data, b->data, a->length) == 0;
+  // Straight-line comparison — do not call memcmp here. string.c's
+  // memcmp is a byte-stepping loop which k-induction bounds to k
+  // iterations, silently truncating the comparison for bytes beyond
+  // the k-th position and producing false-positive equality. bytesN
+  // (1 <= N <= 32) has a compile-time-bounded data buffer, so unroll
+  // 32 length-gated byte comparisons explicitly. ESBMC emits one
+  // conjunction of equalities per call, no loop unwinding needed.
+  const size_t n = a->length;
+#define __ESBMC_BSEQ(i) (n <= (size_t)(i) || a->data[i] == b->data[i])
+  return __ESBMC_BSEQ(0) && __ESBMC_BSEQ(1) && __ESBMC_BSEQ(2) &&
+         __ESBMC_BSEQ(3) && __ESBMC_BSEQ(4) && __ESBMC_BSEQ(5) &&
+         __ESBMC_BSEQ(6) && __ESBMC_BSEQ(7) && __ESBMC_BSEQ(8) &&
+         __ESBMC_BSEQ(9) && __ESBMC_BSEQ(10) && __ESBMC_BSEQ(11) &&
+         __ESBMC_BSEQ(12) && __ESBMC_BSEQ(13) && __ESBMC_BSEQ(14) &&
+         __ESBMC_BSEQ(15) && __ESBMC_BSEQ(16) && __ESBMC_BSEQ(17) &&
+         __ESBMC_BSEQ(18) && __ESBMC_BSEQ(19) && __ESBMC_BSEQ(20) &&
+         __ESBMC_BSEQ(21) && __ESBMC_BSEQ(22) && __ESBMC_BSEQ(23) &&
+         __ESBMC_BSEQ(24) && __ESBMC_BSEQ(25) && __ESBMC_BSEQ(26) &&
+         __ESBMC_BSEQ(27) && __ESBMC_BSEQ(28) && __ESBMC_BSEQ(29) &&
+         __ESBMC_BSEQ(30) && __ESBMC_BSEQ(31);
+#undef __ESBMC_BSEQ
 }
 
 bool bytes_dynamic_equal(
@@ -442,10 +568,18 @@ __ESBMC_HIDE:;
 BytesStatic bytes_static_extend(const BytesStatic *src, size_t new_len)
 {
 __ESBMC_HIDE:;
+  /* Constant-index unroll — see `bytes_static_from_string` rationale.
+   * Zero-pad above src->length is implicit via the `{0}` initializer. */
   BytesStatic out = {0};
-  memcpy(out.data, src->data, src->length);
-  memset(out.data + src->length, 0, new_len - src->length);
   out.length = new_len;
+#define STEP(i)                                                                \
+  do                                                                           \
+  {                                                                            \
+    if ((i) < src->length)                                                     \
+      out.data[i] = src->data[i];                                              \
+  } while (0)
+  _ESBMC_BS_UNROLL_32(STEP);
+#undef STEP
   return out;
 }
 
@@ -473,10 +607,17 @@ BytesStatic bytes_static_extend_from_dynamic(
 {
 __ESBMC_HIDE:;
   bytes_dynamic_init_check(src->initialized);
+  /* Constant-index unroll over the BytesDynamic source bytes. */
   BytesStatic b = {0};
-  memcpy(b.data, &pool->pool[src->offset], src->length);
-  memset(b.data + src->length, 0, new_len - src->length);
   b.length = new_len;
+#define STEP(i)                                                                \
+  do                                                                           \
+  {                                                                            \
+    if ((i) < src->length)                                                     \
+      b.data[i] = pool->pool[src->offset + (i)];                               \
+  } while (0)
+  _ESBMC_BS_UNROLL_32(STEP);
+#undef STEP
   return b;
 }
 

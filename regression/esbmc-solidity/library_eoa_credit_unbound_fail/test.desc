@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--sol contract.sol --contract C --no-standard-checks --cvc5 --incremental-bmc
+^VERIFICATION FAILED$

@@ -1,4 +1,4 @@
 THOROUGH
 contract.solast
---contract Derive --sol contract.sol --unwind 3 --no-unwinding-assertions --bound
+--contract Derive --sol contract.sol --bound --k-induction --max-k-step 20 --k-step 3
 ^VERIFICATION FAILED$

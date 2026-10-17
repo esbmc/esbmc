@@ -1,0 +1,7 @@
+KNOWNBUG
+contract.solast
+--sol contract.sol --contract CityToken --branch-coverage-claims --generate-foundry-testcase --k-induction --base-k-step 2 --k-step 3 --max-k-step 50 --cvc5
+^Generated Foundry coverage test with [0-9]+ case\(s\)
+^Foundry: [0-9]+ call\(s\) with pinned msg.sender \(vm.prank\)
+^  !\(!\(msg\.sender == ceoAddress \|\| msg\.sender == cooAddress\)\)
+^  !\(!\(msg\.sender == cooAddress\)\)

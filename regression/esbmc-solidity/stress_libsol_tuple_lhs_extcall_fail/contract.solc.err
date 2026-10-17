@@ -1,0 +1,6 @@
+Warning: Function state mutability can be restricted to pure
+  --> contract.sol:12:5:
+   |
+12 |     function virtualBalancesForAddition(address)
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+

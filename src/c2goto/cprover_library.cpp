@@ -722,41 +722,59 @@ void add_cprover_library(contextt &context, const languaget *language)
   contextt new_ctx, store_ctx;
   std::multimap<irep_idt, irep_idt> symbol_deps;
   std::list<irep_idt> to_include;
-  const buffer *clib;
+  const buffer *clib = nullptr;
 
-  switch (config.ansi_c.word_size)
-  {
-  case 16:
-    log_warning(
-      "this version of ESBMC does not have a C library for 16 bit machines");
-    return;
-  case 32:
-#ifndef ESBMC_BUNDLE_LIBC_32BIT
-    log_warning(
-      "this version of ESBMC does not have a C library for 32 bit machines");
-    return;
+#ifdef ENABLE_SOLIDITY_FRONTEND
+  // Solidity uses its own precompiled goto binary (sol64) that contains ONLY
+  // Solidity symbols and does not depend on the C stdlib. It is loaded
+  // regardless of --16/--32/--64 so that word_size can be used to shrink
+  // size_t / pointer widths without losing the Solidity model. uint256_t is
+  // declared _ExtInt(256) in the model sources, so it stays 256-bit across
+  // word sizes; mapping/bytes helpers that take raw size_t parameters were
+  // built with size_t=64 in the binary, so under --16/--32 the size_t
+  // argument at call sites will be implicitly zero-extended by ESBMC's type
+  // conversion — callers pass small values that fit the stored 64-bit slot.
+  const bool is_solidity_lang = (language && language->id() == "solidity_ast");
+#else
+  const bool is_solidity_lang = false;
 #endif
-  case 64:
-    break;
-  default:
-    log_error("No C library for bitwidth {}", config.ansi_c.word_size);
-    abort();
-  }
 
-  clib = &clibs[config.ansi_c.cheri][!config.ansi_c.use_fixed_for_float]
-               [config.ansi_c.word_size == 64];
-
-  if (clib->size == 0)
+  if (!is_solidity_lang)
   {
-    if (language)
+    switch (config.ansi_c.word_size)
     {
-      // C library sources must be parsed with C frontend, not the current
-      // language
-      std::unique_ptr<languaget> c_lang(new_language(language_idt::C));
-      return add_bundled_library_sources(context, *c_lang);
+    case 16:
+      log_warning(
+        "this version of ESBMC does not have a C library for 16 bit machines");
+      return;
+    case 32:
+#ifndef ESBMC_BUNDLE_LIBC_32BIT
+      log_warning(
+        "this version of ESBMC does not have a C library for 32 bit machines");
+      return;
+#endif
+    case 64:
+      break;
+    default:
+      log_error("No C library for bitwidth {}", config.ansi_c.word_size);
+      abort();
     }
-    log_error("Zero-lengthed internal C library");
-    abort();
+
+    clib = &clibs[config.ansi_c.cheri][!config.ansi_c.use_fixed_for_float]
+                 [config.ansi_c.word_size == 64];
+
+    if (clib->size == 0)
+    {
+      if (language)
+      {
+        // C library sources must be parsed with C frontend, not the current
+        // language
+        std::unique_ptr<languaget> c_lang(new_language(language_idt::C));
+        return add_bundled_library_sources(context, *c_lang);
+      }
+      log_error("Zero-lengthed internal C library");
+      abort();
+    }
   }
 
   goto_binary_reader goto_reader;
@@ -765,8 +783,9 @@ void add_cprover_library(contextt &context, const languaget *language)
   if (is_python)
     goto_reader.set_functions_to_read(python_c_models);
 
-  const uint8_t *lib_start = clib->start;
-  unsigned int lib_size = clib->size;
+  // clib is null for Solidity, which loads its own binary below.
+  const uint8_t *lib_start = clib ? clib->start : nullptr;
+  unsigned int lib_size = clib ? clib->size : 0;
   bool is_solidity = false;
 #ifdef ENABLE_SOLIDITY_FRONTEND
   is_solidity = select_solidity_blob(language, lib_start, lib_size);

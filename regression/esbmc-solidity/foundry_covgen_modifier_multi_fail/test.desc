@@ -1,0 +1,7 @@
+CORE
+contract.solast
+--sol contract.sol --contract Multi --branch-coverage --generate-foundry-testcase --no-assertions
+^Generated Foundry coverage test with 4 case\(s\)
+^Foundry: 4 call\(s\) wrapped in revert-tolerant try/catch
+^Foundry: 4 call\(s\) with pinned msg.sender \(vm.prank\)
+^COVERAGE ANALYSIS COMPLETE$

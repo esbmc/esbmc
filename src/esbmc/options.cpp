@@ -97,6 +97,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"show-stacktrace",
      NULL,
      "Show the stack trace of function call in the counterexample"},
+    {"show-funccall-trace",
+     NULL,
+     "Show the chronological sequence of function calls leading to the "
+     "counterexample (reentrancy-aware)"},
     {"simplify-trace",
      NULL,
      "Simplify the trace and exclude the assignments whose variables are not "
@@ -306,25 +310,115 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<std::string>()->value_name("cname"),
      "Set contract name"},
     {"focus-function",
-     boost::program_options::value<std::string>()->value_name("name"),
-     "Restrict the contract harness to verify only the named public/external "
-     "function. The constructor and state initialization still run (unlike "
-     "--function), but the nondet dispatch loop calls only this function. "
+     boost::program_options::value<std::string>()->value_name("name[,name...]"),
+     "Restrict the contract harness to the named public/external function(s). "
+     "The constructor and state initialization still run (unlike --function), "
+     "but the nondet dispatch loop calls only these. Several names may be "
+     "given, "
+     "separated by commas or spaces (--focus-function deposit,withdraw), and "
+     "every name must exist -- a value naming a function the contract does not "
+     "have fails the conversion and says which one, so a typo in a long list "
+     "cannot silently narrow the run to the names that happened to be right. "
      "Requires --contract when the source declares more than one contract."},
     {"no-visibility",
      NULL,
      "Force to verify every function, even if it's an unreachable "
      "internal/private function"},
-    {"unbound", NULL, "Model external function calls as arbitrary behavior"},
+    {"unbound",
+     NULL,
+     "Model external function calls as arbitrary behavior (default)"},
     {"bound",
      NULL,
-     "Model inter-contract function calls within a bounded system (default)"},
+     "Model inter-contract function calls within a bounded system"},
     {"reentry-check",
      NULL,
      "Detect reentrancy behavior during contract execution"},
+    {"reentry-balance-drain-check",
+     NULL,
+     "Detect DAO-style balance drain via reentrancy: assert at every "
+     "transfer/send/call{value:V} call site that the contract's $balance "
+     "drops by at most V.  Skipped for contracts with no outbound "
+     "value-transfer call sites.  Low-level call{value:} requires "
+     "--bound (under unbound the call is special-cased to skip "
+     "balance accounting)."},
     {"negating-property",
-     boost::program_options::value<std::string>()->value_name("fname"),
-     "Convert the assert(cond) to assert(!cond)"}}},
+     boost::program_options::value<std::string>()->value_name(
+       "[contract:]fn[:line]"),
+     "Convert assert(cond) to assert(!cond). Accepts [contract:]function"
+     "[:line]: line restricts negation to asserts on that source line "
+     "(falls back to the whole function if no assert matches the line); "
+     "contract (Solidity, case-sensitive) disambiguates same-named "
+     "functions"},
+    {"tod-balance-check",
+     boost::program_options::value<std::string>()
+       ->value_name("auto|f1,f2")
+       ->implicit_value("auto"),
+     "Detect balance-based TOD on --contract: pairs whose shared footprint "
+     "includes address(this).balance.  auto discovers candidate pairs "
+     "automatically; f1,f2 targets a specific pair."},
+    {"tod-race-check",
+     boost::program_options::value<std::string>()
+       ->value_name("auto|f1,f2")
+       ->implicit_value("auto"),
+     "Detect TransRacer-style storage-race TOD on --contract: pairs whose "
+     "shared footprint includes at least one non-balance state variable.  "
+     "auto discovers candidate pairs automatically; f1,f2 targets a "
+     "specific pair."},
+    {"dump-harness",
+     NULL,
+     "Output the TOD harness as compilable Solidity source and exit"},
+    {"tod-jobs",
+     boost::program_options::value<std::string>()->value_name("N"),
+     "Number of parallel ESBMC subprocesses to run in --tod-*-check=auto "
+     "mode.  Defaults to min(hardware_concurrency, pair_count).  Use 1 to "
+     "force sequential execution."},
+    {"no-cvc5-native-tuples",
+     NULL,
+     "Opt out of the auto-injection of --cvc5-native-tuples that "
+     "fires when nested-dynamic-array storage is detected in the input "
+     "contract. Use plain CVC5 (flattener) instead. Has no effect when CVC5 "
+     "is not auto-selected."},
+    {"enable-forward-condition",
+     NULL,
+     "Opt out of the auto-disable of the k-induction forward "
+     "condition phase that fires in dispatcher mode (non-`--function`). "
+     "By default, Solidity's `while(nondet) dispatch()` harness is "
+     "unboundable, so forward condition cannot prove and is skipped to "
+     "save solver budget. Pass this flag if you want to run forward "
+     "condition anyway (e.g. for diagnostic comparison)."},
+    {"no-narrowing-check",
+     NULL,
+     "Disable Solidity narrowing typecast overflow checks (e.g. uint256 "
+     "-> uint8); implied by --no-standard-checks. No effect on C/C++."},
+    {"narrowing-check",
+     NULL,
+     "Enable Solidity narrowing typecast overflow checks (default OFF; "
+     "overrides --no-standard-checks). For C/C++, use --int-encoding "
+     "with --overflow-check or --unsigned-overflow-check."},
+    {"solidity-precise",
+     NULL,
+     "Opt into precise (sound) modelling for Solidity primitives that "
+     "currently default to a loose under-approximation. As of this "
+     "release, this controls _ESBMC_get_unique_address: default = "
+     "16-slot if-chain (loose; 17th allocation is unconstrained), with "
+     "--solidity-precise = for-loop linear scan over sol_max_cnt (sound "
+     "at any slot count). The precise form is bounded by --unwind, so "
+     "pair it with --unwind N where N covers your maximum on-path "
+     "contract-allocation count. Future under-approximations added to "
+     "the Solidity frontend will be bound to this same flag. See "
+     "src/solidity-frontend/README.md, section \"Address uniqueness "
+     "modelling\". As of this release --solidity-precise also restores the "
+     "unbounded transaction-dispatcher harness (see --solidity-max-tx)."},
+    {"solidity-max-tx",
+     boost::program_options::value<int>()->value_name("N"),
+     "Bound the Solidity transaction-dispatcher harness to exactly N "
+     "transactions (deterministic unroll) instead of the unbounded "
+     "while(nondet_bool) loop. Default N=2: this makes k-induction/BMC "
+     "converge but is an under-approximation. A VERIFICATION SUCCESSFUL "
+     "result then means 'no violation within N transactions', NOT an "
+     "unbounded proof (a frontend warning is emitted); FAILED stays sound. "
+     "Use --solidity-max-tx 0 (or --solidity-precise) to restore the "
+     "unbounded loop for an unbounded proof."}}},
 #endif
   {"Architecture",
    {
@@ -475,6 +569,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"generate-ctest-testcase",
      NULL,
      "If a solution is found, generates CTest testcases for C programs"},
+    {"generate-foundry-testcase",
+     NULL,
+     "If a solution is found, generates a Foundry (*.t.sol) testcase for "
+     "Solidity contracts"},
     {"ctest-output-dir",
      boost::program_options::value<std::string>()->value_name("<dir>"),
      "Directory for --generate-ctest-testcase output (default: esbmc-ctest)"},
@@ -755,6 +853,13 @@ const struct group_opt_templ all_cmd_options[] = {
     {"tuple-sym-flattener",
      NULL,
      "Encode tuples using our tuple to symbol API"},
+    {"cvc5-native-tuples",
+     NULL,
+     "[CVC5] Use CVC5's native datatype-based tuple/struct encoding instead "
+     "of the tuple_node_flattener fallback. Required to encode Solidity "
+     "nested-dynamic shapes (e.g. T[N][infinite]) under CVC5; can be slower "
+     "than the flattener for queries that only use plain pointer/struct "
+     "tuples."},
     {"array-flattener", NULL, "Encode arrays using our array API"},
     {"no-return-value-opt",
      NULL,
@@ -796,7 +901,15 @@ const struct group_opt_templ all_cmd_options[] = {
      "ESBMC generates inside model code (see --no-standard-checks), renumbers "
      "--claim, and is unsupported for Python"},
     {"no-bounds-check", NULL, "Do not do array bounds check"},
+    {"bounds-check",
+     NULL,
+     "Enable array bounds check (Solidity: opt-in, default OFF; "
+     "C/C++: default ON; overrides --no-standard-checks)"},
     {"no-div-by-zero-check", NULL, "Do not do division by zero check"},
+    {"div-by-zero-check",
+     NULL,
+     "Enable division-by-zero check (Solidity: opt-in, default OFF; "
+     "C/C++: default ON; overrides --no-standard-checks)"},
     {"no-pointer-check", NULL, "Do not do pointer check"},
     {"no-align-check", NULL, "Do not check pointer alignment"},
     {"no-fp-conversion-check",
@@ -1023,6 +1136,39 @@ const struct group_opt_templ all_cmd_options[] = {
      {"branch-coverage-claims",
       NULL,
       "Enable branch-coverage and shows all reached claims"},
+     {"coverage-whole-unit",
+      NULL,
+      "With --contract C, keep C as the harness entry but count branch "
+      "coverage over the whole compilation unit instead of scoping the "
+      "denominator/numerator to C's own lexically-declared decisions "
+      "(opt-out of per-contract semantics A)"},
+     {"coverage-multi-tx",
+      NULL,
+      "Keep the multi-transaction dispatcher loop live in Solidity coverage "
+      "mode instead of neutralizing it to one call, so branches reachable only "
+      "through a state-building call sequence (e.g. deposit(); withdraw();) "
+      "are "
+      "covered and reconstructed into an ordered Foundry test. Requires a "
+      "global bound: use with --incremental-bmc (recommended; discovers the "
+      "transaction depth dynamically) or --unwind N (reaches up to ~N-1 tx). "
+      "Incompatible with --solidity-max-tx. Note: a state-building prefix "
+      "transaction can be lost under per-claim slicing, degrading that case to "
+      "a single call (under-coverage, never a wrong test)"},
+     {"coverage-covered-set",
+      boost::program_options::value<std::string>()->value_name("path"),
+      "Cross-run persisted covered-set for --branch-coverage. Read at "
+      "start (edges already witnessed are not re-instrumented, cutting "
+      "SMT cost) and merge-written at end. The denominator stays the "
+      "full static universe, so skipping never inflates coverage"},
+     {"coverage-exclude-contract",
+      boost::program_options::value<std::vector<std::string>>()->value_name(
+        "name"),
+      "Exclude a Solidity contract's own decisions from branch coverage "
+      "(repeatable). Decisions whose lexically-declaring contract is in "
+      "this set count in NEITHER the denominator NOR the numerator. Used "
+      "with --coverage-whole-unit to drop dependency code (e.g. "
+      "OpenZeppelin); a no-op in default per-contract mode, where foreign "
+      "decisions are already scoped out"},
      {"branch-function-coverage",
       NULL,
       "Show the coverage of branches and function entry"},

@@ -105,15 +105,61 @@ void solidity_convertert::merge_inheritance_ast(
         if (is_dubplicate)
           continue;
 
+        // Inheritance-shadow guard: when an interface declares a
+        // function (no body) AND a base contract provides the
+        // implementation (with body), both get copied into the
+        // derived contract's nodes with DIFFERENT ids (interface id +
+        // base id).  The function-by-name dispatcher resolution may
+        // then bind to the empty stub instead of the real body —
+        // surfaced empirically as `EscrowSrc.rescueFunds#<iface-id>`
+        // having `END_FUNCTION` immediately, while
+        // `BaseEscrow.rescueFunds#<base-id>` has the full body, and
+        // the EscrowSrc dispatcher calling the empty stub.  Drop the
+        // body-less interface declaration if we are about to merge a
+        // same-name FunctionDefinition WITH body, so the dispatcher
+        // resolves to the implementation.
+        if (
+          i.contains("nodeType") && i["nodeType"] == "FunctionDefinition" &&
+          i.contains("body") && !i["body"].is_null() && i.contains("name"))
+        {
+          const std::string i_fname = i["name"].get<std::string>();
+          for (auto c_it = c_node["nodes"].begin();
+               c_it != c_node["nodes"].end();)
+          {
+            if (
+              c_it->contains("nodeType") &&
+              (*c_it)["nodeType"] == "FunctionDefinition" &&
+              c_it->contains("name") &&
+              (*c_it)["name"].get<std::string>() == i_fname &&
+              (!c_it->contains("body") || (*c_it)["body"].is_null()))
+            {
+              c_it = c_node["nodes"].erase(c_it);
+            }
+            else
+              ++c_it;
+          }
+        }
+
         // skip ctor
         if (i.contains("kind") && i["kind"].get<std::string>() == "constructor")
           continue;
 
+        // Inherited-node filter: this merge path only handles member
+        // declarations that carry a `name` (functions, state vars,
+        // events, errors, etc.). Non-named nodes such as UsingForDirective
+        // live in the base but are not merge candidates — skip them so
+        // the `.name` access below cannot throw.
+        if (!i.contains("name") || !i["name"].is_string())
+          continue;
+
         // for virtual/override function
-        assert(i.contains("name"));
         std::string i_name = i["name"].get<std::string>() == ""
-                               ? i["kind"].get<std::string>()
+                               ? (i.contains("kind") && i["kind"].is_string()
+                                    ? i["kind"].get<std::string>()
+                                    : std::string())
                                : i["name"].get<std::string>();
+        if (i_name.empty())
+          continue;
         assert(!i_name.empty());
         if (i.contains("nodeType") && i["nodeType"] == "FunctionDefinition")
         {

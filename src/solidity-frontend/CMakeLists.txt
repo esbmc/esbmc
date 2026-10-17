@@ -17,8 +17,11 @@ add_library(solidityfrontend_stuff
   solidity_convert_call.cpp
   solidity_convert_util.cpp
   solidity_convert_literals.cpp
+  solidity_monomorphize.cpp
   solidity_grammar.cpp
   pattern_check.cpp
+  solidity_tod_harness.cpp
+  solidity_tod_analysis.cpp
 )
 target_include_directories(solidityfrontend_stuff
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}

@@ -1,0 +1,5 @@
+CORE
+contract.solast
+--sol contract.sol --contract BoxUser --focus-function put --branch-coverage --generate-foundry-testcase --no-assertions --unwind 3
+^Generated Foundry coverage test with 1 case\(s\)
+^COVERAGE ANALYSIS COMPLETE$

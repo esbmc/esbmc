@@ -1,5 +1,5 @@
 THOROUGH
 MyContract_underflow_UnaryOp.solast
---sol MyContract_underflow_UnaryOp.sol --overflow-check --multi-property --unwind 5 --no-unwinding-assertions
+--sol MyContract_underflow_UnaryOp.sol --overflow-check --multi-property --k-induction --max-k-step 20 --k-step 3
 .*function func_underflow$
 ^VERIFICATION FAILED$

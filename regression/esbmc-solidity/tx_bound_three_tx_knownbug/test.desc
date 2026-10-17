@@ -1,0 +1,4 @@
+KNOWNBUG
+contract.solast
+--sol contract.sol --contract C --no-standard-checks --k-induction
+^VERIFICATION FAILED$

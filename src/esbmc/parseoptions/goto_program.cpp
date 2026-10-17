@@ -723,21 +723,68 @@ static void warn_undefined_external_symbols(const contextt &context)
 // Expand --no-standard-checks into the individual checks it stands for. Must
 // run before goto_convert, because VLA size checks are generated during goto
 // conversion.
-static void
-expand_no_standard_checks(const cmdlinet &cmdline, optionst &options)
+void esbmc_parseoptionst::expand_no_standard_checks(optionst &options) const
 {
   if (
     !cmdline.isset("no-standard-checks") &&
     !options.get_bool_option("no-standard-checks"))
     return;
 
-  options.set_option("no-pointer-check", true);
-  options.set_option("no-div-by-zero-check", true);
+  // --bounds-check and --div-by-zero-check opt back in under the umbrella:
+  // `--no-standard-checks --div-by-zero-check` disables every standard check
+  // except division by zero. --bounds-check also keeps the pointer check,
+  // because an out-of-bounds access to a symbolic-size dynamic array (a
+  // malloc'd region) surfaces as a dereference failure.
+  if (!cmdline.isset("bounds-check") || cmdline.isset("no-bounds-check"))
+    options.set_option("no-pointer-check", true);
+  if (!cmdline.isset("div-by-zero-check"))
+    options.set_option("no-div-by-zero-check", true);
   options.set_option("no-pointer-relation-check", true);
   options.set_option("no-unlimited-scanf-check", true);
   options.set_option("no-vla-size-check", true);
   options.set_option("no-align-check", true);
-  options.set_option("no-bounds-check", true);
+  if (!cmdline.isset("bounds-check"))
+    options.set_option("no-bounds-check", true);
+  if (!cmdline.isset("narrowing-check"))
+    options.set_option("no-narrowing-check", true);
+}
+
+bool esbmc_parseoptionst::is_solidity_input() const
+{
+  if (cmdline.isset("sol"))
+    return true;
+  for (const auto &arg : cmdline.args)
+    if (arg.size() >= 4 && arg.substr(arg.size() - 4) == ".sol")
+      return true;
+  return false;
+}
+
+// Solidity runs default to --no-standard-checks: the C-level safety checks
+// (pointer, alignment, VLA, scanf) only fire on the frontend's own lowering,
+// and the two that carry Solidity meaning are opt-in via --bounds-check and
+// --div-by-zero-check.
+//
+// Under branch or condition coverage the user and library assertions
+// are dropped as well, so they are not counted as coverage goals. Must run
+// before goto_convert, which is where no-assertions is consumed.
+void esbmc_parseoptionst::set_solidity_check_defaults(optionst &options) const
+{
+  if (!is_solidity_input())
+    return;
+
+  options.set_option("no-standard-checks", true);
+
+  const bool branch_or_cond_cov =
+    cmdline.isset("branch-coverage") ||
+    cmdline.isset("branch-coverage-claims") ||
+    cmdline.isset("branch-function-coverage") ||
+    cmdline.isset("branch-function-coverage-claims") ||
+    cmdline.isset("condition-coverage") ||
+    cmdline.isset("condition-coverage-claims") ||
+    cmdline.isset("condition-coverage-rm") ||
+    cmdline.isset("condition-coverage-claims-rm");
+  if (branch_or_cond_cov)
+    options.set_option("no-assertions", true);
 }
 
 // --python-check-exceptions reports only the listed exception types and their
@@ -802,7 +849,8 @@ bool esbmc_parseoptionst::parse_goto_program(
         exit(0);
     }
 
-    expand_no_standard_checks(cmdline, options);
+    set_solidity_check_defaults(options);
+    expand_no_standard_checks(options);
     expand_python_check_exceptions(context, options);
 
     log_progress("Generating GOTO Program");
