@@ -1,5 +1,6 @@
 #include <solvers/smt/smt_solver.h>
 #include <util/expr/type_byte_size.h>
+#include <algorithm>
 #include <functional>
 
 /**
@@ -232,12 +233,21 @@ void smt_solver_baset::record_flattened_pointer(
   smt_astt address,
   smt_astt pointer)
 {
+  smt_astt guard = step_guard ? step_guard : mk_smt_bool(true);
+  /* A byte-wise store flattens one pointer once per byte, each in its own
+   * step; as distinct entries they fill max_rebuild_sources (#7855). The
+   * entry moves last, as decode_pointer_repr() keeps the latest. */
+  for (auto it = ptr_flatten_history.begin(); it != ptr_flatten_history.end();
+       ++it)
+    if (it->address == address && it->pointer == pointer && it->guard == guard)
+    {
+      step_flattens.insert(it->id);
+      std::rotate(it, it + 1, ptr_flatten_history.end());
+      return;
+    }
+
   const ptr_flatten_entry flat{
-    address,
-    pointer,
-    step_guard ? step_guard : mk_smt_bool(true),
-    ctx_level,
-    flatten_count++};
+    address, pointer, guard, ctx_level, flatten_count++};
   step_flattens.insert(flat.id);
 
   for (const ptr_flatten_entry &prev : ptr_flatten_history)
@@ -423,15 +433,18 @@ smt_astt smt_solver_baset::decode_pointer_repr(
   for (const ptr_flatten_entry &flat : ptr_flatten_history)
     if (step_sources.count(flat.id))
       sources.push_back(&flat);
-  /* Past the cap the rebuilt pointer is the address-space reconstruction
-   * alone, as before #7895: each source adds an ite over pointer tuples, and
-   * data flow can hand one rebuild hundreds, which ran the C++ stream and map
-   * suites out of memory. The reconstruction is not tied, so #7965 cannot
-   * recur; what is lost is the flattened pointer's provenance. */
-  if (sources.size() <= max_rebuild_sources)
-    for (const ptr_flatten_entry *flat : sources)
-      pointer = flat->pointer->ite(
-        this, mk_and(flat->guard, mk_eq(address, flat->address)), pointer);
+  /* Only the latest sources are kept: each adds an ite over pointer tuples,
+   * and data flow can hand one rebuild hundreds, which ran the C++ stream and
+   * map suites out of memory. An address only a dropped source holds gets the
+   * untied reconstruction, as before #7895, so #7965 cannot recur. */
+  const size_t first = sources.size() > max_rebuild_sources
+                         ? sources.size() - max_rebuild_sources
+                         : 0;
+  for (size_t i = first; i < sources.size(); ++i)
+    pointer = sources[i]->pointer->ite(
+      this,
+      mk_and(sources[i]->guard, mk_eq(address, sources[i]->address)),
+      pointer);
   if (same.pointer)
     pointer = original->ite(this, convert_ast(same.untouched), pointer);
   return pointer;
