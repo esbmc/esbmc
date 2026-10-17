@@ -1005,6 +1005,8 @@ private:
     const exprt &index,
     const nlohmann::json &element);
 
+  exprt bind_list_element(const exprt &list_at_call);
+
   list_elem_info
   get_list_element_info(const nlohmann::json &op, const exprt &elem);
 

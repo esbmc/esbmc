@@ -527,6 +527,10 @@ public:
   {
     return in_contract_clause_;
   }
+  size_t current_block_statement_count() const
+  {
+    return current_block ? current_block->operands().size() : 0;
+  }
 
   /// The class a variable was last assigned as a value (`x = int`), or null.
   /// Kept here rather than read back from the symbol's value, which the IREP2
