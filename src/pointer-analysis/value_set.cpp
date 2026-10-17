@@ -679,8 +679,6 @@ void value_sett::get_value_set_rec(
     assert(is_array_or_vector_type(source_type));
 #endif
 
-    // Attach '[]' to the suffix, identifying the variable tracking all the
-    // pointers in this array.
     get_value_set_rec_cached(
       idx.source_value, dest, "[]" + suffix, original_type);
     return;
@@ -1755,19 +1753,20 @@ void value_sett::assign_rec(
     for (const auto &it : reference_set)
     {
       const expr2tc obj = object_numbering[it.first];
+      if (is_unknown2t(obj) || is_invalid2t(obj))
+        continue;
 
-      if (!is_unknown2t(obj) && !is_invalid2t(obj))
-        assign_rec(obj, values_rhs, suffix, add_to_sets);
+      assign_rec(obj, values_rhs, suffix, add_to_sets);
     }
   }
   else if (is_index2t(lhs))
   {
+    const index2t &idx = to_index2t(lhs);
     assert(
-      is_array_type(to_index2t(lhs).source_value) ||
-      is_vector_type(to_index2t(lhs).source_value) ||
-      is_dynamic_object2t(to_index2t(lhs).source_value));
+      is_array_type(idx.source_value) || is_vector_type(idx.source_value) ||
+      is_dynamic_object2t(idx.source_value));
 
-    assign_rec(to_index2t(lhs).source_value, values_rhs, "[]" + suffix, true);
+    assign_rec(idx.source_value, values_rhs, "[]" + suffix, true);
   }
   else if (is_member2t(lhs))
   {
@@ -1910,6 +1909,72 @@ void value_sett::do_end_function(const expr2tc &lhs)
   expr2tc rhs = symbol2tc(lhs->type, irep_idt("value_set::return_value"));
 
   assign(lhs, rhs);
+}
+
+static bool is_null_pointer_constant(expr2tc expr)
+{
+  while (is_typecast2t(expr))
+    expr = to_typecast2t(expr).from;
+  if (is_constant_int2t(expr))
+    return to_constant_int2t(expr).value.is_zero();
+  if (is_symbol2t(expr))
+    return to_symbol2t(expr).thename == "NULL";
+  return is_null_object2t(expr);
+}
+
+void value_sett::apply_assume(const expr2tc &guard)
+{
+  // Recognize `p != 0` / `0 != p` where `p` is a pointer-typed symbol (possibly
+  // under typecasts). For such guards, strip null-object and constant-zero
+  // entries from `p`'s value-set so subsequent pointer arithmetic (`p + 8`)
+  // doesn't produce `<0, 8, *, void>` entries for the impossible null branch.
+  //
+  // This is narrow on purpose: widening the handler to generic predicates
+  // (compound conditions, equality against concrete addresses, etc.) requires
+  // a theory-aware refinement that goes beyond what this fix needs. The
+  // `p != 0` shape covers the canonical library idiom `__ESBMC_assume(alloc
+  // != 0)` used to pin calloc's non-null branch in the value-set.
+  if (!is_notequal2t(guard))
+    return;
+  const notequal2t &ne = to_notequal2t(guard);
+  expr2tc lhs = ne.side_1;
+  expr2tc rhs = ne.side_2;
+
+  if (is_null_pointer_constant(lhs))
+    std::swap(lhs, rhs);
+  if (!is_null_pointer_constant(rhs))
+    return;
+
+  // Strip typecasts (e.g. `(void *)block != (void *)0`).
+  while (is_typecast2t(lhs))
+    lhs = to_typecast2t(lhs).from;
+
+  if (!is_pointer_type(lhs) || !is_symbol2t(lhs))
+    return;
+
+  const symbol2t &sym = to_symbol2t(lhs);
+  const std::string name = sym.get_symbol_name();
+  const entryt *found = values.find(name);
+  if (!found)
+    return;
+
+  entryt entry = *found;
+  object_mapt new_map;
+  for (auto o_it = entry.object_map.begin(); o_it != entry.object_map.end();
+       ++o_it)
+  {
+    const expr2tc &obj = object_numbering[o_it->first];
+    // Null-pointer representations: strip them.
+    if (is_null_object2t(obj))
+      continue;
+    if (is_typecast2t(obj) && is_null_object2t(to_typecast2t(obj).from))
+      continue;
+    if (is_constant_int2t(obj) && to_constant_int2t(obj).value.is_zero())
+      continue;
+    set(new_map, o_it);
+  }
+  entry.object_map = std::move(new_map);
+  values.set(name, std::move(entry));
 }
 
 void value_sett::apply_code(const expr2tc &code)
