@@ -682,8 +682,13 @@ public:
     const exprt &index,
     const locationt &location);
 
+  /// Whether storing a `new_type` value into an element read as `old_type`
+  /// replaces the element rather than writing into its storage.
+  bool
+  store_replaces_element(const typet &old_type, const typet &new_type) const;
+
   /// The __ESBMC_list_set_at call storing `rhs` into the list element `lhs`
-  /// reads, when `rhs` changes the element's type; nullopt otherwise.
+  /// reads, when store_replaces_element holds; nullopt otherwise.
   std::optional<exprt> build_element_replacement(
     const exprt &lhs,
     const exprt &rhs,
