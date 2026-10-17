@@ -766,7 +766,9 @@ std::string python_annotation<Json>::get_call_type(const Json &arg)
     // Resolve possible import aliases before checking if this is a class
     const std::string class_name =
       json_utils::get_object_alias(ast_, func_name);
-    if (json_utils::is_class(class_name, ast_))
+    if (
+      json_utils::is_class(class_name, ast_) ||
+      type_utils::is_python_exceptions(class_name))
       return class_name;
 
     // hash() returns bytes only for the consensus spec's own
