@@ -3115,6 +3115,7 @@ regression/python/github_8670_forwarded
 regression/python/github_8670_forwarded_fail
 regression/python/github_8670_str_element
 regression/python/github_8670_str_element_fail
+regression/floats/github_8701_nondet_mode
 regression/python/github_8351_branch
 regression/python/github_8351_branch_fail
 regression/python/github_8351_disagree
