@@ -1769,7 +1769,9 @@ std::string python_annotation<Json>::get_function_return_type(
       }
       current_func_name_context_ = saved_fallback_ctx;
       functions_in_analysis_.erase(func_name);
-      return fallback_type;
+      // An Any fallback says nothing, yet a caller returning this call would
+      // be annotated Any and converted with an int return (#8358)
+      return fallback_type == "Any" ? "" : fallback_type;
     }
 
     // If function has no explicit return statements, assume void/None
