@@ -100,6 +100,7 @@ private:
     const nlohmann::json &list,
     const std::function<exprt(const nlohmann::json &)> &build);
   exprt typed_static_array(const nlohmann::json &list, const typet &shape);
+  exprt full_of_runtime_fill(const std::vector<std::size_t> &dims);
 
   bool is_math_function() const;
 
