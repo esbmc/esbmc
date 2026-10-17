@@ -221,6 +221,17 @@ static std::set<irep_idt> unreported_exceptions(const optionst &options)
   return {};
 }
 
+static void configure_branch_instrumentation(
+  const cmdlinet &cmdline,
+  goto_coveraget &coverage)
+{
+  if (cmdline.isset("function"))
+    coverage.set_target(cmdline.getval("function"));
+  if (cmdline.isset("coverage-covered-set"))
+    coverage.covered_set_path = cmdline.getval("coverage-covered-set");
+  coverage.cov_assume_asserts = cmdline.isset("cov-assume-asserts");
+}
+
 bool esbmc_parseoptionst::process_goto_program(
   optionst &options,
   goto_functionst &goto_functions)
@@ -710,10 +721,7 @@ bool esbmc_parseoptionst::process_goto_program(
 
       std::string filename = cmdline.args[0];
       goto_coveraget tmp(ns, goto_functions, filename);
-      // for function mode
-      if (cmdline.isset("function"))
-        tmp.set_target(cmdline.getval("function"));
-      tmp.cov_assume_asserts = cmdline.isset("cov-assume-asserts");
+      configure_branch_instrumentation(cmdline, tmp);
       tmp.branch_coverage();
     }
     if (

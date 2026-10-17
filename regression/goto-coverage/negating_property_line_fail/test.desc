@@ -1,0 +1,5 @@
+CORE
+main.c
+--negating-property main:8
+^VERIFICATION FAILED$
+line 8
