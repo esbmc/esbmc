@@ -1,0 +1,6 @@
+CORE
+main.cpp
+--std c++17
+^\s*file .*main\.cpp line 16 column 3 function main$
+^\s*assertion s != nullptr && s\[1\] == 'c'$
+^VERIFICATION FAILED$
