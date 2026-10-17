@@ -3079,3 +3079,6 @@ regression/python/arith_lost_type_default_fail
 regression/python/arith_lost_type_fail
 regression/python/arith_lost_type_lambda_fail
 regression/python/arith_lost_type_param_fail
+regression/esbmc/github_8709_alloca_release
+regression/esbmc/github_8709_alloca_block_scope
+regression/esbmc/github_8709_alloca_use_after_return_fail
