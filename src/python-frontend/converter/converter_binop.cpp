@@ -1660,6 +1660,9 @@ exprt python_converter::get_right_operand_expr(
 
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
+  if (std::optional<exprt> bound = try_bound_method_compare(element))
+    return *bound;
+
   // Extract left and right operands from AST
   auto left = element.contains("left") ? element["left"] : element["target"];
 

@@ -629,6 +629,12 @@ private:
   static bool contains_nested_scope_named_expr(const nlohmann::json &node);
 
   exprt get_binary_operator_expr(const nlohmann::json &element);
+  /// `a.m == b.m` for methods of instances, or nothing for any other shape.
+  std::optional<exprt> try_bound_method_compare(const nlohmann::json &element);
+  /// The receiver of `name.m` naming a method, and `C.m` for the class C
+  /// that defines it, or nothing.
+  std::optional<std::pair<exprt, std::string>>
+  bound_method_operand(const nlohmann::json &operand);
   exprt get_binary_operator_expr(
     const nlohmann::json &element,
     const nlohmann::json &left,
