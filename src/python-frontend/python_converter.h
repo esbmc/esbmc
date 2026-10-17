@@ -2534,6 +2534,14 @@ private:
    */
   bool is_global_variable(const symbol_id &sid) const;
 
+  /// Binds each name of a `nonlocal` statement to the enclosing function's
+  /// local, refusing the forms whose writes would not reach it.
+  void declare_nonlocal(const nlohmann::json &element);
+
+  /// Points @p sid at the enclosing function's local when the current
+  /// function declared its name `nonlocal`.
+  void redirect_nonlocal(symbol_id &sid) const;
+
   /**
    * @brief Extracts variable name from assignment target.
    *
@@ -3513,6 +3521,9 @@ private:
   function_call_cache function_call_cache_;
 
   std::vector<std::string> global_declarations;
+  /// A nested function's local id -> the enclosing function it is `nonlocal`
+  /// to.
+  std::map<std::string, std::string> nonlocal_scopes_;
   std::vector<std::string> local_loads;
   bool is_right = false;
   std::vector<std::string> scope_stack_;
