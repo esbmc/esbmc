@@ -3138,3 +3138,6 @@ regression/python/github_8355_function_choice
 regression/python/github_8355_function_choice_fail
 regression/python/github_8475
 regression/python/github_8475_fail
+regression/esbmc/github_8661_ir_signed_cast
+regression/esbmc/github_8661_ir_signed_cast_fail
+regression/esbmc/github_8661_ir_unsigned_to_int_fail

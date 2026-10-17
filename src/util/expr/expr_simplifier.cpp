@@ -5392,8 +5392,8 @@ expr2tc if2t::do_simplify() const
 
 expr2tc overflow_cast2t::do_simplify() const
 {
-  // SMT lowering (smt_overflow.cpp:overflow_cast) defines this as
-  // `operand < 0 || operand > 2^bits - 1` — an unsigned narrowing check.
+  // SMT lowering (smt_overflow.cpp:overflow_cast) defines this as the operand
+  // leaving the bits-wide range of its own signedness (#8661).
   // Bool operand: always fits (true=1, false=0), so the cast never overflows.
   if (is_bool_type(operand->type))
     return gen_false_expr();
@@ -5407,9 +5407,10 @@ expr2tc overflow_cast2t::do_simplify() const
   if (is_constant_int2t(operand))
   {
     const BigInt &v = to_constant_int2t(operand).value;
-    if (v.is_negative())
-      return gen_true_expr();
-    return v > BigInt::power2(bits) - 1 ? gen_true_expr() : gen_false_expr();
+    const bool is_signed = is_signedbv_type(operand->type);
+    const BigInt low = is_signed ? -BigInt::power2(bits - 1) : BigInt(0);
+    const BigInt high = BigInt::power2(bits - is_signed) - 1;
+    return v < low || v > high ? gen_true_expr() : gen_false_expr();
   }
 
   return expr2tc();
