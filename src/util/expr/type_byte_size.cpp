@@ -654,7 +654,8 @@ BigInt alignment(const typet &type, const namespacet &ns)
   // compute default
   BigInt result = 0;
 
-  if (type.id() == typet::t_array)
+  // A _Complex T is laid out as T[2] (C17 6.2.5p13).
+  if (type.id() == typet::t_array || type.id() == typet::t_complex)
     result = alignment(type.subtype(), ns);
   else if (type.id() == typet::t_struct || type.id() == typet::t_union)
   {
