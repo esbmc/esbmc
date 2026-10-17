@@ -764,8 +764,9 @@ void __ESBMC_assigns_impl(const void *, ...);
 #define __ESBMC_assigns_3(a,b,c) __ESBMC_assigns_impl(&(a),&(b),&(c))
 #define __ESBMC_assigns_4(a,b,c,d) __ESBMC_assigns_impl(&(a),&(b),&(c),&(d))
 #define __ESBMC_assigns_5(a,b,c,d,e) __ESBMC_assigns_impl(&(a),&(b),&(c),&(d),&(e))
-#define __ESBMC_assigns_N(_0,_1,_2,_3,_4,_5,N,...) __ESBMC_assigns_##N
-#define __ESBMC_assigns(...) __ESBMC_assigns_N(~,##__VA_ARGS__,5,4,3,2,1,0)(__VA_ARGS__)
+#define __ESBMC_assigns_6(a,b,c,d,e,f) __ESBMC_assigns_impl(&(a),&(b),&(c),&(d),&(e),&(f))
+#define __ESBMC_assigns_N(_0,_1,_2,_3,_4,_5,_6,N,...) __ESBMC_assigns_##N
+#define __ESBMC_assigns(...) __ESBMC_assigns_N(~,##__VA_ARGS__,6,5,4,3,2,1,0)(__VA_ARGS__)
     )";
 
   if (config.ansi_c.cheri)

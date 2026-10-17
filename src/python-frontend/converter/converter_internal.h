@@ -37,6 +37,7 @@ inline StatementType get_statement_type(const nlohmann::json &element)
     {"Import", StatementType::IMPORT},
     {"Raise", StatementType::RAISE},
     {"Global", StatementType::GLOBAL},
+    {"Nonlocal", StatementType::NONLOCAL},
     {"Try", StatementType::TRY},
     {"ExceptHandler", StatementType::EXCEPTHANDLER},
     {"Delete", StatementType::DELETE_STATEMENT}};
