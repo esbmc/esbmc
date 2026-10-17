@@ -15,7 +15,7 @@ int main(void)
   char *p = nondet_bool() ? small : big + 50;
   if (p == big + 50)
   {
-    assert(__ESBMC_builtin_object_size(p, 0) == 100);
+    assert(__ESBMC_builtin_object_size(p, 0) == 50);
     assert(__ESBMC_builtin_object_size(p, 3) == 50);
   }
   else
