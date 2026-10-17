@@ -73,11 +73,11 @@ private:
   exprt get_arange_expr();
 
 public:
-  /// The literal list `np.arange` builds from @p args, a Name among them
-  /// read from its declaration for code in @p function; nullopt when the
-  /// arguments are not constants.
+  /// The literal list the `np.arange` @p call builds, in its dtype, a Name
+  /// among its arguments read from its declaration for code in @p function;
+  /// nullopt when the arguments are not constants.
   static std::optional<nlohmann::json> arange_literal(
-    const nlohmann::json &args,
+    const nlohmann::json &call,
     const std::string &function,
     const nlohmann::json &ast);
 
