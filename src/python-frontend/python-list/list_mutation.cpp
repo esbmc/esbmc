@@ -370,12 +370,27 @@ void python_list::record_element_store(
       elem_type);
 }
 
+/// Whether a list slot holding @p type may share its payload with a copy of
+/// the list: list copies keep the PyObject record of a non-scalar element
+/// verbatim (#5102), so a store must not write through it.
+bool python_list::has_shared_payload(const typet &type) const
+{
+  if (converter_.get_type_handler().is_tagged_scalar_type(type))
+    return false;
+  if (type.is_pointer())
+    return type.subtype() != char_type() && !type.subtype().is_code();
+  return type.is_struct() || type.id() == "symbol";
+}
+
 void python_list::retype_element_store(exprt &lhs, exprt &rhs)
 {
   const tuple_handler &tuples = converter_.get_tuple_handler();
-  if (
-    lhs.type() == rhs.type() ||
-    !(tuples.is_tuple_type(lhs.type()) || tuples.is_tuple_type(rhs.type())))
+  const bool retypes_tuple =
+    lhs.type() != rhs.type() &&
+    (tuples.is_tuple_type(lhs.type()) || tuples.is_tuple_type(rhs.type()));
+  const bool rebinds_shared =
+    lhs.type() == rhs.type() && has_shared_payload(lhs.type());
+  if (!retypes_tuple && !rebinds_shared)
     return;
 
   const typet obj_type = converter_.get_type_handler().get_list_element_type();
@@ -394,10 +409,49 @@ void python_list::retype_element_store(exprt &lhs, exprt &rhs)
   const exprt fresh = build_list_at_call(
     holder, from_integer(BigInt(0), size_type()), list_value_);
 
-  record_element_store(list_value_, stored.id.as_string(), rhs.type());
+  if (retypes_tuple)
+    record_element_store(list_value_, stored.id.as_string(), rhs.type());
 
   lhs = build_dereference(*item, obj_type);
   rhs = build_dereference(fresh, obj_type);
+}
+
+exprt python_list::allocate_constructed_object(const exprt &lhs)
+{
+  const symbolt *new_obj_sym =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_new_object");
+  assert(new_obj_sym && "__ESBMC_new_object model required");
+
+  // Allocating straight into a list slot would write through a payload a copy
+  // of the list may share, so allocate into a temporary and rebind the slot.
+  const bool into_slot =
+    list_item_of_store_target(lhs) && has_shared_payload(lhs.type());
+  exprt self = lhs;
+  if (into_slot)
+  {
+    symbolt &tmp = converter_.create_tmp_symbol(
+      list_value_, "$ctor_obj$", lhs.type(), exprt());
+    self = build_symbol(tmp);
+    code_declt decl(self);
+    decl.location() = converter_.get_location_from_decl(list_value_);
+    converter_.add_instruction(decl);
+  }
+
+  code_function_callt alloc_call;
+  alloc_call.lhs() = self;
+  alloc_call.function() = symbol_expr(*new_obj_sym);
+  converter_.add_instruction(alloc_call);
+
+  if (into_slot)
+  {
+    exprt slot = lhs;
+    exprt value = self;
+    retype_element_store(slot, value);
+    code_assignt rebind(slot, value);
+    rebind.location() = converter_.get_location_from_decl(list_value_);
+    converter_.add_instruction(rebind);
+  }
+  return self;
 }
 
 /// A constructed instance reaches a list literal as a *value* struct
