@@ -109,12 +109,13 @@ smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
       // Compute the subtraction result
       expr2tc sub_result = sub2tc(side1->type, side1, side2);
 
-      // Overflow condition: (a > 0 && b < 0 && result < 0) || (a < 0 && b > 0
-      // && result > 0)
-      expr2tc a_pos = greaterthan2tc(side1, zero);        // a > 0
-      expr2tc b_neg = lessthan2tc(side2, zero);           // b < 0
-      expr2tc result_neg = lessthan2tc(sub_result, zero); // result < 0
-      expr2tc pos_minus_neg_overflow = and2tc(a_pos, and2tc(b_neg, result_neg));
+      // Overflow condition: (a >= 0 && b < 0 && result < 0) || (a < 0 && b > 0
+      // && result > 0). a >= 0 rather than a > 0: 0 - INT_MIN overflows.
+      expr2tc a_nonneg = greaterthanequal2tc(side1, zero); // a >= 0
+      expr2tc b_neg = lessthan2tc(side2, zero);            // b < 0
+      expr2tc result_neg = lessthan2tc(sub_result, zero);  // result < 0
+      expr2tc pos_minus_neg_overflow =
+        and2tc(a_nonneg, and2tc(b_neg, result_neg));
 
       expr2tc a_neg = lessthan2tc(side1, zero);              // a < 0
       expr2tc b_pos = greaterthan2tc(side2, zero);           // b > 0

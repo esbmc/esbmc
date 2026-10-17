@@ -1,0 +1,7 @@
+CORE
+main.c
+--overflow-check --unsigned-overflow-check --bitwuzla --multi-property
+^  PASSED .*line +10  arithmetic overflow on div$
+^  FAILED .*line +11  assertion q == 1$
+^  FAILED .*line +14  arithmetic overflow on div$
+^VERIFICATION FAILED$
