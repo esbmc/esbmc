@@ -1526,24 +1526,12 @@ class CoreVisitorsMixin:
         """
         Handle assignment nodes, including multiple assignments and tuple unpacking.
         """
+        split = self._split_linspace_retstep(node)
+        if split is not None:
+            return [self.visit(statement) for statement in split]
         self._invalidate_list_literals_for_assign_targets(node.targets)
         self._update_assignment_call_origins(node.targets, node.value)
-        # Neutralise `x = sorted(...d.items()...)` to `x = []` when the scan
-        # certified x as eq-only with a known dict receiver; the cascade
-        # then recovers the assert against the tracked Call origin.
-        # Only sorted() is neutralised: plain `list(d.items())` still has a
-        # materialised list path elsewhere that other rewrites depend on.
-        neutralized_target = None
-        if (len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
-                and node.targets[0].id in self._eq_only_items_view_targets
-                and self._is_items_view_call(node.value) and node.value.func.id == "sorted"):
-            recv = self._items_view_receiver_name(node.value)
-            if recv is not None and self._is_known_dict_name(recv):
-                placeholder = ast.List(elts=[], ctx=ast.Load())
-                ast.copy_location(placeholder, node.value)
-                ast.fix_missing_locations(placeholder)
-                node.value = placeholder
-                neutralized_target = node.targets[0].id
+        neutralized_target = self._neutralize_sorted_items_view(node)
 
         if self._maybe_record_type_alias_assign(node):
             return None
@@ -1581,6 +1569,27 @@ class CoreVisitorsMixin:
         if len(node.targets) == 1:
             return self._handle_single_target_assign(node)
         return self._handle_multi_target_assign(node)
+
+    def _neutralize_sorted_items_view(self, node):
+        """Neutralise `x = sorted(...d.items()...)` to `x = []` and return x.
+
+        Only when the scan certified x as eq-only with a known dict receiver;
+        the cascade then recovers the assert against the tracked Call origin.
+        Only sorted() is neutralised: plain `list(d.items())` still has a
+        materialised list path elsewhere that other rewrites depend on.
+        """
+        if not (len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
+                and node.targets[0].id in self._eq_only_items_view_targets
+                and self._is_items_view_call(node.value) and node.value.func.id == "sorted"):
+            return None
+        recv = self._items_view_receiver_name(node.value)
+        if recv is None or not self._is_known_dict_name(recv):
+            return None
+        placeholder = ast.List(elts=[], ctx=ast.Load())
+        ast.copy_location(placeholder, node.value)
+        ast.fix_missing_locations(placeholder)
+        node.value = placeholder
+        return node.targets[0].id
 
     def _is_known_dict_name(self, name):
         """True when `name` is reliably known to be bound to a dict.
