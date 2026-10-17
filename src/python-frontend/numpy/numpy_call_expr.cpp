@@ -97,15 +97,22 @@ static bool numpy_constant_folding_enabled()
   return !config.options.get_bool_option("python-no-fold");
 }
 
-// The array models hold numbers only; a string element would be read back
-// as an unrelated value.
-static void reject_string_full_fill(const nlohmann::json &fill)
+// A complex literal is serialized with a string value too, told apart by its
+// annotation.
+static bool is_numpy_string_literal(const nlohmann::json &node)
 {
-  if (
-    fill.value("_type", "") == "Constant" && fill.contains("value") &&
-    fill["value"].is_string())
+  return node.is_object() && node.value("_type", "") == "Constant" &&
+         node.contains("value") && node["value"].is_string() &&
+         !is_complex_annotated_constant(node);
+}
+
+// Broadcasting an array fill over the shape is not modelled.
+static void reject_array_full_fill(const nlohmann::json &fill)
+{
+  const std::string type = fill.value("_type", std::string());
+  if (type == "List" || type == "Tuple")
     throw std::runtime_error(
-      "TypeError: numpy.full() with a string fill value is not supported");
+      "TypeError: numpy.full() with an array fill value is not supported");
 }
 
 static BigInt pow_bigint_non_negative(BigInt base, BigInt exponent)
@@ -4656,21 +4663,76 @@ static std::string normalize_numpy_dtype_name(const std::string &dtype)
     return "float64";
   if (dtype == "complex" || dtype == "complex_")
     return "complex128";
+  if (dtype == "str_" || dtype == "unicode")
+    return "str";
+  if (dtype == "object_")
+    return "object";
   return dtype;
 }
 
+// The scalar dtypes a constructor can store, plus object, which every
+// constructor rejects with its own diagnostic further on.
+static bool is_named_numpy_dtype(const std::string &dtype)
+{
+  static const std::set<std::string> names = {
+    "bool",
+    "int8",
+    "uint8",
+    "int16",
+    "uint16",
+    "int32",
+    "uint32",
+    "int64",
+    "uint64",
+    "float16",
+    "float32",
+    "float64",
+    "complex64",
+    "complex128",
+    "str",
+    "object"};
+  return names.count(dtype) != 0;
+}
+
+// A dtype= spelled as a call: np.dtype(...) builds a dtype object, which is
+// structured when its argument lists fields.
+[[noreturn]] static void reject_numpy_dtype_call(const nlohmann::json &call)
+{
+  const auto &args = call.value("args", nlohmann::json::array());
+  const std::string first =
+    args.empty() ? std::string() : args[0].value("_type", std::string());
+  if (first == "List" || first == "Dict" || first == "Tuple")
+    throw std::runtime_error(
+      "TypeError: structured numpy dtypes are not supported");
+  throw std::runtime_error("TypeError: numpy dtype objects are not supported");
+}
+
+// The single normalization of a dtype= argument: a scalar type named by a
+// builtin, a numpy attribute or a string, or a specific rejection.
 static std::string extract_numpy_dtype_name(const nlohmann::json &dtype_node)
 {
-  if (!dtype_node.is_object() || !dtype_node.contains("_type"))
-    throw std::runtime_error("Unsupported dtype value");
-
-  const std::string node_type = dtype_node["_type"].get<std::string>();
+  const std::string node_type =
+    dtype_node.is_object() ? dtype_node.value("_type", std::string()) : "";
   if (node_type == "Attribute" && dtype_node.contains("attr"))
     return normalize_numpy_dtype_name(dtype_node["attr"].get<std::string>());
-  if (node_type == "Name" && dtype_node.contains("id"))
-    return normalize_numpy_dtype_name(dtype_node["id"].get<std::string>());
-
-  throw std::runtime_error("Unsupported dtype value");
+  const bool is_string = node_type == "Constant" &&
+                         dtype_node.contains("value") &&
+                         dtype_node["value"].is_string() &&
+                         !is_complex_annotated_constant(dtype_node);
+  if (is_string)
+    return normalize_numpy_dtype_name(dtype_node["value"].get<std::string>());
+  if (node_type == "List" || node_type == "Dict" || node_type == "Tuple")
+    throw std::runtime_error(
+      "TypeError: structured numpy dtypes are not supported");
+  if (node_type == "Call")
+    reject_numpy_dtype_call(dtype_node);
+  if (node_type != "Name")
+    throw std::runtime_error(
+      "TypeError: numpy dtype= must name a scalar type literally");
+  const std::string name = normalize_numpy_dtype_name(dtype_node["id"]);
+  if (is_named_numpy_dtype(name))
+    return name;
+  throw std::runtime_error("Unsupported dtype value: " + name);
 }
 
 static bool is_numpy_integer_dtype(const std::string &dtype)
@@ -4688,13 +4750,52 @@ static bool is_numpy_complex_dtype(const std::string &dtype)
   return dtype == "complex64" || dtype == "complex128" || dtype == "complex";
 }
 
-static nlohmann::json
-make_numpy_typed_constant(const scalar_value &value, const std::string &dtype)
+// Whether the integer dtype @p dtype (int8 ... uint64) holds @p value.
+static bool
+numpy_integer_dtype_holds(long double value, const std::string &dtype)
+{
+  const int bits = std::stoi(dtype.substr(dtype.find("int") + 3));
+  const bool is_unsigned = dtype[0] == 'u';
+  const long double low = is_unsigned ? 0.0L : -std::ldexp(1.0L, bits - 1);
+  const long double high = std::ldexp(1.0L, is_unsigned ? bits : bits - 1);
+  return value >= low && value < high;
+}
+
+// NumPy raises OverflowError for a Python integer its integer dtype cannot
+// hold (NEP 50); an out-of-range float has no defined cast, so it is
+// rejected rather than given one.
+static void check_numpy_integer_cast(
+  long double truncated,
+  bool integral,
+  const std::string &dtype)
+{
+  if (numpy_integer_dtype_holds(truncated, dtype))
+    return;
+  std::ostringstream value;
+  value << std::fixed << std::setprecision(0) << truncated;
+  if (integral)
+    throw std::runtime_error(
+      "OverflowError: Python integer " + value.str() + " out of bounds for " +
+      dtype);
+  throw std::runtime_error(
+    "TypeError: casting an out-of-range float to " + dtype +
+    " is not supported");
+}
+
+static nlohmann::json make_numpy_typed_constant(
+  const scalar_value &value,
+  const std::string &dtype,
+  bool integral = false)
 {
   const std::string normalized = normalize_numpy_dtype_name(dtype);
 
   if (normalized.empty())
     return {{"_type", "Constant"}, {"value", value.value.real()}};
+
+  if (normalized == "str")
+    throw std::runtime_error(
+      "TypeError: converting numbers to a numpy string dtype is not "
+      "supported");
 
   if (normalized == "bool")
   {
@@ -4717,9 +4818,12 @@ make_numpy_typed_constant(const scalar_value &value, const std::string &dtype)
     // success, which pins 2.5 -> 2 and -1.9 -> -1). A rounding function
     // here would silently diverge from that (found in review: 1.5 -> 2
     // instead of 1).
-    return {
-      {"_type", "Constant"},
-      {"value", static_cast<int64_t>(std::trunc(value.value.real()))}};
+    const long double truncated = std::trunc(value.value.real());
+    check_numpy_integer_cast(truncated, integral, normalized);
+    if (truncated >= std::ldexp(1.0L, 63))
+      return {
+        {"_type", "Constant"}, {"value", static_cast<uint64_t>(truncated)}};
+    return {{"_type", "Constant"}, {"value", static_cast<int64_t>(truncated)}};
   }
 
   if (is_numpy_float_dtype(normalized))
@@ -4733,10 +4837,8 @@ make_numpy_typed_constant(const scalar_value &value, const std::string &dtype)
   }
 
   if (is_numpy_complex_dtype(normalized))
-  {
-    throw std::runtime_error(
-      "TypeError: complex dtype is not supported in NumPy constructors yet");
-  }
+    return to_json_constant(
+      make_complex_scalar(value.value.real(), value.value.imag()));
 
   throw std::runtime_error("Unsupported dtype value: " + normalized);
 }
@@ -4764,9 +4866,23 @@ static nlohmann::json cast_numpy_literal_to_dtype(
     return casted;
   }
 
+  if (is_numpy_string_literal(node))
+  {
+    if (normalize_numpy_dtype_name(dtype) == "str")
+      return node;
+    throw std::runtime_error(
+      "TypeError: converting a string to a numeric numpy dtype is not "
+      "supported");
+  }
+
   scalar_value value;
+  numeric_value numeric;
   if (try_extract_scalar_constant(node, value))
-    return make_numpy_typed_constant(value, dtype);
+    return make_numpy_typed_constant(
+      value,
+      dtype,
+      !value.is_complex && try_extract_numeric_constant(node, numeric) &&
+        numeric.is_int);
 
   throw std::runtime_error(
     "TypeError: np.array(..., dtype=...) requires literal numeric elements");
@@ -4907,6 +5023,114 @@ typet numpy_call_expr::get_typet_from_dtype() const
     return get_complex_struct_type();
 
   return {};
+}
+
+// The longest string at the leaves of @p list, at least 1, which NumPy
+// stores as a fixed-width `<U{n}` array; nullopt unless every leaf is a
+// string literal.
+static std::optional<std::size_t> numpy_string_width(const nlohmann::json &list)
+{
+  std::size_t width = 0;
+  bool any = false;
+  for (const auto &elt : list.value("elts", nlohmann::json::array()))
+  {
+    std::optional<std::size_t> leaf;
+    if (elt.value("_type", std::string()) == "List")
+      leaf = numpy_string_width(elt);
+    else if (is_numpy_string_literal(elt))
+      leaf = elt["value"].get<std::string>().size();
+    if (!leaf)
+      return std::nullopt;
+    width = std::max(width, *leaf);
+    any = true;
+  }
+  return any ? std::optional<std::size_t>(std::max<std::size_t>(width, 1))
+             : std::nullopt;
+}
+
+static bool has_complex_leaf(const nlohmann::json &list)
+{
+  for (const auto &elt : list.value("elts", nlohmann::json::array()))
+  {
+    scalar_value value;
+    const bool complex =
+      elt.value("_type", std::string()) == "List"
+        ? has_complex_leaf(elt)
+        : try_extract_scalar_constant(elt, value) && value.is_complex;
+    if (complex)
+      return true;
+  }
+  return false;
+}
+
+static nlohmann::json as_complex_leaves(const nlohmann::json &list)
+{
+  nlohmann::json out = list;
+  for (auto &elt : out["elts"])
+  {
+    scalar_value value;
+    if (elt.value("_type", std::string()) == "List")
+      elt = as_complex_leaves(elt);
+    else if (try_extract_scalar_constant(elt, value))
+      elt = to_json_constant(
+        make_complex_scalar(value.value.real(), value.value.imag()));
+    else
+      throw std::runtime_error(
+        "TypeError: a numpy complex array element must be a numeric literal");
+  }
+  return out;
+}
+
+// A literal holding a complex number is a complex array: every element,
+// real ones included, becomes a complex constant.
+static std::optional<nlohmann::json>
+complex_literal_leaves(const nlohmann::json &list)
+{
+  if (!has_complex_leaf(list))
+    return std::nullopt;
+  return as_complex_leaves(list);
+}
+
+// Numbers keep the literal's 64-bit storage: an int8 array would read as a
+// string, and NumPy compares a float32 element with a Python float in
+// float32, which a narrower storage alone would not reproduce.
+typet numpy_call_expr::constructor_element_type(
+  const nlohmann::json &list) const
+{
+  if (std::optional<std::size_t> width = numpy_string_width(list))
+    return type_handler_.build_array(char_type(), *width + 1);
+  if (has_complex_leaf(list))
+    return get_complex_struct_type();
+  return typet();
+}
+
+exprt numpy_call_expr::with_element_type(
+  const nlohmann::json &list,
+  const std::function<exprt(const nlohmann::json &)> &build)
+{
+  const nlohmann::json literal = complex_literal_leaves(list).value_or(list);
+  const typet saved = converter_.numpy_element_type;
+  converter_.numpy_element_type = constructor_element_type(literal);
+  try
+  {
+    exprt result = build(literal);
+    converter_.numpy_element_type = saved;
+    return result;
+  }
+  catch (...)
+  {
+    converter_.numpy_element_type = saved;
+    throw;
+  }
+}
+
+exprt numpy_call_expr::typed_static_array(
+  const nlohmann::json &list,
+  const typet &shape)
+{
+  return with_element_type(list, [&](const nlohmann::json &literal) {
+    return converter_.get_static_array(literal, shape);
+  });
 }
 
 // Checks if two shapes are broadcast-compatible.
@@ -5530,7 +5754,7 @@ exprt numpy_call_expr::create_expr_from_call()
       nlohmann::json fill_value = call_["args"][1];
       resolve_var(shape);
       resolve_var(fill_value);
-      reject_string_full_fill(fill_value);
+      reject_array_full_fill(fill_value);
 
       const auto dims = extract_shape_dims(shape);
       if (dims.empty())
@@ -7517,7 +7741,7 @@ exprt numpy_call_expr::literal_constructor_expr(const nlohmann::json &list)
   if (binds_static_array(list))
   {
     exprt array =
-      converter_.get_static_array(list, type_handler_.get_typet(list["elts"]));
+      typed_static_array(list, type_handler_.get_typet(list["elts"]));
     // The model's annotation types the name as a list or Any.
     converter_.current_lhs->type() = array.type();
     converter_.update_symbol(*converter_.current_lhs);
@@ -9523,7 +9747,7 @@ exprt numpy_call_expr::get()
     {
       auto shape = get_arg(0);
       auto fill = get_arg(1);
-      reject_string_full_fill(fill);
+      reject_array_full_fill(fill);
       auto dims = parse_shape(shape);
       if (dims.empty())
       {
@@ -9651,7 +9875,7 @@ exprt numpy_call_expr::get()
     }
 
     typet size = type_handler_.get_typet(array_arg["elts"]);
-    return converter_.get_static_array(array_arg, size);
+    return typed_static_array(array_arg, size);
   }
 
   static const std::unordered_map<std::string, float> array_creation_funcs = {
@@ -9876,7 +10100,9 @@ exprt numpy_call_expr::get()
             "ValueError: array size overflows during creation");
         auto list =
           create_list(static_cast<int>(shape_numeric.int_value), fill_value);
-        return converter_.get_expr(list);
+        return with_element_type(list, [&](const nlohmann::json &literal) {
+          return converter_.get_expr(literal);
+        });
       }
     }
 
@@ -9912,7 +10138,10 @@ exprt numpy_call_expr::get()
         return list;
       };
 
-      return converter_.get_expr(create_nd_fill(0));
+      const nlohmann::json list = create_nd_fill(0);
+      return with_element_type(list, [&](const nlohmann::json &literal) {
+        return converter_.get_expr(literal);
+      });
     }
 
     // Symbolic 1-D shape: try to evaluate the size expression at runtime,
