@@ -97,6 +97,7 @@ PyListObject *__ESBMC_list_create()
   l->type = &__ESBMC_list_type;
   l->items = __ESBMC_create_inf_obj();
   l->size = 0;
+  l->is_tuple = false;
   return l;
 }
 
@@ -1277,6 +1278,29 @@ PyListObject *__ESBMC_list_copy_shallow_sz(
 PyListObject *__ESBMC_list_copy_shallow(PyListObject *l, size_t list_type_id)
 {
   return __ESBMC_list_copy_shallow_sz(l, list_type_id, 0, 0);
+}
+
+// tuple(x) of a list is modelled as a list copy marked as a tuple, so that
+// isinstance can tell the two apart (#8777)
+void __ESBMC_list_mark_tuple(PyListObject *l)
+{
+__ESBMC_HIDE:;
+  l->is_tuple = true;
+}
+
+bool __ESBMC_list_is_tuple(const PyListObject *l)
+{
+__ESBMC_HIDE:;
+  return l != NULL && l->is_tuple;
+}
+
+// list(x) of a tuple built that way is a fresh list, not the tuple itself
+PyListObject *__ESBMC_list_untuple(PyListObject *l, size_t list_type_id)
+{
+__ESBMC_HIDE:;
+  return __ESBMC_list_is_tuple(l)
+           ? __ESBMC_list_copy_shallow_sz(l, list_type_id, 0, 0)
+           : l;
 }
 
 // Store `o` into an existing slot, with __ESBMC_list_push_shallow's sharing

@@ -1173,7 +1173,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     // d.items() returns the keys member as a placeholder list (correct size).
     exprt arg_expr = list_argument_expr(list_arg);
     if (arg_expr.type() == type_handler_.get_list_type())
-      return arg_expr;
+      return python_list(*this, element).build_untuple_call(arg_expr);
 
     // list(tuple) — materialise the tuple's components into a real list.
     // Without this the tuple struct flows into the generic builder, which
