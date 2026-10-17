@@ -2758,25 +2758,29 @@ exprt string_handler::try_handle_len_string_fast_path(
     }
   }
 
+  return char_array_type_length(arg_expr);
+}
+
+// The length a char array's type gives @p arg_expr, or nil. An element of a
+// numpy string array is NUL-padded to the array's width, so only strlen
+// knows its length.
+exprt string_handler::char_array_type_length(const exprt &arg_expr) const
+{
+  if (arg_expr.id() == "index" && arg_expr.op0().type().is_array())
+    return nil_exprt();
   typet actual_type = arg_expr.type();
   if (actual_type.is_pointer())
     actual_type = actual_type.subtype();
   if (actual_type.id() == "symbol")
     actual_type = converter_.ns.follow(actual_type);
-
-  if (actual_type.id() == "array")
-  {
-    const array_typet &arr_type = to_array_type(actual_type);
-    if (
-      type_utils::is_char_type(arr_type.subtype()) &&
-      arr_type.size().is_constant())
-    {
-      BigInt sz;
-      if (!to_integer(arr_type.size(), sz) && sz > 0)
-        return from_integer(sz - 1, size_type());
-    }
-  }
-
+  if (actual_type.id() != "array")
+    return nil_exprt();
+  const array_typet &arr_type = to_array_type(actual_type);
+  BigInt sz;
+  if (
+    type_utils::is_char_type(arr_type.subtype()) &&
+    arr_type.size().is_constant() && !to_integer(arr_type.size(), sz) && sz > 0)
+    return from_integer(sz - 1, size_type());
   return nil_exprt();
 }
 

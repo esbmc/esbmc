@@ -91,6 +91,15 @@ private:
     std::size_t cols) const;
   exprt full_size_temporary(exprt size_expr);
   exprt literal_constructor_expr(const nlohmann::json &list);
+  // The element type of the array built from the literal @p list: a fixed-width
+  // string, or empty for the literal's own.
+  typet constructor_element_type(const nlohmann::json &list) const;
+  // @p build run with constructor_element_type(@p list) at the leaves of
+  // the static arrays it builds.
+  exprt with_element_type(
+    const nlohmann::json &list,
+    const std::function<exprt(const nlohmann::json &)> &build);
+  exprt typed_static_array(const nlohmann::json &list, const typet &shape);
 
   bool is_math_function() const;
 
