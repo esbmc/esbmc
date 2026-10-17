@@ -433,6 +433,12 @@ void clang_cpp_adjust::adjust_side_effect_throw(side_effect_exprt &expr)
   // ctor is called with a struct value where a pointer is expected.
   adjust_expr(expr.op0());
 
+  // The array-to-pointer conversion applies to the operand ([except.throw]/3);
+  // clang's decay cast is a no-op here.
+  exprt &op = expr.op0();
+  if (op.type().is_array())
+    op = address_of_exprt(index_exprt(op, gen_zero(index_type())));
+
   const typet &exception_type = expr.op0().type();
 
   std::vector<irep_idt> ids;
