@@ -3019,8 +3019,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc case_op, case_op_hi, body;
     if (!sc.is_default())
       migrate_expr(sc.case_op(), case_op);
-    if (sc.case_range_hi().is_not_nil())
-      migrate_expr(sc.case_range_hi(), case_op_hi);
+    migrate_expr(sc.case_range_hi(), case_op_hi);
     migrate_expr(sc.code(), body);
     new_expr_ref = code_switch_case2tc(
       sc.is_default(), case_op, body, expr.location(), case_op_hi);

@@ -1547,9 +1547,7 @@ bool goto_convert_functionst::convert_native_rec(
           .first;
     }
     entry->second->second.push_back(case_label(
-      migrate_expr_back(sc.case_op),
-      is_nil_expr(sc.case_op_hi) ? nil_exprt()
-                                 : migrate_expr_back(sc.case_op_hi)));
+      migrate_expr_back(sc.case_op), migrate_expr_back(sc.case_op_hi)));
     return true;
   }
 
