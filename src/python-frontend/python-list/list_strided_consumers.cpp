@@ -197,10 +197,67 @@ exprt python_list::reduce_view_extreme(
   return acc;
 }
 
+// argmin/argmax of a 1-D pointer view, constant or run-time: the index of
+// the first extreme element, walking the view through its own strides.
+std::optional<exprt> python_list::reduce_view_argextreme(
+  const std::string &function,
+  const nlohmann::json &arg)
+{
+  if (!arg.is_object() || arg.value("_type", "") != "Name")
+    return std::nullopt;
+  const auto info = converter_.numpy_pointer_view_info_.find(
+    converter_.resolve_name_symbol_id(arg.value("id", "")));
+  if (
+    info == converter_.numpy_pointer_view_info_.end() ||
+    info->second.shape.size() > 1)
+    return std::nullopt;
+  exprt *lhs = converter_.current_lhs;
+  converter_.current_lhs = nullptr;
+  const exprt array = converter_.get_expr(arg);
+  converter_.current_lhs = lhs;
+  std::optional<strided_view_desc> view = describe_strided_view(array);
+  if (!view || view->axes.size() != 1)
+    return std::nullopt;
+
+  const locationt loc = converter_.get_location_from_decl(arg);
+  const exprt count = view_element_count(arg, *view);
+  exprt raise = converter_.get_exception_handler().gen_exception_raise(
+    "ValueError", "attempt to get " + function + " of an empty sequence");
+  codet throw_code("expression");
+  throw_code.operands().push_back(raise);
+  throw_code.location() = loc;
+  code_ifthenelset empty_guard;
+  empty_guard.cond() = build_equal(count, from_integer(0, ll_type()));
+  empty_guard.then_case() = throw_code;
+  empty_guard.location() = loc;
+  empty_guard.location().property("skipped");
+  converter_.add_instruction(empty_guard);
+
+  const exprt best = emit_view_accumulator(
+    arg, view->elem_type, view_element(*view, {from_integer(0, ll_type())}));
+  const exprt best_index =
+    emit_view_accumulator(arg, ll_type(), from_integer(0, ll_type()));
+  emit_counted_loop(arg, axis_extent(view->axes[0]), [&](const exprt &i) {
+    const exprt element = view_element(*view, {i});
+    code_blockt take;
+    take.copy_to_operands(code_assignt(best, element));
+    take.copy_to_operands(code_assignt(best_index, i));
+    code_ifthenelset update;
+    update.cond() = function == "argmin" ? build_less_than(element, best)
+                                         : build_greater_than(element, best);
+    update.then_case() = take;
+    update.location() = loc;
+    converter_.add_instruction(update);
+  });
+  return best_index;
+}
+
 std::optional<exprt> python_list::try_reduce_symbolic_view(
   const std::string &function,
   const nlohmann::json &arg)
 {
+  if (function == "argmin" || function == "argmax")
+    return reduce_view_argextreme(function, arg);
   static const std::set<std::string> reducers = {
     "sum", "mean", "min", "max", "any", "all"};
   if (reducers.count(function) == 0)
