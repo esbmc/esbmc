@@ -388,16 +388,18 @@ std::string py_percent_format(
 }
 
 // `%d` takes an int or bool only: int() of a float does not raise on inf/nan.
+// A char is a one-character str (`s[i]`), not an int.
 bool percent_d_accepts(const typet &t)
 {
-  return t.is_signedbv() || t.is_unsignedbv() || t.is_bool();
+  return (t.is_signedbv() || t.is_unsignedbv() || t.is_bool()) &&
+         !type_utils::is_char_type(t);
 }
 
 // `%s` is limited to the types whose f-string lowering matches str().
 bool percent_s_accepts(const typet &t)
 {
-  return percent_d_accepts(t) || t.is_floatbv() ||
-         type_utils::is_string_type(t);
+  return percent_d_accepts(t) || type_utils::is_char_type(t) ||
+         t.is_floatbv() || type_utils::is_string_type(t);
 }
 
 nlohmann::json ast_node(const char *type, const nlohmann::json &loc)
