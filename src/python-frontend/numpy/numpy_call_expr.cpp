@@ -2268,10 +2268,13 @@ materialize_arange_float(double start, double stop, double step)
   if (count_d <= 0.0)
     return node;
 
+  // NumPy's fill steps by the difference of the first two elements, which
+  // in floating point need not equal step.
+  const double delta = (start + step) - start;
   const auto count = static_cast<std::size_t>(count_d);
   for (std::size_t i = 0; i < count; ++i)
     node["elts"].push_back(build_constant_node(
-      make_float_value(start + static_cast<double>(i) * step)));
+      make_float_value(start + static_cast<double>(i) * delta)));
   return node;
 }
 
@@ -2368,6 +2371,88 @@ materialize_arange(const nlohmann::json &args)
   return materialize_arange_ex(args).list;
 }
 
+static bool is_numpy_integer_dtype(const std::string &dtype);
+static bool is_numpy_float_dtype(const std::string &dtype);
+static nlohmann::json make_numpy_typed_constant(
+  const scalar_value &value,
+  const std::string &dtype,
+  bool integral);
+
+// @p value reduced modulo the width of the integer dtype @p dtype, the
+// wraparound of NumPy's integer arithmetic.
+static nlohmann::json
+wrap_to_numpy_integer(uint64_t value, const std::string &dtype)
+{
+  const int bits = std::stoi(dtype.substr(dtype.find("int") + 3));
+  if (bits < 64)
+  {
+    value &= (uint64_t{1} << bits) - 1;
+    if (dtype[0] != 'u' && (value >> (bits - 1)) != 0)
+      value |= ~((uint64_t{1} << bits) - 1);
+  }
+  if (dtype[0] == 'u')
+    return {{"_type", "Constant"}, {"value", value}};
+  return {{"_type", "Constant"}, {"value", static_cast<int64_t>(value)}};
+}
+
+// NumPy fills an arange() in its dtype: the first element is start and the
+// step is the difference of the first two elements, both cast to the dtype,
+// so the elements keep that cast and an integer range wraps at the dtype's
+// width.
+static nlohmann::json arange_in_dtype(
+  const nlohmann::json &args,
+  std::size_t count,
+  const std::string &dtype)
+{
+  numeric_value first;
+  const bool from_zero = args.size() < 2;
+  if (!from_zero)
+    try_extract_numeric_constant(args[0], first);
+  const double start = from_zero ? 0.0 : to_double(first);
+  numeric_value step_value = make_int_value(1);
+  if (args.size() == 3)
+    try_extract_numeric_constant(args[2], step_value);
+  const bool integral = (from_zero || first.is_int) && step_value.is_int;
+  const nlohmann::json head =
+    make_numpy_typed_constant(make_real_scalar(start), dtype, integral);
+  const nlohmann::json next = make_numpy_typed_constant(
+    make_real_scalar(start + to_double(step_value)), dtype, integral);
+  nlohmann::json list = {{"_type", "List"}, {"elts", nlohmann::json::array()}};
+  for (std::size_t i = 0; i < count; ++i)
+  {
+    if (is_numpy_integer_dtype(dtype))
+    {
+      const auto v0 = head["value"].get<int64_t>();
+      const auto delta = static_cast<uint64_t>(next["value"].get<int64_t>()) -
+                         static_cast<uint64_t>(v0);
+      list["elts"].push_back(
+        wrap_to_numpy_integer(static_cast<uint64_t>(v0) + i * delta, dtype));
+    }
+    else
+    {
+      const double v0 = head["value"].get<double>();
+      const double delta = next["value"].get<double>() - v0;
+      list["elts"].push_back(build_constant_node(
+        make_float_value(v0 + static_cast<double>(i) * delta)));
+    }
+  }
+  return list;
+}
+
+// arange() of the constant @p args in @p dtype, or nullopt when it is not
+// materialized.
+static std::optional<nlohmann::json>
+materialize_arange_dtype(const nlohmann::json &args, const std::string &dtype)
+{
+  std::optional<nlohmann::json> list = materialize_arange(args);
+  if (!list || dtype.empty())
+    return list;
+  if (!is_numpy_integer_dtype(dtype) && !is_numpy_float_dtype(dtype))
+    throw std::runtime_error(
+      "TypeError: numpy.arange() with a " + dtype + " dtype is not supported");
+  return arange_in_dtype(args, (*list)["elts"].size(), dtype);
+}
+
 // Defined further down (dtype parsing/casting lives next to get_dtype());
 // forward-declared here so materialize_numpy_constructor_array can apply a
 // dtype= keyword instead of just tolerating its absence.
@@ -2379,6 +2464,15 @@ static nlohmann::json cast_numpy_literal_to_dtype(
 static nlohmann::json cast_numpy_linspace_literal_to_dtype(
   const nlohmann::json &node,
   const std::string &dtype);
+
+// The normalized dtype= of @p call_node, or "" when it has none.
+static std::string constructor_dtype_name(const nlohmann::json &call_node)
+{
+  for (const auto &kw : call_node.value("keywords", nlohmann::json::array()))
+    if (kw.value("arg", std::string()) == "dtype")
+      return extract_numpy_dtype_name(kw["value"]);
+  return {};
+}
 
 // A single `dtype=` keyword is the only one materialize_numpy_constructor_
 // array() understands; anything else (an unrecognized keyword, or more than
@@ -2440,7 +2534,7 @@ static std::optional<nlohmann::json> materialize_numpy_constructor_array(
   else if (ctor == "linspace")
     materialized = materialize_linspace(args);
   else if (ctor == "arange")
-    materialized = materialize_arange(args);
+    return materialize_arange_dtype(args, constructor_dtype_name(call_node));
 
   if (!materialized)
     return std::nullopt;
@@ -7708,7 +7802,7 @@ bool numpy_call_expr::binds_static_array(const nlohmann::json &list) const
 {
   const std::string function = function_id_.get_function();
   static const std::map<std::string, std::set<std::string>> keywords = {
-    {"arange", {}},
+    {"arange", {"dtype"}},
     {"linspace", {}},
     {"full", {"dtype"}},
     {"identity", {"dtype"}},
@@ -7821,11 +7915,10 @@ exprt numpy_call_expr::literal_constructor_expr(const nlohmann::json &list)
 
 exprt numpy_call_expr::get_arange_expr()
 {
-  // A dtype= (or any other) keyword changes arange()'s output in ways the
-  // literal-materialization path below does not model; fall back to the
-  // operational model for that shape exactly like every arange call used
-  // to, rather than silently ignoring the keyword.
-  if (call_.contains("keywords") && !call_["keywords"].empty())
+  // A keyword other than dtype= (device=, like=) changes arange() in ways
+  // the literal materialization below does not model; fall back to the
+  // operational model for it rather than silently ignoring the keyword.
+  if (!is_only_dtype_keyword(call_))
     return function_call_expr::get();
 
   const nlohmann::json resolved_args =
@@ -7846,7 +7939,8 @@ exprt numpy_call_expr::get_arange_expr()
   const arange_materialize_result result = materialize_arange_ex(resolved_args);
   if (result.list)
   {
-    exprt expr = literal_constructor_expr(*result.list);
+    exprt expr = literal_constructor_expr(
+      *materialize_arange_dtype(resolved_args, get_dtype()));
     if (converter_.current_lhs)
     {
       converter_.current_lhs->type() = expr.type();
@@ -9268,38 +9362,12 @@ exprt numpy_call_expr::retype_current_lhs_and_return(
   return value;
 }
 
-// `np.full(shape=..., fill_value=...)` as the positional call every reader
-// of `np.full` expects.
-static nlohmann::json positional_full_call(const nlohmann::json &call)
-{
-  nlohmann::json normalized = call;
-  nlohmann::json &args = normalized["args"];
-  nlohmann::json &keywords = normalized["keywords"];
-  for (const char *name : {"shape", "fill_value"})
-  {
-    auto kw = std::find_if(
-      keywords.begin(), keywords.end(), [name](const nlohmann::json &k) {
-        return k.contains("arg") && k["arg"] == name;
-      });
-    if (kw == keywords.end() || args.size() != (name[0] == 's' ? 0 : 1))
-      continue;
-    args.push_back((*kw)["value"]);
-    keywords.erase(kw);
-  }
-  return normalized;
-}
-
 exprt numpy_call_expr::build_result(
   const symbol_id &function_id,
   const nlohmann::json &call,
   python_converter &converter)
 {
-  const nlohmann::json full_call =
-    function_id.get_function() == "full" && call.contains("keywords")
-      ? positional_full_call(call)
-      : nlohmann::json();
-  numpy_call_expr instance(
-    function_id, full_call.is_null() ? call : full_call, converter);
+  numpy_call_expr instance(function_id, call, converter);
   if (
     std::optional<exprt> hoisted =
       instance.try_hoist_call_arg_for_view_method(function_id.get_function()))
