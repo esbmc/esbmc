@@ -5286,11 +5286,13 @@ expr2tc if2t::do_simplify() const
 
   if (
     is_constant_number(true_value) && is_true(true_value) &&
-    (gen_one(true_value->type) == true_value) && is_false(false_value))
+    (gen_one(true_value->type) == true_value) && is_false(false_value) &&
+    same_value_and_sign(false_value, gen_zero(false_value->type)))
     return typecast_check_return(type, cond);
 
   if (
     is_constant_number(false_value) && is_false(true_value) &&
+    same_value_and_sign(true_value, gen_zero(true_value->type)) &&
     (gen_one(false_value->type) == false_value) && is_true(false_value))
     return typecast_check_return(type, not2tc(cond));
 
