@@ -2493,7 +2493,9 @@ materialize_arange_dtype(const nlohmann::json &args, const std::string &dtype)
 // Defined further down (dtype parsing/casting lives next to get_dtype());
 // forward-declared here so materialize_numpy_constructor_array can apply a
 // dtype= keyword instead of just tolerating its absence.
-static std::string extract_numpy_dtype_name(const nlohmann::json &dtype_node);
+static std::string extract_numpy_dtype_name(
+  const nlohmann::json &dtype_node,
+  const nlohmann::json &ast);
 static bool is_numpy_integer_dtype(const std::string &dtype);
 static nlohmann::json cast_numpy_literal_to_dtype(
   const nlohmann::json &node,
@@ -2503,11 +2505,13 @@ static nlohmann::json cast_numpy_linspace_literal_to_dtype(
   const std::string &dtype);
 
 // The normalized dtype= of @p call_node, or "" when it has none.
-static std::string constructor_dtype_name(const nlohmann::json &call_node)
+static std::string constructor_dtype_name(
+  const nlohmann::json &call_node,
+  const nlohmann::json &ast)
 {
   for (const auto &kw : call_node.value("keywords", nlohmann::json::array()))
     if (kw.value("arg", std::string()) == "dtype")
-      return extract_numpy_dtype_name(kw["value"]);
+      return extract_numpy_dtype_name(kw["value"], ast);
   return {};
 }
 
@@ -2573,7 +2577,8 @@ static std::optional<nlohmann::json> materialize_numpy_constructor_array(
   else if (ctor == "linspace")
     materialized = materialize_linspace(args, linspace_endpoint(call_node));
   else if (ctor == "arange")
-    return materialize_arange_dtype(args, constructor_dtype_name(call_node));
+    return materialize_arange_dtype(
+      args, constructor_dtype_name(call_node, ast_json));
 
   if (!materialized)
     return std::nullopt;
@@ -2588,7 +2593,7 @@ static std::optional<nlohmann::json> materialize_numpy_constructor_array(
   {
     if (kw.value("arg", std::string()) != "dtype")
       continue;
-    const std::string dtype = extract_numpy_dtype_name(kw["value"]);
+    const std::string dtype = extract_numpy_dtype_name(kw["value"], ast_json);
     if (ctor == "linspace")
       return cast_numpy_linspace_literal_to_dtype(*materialized, dtype);
     return cast_numpy_literal_to_dtype(*materialized, dtype);
@@ -4816,7 +4821,7 @@ static std::string normalize_numpy_dtype_name(const std::string &dtype)
     return "complex128";
   if (dtype == "str_" || dtype == "unicode")
     return "str";
-  if (dtype == "object_")
+  if (dtype == "object_" || dtype == "O")
     return "object";
   return dtype;
 }
@@ -4860,11 +4865,17 @@ static bool is_named_numpy_dtype(const std::string &dtype)
 
 // The single normalization of a dtype= argument: a scalar type named by a
 // builtin, a numpy attribute or a string, or a specific rejection.
-static std::string extract_numpy_dtype_name(const nlohmann::json &dtype_node)
+static std::string extract_numpy_dtype_name(
+  const nlohmann::json &dtype_node,
+  const nlohmann::json &ast)
 {
   const std::string node_type =
     dtype_node.is_object() ? dtype_node.value("_type", std::string()) : "";
-  if (node_type == "Attribute" && dtype_node.contains("attr"))
+  const bool numpy_attribute =
+    node_type == "Attribute" &&
+    dtype_node["value"].value("_type", std::string()) == "Name" &&
+    is_imported_numpy_module_alias(ast, dtype_node["value"].value("id", ""));
+  if (numpy_attribute)
     return normalize_numpy_dtype_name(dtype_node["attr"].get<std::string>());
   const bool is_string = node_type == "Constant" &&
                          dtype_node.contains("value") &&
@@ -5192,7 +5203,7 @@ std::string numpy_call_expr::get_dtype() const
     for (const auto &kw : call_["keywords"])
     {
       if (kw["_type"] == "keyword" && kw["arg"] == "dtype")
-        return extract_numpy_dtype_name(kw["value"]);
+        return extract_numpy_dtype_name(kw["value"], converter_.ast());
     }
   }
   return {};
