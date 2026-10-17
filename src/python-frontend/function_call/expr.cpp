@@ -2534,7 +2534,7 @@ exprt function_call_expr::handle_list_sort() const
 
   // sort() supports a `reverse=` keyword. `key=` is not handled yet; reject
   // explicitly rather than dropping it silently.
-  bool reverse = false;
+  exprt reverse = false_exprt();
   if (call_.contains("keywords"))
   {
     for (const auto &kw : call_["keywords"])
@@ -2542,11 +2542,9 @@ exprt function_call_expr::handle_list_sort() const
       const std::string name = kw.value("arg", "");
       if (name == "reverse")
       {
-        exprt v = converter_.get_expr(kw["value"]);
-        if (!v.is_constant())
-          throw std::runtime_error(
-            "sort(reverse=...) requires a constant boolean");
-        reverse = v.is_true();
+        reverse = converter_.get_expr(kw["value"]);
+        if (!reverse.type().is_bool())
+          reverse = typecast_exprt(reverse, bool_typet());
       }
       else
         throw std::runtime_error(
@@ -2596,8 +2594,15 @@ exprt function_call_expr::handle_list_sort() const
 
   // For reverse=True, sort ascending then reverse in place via the existing
   // __ESBMC_list_reverse model. Wrap both calls in a code_blockt.
-  if (!reverse)
+  if (reverse.is_false())
     return sort_call;
+  // The element type registry is reversed at conversion time, so a reverse
+  // known only at run time needs elements of one type, which it leaves
+  // unchanged.
+  if (!reverse.is_true() && type_flag == 3)
+    throw std::runtime_error(
+      "sort(reverse=...) over a mixed int/float list requires a constant "
+      "boolean");
 
   const symbolt *reverse_func =
     converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_reverse");
@@ -2611,11 +2616,20 @@ exprt function_call_expr::handle_list_sort() const
   reverse_call.type() = empty_typet();
   reverse_call.location() = converter_.get_location_from_decl(call_);
 
-  converter_.get_element_type_registry().reverse(list_id);
-
   code_blockt block;
   block.copy_to_operands(sort_call);
-  block.copy_to_operands(reverse_call);
+  if (reverse.is_true())
+  {
+    converter_.get_element_type_registry().reverse(list_id);
+    block.copy_to_operands(reverse_call);
+  }
+  else
+  {
+    code_ifthenelset reverse_if;
+    reverse_if.cond() = reverse;
+    reverse_if.then_case() = reverse_call;
+    block.copy_to_operands(reverse_if);
+  }
   return block;
 }
 

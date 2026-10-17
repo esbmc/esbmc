@@ -5631,6 +5631,44 @@ std::string python_converter::call_return_class(const nlohmann::json &rhs) const
   return json_utils::is_class(cls, *ast_json) ? cls : std::string();
 }
 
+// A tuple-struct variable (adopted from an explicit-Any binding) being
+// rebound to a non-tuple value needs the same fresh slot: retyping the
+// shared symbol would turn earlier member reads into member-of-scalar,
+// which trips member2t's source-type assert at GOTO conversion.
+// Code-typed and unknown (void*) rhs are excluded exactly as in the
+// propagate branch of handle_assignment_type_adjustments: neither
+// yields a usable alias slot type.
+bool python_converter::needs_fresh_retype_slot(
+  const exprt &lhs,
+  const exprt &rhs,
+  const std::string &lhs_id) const
+{
+  const bool tuple_to_nontuple_rebind =
+    tuple_handler_->is_tuple_type(lhs.type()) && !rhs.type().is_empty() &&
+    !tuple_handler_->is_tuple_type(rhs.type()) && !rhs.type().is_code() &&
+    !(rhs.type().is_pointer() && rhs.type().subtype().id() == "empty");
+  return tuple_to_nontuple_rebind ||
+         is_numpy_array_to_view_rebind(lhs, rhs, lhs_id);
+}
+
+// A NumPy array rebound to a view of itself, `x = x[1]`: retyping x in
+// place would turn the view's own `&x` into the address of a pointer.
+bool python_converter::is_numpy_array_to_view_rebind(
+  const exprt &lhs,
+  const exprt &rhs,
+  const std::string &lhs_id) const
+{
+  return block_nesting_ == function_body_depth_ + 1 && lhs.type().is_array() &&
+         rhs.type().is_pointer() && numpy_array_symbols_.count(lhs_id) != 0;
+}
+
+bool python_converter::is_attribute_store_of_numpy_view(
+  const nlohmann::json &target,
+  const nlohmann::json &value)
+{
+  return target.value("_type", "") == "Attribute" && passes_numpy_view(value);
+}
+
 symbolt *python_converter::mint_retyped_symbol(
   const symbolt &orig,
   const std::string &alias_key,
@@ -6128,7 +6166,8 @@ void python_converter::get_var_assign(
     ast_node.contains("value") && ast_node["value"].is_object() &&
     contains_tracked_numpy_view_name(ast_node["value"]))
   {
-    if (target.value("_type", "") == "Attribute")
+    // `self.n = len(v)` or `self.x = v[0]` stores a scalar read of it.
+    if (is_attribute_store_of_numpy_view(target, ast_node["value"]))
       throw std::runtime_error(
         "TypeError: storing a copied numpy view in an attribute is not "
         "supported");
@@ -6862,25 +6901,13 @@ void python_converter::get_var_assign(
         }
       }
 
-      // A tuple-struct variable (adopted from an explicit-Any binding) being
-      // rebound to a non-tuple value needs the same fresh slot: retyping the
-      // shared symbol would turn earlier member reads into member-of-scalar,
-      // which trips member2t's source-type assert at GOTO conversion.
-      // Code-typed and unknown (void*) rhs are excluded exactly as in the
-      // propagate branch of handle_assignment_type_adjustments: neither
-      // yields a usable alias slot type.
-      const bool tuple_to_nontuple_rebind =
-        tuple_handler_->is_tuple_type(lhs.type()) && !rhs.type().is_empty() &&
-        !tuple_handler_->is_tuple_type(rhs.type()) && !rhs.type().is_code() &&
-        !(rhs.type().is_pointer() && rhs.type().subtype().id() == "empty");
-
       if (
         is_scalar_retype(
           type_handler_,
           lhs.type(),
           rhs.type(),
           block_nesting_ == function_body_depth_ + 1) ||
-        tuple_to_nontuple_rebind)
+        needs_fresh_retype_slot(lhs, rhs, orig_id))
       {
         symbolt *new_symbol_ptr = mint_retyped_symbol(
           *lhs_symbol, orig_id, rhs.type(), location_begin, sid, target_block);
@@ -6945,6 +6972,7 @@ void python_converter::get_var_assign(
     // Handle type adjustments
     handle_assignment_type_adjustments(
       lhs_symbol, lhs, rhs, lhs_type, ast_node, is_ctor_call);
+    set_none_flag(lhs, ast_node, target_block);
 
     // Propagate $input_str$ → $input_len$ companion mapping so that len()
     // on any alias of an input() string can use the symbolic length directly.
@@ -7549,6 +7577,19 @@ bool python_converter::contains_nested_scope_named_expr(
   return false;
 }
 
+// Whether a str array constant is empty, reading it as strlen does; nullopt for
+// any other value. Symex never ends strlen's loop over the address of an array
+// constant (#8713), so a literal's truth value is folded instead.
+static std::optional<bool> constant_string_is_empty(const exprt &str)
+{
+  if (!str.is_constant() || !str.type().is_array() || str.operands().empty())
+    return std::nullopt;
+  const exprt &first = str.operands().front();
+  if (!first.is_constant())
+    return std::nullopt;
+  return first.is_zero();
+}
+
 exprt python_converter::apply_string_truthiness(
   const exprt &str,
   const locationt &location)
@@ -7556,14 +7597,20 @@ exprt python_converter::apply_string_truthiness(
   if (!type_utils::is_string_type(str.type()))
     return str;
 
+  if (const auto empty = constant_string_is_empty(str))
+  {
+    exprt cond = *empty ? exprt(false_exprt()) : exprt(true_exprt());
+    cond.location() = location;
+    return cond;
+  }
+
   const symbolt *strlen_sym = symbol_table_.find_symbol("c:@F@strlen");
   if (!strlen_sym)
     throw std::runtime_error("strlen not found for string truthiness check");
 
-  // V.3: build `strlen(s) != 0` in IREP2, back-migrating once (mirrors the
-  // string-truthiness path at converter_unop.cpp). The call is built directly
-  // in IREP2; it carries no IREP2 location, so the location is re-attached to
-  // the back-migrated operand below.
+  // V.3: build `strlen(s) != 0` in IREP2, back-migrating once. The call is
+  // built directly in IREP2; it carries no IREP2 location, so the location is
+  // re-attached to the back-migrated operand below.
   expr2tc strlen_arg2;
   migrate_expr(string_handler_.get_array_base_address(str), strlen_arg2);
   expr2tc strlen_call2 = side_effect_function_call2tc(
@@ -8890,11 +8937,13 @@ exprt python_converter::get_block(
   // Iterate over block statements
   for (auto &raw_element : ast_block)
   {
-    nlohmann::json rewritten_element, hoisted_element;
-    const nlohmann::json &element = hoist_unnamed_numpy_view_arguments(
-      resolve_numpy_view_containers(raw_element, rewritten_element),
-      hoisted_element,
-      block);
+    nlohmann::json rewritten_element, adapted_element, hoisted_element;
+    const nlohmann::json &element = adapt_numpy_view_builtin_calls(
+      hoist_unnamed_numpy_view_arguments(
+        resolve_numpy_view_containers(raw_element, rewritten_element),
+        hoisted_element,
+        block),
+      adapted_element);
     check_numpy_view_statement(element);
     bind_runtime_numpy_view_arguments(element, block);
     StatementType type = python_frontend::get_statement_type(element);

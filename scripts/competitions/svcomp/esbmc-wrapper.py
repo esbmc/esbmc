@@ -181,10 +181,23 @@ UNCAUGHT_EXCEPTION = re.compile(r"uncaught exception: (\w+)")
 ASSERTION_ROW = re.compile(r"\]\s+line\s+\d+\s+assertion\b")
 
 
+# The scalar model raises a TypeError on a dynamically-typed operand as an
+# assertion in scalar.c, so the comment is the bare message, not "uncaught
+# exception: TypeError". A try/except TypeError around the operation still
+# catches it. Only these operand checks count: list.c's "object of this type
+# has no len()" also fails inside the model on correct programs.
+MODEL_TYPEERROR = re.compile(
+  r"TypeError: (?:unsupported operand type\(s\)|comparison not supported"
+  r"|can only concatenate str)")
+
+
 def classify_python_violation(violated, prop):
   """Does this violation belong to the exception family the property asks about?"""
   family = PYTHON_EXCEPTION_FAMILIES[prop]
   if any(name in family for name in UNCAUGHT_EXCEPTION.findall(violated)):
+    return Result.fail_python
+
+  if "TypeError" in family and MODEL_TYPEERROR.search(violated):
     return Result.fail_python
 
   if prop == Property.py_assertion and ASSERTION_ROW.search(violated):
