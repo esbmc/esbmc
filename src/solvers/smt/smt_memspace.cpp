@@ -484,6 +484,7 @@ smt_astt smt_solver_baset::init_pointer_obj(
   finalize_pointer_chain(obj_num);
 
   addr_space_data.back()[obj_num] = may_be_freed;
+  extend_rebuilt_pointers(obj_num);
 
   membs.clear();
   membs.push_back(start_sym);
