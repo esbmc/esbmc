@@ -3138,3 +3138,4 @@ regression/python/github_8355_function_choice
 regression/python/github_8355_function_choice_fail
 regression/python/github_8475
 regression/python/github_8475_fail
+regression/esbmc-cpp/try_catch/github_8680_throw_operand_before_unwind
