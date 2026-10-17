@@ -1839,6 +1839,7 @@ regression/esbmc/github_7855-tie-hides-deref
 regression/esbmc/github_7855-tie-hides-deref_pass
 regression/esbmc/github_7855-reread
 regression/esbmc/github_7855-reread_fail
+regression/esbmc/github_7855-reread-all-witnesses_fail
 regression/esbmc/github_7855-reread-later-object
 regression/esbmc/github_7855-reread-smt-during-symex
 regression/esbmc/github_7855-bytewise-store
