@@ -296,6 +296,13 @@ bool configt::set(const cmdlinet &cmdline)
     dm = ansi_c.target.is_windows_abi() ? LLP64 : LP64;
   ansi_c.set_data_model(dm);
 
+  /* i386's long double used to be a 96-bit (15, 81) float, a format Bitwuzla
+   * rejects (#8097). Model it as binary128, the format x86_64 already uses;
+   * the clang frontend passes -mlong-double-128 so sizeof, alignment and
+   * LDBL_MANT_DIG agree. */
+  if (std::regex_match(ansi_c.target.arch, X86) && ansi_c.word_size == 32)
+    ansi_c.long_double_width = 128;
+
   if (ansi_c.cheri && ansi_c.word_size != 64)
   {
     log_error("--cheri!=off is only supported with 64-bit targets");

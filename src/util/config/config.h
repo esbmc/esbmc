@@ -112,8 +112,9 @@ public:
     // alignment of max_align_t (in bytes)
     unsigned int max_alignment() const noexcept
     {
-      // 8 for 32-bit, 16 for 64-bit
-      return word_size * 2 / char_width;
+      // alignof(max_align_t): 8 for 32-bit, 16 for 64-bit or for a binary128
+      // long double
+      return (long_double_width == 128 ? 128 : word_size * 2) / char_width;
     }
 
     bool char_is_unsigned;
