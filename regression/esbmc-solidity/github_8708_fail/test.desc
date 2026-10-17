@@ -1,0 +1,5 @@
+CORE
+contract.solast
+--sol contract.sol --contract C --overflow-check --unwind 3 --no-unwinding-assertions --multi-property
+^  FAILED +\[f\.arithmetic-overflow\.1\] +line +8 +arithmetic overflow on add$
+^VERIFICATION FAILED$
