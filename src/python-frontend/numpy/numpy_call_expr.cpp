@@ -106,6 +106,24 @@ static bool is_numpy_string_literal(const nlohmann::json &node)
          !is_complex_annotated_constant(node);
 }
 
+static bool is_literal_full_fill(const nlohmann::json &fill)
+{
+  scalar_value value;
+  return is_numpy_string_literal(fill) ||
+         try_extract_scalar_constant(fill, value);
+}
+
+// @p value at every leaf of the array type @p shape.
+static exprt filled_array(const typet &shape, const exprt &value)
+{
+  if (!shape.is_array())
+    return value;
+  exprt array = gen_zero(shape);
+  for (auto &element : array.operands())
+    element = filled_array(shape.subtype(), value);
+  return array;
+}
+
 // Broadcasting an array fill over the shape is not modelled.
 static void reject_array_full_fill(const nlohmann::json &fill)
 {
@@ -4930,6 +4948,53 @@ make_numpy_linspace_constant(double value, const std::string &dtype)
   return out;
 }
 
+// np.full with a fill computed at run time: the fill is evaluated once, into
+// a temporary every element then holds.
+exprt numpy_call_expr::full_of_runtime_fill(
+  const std::vector<std::size_t> &dims)
+{
+  if (!get_dtype().empty())
+    throw std::runtime_error(
+      "TypeError: numpy.full() with dtype= and a non-literal fill value is "
+      "not supported");
+  const exprt fill = converter_.get_expr(call_["args"][1]);
+  const typet type = fill.type();
+  if (
+    !type.is_signedbv() && !type.is_unsignedbv() && !type.is_floatbv() &&
+    !type.is_bool())
+    throw std::runtime_error(
+      "TypeError: numpy.full() with a non-literal fill value that is not a "
+      "number is not supported");
+  const locationt location = converter_.get_location_from_decl(call_);
+  symbolt &tmp =
+    converter_.create_tmp_symbol(call_, "$full_fill$", type, exprt());
+  code_declt decl(symbol_expr(tmp));
+  decl.location() = location;
+  converter_.current_block->copy_to_operands(decl);
+  if (fill.id() == "code" && fill.get("statement") == "function_call")
+  {
+    code_function_callt call = to_code_function_call(to_code(fill));
+    call.lhs() = symbol_expr(tmp);
+    converter_.current_block->copy_to_operands(call);
+  }
+  else
+  {
+    code_assignt assign(symbol_expr(tmp), fill);
+    assign.location() = location;
+    converter_.current_block->copy_to_operands(assign);
+  }
+  typet shape = type;
+  for (auto dim = dims.rbegin(); dim != dims.rend(); ++dim)
+    shape = type_handler_.build_array(shape, *dim);
+  const exprt value = filled_array(shape, symbol_expr(tmp));
+  symbolt &literal =
+    converter_.create_tmp_symbol(call_, "$compound-literal$", shape, value);
+  code_declt literal_decl(symbol_expr(literal));
+  literal_decl.operands().push_back(value);
+  converter_.current_block->copy_to_operands(literal_decl);
+  return retype_current_lhs_and_return(converter_, symbol_expr(literal));
+}
+
 bool numpy_call_expr::is_math_function() const
 {
   const std::string &function = function_id_.get_function();
@@ -9749,6 +9814,8 @@ exprt numpy_call_expr::get()
       auto fill = get_arg(1);
       reject_array_full_fill(fill);
       auto dims = parse_shape(shape);
+      if (!dims.empty() && !is_literal_full_fill(fill))
+        return full_of_runtime_fill(dims);
       if (dims.empty())
       {
         // Try symbolic 1-D shape: evaluate the size expression at runtime.
