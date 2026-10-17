@@ -335,6 +335,11 @@ private:
   std::string infer_parameter_type_from_calls(
     size_t param_index,
     const std::vector<Json> &function_calls);
+  std::string infer_parameter_type_at_call_sites(
+    const std::string &func_name,
+    size_t param_index,
+    const std::vector<Json> &function_calls,
+    const Json &search_context);
   void infer_parameter_types(Json &function_element);
 
   // ----- top-level orchestration entry points -----

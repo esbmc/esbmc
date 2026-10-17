@@ -4355,6 +4355,89 @@ python_annotation<Json>::infer_tuple_param_types_from_calls(
   return result;
 }
 
+/// The position of @p name among @p def's positional parameters, or -1.
+template <class Json>
+static int positional_param_index(const Json &def, const std::string &name)
+{
+  const Json &params = def["args"]["args"];
+  for (size_t i = 0; i < params.size(); ++i)
+    if (params[i].value("arg", "") == name)
+      return static_cast<int>(i);
+  return -1;
+}
+
+/// Append to @p types the annotation of each parameter of its caller that a
+/// call to @p callee in @p node passes as argument @p index, or "" for an
+/// unannotated one. A call to @p callee inside its own body that passes its
+/// parameter back in the same position says nothing new and is left out.
+template <class Json>
+static void collect_forwarded_parameters(
+  const std::string &callee,
+  size_t index,
+  const Json &node,
+  const Json *caller,
+  std::vector<std::string> &types)
+{
+  if (node.is_array())
+  {
+    for (const auto &elem : node)
+      collect_forwarded_parameters(callee, index, elem, caller, types);
+    return;
+  }
+  if (!node.is_object())
+    return;
+
+  const std::string kind = node.value("_type", "");
+  if (kind == "FunctionDef" || kind == "AsyncFunctionDef" || kind == "Lambda")
+    caller = &node;
+  else if (
+    kind == "Call" && caller != nullptr &&
+    node["func"].value("_type", "") == "Name" &&
+    node["func"].value("id", "") == callee && index < node["args"].size() &&
+    node["args"][index].value("_type", "") == "Name")
+  {
+    const std::string name = node["args"][index]["id"];
+    const int pos = positional_param_index(*caller, name);
+    const bool same_slot =
+      caller->value("name", "") == callee && pos == static_cast<int>(index);
+    if (pos >= 0 && !same_slot)
+    {
+      const Json &param = (*caller)["args"]["args"][pos];
+      types.push_back(
+        param.contains("annotation") && !param["annotation"].is_null()
+          ? json_utils::get_annotation_type_name(param["annotation"])
+          : "");
+    }
+  }
+
+  for (auto it = node.begin(); it != node.end(); ++it)
+    collect_forwarded_parameters(callee, index, it.value(), caller, types);
+}
+
+/// The call sites' type for parameter @p param_index of @p func_name, or ""
+/// when a caller forwards one of its own parameters there with another or no
+/// annotation. Such an argument resolves only in the caller's scope, so the
+/// call-site inference skips it, and typing the parameter from the remaining
+/// sites alone would mistype the forwarded value (`f("s")` and `f(y)` with
+/// `y` an int typed `x` as str).
+template <class Json>
+std::string python_annotation<Json>::infer_parameter_type_at_call_sites(
+  const std::string &func_name,
+  size_t param_index,
+  const std::vector<Json> &function_calls,
+  const Json &search_context)
+{
+  const std::string inferred =
+    infer_parameter_type_from_calls(param_index, function_calls);
+  std::vector<std::string> forwarded;
+  collect_forwarded_parameters<Json>(
+    func_name, param_index, search_context, nullptr, forwarded);
+  for (const std::string &type : forwarded)
+    if (type != inferred)
+      return "";
+  return inferred;
+}
+
 template <class Json>
 std::string python_annotation<Json>::infer_parameter_type_from_calls(
   size_t param_index,
@@ -4622,7 +4705,8 @@ void python_annotation<Json>::infer_parameter_types(Json &function_element)
 
         std::string saved_ctx = current_func_name_context_;
         current_func_name_context_ = call_site_context;
-        inferred_type = infer_parameter_type_from_calls(i, function_calls);
+        inferred_type = infer_parameter_type_at_call_sites(
+          func_name, i, function_calls, search_context);
         current_func_name_context_ = saved_ctx;
       }
 
