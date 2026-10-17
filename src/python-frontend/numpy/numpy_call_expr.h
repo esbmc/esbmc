@@ -94,6 +94,7 @@ private:
   // The element type of the array built from the literal @p list: a fixed-width
   // string, or empty for the literal's own.
   typet constructor_element_type(const nlohmann::json &list) const;
+  void reject_complex_array_operands(const std::string &function) const;
   // @p build run with constructor_element_type(@p list) at the leaves of
   // the static arrays it builds.
   exprt with_element_type(

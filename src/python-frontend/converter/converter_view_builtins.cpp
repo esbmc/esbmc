@@ -401,10 +401,32 @@ bool python_converter::is_rank1_numpy_array_name(
   return type.is_array() && !ns.follow(type.subtype()).is_array();
 }
 
+// The builtins read the elements of a numpy array as real numbers.
+void python_converter::reject_builtin_over_complex_array(
+  const nlohmann::json &node) const
+{
+  if (
+    !is_builtin_over_numpy_view(node) || node["func"].value("id", "") == "list")
+    return;
+  const nlohmann::json &arg = node["args"][0];
+  const std::string id = arg.value("_type", "") == "Name"
+                           ? resolve_name_symbol_id(arg.value("id", ""))
+                           : std::string();
+  const symbolt *symbol = id.empty() ? nullptr : symbol_table_.find_symbol(id);
+  if (symbol == nullptr)
+    return;
+  const typet type = ns.follow(symbol->get_type());
+  if (type.is_array() && is_complex_type(ns.follow(type.subtype())))
+    throw std::runtime_error(
+      "TypeError: passing a numpy complex array to " +
+      node["func"]["id"].get<std::string>() + "() is not supported");
+}
+
 // Replaces, in the expressions of `node`, each view argument of a
 // list-consuming builtin by the list of its elements.
 bool python_converter::adapt_numpy_view_builtin_arguments(nlohmann::json &node)
 {
+  reject_builtin_over_complex_array(node);
   if (!node.is_object() && !node.is_array())
     return false;
   bool changed = false;

@@ -9447,9 +9447,47 @@ exprt numpy_call_expr::build_result(
   return instance.get();
 }
 
+// Complex arrays are stored, indexed and copied; the reducers read their
+// elements as real numbers.
+void numpy_call_expr::reject_complex_array_operands(
+  const std::string &function) const
+{
+  static const std::set<std::string> reducers = {
+    "sum",
+    "prod",
+    "mean",
+    "min",
+    "max",
+    "argmin",
+    "argmax",
+    "any",
+    "all",
+    "std",
+    "var",
+    "median",
+    "cumsum",
+    "cumprod",
+    "sort",
+    "argsort"};
+  if (!reducers.count(function))
+    return;
+  for (const auto &arg : call_.value("args", nlohmann::json::array()))
+  {
+    if (arg.value("_type", std::string()) != "Name")
+      continue;
+    const symbolt *symbol = converter_.find_symbol(
+      converter_.resolve_name_symbol_id(arg["id"].get<std::string>()));
+    if (symbol && is_complex_type(get_array_scalar_type(symbol->get_type())))
+      throw std::runtime_error(
+        "TypeError: numpy." + function +
+        "() over a complex array is not supported");
+  }
+}
+
 exprt numpy_call_expr::get()
 {
   const std::string &function = function_id_.get_function();
+  reject_complex_array_operands(function);
 
   if (std::optional<exprt> permuted = try_build_axis_permutation_view())
     return *permuted;
