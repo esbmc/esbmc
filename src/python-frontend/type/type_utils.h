@@ -370,6 +370,15 @@ public:
     return type.is_signedbv() || type.is_unsignedbv();
   }
 
+  /// A numpy array of fixed-width strings: arrays of char arrays.
+  static bool is_numpy_string_array(const typet &type)
+  {
+    if (!type.is_array() || !type.subtype().is_array())
+      return false;
+    return type.subtype().subtype() == char_type() ||
+           is_numpy_string_array(type.subtype());
+  }
+
   static bool is_string_type(const typet &type)
   {
     // String types are represented as arrays or pointers to char
