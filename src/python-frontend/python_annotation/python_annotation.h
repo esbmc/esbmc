@@ -158,6 +158,9 @@ private:
   // The type of `f(...)[i]` read from f's `list[T]` return annotation, or "Any"
   // when the subscript's base is not such a call.
   std::string subscript_type_from_call(const Json &subscript_node);
+
+  // The type every element of the literal in `[a, b, ...][i]` shares, or "Any".
+  std::string subscript_type_from_list_literal(const Json &subscript_node);
   bool
   is_imported_name_in_body(const std::string &name, const Json &stmts) const;
   bool is_imported_name(const std::string &name) const;
@@ -334,6 +337,8 @@ private:
   void annotate_function(Json &function_element);
   void annotate_class(Json &class_element);
   void infer_loop_variable_types(Json &while_stmt);
+  Json list_element_annotation(const Json &iter_node);
+  Json self_attr_list_element(const std::string &attr);
   void annotate_branch_blocks(Json &element);
   void add_annotation(Json &body);
   std::string widen_to_optional_scalar(

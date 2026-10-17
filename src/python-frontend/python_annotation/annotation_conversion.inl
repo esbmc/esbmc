@@ -229,6 +229,21 @@ python_annotation<Json>::subscript_type_from_call(const Json &subscript_node)
 }
 
 template <class Json>
+std::string python_annotation<Json>::subscript_type_from_list_literal(
+  const Json &subscript_node)
+{
+  const Json &elts = subscript_node["value"]["elts"];
+  if (elts.empty() || subscript_node["slice"].value("_type", "") == "Slice")
+    return "Any";
+
+  const std::string elem = get_argument_type(elts[0]);
+  for (const Json &e : elts)
+    if (get_argument_type(e) != elem)
+      return "Any";
+  return elem.empty() ? "Any" : elem;
+}
+
+template <class Json>
 std::string python_annotation<Json>::resolve_subscript_type(
   const Json &subscript_node,
   const Json &body)
@@ -238,6 +253,9 @@ std::string python_annotation<Json>::resolve_subscript_type(
   // Recursively resolve nested subscripts
   if (base["_type"] == "Subscript")
     return resolve_subscript_type(base, body);
+
+  if (base["_type"] == "List")
+    return subscript_type_from_list_literal(subscript_node);
 
   if (base["_type"] != "Name")
     return subscript_type_from_call(subscript_node);
@@ -5259,7 +5277,7 @@ void python_annotation<Json>::infer_loop_variable_types(Json &while_stmt)
         {
           // Extract T from list[T]
           if (iter_annotation.contains("slice"))
-            stmt["annotation"] = iter_annotation["slice"];
+            stmt["annotation"] = list_element_annotation(iter_node);
         }
         else if (container_type == "dict" || container_type == "Dict")
         {
@@ -5284,6 +5302,85 @@ void python_annotation<Json>::infer_loop_variable_types(Json &while_stmt)
       }
     }
   }
+}
+
+/// T for an iterable annotated list[T]. The preprocessor annotates the
+/// iterable `self.attr` as list[Any], so take T from the attribute's binding.
+template <class Json>
+Json python_annotation<Json>::list_element_annotation(const Json &iter_node)
+{
+  const Json &elem = iter_node["annotation"]["slice"];
+  const Json &value = iter_node.value("value", Json());
+  if (
+    elem.value("id", "") != "Any" || !value.is_object() ||
+    value.value("_type", "") != "Attribute" ||
+    value["value"].value("id", "") != "self")
+    return elem;
+
+  const Json attr_elem =
+    self_attr_list_element(value["attr"].template get<std::string>());
+  return attr_elem.is_null() ? elem : attr_elem;
+}
+
+/// T when the current class binds `self.<attr>` exactly once, in __init__, to
+/// a list[T]: annotated so, or assigned a parameter annotated so. Null
+/// otherwise, since another binding could hold a list of another type.
+template <class Json>
+Json python_annotation<Json>::self_attr_list_element(const std::string &attr)
+{
+  const Json cls = json_utils::find_class(ast_["body"], current_class_name_);
+  if (cls.empty())
+    return Json();
+
+  auto is_self_attr = [&attr](const Json &node) {
+    return node.is_object() && node.value("_type", "") == "Attribute" &&
+           node.value("attr", "") == attr && node.contains("value") &&
+           node["value"].value("id", "") == "self";
+  };
+  size_t stores = 0;
+  std::function<void(const Json &)> count = [&](const Json &node) {
+    if (
+      is_self_attr(node) && node.contains("ctx") &&
+      node["ctx"].value("_type", "") == "Store")
+      ++stores;
+    if (node.is_structured())
+      for (const Json &child : node)
+        count(child);
+  };
+  count(cls);
+  if (stores != 1)
+    return Json();
+
+  const Json init = json_utils::try_find_function(cls["body"], "__init__");
+  if (init.empty())
+    return Json();
+
+  auto list_slice = [](const Json &ann) {
+    return ann.is_object() && ann.value("_type", "") == "Subscript" &&
+               ann["value"].value("id", "") == "list"
+             ? ann["slice"]
+             : Json();
+  };
+  for (const Json &stmt : init["body"])
+  {
+    const bool binds =
+      (stmt["_type"] == "AnnAssign" && is_self_attr(stmt["target"])) ||
+      (stmt["_type"] == "Assign" && is_self_attr(stmt["targets"][0]));
+    if (!binds)
+      continue;
+    // The annotator rewrites `self.a = p` to `self.a: list = p`, so a bare
+    // list annotation still takes T from the parameter.
+    const Json elem = list_slice(stmt.value("annotation", Json()));
+    const Json &value = stmt["value"];
+    if (
+      !elem.is_null() || !value.is_object() ||
+      value.value("_type", "") != "Name")
+      return elem;
+    const Json param = find_annotated_assign(
+      value["id"].template get<std::string>(), init["args"]["args"]);
+    return param.empty() ? Json() : list_slice(param["annotation"]);
+  }
+  return Json();
 }
 
 /// Annotates the else block of an if, and the else and finally blocks of a
