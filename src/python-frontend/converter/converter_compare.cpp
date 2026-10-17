@@ -1081,6 +1081,12 @@ static bool is_type_call(const nlohmann::json &node)
          node["func"]["id"] == "type";
 }
 
+// A builtin type's name, or `NoneType`, the class `type(None)` gives.
+static bool is_type_name(const std::string &name)
+{
+  return type_utils::is_type_identifier(name) || name == "NoneType";
+}
+
 std::optional<std::string> python_converter::class_identity_operand(
   const nlohmann::json &node,
   const exprt &expr) const
@@ -1092,8 +1098,7 @@ std::optional<std::string> python_converter::class_identity_operand(
     if (!expr.is_constant())
       return std::nullopt;
     const std::string name = expr.get_string("value");
-    return type_utils::is_type_identifier(name) ? std::optional(name)
-                                                : std::nullopt;
+    return is_type_name(name) ? std::optional(name) : std::nullopt;
   }
 
   if (is_class_object(expr))

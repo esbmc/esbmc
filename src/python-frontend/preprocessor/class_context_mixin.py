@@ -4,6 +4,10 @@ import copy
 from collections import Counter, defaultdict
 # pylint: disable=too-many-boolean-expressions
 
+# The class `type(None)` evaluates to, passed for a parameter, which a name
+# cannot spell.
+NONE_TYPE = "type(None)"
+
 
 def _class_scope_nodes(node):
     """The nodes of a class-body statement that are evaluated in the class
@@ -569,10 +573,24 @@ class ClassContextMixin:
 
     @staticmethod
     def _replace_reads(nodes, name, value):
-        for stmt in nodes:
-            for n in ast.walk(stmt):
-                if isinstance(n, ast.Name) and n.id == name and isinstance(n.ctx, ast.Load):
+        """Reads of `name` in `nodes` become the class `value` names, or
+        `type(None)` for the `NONE_TYPE` marker."""
+
+        class Reads(ast.NodeTransformer):
+
+            def visit_Name(self, n):
+                if n.id != name or not isinstance(n.ctx, ast.Load):
+                    return n
+                if value != NONE_TYPE:
                     n.id = value
+                    return n
+                call = ast.Call(func=ast.Name(id="type", ctx=ast.Load()),
+                                args=[ast.Constant(value=None)],
+                                keywords=[])
+                return ast.fix_missing_locations(ast.copy_location(call, n))
+
+        for stmt in nodes:
+            Reads().visit(stmt)
 
     def _bind_local_type_values(self, module, known):
         for func in ast.walk(module):
@@ -594,7 +612,23 @@ class ClassContextMixin:
         by_keyword = index >= len(func.args.posonlyargs)
         arg = call.args[index] if index < len(call.args) else next(
             (k.value for k in call.keywords if by_keyword and k.arg == param), None)
-        return arg.id if isinstance(arg, ast.Name) and arg.id in known else None
+        return ClassContextMixin._class_name(arg, known)
+
+    @staticmethod
+    def _class_name(node, known):
+        """The known class `node` names, or the `NONE_TYPE` marker for
+        `type(None)`, else None."""
+        if ClassContextMixin._is_type_of_none(node, known):
+            return NONE_TYPE
+        return node.id if isinstance(node, ast.Name) and node.id in known else None
+
+    @staticmethod
+    def _is_type_of_none(node, known):
+        """Whether `node` is `type(None)`, with `type` the builtin."""
+        return (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                and node.func.id == "type" and "type" in known and len(node.args) == 1
+                and not node.keywords and isinstance(node.args[0], ast.Constant)
+                and node.args[0].value is None)
 
     def _type_parameters(self, func, known, calls):
         """The indexes of the parameters `func` reads and never rebinds, for

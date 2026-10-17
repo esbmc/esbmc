@@ -1168,6 +1168,8 @@ exprt function_call_expr::handle_type_call() const
     throw std::runtime_error("type() requires exactly 1 argument");
 
   exprt arg_expr = converter_.get_expr(args[0]);
+  if (arg_expr.type() == none_type())
+    return converter_.make_class_object("NoneType");
   const std::string instance_class = exact_instance_class(args[0], arg_expr);
   if (!instance_class.empty())
     return converter_.make_class_object(instance_class);
