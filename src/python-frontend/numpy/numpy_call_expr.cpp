@@ -2192,8 +2192,65 @@ materialize_eye_identity(const std::string &ctor, const nlohmann::json &args)
   return node;
 }
 
+// The points of linspace(start, stop, num, endpoint) as NumPy computes them:
+// start + i * step, with the last point set to stop when it is included.
+static std::vector<double>
+linspace_points(double start, double stop, std::size_t num, bool endpoint)
+{
+  const std::size_t div = endpoint ? num - 1 : num;
+  const double step = div > 0 ? (stop - start) / static_cast<double>(div) : 0.0;
+  std::vector<double> points;
+  for (std::size_t i = 0; i < num; ++i)
+    points.push_back(static_cast<double>(i) * step + start);
+  if (endpoint && num > 1)
+    points.back() = stop;
+  return points;
+}
+
+static constexpr std::size_t max_materialized_linspace_points = 10000;
+
+// linspace()'s num: a constant, non-negative integer, 50 when absent.
+static std::size_t linspace_num(const nlohmann::json &num_node)
+{
+  if (num_node.is_null())
+    return 50;
+  numeric_value num;
+  if (!try_extract_numeric_constant(num_node, num))
+    throw std::runtime_error(
+      "TypeError: numpy.linspace() requires a constant num");
+  if (!num.is_int)
+    throw std::runtime_error(
+      "TypeError: 'float' object cannot be interpreted as an integer");
+  if (num.int_value < 0)
+    throw std::runtime_error(
+      "ValueError: Number of samples, " + std::to_string(num.int_value) +
+      ", must be non-negative.");
+  if (
+    static_cast<std::size_t>(num.int_value) > max_materialized_linspace_points)
+    throw std::runtime_error(
+      "TypeError: numpy.linspace() num exceeds the supported element limit "
+      "of " +
+      std::to_string(max_materialized_linspace_points));
+  return static_cast<std::size_t>(num.int_value);
+}
+
+// linspace()'s endpoint=: a constant bool, true when absent.
+static bool linspace_endpoint(const nlohmann::json &call_node)
+{
+  for (const auto &kw : call_node.value("keywords", nlohmann::json::array()))
+  {
+    if (kw.value("arg", std::string()) != "endpoint")
+      continue;
+    if (!kw["value"].contains("value") || !kw["value"]["value"].is_boolean())
+      throw std::runtime_error(
+        "TypeError: numpy.linspace() requires a constant boolean endpoint");
+    return kw["value"]["value"].get<bool>();
+  }
+  return true;
+}
+
 static std::optional<nlohmann::json>
-materialize_linspace(const nlohmann::json &args)
+materialize_linspace(const nlohmann::json &args, bool endpoint)
 {
   if (args.size() < 2 || args.size() > 3)
     return std::nullopt;
@@ -2203,34 +2260,14 @@ materialize_linspace(const nlohmann::json &args)
     !try_extract_numeric_constant(args[0], start_v) ||
     !try_extract_numeric_constant(args[1], stop_v))
     return std::nullopt;
-  std::size_t num = 50;
-  if (args.size() == 3)
-  {
-    numeric_value num_v;
-    if (
-      !try_extract_numeric_constant(args[2], num_v) || !num_v.is_int ||
-      num_v.int_value < 0)
-      return std::nullopt;
-    num = static_cast<std::size_t>(num_v.int_value);
-  }
-  // Matches the real linspace() creation path: every element is a float,
-  // computed with the same start + step * i formula.
-  const double start = to_double(start_v);
-  const double stop = to_double(stop_v);
+  const std::size_t num =
+    linspace_num(args.size() == 3 ? args[2] : nlohmann::json());
   nlohmann::json node;
   node["_type"] = "List";
   node["elts"] = nlohmann::json::array();
-  if (num == 0)
-    return node;
-  if (num == 1)
-  {
-    node["elts"].push_back(build_constant_node(make_float_value(start)));
-    return node;
-  }
-  const double step = (stop - start) / static_cast<double>(num - 1);
-  for (std::size_t i = 0; i < num; ++i)
-    node["elts"].push_back(build_constant_node(
-      make_float_value(start + step * static_cast<double>(i))));
+  for (double point :
+       linspace_points(to_double(start_v), to_double(stop_v), num, endpoint))
+    node["elts"].push_back(build_constant_node(make_float_value(point)));
   return node;
 }
 
@@ -2474,16 +2511,18 @@ static std::string constructor_dtype_name(const nlohmann::json &call_node)
   return {};
 }
 
-// A single `dtype=` keyword is the only one materialize_numpy_constructor_
-// array() understands; anything else (an unrecognized keyword, or more than
-// one) still declines.
+// dtype= and linspace()'s endpoint= are the keywords materialize_numpy_
+// constructor_array() understands; any other still declines. The
+// preprocessor binds every constructor call, so a keyword reaching here is
+// one of the constructor's parameters, given once.
 static bool is_only_dtype_keyword(const nlohmann::json &call_node)
 {
-  if (!call_node.contains("keywords") || call_node["keywords"].empty())
-    return true;
-  const auto &keywords = call_node["keywords"];
-  return keywords.size() == 1 &&
-         keywords[0].value("arg", std::string()) == "dtype";
+  const auto &keywords = call_node.value("keywords", nlohmann::json::array());
+  return std::all_of(
+    keywords.begin(), keywords.end(), [](const nlohmann::json &kw) {
+      const std::string arg = kw.value("arg", std::string());
+      return arg == "dtype" || arg == "endpoint";
+    });
 }
 
 // The structural/receiver checks materialize_numpy_constructor_array() needs
@@ -2532,7 +2571,7 @@ static std::optional<nlohmann::json> materialize_numpy_constructor_array(
   else if (ctor == "eye" || ctor == "identity")
     materialized = materialize_eye_identity(ctor, args);
   else if (ctor == "linspace")
-    materialized = materialize_linspace(args);
+    materialized = materialize_linspace(args, linspace_endpoint(call_node));
   else if (ctor == "arange")
     return materialize_arange_dtype(args, constructor_dtype_name(call_node));
 
@@ -5087,6 +5126,39 @@ exprt numpy_call_expr::full_of_runtime_fill(
   literal_decl.operands().push_back(value);
   converter_.current_block->copy_to_operands(literal_decl);
   return retype_current_lhs_and_return(converter_, symbol_expr(literal));
+}
+
+nlohmann::json numpy_call_expr::linspace_literal(
+  const nlohmann::json &start_node,
+  const nlohmann::json &stop_node,
+  const nlohmann::json &num_node) const
+{
+  for (const char *unsupported : {"axis", "device"})
+    if (find_keyword_arg(unsupported))
+      throw std::runtime_error(
+        std::string("TypeError: numpy.linspace() ") + unsupported +
+        "= is not supported");
+  const nlohmann::json *retstep = find_keyword_arg("retstep");
+  if (retstep && retstep->value("value", nlohmann::json()) != false)
+    throw std::runtime_error(
+      "TypeError: numpy.linspace(retstep=True) is supported only unpacked "
+      "into two names");
+  numeric_value start;
+  numeric_value stop;
+  if (
+    !try_extract_numeric_constant(start_node, start) ||
+    !try_extract_numeric_constant(stop_node, stop))
+    throw std::runtime_error(
+      "TypeError: numpy.linspace() requires constant numeric start and stop");
+  const std::string dtype = get_dtype();
+  nlohmann::json list = {{"_type", "List"}, {"elts", nlohmann::json::array()}};
+  for (double point : linspace_points(
+         to_double(start),
+         to_double(stop),
+         linspace_num(num_node),
+         linspace_endpoint(call_)))
+    list["elts"].push_back(make_numpy_linspace_constant(point, dtype));
+  return list;
 }
 
 bool numpy_call_expr::is_math_function() const
@@ -7803,7 +7875,7 @@ bool numpy_call_expr::binds_static_array(const nlohmann::json &list) const
   const std::string function = function_id_.get_function();
   static const std::map<std::string, std::set<std::string>> keywords = {
     {"arange", {"dtype"}},
-    {"linspace", {}},
+    {"linspace", {"dtype", "endpoint", "retstep"}},
     {"full", {"dtype"}},
     {"identity", {"dtype"}},
     {"eye", {"dtype", "M", "k"}}};
@@ -9781,13 +9853,6 @@ exprt numpy_call_expr::get()
       return out;
     };
 
-    auto as_double = [](const nlohmann::json &node) {
-      numeric_value value;
-      if (try_extract_numeric_constant(node, value))
-        return to_double(value);
-      return 0.0;
-    };
-
     if (
       function == "greater" || function == "less" ||
       function == "greater_equal" || function == "less_equal" ||
@@ -9965,23 +10030,13 @@ exprt numpy_call_expr::get()
 
     if (function == "linspace")
     {
-      auto start = as_double(get_arg(0));
-      auto stop = as_double(get_arg(1));
-      std::size_t num = 50;
-      if (call_["args"].size() == 3)
-        num = get_arg(2)["value"].get<std::size_t>();
-      if (num == 0)
-        return to_list_expr(make_list({}));
-      const std::string dtype = get_dtype();
-      if (num == 1)
-        return to_array_expr(apply_constructor_dtype(
-          make_list({make_numpy_linspace_constant(start, dtype)})));
-      const double step = (stop - start) / static_cast<double>(num - 1);
-      std::vector<nlohmann::json> elts;
-      for (std::size_t i = 0; i < num; ++i)
-        elts.push_back(make_numpy_linspace_constant(
-          start + (step * static_cast<double>(i)), dtype));
-      return to_array_expr(apply_constructor_dtype(make_list(elts)));
+      const nlohmann::json points = linspace_literal(
+        get_arg(0),
+        get_arg(1),
+        call_["args"].size() == 3 ? get_arg(2) : nlohmann::json());
+      if (points["elts"].empty())
+        return to_list_expr(points);
+      return to_array_expr(apply_constructor_dtype(points));
     }
   }
 

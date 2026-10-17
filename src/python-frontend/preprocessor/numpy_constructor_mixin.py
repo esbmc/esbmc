@@ -1,5 +1,6 @@
 """Binding of the arguments of the NumPy array constructors."""
 import ast
+import copy
 
 
 class NumpyConstructorMixin:
@@ -15,6 +16,8 @@ class NumpyConstructorMixin:
     # reads positionally, and the keyword-only ones.
     _NUMPY_CONSTRUCTOR_SIGNATURES = {
         "arange": (("start", "stop", "step", "dtype"), 3, ("device", "like")),
+        "linspace":
+        (("start", "stop", "num", "endpoint", "retstep", "dtype", "axis"), 3, ("device", )),
         "full": (("shape", "fill_value", "dtype", "order"), 2, ("device", "like")),
         "zeros": (("shape", "dtype", "order"), 1, ("device", "like")),
         "ones": (("shape", "dtype", "order"), 1, ("device", "like")),
@@ -23,6 +26,7 @@ class NumpyConstructorMixin:
         "array": (("object", "dtype"), 1, ("copy", "order", "subok", "ndmin", "like")),
     }
     _NUMPY_REQUIRED_PARAMS = {
+        "linspace": ("start", "stop"),
         "full": ("shape", "fill_value"),
         "zeros": ("shape", ),
         "ones": ("shape", ),
@@ -137,3 +141,59 @@ class NumpyConstructorMixin:
         if isinstance(node, (ast.Tuple, ast.List)):
             return all(cls._is_pure_numpy_argument(elt) for elt in node.elts)
         return False
+
+    def _unpacked_linspace_call(self, node):
+        """The linspace call of `a, s = np.linspace(...)`, or None."""
+        target = node.targets[0] if len(node.targets) == 1 else None
+        if not (isinstance(target, ast.Tuple) and len(target.elts) == 2
+                and all(isinstance(elt, ast.Name) for elt in target.elts)):
+            return None
+        call = node.value
+        if not isinstance(call, ast.Call) or self._numpy_constructor_name(call) != "linspace":
+            return None
+        if any(isinstance(arg, ast.Starred) for arg in call.args):
+            return None
+        return call if all(kw.arg is not None for kw in call.keywords) else None
+
+    def _split_linspace_retstep(self, node):
+        """`a, s = np.linspace(..., retstep=True)` as `a = np.linspace(...)`
+        followed by `s = step`, the step NumPy returns: (stop - start) / div,
+        or NaN when div, num - 1 with the endpoint and num without it, is not
+        positive. Only for arguments that are safe to read twice."""
+        call = self._unpacked_linspace_call(node)
+        if call is None:
+            return None
+        try:
+            bound = self._bind_numpy_parameters("linspace", call)
+        except TypeError:
+            return None  # the call raises its TypeError where it stands
+        retstep = bound.pop("retstep", None)
+        num = bound.get("num", ast.Constant(value=50))
+        endpoint = bound.get("endpoint", ast.Constant(value=True))
+        if not (isinstance(retstep, ast.Constant) and retstep.value is True):
+            return None
+        if not (isinstance(num, ast.Constant) and isinstance(num.value, int)
+                and not isinstance(num.value, bool) and isinstance(endpoint, ast.Constant)):
+            return None
+        if not all(self._is_pure_numpy_argument(bound[param]) for param in ("start", "stop")):
+            return None
+        target = node.targets[0]
+        div = num.value - 1 if endpoint.value else num.value
+        if div > 0:
+            step = ast.BinOp(left=ast.BinOp(left=copy.deepcopy(bound["stop"]),
+                                            op=ast.Sub(),
+                                            right=copy.deepcopy(bound["start"])),
+                             op=ast.Div(),
+                             right=ast.Constant(value=div))
+        else:
+            step = ast.Call(func=ast.Name(id="float", ctx=ast.Load()),
+                            args=[ast.Constant(value="nan")],
+                            keywords=[])
+        call.args = []
+        call.keywords = [ast.keyword(arg=param, value=value) for param, value in bound.items()]
+        array_assign = ast.Assign(targets=[target.elts[0]], value=call)
+        step_assign = ast.Assign(targets=[target.elts[1]], value=step)
+        for statement in (array_assign, step_assign):
+            ast.copy_location(statement, node)
+            ast.fix_missing_locations(statement)
+        return [array_assign, step_assign]

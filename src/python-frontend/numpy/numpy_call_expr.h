@@ -101,6 +101,11 @@ private:
     const std::function<exprt(const nlohmann::json &)> &build);
   exprt typed_static_array(const nlohmann::json &list, const typet &shape);
   exprt full_of_runtime_fill(const std::vector<std::size_t> &dims);
+  // The points of this linspace() call as a literal list.
+  nlohmann::json linspace_literal(
+    const nlohmann::json &start_node,
+    const nlohmann::json &stop_node,
+    const nlohmann::json &num_node) const;
 
   bool is_math_function() const;
 
