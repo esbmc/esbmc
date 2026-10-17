@@ -30,14 +30,15 @@ smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
       expr2tc op2pos = lessthan2tc(zero, side2);
       expr2tc both_pos = and2tc(op1pos, op2pos);
 
-      expr2tc negop1 = not2tc(op1pos);
-      expr2tc negop2 = not2tc(op2pos);
+      expr2tc negop1 = lessthan2tc(side1, zero);
+      expr2tc negop2 = lessthan2tc(side2, zero);
       expr2tc both_neg = and2tc(negop1, negop2);
 
       expr2tc nooverflow =
         implies2tc(both_pos, greaterthanequal2tc(overflow.operand, zero));
+      // INT_MIN + INT_MIN wraps to 0, so the result must stay strictly negative
       expr2tc nounderflow =
-        implies2tc(both_neg, lessthanequal2tc(overflow.operand, zero));
+        implies2tc(both_neg, lessthan2tc(overflow.operand, zero));
       return mk_not(mk_and(convert_ast(nooverflow), convert_ast(nounderflow)));
     }
     else if (int_encoding)
