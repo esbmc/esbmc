@@ -1799,6 +1799,11 @@ void python_converter::reject_scalar_subscript(
   const typet &array_type,
   const nlohmann::json &element) const
 {
+  // A void* value has no element type, so indexing it reads void (#8358)
+  if (array_type.is_pointer() && array_type.subtype().is_empty())
+    throw std::runtime_error(
+      "subscripting a value whose type is not known is not supported");
+
   // Reject subscripting scalar numeric / boolean values up front. CPython
   // raises "TypeError: 'int'/'float'/'bool' object is not subscriptable";
   // the list handler below silently produces an unresolved-type value that
