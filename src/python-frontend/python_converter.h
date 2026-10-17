@@ -602,6 +602,13 @@ private:
 
   void get_function_definition(const nlohmann::json &function_node);
 
+  /// Before a call through `callee`, whose function type is unknown, refuses
+  /// the path where it holds a top-level function taking a different number
+  /// of parameters than @p call passes: such a call fills no defaults and
+  /// raises no TypeError.
+  void
+  refuse_mismatched_callees(const exprt &callee, const nlohmann::json &call);
+
   exprt get_function_body_or_unsupported(const nlohmann::json &function_node);
 
   /// Moves the declaration of each local first assigned in a nested block of

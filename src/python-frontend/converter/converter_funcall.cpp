@@ -1480,7 +1480,11 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       // Fallback for Any-typed (void*) function parameters: use any_type so
       // the indirect call expression has a well-formed type.
       if (!resolved)
+      {
         call.type() = any_type();
+        refuse_mismatched_callees(
+          python_expr::build_symbol(*var_symbol), element);
+      }
 
       // Process arguments
       if (element.contains("args"))
@@ -2132,4 +2136,68 @@ exprt python_converter::materialize_list_function_call(
 
   // Return reference to the temp variable
   return symbol_expr(tmp_var_symbol);
+}
+
+// Whether some load of `name` under `node` is not the callee of a call, so
+// the function it names is used as a value.
+static bool used_as_value(const nlohmann::json &node, const std::string &name)
+{
+  if (node.is_object() && node.value("_type", "") == "Call")
+  {
+    const nlohmann::json &func = node["func"];
+    const bool direct =
+      func.value("_type", "") == "Name" && func.value("id", "") == name;
+    for (auto it = node.begin(); it != node.end(); ++it)
+      if ((!direct || it.key() != "func") && used_as_value(it.value(), name))
+        return true;
+    return false;
+  }
+  if (
+    node.is_object() && node.value("_type", "") == "Name" &&
+    node.value("id", "") == name)
+    return true;
+  if (node.is_structured())
+    for (const auto &child : node)
+      if (used_as_value(child, name))
+        return true;
+  return false;
+}
+
+void python_converter::refuse_mismatched_callees(
+  const exprt &callee,
+  const nlohmann::json &call)
+{
+  if (!current_block)
+    return;
+  const std::size_t passed = call["args"].size() + call["keywords"].size();
+  const nlohmann::json &body = (*ast_json)["body"];
+  for (const auto &def : body)
+  {
+    if (def.value("_type", "") != "FunctionDef")
+      continue;
+    const nlohmann::json &args = def["args"];
+    const std::string name = def.value("name", "");
+    const std::size_t params = args["posonlyargs"].size() + args["args"].size();
+    if (
+      params == passed || args["vararg"].is_object() ||
+      !used_as_value(body, name))
+      continue;
+    const symbolt *function =
+      symbol_table_.find_symbol(symbol_id(python_file(), "", name).to_string());
+    if (!function)
+      continue;
+    exprt differs("notequal", bool_type());
+    differs.copy_to_operands(
+      callee,
+      python_expr::build_typecast(
+        python_expr::build_address_of(python_expr::build_symbol(*function)),
+        callee.type()));
+    code_assertt check(differs);
+    check.location() = get_location_from_decl(call);
+    check.location().user_provided(true);
+    check.location().comment(
+      "Unsupported: call through a function value that may take a "
+      "different number of arguments");
+    current_block->copy_to_operands(check);
+  }
 }
