@@ -3,6 +3,7 @@ import copy
 from collections import Counter
 
 from preprocessor.bound_method_dispatch import dispatch_rebound_methods
+from preprocessor.decorator_lowering import lower_user_decorators
 from preprocessor.match_lowering import lower_match_statements
 from preprocessor.function_value_types import reject_mixed_function_values
 from preprocessor.receiver_classes import refuse_path_dependent_receivers
@@ -478,6 +479,7 @@ class ModuleRewriteMixin:
         """Run pre-visit analyses and range-alias/wrapper canonicalization."""
         reject_mixed_function_values(node, self.module_name)
         lower_match_statements(node)
+        lower_user_decorators(node, self.module_name)
         refuse_path_dependent_receivers(node, self.module_name)
         self.expand_unittest_main(node)
         self._rewrite_module_aliases(node)
