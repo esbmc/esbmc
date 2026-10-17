@@ -2161,6 +2161,10 @@ std::string python_annotation<Json>::get_type_from_call(const Json &element)
         // Keep imported names intact here; the converter resolves them later.
         if (is_imported_name(func_id))
           return func_id;
+        if (const std::string type =
+              function_value_return_type(func, &element["value"]);
+            !type.empty())
+          return type;
         for (const auto &stmt : body)
         {
           if (!stmt.contains("_type"))
@@ -2233,6 +2237,86 @@ std::string python_annotation<Json>::get_type_from_call(const Json &element)
   }
 
   return "";
+}
+
+/// A function's parameter annotations and return type, when it takes only
+/// annotated positional parameters without defaults and is not decorated.
+template <class Json>
+std::optional<std::pair<Json, std::string>>
+python_annotation<Json>::function_signature(
+  const function_values::candidate &function)
+{
+  const Json &def = *function.def;
+  const Json &args = def["args"];
+  if (
+    !def["decorator_list"].empty() || !args["posonlyargs"].empty() ||
+    !args["kwonlyargs"].empty() || !args["defaults"].empty() ||
+    !args["vararg"].is_null() || !args["kwarg"].is_null())
+    return std::nullopt;
+  Json params = Json::array();
+  for (const Json &arg : args["args"])
+  {
+    if (arg["annotation"].is_null())
+      return std::nullopt;
+    params.push_back(arg["annotation"]);
+  }
+
+  const std::string name = def["name"];
+  const Json &returns = def["returns"];
+  std::string returned;
+  if (function.module != &ast_)
+    returned = returns.is_object() && returns.value("_type", "") == "Name"
+                 ? returns["id"].template get<std::string>()
+                 : "";
+  else if (json_utils::count_name_bindings(ast_, name) == 1)
+  {
+    try
+    {
+      returned = get_function_return_type(name, ast_);
+    }
+    catch (std::runtime_error &)
+    {
+    }
+  }
+  if (returned.empty() || returned == "Any")
+    return std::nullopt;
+  return std::make_pair(params, returned);
+}
+
+/// The return type of every function `value` may evaluate to, when they all
+/// share it and their parameters, else "". With `call`, its arguments must
+/// bind those parameters by position.
+template <class Json>
+std::string python_annotation<Json>::function_value_return_type(
+  const Json &value,
+  const Json *call)
+{
+  function_values values(ast_, extra_subscript_inference_asts_);
+  const auto functions = values.of(value);
+  if (!functions)
+    return "";
+  std::optional<std::pair<Json, std::string>> agreed;
+  for (const function_values::candidate &function : *functions)
+  {
+    const auto signature = function_signature(function);
+    if (
+      !signature ||
+      (agreed && (signature->second != agreed->second ||
+                  !json_utils::ast_equal_ignoring_location(
+                    signature->first, agreed->first))))
+      return "";
+    agreed = signature;
+  }
+  const auto is_starred = [](const Json &arg) {
+    return arg.value("_type", "") == "Starred";
+  };
+  if (
+    call && ((*call)["args"].size() != agreed->first.size() ||
+             !(*call)["keywords"].empty() ||
+             std::any_of(
+               (*call)["args"].begin(), (*call)["args"].end(), is_starred)))
+    return "";
+  return agreed->second;
 }
 
 template <class Json>
@@ -3281,7 +3365,12 @@ InferResult python_annotation<Json>::infer_type(
 
   // Get type from conditional expressions (ternary operator)
   else if (value_type == "IfExp")
+  {
+    // A choice between functions is typed by the converter, as `g = f` is.
+    if (!function_value_return_type(stmt["value"]).empty())
+      return InferResult::UNKNOWN;
     return infer_type_from_ifexp(stmt["value"], body, inferred_type);
+  }
 
   // Get type from top-level functions
   else if (

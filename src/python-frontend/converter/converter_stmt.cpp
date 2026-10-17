@@ -4834,6 +4834,22 @@ symbolt *python_converter::create_symbol_for_unannotated_assign(
   return symbol_table_.move_symbol_to_context(symbol);
 }
 
+/// A choice between two functions of one type is a pointer to either. The
+/// result of a choice between types would have no single type (#8404).
+static void decay_function_choice(exprt &then, exprt &else_expr)
+{
+  if (
+    !then.type().is_code() || !else_expr.type().is_code() ||
+    !then.is_symbol() || !else_expr.is_symbol())
+    return;
+  if (then.type() != else_expr.type())
+    throw std::runtime_error(
+      "a conditional expression choosing between functions of different "
+      "types is not supported");
+  then = python_expr::decay_function_to_pointer(then);
+  else_expr = python_expr::decay_function_to_pointer(else_expr);
+}
+
 /// The bare name an AST node denotes: `id` for a Name, `attr` for an Attribute
 /// -- a qualified `module.Class`, which is what a base inherited from an
 /// operational model looks like. \p fallback covers any other shape.
@@ -8485,6 +8501,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     // that migration to irep2 preserves the correct return type in if2t.
     then = to_value_expr(then, ns);
     else_expr = to_value_expr(else_expr, ns);
+    decay_function_choice(then, else_expr);
 
     bool then_is_none = (then.type() == none_type());
     bool else_is_none = (else_expr.type() == none_type());

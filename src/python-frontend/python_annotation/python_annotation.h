@@ -10,6 +10,7 @@
 #include <python-frontend/python_annotation/annotation_intrinsics.h>
 #include <python-frontend/python_annotation/annotation_parser.h>
 #include <python-frontend/python_annotation/annotation_utils.h>
+#include <python-frontend/python_annotation/function_values.h>
 #include <util/message/message.h>
 
 #include <map>
@@ -190,6 +191,10 @@ private:
     const Json &ifexp_node,
     const Json &body,
     std::string &inferred_type);
+  std::optional<std::pair<Json, std::string>>
+  function_signature(const function_values::candidate &function);
+  std::string
+  function_value_return_type(const Json &value, const Json *call = nullptr);
   InferResult
   infer_type(const Json &stmt, const Json &body, std::string &inferred_type);
   // True for a `np.<ctor>(...)` call node (module or aliased), where <ctor>
