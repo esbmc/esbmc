@@ -148,11 +148,18 @@ DIV_DEF(lldiv, lldiv_t, long long int)
 
 /* Skips the whitespace, sign and 0x prefix of a strtol subject sequence and
  * resolves base 0. A 0x not followed by a hex digit is left in place, so the
- * '0' is the whole subject sequence (C11 7.22.1.4p3). */
+ * '0' is the whole subject sequence (C11 7.22.1.4p3). Returns NULL for a base
+ * outside 0 and 2-36, which glibc rejects with EINVAL. */
 static const char *
 __ESBMC_strto_prefix(const char *str, int *base, int *negative)
 {
 __ESBMC_HIDE:;
+  if (*base < 0 || *base == 1 || *base > 36)
+  {
+    __ESBMC_set_errno(EINVAL);
+    return NULL;
+  }
+
   while (isspace(*str))
     str++;
 
@@ -194,6 +201,8 @@ __ESBMC_HIDE:;
   __ESBMC_HIDE:;                                                               \
     int negative;                                                              \
     const char *str = __ESBMC_strto_prefix(nptr, &base, &negative);            \
+    if (str == NULL)                                                           \
+      return 0;                                                                \
     const unsigned type limit =                                                \
       negative ? (unsigned type)TYPE##_MAX + 1 : (unsigned type)TYPE##_MAX;    \
     unsigned type magnitude = 0;                                               \
@@ -235,6 +244,8 @@ STRTOL_DEF(strtoll, long long int, LLONG)
   __ESBMC_HIDE:;                                                               \
     int negative;                                                              \
     const char *str = __ESBMC_strto_prefix(nptr, &base, &negative);            \
+    if (str == NULL)                                                           \
+      return 0;                                                                \
     type result = 0;                                                           \
     const char *digits = str;                                                  \
     int out_of_range = 0;                                                      \
