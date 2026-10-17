@@ -1795,10 +1795,34 @@ std::optional<exprt> python_converter::try_dispatch_dunder_getitem(
   return get_function_call(call_node);
 }
 
+// Whether `node` is a name declared `Any`, as a for loop's tuple target
+// variable is when the iterable's element type is unknown.
+static bool is_declared_any(
+  const nlohmann::json &node,
+  const std::string &function,
+  const nlohmann::json &ast)
+{
+  if (node.value("_type", "") != "Name")
+    return false;
+  const nlohmann::json decl =
+    json_utils::find_var_decl(node.value("id", ""), function, ast);
+  return decl.value("_type", "") == "AnnAssign" &&
+         decl["annotation"].value("id", "") == "Any";
+}
+
 void python_converter::reject_scalar_subscript(
   const typet &array_type,
   const nlohmann::json &element) const
 {
+  // A void* value declared Any has no element type, so indexing it reads void
+  // (#8358). A numpy value of unknown type is a void* too, but is not
+  // declared Any, and its own lowering reads it.
+  if (
+    array_type.is_pointer() && array_type.subtype().is_empty() &&
+    is_declared_any(element["value"], current_func_name_, *ast_json))
+    throw std::runtime_error(
+      "subscripting a value whose type is not known is not supported");
+
   // Reject subscripting scalar numeric / boolean values up front. CPython
   // raises "TypeError: 'int'/'float'/'bool' object is not subscriptable";
   // the list handler below silently produces an unresolved-type value that
