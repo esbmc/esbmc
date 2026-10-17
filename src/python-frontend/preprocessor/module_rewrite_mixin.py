@@ -496,6 +496,7 @@ class ModuleRewriteMixin:
 
         self._scan_shadowed_nondet_collections(node)
         self._scan_imported_module_names(node)
+        self._scan_functools_reduce_names(node)
 
         self.iterator_classes = self._scan_iterator_classes(node)
         self.iterator_params = self._scan_iterator_params(node)

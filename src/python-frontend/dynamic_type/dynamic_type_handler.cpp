@@ -693,9 +693,12 @@ exprt dynamic_type_handler::handle_arithmetic(
                     : build_div_literal(rhs, lhs, false, location);
 }
 
-exprt dynamic_type_handler::build_neg_tagged(const exprt &tagged)
+exprt dynamic_type_handler::build_neg_tagged(
+  const exprt &tagged,
+  const locationt &location)
 {
   exprt zero = from_integer(0, signedbv_typet(config.ansi_c.int_width));
+  guard_type_error("Sub", zero, tagged, location);
   return build_sub_literal(tagged, zero, /*tagged_is_left=*/false);
 }
 

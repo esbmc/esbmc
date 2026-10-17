@@ -398,8 +398,8 @@ bool percent_d_accepts(const typet &t)
 // `%s` is limited to the types whose f-string lowering matches str().
 bool percent_s_accepts(const typet &t)
 {
-  return percent_d_accepts(t) || t.is_floatbv() ||
-         type_utils::is_string_type(t);
+  return percent_d_accepts(t) || type_utils::is_char_type(t) ||
+         t.is_floatbv() || type_utils::is_string_type(t);
 }
 
 nlohmann::json ast_node(const char *type, const nlohmann::json &loc)
@@ -459,7 +459,8 @@ bool names_and_constants(const std::vector<nlohmann::json> &args)
 bool may_run_code(const std::vector<nlohmann::json> &args)
 {
   return std::any_of(args.begin(), args.end(), [](const nlohmann::json &a) {
-    return a.value("_type", "") != "Name" && a.value("_type", "") != "Constant";
+    const std::string kind = a.value("_type", "");
+    return kind == "Attribute" || kind == "Call" || kind == "Subscript";
   });
 }
 
@@ -1664,6 +1665,9 @@ exprt python_converter::get_right_operand_expr(
 
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
+  if (std::optional<exprt> bound = try_bound_method_compare(element))
+    return *bound;
+
   // Extract left and right operands from AST
   auto left = element.contains("left") ? element["left"] : element["target"];
 

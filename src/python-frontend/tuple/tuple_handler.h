@@ -160,6 +160,15 @@ private:
   symbolt &
   unpack_target_symbol(const nlohmann::json &name_node, const typet &type);
 
+  typet unpack_target_type(const exprt &rhs, const typet &member_type) const;
+
+  /// Store the tuple element @p member_access in the unpacking @p target.
+  void assign_unpacked_element(
+    const exprt &target,
+    const exprt &member_access,
+    const locationt &loc,
+    codet &target_block);
+
   /// Bind a starred target to a list of elements [first, first + count) of
   /// the tuple @p rhs, as CPython always makes a list.
   void assign_starred_elements(

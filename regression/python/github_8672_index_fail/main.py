@@ -1,6 +1,6 @@
-# The subscript of a str % operand raises IndexError where Python does.
-def f(xs: list[int], i: int) -> str:
+def f(xs, i):
     return "v %d" % xs[i]
 
 
+assert f([1, 2], 1) == "v 2"
 f([1, 2], 2)

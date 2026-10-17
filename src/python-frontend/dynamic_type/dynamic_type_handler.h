@@ -101,9 +101,10 @@ public:
     const locationt &location);
 
   /**
-   * @brief Builds unary minus on a tagged-scalar operand, as `0 - tagged`
+   * @brief Builds unary minus on a tagged-scalar operand, as `0 - tagged`,
+   * after guard_type_error for that subtraction
    */
-  exprt build_neg_tagged(const exprt &tagged);
+  exprt build_neg_tagged(const exprt &tagged, const locationt &location);
 
   /**
    * @brief Builds isinstance(tagged, type_name). `type_is_user_class` says
