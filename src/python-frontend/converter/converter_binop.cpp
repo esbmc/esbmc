@@ -443,19 +443,22 @@ bool names_and_constants(const std::vector<nlohmann::json> &args)
     const std::string kind = a.value("_type", "");
     if (kind == "Constant")
       continue;
-    if (kind != "Name" && kind != "Attribute" && kind != "Call")
+    if (
+      kind != "Name" && kind != "Attribute" && kind != "Call" &&
+      kind != "Subscript")
       return false;
     has_name = true;
   }
   return has_name;
 }
 
-// An attribute (a property getter) or a call may run code.
+// An attribute (a property getter), a call or a subscript (which may raise)
+// may run code.
 bool may_run_code(const std::vector<nlohmann::json> &args)
 {
   return std::any_of(args.begin(), args.end(), [](const nlohmann::json &a) {
-    return a.value("_type", "") == "Attribute" ||
-           a.value("_type", "") == "Call";
+    const std::string kind = a.value("_type", "");
+    return kind == "Attribute" || kind == "Call" || kind == "Subscript";
   });
 }
 

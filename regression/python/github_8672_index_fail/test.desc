@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 8 --no-unwinding-assertions
+^  uncaught exception: IndexError$
+^VERIFICATION FAILED$

@@ -904,6 +904,11 @@ private:
     const std::vector<unsigned char> &chars,
     const typet &type);
 
+  /// A one-character str holding the char `expr`.
+  exprt char_to_string(const exprt &expr);
+
+  exprt constant_to_string(const exprt &expr);
+
   exprt build_string_index_result(
     const nlohmann::json &call,
     const exprt &find_expr,
