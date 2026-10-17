@@ -204,8 +204,8 @@ void goto_convertt::convert_switch_case(
           .first;
     }
 
-    exprt::operandst &case_op_dest = cases_entry->second->second;
-    case_op_dest.push_back(code.case_op());
+    cases_entry->second->second.push_back(
+      case_label(code.case_op(), code.case_range_hi()));
   }
 }
 
@@ -2015,6 +2015,15 @@ void goto_convertt::convert_dowhile(const codet &code, goto_programt &dest)
   old_targets.restore(targets);
 }
 
+exprt goto_convertt::case_label(const exprt &lo, const exprt &hi)
+{
+  if (hi.is_nil())
+    return lo;
+  exprt range("case_range");
+  range.copy_to_operands(lo, hi);
+  return range;
+}
+
 void goto_convertt::case_guard(
   const exprt &value,
   const exprt::operandst &case_op,
@@ -2025,6 +2034,14 @@ void goto_convertt::case_guard(
 
   forall_expr (it, case_op)
   {
+    if (it->id() == "case_range")
+    {
+      dest.copy_to_operands(and_exprt(
+        binary_relation_exprt(value, ">=", it->op0()),
+        binary_relation_exprt(value, "<=", it->op1())));
+      continue;
+    }
+
     equality_exprt eq_expr;
     eq_expr.lhs() = value;
     eq_expr.rhs() = *it;

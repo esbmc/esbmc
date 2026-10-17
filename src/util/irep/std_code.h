@@ -740,6 +740,17 @@ public:
     return op0();
   }
 
+  /// Upper bound of a GNU case range `case lo ... hi:`; nil otherwise.
+  inline const exprt &case_range_hi() const
+  {
+    return static_cast<const exprt &>(find("case_range_hi"));
+  }
+
+  inline exprt &case_range_hi()
+  {
+    return static_cast<exprt &>(add("case_range_hi"));
+  }
+
   codet &code()
   {
     return static_cast<codet &>(op1());

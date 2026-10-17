@@ -3016,12 +3016,13 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   if (expr.id() == "code" && expr.statement() == "switch_case")
   {
     const auto &sc = to_code_switch_case(to_code(expr));
-    expr2tc case_op, body;
+    expr2tc case_op, case_op_hi, body;
     if (!sc.is_default())
       migrate_expr(sc.case_op(), case_op);
+    migrate_expr(sc.case_range_hi(), case_op_hi);
     migrate_expr(sc.code(), body);
-    new_expr_ref =
-      code_switch_case2tc(sc.is_default(), case_op, body, expr.location());
+    new_expr_ref = code_switch_case2tc(
+      sc.is_default(), case_op, body, expr.location(), case_op_hi);
     return;
   }
 
@@ -3885,6 +3886,8 @@ static exprt migrate_expr_back_rest6(const expr2tc &ref)
       sc.set_default(true);
     else
       sc.op0() = migrate_expr_back(ref2.case_op);
+    if (!is_nil_expr(ref2.case_op_hi))
+      sc.case_range_hi() = migrate_expr_back(ref2.case_op_hi);
     sc.op1() = migrate_expr_back(ref2.code);
     if (ref2.location.is_not_nil())
       sc.location() = ref2.location;
