@@ -2239,8 +2239,8 @@ std::string python_annotation<Json>::get_type_from_call(const Json &element)
   return "";
 }
 
-/// A function's parameter annotations and return type, when it takes only
-/// annotated positional parameters without defaults and is not decorated.
+/// A function's parameters and return type, when it takes only positional
+/// parameters and is not decorated.
 template <class Json>
 std::optional<std::pair<Json, std::string>>
 python_annotation<Json>::function_signature(
@@ -2250,16 +2250,18 @@ python_annotation<Json>::function_signature(
   const Json &args = def["args"];
   if (
     !def["decorator_list"].empty() || !args["posonlyargs"].empty() ||
-    !args["kwonlyargs"].empty() || !args["defaults"].empty() ||
-    !args["vararg"].is_null() || !args["kwarg"].is_null())
+    !args["kwonlyargs"].empty() || !args["vararg"].is_null() ||
+    !args["kwarg"].is_null())
     return std::nullopt;
+  // Each parameter's annotation, null when it has none, and whether it has a
+  // default, so candidates agree only on both.
   Json params = Json::array();
-  for (const Json &arg : args["args"])
-  {
-    if (arg["annotation"].is_null())
-      return std::nullopt;
-    params.push_back(arg["annotation"]);
-  }
+  const std::size_t first_default =
+    args["args"].size() - args["defaults"].size();
+  for (std::size_t i = 0; i < args["args"].size(); ++i)
+    params.push_back(
+      {{"annotation", args["args"][i]["annotation"]},
+       {"default", i >= first_default}});
 
   const std::string name = def["name"];
   const Json &returns = def["returns"];
@@ -2310,9 +2312,14 @@ std::string python_annotation<Json>::function_value_return_type(
   const auto is_starred = [](const Json &arg) {
     return arg.value("_type", "") == "Starred";
   };
+  const auto required = std::count_if(
+    agreed->first.begin(), agreed->first.end(), [](const Json &param) {
+      return !param["default"].template get<bool>();
+    });
+  const std::size_t passed = call ? (*call)["args"].size() : 0;
   if (
-    call && ((*call)["args"].size() != agreed->first.size() ||
-             !(*call)["keywords"].empty() ||
+    call && (passed < static_cast<std::size_t>(required) ||
+             passed > agreed->first.size() || !(*call)["keywords"].empty() ||
              std::any_of(
                (*call)["args"].begin(), (*call)["args"].end(), is_starred)))
     return "";
@@ -3646,7 +3653,14 @@ void python_annotation<Json>::collect_return_types(
         }
         catch (std::runtime_error &)
         {
-          // Function not found, continue with normal inference
+          // Not a function: a variable or parameter holding one (#8669).
+          const std::string held =
+            function_value_return_type(return_val["func"], &return_val);
+          if (!held.empty())
+          {
+            types.insert(held);
+            continue;
+          }
         }
       }
 
