@@ -752,6 +752,19 @@ void __ESBMC_unroll(int);
 void __ESBMC_requires(_Bool);
 void __ESBMC_ensures(_Bool);
 int __ESBMC_return_value;
+/* Cumulative stack bits charged to contract-replaced (summarised) callees.
+ * When a contract clause constrains it, each --replace-call-with-contract site
+ * adds the callee's real frame size, the same per-local bit count ESBMC charges
+ * natively at DECL (framet::grow_stack_frame). Usable in __ESBMC_requires /
+ * __ESBMC_ensures like any ghost; __ESBMC_old() over it works unchanged.
+ * Zero-initialised. */
+__UINT64_TYPE__ __ESBMC_stack_used;
+/* The current contract function's frame size in bits, substituted by the
+ * contract engine with the exact amount charged to __ESBMC_stack_used on entry.
+ * Lets a contract scale a depth bound by the real per-frame size with no
+ * hand-written byte literal. Only meaningful inside __ESBMC_requires /
+ * __ESBMC_ensures of an enforced or replaced function. */
+__UINT64_TYPE__ __ESBMC_frame_size;
 void* __ESBMC_old_raw(void*);
 #define __ESBMC_old(x) (*(__typeof__(x)*)__ESBMC_old_raw((void*)(&(x))))
 #define __ESBMC_and(a, b) ((a) & (b))
