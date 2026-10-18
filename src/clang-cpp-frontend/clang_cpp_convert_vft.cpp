@@ -407,6 +407,12 @@ void clang_cpp_convertert::add_thunk_method(
   {
     typet t = component.type();
     update_thunk_this_type(t, base_class_id);
+    // The thunk fills the base's vtable slot, so it returns what the base
+    // method returns; a covariant override's result is converted in its body.
+    typet base_return;
+    if (get_type(md.getReturnType(), base_return))
+      abort();
+    to_code_type(t).return_type() = base_return;
     // A code type carries its arguments' base names across the seam, which
     // add_thunk_method_arguments reads back (frontends-to-irep2.md §44).
     thunk_func_symb.set_type(migrate_type(t));
@@ -609,8 +615,34 @@ void clang_cpp_convertert::add_thunk_method_body_return(
   code_returnt code_return;
   code_return.return_value() = expr_call;
 
+  // A covariant override returns a pointer to a class derived from the one the
+  // base method returns, and the caller expects the base subobject
+  // ([class.virtual]). The displacement needs a side-effect-free operand, so
+  // the result goes through a local first.
+  const typet &thunk_ret =
+    to_code_type(thunk_func_symb.get_type()).return_type();
+  code_blockt block;
+  if (thunk_ret.is_pointer() && thunk_ret != expr_call.type())
+  {
+    symbolt result_symb;
+    result_symb.id = thunk_func_symb.id.as_string() + "::covariant_result";
+    result_symb.name = "covariant_result";
+    result_symb.mode = mode;
+    result_symb.location = thunk_func_symb.location;
+    result_symb.lvalue = true;
+    result_symb.set_type(expr_call.type());
+    const exprt result =
+      symbol_expr(*context.move_symbol_to_context(result_symb));
+
+    block.copy_to_operands(code_declt(result), code_assignt(result, expr_call));
+    exprt as_base = result;
+    as_base.set("#derived_to_base", thunk_ret.subtype().identifier());
+    code_return.return_value() = as_base;
+  }
+  block.copy_to_operands(code_return);
+
   expr2tc body;
-  migrate_expr(code_return, body);
+  migrate_expr(block, body);
   thunk_func_symb.set_value(body);
 }
 
