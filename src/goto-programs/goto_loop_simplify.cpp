@@ -1,3 +1,4 @@
+#include <goto-programs/goto_functions.h>
 #include <goto-programs/goto_loop_simplify.h>
 #include <goto-programs/loopst.h>
 #include <irep2/irep2_utils.h>
@@ -480,18 +481,52 @@ std::optional<BigInt> compute_post_value(const counter_loop_info &c)
 /// once before the first guard test. Affects compute_post_value: for
 /// do-while we step `init` by `step` before applying the standard
 /// formula, modelling the at-least-one-iteration semantics.
+bool takes_address_of(const expr2tc &e, const irep_idt &name)
+{
+  if (is_nil_expr(e))
+    return false;
+  if (
+    is_address_of2t(e) && is_symbol2t(to_address_of2t(e).ptr_obj) &&
+    to_symbol2t(to_address_of2t(e).ptr_obj).thename == name)
+    return true;
+  bool found = false;
+  e->foreach_operand(
+    [&](const expr2tc &op) { found = found || takes_address_of(op, name); });
+  return found;
+}
+
+/// Whether another thread may see `name`: it is not a local this function
+/// declares, or its address is taken.
+bool may_be_shared(const goto_programt &body, const irep_idt &name)
+{
+  bool declared = false;
+  for (const auto &i : body.instructions)
+  {
+    if (i.is_decl() && to_code_decl2t(i.code).value == name)
+      declared = true;
+    if (takes_address_of(i.code, name) || takes_address_of(i.guard, name))
+      return true;
+  }
+  return !declared;
+}
+
 bool try_step_recognition(
   goto_programt &body,
   inst_iter loop_head,
   inst_iter loop_exit,
   inst_iter body_first,
   const expr2tc &exit_guard,
-  bool is_dowhile)
+  bool is_dowhile,
+  bool threaded)
 {
   counter_loop_info info;
   if (!parse_guard(exit_guard, info))
     return false;
   const irep_idt induction_name = to_symbol2t(info.induction_sym).thename;
+  // Collapsing the loop would hide its intermediate values from the threads
+  // that may read the counter between iterations (#8712).
+  if (threaded && may_be_shared(body, induction_name))
+    return false;
   if (!parse_step(body_first, loop_exit, induction_name, info))
     return false;
   if (!parse_init(body.instructions.begin(), loop_head, induction_name, info))
@@ -555,7 +590,10 @@ bool try_step_recognition(
 
 /// One pass over a function. Returns true iff any loop was erased (so
 /// the caller can iterate to fixpoint).
-bool simplify_function_once(goto_functiont &fn, const optionst &options)
+bool simplify_function_once(
+  goto_functiont &fn,
+  const optionst &options,
+  bool threaded)
 {
   if (!fn.body_available)
     return false;
@@ -713,7 +751,13 @@ bool simplify_function_once(goto_functiont &fn, const optionst &options)
     // shape into a terminating one.
     if (
       try_step_recognition(
-        body, loop_head, loop_exit, body_first, exit_guard, is_dowhile))
+        body,
+        loop_head,
+        loop_exit,
+        body_first,
+        exit_guard,
+        is_dowhile,
+        threaded))
     {
       changed = true;
       continue;
@@ -723,9 +767,12 @@ bool simplify_function_once(goto_functiont &fn, const optionst &options)
   return changed;
 }
 
-void simplify_function(goto_functiont &fn, const optionst &options)
+void simplify_function(
+  goto_functiont &fn,
+  const optionst &options,
+  bool threaded)
 {
-  while (simplify_function_once(fn, options))
+  while (simplify_function_once(fn, options, threaded))
     ;
 }
 } // namespace
@@ -778,8 +825,9 @@ void goto_loop_simplify(
     options.get_bool_option("dead-code-check"))
     return;
 
+  const bool threaded = spawns_threads(goto_functions);
   Forall_goto_functions (it, goto_functions)
-    simplify_function(it->second, options);
+    simplify_function(it->second, options, threaded);
 
   goto_functions.update();
 }

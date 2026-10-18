@@ -3,6 +3,7 @@
 #include <clang-cpp-frontend/clang_cpp_destructor_call.h>
 #include <goto-programs/destructor.h>
 #include <util/irep/std_code.h>
+#include <util/lang/c_typecast.h>
 #include <clang-cpp-frontend/clang_cpp_exception_id.h>
 
 /// The guards live on the C pass's translation unit as file-local statics, so
@@ -386,12 +387,19 @@ void clang_cpp_adjust_irep2::adjust_cpp_throw(expr2tc &expr)
 {
   const code_cpp_throw2t &th = to_code_cpp_throw2t(expr);
 
+  // [except.throw]/2: the operand undergoes array-to-pointer conversion.
+  expr2tc operand = th.operand;
+  const type2tc op_type = ns.follow(operand->type);
+  if (is_array_type(op_type))
+    c_implicit_typecast(
+      operand, pointer_type2tc(to_array_type(op_type).subtype), ns);
+
   // Every id the thrown type resolves to, most derived first, so a handler for
   // a base catches it.
   std::vector<irep_idt> ids;
-  convert_exception_id(ns, migrate_type_back(th.operand->type), "", ids);
+  convert_exception_id(ns, migrate_type_back(operand->type), "", ids);
 
-  expr = code_cpp_throw2tc(th.operand, ids, th.location);
+  expr = code_cpp_throw2tc(operand, ids, th.location);
 }
 
 void clang_cpp_adjust_irep2::adjust_cpp_delete(expr2tc &expr)
