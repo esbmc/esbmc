@@ -571,11 +571,18 @@ public:
    *
    * @p lhs is the subscript target `*(T *)item->value` of the list subscript
    * this handler was built for. When @p rhs is a tuple of another type than T
-   * (or T is a tuple and @p rhs is not), the pair is rewritten into
-   * `*item = *list_at(tmp, 0)`, with tmp a list holding @p rhs, so the slot
-   * gets the new value, type_id and size. Otherwise both are left unchanged.
+   * (or T is a tuple and @p rhs is not), or T is a non-scalar a list copy may
+   * share, the pair is rewritten into `*item = *list_at(tmp, 0)`, with tmp a
+   * list holding @p rhs, so the slot gets the new value, type_id and size.
+   * Otherwise both are left unchanged.
    */
   void retype_element_store(exprt &lhs, exprt &rhs);
+
+  bool has_shared_payload(const typet &type) const;
+
+  /// Allocates the instance a constructor stores to @p lhs and returns the
+  /// pointer to pass as `self`.
+  exprt allocate_constructed_object(const exprt &lhs);
 
   /// Records @p elem_type as the type of the element @p subscript stores to.
   void record_element_store(
@@ -682,8 +689,13 @@ public:
     const exprt &index,
     const locationt &location);
 
+  /// Whether storing a `new_type` value into an element read as `old_type`
+  /// replaces the element rather than writing into its storage.
+  bool
+  store_replaces_element(const typet &old_type, const typet &new_type) const;
+
   /// The __ESBMC_list_set_at call storing `rhs` into the list element `lhs`
-  /// reads, when `rhs` changes the element's type; nullopt otherwise.
+  /// reads, when store_replaces_element holds; nullopt otherwise.
   std::optional<exprt> build_element_replacement(
     const exprt &lhs,
     const exprt &rhs,
@@ -1022,6 +1034,11 @@ private:
 
   list_elem_info
   get_tagged_element_info(const nlohmann::json &op, const exprt &elem);
+
+  /// Element info for a key that is only compared, never stored: a tagged key
+  /// forwards its runtime value/type_id/size.
+  list_elem_info
+  get_lookup_key_info(const nlohmann::json &op, const exprt &key);
 
   // The type_id a tagged scalar carries when it holds a float, or 0 when the
   // caller opts out of the float path (dict values compare via void*).
