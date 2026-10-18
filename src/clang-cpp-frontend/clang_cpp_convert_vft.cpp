@@ -898,12 +898,12 @@ bool clang_cpp_convertert::build_dynamic_cast(
   // compares it against vtable variable addresses to identify the
   // runtime type. For dynamic_cast<T*>:
   //   src == NULL ? (T*)NULL
-  //               : (src->vptr == &vt-D1 || src->vptr == &vt-D2 || ...)
-  //                   ? (T*)src
-  //                   : (T*)NULL
-  // For dynamic_cast<void*> the result is a pointer to the start of the
-  // most-derived object, so each matching D contributes its own arm
-  // adjusting src by the offset of S inside D.
+  //               : src->vptr == &vt-D1 ? (T*)(D1*)src
+  //               : src->vptr == &vt-D2 ? (T*)(D2*)src
+  //               : ... : (T*)NULL
+  // Each matching D contributes its own arm because the offsets of S and T
+  // inside D differ between D's under multiple inheritance. For
+  // dynamic_cast<void*> each arm points at the start of D instead.
   // For dynamic_cast<T&> the result is wrapped in a statement_expression
   // that throws std::bad_cast when no D matches, so the catch (bad_cast&)
   // arm of a try/catch can fire.
@@ -1073,15 +1073,6 @@ bool clang_cpp_convertert::build_dynamic_cast(
       src_deref, vptr_class_id + "::" + vtable_ptr_suffix, vptr_type);
   }
 
-  // OR-chain: vptr == arm0 || vptr == arm1 || ... — used by the reference
-  // form and the T* pointer form. Precondition: arms not empty.
-  auto vptr_match_any = [&]() -> exprt {
-    exprt match = equality_exprt(vptr_read, arms.front().first);
-    for (size_t i = 1; i < arms.size(); ++i)
-      match = or_exprt(match, equality_exprt(vptr_read, arms[i].first));
-    return match;
-  };
-
   // Reference form: if the vptr check fails, call __ESBMC_throw_bad_cast()
   // which symex resolves to a std::bad_cast throw at verification time.
   // This decouples the frontend from <typeinfo> inclusion order entirely.
@@ -1093,10 +1084,21 @@ bool clang_cpp_convertert::build_dynamic_cast(
     typet ref_type = pointer_typet(target_type);
     ref_type.set("#reference", true);
 
+    // No arm matching throws below, so the last arm needs no vptr test.
     exprt cast_value = src_pointer;
+    exprt match = false_exprt();
+    if (!arms.empty())
+    {
+      cast_value = arms.back().second;
+      match = equality_exprt(vptr_read, arms.back().first);
+      for (auto it = std::next(arms.rbegin()); it != arms.rend(); ++it)
+      {
+        equality_exprt is_d(vptr_read, it->first);
+        cast_value = if_exprt(is_d, it->second, cast_value);
+        match = or_exprt(is_d, match);
+      }
+    }
     gen_typecast(ns, cast_value, ref_type);
-
-    exprt match = arms.empty() ? exprt(false_exprt()) : vptr_match_any();
 
     code_typet throw_func_type;
     throw_func_type.return_type() = empty_typet();
@@ -1119,26 +1121,10 @@ bool clang_cpp_convertert::build_dynamic_cast(
     return false;
   }
 
-  exprt cast_or_null;
-  if (arms.empty())
-  {
-    // No reachable D can satisfy the cast — emit a typed null directly.
-    cast_or_null = typed_null;
-  }
-  else if (to_void)
-  {
-    // Per-D results differ; chain ITEs so each D selects its own offset.
-    cast_or_null = typed_null;
-    for (auto it = arms.rbegin(); it != arms.rend(); ++it)
-      cast_or_null = if_exprt(
-        equality_exprt(vptr_read, it->first), it->second, cast_or_null);
-  }
-  else
-  {
-    // T* form: every matching D yields the same `(T*) src`, so collapse
-    // the per-D vptr equalities into one OR-chain with a single result.
-    cast_or_null = if_exprt(vptr_match_any(), arms.front().second, typed_null);
-  }
+  exprt cast_or_null = typed_null;
+  for (auto it = arms.rbegin(); it != arms.rend(); ++it)
+    cast_or_null =
+      if_exprt(equality_exprt(vptr_read, it->first), it->second, cast_or_null);
 
   // Null-source guard — without this, src_deref above would crash
   // symbolic execution before the SMT solver ever sees the ITE.

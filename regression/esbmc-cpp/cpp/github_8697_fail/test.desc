@@ -1,0 +1,6 @@
+CORE
+main.cpp
+--std c++17 --multi-property
+^  FAILED .*line 16  assertion b1 != .*
+^  FAILED .*line 18  assertion r2.b != 2$
+^VERIFICATION FAILED$
