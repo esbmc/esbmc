@@ -672,6 +672,35 @@ static expr2tc replace_subobject(
   return expr2tc();
 }
 
+/* Overwriting a whole float is a bitcast of the copied bytes. The C byte loop
+ * would rebuild it a byte at a time, and an intermediate NaN loses its bits:
+ * floating-point theory has a single NaN (#8711). Nil defers to that loop. */
+static expr2tc float_from_bytes(
+  const expr2tc &dst,
+  const size_t dst_offset,
+  const expr2tc &src,
+  const size_t src_offset,
+  const size_t num_of_bytes)
+{
+  if (
+    !is_floatbv_type(dst->type) || dst_offset || !is_array_type(src->type) ||
+    type_byte_size(dst->type).to_uint64() != num_of_bytes)
+  {
+    log_debug("memcpy", "Only primitives are supported for now");
+    return expr2tc();
+  }
+
+  const bool be = target_is_big_endian();
+  expr2tc bytes =
+    object_byte(src, src_offset + (be ? 0 : num_of_bytes - 1), be);
+  for (size_t i = 1; i < num_of_bytes; i++)
+    bytes = concat2tc(
+      get_uint_type(bytes->type->get_width() + 8),
+      bytes,
+      object_byte(src, src_offset + (be ? i : num_of_bytes - 1 - i), be));
+  return bitcast2tc(dst->type, bytes);
+}
+
 static inline expr2tc do_memcpy_expression(
   const expr2tc &dst,
   const size_t &dst_offset,
@@ -687,24 +716,6 @@ static inline expr2tc do_memcpy_expression(
     dst->type == src->type && !dst_offset && !src_offset &&
     type_byte_size(dst->type).to_uint64() == num_of_bytes)
     return src;
-
-  // Overwriting a whole float is a bitcast of the copied bytes. The C byte
-  // loop would rebuild it a byte at a time, and an intermediate NaN loses its
-  // bits: floating-point theory has a single NaN (#8711).
-  if (
-    is_floatbv_type(dst->type) && !dst_offset && is_array_type(src->type) &&
-    type_byte_size(dst->type).to_uint64() == num_of_bytes)
-  {
-    const bool be = target_is_big_endian();
-    expr2tc bytes =
-      object_byte(src, src_offset + (be ? 0 : num_of_bytes - 1), be);
-    for (size_t i = 1; i < num_of_bytes; i++)
-      bytes = concat2tc(
-        get_uint_type(bytes->type->get_width() + 8),
-        bytes,
-        object_byte(src, src_offset + (be ? i : num_of_bytes - 1 - i), be));
-    return bitcast2tc(dst->type, bytes);
-  }
 
   if (
     is_array_type(src->type) || is_array_type(dst->type) ||
@@ -730,8 +741,7 @@ static inline expr2tc do_memcpy_expression(
       }
     }
 
-    log_debug("memcpy", "Only primitives are supported for now");
-    return expr2tc();
+    return float_from_bytes(dst, dst_offset, src, src_offset, num_of_bytes);
   }
 
   // gen_byte_memcpy asserts on get_width(), which throws
