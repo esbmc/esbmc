@@ -1,4 +1,0 @@
-CORE
-main.py
---enforce-contract touch
-^ERROR: __ESBMC_assigns at line 5 is not supported by the Python frontend yet$
