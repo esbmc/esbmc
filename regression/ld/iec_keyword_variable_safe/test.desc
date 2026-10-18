@@ -1,0 +1,4 @@
+CORE
+program.ld
+--ld-props props.yaml --incremental-bmc
+^VERIFICATION SUCCESSFUL$

@@ -20,13 +20,52 @@ static std::string ld_name(const std::string &var)
   return "ld::" + var;
 }
 
+static std::string find_iec_operator(const std::string &s)
+{
+  for (size_t i = 0; i < s.size();)
+  {
+    if (!std::isalpha(static_cast<unsigned char>(s[i])) && s[i] != '_')
+    {
+      ++i;
+      continue;
+    }
+
+    size_t start = i;
+    while (i < s.size() &&
+           (std::isalnum(static_cast<unsigned char>(s[i])) || s[i] == '_'))
+      ++i;
+
+    std::string token = s.substr(start, i - start);
+    std::transform(
+      token.begin(), token.end(), token.begin(), [](unsigned char c) {
+        return std::toupper(c);
+      });
+
+    if (token == "AND" || token == "OR" || token == "NOT" || token == "XOR")
+      return token;
+  }
+
+  return {};
+}
+
 symbol_exprt
 property_encoder::var_expr(const std::string &name, const LdProperty &p) const
 {
   const symbolt *sym = context_.find_symbol(ld_name(name));
+
   if (!sym)
+  {
+    const std::string iec_op = find_iec_operator(name);
+
+    if (!iec_op.empty())
+      throw std::runtime_error(
+        "property '" + p.id + "': IEC operator '" + iec_op +
+        "' is not supported; use C operators (!, &&, ||)");
+
     throw std::runtime_error(
       "property '" + p.id + "': undeclared variable '" + name + "'");
+  }
+
   return symbol_exprt(ld_name(name), sym->get_type());
 }
 
@@ -44,38 +83,6 @@ static size_t find_outermost_op(const std::string &s, const std::string &op)
       return i;
   }
   return std::string::npos;
-}
-
-static std::string find_iec_operator(const std::string &s)
-{
-  for (size_t i = 0; i < s.size();)
-  {
-    if (!std::isalpha(static_cast<unsigned char>(s[i])) &&
-        s[i] != '_')
-    {
-      ++i;
-      continue;
-    }
-
-    size_t start = i;
-    while (i < s.size() &&
-           (std::isalnum(static_cast<unsigned char>(s[i])) ||
-            s[i] == '_'))
-      ++i;
-
-    std::string token = s.substr(start, i - start);
-    std::transform(
-      token.begin(),
-      token.end(),
-      token.begin(),
-      [](unsigned char c) { return std::toupper(c); });
-
-    if (token == "AND" || token == "OR" ||
-        token == "NOT" || token == "XOR")
-      return token;
-  }
-
-  return {};
 }
 
 // Minimal boolean expression parser: var, !var, A && B, A || B, (expr).
@@ -139,18 +146,6 @@ exprt property_encoder::parse_bool_expr(
   // Negation.
   if (s.front() == '!')
     return not_exprt(parse_bool_expr(s.substr(1), p));
-
-  const bool has_whitespace =
-    s.find_first_of(" \t\n\r") != std::string::npos;
-
-  const std::string iec_op = find_iec_operator(s);
-
-  if (has_whitespace || !iec_op.empty())
-    throw std::runtime_error(
-      "property '" + p.id +
-      "': expressions use C operators (!, &&, ||); "
-      "IEC-style operators are not supported in '" + s + "'");
-
   return var_expr(s, p);
 }
 
