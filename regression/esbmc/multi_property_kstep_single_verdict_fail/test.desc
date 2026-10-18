@@ -1,0 +1,6 @@
+CORE
+main.c
+--incremental-bmc --multi-property --max-k-step 5
+^\*\* 2 of 2 properties failed$
+^VERIFICATION FAILED$
+\A(?![\s\S]*VERIFICATION FAILED[\s\S]*VERIFICATION FAILED)[\s\S]*\Z
