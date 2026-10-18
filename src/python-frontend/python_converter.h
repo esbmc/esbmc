@@ -8,6 +8,7 @@
 #include <python-frontend/module/global_scope.h>
 #include <python-frontend/python-dict/python_dict_handler.h>
 #include <python-frontend/dynamic_type/dynamic_type_handler.h>
+#include <python-frontend/dynamic_type/literal_divergence.h>
 #include <python-frontend/math/python_math.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/type/element_type_registry.h>
@@ -527,6 +528,10 @@ public:
   {
     return in_contract_clause_;
   }
+  size_t current_block_statement_count() const
+  {
+    return current_block ? current_block->operands().size() : 0;
+  }
 
   /// The class a variable was last assigned as a value (`x = int`), or null.
   /// Kept here rather than read back from the symbol's value, which the IREP2
@@ -601,6 +606,13 @@ private:
   get_return_statements(const nlohmann::json &ast_node, codet &target_block);
 
   void get_function_definition(const nlohmann::json &function_node);
+
+  /// Before a call through `callee`, whose function type is unknown, refuses
+  /// the path where it holds a top-level function taking a different number
+  /// of parameters than @p call passes: such a call fills no defaults and
+  /// raises no TypeError.
+  void
+  refuse_mismatched_callees(const exprt &callee, const nlohmann::json &call);
 
   exprt get_function_body_or_unsupported(const nlohmann::json &function_node);
 
@@ -795,6 +807,18 @@ private:
   std::string create_normalized_self_key(const std::string &class_tag);
 
   std::string extract_class_name_from_tag(const std::string &tag_name);
+
+  /// The number bindings of `name` in the scope being converted that are
+  /// live at line `before`: the ones that reach it, or with `include_later`
+  /// also the ones that share its storage further on.
+  std::vector<dynamic_type_detail::numeric_bindingt> scope_numeric_bindings(
+    const std::string &name,
+    int before,
+    bool include_later) const;
+
+  void reject_inexact_number_join(
+    const nlohmann::json &element,
+    const exprt &expr) const;
 
   // The class name `t` names, or empty when it is neither a struct nor a
   // `tag-<Class>` symbol reference.
@@ -2589,6 +2613,10 @@ private:
     const exprt &lhs,
     const exprt &rhs,
     const nlohmann::json &ast_node,
+    bool is_ctor_call);
+  void widen_int_target_for_float_call(
+    exprt &lhs,
+    const exprt &rhs,
     bool is_ctor_call);
   void handle_function_call_rhs(
     const nlohmann::json &ast_node,
