@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--std c++17
+^VERIFICATION FAILED$
+^\s*FAILED\s+\[main\.assertion\.1\]\s+line 14\s+assertion false$
