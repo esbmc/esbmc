@@ -1845,6 +1845,13 @@ exprt string_handler::get_array_base_address(const exprt &arr)
 {
   if (arr.type().is_pointer())
     return arr;
+  // `c ? "a" : "b"` addresses the chosen array, not an element of the choice,
+  // which the solver cannot take the address of (#8784).
+  if (arr.id() == "if")
+    return build_if(
+      arr.op0(),
+      get_array_base_address(arr.op1()),
+      get_array_base_address(arr.op2()));
   // arr is non-pointer (array) here; index2t source ok, address_of of a
   // non-constant/non-address_of expr is a valid address_of2t source.
   exprt index = build_index(arr, from_integer(0, index_type()));

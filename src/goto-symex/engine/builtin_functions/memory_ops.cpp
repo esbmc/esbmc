@@ -738,6 +738,17 @@ static void offset_simplifier(expr2tc &e)
   simplify(e);
 }
 
+void goto_symext::claim_not_code(const expr2tc &guard)
+{
+  if (options.get_bool_option("no-pointer-check"))
+    return;
+
+  // SAME_OBJECT(ptr, item) => DEREF ERROR
+  claim(
+    implies2tc(guard, gen_false_expr()),
+    "dereference failure: trying to deref a ptr code");
+}
+
 void goto_symext::claim_valid_operand(
   const expr2tc &ptr,
   const expr2tc &n,
@@ -982,12 +993,7 @@ void goto_symext::intrinsic_memcpy_impl(
         return;
       }
 
-      std::string error_msg =
-        fmt::format("dereference failure: trying to deref a ptr code");
-
-      // SAME_OBJECT(ptr, item) => DEREF ERROR
-      expr2tc check = implies2tc(item.guard, gen_false_expr());
-      claim(check, error_msg);
+      claim_not_code(item.guard);
       continue;
     }
 
@@ -1704,12 +1710,7 @@ void goto_symext::intrinsic_memset(
 
     if (is_code_type(item_object->type))
     {
-      std::string error_msg =
-        fmt::format("dereference failure: trying to deref a ptr code");
-
-      // SAME_OBJECT(ptr, item) => DEREF ERROR
-      expr2tc check = implies2tc(item.guard, gen_false_expr());
-      claim(check, error_msg);
+      claim_not_code(item.guard);
       continue;
     }
 

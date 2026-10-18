@@ -164,8 +164,8 @@ static bool needs_bool_intrinsic_symbol(const std::string &name)
 // impure and leaving the reader to guess which call was the problem.
 static bool is_unsupported_contract_intrinsic(const std::string &name)
 {
-  return name == "__ESBMC_assigns" || name == "__ESBMC_is_fresh" ||
-         name == "__ESBMC_forall" || name == "__ESBMC_exists";
+  return name == "__ESBMC_is_fresh" || name == "__ESBMC_forall" ||
+         name == "__ESBMC_exists";
 }
 
 void function_call_builder::check_contract_call(
@@ -173,17 +173,11 @@ void function_call_builder::check_contract_call(
 {
   const std::string &clause = function_id.get_function();
 
-  // Only `assigns` is reported from here: it is a statement in its own right,
-  // so nothing else sees it. The other unsupported intrinsics are meaningful
-  // only inside a clause, where check_contract_clause already rejects them by
-  // name. Reporting them here would fire on any call sharing the name, outside
-  // any clause, and blame contracts for it.
   if (clause == kEsbmcAssigns)
-    throw std::runtime_error(
-      fmt::format(
-        "{} at line {} is not supported by the Python frontend yet",
-        clause,
-        call_.value("lineno", 0)));
+  {
+    check_assigns_targets();
+    return;
+  }
 
   if (clause != kEsbmcRequires && clause != kEsbmcEnsures)
     return;
@@ -254,6 +248,9 @@ std::optional<exprt> function_call_builder::build_contract_intrinsic(
   if (function_id.get_function() == kEsbmcOld)
     return build_old_snapshot();
 
+  if (function_id.get_function() == kEsbmcAssigns)
+    return build_assigns_call();
+
   // Loop invariants and function-contract clauses share one shape: a bodiless
   // `void f(bool)` whose call goto_convert lowers into a LOOP_INVARIANT or a
   // marked ASSUME. The symbol must stay valueless: builtin_functions.cpp
@@ -279,6 +276,58 @@ std::optional<exprt> function_call_builder::build_contract_intrinsic(
     code_type);
   converter_.add_symbol(symbol);
   return std::nullopt;
+}
+
+// A frame names places the caller can observe: a module-level global, or an
+// attribute of an object the function reaches. A local or a parameter is
+// invisible to the caller, so naming one states nothing.
+void function_call_builder::check_assigns_targets() const
+{
+  for (const auto &target : call_["args"])
+  {
+    const std::string kind = target.value("_type", "");
+    const std::string name = target.value("id", "");
+    if (kind == "Attribute")
+      continue;
+    if (
+      kind == "Name" && names_module_global(name) &&
+      !names_enclosing_parameter(name))
+      continue;
+    throw std::runtime_error(
+      fmt::format(
+        "{} at line {} names {}; a frame target must be a module-level "
+        "global or an attribute",
+        kEsbmcAssigns,
+        call_.value("lineno", 0),
+        kind == "Name" ? "'" + name + "'" : describe_clause_node(kind)));
+  }
+}
+
+// Lowered as the C macro spells it: __ESBMC_assigns_impl(&t1, &t2, ...), or
+// __ESBMC_assigns_impl((void *)0) for an empty frame.
+exprt function_call_builder::build_assigns_call() const
+{
+  const std::string impl_id = "c:@F@__ESBMC_assigns_impl";
+  const locationt location = converter_.get_location_from_decl(call_);
+  const symbolt *impl = converter_.symbol_table().find_symbol(impl_id);
+  if (impl == nullptr)
+  {
+    code_typet code_type;
+    code_type.return_type() = empty_typet();
+    code_type.make_ellipsis();
+    symbolt symbol = converter_.create_symbol(
+      "", "__ESBMC_assigns_impl", impl_id, location, code_type);
+    impl = converter_.add_symbol_and_get_ptr(symbol);
+  }
+
+  code_function_callt call;
+  call.function() = symbol_expr(*impl);
+  call.location() = location;
+  for (const auto &target : call_["args"])
+    call.arguments().push_back(address_of_exprt(converter_.get_expr(target)));
+  if (call.arguments().empty())
+    call.arguments().push_back(gen_zero(pointer_typet(empty_typet())));
+  return call;
 }
 
 // Whether \p name is a parameter of the function being converted. Only a

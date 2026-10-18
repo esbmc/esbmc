@@ -6,6 +6,7 @@
 
 #include <utility>
 #include <memory> /* std::allocator, for the Allocator parameter */
+#include <stdexcept>
 
 namespace std {
 
@@ -301,22 +302,15 @@ public:
     // Access with bounds checking
     Value& at(const Key& key) {
         size_type idx = find_index(key);
-        if (idx == MAX_SIZE) {
-            // In real implementation, this would throw std::out_of_range
-            // Here, we'll return a reference to a static default value
-            static Value default_value = Value();
-            return default_value;
-        }
+        if (idx == MAX_SIZE)
+            throw std::out_of_range();
         return data_[idx].second;
     }
     
     const Value& at(const Key& key) const {
         size_type idx = find_index(key);
-        if (idx == MAX_SIZE) {
-            // In real implementation, this would throw std::out_of_range
-            static const Value default_value = Value();
-            return default_value;
-        }
+        if (idx == MAX_SIZE)
+            throw std::out_of_range();
         return data_[idx].second;
     }
     
