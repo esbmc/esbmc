@@ -1,6 +1,5 @@
-from esbmc import nondet_bool
-
+# A str compared with a conditional choosing between two str literals.
+s = nondet_str()
 c = nondet_bool()
-s = "xy" if c else "z"
-assert s == ("xy" if c else "z")
-assert s != ("q" if c else "w")
+if s == ("a" if c else "b"):
+    assert len(s) == 1
