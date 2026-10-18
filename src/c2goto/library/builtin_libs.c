@@ -275,13 +275,17 @@ _Bool __CPROVER_same_object(const void *p, const void *q)
   return __ESBMC_same_object(p, q);
 }
 
-/* The whole object's size in bytes. Types 0 and 2 agree on every object symex
- * resolves and differ only in their fallbacks, so a mismatch marks a pointer
- * with no known object, whose size stays unconstrained. */
+__SIZE_TYPE__ __ESBMC_builtin_object_size(const void *, int);
+
+/* The whole object's size in bytes: mode 4 (esbmc_object_size_whole in
+ * c_builtins.h). Types 0 and 2 agree on every object symex resolves and differ
+ * only in their fallbacks, so a mismatch marks a pointer with no known object,
+ * whose size stays unconstrained. */
 static __SIZE_TYPE__ __esbmc_object_bytes(const void *p)
 {
-  __SIZE_TYPE__ size = __builtin_object_size(p, 0);
-  return size == __builtin_object_size(p, 2) ? size : nondet_ulong();
+  if (__ESBMC_builtin_object_size(p, 0) != __ESBMC_builtin_object_size(p, 2))
+    return nondet_ulong();
+  return __ESBMC_builtin_object_size(p, 4);
 }
 
 __SIZE_TYPE__ __CPROVER_OBJECT_SIZE(const void *p)
