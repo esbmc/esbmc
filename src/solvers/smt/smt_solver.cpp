@@ -278,12 +278,6 @@ void smt_solver_baset::pop_ctx()
     flattened, [this](const auto &kv) { return kv.second.level >= ctx_level; });
   std::erase_if(
     ptr_flow, [this](const auto &kv) { return kv.second.first >= ctx_level; });
-  std::erase_if(rebuilt_pointers, [this](const rebuilt_pointer &r) {
-    return r.level >= ctx_level;
-  });
-  for (rebuilt_pointer &r : rebuilt_pointers)
-    if (r.fallback_level && *r.fallback_level >= ctx_level)
-      r.fallback_level.reset();
 
   pointer_logic.pop_back();
   addr_space_sym_num.pop_back();
@@ -3326,9 +3320,6 @@ void smt_solver_baset::pre_solve()
   // A new solve produces a fresh model; drop memoised l_get values.
   l_get_cache.clear();
   get_ast_cache.clear();
-
-  // Before the tuple and array constraints: it converts more of both.
-  fall_back_rebuilt_pointers();
 
   // NB: always perform tuple constraint adding first, as it covers tuple
   // arrays too, and might end up generating more ASTs to be encoded in

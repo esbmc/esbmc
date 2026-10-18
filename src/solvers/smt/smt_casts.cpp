@@ -1,4 +1,5 @@
 #include <solvers/smt/smt_solver.h>
+#include <sstream>
 #include <util/expr/base_type.h>
 #include <util/expr/expr_util.h>
 #include <util/message/message.h>
@@ -426,17 +427,51 @@ smt_astt smt_solver_baset::convert_typecast_to_ptr(const typecast2t &cast)
 
   // First cast it to an unsignedbv
   type2tc int_type = ptraddr_type2();
+  smt_sortt int_sort = convert_sort(int_type);
   expr2tc cast_to_unsigned = typecast2tc(int_type, cast.from);
   smt_astt target = convert_ast(cast_to_unsigned);
 
+  // Construct array for all possible object outcomes
+  std::vector<smt_astt> is_in_range(addr_space_data.back().size());
+  std::vector<smt_astt> obj_ids(addr_space_data.back().size());
+  std::vector<smt_astt> obj_starts(addr_space_data.back().size());
+
+  std::map<unsigned, bool>::const_iterator it;
+  unsigned int i;
+  for (it = addr_space_data.back().begin(), i = 0;
+       it != addr_space_data.back().end();
+       ++it, i++)
+  {
+    unsigned id = it->first;
+    obj_ids[i] = convert_terminal(constant_int2tc(int_type, BigInt(id)));
+
+    std::stringstream ss1, ss2;
+    ss1 << "__ESBMC_ptr_obj_start_" << id;
+    smt_astt ptr_start = mk_smt_symbol(ss1.str(), int_sort);
+    ss2 << "__ESBMC_ptr_obj_end_" << id;
+    smt_astt ptr_end = mk_smt_symbol(ss2.str(), int_sort);
+
+    obj_starts[i] = ptr_start;
+
+    smt_astt ge =
+      int_encoding ? mk_ge(target, ptr_start) : mk_bvuge(target, ptr_start);
+    smt_astt le =
+      int_encoding ? mk_le(target, ptr_end) : mk_bvule(target, ptr_end);
+    smt_astt theand = mk_and(ge, le);
+    is_in_range[i] = theand;
+  }
+
   // Create a fresh new variable; encode implications that if the integer is
-  // in the relevant range, that the value is the relevant id / offset.
+  // in the relevant range, that the value is the relevant id / offset. If none
+  // are matched, match the invalid pointer.
   // Technically C doesn't allow for any variable to hold an invalid pointer,
   // except through initialization.
 
   std::string newname = mk_fresh_name("smt_solver_baset::int_to_ptr");
   expr2tc output_sym = symbol2tc(cast.type, newname);
   smt_astt output = convert_ast(output_sym);
+  smt_astt output_obj = output->project(this, 0);
+  smt_astt output_offs = output->project(this, 1);
   if (config.ansi_c.cheri)
   {
     smt_astt output_cap = output->project(this, 2);
@@ -450,16 +485,40 @@ smt_astt smt_solver_baset::convert_typecast_to_ptr(const typecast2t &cast)
     assert_ast(other_cap_ast->eq(this, output_cap));
   }
 
-  rebuilt_pointer rebuilt{
-    target, output, nullptr, nullptr, ctx_level, {}, get_cur_addrspace_ident()};
   ast_vec guards;
-  for (const auto &[id, may_be_freed] : addr_space_data.back())
+  for (i = 0; i < addr_space_data.back().size(); i++)
   {
-    if (id == 1)
+    if (i == 1)
       continue; // Skip invalid, it contains everything.
-    guards.push_back(name_object_at(rebuilt, id));
+
+    // Calculate ptr offset were it this
+    smt_astt offs = int_encoding ? mk_sub(target, obj_starts[i])
+                                 : mk_bvsub(target, obj_starts[i]);
+
+    smt_astt this_obj = obj_ids[i];
+    smt_astt this_offs = offs;
+
+    smt_astt obj_eq = this_obj->eq(this, output_obj);
+    smt_astt offs_eq = this_offs->eq(this, output_offs);
+    smt_astt is_eq = mk_and(obj_eq, offs_eq);
+
+    smt_astt in_range = is_in_range[i];
+    guards.push_back(in_range);
+    smt_astt imp = mk_implies(in_range, is_eq);
+    assert_ast(imp);
   }
-  rebuilt.known_match = make_n_ary_or(guards);
+
+  // If none of the above, match invalid.
+  smt_astt was_matched = make_n_ary_or(guards);
+  smt_astt not_matched = mk_not(was_matched);
+
+  smt_astt id = convert_terminal(
+    constant_int2tc(int_type, pointer_logic.back().get_invalid_object()));
+
+  smt_astt one = convert_terminal(constant_int2tc(int_type, BigInt(1)));
+  smt_astt offs = int_encoding ? mk_sub(target, one) : mk_bvsub(target, one);
+  smt_astt inv_obj = id;
+  smt_astt inv_offs = offs;
 
   // Cast from a byte-updated pointer: either the direct BV-mode update
   // byte_update<uint>(bitcast<uint>(ptr), ...) or a struct-field extraction
@@ -484,100 +543,17 @@ smt_astt smt_solver_baset::convert_typecast_to_ptr(const typecast2t &cast)
       pointer_offset2tc(get_int_type(config.ansi_c.address_width), output_sym);
     expr2tc address = add2tc(
       ptraddr_type2(), from_start, typecast2tc(ptraddr_type2(), ptr_offs));
-    rebuilt.fallback = convert_ast(address)->eq(this, target);
-  }
-  else
-  {
-    smt_astt id = convert_terminal(
-      constant_int2tc(int_type, pointer_logic.back().get_invalid_object()));
-    smt_astt one = convert_terminal(constant_int2tc(int_type, BigInt(1)));
-    smt_astt offs = int_encoding ? mk_sub(target, one) : mk_bvsub(target, one);
-    rebuilt.fallback = mk_and(
-      id->eq(this, output->project(this, 0)),
-      offs->eq(this, output->project(this, 1)));
+    smt_astt addr = convert_ast(address);
+    assert_ast(mk_implies(not_matched, addr->eq(this, target)));
+    return output;
   }
 
-  /* Rebuilt from stored bits, objects registered later extend this pointer
-   * and the fallback waits for pre_solve(): two rebuilds of one address must
-   * name one pointer (#7855). A source-level cast keeps naming only the objects
-   * that exist when it runs. */
-  if (repr_rebuilds.count(&cast))
-    rebuilt_pointers.push_back(rebuilt);
-  else
-    assert_ast(mk_implies(mk_not(rebuilt.known_match), rebuilt.fallback));
+  smt_astt obj_eq = inv_obj->eq(this, output_obj);
+  smt_astt offs_eq = inv_offs->eq(this, output_offs);
+  smt_astt is_inv = mk_and(obj_eq, offs_eq);
+
+  assert_ast(mk_implies(not_matched, is_inv));
   return output;
-}
-
-smt_astt smt_solver_baset::object_start(unsigned id)
-{
-  return mk_smt_symbol(
-    "__ESBMC_ptr_obj_start_" + std::to_string(id),
-    convert_sort(ptraddr_type2()));
-}
-
-smt_astt smt_solver_baset::address_in_object(smt_astt address, unsigned id)
-{
-  smt_astt start = object_start(id);
-  smt_astt end = mk_smt_symbol(
-    "__ESBMC_ptr_obj_end_" + std::to_string(id), convert_sort(ptraddr_type2()));
-  return int_encoding
-           ? mk_and(mk_ge(address, start), mk_le(address, end))
-           : mk_and(mk_bvuge(address, start), mk_bvule(address, end));
-}
-
-smt_astt
-smt_solver_baset::name_object_at(const rebuilt_pointer &rebuilt, unsigned id)
-{
-  smt_astt in_range = address_in_object(rebuilt.address, id);
-  smt_astt obj = convert_terminal(constant_int2tc(ptraddr_type2(), BigInt(id)));
-  smt_astt offs = int_encoding ? mk_sub(rebuilt.address, object_start(id))
-                               : mk_bvsub(rebuilt.address, object_start(id));
-  smt_astt is_eq = mk_and(
-    obj->eq(this, rebuilt.pointer->project(this, 0)),
-    offs->eq(this, rebuilt.pointer->project(this, 1)));
-
-  /* An object registered after the rebuild applies only where no earlier one
-   * did: a freed heap object may share addresses with it. */
-  smt_astt applies = rebuilt.known_match
-                       ? mk_and(mk_not(rebuilt.known_match), in_range)
-                       : in_range;
-  assert_ast(mk_implies(applies, is_eq));
-  return in_range;
-}
-
-void smt_solver_baset::extend_rebuilt_pointers(unsigned int obj_num)
-{
-  const expr2tc range = symbol2tc(
-    addr_space_type, "__ESBMC_ptr_addr_range_" + std::to_string(obj_num));
-  for (const rebuilt_pointer &rebuilt : rebuilt_pointers)
-    if (!rebuilt.fallback_level)
-    {
-      name_object_at(rebuilt, obj_num);
-      /* convert_typecast_from_ptr() reads the version current at its step,
-       * and every version from the rebuild on shares this slot. */
-      assert_expr(equality2tc(
-        index2tc(
-          addr_space_type,
-          symbol2tc(addr_space_arr_type, rebuilt.addrspace),
-          constant_int2tc(machine_ptr, BigInt(obj_num))),
-        range));
-    }
-}
-
-void smt_solver_baset::fall_back_rebuilt_pointers()
-{
-  for (rebuilt_pointer &rebuilt : rebuilt_pointers)
-  {
-    if (rebuilt.fallback_level)
-      continue;
-    ast_vec in_some_object;
-    for (const auto &[id, may_be_freed] : addr_space_data.back())
-      if (id != 1)
-        in_some_object.push_back(address_in_object(rebuilt.address, id));
-    assert_ast(
-      mk_implies(mk_not(make_n_ary_or(in_some_object)), rebuilt.fallback));
-    rebuilt.fallback_level = ctx_level;
-  }
 }
 
 smt_astt smt_solver_baset::convert_typecast_from_ptr(const typecast2t &cast)

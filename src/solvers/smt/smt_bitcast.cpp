@@ -428,10 +428,7 @@ smt_astt smt_solver_baset::decode_pointer_repr(
   }
 
   smt_astt address = convert_ast(repr);
-  const expr2tc rebuild = typecast2tc(to_type, repr);
-  repr_rebuilds.insert(rebuild.get());
-  smt_astt pointer = convert_ast(rebuild);
-  repr_rebuilds.erase(rebuild.get());
+  smt_astt pointer = convert_ast(typecast2tc(to_type, repr));
   std::vector<const ptr_flatten_entry *> sources;
   for (const ptr_flatten_entry &flat : ptr_flatten_history)
     if (step_sources.count(flat.id))

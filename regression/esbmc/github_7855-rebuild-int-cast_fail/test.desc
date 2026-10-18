@@ -1,5 +1,0 @@
-CORE
-main.c
---64 --incremental-bmc
-^VERIFICATION FAILED$
-^  FAILED +\[main\.assertion\.\d+\] +line +\d+ +the address read back is another$

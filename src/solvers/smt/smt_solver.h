@@ -1182,34 +1182,6 @@ public:
   void note_assignment(const expr2tc &lhs, const expr2tc &rhs);
   void end_step();
 
-  /** A pointer convert_typecast_to_ptr() rebuilt from an address. */
-  struct rebuilt_pointer
-  {
-    smt_astt address;
-    smt_astt pointer;
-    /** The address is in an object registered before the rebuild. */
-    smt_astt known_match;
-    /** What the pointer is when no object holds the address. */
-    smt_astt fallback;
-    unsigned int level;
-    /** The context level pre_solve() asserted the fallback at, after which
-     *  objects registered later no longer extend the pointer. */
-    std::optional<unsigned int> fallback_level;
-    /** The address-space array version current at the rebuild. */
-    std::string addrspace;
-  };
-  /** Pruned on pop_ctx like ptr_flatten_history. */
-  std::vector<rebuilt_pointer> rebuilt_pointers;
-  /** The casts decode_pointer_repr() is converting. */
-  std::unordered_set<const expr2t *> repr_rebuilds;
-  smt_astt object_start(unsigned id);
-  smt_astt address_in_object(smt_astt address, unsigned id);
-  /** Asserts that @p rebuilt names object @p id when its address is in it,
-   *  and returns that range condition. */
-  smt_astt name_object_at(const rebuilt_pointer &rebuilt, unsigned id);
-  void extend_rebuilt_pointers(unsigned int obj_num);
-  void fall_back_rebuilt_pointers();
-
   /** Map from SSA symbol name to its forall/exists irep2 expression.
    *  Populated in convert_assign when a symbol is assigned a quantifier
    *  expression; used in convert_ast to inline nested quantifier bodies
