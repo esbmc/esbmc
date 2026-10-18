@@ -768,6 +768,10 @@ std::string python_annotation<Json>::get_call_type(const Json &arg)
       json_utils::get_object_alias(ast_, func_name);
     if (json_utils::is_class(class_name, ast_))
       return class_name;
+    // A built-in exception is a class too, so ValueError("x") and 1 at two
+    // call sites widen the parameter rather than typing it int (#8766).
+    if (type_utils::is_python_exceptions(class_name))
+      return class_name;
 
     // hash() returns bytes only for the consensus spec's own
     // hash(data: bytes); on any other argument it is the real builtin,
