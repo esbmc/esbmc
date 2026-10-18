@@ -3149,6 +3149,10 @@ regression/python/github_8355_function_choice
 regression/python/github_8355_function_choice_fail
 regression/python/github_8475
 regression/python/github_8475_fail
+regression/python/github_8764_type_none
+regression/python/github_8764_type_none_value
+regression/python/github_8764_type_none_fail
+regression/python/github_8764_type_none_param_refused
 regression/esbmc-cpp/cpp/github_8697_dynamic_cast_reference
 regression/esbmc-cpp/cpp/github_8697_dynamic_cast_two_types
 regression/esbmc-cpp/cpp/github_8677_covariant_non_first_base
