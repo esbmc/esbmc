@@ -35,13 +35,20 @@ set(ESBMC_REGRESS_MEMORY_LIMIT 8192 CACHE STRING
 # cov-regression: the minimal coverage suite. One test name per line;
 # together with the unit tests it covers exactly the lines the full
 # regression suite covers (100% parity, line-level verified).
-set(ESBMC_COV_TESTS "")
+# A pull request lists its new tests in a file of its own under COV_TESTS.d,
+# so concurrent pull requests do not conflict at the end of COV_TESTS.
+file(GLOB cov_manifests CONFIGURE_DEPENDS
+     "${CMAKE_CURRENT_SOURCE_DIR}/COV_TESTS.d/*")
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/COV_TESTS")
-    file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/COV_TESTS" cov_manifest)
+    list(PREPEND cov_manifests "${CMAKE_CURRENT_SOURCE_DIR}/COV_TESTS")
+endif()
+set(ESBMC_COV_TESTS "")
+foreach(manifest IN LISTS cov_manifests)
+    file(STRINGS "${manifest}" cov_manifest)
     list(FILTER cov_manifest EXCLUDE REGEX "^#")
     list(FILTER cov_manifest EXCLUDE REGEX "^[ \t]*$")
-    set(ESBMC_COV_TESTS "${cov_manifest}")
-endif()
+    list(APPEND ESBMC_COV_TESTS ${cov_manifest})
+endforeach()
 
 option(ENABLE_SANITIZER_CI
     "Restrict regression to CORE mode for sanitizer-instrumented CI runs" OFF)
