@@ -3138,3 +3138,5 @@ regression/python/github_8355_function_choice
 regression/python/github_8355_function_choice_fail
 regression/python/github_8475
 regression/python/github_8475_fail
+regression/esbmc-cpp/cpp/github_8697_dynamic_cast_reference
+regression/esbmc-cpp/cpp/github_8697_dynamic_cast_two_types
