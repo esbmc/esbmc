@@ -551,7 +551,8 @@ class ClassContextMixin:
             for s in module.body if isinstance(s, ast.ClassDef) and counts[s.name] == 1
         }
         builtin = {n for n, v in vars(builtins).items() if isinstance(v, type) and not counts[n]}
-        return defined | builtin
+        none_type = set() if counts["NoneType"] else {"NoneType"}
+        return defined | builtin | none_type
 
     def _specialise_one_function(self, module, known, counts):
         """Specialise the first top-level function that only ever is called
@@ -594,7 +595,15 @@ class ClassContextMixin:
         by_keyword = index >= len(func.args.posonlyargs)
         arg = call.args[index] if index < len(call.args) else next(
             (k.value for k in call.keywords if by_keyword and k.arg == param), None)
-        return arg.id if isinstance(arg, ast.Name) and arg.id in known else None
+        if isinstance(arg, ast.Name) and arg.id in known:
+            return arg.id
+        # type(None) has no builtin name; the frontend reads NoneType as it (#8764).
+        is_type_of_none = (isinstance(arg, ast.Call) and isinstance(arg.func, ast.Name)
+                           and arg.func.id == "type" and {"type", "NoneType"} <= known
+                           and not arg.keywords
+                           and len(arg.args) == 1 and isinstance(arg.args[0], ast.Constant)
+                           and arg.args[0].value is None)
+        return "NoneType" if is_type_of_none else None
 
     def _type_parameters(self, func, known, calls):
         """The indexes of the parameters `func` reads and never rebinds, for
