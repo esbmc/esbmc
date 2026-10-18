@@ -3,6 +3,7 @@
 CC_DIAGNOSTIC_PUSH()
 CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/Basic/TargetInfo.h>
+#include <clang/Basic/Version.inc>
 #include <clang/Frontend/ASTUnit.h>
 CC_DIAGNOSTIC_POP()
 
@@ -443,7 +444,12 @@ bool clang_c_languaget::parse(const std::string &path)
   config.ansi_c.long_long_align = target.getLongLongAlign() / 8;
   config.ansi_c.double_align = target.getDoubleAlign() / 8;
   config.ansi_c.long_double_align = target.getLongDoubleAlign() / 8;
+#if CLANG_VERSION_MAJOR >= 19
   config.ansi_c.bitint_max_align = target.getBitIntMaxAlign() / 8;
+#else
+  // Before clang 19, _BitInt alignment was capped at that of long long.
+  config.ansi_c.bitint_max_align = target.getLongLongAlign() / 8;
+#endif
 
   return false;
 }
