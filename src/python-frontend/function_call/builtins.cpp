@@ -1571,8 +1571,8 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
   {
     if (arg["value"].is_number_integer())
     {
-      int value = arg["value"].get<int>();
-      arg["value"] = std::abs(value); // Apply abs to integer constant
+      const long long value = arg["value"].get<long long>();
+      arg["value"] = std::llabs(value); // Apply abs to integer constant
       arg["type"] = "int";
     }
     else if (arg["value"].is_number_float())
@@ -1661,7 +1661,7 @@ exprt function_call_expr::handle_round(nlohmann::json &arg) const
       // round(x) -> nearest integer (returns int)
       if (arg["value"].is_number_integer())
       {
-        int val = arg["value"].get<int>();
+        long long val = arg["value"].get<long long>();
         if (is_negated)
           val = -val;
         arg["value"] = val;
@@ -1705,9 +1705,7 @@ exprt function_call_expr::handle_round(nlohmann::json &arg) const
         int n = ndigits_arg["value"].get<int>();
         if (ndigits_negated)
           n = -n;
-        double val = arg["value"].is_number_integer()
-                       ? static_cast<double>(arg["value"].get<int>())
-                       : arg["value"].get<double>();
+        double val = arg["value"].get<double>();
         if (is_negated)
           val = -val;
         double rounded = round_to_ndigits_ties_even(val, n);

@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: nonlocal statements are only supported in a nested function that is only called, not decorated, stored, passed or returned$

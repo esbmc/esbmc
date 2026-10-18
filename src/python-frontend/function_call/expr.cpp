@@ -2822,21 +2822,43 @@ bool function_call_expr::receiver_is_binop_or_list_symbol() const
   return sym != nullptr && sym->get_type() == type_handler_.get_list_type();
 }
 
+bool function_call_expr::receiver_class_defines_method(
+  const std::string &method_name) const
+{
+  std::string cls = function_id_.get_class();
+  if (cls.rfind("tag-", 0) == 0)
+    cls = cls.substr(4);
+  const auto &ast = converter_.ast();
+  return is_class(cls, ast) &&
+         json_utils::class_defines_method(ast["body"], cls, method_name);
+}
+
 bool function_call_expr::is_list_method_call() const
 {
   if (call_["func"]["_type"] != "Attribute")
     return false;
 
-  const std::string &method_name = function_id_.get_function();
+  static const std::unordered_set<std::string> list_methods = {
+    "append",
+    "pop",
+    "insert",
+    "remove",
+    "clear",
+    "extend",
+    "copy",
+    "sort",
+    "reverse",
+    "popleft",
+    "appendleft",
+    "count",
+    "index"};
 
-  if (
-    method_name != "append" && method_name != "pop" &&
-    method_name != "insert" && method_name != "remove" &&
-    method_name != "clear" && method_name != "extend" &&
-    method_name != "copy" && method_name != "sort" &&
-    method_name != "reverse" && method_name != "popleft" &&
-    method_name != "appendleft" && method_name != "count" &&
-    method_name != "index")
+  const std::string &method_name = function_id_.get_function();
+  if (!list_methods.count(method_name))
+    return false;
+
+  // A user class's own method of the same name (`e.remove(1)`) wins.
+  if (receiver_class_defines_method(method_name))
     return false;
 
   // Tuples are claimed earlier; only claim count/index here when the receiver
@@ -5835,7 +5857,10 @@ std::optional<exprt> function_call_expr::try_indirect_variable_call()
         resolved = true;
       }
       if (!resolved)
+      {
         call.type() = any_type();
+        converter_.refuse_mismatched_callees(build_symbol(*var_symbol), call_);
+      }
 
       for (const auto &arg_node : call_["args"])
       {
@@ -6540,16 +6565,9 @@ size_t function_call_expr::bind_call_receiver(
             s->set_type(migrate_type(class_ptr));
       }
       if (converter_.current_lhs->type().is_pointer())
-      {
-        const symbolt *new_obj_sym =
-          converter_.symbol_table().find_symbol("c:@F@__ESBMC_new_object");
-        assert(new_obj_sym && "__ESBMC_new_object model required");
-        code_function_callt alloc_call;
-        alloc_call.lhs() = *converter_.current_lhs;
-        alloc_call.function() = symbol_expr(*new_obj_sym);
-        converter_.add_instruction(alloc_call);
-        call.arguments().push_back(*converter_.current_lhs);
-      }
+        call.arguments().push_back(
+          python_list(converter_, call_)
+            .allocate_constructed_object(*converter_.current_lhs));
       else
         call.arguments().push_back(gen_address_of(*converter_.current_lhs));
       param_offset = 1;

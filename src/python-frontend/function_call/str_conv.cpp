@@ -416,7 +416,7 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
 
 exprt function_call_expr::handle_int_to_str(nlohmann::json &arg) const
 {
-  std::string str_val = std::to_string(arg["value"].get<int>());
+  std::string str_val = std::to_string(arg["value"].get<long long>());
   typet t = type_handler_.get_typet("str", str_val.size() + 1);
   return converter_.make_char_array_expr(
     std::vector<uint8_t>(str_val.begin(), str_val.end()), t);
@@ -571,8 +571,7 @@ exprt function_call_expr::guard_nonfinite_float_to_int(
 
 void function_call_expr::handle_int_to_float(nlohmann::json &arg) const
 {
-  int value = arg["value"].get<int>();
-  arg["value"] = static_cast<double>(value);
+  arg["value"] = arg["value"].get<double>();
 }
 
 exprt function_call_expr::handle_base_conversion(

@@ -528,6 +528,10 @@ public:
   {
     return in_contract_clause_;
   }
+  size_t current_block_statement_count() const
+  {
+    return current_block ? current_block->operands().size() : 0;
+  }
 
   /// The class a variable was last assigned as a value (`x = int`), or null.
   /// Kept here rather than read back from the symbol's value, which the IREP2
@@ -602,6 +606,13 @@ private:
   get_return_statements(const nlohmann::json &ast_node, codet &target_block);
 
   void get_function_definition(const nlohmann::json &function_node);
+
+  /// Before a call through `callee`, whose function type is unknown, refuses
+  /// the path where it holds a top-level function taking a different number
+  /// of parameters than @p call passes: such a call fills no defaults and
+  /// raises no TypeError.
+  void
+  refuse_mismatched_callees(const exprt &callee, const nlohmann::json &call);
 
   exprt get_function_body_or_unsupported(const nlohmann::json &function_node);
 
@@ -2547,6 +2558,14 @@ private:
    */
   bool is_global_variable(const symbol_id &sid) const;
 
+  /// Binds each name of a `nonlocal` statement to the enclosing function's
+  /// local, refusing the forms whose writes would not reach it.
+  void declare_nonlocal(const nlohmann::json &element);
+
+  /// Points @p sid at the enclosing function's local when the current
+  /// function declared its name `nonlocal`.
+  void redirect_nonlocal(symbol_id &sid) const;
+
   /**
    * @brief Extracts variable name from assignment target.
    *
@@ -3533,6 +3552,9 @@ private:
   function_call_cache function_call_cache_;
 
   std::vector<std::string> global_declarations;
+  /// A nested function's local id -> the enclosing function it is `nonlocal`
+  /// to.
+  std::map<std::string, std::string> nonlocal_scopes_;
   std::vector<std::string> local_loads;
   bool is_right = false;
   std::vector<std::string> scope_stack_;

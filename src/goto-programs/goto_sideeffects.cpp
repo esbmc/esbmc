@@ -3,6 +3,7 @@
 #include <goto-programs/goto_convert_class.h>
 #include <irep2/irep2_utils.h>
 #include <util/arith/arith_tools.h>
+#include <util/config/config.h>
 #include <util/lang/c_types.h>
 #include <util/symtab/cprover_prefix.h>
 #include <util/expr/expr_util.h>
@@ -2164,6 +2165,24 @@ void goto_convertt::remove_assignment(
     expr.make_nil();
 }
 
+// C11 6.5.2.4p2/6.5.3.1p2 define ++ and -- through += 1, so a signed operand
+// of rank below int is promoted (6.3.1.1p2) and cannot overflow. Unsigned
+// operands keep their own type so --unsigned-overflow-check still reports the
+// wrap. _BitInt is not promoted (C23 6.3.1.1p2); it is told apart by having
+// no #cpp_type, the only marker irep2 keeps.
+static bool is_promoted_to_int(const typet &type)
+{
+  if (
+    config.language.lid != language_idt::C &&
+    config.language.lid != language_idt::CPP)
+    return false;
+  if (!type.is_signedbv())
+    return false;
+  if (type.cpp_type().empty())
+    return false;
+  return bv_width(type) < bv_width(int_type());
+}
+
 void goto_convertt::remove_pre(
   exprt &expr,
   goto_programt &dest,
@@ -2209,7 +2228,9 @@ void goto_convertt::remove_pre(
     rhs.type() = int_type();
     rhs.make_typecast(bool_type());
   }
-  else if (op_type.id() == "c_enum" || op_type.id() == "incomplete_c_enum")
+  else if (
+    op_type.id() == "c_enum" || op_type.id() == "incomplete_c_enum" ||
+    is_promoted_to_int(op_type))
   {
     rhs.copy_to_operands(expr.op0(), gen_one(int_type()));
     rhs.op0().make_typecast(int_type());
@@ -2306,7 +2327,9 @@ void goto_convertt::remove_post(
     rhs.type() = int_type();
     rhs.make_typecast(bool_type());
   }
-  else if (op_type.id() == "c_enum" || op_type.id() == "incomplete_c_enum")
+  else if (
+    op_type.id() == "c_enum" || op_type.id() == "incomplete_c_enum" ||
+    is_promoted_to_int(op_type))
   {
     rhs.copy_to_operands(expr.op0(), gen_one(int_type()));
     rhs.op0().make_typecast(int_type());

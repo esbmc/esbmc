@@ -64,6 +64,7 @@ add_library(pythonfrontend STATIC
             python_annotation/annotation_intrinsics.cpp
             python_annotation/annotation_parser.cpp
             python_annotation/annotation_utils.cpp
+            python_annotation/function_values.cpp
             symbol_id.cpp
             type/element_type_registry.cpp
             type/type_handler.cpp
