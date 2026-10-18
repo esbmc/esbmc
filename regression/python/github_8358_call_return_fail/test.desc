@@ -1,0 +1,8 @@
+CORE
+main.py
+--unwind 8 --no-unwinding-assertions --multi-property --no-pointer-check --no-bounds-check
+^VERIFICATION FAILED$
+^\s+FAILED\s+\[global\.assertion\.[0-9]+\]\s+line\s+32\s+assertion
+^\s+FAILED\s+\[global\.assertion\.[0-9]+\]\s+line\s+34\s+assertion
+^\s+FAILED\s+\[global\.assertion\.[0-9]+\]\s+line\s+36\s+assertion
+^\*\* 3 of [0-9]+ properties failed

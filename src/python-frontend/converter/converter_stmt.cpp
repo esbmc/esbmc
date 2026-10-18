@@ -4944,6 +4944,22 @@ void python_converter::copy_elem_types_from_reordering_builtin(
   copy_homogeneous_elem_types(element_type_registry_, src, lhs_id);
 }
 
+// A float returned into an int-typed name widens the name, as a float
+// expression assigned to it does in adjust_statement_types. Binding the call's
+// result to the int slot would truncate it (#8417).
+void python_converter::widen_int_target_for_float_call(
+  exprt &lhs,
+  const exprt &rhs,
+  bool is_ctor_call)
+{
+  if (
+    is_ctor_call || !lhs.is_symbol() || !rhs.type().is_floatbv() ||
+    !type_utils::is_integer_type(lhs.type()))
+    return;
+  lhs.type() = rhs.type();
+  update_symbol(lhs);
+}
+
 void python_converter::handle_function_call_rhs(
   const nlohmann::json &ast_node,
   symbolt *lhs_symbol,
@@ -5032,6 +5048,8 @@ void python_converter::handle_function_call_rhs(
     lhs.type() = rhs.type();
     lhs_symbol->set_type(migrate_type(rhs.type()));
   }
+
+  widen_int_target_for_float_call(lhs, rhs, is_ctor_call);
 
   // Set return destination
   if (rhs.type().is_pointer() && !is_ctor_call)
@@ -6136,7 +6154,7 @@ python_converter::instantiated_class(const nlohmann::json &value) const
   return json_utils::is_class(name, *ast_json) ? name : "";
 }
 
-static bool ctor_arms_share_class(
+static bool ctor_arms_are_spellable(
   const nlohmann::json &ifexp,
   const std::string &then_class,
   const std::string &else_class)
@@ -6149,7 +6167,7 @@ static bool ctor_arms_share_class(
     return is_none(ifexp["body"]);
   if (else_class.empty())
     return is_none(ifexp["orelse"]);
-  return then_class == else_class;
+  return true;
 }
 
 bool python_converter::ternary_needs_if_spelling(
@@ -6165,11 +6183,12 @@ bool python_converter::ternary_needs_if_spelling(
       dynamic_type_detail::classify_literal_value_kind(ifexp["orelse"]);
     return !then_kind.empty() && !else_kind.empty() && then_kind != else_kind;
   }
-  if (!ctor_arms_share_class(ifexp, then_class, else_class))
-    // A method call on the target would dispatch on one class only (#8408).
+  // Arms constructing different classes are spelled as `if` too, where the
+  // preprocessor refuses what would resolve against one class only (#8408).
+  if (!ctor_arms_are_spellable(ifexp, then_class, else_class))
     throw std::runtime_error(
-      "a conditional expression instantiating a class must pick that class "
-      "or None in its other branch");
+      "a conditional expression instantiating a class must pick a class or "
+      "None in its other branch");
   return true;
 }
 
