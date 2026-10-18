@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--sol contract.sol --contract C --no-standard-checks --k-induction --max-k-step 20 --k-step 3
+^VERIFICATION SUCCESSFUL$

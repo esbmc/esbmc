@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--sol contract.sol --contract Vault --no-standard-checks --unwind 5 --no-unwinding-assertions --bound --cvc5
+^VERIFICATION SUCCESSFUL$

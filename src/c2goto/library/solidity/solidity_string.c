@@ -9,9 +9,7 @@
 char *string_concat(char *x, char *y)
 {
 __ESBMC_HIDE:;
-  size_t xlen = strnlen(x, 256);
-  if (xlen < 256)
-    snprintf(x + xlen, 256 - xlen, "%s", y);
+  strncat(x, y, 256);
   return x;
 }
 
@@ -25,10 +23,7 @@ __ESBMC_HIDE:;
 void sol_rev(char *p)
 {
 __ESBMC_HIDE:;
-  size_t n = strnlen(p, 256);
-  if (n == 0)
-    return;
-  char *q = &p[n - 1];
+  char *q = &p[strlen(p) - 1];
   char *r = p;
   for (; q > r; q--, r++)
   {
@@ -142,8 +137,7 @@ char *ASCIItoHEX(const char *ascii)
 __ESBMC_HIDE:;
   char *hex = (char *)malloc(256 * sizeof(char));
   hex[0] = '\0';
-  size_t n = strnlen(ascii, 256);
-  for (size_t i = 0; i < n; i++)
+  for (int i = 0; i < strlen(ascii); i++)
   {
     char ch = ascii[i];
     int tmp = (int)ch;
@@ -184,36 +178,10 @@ __ESBMC_HIDE:;
 uint256_t str2uint(const char *str)
 {
 __ESBMC_HIDE:;
-  // Pure: same string contents -> same uint256_t.
-  // The previous hexdec(ASCIItoHEX(str)) implementation went through malloc,
-  // so symex could not treat repeated calls on the same literal as equal —
-  // mapping(string => T) writes and reads produced different keys, missing
-  // the just-stored entry.
-  //
-  // Encoding: pack the first 32 bytes of str into a 256-bit big-endian
-  // integer, stopping at the NUL terminator. Strings longer than 32 bytes
-  // are still mapped deterministically (further bytes shift earlier ones
-  // out of the high 32 lanes), preserving collision resistance.
-  uint256_t result = (uint256_t)0;
-  for (size_t i = 0; str[i] != '\0' && i < 32; i++)
-    result = (result << (uint256_t)8) | (uint256_t)(uint8_t)str[i];
-  return result;
+  return hexdec(ASCIItoHEX(str));
 }
 
-// Fold a 256-bit mapping key down to a 64-bit array-domain index.
-// Implemented as a single C function so the frontend only generates one call,
-// avoiding side-effect duplication when the key is a function-call result
-// (e.g. str2uint, bytes_static_to_mapping_key) that would otherwise be
-// re-evaluated per chunk.
-uint64_t _ESBMC_str_key_fold64(uint256_t key)
-{
-__ESBMC_HIDE:;
-  uint64_t k0 = (uint64_t)key;
-  uint64_t k1 = (uint64_t)(key >> (uint256_t)64);
-  uint64_t k2 = (uint64_t)(key >> (uint256_t)128);
-  uint64_t k3 = (uint64_t)(key >> (uint256_t)192);
-  return k0 ^ k1 ^ k2 ^ k3;
-}
+#define _ESBMC_SOL_STR_MAX 64
 
 // string assign
 void _str_assign(char **str1, const char *str2)
@@ -224,6 +192,10 @@ __ESBMC_HIDE:;
   {
     return; // Early exit if str1 is invalid
   }
+  // Free *str1 only if it was previously allocated (non-NULL)
+  // if (*str1 != NULL) {
+  //     free(*str1);
+  // }
 
   // If str2 is NULL, set *str1 to NULL (avoid dangling pointers)
   if (str2 == NULL)
@@ -231,27 +203,60 @@ __ESBMC_HIDE:;
     *str1 = NULL;
     return;
   }
-  size_t len = strnlen(str2, SIZE_MAX - 1);
+  /* Bounded scan instead of strlen: in --contract mode (and anywhere a
+   * string parameter is nondet) str2's bytes are symbolic, so the generic
+   * strlen's "while (s[len] != 0) len++" has no concrete termination and
+   * the unwinder spins until OOM. A 256-byte cap is more than enough for
+   * any Solidity name/symbol/short-URI literal we see in practice. */
+  size_t len = 0;
+  while (len < _ESBMC_SOL_STR_MAX && str2[len] != '\0')
+    ++len;
   *str1 = (char *)malloc(len + 1);
-  memcpy(*str1, str2, len);
+  for (size_t i = 0; i < _ESBMC_SOL_STR_MAX; ++i)
+  {
+    if (i >= len)
+      break;
+    (*str1)[i] = str2[i];
+  }
   (*str1)[len] = '\0';
 }
 
 unsigned int nondet_uint();
 char nondet_char();
 
-__attribute__((annotate("__ESBMC_inf_size"))) char _ESBMC_rand_str[1];
+/* Fixed-size buffer (not __ESBMC_inf_size) so a concrete NUL at index
+ * _ESBMC_NONDET_STRING_MAX guarantees strlen() terminates without the
+ * generic scan loop unwinding indefinitely. */
+#define _ESBMC_NONDET_STRING_MAX 32
+char _ESBMC_rand_str[_ESBMC_NONDET_STRING_MAX + 1];
 
+/* Cap the symbolic length so symex terminates without --unwind. Without
+ * a concrete loop bound, len is symbolic and the fill loop would unwind
+ * forever; without a zero-initialised tail, strlen() on the returned
+ * string would keep scanning symbolic bytes past the NUL until OOM. */
 char *nondet_string()
 {
 __ESBMC_HIDE:;
   size_t len = nondet_uint();
+  __ESBMC_assume(len < _ESBMC_NONDET_STRING_MAX);
 
-  for (size_t i = 0; i < len; ++i)
+  /* Zero the whole buffer concretely so any later strlen() terminates at
+   * or before _ESBMC_NONDET_STRING_MAX.  memset here is a constant size
+   * on a writable global with simplify on => intrinsic_memset single-
+   * shot (no per-byte loop), so the k-induction base case / a sub-33
+   * --unwind cannot spuriously prune the post-string path by k-bounding
+   * this fixed-trip-count library loop (was: 33-iter zero-fill loop;
+   * see notes/Results/branch_cov/STAGE5_RESIDUAL_DIAG.md Stage H). */
+  memset(_ESBMC_rand_str, 0, _ESBMC_NONDET_STRING_MAX + 1);
+
+  /* Concrete upper bound in the loop header gives the unwinder a static
+   * stop; the extra i<len lets the loop exit early for smaller lengths. */
+  for (size_t i = 0; i < _ESBMC_NONDET_STRING_MAX; ++i)
   {
+    if (i >= len)
+      break;
     _ESBMC_rand_str[i] = nondet_char();
     __ESBMC_assume(_ESBMC_rand_str[i] != '\0');
   }
-  _ESBMC_rand_str[len] = '\0';
   return _ESBMC_rand_str;
 }

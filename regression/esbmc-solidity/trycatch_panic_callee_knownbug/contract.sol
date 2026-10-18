@@ -1,0 +1,11 @@
+pragma solidity >=0.8.0;
+contract C { function f(uint256) external pure returns (uint256) { assert(false); return 0; } }
+contract H {
+  C c;
+  function __ESBMC_reverted() internal returns (bool) {}
+  constructor() { c = new C(); }
+  function run(uint256 x) public {
+    bool r; try c.f(x) returns (uint256) { r = false; } catch { r = true; }
+    assert(r);                    // real EVM: panic caught -> r true. Model: callee assert dominates.
+  }
+}

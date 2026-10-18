@@ -1,0 +1,6 @@
+CORE
+contract.solast
+--sol contract.sol --no-standard-checks --bounds-check --incremental-bmc --bitwuzla
+^VERIFICATION FAILED$
+^Violated property:$
+^  dereference failure: array bounds violated$

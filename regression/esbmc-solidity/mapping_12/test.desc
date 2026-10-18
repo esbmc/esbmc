@@ -1,4 +1,4 @@
 CORE
 contract.solast
---sol contract.sol --k-induction --no-standard-checks --bound
+--sol contract.sol --k-induction --no-standard-checks --bound --cvc5
 ^VERIFICATION FAILED$

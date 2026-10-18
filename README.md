@@ -47,6 +47,52 @@ Concurrent software (using the pthread API) is verified by explicitly exploring 
 
 By default, ESBMC performs a "lazy" depth-first search of interleavings -- it can also encode (explicitly) all interleavings into a single SMT formula.
 
+#### Property-check flags
+
+Each class of bug maps to a CLI flag.  C/C++/Python/Rust default to the
+"on by default" set; Solidity defaults to opt-in (SMTChecker-style — see
+the Solidity column).  Pass `--no-standard-checks` to disable the whole
+default-on bundle in C/C++; pass a positive flag to force a single check
+on regardless of `--no-standard-checks`.
+
+| Bug class | Enable flag | Disable flag | C/C++ default | Solidity default |
+|---|---|---|---|---|
+| User assertions (`assert(...)`) | (always on) | `--no-assertions` | on | on |
+| Array out-of-bounds | `--bounds-check` | `--no-bounds-check` | on | **off** (opt-in) |
+| Division by zero | `--div-by-zero-check` | `--no-div-by-zero-check` | on | **off** (opt-in) |
+| Pointer safety (null deref, OOB deref, double-free) | (default on) | `--no-pointer-check` | on | off (no Solidity pointers) |
+| Pointer alignment | (default on) | `--no-align-check` | on | off |
+| Pointer relations (`p < q` on unrelated objects) | (default on) | `--no-pointer-relation-check` | on | off |
+| VLA size overflow | (default on) | `--no-vla-size-check` | on | off |
+| Narrowing cast | C/C++: `--int-encoding` with `--overflow-check` or `--unsigned-overflow-check`; Solidity: `--narrowing-check` | Solidity: `--no-narrowing-check` | off | off (opt-in) |
+| `scanf` unlimited-width overflow | (default on) | `--no-unlimited-scanf-check` | on | off |
+| Signed integer over/underflow | `--overflow-check` | (default off) | off | off |
+| Unsigned integer over/underflow | `--unsigned-overflow-check` | (default off) | off | off |
+| Undefined-behaviour shifts (`x << y`, `x >> y`) | `--ub-shift-check` | (default off) | off | off |
+| Floating-point NaN | `--nan-check` | (default off) | off | off |
+| Memory leak | `--memory-leak-check` | (default off) | off | off |
+| `printf` argument validity | `--printf-check` | (default off) | off | off |
+| Struct over-sized read | `--struct-fields-check` | (default off) | off | off |
+| Stack-size limit | `--stack-limit <bits>` | (default off) | off | off |
+| Unreachable label | `--error-label <label>` | (default off) | off | off |
+| `__ESBMC_unreachable()` intrinsic | `--enable-unreachability-intrinsic` | (default off) | off | off |
+| Reachable `isinstance` (Python) | `--is-instance-check` | (default off) | off | – |
+| Concurrent: deadlock | `--deadlock-check` | (default off) | off | – |
+| Concurrent: data race | `--data-races-check` / `--data-races-check-only` | (default off) | off | – |
+| Concurrent: atomicity violation | `--atomicity-check` | (default off) | off | – |
+| Concurrent: lock acquisition order | `--lock-order-check` | (default off) | off | – |
+| Volatile-variable access | `--volatile-check` | (default off) | off | – |
+| Solidity: reentrancy | `--reentry-check` | (default off) | – | off |
+| Solidity: TOD on `address(this).balance` | `--tod-balance-check[=auto\|f1,f2]` | (default off) | – | off |
+| Solidity: TOD on storage state vars | `--tod-race-check[=auto\|f1,f2]` | (default off) | – | off |
+
+`--no-standard-checks` disables every "default on" check in one go.
+Positive flags (e.g. `--bounds-check`) override `--no-standard-checks`,
+so `--no-standard-checks --bounds-check` keeps only bounds-checking on.
+Solidity runs implicitly set `--no-standard-checks`, so each Solidity
+property is opt-in — `esbmc contract.sol --div-by-zero-check` enables
+exactly that one check.
+
 Many SMT solvers are currently supported:
  * Z3 4.13+
  * Bitwuzla

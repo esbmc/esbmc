@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--sol contract.sol --contract C --unbound --no-standard-checks --k-induction --max-k-step 25 --k-step 2 --solidity-precise --solidity-max-tx 1
+^VERIFICATION FAILED$

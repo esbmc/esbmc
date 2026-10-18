@@ -54,24 +54,27 @@ __ESBMC_HIDE:;
 }
 
 /*
- * llc_nondet_bytes — nondet abstraction for the `bytes memory data` component
- * of a low-level `.call()` / `.staticcall()` / `.delegatecall()` return.
+ * llc_nondet_bytes — nondet abstraction for a `bytes memory` value whose
+ * content is unknown but whose structural invariants are known to hold.
+ * Used for (a) the data component of a low-level .call()/.staticcall()/
+ * .delegatecall() return, and (b) entry-harness parameters of type
+ * `bytes calldata` / `bytes memory` (via assign_param_nondet).
  *
- * The returned BytesDynamic has `initialized = 1` so that init-checks pass.
- * All other fields (length, offset, capacity) are left uninitialized →
- * ESBMC treats them as fresh nondet symbols.  In particular, `data.length`
- * is fully unconstrained (any size_t value is possible).
- *
- * Over-approximation semantics (same as crypto hash abstraction):
- *  - Sound for safety: no real return-data outcome is excluded.
- *  - Possible false positives for properties that rely on the concrete
- *    content or on specific length values.
+ * The returned BytesDynamic is constrained so:
+ *  - `initialized == 1` — init-checks pass unconditionally
+ *  - `length` is fully nondet (size_t range, scalar-driven by the SMT
+ *    solver per assertion / counterexample). Real Solidity admits any
+ *    gas-bounded length, including 0; contracts that need a tighter
+ *    range must require() it explicitly.
+ *  - `capacity == length` — matches a freshly-decoded calldata view
+ *  - `offset` is fresh nondet — pool contents remain symbolic.
  */
 BytesDynamic llc_nondet_bytes(void)
 {
 __ESBMC_HIDE:;
   BytesDynamic result;
   result.initialized = 1;
+  result.capacity = result.length;
   return result;
 }
 

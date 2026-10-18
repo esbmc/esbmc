@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--sol contract.sol --contract MappingFixed2DArrayUnboundFail --no-standard-checks --k-induction --max-k-step 20 --k-step 3
+^VERIFICATION FAILED$

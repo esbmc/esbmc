@@ -26,6 +26,15 @@
 #include <map>
 #include <vector>
 
+static bool intrinsic_has_library_body(const std::string &name)
+{
+  return has_prefix(name, "c:@F@__ESBMC_pthread_start_main_hook") ||
+         has_prefix(name, "c:@F@__ESBMC_pthread_end_main_hook") ||
+         has_prefix(name, "c:@F@__ESBMC_atexit_handler") ||
+         has_prefix(name, "c:@F@__ESBMC_pylock_block_and_check") ||
+         name == "c:@F@__ESBMC_reverted";
+}
+
 bool goto_symext::check_incremental(const expr2tc &expr, const std::string &msg)
 {
   auto rte = std::dynamic_pointer_cast<runtime_encoded_equationt>(target);
@@ -591,9 +600,16 @@ void goto_symext::symex_assert()
   if (cur_state->guard.is_false())
     return;
 
-  // Don't convert if it's an user provided assertion and we're running in
-  // no assertion mode or forward condition
-  if (cur_state->source.pc->location.user_provided() && no_assertions)
+  // Don't convert if it's a user-provided assertion and we're running in
+  // no assertion mode. Exception: coverage instrumentation asserts inherit
+  // user_provided(true) so they show up in counterexample traces — they
+  // are NOT user safety properties and must survive --no-assertions
+  // (otherwise the Solidity coverage auto-enable in esbmc_parseoptions
+  // would silently disable branch/condition coverage instrumentation).
+  if (
+    cur_state->source.pc->location.user_provided() && no_assertions &&
+    cur_state->source.pc->location.property().as_string() !=
+      "instrumented assertion")
     return;
 
   const goto_programt::instructiont &instruction = *cur_state->source.pc;
@@ -1137,12 +1153,7 @@ void goto_symext::run_intrinsic(
     return;
   }
 
-  // We simply call these functions
-  if (
-    has_prefix(symname, "c:@F@__ESBMC_pthread_start_main_hook") ||
-    has_prefix(symname, "c:@F@__ESBMC_pthread_end_main_hook") ||
-    has_prefix(symname, "c:@F@__ESBMC_atexit_handler") ||
-    has_prefix(symname, "c:@F@__ESBMC_pylock_block_and_check"))
+  if (intrinsic_has_library_body(symname))
   {
     bump_call(func_call, symname);
     return;

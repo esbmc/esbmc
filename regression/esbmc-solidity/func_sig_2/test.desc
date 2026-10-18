@@ -1,4 +1,4 @@
-THOROUGH
+CORE
 contract.solast
---sol contract.sol --contract C --no-standard-checks --unwind 4 --no-unwinding-assertions --bound
+--sol contract.sol --contract C --no-standard-checks --bound --unwind 20 --no-unwinding-assertions
 ^VERIFICATION SUCCESSFUL$

@@ -1,0 +1,5 @@
+CORE
+contract.solast
+--sol contract.sol --contract User --k-induction --no-standard-check --branch-coverage-claims
+^Branches :
+^Branch Coverage:

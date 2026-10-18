@@ -1,0 +1,4 @@
+KNOWNBUG
+contract.solast
+--sol contract.sol --contract Aqua --branch-coverage-claims --k-induction --unlimited-k-steps --memlimit 8g --timeout 90 --quiet --no-assertions
+^Branch Coverage: 50%

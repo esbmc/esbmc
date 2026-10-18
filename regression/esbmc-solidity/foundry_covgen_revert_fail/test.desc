@@ -1,0 +1,7 @@
+CORE
+contract.solast
+--sol contract.sol --contract Rev --branch-coverage --generate-foundry-testcase --no-assertions
+^Generated Foundry coverage test with 2 case\(s\)
+^Foundry: 1 call\(s\) wrapped in vm\.expectRevert \(detected revert edge\)$
+^Foundry: 1 call\(s\) wrapped in revert-tolerant try/catch \(outcome not confirmed\)$
+^COVERAGE ANALYSIS COMPLETE$

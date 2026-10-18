@@ -265,6 +265,9 @@ int esbmc_parseoptionst::do_bmc_strategy(
   // For ctest test generation
   ctest_generator ctest_gen;
 
+  // For Foundry (*.t.sol) test generation
+  foundry_generator foundry_gen;
+
   if (k_step_base >= max_k_step)
   {
     log_error(
@@ -316,7 +319,8 @@ int esbmc_parseoptionst::do_bmc_strategy(
     if (options.get_bool_option("k-induction"))
     {
       const bool is_bcv =
-        is_base_case_violated(options, goto_functions, k_step).is_true();
+        is_base_case_violated(options, goto_functions, k_step, &foundry_gen)
+          .is_true();
       if (is_bcv && ends_at_violation(options, any_violation_found))
         return 1;
 
@@ -333,7 +337,8 @@ int esbmc_parseoptionst::do_bmc_strategy(
             goto_functions.reached_claims,
             goto_functions.reached_mul_claims,
             pytest_gen,
-            ctest_gen);
+            ctest_gen,
+            foundry_gen);
         return conclude();
       }
 
@@ -350,7 +355,8 @@ int esbmc_parseoptionst::do_bmc_strategy(
               goto_functions.reached_claims,
               goto_functions.reached_mul_claims,
               pytest_gen,
-              ctest_gen);
+              ctest_gen,
+              foundry_gen);
           return conclude();
         }
       }
@@ -466,7 +472,8 @@ int esbmc_parseoptionst::do_bmc_strategy(
     if (options.get_bool_option("incremental-bmc"))
     {
       const bool is_bcv =
-        is_base_case_violated(options, goto_functions, k_step).is_true();
+        is_base_case_violated(options, goto_functions, k_step, &foundry_gen)
+          .is_true();
       if (is_bcv && ends_at_violation(options, any_violation_found))
         return 1;
 
@@ -480,7 +487,8 @@ int esbmc_parseoptionst::do_bmc_strategy(
             goto_functions.reached_claims,
             goto_functions.reached_mul_claims,
             pytest_gen,
-            ctest_gen);
+            ctest_gen,
+            foundry_gen);
         return conclude();
       }
     }
@@ -488,7 +496,8 @@ int esbmc_parseoptionst::do_bmc_strategy(
     if (options.get_bool_option("falsification"))
     {
       const bool violated =
-        is_base_case_violated(options, goto_functions, k_step).is_true();
+        is_base_case_violated(options, goto_functions, k_step, &foundry_gen)
+          .is_true();
       if (
         violated && !is_coverage &&
         ends_at_violation(options, any_violation_found))
@@ -518,7 +527,8 @@ int esbmc_parseoptionst::do_bmc_strategy(
       goto_functions.reached_claims,
       goto_functions.reached_mul_claims,
       pytest_gen,
-      ctest_gen);
+      ctest_gen,
+      foundry_gen);
     return 0;
   }
 

@@ -1,0 +1,6 @@
+CORE
+contract.solast
+--sol contract.sol --contract C --branch-coverage-claims --k-induction --max-k-step 5 --no-assertions
+^Branches : 4$
+^Reached : 4$
+^Branch Coverage: 100%$

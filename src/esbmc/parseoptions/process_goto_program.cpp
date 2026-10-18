@@ -221,6 +221,30 @@ static std::set<irep_idt> unreported_exceptions(const optionst &options)
   return {};
 }
 
+static void configure_branch_instrumentation(
+  const cmdlinet &cmdline,
+  goto_coveraget &coverage)
+{
+  if (cmdline.isset("function"))
+    coverage.set_target(cmdline.getval("function"));
+  if (cmdline.isset("coverage-covered-set"))
+    coverage.covered_set_path = cmdline.getval("coverage-covered-set");
+  // Per-contract branch coverage (semantics A): scope the
+  // denominator/numerator to decisions lexically declared inside the
+  // --contract target only. --coverage-whole-unit opts out: keep the
+  // contract as the harness entry but count the whole compilation unit.
+  if (cmdline.isset("contract") && !cmdline.isset("coverage-whole-unit"))
+    coverage.scope_contract = cmdline.getval("contract");
+  // Dependency exclusion (Item 5-d): decisions whose declaring
+  // contract is in this set are dropped from BOTH denominator and
+  // numerator. Meaningful under --coverage-whole-unit (a no-op in
+  // default mode, where scope_contract already filters foreign code).
+  if (cmdline.isset("coverage-exclude-contract"))
+    for (const auto &c : cmdline.get_values("coverage-exclude-contract"))
+      coverage.exclude_contracts.insert(c);
+  coverage.cov_assume_asserts = cmdline.isset("cov-assume-asserts");
+}
+
 bool esbmc_parseoptionst::process_goto_program(
   optionst &options,
   goto_functionst &goto_functions)
@@ -272,7 +296,12 @@ bool esbmc_parseoptionst::process_goto_program(
     // in coverage mode where we only need each function executed once. Convert
     // backward GOTOs (loop back-edges) in _ESBMC_Main* functions to SKIPs so
     // the loop body executes exactly once.
-    if (is_coverage)
+    //
+    // --coverage-multi-tx opts out: the loop stays live (bounded by --unwind),
+    // so a branch reachable only through a state-building call sequence
+    // (deposit(); withdraw();) becomes coverable and the Foundry generator
+    // can reconstruct the multi-call sequence.
+    if (is_coverage && !cmdline.isset("coverage-multi-tx"))
     {
       bool is_sol = cmdline.isset("sol");
       if (!is_sol)
@@ -299,21 +328,14 @@ bool esbmc_parseoptionst::process_goto_program(
       }
     }
 
+    // Re-applied here for the read_goto_binary path, which bypasses
+    // parse_goto_program.
+    set_solidity_check_defaults(options);
+
     // Expand --no-standard-checks before goto_check (also expanded before
     // goto_convert in parse_goto_program; re-expanding here is idempotent
     // and covers the read_goto_binary path).
-    if (
-      cmdline.isset("no-standard-checks") ||
-      options.get_bool_option("no-standard-checks"))
-    {
-      options.set_option("no-pointer-check", true);
-      options.set_option("no-div-by-zero-check", true);
-      options.set_option("no-pointer-relation-check", true);
-      options.set_option("no-unlimited-scanf-check", true);
-      options.set_option("no-vla-size-check", true);
-      options.set_option("no-align-check", true);
-      options.set_option("no-bounds-check", true);
-    }
+    expand_no_standard_checks(options);
 
     // Must precede inlining: goto_inlinet relabels a hidden function's
     // instructions with the call site, after which the models' assertions
@@ -710,10 +732,7 @@ bool esbmc_parseoptionst::process_goto_program(
 
       std::string filename = cmdline.args[0];
       goto_coveraget tmp(ns, goto_functions, filename);
-      // for function mode
-      if (cmdline.isset("function"))
-        tmp.set_target(cmdline.getval("function"));
-      tmp.cov_assume_asserts = cmdline.isset("cov-assume-asserts");
+      configure_branch_instrumentation(cmdline, tmp);
       tmp.branch_coverage();
     }
     if (

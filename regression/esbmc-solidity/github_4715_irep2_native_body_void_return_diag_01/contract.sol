@@ -24,7 +24,7 @@ contract C {
     }
 }
 
-// esbmc/esbmc#4715: `newD.x()` returns a value from a void-typed call site, so
-// convert_return takes its "function should not return value" diagnostic arm.
-// The native return arm has to delegate that shape rather than drop the
-// diagnostic. Comments go at the end: the committed .solast pins line numbers.
+// esbmc/esbmc#4715: `newD.x()` calls the getter dispatcher D_x. It must be typed
+// as the getter's uint256 return, so its native RETURN carries a value without
+// taking convert_return's "function should not return value" arm.
+// Comments go at the end: the committed .solast pins line numbers.

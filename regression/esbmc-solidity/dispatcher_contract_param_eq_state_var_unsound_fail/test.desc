@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--sol contract.sol --contract C --k-induction --max-k-step 5
+^VERIFICATION FAILED$

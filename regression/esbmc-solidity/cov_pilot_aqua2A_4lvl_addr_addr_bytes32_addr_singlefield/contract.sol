@@ -1,0 +1,24 @@
+// SPDX-License-Identifier: MIT
+//
+// CORE (flipped from KNOWNBUG 2026-05-15 by the deep-nested-mapping
+// WRITE fix in src/solidity-frontend/solidity_convert_expr.cpp:4203:
+// the nested mapping-access branch now types the intermediate
+// index_exprt with array.type().subtype() instead of the under-nested
+// get_type_description `t` (mirrors the direct-access fast path :4174).
+// Previously: bare smt_sort (Stage 0/1) -> after Stage 2C, symex/IR
+// abort (irep2_expr.cpp:366 / value_set.cpp:1258) on the >=3-level
+// nested-mapping storage-ref write.  Now completes: Branch Coverage
+// 75% (4 branches, 3 reached).  See
+// notes/Results/branch_cov/STAGE2C_FOLLOWUP_DIAG.md.
+pragma solidity ^0.8.0;
+struct Single { uint256 v; }
+contract C {
+    mapping(address => mapping(address => mapping(bytes32 => mapping(address => Single)))) private _b;
+    function dock(address app, bytes32 h, address[] calldata toks) external {
+        for (uint256 i = 0; i < toks.length; i++) {
+            Single storage b = _b[msg.sender][app][h][toks[i]];
+            require(b.v == toks.length);
+            b.v = 1;
+        }
+    }
+}

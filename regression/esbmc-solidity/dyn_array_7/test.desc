@@ -1,5 +1,5 @@
 THOROUGH
 contract.solast
---sol contract.sol --contract A --unwind 3 --no-unwinding-assertions --no-standard-checks --32 --fixedbv --z3
+--sol contract.sol --contract A --no-standard-checks --32 --fixedbv --z3 --k-induction --max-k-step 20 --k-step 3
 REQUIRES arch32
 ^VERIFICATION SUCCESSFUL$

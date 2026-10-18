@@ -1,0 +1,6 @@
+CORE
+contract.solast
+--sol contract.sol --contract D --coverage-whole-unit --branch-coverage-claims --k-induction --unlimited-k-steps --memlimit 8g --timeout 90 --quiet --no-assertions
+^Branches : 6$
+^Reached : 6$
+^Branch Coverage: 100%$

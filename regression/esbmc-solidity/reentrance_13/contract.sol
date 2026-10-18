@@ -50,6 +50,15 @@ contract Reproduction {
     }
 
     receive() external payable {
-        target.withdraw(msg.value);
+        // The guard MUST be able to become false, otherwise this attacker
+        // re-enters forever: the innermost withdraw fails its
+        // `require(amount <= balances[msg.sender])`, that revert propagates
+        // back through every frame's `require(success)` (a low-level call
+        // returns ok = !reverted), and the ghost post-condition is never
+        // reached.  Same guard as reentrance_2, so the two tests differ only
+        // in where Bank does its bookkeeping.
+        if (address(target).balance > 0) {
+            target.withdraw(msg.value);
+        }
     }
 }

@@ -1,0 +1,5 @@
+CORE
+contract.solast
+--sol contract.sol --contract C --tod-race-check=setR,claimR --bound --no-standard-checks --cvc5 --k-induction --max-k-step 20 --k-step 3
+REQUIRES solc_binary
+^VERIFICATION FAILED$

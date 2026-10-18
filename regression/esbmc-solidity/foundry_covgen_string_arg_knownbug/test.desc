@@ -1,0 +1,7 @@
+CORE
+contract.solast
+--sol contract.sol --contract StrArg --branch-coverage-claims --generate-foundry-testcase --k-induction --base-k-step 2 --k-step 3 --max-k-step 50
+^Branches : 2$
+^Reached : 2$
+^Branch Coverage: 100%$
+^Generated Foundry coverage test with 2 case\(s\)

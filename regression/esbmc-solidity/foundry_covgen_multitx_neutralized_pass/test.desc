@@ -1,0 +1,5 @@
+CORE
+contract.solast
+--sol contract.sol --contract Bank --branch-coverage --generate-foundry-testcase --no-assertions
+^Reached : 1$
+^Generated Foundry coverage test with 1 case\(s\)

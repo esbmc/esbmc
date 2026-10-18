@@ -57,6 +57,36 @@
 #include <vector>
 #include <nlohmann/json.hpp>
 
+// Caller holds reached_claims_mutex, protecting both the set and its snapshot.
+static void record_covered_branch(
+  const std::string &condition,
+  const std::string &location,
+  size_t reached)
+{
+  if (
+    !goto_coveraget::covered_set_outpath.empty() &&
+    goto_coveraget::covered_set.emplace(condition, location).second)
+  {
+    goto_coveraget::write_covered_set_atomic();
+    goto_coveraget::covered_run.fetch_add(1, std::memory_order_relaxed);
+  }
+  goto_coveraget::live_reached.store(reached, std::memory_order_relaxed);
+}
+
+static bool strategy_reports_coverage(const optionst &options)
+{
+  return options.get_bool_option("k-induction") ||
+         options.get_bool_option("incremental-bmc");
+}
+
+static bool reports_bounded_coverage(const optionst &options)
+{
+  return options.get_bool_option("base-case") &&
+         !options.get_bool_option("forward-condition") &&
+         !options.get_bool_option("inductive-step") &&
+         !strategy_reports_coverage(options);
+}
+
 static std::string ctest_output_dir(const optionst &options)
 {
   std::string dir = options.get_option("ctest-output-dir");
@@ -190,8 +220,15 @@ static bool is_bounded_round(const optionst &options)
          strategy_owns_property_table(options);
 }
 
-bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
-  : options(opts), context(_context), ns(context)
+bmct::bmct(
+  goto_functionst &funcs,
+  optionst &opts,
+  contextt &_context,
+  foundry_generator *ext_foundry_gen)
+  : options(opts),
+    context(_context),
+    ns(context),
+    foundry_gen_ext(ext_foundry_gen)
 {
   interleaving_number = 0;
   interleaving_failed = 0;
@@ -460,6 +497,9 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
   {
     ctest_gen.generate_single(ctest_output_dir(options), eq, smt_conv, ns);
   }
+
+  if (options.get_bool_option("generate-foundry-testcase"))
+    foundry_gen.generate_single(eq, smt_conv, ns);
 
   if (options.get_bool_option("generate-html-report"))
     generate_html_report("1", ns, goto_trace, options);
@@ -1220,10 +1260,7 @@ static std::string prettify_solidity_expr(const std::string &expr)
   return s;
 }
 
-// Parse location string "file X line Y column Z function F" into components.
-// A file path may contain spaces (util/location.cpp does not quote it), so a
-// string-valued field is the run of words up to the next keyword rather than a
-// single whitespace-delimited token.
+// Parse location string "file X line Y column Z function F" into components
 static nlohmann::json parse_claim_location(const std::string &loc)
 {
   nlohmann::json j;
@@ -1353,12 +1390,115 @@ count_reached_goals(const std::unordered_set<std::string> &reached_claims)
   return reached;
 }
 
+static void report_branch_coverage(
+  const optionst &options,
+  const std::unordered_set<std::string> &reached_claims)
+{
+  const size_t total = goto_coveraget::total_branch;
+  const bool cov_set_active = !goto_coveraget::covered_set_outpath.empty();
+
+  // With the cross-run covered-set, the numerator is the universe edges
+  // either witnessed this run or already persisted.
+  size_t tracked_instance = count_reached_goals(reached_claims);
+  if (cov_set_active)
+  {
+    tracked_instance = 0;
+    for (const auto &[cond, loc] : goto_coveraget::all_claims)
+      if (
+        goto_coveraget::covered_set.count({cond, loc}) ||
+        reached_claims.count(cond + "\t" + loc))
+        ++tracked_instance;
+  }
+  log_success("\n[Coverage]\n");
+  log_result("Branches : {}", total);
+  log_result("Reached : {}", tracked_instance);
+
+  // show claims
+  if (options.get_bool_option("branch-coverage-claims"))
+  {
+    // reached claims:
+    for (const auto &claim : reached_claims)
+      log_status("  {}", prettify_solidity_expr(claim));
+  }
+
+  if (total != 0)
+    log_result("Branch Coverage: {}%", tracked_instance * 100.0 / total);
+  else
+    log_result("Branch Coverage: N/A (no branches)");
+
+  // Re-sync the signal-safe snapshot to the AUTHORITATIVE number:
+  // this is the only place reached_claims is erased (short-circuit /
+  // non-universe pruning above), and tracked_instance is exactly the
+  // mode-correct numerator just printed. Storing it into the active
+  // counter makes a subsequent kill (e.g. inductive step after the
+  // base-case report) emit the exact post-report coverage, not a
+  // pre-report lower bound.
+  if (cov_set_active)
+    goto_coveraget::covered_run.store(
+      tracked_instance, std::memory_order_relaxed);
+  else
+    goto_coveraget::live_reached.store(
+      tracked_instance, std::memory_order_relaxed);
+
+  // Merge witnessed universe edges into the persisted set before the final
+  // atomic rewrite. Previously witnessed edges remain covered.
+  if (cov_set_active)
+  {
+    for (const auto &[cond, loc] : goto_coveraget::all_claims)
+      if (reached_claims.count(cond + "\t" + loc))
+        goto_coveraget::covered_set.emplace(cond, loc);
+    goto_coveraget::write_covered_set_atomic();
+    log_success(
+      "coverage covered-set written to {}",
+      goto_coveraget::covered_set_outpath);
+  }
+}
+
+static void report_truncated_coverage(const optionst &options)
+{
+  std::lock_guard lk(goto_functionst::truncated_loops_mutex);
+  if (
+    !goto_functionst::truncated_loops.empty() &&
+    options.get_bool_option("no-unwinding-assertions"))
+  {
+    log_warning(
+      "Coverage may be UNDER-REPORTED: {} loop(s) hit the unwind bound "
+      "while --no-unwinding-assertions was active, so the paths that "
+      "needed more iterations were silently assumed away. Goals reachable "
+      "only through those paths are counted as uncovered. Raise --unwind, "
+      "use --unwindset/--unwindsetname for the specific loop, or switch to "
+      "--k-induction / --incremental-bmc. Loops truncated:",
+      goto_functionst::truncated_loops.size());
+    for (const auto &l : goto_functionst::truncated_loops)
+      log_warning("  {}", l);
+  }
+}
+
+static void
+annotate_partial_coverage(nlohmann::json &report, const std::string &reason)
+{
+  const bool partial = !reason.empty();
+  report["partial"] = partial;
+  report["summary"]["partial"] = partial;
+  if (partial)
+  {
+    report["partial_reason"] = reason;
+    report["summary"]["partial_reason"] = reason;
+    report["summary"]["claims_decided"] =
+      goto_coveraget::live_decided.load(std::memory_order_relaxed);
+    report["summary"]["claims_total"] =
+      goto_coveraget::claims_total_atomic.load(std::memory_order_relaxed);
+  }
+}
+
 void report_coverage(
   const optionst &options,
   std::unordered_set<std::string> &reached_claims,
   const std::unordered_multiset<std::string> &reached_mul_claims,
   pytest_generator &pytest_gen,
-  ctest_generator &ctest_gen)
+  ctest_generator &ctest_gen,
+  foundry_generator &foundry_gen,
+  const std::string &partial_reason)
 {
   // --dead-code-check reuses the coverage machinery for instrumentation but
   // reports its results as CWE-561 advisories rather than a coverage summary.
@@ -1389,6 +1529,8 @@ void report_coverage(
   // (false) for valid invocations like `--k-path-coverage` (no value) or
   // `--k-path-coverage=0` (rejected at parse time, but defensive here).
   bool is_k_path_cov = options.get_bool_option("k-path-coverage-enabled");
+
+  report_truncated_coverage(options);
 
   if (is_assert_cov)
   {
@@ -1571,24 +1713,7 @@ void report_coverage(
 
   else if (is_branch_cov)
   {
-    const size_t total = goto_coveraget::total_branch;
-    const size_t tracked_instance = count_reached_goals(reached_claims);
-    log_success("\n[Coverage]\n");
-    log_result("Branches : {}", total);
-    log_result("Reached : {}", tracked_instance);
-
-    // show claims
-    if (options.get_bool_option("branch-coverage-claims"))
-    {
-      // reached claims:
-      for (const auto &claim : reached_claims)
-        log_status("  {}", prettify_solidity_expr(claim));
-    }
-
-    if (total != 0)
-      log_result("Branch Coverage: {}%", tracked_instance * 100.0 / total);
-    else
-      log_result("Branch Coverage: N/A (no branches)");
+    report_branch_coverage(options, reached_claims);
   }
 
   else if (is_branch_func_cov)
@@ -1732,11 +1857,18 @@ void report_coverage(
     for (const auto &f : source_files)
       report["source_files"].push_back(f);
     report["claims"] = claims_json;
+    annotate_partial_coverage(report, partial_reason);
     report["summary"]["total"] = total;
     report["summary"]["covered"] = covered_count;
     report["summary"]["uncovered"] = total - covered_count;
     report["summary"]["percentage"] =
       total > 0 ? covered_count * 100.0 / total : 0.0;
+    // For branch / branch-function modes: explicit "no_branch" marker when the
+    // source has zero branches. Key absent when total > 0 — consumers should
+    // read with default false. Not emitted for condition/assertion/k-path
+    // modes (their zero-claim case has different semantics).
+    if (total == 0 && (is_branch_cov || is_branch_func_cov))
+      report["summary"]["no_branch"] = true;
 
     std::ofstream out("cov-report.json");
     out << report.dump(2) << std::endl;
@@ -1761,6 +1893,8 @@ void report_coverage(
   {
     ctest_gen.generate(ctest_output_dir(options));
   }
+  if (options.get_bool_option("generate-foundry-testcase"))
+    foundry_gen.generate();
 }
 
 /* Closing line of a coverage run, in place of a verification verdict: it says
@@ -2436,6 +2570,27 @@ void bmct::bidirectional_search(
   }
 }
 
+static void report_empty_coverage(const optionst &options)
+{
+  if (
+    options.get_bool_option("multi-property") &&
+    !strategy_reports_coverage(options))
+  {
+    std::unordered_set<std::string> empty_reached;
+    std::unordered_multiset<std::string> empty_mul_reached;
+    pytest_generator empty_pytest;
+    ctest_generator empty_ctest;
+    foundry_generator empty_foundry;
+    report_coverage(
+      options,
+      empty_reached,
+      empty_mul_reached,
+      empty_pytest,
+      empty_ctest,
+      empty_foundry);
+  }
+}
+
 smt_resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
 {
   // Clear collected pytest test data at the start of coverage run
@@ -2522,15 +2677,21 @@ smt_resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
 
       // In coverage mode, still print the coverage summary even when all
       // claims are simplified away (e.g., straight-line code with 0 branches).
-      if (options.get_bool_option("multi-property"))
-      {
-        std::unordered_set<std::string> empty_reached;
-        std::unordered_multiset<std::string> empty_mul_reached;
-        pytest_generator empty_pytest;
-        ctest_generator empty_ctest;
-        report_coverage(
-          options, empty_reached, empty_mul_reached, empty_pytest, empty_ctest);
-      }
+      //
+      // BUT NOT under --k-induction / --incremental-bmc. Those drivers run
+      // several bmct phases and emit the authoritative summary themselves
+      // (do_bmc_strategy in esbmc_parseoptions.cpp), from the accumulated
+      // goto_functionst::reached_claims. A phase whose equation simplifies
+      // to zero claims -- which is the normal outcome of the final inductive
+      // step -- would otherwise print a second "[Coverage] ... Reached : 0 ...
+      // Branch Coverage: 0%" block from the deliberately EMPTY sets below,
+      // immediately before the real one. Two blocks, the first always 0%:
+      // any consumer that reads the first match (or greps `head -1`)
+      // concludes k-induction covered nothing, when the run in fact reached
+      // 9/10 on the same input. multi_property_check's own report_coverage
+      // call already carries exactly this guard; this early-return path was
+      // missing it.
+      report_empty_coverage(options);
 
       return P_UNSATISFIABLE;
     }
@@ -2912,6 +3073,135 @@ static void dump_claim_fingerprint(
   out << line << "\n";
 }
 
+static void prioritize_source_claims(
+  const symex_target_equationt &eq,
+  std::vector<size_t> &jobs)
+{
+  const size_t remaining_claims = jobs.size();
+  if (remaining_claims > 0)
+  {
+    std::vector<bool> is_user(remaining_claims + 1, false);
+    size_t counter = 0;
+    for (auto const &step : eq.SSA_steps)
+    {
+      if (!step.is_assert())
+        continue;
+      ++counter;
+      if (counter > remaining_claims)
+        break;
+      const std::string file = step.source.pc->location.get_file().as_string();
+      const bool is_library =
+        file.find("c2goto/library") != std::string::npos ||
+        file.find("/library/") != std::string::npos;
+      is_user[counter] = !is_library;
+    }
+    std::stable_sort(jobs.begin(), jobs.end(), [&is_user](size_t a, size_t b) {
+      return is_user[a] && !is_user[b];
+    });
+  }
+}
+
+static void report_partial_coverage(
+  const optionst &options,
+  std::unordered_set<std::string> &reached_claims,
+  const std::unordered_multiset<std::string> &reached_mul_claims,
+  pytest_generator &pytest_gen,
+  ctest_generator &ctest_gen,
+  foundry_generator &foundry_gen,
+  const std::string &reason,
+  size_t decided_claims,
+  size_t remaining_claims)
+{
+  log_error(
+    "the per-claim solve loop did not finish ({}). Writing a PARTIAL report "
+    "with the {} of {} claim(s) decided so far, rather than discarding them. "
+    "It is marked partial in the JSON (`partial: true`, and the same under "
+    "`summary`) and on stdout; it must NOT be read as a measurement of this "
+    "program",
+    reason,
+    decided_claims,
+    remaining_claims);
+  // The rescue gets its own handler so that a failure INSIDE it cannot
+  // replace the original reason with its own. Without this, a second
+  // bad_alloc thrown while building the JSON propagates out of the catch
+  // clause in place of the `throw;` below, and the log then blames the
+  // report writer for a run that died in the solver -- the wrong cause,
+  // reported confidently.
+  try
+  {
+    if (reports_bounded_coverage(options))
+      report_coverage(
+        options,
+        reached_claims,
+        reached_mul_claims,
+        pytest_gen,
+        ctest_gen,
+        foundry_gen,
+        reason);
+  }
+  catch (const std::bad_alloc &)
+  {
+    log_error(
+      "the PARTIAL report itself could not be built: there was not enough "
+      "memory left to serialise it. {} of {} claim(s) had been decided",
+      decided_claims,
+      remaining_claims);
+  }
+  catch (...)
+  {
+    log_error(
+      "the PARTIAL report itself failed to be written. {} of {} claim(s) had "
+      "been decided",
+      decided_claims,
+      remaining_claims);
+  }
+}
+
+template <typename Work, typename Report>
+static void run_with_partial_coverage_report(Work work, Report emit_partial)
+{
+  try
+  {
+    work();
+  }
+  // Typed arms, not a bare catch(...), because the REASON is the point: a
+  // reader of a partial report has to be able to tell an out-of-memory kill
+  // from a frontend error from an internal invariant, and "unknown exception"
+  // is the answer that sends them back to the log they no longer have.
+  catch (const std::bad_alloc &)
+  {
+    emit_partial(
+      "std::bad_alloc — the process ran out of memory during the "
+      "per-claim solve");
+    throw;
+  }
+  catch (const std::string &e)
+  {
+    emit_partial("error: " + e);
+    throw;
+  }
+  catch (const char *e)
+  {
+    emit_partial(std::string("error: ") + e);
+    throw;
+  }
+  catch (const std::exception &e)
+  {
+    emit_partial(std::string("exception: ") + e.what());
+    throw;
+  }
+  catch (...)
+  {
+    // Reached only by a throw of a type nothing here knows about. Kept rather
+    // than dropped: the alternative is that the one exception nobody
+    // anticipated is also the one that costs the whole report.
+    emit_partial(
+      "an exception of unrecognised type escaped the per-claim "
+      "solve loop");
+    throw;
+  }
+}
+
 smt_resultt bmct::multi_property_check(
   const symex_target_equationt &eq,
   size_t remaining_claims,
@@ -2921,9 +3211,14 @@ smt_resultt bmct::multi_property_check(
   // Initial values
   smt_resultt final_result = P_UNSATISFIABLE;
   std::mutex result_mutex;
-  // Solved in claim order: an unordered container would make the per-claim
-  // solve order — and which claim a shared-solver bug lands on — vary by
-  // standard library.
+  std::atomic<size_t> ce_counter{0};
+  // How many claims this run has decided (a solver verdict came back), for the
+  // partial report of a loop that did not finish.
+  std::atomic<size_t> decided_claims{0};
+  // Sequential default consumes `jobs` in iteration order; using a sorted
+  // vector lets us solve user-source claims before c2goto/library claims so
+  // multi-property doesn't burn the budget on spurious library-side dereference
+  // / overflow checks ahead of the user's real bugs.
   std::vector<size_t> jobs;
 
   // For coverage info
@@ -2974,6 +3269,7 @@ smt_resultt bmct::multi_property_check(
   // is_goto_cov disjunction so the claim_slicer reads the witness
   // comment, matching the form stored in goto_coveraget::all_claims.
   bool is_k_path_cov = options.get_bool_option("k-path-coverage-enabled");
+
   // "Dead code" (advisory) reuses the branch-coverage instrumentation, so it
   // needs the same goto-cov claim handling: claim_slicer must read the probe
   // comment and reached_claims must be keyed by "comment\tloc" to match
@@ -3022,8 +3318,20 @@ smt_resultt bmct::multi_property_check(
   }
 
   // TODO: This is the place to check a cache
+  jobs.reserve(remaining_claims);
   for (size_t i = 1; i <= remaining_claims; i++)
     jobs.push_back(i);
+
+  // Published BEFORE the first solve, so that a run killed during job 1 still
+  // has a denominator to report its partial numerator against. Set here rather
+  // than in the pass, because it is the count of claims that survived
+  // simplification and reached this loop — which is what "decided so far" is a
+  // fraction of, and is not the instrumented path count.
+  goto_coveraget::live_decided.store(0, std::memory_order_relaxed);
+  goto_coveraget::claims_total_atomic.store(
+    remaining_claims, std::memory_order_relaxed);
+
+  prioritize_source_claims(eq, jobs);
 
   /* This is a JOB that will:
    * 1. Generate a solver instance for a specific claim (@parameter i)
@@ -3040,6 +3348,8 @@ smt_resultt bmct::multi_property_check(
    */
   auto job_function = [this,
                        &eq,
+                       &ce_counter,
+                       &decided_claims,
                        &final_result,
                        &result_mutex,
                        &reached_claims,
@@ -3318,6 +3628,14 @@ smt_resultt bmct::multi_property_check(
       note_cov_suppressed_violation(claim.claim_cstr);
     }
 
+    // Count only actual decisions, before counterexample generation can fail.
+    // Separate atomic increments keep the signal-handler snapshot monotonic.
+    if (solver_result == P_SATISFIABLE || solver_result == P_UNSATISFIABLE)
+    {
+      decided_claims.fetch_add(1, std::memory_order_relaxed);
+      goto_coveraget::live_decided.fetch_add(1, std::memory_order_relaxed);
+    }
+
     solver_stats.total_time_ms.fetch_add(solve_stop - solve_start);
 
     // A claim that reached no verdict — a backend failure (P_ERROR) or an
@@ -3396,6 +3714,8 @@ smt_resultt bmct::multi_property_check(
         options.get_bool_option("generate-pytest-testcase");
       const bool want_ctest =
         options.get_bool_option("generate-ctest-testcase");
+      const bool want_foundry =
+        options.get_bool_option("generate-foundry-testcase");
 
       // A bare "{index}-" prefix collides across k-induction phases/k-steps,
       // since ce_counter restarts at zero on every bmct (discussion #6070);
@@ -3470,6 +3790,8 @@ smt_resultt bmct::multi_property_check(
           pytest_gen.collect(local_eq, *solver_ptr);
         if (want_ctest)
           ctest_gen.collect(local_eq, *solver_ptr, ns);
+        if (want_foundry)
+          foundry().collect(local_eq, *solver_ptr, ns);
 
         witnesses.push_back(std::move(w));
 
@@ -3535,6 +3857,9 @@ smt_resultt bmct::multi_property_check(
           reached_claims.emplace(claim_sig);
         else
           reached_claims.emplace(claim.claim_key);
+        if (is_branch_cov)
+          record_covered_branch(
+            claim.claim_msg, claim.claim_loc, reached_claims.size());
       }
 
       // for verbose output of cond coverage
@@ -3589,51 +3914,78 @@ smt_resultt bmct::multi_property_check(
       }
   };
 
-  // PARALLEL
-  if (options.get_bool_option("parallel-solving"))
-  {
-    /* NOTE: I would love to use std::for_each here, but it is not giving
-     * the result I would expect. My guess is either compiler version
-     * or some magic flag that we are not using.
-     *
-     * Nevertheless, we can achieve the same results by just creating
-     * threads.
-     */
+  // report_coverage runs after this loop, so an exception escaping a job
+  // (most often std::bad_alloc) would otherwise discard every claim already
+  // decided. Report what was decided, marked partial, then rethrow so the
+  // control flow downstream is unchanged.
+  auto emit_partial = [&](const std::string &reason) {
+    report_partial_coverage(
+      options,
+      reached_claims,
+      reached_mul_claims,
+      pytest_gen,
+      ctest_gen,
+      foundry_gen,
+      reason,
+      decided_claims.load(),
+      remaining_claims);
+  };
+  run_with_partial_coverage_report(
+    [&] {
+      // PARALLEL
+      if (options.get_bool_option("parallel-solving"))
+      {
+        /* NOTE: I would love to use std::for_each here, but it is not giving
+         * the result I would expect. My guess is either compiler version
+         * or some magic flag that we are not using.
+         *
+         * Nevertheless, we can achieve the same results by just creating
+         * threads.
+         */
 
-    // TODO: Running everything in parallel might be a bad idea.
-    //       Should we also add a thread pool?
-    std::vector<std::thread> parallel_jobs;
-    for (const auto &i : jobs)
-      parallel_jobs.push_back(
-        std::thread(
-          [&](const size_t &n) {
-            run_job_guarded(
-              job_function, n, result_mutex, final_result, report_incomplete);
-          },
-          i));
+        // TODO: Running everything in parallel might be a bad idea.
+        //       Should we also add a thread pool?
+        std::vector<std::thread> parallel_jobs;
+        for (const auto &i : jobs)
+          parallel_jobs.push_back(
+            std::thread(
+              [&](const size_t &n) {
+                run_job_guarded(
+                  job_function,
+                  n,
+                  result_mutex,
+                  final_result,
+                  report_incomplete);
+              },
+              i));
 
-    // Main driver
-    for (auto &t : parallel_jobs)
-    {
-      t.join();
-    }
-    // We could remove joined jobs from the parallel_jobs vector.
-    // However, its probably not worth for small vectors.
-  }
-  // SEQUENTIAL
-  else
-    std::for_each(std::begin(jobs), std::end(jobs), job_function);
+        // Main driver
+        for (auto &t : parallel_jobs)
+        {
+          t.join();
+        }
+        // We could remove joined jobs from the parallel_jobs vector.
+        // However, its probably not worth for small vectors.
+      }
+      // SEQUENTIAL
+      else
+        std::for_each(std::begin(jobs), std::end(jobs), job_function);
+    },
+    emit_partial);
 
   // A warm run solves nothing, so without this the report shows no solver
   // activity at all and gives no sign of where the verdicts came from.
   log_proof_cache_summary(proof_cache.get());
 
   // For coverage with fixed bound unwinding
-  if (
-    bs && !fc && !is && !options.get_bool_option("k-induction") &&
-    !options.get_bool_option("incremental-bmc"))
+  if (reports_bounded_coverage(options))
     report_coverage(
-      options, reached_claims, reached_mul_claims, pytest_gen, ctest_gen);
+      options,
+      reached_claims,
+      reached_mul_claims,
+      pytest_gen,
+      ctest_gen,
+      foundry_gen);
 
   return final_result;
 }

@@ -1,4 +1,4 @@
 CORE
 contract.solast
---sol contract.sol --unwind 3 --no-unwinding-assertions --bound
+--sol contract.sol --bound --k-induction --max-k-step 20 --k-step 3
 ^VERIFICATION SUCCESSFUL$

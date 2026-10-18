@@ -18,6 +18,13 @@ extern "C"
 
 #include <esbmc/bmc.h>
 #include <esbmc/esbmc_parseoptions.h>
+#ifdef ENABLE_SOLIDITY_FRONTEND
+#  include <solidity-frontend/solidity_tod_analysis.h>
+#  include <solidity-frontend/solidity_tod_harness.h>
+#endif
+#include <atomic>
+#include <mutex>
+#include <thread>
 #include <goto-symex/engine/goto_symex.h>
 #include <goto-symex/trace/goto_trace.h>
 #include <goto-symex/trace/sarif.h>
@@ -83,6 +90,12 @@ extern "C"
 #include <langapi/language_util.h>
 #include <goto-programs/contracts/contracts.h>
 #include <util/ssa/proof_cache.h>
+
+#ifdef _WIN32
+// MSVC spells the pipe-capable subprocess helpers with a leading underscore.
+#  define popen _popen
+#  define pclose _pclose
+#endif
 
 #ifndef _WIN32
 #  include <sys/wait.h>
@@ -472,55 +485,1061 @@ int esbmc_parseoptionst::doit()
     }
     if (is_solidity)
     {
+      // Mark the run as Solidity so downstream analyses (e.g.
+      // pointer-analysis VSA) can gate Solidity-specific precision
+      // tweaks off this flag without reparsing cmdline.args. Mirrored
+      // into the global `config.options` because analyses outside BMC's
+      // local `options` scope (static analysers, value_set_domain's
+      // transform, etc.) read from the config.
+      //
+      // Critical: this is a *distinct* option from the user-facing `sol`,
+      // which is a string-valued path (--sol <contract.sol>). Reusing the
+      // same name would overwrite the user's path with the string "1"
+      // (boolean-true serialised into a string option), corrupting
+      // contract_path downstream and — among other things — wiping out
+      // the contents buffer used for line-number computation, collapsing
+      // every Solidity source location to line 1.
+      options.set_option("solidity-mode", true);
+      config.options.set_option("solidity-mode", true);
       options.set_option(
         "no-align-check", true); // no need to check alignment in solidity
       options.set_option("no-unlimited-scanf-check", true);
       options.set_option(
         "force-malloc-success", true); // for calloc in the 'newexpression'
 
+      // Solidity contracts are wrapped in a `while(nondet) dispatch()`
+      // harness whose unwinding assertion can never be proven (the
+      // condition is non-deterministic, so the loop has no static
+      // bound).  As a result the k-induction forward-condition phase
+      // always returns "unable to prove" for every k, burning solver
+      // budget across all k iterations without contributing to a
+      // proof — only the inductive step can close the verification.
+      // Auto-disable forward condition in dispatcher mode (non-
+      // `--function`) to recover that budget.
+      // `--function` verifies a single function whose internal loops
+      // CAN be bounded (`for (i=0; i<N; ++i)`), so leave forward
+      // enabled there.
+      if (
+        !cmdline.isset("function") &&
+        !cmdline.isset("enable-forward-condition"))
+        options.set_option("disable-forward-condition", true);
+
+      // `--sol <path>` is documented (in options.cpp) as equivalent to
+      // a positional argument. boost::program_options parses `<path>`
+      // as the VALUE of `--sol`, which does not reach `cmdline.args`;
+      // the downstream `create_goto_program` sees an empty positional
+      // list and bails with "Please provide a program to verify". Lift
+      // the value into `cmdline.args` only when the positional list is
+      // empty: the regression suite uses `--sol <display-name>
+      // contract.solast` to supply a source-mapping name alongside a
+      // pre-compiled AST, so we must not disturb that form (in which
+      // case `cmdline.args` already has the .solast and `--sol` is a
+      // label, not a source file).
+      if (
+        cmdline.args.empty() && cmdline.isset("sol") &&
+        !std::string(cmdline.getval("sol")).empty())
+      {
+        cmdline.args.push_back(cmdline.getval("sol"));
+      }
+
       // Auto-select the best SMT backend for Solidity when the user did not
       // explicitly ask for one. Z3 is significantly slower than modern QF_BV
       // engines on the 256-bit bit-vector arithmetic pervasive in Solidity
       // (uint256, mappings, etc.), so prefer Bitwuzla / CVC5 / Boolector.
-      //
-      // Exception: k-induction and incremental-bmc issue many incremental
-      // queries where Z3 has historically been more robust than CVC5; keep
-      // the default (Z3) there so existing regression tests do not regress.
-      const bool incremental_mode =
-        cmdline.isset("k-induction") || cmdline.isset("k-induction-parallel") ||
-        cmdline.isset("incremental-bmc") || cmdline.isset("falsification");
+      // The auto-selection also covers incremental modes (k-induction,
+      // incremental-bmc, falsification): Solidity contracts model storage
+      // as recursive struct datatypes which Z3 sometimes rejects with
+      // "datatype is not well-founded" — Bitwuzla handles them correctly.
       const bool user_picked_solver =
         cmdline.isset("z3") || cmdline.isset("cvc5") ||
         cmdline.isset("bitwuzla") || cmdline.isset("boolector") ||
         cmdline.isset("yices") || cmdline.isset("mathsat") ||
         cmdline.isset("cvc4") || cmdline.isset("smtlib") ||
         cmdline.isset("neurosym") || cmdline.isset("default-solver");
-      if (!user_picked_solver && !incremental_mode)
+
+      // Nested-dynamic-array shapes (`T[][]`, `T[N][][M]`, etc.) hit the
+      // Phase-0 bare-smt_sort abort under default Bitwuzla because the
+      // tuple flattener cannot represent `array<array<tuple, N>, ...>`.
+      // CVC5 with `--cvc5-native-tuples` (commit 41878f36cb) handles them
+      // via native datatype encoding. Detect the pattern in the source by
+      // scanning for `[]` immediately followed by `[` — the marker of a
+      // nested-dynamic-array dimension. False positives (memory or local
+      // arrays) only result in CVC5 being chosen instead of Bitwuzla,
+      // which is sound (just potentially slower for non-nested shapes).
+      const std::string padded_solvers =
+        std::string(" ") + ESBMC_AVAILABLE_SOLVERS + " ";
+      const bool cvc5_available =
+        padded_solvers.find(" cvc5 ") != std::string::npos;
+      bool nested_dyn_detected = false;
+      // A scalar-valued ≥3-level nested mapping
+      // (`mapping(K1=>mapping(K2=>mapping(K3=>uint256)))`) lowers to a
+      // CONST_ARRAY-initialised infinite mapping array that Bitwuzla
+      // cannot equate (asymmetric `(= ca freshsym)` from IS-havoc →
+      // "Equality over constant arrays not fully supported yet" abort
+      // under assertion BMC; k-induction non-convergence under
+      // coverage). CVC5 handles every scalar depth cleanly (regression
+      // duals nested_mapping_write_{3,4}lvl_uint256_*). The
+      // typeIdentifier marker is `t_mapping$_` (NOT `t_array$_`), so it
+      // is detected separately below and routed to plain CVC5 (no
+      // native-tuples — that flag is array-tuple-encoding-specific).
+      // See notes/Results/branch_cov/STAGE5_RESIDUAL_DIAG.md.
+      bool deep_mapping_detected = false;
+      // Pattern B: --k-induction with multi-contract dispatch.  The
+      // generated $call#0 / $call#1 dispatcher (solidity_convert_call.cpp
+      // around line 2777+ / 3135+) emits a sequential O(N) if-else
+      // chain on `this->$address`.  Under k-induction iteration this
+      // chain is replicated per step, producing a linear chain of
+      // 256-bit BV equalities that Bitwuzla's BV-quantifier engine
+      // balloons on (see src/solidity-frontend/README.md:564 and memory
+      // reference_cvc5_vs_bitwuzla_eoa.md).  CVC5's array+datatype
+      // engine handles the chain in seconds.
+      //
+      // The trigger requires multi-contract AND value-call AND
+      // (--bound OR --reentry-check): the dispatcher chain on
+      // `this->$address` and the EOA-balance linear scan are only
+      // materialized under bounded inter-contract modelling. Without
+      // --bound / --reentry-check, ESBMC nondeterministically models
+      // external calls and there is no chain to be amplified by
+      // k-induction iteration, so CVC5's array+datatype advantage
+      // evaporates and Bitwuzla (or the default fallback) handles the
+      // residual VC at parity. A multi-contract test without
+      // value-call (e.g. inheritance with direct method calls)
+      // doesn't materialize the EOA-fallback path, so the dispatcher
+      // chain stays small and Bitwuzla is fine. Conversely, a
+      // value-call test without --k-induction is BMC-mode and either
+      // has too few EOA scans for the chain to matter (single-EOA:
+      // Bitwuzla wins) or is best handled with explicit --cvc5
+      // (multi-EOA UNSAT: case-by-case). See memory
+      // reference_solidity_solver_auto_hint.md "Why NOT auto-route
+      // bare value-call".
+      int contract_decl_count = 0;
+      bool value_call_detected = false;
+      if (!user_picked_solver && cvc5_available)
       {
-        const std::string padded =
-          std::string(" ") + ESBMC_AVAILABLE_SOLVERS + " ";
-        const char *preferred[] = {"bitwuzla", "cvc5", "boolector", "z3"};
-        const char *chosen = nullptr;
-        for (const char *name : preferred)
+        // Detection strategy:
+        //
+        //   (1) Prefer a `.solast` file in cmdline.args — it carries
+        //       precise `typeIdentifier` strings.  Scan for three
+        //       consecutive `t_array$_t_array$_t_array$_` substrings,
+        //       the unambiguous marker of ≥3-dimensional array types
+        //       (where the flattener produces bare smt_sorts that
+        //       trip the Phase-0 abort under default Bitwuzla).
+        //
+        //   (2) Fall back to `.sol` source scanning only if no
+        //       `.solast` is present.  Source-level bracket counting
+        //       can't reliably distinguish type declarations from
+        //       index expressions, so the fallback is conservative —
+        //       it requires three consecutive `[]` (truly empty
+        //       brackets, the most reliable type-level marker).
+        const std::string ext_solast = ".solast";
+        const std::string ext_sol = ".sol";
+        std::string solast_path, sol_path;
+        for (const auto &arg : cmdline.args)
         {
-          if (padded.find(std::string(" ") + name + " ") != std::string::npos)
+          if (
+            arg.size() >= ext_solast.size() &&
+            arg.compare(
+              arg.size() - ext_solast.size(), ext_solast.size(), ext_solast) ==
+              0)
           {
-            chosen = name;
-            break;
+            solast_path = arg;
+          }
+          else if (
+            arg.size() >= ext_sol.size() &&
+            arg.compare(arg.size() - ext_sol.size(), ext_sol.size(), ext_sol) ==
+              0)
+          {
+            sol_path = arg;
+          }
+        }
+
+        const std::string &scan_path =
+          !solast_path.empty() ? solast_path : sol_path;
+        const bool scanning_solast = !solast_path.empty();
+
+        std::ifstream f(scan_path);
+        if (f.is_open())
+        {
+          static const std::string ta_marker = "t_array$_";
+          int ta_run = 0;
+          size_t ta_match_pos = 0;
+          static const std::string tm_marker = "t_mapping$_";
+          int tm_run = 0;
+          size_t tm_match_pos = 0;
+          // A struct-VALUED nested mapping (≥2 levels) needs CVC5 too: its
+          // K≥2 array-of-struct zero-init lowers to per-field const-arrays
+          // Bitwuzla cannot equate.  `t_struct$_` trails the `t_mapping$_`
+          // markers within the same typeIdentifier.
+          static const std::string ts_marker = "t_struct$_";
+          size_t ts_match_pos = 0;
+          int empty_bracket_run = 0;
+          static const std::string mp_marker = "mapping(";
+          size_t mp_match_pos = 0;
+          int mapping_chain_run = 0; // .sol: consecutive `mapping(`
+          int prev_emit = -1; // last non-whitespace char (.sol scan only)
+          bool in_line = false, in_block = false, in_str = false;
+          char str_quote = '\0';
+          int c;
+          while ((c = f.get()) != EOF)
+          {
+            char ch = static_cast<char>(c);
+            // Comment/string stripping only for .sol source — .solast
+            // is JSON where typeIdentifier values live INSIDE double
+            // quotes; stripping them would skip the markers we need.
+            if (!scanning_solast)
+            {
+              if (in_line)
+              {
+                if (ch == '\n')
+                  in_line = false;
+                continue;
+              }
+              if (in_block)
+              {
+                if (ch == '*' && f.peek() == '/')
+                {
+                  f.get();
+                  in_block = false;
+                }
+                continue;
+              }
+              if (in_str)
+              {
+                if (ch == '\\')
+                {
+                  f.get();
+                  continue;
+                }
+                if (ch == str_quote)
+                  in_str = false;
+                continue;
+              }
+              if (ch == '/' && f.peek() == '/')
+              {
+                f.get();
+                in_line = true;
+                continue;
+              }
+              if (ch == '/' && f.peek() == '*')
+              {
+                f.get();
+                in_block = true;
+                continue;
+              }
+              if (ch == '"' || ch == '\'')
+              {
+                in_str = true;
+                str_quote = ch;
+                continue;
+              }
+            }
+
+            if (scanning_solast)
+            {
+              // Sliding match on `t_array$_` markers in
+              // typeIdentifier strings.  Three consecutive markers
+              // ⇒ array of array of array of ... (≥3 nesting).
+              if (ch == ta_marker[ta_match_pos])
+              {
+                ++ta_match_pos;
+                if (ta_match_pos == ta_marker.size())
+                {
+                  ++ta_run;
+                  ta_match_pos = 0;
+                  if (ta_run >= 3)
+                  {
+                    nested_dyn_detected = true;
+                    break;
+                  }
+                }
+              }
+              else
+              {
+                ta_match_pos = (ch == ta_marker[0]) ? 1 : 0;
+                if (ta_match_pos == 0)
+                  ta_run = 0;
+              }
+              // Count `t_mapping$_` markers WITHIN ONE typeIdentifier
+              // JSON string.  A nested mapping
+              // `mapping(K1=>mapping(K2=>mapping(K3=>V)))` lowers to a
+              // single typeIdentifier `t_mapping$_<K1>_$_t_mapping$_
+              // <K2>_$_t_mapping$_<V>...` — the markers are SEPARATED by
+              // key/value types (unlike the array case's adjacent
+              // `t_array$_t_array$_`), so the run must NOT reset on the
+              // intra-string gap; it resets only at the `"` string
+              // boundary.  This confines the count to one type, so
+              // three *separate* 1-level mappings (three distinct
+              // typeIdentifier strings) never reach 3 — only a genuine
+              // ≥3-level nested mapping does.
+              if (ch == '"')
+              {
+                tm_run = 0;
+                tm_match_pos = 0;
+                ts_match_pos = 0;
+              }
+              else
+              {
+                // ≥3 nested mapping levels (any leaf): Bitwuzla const-array
+                // abort on the scalar-leaf init.
+                if (ch == tm_marker[tm_match_pos])
+                {
+                  ++tm_match_pos;
+                  if (tm_match_pos == tm_marker.size())
+                  {
+                    tm_match_pos = 0;
+                    if (++tm_run >= 3)
+                    {
+                      deep_mapping_detected = true;
+                      break;
+                    }
+                  }
+                }
+                else
+                  tm_match_pos = (ch == tm_marker[0]) ? 1 : 0;
+
+                // ≥2 nested mapping levels with a STRUCT leaf: the K≥2
+                // array-of-struct SoA zero-init emits per-field const-arrays
+                // Bitwuzla cannot equate — route to CVC5 as well.
+                if (ch == ts_marker[ts_match_pos])
+                {
+                  ++ts_match_pos;
+                  if (ts_match_pos == ts_marker.size())
+                  {
+                    ts_match_pos = 0;
+                    if (tm_run >= 2)
+                    {
+                      deep_mapping_detected = true;
+                      break;
+                    }
+                  }
+                }
+                else
+                  ts_match_pos = (ch == ts_marker[0]) ? 1 : 0;
+              }
+            }
+            else
+            {
+              // .sol fallback: count CONSECUTIVE empty brackets
+              // `[][][]` etc.  Three-or-more in a row marks a real
+              // 3+D type declaration; index expressions like
+              // `a[i][j]` or `a[0][0][0]` have non-empty inner brackets
+              // and don't bump the run.  Whitespace between `]` and
+              // `[` is allowed.
+              if (ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r')
+                continue;
+              if (prev_emit == '[' && ch == ']')
+              {
+                ++empty_bracket_run;
+                if (empty_bracket_run >= 3)
+                {
+                  nested_dyn_detected = true;
+                  break;
+                }
+              }
+              else if (ch != '[' || prev_emit != ']')
+              {
+                // Not part of `]\[` or `[]` chain → reset.
+                if (!(prev_emit == ']' && ch == '['))
+                  empty_bracket_run = 0;
+              }
+              // .sol fallback for ≥3-level nested mapping: count
+              // `mapping(` tokens in a contiguous run.  A real nested
+              // mapping `mapping(K1=>mapping(K2=>mapping(K3=>V)))`
+              // never contains `;{}` between its `mapping(` tokens, so
+              // those reset the run.  Conservative over-approx (perf-
+              // only false positives, acceptable per this detector's
+              // documented design); the .solast arm is the precise
+              // path the regression suite exercises.
+              if (ch == ';' || ch == '{' || ch == '}')
+              {
+                mapping_chain_run = 0;
+                mp_match_pos = 0;
+              }
+              else if (ch == mp_marker[mp_match_pos])
+              {
+                ++mp_match_pos;
+                if (mp_match_pos == mp_marker.size())
+                {
+                  mp_match_pos = 0;
+                  if (++mapping_chain_run >= 3)
+                  {
+                    deep_mapping_detected = true;
+                    break;
+                  }
+                }
+              }
+              else
+                mp_match_pos = (ch == mp_marker[0]) ? 1 : 0;
+              prev_emit = ch;
+            }
+          }
+        }
+
+        // Pattern B contract count: prefer .sol (text-greppable with
+        // word-boundary check); fall back to .solast (JSON) when .sol
+        // isn't given as a positional argument — which happens when
+        // testing_tool.py invokes ESBMC with `--sol contract.sol`
+        // (a flag, not positional) plus `contract.solast` (positional).
+        if (sol_path.empty() && !solast_path.empty())
+        {
+          // .solast fallback: each contract definition appears as
+          // `"contractKind":"contract"` in the JSON.  No comment/string
+          // filtering needed — JSON has neither, and the marker only
+          // appears as a key/value pair.  Note: this counts both regular
+          // contracts and abstract contracts (both use "contract"), but
+          // not interfaces (`"contractKind":"interface"`) or libraries
+          // (`"contractKind":"library"`) — matching .sol semantics.
+          std::ifstream lf(solast_path);
+          if (lf.is_open())
+          {
+            static const std::string p_kind = "\"contractKind\":\"contract\"";
+            // Value-call markers in solidity solast typeIdentifier
+            // strings: transfer/send for built-in address calls;
+            // barecall_payable for low-level `.call{value:}`.
+            static const std::string p_xfer = "t_function_transfer";
+            static const std::string p_send_id = "t_function_send";
+            static const std::string p_bare = "t_function_barecall_payable";
+            size_t mp_kind = 0, mp_xfer = 0, mp_send = 0, mp_bare = 0;
+            auto step =
+              [](char ch, size_t &pos, const std::string &pat) -> bool {
+              if (ch == pat[pos])
+                ++pos;
+              else
+                pos = (ch == pat[0]) ? 1 : 0;
+              if (pos == pat.size())
+              {
+                pos = 0;
+                return true;
+              }
+              return false;
+            };
+            int c;
+            while ((c = lf.get()) != EOF)
+            {
+              char ch = static_cast<char>(c);
+              if (step(ch, mp_kind, p_kind))
+                ++contract_decl_count;
+              if (step(ch, mp_xfer, p_xfer))
+                value_call_detected = true;
+              if (step(ch, mp_send, p_send_id))
+                value_call_detected = true;
+              if (step(ch, mp_bare, p_bare))
+                value_call_detected = true;
+            }
+          }
+        }
+        else if (!sol_path.empty())
+        {
+          std::ifstream sf(sol_path);
+          if (sf.is_open())
+          {
+            static const std::string p_contract = "contract";
+            static const std::string p_xfer = ".transfer(";
+            static const std::string p_send_d = ".send(";
+            static const std::string p_call = ".call{";
+            size_t mp_contract = 0;
+            size_t mp_xfer = 0, mp_send = 0, mp_call = 0;
+            char prev_for_contract = '\0';
+            bool sin_line = false, sin_block = false, sin_str = false;
+            char sstr_quote = '\0';
+            int sc;
+            while ((sc = sf.get()) != EOF)
+            {
+              char ch = static_cast<char>(sc);
+              if (sin_line)
+              {
+                if (ch == '\n')
+                  sin_line = false;
+                continue;
+              }
+              if (sin_block)
+              {
+                if (ch == '*' && sf.peek() == '/')
+                {
+                  sf.get();
+                  sin_block = false;
+                }
+                continue;
+              }
+              if (sin_str)
+              {
+                if (ch == '\\')
+                {
+                  sf.get();
+                  continue;
+                }
+                if (ch == sstr_quote)
+                  sin_str = false;
+                continue;
+              }
+              if (ch == '/' && sf.peek() == '/')
+              {
+                sf.get();
+                sin_line = true;
+                continue;
+              }
+              if (ch == '/' && sf.peek() == '*')
+              {
+                sf.get();
+                sin_block = true;
+                continue;
+              }
+              if (ch == '"' || ch == '\'')
+              {
+                sin_str = true;
+                sstr_quote = ch;
+                continue;
+              }
+
+              // Value-call detection (sliding match, no boundary check
+              // needed — the leading `.` is the boundary).
+              auto step = [ch](size_t &pos, const std::string &pat) -> bool {
+                if (ch == pat[pos])
+                  ++pos;
+                else
+                  pos = (ch == pat[0]) ? 1 : 0;
+                if (pos == pat.size())
+                {
+                  pos = 0;
+                  return true;
+                }
+                return false;
+              };
+              if (step(mp_xfer, p_xfer))
+                value_call_detected = true;
+              if (step(mp_send, p_send_d))
+                value_call_detected = true;
+              if (step(mp_call, p_call))
+                value_call_detected = true;
+
+              // `contract` keyword count: must be a whole word —
+              // preceded by non-identifier char (or start-of-file) AND
+              // followed by non-identifier char.  Filters out usage as
+              // an identifier substring (rare but possible in import
+              // paths etc., already string-stripped above).
+              if (mp_contract == 0)
+              {
+                bool boundary =
+                  (prev_for_contract == '\0' ||
+                   !(std::isalnum(
+                       static_cast<unsigned char>(prev_for_contract)) ||
+                     prev_for_contract == '_'));
+                if (boundary && ch == p_contract[0])
+                  mp_contract = 1;
+              }
+              else if (ch == p_contract[mp_contract])
+              {
+                ++mp_contract;
+                if (mp_contract == p_contract.size())
+                {
+                  int nx = sf.peek();
+                  bool word_end =
+                    (nx == EOF ||
+                     !(std::isalnum(static_cast<unsigned char>(nx)) ||
+                       nx == '_'));
+                  if (word_end)
+                    ++contract_decl_count;
+                  mp_contract = 0;
+                }
+              }
+              else
+              {
+                mp_contract = (ch == p_contract[0]) ? 1 : 0;
+              }
+
+              prev_for_contract = ch;
+            }
+          }
+        }
+      }
+
+      // Pattern B fires only when ALL four signals align:
+      //   (1) k-induction iteration multiplier
+      //   (2) ≥2 contracts (dispatcher chain materializes)
+      //   (3) value-call (transfer/send/.call{value:}) — the EOA
+      //       fallback path that makes the chain hot
+      //   (4) --bound or --reentry-check: the `this->$address` chain
+      //       and the EOA-balance linear scan are only materialized
+      //       under bounded inter-contract modelling. Without either,
+      //       external calls are nondet, the chain doesn't exist, and
+      //       CVC5's array+datatype advantage evaporates — Bitwuzla
+      //       (or the default fallback order) handles the residual
+      //       VC at parity. (--reentry-check internally enables
+      //       --bound through the reentry harness.)
+      // Without any of (1)..(4), Bitwuzla handles the workload fine.
+      const bool kind_multi_contract_detected =
+        cmdline.isset("k-induction") &&
+        (cmdline.isset("bound") || cmdline.isset("reentry-check")) &&
+        contract_decl_count >= 2 && value_call_detected;
+
+      if (!user_picked_solver)
+      {
+        const char *chosen = nullptr;
+        if (nested_dyn_detected)
+        {
+          // Force CVC5 for nested-dyn-array shapes (Bitwuzla aborts).
+          chosen = "cvc5";
+          if (!cmdline.isset("no-cvc5-native-tuples"))
+            options.set_option("cvc5-native-tuples", true);
+        }
+        else if (deep_mapping_detected)
+        {
+          // ≥3-level nested mapping with a scalar leaf.  Bitwuzla
+          // aborts on the CONST_ARRAY-initialised infinite mapping
+          // array; CVC5's array engine handles it.  Plain CVC5 — NO
+          // native-tuples (that is array-tuple-encoding-specific;
+          // mirrors Pattern B's plain-CVC5 selection below).
+          chosen = "cvc5";
+        }
+        else if (kind_multi_contract_detected)
+        {
+          // Pattern B: k-induction-amplified linear if-else chain on
+          // 256-bit address equality.  Bitwuzla balloons; CVC5 fast.
+          // No native-tuples — that's nested-array-specific encoding.
+          chosen = "cvc5";
+        }
+        else
+        {
+          const char *preferred[] = {"bitwuzla", "cvc5", "boolector", "z3"};
+          for (const char *name : preferred)
+          {
+            if (
+              padded_solvers.find(std::string(" ") + name + " ") !=
+              std::string::npos)
+            {
+              chosen = name;
+              break;
+            }
           }
         }
         if (chosen)
         {
           options.set_option("default-solver", chosen);
-          log_status(
-            "Solidity: auto-selecting '{}' as SMT backend (Z3 is much "
-            "slower on 256-bit bit-vector arithmetic). Override with "
-            "--z3 / --cvc5 / --bitwuzla / --boolector or --default-solver.",
-            chosen);
+          if (nested_dyn_detected)
+          {
+            const bool native_on = !cmdline.isset("no-cvc5-native-tuples");
+            log_status(
+              "Solidity: detected nested-dynamic-array shape; auto-selecting "
+              "'cvc5'{} (Bitwuzla's tuple flattener cannot encode "
+              "`T[][]`-style storage). Override with --bitwuzla / --z3 "
+              "or pass --no-cvc5-native-tuples to disable native-tuple "
+              "encoding.",
+              native_on ? " with --cvc5-native-tuples" : "");
+          }
+          else if (deep_mapping_detected)
+          {
+            log_status(
+              "Solidity: detected >=3-level nested-mapping shape (or a "
+              ">=2-level struct-valued mapping); auto-selecting 'cvc5' "
+              "(Bitwuzla aborts on the CONST_ARRAY-initialised infinite "
+              "mapping array — \"Equality over constant arrays not fully "
+              "supported\" under assertion BMC, k-induction non-convergence "
+              "under coverage). Override with --bitwuzla / --z3 / "
+              "--boolector.");
+          }
+          else if (kind_multi_contract_detected)
+          {
+            const char *bound_reason =
+              cmdline.isset("bound") ? "--bound" : "--reentry-check";
+            log_status(
+              "Solidity: detected --k-induction with multi-contract "
+              "dispatch ({} contracts) AND value-routing call "
+              "(.transfer/.send/.call{{value:}}) under {}; auto-selecting "
+              "'cvc5' (Bitwuzla balloons on the k-induction-amplified "
+              "linear if-else chain over 256-bit address equality "
+              "materialized in bounded inter-contract mode). Override "
+              "with --bitwuzla / --z3 / --boolector.",
+              contract_decl_count,
+              bound_reason);
+          }
+          else
+          {
+            log_status(
+              "Solidity: auto-selecting '{}' as SMT backend (Z3 is much "
+              "slower on 256-bit bit-vector arithmetic). Override with "
+              "--z3 / --cvc5 / --bitwuzla / --boolector or --default-solver.",
+              chosen);
+          }
         }
       }
     }
   }
+
+#ifdef ENABLE_SOLIDITY_FRONTEND
+  // TOD harness generation is driven by one of two flags:
+  //   --tod-balance-check  -> balance-TOD: pair shares address(this).balance
+  //   --tod-race-check     -> storage-race TOD: pair shares a non-balance var
+  // Each flag takes "auto" (discover pairs) or "f1,f2" (specific pair).
+  if (cmdline.isset("tod-balance-check") || cmdline.isset("tod-race-check"))
+  {
+    if (cmdline.isset("tod-balance-check") && cmdline.isset("tod-race-check"))
+    {
+      log_error(
+        "--tod-balance-check and --tod-race-check are mutually exclusive");
+      return 1;
+    }
+    const bool balance_mode = cmdline.isset("tod-balance-check");
+    const char *tod_flag =
+      balance_mode ? "tod-balance-check" : "tod-race-check";
+    const solidity_tod::Mode tod_mode = balance_mode
+                                          ? solidity_tod::Mode::BalanceOnly
+                                          : solidity_tod::Mode::RaceOnly;
+    const char *mode_tag = balance_mode ? "balance" : "race";
+    // ---- shared: locate .sol / .solast paths ----
+    std::string sol_path, solast_path;
+    if (cmdline.isset("sol"))
+      sol_path = cmdline.getval("sol");
+    for (const auto &arg : cmdline.args)
+    {
+      if (arg.size() >= 4 && arg.substr(arg.size() - 4) == ".sol")
+      {
+        if (sol_path.empty())
+          sol_path = arg;
+      }
+      else if (arg.size() >= 7 && arg.substr(arg.size() - 7) == ".solast")
+        solast_path = arg;
+    }
+    if (sol_path.empty())
+    {
+      log_error("--{} requires a .sol source file", tod_flag);
+      return 1;
+    }
+
+    std::ifstream sol_file(sol_path);
+    if (!sol_file.is_open())
+    {
+      log_error("Cannot open source file: {}", sol_path);
+      return 1;
+    }
+    std::string sol_source(
+      (std::istreambuf_iterator<char>(sol_file)),
+      std::istreambuf_iterator<char>());
+
+    if (solast_path.empty())
+    {
+      solast_path = sol_path + "ast";
+      std::string cmd =
+        "solc --ast-compact-json " + sol_path + " > " + solast_path;
+      if (cmdline.isset("solc-bin"))
+        cmd = std::string(cmdline.getval("solc-bin")) + " --ast-compact-json " +
+              sol_path + " > " + solast_path;
+      if (system(cmd.c_str()) != 0)
+      {
+        log_error("solc failed: {}", cmd);
+        return 1;
+      }
+    }
+
+    std::ifstream ast_file(solast_path);
+    if (!ast_file.is_open())
+    {
+      log_error("Cannot open AST file: {}", solast_path);
+      return 1;
+    }
+    nlohmann::json ast;
+    {
+      std::string line, json_block;
+      while (getline(ast_file, line))
+        if (line.find(".sol =======") != std::string::npos)
+          break;
+      while (getline(ast_file, line))
+      {
+        if (line.find(".sol =======") != std::string::npos)
+          break;
+        json_block += line + "\n";
+      }
+      if (json_block.empty())
+      {
+        log_error("No JSON block found in {}", solast_path);
+        return 1;
+      }
+      ast = nlohmann::json::parse(json_block);
+    }
+
+    std::string contract_name;
+    if (cmdline.isset("contract"))
+      contract_name = cmdline.getval("contract");
+    if (contract_name.empty())
+    {
+      log_error("TOD: --contract is required to identify the target contract");
+      return 1;
+    }
+
+    // ---- decide pair list ----
+    std::vector<std::pair<std::string, std::string>> pairs;
+    std::string tod_val = cmdline.getval(tod_flag);
+    bool auto_mode = (tod_val == "auto");
+
+    if (auto_mode)
+    {
+      const nlohmann::json *cdef = nullptr;
+      if (ast.contains("nodes"))
+        for (const auto &n : ast["nodes"])
+          if (
+            n.value("nodeType", "") == "ContractDefinition" &&
+            n.value("name", "") == contract_name)
+          {
+            cdef = &n;
+            break;
+          }
+      if (!cdef)
+      {
+        log_error(
+          "--{}: contract '{}' not found in AST", tod_flag, contract_name);
+        return 1;
+      }
+      auto candidates =
+        solidity_tod::find_tod_candidates(*cdef, tod_mode, &ast);
+      log_status(
+        "--{}: discovered {} candidate pair(s) in '{}'",
+        tod_flag,
+        candidates.size(),
+        contract_name);
+      for (const auto &p : candidates)
+      {
+        log_status("  - {} vs {}", p.func_a, p.func_b);
+        pairs.emplace_back(p.func_a, p.func_b);
+      }
+      if (pairs.empty())
+      {
+        log_status(
+          "--{}: no {} TOD pairs detected — done.", tod_flag, mode_tag);
+        return 0;
+      }
+    }
+    else
+    {
+      auto comma = tod_val.find(',');
+      if (comma == std::string::npos)
+      {
+        log_error(
+          "--{} expects 'auto' or two comma-separated function names",
+          tod_flag);
+        return 1;
+      }
+      pairs.emplace_back(tod_val.substr(0, comma), tod_val.substr(comma + 1));
+    }
+
+    // Each pair -> its own .sol file (one TOD_<a>_<b> contract per file).
+    TodHarnessMode harness_mode =
+      balance_mode ? TodHarnessMode::Balance : TodHarnessMode::Race;
+    std::string sol_dir;
+    {
+      auto slash = sol_path.find_last_of("/\\");
+      sol_dir = (slash == std::string::npos) ? std::string(".")
+                                             : sol_path.substr(0, slash);
+    }
+    auto harness_path_for = [&](const std::string &fa, const std::string &fb) {
+      return sol_dir + "/tod_" + mode_tag + "_" + fa + "_" + fb +
+             "_harness.sol";
+    };
+
+    // --dump-harness: print the first pair and exit.
+    if (cmdline.isset("dump-harness"))
+    {
+      std::string harness = generate_tod_harness(
+        sol_source,
+        ast,
+        contract_name,
+        pairs[0].first,
+        pairs[0].second,
+        harness_mode);
+      if (harness.empty())
+        return 1;
+      std::cout << harness;
+      return 0;
+    }
+
+    // ---- single pair: generate file, verify in-process ----
+    if (!auto_mode)
+    {
+      std::string harness = generate_tod_harness(
+        sol_source,
+        ast,
+        contract_name,
+        pairs[0].first,
+        pairs[0].second,
+        harness_mode);
+      if (harness.empty())
+        return 1;
+      std::string harness_path =
+        harness_path_for(pairs[0].first, pairs[0].second);
+      std::ofstream out(harness_path);
+      if (!out.is_open())
+      {
+        log_error("Cannot write harness to {}", harness_path);
+        return 1;
+      }
+      out << harness;
+      out.close();
+      log_status("TOD harness written to {}", harness_path);
+
+      std::string harness_contract =
+        "TOD_" + pairs[0].first + "_" + pairs[0].second;
+      cmdline.args.clear();
+      cmdline.args.push_back(harness_path);
+      config.cname = harness_contract;
+      options.set_option("contract", harness_contract);
+      options.set_option("bound", true);
+      options.set_option("no-standard-checks", true);
+      // The generated TOD harness drives two transactions in two orders via
+      // the dispatcher loop; it must use the unbounded harness, not the
+      // bounded-by-default unroll (which would hide the ordering race).
+      options.set_option("solidity-max-tx", "0");
+      config.options = options;
+    }
+    // ---- auto: one .sol per pair, one subprocess per .sol ----
+    else
+    {
+      std::string esbmc = executable_path.string();
+      // --solidity-max-tx 0: the TOD harness needs the unbounded dispatcher
+      // loop to explore both transaction orderings (bounded-by-default would
+      // hide the race).
+      std::string forwarded =
+        " --bound --no-standard-checks --solidity-max-tx 0";
+      if (cmdline.isset("unwind"))
+        forwarded += std::string(" --unwind ") + cmdline.getval("unwind");
+      if (cmdline.isset("no-unwinding-assertions"))
+        forwarded += " --no-unwinding-assertions";
+      if (cmdline.isset("incremental-bmc"))
+        forwarded += " --incremental-bmc";
+      if (cmdline.isset("max-k-step"))
+        forwarded +=
+          std::string(" --max-k-step ") + cmdline.getval("max-k-step");
+      for (const char *flag :
+           {"cvc5", "bitwuzla", "boolector", "z3", "yices", "mathsat"})
+        if (cmdline.isset(flag))
+          forwarded += std::string(" --") + flag;
+
+      // Materialise every harness file first so workers only spawn ESBMC.
+      std::vector<std::string> harness_paths(pairs.size());
+      std::vector<bool> harness_ok(pairs.size(), false);
+      for (size_t i = 0; i < pairs.size(); ++i)
+      {
+        const auto &p = pairs[i];
+        std::string harness = generate_tod_harness(
+          sol_source, ast, contract_name, p.first, p.second, harness_mode);
+        if (harness.empty())
+        {
+          log_error(
+            "--{}: harness generation failed for {}/{}",
+            tod_flag,
+            p.first,
+            p.second);
+          continue;
+        }
+        std::string hp = harness_path_for(p.first, p.second);
+        std::ofstream out(hp);
+        if (!out.is_open())
+        {
+          log_error("Cannot write harness to {}", hp);
+          continue;
+        }
+        out << harness;
+        harness_paths[i] = hp;
+        harness_ok[i] = true;
+      }
+
+      unsigned int jobs = 0;
+      if (cmdline.isset("tod-jobs"))
+        jobs = std::stoul(cmdline.getval("tod-jobs"));
+      if (jobs == 0)
+      {
+        unsigned hw = std::thread::hardware_concurrency();
+        if (hw == 0)
+          hw = 1;
+        jobs = std::min<unsigned>(hw, pairs.size());
+      }
+      if (jobs == 0)
+        jobs = 1;
+      log_status(
+        "--{}: launching {} parallel ESBMC job(s) over {} pair(s)",
+        tod_flag,
+        jobs,
+        pairs.size());
+
+      std::atomic<size_t> next_idx{0};
+      std::atomic<size_t> fail_count{0}, succ_count{0}, error_count{0};
+      std::mutex failed_mutex;
+      std::vector<std::string> failed_pairs;
+
+      auto worker = [&]() {
+        for (;;)
+        {
+          size_t i = next_idx.fetch_add(1);
+          if (i >= pairs.size())
+            return;
+          if (!harness_ok[i])
+          {
+            error_count.fetch_add(1);
+            continue;
+          }
+          const auto &p = pairs[i];
+          std::string c = "TOD_" + p.first + "_" + p.second;
+          std::string cmd = esbmc + " " + harness_paths[i] + forwarded +
+                            " --contract " + c + " 2>&1";
+          log_status("--{}: verifying {} ({})", tod_flag, c, harness_paths[i]);
+          FILE *fp = popen(cmd.c_str(), "r");
+          if (!fp)
+          {
+            log_error("popen failed for: {}", cmd);
+            error_count.fetch_add(1);
+            continue;
+          }
+          std::string output;
+          char buf[4096];
+          while (fgets(buf, sizeof(buf), fp))
+            output += buf;
+          pclose(fp);
+
+          if (output.find("VERIFICATION SUCCESSFUL") != std::string::npos)
+          {
+            log_status("  -> {} SUCCESSFUL", c);
+            succ_count.fetch_add(1);
+          }
+          else if (output.find("VERIFICATION FAILED") != std::string::npos)
+          {
+            log_fail(
+              "  -> {} FAILED  (TOD vulnerability between {} and {})",
+              c,
+              p.first,
+              p.second);
+            fail_count.fetch_add(1);
+            std::lock_guard<std::mutex> lk(failed_mutex);
+            failed_pairs.push_back(c);
+          }
+          else
+          {
+            log_error("  -> {} ERROR (no verdict)", c);
+            error_count.fetch_add(1);
+          }
+        }
+      };
+
+      std::vector<std::thread> threads;
+      threads.reserve(jobs);
+      for (unsigned t = 0; t < jobs; ++t)
+        threads.emplace_back(worker);
+      for (auto &th : threads)
+        th.join();
+
+      log_status(
+        "--{} summary: {} pair(s) — {} clean, {} TOD found, {} error",
+        tod_flag,
+        pairs.size(),
+        succ_count.load(),
+        fail_count.load(),
+        error_count.load());
+      if (!failed_pairs.empty())
+      {
+        log_fail("TOD-vulnerable pairs:");
+        for (const auto &c : failed_pairs)
+          log_fail("  - {}", c);
+      }
+      return (fail_count.load() > 0 || error_count.load() > 0) ? 1 : 0;
+    }
+  }
+#endif
 
   // Installed before the GOTO program is built so the check also covers the
   // simplification the frontend and the GOTO passes perform. Inert unless

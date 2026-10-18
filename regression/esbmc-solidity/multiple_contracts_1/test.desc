@@ -1,4 +1,4 @@
-THOROUGH
+KNOWNBUG
 mul.solast
 --function func_array_loop --sol mul.sol --k-induction --bound
 ^VERIFICATION FAILED$
