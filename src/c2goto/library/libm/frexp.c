@@ -1,4 +1,5 @@
 
+#include <fenv.h>
 #include <math.h>
 #include <stdint.h> /* uint64_t */
 #include <float.h>  /* *_MANT_DIG */
@@ -82,24 +83,44 @@ typedef __uint128_t __UINT128_TYPE__;
   __ESBMC_HIDE:;                                                               \
     if (!isfinite(x) || x == 0.0##suff)                                        \
       return x;                                                                \
-    TYPE(pre) v, m;                                                            \
-    __ESBMC_bitcast(&v, &x);                                                   \
-    m = v & (((TYPE(pre))1 << MANT_BITS(pre)) - 1); /* mantissa encoding */    \
-    int e = (v & EXP_MASK(pre)) >> MANT_BITS(pre);                             \
-    exp += e; /* add exponent encoding */                                      \
-    if (exp < -MANT_BITS(pre))                                                 \
-      return copysign##suff(0.0##suff, x);                                     \
-    if (exp >= (1 << EXP_BITS(pre)) - 1)                                       \
-      return copysign##suff(HUGE_VAL##SUFF, x);                                \
-    if (exp <= 0)                                                              \
+    if (!isnormal(x))                                                          \
     {                                                                          \
-      /* make a denormalized number */                                         \
-      m |= (TYPE(pre))1 << MANT_BITS(pre);                                     \
-      m >>= 1 - exp;                                                           \
-      exp = 0;                                                                 \
+      x *= (TYPE(pre))1 << MANT_BITS(pre);                                     \
+      exp = exp < INT_MIN + MANT_BITS(pre) ? INT_MIN : exp - MANT_BITS(pre);   \
     }                                                                          \
-    v &= (TYPE(pre))1 << (BITS(pre) - 1);      /* keep only sign bit */        \
-    v |= (TYPE(pre))exp << MANT_BITS(pre) | m; /* set exponent and mantissa */ \
+    TYPE(pre) v;                                                               \
+    __ESBMC_bitcast(&v, &x);                                                   \
+    const TYPE(pre) sign = v & (TYPE(pre))1 << (BITS(pre) - 1);                \
+    TYPE(pre) m = v & (((TYPE(pre))1 << MANT_BITS(pre)) - 1);                  \
+    int e = (v & EXP_MASK(pre)) >> MANT_BITS(pre);                             \
+    const int rm = fegetround();                                               \
+    if (exp >= (1 << EXP_BITS(pre)) - 1 - e)                                   \
+    {                                                                          \
+      /* overflow: infinity, or the largest finite value when rounding away */ \
+      const int to_max = rm == FE_TOWARDZERO || (rm == FE_UPWARD && sign) ||   \
+                         (rm == FE_DOWNWARD && !sign);                         \
+      v = sign | (EXP_MASK(pre) - to_max);                                     \
+    }                                                                          \
+    else if (exp > -e)                                                         \
+      v = sign | (TYPE(pre))(exp + e) << MANT_BITS(pre) | m;                   \
+    else                                                                       \
+    {                                                                          \
+      /* subnormal: shift out 1 - (exp + e) bits and round them in the current \
+       * mode. Below half the least subnormal every exponent rounds alike. */  \
+      const int shift =                                                        \
+        exp < -MANT_BITS(pre) - 1 - e ? MANT_BITS(pre) + 2 : 1 - (exp + e);    \
+      m |= (TYPE(pre))1 << MANT_BITS(pre);                                     \
+      const TYPE(pre) rest = m & (((TYPE(pre))1 << shift) - 1);                \
+      const TYPE(pre) half = (TYPE(pre))1 << (shift - 1);                      \
+      m >>= shift;                                                             \
+      if (                                                                     \
+        rm == FE_TONEAREST  ? rest > half || (rest == half && (m & 1))         \
+        : rm == FE_UPWARD   ? rest && !sign                                    \
+        : rm == FE_DOWNWARD ? rest && sign                                     \
+                            : 0)                                               \
+        ++m; /* a carry into the exponent gives the least normal value */      \
+      v = sign | m;                                                            \
+    }                                                                          \
     __ESBMC_bitcast(&x, &v);                                                   \
     return x;                                                                  \
   }

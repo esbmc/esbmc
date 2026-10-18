@@ -1,0 +1,5 @@
+CORE
+main.py
+--enforce-contract pure
+^.*assigns compliance: py:.*main.py@g not in assigns clause$
+^VERIFICATION FAILED$

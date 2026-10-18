@@ -61,9 +61,16 @@ double atan2(double v, double u)
 __ESBMC_HIDE:;
   double au, av, f;
 
+  // C11 F.10.1.4: a NaN argument gives NaN, and the signs of zero and
+  // infinite arguments select the quadrant.
+  if (isnan(v) || isnan(u))
+    return v + u;
+
   av = v < 0.0 ? -v : v;
   au = u < 0.0 ? -u : u;
-  if (u != 0.0)
+  if (isinf(av) && isinf(au))
+    f = M_PI_4;
+  else if (u != 0.0)
   {
     if (av > au)
     {
@@ -89,7 +96,7 @@ __ESBMC_HIDE:;
       f = 0.0;
     }
   }
-  if (u < 0.0)
+  if (signbit(u))
     f = M_PI - f;
-  return (v < 0.0 ? -f : f);
+  return signbit(v) ? -f : f;
 }
