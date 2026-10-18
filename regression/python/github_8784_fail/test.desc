@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^  FAILED .*assertion return_value\$_strcmp\$1 == 0$
+^VERIFICATION FAILED$
