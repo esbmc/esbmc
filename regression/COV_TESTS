@@ -3138,3 +3138,7 @@ regression/python/github_8355_function_choice
 regression/python/github_8355_function_choice_fail
 regression/python/github_8475
 regression/python/github_8475_fail
+regression/python/github_8764_type_none
+regression/python/github_8764_type_none_value
+regression/python/github_8764_type_none_fail
+regression/python/github_8764_type_none_param_refused

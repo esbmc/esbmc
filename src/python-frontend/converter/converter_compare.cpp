@@ -1112,6 +1112,13 @@ std::optional<std::string> python_converter::class_identity_operand(
   return *held;
 }
 
+static bool may_hold_class(const exprt &expr)
+{
+  const typet &t = expr.type();
+  return (t.is_array() || t.is_pointer()) &&
+         (t.subtype() == char_type() || t.subtype().id() == "empty");
+}
+
 exprt python_converter::handle_type_identity_check(
   const std::string &op,
   const exprt &lhs,
@@ -1131,6 +1138,13 @@ exprt python_converter::handle_type_identity_check(
   if (
     (!lhs_class && !rhs_class) || (!lhs_class && is_type_call(left)) ||
     (!rhs_class && is_type_call(right)))
+    return nil_exprt();
+  // A class object is lowered to a string, so an unresolved name typed as a
+  // string or erased to void * (say a parameter) may hold one; it cannot be
+  // folded to "not identical".
+  if (
+    (!lhs_class && left["_type"] == "Name" && may_hold_class(lhs)) ||
+    (!rhs_class && right["_type"] == "Name" && may_hold_class(rhs)))
     return nil_exprt();
 
   // A value is never identical to a class object.
