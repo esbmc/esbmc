@@ -872,6 +872,12 @@ expr2tc python_converter::build_is_equality(
       "'is' with an operand that lost its object type, which ESBMC cannot "
       "compare by identity");
 
+  // IEEE == calls a NaN not identical to itself (#8769). Comparing bit
+  // patterns would be exact, but SMT-LIB leaves a NaN's bits unspecified.
+  if (is_floatbv_type(lhs2->type) && lhs2->type == rhs2->type)
+    return or2tc(
+      equality2tc(lhs2, rhs2), and2tc(isnan2tc(lhs2), isnan2tc(rhs2)));
+
   return equality2tc(lhs2, rhs2);
 }
 
