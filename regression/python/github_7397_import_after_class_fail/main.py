@@ -1,0 +1,12 @@
+# The import rebinds Shape before anything reads the local class, so only the
+# imported one is ever observable (#7397, #8343).
+class Shape:
+    def __init__(self) -> None:
+        self.edges: int = 3
+    def total(self) -> int:
+        return self.edges
+
+from shapes import Shape
+
+s = Shape()
+assert s.total() == 3

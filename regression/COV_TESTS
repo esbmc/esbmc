@@ -3192,3 +3192,7 @@ regression/esbmc/github_8661_ir_unsigned_to_int_fail
 regression/python/github_8704_hash_int
 regression/python/github_8704_hash_str
 regression/python/github_8704_hash_int_fail
+regression/python/github_8343
+regression/python/github_8343_rebound_class_def
+regression/python/github_8343_rebound_class_fail
+regression/python/github_7397_import_after_class_fail
