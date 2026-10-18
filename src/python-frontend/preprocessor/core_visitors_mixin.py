@@ -1616,7 +1616,7 @@ class CoreVisitorsMixin:
     def _maybe_rewrite_dict_to_list_call(self, node):
         """Rewrite iterating builtins over a dict to use d.keys().
 
-        list(d) -> d.keys(); sorted/max/min/sum(d, ...) -> ...(d.keys(), ...).
+        list(d) -> list(d.keys()); sorted/max/min/sum(d, ...) -> ...(d.keys(), ...).
         The bare builtins reinterpret the dict struct as a list (wrong length,
         unsound subscript / wrong reduction). Routing through d.keys() reuses the
         correctly-typed dict-keys list path — Python iterates a dict over its
@@ -1644,14 +1644,10 @@ class CoreVisitorsMixin:
         ast.copy_location(keys_call, node)
         ast.fix_missing_locations(keys_call)
 
-        if node.func.id == "list":
-            # list(d) yields the keys list; d.keys() is exactly that. Note this
-            # aliases the dict's keys member rather than copying it, so mutating
-            # the result also mutates the dict — acceptable here because the
-            # pre-fix relabeling was outright unsound, and the common uses
-            # (len/iteration/indexing/sorted) are read-only.
-            return self.visit(keys_call)
-
+        # list(d) -> list(d.keys()): the list() wrapper keeps the result a
+        # plain list rather than a keys view, which compares unequal to any
+        # list (#8689). It still aliases the dict's keys member rather than
+        # copying it, so mutating the result also mutates the dict.
         # sorted(d, key=..., reverse=...) -> sorted(d.keys(), key=..., reverse=...)
         node.args[0] = keys_call
         self.generic_visit(node)
