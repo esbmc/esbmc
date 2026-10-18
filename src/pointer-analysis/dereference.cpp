@@ -3206,7 +3206,7 @@ void dereferencet::check_alignment(
   }
 
   // Perform conversion to bytes here
-  minwidth = minwidth / 8;
+  minwidth = access_alignment(minwidth / 8);
   expr2tc addr = typecast2tc(
     size_type2(),
     div2tc(offset_bits->type, offset_bits, gen_long(offset_bits->type, 8)));
