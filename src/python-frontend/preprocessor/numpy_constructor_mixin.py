@@ -161,44 +161,60 @@ class NumpyConstructorMixin:
         or NaN when div, num - 1 with the endpoint and num without it, is not
         positive. Only for arguments that are safe to read twice."""
         call = self._unpacked_linspace_call(node)
-        if call is None:
+        bound = self._retstep_bound_arguments(call) if call is not None else None
+        if bound is None or self._reads_unpacked_target(node, bound):
             return None
-        try:
-            bound = self._bind_numpy_parameters("linspace", call)
-        except TypeError:
-            return None  # the call raises its TypeError where it stands
-        retstep = bound.pop("retstep", None)
+        bound.pop("retstep")
         num = bound.get("num", ast.Constant(value=50))
         endpoint = bound.get("endpoint", ast.Constant(value=True))
-        if not (isinstance(retstep, ast.Constant) and retstep.value is True):
-            return None
-        if not (isinstance(num, ast.Constant) and isinstance(num.value, int)
-                and not isinstance(num.value, bool) and isinstance(endpoint, ast.Constant)):
-            return None
-        if not all(self._is_pure_numpy_argument(bound[param]) for param in ("start", "stop")):
-            return None
-        target = node.targets[0]
-        assigned = {elt.id for elt in target.elts}
-        if any(
-                isinstance(sub, ast.Name) and sub.id in assigned for param in ("start", "stop")
-                for sub in ast.walk(bound[param])):
-            return None  # the step would read the name after the array rebinds it
-        div = num.value - 1 if endpoint.value else num.value
-        if div > 0:
-            step = ast.BinOp(left=ast.BinOp(left=copy.deepcopy(bound["stop"]),
-                                            op=ast.Sub(),
-                                            right=copy.deepcopy(bound["start"])),
-                             op=ast.Div(),
-                             right=ast.Constant(value=div))
-        else:
-            step = ast.Call(func=ast.Name(id="float", ctx=ast.Load()),
-                            args=[ast.Constant(value="nan")],
-                            keywords=[])
+        step = self._linspace_step(bound, num.value - 1 if endpoint.value else num.value)
         call.args = []
         call.keywords = [ast.keyword(arg=param, value=value) for param, value in bound.items()]
+        target = node.targets[0]
         array_assign = ast.Assign(targets=[target.elts[0]], value=call)
         step_assign = ast.Assign(targets=[target.elts[1]], value=step)
         for statement in (array_assign, step_assign):
             ast.copy_location(statement, node)
             ast.fix_missing_locations(statement)
         return [array_assign, step_assign]
+
+    def _retstep_bound_arguments(self, call):
+        """The bound arguments of a `retstep=True` call whose step can be
+        computed here: constant num and endpoint, start and stop safe to read
+        twice. None otherwise."""
+        try:
+            bound = self._bind_numpy_parameters("linspace", call)
+        except TypeError:
+            return None  # the call raises its TypeError where it stands
+        retstep = bound.get("retstep")
+        if not (isinstance(retstep, ast.Constant) and retstep.value is True):
+            return None
+        num = bound.get("num", ast.Constant(value=50))
+        endpoint = bound.get("endpoint", ast.Constant(value=True))
+        if not (isinstance(num, ast.Constant) and isinstance(num.value, int)
+                and not isinstance(num.value, bool) and isinstance(endpoint, ast.Constant)):
+            return None
+        if not all(self._is_pure_numpy_argument(bound[param]) for param in ("start", "stop")):
+            return None
+        return bound
+
+    @staticmethod
+    def _reads_unpacked_target(node, bound):
+        """Whether start or stop reads a name the unpacking rebinds: the step,
+        computed after the array, would read the rebound name."""
+        assigned = {elt.id for elt in node.targets[0].elts}
+        return any(
+            isinstance(sub, ast.Name) and sub.id in assigned for param in ("start", "stop")
+            for sub in ast.walk(bound[param]))
+
+    @staticmethod
+    def _linspace_step(bound, div):
+        if div <= 0:
+            return ast.Call(func=ast.Name(id="float", ctx=ast.Load()),
+                            args=[ast.Constant(value="nan")],
+                            keywords=[])
+        return ast.BinOp(left=ast.BinOp(left=copy.deepcopy(bound["stop"]),
+                                        op=ast.Sub(),
+                                        right=copy.deepcopy(bound["start"])),
+                         op=ast.Div(),
+                         right=ast.Constant(value=div))
