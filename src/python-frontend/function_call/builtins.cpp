@@ -1095,7 +1095,11 @@ exprt function_call_expr::handle_type_call() const
   if (!instance_class.empty())
     return converter_.make_class_object(instance_class);
 
-  std::string type_name = type_handler_.get_python_type_name(arg_expr.type());
+  // None's C type would otherwise name it "pointer" (#8764).
+  std::string type_name =
+    arg_expr.type() == none_type()
+      ? "NoneType"
+      : type_handler_.get_python_type_name(arg_expr.type());
   if (type_name.empty())
     type_name = arg_expr.type().id_string();
 
