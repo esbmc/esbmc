@@ -1979,7 +1979,8 @@ assigns_class_attribute(const nlohmann::json &body, const std::string &attr)
 }
 
 // Whether `class_name` or a class it derives from binds `attr` itself. A
-// class not defined in this module, such as an imported one, is assumed to.
+// builtin exception binds only `args` and dunder attributes. Any other class
+// not defined in this module, such as an imported one, is assumed to.
 static bool class_binds_attribute(
   const nlohmann::json &ast,
   const std::string &class_name,
@@ -1987,6 +1988,8 @@ static bool class_binds_attribute(
 {
   if (class_name == "object")
     return false;
+  if (type_utils::is_python_exceptions(class_name))
+    return attr == "args" || attr.rfind("__", 0) == 0;
   for (const auto &stmt : ast["body"])
   {
     if (
