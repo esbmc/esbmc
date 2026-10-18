@@ -3175,6 +3175,8 @@ regression/python/github_8642_is_not_none_value_fail
 regression/esbmc/github_8660_object_size_offset
 regression/esbmc/github_8694_32bit_member_offset
 regression/esbmc/github_8694_32bit_struct_copy
+regression/esbmc/github_8692_bitint_member
+regression/esbmc/github_8692_bitint_member_32
 regression/python/github_8669
 regression/python/github_8669_fail
 regression/python/github_8669_branch_unsupported
