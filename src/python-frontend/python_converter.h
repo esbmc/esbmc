@@ -8,6 +8,7 @@
 #include <python-frontend/module/global_scope.h>
 #include <python-frontend/python-dict/python_dict_handler.h>
 #include <python-frontend/dynamic_type/dynamic_type_handler.h>
+#include <python-frontend/dynamic_type/literal_divergence.h>
 #include <python-frontend/math/python_math.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/type/element_type_registry.h>
@@ -393,6 +394,16 @@ public:
     const nlohmann::json &element,
     const std::string &prefix);
 
+  /// Before an access to `var_name.attr_name` through a class pointer that
+  /// may be None, raises AttributeError when it is, as CPython does. Planted
+  /// only where the read runs exactly when the statement does, so never in an
+  /// and/or tail or a while test, whose reads are left as before.
+  void guard_attribute_on_none(
+    const symbolt &symbol,
+    const std::string &var_name,
+    const std::string &attr_name,
+    const nlohmann::json &element);
+
   void emit_guarded_raise(
     const exprt &cond,
     const std::string &exception,
@@ -526,6 +537,10 @@ public:
   bool in_contract_clause() const
   {
     return in_contract_clause_;
+  }
+  size_t current_block_statement_count() const
+  {
+    return current_block ? current_block->operands().size() : 0;
   }
 
   /// The class a variable was last assigned as a value (`x = int`), or null.
@@ -802,6 +817,18 @@ private:
   std::string create_normalized_self_key(const std::string &class_tag);
 
   std::string extract_class_name_from_tag(const std::string &tag_name);
+
+  /// The number bindings of `name` in the scope being converted that are
+  /// live at line `before`: the ones that reach it, or with `include_later`
+  /// also the ones that share its storage further on.
+  std::vector<dynamic_type_detail::numeric_bindingt> scope_numeric_bindings(
+    const std::string &name,
+    int before,
+    bool include_later) const;
+
+  void reject_inexact_number_join(
+    const nlohmann::json &element,
+    const exprt &expr) const;
 
   // The class name `t` names, or empty when it is neither a struct nor a
   // `tag-<Class>` symbol reference.
@@ -2596,6 +2623,10 @@ private:
     const exprt &lhs,
     const exprt &rhs,
     const nlohmann::json &ast_node,
+    bool is_ctor_call);
+  void widen_int_target_for_float_call(
+    exprt &lhs,
+    const exprt &rhs,
     bool is_ctor_call);
   void handle_function_call_rhs(
     const nlohmann::json &ast_node,
