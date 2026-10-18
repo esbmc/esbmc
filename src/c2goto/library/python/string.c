@@ -1121,15 +1121,16 @@ __ESBMC_HIDE:;
   return -1;
 }
 
-long long __python_int(const char *s, int base)
+static long long __python_int_parse(const char *s, int base, int *status)
 {
 __ESBMC_HIDE:;
+  *status = 0;
   if (!s)
     return 0;
 
   if (base != 0 && (base < 2 || base > 36))
   {
-    __ESBMC_assert(0, "int() base must be >= 2 and <= 36, or 0");
+    *status = 1;
     return 0;
   }
 
@@ -1139,7 +1140,7 @@ __ESBMC_HIDE:;
 
   if (!*s)
   {
-    __ESBMC_assert(0, "invalid literal for int() with empty string");
+    *status = 1;
     return 0;
   }
 
@@ -1200,7 +1201,7 @@ __ESBMC_HIDE:;
 
   if (!*s)
   {
-    __ESBMC_assert(0, "invalid literal for int() - no digits");
+    *status = 1;
     return 0;
   }
 
@@ -1221,7 +1222,7 @@ __ESBMC_HIDE:;
       const int next = __python_digit_value((unsigned char)*(s + 1));
       if ((!found_digit && !prefix_consumed) || next < 0 || next >= base)
       {
-        __ESBMC_assert(0, "invalid literal for int() - invalid character");
+        *status = 1;
         return 0;
       }
       s++;
@@ -1238,7 +1239,7 @@ __ESBMC_HIDE:;
         c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' ||
         c == '\r')
         break;
-      __ESBMC_assert(0, "invalid literal for int() - invalid character");
+      *status = 1;
       return 0;
     }
 
@@ -1248,8 +1249,7 @@ __ESBMC_HIDE:;
       {
         break;
       }
-      __ESBMC_assert(
-        0, "invalid literal for int() - digit out of range for base");
+      *status = 1;
       return 0;
     }
 
@@ -1257,7 +1257,7 @@ __ESBMC_HIDE:;
 
     if (result > (LLONG_MAX / base))
     {
-      __ESBMC_assert(0, "int() conversion overflow");
+      *status = 2;
       return 0;
     }
 
@@ -1271,17 +1271,39 @@ __ESBMC_HIDE:;
 
   if (*s != '\0')
   {
-    __ESBMC_assert(0, "invalid literal for int() - trailing characters");
+    *status = 1;
     return 0;
   }
 
   if (!found_digit)
   {
-    __ESBMC_assert(0, "invalid literal for int() - no valid digits");
+    *status = 1;
     return 0;
   }
 
   return sign * result;
+}
+
+/* Parse status: 0 ok, 1 an invalid literal (ValueError in Python), 2 a value
+ * the model's long long cannot hold. */
+long long __python_int(const char *s, int base)
+{
+__ESBMC_HIDE:;
+  int status;
+  long long result = __python_int_parse(s, base, &status);
+  __ESBMC_assert(status != 2, "int() conversion overflow");
+  __ESBMC_assert(status != 1, "invalid literal for int()");
+  return result;
+}
+
+/* Whether int(s, base) accepts s, so the caller can raise ValueError (#8705).
+ */
+_Bool __python_str_is_int(const char *s, int base)
+{
+__ESBMC_HIDE:;
+  int status;
+  __python_int_parse(s, base, &status);
+  return status != 1;
 }
 
 /// Scan a run of decimal digits starting at s[*i], folding them into *value and
