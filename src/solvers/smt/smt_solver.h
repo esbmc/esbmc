@@ -1191,9 +1191,13 @@ public:
     /** The context level pre_solve() asserted the fallback at, after which
      *  objects registered later no longer extend the pointer. */
     std::optional<unsigned int> fallback_level;
+    /** The address-space array version current at the rebuild. */
+    std::string addrspace;
   };
   /** Pruned on pop_ctx like ptr_flatten_history. */
   std::vector<rebuilt_pointer> rebuilt_pointers;
+  /** The casts decode_pointer_repr() is converting. */
+  std::unordered_set<const expr2t *> repr_rebuilds;
   smt_astt object_start(unsigned id);
   smt_astt address_in_object(smt_astt address, unsigned id);
   /** Asserts that @p rebuilt names object @p id when its address is in it,

@@ -450,7 +450,8 @@ smt_astt smt_solver_baset::convert_typecast_to_ptr(const typecast2t &cast)
     assert_ast(other_cap_ast->eq(this, output_cap));
   }
 
-  rebuilt_pointer rebuilt{target, output, nullptr, nullptr, ctx_level, {}};
+  rebuilt_pointer rebuilt{
+    target, output, nullptr, nullptr, ctx_level, {}, get_cur_addrspace_ident()};
   ast_vec guards;
   for (const auto &[id, may_be_freed] : addr_space_data.back())
   {
@@ -496,10 +497,14 @@ smt_astt smt_solver_baset::convert_typecast_to_ptr(const typecast2t &cast)
       offs->eq(this, output->project(this, 1)));
   }
 
-  /* Objects registered later extend this pointer, and the fallback waits for
-   * pre_solve(): an address no object holds yet may be one a later allocation
-   * takes, and two rebuilds of one address must name one pointer (#7855). */
-  rebuilt_pointers.push_back(rebuilt);
+  /* Rebuilt from stored bits, objects registered later extend this pointer
+   * and the fallback waits for pre_solve(): two rebuilds of one address must
+   * name one pointer (#7855). A source-level cast keeps naming only the objects
+   * that exist when it runs. */
+  if (repr_rebuilds.count(&cast))
+    rebuilt_pointers.push_back(rebuilt);
+  else
+    assert_ast(mk_implies(mk_not(rebuilt.known_match), rebuilt.fallback));
   return output;
 }
 
@@ -542,9 +547,21 @@ smt_solver_baset::name_object_at(const rebuilt_pointer &rebuilt, unsigned id)
 
 void smt_solver_baset::extend_rebuilt_pointers(unsigned int obj_num)
 {
+  const expr2tc range = symbol2tc(
+    addr_space_type, "__ESBMC_ptr_addr_range_" + std::to_string(obj_num));
   for (const rebuilt_pointer &rebuilt : rebuilt_pointers)
     if (!rebuilt.fallback_level)
+    {
       name_object_at(rebuilt, obj_num);
+      /* convert_typecast_from_ptr() reads the version current at its step,
+       * and every version from the rebuild on shares this slot. */
+      assert_expr(equality2tc(
+        index2tc(
+          addr_space_type,
+          symbol2tc(addr_space_arr_type, rebuilt.addrspace),
+          constant_int2tc(machine_ptr, BigInt(obj_num))),
+        range));
+    }
 }
 
 void smt_solver_baset::fall_back_rebuilt_pointers()
