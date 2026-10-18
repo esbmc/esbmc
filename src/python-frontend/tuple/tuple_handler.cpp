@@ -462,14 +462,26 @@ exprt tuple_handler::handle_tuple_subscript(
   return result;
 }
 
+static bool has_side_effect(const exprt &expr)
+{
+  if (expr.id() == "sideeffect")
+    return true;
+  for (const auto &op : expr.operands())
+    if (has_side_effect(op))
+      return true;
+  return false;
+}
+
 exprt tuple_handler::prepare_rhs_for_unpacking(
   const nlohmann::json &ast_node,
   exprt &rhs,
   codet &target_block)
 {
   // If RHS is a function call, we need to create a temporary variable first
-  // because we can't do member access on a side effect expression
-  if (rhs.is_function_call() || rhs.id() == "sideeffect")
+  // because we can't do member access on a side effect expression. A call
+  // nested in the RHS (`*(T *)xs.pop()->value`) is bound too, or each target
+  // would run it again.
+  if (rhs.is_function_call() || has_side_effect(rhs))
   {
     locationt loc = converter_.get_location_from_decl(ast_node);
     std::string temp_name =
