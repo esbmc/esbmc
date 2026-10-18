@@ -102,6 +102,13 @@ private:
   void check_clause_name(const nlohmann::json &node, const std::string &clause)
     const;
 
+  const symbolt *clause_name_symbol(const std::string &name) const;
+
+  bool is_pure_list_query(const nlohmann::json &node) const;
+
+  void
+  check_clause_planted_nothing(const std::string &clause, size_t planted) const;
+
   void check_contract_clause(
     const nlohmann::json &node,
     const std::string &clause) const;
