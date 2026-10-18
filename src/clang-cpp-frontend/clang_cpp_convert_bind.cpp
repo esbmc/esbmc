@@ -208,9 +208,7 @@ bool clang_cpp_convertert::get_virtual_member_function_pointer(
     const exprt this_expr = symbol_expr(*ns.lookup(args[0].cmt_identifier()));
     exprt vtable_ptr_deref;
     get_vft_binding_expr_vtable_ptr(
-      md,
-      vtable_ptr_deref,
-      dereference_exprt(this_expr, this_expr.type().subtype()));
+      md, vtable_ptr_deref, dereference_exprt(this_expr, this_expr.type()));
     exprt function;
     if (get_vft_binding_expr_function(md, function, vtable_ptr_deref))
       return true;
