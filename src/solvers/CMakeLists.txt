@@ -8,28 +8,35 @@ set(ESBMC_ENABLE_bitwuzla 0)
 set(ESBMC_ENABLE_smtlib 0)
 
 # Camada is the SMT abstraction layer this project uses for Z3, CVC5,
-# Bitwuzla, MathSAT, and Yices. It can be supplied via a system install or
-# downloaded and built on demand. This file:
+# Bitwuzla, MathSAT, and Yices. This file:
 #   1. Returns early if no camada-backed solver is enabled.
-#   2. Looks for an existing camada install (CAMADA_DIR or system).
-#   3. Falls back to downloading, building, and installing camada into the
-#      build tree when DOWNLOAD_DEPENDENCIES is on.
-#   4. Wires camada into the solvercamada library and the global solver list.
+#   2. Uses the install CAMADA_DIR names, or else, when DOWNLOAD_DEPENDENCIES
+#      is on, downloads and unpacks the pinned prebuilt release into the build
+#      tree; failing both, looks for a system install.
+#   3. Wires camada into the solvers library and the global solver list.
 
 if(NOT (ENABLE_Z3 OR ENABLE_CVC5 OR ENABLE_MATHSAT OR ENABLE_YICES OR ENABLE_BITWUZLA))
   return()
 endif()
 
 # Empty by default: a camada tree left in a developer's home directory must not
-# silently take the place of the pinned download (its version is unchecked and
-# its build options unknown). Set -DCAMADA_DIR=... to use one deliberately.
+# silently take the place of the pinned release (its version is unchecked and
+# its build options unknown). Set -DCAMADA_DIR=... to use one deliberately, e.g.
+# for MathSAT or Yices, which the release archives do not carry.
 set(CAMADA_DIR "" CACHE PATH "Camada installation prefix")
+# Build trees configured when camada was built from source cached its install
+# here; drop it so they move to the pinned release.
+if(CAMADA_DIR STREQUAL "${CMAKE_BINARY_DIR}/camada/install")
+  set(CAMADA_DIR "" CACHE PATH "Camada installation prefix" FORCE)
+endif()
 set(CAMADA_EXTRA_INCLUDE_DIRS)
 set(CAMADA_EXTRA_LIBRARY_DIRS)
 
-# Register the include/lib paths for an additional camada dependency tree
-# (typically the deps/install/ dir produced by camada's own build) and pull
-# in cvc5/STP CMake configs from there if present.
+# A hand-built camada exports absolute paths to its own dependency tree
+# (…/build/deps/install), and names cvc5::cvc5 / stp as imported targets when
+# built with those solvers. Register that tree, or find_package(camada) fails
+# on the missing targets. CAMADA_DEPS_DIR overrides the guess for an install
+# whose build tree is not a sibling of the prefix.
 macro(camada_register_deps_tree deps_install_dir)
   if(EXISTS "${deps_install_dir}")
     list(APPEND CAMADA_EXTRA_INCLUDE_DIRS "${deps_install_dir}/include")
@@ -53,239 +60,64 @@ macro(camada_register_deps_tree deps_install_dir)
   endif()
 endmacro()
 
-# On a re-configure the camada build tree from the previous run is still
-# around; re-register its deps so cvc5/STP imported targets are available
-# before the find_package(camada ...) call below.
-if(DEFINED CAMADA_DOWNLOAD_DIR)
-  camada_register_deps_tree("${CAMADA_DOWNLOAD_DIR}/build/deps/install")
+set(CAMADA_DEPS_DIR "" CACHE PATH
+    "camada's dependency install tree (…/build/deps/install)")
+if(CAMADA_DEPS_DIR)
+  camada_register_deps_tree("${CAMADA_DEPS_DIR}")
+elseif(CAMADA_DIR)
+  camada_register_deps_tree("${CAMADA_DIR}/build/deps/install")
+  camada_register_deps_tree("${CAMADA_DIR}/../camada/build/deps/install")
 endif()
-
-# A hand-built camada (CAMADA_DIR) exports absolute paths to its own
-# dependency tree, and names cvc5::cvc5 / stp as imported targets when built
-# with those solvers. Register that tree too, or find_package(camada) fails on
-# the missing targets. CAMADA_DEPS_DIR overrides the guess for an install
-# whose build tree is not a sibling of the prefix.
-if(NOT DEFINED CAMADA_DOWNLOAD_DIR)
-  set(CAMADA_DEPS_DIR "" CACHE PATH
-      "camada's dependency install tree (…/build/deps/install)")
-  if(CAMADA_DEPS_DIR)
-    camada_register_deps_tree("${CAMADA_DEPS_DIR}")
-  elseif(CAMADA_DIR)
-    camada_register_deps_tree("${CAMADA_DIR}/build/deps/install")
-    camada_register_deps_tree("${CAMADA_DIR}/../camada/build/deps/install")
-  endif()
-endif()
-
-# If the user bumped ESBMC_CAMADA_NAME and a stale install from a previous
-# version is still in the download dir, wipe it so the rebuild path below
-# kicks in. Otherwise find_package would happily pick up the old install
-# and silently link ESBMC against the previous camada version.
-if(DEFINED CAMADA_DOWNLOAD_DIR AND DOWNLOAD_DEPENDENCIES)
-  set(_camada_stale_version_file
-      "${CAMADA_DOWNLOAD_DIR}/install/lib/cmake/camada/camadaConfigVersion.cmake")
-  if(EXISTS "${_camada_stale_version_file}")
-    string(REGEX MATCH "v?([0-9]+\\.[0-9]+(\\.[0-9]+)?)"
-                 _camada_unused "${ESBMC_CAMADA_NAME}")
-    set(_camada_expected_version "${CMAKE_MATCH_1}")
-    file(STRINGS "${_camada_stale_version_file}" _camada_version_line
-         REGEX "^set\\(PACKAGE_VERSION ")
-    string(REGEX MATCH "\"([^\"]+)\"" _camada_unused "${_camada_version_line}")
-    set(_camada_installed_version "${CMAKE_MATCH_1}")
-    if(_camada_expected_version AND _camada_installed_version
-       AND NOT _camada_installed_version VERSION_EQUAL _camada_expected_version)
-      message(STATUS "Wiping stale Camada install "
-              "(${_camada_installed_version}, expected ${_camada_expected_version})")
-      file(REMOVE_RECURSE "${CAMADA_DOWNLOAD_DIR}")
-      unset(camada_DIR CACHE)
-      unset(CAMADA_CONFIG_DIR CACHE)
-    endif()
-  endif()
-endif()
-
-find_package(camada CONFIG QUIET HINTS ${CAMADA_DIR} PATH_SUFFIXES lib/cmake/camada)
 
 #-----------------------------------------------------------------------------#
-# Download, build, and install camada when no existing install is found.
+# Download and unpack the pinned camada release when no install is given.
 #-----------------------------------------------------------------------------#
 
-if(NOT camada_FOUND AND DOWNLOAD_DEPENDENCIES)
-  set(CAMADA_DOWNLOAD_DIR "${CMAKE_BINARY_DIR}/camada"
-      CACHE PATH "Directory used to build downloaded Camada")
-  set(CAMADA_ARCHIVE     "${CMAKE_BINARY_DIR}/${ESBMC_CAMADA_NAME}")
-  set(CAMADA_SOURCE_DIR  "${CAMADA_DOWNLOAD_DIR}/src")
-  set(CAMADA_BUILD_DIR   "${CAMADA_DOWNLOAD_DIR}/build")
-  set(CAMADA_INSTALL_DIR "${CAMADA_DOWNLOAD_DIR}/install")
-  set(CAMADA_DEPS_INSTALL_DIR "${CAMADA_BUILD_DIR}/deps/install")
+set(_camada_prefix "${CAMADA_DIR}")
+if(NOT CAMADA_DIR AND DOWNLOAD_DEPENDENCIES)
+  # Unpack into a directory named after the archive's hash, so a new pin (even
+  # a retagged release at the same URL) unpacks afresh instead of reusing the
+  # previous one.
+  string(SHA256 _camada_key "${ESBMC_CAMADA_ARCHIVE_URL}${ESBMC_CAMADA_ARCHIVE_HASH}")
+  string(SUBSTRING "${_camada_key}" 0 16 _camada_key)
+  set(_camada_prefix "${CMAKE_BINARY_DIR}/camada/${_camada_key}")
 
-  camada_register_deps_tree("${CAMADA_DEPS_INSTALL_DIR}")
-
-  # Download the archive if absent, empty (a previous interrupted run), or not
-  # the pinned one.
-  if(EXISTS "${CAMADA_ARCHIVE}")
-    file(SIZE "${CAMADA_ARCHIVE}" _camada_archive_size)
-    if(_camada_archive_size EQUAL 0)
-      file(REMOVE "${CAMADA_ARCHIVE}")
-    elseif(ESBMC_CAMADA_HASH)
-      file(SHA256 "${CAMADA_ARCHIVE}" _camada_have_hash)
-      if(NOT _camada_have_hash STREQUAL ESBMC_CAMADA_HASH)
-        message(STATUS "Cached Camada archive does not match the pinned hash; "
-                       "re-downloading")
-        file(REMOVE "${CAMADA_ARCHIVE}")
-      endif()
-    endif()
-  endif()
-  if(NOT EXISTS "${CAMADA_ARCHIVE}")
-    message(STATUS "Downloading Camada from ${ESBMC_CAMADA_URL}")
-    if(ESBMC_CAMADA_HASH)
-      # EXPECTED_HASH makes a moved or tampered artefact a hard error: camada
-      # supplies every bit-vector backend, so it must not be linked unverified.
-      file(DOWNLOAD "${ESBMC_CAMADA_URL}" "${CAMADA_ARCHIVE}"
-           SHOW_PROGRESS STATUS _camada_dl_status
-           EXPECTED_HASH SHA256=${ESBMC_CAMADA_HASH})
+  if(NOT EXISTS "${_camada_prefix}/lib/cmake/camada/camadaConfig.cmake")
+    get_filename_component(_camada_archive_name "${ESBMC_CAMADA_ARCHIVE_URL}" NAME)
+    set(_camada_archive "${CMAKE_BINARY_DIR}/camada/${_camada_archive_name}")
+    message(STATUS "Downloading Camada from ${ESBMC_CAMADA_ARCHIVE_URL}")
+    if(ESBMC_CAMADA_ARCHIVE_HASH)
+      file(DOWNLOAD "${ESBMC_CAMADA_ARCHIVE_URL}" "${_camada_archive}"
+           STATUS _camada_dl_status
+           EXPECTED_HASH SHA256=${ESBMC_CAMADA_ARCHIVE_HASH})
     else()
       message(WARNING
-        "ESBMC_CAMADA_HASH is empty: downloading Camada without verifying it")
-      file(DOWNLOAD "${ESBMC_CAMADA_URL}" "${CAMADA_ARCHIVE}"
-           SHOW_PROGRESS STATUS _camada_dl_status)
+        "ESBMC_CAMADA_ARCHIVE_HASH is empty: downloading Camada without verifying it")
+      file(DOWNLOAD "${ESBMC_CAMADA_ARCHIVE_URL}" "${_camada_archive}"
+           STATUS _camada_dl_status)
     endif()
     list(GET _camada_dl_status 0 _camada_dl_result)
-    list(GET _camada_dl_status 1 _camada_dl_message)
     if(NOT _camada_dl_result EQUAL 0)
-      # file(DOWNLOAD) leaves the partial/mismatched file behind; drop it so the
-      # next configure re-downloads instead of reusing it.
-      file(REMOVE "${CAMADA_ARCHIVE}")
+      list(GET _camada_dl_status 1 _camada_dl_message)
+      file(REMOVE "${_camada_archive}")
       message(FATAL_ERROR "Failed to download Camada: ${_camada_dl_message}")
     endif()
-    file(SIZE "${CAMADA_ARCHIVE}" _camada_archive_size)
-    if(_camada_archive_size EQUAL 0)
-      message(FATAL_ERROR "Downloaded Camada archive is empty: ${CAMADA_ARCHIVE}")
+
+    file(REMOVE_RECURSE "${_camada_prefix}")
+    file(ARCHIVE_EXTRACT INPUT "${_camada_archive}" DESTINATION "${_camada_prefix}")
+    file(REMOVE "${_camada_archive}")
+    if(NOT EXISTS "${_camada_prefix}/lib/cmake/camada/camadaConfig.cmake")
+      message(FATAL_ERROR
+        "${ESBMC_CAMADA_ARCHIVE_URL} has no lib/cmake/camada/camadaConfig.cmake")
     endif()
   endif()
-
-  # An install from a prior run is up-to-date unless we need a static
-  # rebuild. Version mismatches are caught earlier (above) before
-  # find_package picks up the old install.
-  unset(CAMADA_CONFIG_DIR CACHE)
-  find_path(CAMADA_CONFIG_DIR
-    NAMES camadaConfig.cmake camada-config.cmake
-    HINTS "${CAMADA_INSTALL_DIR}"
-    PATH_SUFFIXES lib/cmake/camada share/cmake/camada cmake
-    NO_DEFAULT_PATH)
-  if(BUILD_STATIC AND CAMADA_CONFIG_DIR
-     AND NOT EXISTS "${CAMADA_INSTALL_DIR}/lib/libcamada.a")
-    message(STATUS "Rebuilding Camada as a static library")
-    file(REMOVE_RECURSE "${CAMADA_BUILD_DIR}" "${CAMADA_INSTALL_DIR}")
-    unset(CAMADA_CONFIG_DIR CACHE)
-    set(CAMADA_CONFIG_DIR)
-  endif()
-
-  if(NOT CAMADA_CONFIG_DIR)
-    message(STATUS "Extracting Camada")
-    file(REMOVE_RECURSE "${CAMADA_SOURCE_DIR}")
-    file(MAKE_DIRECTORY "${CAMADA_SOURCE_DIR}")
-    file(ARCHIVE_EXTRACT INPUT "${CAMADA_ARCHIVE}" DESTINATION "${CAMADA_SOURCE_DIR}")
-
-    # GitHub tarballs extract to a single ${repo}-${tag} directory.
-    file(GLOB _camada_extracted LIST_DIRECTORIES true "${CAMADA_SOURCE_DIR}/*")
-    list(LENGTH _camada_extracted _camada_extracted_count)
-    if(_camada_extracted_count EQUAL 1)
-      list(GET _camada_extracted 0 CAMADA_PROJECT_SOURCE_DIR)
-    else()
-      set(CAMADA_PROJECT_SOURCE_DIR "${CAMADA_SOURCE_DIR}")
-    endif()
-
-    # Camada has no MSVC-compatible builds for Bitwuzla, CVC5, MathSAT (per
-    # camada's CamadaDependencies.cmake) or Yices (autoreconf-only build).
-    # Disable them on Windows targets regardless of the user's ENABLE_*.
-    set(_camada_unix TRUE)
-    if(CMAKE_SYSTEM_NAME MATCHES "Windows")
-      set(_camada_unix FALSE)
-    endif()
-    set(_camada_args)
-    foreach(_solver Z3 CVC5 MATHSAT YICES BITWUZLA)
-      set(_enabled OFF)
-      if(ENABLE_${_solver} AND (_solver STREQUAL "Z3" OR _camada_unix))
-        set(_enabled ON)
-      endif()
-      list(APPEND _camada_args "-DCAMADA_SOLVER_${_solver}_ENABLE=${_enabled}")
-    endforeach()
-    list(APPEND _camada_args "-DCAMADA_SOLVER_STP_ENABLE=OFF")
-
-    # Multi-config generators (Visual Studio, Xcode) ignore CMAKE_BUILD_TYPE
-    # at configure time and pick the configuration via --config later. Pick a
-    # default so --config is never empty.
-    set(_camada_build_type "${CMAKE_BUILD_TYPE}")
-    if(NOT _camada_build_type)
-      set(_camada_build_type RelWithDebInfo)
-    endif()
-
-    # On MSVC, the CRT (/MT vs /MD) must match between camada and ESBMC, or
-    # linking fails with LNK2038 RuntimeLibrary mismatch. The inner build does
-    # not inherit cache variables, so forward CMAKE_MSVC_RUNTIME_LIBRARY (and
-    # CMP0091 NEW so the variable is honored).
-    if(MSVC)
-      list(APPEND _camada_args "-DCMAKE_POLICY_DEFAULT_CMP0091=NEW")
-      if(CMAKE_MSVC_RUNTIME_LIBRARY)
-        list(APPEND _camada_args
-          "-DCMAKE_MSVC_RUNTIME_LIBRARY=${CMAKE_MSVC_RUNTIME_LIBRARY}")
-      endif()
-    endif()
-
-    message(STATUS "Configuring Camada")
-    execute_process(
-      COMMAND ${CMAKE_COMMAND}
-        -S "${CAMADA_PROJECT_SOURCE_DIR}"
-        -B "${CAMADA_BUILD_DIR}"
-        -DCMAKE_BUILD_TYPE=${_camada_build_type}
-        -DCMAKE_INSTALL_PREFIX=${CAMADA_INSTALL_DIR}
-        -DBUILD_SHARED_LIBS=OFF
-        -DCAMADA_DOWNLOAD_DEPENDENCIES=ALL
-        -DCAMADA_ENABLE_REGRESSION=OFF
-        ${_camada_args}
-      RESULT_VARIABLE _camada_status)
-    if(NOT _camada_status EQUAL 0)
-      message(FATAL_ERROR "Failed to configure Camada")
-    endif()
-
-    message(STATUS "Building Camada")
-    execute_process(
-      COMMAND ${CMAKE_COMMAND} --build "${CAMADA_BUILD_DIR}"
-              --config ${_camada_build_type} --parallel
-      RESULT_VARIABLE _camada_status)
-    if(NOT _camada_status EQUAL 0)
-      message(FATAL_ERROR "Failed to build Camada")
-    endif()
-
-    message(STATUS "Installing Camada")
-    execute_process(
-      COMMAND ${CMAKE_COMMAND} --install "${CAMADA_BUILD_DIR}"
-              --config ${_camada_build_type}
-      RESULT_VARIABLE _camada_status)
-    if(NOT _camada_status EQUAL 0)
-      message(FATAL_ERROR "Failed to install Camada")
-    endif()
-
-    find_path(CAMADA_CONFIG_DIR
-      NAMES camadaConfig.cmake camada-config.cmake
-      HINTS "${CAMADA_INSTALL_DIR}"
-      PATH_SUFFIXES lib/cmake/camada share/cmake/camada cmake
-      NO_DEFAULT_PATH)
-  endif()
-
-  if(NOT CAMADA_CONFIG_DIR)
-    message(FATAL_ERROR "Downloaded Camada build did not install camadaConfig.cmake")
-  endif()
-
-  unset(camada_DIR CACHE)
-  set(camada_DIR "${CAMADA_CONFIG_DIR}" CACHE PATH "Path to camadaConfig.cmake" FORCE)
-  camada_register_deps_tree("${CAMADA_DEPS_INSTALL_DIR}")
-  find_package(camada CONFIG REQUIRED PATHS "${CAMADA_CONFIG_DIR}" NO_DEFAULT_PATH)
-  set(CAMADA_DIR "${CAMADA_INSTALL_DIR}" CACHE PATH "Camada installation prefix" FORCE)
 endif()
 
-if(NOT camada_FOUND)
-  find_package(camada CONFIG REQUIRED HINTS ${CAMADA_DIR} PATH_SUFFIXES lib/cmake/camada)
-endif()
+# camada_DIR is cached by find_package; drop it so a changed CAMADA_DIR or pin
+# is searched again rather than the previous configure's install reused.
+unset(camada_DIR CACHE)
+find_package(camada CONFIG REQUIRED HINTS ${_camada_prefix}
+             PATH_SUFFIXES lib/cmake/camada)
 
 # Camada is built for a single configuration (CMAKE_BUILD_TYPE on
 # single-config generators, RelWithDebInfo when invoked from a multi-config
@@ -396,6 +228,9 @@ foreach(_solver z3 cvc5 mathsat yices bitwuzla)
   if(ENABLE_${_SOLVER} AND CAMADA_HAVE_${_SOLVER})
     set(ESBMC_ENABLE_${_solver} 1)
     list(APPEND _camada_solvers ${_solver})
+  elseif(ENABLE_${_SOLVER})
+    message(WARNING "ENABLE_${_SOLVER} is on, but this camada has no "
+                    "${_solver} backend; set CAMADA_DIR to a camada built with it")
   endif()
 endforeach()
 
@@ -413,21 +248,21 @@ list(REMOVE_DUPLICATES _camada_solvers)
 list(JOIN _camada_solvers " " _camada_solvers_str)
 set(ESBMC_AVAILABLE_SOLVERS "${_camada_solvers_str}" PARENT_SCOPE)
 
-# Windows: ship runtime DLLs from camada's downloaded deps tree alongside
-# esbmc.exe. Without this, esbmc.exe exits silently at startup when the OS
-# loader cannot find libz3.dll, which the deleted src/solvers/z3/CMakeLists.txt
-# used to install via its own find_file(...libz3.dll...) rule.
-if(WIN32 AND DEFINED CAMADA_DEPS_INSTALL_DIR)
-  foreach(_dll libz3.dll)
-    find_file(_solver_dll ${_dll}
-      HINTS "${CAMADA_DEPS_INSTALL_DIR}"
-      PATH_SUFFIXES bin
-      NO_DEFAULT_PATH)
-    if(_solver_dll)
-      message(STATUS "Windows will install ${_solver_dll}")
-      install(FILES "${_solver_dll}" DESTINATION bin)
+# Windows: ship the release's libz3.dll alongside esbmc.exe. Without it,
+# esbmc.exe exits silently at startup when the OS loader cannot find the DLL.
+if(WIN32 AND EXISTS "${_camada_prefix}/bin/libz3.dll")
+  install(FILES "${_camada_prefix}/bin/libz3.dll" DESTINATION bin)
+endif()
+
+# The release archives link bare -lgmp/-lmpfr. Homebrew on Apple Silicon keeps
+# them in /opt/homebrew/lib, which the linker does not search by default.
+if(APPLE)
+  foreach(_lib gmp mpfr)
+    find_library(_camada_${_lib} ${_lib})
+    if(_camada_${_lib})
+      get_filename_component(_dir "${_camada_${_lib}}" DIRECTORY)
+      target_link_directories(solvers PUBLIC "${_dir}")
     endif()
-    unset(_solver_dll CACHE)
   endforeach()
 endif()
 

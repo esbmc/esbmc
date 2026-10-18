@@ -100,12 +100,25 @@ else()
   set(DEFAULT_CHERI_LLVM_NAME "clang-cheri-17")
 endif()
 
-set(DEFAULT_CAMADA_URL "https://github.com/mikhailramalho/camada/archive/refs/tags/v0.22.tar.gz")
-set(DEFAULT_CAMADA_NAME "camada-v0.22.tar.gz")
-# SHA256 of the archive above. Camada carries every bit-vector backend, so a
-# moved or tampered artefact has to fail the build rather than be linked in.
-# Update alongside the URL; an empty value skips the check.
-set(DEFAULT_CAMADA_HASH "806c2e7d990ba9dd6ecbcdbf93ba3ce69471f1af98351cc3dc54ffb7fc6c513e")
+# Camada's prebuilt release: a static libcamada with Bitwuzla, CVC5 and Z3
+# (Z3 only on Windows). The SHA256 pins each archive -- camada carries every
+# backend, so a moved or tampered artefact has to fail the build rather than be
+# linked in. Update the hashes alongside the version; an empty one skips the
+# check.
+set(CAMADA_RELEASE "https://github.com/mikhailramalho/camada/releases/download/v0.23")
+if(WIN32)
+  set(DEFAULT_CAMADA_URL "${CAMADA_RELEASE}/camada-windows-x64.zip")
+  set(DEFAULT_CAMADA_HASH "783a52801586786e32e083d95112634a60a4ea26c00e4a8c1356cb17eba747d0")
+elseif(APPLE)
+  set(DEFAULT_CAMADA_URL "${CAMADA_RELEASE}/camada-macos-arm64.tar.gz")
+  set(DEFAULT_CAMADA_HASH "fdb70f97a6cc785bcbacf8d26fa22470c82f4473f941df34b4ac4b1fd39a27a8")
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)$")
+  set(DEFAULT_CAMADA_URL "${CAMADA_RELEASE}/camada-linux-arm64.tar.gz")
+  set(DEFAULT_CAMADA_HASH "e27a30b0d2f38adc8ff3c1795f569c043c3e37b77b94669cd44c8c75d6015625")
+else()
+  set(DEFAULT_CAMADA_URL "${CAMADA_RELEASE}/camada-linux-x64.tar.gz")
+  set(DEFAULT_CAMADA_HASH "f3d45dc34a6f10476707ef228136b19bc4cfefbd696ca59d7c45de5b2597a3e9")
+endif()
 
 set(ESBMC_LLVM_URL ${DEFAULT_LLVM_URL} CACHE STRING "URL to download prebuilt LLVM")
 set(ESBMC_LLVM_NAME ${DEFAULT_LLVM_NAME} CACHE STRING "Name of the extracted directory of LLVM")
@@ -113,9 +126,8 @@ set(ESBMC_LLVM_NAME ${DEFAULT_LLVM_NAME} CACHE STRING "Name of the extracted dir
 set(ESBMC_CHERI_LLVM_URL ${DEFAULT_CHERI_LLVM_URL} CACHE STRING "URL to download prebuilt CHERI LLVM")
 set(ESBMC_CHERI_LLVM_NAME ${DEFAULT_CHERI_LLVM_NAME} CACHE STRING "Name of the extracted directory of CHERI LLVM")
 
-set(ESBMC_CAMADA_URL ${DEFAULT_CAMADA_URL} CACHE STRING "URL to download Camada sources")
-set(ESBMC_CAMADA_NAME ${DEFAULT_CAMADA_NAME} CACHE STRING "Name of the downloaded Camada source archive")
-set(ESBMC_CAMADA_HASH ${DEFAULT_CAMADA_HASH} CACHE STRING "SHA256 of the Camada source archive; empty to skip verification")
+set(ESBMC_CAMADA_ARCHIVE_URL ${DEFAULT_CAMADA_URL} CACHE STRING "URL of the prebuilt Camada release archive")
+set(ESBMC_CAMADA_ARCHIVE_HASH ${DEFAULT_CAMADA_HASH} CACHE STRING "SHA256 of the Camada release archive; empty to skip verification")
 
 #############################
 # CMake extra Vars
