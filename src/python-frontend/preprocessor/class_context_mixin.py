@@ -600,9 +600,8 @@ class ClassContextMixin:
         # type(None) has no builtin name; the frontend reads NoneType as it (#8764).
         is_type_of_none = (isinstance(arg, ast.Call) and isinstance(arg.func, ast.Name)
                            and arg.func.id == "type" and {"type", "NoneType"} <= known
-                           and not arg.keywords
-                           and len(arg.args) == 1 and isinstance(arg.args[0], ast.Constant)
-                           and arg.args[0].value is None)
+                           and not arg.keywords and len(arg.args) == 1
+                           and isinstance(arg.args[0], ast.Constant) and arg.args[0].value is None)
         return "NoneType" if is_type_of_none else None
 
     def _type_parameters(self, func, known, calls):
