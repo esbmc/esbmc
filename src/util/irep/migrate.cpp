@@ -1410,6 +1410,27 @@ static void wrap_padded_union_member(
   members[0] = constant_struct2tc(to_union_type(type).members[*n], fields);
 }
 
+static bool is_all_zero_bytes(const expr2tc &e)
+{
+  if (is_constant_int2t(e))
+    return to_constant_int2t(e).value.is_zero();
+  if (is_constant_floatbv2t(e))
+  {
+    const ieee_floatt &f = to_constant_floatbv2t(e).value;
+    return f.is_zero() && !f.get_sign();
+  }
+  if (is_constant_array_of2t(e))
+    return is_all_zero_bytes(to_constant_array_of2t(e).initializer);
+  if (
+    !is_constant_struct2t(e) && !is_constant_union2t(e) &&
+    !is_constant_array2t(e) && !is_constant_vector2t(e))
+    return false;
+  bool zero = true;
+  e->foreach_operand(
+    [&zero](const expr2tc &op) { zero = zero && is_all_zero_bytes(op); });
+  return zero;
+}
+
 // CBMC initialises a union through a member other than its first as a
 // byte_update of the zero union at offset 0; a union constant of that member
 // keeps the value whole, which a pointer member needs for its value set.
@@ -1420,14 +1441,8 @@ static expr2tc union_member_update(
   const expr2tc &update)
 {
   if (
-    !is_union_type(type) || !is_constant_union2t(source) ||
+    !is_union_type(type) || !is_all_zero_bytes(source) ||
     !is_constant_int2t(offs) || !to_constant_int2t(offs).value.is_zero())
-    return expr2tc();
-  const std::vector<expr2tc> &zero =
-    to_constant_union2t(source).datatype_members;
-  if (
-    zero.size() != 1 || !is_constant_int2t(zero[0]) ||
-    !to_constant_int2t(zero[0]).value.is_zero())
     return expr2tc();
 
   const union_type2t &u = to_union_type(type);
@@ -1465,7 +1480,7 @@ static expr2tc byte_update_bytes(
   }
 
   const unsigned width = update->type->get_width();
-  if (width == 8)
+  if (width == 8 && is_bv_type(update))
     return byte_update2tc(type, result, offs, update, big_endian);
   if (width % 8 != 0)
     throw std::string(
