@@ -4010,12 +4010,20 @@ exprt python_list::handle_range_slice(
 
   copy_dict_view_elem_types(array, sliced_id);
 
-  if (elem_types().size(sliced_id) == 0 && array.is_symbol())
+  // list(d.keys())[a:b] slices the copy just built, which nothing else can
+  // reach, so the dict view's types it carries still hold.
+  const nlohmann::json &sliced_node = list_value_["value"];
+  if (
+    elem_types().size(sliced_id) == 0 && array.is_symbol() &&
+    sliced_node.value("_type", "") == "Call" &&
+    sliced_node["func"].value("id", "") == "list" &&
+    sliced_node["args"].size() == 1 &&
+    sliced_node["args"][0].value("_type", "") == "Call" &&
+    sliced_node["args"][0]["func"].value("_type", "") == "Attribute")
   {
-    const typet uniform =
-      elem_types().uniform_element_type(array.identifier().as_string());
-    if (!uniform.is_nil())
-      elem_types().record(sliced_id, std::string(), uniform);
+    const std::string view = sliced_node["args"][0]["func"].value("attr", "");
+    if (view == "keys" || view == "values")
+      elem_types().assign_from(array.identifier().as_string(), sliced_id);
   }
 
   if (elem_types().size(sliced_id) == 0)
