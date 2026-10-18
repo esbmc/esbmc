@@ -3146,6 +3146,8 @@ regression/python/github_8325_fail
 regression/python/github_8325_only_attribute_fail
 regression/python/attr_on_none_caught
 regression/python/attr_on_none_lazy
+regression/esbmc-cpp/cpp/github_8743_enum_unsigned_fail
+regression/esbmc-cpp/cpp/github_8743_enum_unsigned
 regression/floats/github_8701_nondet_mode
 regression/python/github_8351_disagree
 regression/python/github_8351_param_disagree
