@@ -6,6 +6,7 @@
 #include <python-frontend/python_adjust.h>
 #include <util/base/host_rounding_mode.h>
 #include <python-frontend/param_annotations.h>
+#include <python-frontend/runtime/runtime_converter.h>
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <util/message/message.h>
 #include <util/base/filesystem.h>
@@ -90,7 +91,8 @@ static void append_parser_flags(std::vector<std::string> &args)
 {
   static const std::pair<const char *, const char *> flags[] = {
     {"deadlock-check", "--deadlock-check"},
-    {"python-typecheck", "--typecheck"}};
+    {"python-typecheck", "--typecheck"},
+    {"python-runtime", "--runtime"}};
 
   for (const auto &[option, flag] : flags)
     if (config.options.get_bool_option(option))
@@ -218,6 +220,15 @@ bool python_languaget::parse(const std::string &path)
     return false;
   }
 
+  if (config.options.get_bool_option("python-runtime"))
+  {
+    if (ast.is_null())
+      ast = std::move(parsed_ast);
+    else
+      extra_asts.push_back(std::move(parsed_ast));
+    return false;
+  }
+
   try
   {
     // Retype this module's list parameters from their call sites, before the
@@ -273,8 +284,9 @@ bool python_languaget::typecheck(contextt &context, const std::string &)
   // (remove_exceptions) covers Python's bare `raise` without that OM.
   add_cprover_library(context, this);
 
+  const bool runtime = config.options.get_bool_option("python-runtime");
   if (
-    !config.options.get_bool_option("building-python-library") &&
+    !runtime && !config.options.get_bool_option("building-python-library") &&
     !config.options.get_bool_option("no-library") &&
     !config.options.get_bool_option("int-encoding"))
     add_cpython_library(context);
@@ -282,8 +294,26 @@ bool python_languaget::typecheck(contextt &context, const std::string &)
   try
   {
     // Generate symbol table
-    python_converter converter(context, &ast, global_scope_, &extra_asts);
-    converter.convert();
+    if (runtime)
+    {
+      // Floats live in a double field of an allocated object, which --ir
+      // stores byte-wise and truncates. Wait for the mixed encoding rather
+      // than answer with a silently rounded value.
+      if (config.options.get_bool_option("int-encoding"))
+        throw std::runtime_error("--python-runtime does not support --ir yet");
+      if (!extra_asts.empty())
+        throw std::runtime_error("--python-runtime takes a single Python file");
+      python_runtime_converter(
+        context,
+        ast,
+        config.options.get_bool_option("python-check-annotations"))
+        .convert();
+    }
+    else
+    {
+      python_converter converter(context, &ast, global_scope_, &extra_asts);
+      converter.convert();
+    }
   }
   catch (const std::runtime_error &e)
   {

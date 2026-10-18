@@ -415,6 +415,14 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   // that are used by ESBMC at later stages but which are not available
   // through CMD, setting groups of options based depending on
   // particular CMD flags)
+  // Every callable in runtime mode comes from the models or from a function
+  // the frontend emitted, and anything else is refused at conversion time, so
+  // havocing the result of an unresolved slot call reports failures that
+  // cannot happen. Report such a call rather than assuming it away, so a hole
+  // in the lowering shows up instead of verifying vacuously.
+  if (cmdline.isset("python-runtime"))
+    options.set_option("check-fnptr-targets", true);
+
   if (cmdline.isset("bv"))
     options.set_option("int-encoding", false);
 

@@ -1,0 +1,16 @@
+assert "-".join(["a", "b", "c"]) == "a-b-c"
+assert "".join(["x", "y"]) == "xy"
+assert ",".join([]) == ""
+assert ",".join(["solo"]) == "solo"
+
+assert "banana".replace("a", "o") == "bonono"
+assert "aaa".replace("aa", "b") == "ba"
+assert "abc".replace("z", "y") == "abc"
+assert "aXbXc".replace("X", "") == "abc"
+
+assert "  hi  ".strip() == "hi"
+assert "  hi  ".lstrip() == "hi  "
+assert "  hi  ".rstrip() == "  hi"
+assert "xxhixx".strip("x") == "hi"
+assert "".strip() == ""
+assert "abc".strip() == "abc"

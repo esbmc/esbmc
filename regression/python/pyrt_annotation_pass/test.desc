@@ -1,0 +1,5 @@
+CORE
+main.py
+--python-runtime --python-check-annotations
+^VERIFICATION FAILED$
+^.*does not match its annotation.*$

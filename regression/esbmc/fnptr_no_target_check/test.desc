@@ -1,0 +1,5 @@
+CORE
+main.c
+--check-fnptr-targets --no-pointer-check
+^VERIFICATION FAILED$
+function-pointer call has no target

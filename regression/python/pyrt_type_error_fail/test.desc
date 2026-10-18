@@ -1,0 +1,5 @@
+CORE
+main.py
+--python-runtime
+^VERIFICATION FAILED$
+TypeError: unsupported operand type\(s\) for \+
