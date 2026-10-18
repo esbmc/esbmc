@@ -1105,10 +1105,6 @@ void goto_symext::pop_frame()
     expr2tc l1_sym = symbol2tc(ptr, it.base_name);
     frame.level1.get_ident_name(l1_sym);
 
-    // Call free on alloca'd objects
-    if (goto_symex_utils::is_alloca_return_value_name(it.base_name.as_string()))
-      symex_free(code_free2tc(l1_sym));
-
     // Erase from level 1 propagation
     cur_state->value_set.erase(to_symbol2t(l1_sym).get_symbol_name());
 
@@ -1120,6 +1116,9 @@ void goto_symext::pop_frame()
       get_empty_type(), it.base_name, it.lev, it.l1_num, 0, it.t_num, 0);
     cur_state->value_set.erase(to_symbol2t(tmp_expr).get_symbol_name());
   }
+
+  for (const expr2tc &ptr : frame.alloca_objects)
+    invalidate_object(ptr);
 
   // decrease recursion unwinding counter
   if (!frame.function_identifier.empty())

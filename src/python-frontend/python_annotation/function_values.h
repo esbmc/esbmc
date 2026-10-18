@@ -63,6 +63,21 @@ private:
     const chaint &chain,
     const std::string &name,
     std::vector<valuet> &values);
+  /// Where `def` is called, as (scope, name it is called by): the module by
+  /// its own name, and each function it is passed to and only called
+  /// through, by that parameter's name. None when it is used otherwise.
+  std::optional<std::vector<std::pair<const nlohmann::json *, std::string>>>
+  callers_of(const nlohmann::json &def, const nlohmann::json &module) const;
+  /// Collects the argument each call of `callee` in `scope` passes for
+  /// positional parameter `index`, called `name`; whether every call does.
+  bool bound_arguments(
+    const nlohmann::json &module,
+    const nlohmann::json *scope,
+    const std::string &callee,
+    const nlohmann::json &args,
+    std::size_t index,
+    const std::string &name,
+    std::vector<valuet> &values) const;
   /// Whether every use of `def` is a call `module` makes.
   bool
   only_called(const nlohmann::json &def, const nlohmann::json &module) const;

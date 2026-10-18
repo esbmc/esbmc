@@ -4,6 +4,7 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 // Pure-AST literal-kind divergence detection, shared by dynamic_type_handler
 // and the annotation pre-pass (which has no symbol table to check against).
@@ -270,5 +271,128 @@ inline bool scope_assigns_divergent_literal_types(
       return true;
   }
   return false;
+}
+
+// A binding of a name to a number: its kind, "int" (bool included) or
+// "float", the value bound, and whether it sits inside a block.
+struct numeric_bindingt
+{
+  std::string kind;
+  nlohmann::json value;
+  bool in_block;
+};
+
+// Whether `stmt` assigns to `name`.
+inline bool assigns_name(const nlohmann::json &stmt, const std::string &name)
+{
+  const std::string kind = stmt.value("_type", "");
+  const nlohmann::json *target = nullptr;
+  if (kind == "AnnAssign")
+    target = &stmt["target"];
+  else if (kind == "Assign" && stmt["targets"].size() == 1)
+    target = &stmt["targets"][0];
+  return target && target->is_object() &&
+         target->value("_type", "") == "Name" &&
+         target->value("id", "") == name;
+}
+
+// The kind of number a binding of `name` stores: "int" (bool included),
+// "float", or "" for anything else or another name.
+inline std::string
+numeric_binding_kind(const nlohmann::json &stmt, const std::string &name)
+{
+  if (!assigns_name(stmt, name))
+    return "";
+  const nlohmann::json &annotation = stmt.value("annotation", nlohmann::json());
+  const std::string type =
+    annotation.is_object() ? annotation.value("id", "") : "";
+  if (type == "int" || type == "bool")
+    return "int";
+  return type == "float" ? "float" : "";
+}
+
+// A line field of `node`, or -1 when the preprocessor left it unset.
+inline int line_field(const nlohmann::json &node, const char *key)
+{
+  const auto it = node.find(key);
+  return it != node.end() && it->is_number_integer() ? it->get<int>() : -1;
+}
+
+// Whether `stmt` starts after line `before`, so that, outside a loop that
+// spans `before`, nothing it binds reaches that line.
+inline bool starts_after(const nlohmann::json &stmt, int before)
+{
+  return line_field(stmt, "lineno") >= before;
+}
+
+// Whether `stmt` is a loop whose body runs again after line `before`. A loop
+// the preprocessor built without an end line is taken to span it.
+inline bool loop_spans(const nlohmann::json &stmt, int before)
+{
+  const std::string kind = stmt.value("_type", "");
+  const int end = line_field(stmt, "end_lineno");
+  return (kind == "While" || kind == "For" || kind == "AsyncFor") &&
+         line_field(stmt, "lineno") <= before && (end < 0 || end >= before);
+}
+
+// Records the number `stmt` binds to `name`. A binding on the straight-line
+// spine before line `before` replaces every binding ahead of it on all paths,
+// so those are dropped.
+inline void record_numeric_binding(
+  const nlohmann::json &stmt,
+  const std::string &name,
+  bool nested,
+  int before,
+  std::vector<numeric_bindingt> &bindings)
+{
+  const int line = line_field(stmt, "lineno");
+  if (!nested && line >= 0 && line < before && assigns_name(stmt, name))
+    bindings.clear();
+  const std::string number = numeric_binding_kind(stmt, name);
+  if (!number.empty() && stmt.contains("value") && !stmt["value"].is_null())
+    bindings.push_back({number, stmt["value"], nested});
+}
+
+// The number bindings of `name` in `body`, outside nested scopes, that are
+// live at line `before`. With `include_later`, those starting after it count
+// too, as they do inside a loop that spans it.
+inline void collect_numeric_bindings(
+  const nlohmann::json &body,
+  const std::string &name,
+  bool nested,
+  int before,
+  bool include_later,
+  std::vector<numeric_bindingt> &bindings)
+{
+  for (const auto &stmt : body)
+  {
+    if (!stmt.is_object() || (!include_later && starts_after(stmt, before)))
+      continue;
+    const std::string kind = stmt.value("_type", "");
+    if (kind == "FunctionDef" || kind == "ClassDef")
+      continue;
+    record_numeric_binding(stmt, name, nested, before, bindings);
+    const bool later = include_later || loop_spans(stmt, before);
+    for (const char *key : {"body", "orelse", "finalbody", "handlers", "cases"})
+      if (stmt.contains(key) && stmt[key].is_array())
+        collect_numeric_bindings(
+          stmt[key], name, true, before, later, bindings);
+  }
+}
+
+// Whether the bindings store an int on one path and a float on another: an
+// int and a float, at least one of them inside a block. A name rebound on
+// the straight-line spine has the same type on every path.
+inline bool
+is_path_dependent_number(const std::vector<numeric_bindingt> &bindings)
+{
+  bool has_int = false, has_float = false, in_block = false;
+  for (const auto &binding : bindings)
+  {
+    has_int |= binding.kind == "int";
+    has_float |= binding.kind == "float";
+    in_block |= binding.in_block;
+  }
+  return has_int && has_float && in_block;
 }
 } // namespace dynamic_type_detail
