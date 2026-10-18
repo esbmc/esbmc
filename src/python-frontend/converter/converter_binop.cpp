@@ -415,15 +415,10 @@ nlohmann::json ast_node(const char *type, const nlohmann::json &loc)
 std::optional<nlohmann::json>
 formatted_part(char conversion, nlohmann::json value, const typet &type)
 {
-  nlohmann::json format_spec;
   if (conversion == 'f')
   {
     if (!type.is_floatbv())
       return std::nullopt;
-    nlohmann::json precision = ast_node("Constant", value);
-    precision["value"] = ".6f";
-    format_spec = ast_node("JoinedStr", value);
-    format_spec["values"] = nlohmann::json::array({precision});
   }
   else if (conversion == 'd' || conversion == 'i')
   {
@@ -442,8 +437,11 @@ formatted_part(char conversion, nlohmann::json value, const typet &type)
   nlohmann::json part = ast_node("FormattedValue", value);
   part["value"] = value;
   part["conversion"] = -1;
-  if (!format_spec.is_null())
-    part["format_spec"] = format_spec;
+  if (conversion == 'f')
+  {
+    part["format_spec"] = ast_node("Constant", value);
+    part["format_spec"]["value"] = ".6f";
+  }
   return part;
 }
 
@@ -1640,7 +1638,11 @@ exprt python_converter::get_fstring_in_order(const nlohmann::json &joined)
         create_tmp_symbol(joined, "$str_mod$", part.type(), exprt());
       add_instruction(code_declt(symbol_expr(tmp)));
       add_instruction(code_assignt(symbol_expr(tmp), part));
-      part = string_handler_.convert_to_string(symbol_expr(tmp));
+      part = string_handler_.apply_format_specification(
+        symbol_expr(tmp),
+        value.contains("format_spec")
+          ? string_handler_.process_format_spec(value["format_spec"])
+          : std::string());
     }
     result = result.is_nil()
                ? part

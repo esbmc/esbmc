@@ -1,4 +1,4 @@
 CORE
 main.py
---unwind 8 --no-unwinding-assertions
+--unwind 20
 ^VERIFICATION FAILED$

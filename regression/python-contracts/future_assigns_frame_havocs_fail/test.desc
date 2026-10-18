@@ -1,4 +1,0 @@
-FUTURE
-main.py
---replace-call-with-contract touch
-^VERIFICATION FAILED$

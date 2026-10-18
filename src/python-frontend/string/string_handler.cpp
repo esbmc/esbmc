@@ -8,6 +8,7 @@
 #include <python-frontend/string/string_handler.h>
 #include <algorithm>
 #include <charconv>
+#include <optional>
 #include <python-frontend/string/string_handler_utils.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/exception/python_exception_handler.h>
@@ -1104,44 +1105,6 @@ apply_padding(const std::string &input, char fill, char align, int width)
   }
 }
 
-// The IEEE bits of a float constant, or of a variable bound to one. A
-// variable's stored value is only its last static assignment, so a name
-// assigned more than once in scope is not folded.
-std::optional<std::string>
-string_handler::constant_float_bits(const exprt &expr)
-{
-  if (expr.is_constant())
-    return expr.value().as_string();
-  if (!expr.is_symbol())
-    return std::nullopt;
-
-  const symbolt *symbol =
-    find_cached_symbol(to_symbol_expr(expr).get_identifier().as_string());
-  if (
-    !symbol || json_utils::has_multiple_assignments_in_scope(
-                 symbol->name.as_string(),
-                 converter_.get_current_func_name(),
-                 converter_.get_ast_json()))
-    return std::nullopt;
-
-  const exprt &val = symbol->get_value();
-  if (val.is_constant())
-    return val.value().as_string();
-
-  // A negative float literal is stored as unary- over a constant; IEEE
-  // negation is a sign-bit flip (MSB first).
-  if (
-    val.id() == "unary-" && val.operands().size() == 1 &&
-    val.op0().is_constant() && val.op0().type().is_floatbv())
-  {
-    std::string bits = val.op0().value().as_string();
-    if (!bits.empty())
-      bits[0] = bits[0] == '0' ? '1' : '0';
-    return bits;
-  }
-  return std::nullopt;
-}
-
 exprt string_handler::apply_format_specification(
   const exprt &expr,
   const std::string &format)
@@ -1164,7 +1127,7 @@ exprt string_handler::apply_format_specification(
     if (v.is_symbol())
     {
       const symbolt *sym =
-        find_cached_symbol(to_symbol_expr(v).get_identifier().as_string());
+        find_foldable_symbol(to_symbol_expr(v).get_identifier().as_string());
       if (sym && !sym->get_value().is_nil())
         v = sym->get_value();
     }
@@ -1233,7 +1196,7 @@ exprt string_handler::apply_format_specification(
     exprt fmt_expr = expr;
     if (fmt_expr.is_symbol())
     {
-      const symbolt *sym = find_cached_symbol(
+      const symbolt *sym = find_foldable_symbol(
         to_symbol_expr(fmt_expr).get_identifier().as_string());
       if (sym && !sym->get_value().is_nil())
       {
@@ -1303,7 +1266,7 @@ exprt string_handler::apply_format_specification(
     if (v.is_symbol())
     {
       const symbolt *sym =
-        find_cached_symbol(to_symbol_expr(v).get_identifier().as_string());
+        find_foldable_symbol(to_symbol_expr(v).get_identifier().as_string());
       if (sym && !sym->get_value().is_nil())
         v = sym->get_value();
     }
@@ -1328,7 +1291,7 @@ exprt string_handler::apply_format_specification(
     if (v.is_symbol())
     {
       const symbolt *sym =
-        find_cached_symbol(to_symbol_expr(v).get_identifier().as_string());
+        find_foldable_symbol(to_symbol_expr(v).get_identifier().as_string());
       if (sym && !sym->get_value().is_nil())
         v = sym->get_value();
     }
@@ -1396,8 +1359,39 @@ exprt string_handler::apply_format_specification(
         // Support common floating point widths
         if (t.is_floatbv() && (float_width == 32 || float_width == 64))
         {
-          const std::optional<std::string> float_bits =
-            constant_float_bits(expr);
+          const std::string *float_bits = nullptr;
+          std::string negated_bits;
+
+          // Handle constant expressions
+          if (expr.is_constant())
+            float_bits = &expr.value().as_string();
+          // Handle symbol expressions
+          else if (expr.is_symbol())
+          {
+            const symbol_exprt &sym_expr = to_symbol_expr(expr);
+            const symbolt *symbol =
+              find_foldable_symbol(sym_expr.get_identifier().as_string());
+
+            if (symbol && symbol->get_value().is_constant())
+              float_bits = &symbol->get_value().value().as_string();
+            else if (symbol)
+            {
+              // A negative float literal is stored as unary- over a
+              // constant; IEEE negation is a sign-bit flip (MSB first).
+              const exprt &val = symbol->get_value();
+              if (
+                val.id() == "unary-" && val.operands().size() == 1 &&
+                val.op0().is_constant() && val.op0().type().is_floatbv())
+              {
+                negated_bits = val.op0().value().as_string();
+                if (negated_bits.length() == float_width)
+                {
+                  negated_bits[0] = negated_bits[0] == '0' ? '1' : '0';
+                  float_bits = &negated_bits;
+                }
+              }
+            }
+          }
 
           if (float_bits && float_bits->length() == float_width)
           {
@@ -1427,6 +1421,41 @@ exprt string_handler::apply_format_specification(
       }
     }
   }
+
+  return format_runtime_value(expr, format);
+}
+
+// The precision of a bare "f" or ".<digits>f" spec of at most 15 digits.
+static std::optional<long long> fixed_point_precision(const std::string &format)
+{
+  if (format == "f")
+    return 6;
+  if (
+    format.size() < 3 || format.size() > 4 || format.front() != '.' ||
+    format.back() != 'f')
+    return std::nullopt;
+  const std::string digits = format.substr(1, format.size() - 2);
+  if (!std::all_of(digits.begin(), digits.end(), [](unsigned char c) {
+        return std::isdigit(c);
+      }))
+    return std::nullopt;
+  const long long precision = std::stoll(digits);
+  return precision <= 15 ? std::optional<long long>(precision) : std::nullopt;
+}
+
+exprt string_handler::format_runtime_value(
+  const exprt &expr,
+  const std::string &format)
+{
+  const std::optional<long long> precision = fixed_point_precision(format);
+  symbolt *fixed_symbol =
+    find_cached_c_function_symbol("c:@F@__python_float_to_fixed_str");
+  if (expr.type().is_floatbv() && precision && fixed_symbol)
+    return build_call_expr(
+      *fixed_symbol,
+      gen_pointer_type(char_type()),
+      {build_typecast(expr, double_type()),
+       from_integer(*precision, long_long_int_type())});
 
   // Any other spec (e.g. "x", ",", combined width+precision) changes the
   // rendered text; folding to the unformatted value would be a wrong value
@@ -1522,6 +1551,22 @@ exprt string_handler::constant_to_string(const exprt &expr)
   return nil_exprt();
 }
 
+/// A str symbol itself, the str of a foldable constant value, or nil.
+exprt string_handler::symbol_to_string(const exprt &expr)
+{
+  const symbolt *symbol = find_cached_symbol(expr.identifier().as_string());
+  if (symbol == nullptr)
+    return nil_exprt();
+  if (
+    symbol->get_type().is_array() &&
+    symbol->get_type().subtype() == char_type())
+    return expr;
+  const symbolt *foldable = find_foldable_symbol(expr.identifier().as_string());
+  if (foldable != nullptr && foldable->get_value().is_constant())
+    return convert_to_string(foldable->get_value());
+  return nil_exprt();
+}
+
 exprt string_handler::convert_to_string(const exprt &expr)
 {
   const typet &t = expr.type();
@@ -1534,22 +1579,11 @@ exprt string_handler::convert_to_string(const exprt &expr)
   if (t == char_type())
     return char_to_string(expr);
 
-  // Handle symbol references
   if (expr.is_symbol())
   {
-    const symbolt *symbol = find_cached_symbol(expr.identifier().as_string());
-    if (symbol)
-    {
-      // If symbol has string type, return it
-      if (
-        symbol->get_type().is_array() &&
-        symbol->get_type().subtype() == char_type())
-        return expr;
-
-      // If symbol has a constant value, convert that
-      if (symbol->get_value().is_constant())
-        return convert_to_string(symbol->get_value());
-    }
+    const exprt from_symbol = symbol_to_string(expr);
+    if (from_symbol.is_not_nil())
+      return from_symbol;
   }
 
   if (expr.is_constant())
@@ -2190,6 +2224,23 @@ symbolt *string_handler::find_cached_symbol(const std::string &symbol_id)
     symbol_cache_.emplace(symbol_id, symbol);
 
   return symbol;
+}
+
+// A symbol's value is its last static assignment, which is the value a read
+// sees only when the name is bound once and is not a parameter.
+const symbolt *
+string_handler::find_foldable_symbol(const std::string &symbol_id)
+{
+  const symbolt *symbol = find_cached_symbol(symbol_id);
+  if (symbol == nullptr || symbol->get_value().is_nil())
+    return nullptr;
+  const std::string name = symbol->name.as_string();
+  const std::string &function = converter_.get_current_func_name();
+  const nlohmann::json &ast = converter_.get_ast_json();
+  if (json_utils::has_multiple_assignments_in_scope(name, function, ast))
+    return nullptr;
+  const nlohmann::json decl = json_utils::find_var_decl(name, function, ast);
+  return decl.value("_type", "") == "arg" ? nullptr : symbol;
 }
 
 symbolt *

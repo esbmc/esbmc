@@ -6,6 +6,7 @@
 // exclusively by them. The class declaration and the remaining
 // implementations live in function_call/expr.{h,cpp}.
 
+#include <python-frontend/dynamic_type/literal_divergence.h>
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/math/complex_handler.h>
 #include <python-frontend/math/complex_handler_utils.h>
@@ -292,72 +293,6 @@ bool function_call_expr::is_class_object_operand(
   return name && type_utils::is_type_identifier(*name);
 }
 
-namespace
-{
-/// Whether `stmt` assigns to `name`.
-bool assigns_name(const nlohmann::json &stmt, const std::string &name)
-{
-  const std::string kind = stmt.value("_type", "");
-  const nlohmann::json *target = nullptr;
-  if (kind == "AnnAssign")
-    target = &stmt["target"];
-  else if (kind == "Assign" && stmt["targets"].size() == 1)
-    target = &stmt["targets"][0];
-  return target && target->value("_type", "") == "Name" &&
-         target->value("id", "") == name;
-}
-
-/// The kind of number a binding of `name` stores: "int" (bool included),
-/// "float", or "" for anything else or another name.
-std::string
-numeric_binding_kind(const nlohmann::json &stmt, const std::string &name)
-{
-  if (!assigns_name(stmt, name))
-    return "";
-  const nlohmann::json &annotation = stmt.value("annotation", nlohmann::json());
-  const std::string type =
-    annotation.is_object() ? annotation.value("id", "") : "";
-  if (type == "int" || type == "bool")
-    return "int";
-  return type == "float" ? "float" : "";
-}
-
-/// Collects the number kinds bound to `name` in `body`, outside nested
-/// scopes, and whether any of those bindings sits inside a block. A binding
-/// on the straight-line spine before line `before` replaces every binding
-/// ahead of it on all paths, so those are dropped.
-void collect_numeric_bindings(
-  const nlohmann::json &body,
-  const std::string &name,
-  bool nested,
-  int before,
-  std::set<std::string> &kinds,
-  bool &in_block)
-{
-  for (const auto &stmt : body)
-  {
-    const std::string kind = stmt.value("_type", "");
-    if (kind == "FunctionDef" || kind == "ClassDef")
-      continue;
-    if (!nested && assigns_name(stmt, name) && stmt.value("lineno", 0) < before)
-    {
-      kinds.clear();
-      in_block = false;
-    }
-    const std::string number = numeric_binding_kind(stmt, name);
-    if (!number.empty())
-    {
-      kinds.insert(number);
-      in_block |= nested;
-    }
-    for (const char *key : {"body", "orelse", "finalbody", "handlers", "cases"})
-      if (stmt.contains(key) && stmt[key].is_array())
-        collect_numeric_bindings(
-          stmt[key], name, true, before, kinds, in_block);
-  }
-}
-} // namespace
-
 /// A name bound an int on one path and a float on another has one static C
 /// type, so isinstance would answer from that type on every path (#8417).
 void function_call_expr::refuse_isinstance_on_path_dependent_number(
@@ -371,22 +306,10 @@ void function_call_expr::refuse_isinstance_on_path_dependent_number(
     });
   if (!asks_number || obj_arg.value("_type", "") != "Name")
     return;
-  const nlohmann::json function = json_utils::find_function_by_path(
-    converter_.ast(),
-    json_utils::split_function_path(converter_.current_function_name()));
-  const nlohmann::json &body = function.is_object() && function.contains("body")
-                                 ? function["body"]
-                                 : converter_.ast()["body"];
-  std::set<std::string> kinds;
-  bool in_block = false;
-  collect_numeric_bindings(
-    body,
-    obj_arg["id"].get<std::string>(),
-    false,
-    obj_arg.value("lineno", 0),
-    kinds,
-    in_block);
-  if (kinds.size() == 2 && in_block)
+  if (
+    dynamic_type_detail::is_path_dependent_number(
+      converter_.scope_numeric_bindings(
+        obj_arg["id"].get<std::string>(), obj_arg.value("lineno", 0), true)))
     throw std::runtime_error(
       "isinstance() on '" + obj_arg["id"].get<std::string>() +
       "', which holds an int or a float depending on the path, is not "

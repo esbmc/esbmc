@@ -1,5 +1,5 @@
-x = 2.5
-if nondet_bool():
-    x = 1.5
-s = "v %f" % x
-assert s == "v 1.500000"
+def show(x: float) -> str:
+    return "v %f" % x
+
+
+assert show(2.0000005) == "v 2.000000"
