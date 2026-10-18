@@ -3182,3 +3182,5 @@ regression/esbmc/github_8712_shared_counter_fail
 regression/esbmc/github_8712_local_counter_simplified
 regression/esbmc-cpp/try_catch/github_8695_catch_pointer_base
 regression/esbmc-cpp/try_catch/github_8695_catch_pointer_base_fail
+regression/esbmc/github_7363_bitint40
+regression/esbmc/github_7363_bitint40_fail
