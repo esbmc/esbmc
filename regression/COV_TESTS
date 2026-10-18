@@ -3142,3 +3142,7 @@ regression/python/github_8764_type_none
 regression/python/github_8764_type_none_value
 regression/python/github_8764_type_none_fail
 regression/python/github_8764_type_none_param_refused
+regression/esbmc/github_8712_shared_counter_fail
+regression/esbmc/github_8712_local_counter_simplified
+regression/esbmc-cpp/try_catch/github_8695_catch_pointer_base
+regression/esbmc-cpp/try_catch/github_8695_catch_pointer_base_fail
