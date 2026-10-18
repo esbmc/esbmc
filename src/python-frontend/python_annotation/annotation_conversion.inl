@@ -1375,17 +1375,29 @@ std::string python_annotation<Json>::get_builtin_call_type(const Json &call)
   return it != builtin_functions().end() ? it->second : func_name;
 }
 
-/// `[a] + [b]` keeps the element type both literals share, so a callee fed
-/// the result is typed by it rather than by Any (#8770); anything else is a
-/// bare list.
+/// `[a] + [b]` keeps the element type both operands share, so a callee fed
+/// the result is typed by it rather than by Any (#8770). The right operand may
+/// also be a nondet_list builder, `_nondet_list_T(n)`, a list of T (#8843);
+/// anything else is a bare list.
 template <class Json>
 std::string python_annotation<Json>::list_concat_type(const Json &binop)
 {
   const Json &rhs = binop["right"];
-  if (binop["op"]["_type"] != "Add" || rhs["_type"] != "List")
+  if (binop["op"]["_type"] != "Add")
     return "list";
+  const std::string callee =
+    rhs["_type"] == "Call" ? rhs["func"].value("id", "") : "";
+  const std::string builder_elem =
+    callee.rfind("_nondet_list_", 0) == 0 ? callee.substr(13) : "";
+  std::string right = "list";
+  if (rhs["_type"] == "List")
+    right = get_list_type_from_literal(rhs);
+  else if (
+    builder_elem == "int" || builder_elem == "float" ||
+    builder_elem == "bool" || builder_elem == "str")
+    right = "list[" + builder_elem + "]";
   const std::string left = get_list_type_from_literal(binop["left"]);
-  return left == get_list_type_from_literal(rhs) ? left : "list";
+  return left == right ? left : "list";
 }
 
 template <class Json>
@@ -2212,9 +2224,14 @@ std::string python_annotation<Json>::get_type_from_call(const Json &element)
   {
     const std::string &func_id = func["id"];
 
+    const bool is_user_class = json_utils::is_class<Json>(func_id, ast_);
+    const std::string copied =
+      is_user_class ? "" : list_copy_type(func_id, element["value"]);
+    if (!copied.empty())
+      return copied;
+
     if (
-      json_utils::is_class<Json>(func_id, ast_) ||
-      type_utils::is_builtin_type(func_id) ||
+      is_user_class || type_utils::is_builtin_type(func_id) ||
       type_utils::is_consensus_type(func_id) ||
       type_utils::is_python_exceptions(func_id))
       return func_id;
