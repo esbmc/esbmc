@@ -359,6 +359,60 @@ const json *passed_argument(
   return index >= first_default ? &defaults[index - first_default] : nullptr;
 }
 
+/// The undecorated top-level function `name` of `module`, or null.
+const json *top_level_def(const json &module, const std::string &name)
+{
+  for (const json &stmt : module["body"])
+    if (
+      kind(stmt) == "FunctionDef" && stmt.value("name", "") == name &&
+      stmt["decorator_list"].empty())
+      return &stmt;
+  return nullptr;
+}
+
+/// The parameter a positional argument `index` of `call` binds, when the
+/// callee is a top-level function of `module` that only ever calls it and
+/// never rebinds it, as (function, parameter); else null.
+std::optional<std::pair<const json *, std::string>>
+called_parameter(const json &module, const json &call, std::size_t index)
+{
+  const json *def = top_level_def(module, call["func"].value("id", ""));
+  if (!def || index >= (*def)["args"]["args"].size())
+    return std::nullopt;
+  const std::string param = (*def)["args"]["args"][index].value("arg", "");
+  if (
+    !every_load_is((*def)["body"], param, "Call", "func") ||
+    json_utils::count_name_bindings((*def)["body"], param) != 0)
+    return std::nullopt;
+  return std::make_pair(def, param);
+}
+
+/// The parameters function `name` is passed to and then only called through,
+/// when every load of `name` is either a call or such an argument.
+std::optional<std::vector<std::pair<const json *, std::string>>>
+forwarded_parameters(const json &module, const std::string &name)
+{
+  std::vector<std::pair<const json *, std::string>> out;
+  bool ok = true;
+  std::vector<const json *> chain{&module};
+  walk(module["body"], chain, [&](const json &call, const auto &) {
+    if (kind(call) != "Call" || kind(call["func"]) != "Name")
+      return;
+    for (std::size_t i = 0; i < call["args"].size(); ++i)
+      if (is_name(call["args"][i], name))
+      {
+        const auto param = called_parameter(module, call, i);
+        ok &= param.has_value();
+        if (param)
+          out.push_back(*param);
+      }
+  });
+  const auto loads = count_loads(module, name, "Call", "func");
+  if (!ok || loads.first != loads.second + out.size())
+    return std::nullopt;
+  return out;
+}
+
 bool is_parameter(const json &def, const std::string &name)
 {
   const json &args = def["args"];
@@ -567,23 +621,61 @@ bool function_values::parameter_values(
     });
   const json &module = *chain.front();
   if (
-    chain.size() != 2 || param == params.end() ||
-    !args["posonlyargs"].empty() || !only_called(def, module))
+    chain.size() != 2 || param == params.end() || !args["posonlyargs"].empty())
     return false;
+  const auto callers = callers_of(def, module);
+  if (!callers)
+    return false;
+  bool ok = true;
+  for (const auto &[scope, callee] : *callers)
+    ok &= bound_arguments(
+      module, scope, callee, args, param - params.begin(), name, values);
+  return ok;
+}
 
+std::optional<std::vector<std::pair<const json *, std::string>>>
+function_values::callers_of(const json &def, const json &module) const
+{
+  // The module calls the function by its name, and a parameter it is passed
+  // to and only called through calls it under that parameter's name.
   const std::string fname = def.value("name", "");
+  std::vector<std::pair<const json *, std::string>> out{{&module, fname}};
+  if (only_called(def, module))
+    return out;
+  const auto forwarded = forwarded_parameters(module, fname);
+  if (
+    &module != &module_ || !def["decorator_list"].empty() ||
+    json_utils::count_name_bindings(module, fname) != 1 ||
+    mentioned_elsewhere(module, fname) || !forwarded)
+    return std::nullopt;
+  out.insert(out.end(), forwarded->begin(), forwarded->end());
+  return out;
+}
+
+bool function_values::bound_arguments(
+  const json &module,
+  const json *scope,
+  const std::string &callee,
+  const json &args,
+  std::size_t index,
+  const std::string &name,
+  std::vector<valuet> &values) const
+{
   bool ok = true;
   chaint scopes{&module};
-  walk(module["body"], scopes, [&](const json &call, const chaint &call_chain) {
-    if (kind(call) != "Call" || !is_name(call["func"], fname))
-      return;
-    const json *arg = passed_argument(call, args, param - params.begin(), name);
-    ok &= arg != nullptr;
-    // A default is evaluated where the function is defined.
-    if (arg)
-      values.emplace_back(
-        arg, contains(args, arg) ? chaint{&module} : call_chain);
-  });
+  if (scope != &module)
+    scopes.push_back(scope);
+  walk(
+    (*scope)["body"], scopes, [&](const json &call, const chaint &call_chain) {
+      if (kind(call) != "Call" || !is_name(call["func"], callee))
+        return;
+      const json *arg = passed_argument(call, args, index, name);
+      ok &= arg != nullptr;
+      // A default is evaluated where the function is defined.
+      if (arg)
+        values.emplace_back(
+          arg, contains(args, arg) ? chaint{&module} : call_chain);
+    });
   return ok;
 }
 
