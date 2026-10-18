@@ -3182,3 +3182,6 @@ regression/esbmc/github_8712_shared_counter_fail
 regression/esbmc/github_8712_local_counter_simplified
 regression/esbmc-cpp/try_catch/github_8695_catch_pointer_base
 regression/esbmc-cpp/try_catch/github_8695_catch_pointer_base_fail
+regression/python/github_8704_hash_int
+regression/python/github_8704_hash_str
+regression/python/github_8704_hash_int_fail
