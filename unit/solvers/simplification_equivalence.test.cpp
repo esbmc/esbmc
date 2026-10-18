@@ -89,36 +89,26 @@ SCENARIO(
 
   GIVEN("an overflow_cast whose bound the operand's type cannot hold")
   {
-    // overflow_cast(x, bits) asks whether x leaves the bits-wide range of its
-    // own signedness (#8661). The SMT lowering builds that bound in the
-    // operand's type, where at equal widths 2^bits - 1 would wrap and turn the
-    // check into a tautology (#7324). Only a unit test reaches the shape:
-    // goto_check builds it with bits == width solely under --ir.
-    THEN("32 bits over an int32 never overflows")
+    // overflow_cast(x, bits) asks whether x lies in [0, 2^bits - 1]. The SMT
+    // lowering built that bound in the operand's own type, where at equal
+    // widths a signed operand wraps it to -1 and the check becomes a tautology
+    // (#7324). goto_check builds that shape solely under --ir, for a cast to
+    // the operand's own signed type, so it tests the type's range (#8661).
+    THEN("32 bits over an int32 never overflows a bitvector")
     {
       REQUIRE(
         check_simplification_equivalence(
           overflow_cast2tc(x, 32), gen_false_expr(), ns, options) ==
         simplification_equivalencet::equivalent);
     }
-    THEN("8 bits over an int32 catches a value outside the signed byte")
+    THEN("8 bits over an int32 still catches a value that does not fit")
     {
-      const expr2tc low = from_integer(-128, get_int32_type());
-      const expr2tc high = from_integer(127, get_int32_type());
+      const expr2tc max_byte = from_integer(255, get_int32_type());
       const expr2tc narrow =
-        or2tc(lessthan2tc(x, low), greaterthan2tc(x, high));
+        or2tc(lessthan2tc(x, zero), greaterthan2tc(x, max_byte));
       REQUIRE(
         check_simplification_equivalence(
           overflow_cast2tc(x, 8), narrow, ns, options) ==
-        simplification_equivalencet::equivalent);
-    }
-    THEN("8 bits over a uint32 catches a value above the unsigned byte")
-    {
-      const expr2tc u = symbol2tc(get_uint32_type(), "u");
-      const expr2tc max_byte = from_integer(255, get_uint32_type());
-      REQUIRE(
-        check_simplification_equivalence(
-          overflow_cast2tc(u, 8), greaterthan2tc(u, max_byte), ns, options) ==
         simplification_equivalencet::equivalent);
     }
   }

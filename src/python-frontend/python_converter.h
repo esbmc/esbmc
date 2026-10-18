@@ -527,6 +527,10 @@ public:
   {
     return in_contract_clause_;
   }
+  size_t current_block_statement_count() const
+  {
+    return current_block ? current_block->operands().size() : 0;
+  }
 
   /// The class a variable was last assigned as a value (`x = int`), or null.
   /// Kept here rather than read back from the symbol's value, which the IREP2
@@ -601,6 +605,13 @@ private:
   get_return_statements(const nlohmann::json &ast_node, codet &target_block);
 
   void get_function_definition(const nlohmann::json &function_node);
+
+  /// Before a call through `callee`, whose function type is unknown, refuses
+  /// the path where it holds a top-level function taking a different number
+  /// of parameters than @p call passes: such a call fills no defaults and
+  /// raises no TypeError.
+  void
+  refuse_mismatched_callees(const exprt &callee, const nlohmann::json &call);
 
   exprt get_function_body_or_unsupported(const nlohmann::json &function_node);
 

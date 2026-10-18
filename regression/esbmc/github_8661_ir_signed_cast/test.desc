@@ -1,4 +1,4 @@
 CORE
 main.c
---overflow-check --ir --multi-property
+--ir --overflow-check --multi-property
 ^VERIFICATION SUCCESSFUL$
