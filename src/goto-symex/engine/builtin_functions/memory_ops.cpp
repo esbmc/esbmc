@@ -716,6 +716,19 @@ static expr2tc copy_into_float(
   return expr2tc();
 }
 
+// gen_byte_memcpy, or the float copy when it declines.
+static expr2tc copy_primitive(
+  const expr2tc &dst,
+  uint64_t dst_offset,
+  const expr2tc &src,
+  uint64_t src_offset,
+  uint64_t n)
+{
+  expr2tc result =
+    goto_symex_utils::gen_byte_memcpy(src, dst, n, src_offset, dst_offset);
+  return result ? result : copy_into_float(dst, dst_offset, src, src_offset, n);
+}
+
 static inline expr2tc do_memcpy_expression(
   const expr2tc &dst,
   const size_t &dst_offset,
@@ -756,13 +769,8 @@ static inline expr2tc do_memcpy_expression(
       }
     }
 
-    if (
-      expr2tc updated =
-        copy_into_float(dst, dst_offset, src, src_offset, num_of_bytes))
-      return updated;
-
     log_debug("memcpy", "Only primitives are supported for now");
-    return expr2tc();
+    return copy_into_float(dst, dst_offset, src, src_offset, num_of_bytes);
   }
 
   // gen_byte_memcpy asserts on get_width(), which throws
@@ -778,11 +786,7 @@ static inline expr2tc do_memcpy_expression(
   }
 
   // Base-case. Primitives!
-  expr2tc result = goto_symex_utils::gen_byte_memcpy(
-    src, dst, num_of_bytes, src_offset, dst_offset);
-  if (!result)
-    result = copy_into_float(dst, dst_offset, src, src_offset, num_of_bytes);
-  return result;
+  return copy_primitive(dst, dst_offset, src, src_offset, num_of_bytes);
 }
 
 static void offset_simplifier(expr2tc &e)
