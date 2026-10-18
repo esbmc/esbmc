@@ -60,8 +60,8 @@ public:
 
 private:
   /*
-   * Validates a call to __ESBMC_requires / __ESBMC_ensures; a no-op for any
-   * other callee.
+   * Validates a call to __ESBMC_requires / __ESBMC_ensures / __ESBMC_assigns;
+   * a no-op for any other callee.
    */
   void check_contract_call(const symbol_id &function_id) const;
 
@@ -102,6 +102,13 @@ private:
   void check_clause_name(const nlohmann::json &node, const std::string &clause)
     const;
 
+  const symbolt *clause_name_symbol(const std::string &name) const;
+
+  bool is_pure_list_query(const nlohmann::json &node) const;
+
+  void
+  check_clause_planted_nothing(const std::string &clause, size_t planted) const;
+
   void check_contract_clause(
     const nlohmann::json &node,
     const std::string &clause) const;
@@ -119,6 +126,12 @@ private:
    * ran. Throws when x is not a scalar the frontend can snapshot.
    */
   exprt build_old_snapshot() const;
+
+  /// Rejects an __ESBMC_assigns target the caller cannot observe.
+  void check_assigns_targets() const;
+
+  /// __ESBMC_assigns(t, ...) as the call goto_convert reads a frame from.
+  exprt build_assigns_call() const;
 
   /*
    * Whether the name is a parameter of the function being converted, or a

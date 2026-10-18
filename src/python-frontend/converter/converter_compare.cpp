@@ -1118,6 +1118,26 @@ std::optional<std::string> python_converter::class_identity_operand(
   return *held;
 }
 
+static bool may_hold_class(const exprt &expr)
+{
+  const typet &t = expr.type();
+  return (t.is_array() || t.is_pointer()) &&
+         (t.subtype() == char_type() || t.subtype().id() == "empty");
+}
+
+/// Whether an operand the fold could not resolve to a class may still be
+/// one: an unresolved type(x) denotes a class, and since a class object is
+/// lowered to a string, so may a name typed as a string or erased to void *
+/// (say a parameter). Such a side is left to the comparison paths that follow.
+static bool undecided_side(
+  const std::optional<std::string> &cls,
+  const nlohmann::json &node,
+  const exprt &expr)
+{
+  return !cls && (is_type_call(node) ||
+                  (node["_type"] == "Name" && may_hold_class(expr)));
+}
+
 exprt python_converter::handle_type_identity_check(
   const std::string &op,
   const exprt &lhs,
@@ -1132,11 +1152,9 @@ exprt python_converter::handle_type_identity_check(
     class_identity_operand(left, lhs);
   const std::optional<std::string> rhs_class =
     class_identity_operand(right, rhs);
-  // An unresolved type(x) still denotes a class, so it is left to the
-  // comparison paths that follow.
   if (
-    (!lhs_class && !rhs_class) || (!lhs_class && is_type_call(left)) ||
-    (!rhs_class && is_type_call(right)))
+    (!lhs_class && !rhs_class) || undecided_side(lhs_class, left, lhs) ||
+    undecided_side(rhs_class, right, rhs))
     return nil_exprt();
 
   // A value is never identical to a class object.

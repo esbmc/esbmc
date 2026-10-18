@@ -1,5 +1,0 @@
-CORE
-main.py
---unwind 8 --no-unwinding-assertions
-^VERIFICATION FAILED$
-assertion r == 1
