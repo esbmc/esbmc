@@ -768,6 +768,10 @@ std::string python_annotation<Json>::get_call_type(const Json &arg)
       json_utils::get_object_alias(ast_, func_name);
     if (json_utils::is_class(class_name, ast_))
       return class_name;
+    // A built-in exception is a class too, so ValueError("x") and 1 at two
+    // call sites widen the parameter rather than typing it int (#8766).
+    if (type_utils::is_python_exceptions(class_name))
+      return class_name;
 
     // hash() returns bytes only for the consensus spec's own
     // hash(data: bytes); on any other argument it is the real builtin,
@@ -1075,8 +1079,73 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
   }
   else if (arg["_type"] == "Call")
     return get_call_type(arg);
+  else if (arg["_type"] == "Attribute")
+    return get_attribute_type(arg);
 
   return ""; // Cannot determine type
+}
+
+/// The annotation of `self.<attr>` in the `__init__` of @p class_node, or of
+/// `<attr>` in its body, or an empty Json.
+template <class Json>
+static Json
+find_attr_annotation(const Json &class_node, const std::string &attr)
+{
+  auto annotation_of = [&](const Json &stmt, bool on_self) -> Json {
+    if (stmt.value("_type", "") != "AnnAssign" || !stmt.contains("target"))
+      return Json();
+    const Json &target = stmt["target"];
+    const bool matches =
+      on_self
+        ? target.value("_type", "") == "Attribute" &&
+            target.value("attr", "") == attr && target.contains("value") &&
+            target["value"].value("id", "") == "self"
+        : target.value("_type", "") == "Name" && target.value("id", "") == attr;
+    return matches ? stmt["annotation"] : Json();
+  };
+
+  for (const Json &member : class_node["body"])
+  {
+    Json annotation = annotation_of(member, false);
+    if (!annotation.empty())
+      return annotation;
+    if (
+      member.value("_type", "") != "FunctionDef" ||
+      member["name"] != "__init__")
+      continue;
+    for (const Json &stmt : member["body"])
+    {
+      annotation = annotation_of(stmt, true);
+      if (!annotation.empty())
+        return annotation;
+    }
+  }
+  return Json();
+}
+
+/// The declared type of `obj.attr`, where `obj` is a name bound to an
+/// instance of a class defined in the program, or empty. Without it an
+/// unannotated parameter that receives `obj.attr` stays `void *` (#8672).
+template <class Json>
+std::string python_annotation<Json>::get_attribute_type(const Json &arg)
+{
+  const Json &obj = arg["value"];
+  if (
+    obj.value("_type", "") != "Name" ||
+    is_rebound_in_scope(obj["id"].template get<std::string>()))
+    return "";
+
+  const std::string attr = arg["attr"].template get<std::string>();
+  for (const std::string &cls : get_class_ancestors(get_argument_type(obj)))
+  {
+    const Json class_node = json_utils::find_class(ast_["body"], cls);
+    if (class_node.empty())
+      return "";
+    const Json annotation = find_attr_annotation(class_node, attr);
+    if (!annotation.empty())
+      return json_utils::render_annotation_type(annotation);
+  }
+  return "";
 }
 
 // Recursively search a statement subtree for the first
