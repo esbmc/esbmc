@@ -1,0 +1,5 @@
+CORE
+main.py
+--enforce-contract touch
+^.*assigns compliance: py:.*main.py@h not in assigns clause$
+^VERIFICATION FAILED$

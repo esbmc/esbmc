@@ -388,16 +388,18 @@ std::string py_percent_format(
 }
 
 // `%d` takes an int or bool only: int() of a float does not raise on inf/nan.
+// A char is a one-character str (`s[i]`), not an int.
 bool percent_d_accepts(const typet &t)
 {
-  return t.is_signedbv() || t.is_unsignedbv() || t.is_bool();
+  return (t.is_signedbv() || t.is_unsignedbv() || t.is_bool()) &&
+         !type_utils::is_char_type(t);
 }
 
 // `%s` is limited to the types whose f-string lowering matches str().
 bool percent_s_accepts(const typet &t)
 {
-  return percent_d_accepts(t) || t.is_floatbv() ||
-         type_utils::is_string_type(t);
+  return percent_d_accepts(t) || type_utils::is_char_type(t) ||
+         t.is_floatbv() || type_utils::is_string_type(t);
 }
 
 nlohmann::json ast_node(const char *type, const nlohmann::json &loc)
@@ -409,11 +411,16 @@ nlohmann::json ast_node(const char *type, const nlohmann::json &loc)
   return node;
 }
 
-// The f-string part for one %s/%d/%i conversion of `value`.
+// The f-string part for one %s/%d/%i/%f conversion of `value`.
 std::optional<nlohmann::json>
 formatted_part(char conversion, nlohmann::json value, const typet &type)
 {
-  if (conversion == 'd' || conversion == 'i')
+  if (conversion == 'f')
+  {
+    if (!type.is_floatbv())
+      return std::nullopt;
+  }
+  else if (conversion == 'd' || conversion == 'i')
   {
     if (!percent_d_accepts(type))
       return std::nullopt;
@@ -430,6 +437,11 @@ formatted_part(char conversion, nlohmann::json value, const typet &type)
   nlohmann::json part = ast_node("FormattedValue", value);
   part["value"] = value;
   part["conversion"] = -1;
+  if (conversion == 'f')
+  {
+    part["format_spec"] = ast_node("Constant", value);
+    part["format_spec"]["value"] = ".6f";
+  }
   return part;
 }
 
@@ -475,7 +487,7 @@ bool is_literal_percent_format(const nlohmann::json &element, const exprt &lhs)
 }
 
 // `"id %d" % i` with a non-constant `i` as the f-string `f"id {int(i)}"`
-// (#8224). Only flag-free %s/%d/%i/%% are rewritten.
+// (#8224). Only flag-free %s/%d/%i/%f/%% are rewritten.
 std::optional<nlohmann::json> percent_format_as_fstring(
   const nlohmann::json &left,
   const std::vector<nlohmann::json> &args,
@@ -576,6 +588,25 @@ exprt python_converter::hoist_side_effecting_operand(
   assign.location() = loc;
   add_instruction(assign);
   return symbol_expr(tmp);
+}
+
+void python_converter::guard_attribute_on_none(
+  const symbolt &symbol,
+  const std::string &var_name,
+  const std::string &attr_name,
+  const nlohmann::json &element)
+{
+  const typet &type = symbol.get_type();
+  if (var_name == "self" || !type.is_pointer() || !can_emit_runtime_guard())
+    return;
+
+  exprt is_none("=", bool_type());
+  is_none.copy_to_operands(symbol_expr(symbol), gen_zero(type));
+  emit_guarded_raise(
+    is_none,
+    "AttributeError",
+    "'NoneType' object has no attribute '" + attr_name + "'",
+    get_location_from_decl(element));
 }
 
 void python_converter::emit_guarded_raise(
@@ -1626,7 +1657,11 @@ exprt python_converter::get_fstring_in_order(const nlohmann::json &joined)
         create_tmp_symbol(joined, "$str_mod$", part.type(), exprt());
       add_instruction(code_declt(symbol_expr(tmp)));
       add_instruction(code_assignt(symbol_expr(tmp), part));
-      part = string_handler_.convert_to_string(symbol_expr(tmp));
+      part = string_handler_.apply_format_specification(
+        symbol_expr(tmp),
+        value.contains("format_spec")
+          ? string_handler_.process_format_spec(value["format_spec"])
+          : std::string());
     }
     result = result.is_nil()
                ? part
