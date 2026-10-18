@@ -1,0 +1,8 @@
+CORE
+cbmc_union_designated_init_fail.goto
+--binary --multi-property
+^  FAILED +\[main.assertion.1\] +line 40 
+^  FAILED +\[main.assertion.2\] +line 41 
+^  FAILED +\[main.assertion.4\] +line 42 
+^  FAILED +\[main.assertion.5\] +line 43 
+^VERIFICATION FAILED$

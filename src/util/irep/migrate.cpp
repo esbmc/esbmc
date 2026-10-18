@@ -1410,6 +1410,81 @@ static void wrap_padded_union_member(
   members[0] = constant_struct2tc(to_union_type(type).members[*n], fields);
 }
 
+// CBMC initialises a union through a member other than its first as a
+// byte_update of the zero union at offset 0; a union constant of that member
+// keeps the value whole, which a pointer member needs for its value set.
+static expr2tc union_member_update(
+  const type2tc &type,
+  const expr2tc &source,
+  const expr2tc &offs,
+  const expr2tc &update)
+{
+  if (
+    !is_union_type(type) || !is_constant_union2t(source) ||
+    !is_constant_int2t(offs) || !to_constant_int2t(offs).value.is_zero())
+    return expr2tc();
+  const std::vector<expr2tc> &zero =
+    to_constant_union2t(source).datatype_members;
+  if (
+    zero.size() != 1 || !is_constant_int2t(zero[0]) ||
+    !to_constant_int2t(zero[0]).value.is_zero())
+    return expr2tc();
+
+  const union_type2t &u = to_union_type(type);
+  for (size_t i = 0; i < u.members.size(); ++i)
+    if (u.members[i] == update->type)
+      return constant_union2tc(
+        type, u.member_names[i], std::vector<expr2tc>{update});
+  return expr2tc();
+}
+
+// ESBMC's byte_update2t writes one byte; a CBMC byte_update writes all of
+// update's bytes from offs on, so it is lowered to one byte_update2t per byte.
+static expr2tc byte_update_bytes(
+  const type2tc &type,
+  expr2tc result,
+  const expr2tc &offs,
+  const expr2tc &update,
+  bool big_endian)
+{
+  if (is_array_type(update))
+  {
+    const array_type2t &arr = to_array_type(update->type);
+    if (arr.size_is_infinite || !is_constant_int2t(arr.array_size))
+      throw std::string("byte_update of a variable-length array");
+    const BigInt elem_size = type_byte_size(arr.subtype);
+    const BigInt n = to_constant_int2t(arr.array_size).value;
+    for (BigInt i = 0; i < n; ++i)
+      result = byte_update_bytes(
+        type,
+        result,
+        add2tc(offs->type, offs, constant_int2tc(offs->type, i * elem_size)),
+        index2tc(arr.subtype, update, gen_ulong(i.to_uint64())),
+        big_endian);
+    return result;
+  }
+
+  const unsigned width = update->type->get_width();
+  if (width == 8)
+    return byte_update2tc(type, result, offs, update, big_endian);
+  if (width % 8 != 0)
+    throw std::string(
+      "byte_update of a value that is not a whole number of bytes");
+
+  for (unsigned i = 0; i < width / 8; ++i)
+  {
+    const expr2tc offs_i =
+      add2tc(offs->type, offs, constant_int2tc(offs->type, BigInt(i)));
+    const expr2tc byte = byte_extract2tc(
+      get_uint8_type(),
+      update,
+      constant_int2tc(offs->type, BigInt(i)),
+      big_endian);
+    result = byte_update2tc(type, result, offs_i, byte, big_endian);
+  }
+  return result;
+}
+
 void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 {
   const migrate_stack_guardt stack_guard;
@@ -2110,7 +2185,10 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     bool big_endian = (expr.id() == "byte_update_big_endian") ? true : false;
 
-    new_expr_ref = byte_update2tc(type, sourceval, offs, update, big_endian);
+    new_expr_ref = union_member_update(type, sourceval, offs, update);
+    if (is_nil_expr(new_expr_ref))
+      new_expr_ref =
+        byte_update_bytes(type, sourceval, offs, update, big_endian);
     return;
   }
 
