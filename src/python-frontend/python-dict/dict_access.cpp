@@ -47,7 +47,7 @@ exprt python_dict_handler::handle_dict_subscript(
   // Get element info for the key
   python_list list_handler(converter_, slice_node);
   list_elem_info key_info =
-    list_handler.get_list_element_info(slice_node, key_expr);
+    list_handler.get_lookup_key_info(slice_node, key_expr);
 
   // Call try_find_index(keys, key, type_hash, size) — returns SIZE_MAX if
   // absent
