@@ -1021,6 +1021,7 @@ public:
   /** Prepare an array_of expression by flattening its dimensions, if it
    *  has more than one. */
   smt_astt convert_array_of_prep(const expr2tc &expr);
+  smt_astt convert_nested_array_of(const constant_array_of2t &arrof);
   /** Create an array of pointers; expects the init_val to be null, because
    *  there's no other way to initialize a pointer array in C, AFAIK. */
   smt_astt pointer_array_of(const expr2tc &init_val, unsigned long array_width);
@@ -1246,6 +1247,14 @@ type2tc make_array_domain_type(const array_type2t &arr);
  *  every valid index.  For VLA, dynamic, or infinite arrays the size is not
  *  statically known, so the machine word size is returned as a safe default. */
 unsigned long array_domain_width_or_word_size(const array_type2t &arr);
+
+/** Walk an array nesting and return true if any level is infinite-sized.
+ *  Linearization (flatten_array_type / decompose_select_chain) requires every
+ *  level to have a constant size; an infinite middle (e.g. Solidity `T[N][]`
+ *  or `uint256[4][][2]`) makes the size product non-constant. Callers use
+ *  this guard to route such chains to per-level native array sorts instead of
+ *  attempting to flatten. */
+bool array_chain_has_infinite_level(const type2tc &type);
 
 // Define here to enable inlining
 inline smt_ast::smt_ast(smt_solver_baset *ctx, smt_sortt s)
