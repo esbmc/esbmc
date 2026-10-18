@@ -1270,6 +1270,88 @@ void code_contractst::havoc_globals_for_entry_harness(
     havoc_static_globals(dest, location);
 }
 
+// --- Stack-exhaustion ghost support (CWE-674) -------------------------------
+// A contract may constrain the built-in ghost __ESBMC_stack_used (cumulative
+// stack bits of the recursive frames on the current path). The enforce side
+// charges each function's real frame size on entry; the replace side havocs the
+// ghost so the callee's ensures bounds the folded subtree. The amount is taken
+// from the same per-local bit count ESBMC's own --stack-limit accounting uses
+// (framet::grow_stack_frame at each DECL). The ghost is otherwise an ordinary
+// global, so __ESBMC_old() over it needs no special threading.
+
+// The exact symbol a clause uses for the ghost, or nil. Matching on the base
+// name keeps this independent of the frontend's mangling, and reusing the
+// clause's own symbol2tc guarantees the injected update writes what the clause
+// reads. Old-snapshot variables are named __ESBMC_old_snapshot_* and so never
+// match, so this picks the bare current-value reference even in a clause that
+// also reads __ESBMC_old(__ESBMC_stack_used).
+static expr2tc find_stack_used_symbol(const expr2tc &e)
+{
+  if (is_nil_expr(e))
+    return expr2tc();
+  if (
+    is_symbol2t(e) && to_symbol2t(e).thename.as_string().find(
+                        "__ESBMC_stack_used") != std::string::npos)
+    return e;
+
+  expr2tc found;
+  e->foreach_operand([&found](const expr2tc &op) {
+    if (is_nil_expr(found))
+      found = find_stack_used_symbol(op);
+  });
+  return found;
+}
+
+// Bits of stack the callee's frame occupies: sum of type_byte_size * 8 over its
+// declared locals, mirroring framet::grow_stack_frame at each DECL.
+static BigInt callee_frame_bits(const goto_programt &body, const namespacet &ns)
+{
+  BigInt bits(0);
+  forall_goto_program_instructions (it, body)
+    if (it->is_decl() && is_code_decl2t(it->code))
+      bits += type_byte_size(to_code_decl2t(it->code).type, &ns) * 8;
+  return bits;
+}
+
+// Substitute the built-in __ESBMC_frame_size with the function's real frame
+// size in bits, so a contract can scale a depth bound by the exact amount the
+// enforce-side entry charge adds; the literal and the charge then always agree.
+static expr2tc substitute_frame_size(const expr2tc &e, const BigInt &bits)
+{
+  if (is_nil_expr(e))
+    return e;
+  if (
+    is_symbol2t(e) && to_symbol2t(e).thename.as_string().find(
+                        "__ESBMC_frame_size") != std::string::npos)
+    return constant_int2tc(e->type, bits);
+
+  expr2tc result = e->clone();
+  result->Foreach_operand(
+    [&bits](expr2tc &op) { op = substitute_frame_size(op, bits); });
+  return result;
+}
+
+// Append `ghost = value(ghost)` when either clause reads __ESBMC_stack_used.
+template <typename Value>
+static void assign_stack_used(
+  goto_programt &dest,
+  const expr2tc &first,
+  const expr2tc &second,
+  Value value,
+  const locationt &location,
+  const char *comment)
+{
+  expr2tc ghost = find_stack_used_symbol(first);
+  if (is_nil_expr(ghost))
+    ghost = find_stack_used_symbol(second);
+  if (is_nil_expr(ghost))
+    return;
+  goto_programt::targett t = dest.add_instruction(ASSIGN);
+  t->code = code_assign2tc(ghost, value(ghost));
+  t->location = location;
+  t->location.comment(comment);
+}
+
 std::set<std::string> code_contractst::enforce_contracts(
   const std::set<std::string> &to_enforce,
   const std::string &entry_function,
@@ -1326,6 +1408,14 @@ std::set<std::string> code_contractst::enforce_contracts(
     // Extract contract clauses from function body
     expr2tc requires_clause = extract_requires_from_body(original_body_copy);
     expr2tc ensures_clause = extract_ensures_from_body(original_body_copy);
+
+    // Resolve __ESBMC_frame_size to this function's real frame bits, the same
+    // amount the stack-used entry charge adds in generate_checking_wrapper.
+    {
+      BigInt frame_bits = callee_frame_bits(original_body_copy, ns);
+      requires_clause = substitute_frame_size(requires_clause, frame_bits);
+      ensures_clause = substitute_frame_size(ensures_clause, frame_bits);
+    }
 
     // Skip if no contracts found and no annotation
     // For annotated functions, we use default contracts (requires(true),
@@ -1902,6 +1992,30 @@ goto_programt code_contractst::generate_checking_wrapper(
       replace_old_in_expr(requires_clause, old_snapshots),
       ASSUME,
       "contract requires");
+
+  // 2.c Charge this function's own frame to the __ESBMC_stack_used ghost, when
+  // a contract constrains it. The amount is this function's real frame size in
+  // bits, the same quantity ESBMC charges natively at DECL
+  // (framet::grow_stack_frame), so a contract that bounds the ghost is checked
+  // against genuine, byte-accurate per-level stack growth. After the
+  // old-snapshots and the requires ASSUME, so __ESBMC_old() reads the value on
+  // entry and the charge starts from a state the precondition admits. Deeper
+  // levels are reached through replaced recursive calls in the body, whose
+  // havoc + ensures ASSUME (section 3.c of generate_replacement_at_call) admit
+  // the folded subtree. Together these make the stack-exhaustion property
+  // provable compositionally, without unwinding the recursion.
+  assign_stack_used(
+    wrapper,
+    requires_clause,
+    ensures_clause,
+    [&](const expr2tc &ghost) {
+      return add2tc(
+        ghost->type,
+        ghost,
+        constant_int2tc(ghost->type, callee_frame_bits(original_body, ns)));
+    },
+    location,
+    "contract stack-used entry charge");
 
   // 3b. Snapshot globals and ptr->field targets for assigns compliance
   //     (before function call).
@@ -5595,6 +5709,14 @@ void code_contractst::generate_replacement_at_call(
   std::vector<expr2tc> assigns_target_exprs =
     extract_assigns_from_body(function_body);
 
+  // Resolve __ESBMC_frame_size to the replaced callee's real frame bits, so a
+  // clause scales depth by the same per-frame amount the enforce side charges.
+  {
+    BigInt frame_bits = callee_frame_bits(function_body, ns);
+    requires_clause = substitute_frame_size(requires_clause, frame_bits);
+    ensures_clause = substitute_frame_size(ensures_clause, frame_bits);
+  }
+
   // Debug: log extracted clauses
   log_debug(
     "contracts",
@@ -5895,6 +6017,23 @@ void code_contractst::generate_replacement_at_call(
       "ensures (after type={})",
       ensures_guard ? get_type_id(*ensures_guard->type) : "nil");
   }
+
+  // 3.c When a contract constrains __ESBMC_stack_used, the replaced callee may
+  // have grown it by its whole (possibly deep) subtree, which replacement folds
+  // into one step. Havoc the ghost here so the ensures ASSUME below is its only
+  // constraint and the subtree's peak is admitted (for a safety check the
+  // solver then takes the worst case the ensures permits). The per-level growth
+  // is charged on the enforce side (generate_checking_wrapper). This is needed
+  // even with an assigns clause, which would not otherwise havoc this global.
+  // Done after the call-site __ESBMC_old() snapshots (above), so the ensures'
+  // old() still reads the pre-call value.
+  assign_stack_used(
+    replacement,
+    ensures_guard,
+    requires_clause,
+    [](const expr2tc &ghost) { return gen_nondet(ghost->type); },
+    call_location,
+    "contract stack-used havoc");
 
   // 4. Assume ensures clause (assume postcondition at call site)
   add_contract_clause(
