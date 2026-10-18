@@ -8768,6 +8768,39 @@ bool python_converter::reject_or_defer_numpy_view_name_return(
   return true;
 }
 
+// Python does not enforce `-> int`: the caller sees the float itself, which
+// the int return slot holds only when it is finite and integral (#1966).
+exprt python_converter::check_float_fits_int_return(
+  const nlohmann::json &ast_node,
+  const exprt &value,
+  codet &target_block)
+{
+  if (!current_func_annotated_int_ || !value.type().is_floatbv())
+    return value;
+
+  const locationt location = get_location_from_decl(ast_node);
+  symbolt &tmp =
+    create_tmp_symbol(ast_node, "$int_return$", value.type(), exprt());
+  const exprt result = symbol_expr(tmp);
+  code_declt decl(result);
+  decl.location() = location;
+  target_block.copy_to_operands(decl);
+  code_assignt assign(result, value);
+  assign.location() = location;
+  target_block.copy_to_operands(assign);
+
+  const exprt round_trip = typecast_exprt(
+    typecast_exprt(result, current_func_return_type_), value.type());
+  code_assertt check(equality_exprt(round_trip, result));
+  check.location() = location;
+  check.location().user_provided(true);
+  check.location().comment(
+    "a function annotated to return int returns a float that int cannot "
+    "hold; not modelled");
+  target_block.copy_to_operands(check);
+  return result;
+}
+
 void python_converter::get_return_statements(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -8950,6 +8983,7 @@ void python_converter::get_return_statements(
     }
 
     coerce_to_tagged_return(ret_expr);
+    ret_expr = check_float_fits_int_return(ast_node, ret_expr, target_block);
 
     // Return the temporary variable
     code_returnt return_code;
@@ -9032,6 +9066,8 @@ void python_converter::get_return_statements(
     return_value = coerce_optional_return(return_value, location, target_block);
 
     coerce_to_tagged_return(return_value);
+    return_value =
+      check_float_fits_int_return(ast_node, return_value, target_block);
 
     code_returnt return_code;
     return_code.return_value() = return_value;

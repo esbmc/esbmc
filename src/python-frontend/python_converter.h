@@ -2950,6 +2950,10 @@ private:
 
   /// Handle Optional value access
   exprt materialize_optional(const exprt &expr, const nlohmann::json &element);
+  exprt check_float_fits_int_return(
+    const nlohmann::json &ast_node,
+    const exprt &value,
+    codet &target_block);
   exprt coerce_optional_return(
     const exprt &value,
     const locationt &location,
@@ -3036,6 +3040,8 @@ private:
   namespacet ns;
   typet current_element_type;
   typet current_func_return_type_;
+  /// Whether the program annotates the current function `-> int`.
+  bool current_func_annotated_int_ = false;
   /// The target of a ternary that is itself a return value; see
   /// optional_ternary_type.
   typet ternary_return_target_;
