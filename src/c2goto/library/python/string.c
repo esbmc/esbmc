@@ -2024,3 +2024,82 @@ unrendered:
   buffer[24] = '\0';
   return buffer;
 }
+
+// format(v, '.<prec>f') for 0 <= prec <= 15, exact where it is rendered at all.
+char *__python_float_to_fixed_str(double v, long long prec)
+{
+__ESBMC_HIDE:;
+  // "-", 309 integral digits, "." and 15 fractional digits.
+  char *buffer = __ESBMC_alloca(328);
+
+  if (v != v)
+  {
+    buffer[0] = 'n';
+    buffer[1] = 'a';
+    buffer[2] = 'n';
+    buffer[3] = '\0';
+    return buffer;
+  }
+
+  size_t pos = 0;
+  if (__builtin_signbit(v))
+  {
+    buffer[pos++] = '-';
+    v = -v;
+  }
+
+  if (v > 1.7976931348623157e+308)
+  {
+    buffer[pos++] = 'i';
+    buffer[pos++] = 'n';
+    buffer[pos++] = 'f';
+    buffer[pos] = '\0';
+    return buffer;
+  }
+
+  unsigned long long scale = 1;
+  for (long long i = 0; i < prec; ++i)
+    scale *= 10;
+
+  // CPython rounds the exact v * 10**prec half to even. That product is t + e:
+  // fma gives the rounding error e of t exactly, and below 2**52 the fraction
+  // of t and its distance r from one half are exact too.
+  const double t = v * (double)scale;
+  if (!(t < 4503599627370496.0))
+    goto unrendered;
+  const double e = __builtin_fma(v, (double)scale, -t);
+  unsigned long long d = (unsigned long long)t;
+  const double r = (t - (double)d) - 0.5;
+  if (r > -e || (r == -e && (d & 1U)))
+    ++d;
+
+  unsigned long long ip = d / scale;
+  unsigned long long frac = d % scale;
+
+  char digits[20];
+  size_t n = 0;
+  do
+  {
+    digits[n++] = (char)('0' + ip % 10);
+    ip /= 10;
+  } while (ip > 0);
+  while (n > 0)
+    buffer[pos++] = digits[--n];
+
+  if (prec > 0)
+  {
+    buffer[pos++] = '.';
+    for (unsigned long long s = scale / 10; s > 0; s /= 10)
+    {
+      buffer[pos++] = (char)('0' + frac / s);
+      frac %= s;
+    }
+  }
+  buffer[pos] = '\0';
+  return buffer;
+
+unrendered:
+  __ESBMC_assume(buffer[0] != '\0');
+  buffer[327] = '\0';
+  return buffer;
+}

@@ -433,6 +433,12 @@ void clang_cpp_adjust::adjust_side_effect_throw(side_effect_exprt &expr)
   // ctor is called with a struct value where a pointer is expected.
   adjust_expr(expr.op0());
 
+  // [except.throw]/2: the operand undergoes array-to-pointer conversion, so
+  // the exception object is the pointer, not a copy of the array.
+  const typet &op_type = ns.follow(expr.op0().type());
+  if (op_type.is_array() || op_type.id() == "incomplete_array")
+    gen_typecast(ns, expr.op0(), pointer_typet(op_type.subtype()));
+
   const typet &exception_type = expr.op0().type();
 
   std::vector<irep_idt> ids;
