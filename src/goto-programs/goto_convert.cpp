@@ -454,7 +454,10 @@ void goto_convertt::convert_throw(const exprt &expr_in, goto_programt &dest)
   // destroyed ([except.throw]p3), so `throw t.v` must not read t after ~T.
   if (
     detached.empty() && !expr.operands().empty() &&
-    stack.size() > targets.throw_stack_size)
+    std::any_of(
+      stack.begin() + targets.throw_stack_size,
+      stack.end(),
+      is_destructor_entry))
   {
     const exprt operand = expr.op0();
     symbol_exprt value(new_tmp_symbol(operand.type()).id, operand.type());
