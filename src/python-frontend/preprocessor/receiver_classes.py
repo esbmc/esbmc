@@ -136,11 +136,12 @@ def _header_nodes(stmt):
 
 
 def _isinstance_receiver(node, receivers):
-    if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-            and node.func.id == "isinstance" and len(node.args) == 2
-            and isinstance(node.args[0], ast.Name) and node.args[0].id in receivers):
-        return node.args[0].id
-    return None
+    """The receiver `node` tests with isinstance, or None."""
+    if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+            and node.func.id == "isinstance" and len(node.args) == 2):
+        return None
+    obj = node.args[0]
+    return obj.id if isinstance(obj, ast.Name) and obj.id in receivers else None
 
 
 def _scope_blocks(body):
