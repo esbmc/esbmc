@@ -178,6 +178,11 @@ class NumpyConstructorMixin:
         if not all(self._is_pure_numpy_argument(bound[param]) for param in ("start", "stop")):
             return None
         target = node.targets[0]
+        assigned = {elt.id for elt in target.elts}
+        if any(
+                isinstance(sub, ast.Name) and sub.id in assigned for param in ("start", "stop")
+                for sub in ast.walk(bound[param])):
+            return None  # the step would read the name after the array rebinds it
         div = num.value - 1 if endpoint.value else num.value
         if div > 0:
             step = ast.BinOp(left=ast.BinOp(left=copy.deepcopy(bound["stop"]),

@@ -95,6 +95,7 @@ private:
   // string, or empty for the literal's own.
   typet constructor_element_type(const nlohmann::json &list) const;
   void reject_complex_array_operands(const std::string &function) const;
+  bool is_complex_operand(const nlohmann::json &arg) const;
   // @p build run with constructor_element_type(@p list) at the leaves of
   // the static arrays it builds.
   exprt with_element_type(

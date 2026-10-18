@@ -2519,7 +2519,7 @@ static std::string constructor_dtype_name(
 // constructor_array() understands; any other still declines. The
 // preprocessor binds every constructor call, so a keyword reaching here is
 // one of the constructor's parameters, given once.
-static bool is_only_dtype_keyword(const nlohmann::json &call_node)
+static bool has_only_dtype_or_endpoint_keywords(const nlohmann::json &call_node)
 {
   const auto &keywords = call_node.value("keywords", nlohmann::json::array());
   return std::all_of(
@@ -2549,7 +2549,7 @@ static bool is_recognized_numpy_constructor_call_shape(
       ast_json, call_node["func"]["value"].value("id", std::string())))
     return false;
 
-  if (!is_only_dtype_keyword(call_node))
+  if (!has_only_dtype_or_endpoint_keywords(call_node))
     return false;
 
   return call_node.contains("args") && call_node["args"].is_array();
@@ -3120,14 +3120,6 @@ static nlohmann::json unwrap_list_like_node(const nlohmann::json &node)
   }
 
   return {};
-}
-
-static typet get_array_scalar_type(const typet &array_type)
-{
-  typet scalar_type = array_type;
-  while (scalar_type.is_array())
-    scalar_type = scalar_type.subtype();
-  return scalar_type;
 }
 
 numpy_call_expr::numpy_call_expr(
@@ -7668,9 +7660,9 @@ exprt numpy_call_expr::create_expr_from_call()
           };
 
         typet lhs_scalar_type =
-          get_array_scalar_type(type_handler_.get_typet(lhs));
+          type_utils::array_scalar_type(type_handler_.get_typet(lhs));
         typet rhs_scalar_type =
-          get_array_scalar_type(type_handler_.get_typet(rhs));
+          type_utils::array_scalar_type(type_handler_.get_typet(rhs));
         const bool is_float =
           lhs_scalar_type.is_floatbv() || rhs_scalar_type.is_floatbv();
 
@@ -7747,7 +7739,8 @@ exprt numpy_call_expr::create_expr_from_call()
         m = 1;
         n = static_cast<std::size_t>(lhs_shape[0]);
         p = 1;
-        converter_.current_lhs->type() = get_array_scalar_type(lhs_arg.type());
+        converter_.current_lhs->type() =
+          type_utils::array_scalar_type(lhs_arg.type());
         result_is_scalar = true;
       }
       else if (lhs_shape.size() == 1 && rhs_shape.size() == 2)
@@ -7757,7 +7750,7 @@ exprt numpy_call_expr::create_expr_from_call()
         m = 1;
         n = static_cast<std::size_t>(lhs_shape[0]);
         p = static_cast<std::size_t>(rhs_shape[1]);
-        typet base_type = get_array_scalar_type(rhs_arg.type());
+        typet base_type = type_utils::array_scalar_type(rhs_arg.type());
         converter_.current_lhs->type() =
           type_handler_.build_array(base_type, p);
         result_is_1d = true;
@@ -7769,7 +7762,7 @@ exprt numpy_call_expr::create_expr_from_call()
         m = static_cast<std::size_t>(lhs_shape[0]);
         n = static_cast<std::size_t>(lhs_shape[1]);
         p = 1;
-        typet base_type = get_array_scalar_type(lhs_arg.type());
+        typet base_type = type_utils::array_scalar_type(lhs_arg.type());
         converter_.current_lhs->type() =
           type_handler_.build_array(base_type, m);
         result_is_1d = true;
@@ -7781,12 +7774,12 @@ exprt numpy_call_expr::create_expr_from_call()
         m = static_cast<std::size_t>(lhs_shape[0]);
         n = static_cast<std::size_t>(lhs_shape[1]);
         p = static_cast<std::size_t>(rhs_shape[1]);
-        typet base_type = get_array_scalar_type(lhs_arg.type());
+        typet base_type = type_utils::array_scalar_type(lhs_arg.type());
         typet row_type = type_handler_.build_array(base_type, p);
         converter_.current_lhs->type() = type_handler_.build_array(row_type, m);
       }
 
-      typet base_type = get_array_scalar_type(lhs_arg.type());
+      typet base_type = type_utils::array_scalar_type(lhs_arg.type());
       const bool is_float = base_type.is_floatbv();
       unsigned dtype_bits = 64;
       if (!is_float && (base_type.is_signedbv() || base_type.is_unsignedbv()))
@@ -8003,7 +7996,7 @@ exprt numpy_call_expr::get_arange_expr()
   // A keyword other than dtype= (device=, like=) changes arange() in ways
   // the literal materialization below does not model; fall back to the
   // operational model for it rather than silently ignoring the keyword.
-  if (!is_only_dtype_keyword(call_))
+  if (!has_only_dtype_or_endpoint_keywords(call_))
     return function_call_expr::get();
 
   const nlohmann::json resolved_args =
@@ -9261,7 +9254,7 @@ typet numpy_call_expr::resolve_like_element_type(const typet &base_type)
 
   typet elem_type;
   if (like_dtype.empty())
-    elem_type = get_array_scalar_type(base_type);
+    elem_type = type_utils::array_scalar_type(base_type);
   else
   {
     get_dtype_size();
@@ -9485,16 +9478,39 @@ void numpy_call_expr::reject_complex_array_operands(
   if (!reducers.count(function))
     return;
   for (const auto &arg : call_.value("args", nlohmann::json::array()))
-  {
-    if (arg.value("_type", std::string()) != "Name")
-      continue;
-    const symbolt *symbol = converter_.find_symbol(
-      converter_.resolve_name_symbol_id(arg["id"].get<std::string>()));
-    if (symbol && is_complex_type(get_array_scalar_type(symbol->get_type())))
+    if (is_complex_operand(arg))
       throw std::runtime_error(
         "TypeError: numpy." + function +
         "() over a complex array is not supported");
+}
+
+// Whether the operand @p arg holds complex numbers: a name bound to a complex
+// array, an item or slice of one, or a call over complex literals, complex
+// operands or with a complex dtype=. Read from the AST and the symbol table,
+// so the check converts nothing ahead of the call itself.
+bool numpy_call_expr::is_complex_operand(const nlohmann::json &arg) const
+{
+  const std::string type = arg.value("_type", std::string());
+  scalar_value scalar;
+  if (type == "Subscript")
+    return is_complex_operand(arg["value"]);
+  if (type == "List")
+    return has_complex_leaf(arg);
+  if (type == "Call")
+  {
+    const auto &args = arg.value("args", nlohmann::json::array());
+    const bool complex_arg =
+      std::any_of(args.begin(), args.end(), [this](const nlohmann::json &a) {
+        return is_complex_operand(a);
+      });
+    return complex_arg || is_numpy_complex_dtype(
+                            constructor_dtype_name(arg, converter_.ast()));
   }
+  if (type != "Name")
+    return try_extract_scalar_constant(arg, scalar) && scalar.is_complex;
+  const symbolt *symbol = converter_.find_symbol(
+    converter_.resolve_name_symbol_id(arg["id"].get<std::string>()));
+  return symbol && type_utils::is_numpy_complex_array(symbol->get_type());
 }
 
 exprt numpy_call_expr::get()

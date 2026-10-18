@@ -2649,18 +2649,12 @@ exprt python_converter::build_bytes_concat(const exprt &lhs, const exprt &rhs)
   return result;
 }
 
-static bool is_complex_array(const typet &type)
-{
-  typet scalar = type;
-  while (scalar.is_array())
-    scalar = scalar.subtype();
-  return type.is_array() && is_complex_type(scalar);
-}
-
 // Complex arrays are stored and indexed; no arithmetic over them is modelled.
 static void reject_complex_array_arithmetic(const exprt &lhs, const exprt &rhs)
 {
-  if (is_complex_array(lhs.type()) || is_complex_array(rhs.type()))
+  if (
+    type_utils::is_numpy_complex_array(lhs.type()) ||
+    type_utils::is_numpy_complex_array(rhs.type()))
     throw std::runtime_error(
       "TypeError: arithmetic on a numpy complex array is not supported");
 }

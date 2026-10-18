@@ -6853,10 +6853,7 @@ static void reject_unmodelled_numpy_array_argument(const typet &type)
     throw std::runtime_error(
       "TypeError: passing a numpy string array to a function is not "
       "supported");
-  typet scalar = type;
-  while (scalar.is_array())
-    scalar = scalar.subtype();
-  if (type.is_array() && is_complex_type(scalar))
+  if (type_utils::is_numpy_complex_array(type))
     throw std::runtime_error(
       "TypeError: passing a numpy complex array to a function is not "
       "supported");

@@ -5,6 +5,7 @@
 #include <util/irep/std_types.h>
 #include <util/expr/expr_util.h>
 #include <util/irep/type.h>
+#include <python-frontend/type/type_handler.h>
 
 #include <nlohmann/json.hpp>
 
@@ -377,6 +378,21 @@ public:
       return false;
     return type.subtype().subtype() == char_type() ||
            is_numpy_string_array(type.subtype());
+  }
+
+  /// The scalar type at the leaves of the (possibly nested) array @p type.
+  static typet array_scalar_type(const typet &type)
+  {
+    typet scalar = type;
+    while (scalar.is_array())
+      scalar = scalar.subtype();
+    return scalar;
+  }
+
+  /// A numpy array of complex numbers.
+  static bool is_numpy_complex_array(const typet &type)
+  {
+    return type.is_array() && is_complex_type(array_scalar_type(type));
   }
 
   static bool is_string_type(const typet &type)

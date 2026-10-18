@@ -290,10 +290,10 @@ public:
    * available. Returns nil_exprt when caller should fall back to the generic
    * len() handling path.
    */
-  exprt char_array_type_length(const exprt &arg_expr) const;
   exprt try_handle_len_string_fast_path(
     const nlohmann::json &call_json,
     const exprt &arg_expr);
+  exprt char_array_type_length(const exprt &arg_expr) const;
 
   // String method operations
 
