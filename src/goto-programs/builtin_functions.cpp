@@ -353,6 +353,25 @@ void goto_convertt::do_mem(
 
   locationt location = function.location();
 
+  // Symex ends an alloca's storage with its frame by recognising the
+  // `return_value$_alloca$N` temp, which `p = alloca(n);` would bypass (#8709).
+  const std::string frame_temp = "return_value$_alloca$";
+  if (!is_malloc && ns.lookup(function.identifier())->name == "alloca")
+  {
+    const symbolt *lhs_sym =
+      lhs.is_symbol() ? ns.lookup(lhs.identifier()) : nullptr;
+    if (!lhs_sym || !has_prefix(id2string(lhs_sym->name), frame_temp))
+    {
+      const typet ptr_type = pointer_typet(empty_typet());
+      exprt temp = symbol_exprt(
+        tmp_symbol.new_symbol(context, ptr_type, frame_temp).id, ptr_type);
+      do_mem(is_malloc, temp, function, arguments, dest);
+      if (lhs.is_not_nil())
+        copy(code_assignt(lhs, typecast_exprt(temp, lhs.type())), ASSIGN, dest);
+      return;
+    }
+  }
+
   // `malloc(n);` with the result discarded still allocates, and the storage is
   // unreachable the moment the statement ends -- exactly what
   // --memory-leak-check exists to report. Dropping the call made that leak
