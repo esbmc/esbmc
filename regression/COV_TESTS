@@ -3126,6 +3126,14 @@ regression/python/github_8670_forwarded
 regression/python/github_8670_forwarded_fail
 regression/python/github_8670_str_element
 regression/python/github_8670_str_element_fail
+regression/esbmc-cpp/cpp/github_8698_substr
+regression/esbmc-cpp/cpp/github_8698_erase
+regression/esbmc-cpp/cpp/github_8698_deque_at
+regression/esbmc-cpp/cpp/github_8698_string_view_at
+regression/esbmc-cpp/cpp/github_8698_array_at
+regression/esbmc-cpp/cpp/github_8698_string_view_only
+regression/esbmc-cpp/cpp/github_8698_string_view_uncaught_fail
+regression/esbmc-cpp/cpp/github_8698_array_uncaught_fail
 regression/python/github_8325_fail
 regression/python/github_8325_only_attribute_fail
 regression/python/attr_on_none_caught
