@@ -1419,8 +1419,6 @@ static bool is_all_zero_bytes(const expr2tc &e)
     const ieee_floatt &f = to_constant_floatbv2t(e).value;
     return f.is_zero() && !f.get_sign();
   }
-  if (is_constant_array_of2t(e))
-    return is_all_zero_bytes(to_constant_array_of2t(e).initializer);
   if (
     !is_constant_struct2t(e) && !is_constant_union2t(e) &&
     !is_constant_array2t(e) && !is_constant_vector2t(e))
@@ -1465,8 +1463,6 @@ static expr2tc byte_update_bytes(
   if (is_array_type(update))
   {
     const array_type2t &arr = to_array_type(update->type);
-    if (arr.size_is_infinite || !is_constant_int2t(arr.array_size))
-      throw std::string("byte_update of a variable-length array");
     const BigInt elem_size = type_byte_size(arr.subtype);
     const BigInt n = to_constant_int2t(arr.array_size).value;
     for (BigInt i = 0; i < n; ++i)

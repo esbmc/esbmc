@@ -59,6 +59,11 @@ union M
   long l;
   unsigned char c[3];
 };
+union F
+{
+  float f;
+  int i;
+};
 union K
 {
   int *p;
@@ -75,6 +80,7 @@ union R gr = {.q = {{1}, {2}}};
 union B gb = {.b = 5};
 union N gn = {.l = 0x0102030405060708};
 union M gm = {.c = {1, 2, 3}};
+union F gf = {.i = 1};
 union K gk = {.q = {{1}, {2}}};
 
 int main(void)
@@ -89,5 +95,6 @@ int main(void)
   assert(gn.l == 0x0102030405060708);
   assert(gm.c[2] == 3 && (gm.l & 0xffffff) == 0x030201);
   assert(gk.q[1].a == 2);
+  assert(gf.i == 1 && gf.f != 0);
   return 0;
 }
