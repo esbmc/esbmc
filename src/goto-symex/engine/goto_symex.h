@@ -767,6 +767,10 @@ protected:
     const expr2tc &n,
     const std::string &func);
 
+  /** Claim that a memory builtin's operand, on the path @p guard selects, is
+   *  not a code object; nothing under --no-pointer-check. */
+  void claim_not_code(const expr2tc &guard);
+
   /** Helper for intrinsic_memcmp: resolve @p ptr to a single concrete
    *  primitive object with a constant offset, validating that an
    *  @p number_of_bytes read stays in bounds. Returns false (bump to the C
