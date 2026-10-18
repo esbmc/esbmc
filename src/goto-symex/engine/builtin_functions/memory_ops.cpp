@@ -982,12 +982,15 @@ void goto_symext::intrinsic_memcpy_impl(
         return;
       }
 
-      std::string error_msg =
-        fmt::format("dereference failure: trying to deref a ptr code");
+      if (!options.get_bool_option("no-pointer-check"))
+      {
+        std::string error_msg =
+          fmt::format("dereference failure: trying to deref a ptr code");
 
-      // SAME_OBJECT(ptr, item) => DEREF ERROR
-      expr2tc check = implies2tc(item.guard, gen_false_expr());
-      claim(check, error_msg);
+        // SAME_OBJECT(ptr, item) => DEREF ERROR
+        expr2tc check = implies2tc(item.guard, gen_false_expr());
+        claim(check, error_msg);
+      }
       continue;
     }
 
@@ -1704,12 +1707,15 @@ void goto_symext::intrinsic_memset(
 
     if (is_code_type(item_object->type))
     {
-      std::string error_msg =
-        fmt::format("dereference failure: trying to deref a ptr code");
+      if (!options.get_bool_option("no-pointer-check"))
+      {
+        std::string error_msg =
+          fmt::format("dereference failure: trying to deref a ptr code");
 
-      // SAME_OBJECT(ptr, item) => DEREF ERROR
-      expr2tc check = implies2tc(item.guard, gen_false_expr());
-      claim(check, error_msg);
+        // SAME_OBJECT(ptr, item) => DEREF ERROR
+        expr2tc check = implies2tc(item.guard, gen_false_expr());
+        claim(check, error_msg);
+      }
       continue;
     }
 
