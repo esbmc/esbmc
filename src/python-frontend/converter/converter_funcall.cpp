@@ -920,6 +920,33 @@ static void collect_dict_values(
       collect_dict_values(child, name, out);
 }
 
+// The values the dict `container` may hold: a literal's, every value stored
+// into a named dict, or for `d[k]` the values of each dict literal d holds
+// (#8768). False when they cannot be listed.
+bool python_converter::dict_values(
+  const nlohmann::json &container,
+  std::vector<nlohmann::json> &out)
+{
+  const std::string type = container.value("_type", "");
+  if (type == "Dict")
+    push_dict_values(container, out);
+  else if (type == "Name")
+    collect_dict_values(*ast_json, container["id"], out);
+  else if (type == "Subscript")
+  {
+    std::vector<nlohmann::json> outer;
+    if (!dict_values(container["value"], outer))
+      return false;
+    for (const auto &v : outer)
+    {
+      if (v.value("_type", "") != "Dict")
+        return false;
+      push_dict_values(v, out);
+    }
+  }
+  return true;
+}
+
 typet python_converter::stored_function_return_type(const nlohmann::json &value)
 {
   if (value.value("_type", "") == "Lambda" && value.contains("body"))
@@ -935,10 +962,8 @@ std::optional<typet>
 python_converter::dict_function_return_type(const nlohmann::json &container)
 {
   std::vector<nlohmann::json> values;
-  if (container.value("_type", "") == "Dict")
-    push_dict_values(container, values);
-  else if (container.value("_type", "") == "Name")
-    collect_dict_values(*ast_json, container["id"], values);
+  if (!dict_values(container, values))
+    return std::nullopt;
 
   std::optional<typet> shared;
   for (const auto &v : values)

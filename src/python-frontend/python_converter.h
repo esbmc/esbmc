@@ -3160,6 +3160,9 @@ private:
   /// literal or a name) shares; nothing when a stored value is not a function.
   std::optional<typet>
   dict_function_return_type(const nlohmann::json &container);
+  bool dict_values(
+    const nlohmann::json &container,
+    std::vector<nlohmann::json> &out);
   typet subscript_call_return_type(
     const exprt &func_ptr,
     const nlohmann::json &func_node);
