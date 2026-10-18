@@ -783,8 +783,9 @@ protected:
   bool get_virtual_member_function_pointer(
     const clang::CXXMethodDecl &md,
     exprt &new_expr);
-  bool
-  get_unary_operator_expr(const clang::UnaryOperator &uniop, exprt &new_expr);
+  bool get_unary_operator_expr(
+    const clang::UnaryOperator &uniop,
+    exprt &new_expr) override;
 
   bool is_aggregate_type(const clang::QualType &q_type) override;
   /*

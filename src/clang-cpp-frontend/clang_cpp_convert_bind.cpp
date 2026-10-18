@@ -205,10 +205,7 @@ bool clang_cpp_convertert::get_virtual_member_function_pointer(
 
     const code_typet &code_type = to_code_type(thunk_symb.get_type());
     const code_typet::argumentst &args = code_type.arguments();
-    const namespacet ns_ctx(context);
-
-    const exprt this_expr =
-      symbol_expr(*ns_ctx.lookup(args[0].cmt_identifier()));
+    const exprt this_expr = symbol_expr(*ns.lookup(args[0].cmt_identifier()));
     exprt vtable_ptr_deref;
     get_vft_binding_expr_vtable_ptr(
       md,
@@ -221,17 +218,23 @@ bool clang_cpp_convertert::get_virtual_member_function_pointer(
     side_effect_expr_function_callt call;
     call.function() = function;
     call.type() = code_type.return_type();
+    call.location() = method->location;
     for (const auto &arg : args)
-      call.arguments().push_back(
-        symbol_expr(*ns_ctx.lookup(arg.cmt_identifier())));
+      call.arguments().push_back(symbol_expr(*ns.lookup(arg.cmt_identifier())));
 
     code_blockt body;
+    body.location() = method->location;
     if (call.type().is_empty())
-      body.copy_to_operands(code_expressiont(call));
+    {
+      code_expressiont expr(call);
+      expr.location() = method->location;
+      body.copy_to_operands(expr);
+    }
     else
     {
       code_returnt ret;
       ret.return_value() = call;
+      ret.location() = method->location;
       body.copy_to_operands(ret);
     }
 
@@ -255,9 +258,10 @@ bool clang_cpp_convertert::get_unary_operator_expr(
   const auto *dre = llvm::dyn_cast<clang::DeclRefExpr>(uniop.getSubExpr());
   const auto *md =
     dre ? llvm::dyn_cast<clang::CXXMethodDecl>(dre->getDecl()) : nullptr;
+  // The thunk cannot forward the arguments of an ellipsis.
   if (
     uniop.getOpcode() != clang::UO_AddrOf || !md ||
-    !is_md_virtual_or_overriding(*md))
+    !is_md_virtual_or_overriding(*md) || md->isVariadic())
     return clang_c_convertert::get_unary_operator_expr(uniop, new_expr);
 
   typet t;
