@@ -1306,6 +1306,19 @@ std::string python_annotation<Json>::get_builtin_call_type(const Json &call)
   return it != builtin_functions().end() ? it->second : func_name;
 }
 
+/// `[a] + [b]` keeps the element type both literals share, so a callee fed
+/// the result is typed by it rather than by Any (#8770); anything else is a
+/// bare list.
+template <class Json>
+std::string python_annotation<Json>::list_concat_type(const Json &binop)
+{
+  const Json &rhs = binop["right"];
+  if (binop["op"]["_type"] != "Add" || rhs["_type"] != "List")
+    return "list";
+  const std::string left = get_list_type_from_literal(binop["left"]);
+  return left == get_list_type_from_literal(rhs) ? left : "list";
+}
+
 template <class Json>
 std::string python_annotation<Json>::get_type_from_binary_expr(
   const Json &stmt,
@@ -1367,7 +1380,7 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
   if (lhs["_type"] == "BinOp")
     type = get_type_from_binary_expr(lhs, body);
   else if (lhs["_type"] == "List")
-    type = "list";
+    type = list_concat_type(stmt.contains("value") ? stmt["value"] : stmt);
   else if (lhs["_type"] == "Tuple")
     type = "tuple";
   // Floor division (//) operations always result in an integer value
