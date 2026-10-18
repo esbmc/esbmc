@@ -2,6 +2,7 @@
 #include <clang-c-frontend/clang_c_adjust_irep2.h>
 CC_DIAGNOSTIC_PUSH()
 CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
+#include <clang/Basic/TargetInfo.h>
 #include <clang/Frontend/ASTUnit.h>
 CC_DIAGNOSTIC_POP()
 
@@ -436,6 +437,11 @@ bool clang_c_languaget::parse(const std::string &path)
     AST = std::move(newAST);
   else
     mergeASTs(newAST, AST);
+
+  const clang::TargetInfo &target = AST->getASTContext().getTargetInfo();
+  config.ansi_c.long_long_align = target.getLongLongAlign() / 8;
+  config.ansi_c.double_align = target.getDoubleAlign() / 8;
+  config.ansi_c.long_double_align = target.getLongDoubleAlign() / 8;
 
   return false;
 }

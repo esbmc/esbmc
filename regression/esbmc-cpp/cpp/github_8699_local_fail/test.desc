@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--std c++17
+^  FAILED +\[main\.[a-z-]+\.[0-9]+\] +line 15 +dereference failure: accessed expired variable pointer .a.$
+^VERIFICATION FAILED$
