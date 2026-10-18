@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwind 2 --no-unwinding-assertions
+^  FAILED .*assertion f == 1\.0f$
+^VERIFICATION FAILED$

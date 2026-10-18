@@ -672,6 +672,36 @@ static expr2tc replace_subobject(
   return expr2tc();
 }
 
+// @p dst with the float it holds at [dst_offset, dst_offset+n) read whole
+// from @p src; null when that range is not a float. The C byte loop rebuilds a
+// float a byte at a time, and an intermediate NaN loses its bits:
+// floating-point theory has a single NaN.
+static expr2tc copy_into_float(
+  const expr2tc &dst,
+  size_t dst_offset,
+  const expr2tc &src,
+  size_t src_offset,
+  size_t n)
+{
+  if (
+    is_pointer_type(src) || is_empty_type(src->type) || is_code_type(src->type))
+    return expr2tc();
+
+  std::vector<expr2tc> dst_subs;
+  collect_subobjects(dst, dst_offset, n, dst_subs);
+  for (const expr2tc &dst_sub : dst_subs)
+  {
+    if (!is_floatbv_type(dst_sub->type))
+      continue;
+    expr2tc value = byte_extract2tc(
+      dst_sub->type, src, gen_ulong(src_offset), target_is_big_endian());
+    expr2tc updated = replace_subobject(dst, dst_offset, n, value);
+    if (updated)
+      return updated;
+  }
+  return expr2tc();
+}
+
 static inline expr2tc do_memcpy_expression(
   const expr2tc &dst,
   const size_t &dst_offset,
@@ -712,6 +742,11 @@ static inline expr2tc do_memcpy_expression(
       }
     }
 
+    if (
+      expr2tc updated =
+        copy_into_float(dst, dst_offset, src, src_offset, num_of_bytes))
+      return updated;
+
     log_debug("memcpy", "Only primitives are supported for now");
     return expr2tc();
   }
@@ -729,8 +764,11 @@ static inline expr2tc do_memcpy_expression(
   }
 
   // Base-case. Primitives!
-  return goto_symex_utils::gen_byte_memcpy(
+  expr2tc result = goto_symex_utils::gen_byte_memcpy(
     src, dst, num_of_bytes, src_offset, dst_offset);
+  if (!result)
+    result = copy_into_float(dst, dst_offset, src, src_offset, num_of_bytes);
+  return result;
 }
 
 static void offset_simplifier(expr2tc &e)
