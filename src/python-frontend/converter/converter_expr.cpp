@@ -2520,6 +2520,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     }
 
     expr = symbol_expr(*symbol);
+    reject_inexact_number_join(element, expr);
 
     // If the looked-up symbol is an enum class attribute with int type,
     // wrap it in the proper enum struct expression so callers that expect
@@ -3210,4 +3211,70 @@ exprt python_converter::build_slice_from_args(
       std::to_string(args.size()));
   }
   return make_slice_struct_expr(*this, lower, upper, step, source_node);
+}
+
+std::vector<dynamic_type_detail::numeric_bindingt>
+python_converter::scope_numeric_bindings(
+  const std::string &name,
+  int before,
+  bool include_later) const
+{
+  const nlohmann::json function = json_utils::find_function_by_path(
+    *ast_json, json_utils::split_function_path(current_function_name()));
+  const nlohmann::json &body = function.is_object() && function.contains("body")
+                                 ? function["body"]
+                                 : (*ast_json)["body"];
+  std::vector<dynamic_type_detail::numeric_bindingt> bindings;
+  dynamic_type_detail::collect_numeric_bindings(
+    body, name, false, before, include_later, bindings);
+  return bindings;
+}
+
+/// Whether `value` survives the C type `type` unchanged: a float is exact
+/// only for an integral literal, and an int in a double only for a literal
+/// of at most 2**53.
+static bool stored_exactly(const nlohmann::json &value, const typet &type)
+{
+  if (value.value("_type", "") != "Constant")
+    return false;
+  const nlohmann::json &literal = value["value"];
+  if (type.is_floatbv())
+    return literal.is_boolean() ||
+           (literal.is_number_integer() &&
+            std::abs(literal.get<long long>()) <= (1LL << 53));
+  return literal.is_number_float() &&
+         literal.get<double>() == static_cast<long long>(literal.get<double>());
+}
+
+/// A name bound an int on one path and a float on another ends up one C
+/// double, but a read converted before the float binding still sees an int.
+/// On the path whose value the variable cannot hold, a read sees a rounded
+/// value (#8418).
+void python_converter::reject_inexact_number_join(
+  const nlohmann::json &element,
+  const exprt &expr) const
+{
+  const bool is_double = expr.type().is_floatbv();
+  if (
+    element.value("_type", "") != "Name" ||
+    !(is_double || expr.type().is_signedbv()) || is_loading_models ||
+    is_model_file(element))
+    return;
+  const std::string name = element["id"].get<std::string>();
+  const int line = element.value("lineno", 0);
+  if (!dynamic_type_detail::is_path_dependent_number(
+        scope_numeric_bindings(name, line, true)))
+    return;
+  for (const auto &binding : scope_numeric_bindings(name, line, false))
+  {
+    const bool is_int = binding.kind == "int";
+    if (
+      (is_int && !stored_exactly(binding.value, double_type())) ||
+      (!is_int && !is_double && !stored_exactly(binding.value, expr.type())))
+      throw std::runtime_error(
+        "reading '" + name +
+        "' is not supported: it holds an int or a float depending on the "
+        "path, and the " +
+        binding.kind + " is not stored exactly");
+  }
 }
