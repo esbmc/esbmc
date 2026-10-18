@@ -579,6 +579,13 @@ exprt function_call_expr::abstract_instantiation_error(
   return raise;
 }
 
+exprt function_call_expr::call_argument_error(const symbolt &func_symbol) const
+{
+  exprt error =
+    check_argument_types(&func_symbol, call_["args"], call_["keywords"]);
+  return error.is_nil() ? unbound_method_error(func_symbol) : error;
+}
+
 exprt function_call_expr::unbound_method_error(const symbolt &func_symbol) const
 {
   const nlohmann::json &func = call_["func"];
@@ -4570,10 +4577,7 @@ exprt function_call_expr::handle_general_function_call()
 
   if (func_symbol != nullptr)
   {
-    exprt type_error =
-      check_argument_types(func_symbol, call_["args"], call_["keywords"]);
-    if (type_error.is_nil())
-      type_error = unbound_method_error(*func_symbol);
+    exprt type_error = call_argument_error(*func_symbol);
     if (!type_error.is_nil())
       return type_error;
   }

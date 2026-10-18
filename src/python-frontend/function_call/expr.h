@@ -107,6 +107,9 @@ private:
   /// class with no instance (`C.func()`), or nil.
   exprt unbound_method_error(const symbolt &func_symbol) const;
 
+  /// The TypeError this call's arguments raise, or nil.
+  exprt call_argument_error(const symbolt &func_symbol) const;
+
   exprt check_argument_types(
     const symbolt *func_symbol,
     const nlohmann::json &args,
