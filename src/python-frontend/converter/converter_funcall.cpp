@@ -1173,7 +1173,11 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     // d.items() returns the keys member as a placeholder list (correct size).
     exprt arg_expr = list_argument_expr(list_arg);
     if (arg_expr.type() == type_handler_.get_list_type())
+    {
+      // list() of a keys view is a plain list, compared by order (#8689).
+      arg_expr.remove(PYTHON_KEYS_VIEW_ATTR);
       return arg_expr;
+    }
 
     // list(tuple) — materialise the tuple's components into a real list.
     // Without this the tuple struct flows into the generic builder, which
