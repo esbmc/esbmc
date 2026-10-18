@@ -1,6 +1,7 @@
 #include "goto-programs/goto_binary_reader.h"
 #include <util/base/stack_budget.h>
 #include "irep2/irep2_expr.h"
+#include <util/lang/c_builtins.h>
 #include <util/lang/c_sizeof.h>
 #include <util/lang/c_typecast.h>
 #include <util/lang/c_types.h>
@@ -1153,8 +1154,8 @@ static expr2tc migrate_pointer_ok(const exprt &expr)
   // call out of this predicate once the binary is loaded.
   const typet size_t_type = expr.op1().type();
   constant_exprt kind(size_t_type);
-  kind.set_value(
-    integer2binary(0, atoi(size_t_type.width().as_string().c_str())));
+  kind.set_value(integer2binary(
+    esbmc_object_size_whole, atoi(size_t_type.width().as_string().c_str())));
   expr2tc extent = invoke_intrinsic(
     "c:@F@__ESBMC_builtin_object_size", size_t_type, {expr.op0(), kind});
 
@@ -3187,8 +3188,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     // array's element count, so it agreed only for char.
     const std::string function = "c:@F@__ESBMC_builtin_object_size";
     constant_exprt kind(expr.type());
-    kind.set_value(
-      integer2binary(0, atoi(expr.type().width().as_string().c_str())));
+    kind.set_value(integer2binary(
+      esbmc_object_size_whole, atoi(expr.type().width().as_string().c_str())));
     const std::vector<exprt> args = {expr.op0(), kind};
 
     // The result is a *call*: object_size resolves its object by dereference,

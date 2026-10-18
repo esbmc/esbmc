@@ -1667,6 +1667,14 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
 
     complex_typet t;
     t.set_base_type(elem_type);
+    // C11 6.2.5p13 gives a complex type its real type's alignment, which the
+    // target ABI decides (4 for double in an i386 struct) and alignment()
+    // cannot derive from the element.
+    t.set(
+      "alignment",
+      constant_exprt(
+        BigInt(ASTContext->getTypeAlignInChars(&ct).getQuantity()),
+        size_type()));
     new_type = t;
     break;
   }

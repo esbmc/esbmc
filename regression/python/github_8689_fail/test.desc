@@ -1,0 +1,7 @@
+KNOWNBUG
+main.py
+--multi-property
+^VERIFICATION FAILED$
+FAILED .* line +4 +assertion
+--
+FAILED .* line +3 +assertion

@@ -1423,8 +1423,15 @@ protected:
     const type2tc &new_type,
     const guard2tc &guard,
     const expr2tc &size = expr2tc());
+  /** Records an alloca'd object on the current frame, to die when it returns */
+  void record_frame_alloca(
+    const expr2tc &lhs,
+    const expr2tc &object,
+    bool is_malloc);
   /** Symbolic implementation of free */
   void symex_free(const expr2tc &expr);
+  /** Clear the valid bit of the object \p ptr points to, with no free checks */
+  void invalidate_object(const expr2tc &ptr);
   /** Symbolic implementation of c++'s delete. */
   void symex_cpp_delete(const expr2tc &code);
   /** Symbolic implementation of c++'s new. */
@@ -1861,9 +1868,11 @@ expr2tc gen_byte_memcpy(
 
 /**
  * Returns true iff `name` is the goto-program return-value temp for an
- * `alloca` / `__builtin_alloca` call, i.e. exactly matches
- * `<L1-prefix?>return_value$_alloca$<digits>`.  Used to identify which
- * locals symex must free when the calling function returns.
+ * `alloca` call, i.e. exactly matches
+ * `<L1-prefix?>return_value$_alloca$<digits>`.
+ * Only these allocations die with their frame: `__builtin_alloca` is what the
+ * operational models' `__ESBMC_alloca` expands to, and they rely on the object
+ * outliving the call (#8691).
  *
  * A previous substring-only check fired on any user identifier containing
  * `_alloca$` (e.g. a method literally named `alloca$te`), causing symex to
