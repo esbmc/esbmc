@@ -1744,6 +1744,62 @@ exprt python_list::build_copy_list_call(
   return build_symbol(copied_list);
 }
 
+static const symbolt &
+list_model_function(python_converter &converter, const std::string &name)
+{
+  const symbolt *fn = converter.symbol_table().find_symbol("c:@F@" + name);
+  if (!fn)
+    throw std::runtime_error(name + " not found in symbol table");
+  return *fn;
+}
+
+exprt python_list::build_tuple_copy_call(
+  const exprt &src_list,
+  const nlohmann::json &element)
+{
+  // Marked in place, so the copy keeps its symbol and recorded element types
+  const exprt copy = build_shallow_copy_call(src_list, element);
+  code_function_callt mark;
+  mark.function() =
+    build_symbol(list_model_function(converter_, "__ESBMC_list_mark_tuple"));
+  mark.arguments().push_back(copy);
+  mark.location() = converter_.get_location_from_decl(element);
+  converter_.add_instruction(mark);
+  return copy;
+}
+
+exprt python_list::build_is_tuple_call(const exprt &list)
+{
+  return build_call_expr(
+    list_model_function(converter_, "__ESBMC_list_is_tuple"),
+    bool_type(),
+    {list});
+}
+
+exprt python_list::build_untuple_call(const exprt &list)
+{
+  // Only a variable can hold a list that tuple(x) built here. Its copy keeps
+  // the element types recorded for it.
+  if (!list.is_symbol())
+    return list;
+  const typet list_type = converter_.get_type_handler().get_list_type();
+  symbolt &copy =
+    converter_.create_tmp_symbol(list_value_, "$untuple$", list_type, exprt());
+  code_declt decl(build_symbol(copy));
+  decl.copy_to_operands(build_call_expr(
+    list_model_function(converter_, "__ESBMC_list_untuple"),
+    list_type,
+    {list,
+     from_integer(
+       std::hash<std::string>{}(
+         converter_.get_type_handler().type_to_string(list_type)),
+       size_type())}));
+  decl.location() = converter_.get_location_from_decl(list_value_);
+  converter_.add_instruction(decl);
+  elem_types().assign_from(list.identifier().as_string(), copy.id.as_string());
+  return build_symbol(copy);
+}
+
 exprt python_list::build_shallow_copy_call(
   const exprt &src_list,
   const nlohmann::json &element)

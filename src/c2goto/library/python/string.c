@@ -1098,6 +1098,7 @@ __ESBMC_HIDE:;
   }
 
   list->type = NULL;
+  list->is_tuple = false;
   list->items = items;
   list->size = count;
   return list;

@@ -697,13 +697,16 @@ inline bool is_unresolved_arg_type(const std::string &type)
 
 /// list(x) copies an iterable into the list model, so the call has type
 /// list[T] for an iterable of T. Empty when the iterable's element type is
-/// unknown (GitHub #8358).
+/// unknown (GitHub #8358). tuple(x) of a list or range is modelled as the same
+/// copy (GitHub #8777).
 template <class Json>
 std::string python_annotation<Json>::list_copy_type(
   const std::string &func_name,
   const Json &call)
 {
-  if (func_name != "list" || !call.contains("args") || call["args"].size() != 1)
+  if (
+    (func_name != "list" && func_name != "tuple") || !call.contains("args") ||
+    call["args"].size() != 1)
     return "";
   const std::string source = get_argument_type(call["args"][0]);
   if (source == "range")
