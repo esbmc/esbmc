@@ -48,23 +48,28 @@ static std::string find_iec_operator(const std::string &s)
   return {};
 }
 
+static std::string
+undeclared_message(const std::string &name, const LdProperty &p)
+{
+  const std::string prefix = "property '" + p.id + "': ";
+  const std::string iec_op = find_iec_operator(name);
+
+  if (!iec_op.empty())
+    return prefix + "IEC operator '" + iec_op + "' in '" + name +
+           "'; expressions use C operators (!, &&, ||)";
+
+  if (name.find_first_of(" \t") != std::string::npos)
+    return prefix + "unsupported syntax in '" + name + "'";
+
+  return prefix + "undeclared variable '" + name + "'";
+}
+
 symbol_exprt
 property_encoder::var_expr(const std::string &name, const LdProperty &p) const
 {
   const symbolt *sym = context_.find_symbol(ld_name(name));
-
   if (!sym)
-  {
-    const std::string iec_op = find_iec_operator(name);
-
-    if (!iec_op.empty())
-      throw std::runtime_error(
-        "property '" + p.id + "': IEC operator '" + iec_op +
-        "' is not supported; use C operators (!, &&, ||)");
-
-    throw std::runtime_error(
-      "property '" + p.id + "': undeclared variable '" + name + "'");
-  }
+    throw std::runtime_error(undeclared_message(name, p));
 
   return symbol_exprt(ld_name(name), sym->get_type());
 }
