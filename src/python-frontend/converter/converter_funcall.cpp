@@ -1171,13 +1171,12 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     // Handle list(iterable) where iterable evaluates to a list — e.g.
     // list(d.items()), list(d.keys()), list(d.values()), list(some_list).
     // d.items() returns the keys member as a placeholder list (correct size).
+    // The result is a new list, so mutating it must not reach the argument;
+    // the copy of a keys view is a plain list, compared by order (#8689).
     exprt arg_expr = list_argument_expr(list_arg);
     if (arg_expr.type() == type_handler_.get_list_type())
-    {
-      // list() of a keys view is a plain list, compared by order (#8689).
-      arg_expr.remove(PYTHON_KEYS_VIEW_ATTR);
-      return arg_expr;
-    }
+      return python_list(*this, element)
+        .build_shallow_copy_call(arg_expr, element);
 
     // list(tuple) — materialise the tuple's components into a real list.
     // Without this the tuple struct flows into the generic builder, which

@@ -4010,6 +4010,14 @@ exprt python_list::handle_range_slice(
 
   copy_dict_view_elem_types(array, sliced_id);
 
+  if (elem_types().size(sliced_id) == 0 && array.is_symbol())
+  {
+    const typet uniform =
+      elem_types().uniform_element_type(array.identifier().as_string());
+    if (!uniform.is_nil())
+      elem_types().record(sliced_id, std::string(), uniform);
+  }
+
   if (elem_types().size(sliced_id) == 0)
   {
     if (list_value_.contains("value") && list_value_["value"].contains("id"))
