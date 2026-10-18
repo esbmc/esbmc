@@ -80,6 +80,30 @@ static bool is_pylist_object_type(const typet &type, const namespacet &ns)
   return try_get_pylist_struct_type(type, ns).has_value();
 }
 
+/// `len(list)`. A contract clause cannot name the result of a call, so there it
+/// reads the size field directly.
+static exprt list_length(
+  const exprt &list,
+  const struct_typet &list_struct,
+  bool in_contract_clause)
+{
+  if (in_contract_clause && list.type().is_pointer())
+    return build_deref_member(list, "size", size_type());
+
+  code_typet list_size_type;
+  list_size_type.return_type() = size_type();
+  code_typet::argumentt arg_type;
+  arg_type.type() = pointer_typet(list_struct);
+  list_size_type.arguments().push_back(arg_type);
+
+  symbol_exprt list_size_func("c:@F@__ESBMC_list_size", list_size_type);
+
+  return build_call(
+    list_size_func,
+    size_type(),
+    {list.type().is_pointer() ? list : build_address_of(list)});
+}
+
 /// Python types that define no __len__. Named rather than tested inline so the
 /// len() lowering stays one decision point wide.
 static bool is_unsized_python_type(const std::string &python_type)
@@ -383,6 +407,53 @@ exprt function_call_builder::build_old_snapshot() const
   return snapshot;
 }
 
+const symbolt *
+function_call_builder::clause_name_symbol(const std::string &name) const
+{
+  symbol_id sid(
+    converter_.python_file(),
+    converter_.current_classname(),
+    converter_.current_function_name());
+  sid.set_object(name);
+
+  // A clause may also name a module-level global, which is not in the
+  // function's scope.
+  const symbolt *sym = converter_.symbol_table().find_symbol(sid.to_string());
+  if (!sym)
+    sym = converter_.symbol_table().find_symbol(sid.global_to_string());
+  return sym;
+}
+
+static bool is_int_literal(const nlohmann::json &node)
+{
+  if (
+    node.value("_type", "") == "UnaryOp" &&
+    node["op"].value("_type", "") == "USub")
+    return is_int_literal(node["operand"]);
+  return node.value("_type", "") == "Constant" &&
+         node["value"].is_number_integer();
+}
+
+// `len(l)` and `l[k]`, for a list `l` and an int literal `k`, lower to reads
+// of the list object with no call or branch, so a clause may use them (#7629).
+bool function_call_builder::is_pure_list_query(const nlohmann::json &node) const
+{
+  const std::string kind = node.value("_type", "");
+  const nlohmann::json *base = nullptr;
+  if (
+    kind == "Call" && node["func"].value("id", "") == "len" &&
+    node["args"].size() == 1 &&
+    node.value("keywords", nlohmann::json()).empty())
+    base = &node["args"][0];
+  else if (kind == "Subscript" && is_int_literal(node["slice"]))
+    base = &node["value"];
+
+  if (base == nullptr || base->value("_type", "") != "Name")
+    return false;
+  const symbolt *sym = clause_name_symbol(base->value("id", ""));
+  return sym && is_pylist_object_type(sym->get_type(), converter_.ns);
+}
+
 void function_call_builder::check_clause_name(
   const nlohmann::json &node,
   const std::string &clause) const
@@ -410,17 +481,7 @@ void function_call_builder::check_clause_name(
           converter_.current_function_name()));
   }
 
-  symbol_id sid(
-    converter_.python_file(),
-    converter_.current_classname(),
-    converter_.current_function_name());
-  sid.set_object(name);
-
-  // A clause may also name a module-level global, which is not in the
-  // function's scope.
-  const symbolt *sym = converter_.symbol_table().find_symbol(sid.to_string());
-  if (!sym)
-    sym = converter_.symbol_table().find_symbol(sid.global_to_string());
+  const symbolt *sym = clause_name_symbol(name);
   if (sym && sym->get_type() == any_type())
     throw std::runtime_error(
       fmt::format(
@@ -439,7 +500,8 @@ void function_call_builder::check_clause_name(
 // could not be inferred is a `void *`, so `o > 0` compares a pointer rather
 // than the value the source reads as. Reject all three instead of verifying a
 // different property than the one written. A parameter whose type *is* known,
-// including a list or str, stays allowed.
+// including a list or str, stays allowed, as do `len(l)` and `l[k]` over a
+// list, which lower without a temporary or a branch.
 void function_call_builder::check_contract_clause(
   const nlohmann::json &node,
   const std::string &clause) const
@@ -461,7 +523,7 @@ void function_call_builder::check_contract_clause(
   // ran, and lowers to a snapshot taken there.
   if (
     !node_type.empty() && !is_pure_clause_node(node_type) &&
-    callee != kEsbmcOld)
+    callee != kEsbmcOld && !is_pure_list_query(node))
   {
     throw std::runtime_error(
       fmt::format(
@@ -492,6 +554,23 @@ void function_call_builder::check_contract_clause(
 
   for (const auto &child : node)
     check_contract_clause(child, clause);
+}
+
+// A statement planted while converting a clause runs in the body, not where
+// the clause is checked, so the clause would read a value it never computed.
+void function_call_builder::check_clause_planted_nothing(
+  const std::string &clause,
+  size_t planted) const
+{
+  if (
+    (clause == kEsbmcRequires || clause == kEsbmcEnsures) &&
+    converter_.current_block_statement_count() != planted)
+    throw std::runtime_error(
+      fmt::format(
+        "{} clause at line {} needs a statement to evaluate; a contract clause "
+        "must be a pure expression",
+        clause,
+        call_.value("lineno", 0)));
 }
 
 function_call_builder::function_call_builder(
@@ -1646,21 +1725,8 @@ exprt function_call_builder::build() const
         auto list_struct =
           try_get_pylist_struct_type(arg_symbol->get_type(), converter_.ns);
         if (list_struct)
-        {
-          code_typet list_size_type;
-          list_size_type.return_type() = size_type();
-          code_typet::argumentt arg_type;
-          arg_type.type() = pointer_typet(*list_struct);
-          list_size_type.arguments().push_back(arg_type);
-
-          symbol_exprt list_size_func("c:@F@__ESBMC_list_size", list_size_type);
-
-          return build_call(
-            list_size_func,
-            size_type(),
-            {arg_expr.type().is_pointer() ? arg_expr
-                                          : build_address_of(arg_expr)});
-        }
+          return list_length(
+            arg_expr, *list_struct, converter_.in_contract_clause());
       }
     }
 
@@ -2023,8 +2089,10 @@ exprt function_call_builder::build() const
 
   const bool saved = converter_.enter_contract_clause(
     needs_bool_intrinsic_symbol(function_id.get_function()));
+  const size_t planted = converter_.current_block_statement_count();
   function_call_expr call_expr(function_id, call_, converter_);
   exprt result = call_expr.get();
   converter_.restore_contract_clause(saved);
+  check_clause_planted_nothing(function_id.get_function(), planted);
   return result;
 }

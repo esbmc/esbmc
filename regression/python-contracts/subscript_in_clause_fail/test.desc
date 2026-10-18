@@ -1,4 +1,4 @@
-FUTURE
+CORE
 main.py
 --enforce-contract first
 ^VERIFICATION FAILED$
