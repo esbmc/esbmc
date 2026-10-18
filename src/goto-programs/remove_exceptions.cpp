@@ -1366,6 +1366,55 @@ private:
     return result;
   }
 
+  /// Point every vtable pointer of `obj`, a `catch (T v)` parameter or one of
+  /// its base subobjects, at T's own vtables: v is copy-initialised as a T, so
+  /// its dynamic type is T, not the thrown class ([except.handle]p15, #8696).
+  void reset_vptrs(
+    goto_programt &body,
+    goto_programt::targett &after,
+    const expr2tc &obj,
+    const irep_idt &object_tag)
+  {
+    const type2tc st = ns.follow(obj->type);
+    if (!is_struct_type(st))
+      return;
+    const struct_type2t &s = to_struct_type(st);
+    const std::string vptr_suffix = "::@vtable_pointer";
+    for (std::size_t i = 0; i < s.members.size(); ++i)
+    {
+      const std::string name = id2string(s.member_names[i]);
+      const expr2tc member = member2tc(s.members[i], obj, s.member_names[i]);
+      if (
+        name.compare(0, BASE_SUBOBJECT_PREFIX.size(), BASE_SUBOBJECT_PREFIX) ==
+        0)
+      {
+        reset_vptrs(body, after, member, object_tag);
+        continue;
+      }
+      if (
+        name.size() <= vptr_suffix.size() ||
+        name.compare(
+          name.size() - vptr_suffix.size(), vptr_suffix.size(), vptr_suffix) !=
+          0)
+        continue;
+      const std::string vptr_class =
+        name.substr(0, name.size() - vptr_suffix.size());
+      const symbolt *vtable = ns.lookup(
+        irep_idt("virtual_table::" + vptr_class + "@" + id2string(object_tag)));
+      if (!vtable)
+        continue;
+      const expr2tc table =
+        symbol2tc(migrate_type(vtable->get_type()), vtable->id);
+      auto assign = body.insert(std::next(after));
+      assign->make_assignment();
+      assign->code = code_assign2tc(
+        member, typecast2tc(s.members[i], address_of2tc(table->type, table)));
+      assign->location = after->location;
+      assign->function = after->function;
+      after = assign;
+    }
+  }
+
   /// Insert `__ESBMC_exc_thrown = false` before a handler and rewrite its
   /// `var = NONDET` binding to read the thrown object via __ESBMC_exc_value:
   ///   catch (T &v): v is a T* — bind the address      v = (T*)value
@@ -1409,6 +1458,13 @@ private:
       expr2tc src = ref_catch ? obj_ptr : dereference2tc(var->type, obj_ptr);
       bind->code = code_assign2tc(var, src);
       before_body = bind;
+      // `var` referred into the code just replaced; read the target back.
+      if (!ref_catch && !is_pointer_catch(h.type))
+        reset_vptrs(
+          body,
+          before_body,
+          to_code_assign2t(bind->code).target,
+          "tag-" + id2string(h.type));
     }
 
     auto insert_after = before_body;
