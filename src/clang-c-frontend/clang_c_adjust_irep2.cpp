@@ -312,14 +312,15 @@ void clang_c_adjust_irep2::adjust_sole_arms(expr2tc &expr)
 }
 
 /// One of a family of spellings differing only by the argument's width:
-/// `__builtin_popcount`, `...l`, `...ll`. The lowering is the same node for all
-/// three, so the suffix carries no information here.
+/// `__builtin_popcount`, `...l`, `...ll` and the type-generic `...g`. The
+/// lowering is the same node for all of them, so the suffix carries no
+/// information here.
 static bool is_width_suffixed(const std::string &name, const std::string &stem)
 {
   if (name.compare(0, stem.size(), stem) != 0)
     return false;
   const std::string suffix = name.substr(stem.size());
-  return suffix.empty() || suffix == "l" || suffix == "ll";
+  return suffix.empty() || suffix == "l" || suffix == "ll" || suffix == "g";
 }
 
 /// The ordered-comparison builtins, which differ from the plain operators only

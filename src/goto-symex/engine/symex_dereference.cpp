@@ -12,6 +12,7 @@ void symex_dereference_statet::dereference_failure(
 {
   expr2tc g = guard.as_expr();
   goto_symex.replace_dynamic_allocation(g);
+  goto_symex.simplify_python_builtins(g);
   goto_symex.claim(not2tc(g), "dereference failure: " + msg);
 }
 
@@ -19,6 +20,7 @@ void symex_dereference_statet::dereference_assume(const guard2tc &guard)
 {
   expr2tc g = guard.as_expr();
   goto_symex.replace_dynamic_allocation(g);
+  goto_symex.simplify_python_builtins(g);
   goto_symex.assume(not2tc(g));
 }
 

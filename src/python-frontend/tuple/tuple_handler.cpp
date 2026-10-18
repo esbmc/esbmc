@@ -462,14 +462,26 @@ exprt tuple_handler::handle_tuple_subscript(
   return result;
 }
 
+static bool has_side_effect(const exprt &expr)
+{
+  if (expr.id() == "sideeffect")
+    return true;
+  for (const auto &op : expr.operands())
+    if (has_side_effect(op))
+      return true;
+  return false;
+}
+
 exprt tuple_handler::prepare_rhs_for_unpacking(
   const nlohmann::json &ast_node,
   exprt &rhs,
   codet &target_block)
 {
   // If RHS is a function call, we need to create a temporary variable first
-  // because we can't do member access on a side effect expression
-  if (rhs.is_function_call() || rhs.id() == "sideeffect")
+  // because we can't do member access on a side effect expression. A call
+  // nested in the RHS (`*(T *)xs.pop()->value`) is bound too, or each target
+  // would run it again.
+  if (rhs.is_function_call() || has_side_effect(rhs))
   {
     locationt loc = converter_.get_location_from_decl(ast_node);
     std::string temp_name =
@@ -601,37 +613,76 @@ void tuple_handler::handle_tuple_unpacking(
     std::string member_name = "element_" + std::to_string(i);
     const typet &member_type = tuple_type.components()[i].type();
     exprt member_access = build_member(rhs, member_name, member_type);
-    const locationt loc = converter_.get_location_from_decl(ast_node);
-    const exprt target =
-      build_symbol(unpack_target_symbol(targets[t], member_type));
+    const exprt target = build_symbol(
+      unpack_target_symbol(targets[t], unpack_target_type(rhs, member_type)));
+    assign_unpacked_element(
+      target,
+      member_access,
+      converter_.get_location_from_decl(ast_node),
+      target_block);
+  }
+}
 
-    // A tuple held in a list is reached through a dereference, and the
-    // dereference layer refuses to build a whole-array rvalue, as C does. A
-    // string element is such an array, so copy it element by element; its size
-    // is static, so the two are the same assignment (#7693).
-    if (
-      member_type.is_array() && to_array_type(member_type).size().is_constant())
-    {
-      const array_typet &arr_t = to_array_type(member_type);
-      const BigInt n =
-        binary2integer(to_constant_expr(arr_t.size()).value().c_str(), false);
-      for (BigInt k = 0; k < n; k = k + 1)
-      {
-        const exprt idx = from_integer(k, index_type());
-        code_assignt store(
-          build_index(target, idx, arr_t.subtype()),
-          build_index(member_access, idx, arr_t.subtype()));
-        store.location() = loc;
-        target_block.copy_to_operands(store);
-      }
-      continue;
-    }
+// A str element of a tuple held in a list or dict (reached through a
+// dereference) outlives the target, so the target can point at it; a later
+// rebinding to a call's char* result then keeps the symbol's type (#8667). A
+// local tuple, such as a loop variable, can expire first, so it is copied.
+typet tuple_handler::unpack_target_type(
+  const exprt &rhs,
+  const typet &member_type) const
+{
+  if (member_type.is_array() && rhs.id() == "dereference")
+    return pointer_typet(member_type.subtype());
+  return member_type;
+}
 
-    // Create assignment
-    code_assignt assign(target, member_access);
+void tuple_handler::assign_unpacked_element(
+  const exprt &target,
+  const exprt &member_access,
+  const locationt &loc,
+  codet &target_block)
+{
+  const typet &member_type = member_access.type();
+
+  // A pointer target shares the element's storage: a str is immutable.
+  if (member_type.is_array() && target.type().is_pointer())
+  {
+    exprt addr = build_address_of(build_index(
+      member_access,
+      from_integer(0, index_type()),
+      to_array_type(member_type).subtype()));
+    if (addr.type() != target.type())
+      addr = typecast_exprt(addr, target.type());
+    code_assignt assign(target, addr);
     assign.location() = loc;
     target_block.copy_to_operands(assign);
+    return;
   }
+
+  // A tuple held in a list is reached through a dereference, and the
+  // dereference layer refuses to build a whole-array rvalue, as C does. A
+  // string element is such an array, so copy it element by element; its size
+  // is static, so the two are the same assignment (#7693).
+  if (member_type.is_array() && to_array_type(member_type).size().is_constant())
+  {
+    const array_typet &arr_t = to_array_type(member_type);
+    const BigInt n =
+      binary2integer(to_constant_expr(arr_t.size()).value().c_str(), false);
+    for (BigInt k = 0; k < n; k = k + 1)
+    {
+      const exprt idx = from_integer(k, index_type());
+      code_assignt store(
+        build_index(target, idx, arr_t.subtype()),
+        build_index(member_access, idx, arr_t.subtype()));
+      store.location() = loc;
+      target_block.copy_to_operands(store);
+    }
+    return;
+  }
+
+  code_assignt assign(target, member_access);
+  assign.location() = loc;
+  target_block.copy_to_operands(assign);
 }
 
 size_t tuple_handler::starred_target_index(const nlohmann::json &targets) const

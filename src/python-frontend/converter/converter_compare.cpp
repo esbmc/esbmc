@@ -872,7 +872,85 @@ expr2tc python_converter::build_is_equality(
       "'is' with an operand that lost its object type, which ESBMC cannot "
       "compare by identity");
 
+  // IEEE == calls a NaN not identical to itself (#8769). Comparing bit
+  // patterns would be exact, but SMT-LIB leaves a NaN's bits unspecified.
+  if (is_floatbv_type(lhs2->type) && lhs2->type == rhs2->type)
+    return or2tc(
+      equality2tc(lhs2, rhs2), and2tc(isnan2tc(lhs2), isnan2tc(rhs2)));
+
   return equality2tc(lhs2, rhs2);
+}
+
+std::optional<std::pair<exprt, std::string>>
+python_converter::bound_method_operand(const nlohmann::json &operand)
+{
+  if (
+    operand.value("_type", "") != "Attribute" ||
+    operand["value"].value("_type", "") != "Name")
+    return std::nullopt;
+  const std::string &attr = operand["attr"].get_ref<const std::string &>();
+  const nlohmann::json &body = (*ast_json)["body"];
+  if (std::none_of(body.begin(), body.end(), [&](const nlohmann::json &stmt) {
+        return stmt.value("_type", "") == "ClassDef" &&
+               sole_method_def(stmt["name"].get<std::string>(), attr);
+      }))
+    return std::nullopt;
+  const exprt receiver = get_expr(operand["value"]);
+  if (!receiver.type().is_pointer())
+    return std::nullopt;
+  const typet &pointed = ns.follow(receiver.type().subtype());
+  if (!pointed.is_struct())
+    return std::nullopt;
+  const struct_typet &instance = to_struct_type(pointed);
+  const std::string class_name =
+    extract_class_name_from_tag(instance.tag().as_string());
+  const auto mro = class_mro(class_name);
+  if (
+    !mro || instance.has_component(attr) || overridden_below(class_name, attr))
+    return std::nullopt;
+  for (const std::string &cls : *mro)
+    if (class_binds_name(cls, attr))
+    {
+      // A decorator (staticmethod, classmethod, property) may not bind the
+      // receiver at all.
+      const nlohmann::json *def = sole_method_def(cls, attr);
+      if (!def || !def->value("decorator_list", nlohmann::json()).empty())
+        return std::nullopt;
+      return std::make_pair(receiver, cls + "." + attr);
+    }
+  return std::nullopt;
+}
+
+/// Two bound methods are equal when they bind the same function to the same
+/// object (#8457). No subclass overrides either method, so the class that
+/// defines it on the static type is the one the object runs.
+std::optional<exprt>
+python_converter::try_bound_method_compare(const nlohmann::json &element)
+{
+  if (
+    element.value("_type", "") != "Compare" || element["ops"].size() != 1 ||
+    element["comparators"].size() != 1)
+    return std::nullopt;
+  const std::string op = element["ops"][0]["_type"].get<std::string>();
+  if (op != "Eq" && op != "NotEq")
+    return std::nullopt;
+  const nlohmann::json &left = element["left"];
+  const nlohmann::json &right = element["comparators"][0];
+  if (
+    left.value("_type", "") != "Attribute" ||
+    right.value("_type", "") != "Attribute")
+    return std::nullopt;
+  const auto lhs = bound_method_operand(left);
+  const auto rhs = lhs ? bound_method_operand(right) : std::nullopt;
+  if (!lhs || !rhs)
+    return std::nullopt;
+  const typet object = pointer_typet(empty_typet());
+  exprt same = lhs->second != rhs->second
+                 ? gen_bool(false)
+                 : exprt(equality_exprt(
+                     typecast_exprt(lhs->first, object),
+                     typecast_exprt(rhs->first, object)));
+  return op == "Eq" ? same : exprt(not_exprt(same));
 }
 
 /// Construct the expression for Python 'is' operator
@@ -1040,6 +1118,26 @@ std::optional<std::string> python_converter::class_identity_operand(
   return *held;
 }
 
+static bool may_hold_class(const exprt &expr)
+{
+  const typet &t = expr.type();
+  return (t.is_array() || t.is_pointer()) &&
+         (t.subtype() == char_type() || t.subtype().id() == "empty");
+}
+
+/// Whether an operand the fold could not resolve to a class may still be
+/// one: an unresolved type(x) denotes a class, and since a class object is
+/// lowered to a string, so may a name typed as a string or erased to void *
+/// (say a parameter). Such a side is left to the comparison paths that follow.
+static bool undecided_side(
+  const std::optional<std::string> &cls,
+  const nlohmann::json &node,
+  const exprt &expr)
+{
+  return !cls && (is_type_call(node) ||
+                  (node["_type"] == "Name" && may_hold_class(expr)));
+}
+
 exprt python_converter::handle_type_identity_check(
   const std::string &op,
   const exprt &lhs,
@@ -1054,11 +1152,9 @@ exprt python_converter::handle_type_identity_check(
     class_identity_operand(left, lhs);
   const std::optional<std::string> rhs_class =
     class_identity_operand(right, rhs);
-  // An unresolved type(x) still denotes a class, so it is left to the
-  // comparison paths that follow.
   if (
-    (!lhs_class && !rhs_class) || (!lhs_class && is_type_call(left)) ||
-    (!rhs_class && is_type_call(right)))
+    (!lhs_class && !rhs_class) || undecided_side(lhs_class, left, lhs) ||
+    undecided_side(rhs_class, right, rhs))
     return nil_exprt();
 
   // A value is never identical to a class object.

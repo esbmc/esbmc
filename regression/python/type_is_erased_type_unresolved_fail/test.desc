@@ -1,5 +1,0 @@
-CORE
-main.py
-
-^VERIFICATION FAILED$
-isinstance\(\) on a value whose type was lost

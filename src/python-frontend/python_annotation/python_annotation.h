@@ -10,6 +10,7 @@
 #include <python-frontend/python_annotation/annotation_intrinsics.h>
 #include <python-frontend/python_annotation/annotation_parser.h>
 #include <python-frontend/python_annotation/annotation_utils.h>
+#include <python-frontend/python_annotation/function_values.h>
 #include <util/message/message.h>
 
 #include <map>
@@ -76,6 +77,14 @@ public:
   }
   /// @return true if this pass wrote at least one parameter annotation.
   bool preprocess_function_calls(Json &root);
+  std::string
+  promote_to_float_operand(const Json &stmt, const std::string &type);
+  bool annotate_from_call_sites(
+    Json &root,
+    Json &param,
+    const std::pair<std::string, size_t> &key,
+    std::set<std::string> types,
+    const std::set<std::string> &top_level_funcs);
   void collect_function_call_arg_types(
     Json &node,
     std::map<std::pair<std::string, size_t>, std::set<std::string>>
@@ -106,6 +115,7 @@ private:
   find_annotated_assign(const std::string &node_name, const Json &body);
   Json
   match_unpacking_assignment(const Json &elem, const std::string &node_name);
+  Json find_receiver_decl(const std::string &obj);
   std::vector<Json>
   find_function_calls(const std::string &func_name, const Json &body);
   void find_function_calls_recursive(
@@ -122,6 +132,7 @@ private:
   std::string get_type_from_lhs(const std::string &id, const Json &body);
   std::string get_list_subtype(const Json &list);
   std::string get_list_type_from_literal(const Json &list_arg);
+  std::string list_concat_type(const Json &binop);
   // Recover a `list[T]` type for a name bound to an *empty* list literal by
   // inspecting the first `<var_name>.append(arg)` in the enclosing scope.
   // Comprehensions lower to `tmp = []; tmp.append(elt)`, so the element type
@@ -149,6 +160,9 @@ private:
   // The type of `f(...)[i]` read from f's `list[T]` return annotation, or "Any"
   // when the subscript's base is not such a call.
   std::string subscript_type_from_call(const Json &subscript_node);
+
+  // The type every element of the literal in `[a, b, ...][i]` shares, or "Any".
+  std::string subscript_type_from_list_literal(const Json &subscript_node);
   bool
   is_imported_name_in_body(const std::string &name, const Json &stmts) const;
   bool is_imported_name(const std::string &name) const;
@@ -165,6 +179,7 @@ private:
   std::string get_argument_type(const Json &arg);
   std::string get_dict_literal_type(const Json &dict_value);
   std::string get_call_type(const Json &arg);
+  std::string get_attribute_type(const Json &arg);
   std::string get_builtin_call_type(const Json &call);
   // Type of a builtin call whose result depends on its argument (abs, hash),
   // or empty for any other call.
@@ -178,6 +193,10 @@ private:
     const Json &ifexp_node,
     const Json &body,
     std::string &inferred_type);
+  std::optional<std::pair<Json, std::string>>
+  function_signature(const function_values::candidate &function);
+  std::string
+  function_value_return_type(const Json &value, const Json *call = nullptr);
   InferResult
   infer_type(const Json &stmt, const Json &body, std::string &inferred_type);
   // True for a `np.<ctor>(...)` call node (module or aliased), where <ctor>
@@ -318,6 +337,34 @@ private:
   std::string infer_parameter_type_from_calls(
     size_t param_index,
     const std::vector<Json> &function_calls);
+  struct caller_scopet
+  {
+    std::string root;
+    std::string ctx;
+    std::string class_prefix;
+    bool in_lambda = false;
+  };
+  std::string caller_arg_type(const Json &arg, const caller_scopet &scope);
+  void collect_caller_arg_types(
+    const std::string &callee,
+    size_t index,
+    const Json &node,
+    const caller_scopet &scope,
+    std::vector<std::string> &types);
+  std::vector<std::string> caller_arg_types(
+    const std::string &func_name,
+    size_t index,
+    const Json &search_context);
+  std::string infer_parameter_type_at_call_sites(
+    const std::string &func_name,
+    size_t param_index,
+    const std::vector<Json> &function_calls,
+    const Json &search_context);
+  bool specializable_at_call_sites(
+    const std::string &func_name,
+    size_t param_index,
+    std::vector<std::string> &call_types,
+    const Json &search_context);
   void infer_parameter_types(Json &function_element);
 
   // ----- top-level orchestration entry points -----
@@ -325,6 +372,8 @@ private:
   void annotate_function(Json &function_element);
   void annotate_class(Json &class_element);
   void infer_loop_variable_types(Json &while_stmt);
+  Json list_element_annotation(const Json &iter_node);
+  Json self_attr_list_element(const std::string &attr);
   void annotate_branch_blocks(Json &element);
   void add_annotation(Json &body);
   std::string widen_to_optional_scalar(

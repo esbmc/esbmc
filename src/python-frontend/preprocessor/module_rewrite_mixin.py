@@ -4,6 +4,7 @@ from collections import Counter
 
 from preprocessor.bound_method_dispatch import dispatch_rebound_methods
 from preprocessor.match_lowering import lower_match_statements
+from preprocessor.function_value_types import reject_mixed_function_values
 from preprocessor.receiver_classes import refuse_path_dependent_receivers
 from preprocessor.unbound_locals import guard_unbound_locals
 # pylint: disable=too-many-branches,too-many-boolean-expressions
@@ -475,6 +476,7 @@ class ModuleRewriteMixin:
 
     def prepare_module(self, node, alias_seed=frozenset(), wrapper_seed=None):
         """Run pre-visit analyses and range-alias/wrapper canonicalization."""
+        reject_mixed_function_values(node, self.module_name)
         lower_match_statements(node)
         refuse_path_dependent_receivers(node, self.module_name)
         self.expand_unittest_main(node)
@@ -496,6 +498,7 @@ class ModuleRewriteMixin:
 
         self._scan_shadowed_nondet_collections(node)
         self._scan_imported_module_names(node)
+        self._scan_functools_reduce_names(node)
 
         self.iterator_classes = self._scan_iterator_classes(node)
         self.iterator_params = self._scan_iterator_params(node)

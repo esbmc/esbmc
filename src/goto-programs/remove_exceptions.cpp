@@ -1366,6 +1366,48 @@ private:
     return result;
   }
 
+  /// The value a `catch (T *)` binds: the thrown pointer, converted to `T *`
+  /// ([except.handle]p3). A thrown `D *` whose `T` base sits at a non-zero
+  /// offset moves to that subobject, and a null pointer stays null (#8695).
+  expr2tc
+  catch_pointer_value(const type2tc &var_type, const irep_idt &catch_type)
+  {
+    const type2tc char_ptr = pointer_type2tc(get_uint8_type());
+    const expr2tc thrown_ptr =
+      dereference2tc(char_ptr, typecast2tc(pointer_type2tc(char_ptr), value));
+    expr2tc result = typecast2tc(var_type, thrown_ptr);
+
+    const std::string suffix = "_ptr";
+    auto pointee = [&suffix](const irep_idt &name) {
+      const std::string s = id2string(name);
+      return s.substr(0, s.size() - suffix.size());
+    };
+    const irep_idt target_tag = "tag-" + pointee(catch_type);
+    for (const auto &[dname, id] : registry.concrete_subtypes(catch_type))
+    {
+      const symbolt *dsym = ns.lookup(irep_idt("tag-" + pointee(dname)));
+      if (!dsym)
+        continue;
+      std::optional<BigInt> off =
+        direct_base_offset(migrate_type(dsym->get_type()), target_tag);
+      if (!off || *off == 0)
+        continue;
+      expr2tc rebased = if2tc(
+        var_type,
+        equality2tc(thrown_ptr, gen_zero(char_ptr)),
+        gen_zero(var_type),
+        typecast2tc(
+          var_type,
+          add2tc(char_ptr, thrown_ptr, constant_int2tc(index_type2(), *off))));
+      result = if2tc(
+        var_type,
+        equality2tc(type_id, constant_int2tc(type_id->type, BigInt(id))),
+        rebased,
+        result);
+    }
+    return result;
+  }
+
   /// Insert `__ESBMC_exc_thrown = false` before a handler and rewrite its
   /// `var = NONDET` binding to read the thrown object via __ESBMC_exc_value:
   ///   catch (T &v): v is a T* — bind the address      v = (T*)value
@@ -1407,6 +1449,8 @@ private:
         ref_catch ? var->type : pointer_type2tc(var->type);
       expr2tc obj_ptr = catch_object_pointer(catch_ptr_type, h.type);
       expr2tc src = ref_catch ? obj_ptr : dereference2tc(var->type, obj_ptr);
+      if (is_pointer_catch(h.type) && is_pointer_type(var->type))
+        src = catch_pointer_value(var->type, h.type);
       bind->code = code_assign2tc(var, src);
       before_body = bind;
     }

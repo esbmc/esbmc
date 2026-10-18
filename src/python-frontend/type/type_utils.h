@@ -31,6 +31,7 @@ enum class StatementType
   RAISE,
   UNKNOWN,
   GLOBAL,
+  NONLOCAL,
   TRY,
   EXCEPTHANDLER,
   DELETE_STATEMENT
@@ -409,7 +410,8 @@ public:
       "type",
       "object",
       "complex",
-      "frozenset"};
+      "frozenset",
+      "NoneType"};
     return type_identifiers.find(name) != type_identifiers.end();
   }
 

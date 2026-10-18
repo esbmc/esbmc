@@ -8,6 +8,7 @@
 #include <python-frontend/module/global_scope.h>
 #include <python-frontend/python-dict/python_dict_handler.h>
 #include <python-frontend/dynamic_type/dynamic_type_handler.h>
+#include <python-frontend/dynamic_type/literal_divergence.h>
 #include <python-frontend/math/python_math.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/type/element_type_registry.h>
@@ -393,6 +394,16 @@ public:
     const nlohmann::json &element,
     const std::string &prefix);
 
+  /// Before an access to `var_name.attr_name` through a class pointer that
+  /// may be None, raises AttributeError when it is, as CPython does. Planted
+  /// only where the read runs exactly when the statement does, so never in an
+  /// and/or tail or a while test, whose reads are left as before.
+  void guard_attribute_on_none(
+    const symbolt &symbol,
+    const std::string &var_name,
+    const std::string &attr_name,
+    const nlohmann::json &element);
+
   void emit_guarded_raise(
     const exprt &cond,
     const std::string &exception,
@@ -527,6 +538,10 @@ public:
   {
     return in_contract_clause_;
   }
+  size_t current_block_statement_count() const
+  {
+    return current_block ? current_block->operands().size() : 0;
+  }
 
   /// The class a variable was last assigned as a value (`x = int`), or null.
   /// Kept here rather than read back from the symbol's value, which the IREP2
@@ -602,6 +617,13 @@ private:
 
   void get_function_definition(const nlohmann::json &function_node);
 
+  /// Before a call through `callee`, whose function type is unknown, refuses
+  /// the path where it holds a top-level function taking a different number
+  /// of parameters than @p call passes: such a call fills no defaults and
+  /// raises no TypeError.
+  void
+  refuse_mismatched_callees(const exprt &callee, const nlohmann::json &call);
+
   exprt get_function_body_or_unsupported(const nlohmann::json &function_node);
 
   /// Moves the declaration of each local first assigned in a nested block of
@@ -629,6 +651,12 @@ private:
   static bool contains_nested_scope_named_expr(const nlohmann::json &node);
 
   exprt get_binary_operator_expr(const nlohmann::json &element);
+  /// `a.m == b.m` for methods of instances, or nothing for any other shape.
+  std::optional<exprt> try_bound_method_compare(const nlohmann::json &element);
+  /// The receiver of `name.m` naming a method, and `C.m` for the class C
+  /// that defines it, or nothing.
+  std::optional<std::pair<exprt, std::string>>
+  bound_method_operand(const nlohmann::json &operand);
   exprt get_binary_operator_expr(
     const nlohmann::json &element,
     const nlohmann::json &left,
@@ -789,6 +817,18 @@ private:
   std::string create_normalized_self_key(const std::string &class_tag);
 
   std::string extract_class_name_from_tag(const std::string &tag_name);
+
+  /// The number bindings of `name` in the scope being converted that are
+  /// live at line `before`: the ones that reach it, or with `include_later`
+  /// also the ones that share its storage further on.
+  std::vector<dynamic_type_detail::numeric_bindingt> scope_numeric_bindings(
+    const std::string &name,
+    int before,
+    bool include_later) const;
+
+  void reject_inexact_number_join(
+    const nlohmann::json &element,
+    const exprt &expr) const;
 
   // The class name `t` names, or empty when it is neither a struct nor a
   // `tag-<Class>` symbol reference.
@@ -2070,6 +2110,55 @@ private:
     nlohmann::json &rewritten,
     codet &target_block);
   bool needs_numpy_view_call_binding(const nlohmann::json &node);
+  std::string numpy_view_callee_name(const symbol_id &function) const;
+  std::optional<std::pair<std::string, std::size_t>>
+  numpy_view_method_callee(const nlohmann::json &call) const;
+  bool binds_every_numpy_view_argument(const nlohmann::json &call);
+  bool names_python_builtin(const std::string &name) const;
+  bool consumes_numpy_view_as_list(const nlohmann::json &node) const;
+  bool is_builtin_over_numpy_view(const nlohmann::json &node) const;
+  symbolt *find_symbol_in_import(
+    const nlohmann::json &obj,
+    const std::string &symbol_id,
+    const std::string &lookup_name) const;
+  symbolt *find_symbol_in_module(
+    const std::string &symbol_id,
+    const std::string &module_file,
+    const std::string &lookup_name,
+    const std::string &name) const;
+  bool import_hides_builtin(
+    const nlohmann::json &import,
+    const std::string &symbol_id,
+    const std::string &name) const;
+  bool needs_fresh_retype_slot(
+    const exprt &lhs,
+    const exprt &rhs,
+    const std::string &lhs_id) const;
+  bool is_numpy_array_to_view_rebind(
+    const exprt &lhs,
+    const exprt &rhs,
+    const std::string &lhs_id) const;
+  bool passes_numpy_view_anywhere(const nlohmann::json &call);
+  bool is_handled_numpy_view_call(const nlohmann::json &call);
+  bool is_attribute_store_of_numpy_view(
+    const nlohmann::json &target,
+    const nlohmann::json &value);
+  bool call_needs_view_argument_hoist(const nlohmann::json &call);
+  bool takes_numpy_view_argument(const nlohmann::json &call, std::size_t index);
+  bool is_rank1_numpy_view(const nlohmann::json &node) const;
+  bool is_rank1_numpy_array_name(const nlohmann::json &node) const;
+  bool adapt_numpy_view_builtin_arguments(nlohmann::json &node);
+  std::optional<nlohmann::json>
+  inline_numpy_view_lambda_call(const nlohmann::json &call);
+  bool is_inlined_numpy_view_lambda(const nlohmann::json &statement);
+  std::optional<bool> bind_lambda_arguments(
+    const nlohmann::json &signature,
+    const nlohmann::json &args,
+    std::map<std::string, nlohmann::json> &values) const;
+  std::set<std::string> numpy_inlined_lambdas_;
+  const nlohmann::json &adapt_numpy_view_builtin_calls(
+    const nlohmann::json &statement,
+    nlohmann::json &rewritten);
   bool split_conditional_numpy_view_assignment(
     const nlohmann::json &statement,
     nlohmann::json &rewritten);
@@ -2479,6 +2568,14 @@ private:
    */
   bool is_global_variable(const symbol_id &sid) const;
 
+  /// Binds each name of a `nonlocal` statement to the enclosing function's
+  /// local, refusing the forms whose writes would not reach it.
+  void declare_nonlocal(const nlohmann::json &element);
+
+  /// Points @p sid at the enclosing function's local when the current
+  /// function declared its name `nonlocal`.
+  void redirect_nonlocal(symbol_id &sid) const;
+
   /**
    * @brief Extracts variable name from assignment target.
    *
@@ -2526,6 +2623,10 @@ private:
     const exprt &lhs,
     const exprt &rhs,
     const nlohmann::json &ast_node,
+    bool is_ctor_call);
+  void widen_int_target_for_float_call(
+    exprt &lhs,
+    const exprt &rhs,
     bool is_ctor_call);
   void handle_function_call_rhs(
     const nlohmann::json &ast_node,
@@ -3169,8 +3270,10 @@ private:
     codet &target_block);
   void store_runtime_numpy_view_layout(
     const nlohmann::json &call,
+    const std::string &func_name,
     std::size_t param_index,
     codet &target_block);
+  std::string numpy_view_callee_of(const nlohmann::json &call);
   std::vector<std::size_t>
   runtime_numpy_view_params(const std::string &func_name);
   void reject_unbound_runtime_numpy_view_call(const nlohmann::json &call);
@@ -3180,6 +3283,10 @@ private:
   static std::optional<numpy_scalar_pointer_view_infot> subview_info(
     const numpy_scalar_pointer_view_infot &parent,
     const nlohmann::json &slice_node);
+  std::optional<std::pair<typet, numpy_scalar_pointer_view_infot>>
+  infer_diagonal_view_layout(
+    const nlohmann::json &call,
+    const std::string &function) const;
   std::optional<std::pair<typet, numpy_scalar_pointer_view_infot>>
   infer_branch_bound_view_layout(
     const nlohmann::json &node,
@@ -3337,6 +3444,9 @@ private:
   // searchsorted, reducers) read the pre-decay shape from here instead.
   std::unordered_map<std::string, std::vector<std::size_t>> numpy_param_shapes_;
   std::unordered_set<std::string> numpy_ambiguous_shape_symbols_;
+  // List parameters mixing strings and numbers whose call sites agree on
+  // each position's type, so a constant index reads that type (#8670).
+  std::unordered_set<std::string> positional_list_params_;
   // Keys are "func_name#param_index" for parameters that receive numpy views
   // and have registered view metadata in numpy_pointer_view_info_.
   std::set<std::string> numpy_view_params_;
@@ -3452,6 +3562,9 @@ private:
   function_call_cache function_call_cache_;
 
   std::vector<std::string> global_declarations;
+  /// A nested function's local id -> the enclosing function it is `nonlocal`
+  /// to.
+  std::map<std::string, std::string> nonlocal_scopes_;
   std::vector<std::string> local_loads;
   bool is_right = false;
   std::vector<std::string> scope_stack_;
