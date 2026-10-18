@@ -528,6 +528,22 @@ static bool spans_bytes(const type2tc &type, uint64_t n)
   return type_byte_size_bits(type).to_uint64() == n * 8;
 }
 
+// Whether [offset, offset+n) lies inside an object of @p type.
+static bool fits_bytes(const type2tc &type, uint64_t offset, uint64_t n)
+{
+  try
+  {
+    return offset + n <= type_byte_size(type).to_uint64();
+  }
+  catch (const array_type2t::dyn_sized_array_excp &)
+  {
+  }
+  catch (const array_type2t::inf_sized_array_excp &)
+  {
+  }
+  return false;
+}
+
 // Collect, shallowest first, every sub-object of @p root that occupies exactly
 // [offset, offset+n) bytes. A struct shares its byte range with a sole member,
 // so the shallowest match is not always the one whose type the destination
@@ -673,18 +689,18 @@ static expr2tc replace_subobject(
 }
 
 // @p dst with the float it holds at [dst_offset, dst_offset+n) read whole
-// from @p src; null when that range is not a float. The C byte loop rebuilds a
-// float a byte at a time, and an intermediate NaN loses its bits:
-// floating-point theory has a single NaN.
+// from @p src; null when that range is not a float or overruns @p src. See
+// gen_byte_memcpy for why the C byte loop cannot copy a float.
 static expr2tc copy_into_float(
   const expr2tc &dst,
-  size_t dst_offset,
+  uint64_t dst_offset,
   const expr2tc &src,
-  size_t src_offset,
-  size_t n)
+  uint64_t src_offset,
+  uint64_t n)
 {
   if (
-    is_pointer_type(src) || is_empty_type(src->type) || is_code_type(src->type))
+    is_pointer_type(src) || is_empty_type(src->type) ||
+    is_code_type(src->type) || !fits_bytes(src->type, src_offset, n))
     return expr2tc();
 
   std::vector<expr2tc> dst_subs;
@@ -695,9 +711,7 @@ static expr2tc copy_into_float(
       continue;
     expr2tc value = byte_extract2tc(
       dst_sub->type, src, gen_ulong(src_offset), target_is_big_endian());
-    expr2tc updated = replace_subobject(dst, dst_offset, n, value);
-    if (updated)
-      return updated;
+    return replace_subobject(dst, dst_offset, n, value);
   }
   return expr2tc();
 }
