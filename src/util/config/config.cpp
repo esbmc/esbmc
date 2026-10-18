@@ -164,12 +164,6 @@ bool configt::set(const cmdlinet &cmdline)
         ansi_c.warnings.push_back(w);
     }
 
-  if (cmdline.isset("floatbv") && cmdline.isset("fixedbv"))
-  {
-    log_error("Can't set both floatbv and fixedbv modes");
-    return true;
-  }
-
   if (cmdline.isset("no-slice-name"))
   {
     const std::list<std::string> &args = cmdline.get_values("no-slice-name");
@@ -182,7 +176,6 @@ bool configt::set(const cmdlinet &cmdline)
     no_slice_ids = {begin(args), end(args)};
   }
 
-  ansi_c.use_fixed_for_float = cmdline.isset("fixedbv");
   ansi_c.reserve_first_page = cmdline.isset("reserve-first-page");
 
   ansi_c.cheri = ansi_ct::CHERI_OFF;
@@ -302,6 +295,13 @@ bool configt::set(const cmdlinet &cmdline)
   else
     dm = ansi_c.target.is_windows_abi() ? LLP64 : LP64;
   ansi_c.set_data_model(dm);
+
+  /* i386's long double used to be a 96-bit (15, 81) float, a format Bitwuzla
+   * rejects (#8097). Model it as binary128, the format x86_64 already uses;
+   * the clang frontend passes -mlong-double-128 so sizeof, alignment and
+   * LDBL_MANT_DIG agree. */
+  if (std::regex_match(ansi_c.target.arch, X86) && ansi_c.word_size == 32)
+    ansi_c.long_double_width = 128;
 
   if (ansi_c.cheri && ansi_c.word_size != 64)
   {

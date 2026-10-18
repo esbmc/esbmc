@@ -1,4 +1,5 @@
 CORE
 main.c
 --32
-^VERIFICATION SUCCESSFUL$
+^VERIFICATION FAILED$
+Incorrect alignment when accessing data object

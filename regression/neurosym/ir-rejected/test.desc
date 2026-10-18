@@ -1,4 +1,4 @@
 CORE
 main.c
---neurosym --ir
-bit-vector-only
+--smtlib --smtlib-oneshot-prog "python main.py %f" --smtlib-logic QF_BV --ir
+needs a logic with the Int sort

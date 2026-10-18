@@ -33,15 +33,11 @@ option(ENABLE_LLM "Build LLM integration module (default: OFF)" OFF)
 # SOLVERS
 #############################
 option(ENABLE_SMTLIB "Use SMTLIB interface solver (default: ON)" ON)
-option(ENABLE_BOOLECTOR "Use Boolector solver (default: OFF)" OFF)
 option(ENABLE_Z3 "Use Z3 solver (default: OFF)" OFF)
 option(ENABLE_MATHSAT "Use MathSAT solver (default: OFF)" OFF)
 option(ENABLE_YICES "Use Yices solver (default: OFF)" OFF)
-option(ENABLE_CVC4 "Use CVC4 solver (default: OFF)" OFF)
 option(ENABLE_CVC5 "Use CVC5 solver (default: OFF)" OFF)
 option(ENABLE_BITWUZLA "Use Bitwuzla solver (default: OFF)" OFF)
-option(ENABLE_BITWUZLLOB "Use Bitwuzllob (Bitwuzla on the Mallob platform) via an external mallob binary (default: ON)" ON)
-option(ENABLE_NEUROSYM "Use NeuroSym (neural-guided GAN + Z3 fallback) via an external Python program (default: ON)" ON)
 
 #############################
 # OTHERS
@@ -102,28 +98,36 @@ else()
 
   set(DEFAULT_CHERI_LLVM_URL "https://github.com/XLiZHI/esbmc/releases/download/v17/clang-cheri-17.zip")
   set(DEFAULT_CHERI_LLVM_NAME "clang-cheri-17")
+endif()
 
-  set(DEFAULT_Z3_URL "https://github.com/Z3Prover/z3/releases/download/z3-4.13.3/z3-4.13.3-x64-glibc-2.35.zip")
-  set(DEFAULT_Z3_NAME z3-4.13.3-x64-glibc-2.35)
-
-  set(MATHSAT_URL "https://mathsat.fbk.eu/release/mathsat-5.6.11-linux-x86_64.tar.gz")
-  set(MATHSAT_NAME "mathsat-5.6.11-linux-x86_64")
-
-  set(DEFAULT_CVC5_URL "https://github.com/cvc5/cvc5/releases/download/cvc5-1.1.2/cvc5-Linux-static.zip")
-  set(DEFAULT_CVC5_NAME cvc5-Linux-static)
+# Camada's prebuilt release: a static libcamada with Bitwuzla, CVC5 and Z3
+# (Z3 only on Windows). The SHA256 pins each archive -- camada carries every
+# backend, so a moved or tampered artefact has to fail the build rather than be
+# linked in. Update the hashes alongside the version; an empty one skips the
+# check.
+set(CAMADA_RELEASE "https://github.com/mikhailramalho/camada/releases/download/v0.23")
+if(WIN32)
+  set(DEFAULT_CAMADA_URL "${CAMADA_RELEASE}/camada-windows-x64.zip")
+  set(DEFAULT_CAMADA_HASH "783a52801586786e32e083d95112634a60a4ea26c00e4a8c1356cb17eba747d0")
+elseif(APPLE)
+  set(DEFAULT_CAMADA_URL "${CAMADA_RELEASE}/camada-macos-arm64.tar.gz")
+  set(DEFAULT_CAMADA_HASH "fdb70f97a6cc785bcbacf8d26fa22470c82f4473f941df34b4ac4b1fd39a27a8")
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)$")
+  set(DEFAULT_CAMADA_URL "${CAMADA_RELEASE}/camada-linux-arm64.tar.gz")
+  set(DEFAULT_CAMADA_HASH "e27a30b0d2f38adc8ff3c1795f569c043c3e37b77b94669cd44c8c75d6015625")
+else()
+  set(DEFAULT_CAMADA_URL "${CAMADA_RELEASE}/camada-linux-x64.tar.gz")
+  set(DEFAULT_CAMADA_HASH "f3d45dc34a6f10476707ef228136b19bc4cfefbd696ca59d7c45de5b2597a3e9")
 endif()
 
 set(ESBMC_LLVM_URL ${DEFAULT_LLVM_URL} CACHE STRING "URL to download prebuilt LLVM")
 set(ESBMC_LLVM_NAME ${DEFAULT_LLVM_NAME} CACHE STRING "Name of the extracted directory of LLVM")
 
-set(ESBMC_Z3_URL ${DEFAULT_Z3_URL} CACHE STRING "URL to download prebuilt Z3")
-set(ESBMC_Z3_NAME ${DEFAULT_Z3_NAME} CACHE STRING "Name of the extracted directory of Z3")
-
-set(ESBMC_CVC5_URL ${DEFAULT_CVC5_URL} CACHE STRING "URL to download prebuilt CVC")
-set(ESBMC_CVC5_NAME ${DEFAULT_CVC5_NAME} CACHE STRING "Name of the extracted directory of CVC")
-
 set(ESBMC_CHERI_LLVM_URL ${DEFAULT_CHERI_LLVM_URL} CACHE STRING "URL to download prebuilt CHERI LLVM")
 set(ESBMC_CHERI_LLVM_NAME ${DEFAULT_CHERI_LLVM_NAME} CACHE STRING "Name of the extracted directory of CHERI LLVM")
+
+set(ESBMC_CAMADA_ARCHIVE_URL ${DEFAULT_CAMADA_URL} CACHE STRING "URL of the prebuilt Camada release archive")
+set(ESBMC_CAMADA_ARCHIVE_HASH ${DEFAULT_CAMADA_HASH} CACHE STRING "SHA256 of the Camada release archive; empty to skip verification")
 
 #############################
 # CMake extra Vars

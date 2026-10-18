@@ -602,6 +602,16 @@ class Executor:
         """Execute the test case. `cwd` isolates ESBMC's output files."""
         cmd = test_case.generate_run_argument_list(*self.tool)
         preexec = _prepare_child if os.name == "posix" else None
+        # ru_maxrss over RUSAGE_CHILDREN is a high-water mark across every
+        # child this process has reaped, so a run covering more than one test
+        # reports the largest of them for all of them -- a 76MB test read as
+        # 4.1GB. Sampling either side attributes the peak only when
+        # this child set it; where it did not, the mark is someone else's and
+        # the figure says so.
+        rss_before = 0
+        if sys.platform.startswith("linux"):
+            import resource
+            rss_before = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
 
         with subprocess.Popen(
             cmd,
@@ -649,7 +659,11 @@ class Executor:
             if sys.platform.startswith("linux"):
                 import resource
                 rss = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
-                print("mem_usage={0} kilobytes".format(rss))
+                if rss > rss_before:
+                    print("mem_usage={0} kilobytes".format(rss))
+                else:
+                    print("mem_usage<={0} kilobytes (peak set by an earlier "
+                          "child)".format(rss))
             return stdout, stderr, proc.returncode
 
 
