@@ -4,7 +4,8 @@
 double acos(double x)
 {
 __ESBMC_HIDE:;
-  return atan2(sqrt(1.0 - x * x), x);
+  // 1.0 - 1.0 is -0.0 when rounding downward, and atan2 honours its sign.
+  return atan2(fabs(sqrt(1.0 - x * x)), x);
 }
 
 double arccos(double x)

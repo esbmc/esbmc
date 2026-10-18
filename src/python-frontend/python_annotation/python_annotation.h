@@ -336,6 +336,34 @@ private:
   std::string infer_parameter_type_from_calls(
     size_t param_index,
     const std::vector<Json> &function_calls);
+  struct caller_scopet
+  {
+    std::string root;
+    std::string ctx;
+    std::string class_prefix;
+    bool in_lambda = false;
+  };
+  std::string caller_arg_type(const Json &arg, const caller_scopet &scope);
+  void collect_caller_arg_types(
+    const std::string &callee,
+    size_t index,
+    const Json &node,
+    const caller_scopet &scope,
+    std::vector<std::string> &types);
+  std::vector<std::string> caller_arg_types(
+    const std::string &func_name,
+    size_t index,
+    const Json &search_context);
+  std::string infer_parameter_type_at_call_sites(
+    const std::string &func_name,
+    size_t param_index,
+    const std::vector<Json> &function_calls,
+    const Json &search_context);
+  bool specializable_at_call_sites(
+    const std::string &func_name,
+    size_t param_index,
+    std::vector<std::string> &call_types,
+    const Json &search_context);
   void infer_parameter_types(Json &function_element);
 
   // ----- top-level orchestration entry points -----
