@@ -274,18 +274,27 @@ STRTOUL_DEF(strtoull, unsigned long long int, ULLONG)
 
 #undef STRTOUL_DEF
 
-/* strtod and strtold were declared in stdlib.h but never defined, so they
- * returned an unconstrained value (and an unconstrained endptr). Share the
- * strtof body rather than duplicating it three times. The digit-by-digit
- * accumulation is approximate for values that are not exactly representable,
- * which is the accuracy strtof already had. */
-#define STRTOF_DEF(name, type, one_tenth)                                      \
+/* Digits accumulate into an integer significand and a decimal exponent. When
+ * both the significand and the power of ten are exact in the result type, one
+ * correctly rounded multiply or divide gives the correctly rounded result
+ * (C11 F.5); otherwise the result is approximate. */
+static double __ESBMC_exact_pow10(int n)
+{
+__ESBMC_HIDE:;
+  /* 10^n is exact in double for n <= 22, since 5^22 < 2^53. */
+  const double p[23] = {1e0,  1e1,  1e2,  1e3,  1e4,  1e5,  1e6,  1e7,
+                        1e8,  1e9,  1e10, 1e11, 1e12, 1e13, 1e14, 1e15,
+                        1e16, 1e17, 1e18, 1e19, 1e20, 1e21, 1e22};
+  return p[n];
+}
+
+#define STRTOF_DEF(name, type, mant_dig, max_exact_pow10)                      \
   type name(const char *str, char **endptr)                                    \
   {                                                                            \
   __ESBMC_HIDE:;                                                               \
-    type result = 0;                                                           \
+    unsigned long long mant = 0;                                               \
+    int dexp = 0;                                                              \
     int sign = 1;                                                              \
-    type decimal_factor = one_tenth;                                           \
                                                                                \
     while (isspace(*str))                                                      \
       str++;                                                                   \
@@ -300,7 +309,10 @@ STRTOUL_DEF(strtoull, unsigned long long int, ULLONG)
                                                                                \
     while (isdigit(*str))                                                      \
     {                                                                          \
-      result = result * 10 + (*str - '0');                                     \
+      if (mant < 1000000000000000000ULL)                                       \
+        mant = mant * 10 + (*str - '0');                                       \
+      else                                                                     \
+        dexp++;                                                                \
       str++;                                                                   \
     }                                                                          \
                                                                                \
@@ -309,8 +321,11 @@ STRTOUL_DEF(strtoull, unsigned long long int, ULLONG)
       str++;                                                                   \
       while (isdigit(*str))                                                    \
       {                                                                        \
-        result += (*str - '0') * decimal_factor;                               \
-        decimal_factor /= 10;                                                  \
+        if (mant < 1000000000000000000ULL)                                     \
+        {                                                                      \
+          mant = mant * 10 + (*str - '0');                                     \
+          dexp--;                                                              \
+        }                                                                      \
         str++;                                                                 \
       }                                                                        \
     }                                                                          \
@@ -330,12 +345,24 @@ STRTOUL_DEF(strtoull, unsigned long long int, ULLONG)
       int exponent = 0;                                                        \
       while (isdigit(*str))                                                    \
       {                                                                        \
-        exponent = exponent * 10 + (*str - '0');                               \
+        if (exponent < 100000)                                                 \
+          exponent = exponent * 10 + (*str - '0');                             \
         str++;                                                                 \
       }                                                                        \
                                                                                \
-      result *= pow(10, exp_sign * exponent);                                  \
+      dexp += exp_sign * exponent;                                             \
     }                                                                          \
+                                                                               \
+    type result = mant;                                                        \
+    if (                                                                       \
+      mant <= (1ULL << mant_dig) && dexp >= -(max_exact_pow10) &&              \
+      dexp <= (max_exact_pow10))                                               \
+    {                                                                          \
+      type p = __ESBMC_exact_pow10(dexp < 0 ? -dexp : dexp);                   \
+      result = dexp < 0 ? result / p : result * p;                             \
+    }                                                                          \
+    else if (mant != 0 && dexp != 0)                                           \
+      result *= pow(10, dexp);                                                 \
                                                                                \
     result *= sign;                                                            \
                                                                                \
@@ -345,11 +372,19 @@ STRTOUL_DEF(strtoull, unsigned long long int, ULLONG)
     return result;                                                             \
   }
 
-STRTOF_DEF(strtof, float, 0.1f)
-STRTOF_DEF(strtod, double, 0.1)
-STRTOF_DEF(strtold, long double, 0.1L)
+/* 5^10 < 2^24, so 10^n is exact in float for n <= 10. long double shares the
+ * double bounds, which are exact for any format at least as wide. */
+STRTOF_DEF(strtof, float, 24, 10)
+STRTOF_DEF(strtod, double, 53, 22)
+STRTOF_DEF(strtold, long double, 53, 22)
 
 #undef STRTOF_DEF
+
+double atof(const char *nptr)
+{
+__ESBMC_HIDE:;
+  return strtod(nptr, NULL);
+}
 
 /* one plus the numeric value, rest is zero */
 static const unsigned char get_atoi_map(unsigned char pos)

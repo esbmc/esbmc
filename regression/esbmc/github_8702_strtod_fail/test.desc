@@ -1,0 +1,5 @@
+CORE
+main.c
+--multi-property
+^\s+FAILED\s+\[main\.assertion\.1\]\s+line\s+7
+^VERIFICATION FAILED$
