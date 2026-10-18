@@ -3048,6 +3048,11 @@ regression/python/github_8417_spine_fail
 regression/python/github_8417_unsupported
 regression/python/github_8417_float_of_int
 regression/python/github_8417_float_of_int_fail
+regression/python/github_8418
+regression/python/github_8418_fail
+regression/python/github_8418_unsupported
+regression/python/github_8358_call_return
+regression/python/github_8358_call_return_fail
 regression/python/github_8408_factory_unsupported
 regression/python/github_8408_inherited
 regression/python/github_8408_inherited_fail
@@ -3140,3 +3145,15 @@ regression/python/github_8475
 regression/python/github_8475_fail
 regression/esbmc/github_8693_complex_member_copy
 regression/esbmc/github_8693_complex_member_offset
+regression/python/github_8642_is_not_none_value
+regression/python/github_8642_is_not_none_value_fail
+regression/esbmc/github_8660_object_size_offset
+regression/esbmc/github_8694_32bit_member_offset
+regression/esbmc/github_8694_32bit_struct_copy
+regression/python/github_8669
+regression/python/github_8669_fail
+regression/python/github_8669_branch_unsupported
+regression/esbmc/github_8712_shared_counter_fail
+regression/esbmc/github_8712_local_counter_simplified
+regression/esbmc-cpp/try_catch/github_8695_catch_pointer_base
+regression/esbmc-cpp/try_catch/github_8695_catch_pointer_base_fail
