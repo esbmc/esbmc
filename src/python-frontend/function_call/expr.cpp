@@ -6592,16 +6592,9 @@ size_t function_call_expr::bind_call_receiver(
             s->set_type(migrate_type(class_ptr));
       }
       if (converter_.current_lhs->type().is_pointer())
-      {
-        const symbolt *new_obj_sym =
-          converter_.symbol_table().find_symbol("c:@F@__ESBMC_new_object");
-        assert(new_obj_sym && "__ESBMC_new_object model required");
-        code_function_callt alloc_call;
-        alloc_call.lhs() = *converter_.current_lhs;
-        alloc_call.function() = symbol_expr(*new_obj_sym);
-        converter_.add_instruction(alloc_call);
-        call.arguments().push_back(*converter_.current_lhs);
-      }
+        call.arguments().push_back(
+          python_list(converter_, call_)
+            .allocate_constructed_object(*converter_.current_lhs));
       else
         call.arguments().push_back(gen_address_of(*converter_.current_lhs));
       param_offset = 1;
