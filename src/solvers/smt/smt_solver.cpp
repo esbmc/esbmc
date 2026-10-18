@@ -837,7 +837,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     }
     else if (int_encoding)
     {
-      a = mk_div(args[0], args[1]);
+      a = mk_truncated_div(d.type, args[0], args[1]);
     }
     else if (is_unsignedbv_type(d.side_1) && is_unsignedbv_type(d.side_2))
     {
@@ -1837,7 +1837,7 @@ smt_astt
 smt_solver_baset::convert_modulus(const modulus2t &m, smt_astt a, smt_astt b)
 {
   if (int_encoding)
-    return mk_mod(a, b);
+    return mk_truncated_rem(m.type, a, b);
   if (is_fixedbv_type(m.side_1) && is_fixedbv_type(m.side_2))
     return mk_bvsmod(a, b);
 
@@ -1850,6 +1850,39 @@ smt_solver_baset::convert_modulus(const modulus2t &m, smt_astt a, smt_astt b)
     return mk_bvsub(a, mk_bvmul(quot, b));
   }
   return both_unsigned ? mk_bvumod(a, b) : mk_bvsmod(a, b);
+}
+
+/// SMT-LIB integer div/mod are Euclidean (0 <= mod < |b|); C11 6.5.5p6
+/// truncates toward zero. The two agree on a non-negative dividend whatever
+/// b's sign, so apply them to |a| and give the result a's sign: one div or
+/// mod per operation, as before (#8662). Unsigned operations stay Euclidean:
+/// integer-mode byte extraction (smt_byteops.cpp) relies on that.
+static smt_astt
+with_dividend_sign(smt_solver_baset &s, smt_astt a, smt_astt of_abs_a)
+{
+  smt_astt a_neg = s.mk_lt(a, s.mk_smt_int(BigInt(0)));
+  return s.mk_ite(a_neg, s.mk_neg(of_abs_a), of_abs_a);
+}
+
+static smt_astt abs_int(smt_solver_baset &s, smt_astt a)
+{
+  return s.mk_ite(s.mk_lt(a, s.mk_smt_int(BigInt(0))), s.mk_neg(a), a);
+}
+
+smt_astt
+smt_solver_baset::mk_truncated_div(const type2tc &type, smt_astt a, smt_astt b)
+{
+  if (!is_signedbv_type(type) || a->sort->id != SMT_SORT_INT)
+    return mk_div(a, b);
+  return with_dividend_sign(*this, a, mk_div(abs_int(*this, a), b));
+}
+
+smt_astt
+smt_solver_baset::mk_truncated_rem(const type2tc &type, smt_astt a, smt_astt b)
+{
+  if (!is_signedbv_type(type) || a->sort->id != SMT_SORT_INT)
+    return mk_mod(a, b);
+  return with_dividend_sign(*this, a, mk_mod(abs_int(*this, a), b));
 }
 
 void smt_solver_baset::note_division_operands(const expr2tc &expr)
