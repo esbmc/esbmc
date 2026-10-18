@@ -443,6 +443,7 @@ bool clang_c_languaget::parse(const std::string &path)
   config.ansi_c.long_long_align = target.getLongLongAlign() / 8;
   config.ansi_c.double_align = target.getDoubleAlign() / 8;
   config.ansi_c.long_double_align = target.getLongDoubleAlign() / 8;
+  config.ansi_c.bitint_max_align = target.getBitIntMaxAlign() / 8;
 
   return false;
 }

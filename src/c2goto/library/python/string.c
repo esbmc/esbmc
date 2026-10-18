@@ -12,6 +12,20 @@ __ESBMC_HIDE:;
   return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
 }
 
+// A deterministic str hash: equal strings hash equal, as hash() requires.
+// FNV-1a, shifted so the result is never negative, and so never -1.
+long __python_str_hash(const char *s)
+{
+__ESBMC_HIDE:;
+  unsigned long h = 14695981039346656037UL;
+  while (*s)
+  {
+    h ^= (unsigned char)*s++;
+    h *= 1099511628211UL;
+  }
+  return (long)(h >> 3);
+}
+
 size_t __python_strnlen_bounded(const char *s, size_t max_len)
 {
 __ESBMC_HIDE:;

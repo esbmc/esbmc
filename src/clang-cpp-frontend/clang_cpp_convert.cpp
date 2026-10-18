@@ -1010,6 +1010,25 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
   }
 
+  case clang::Stmt::ConceptSpecializationExprClass:
+  {
+    const clang::ConceptSpecializationExpr &concept_expr =
+      static_cast<const clang::ConceptSpecializationExpr &>(stmt);
+
+    new_expr = gen_boolean(concept_expr.isSatisfied());
+    break;
+  }
+
+  // If this node is the template (not a specialization), then
+  // isSatisfied asserts an error.
+  case clang::Stmt::RequiresExprClass:
+  {
+    const auto &requires_expr = static_cast<const clang::RequiresExpr &>(stmt);
+
+    new_expr = gen_boolean(requires_expr.isSatisfied());
+    break;
+  }
+
   case clang::Stmt::CXXMemberCallExprClass:
   {
     const clang::CXXMemberCallExpr &member_call =
