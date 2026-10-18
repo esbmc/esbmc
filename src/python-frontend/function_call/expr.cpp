@@ -5857,7 +5857,10 @@ std::optional<exprt> function_call_expr::try_indirect_variable_call()
         resolved = true;
       }
       if (!resolved)
+      {
         call.type() = any_type();
+        converter_.refuse_mismatched_callees(build_symbol(*var_symbol), call_);
+      }
 
       for (const auto &arg_node : call_["args"])
       {

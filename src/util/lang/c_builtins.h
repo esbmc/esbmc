@@ -3,6 +3,11 @@
 #include <string_view>
 #include <util/base/prefix.h>
 
+/// An __ESBMC_builtin_object_size type outside GCC's 0..3: the size of the
+/// whole object, regardless of the pointer's offset, which is what CBMC's
+/// __CPROVER_OBJECT_SIZE and r_ok/w_ok extents mean (#8660).
+constexpr int esbmc_object_size_whole = 4;
+
 /// Which bit of the operand a __builtin_clz*/ctz*/ffs*/clrsb* call reports.
 enum class bit_scan_endt
 {

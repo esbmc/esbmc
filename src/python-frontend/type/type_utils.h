@@ -410,7 +410,8 @@ public:
       "type",
       "object",
       "complex",
-      "frozenset"};
+      "frozenset",
+      "NoneType"};
     return type_identifiers.find(name) != type_identifiers.end();
   }
 
