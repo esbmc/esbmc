@@ -132,6 +132,7 @@ private:
   std::string get_type_from_lhs(const std::string &id, const Json &body);
   std::string get_list_subtype(const Json &list);
   std::string get_list_type_from_literal(const Json &list_arg);
+  std::string list_concat_type(const Json &binop);
   // Recover a `list[T]` type for a name bound to an *empty* list literal by
   // inspecting the first `<var_name>.append(arg)` in the enclosing scope.
   // Comprehensions lower to `tmp = []; tmp.append(elt)`, so the element type
