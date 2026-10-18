@@ -1176,6 +1176,10 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     {
       // list() of a keys view is a plain list, compared by order (#8689).
       arg_expr.remove(PYTHON_KEYS_VIEW_ATTR);
+      // list(xs) builds a new list; returning xs itself would alias the two.
+      if (arg_expr.is_symbol())
+        return python_list(*this, element)
+          .build_shallow_copy_call(arg_expr, element);
       return arg_expr;
     }
 
