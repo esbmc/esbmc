@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: __ESBMC_assigns at line 3 names 'k'; a frame target must be a module-level global or an attribute$
