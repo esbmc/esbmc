@@ -890,6 +890,23 @@ void clang_cpp_convertert::pre_register_inherited_vtables(
   walk(&cxxrd);
 }
 
+/// Whether @p base is a base class of @p derived reached by a single path.
+static bool is_unambiguous_base(
+  const clang::CXXRecordDecl &derived,
+  const clang::CXXRecordDecl &base)
+{
+  clang::CXXBasePaths paths;
+  if (!derived.isDerivedFrom(&base, paths))
+    return false;
+  clang::ASTContext &ctx = derived.getASTContext();
+#if CLANG_VERSION_MAJOR >= 22
+  const clang::QualType qtype = ctx.getCanonicalTagType(&base);
+#else
+  const clang::QualType qtype = ctx.getRecordType(&base);
+#endif
+  return !paths.isAmbiguous(ctx.getCanonicalType(qtype));
+}
+
 bool clang_cpp_convertert::build_dynamic_cast(
   const clang::CXXDynamicCastExpr &cast,
   exprt &new_expr)
@@ -1032,6 +1049,13 @@ bool clang_cpp_convertert::build_dynamic_cast(
       if (D != S && !D->isDerivedFrom(S))
         continue;
       if (!to_void && !(D == T || D->isDerivedFrom(T)))
+        continue;
+      // [expr.dynamic.cast]/8: the cast fails when T occurs more than once in
+      // D. An ambiguous S cannot be re-based (#base_to_derived picks one S),
+      // so that case is left as it was.
+      if (
+        !to_void && D != T && is_unambiguous_base(*D, *S) &&
+        !is_unambiguous_base(*D, *T))
         continue;
 
       std::string D_id, D_name;
