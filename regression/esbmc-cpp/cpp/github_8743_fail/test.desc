@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--std c++17
+^  k = 200 \(11001000\)$
+^VERIFICATION FAILED$
