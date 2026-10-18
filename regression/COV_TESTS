@@ -3138,3 +3138,6 @@ regression/python/github_8355_function_choice
 regression/python/github_8355_function_choice_fail
 regression/python/github_8475
 regression/python/github_8475_fail
+regression/python/github_8771_unbound_method
+regression/python/github_8771_unbound_method_fail
+regression/python/github_8771_bound_and_static_calls
