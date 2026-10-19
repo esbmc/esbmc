@@ -363,6 +363,28 @@ smt_astt smt_solver_baset::convert_concat_int_mode(
   return result;
 }
 
+void smt_solver_baset::define(const expr2tc &expr)
+{
+  const equality2t &eq = to_equality2t(expr);
+  const type2tc &t = eq.side_1->type;
+  const bool scalar = is_bool_type(t) || is_bv_type(t) || is_floatbv_type(t);
+  bool converted;
+  {
+    std::lock_guard lock(smt_cache_mutex);
+    converted = smt_cache.find(eq.side_1) != smt_cache.end();
+  }
+  // Aggregates need the flatteners' assign; a symbol already in use would
+  // otherwise stay free.
+  if (!scalar || converted)
+  {
+    convert_assign(expr);
+    return;
+  }
+  smt_astt value = convert_ast(eq.side_2);
+  std::lock_guard lock(smt_cache_mutex);
+  smt_cache.insert({eq.side_1, value, ctx_level});
+}
+
 smt_astt smt_solver_baset::convert_assign(const expr2tc &expr)
 {
   const equality2t &eq = to_equality2t(expr);
@@ -398,6 +420,22 @@ smt_astt smt_solver_baset::convert_assign(const expr2tc &expr)
   ir_ieee_api->propagate_neg_zero_pred(side1, side2);
 
   return side2;
+}
+
+// Brings a shift count to the width of the shifted value, as SMT requires. A
+// wider count is saturated rather than truncated, so x << 2^32 does not become
+// x << 0: shifting by the width already gives the result of any larger count.
+static expr2tc shift_count(const expr2tc &value, const expr2tc &count)
+{
+  const type2tc &type = value->type;
+  if (count->type->get_width() < type->get_width())
+    return typecast2tc(type, count);
+  const BigInt width(type->get_width());
+  return if2tc(
+    type,
+    greaterthanequal2tc(count, constant_int2tc(count->type, width)),
+    constant_int2tc(type, width),
+    typecast2tc(type, count));
 }
 
 // Returns true when convert_ast_node() would recurse into expr's operands
@@ -1357,12 +1395,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   {
     const shl2t &shl = to_shl2t(expr);
     if (shl.side_1->type->get_width() != shl.side_2->type->get_width())
-    {
-      // frontend doesn't cast the second operand up to the width of
-      // the first, which SMT does not enjoy.
-      expr2tc cast = typecast2tc(shl.side_1->type, shl.side_2);
-      args[1] = convert_ast(cast);
-    }
+      args[1] = convert_ast(shift_count(shl.side_1, shl.side_2));
 
     if (int_encoding)
     {
@@ -1382,12 +1415,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   {
     const ashr2t &ashr = to_ashr2t(expr);
     if (ashr.side_1->type->get_width() != ashr.side_2->type->get_width())
-    {
-      // frontend doesn't cast the second operand up to the width of
-      // the first, which SMT does not enjoy.
-      expr2tc cast = typecast2tc(ashr.side_1->type, ashr.side_2);
-      args[1] = convert_ast(cast);
-    }
+      args[1] = convert_ast(shift_count(ashr.side_1, ashr.side_2));
 
     if (int_encoding)
     {
@@ -1407,12 +1435,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   {
     const lshr2t &lshr = to_lshr2t(expr);
     if (lshr.side_1->type->get_width() != lshr.side_2->type->get_width())
-    {
-      // frontend doesn't cast the second operand up to the width of
-      // the first, which SMT does not enjoy.
-      expr2tc cast = typecast2tc(lshr.side_1->type, lshr.side_2);
-      args[1] = convert_ast(cast);
-    }
+      args[1] = convert_ast(shift_count(lshr.side_1, lshr.side_2));
 
     if (int_encoding)
     {
@@ -3313,6 +3336,12 @@ type2tc smt_solver_baset::get_flattened_array_subtype(const type2tc &type)
 
   // type_rec is now the base type.
   return type_rec;
+}
+
+smt_resultt smt_solver_baset::dec_solve_assuming(const ast_vec &)
+{
+  log_error("{} does not support solving under assumptions", solver_text());
+  abort();
 }
 
 void smt_solver_baset::pre_solve()

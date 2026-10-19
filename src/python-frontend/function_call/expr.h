@@ -103,6 +103,13 @@ private:
    * Returns TypeError exception if type mismatch is detected, nil_exprt
    * otherwise.
    */
+  /// The TypeError CPython raises when an instance method is called on its
+  /// class with no instance (`C.func()`), or nil.
+  exprt unbound_method_error(const symbolt &func_symbol) const;
+
+  /// The TypeError this call's arguments raise, or nil.
+  exprt call_argument_error(const symbolt &func_symbol) const;
+
   exprt check_argument_types(
     const symbolt *func_symbol,
     const nlohmann::json &args,

@@ -72,7 +72,7 @@ target_link_libraries(esbmc-driver PUBLIC
                             ${OLD_FRONTEND_TARGETS} ${SOLIDITY_FRONTEND_TARGETS} ${PYTHON_FRONTEND_TARGETS}
                             ${LD_FRONTEND_TARGETS}
                             ${GOTO_CONTRACTOR_TARGETS} ${JIMPLE_FRONTEND_TARGETS}
-                            clangcfrontend clangcppfrontend symex langapi transition-system-extraction
+                            clangcfrontend clangcppfrontend symex langapi transition-system-extraction transition-system-engines
                             solvers clibs gotoalgorithms cache ESBMC::boost goto2c ${OS_INCLUDE_LIBS}
                             nlohmann_json::nlohmann_json)
 

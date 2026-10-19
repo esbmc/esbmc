@@ -922,6 +922,40 @@ void clang_cpp_convertert::pre_register_inherited_vtables(
   walk(&cxxrd);
 }
 
+/// Whether @p base is a base class of @p derived reached by a single path.
+static bool is_unambiguous_base(
+  const clang::CXXRecordDecl &derived,
+  const clang::CXXRecordDecl &base)
+{
+  clang::CXXBasePaths paths;
+  if (!derived.isDerivedFrom(&base, paths))
+    return false;
+  clang::ASTContext &ctx = derived.getASTContext();
+#if CLANG_VERSION_MAJOR >= 22
+  const clang::QualType qtype = ctx.getCanonicalTagType(&base);
+#else
+  const clang::QualType qtype = ctx.getRecordType(&base);
+#endif
+  return !paths.isAmbiguous(ctx.getCanonicalType(qtype));
+}
+
+/// Whether a dynamic_cast from @p S to @p T can succeed on an object of
+/// dynamic type @p D, a class at-or-below S.
+static bool is_dynamic_cast_target(
+  const clang::CXXRecordDecl &D,
+  const clang::CXXRecordDecl &S,
+  const clang::CXXRecordDecl &T)
+{
+  if (&D == &T)
+    return true;
+  if (!D.isDerivedFrom(&T))
+    return false;
+  // [expr.dynamic.cast]/8: the cast fails when T occurs more than once in D.
+  // An ambiguous S cannot be re-based (#base_to_derived picks one S), so that
+  // case is left as it was.
+  return !is_unambiguous_base(D, S) || is_unambiguous_base(D, T);
+}
+
 bool clang_cpp_convertert::build_dynamic_cast(
   const clang::CXXDynamicCastExpr &cast,
   exprt &new_expr)
@@ -1054,7 +1088,10 @@ bool clang_cpp_convertert::build_dynamic_cast(
   // address, per-D result expression).
   pointer_typet vptr_type(symbol_typet(vtable_type_prefix + vptr_class_id));
   std::vector<std::pair<exprt, exprt>> arms;
-  exprt typed_null = gen_zero(target_type);
+  // Each arm yields a T* (for the reference form too, which derefs it below).
+  const typet result_ptr_type =
+    is_reference ? typet(pointer_typet(target_type)) : target_type;
+  exprt typed_null = gen_zero(result_ptr_type);
 
   auto vptr_it = vtable_classes_per_vptr_.find(vptr_class_id);
   if (vptr_it != vtable_classes_per_vptr_.end())
@@ -1063,7 +1100,7 @@ bool clang_cpp_convertert::build_dynamic_cast(
     {
       if (D != S && !D->isDerivedFrom(S))
         continue;
-      if (!to_void && !(D == T || D->isDerivedFrom(T)))
+      if (!to_void && !is_dynamic_cast_target(*D, *S, *T))
         continue;
 
       std::string D_id, D_name;
@@ -1090,7 +1127,7 @@ bool clang_cpp_convertert::build_dynamic_cast(
         get_decl_name(*T, T_name, T_id);
         result.set("#derived_to_base", T_id);
       }
-      gen_typecast(ns, result, target_type);
+      gen_typecast(ns, result, result_ptr_type);
       arms.push_back({vt_addr, result});
     }
   }
@@ -1105,8 +1142,18 @@ bool clang_cpp_convertert::build_dynamic_cast(
       src_deref, vptr_class_id + "::" + vtable_ptr_suffix, vptr_type);
   }
 
+  // The T's position differs between runtime types (`C1 : A, B` vs
+  // `C2 : A, P, B`), so each matching D selects its own adjusted result
+  // (#8697); `otherwise` is taken when no D matches.
+  auto select_by_vptr = [&](exprt otherwise) {
+    for (auto it = arms.rbegin(); it != arms.rend(); ++it)
+      otherwise =
+        if_exprt(equality_exprt(vptr_read, it->first), it->second, otherwise);
+    return otherwise;
+  };
+
   // OR-chain: vptr == arm0 || vptr == arm1 || ... — used by the reference
-  // form and the T* pointer form. Precondition: arms not empty.
+  // form. Precondition: arms not empty.
   auto vptr_match_any = [&]() -> exprt {
     exprt match = equality_exprt(vptr_read, arms.front().first);
     for (size_t i = 1; i < arms.size(); ++i)
@@ -1125,7 +1172,7 @@ bool clang_cpp_convertert::build_dynamic_cast(
     typet ref_type = pointer_typet(target_type);
     ref_type.set("#reference", true);
 
-    exprt cast_value = src_pointer;
+    exprt cast_value = select_by_vptr(typed_null);
     gen_typecast(ns, cast_value, ref_type);
 
     exprt match = arms.empty() ? exprt(false_exprt()) : vptr_match_any();
@@ -1151,26 +1198,8 @@ bool clang_cpp_convertert::build_dynamic_cast(
     return false;
   }
 
-  exprt cast_or_null;
-  if (arms.empty())
-  {
-    // No reachable D can satisfy the cast — emit a typed null directly.
-    cast_or_null = typed_null;
-  }
-  else if (to_void)
-  {
-    // Per-D results differ; chain ITEs so each D selects its own offset.
-    cast_or_null = typed_null;
-    for (auto it = arms.rbegin(); it != arms.rend(); ++it)
-      cast_or_null = if_exprt(
-        equality_exprt(vptr_read, it->first), it->second, cast_or_null);
-  }
-  else
-  {
-    // T* form: every matching D yields the same `(T*) src`, so collapse
-    // the per-D vptr equalities into one OR-chain with a single result.
-    cast_or_null = if_exprt(vptr_match_any(), arms.front().second, typed_null);
-  }
+  // Null when no reachable D matches.
+  exprt cast_or_null = select_by_vptr(typed_null);
 
   // Null-source guard — without this, src_deref above would crash
   // symbolic execution before the SMT solver ever sees the ITE.

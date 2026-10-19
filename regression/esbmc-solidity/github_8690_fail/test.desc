@@ -1,0 +1,14 @@
+CORE
+contract.solast
+--sol contract.sol --contract C --unwind 10 --no-unwinding-assertions --multi-property
+FAILED\s+\[shifts\.assertion\.1\]\s+line\s+10\s
+FAILED\s+\[shifts\.assertion\.2\]\s+line\s+11\s
+FAILED\s+\[shifts\.assertion\.3\]\s+line\s+12\s
+FAILED\s+\[shifts\.assertion\.4\]\s+line\s+15\s
+FAILED\s+\[shifts\.assertion\.5\]\s+line\s+17\s
+FAILED\s+\[small\.assertion\.1\]\s+line\s+23\s
+FAILED\s+\[small\.assertion\.2\]\s+line\s+24\s
+FAILED\s+\[bytesShift\.assertion\.1\]\s+line\s+29\s
+FAILED\s+\[bytesShift\.assertion\.2\]\s+line\s+30\s
+FAILED\s+\[bytesShift\.assertion\.3\]\s+line\s+31\s
+^VERIFICATION FAILED$
