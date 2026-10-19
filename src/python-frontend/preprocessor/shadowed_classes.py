@@ -32,8 +32,8 @@ def _executed_nodes(stmt):
 def _observes(stmt, name):
     """Whether running `stmt` may read `name`: directly, or through a call."""
     return any(
-        isinstance(n, ast.Call) or (isinstance(n, ast.Name) and n.id == name
-                                    and isinstance(n.ctx, ast.Load))
+        isinstance(n, ast.Call) or (
+            isinstance(n, ast.Name) and n.id == name and isinstance(n.ctx, ast.Load))
         for n in _executed_nodes(stmt))
 
 
