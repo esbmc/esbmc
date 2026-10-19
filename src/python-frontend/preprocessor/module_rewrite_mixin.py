@@ -3,6 +3,7 @@ import copy
 from collections import Counter
 
 from preprocessor.bound_method_dispatch import dispatch_rebound_methods
+from preprocessor.itertools_lowering import lower_itertools
 from preprocessor.match_lowering import lower_match_statements
 from preprocessor.namedtuple_lowering import lower_namedtuples
 from preprocessor.function_value_types import reject_mixed_function_values
@@ -534,6 +535,7 @@ class ModuleRewriteMixin:
         _rename_shadowed_classes(node)
         reject_mixed_function_values(node, self.module_name)
         lower_match_statements(node)
+        lower_itertools(node)
         lower_namedtuples(node, self.module_name)
         refuse_path_dependent_receivers(node, self.module_name)
         refuse_skipped_base_init(node, self.module_name)
