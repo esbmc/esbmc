@@ -1326,7 +1326,7 @@ void goto_symext::run_intrinsic(
     "(NB: the C spec reserves the __ prefix for the compiler and "
     "environment)",
     symname);
-  abort();
+  exit(6);
 }
 
 namespace

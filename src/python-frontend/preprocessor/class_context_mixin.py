@@ -526,32 +526,92 @@ class ClassContextMixin:
         """Replace a parameter or local that only ever holds one known class by
         that class's name, which the converter resolves statically (#8389).
 
-        A known class is a top-level class bound only by its definition or a
-        builtin class the module never binds, so its name denotes the same
-        object wherever it is read. A local qualifies when a statement `t = C`
-        directly in its function's body is its only binding: the reads after
-        that statement become `C`. A parameter qualifies when, in the entry
-        module, every reference to its undecorated top-level function is a
-        call passing a known class for it and nothing rebinds it; each
-        distinct combination of such classes gets its own copy of the function,
-        and the calls keep their arguments, so they are still evaluated."""
+        A known class is a top-level class or undecorated function bound only
+        by its definition, or a builtin class the module never binds, so its
+        name denotes the same object wherever it is read. A local qualifies
+        when a statement `t = C` directly in its function's body is its only
+        binding: the reads after that statement become `C`. A parameter
+        qualifies when, in the entry module, every reference to its
+        undecorated top-level function is a call passing a known class for it
+        and nothing rebinds it; each distinct combination of such classes gets
+        its own copy of the function, and the calls keep their arguments, so
+        they are still evaluated."""
         while True:
             counts = Counter(name for n in ast.walk(module) for name in self._names_bound_by(n))
             if counts["*"]:
                 return
             known = self._known_classes(module, counts)
             self._bind_local_type_values(module, known)
-            if not self.is_entry_module or not self._specialise_one_function(module, known, counts):
+            if not self.is_entry_module:
+                return
+            self._lower_called_lambdas(module, known, counts)
+            if not self._specialise_one_function(module, known, counts):
                 return
 
     @staticmethod
     def _known_classes(module, counts):
         defined = {
             s.name
-            for s in module.body if isinstance(s, ast.ClassDef) and counts[s.name] == 1
+            for s in module.body
+            if (isinstance(s, ast.ClassDef) or ClassContextMixin._is_plain_function(s))
+            and counts[s.name] == 1
         }
         builtin = {n for n, v in vars(builtins).items() if isinstance(v, type) and not counts[n]}
         return defined | builtin
+
+    @staticmethod
+    def _is_plain_function(stmt):
+        """Whether `stmt` defines an undecorated function without *args or
+        **kwargs: calls to a variadic function are lowered before this pass,
+        so a call a copy introduces would be left unlowered (#8498)."""
+        return (isinstance(stmt, ast.FunctionDef) and not stmt.decorator_list
+                and not (stmt.args.vararg or stmt.args.kwarg))
+
+    @staticmethod
+    def _lambda_as_def(stmt, counts):
+        """`def f(...): return body` for a statement `f = lambda ...: body`
+        that is the only binding of `f`, else None."""
+        if not (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1
+                and isinstance(stmt.targets[0], ast.Name) and isinstance(stmt.value, ast.Lambda)
+                and counts[stmt.targets[0].id] == 1):
+            return None
+        func = ast.FunctionDef(name=stmt.targets[0].id,
+                               args=stmt.value.args,
+                               body=[ast.Return(value=stmt.value.body)],
+                               decorator_list=[],
+                               returns=None,
+                               type_params=[])
+        return ast.fix_missing_locations(ast.copy_location(func, stmt))
+
+    @staticmethod
+    def _called_parameters(func):
+        """The indexes of `func`'s positional parameters it calls by name."""
+        called = {
+            n.func.id
+            for n in ast.walk(func) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+        }
+        return {i for i, p in enumerate(func.args.posonlyargs + func.args.args) if p.arg in called}
+
+    def _lower_called_lambdas(self, module, known, counts):
+        """Rewrite a top-level `f = lambda ...` that calls one of its
+        parameters to `def f(...)` when every reference to `f` is a call
+        passing a known class or function for each called parameter, so that
+        the def is specialised. The converter types lambda parameters as
+        numbers and cannot call them (#8485)."""
+        loads = Counter(n.id for n in ast.walk(module)
+                        if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load))
+        for i, stmt in enumerate(module.body):
+            func = self._lambda_as_def(stmt, counts)
+            wanted = self._called_parameters(func) if func else None
+            if not wanted:
+                continue
+            calls = [
+                n for n in ast.walk(module) if isinstance(n, ast.Call)
+                and isinstance(n.func, ast.Name) and n.func.id == func.name
+            ]
+            if (calls and loads[func.name] == len(calls)
+                    and wanted <= set(self._type_parameters(func, known, calls))):
+                module.body[i] = func
 
     def _specialise_one_function(self, module, known, counts):
         """Specialise the first top-level function that only ever is called

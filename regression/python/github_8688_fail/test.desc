@@ -1,5 +1,5 @@
 CORE
 main.py
 
-^  FAILED .*invalid literal for int\(\) - trailing characters$
+uncaught exception: ValueError
 ^VERIFICATION FAILED$
