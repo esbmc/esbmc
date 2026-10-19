@@ -1142,6 +1142,8 @@ class CoreVisitorsMixin:
 
         if (function_name not in self.functionVarargs
                 and any(isinstance(arg, ast.Starred) for arg in node.args)):
+            if self._forwards_own_varargs(node):
+                return False
             raise NotImplementedError(
                 f"Unpacking *x into {self._display_name(function_name)}() is supported only "
                 "when x is a list or tuple of statically known length")

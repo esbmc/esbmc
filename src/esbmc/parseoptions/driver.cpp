@@ -315,7 +315,7 @@ int esbmc_parseoptionst::run_chosen_strategy(
   if (cmdline.isset("incremental-context-bound"))
     return do_context_bound_deepening(options, goto_functions);
 
-  if (cmdline.isset("ts-check"))
+  if (ts_strategy_requested())
     return do_ts_strategy(options, goto_functions);
 
   if (
