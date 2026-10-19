@@ -297,6 +297,10 @@ private:
   // "bases". Handles multiple inheritance and cycle-safe (visited guard).
   // "object" is intentionally excluded — it has no ESBMC IR representation.
   std::vector<std::string> get_class_ancestors(const std::string &class_name);
+  void annotate_init_params(Json &init, const Json &call_args);
+  Json *find_inherited_init(const Json &class_node);
+  void record_init_call(const Json &init, const Json &call_args);
+  void annotate_inherited_inits();
   // Returns the lowest common ancestor of two user-defined class types,
   // or "" when none exists.
   std::string
@@ -396,6 +400,9 @@ private:
   Json
     *parent_func; // Track parent function for nested function scope resolution
   int current_line_;
+  std::vector<std::pair<const Json *, std::vector<std::string>>>
+    init_call_arg_types_;
+  std::unordered_set<Json *> inherited_inits_;
   std::string python_filename_;
   bool filter_global_elements_ = false;
   // True only while add_type_annotation(func_name) (the --function

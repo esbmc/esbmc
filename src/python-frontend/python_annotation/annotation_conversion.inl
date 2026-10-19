@@ -5007,6 +5007,107 @@ void python_annotation<Json>::infer_parameter_types(Json &function_element)
 
 // ---------- preprocessing and orchestration ----------
 
+/// Annotate the unannotated parameters of @p init from the arguments of a
+/// constructor call that runs it.
+template <class Json>
+void python_annotation<Json>::annotate_init_params(
+  Json &init,
+  const Json &call_args)
+{
+  if (!init.contains("args") || !init["args"].contains("args"))
+    return;
+  Json &params = init["args"]["args"];
+  // Skip self (index 0), match remaining params with call args
+  for (size_t i = 1; i < params.size() && (i - 1) < call_args.size(); ++i)
+  {
+    Json &param = params[i];
+    // Only annotate if the parameter is not yet annotated;
+    // do not overwrite explicit annotations (e.g.,
+    // Optional["List"]) with a less-specific type inferred from a
+    // call site (e.g., NoneType).
+    if (param.contains("annotation") && !param["annotation"].is_null())
+      continue;
+    std::string arg_type = get_argument_type(call_args[i - 1]);
+    if (!arg_type.empty())
+      add_parameter_annotation(param, arg_type);
+  }
+}
+
+template <class Json>
+void python_annotation<Json>::record_init_call(
+  const Json &init,
+  const Json &call_args)
+{
+  std::vector<std::string> types;
+  for (const Json &arg : call_args)
+    types.push_back(get_argument_type(arg));
+  init_call_arg_types_.emplace_back(&init, std::move(types));
+}
+
+/// Annotate a parameter of an `__init__` reached through a subclass only when
+/// every recorded call passes it the same type: a parameter fed different
+/// types stays unannotated, so its type is still dispatched at run time.
+template <class Json>
+void python_annotation<Json>::annotate_inherited_inits()
+{
+  for (Json *init : inherited_inits_)
+  {
+    if (!init->contains("args") || !(*init)["args"].contains("args"))
+      continue;
+    Json &params = (*init)["args"]["args"];
+    for (size_t i = 1; i < params.size(); ++i)
+    {
+      if (
+        params[i].contains("annotation") && !params[i]["annotation"].is_null())
+        continue;
+      std::string agreed;
+      for (const auto &[call_init, types] : init_call_arg_types_)
+      {
+        if (call_init != init || types.size() < i)
+          continue;
+        if (types[i - 1].empty() || (!agreed.empty() && agreed != types[i - 1]))
+        {
+          agreed.clear();
+          break;
+        }
+        agreed = types[i - 1];
+      }
+      if (!agreed.empty())
+        add_parameter_annotation(params[i], agreed);
+    }
+  }
+}
+
+/// The `__init__` that @p class_node, which defines none, inherits. Only a
+/// chain of single-base classes is followed: there the MRO is the chain itself.
+template <class Json>
+Json *python_annotation<Json>::find_inherited_init(const Json &class_node)
+{
+  std::unordered_set<std::string> visited;
+  const Json *cls = &class_node;
+  while (cls->contains("bases") && (*cls)["bases"].size() == 1 &&
+         (*cls)["bases"][0].contains("id"))
+  {
+    const std::string base = (*cls)["bases"][0]["id"];
+    if (!visited.insert(base).second)
+      return nullptr;
+    auto it = std::find_if(
+      ast_["body"].begin(), ast_["body"].end(), [&](const Json &n) {
+        return n["_type"] == "ClassDef" && n["name"] == base;
+      });
+    if (it == ast_["body"].end())
+      return nullptr;
+    Json *init = nullptr;
+    for (Json &member : (*it)["body"])
+      if (member["_type"] == "FunctionDef" && member["name"] == "__init__")
+        init = &member;
+    if (init)
+      return init;
+    cls = &*it;
+  }
+  return nullptr;
+}
+
 template <class Json>
 void python_annotation<Json>::preprocess_constructor_calls(const Json &node)
 {
@@ -5022,41 +5123,24 @@ void python_annotation<Json>::preprocess_constructor_calls(const Json &node)
       for (Json &class_node : ast_["body"])
       {
         if (
-          class_node["_type"] == "ClassDef" && class_node["name"] == func_name)
+          class_node["_type"] != "ClassDef" || class_node["name"] != func_name)
+          continue;
+        bool has_init = false;
+        for (Json &member : class_node["body"])
         {
-          // Find __init__ method
-          for (Json &member : class_node["body"])
+          if (member["_type"] == "FunctionDef" && member["name"] == "__init__")
           {
-            if (
-              member["_type"] == "FunctionDef" && member["name"] == "__init__")
-            {
-              // Annotate parameters based on this call
-              if (member.contains("args") && member["args"].contains("args"))
-              {
-                Json &params = member["args"]["args"];
-                const Json &call_args = node["args"];
-                // Skip self (index 0), match remaining params with call args
-                for (size_t i = 1;
-                     i < params.size() && (i - 1) < call_args.size();
-                     ++i)
-                {
-                  Json &param = params[i];
-                  // Only annotate if the parameter is not yet annotated;
-                  // do not overwrite explicit annotations (e.g.,
-                  // Optional["List"]) with a less-specific type inferred from a
-                  // call site (e.g., NoneType).
-                  if (
-                    param.contains("annotation") &&
-                    !param["annotation"].is_null())
-                    continue;
-                  const Json &arg = call_args[i - 1];
-                  std::string arg_type = get_argument_type(arg);
-                  if (!arg_type.empty())
-                    add_parameter_annotation(param, arg_type);
-                }
-              }
-            }
+            annotate_init_params(member, node["args"]);
+            record_init_call(member, node["args"]);
+            has_init = true;
           }
+        }
+        if (has_init)
+          continue;
+        if (Json *init = find_inherited_init(class_node))
+        {
+          record_init_call(*init, node["args"]);
+          inherited_inits_.insert(init);
         }
       }
     }
@@ -5345,6 +5429,7 @@ void python_annotation<Json>::add_type_annotation()
 {
   // First pass: preprocess all constructor calls to infer parameter types
   preprocess_constructor_calls(ast_);
+  annotate_inherited_inits();
   // Also preprocess method calls on temporary instances: A().method(args)
   preprocess_method_calls(ast_);
   // Preprocess top-level function calls f(arg) so unannotated parameters of
