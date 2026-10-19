@@ -1496,6 +1496,19 @@ static expr2tc byte_update_bytes(
   return result;
 }
 
+static expr2tc migrate_byte_update(
+  const type2tc &type,
+  const expr2tc &source,
+  const expr2tc &offs,
+  const expr2tc &update,
+  bool big_endian)
+{
+  const expr2tc whole = union_member_update(type, source, offs, update);
+  return is_nil_expr(whole)
+           ? byte_update_bytes(type, source, offs, update, big_endian)
+           : whole;
+}
+
 void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 {
   const migrate_stack_guardt stack_guard;
@@ -2196,10 +2209,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     bool big_endian = (expr.id() == "byte_update_big_endian") ? true : false;
 
-    new_expr_ref = union_member_update(type, sourceval, offs, update);
-    if (is_nil_expr(new_expr_ref))
-      new_expr_ref =
-        byte_update_bytes(type, sourceval, offs, update, big_endian);
+    new_expr_ref =
+      migrate_byte_update(type, sourceval, offs, update, big_endian);
     return;
   }
 
