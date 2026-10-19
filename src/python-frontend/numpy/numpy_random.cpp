@@ -34,7 +34,8 @@ const std::map<std::string, std::vector<std::string>> &signatures()
     {"gamma", {"shape", "scale", "size"}},
     {"weibull", {"a", "size"}},
     {"chisquare", {"df", "size"}},
-    {"randint", {"low", "high", "size", "dtype"}}};
+    {"randint", {"low", "high", "size", "dtype"}},
+    {"choice", {"a", "size", "replace", "p"}}};
   return table;
 }
 
@@ -54,6 +55,11 @@ bool is_integer_param(const std::string &name, const std::string &param)
 {
   return (name == "binomial" && param == "n") ||
          (name == "randint" && (param == "low" || param == "high"));
+}
+
+bool is_bool_literal(const nlohmann::json &node)
+{
+  return node.value("_type", "") == "Constant" && node["value"].is_boolean();
 }
 
 bool is_integral_result(const std::string &name)
@@ -182,6 +188,12 @@ void numpy_random::bind(const std::string &param, const nlohmann::json &arg)
 {
   if (param == "dtype")
     dtype_ = extract_numpy_dtype_name(arg, converter_.ast());
+  else if (param == "a" && name_ == "choice")
+    population_ = read_population(arg);
+  else if (param == "replace")
+    replace_ = read_replace(arg);
+  else if (param == "p" && name_ == "choice")
+    has_probabilities_ = read_probabilities(arg);
   else if (param == "size")
     read_shape(arg);
   else
@@ -249,6 +261,64 @@ void numpy_random::bind_keywords()
   }
 }
 
+// The population is copied into a numpy array once, as NumPy does, so a
+// list, a tuple, an array and a view are read alike.
+exprt numpy_random::read_population(const nlohmann::json &arg)
+{
+  const std::string kind = arg.value("_type", "");
+  if (kind != "List" && kind != "Tuple" && !holds_numpy_array(arg))
+    reject_population();
+  nlohmann::json elements = arg;
+  if (kind == "Tuple")
+    elements["_type"] = "List";
+  nlohmann::json copy = call_;
+  copy["func"]["value"] = call_["func"]["value"]["value"];
+  copy["func"]["attr"] = "array";
+  copy["args"] = nlohmann::json::array({elements});
+  copy["keywords"] = nlohmann::json::array();
+  const exprt population = converter_.get_expr(copy);
+  if (
+    !population.type().is_array() ||
+    !to_array_type(population.type()).size().is_constant())
+    reject_population();
+  return population;
+}
+
+[[noreturn]] void numpy_random::reject_population() const
+{
+  throw std::runtime_error(
+    "TypeError: numpy.random.choice() population must be a literal "
+    "sequence or a numpy array");
+}
+
+bool numpy_random::holds_numpy_array(const nlohmann::json &arg) const
+{
+  if (arg.value("_type", "") == "Subscript")
+    return holds_numpy_array(arg["value"]);
+  if (arg.value("_type", "") != "Name")
+    return false;
+  const std::string id = converter_.resolve_name_symbol_id(arg["id"]);
+  return converter_.numpy_array_symbols_.count(id) != 0 ||
+         converter_.numpy_pointer_view_info_.count(id) != 0;
+}
+
+bool numpy_random::read_replace(const nlohmann::json &arg) const
+{
+  if (!is_bool_literal(arg))
+    throw std::runtime_error(
+      "TypeError: numpy.random.choice() replace must be a boolean literal");
+  return arg["value"].get<bool>();
+}
+
+// p= is evaluated like any argument; its value is never read.
+bool numpy_random::read_probabilities(const nlohmann::json &arg)
+{
+  if (is_none(arg))
+    return false;
+  evaluate_once(arg, "");
+  return true;
+}
+
 bool numpy_random::takes_dimensions() const
 {
   return function_ == "rand" || function_ == "randn";
@@ -311,7 +381,10 @@ void numpy_random::check_shape()
 
 exprt numpy_random::sample_array()
 {
-  typet type = is_integral_result(name_) ? long_long_int_type() : double_type();
+  element_type_ = name_ == "choice"           ? population_.type().subtype()
+                  : is_integral_result(name_) ? long_long_int_type()
+                                              : double_type();
+  typet type = element_type_;
   for (auto it = shape_.rbegin(); it != shape_.rend(); ++it)
     type = converter_.get_type_handler().build_array(
       type, static_cast<std::size_t>(std::max(*it, 0LL)));
@@ -328,7 +401,7 @@ exprt numpy_random::sample_array()
 // Each element is its own sample.
 void numpy_random::fill(const exprt &target)
 {
-  if (!target.type().is_array())
+  if (target.type() == element_type_)
   {
     code_assignt assign(target, sample());
     assign.location() = location_;
@@ -347,8 +420,8 @@ std::string numpy_random::missing_argument() const
   for (const std::string &param : signatures().at(name_))
   {
     const bool has_default =
-      param == "size" || param == "dtype" ||
-      (name_ == "randint" && param == "high") ||
+      param == "size" || param == "dtype" || param == "replace" ||
+      param == "p" || (name_ == "randint" && param == "high") ||
       (defaults().count(name_) && defaults().at(name_).count(param));
     if (!bound_.count(param) && !has_default)
       return function_ + "() missing required argument '" + param + "'";
@@ -418,6 +491,8 @@ void numpy_random::validate()
 {
   if (name_ == "randint")
     return validate_randint();
+  if (name_ == "choice")
+    return validate_choice();
   const exprt zero = real(0.0);
   auto below = [&](const std::string &param, const exprt &bound) {
     // `!(x >= bound)` also rejects NaN.
@@ -510,8 +585,75 @@ void numpy_random::validate_randint()
     "high is out of bounds for " + dtype_);
 }
 
+long long numpy_random::population_size() const
+{
+  return binary2integer(
+           to_array_type(population_.type()).size().value().c_str(), false)
+    .to_int64();
+}
+
+long long numpy_random::sample_count() const
+{
+  long long samples = 1;
+  for (long long dimension : shape_)
+    samples *= std::max(dimension, 0LL);
+  return samples;
+}
+
+void numpy_random::validate_choice()
+{
+  const typet &element = population_.type().subtype();
+  if (element.is_array() && element.subtype() != char_type())
+    return raise_if(true_exprt(), "ValueError", "a must be 1-dimensional");
+  const long long samples = sample_count();
+  if (population_size() == 0 && samples != 0)
+    return raise_if(
+      true_exprt(),
+      "ValueError",
+      "a cannot be empty unless no samples are taken");
+  if (has_probabilities_)
+    return raise_if(
+      true_exprt(),
+      "TypeError",
+      "numpy.random.choice() probabilities are not supported");
+  if (!replace_ && samples > population_size())
+    raise_if(
+      true_exprt(),
+      "ValueError",
+      "Cannot take a larger sample than population when replace is False");
+}
+
+// An index into the population, distinct from the earlier ones of this call
+// without replacement; never a range between the smallest and largest value.
+exprt numpy_random::sample_choice()
+{
+  const typet &type = long_long_int_type();
+  const exprt index = fresh(type);
+  assume(and_exprt(
+    rel(index, ">=", gen_zero(type)),
+    rel(index, "<", from_integer(population_size(), type))));
+  if (!replace_)
+    for (const exprt &drawn : drawn_indices_)
+      assume(not_exprt(equality_exprt(index, drawn)));
+  drawn_indices_.push_back(index);
+  const typet &element = population_.type().subtype();
+  if (!element.is_array())
+    return index_exprt(population_, index, element);
+  // A symbolic read of a string row is not encoded by the solver backends,
+  // so the row is picked by comparing the index with each constant one.
+  exprt picked = index_exprt(population_, gen_zero(index_type()), element);
+  for (long long i = 1; i < population_size(); ++i)
+    picked = if_exprt(
+      equality_exprt(index, from_integer(i, type)),
+      index_exprt(population_, from_integer(i, index_type()), element),
+      picked);
+  return picked;
+}
+
 exprt numpy_random::sample()
 {
+  if (name_ == "choice")
+    return sample_choice();
   if (is_integral_result(name_))
     return sample_integer();
 

@@ -71,25 +71,6 @@ def seed(seed: int = None) -> None:
     raise TypeError("numpy.random.seed() is not supported")
 
 
-def choice(a: list[int], size: int = None, replace: bool = True, p: Any = None) -> Any:
-    if p is not None:
-        raise TypeError("numpy.random.choice() probabilities are not supported")
-
-    if not replace:
-        raise TypeError("numpy.random.choice() replace=False is not supported")
-
-    n: int = len(a)
-    if n <= 0:
-        raise ValueError("a cannot be empty unless no samples are taken")
-
-    if size is not None:
-        raise TypeError("numpy.random.choice() size is not supported")
-
-    index: int = nondet_int()
-    __ESBMC_assume(0 <= index < n)
-    return a[index]
-
-
 def add(a: int, b: int) -> float:
     x: float = a + b
     return x

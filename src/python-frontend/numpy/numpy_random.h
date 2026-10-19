@@ -5,6 +5,7 @@
 #include <util/irep/location.h>
 #include <util/irep/std_code.h>
 #include <util/irep/std_expr.h>
+#include <util/irep/std_types.h>
 
 #include <map>
 #include <set>
@@ -47,6 +48,12 @@ private:
   std::vector<long long> shape_;
   bool sized_ = false;
   static constexpr long long max_samples = 1024;
+  typet element_type_;
+  /// choice(): the population as a numpy array, and the indices drawn so far.
+  exprt population_;
+  bool replace_ = true;
+  bool has_probabilities_ = false;
+  std::vector<exprt> drawn_indices_;
 
   void bind_arguments();
   void bind_positional();
@@ -54,6 +61,15 @@ private:
   void bind(const std::string &param, const nlohmann::json &arg);
   [[noreturn]] void reject_unpacked() const;
   std::string missing_argument() const;
+  exprt read_population(const nlohmann::json &arg);
+  [[noreturn]] void reject_population() const;
+  bool holds_numpy_array(const nlohmann::json &arg) const;
+  bool read_replace(const nlohmann::json &arg) const;
+  bool read_probabilities(const nlohmann::json &arg);
+  long long population_size() const;
+  long long sample_count() const;
+  void validate_choice();
+  exprt sample_choice();
   bool takes_dimensions() const;
   void bind_dimensions();
   void read_shape(const nlohmann::json &size);
