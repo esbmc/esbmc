@@ -4834,10 +4834,45 @@ symbolt *python_converter::create_symbol_for_unannotated_assign(
   return symbol_table_.move_symbol_to_context(symbol);
 }
 
-/// A choice between two functions of one type is a pointer to either. The
-/// result of a choice between types would have no single type (#8404).
-static void decay_function_choice(exprt &then, exprt &else_expr)
+/// A function with `function`'s type whose only effect is to raise the
+/// TypeError CPython raises on calling a `value`-typed object (#8475).
+exprt python_converter::not_callable_function(
+  const typet &function,
+  const typet &value,
+  const locationt &location)
 {
+  const std::string name =
+    "$not_callable$" + std::to_string(++not_callable_count_);
+  symbolt symbol = create_symbol(
+    current_python_file,
+    name,
+    "py:" + current_python_file + "@F@" + name,
+    location,
+    function);
+  code_blockt body;
+  body.copy_to_operands(code_expressiont(
+    get_exception_handler().gen_exception_raise(
+      "TypeError",
+      "'" + type_handler_.type_to_string(value) + "' object is not callable")));
+  symbol.set_value(body);
+  return symbol_expr(*symbol_table_.move_symbol_to_context(symbol));
+}
+
+/// A choice between two functions of one type is a pointer to either. The
+/// result of a choice between types would have no single type (#8404). An
+/// arm that cannot be called becomes a function that raises when it is.
+void python_converter::decay_function_choice(exprt &then, exprt &else_expr)
+{
+  if (
+    then.type().is_code() && then.is_symbol() &&
+    !may_be_callable(else_expr.type()))
+    else_expr = not_callable_function(
+      then.type(), else_expr.type(), else_expr.location());
+  else if (
+    else_expr.type().is_code() && else_expr.is_symbol() &&
+    !may_be_callable(then.type()))
+    then =
+      not_callable_function(else_expr.type(), then.type(), then.location());
   if (
     !then.type().is_code() || !else_expr.type().is_code() ||
     !then.is_symbol() || !else_expr.is_symbol())
