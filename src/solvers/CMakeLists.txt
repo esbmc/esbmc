@@ -12,7 +12,8 @@ set(ESBMC_ENABLE_smtlib 0)
 #   1. Returns early if no camada-backed solver is enabled.
 #   2. Uses the install CAMADA_DIR names, or else, when DOWNLOAD_DEPENDENCIES
 #      is on, downloads and unpacks the pinned prebuilt release into the build
-#      tree; failing both, looks for a system install.
+#      tree (for Debug/DebugOpt, builds that release from source instead);
+#      failing both, looks for a system install.
 #   3. Wires camada into the solvers library and the global solver list.
 
 if(NOT (ENABLE_Z3 OR ENABLE_CVC5 OR ENABLE_MATHSAT OR ENABLE_YICES OR ENABLE_BITWUZLA))
@@ -75,25 +76,63 @@ endif()
 
 set(_camada_prefix "${CAMADA_DIR}")
 if(NOT CAMADA_DIR AND DOWNLOAD_DEPENDENCIES)
-  # Unpack into a directory named after the archive's hash, so a new pin (even
-  # a retagged release at the same URL) unpacks afresh instead of reusing the
-  # previous one.
-  string(SHA256 _camada_key "${ESBMC_CAMADA_ARCHIVE_URL}${ESBMC_CAMADA_ARCHIVE_HASH}")
+  # Debug and DebugOpt build camada from source in a matching configuration
+  # instead of using the release archive: camada's checked handles stay on, so
+  # a stale SMTExprRef aborts instead of being undefined behaviour, and on
+  # Windows it links against ESBMC's debug CRT (/MTd), which the release-only
+  # archive cannot.
+  set(_camada_build_type "")
+  if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(_camada_build_type Debug)
+  elseif(CMAKE_BUILD_TYPE STREQUAL "DebugOpt")
+    set(_camada_build_type RelWithDebInfo)
+  endif()
+  if(_camada_build_type)
+    set(_camada_url "${ESBMC_CAMADA_SOURCE_URL}")
+    set(_camada_hash "${ESBMC_CAMADA_SOURCE_HASH}")
+  else()
+    set(_camada_url "${ESBMC_CAMADA_ARCHIVE_URL}")
+    set(_camada_hash "${ESBMC_CAMADA_ARCHIVE_HASH}")
+  endif()
+
+  # Camada has no MSVC-compatible builds for Bitwuzla, CVC5, MathSAT or Yices,
+  # so a source build on Windows carries Z3 only.
+  set(_camada_args)
+  foreach(_solver Z3 CVC5 MATHSAT YICES BITWUZLA)
+    set(_enabled OFF)
+    if(ENABLE_${_solver} AND (_solver STREQUAL "Z3" OR NOT WIN32))
+      set(_enabled ON)
+    endif()
+    list(APPEND _camada_args "-DCAMADA_SOLVER_${_solver}_ENABLE=${_enabled}")
+  endforeach()
+  list(APPEND _camada_args "-DCAMADA_SOLVER_STP_ENABLE=OFF")
+  if(MSVC)
+    list(APPEND _camada_args
+      "-DCMAKE_MSVC_RUNTIME_LIBRARY=${CMAKE_MSVC_RUNTIME_LIBRARY}")
+  endif()
+
+  # Unpack into a directory named after everything that shapes the result, so a
+  # new pin (even a retagged release at the same URL), build type or solver set
+  # starts afresh instead of reusing the previous one.
+  string(SHA256 _camada_key
+         "${_camada_url}${_camada_hash}${_camada_build_type}${_camada_args}")
   string(SUBSTRING "${_camada_key}" 0 16 _camada_key)
-  set(_camada_prefix "${CMAKE_BINARY_DIR}/camada/${_camada_key}")
+  set(_camada_root "${CMAKE_BINARY_DIR}/camada/${_camada_key}")
+  set(_camada_prefix "${_camada_root}/install")
+  if(_camada_build_type)
+    camada_register_deps_tree("${_camada_root}/build/deps/install")
+  endif()
 
   if(NOT EXISTS "${_camada_prefix}/lib/cmake/camada/camadaConfig.cmake")
-    get_filename_component(_camada_archive_name "${ESBMC_CAMADA_ARCHIVE_URL}" NAME)
+    get_filename_component(_camada_archive_name "${_camada_url}" NAME)
     set(_camada_archive "${CMAKE_BINARY_DIR}/camada/${_camada_archive_name}")
-    message(STATUS "Downloading Camada from ${ESBMC_CAMADA_ARCHIVE_URL}")
-    if(ESBMC_CAMADA_ARCHIVE_HASH)
-      file(DOWNLOAD "${ESBMC_CAMADA_ARCHIVE_URL}" "${_camada_archive}"
-           STATUS _camada_dl_status
-           EXPECTED_HASH SHA256=${ESBMC_CAMADA_ARCHIVE_HASH})
+    message(STATUS "Downloading Camada from ${_camada_url}")
+    if(_camada_hash)
+      file(DOWNLOAD "${_camada_url}" "${_camada_archive}"
+           STATUS _camada_dl_status EXPECTED_HASH SHA256=${_camada_hash})
     else()
-      message(WARNING
-        "ESBMC_CAMADA_ARCHIVE_HASH is empty: downloading Camada without verifying it")
-      file(DOWNLOAD "${ESBMC_CAMADA_ARCHIVE_URL}" "${_camada_archive}"
+      message(WARNING "Camada's pinned hash is empty: downloading it unverified")
+      file(DOWNLOAD "${_camada_url}" "${_camada_archive}"
            STATUS _camada_dl_status)
     endif()
     list(GET _camada_dl_status 0 _camada_dl_result)
@@ -103,12 +142,44 @@ if(NOT CAMADA_DIR AND DOWNLOAD_DEPENDENCIES)
       message(FATAL_ERROR "Failed to download Camada: ${_camada_dl_message}")
     endif()
 
-    file(REMOVE_RECURSE "${_camada_prefix}")
-    file(ARCHIVE_EXTRACT INPUT "${_camada_archive}" DESTINATION "${_camada_prefix}")
+    file(REMOVE_RECURSE "${_camada_root}")
+    if(NOT _camada_build_type)
+      file(ARCHIVE_EXTRACT INPUT "${_camada_archive}" DESTINATION "${_camada_prefix}")
+    else()
+      file(ARCHIVE_EXTRACT INPUT "${_camada_archive}" DESTINATION "${_camada_root}/src")
+      # GitHub tarballs extract to a single ${repo}-${tag} directory.
+      file(GLOB _camada_src LIST_DIRECTORIES true "${_camada_root}/src/*")
+      message(STATUS "Building Camada (${_camada_build_type}) from source")
+      execute_process(
+        COMMAND ${CMAKE_COMMAND} -S "${_camada_src}" -B "${_camada_root}/build"
+          -DCMAKE_BUILD_TYPE=${_camada_build_type}
+          -DCMAKE_INSTALL_PREFIX=${_camada_prefix}
+          -DBUILD_SHARED_LIBS=OFF
+          -DCAMADA_DOWNLOAD_DEPENDENCIES=ALL
+          -DCAMADA_ENABLE_REGRESSION=OFF
+          ${_camada_args}
+        RESULT_VARIABLE _camada_status)
+      if(_camada_status EQUAL 0)
+        execute_process(
+          COMMAND ${CMAKE_COMMAND} --build "${_camada_root}/build"
+                  --config ${_camada_build_type} --parallel
+          RESULT_VARIABLE _camada_status)
+      endif()
+      if(_camada_status EQUAL 0)
+        execute_process(
+          COMMAND ${CMAKE_COMMAND} --install "${_camada_root}/build"
+                  --config ${_camada_build_type}
+          RESULT_VARIABLE _camada_status)
+      endif()
+      if(NOT _camada_status EQUAL 0)
+        message(FATAL_ERROR "Failed to build Camada from ${_camada_url}")
+      endif()
+      camada_register_deps_tree("${_camada_root}/build/deps/install")
+    endif()
     file(REMOVE "${_camada_archive}")
     if(NOT EXISTS "${_camada_prefix}/lib/cmake/camada/camadaConfig.cmake")
       message(FATAL_ERROR
-        "${ESBMC_CAMADA_ARCHIVE_URL} has no lib/cmake/camada/camadaConfig.cmake")
+        "${_camada_url} produced no lib/cmake/camada/camadaConfig.cmake")
     endif()
   endif()
 endif()
@@ -250,9 +321,14 @@ set(ESBMC_AVAILABLE_SOLVERS "${_camada_solvers_str}" PARENT_SCOPE)
 
 # Windows: ship the release's libz3.dll alongside esbmc.exe. Without it,
 # esbmc.exe exits silently at startup when the OS loader cannot find the DLL.
-if(WIN32 AND EXISTS "${_camada_prefix}/bin/libz3.dll")
-  install(FILES "${_camada_prefix}/bin/libz3.dll" DESTINATION bin)
-endif()
+# A source build leaves it in camada's dependency tree instead.
+foreach(_dll "${_camada_prefix}/bin/libz3.dll"
+             "${_camada_root}/build/deps/install/bin/libz3.dll")
+  if(WIN32 AND EXISTS "${_dll}")
+    install(FILES "${_dll}" DESTINATION bin)
+    break()
+  endif()
+endforeach()
 
 # The release archives link bare -lgmp/-lmpfr. Homebrew on Apple Silicon keeps
 # them in /opt/homebrew/lib, which the linker does not search by default.
