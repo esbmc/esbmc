@@ -858,6 +858,17 @@ exprt python_converter::list_argument_expr(const nlohmann::json &arg)
   return elements ? *elements : get_expr(arg);
 }
 
+// list(xs) builds a new list; returning xs itself would alias the two.
+static exprt copy_named_list(
+  python_converter &converter,
+  const exprt &list,
+  const nlohmann::json &element)
+{
+  if (!list.is_symbol())
+    return list;
+  return python_list(converter, element).build_shallow_copy_call(list, element);
+}
+
 // Whether `node` is the name `name`.
 static bool is_name(const nlohmann::json &node, const std::string &name)
 {
@@ -1256,7 +1267,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     {
       // list() of a keys view is a plain list, compared by order (#8689).
       arg_expr.remove(PYTHON_KEYS_VIEW_ATTR);
-      return arg_expr;
+      return copy_named_list(*this, arg_expr, element);
     }
 
     // list(tuple) — materialise the tuple's components into a real list.
