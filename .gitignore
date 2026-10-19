@@ -49,3 +49,7 @@ docs/html/
 
 # Per-developer companion to CMakePresets.json; holds local paths and flags
 CMakeUserPresets.json
+
+# LLVM coverage counters, written to the working directory by a coverage build
+# when LLVM_PROFILE_FILE is unset
+*.profraw

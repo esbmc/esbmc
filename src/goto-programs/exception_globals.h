@@ -61,6 +61,7 @@ enum terminate_reasont : unsigned
   terminate_reason_noexcept = 2,
   terminate_reason_exception_spec = 3,
   terminate_reason_no_active = 4,
+  terminate_reason_unwinding = 5,
 };
 } // namespace exception_globals
 

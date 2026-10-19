@@ -1,0 +1,5 @@
+CORE
+main.c
+--bitwuzla --no-pointer-check --no-bounds-check --ts-bmc --max-k-step 10
+^WARNING: an assertion is reachable after the loop$
+^VERIFICATION FAILED$

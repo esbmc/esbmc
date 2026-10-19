@@ -165,6 +165,11 @@ public:
   /// Unknown, function or class-instance types: a call on such a value may
   /// succeed.
   bool may_be_callable(const typet &type);
+  exprt not_callable_function(
+    const typet &function,
+    const typet &value,
+    const locationt &location);
+  void decay_function_choice(exprt &then, exprt &else_expr);
 
   typet get_type_from_annotation(
     const nlohmann::json &annotation_node,
@@ -3049,6 +3054,7 @@ private:
   typet ternary_return_target_;
   std::string main_python_file;
   std::string current_python_file;
+  size_t not_callable_count_ = 0;
   nlohmann::json imported_module_json;
   std::string current_func_name_;
   std::string current_class_name_;
