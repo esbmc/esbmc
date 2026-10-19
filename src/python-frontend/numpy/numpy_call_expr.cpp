@@ -4855,6 +4855,23 @@ static bool is_named_numpy_dtype(const std::string &dtype)
 
 // The single normalization of a dtype= argument: a scalar type named by a
 // builtin, a numpy attribute or a string, or a specific rejection.
+// The dimensions of a zeros()/ones() shape tuple. A dimension known only at
+// run time has no static bound to build the array with.
+static std::vector<int>
+literal_shape_dims(const nlohmann::json &elts, const std::string &function)
+{
+  std::vector<int> dims;
+  for (const auto &e : elts)
+  {
+    if (e.value("_type", "") != "Constant" || !e["value"].is_number_integer())
+      throw std::runtime_error(
+        "TypeError: numpy." + function +
+        "() with a shape tuple of run-time values is not supported");
+    dims.push_back(e["value"].get<int>());
+  }
+  return dims;
+}
+
 std::string extract_numpy_dtype_name(
   const nlohmann::json &dtype_node,
   const nlohmann::json &ast)
@@ -10458,9 +10475,7 @@ exprt numpy_call_expr::get()
           "Found " +
           std::to_string(ndim) + "D array creation in " + function + "().");
 
-      std::vector<int> dims;
-      for (const auto &e : elts)
-        dims.push_back(e["value"].get<int>());
+      const std::vector<int> dims = literal_shape_dims(elts, function);
 
       // Build nested list recursively: create_nd_fill(dims, dim_idx, fill)
       std::function<nlohmann::json(std::size_t)> create_nd_fill =
