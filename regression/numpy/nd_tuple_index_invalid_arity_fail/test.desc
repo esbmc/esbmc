@@ -1,4 +1,0 @@
-CORE
-main.py
---incremental-bmc
-^ERROR: TypeError: multi-dimensional indexing \(a\[i, j, \.\.\.\]\) is not supported
