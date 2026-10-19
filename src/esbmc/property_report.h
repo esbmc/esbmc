@@ -34,6 +34,8 @@ struct property_countst
   size_t failed = 0;
   size_t unknown = 0;
   size_t not_checked = 0;
+  /// Rows --report-unreached-claims added, also counted as passed.
+  size_t unreached = 0;
   size_t id_width = 0;
   size_t line_width = 0;
 
@@ -45,6 +47,10 @@ struct property_countst
 };
 
 property_countst count_properties(const std::vector<property_rowt> &rows);
+
+/// The note on a claim no path reached within the bound. It holds vacuously,
+/// so it is recorded as passed, but the run never tested it (#7503).
+extern const char *const unreached_claim_note;
 
 /// Fixed-width label for a verdict, e.g. "PASSED", "NOT CHECKED".
 const char *verdict_label(property_verdictt);

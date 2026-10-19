@@ -1746,6 +1746,38 @@ exprt python_list::build_copy_list_call(
   return build_symbol(copied_list);
 }
 
+static const symbolt &
+list_model_function(python_converter &converter, const std::string &name)
+{
+  const symbolt *fn = converter.symbol_table().find_symbol("c:@F@" + name);
+  if (!fn)
+    throw std::runtime_error(name + " not found in symbol table");
+  return *fn;
+}
+
+exprt python_list::build_tuple_copy_call(
+  const exprt &src_list,
+  const nlohmann::json &element)
+{
+  // Marked in place, so the copy keeps its symbol and recorded element types
+  const exprt copy = build_shallow_copy_call(src_list, element);
+  code_function_callt mark;
+  mark.function() =
+    build_symbol(list_model_function(converter_, "__ESBMC_list_mark_tuple"));
+  mark.arguments().push_back(copy);
+  mark.location() = converter_.get_location_from_decl(element);
+  converter_.add_instruction(mark);
+  return copy;
+}
+
+exprt python_list::build_is_tuple_call(const exprt &list)
+{
+  return build_call_expr(
+    list_model_function(converter_, "__ESBMC_list_is_tuple"),
+    bool_type(),
+    {list});
+}
+
 exprt python_list::build_shallow_copy_call(
   const exprt &src_list,
   const nlohmann::json &element)
@@ -1847,6 +1879,8 @@ exprt python_list::build_shallow_copy_call(
   if (src.is_symbol())
     elem_types().append_from(
       src.identifier().as_string(), copied.id.as_string());
+  else
+    copy_dict_view_elem_types(src, copied.id.as_string());
 
   return build_symbol(copied);
 }

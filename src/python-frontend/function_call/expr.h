@@ -314,6 +314,8 @@ private:
     const nlohmann::json &obj_arg,
     const std::vector<nlohmann::json> &types) const;
   exprt handle_isinstance() const;
+  std::optional<exprt>
+  list_isinstance(const exprt &obj, const std::string &type_name) const;
 
   /// Whether isinstance's first argument is a class object: a class named
   /// directly (`int`, `A`) or a variable last assigned a builtin type.

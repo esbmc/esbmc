@@ -1,0 +1,5 @@
+CORE
+main.c
+--show-goto-value-sets
+@main@code_ptr = \{ .*<plugins, 0, 1, signed int>
+@run@q = \{ <x, 0, 1, signed int> \}

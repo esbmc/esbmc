@@ -3,4 +3,4 @@ def m(hint) -> bool:
 
 
 assert m(type(None))
-assert not m(int)
+assert not m(None)
