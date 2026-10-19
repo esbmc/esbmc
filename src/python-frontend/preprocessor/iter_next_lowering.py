@@ -26,8 +26,8 @@ def _scope_nodes(scope):
 
 
 def _is_call(node, name, nargs):
-    return (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-            and node.func.id == name and len(node.args) == nargs and not node.keywords)
+    return (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == name
+            and len(node.args) == nargs and not node.keywords)
 
 
 def _single_assignment(node):
@@ -119,10 +119,14 @@ class _Lowering:  # pylint: disable=too-few-public-methods
             name, value = _single_assignment(stmt)
             if not name or not _is_call(value, "iter", 1):
                 continue
-            nexts = [n for n in nodes if _is_call(n, "next", 1)
-                     and isinstance(n.args[0], ast.Name) and n.args[0].id == name]
-            reads = [n for n in nodes if isinstance(n, ast.Name) and n.id == name
-                     and isinstance(n.ctx, ast.Load)]
+            nexts = [
+                n for n in nodes if _is_call(n, "next", 1) and isinstance(n.args[0], ast.Name)
+                and n.args[0].id == name
+            ]
+            reads = [
+                n for n in nodes
+                if isinstance(n, ast.Name) and n.id == name and isinstance(n.ctx, ast.Load)
+            ]
             if self.bound[name] != 1 or not nexts or len(reads) != len(nexts):
                 continue
             stmt.value = ast.copy_location(self._iterator_source(stmt.value, instances), stmt.value)
