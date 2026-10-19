@@ -818,6 +818,12 @@ private:
 
   std::string extract_class_name_from_tag(const std::string &tag_name);
 
+  /// The class-level symbol for `attr_name` on `class_name` or one of its
+  /// direct bases, or null if none is declared.
+  symbolt *find_class_attribute_symbol(
+    const std::string &class_name,
+    const std::string &attr_name);
+
   /// The number bindings of `name` in the scope being converted that are
   /// live at line `before`: the ones that reach it, or with `include_later`
   /// also the ones that share its storage further on.
