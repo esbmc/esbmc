@@ -1,5 +1,0 @@
-CORE
-main.py
---incremental-bmc
-^VERIFICATION FAILED$
-  assertion 0$
