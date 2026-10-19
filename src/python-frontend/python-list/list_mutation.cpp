@@ -1845,6 +1845,8 @@ exprt python_list::build_shallow_copy_call(
   if (src.is_symbol())
     elem_types().append_from(
       src.identifier().as_string(), copied.id.as_string());
+  else
+    copy_dict_view_elem_types(src, copied.id.as_string());
 
   return build_symbol(copied);
 }

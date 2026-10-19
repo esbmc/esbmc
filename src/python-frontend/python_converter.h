@@ -526,6 +526,13 @@ public:
     exprt &rhs,
     const nlohmann::json &element);
 
+  bool scalar_order(
+    exprt a,
+    exprt b,
+    const nlohmann::json &element,
+    expr2tc &lt,
+    expr2tc &eq);
+
   python_typechecking &get_typechecker();
   const python_typechecking &get_typechecker() const;
 

@@ -1,0 +1,5 @@
+CORE
+userfb.ld
+--ld-props props.yaml --k-induction --unlimited-k-steps
+^ERROR: UnsupportedConstruct\(GATE, tier=2\)$
+^ERROR: PARSING ERROR$

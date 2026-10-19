@@ -252,6 +252,14 @@ typet long_double_type()
   return build_float_type(config.ansi_c.long_double_width);
 }
 
+const char *c_float_literal_suffix(const typet &type)
+{
+  // Where long double is double, a double takes no suffix.
+  if (type == double_type())
+    return "";
+  return type == float_type() ? "f" : type == long_double_type() ? "l" : "";
+}
+
 type2tc long_double_type2()
 {
   return build_float_type2(config.ansi_c.long_double_width);

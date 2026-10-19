@@ -224,6 +224,14 @@ static bool ends_at_violation(optionst &options, bool &any_violation_found)
   return !options.get_bool_option("multi-property");
 }
 
+/// Whether the forward condition and inductive step may follow the base case:
+/// a proof needs the base case refuted, not merely left unviolated. A
+/// formula-only run decides no phase, so each still emits its formula.
+static bool may_follow_base_case(const optionst &options, const tvt &base_case)
+{
+  return base_case.is_false() || options.get_bool_option("smt-formula-only");
+}
+
 // This method iteratively applies one of the verification strategies
 // for different unwinding bounds up to the specified maximum depth.
 //
@@ -315,16 +323,18 @@ int esbmc_parseoptionst::do_bmc_strategy(
     // k-induction
     if (options.get_bool_option("k-induction"))
     {
-      const bool is_bcv =
-        is_base_case_violated(options, goto_functions, k_step).is_true();
-      if (is_bcv && ends_at_violation(options, any_violation_found))
+      const tvt base_case =
+        is_base_case_violated(options, goto_functions, k_step);
+      if (
+        base_case.is_true() && ends_at_violation(options, any_violation_found))
         return 1;
+      const bool may_prove = may_follow_base_case(options, base_case);
 
       // if the property is proven violated in the bs, it's unnecessary to
       // further run fw and is this will make the trace looks cleaner yet might
       // lead to an extra round to terminate the verification
       if (
-        !is_bcv &&
+        may_prove &&
         does_forward_condition_hold(options, goto_functions, k_step).is_false())
       {
         if (is_coverage)
@@ -341,8 +351,9 @@ int esbmc_parseoptionst::do_bmc_strategy(
       if (k_step > 1)
       {
         if (
-          !is_bcv && is_inductive_step_violated(options, goto_functions, k_step)
-                       .is_false())
+          may_prove &&
+          is_inductive_step_violated(options, goto_functions, k_step)
+            .is_false())
         {
           if (is_coverage)
             report_coverage(
@@ -465,13 +476,15 @@ int esbmc_parseoptionst::do_bmc_strategy(
     // incremental-bmc
     if (options.get_bool_option("incremental-bmc"))
     {
-      const bool is_bcv =
-        is_base_case_violated(options, goto_functions, k_step).is_true();
-      if (is_bcv && ends_at_violation(options, any_violation_found))
+      const tvt base_case =
+        is_base_case_violated(options, goto_functions, k_step);
+      if (
+        base_case.is_true() && ends_at_violation(options, any_violation_found))
         return 1;
+      const bool may_prove = may_follow_base_case(options, base_case);
 
       if (
-        !is_bcv &&
+        may_prove &&
         does_forward_condition_hold(options, goto_functions, k_step).is_false())
       {
         if (is_coverage)
