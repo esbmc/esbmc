@@ -4834,10 +4834,45 @@ symbolt *python_converter::create_symbol_for_unannotated_assign(
   return symbol_table_.move_symbol_to_context(symbol);
 }
 
-/// A choice between two functions of one type is a pointer to either. The
-/// result of a choice between types would have no single type (#8404).
-static void decay_function_choice(exprt &then, exprt &else_expr)
+/// A function with `function`'s type whose only effect is to raise the
+/// TypeError CPython raises on calling a `value`-typed object (#8475).
+exprt python_converter::not_callable_function(
+  const typet &function,
+  const typet &value,
+  const locationt &location)
 {
+  const std::string name =
+    "$not_callable$" + std::to_string(++not_callable_count_);
+  symbolt symbol = create_symbol(
+    current_python_file,
+    name,
+    "py:" + current_python_file + "@F@" + name,
+    location,
+    function);
+  code_blockt body;
+  body.copy_to_operands(code_expressiont(
+    get_exception_handler().gen_exception_raise(
+      "TypeError",
+      "'" + type_handler_.type_to_string(value) + "' object is not callable")));
+  symbol.set_value(body);
+  return symbol_expr(*symbol_table_.move_symbol_to_context(symbol));
+}
+
+/// A choice between two functions of one type is a pointer to either. The
+/// result of a choice between types would have no single type (#8404). An
+/// arm that cannot be called becomes a function that raises when it is.
+void python_converter::decay_function_choice(exprt &then, exprt &else_expr)
+{
+  if (
+    then.type().is_code() && then.is_symbol() &&
+    !may_be_callable(else_expr.type()))
+    else_expr = not_callable_function(
+      then.type(), else_expr.type(), else_expr.location());
+  else if (
+    else_expr.type().is_code() && else_expr.is_symbol() &&
+    !may_be_callable(then.type()))
+    then =
+      not_callable_function(else_expr.type(), then.type(), then.location());
   if (
     !then.type().is_code() || !else_expr.type().is_code() ||
     !then.is_symbol() || !else_expr.is_symbol())
@@ -8789,6 +8824,39 @@ bool python_converter::reject_or_defer_numpy_view_name_return(
   return true;
 }
 
+// Python does not enforce `-> int`: the caller sees the float itself, which
+// the int return slot holds only when it is finite and integral (#1966).
+exprt python_converter::check_float_fits_int_return(
+  const nlohmann::json &ast_node,
+  const exprt &value,
+  codet &target_block)
+{
+  if (!current_func_annotated_int_ || !value.type().is_floatbv())
+    return value;
+
+  const locationt location = get_location_from_decl(ast_node);
+  symbolt &tmp =
+    create_tmp_symbol(ast_node, "$int_return$", value.type(), exprt());
+  const exprt result = symbol_expr(tmp);
+  code_declt decl(result);
+  decl.location() = location;
+  target_block.copy_to_operands(decl);
+  code_assignt assign(result, value);
+  assign.location() = location;
+  target_block.copy_to_operands(assign);
+
+  const exprt round_trip = typecast_exprt(
+    typecast_exprt(result, current_func_return_type_), value.type());
+  code_assertt check(equality_exprt(round_trip, result));
+  check.location() = location;
+  check.location().user_provided(true);
+  check.location().comment(
+    "a function annotated to return int returns a float that int cannot "
+    "hold; not modelled");
+  target_block.copy_to_operands(check);
+  return result;
+}
+
 void python_converter::get_return_statements(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -8971,6 +9039,7 @@ void python_converter::get_return_statements(
     }
 
     coerce_to_tagged_return(ret_expr);
+    ret_expr = check_float_fits_int_return(ast_node, ret_expr, target_block);
 
     // Return the temporary variable
     code_returnt return_code;
@@ -9053,6 +9122,8 @@ void python_converter::get_return_statements(
     return_value = coerce_optional_return(return_value, location, target_block);
 
     coerce_to_tagged_return(return_value);
+    return_value =
+      check_float_fits_int_return(ast_node, return_value, target_block);
 
     code_returnt return_code;
     return_code.return_value() = return_value;

@@ -5102,6 +5102,13 @@ const nlohmann::json &python_converter::resolve_return_annotation_node(
   return returns;
 }
 
+/// Whether the program, not the annotator, wrote `-> int`.
+static bool is_written_int_annotation(const nlohmann::json &returns)
+{
+  return returns.is_object() && returns.value("id", "") == "int" &&
+         !returns.value("_inferred_annotation", false);
+}
+
 /// Whether a return in \p stmts (nested blocks included) satisfies \p pred.
 static bool any_return(
   const nlohmann::json &stmts,
@@ -5642,6 +5649,8 @@ void python_converter::get_function_definition(
   // Save function return type for use in get_return_statements
   typet saved_func_return_type = current_func_return_type_;
   current_func_return_type_ = type.return_type();
+  const bool saved_func_annotated_int = current_func_annotated_int_;
+  current_func_annotated_int_ = is_written_int_annotation(return_node);
 
   // Nondet stub functions (nondet_int/char/bool/float/str/complex and their
   // __VERIFIER_nondet_* aliases) are intercepted at their call sites by
@@ -5706,6 +5715,7 @@ void python_converter::get_function_definition(
 
   // Restore saved function return type (for nested function defs)
   current_func_return_type_ = saved_func_return_type;
+  current_func_annotated_int_ = saved_func_annotated_int;
 
   // If return type is empty/unannotated, try to infer from return statements
   if (type.return_type().is_empty())

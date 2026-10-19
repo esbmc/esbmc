@@ -1,0 +1,7 @@
+CORE
+cbmc_big_endian_bytes_fail.goto
+--binary --big-endian --multi-property
+^  FAILED +\[main.assertion.1\] +line 23 
+^  FAILED +\[main.assertion.2\] +line 24 
+^  FAILED +\[main.assertion.3\] +line 25 
+^VERIFICATION FAILED$

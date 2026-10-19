@@ -165,6 +165,11 @@ public:
   /// Unknown, function or class-instance types: a call on such a value may
   /// succeed.
   bool may_be_callable(const typet &type);
+  exprt not_callable_function(
+    const typet &function,
+    const typet &value,
+    const locationt &location);
+  void decay_function_choice(exprt &then, exprt &else_expr);
 
   typet get_type_from_annotation(
     const nlohmann::json &annotation_node,
@@ -2952,6 +2957,10 @@ private:
 
   /// Handle Optional value access
   exprt materialize_optional(const exprt &expr, const nlohmann::json &element);
+  exprt check_float_fits_int_return(
+    const nlohmann::json &ast_node,
+    const exprt &value,
+    codet &target_block);
   exprt coerce_optional_return(
     const exprt &value,
     const locationt &location,
@@ -3038,11 +3047,14 @@ private:
   namespacet ns;
   typet current_element_type;
   typet current_func_return_type_;
+  /// Whether the program annotates the current function `-> int`.
+  bool current_func_annotated_int_ = false;
   /// The target of a ternary that is itself a return value; see
   /// optional_ternary_type.
   typet ternary_return_target_;
   std::string main_python_file;
   std::string current_python_file;
+  size_t not_callable_count_ = 0;
   nlohmann::json imported_module_json;
   std::string current_func_name_;
   std::string current_class_name_;
