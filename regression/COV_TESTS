@@ -3224,3 +3224,6 @@ regression/python/github_8704_hash_int_fail
 regression/esbmc-cpp/cpp/github_8680_dtor_throw_unwind_fail
 regression/esbmc-cpp/cpp/github_8680_dtor_catch_unwind
 regression/esbmc-cpp/cpp/github_8680_dtor_throw_scope_exit
+regression/python/github_8283_dict_zip
+regression/python/github_8283_dict_zip_fail
+regression/python/github_8283_dict_zip_nondet
