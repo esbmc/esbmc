@@ -51,7 +51,8 @@ __ESBMC_HIDE:;
   if (is_signed)
   {
     __ESBMC_assume(bitwidth > 0 && bitwidth <= 256);
-    return -((int256_t)1 << (bitwidth - 1)); // -2^(N-1)
+    // -2^(N-1), without the signed shift and negation that overflow (#8707).
+    return -(int256_t)(((uint256_t)1 << (bitwidth - 1)) - 1) - 1;
   }
   else
   {

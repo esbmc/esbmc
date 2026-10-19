@@ -24,8 +24,11 @@ __ESBMC_HIDE:;
   {
     if (exp & 1)
       result *= base;
-    base *= base;
     exp >>= 1;
+    // A square past the last bit is unused, and could overflow when the
+    // result does not (#8707).
+    if (exp > 0)
+      base *= base;
   }
   return result;
 }

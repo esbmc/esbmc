@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--sol contract.sol --contract C --overflow-check --unsigned-overflow-check --unwind 10 --no-unwinding-assertions --multi-property
+^VERIFICATION SUCCESSFUL$
