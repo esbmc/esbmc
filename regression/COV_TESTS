@@ -3221,6 +3221,8 @@ regression/esbmc/github_8661_ir_unsigned_to_int_fail
 regression/python/github_8704_hash_int
 regression/python/github_8704_hash_str
 regression/python/github_8704_hash_int_fail
+regression/esbmc/long_double_member_layout
+regression/esbmc/long_double_member_layout_fail
 regression/python/github_8768_dict_store_beside_constant
 regression/python/github_8768_dict_store_beside_constant_fail
 regression/python/github_8768_dict_from_call
