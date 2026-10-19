@@ -3207,3 +3207,5 @@ regression/python/github_8704_hash_str
 regression/python/github_8704_hash_int_fail
 regression/python/github_8768_dict_store_beside_constant
 regression/python/github_8768_dict_store_beside_constant_fail
+regression/python/github_8768_dict_from_call
+regression/python/github_8768_dict_from_call_refused
