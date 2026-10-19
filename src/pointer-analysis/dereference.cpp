@@ -532,6 +532,22 @@ expr2tc dereferencet::resolve_nonscalar_if(
   return if2tc(expr->type, ifref.cond, t, f);
 }
 
+// Literal arrays have no underlying memory location to dereference.
+static expr2tc constant_array_element(const index2t &index)
+{
+  if (
+    !is_constant_array2t(index.source_value) || !is_constant_int2t(index.index))
+    return expr2tc();
+
+  const auto &arr = to_constant_array2t(index.source_value);
+  const auto &idx = to_constant_int2t(index.index);
+  if (idx.value.is_negative() || !idx.value.is_uint64())
+    return expr2tc();
+
+  const uint64_t i = idx.as_ulong();
+  return i < arr.datatype_members.size() ? arr.datatype_members[i] : expr2tc();
+}
+
 expr2tc dereferencet::dereference_expr_nonscalar(
   expr2tc &expr,
   guard2tc &guard,
@@ -592,6 +608,16 @@ expr2tc dereferencet::dereference_expr_nonscalar(
   {
     index2t &index = to_index2t(expr);
     dereference_expr(index.index, guard, dereferencet::READ);
+
+    if (!is_write(mode))
+    {
+      expr2tc element = constant_array_element(index);
+      if (!is_nil_expr(element))
+      {
+        dereference_expr(element, guard, mode);
+        return element;
+      }
+    }
 
     /* Now free of dereferences, fold in any value symex already knows for
      * the index (e.g. an array index stored in a struct field): a constant

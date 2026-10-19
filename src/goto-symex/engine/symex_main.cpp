@@ -26,6 +26,15 @@
 #include <map>
 #include <vector>
 
+static bool intrinsic_has_library_body(const std::string &name)
+{
+  return has_prefix(name, "c:@F@__ESBMC_pthread_start_main_hook") ||
+         has_prefix(name, "c:@F@__ESBMC_pthread_end_main_hook") ||
+         has_prefix(name, "c:@F@__ESBMC_atexit_handler") ||
+         has_prefix(name, "c:@F@__ESBMC_pylock_block_and_check") ||
+         name == "c:@F@__ESBMC_reverted";
+}
+
 bool goto_symext::check_incremental(const expr2tc &expr, const std::string &msg)
 {
   auto rte = std::dynamic_pointer_cast<runtime_encoded_equationt>(target);
@@ -1137,12 +1146,7 @@ void goto_symext::run_intrinsic(
     return;
   }
 
-  // We simply call these functions
-  if (
-    has_prefix(symname, "c:@F@__ESBMC_pthread_start_main_hook") ||
-    has_prefix(symname, "c:@F@__ESBMC_pthread_end_main_hook") ||
-    has_prefix(symname, "c:@F@__ESBMC_atexit_handler") ||
-    has_prefix(symname, "c:@F@__ESBMC_pylock_block_and_check"))
+  if (intrinsic_has_library_body(symname))
   {
     bump_call(func_call, symname);
     return;
