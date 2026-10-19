@@ -114,16 +114,15 @@ bool esbmc_parseoptionst::process_function_contracts(
                  const std::set<std::string> &resolved,
                  bool for_replace,
                  const char *nothing_selected) {
-    if (named.empty())
+    if (named.empty() && resolved.empty())
     {
-      if (!resolved.empty())
-        return false;
       log_error("--{}: {}", opt, nothing_selected);
       return true;
     }
 
+    // Under "*" or a bulk flag nothing is named, so diagnose what was selected.
     bool failed = false;
-    for (const auto &name : named)
+    for (const auto &name : named.empty() ? resolved : named)
     {
       std::string reason =
         contracts.diagnose_contract_target(name, for_replace);
