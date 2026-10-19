@@ -52,6 +52,8 @@ class PreprocessorStateMixin:
         self.defaultdict_alias = None
         self.collections_module_imported = False
         self.collections_module_alias = None
+        self.numpy_module_names = set()
+        self.numpy_constructor_names = {}
         self._subscript_inferred_vars = set()
         self.generator_funcs = set()
         self.early_return_generator_funcs = set()

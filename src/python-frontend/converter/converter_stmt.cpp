@@ -6301,6 +6301,26 @@ bool python_converter::try_dedicated_assign(
          try_bound_method_store(ast_node, block);
 }
 
+// NumPy truncates a string stored into a fixed-width string array to the
+// array's width and pads it with NULs.
+static void fit_numpy_string_store(const exprt &lhs, exprt &rhs)
+{
+  if (
+    lhs.id() != "index" || !lhs.type().is_array() || !rhs.type().is_array() ||
+    lhs.type().subtype() != char_type() ||
+    rhs.type().subtype() != char_type() || lhs.type() == rhs.type())
+    return;
+  if (!rhs.is_constant())
+    throw std::runtime_error(
+      "TypeError: storing a non-literal string of another width into a numpy "
+      "string array is not supported");
+  exprt fitted = gen_zero(lhs.type());
+  const std::size_t width = fitted.operands().size() - 1;
+  for (std::size_t i = 0; i < width && i < rhs.operands().size(); ++i)
+    fitted.operands()[i] = rhs.operands()[i];
+  rhs = fitted;
+}
+
 void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -6964,6 +6984,7 @@ void python_converter::get_var_assign(
 
     // Handle string literal conversion
     rhs = handle_string_literal_rhs(effective_ast_node, lhs_type, rhs);
+    fit_numpy_string_store(lhs, rhs);
   }
 
   if (converted_value && rhs != exprt("_init_undefined"))
@@ -8768,6 +8789,39 @@ bool python_converter::reject_or_defer_numpy_view_name_return(
   return true;
 }
 
+// Python does not enforce `-> int`: the caller sees the float itself, which
+// the int return slot holds only when it is finite and integral (#1966).
+exprt python_converter::check_float_fits_int_return(
+  const nlohmann::json &ast_node,
+  const exprt &value,
+  codet &target_block)
+{
+  if (!current_func_annotated_int_ || !value.type().is_floatbv())
+    return value;
+
+  const locationt location = get_location_from_decl(ast_node);
+  symbolt &tmp =
+    create_tmp_symbol(ast_node, "$int_return$", value.type(), exprt());
+  const exprt result = symbol_expr(tmp);
+  code_declt decl(result);
+  decl.location() = location;
+  target_block.copy_to_operands(decl);
+  code_assignt assign(result, value);
+  assign.location() = location;
+  target_block.copy_to_operands(assign);
+
+  const exprt round_trip = typecast_exprt(
+    typecast_exprt(result, current_func_return_type_), value.type());
+  code_assertt check(equality_exprt(round_trip, result));
+  check.location() = location;
+  check.location().user_provided(true);
+  check.location().comment(
+    "a function annotated to return int returns a float that int cannot "
+    "hold; not modelled");
+  target_block.copy_to_operands(check);
+  return result;
+}
+
 void python_converter::get_return_statements(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -8950,6 +9004,7 @@ void python_converter::get_return_statements(
     }
 
     coerce_to_tagged_return(ret_expr);
+    ret_expr = check_float_fits_int_return(ast_node, ret_expr, target_block);
 
     // Return the temporary variable
     code_returnt return_code;
@@ -9032,6 +9087,8 @@ void python_converter::get_return_statements(
     return_value = coerce_optional_return(return_value, location, target_block);
 
     coerce_to_tagged_return(return_value);
+    return_value =
+      check_float_fits_int_return(ast_node, return_value, target_block);
 
     code_returnt return_code;
     return_code.return_value() = return_value;
@@ -9473,17 +9530,55 @@ exprt python_converter::get_block(
   return block;
 }
 
+// The shape of the literal @p arr with @p element at its leaves.
+static typet numpy_typed_shape(
+  const type_handler &types,
+  const nlohmann::json &arr,
+  const typet &element)
+{
+  const auto &elts = arr["elts"];
+  const bool nested =
+    !elts.empty() && elts[0].value("_type", std::string()) == "List";
+  return types.build_array(
+    nested ? numpy_typed_shape(types, elts[0], element) : element, elts.size());
+}
+
+// @p value stored as an element of type @p element: a cast for a number, and
+// NUL padding to the array's fixed width for a string.
+static exprt as_numpy_element(const exprt &value, const typet &element)
+{
+  if (value.type() == element || !element.is_array())
+    return value.type() == element ? value : typecast_exprt(value, element);
+  exprt padded = gen_zero(element);
+  if (value.type().is_array() && !value.is_constant())
+    throw std::runtime_error(
+      "TypeError: a numpy string element must be a literal");
+  if (!value.type().is_array())
+  {
+    padded.operands().at(0) = typecast_exprt(value, element.subtype());
+    return padded;
+  }
+  for (std::size_t i = 0; i < value.operands().size(); ++i)
+    padded.operands().at(i) = value.operands()[i];
+  return padded;
+}
+
 exprt python_converter::get_static_array(
   const nlohmann::json &arr,
-  const typet &shape)
+  const typet &literal_shape)
 {
-  exprt zero = gen_zero(size_type());
+  const bool typed = !numpy_element_type.id().empty();
+  const typet shape =
+    typed ? numpy_typed_shape(type_handler_, arr, numpy_element_type)
+          : literal_shape;
   exprt list = gen_zero(shape);
 
   unsigned int i = 0;
   for (auto &e : arr["elts"])
   {
     exprt element_expr = get_expr(e);
+    if (typed && e.value("_type", "") != "List")
+      element_expr = as_numpy_element(element_expr, shape.subtype());
     list.operands().at(i++) = element_expr;
   }
 

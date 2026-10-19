@@ -621,6 +621,12 @@ std::size_t ext_int_representation_bytes(const typet &type)
   return result;
 }
 
+/// An array, or a _Complex T, which is laid out as T[2] (C17 6.2.5p13).
+static bool aligns_as_subtype(const typet &type)
+{
+  return type.id() == typet::t_array || type.id() == typet::t_complex;
+}
+
 /// An 8-byte or wider scalar takes the target's ABI alignment when the C
 /// frontend recorded one, which may be below its size (i386, #8694).
 static BigInt abi_scalar_alignment(const typet &type, const BigInt &natural)
@@ -689,7 +695,7 @@ BigInt alignment(const typet &type, const namespacet &ns)
   // compute default
   BigInt result = 0;
 
-  if (type.id() == typet::t_array)
+  if (aligns_as_subtype(type))
     result = alignment(type.subtype(), ns);
   else if (type.id() == typet::t_struct || type.id() == typet::t_union)
   {
