@@ -2247,10 +2247,6 @@ regression/esbmc/sync_swap_builtins_fail
 regression/esbmc/sync_lock_release_race_fail
 regression/esbmc-cpp/cpp/cxx14_elided_copy_throw
 regression/esbmc-cpp/cpp/cxx14_elided_copy_throw_fail
-regression/esbmc-cpp/cpp/aggregate_init_member_in_place
-regression/esbmc-cpp/cpp/aggregate_init_member_in_place_fail
-regression/esbmc-cpp/cpp/aggregate_init_named_double_destroy_fail
-regression/esbmc-cpp/cpp/shared_ptr_member_copy_fail
 regression/esbmc/github_8096
 regression/esbmc/github_8096_fail
 regression/esbmc/github_8096_int_min
@@ -2270,10 +2266,6 @@ regression/esbmc/github_8103
 regression/esbmc/github_8103_fail
 regression/esbmc/github_8103_symex
 regression/esbmc/github_8103_symex_fail
-regression/esbmc/github_8096
-regression/esbmc/github_8096_fail
-regression/esbmc/github_8096_int_min
-regression/esbmc/github_8096_int_min_fail
 regression/esbmc-cpp/cpp/new_array_string_literal
 regression/esbmc-cpp/cpp/new_array_string_literal_fail
 regression/esbmc-cpp/cpp/braced_list_member_init
@@ -3191,6 +3183,9 @@ regression/esbmc/github_8712_shared_counter_fail
 regression/esbmc/github_8712_local_counter_simplified
 regression/esbmc-cpp/try_catch/github_8695_catch_pointer_base
 regression/esbmc-cpp/try_catch/github_8695_catch_pointer_base_fail
+regression/python/github_8705_int_valueerror
+regression/python/github_8705_int_base_valueerror
+regression/python/github_8705_int_valueerror_fail
 regression/esbmc/github_8661_ir_signed_cast
 regression/esbmc/github_8661_ir_signed_cast_fail
 regression/esbmc/github_8661_ir_unsigned_to_int_fail

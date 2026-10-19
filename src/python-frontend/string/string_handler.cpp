@@ -2554,6 +2554,26 @@ exprt string_handler::handle_string_to_int(
     throw std::runtime_error("__python_int function not found in symbol table");
   }
 
+  // int() of an invalid literal raises a catchable ValueError (#8705), as
+  // float() does; the model's own assertion stays for unguarded callers.
+  if (
+    const symbolt *is_int =
+      find_cached_c_function_symbol("c:@F@__python_str_is_int"))
+  {
+    exprt valid = build_call_expr(*is_int, bool_type(), {str_addr, base_expr});
+    valid.location() = location;
+    codet throw_code("expression");
+    throw_code.operands().push_back(
+      converter_.get_exception_handler().gen_exception_raise(
+        "ValueError", "invalid literal for int()"));
+    code_ifthenelset guard;
+    guard.cond() = not_exprt(valid);
+    guard.then_case() = throw_code;
+    guard.location() = location;
+    guard.location().property("skipped");
+    converter_.add_instruction(guard);
+  }
+
   // Call __python_int(str, base). The result is a 64-bit Python int (matching
   // the model's `long long` return); a 32-bit result type here would make the
   // assigned-to variable 32-bit and truncate a string pointer rebound through
