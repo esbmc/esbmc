@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--std c++17
+^\s*FAILED\s+\[main\.assertion\.2\]\s+line\s+24\s+assertion r != 42$
+^VERIFICATION FAILED$
