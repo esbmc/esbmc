@@ -449,6 +449,12 @@ protected:
     exprt &new_expr);
 
   bool get_binary_operator_expr(const nlohmann::json &expr, exprt &new_expr);
+  void convert_operand_types(
+    exprt &lhs,
+    exprt &rhs,
+    const typet &common_type,
+    bool is_shift,
+    const nlohmann::json &expr);
   bool get_compound_assign_expr(
     const nlohmann::json &expr,
     exprt &lhs,

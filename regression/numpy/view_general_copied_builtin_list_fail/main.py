@@ -1,6 +1,5 @@
 import numpy as np
-import random
 
-r = np.arange(5, dtype=int)
+r = np.full(5, 1, order="C")
 w = r[1:]
 l = list(w)

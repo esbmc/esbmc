@@ -127,7 +127,7 @@ void check_solver_availability(const optionst &options)
   log_error(
     "The {} solver has not been built into this version of ESBMC, sorry",
     solver_name);
-  abort();
+  exit(6);
 }
 
 static solver_creator &
@@ -189,7 +189,7 @@ pick_solver(std::string &solver_name, const optionst &options)
   log_error(
     "The {} solver has not been built into this version of ESBMC, sorry",
     solver_name);
-  abort();
+  exit(6);
 }
 
 smt_convt *create_solver(
