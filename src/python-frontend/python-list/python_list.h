@@ -897,6 +897,18 @@ public:
   /// annotation. Empty when neither gives one.
   typet unrecorded_base_elem_type();
 
+  /// The element type that a program class in the object's MRO annotates the
+  /// instance-attribute list @p array with; empty when unannotated or nested.
+  typet attribute_elem_type(const exprt &array) const;
+
+  /// The type map's record of @p array, or nullptr when it has none or is an
+  /// annotated instance attribute.
+  const element_type_registry::entries *
+  recorded_elem_types(const exprt &array) const;
+
+  /// The element type of @p array's attribute annotation, or Any without one.
+  typet attribute_elem_type_or_any(const exprt &array) const;
+
   // True when the list's recorded element types include a tagged scalar, whose
   // payload width is per-element and symbolic (#7716).
   bool has_tagged_elements(const exprt &list) const;
