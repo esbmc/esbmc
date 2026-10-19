@@ -68,14 +68,10 @@ and its stages, ADR-NP-004 the SMT-array scalability decision, and "principle
    frontend-wide wrong success, not NumPy-specific. A call that passes a
    NumPy view to a user function is exempt: the operands to its left are
    read first (`view_param_operand_order_success`).
-7. **A local first bound inside a branch of a function does not outlive
-   the branch.** `if c: b = [1, 2]` followed by `b[0]` gives a false alarm
-   for any pointer-typed local. NumPy view names are declared at the top
-   of the function and are not affected; lists and other objects are.
-8. **A view of an array rebound to an array of another size reads out of
-   bounds**: `v = a[1:3]; a = np.zeros(2)` makes a later `v[0]` fail
-   (false alarm); a rebind to the same size keeps the view on the old
-   storage, as in NumPy.
+7. **A NumPy array rebound to another shape or dtype** gets its own symbol
+   only in straight-line code that no other function reads; inside a
+   branch or loop, or while a function reads the name, the rebind rejects
+   with a `TypeError` (`array_rebind_other_shape_*_fail`).
 ---
 
 ## Community testing readiness
@@ -122,7 +118,7 @@ reject, each pinned by a `CORE` test:
 | `view_general_lambda_escape_fail` | a lambda that receives the view stores it elsewhere | rejected: the lambda is not a plain function |
 | `view_general_external_method_fail` | a function of another module receives the view | rejected: function of a non-NumPy module |
 | `view_param_element_type_conflict_fail` | one function takes an int view and a float view | rejected: view passed to a multi-statement function |
-| `view_param_branch_source_rebind_fail` | the source array is rebound inside a branch before the view is taken | rejected: view passed to a multi-statement function |
+| `view_param_branch_source_rebind_fail` | the source array is rebound inside a branch before the view is taken | rejected: rebinding a numpy array to another shape inside a branch |
 | `view_param_operand_array_name_fail` | `b + f(v)[0]` with an array name `b` to the left of a view-returning call | rejected: an array operand is not bound to a temporary, which a later call could change through an alias |
 | `view_param_return_multi_path_fail` | a function returns one of two view parameters | rejected: returning a copied numpy view |
 | `view_branch_merge_loop_fail` | a view name rebound to another layout inside a loop | rejected: different shape, strides or storage on different paths |
@@ -154,21 +150,21 @@ needs something outside the view model; they stay rejected.
 
 ## Suggested next PRs
 
-Each roadmap item above groups several sub-efforts; sizing them 1 PR per
-item undercounts the real work. Items below with multiple named consumers or
-distinct designs are sized accordingly instead of assumed to be one PR each.
+The backlog closes in four PRs:
 
-1. **Advanced `nditer`** (~1 PR).
-2. **Linear algebra expansion** (~2 PRs) — larger/symbolic matrix support
-   separate from fuller `eig`/`svd`/`norm`.
-3. **Dtype width and non-numeric arrays** (~1 PR) — narrow-width storage
-   and arithmetic, string/complex array consumers.
-4. **Random generator state** (~1 PR) — after the ADR decision on state and
+1. **Advanced `nditer` and rebinding** — the iteration depth above, plus a
+   second name that follows a rebound array's old storage (item 5) and a
+   rebind to another shape inside a branch or loop, or while a function
+   reads the name (item 7).
+2. **Linear algebra expansion** — larger and symbolic matrices together
+   with fuller `eig`/`svd`/`norm`; the largest of the four.
+3. **Dtype width and non-numeric arrays** — narrow-width storage and
+   arithmetic, string/complex array consumers.
+4. **Random generator state** — after the ADR decision on state and
    probabilities.
 
-**Total to close every item in this file: ~5 PRs.** The operand evaluation
-order and the branch-declared locals ("Soundness / performance concerns",
-items 6 and 7) are Python frontend fixes outside this count.
+The operand evaluation order (item 6) is a Python frontend fix outside
+these four.
 
 ---
 
