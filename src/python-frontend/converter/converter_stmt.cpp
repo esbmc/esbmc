@@ -6590,6 +6590,20 @@ static void fit_numpy_string_store(const exprt &lhs, exprt &rhs)
   rhs = fitted;
 }
 
+// NumPy truncates a float stored into an integer array, raising for NaN and
+// infinity as int() does.
+exprt python_converter::fit_numpy_integer_store(
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &value)
+{
+  if (
+    lhs.id() != "index" || !lhs.op0().type().is_array() ||
+    lhs.type() != long_long_int_type() || !rhs.type().is_floatbv())
+    return rhs;
+  return typecast_exprt(guard_nonfinite_float_to_int(rhs, value), lhs.type());
+}
+
 void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -7254,6 +7268,7 @@ void python_converter::get_var_assign(
     // Handle string literal conversion
     rhs = handle_string_literal_rhs(effective_ast_node, lhs_type, rhs);
     fit_numpy_string_store(lhs, rhs);
+    rhs = fit_numpy_integer_store(lhs, rhs, effective_ast_node["value"]);
   }
 
   if (converted_value && rhs != exprt("_init_undefined"))

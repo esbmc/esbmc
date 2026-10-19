@@ -420,6 +420,11 @@ public:
   exprt
   guard_nonfinite_float_to_int(exprt operand, const nlohmann::json &element);
 
+  exprt fit_numpy_integer_store(
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &value);
+
   void update_symbol(const exprt &expr) const;
 
   symbolt *find_symbol(const std::string &symbol_id) const;
