@@ -3059,6 +3059,7 @@ regression/python/github_8418_fail
 regression/python/github_8418_unsupported
 regression/python/github_8358_call_return
 regression/python/github_8358_call_return_fail
+regression/python/github_8358_values_param_unsupported
 regression/python/github_8408_factory_unsupported
 regression/python/github_8408_inherited
 regression/python/github_8408_inherited_fail
