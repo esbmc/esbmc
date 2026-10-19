@@ -720,8 +720,9 @@ class ClassContextMixin:
         at = module.body.index(func)
         module.body[at:at + 1] = [
             self._drop_parameters(
-                self._type_copy(func, name, [(params[i], cls) for i, cls in zip(indexes, key)]),
-                dropped) for key, name in names.items()
+                self._type_copy(func, name, [(params[i], cls)
+                                             for i, cls in zip(indexes, key)]), dropped)
+            for key, name in names.items()
         ]
         return True
 
