@@ -385,7 +385,7 @@ bool esbmc_parseoptionst::process_goto_program(
     // goto_k_induction must not also run (#6031).
     bool is_k_induction =
       (cmdline.isset("inductive-step") || cmdline.isset("k-induction") ||
-       cmdline.isset("k-induction-parallel") || cmdline.isset("ts-check")) &&
+       cmdline.isset("k-induction-parallel") || ts_strategy_requested()) &&
       !options.get_bool_option("termination");
 
     // --termination reuses k-induction's havoc machinery via

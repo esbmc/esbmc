@@ -1802,10 +1802,34 @@ std::optional<exprt> python_converter::try_dispatch_dunder_getitem(
   return get_function_call(call_node);
 }
 
+// Whether `node` is a name declared `Any`, as a for loop's tuple target
+// variable is when the iterable's element type is unknown.
+static bool is_declared_any(
+  const nlohmann::json &node,
+  const std::string &function,
+  const nlohmann::json &ast)
+{
+  if (node.value("_type", "") != "Name")
+    return false;
+  const nlohmann::json decl =
+    json_utils::find_var_decl(node.value("id", ""), function, ast);
+  return decl.value("_type", "") == "AnnAssign" &&
+         decl["annotation"].value("id", "") == "Any";
+}
+
 void python_converter::reject_scalar_subscript(
   const typet &array_type,
   const nlohmann::json &element) const
 {
+  // A void* value declared Any has no element type, so indexing it reads void
+  // (#8358). A numpy value of unknown type is a void* too, but is not
+  // declared Any, and its own lowering reads it.
+  if (
+    array_type.is_pointer() && array_type.subtype().is_empty() &&
+    is_declared_any(element["value"], current_func_name_, *ast_json))
+    throw std::runtime_error(
+      "subscripting a value whose type is not known is not supported");
+
   // Reject subscripting scalar numeric / boolean values up front. CPython
   // raises "TypeError: 'int'/'float'/'bool' object is not subscriptable";
   // the list handler below silently produces an unresolved-type value that
@@ -2234,6 +2258,15 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             return migrate_expr_back(
               member2tc(migrate_type(clean_type), src2, attr_name));
           }
+          // No instance member: read the class attribute, never write it.
+          // The receiver is dropped, so only a symbol qualifies (e.g. the
+          // temporary a constructor call is hoisted into); dropping a call
+          // left in the expression would lose its effects.
+          if (!is_converting_lhs && base_expr.is_symbol())
+            if (
+              symbolt *class_attr = find_class_attribute_symbol(
+                struct_type.tag().as_string(), attr_name))
+              return symbol_expr(*class_attr);
         }
 
         return nil_exprt();
@@ -2952,35 +2985,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       // Otherwise use class attribute
       else
       {
-        sid.set_function("");
-        sid.set_class(extract_class_name_from_tag(obj_type_name));
-        sid.set_object(attr_name);
-        symbolt *class_attr_symbol = symbol_table_.find_symbol(sid.to_string());
-
-        if (!class_attr_symbol)
-        {
-          // Not found in the direct class — walk base classes (Python MRO).
-          const std::string derived_name =
-            extract_class_name_from_tag(obj_type_name);
-          auto class_node =
-            json_utils::find_class((*ast_json)["body"], derived_name);
-          if (!class_node.empty() && class_node.contains("bases"))
-          {
-            for (const auto &base_node : class_node["bases"])
-            {
-              if (!base_node.contains("id"))
-                continue;
-              symbol_id base_sid = create_symbol_id();
-              base_sid.set_function("");
-              base_sid.set_class(base_node["id"].get<std::string>());
-              base_sid.set_object(attr_name);
-              class_attr_symbol =
-                symbol_table_.find_symbol(base_sid.to_string());
-              if (class_attr_symbol)
-                break;
-            }
-          }
-        }
+        symbolt *class_attr_symbol = find_class_attribute_symbol(
+          extract_class_name_from_tag(obj_type_name), attr_name);
 
         if (!class_attr_symbol)
         {
