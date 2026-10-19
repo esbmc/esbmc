@@ -2245,10 +2245,6 @@ regression/esbmc/sync_swap_builtins_fail
 regression/esbmc/sync_lock_release_race_fail
 regression/esbmc-cpp/cpp/cxx14_elided_copy_throw
 regression/esbmc-cpp/cpp/cxx14_elided_copy_throw_fail
-regression/esbmc-cpp/cpp/aggregate_init_member_in_place
-regression/esbmc-cpp/cpp/aggregate_init_member_in_place_fail
-regression/esbmc-cpp/cpp/aggregate_init_named_double_destroy_fail
-regression/esbmc-cpp/cpp/shared_ptr_member_copy_fail
 regression/esbmc/github_8096
 regression/esbmc/github_8096_fail
 regression/esbmc/github_8096_int_min
@@ -2268,10 +2264,6 @@ regression/esbmc/github_8103
 regression/esbmc/github_8103_fail
 regression/esbmc/github_8103_symex
 regression/esbmc/github_8103_symex_fail
-regression/esbmc/github_8096
-regression/esbmc/github_8096_fail
-regression/esbmc/github_8096_int_min
-regression/esbmc/github_8096_int_min_fail
 regression/esbmc-cpp/cpp/new_array_string_literal
 regression/esbmc-cpp/cpp/new_array_string_literal_fail
 regression/esbmc-cpp/cpp/braced_list_member_init
@@ -3098,6 +3090,9 @@ regression/esbmc/github_8709_alloca_use_after_return_fail
 regression/esbmc/github_8709_alloca_assign_use_after_return_fail
 regression/esbmc/github_8709_alloca_member_use_after_return_fail
 regression/esbmc/github_8709_alloca_assign_scope
+regression/esbmc/github_8691_builtin_alloca_use_after_return_fail
+regression/esbmc/github_8691_builtin_alloca_scope
+regression/esbmc/github_8691_builtin_alloca_assign_fail
 regression/esbmc/github_8676_case_range
 regression/esbmc/github_8676_case_range_fail
 regression/esbmc-cpp/cpp/github_8676_case_range
@@ -3146,6 +3141,8 @@ regression/python/github_8325_fail
 regression/python/github_8325_only_attribute_fail
 regression/python/attr_on_none_caught
 regression/python/attr_on_none_lazy
+regression/esbmc-cpp/cpp/github_8743_enum_unsigned_fail
+regression/esbmc-cpp/cpp/github_8743_enum_unsigned
 regression/floats/github_8701_nondet_mode
 regression/python/github_8351_disagree
 regression/python/github_8351_param_disagree
@@ -3175,6 +3172,8 @@ regression/python/github_8642_is_not_none_value_fail
 regression/esbmc/github_8660_object_size_offset
 regression/esbmc/github_8694_32bit_member_offset
 regression/esbmc/github_8694_32bit_struct_copy
+regression/esbmc/github_8692_bitint_member
+regression/esbmc/github_8692_bitint_member_32
 regression/python/github_8669
 regression/python/github_8669_fail
 regression/python/github_8669_branch_unsupported
@@ -3186,3 +3185,9 @@ regression/esbmc/github_7466
 regression/esbmc/github_7466_fail
 regression/esbmc/github_7466_dynamic_index
 regression/esbmc/github_7466_dynamic_index_fail
+regression/esbmc/github_8661_ir_signed_cast
+regression/esbmc/github_8661_ir_signed_cast_fail
+regression/esbmc/github_8661_ir_unsigned_to_int_fail
+regression/python/github_8704_hash_int
+regression/python/github_8704_hash_str
+regression/python/github_8704_hash_int_fail
