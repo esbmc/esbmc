@@ -484,6 +484,7 @@ protected:
   // if a class/struct has vptr component, it needs to be initialized in ctor
   bool has_vptr_component = false;
   std::string thunk_prefix = "thunk::";
+  std::string vcall_prefix = "virtual_call::";
   using function_switch = std::map<irep_idt, exprt>;
   using switch_table = std::map<irep_idt, function_switch>;
   using overriden_map = std::map<std::string, const clang::CXXMethodDecl &>;
@@ -754,28 +755,37 @@ protected:
    * Get the vtable poitner dereferencing for VFT bound MemberExpr
    *
    * Params:
-   *  - member: the method to which this MemberExpr refers
+   *  - md: the method to which this MemberExpr refers
    *  - new_expr: ESBMC IR to represent X@Vtable_ptr dereferencing as in
    * `x->X@vtable_ptr->F`
    *  - base_deref: the base dereferencing expression incorporated in vtable
    * pointer dereferencing expression
    */
   void get_vft_binding_expr_vtable_ptr(
-    const clang::MemberExpr &member,
+    const clang::CXXMethodDecl &md,
     exprt &new_expr,
     const exprt &base_deref);
   /*
    * Get the Function for VFT bound MemberExpr
    *
    * Params:
-   *  - member: the method to which this MemberExpr refers
+   *  - md: the method to which this MemberExpr refers
    *  - new_expr: ESBMC IR to represent F in `x->X@vtable_ptr->F`
    *  - vtable_ptr_deref: the vtable pointer dereferencing expression
    */
   bool get_vft_binding_expr_function(
-    const clang::MemberExpr &member,
+    const clang::CXXMethodDecl &md,
     exprt &new_expr,
     const exprt &vtable_ptr_deref);
+  /*
+   * Get the function a pointer to the virtual member function md points to
+   */
+  bool get_virtual_member_function_pointer(
+    const clang::CXXMethodDecl &md,
+    exprt &new_expr);
+  bool get_unary_operator_expr(
+    const clang::UnaryOperator &uniop,
+    exprt &new_expr) override;
 
   bool is_aggregate_type(const clang::QualType &q_type) override;
   /*

@@ -3050,11 +3050,16 @@ regression/python/github_8417_spine_fail
 regression/python/github_8417_unsupported
 regression/python/github_8417_float_of_int
 regression/python/github_8417_float_of_int_fail
+regression/python/github_8670_generator
+regression/python/github_8670_generator_fail
+regression/python/github_8475_not_callable
+regression/python/github_8475_not_callable_unused
 regression/python/github_8418
 regression/python/github_8418_fail
 regression/python/github_8418_unsupported
 regression/python/github_8358_call_return
 regression/python/github_8358_call_return_fail
+regression/python/github_8358_values_param_unsupported
 regression/python/github_8408_factory_unsupported
 regression/python/github_8408_inherited
 regression/python/github_8408_inherited_fail
@@ -3198,6 +3203,11 @@ regression/esbmc-cpp/try_catch/github_8695_catch_pointer_base
 regression/esbmc-cpp/try_catch/github_8695_catch_pointer_base_fail
 regression/python/github_8764_type_none_param
 regression/python/github_8764_type_none_param_fail
+regression/python/github_8379_fail
+regression/python/github_8379_float_receiver_fail
+regression/python/github_8379_param_receiver_fail
+regression/python/github_8379_number_methods
+regression/python/github_8379_retyped_receiver
 regression/python/github_8705_int_valueerror
 regression/python/github_8705_int_base_valueerror
 regression/python/github_8705_int_valueerror_fail
@@ -3207,3 +3217,6 @@ regression/esbmc/github_8661_ir_unsigned_to_int_fail
 regression/python/github_8704_hash_int
 regression/python/github_8704_hash_str
 regression/python/github_8704_hash_int_fail
+regression/esbmc-cpp/cpp/github_8680_dtor_throw_unwind_fail
+regression/esbmc-cpp/cpp/github_8680_dtor_catch_unwind
+regression/esbmc-cpp/cpp/github_8680_dtor_throw_scope_exit

@@ -90,6 +90,10 @@ private:
   /// str-method lowering, or nil when neither applies.
   exprt build_method_call_on_receiver() const;
 
+  /// AttributeError for a str-only method called on an int, float or bool,
+  /// which would otherwise lower as a 1-char str (#8379); nil otherwise.
+  exprt str_method_on_number_error() const;
+
   /*
    * Rejects a contract clause that does not lower to a pure expression.
    * Throws with a diagnostic naming the offending construct.
