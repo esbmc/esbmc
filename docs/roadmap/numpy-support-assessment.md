@@ -1,6 +1,6 @@
 # ESBMC NumPy — Remaining Work
 
-**Updated:** 2026-10-17.
+**Updated:** 2026-10-19.
 
 This file tracks only what is **not yet implemented, broken, risky, or queued
 as backlog** in the NumPy module. If an item is not listed here as a gap, TODO,
@@ -34,7 +34,7 @@ and its stages, ADR-NP-004 the SMT-array scalability decision, and "principle
 | Direct constructor chaining | Supported for the current concrete constructor subset and direct literal `np.array(...)` receivers across the pinned reducers/views (`sum`, `mean`, `min`, `max`, `argsort`, `searchsorted`, `flatten`, `ravel`, `transpose`, `.T`, `reshape`, `argmin`, `argmax`, `diagonal`, `prod`, `std`, and `var`). Remaining gaps are method forms tied to unsupported constructors, symbolic constructor payloads, or broader unsupported APIs. |
 | Statistics | `a.sum()`/`a.mean()`/`a.min()`/`a.max()`/`a.any()`/`a.all()`/`a.argmin()`/`a.argmax()` method forms and their `axis=0/1` variants are supported over concrete 1-D/2-D ndarrays (including function-returned arrays), sharing the same reducer/comparison policy as the functional forms. Still missing: axis/keepdims/out/overwrite/nan-policy style variants beyond concrete flattened/literal `median` and `percentile`, and reducer axes outside 2-D concrete `axis=0/1`. |
 | Linear algebra | `det`/`inv`/`solve` beyond small concrete matrices, symbolic matrix entries, additional `norm` axes/orders, and fuller `eig`/`svd` semantics. |
-| Random | Additional distributions, full PRNG state semantics, probability-vector `choice`, replacement control, and large/symbolic shapes. |
+| Random | Generator state and objects (`seed`, `get_state`, `set_state`, `default_rng`, `Generator`, `RandomState`) and every unmodelled `np.random` function (`shuffle`, `permutation`, `multivariate_normal`, `laplace`, `logistic`, ...) raise `TypeError`; `choice(p=...)` does too, since a probability vector has no encoding that keeps ADR-NP-002's over-approximation. Parameters must be scalars (no broadcasting of array parameters). `size` must be integer literals, at most 1024 samples (each sample is unrolled); a `size` read at run time rejects. `choice` takes a 1-D literal sequence, ndarray or view, not an integer `a` or a slice of a string array. `randint` rejects `dtype=bool` and `uint64`, and narrow integer dtypes are stored at 64 bit as for the constructors. A NaN parameter raises the parameter's `ValueError` instead of producing NaN samples. |
 | Structured arrays | Record dtypes. |
 | Views / strides | Views passed to lambdas used as callbacks, through `**kwargs` or to other modules' functions; views passed to multi-statement functions outside the subset whose layout is read from the call sites (see the shared-buffer view model row); views stored by mutation, in attributes or globals; `reshape`/`ravel` of N-D views with a run-time stride; arrays whose shape has no static upper bound (`np.zeros(n)` with `n` unconstrained). |
 | Iteration | Advanced `nditer` flags/options, multi-operand iteration, `external_loop`, `multi_index`, buffering, non-C order, casting/op_dtypes/op_axes, and broader mutable item forms. |
@@ -68,21 +68,11 @@ and its stages, ADR-NP-004 the SMT-array scalability decision, and "principle
    frontend-wide wrong success, not NumPy-specific. A call that passes a
    NumPy view to a user function is exempt: the operands to its left are
    read first (`view_param_operand_order_success`).
-7. **A reduction on a row of a strided 2-D view gives a false alarm**:
-   `v = a[1:]; v[1].sum()` fails although the value is correct; `v.sum()` and
-   element reads are right.
-8. **Writing a float into an integer array ends in a solver exception**
-   instead of truncating (`a = np.array([1, 2]); a[0] = 2.7`), with no
-   verdict. `np.arange` bound to a name is such an array.
-9. **A local first bound inside a branch of a function does not outlive
+7. **A local first bound inside a branch of a function does not outlive
    the branch.** `if c: b = [1, 2]` followed by `b[0]` gives a false alarm
    for any pointer-typed local. NumPy view names are declared at the top
    of the function and are not affected; lists and other objects are.
-10. **A generator over a NumPy array inside `sum()` reads wrong values**
-   (`sum(v for v in a)` gives a false alarm; the plain `for` loop is
-   correct), and `np.transpose` of an array with a run-time shape fails with
-   a raw JSON exception instead of a diagnostic.
-11. **A view of an array rebound to an array of another size reads out of
+8. **A view of an array rebound to an array of another size reads out of
    bounds**: `v = a[1:3]; a = np.zeros(2)` makes a later `v[0]` fail
    (false alarm); a rebind to the same size keeps the view on the old
    storage, as in NumPy.
@@ -146,13 +136,16 @@ reject, each pinned by a `CORE` test:
 
 No item is a known soundness gap; the backlog, in priority order:
 
-1. **Random and iteration depth** — probability/replacement `choice`, extra
-   distributions, and advanced `nditer`.
+1. **Iteration depth** — advanced `nditer` (flags, multiple operands,
+   `multi_index`, `external_loop`, buffering, `op_dtypes`/`op_axes`, writable
+   items).
 2. **Linear algebra breadth** — larger matrices, symbolic entries, and more
    faithful `norm`/`eig`/`svd`.
 3. **Dtype width and non-numeric arrays** — storage and arithmetic in the
    dtype's own width (NEP 50 promotion), and the string/complex array
    consumers that reject today; `object`/structured/custom dtypes stay out.
+4. **Random generator state** — `Generator`/`default_rng`, `seed` and
+   probability-vector `choice`; each needs its own ADR-NP-002 decision first.
 
 The residual view forms in the table above (lambdas passed on, `**kwargs`, a per-type copy of a callee) are narrow and each
 needs something outside the view model; they stay rejected.
@@ -165,16 +158,17 @@ Each roadmap item above groups several sub-efforts; sizing them 1 PR per
 item undercounts the real work. Items below with multiple named consumers or
 distinct designs are sized accordingly instead of assumed to be one PR each.
 
-1. **Random and iteration depth** (~2 PRs) — new distributions/`choice`
-   separate from advanced `nditer`.
+1. **Advanced `nditer`** (~1 PR).
 2. **Linear algebra expansion** (~2 PRs) — larger/symbolic matrix support
    separate from fuller `eig`/`svd`/`norm`.
 3. **Dtype width and non-numeric arrays** (~1 PR) — narrow-width storage
    and arithmetic, string/complex array consumers.
+4. **Random generator state** (~1 PR) — after the ADR decision on state and
+   probabilities.
 
 **Total to close every item in this file: ~5 PRs.** The operand evaluation
 order and the branch-declared locals ("Soundness / performance concerns",
-items 6 and 9) are Python frontend fixes outside this count.
+items 6 and 7) are Python frontend fixes outside this count.
 
 ---
 
