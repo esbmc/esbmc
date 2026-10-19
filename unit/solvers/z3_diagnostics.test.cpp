@@ -28,8 +28,9 @@ TEST_CASE("Z3 reports why solving was inconclusive", "[z3][diagnostics]")
   solver.solver.set("rlimit", 1U);
   solver.assert_expr(symbol2tc(get_bool_type(), "claim"));
 
-  std::unique_ptr<FILE, decltype(&std::fclose)> output(
-    std::tmpfile(), &std::fclose);
+  const auto close_file = [](FILE *file) { std::fclose(file); };
+  std::unique_ptr<FILE, decltype(close_file)> output(
+    std::tmpfile(), close_file);
   REQUIRE(output != nullptr);
   struct restore_outputt
   {
