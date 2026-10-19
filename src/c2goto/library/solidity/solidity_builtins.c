@@ -33,6 +33,23 @@ __ESBMC_HIDE:;
   return result;
 }
 
+/* signed integer power: as sol_pow_uint, so that a negative base multiplies
+ * as a signed value and overflows only when the result does (#8707). */
+int256_t sol_pow_int(int256_t base, uint256_t exp)
+{
+__ESBMC_HIDE:;
+  int256_t result = 1;
+  while (exp > 0)
+  {
+    if (exp & 1)
+      result *= base;
+    exp >>= 1;
+    if (exp > 0)
+      base *= base;
+  }
+  return result;
+}
+
 /*
  * Modular arithmetic — arbitrary precision per Solidity spec.
  *

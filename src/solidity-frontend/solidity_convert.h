@@ -559,6 +559,7 @@ protected:
     const nlohmann::json &caller,
     side_effect_expr_function_callt &call,
     bool skip_first_param = false);
+  exprt power_call(const exprt &lhs, const exprt &rhs);
   void get_library_function_call_no_args(
     const std::string &func_name,
     const std::string &func_id,

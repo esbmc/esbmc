@@ -2437,6 +2437,27 @@ void solidity_convertert::get_current_contract_name(
   log_debug("solidity", "\tcurrent contract name={}", contract_name);
 }
 
+/// `lhs ** rhs` as a call to the integer power model. Solidity ** is purely
+/// integer arithmetic, which avoids a fixedbv/floatbv type mismatch; a signed
+/// base needs the signed model, or its multiplications overflow as unsigned
+/// (#8707).
+exprt solidity_convertert::power_call(const exprt &lhs, const exprt &rhs)
+{
+  unsignedbv_typet u256(256);
+  const bool is_signed = lhs.type().is_signedbv();
+  const typet base_type = is_signed ? typet(signedbv_typet(256)) : typet(u256);
+  side_effect_expr_function_callt call_expr;
+  get_library_function_call_no_args(
+    is_signed ? "sol_pow_int" : "sol_pow_uint",
+    is_signed ? "c:@F@sol_pow_int" : "c:@F@sol_pow_uint",
+    base_type,
+    lhs.location(),
+    call_expr);
+  call_expr.arguments().push_back(typecast_exprt(lhs, base_type));
+  call_expr.arguments().push_back(typecast_exprt(rhs, u256));
+  return call_expr;
+}
+
 bool solidity_convertert::get_binary_operator_expr(
   const nlohmann::json &expr,
   exprt &new_expr)
@@ -3072,17 +3093,7 @@ bool solidity_convertert::get_binary_operator_expr(
     }
     else
     {
-      // Use integer power function to avoid fixedbv/floatbv type mismatch.
-      // Solidity ** is purely integer arithmetic.
-      unsignedbv_typet u256(256);
-      side_effect_expr_function_callt call_expr;
-      get_library_function_call_no_args(
-        "sol_pow_uint", "c:@F@sol_pow_uint", u256, lhs.location(), call_expr);
-
-      call_expr.arguments().push_back(typecast_exprt(lhs, u256));
-      call_expr.arguments().push_back(typecast_exprt(rhs, u256));
-
-      new_expr = call_expr;
+      new_expr = power_call(lhs, rhs);
     }
     new_expr.location() = l;
     // do not fall through
