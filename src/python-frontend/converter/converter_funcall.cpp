@@ -969,6 +969,9 @@ python_converter::dict_function_return_type(const nlohmann::json &container)
   std::optional<typet> shared;
   for (const auto &v : values)
   {
+    // A literal is never the function called, so it decides nothing.
+    if (v.value("_type", "") == "Constant")
+      continue;
     const typet ret = stored_function_return_type(v);
     if (ret.is_nil() || ret.id().empty())
       return std::nullopt;
