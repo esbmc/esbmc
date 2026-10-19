@@ -1,0 +1,6 @@
+CORE
+main.cpp
+--std c++17 --multi-property
+^  FAILED .*line  18  assertion t != nullptr$
+^  FAILED .*line  31  assertion !thrown$
+^VERIFICATION FAILED$

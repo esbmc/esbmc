@@ -1557,3 +1557,113 @@ TEST_CASE("Wrapped interval bounds", "[ai][interval-analysis]")
     REQUIRE(result.second == 10);
   }
 }
+
+// Every wrapped interval of a type, top included, bottom excluded.
+static std::vector<wrapped_interval> all_wrapped_intervals(const type2tc &t)
+{
+  std::vector<wrapped_interval> all;
+  const BigInt mod = wrapped_interval(t).get_upper_bound();
+  for (BigInt l = 0; l < mod; ++l)
+    for (BigInt u = 0; u < mod; ++u)
+    {
+      wrapped_interval w(t);
+      w.lower = l;
+      w.upper = u;
+      all.push_back(w);
+    }
+  return all;
+}
+
+// Membership computed without the arc's own contains()/cardinality().
+static bool
+on_arc(const BigInt &v, const BigInt &lower, const BigInt &upper, BigInt mod)
+{
+  BigInt dv = (v - lower) % mod, du = (upper - lower) % mod;
+  if (dv < 0)
+    dv += mod;
+  if (du < 0)
+    du += mod;
+  return dv <= du;
+}
+
+static bool
+includes_all_values_of(const wrapped_interval &join, const wrapped_interval &w)
+{
+  const BigInt mod = w.get_upper_bound();
+  if (join.is_bottom())
+    return false;
+  for (BigInt v = 0; v < mod; ++v)
+    if (
+      on_arc(v, *w.lower, *w.upper, mod) &&
+      !on_arc(v, *join.lower, *join.upper, mod))
+      return false;
+  return true;
+}
+
+TEST_CASE(
+  "Wrapped interval join covers its operands",
+  "[ai][interval-analysis]")
+{
+  config.ansi_c.set_data_model(configt::ILP32);
+
+  SECTION("Two operands, 4-bit")
+  {
+    for (const type2tc &t : {get_uint_type(4), get_int_type(4)})
+    {
+      const std::vector<wrapped_interval> all = all_wrapped_intervals(t);
+      for (const wrapped_interval &s : all)
+        for (const wrapped_interval &u : all)
+        {
+          const wrapped_interval join = wrapped_interval::over_join(s, u);
+          CAPTURE(*s.lower, *s.upper, *u.lower, *u.upper);
+          REQUIRE(includes_all_values_of(join, s));
+          REQUIRE(includes_all_values_of(join, u));
+        }
+    }
+  }
+
+  SECTION("Three operands, 2-bit")
+  {
+    const std::vector<wrapped_interval> all =
+      all_wrapped_intervals(get_uint_type(2));
+    for (const wrapped_interval &a : all)
+      for (const wrapped_interval &b : all)
+        for (const wrapped_interval &c : all)
+        {
+          std::vector<wrapped_interval> r{a, b, c};
+          const wrapped_interval join = wrapped_interval::over_join(r);
+          CAPTURE(*a.lower, *a.upper, *b.lower, *b.upper, *c.lower, *c.upper);
+          REQUIRE(includes_all_values_of(join, a));
+          REQUIRE(includes_all_values_of(join, b));
+          REQUIRE(includes_all_values_of(join, c));
+        }
+  }
+
+  SECTION("Four operands, 2-bit")
+  {
+    const std::vector<wrapped_interval> all =
+      all_wrapped_intervals(get_uint_type(2));
+    for (const wrapped_interval &a : all)
+      for (const wrapped_interval &b : all)
+        for (const wrapped_interval &c : all)
+          for (const wrapped_interval &d : all)
+          {
+            std::vector<wrapped_interval> r{a, b, c, d};
+            const wrapped_interval join = wrapped_interval::over_join(r);
+            for (const wrapped_interval &w : {a, b, c, d})
+              REQUIRE(includes_all_values_of(join, w));
+          }
+  }
+
+  SECTION("Overlap at the head of a wrapping arc (#8209)")
+  {
+    wrapped_interval s(get_uint_type(3)), u(get_uint_type(3));
+    s.lower = 2;
+    s.upper = 3;
+    u.lower = 3;
+    u.upper = 0;
+    const wrapped_interval join = wrapped_interval::over_join(s, u);
+    REQUIRE(join.lower == 2);
+    REQUIRE(join.upper == 0);
+  }
+}

@@ -803,6 +803,33 @@ std::string python_annotation<Json>::get_call_type(const Json &arg)
   return "";
 }
 
+/// The type a subscripted annotation spells. get_annotation_type_name flattens
+/// dict[K, V] to "dict", which leaves a bare `dict` parameter unrefined at a
+/// call site that passes such a variable (#5444).
+template <class Json>
+std::string
+python_annotation<Json>::subscript_annotation_type(const Json &annotation)
+{
+  const std::string full = json_utils::render_annotation_type(annotation);
+  if (annotation["value"]["id"] == "dict" && !full.empty())
+    return full;
+  return json_utils::get_annotation_type_name(annotation);
+}
+
+/// The full type of a literal bound to a variable annotated with the bare
+/// container @p base_type, or "" when the literal does not refine it.
+template <class Json>
+std::string python_annotation<Json>::container_literal_type(
+  const std::string &base_type,
+  const Json &value)
+{
+  if (base_type == "list" && value["_type"] == "List")
+    return get_list_type_from_literal(value);
+  if (base_type == "dict" && value["_type"] == "Dict")
+    return get_argument_type(value);
+  return "";
+}
+
 template <class Json>
 std::string python_annotation<Json>::get_argument_type(const Json &arg)
 {
@@ -926,7 +953,7 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
         var_node["annotation"].contains("value") &&
         var_node["annotation"]["value"].contains("id"))
       {
-        return json_utils::get_annotation_type_name(var_node["annotation"]);
+        return subscript_annotation_type(var_node["annotation"]);
       }
       // Handle simple type annotations like int, str (Name nodes)
       else if (var_node["annotation"].contains("id"))
@@ -938,13 +965,10 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
           (base_type == "list" || base_type == "dict" || base_type == "set") &&
           var_node.contains("value") && !var_node["value"].is_null())
         {
-          if (base_type == "list" && var_node["value"]["_type"] == "List")
-          {
-            std::string full_type =
-              get_list_type_from_literal(var_node["value"]);
-            if (!full_type.empty())
-              return full_type;
-          }
+          const std::string full_type =
+            container_literal_type(base_type, var_node["value"]);
+          if (!full_type.empty())
+            return full_type;
         }
         return refine_any_from_value(base_type, var_node);
       }
@@ -1375,17 +1399,29 @@ std::string python_annotation<Json>::get_builtin_call_type(const Json &call)
   return it != builtin_functions().end() ? it->second : func_name;
 }
 
-/// `[a] + [b]` keeps the element type both literals share, so a callee fed
-/// the result is typed by it rather than by Any (#8770); anything else is a
-/// bare list.
+/// `[a] + [b]` keeps the element type both operands share, so a callee fed
+/// the result is typed by it rather than by Any (#8770). The right operand may
+/// also be a nondet_list builder, `_nondet_list_T(n)`, a list of T (#8843);
+/// anything else is a bare list.
 template <class Json>
 std::string python_annotation<Json>::list_concat_type(const Json &binop)
 {
   const Json &rhs = binop["right"];
-  if (binop["op"]["_type"] != "Add" || rhs["_type"] != "List")
+  if (binop["op"]["_type"] != "Add")
     return "list";
+  const std::string callee =
+    rhs["_type"] == "Call" ? rhs["func"].value("id", "") : "";
+  const std::string builder_elem =
+    callee.rfind("_nondet_list_", 0) == 0 ? callee.substr(13) : "";
+  std::string right = "list";
+  if (rhs["_type"] == "List")
+    right = get_list_type_from_literal(rhs);
+  else if (
+    builder_elem == "int" || builder_elem == "float" ||
+    builder_elem == "bool" || builder_elem == "str")
+    right = "list[" + builder_elem + "]";
   const std::string left = get_list_type_from_literal(binop["left"]);
-  return left == get_list_type_from_literal(rhs) ? left : "list";
+  return left == right ? left : "list";
 }
 
 template <class Json>
@@ -2212,9 +2248,14 @@ std::string python_annotation<Json>::get_type_from_call(const Json &element)
   {
     const std::string &func_id = func["id"];
 
+    const bool is_user_class = json_utils::is_class<Json>(func_id, ast_);
+    const std::string copied =
+      is_user_class ? "" : list_copy_type(func_id, element["value"]);
+    if (!copied.empty())
+      return copied;
+
     if (
-      json_utils::is_class<Json>(func_id, ast_) ||
-      type_utils::is_builtin_type(func_id) ||
+      is_user_class || type_utils::is_builtin_type(func_id) ||
       type_utils::is_consensus_type(func_id) ||
       type_utils::is_python_exceptions(func_id))
       return func_id;

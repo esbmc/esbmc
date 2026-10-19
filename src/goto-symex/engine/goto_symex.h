@@ -767,6 +767,10 @@ protected:
     const expr2tc &n,
     const std::string &func);
 
+  /** Claim that a memory builtin's operand, on the path @p guard selects, is
+   *  not a code object; nothing under --no-pointer-check. */
+  void claim_not_code(const expr2tc &guard);
+
   /** Helper for intrinsic_memcmp: resolve @p ptr to a single concrete
    *  primitive object with a constant offset, validating that an
    *  @p number_of_bytes read stays in bounds. Returns false (bump to the C
@@ -1868,11 +1872,10 @@ expr2tc gen_byte_memcpy(
 
 /**
  * Returns true iff `name` is the goto-program return-value temp for an
- * `alloca` call, i.e. exactly matches
- * `<L1-prefix?>return_value$_alloca$<digits>`.
- * Only these allocations die with their frame: `__builtin_alloca` is what the
- * operational models' `__ESBMC_alloca` expands to, and they rely on the object
- * outliving the call (#8691).
+ * `alloca` / `__builtin_alloca` call, i.e. exactly matches
+ * `<L1-prefix?>return_value$_alloca$<digits>` or
+ * `<L1-prefix?>return_value$___builtin_alloca$<digits>`.  Only these
+ * allocations die with their frame; the models' `__ESBMC_alloca` outlives it.
  *
  * A previous substring-only check fired on any user identifier containing
  * `_alloca$` (e.g. a method literally named `alloca$te`), causing symex to
