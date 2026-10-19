@@ -2988,6 +2988,61 @@ exprt python_converter::handle_array_operations(
   return nil_exprt();
 }
 
+/// The strict order and equality of two tuple components that are numbers (a
+/// mixed int/float pair compares as doubles, as Python promotes int to float)
+/// or strs (by content). False for any other pair.
+bool python_converter::scalar_order(
+  exprt a,
+  exprt b,
+  const nlohmann::json &element,
+  expr2tc &lt,
+  expr2tc &eq)
+{
+  auto is_num = [](const typet &t) {
+    return t.is_signedbv() || t.is_unsignedbv() || t.is_floatbv() ||
+           t == bool_type();
+  };
+  if (is_num(a.type()) && is_num(b.type()))
+  {
+    if (a.type() != b.type())
+    {
+      a = typecast_exprt(a, double_type());
+      b = typecast_exprt(b, double_type());
+    }
+    expr2tc a2, b2;
+    migrate_expr(a, a2);
+    migrate_expr(b, b2);
+    lt = lessthan2tc(a2, b2);
+    eq = equality2tc(a2, b2);
+    return true;
+  }
+  if (
+    !type_utils::is_string_type(a.type()) ||
+    !type_utils::is_string_type(b.type()))
+    return false;
+
+  // handle_string_comparison folds the relation, or rewrites its operands to
+  // strcmp(a, b) and 0 and returns nil.
+  auto relation = [&](const std::string &op) -> expr2tc {
+    exprt l = a, r = b;
+    exprt folded = handle_string_comparison(op, l, r, element);
+    expr2tc result, l2, r2;
+    if (!folded.is_nil())
+    {
+      migrate_expr(folded, result);
+      return result;
+    }
+    migrate_expr(l, l2);
+    migrate_expr(r, r2);
+    if (op == "Lt")
+      return lessthan2tc(l2, r2);
+    return equality2tc(l2, r2);
+  };
+  lt = relation("Lt");
+  eq = relation("Eq");
+  return true;
+}
+
 exprt python_converter::handle_tuple_operations(
   const std::string &op,
   exprt &lhs,
@@ -3090,42 +3145,31 @@ exprt python_converter::handle_tuple_operations(
   // double, matching Python's numeric tower) or nested tuples (compared
   // recursively). Tuples of differing arity compare on the common prefix, with
   // the shorter tuple ordered first if the prefix is equal. Gt/LtE compare the
-  // swapped operands; LtE/GtE negate the strict result. Any other component
-  // kind (string/list/...) makes the whole comparison fall through unchanged.
+  // swapped operands; LtE/GtE negate the strict result. A str component
+  // compares by content. Any other component kind (list/object/...) makes the
+  // whole comparison fall through unchanged.
   if (
     lhs_is_tuple && rhs_is_tuple &&
     (op == "Lt" || op == "LtE" || op == "Gt" || op == "GtE"))
   {
     bool ok = true;
-    auto is_num = [](const typet &t) {
-      return t.is_signedbv() || t.is_unsignedbv() || t.is_floatbv() ||
-             t == bool_type();
-    };
-
-    auto memb = [&](const expr2tc &s, const struct_typet::componentt &c) {
-      return migrate_expr_back(
-        member2tc(migrate_type(c.type()), s, c.get_name()));
-    };
 
     // Strict lexicographic less-than for two tuple-typed expressions.
     std::function<exprt(const exprt &, const exprt &)> lex_lt =
       [&](const exprt &ta, const exprt &tb) -> exprt {
-      const auto &ca = to_struct_type(ta.type()).components();
-      const auto &cb = to_struct_type(tb.type()).components();
-      const size_t m = std::min(ca.size(), cb.size());
-
-      expr2tc a2, b2;
-      migrate_expr(ta, a2);
-      migrate_expr(tb, b2);
+      const struct_typet &sa = to_struct_type(ta.type());
+      const struct_typet &sb = to_struct_type(tb.type());
+      const size_t na = sa.components().size();
+      const size_t nb = sb.components().size();
+      const size_t m = std::min(na, nb);
 
       // Base: a proper prefix is strictly less than the longer tuple.
       // V.3: build the lexicographic compare in IREP2.
-      expr2tc result =
-        ca.size() < cb.size() ? gen_true_expr() : gen_false_expr();
+      expr2tc result = na < nb ? gen_true_expr() : gen_false_expr();
       for (size_t k = m; k-- > 0;)
       {
-        exprt ai = memb(a2, ca[k]);
-        exprt bi = memb(b2, cb[k]);
+        exprt ai = tuple_handler_->get_tuple_element(ta, sa, k);
+        exprt bi = tuple_handler_->get_tuple_element(tb, sb, k);
 
         expr2tc lt, eq;
         const bool ai_tuple = tuple_handler_->is_tuple_type(ai.type());
@@ -3138,21 +3182,7 @@ exprt python_converter::handle_tuple_operations(
           migrate_expr(bi, bi2);
           eq = equality2tc(ai2, bi2); // native struct equality, element-wise
         }
-        else if (is_num(ai.type()) && is_num(bi.type()))
-        {
-          // Promote a mixed int/float pair to double (Python int->float).
-          if (ai.type() != bi.type())
-          {
-            ai = typecast_exprt(ai, double_type());
-            bi = typecast_exprt(bi, double_type());
-          }
-          expr2tc ai2, bi2;
-          migrate_expr(ai, ai2);
-          migrate_expr(bi, bi2);
-          lt = lessthan2tc(ai2, bi2);
-          eq = equality2tc(ai2, bi2);
-        }
-        else
+        else if (!scalar_order(ai, bi, element, lt, eq))
         {
           ok = false; // unsupported / mismatched component kinds
           return migrate_expr_back(gen_false_expr());

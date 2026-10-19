@@ -526,6 +526,13 @@ public:
     exprt &rhs,
     const nlohmann::json &element);
 
+  bool scalar_order(
+    exprt a,
+    exprt b,
+    const nlohmann::json &element,
+    expr2tc &lt,
+    expr2tc &eq);
+
   python_typechecking &get_typechecker();
   const python_typechecking &get_typechecker() const;
 
@@ -822,6 +829,12 @@ private:
   std::string create_normalized_self_key(const std::string &class_tag);
 
   std::string extract_class_name_from_tag(const std::string &tag_name);
+
+  /// The class-level symbol for `attr_name` on `class_name` or one of its
+  /// direct bases, or null if none is declared.
+  symbolt *find_class_attribute_symbol(
+    const std::string &class_name,
+    const std::string &attr_name);
 
   /// The number bindings of `name` in the scope being converted that are
   /// live at line `before`: the ones that reach it, or with `include_later`
