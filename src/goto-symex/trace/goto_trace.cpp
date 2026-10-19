@@ -700,11 +700,13 @@ void show_goto_trace(
           out << "Stack trace:" << std::endl;
           for (const auto &it : step.stack_trace)
           {
+            const symbolt *fn = ns.lookup(it.function);
+            const irep_idt &name = fn ? fn->name : it.function;
             if (it.src == nullptr)
-              out << "  " << it.function.as_string() << std::endl;
+              out << "  " << name << std::endl;
             else
             {
-              out << "  " << it.function.as_string();
+              out << "  " << name;
               if (it.src->pc->location.is_not_nil())
                 out << " at " << it.src->pc->location << std::endl;
               else
