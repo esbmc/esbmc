@@ -104,6 +104,12 @@ public:
 
   exprt build_nondet_string_fallback(const locationt &location);
 
+  /// A bounded, NUL-terminated str of nondet content, as nondet_str() gives.
+  exprt build_nondet_string(const locationt &location);
+
+  /// The nondet str buffer size: --nondet-str-length plus the NUL.
+  static int nondet_str_buffer_size();
+
   /**
    * @brief Extract string content from array operands
    * @param array_expr Array expression containing characters
@@ -293,6 +299,7 @@ public:
   exprt try_handle_len_string_fast_path(
     const nlohmann::json &call_json,
     const exprt &arg_expr);
+  exprt char_array_type_length(const exprt &arg_expr) const;
 
   // String method operations
 
