@@ -2194,6 +2194,16 @@ private:
     const exprt &lhs,
     const exprt &rhs,
     const std::string &lhs_id) const;
+  void
+  reject_numpy_array_retype(const symbolt &symbol, const typet &type) const;
+  bool needs_fresh_numpy_array_slot(
+    const exprt &lhs,
+    const exprt &rhs,
+    const std::string &lhs_id) const;
+  bool is_numpy_array_reshape_rebind(
+    const exprt &lhs,
+    const exprt &rhs,
+    const std::string &lhs_id) const;
   bool passes_numpy_view_anywhere(const nlohmann::json &call);
   bool is_handled_numpy_view_call(const nlohmann::json &call);
   bool is_attribute_store_of_numpy_view(

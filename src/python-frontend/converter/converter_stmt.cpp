@@ -1433,7 +1433,10 @@ void python_converter::handle_assignment_type_adjustments(
             !lhs_symbol->get_type().is_nil() &&
             lhs_symbol->get_type() != type_handler_.get_list_type();
           if (!is_incompatible)
+          {
+            reject_numpy_array_retype(*lhs_symbol, rhs.type());
             adopt_array_type(*lhs_symbol, lhs, rhs);
+          }
         }
       }
     }
@@ -1880,14 +1883,23 @@ exprt python_converter::get_rhs_with_dict_resolution(
 std::string
 python_converter::resolve_name_symbol_id(const std::string &name) const
 {
+  // A NumPy array rebound to another shape lives in its retype slot, which
+  // holds the metadata of the live binding.
+  const auto live_id = [this](const std::string &id) {
+    const auto alias = retype_aliases_.find(id);
+    return alias != retype_aliases_.end() &&
+               numpy_array_symbols_.count(alias->second) != 0
+             ? alias->second
+             : id;
+  };
   symbol_id sid = create_symbol_id();
   sid.set_object(name);
   if (symbol_table_.find_symbol(sid.to_string()) != nullptr)
-    return sid.to_string();
+    return live_id(sid.to_string());
 
   sid.set_function("");
   if (symbol_table_.find_symbol(sid.to_string()) != nullptr)
-    return sid.to_string();
+    return live_id(sid.to_string());
 
   return "";
 }
@@ -6109,7 +6121,90 @@ bool python_converter::needs_fresh_retype_slot(
     !tuple_handler_->is_tuple_type(rhs.type()) && !rhs.type().is_code() &&
     !(rhs.type().is_pointer() && rhs.type().subtype().id() == "empty");
   return tuple_to_nontuple_rebind ||
-         is_numpy_array_to_view_rebind(lhs, rhs, lhs_id);
+         needs_fresh_numpy_array_slot(lhs, rhs, lhs_id);
+}
+
+bool python_converter::needs_fresh_numpy_array_slot(
+  const exprt &lhs,
+  const exprt &rhs,
+  const std::string &lhs_id) const
+{
+  return is_numpy_array_to_view_rebind(lhs, rhs, lhs_id) ||
+         is_numpy_array_reshape_rebind(lhs, rhs, lhs_id);
+}
+
+static bool is_read_in_other_scope(
+  const nlohmann::json &node,
+  const std::string &name,
+  const std::string &current,
+  bool nested);
+
+static bool is_read_in_other_scope_of_children(
+  const nlohmann::json &node,
+  const std::string &name,
+  const std::string &current,
+  bool nested)
+{
+  for (const auto &child : node)
+    if (
+      child.is_structured() &&
+      is_read_in_other_scope(child, name, current, nested))
+      return true;
+  return false;
+}
+
+// Whether `name` is read inside a function, lambda or class other than
+// `current`: such a body may run after a rebind, through the old symbol.
+static bool is_read_in_other_scope(
+  const nlohmann::json &node,
+  const std::string &name,
+  const std::string &current,
+  bool nested)
+{
+  const std::string type = node.is_object() ? node.value("_type", "") : "";
+  if (nested && type == "Name" && node.value("id", "") == name)
+    return true;
+  const bool scope = type == "FunctionDef" || type == "AsyncFunctionDef" ||
+                     type == "Lambda" || type == "ClassDef";
+  return is_read_in_other_scope_of_children(
+    node,
+    name,
+    current,
+    nested || (scope && node.value("name", "") != current));
+}
+
+// A NumPy array rebound to another shape or dtype where it cannot get its own
+// symbol (in a branch or loop, or read by another function): retyping the
+// symbol in place would retype every read of the earlier binding.
+void python_converter::reject_numpy_array_retype(
+  const symbolt &symbol,
+  const typet &type) const
+{
+  if (
+    symbol.get_type().is_array() &&
+    numpy_array_symbols_.count(symbol.id.as_string()) != 0 &&
+    migrate_type(symbol.get_type()) != migrate_type(type))
+    throw std::runtime_error(
+      "TypeError: rebinding a numpy array to another shape or dtype inside a "
+      "branch or loop, or while a function reads it, is not supported");
+}
+
+// A NumPy array rebound to an array of another shape or dtype: the symbol
+// holds one type, so retyping it in place would retype every earlier read.
+bool python_converter::is_numpy_array_reshape_rebind(
+  const exprt &lhs,
+  const exprt &rhs,
+  const std::string &lhs_id) const
+{
+  if (
+    block_nesting_ != function_body_depth_ + 1 || !lhs.type().is_array() ||
+    !rhs.type().is_array() || lhs.type() == rhs.type() ||
+    numpy_array_symbols_.count(lhs_id) == 0)
+    return false;
+  const symbolt *symbol = symbol_table_.find_symbol(lhs_id);
+  return symbol &&
+         !is_read_in_other_scope(
+           *ast_json, symbol->name.as_string(), current_func_name_, false);
 }
 
 // A NumPy array rebound to a view of itself, `x = x[1]`: retyping x in
