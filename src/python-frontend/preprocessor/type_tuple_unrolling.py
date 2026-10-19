@@ -32,8 +32,9 @@ def _binding_counts(module):
 
 
 def _loads(tree, name):
-    return sum(isinstance(n, ast.Name) and n.id == name and isinstance(n.ctx, ast.Load)
-               for n in ast.walk(tree))
+    return sum(
+        isinstance(n, ast.Name) and n.id == name and isinstance(n.ctx, ast.Load)
+        for n in ast.walk(tree))
 
 
 def _jumps_out(body):
@@ -63,13 +64,14 @@ class _Unroller(ast.NodeTransformer):
         self.module = module
         self.counts = _binding_counts(module)
         known = {n for n, v in vars(builtins).items() if isinstance(v, type) and not self.counts[n]}
-        known |= {s.name for s in module.body
-                  if isinstance(s, ast.ClassDef) and self.counts[s.name] == 1}
+        known |= {
+            s.name
+            for s in module.body if isinstance(s, ast.ClassDef) and self.counts[s.name] == 1
+        }
         self.known = known
         self.tuples = {
             s.targets[0].id: self._class_names(s.value)
-            for s in module.body
-            if isinstance(s, ast.Assign) and len(s.targets) == 1
+            for s in module.body if isinstance(s, ast.Assign) and len(s.targets) == 1
             and isinstance(s.targets[0], ast.Name) and self.counts[s.targets[0].id] == 1
             and self._class_names(s.value)
         }
@@ -110,11 +112,10 @@ class _Unroller(ast.NodeTransformer):
         comp = gen.generators[0] if len(gen.generators) == 1 else None
         # A comprehension's variable is local to it, unlike a loop's.
         name = comp.target.id if comp and not comp.ifs and isinstance(comp.target,
-                                                                       ast.Name) else None
+                                                                      ast.Name) else None
         classes = self._class_names(comp.iter) if name else None
-        is_bool = isinstance(gen.elt, ast.Compare) or (
-            isinstance(gen.elt, ast.Call) and isinstance(gen.elt.func, ast.Name)
-            and gen.elt.func.id == "isinstance")
+        is_bool = isinstance(gen.elt, ast.Compare) or (isinstance(gen.elt, ast.Call) and isinstance(
+            gen.elt.func, ast.Name) and gen.elt.func.id == "isinstance")
         if not classes or not is_bool:
             return node
         values = [_substitute([gen.elt], name, cls)[0] for cls in classes]
