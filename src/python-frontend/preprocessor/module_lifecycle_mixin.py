@@ -1,5 +1,7 @@
 import ast
 
+from preprocessor.type_tuple_unrolling import unroll_type_tuple_loops
+
 
 class ModuleLifecycleMixin:
 
@@ -49,6 +51,9 @@ class ModuleLifecycleMixin:
         self._bind_classmethod_constructors(node)
         self._bind_class_alias_calls(node)
         self._bind_type_values(node)
+        # Specialising a function on a tuple of classes leaves a loop over that
+        # literal for the unrolling pass (#8765).
+        unroll_type_tuple_loops(node)
         self._bind_nested_classes_via_self(node)
         self._builtin_shadow_names = self._scan_builtin_shadow_names(node)
         self._unobservable_builtin_keys = self._scan_unobservable_builtin_keys(node)

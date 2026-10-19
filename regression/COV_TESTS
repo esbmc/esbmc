@@ -3118,7 +3118,7 @@ regression/python/github_8389_make_fail
 regression/python/github_8389_rebound_param_unsupported
 regression/python/github_8389_same_fail
 regression/python/github_8389_shadowed_builtin_unsupported
-regression/python/github_8389_tuple_arg_unsupported
+regression/python/github_8389_tuple_arg
 regression/python/github_8389_validator
 regression/python/github_8389_validator_fail
 regression/python/github_8389_rebound_class_unsupported
@@ -3208,3 +3208,6 @@ regression/python/github_8765_type_tuple_is_fail
 regression/python/github_8765_type_tuple_isinstance
 regression/python/github_8765_type_tuple_any
 regression/python/github_8765_type_tuple_any_fail
+regression/python/github_8765_type_tuple_argument
+regression/python/github_8765_type_tuple_argument_fail
+regression/python/github_8389_tuple_arg_fail

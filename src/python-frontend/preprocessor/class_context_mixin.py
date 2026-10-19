@@ -654,7 +654,14 @@ class ClassContextMixin:
         by_keyword = index >= len(func.args.posonlyargs)
         arg = call.args[index] if index < len(call.args) else next(
             (k.value for k in call.keywords if by_keyword and k.arg == param), None)
-        return arg.id if isinstance(arg, ast.Name) and arg.id in known else None
+        if isinstance(arg, ast.Name) and arg.id in known:
+            return arg.id
+        # A literal tuple of classes, e.g. for `isinstance(v, a) for a in args`.
+        # Its parameter is dropped, which would misalign defaults.
+        if (isinstance(arg, ast.Tuple) and arg.elts and not func.args.defaults
+                and all(isinstance(e, ast.Name) and e.id in known for e in arg.elts)):
+            return tuple(e.id for e in arg.elts)
+        return None
 
     def _type_parameters(self, func, known, calls):
         """The indexes of the parameters `func` reads and never rebinds, for
@@ -672,8 +679,27 @@ class ClassContextMixin:
         spec = copy.deepcopy(func)
         spec.name = name
         for param, cls in bindings:
-            self._replace_reads(spec.body, param, cls)
+            if isinstance(cls, tuple):
+                self._replace_reads_with_tuple(spec.body, param, cls)
+            else:
+                self._replace_reads(spec.body, param, cls)
         return spec
+
+    @staticmethod
+    def _replace_reads_with_tuple(nodes, name, classes):
+        """Reads of `name` in `nodes` become the tuple literal of `classes`."""
+
+        class _Substitute(ast.NodeTransformer):
+
+            def visit_Name(self, node):  # pylint: disable=invalid-name
+                """A read of `name` becomes a fresh tuple of the classes."""
+                if node.id != name or not isinstance(node.ctx, ast.Load):
+                    return node
+                elts = [ast.Name(id=c, ctx=ast.Load()) for c in classes]
+                return ast.copy_location(ast.Tuple(elts=elts, ctx=ast.Load()), node)
+
+        for i, stmt in enumerate(nodes):
+            nodes[i] = ast.fix_missing_locations(_Substitute().visit(stmt))
 
     def _specialise_type_parameters(self, module, func, known, calls, taken):
         """Copy `func` once per combination of known classes its `calls` pass
@@ -684,15 +710,36 @@ class ClassContextMixin:
         names = {key: f"{func.name}__esbmc_type{n}" for n, key in enumerate(dict.fromkeys(keys))}
         if not calls or not indexes or not taken.isdisjoint(names.values()):
             return False
+        params = [p.arg for p in func.args.posonlyargs + func.args.args]
+        # A tuple of class names has no effect to keep, and its parameter is
+        # no longer read, so both go (#8765).
+        dropped = {i for key in keys for i, cls in zip(indexes, key) if isinstance(cls, tuple)}
         for call, key in zip(calls, keys):
             call.func.id = names[key]
-        params = [p.arg for p in func.args.posonlyargs + func.args.args]
+            self._drop_arguments(call, params, dropped)
         at = module.body.index(func)
         module.body[at:at + 1] = [
-            self._type_copy(func, name, [(params[i], cls) for i, cls in zip(indexes, key)])
-            for key, name in names.items()
+            self._drop_parameters(
+                self._type_copy(func, name, [(params[i], cls) for i, cls in zip(indexes, key)]),
+                dropped) for key, name in names.items()
         ]
         return True
+
+    @staticmethod
+    def _drop_arguments(call, params, dropped):
+        """Removes from `call` the arguments for the parameters at `dropped`."""
+        names = {params[i] for i in dropped}
+        call.args = [a for i, a in enumerate(call.args) if i not in dropped]
+        call.keywords = [k for k in call.keywords if k.arg not in names]
+
+    @staticmethod
+    def _drop_parameters(func, dropped):
+        """`func` without its positional parameters at `dropped`."""
+        args = func.args
+        n_pos = len(args.posonlyargs)
+        args.posonlyargs = [p for i, p in enumerate(args.posonlyargs) if i not in dropped]
+        args.args = [p for i, p in enumerate(args.args, n_pos) if i not in dropped]
+        return func
 
     @staticmethod
     def _construction(stmt):

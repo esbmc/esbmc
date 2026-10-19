@@ -1,4 +1,4 @@
 CORE
 main.py
 
-^ERROR: NameError: name 'h' is not defined
+^VERIFICATION SUCCESSFUL$
