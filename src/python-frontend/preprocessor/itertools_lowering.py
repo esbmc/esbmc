@@ -84,7 +84,8 @@ def _as_list(call, names):
             ast.Call(func=ast.Name(id="list", ctx=ast.Load()), args=[a], keywords=[])
             for a in call.args
         ]
-        return functools.reduce(lambda l, r: ast.BinOp(left=l, op=ast.Add(), right=r), parts)
+        return functools.reduce(lambda left, right: ast.BinOp(left=left, op=ast.Add(), right=right),
+                                parts)
     if kind == "repeat":
         operands = _repeat_operands(call)
         if operands is None:
