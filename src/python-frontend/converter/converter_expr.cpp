@@ -519,13 +519,32 @@ exprt python_converter::get_lambda_expr(
   const nlohmann::json &element,
   const std::vector<std::optional<typet>> &argument_types)
 {
-  // The body is converted here with the lambda's parameters still unbound, so
-  // any division inside it must not emit a ZeroDivisionError guard (which would
-  // fire on the unconstrained divisor); it is checked at the bound call site.
+  // The lambda's parameters and signature are built with the parameters still
+  // unbound, so no runtime guard may be planted into the enclosing block; the
+  // body itself is converted by get_lambda_body_expr.
   bool saved = converting_lambda_body_;
   converting_lambda_body_ = true;
   exprt result = lambda_handler_->get_lambda_expr(element, argument_types);
   converting_lambda_body_ = saved;
+  return result;
+}
+
+exprt python_converter::get_lambda_body_expr(
+  const nlohmann::json &body,
+  code_blockt &block)
+{
+  // Unlike the definition site, the lambda's own block runs with its
+  // parameters bound, so guards such as ZeroDivisionError belong there (#8889).
+  code_blockt *const saved_block = current_block;
+  const bool saved_lambda = converting_lambda_body_;
+  const bool saved_lazy = in_lazy_operand_;
+  current_block = &block;
+  converting_lambda_body_ = false;
+  in_lazy_operand_ = false;
+  exprt result = get_expr(body);
+  current_block = saved_block;
+  converting_lambda_body_ = saved_lambda;
+  in_lazy_operand_ = saved_lazy;
   return result;
 }
 

@@ -1055,8 +1055,8 @@ exprt python_lambda::process_lambda_body(
   const nlohmann::json &body_node,
   const locationt &location)
 {
-  // Get the body expression through the converter
-  exprt body_expr = converter_.get_expr(body_node);
+  code_blockt lambda_block;
+  exprt body_expr = converter_.get_lambda_body_expr(body_node, lambda_block);
 
   // If the body is a nested lambda (inner function), take its address so
   // the outer lambda returns a function pointer, not a bare code symbol.
@@ -1067,9 +1067,6 @@ exprt python_lambda::process_lambda_body(
   code_returnt return_stmt;
   return_stmt.return_value() = body_expr;
   return_stmt.location() = location;
-
-  // Wrap in a block
-  code_blockt lambda_block;
   lambda_block.copy_to_operands(return_stmt);
 
   return lambda_block;
@@ -1165,11 +1162,10 @@ exprt python_lambda::get_lambda_expr(
 
     // Callers (e.g. g = f(5); g(10)) read the declared return type, so it
     // follows the body where declares_body_return_type says so.
-    // The RETURN statement is lambda_body.operands()[0] at this point (before
-    // we prepend the closure assignments below).
+    // The RETURN statement is the last one of lambda_body.
     if (!lambda_body.operands().empty())
     {
-      const exprt &ret_stmt = lambda_body.operands()[0];
+      const exprt &ret_stmt = lambda_body.operands().back();
       if (
         ret_stmt.id() == "code" && ret_stmt.get("statement") == "return" &&
         !ret_stmt.operands().empty())

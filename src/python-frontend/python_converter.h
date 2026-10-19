@@ -392,6 +392,10 @@ public:
     const std::string &lambda_id,
     const locationt &location);
 
+  /// Convert a lambda's body expression, planting the statements it needs
+  /// (runtime guards, hoisted operands) into @p block, the lambda's own body.
+  exprt get_lambda_body_expr(const nlohmann::json &body, code_blockt &block);
+
   // Hoists @p operand into a temporary when it carries a side effect, so a
   // guard and its use evaluate it once.
   exprt hoist_side_effecting_operand(
