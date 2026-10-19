@@ -688,6 +688,25 @@ static expr2tc replace_subobject(
   return expr2tc();
 }
 
+/** The @p n bytes of @p object from byte @p offset, as one bit-vector in the
+ * target's byte order. */
+static expr2tc object_bytes(const expr2tc &object, uint64_t offset, uint64_t n)
+{
+  const bool be = target_is_big_endian();
+  expr2tc value;
+  for (uint64_t i = 0; i < n; i++)
+  {
+    expr2tc byte = object_byte(object, offset + i, be);
+    if (!value)
+      value = byte;
+    else if (be)
+      value = concat2tc(get_uint_type((i + 1) * 8), value, byte);
+    else
+      value = concat2tc(get_uint_type((i + 1) * 8), byte, value);
+  }
+  return value;
+}
+
 // @p dst with the float it holds at [dst_offset, dst_offset+n) read whole
 // from @p src; null when that range is not a float or overruns @p src. See
 // gen_byte_memcpy for why the C byte loop cannot copy a float.
@@ -709,9 +728,11 @@ static expr2tc copy_into_float(
   {
     if (!is_floatbv_type(dst_sub->type))
       continue;
-    expr2tc value = byte_extract2tc(
-      dst_sub->type, src, gen_ulong(src_offset), target_is_big_endian());
-    return replace_subobject(dst, dst_offset, n, value);
+    return replace_subobject(
+      dst,
+      dst_offset,
+      n,
+      bitcast2tc(dst_sub->type, object_bytes(src, src_offset, n)));
   }
   return expr2tc();
 }
