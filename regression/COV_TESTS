@@ -3156,6 +3156,9 @@ regression/python/github_8355_function_choice
 regression/python/github_8355_function_choice_fail
 regression/python/github_8475
 regression/python/github_8475_fail
+regression/python/github_8768_nested_dict_call
+regression/python/github_8768_nested_dict_call_two
+regression/python/github_8768_nested_dict_call_fail
 regression/python/github_8770_reduce_concat_list
 regression/python/github_8766_exception_or_int_param
 regression/python/github_8766_exception_or_int_isinstance
