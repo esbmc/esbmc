@@ -1107,6 +1107,36 @@ void python_converter::reject_attribute_class_change(
     "'; an attribute holding instances of unrelated classes is not modelled");
 }
 
+/// An attribute keeps the scalar type it first holds, so storing a value its
+/// type cannot hold (an int attribute given a float or a str) would convert
+/// it rather than rebind it (#8381). An int into a float attribute is exact.
+void python_converter::reject_attribute_scalar_change(
+  const exprt &lhs,
+  const exprt &rhs)
+{
+  if (!lhs.is_member())
+    return;
+  auto kind = [](const typet &t) -> std::string {
+    if (type_utils::is_string_type(t))
+      return "str";
+    if (t.is_floatbv())
+      return "float";
+    if (t.is_signedbv() || t.is_unsignedbv())
+      return "int";
+    return "";
+  };
+  const std::string held = kind(lhs.type());
+  const std::string assigned = kind(rhs.type());
+  if (
+    held.empty() || assigned.empty() || held == assigned ||
+    (held == "float" && assigned == "int"))
+    return;
+  throw std::runtime_error(
+    "unsupported: attribute '" + lhs.component_name().as_string() +
+    "' holds a " + held + " and is assigned a " + assigned +
+    "; an attribute whose type changes is not modelled");
+}
+
 void python_converter::handle_assignment_type_adjustments(
   symbolt *lhs_symbol,
   exprt &lhs,
@@ -1116,6 +1146,7 @@ void python_converter::handle_assignment_type_adjustments(
   bool is_ctor_call)
 {
   reject_attribute_class_change(lhs, rhs, ast_node, is_ctor_call);
+  reject_attribute_scalar_change(lhs, rhs);
   const bool has_annotation =
     ast_node.contains("annotation") && !ast_node["annotation"].is_null();
 

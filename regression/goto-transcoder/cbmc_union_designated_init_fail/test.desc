@@ -1,0 +1,16 @@
+CORE
+cbmc_union_designated_init_fail.goto
+--binary --multi-property
+^  FAILED +\[main.assertion.[0-9]+\] +line 88 
+^  FAILED +\[main.assertion.[0-9]+\] +line 89 
+^  FAILED +\[main.assertion.[0-9]+\] +line 90 
+^  FAILED +\[main.assertion.[0-9]+\] +line 91 
+^  FAILED +\[main.assertion.[0-9]+\] +line 92 
+^  FAILED +\[main.assertion.[0-9]+\] +line 93 
+^  FAILED +\[main.assertion.[0-9]+\] +line 94 
+^  FAILED +\[main.assertion.[0-9]+\] +line 95 
+^  FAILED +\[main.assertion.[0-9]+\] +line 96 
+^  FAILED +\[main.assertion.[0-9]+\] +line 97 
+^  FAILED +\[main.assertion.[0-9]+\] +line 98 
+^\*\* 11 of [0-9]+ properties failed
+^VERIFICATION FAILED$
