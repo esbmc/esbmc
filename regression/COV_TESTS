@@ -3203,3 +3203,8 @@ regression/esbmc/github_8661_ir_unsigned_to_int_fail
 regression/python/github_8704_hash_int
 regression/python/github_8704_hash_str
 regression/python/github_8704_hash_int_fail
+regression/python/github_8765_type_tuple_is
+regression/python/github_8765_type_tuple_is_fail
+regression/python/github_8765_type_tuple_isinstance
+regression/python/github_8765_type_tuple_any
+regression/python/github_8765_type_tuple_any_fail
