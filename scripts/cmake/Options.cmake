@@ -119,10 +119,6 @@ else()
   set(DEFAULT_CAMADA_URL "${CAMADA_RELEASE}/camada-linux-x64.tar.gz")
   set(DEFAULT_CAMADA_HASH "f3d45dc34a6f10476707ef228136b19bc4cfefbd696ca59d7c45de5b2597a3e9")
 endif()
-# The same release's sources, built instead of the archive for Debug and
-# DebugOpt (see src/solvers/CMakeLists.txt).
-set(DEFAULT_CAMADA_SOURCE_URL "https://github.com/mikhailramalho/camada/archive/refs/tags/v0.23.tar.gz")
-set(DEFAULT_CAMADA_SOURCE_HASH "0533116f02bc07f7b32eb0c405707b3afbf132f1235b8be44398b41f9b738716")
 
 set(ESBMC_LLVM_URL ${DEFAULT_LLVM_URL} CACHE STRING "URL to download prebuilt LLVM")
 set(ESBMC_LLVM_NAME ${DEFAULT_LLVM_NAME} CACHE STRING "Name of the extracted directory of LLVM")
@@ -132,8 +128,6 @@ set(ESBMC_CHERI_LLVM_NAME ${DEFAULT_CHERI_LLVM_NAME} CACHE STRING "Name of the e
 
 set(ESBMC_CAMADA_ARCHIVE_URL ${DEFAULT_CAMADA_URL} CACHE STRING "URL of the prebuilt Camada release archive")
 set(ESBMC_CAMADA_ARCHIVE_HASH ${DEFAULT_CAMADA_HASH} CACHE STRING "SHA256 of the Camada release archive; empty to skip verification")
-set(ESBMC_CAMADA_SOURCE_URL ${DEFAULT_CAMADA_SOURCE_URL} CACHE STRING "URL of the Camada source archive built for Debug and DebugOpt")
-set(ESBMC_CAMADA_SOURCE_HASH ${DEFAULT_CAMADA_SOURCE_HASH} CACHE STRING "SHA256 of the Camada source archive; empty to skip verification")
 
 #############################
 # CMake extra Vars
