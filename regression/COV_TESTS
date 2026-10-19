@@ -3224,3 +3224,5 @@ regression/python/github_8704_hash_int_fail
 regression/esbmc-cpp/cpp/github_8680_dtor_throw_unwind_fail
 regression/esbmc-cpp/cpp/github_8680_dtor_catch_unwind
 regression/esbmc-cpp/cpp/github_8680_dtor_throw_scope_exit
+regression/python/github_8412_is_returned_str
+regression/python/github_8412_is_returned_str_fail
