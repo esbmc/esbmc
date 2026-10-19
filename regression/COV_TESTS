@@ -3210,3 +3210,6 @@ regression/esbmc/github_8661_ir_unsigned_to_int_fail
 regression/python/github_8704_hash_int
 regression/python/github_8704_hash_str
 regression/python/github_8704_hash_int_fail
+regression/esbmc/report_unreached_claims
+regression/esbmc/report_unreached_claims_kinduction
+regression/esbmc/report_unreached_claims_off

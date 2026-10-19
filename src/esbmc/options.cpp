@@ -781,6 +781,10 @@ const struct group_opt_templ all_cmd_options[] = {
    {{"multi-property",
      NULL,
      "Verify satisfiability of all claims of the current bound"},
+    {"report-unreached-claims",
+     NULL,
+     "List each claim no path reaches within the bound in the property "
+     "table, as passed vacuously"},
     {"multi-property-interleavings",
      boost::program_options::value<int>()->value_name("n"),
      "In multi-property mode, keep exploring thread interleavings after a "
