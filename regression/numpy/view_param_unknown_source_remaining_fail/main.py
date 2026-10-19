@@ -7,4 +7,4 @@ def set_first(row):
 r = np.arange(5, dtype=int)
 w = r[1:]
 m = set_first(w)
-assert r[1] == 9
+assert r[1] == 1

@@ -575,7 +575,8 @@ std::optional<exprt> python_converter::try_get_numpy_subscript_pointer_view_len(
     return std::nullopt;
 
   const symbolt *source = symbol_table_.find_symbol(source_id);
-  if (!source)
+  // The characters of a numpy string array are not one of its axes.
+  if (!source || type_utils::is_string_type(source->get_type().subtype()))
     return std::nullopt;
 
   const namespacet ns(symbol_table_);
@@ -855,6 +856,17 @@ exprt python_converter::list_argument_expr(const nlohmann::json &arg)
   if (type.is_array() && !ns.follow(type.subtype()).is_array())
     elements = build_numpy_descriptor_materialized_list(arg, true);
   return elements ? *elements : get_expr(arg);
+}
+
+// list(xs) builds a new list; returning xs itself would alias the two.
+static exprt copy_named_list(
+  python_converter &converter,
+  const exprt &list,
+  const nlohmann::json &element)
+{
+  if (!list.is_symbol())
+    return list;
+  return python_list(converter, element).build_shallow_copy_call(list, element);
 }
 
 // Whether `node` is the name `name`.
@@ -1201,7 +1213,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     {
       // list() of a keys view is a plain list, compared by order (#8689).
       arg_expr.remove(PYTHON_KEYS_VIEW_ATTR);
-      return arg_expr;
+      return copy_named_list(*this, arg_expr, element);
     }
 
     // list(tuple) — materialise the tuple's components into a real list.

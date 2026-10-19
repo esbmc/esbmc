@@ -3,6 +3,7 @@
 CC_DIAGNOSTIC_PUSH()
 CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/Basic/TargetInfo.h>
+#include <clang/Basic/Version.inc>
 #include <clang/Frontend/ASTUnit.h>
 CC_DIAGNOSTIC_POP()
 
@@ -348,6 +349,16 @@ static bool ast_failed(const std::unique_ptr<clang::ASTUnit> &unit)
   return !unit || unit->getDiagnostics().hasErrorOccurred();
 }
 
+static unsigned bitint_max_align(const clang::TargetInfo &target)
+{
+#if CLANG_VERSION_MAJOR >= 19
+  return target.getBitIntMaxAlign();
+#else
+  // Before clang 19, _BitInt alignment was capped at that of long long.
+  return target.getLongLongAlign();
+#endif
+}
+
 /// Takes the alignments the data model cannot express from clang's target.
 static void adopt_target_layout(const clang::TargetInfo &target)
 {
@@ -358,7 +369,7 @@ static void adopt_target_layout(const clang::TargetInfo &target)
   // 128 bits would lay it out wider than clang does; other formats keep it.
   if (&target.getLongDoubleFormat() == &llvm::APFloat::IEEEdouble())
     config.ansi_c.long_double_width = target.getLongDoubleWidth();
-  config.ansi_c.bitint_max_align = target.getBitIntMaxAlign() / 8;
+  config.ansi_c.bitint_max_align = bitint_max_align(target) / 8;
 }
 
 bool clang_c_languaget::parse(const std::string &path)
