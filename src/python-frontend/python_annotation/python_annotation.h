@@ -102,6 +102,7 @@ public:
   void add_extra_subscript_inference_source(const Json &ast);
 
 private:
+  Json *class_init(const std::string &class_name, unsigned depth);
   // Implementations live in annotation_conversion.inl unless noted.
 
   // ----- AST lookup and walk helpers -----

@@ -3242,3 +3242,5 @@ regression/python/github_8877_pow2_iterator
 regression/python/github_8877_pow2_iterator_fail
 regression/python/github_8877_pow2_iterator_func
 regression/python/github_8877_pow2_exact
+regression/python/github_8888_inherited_init_attr
+regression/python/github_8888_inherited_init_attr_fail

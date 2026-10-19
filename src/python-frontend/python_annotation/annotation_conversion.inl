@@ -5007,6 +5007,32 @@ void python_annotation<Json>::infer_parameter_types(Json &function_element)
 
 // ---------- preprocessing and orchestration ----------
 
+/// The `__init__` a call to module-level class @p class_name runs: its own,
+/// else the first one found depth-first through its bases (#8888).
+template <class Json>
+Json *python_annotation<Json>::class_init(
+  const std::string &class_name,
+  unsigned depth)
+{
+  if (depth > 32)
+    return nullptr;
+  for (Json &class_node : ast_["body"])
+  {
+    if (class_node["_type"] != "ClassDef" || class_node["name"] != class_name)
+      continue;
+    for (Json &member : class_node["body"])
+      if (member["_type"] == "FunctionDef" && member["name"] == "__init__")
+        return &member;
+    if (class_node.contains("bases"))
+      for (const Json &base : class_node["bases"])
+        if (base.value("_type", "") == "Name")
+          if (Json *init = class_init(base["id"], depth + 1))
+            return init;
+    return nullptr;
+  }
+  return nullptr;
+}
+
 template <class Json>
 void python_annotation<Json>::preprocess_constructor_calls(const Json &node)
 {
@@ -5017,46 +5043,25 @@ void python_annotation<Json>::preprocess_constructor_calls(const Json &node)
       node.contains("_type") && node["_type"] == "Call" &&
       node.contains("func") && node["func"]["_type"] == "Name")
     {
-      const std::string &func_name = node["func"]["id"];
-      // Find the class in ast_["body"] using reference to modify in-place
-      for (Json &class_node : ast_["body"])
+      Json *init = class_init(node["func"]["id"], 0);
+      if (init && init->contains("args") && (*init)["args"].contains("args"))
       {
-        if (
-          class_node["_type"] == "ClassDef" && class_node["name"] == func_name)
+        Json &params = (*init)["args"]["args"];
+        const Json &call_args = node["args"];
+        // Skip self (index 0), match remaining params with call args
+        for (size_t i = 1; i < params.size() && (i - 1) < call_args.size(); ++i)
         {
-          // Find __init__ method
-          for (Json &member : class_node["body"])
-          {
-            if (
-              member["_type"] == "FunctionDef" && member["name"] == "__init__")
-            {
-              // Annotate parameters based on this call
-              if (member.contains("args") && member["args"].contains("args"))
-              {
-                Json &params = member["args"]["args"];
-                const Json &call_args = node["args"];
-                // Skip self (index 0), match remaining params with call args
-                for (size_t i = 1;
-                     i < params.size() && (i - 1) < call_args.size();
-                     ++i)
-                {
-                  Json &param = params[i];
-                  // Only annotate if the parameter is not yet annotated;
-                  // do not overwrite explicit annotations (e.g.,
-                  // Optional["List"]) with a less-specific type inferred from a
-                  // call site (e.g., NoneType).
-                  if (
-                    param.contains("annotation") &&
-                    !param["annotation"].is_null())
-                    continue;
-                  const Json &arg = call_args[i - 1];
-                  std::string arg_type = get_argument_type(arg);
-                  if (!arg_type.empty())
-                    add_parameter_annotation(param, arg_type);
-                }
-              }
-            }
-          }
+          Json &param = params[i];
+          // Only annotate if the parameter is not yet annotated;
+          // do not overwrite explicit annotations (e.g.,
+          // Optional["List"]) with a less-specific type inferred from a
+          // call site (e.g., NoneType).
+          if (param.contains("annotation") && !param["annotation"].is_null())
+            continue;
+          const Json &arg = call_args[i - 1];
+          std::string arg_type = get_argument_type(arg);
+          if (!arg_type.empty())
+            add_parameter_annotation(param, arg_type);
         }
       }
     }
