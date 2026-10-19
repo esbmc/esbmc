@@ -54,7 +54,10 @@ bool is_name_matched_builtin(const irep_idt &identifier)
          compare_float_suffix(identifier, "finite") ||
          compare_unscore_builtin(identifier, "finite") ||
          compare_unscore_builtin(identifier, "inf") ||
-         compare_unscore_builtin(identifier, "huge_val");
+         compare_unscore_builtin(identifier, "nan") ||
+         compare_unscore_builtin(identifier, "huge_val") ||
+         identifier == "__popcnt16" || identifier == "__popcnt" ||
+         identifier == "__popcnt64";
 }
 
 bool builtin_shadows_user_definition(

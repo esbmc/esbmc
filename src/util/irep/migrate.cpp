@@ -1236,6 +1236,32 @@ static bool migrate_before_dispatch(const exprt &expr, expr2tc &new_expr_ref)
   return true;
 }
 
+/// One-operand value operations that keep their irep's type.
+static bool migrate_unary_value_op(const exprt &expr, expr2tc &new_expr_ref)
+{
+  const irep_idt &id = expr.id();
+  if (
+    id != "popcount" && id != "fixedbv_sqrt" && id != "fixedbv_exp" &&
+    id != "bswap")
+    return false;
+
+  expr2tc theval;
+  migrate_expr(expr.op0(), theval);
+  const type2tc type = migrate_type(expr.type());
+
+  if (id == "popcount")
+    // popcount2t is always int; a CBMC binary types the count itself (Kani
+    // emits u32), so keep that type for whatever the count is assigned to.
+    new_expr_ref = coerce_to_type(popcount2tc(theval), type);
+  else if (id == "fixedbv_sqrt")
+    new_expr_ref = fixedbv_sqrt2tc(type, theval);
+  else if (id == "fixedbv_exp")
+    new_expr_ref = fixedbv_exp2tc(type, theval);
+  else
+    new_expr_ref = bswap2tc(type, theval);
+  return true;
+}
+
 /// The right-shift family. `lshr` and `ashr` name their kind; the Solidity
 /// converter also emits a kind-less `shr` for `>>`, and IREP2 has no node for
 /// it. clang_c_adjust resolves that one by the left operand's signedness before
@@ -2077,23 +2103,6 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
   if (migrate_ieee_arith_2op(expr, new_expr_ref))
     return;
-
-  if (expr.id() == "ieee_rem")
-  {
-    type = migrate_type(expr.type());
-
-    assert(expr.operands().size() == 2);
-
-    expr2tc side1, side2;
-    convert_operand_pair(expr, side1, side2);
-
-    /* fp.rem is exact, so no rounding mode participates; the field is the
-     * 2-op plumbing's and is fixed to the default symbol. */
-    expr2tc rm = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
-
-    new_expr_ref = ieee_rem2tc(type, side1, side2, rm);
-    return;
-  }
 
   if (expr.id() == "ieee_fma")
   {
@@ -3235,39 +3244,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     return;
   }
 
-  if (expr.id() == "popcount")
-  {
-    expr2tc theval;
-    migrate_expr(expr.op0(), theval);
-
-    // popcount2t is always int; a CBMC binary types the count itself (Kani
-    // emits u32), so keep that type for whatever the count is assigned to.
-    new_expr_ref =
-      coerce_to_type(popcount2tc(theval), migrate_type(expr.type()));
+  if (migrate_unary_value_op(expr, new_expr_ref))
     return;
-  }
-
-  if (expr.id() == "fixedbv_sqrt" || expr.id() == "fixedbv_exp")
-  {
-    expr2tc theval;
-    migrate_expr(expr.op0(), theval);
-
-    type2tc thetype = migrate_type(expr.type());
-    new_expr_ref = expr.id() == "fixedbv_sqrt"
-                     ? expr2tc(fixedbv_sqrt2tc(thetype, theval))
-                     : expr2tc(fixedbv_exp2tc(thetype, theval));
-    return;
-  }
-
-  if (expr.id() == "bswap")
-  {
-    expr2tc theval;
-    migrate_expr(expr.op0(), theval);
-    type = migrate_type(expr.type());
-
-    new_expr_ref = bswap2tc(type, theval);
-    return;
-  }
 
   if (expr.id() == "concat")
   {

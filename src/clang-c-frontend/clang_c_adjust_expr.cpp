@@ -1408,6 +1408,25 @@ bool clang_c_adjust::has_single_arithmetic_argument(
          !ns.follow(expr.arguments()[0].type()).is_fixedbv();
 }
 
+bool clang_c_adjust::has_single_float_argument(
+  const side_effect_expr_function_callt &expr) const
+{
+  return expr.arguments().size() == 1 &&
+         ns.follow(expr.arguments()[0].type()).is_floatbv();
+}
+
+/// The exact fixed-point sqrt/exp. Distinct nodes rather than the ieee_*
+/// family: these are TR 18037 operations, correctly rounded by construction,
+/// so there is no rounding mode to carry. Null for any other callee.
+static const char *fxp_lowering_id(const irep_idt &identifier)
+{
+  if (has_prefix(identifier, "__ESBMC_fxp_sqrt_"))
+    return "fixedbv_sqrt";
+  if (has_prefix(identifier, "__ESBMC_fxp_exp_"))
+    return "fixedbv_exp";
+  return nullptr;
+}
+
 /// True when lowering this call would throw away a definition the program
 /// supplies. Libc's own declarations are bodiless and the <cmath> overloads
 /// forward to their `__builtin_` spelling, so both still lower.
@@ -1436,33 +1455,6 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
 {
   const exprt &f_op = expr.function();
   const locationt location = expr.location();
-
-  /* Every rewrite below is selected by NAME, so a program that defines one of
-   * these functions itself would have its definition silently replaced by
-   * ESBMC's intrinsic -- a spurious failure when the two differ, and a hidden
-   * bug whenever the intrinsic happens to be correct (esbmc/esbmc#6904).
-   *
-   * Skip the rewrites when the callee has a body whose argument types the
-   * intrinsic cannot be about. ESBMC's own operational models are excluded by
-   * the type test rather than by provenance: libm's models are float-typed
-   * and *rely* on these mappings (fmod.c calls remainder() expecting
-   * fp.rem), so keying purely on "has a body" would break them. The
-   * collisions seen in practice are non-float overloads -- TR 18037's
-   * fixed-point absfx/sqrtfx family, and integer functions sharing a libm
-   * name (function_contract/basic21 defines an int remainder()). */
-  if (f_op.is_symbol())
-  {
-    const std::string usr = "c:@F@" + id2string(to_symbol_expr(f_op).name());
-    const symbolt *callee = context.find_symbol(usr);
-    const bool user_defined = callee && !callee->get_value().is_nil();
-    bool non_float_args = !expr.arguments().empty();
-    for (const exprt &a : expr.arguments())
-      if (ns.follow(a.type()).is_floatbv())
-        non_float_args = false;
-
-    if (user_defined && non_float_args)
-      return;
-  }
 
   // some built-in functions
   if (f_op.is_symbol())
@@ -1663,18 +1655,6 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       new_expr.operands() = expr.arguments();
       expr.swap(new_expr);
     }
-    else if (
-      compare_float_suffix(identifier, "remainder") && expr.type().is_floatbv())
-    {
-      // C17 7.12.10.2: remainder() is IEEE 754 remainder, exactly SMT-LIB's
-      // fp.rem. The fmod/remquo models are built on top of this (fmod.c).
-      // The floatbv guard keeps a program's own non-float function named
-      // remainder() (a reserved identifier, but accepted) out of this
-      // mapping -- function_contract/basic21 defines one.
-      exprt new_expr("ieee_rem", expr.type());
-      new_expr.operands() = expr.arguments();
-      expr.swap(new_expr);
-    }
     else if (identifier == "__builtin_isinf_sign")
     {
       exprt isinf_expr("isinf", bool_typet());
@@ -1727,15 +1707,9 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
 
       expr.swap(new_expr);
     }
-    else if (
-      has_prefix(identifier, "__ESBMC_fxp_sqrt_") ||
-      has_prefix(identifier, "__ESBMC_fxp_exp_"))
+    else if (const char *node_id = fxp_lowering_id(identifier))
     {
-      /* The exact fixed-point sqrt/exp. Distinct nodes rather than the ieee_*
-       * family: these are TR 18037 operations, correctly rounded by
-       * construction, so there is no rounding mode to carry. */
-      const bool is_sqrt = has_prefix(identifier, "__ESBMC_fxp_sqrt_");
-      exprt new_expr(is_sqrt ? "fixedbv_sqrt" : "fixedbv_exp", expr.type());
+      exprt new_expr(node_id, expr.type());
       new_expr.operands() = expr.arguments();
       expr.swap(new_expr);
     }
@@ -1743,12 +1717,10 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
     {
       /* ieee_sqrt is the floating-point operation, so a fixed-point argument
        * -- TR 18037's sqrtfx family -- keeps its call rather than handing a
-       * fixed-point-sorted term to the solver's FP sqrt. A program-supplied
-       * sqrt is handled by the user-definition guard at the top. */
+       * fixed-point-sorted term to the solver's FP sqrt. */
       // Skip Python user-defined functions
       if (
-        expr.arguments().size() == 1 &&
-        ns.follow(expr.arguments()[0].type()).is_floatbv() &&
+        has_single_float_argument(expr) &&
         !has_prefix(id2string(to_symbol_expr(f_op).identifier()), "py:"))
       {
         exprt new_expr("ieee_sqrt", expr.type());

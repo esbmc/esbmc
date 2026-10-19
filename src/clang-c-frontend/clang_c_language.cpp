@@ -81,6 +81,13 @@ static void add_byte_order_macros(std::vector<std::string> &compiler_args)
     big ? "-D__BIG_ENDIAN__=1" : "-D__LITTLE_ENDIAN__=1");
 }
 
+/* configt models a 32-bit long double as binary128 on x86 (#8097). */
+static void add_long_double_format(std::vector<std::string> &compiler_args)
+{
+  if (config.ansi_c.word_size == 32 && config.ansi_c.long_double_width == 128)
+    compiler_args.emplace_back("-mlong-double-128");
+}
+
 void clang_c_languaget::build_compiler_args(
   std::vector<std::string> &compiler_args)
 {
@@ -146,10 +153,7 @@ void clang_c_languaget::build_compiler_args(
   compiler_args.emplace_back(config.ansi_c.target.to_string());
 
   add_byte_order_macros(compiler_args);
-
-  /* configt models a 32-bit long double as binary128 on x86 (#8097). */
-  if (config.ansi_c.word_size == 32 && config.ansi_c.long_double_width == 128)
-    compiler_args.emplace_back("-mlong-double-128");
+  add_long_double_format(compiler_args);
 
   std::string sysroot;
 

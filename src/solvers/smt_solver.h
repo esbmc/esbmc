@@ -786,6 +786,8 @@ public:
   smt_astt convert_pointer_bitcast(const expr2tc &from, const type2tc &to_type);
   smt_astt convert_bitcast_to_fp(const expr2tc &from, const type2tc &to_type);
   smt_astt
+  convert_bitcast_to_fixedbv(const expr2tc &from, const type2tc &to_type);
+  smt_astt
   convert_bitcast_to_struct(const expr2tc &from, const type2tc &to_type);
   /** Flatten a pointer to the machine representation a bitcast reinterprets,
    *  and rebuild it from one; see the comment on the definitions in
@@ -1065,6 +1067,19 @@ public:
   smt_astt round_real_to_int(smt_astt a);
   /** Resize a shift amount's raw bits to a fixed-point operand's width. */
   smt_astt fxp_shift_amount(smt_astt amount, unsigned int width);
+  /** The fixed-point arm of convert_ast_node; null when @p expr is not one. */
+  smt_astt
+  convert_fixedbv_op(const expr2tc &expr, const std::vector<smt_astt> &args);
+  smt_astt
+  convert_fixedbv_arith(const expr2tc &expr, const std::vector<smt_astt> &args);
+  smt_astt convert_fixedbv_value_op(
+    const expr2tc &expr,
+    const std::vector<smt_astt> &args);
+  smt_astt convert_fixedbv_compare(
+    const expr2tc &expr,
+    const std::vector<smt_astt> &args);
+  /** Record @p a as the conversion of @p expr and return it. */
+  smt_astt cache_ast(const expr2tc &expr, smt_astt a);
   /** Convert a mixed-format fixed-point result into the C result type. */
   smt_astt fxp_align_result(
     smt_astt a,

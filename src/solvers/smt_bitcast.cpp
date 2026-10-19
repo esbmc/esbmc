@@ -459,6 +459,40 @@ smt_astt smt_solver_baset::convert_pointer_bitcast(
   return {};
 }
 
+/** Read a fixed-point value from the bits of @p from. Null when the generic
+ *  path below convert_bitcast's dispatch should handle it. */
+smt_astt smt_solver_baset::convert_bitcast_to_fixedbv(
+  const expr2tc &from,
+  const type2tc &to_type)
+{
+  if (is_bv_type(from))
+  {
+    // Under integer encoding, fixedbv values are real-encoded while the
+    // source bitvector is an SMT integer. Returning it unchanged would yield
+    // an int-sorted term with a fixedbv expr-type, tripping later real-only
+    // operations (e.g. round_real_to_int -> mk_lt sort mismatch). Fall back
+    // to a value-based typecast, mirroring the value-based fallbacks in the
+    // bv- and floatbv-target branches.
+    if (int_encoding)
+      return convert_ast(typecast2tc(to_type, from));
+    return solver->mkFXPFromRawBV(convert_ast(from), convert_sort(to_type));
+  }
+
+  /* fixedbv -> fixedbv of the same storage width reinterprets the bits; it
+   * must NOT rescale. Falling through to the generic path gave a
+   * value-preserving typecast, so a u0.32 raw pattern read back as u16.16
+   * came out shifted by the 16-bit difference in fraction length. LLVM
+   * libc's isqrt ends in exactly this cast (bit_cast<OutType> of a FracType
+   * result), so the rescale silently corrupted every isqrt result. */
+  if (
+    is_fixedbv_type(from) && !int_encoding &&
+    to_fixedbv_type(from->type).width == to_fixedbv_type(to_type).width)
+    return solver->mkFXPFromRawBV(
+      solver->mkFXPToRawBV(convert_ast(from)), convert_sort(to_type));
+
+  return {};
+}
+
 /** Read a floating-point value from the bits of @p from. Null when those bits
  *  are not in a form this can take apart. */
 smt_astt smt_solver_baset::convert_bitcast_to_fp(
@@ -655,33 +689,8 @@ smt_astt smt_solver_baset::convert_bitcast(const expr2tc &expr)
   }
   else if (is_fixedbv_type(to_type))
   {
-    if (is_bv_type(from))
-    {
-      // Under integer encoding, fixedbv values are real-encoded while the
-      // source bitvector is an SMT integer. Returning it unchanged would yield
-      // an int-sorted term with a fixedbv expr-type, tripping later real-only
-      // operations (e.g. round_real_to_int -> mk_lt sort mismatch). Fall back
-      // to a value-based typecast, mirroring the value-based fallbacks in the
-      // bv- and floatbv-target branches.
-      if (int_encoding)
-        return convert_ast(typecast2tc(to_type, from));
-      return solver->mkFXPFromRawBV(convert_ast(from), convert_sort(to_type));
-    }
-
-    /* fixedbv -> fixedbv of the same storage width reinterprets the bits; it
-     * must NOT rescale. Falling through to the generic path gave a
-     * value-preserving typecast, so a u0.32 raw pattern read back as u16.16
-     * came out shifted by the 16-bit difference in fraction length. LLVM
-     * libc's isqrt ends in exactly this cast (bit_cast<OutType> of a FracType
-     * result), so the rescale silently corrupted every isqrt result. */
-    if (is_fixedbv_type(from) && !int_encoding)
-    {
-      const fixedbv_type2t &f = to_fixedbv_type(from->type);
-      const fixedbv_type2t &t = to_fixedbv_type(to_type);
-      if (f.width == t.width)
-        return solver->mkFXPFromRawBV(
-          solver->mkFXPToRawBV(convert_ast(from)), convert_sort(to_type));
-    }
+    if (smt_astt fxp = convert_bitcast_to_fixedbv(from, to_type))
+      return fxp;
   }
   else if (is_bv_type(to_type))
   {

@@ -691,6 +691,9 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   }
   }
 
+  if (smt_astt fxp = convert_fixedbv_op(expr, args))
+    return cache_ast(expr, fxp);
+
   smt_astt a;
   switch (expr->expr_id)
   {
@@ -779,12 +782,6 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     {
       a = mk_add(args[0], args[1]);
     }
-    else if (is_fixedbv_type(expr))
-    {
-      a = is_sat_fixedbv(expr->type) ? solver->mkFXPAddSat(args[0], args[1])
-                                     : solver->mkFXPAdd(args[0], args[1]);
-      a = fxp_align_result(a, expr, add.side_1, add.side_2);
-    }
     else
     {
       a = solver->mkBVAdd(args[0], args[1]);
@@ -804,12 +801,6 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     {
       a = mk_sub(args[0], args[1]);
     }
-    else if (is_fixedbv_type(expr))
-    {
-      a = is_sat_fixedbv(expr->type) ? solver->mkFXPSubSat(args[0], args[1])
-                                     : solver->mkFXPSub(args[0], args[1]);
-      a = fxp_align_result(a, expr, sub.side_1, sub.side_2);
-    }
     else
     {
       a = solver->mkBVSub(args[0], args[1]);
@@ -818,16 +809,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   }
   case expr2t::mul_id:
   {
-    if (is_fixedbv_type(expr) && !int_encoding)
-    {
-      const mul2t &mul = to_mul2t(expr);
-      a =
-        is_sat_fixedbv(expr->type)
-          ? solver->mkFXPMulSat(args[0], args[1], camada::FXPRM::TowardNegative)
-          : solver->mkFXPMul(args[0], args[1], camada::FXPRM::TowardNegative);
-      a = fxp_align_result(a, expr, mul.side_1, mul.side_2);
-    }
-    else if (int_encoding)
+    if (int_encoding)
     {
       a = mk_mul(args[0], args[1]);
     }
@@ -841,15 +823,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   {
     auto d = to_div2t(expr);
 
-    if (is_fixedbv_type(expr) && !int_encoding)
-    {
-      a =
-        is_sat_fixedbv(expr->type)
-          ? solver->mkFXPDivSat(args[0], args[1], camada::FXPRM::TowardNegative)
-          : solver->mkFXPDiv(args[0], args[1], camada::FXPRM::TowardNegative);
-      a = fxp_align_result(a, expr, d.side_1, d.side_2);
-    }
-    else if (int_encoding)
+    if (int_encoding)
     {
       a = mk_truncated_div(d.type, args[0], args[1]);
     }
@@ -1354,11 +1328,6 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     if (
       is_floatbv_type(eq.side_1) && is_floatbv_type(eq.side_2) && !int_encoding)
       a = solver->mkFPEqual(args[0], args[1]);
-    else if (
-      is_fixedbv_type(eq.side_1) && is_fixedbv_type(eq.side_2) && !int_encoding)
-      // Scale-aligning: mixed-format operands reach here uncast (TR 18037
-      // 4.1.4 inserts no conversions), so their sorts may differ.
-      a = solver->mkFXPEqual(args[0], args[1]);
     else
       a = ast_eq(args[0], args[1]);
     if (
@@ -1378,10 +1347,6 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
       is_floatbv_type(neq.side_1) && is_floatbv_type(neq.side_2) &&
       !int_encoding)
       a = solver->mkFPEqual(args[0], args[1]);
-    else if (
-      is_fixedbv_type(neq.side_1) && is_fixedbv_type(neq.side_2) &&
-      !int_encoding)
-      a = solver->mkFXPEqual(args[0], args[1]);
     else
       a = ast_eq(args[0], args[1]);
     a = mk_not(a);
@@ -1394,19 +1359,6 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   case expr2t::shl_id:
   {
     const shl2t &shl = to_shl2t(expr);
-    if (is_fixedbv_type(shl.side_1) && !int_encoding)
-    {
-      // The shift amount stays a plain integer count; casting it to the
-      // fixed type would scale it. Resize its raw bits to the operand width.
-      a =
-        is_sat_fixedbv(shl.side_1->type)
-          ? solver->mkFXPShlSatExpr(
-              args[0], fxp_shift_amount(args[1], shl.side_1->type->get_width()))
-          : solver->mkFXPShlExpr(
-              args[0],
-              fxp_shift_amount(args[1], shl.side_1->type->get_width()));
-      break;
-    }
     if (shl.side_1->type->get_width() != shl.side_2->type->get_width())
       args[1] = convert_ast(shift_count(shl.side_1, shl.side_2));
 
@@ -1427,12 +1379,6 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   case expr2t::ashr_id:
   {
     const ashr2t &ashr = to_ashr2t(expr);
-    if (is_fixedbv_type(ashr.side_1) && !int_encoding)
-    {
-      a = solver->mkFXPShrExpr(
-        args[0], fxp_shift_amount(args[1], ashr.side_1->type->get_width()));
-      break;
-    }
     if (ashr.side_1->type->get_width() != ashr.side_2->type->get_width())
       args[1] = convert_ast(shift_count(ashr.side_1, ashr.side_2));
 
@@ -1453,12 +1399,6 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   case expr2t::lshr_id:
   {
     const lshr2t &lshr = to_lshr2t(expr);
-    if (is_fixedbv_type(lshr.side_1) && !int_encoding)
-    {
-      a = solver->mkFXPShrExpr(
-        args[0], fxp_shift_amount(args[1], lshr.side_1->type->get_width()));
-      break;
-    }
     if (lshr.side_1->type->get_width() != lshr.side_2->type->get_width())
       args[1] = convert_ast(shift_count(lshr.side_1, lshr.side_2));
 
@@ -1520,12 +1460,6 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
             ir_ieee_api->apply_nan_cmp(is_nonneg, args[0], zero, false);
           ir_ieee_api->propagate_nan_pred(negated, args[0]);
         }
-      }
-      else if (is_fixedbv_type(abs.value))
-      {
-        is_nonneg = solver->mkFXPGe(args[0], zero);
-        negated = is_sat_fixedbv(abs.value->type) ? solver->mkFXPNegSat(args[0])
-                                                  : solver->mkFXPNeg(args[0]);
       }
       else
       {
@@ -1594,10 +1528,6 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     {
       a = solver->mkFPLt(args[0], args[1]);
     }
-    else if (is_fixedbv_type(lt.side_1) && is_fixedbv_type(lt.side_2))
-    {
-      a = solver->mkFXPLt(args[0], args[1]);
-    }
     else if (is_unsignedbv_type(lt.side_1) && is_unsignedbv_type(lt.side_2))
     {
       a = mk_bvult(args[0], args[1]);
@@ -1626,10 +1556,6 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     else if (is_floatbv_type(lte.side_1) && is_floatbv_type(lte.side_2))
     {
       a = solver->mkFPLe(args[0], args[1]);
-    }
-    else if (is_fixedbv_type(lte.side_1) && is_fixedbv_type(lte.side_2))
-    {
-      a = solver->mkFXPLe(args[0], args[1]);
     }
     else if (is_unsignedbv_type(lte.side_1) && is_unsignedbv_type(lte.side_2))
     {
@@ -1660,10 +1586,6 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     {
       a = mk_smt_fpbv_gt(args[0], args[1]);
     }
-    else if (is_fixedbv_type(gt.side_1) && is_fixedbv_type(gt.side_2))
-    {
-      a = solver->mkFXPGt(args[0], args[1]);
-    }
     else if (is_unsignedbv_type(gt.side_1) && is_unsignedbv_type(gt.side_2))
     {
       a = solver->mkBVUgt(args[0], args[1]);
@@ -1692,10 +1614,6 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     else if (is_floatbv_type(gte.side_1) && is_floatbv_type(gte.side_2))
     {
       a = mk_smt_fpbv_gte(args[0], args[1]);
-    }
-    else if (is_fixedbv_type(gte.side_1) && is_fixedbv_type(gte.side_2))
-    {
-      a = solver->mkFXPGe(args[0], args[1]);
     }
     else if (is_unsignedbv_type(gte.side_1) && is_unsignedbv_type(gte.side_2))
     {
@@ -1765,11 +1683,6 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     else if (is_floatbv_type(neg.value))
     {
       a = solver->mkFPNeg(args[0]);
-    }
-    else if (is_fixedbv_type(neg.value))
-    {
-      a = is_sat_fixedbv(neg.value->type) ? solver->mkFXPNegSat(args[0])
-                                          : solver->mkFXPNeg(args[0]);
     }
     else
     {
@@ -1903,12 +1816,148 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     abort();
   }
 
-  {
-    struct smt_cache_entryt entry = {expr, a, ctx_level};
-    std::lock_guard lock(smt_cache_mutex);
-    smt_cache.insert(entry);
-  }
+  return cache_ast(expr, a);
+}
+
+smt_astt smt_solver_baset::cache_ast(const expr2tc &expr, smt_astt a)
+{
+  struct smt_cache_entryt entry = {expr, a, ctx_level};
+  std::lock_guard lock(smt_cache_mutex);
+  smt_cache.insert(entry);
   return a;
+}
+
+/// The fixed-point arm of every node convert_ast_node lowers. Null when @p expr
+/// is not a fixed-point operation, and under --ir, where fixed-point values are
+/// reals and the generic arms apply.
+smt_astt smt_solver_baset::convert_fixedbv_op(
+  const expr2tc &expr,
+  const std::vector<smt_astt> &args)
+{
+  if (int_encoding)
+    return {};
+
+  switch (expr->expr_id)
+  {
+  case expr2t::add_id:
+  case expr2t::sub_id:
+  case expr2t::mul_id:
+  case expr2t::div_id:
+    return is_fixedbv_type(expr) ? convert_fixedbv_arith(expr, args)
+                                 : smt_astt{};
+  case expr2t::shl_id:
+  case expr2t::ashr_id:
+  case expr2t::lshr_id:
+  case expr2t::neg_id:
+  case expr2t::abs_id:
+    return is_fixedbv_type(*expr->get_sub_expr(0))
+             ? convert_fixedbv_value_op(expr, args)
+             : smt_astt{};
+  case expr2t::equality_id:
+  case expr2t::notequal_id:
+  case expr2t::lessthan_id:
+  case expr2t::lessthanequal_id:
+  case expr2t::greaterthan_id:
+  case expr2t::greaterthanequal_id:
+    return is_fixedbv_type(*expr->get_sub_expr(0)) &&
+               is_fixedbv_type(*expr->get_sub_expr(1))
+             ? convert_fixedbv_compare(expr, args)
+             : smt_astt{};
+  default:
+    return {};
+  }
+}
+
+/// Fixed-point + - * /; a mixed-format result converts into the C result type.
+smt_astt smt_solver_baset::convert_fixedbv_arith(
+  const expr2tc &expr,
+  const std::vector<smt_astt> &args)
+{
+  const bool sat = is_sat_fixedbv(expr->type);
+  const auto rm = camada::FXPRM::TowardNegative;
+  smt_astt a;
+  switch (expr->expr_id)
+  {
+  case expr2t::add_id:
+    a = sat ? solver->mkFXPAddSat(args[0], args[1])
+            : solver->mkFXPAdd(args[0], args[1]);
+    break;
+  case expr2t::sub_id:
+    a = sat ? solver->mkFXPSubSat(args[0], args[1])
+            : solver->mkFXPSub(args[0], args[1]);
+    break;
+  case expr2t::mul_id:
+    a = sat ? solver->mkFXPMulSat(args[0], args[1], rm)
+            : solver->mkFXPMul(args[0], args[1], rm);
+    break;
+  default:
+    assert(expr->expr_id == expr2t::div_id);
+    a = sat ? solver->mkFXPDivSat(args[0], args[1], rm)
+            : solver->mkFXPDiv(args[0], args[1], rm);
+  }
+  return fxp_align_result(
+    a, expr, *expr->get_sub_expr(0), *expr->get_sub_expr(1));
+}
+
+/// Shifts, negation and abs of a fixed-point value. A shift amount stays a
+/// plain integer count; casting it to the fixed type would scale it, so its
+/// raw bits are resized to the operand width instead.
+smt_astt smt_solver_baset::convert_fixedbv_value_op(
+  const expr2tc &expr,
+  const std::vector<smt_astt> &args)
+{
+  const type2tc &type = (*expr->get_sub_expr(0))->type;
+  const bool sat = is_sat_fixedbv(type);
+  switch (expr->expr_id)
+  {
+  case expr2t::shl_id:
+  {
+    smt_astt amount = fxp_shift_amount(args[1], type->get_width());
+    return sat ? solver->mkFXPShlSatExpr(args[0], amount)
+               : solver->mkFXPShlExpr(args[0], amount);
+  }
+  case expr2t::ashr_id:
+  case expr2t::lshr_id:
+    return solver->mkFXPShrExpr(
+      args[0], fxp_shift_amount(args[1], type->get_width()));
+  default:
+    break;
+  }
+
+  if (expr->expr_id == expr2t::neg_id)
+    return sat ? solver->mkFXPNegSat(args[0]) : solver->mkFXPNeg(args[0]);
+  // abs: the `(x >= 0) ? x : -x` lowering of the generic abs arm, building its
+  // nodes in the same order.
+  smt_astt zero = convert_ast(gen_zero(type));
+  smt_astt is_nonneg = solver->mkFXPGe(args[0], zero);
+  smt_astt negated =
+    sat ? solver->mkFXPNegSat(args[0]) : solver->mkFXPNeg(args[0]);
+  return solver->mkIte(is_nonneg, args[0], negated);
+}
+
+/// Comparisons of two fixed-point operands. Scale-aligning: mixed-format
+/// operands reach here uncast (TR 18037 4.1.4 inserts no conversions), so
+/// their sorts may differ.
+smt_astt smt_solver_baset::convert_fixedbv_compare(
+  const expr2tc &expr,
+  const std::vector<smt_astt> &args)
+{
+  switch (expr->expr_id)
+  {
+  case expr2t::equality_id:
+    return solver->mkFXPEqual(args[0], args[1]);
+  case expr2t::notequal_id:
+    return mk_not(solver->mkFXPEqual(args[0], args[1]));
+  case expr2t::lessthan_id:
+    return solver->mkFXPLt(args[0], args[1]);
+  case expr2t::lessthanequal_id:
+    return solver->mkFXPLe(args[0], args[1]);
+  case expr2t::greaterthan_id:
+    return solver->mkFXPGt(args[0], args[1]);
+  default:
+    assert(expr->expr_id == expr2t::greaterthanequal_id);
+    return solver->mkFXPGe(args[0], args[1]);
+  }
 }
 
 /// Encode a remainder: compositional as a - (a / b) * b when the
