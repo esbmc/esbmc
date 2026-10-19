@@ -24,11 +24,3 @@ except TypeError:
 assert f(2) == 3
 assert g("x") == "xy"
 assert A().get() + "z" == "xz"
-
-
-class B:
-    def __init__(self):
-        self.v: int | list[int] | None = 1
-
-
-w = B().v + 1
