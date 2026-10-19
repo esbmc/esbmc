@@ -8074,10 +8074,28 @@ void python_converter::get_compound_assign(
   }
 
   mark_augassign_list_escaped(lhs, rhs);
+  target_block.copy_to_operands(get_compound_store(lhs, rhs, loc));
+}
 
-  code_assignt code_assign(lhs, rhs);
-  code_assign.location() = loc;
-  target_block.copy_to_operands(code_assign);
+// NumPy's in-place ufuncs cast with the same_kind rule: a float result does
+// not fit an integer array (UFuncTypeError, a TypeError).
+codet python_converter::get_compound_store(
+  const exprt &lhs,
+  const exprt &rhs,
+  const locationt &location)
+{
+  codet store = code_assignt(lhs, rhs);
+  if (
+    lhs.type().is_array() && rhs.type().is_array() &&
+    type_utils::is_integer_type(lhs.type().subtype()) &&
+    rhs.type().subtype().is_floatbv())
+    store = code_expressiont(
+      get_exception_handler().gen_exception_raise(
+        "TypeError",
+        "Cannot cast ufunc output from dtype('float64') to dtype('int64') "
+        "with casting rule 'same_kind'"));
+  store.location() = location;
+  return store;
 }
 
 // The length lives in an array's type, so branches of different lengths have

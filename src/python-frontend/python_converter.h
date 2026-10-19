@@ -409,6 +409,10 @@ public:
     const std::string &attr_name,
     const nlohmann::json &element);
 
+  codet get_compound_store(
+    const exprt &lhs,
+    const exprt &rhs,
+    const locationt &location);
   void emit_guarded_raise(
     const exprt &cond,
     const std::string &exception,

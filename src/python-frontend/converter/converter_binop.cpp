@@ -2660,6 +2660,32 @@ static void reject_complex_array_arithmetic(const exprt &lhs, const exprt &rhs)
       "TypeError: arithmetic on a numpy complex array is not supported");
 }
 
+// NumPy's type promotion: an integer array with a float scalar is a float64
+// array, never the scalar truncated to the element type.
+static typet broadcast_element_type(const typet &elem, const typet &scalar)
+{
+  return !elem.is_floatbv() && scalar.is_floatbv() ? scalar : elem;
+}
+
+static exprt cast_to(const exprt &value, const typet &type)
+{
+  return value.type() == type ? value : exprt(typecast_exprt(value, type));
+}
+
+// What an element-wise update starts from: the array itself, or a zero array
+// of the promoted element type.
+static expr2tc broadcast_base(
+  const expr2tc &array,
+  const typet &elem_type,
+  const typet &result_elem_type)
+{
+  if (elem_type == result_elem_type)
+    return array;
+  const array_type2t &type = to_array_type(array->type);
+  return gen_zero(array_type2tc(
+    migrate_type(result_elem_type), type.array_size, type.size_is_infinite));
+}
+
 exprt python_converter::handle_array_operations(
   const std::string &op,
   exprt &lhs,
@@ -2739,9 +2765,13 @@ exprt python_converter::handle_array_operations(
     if (!is_numeric_type(elem_type) || !is_numeric_type(scalar_expr.type()))
       return nil_exprt();
 
+    const typet result_elem_type =
+      broadcast_element_type(elem_type, scalar_expr.type());
     // Element-wise modulo is only modelled for integer elements; float-array %
     // would need fmod-style lowering, so let it fall through to a clean reject.
-    if (op == "Mod" && !(elem_type.is_signedbv() || elem_type.is_unsignedbv()))
+    if (
+      op == "Mod" &&
+      !(result_elem_type.is_signedbv() || result_elem_type.is_unsignedbv()))
       return nil_exprt();
 
     const exprt &size_expr = to_array_type(array_type).size();
@@ -2757,9 +2787,7 @@ exprt python_converter::handle_array_operations(
     if (array_size < 0)
       return nil_exprt();
 
-    exprt casted_scalar = scalar_expr.type() == elem_type
-                            ? scalar_expr
-                            : typecast_exprt(scalar_expr, elem_type);
+    const exprt casted_scalar = cast_to(scalar_expr, result_elem_type);
 
     // V.3: build the per-element index in IREP2 and accumulate the array update
     // with with2tc. The +/* element op stays a legacy node so map_operator +
@@ -2771,12 +2799,14 @@ exprt python_converter::handle_array_operations(
     const type2tc elem_t2 = migrate_type(elem_type);
     const type2tc index_t2 = migrate_type(size_type());
 
-    expr2tc result2 = ar2;
+    expr2tc result2 = broadcast_base(ar2, elem_type, result_elem_type);
     for (long long i = 0; i < array_size; ++i)
     {
       expr2tc ix2 = from_integer(BigInt(i), index_t2);
-      exprt array_item = migrate_expr_back(index2tc(elem_t2, ar2, ix2));
-      exprt bin_elem(python_frontend::map_operator(op, elem_type), elem_type);
+      const exprt array_item = cast_to(
+        migrate_expr_back(index2tc(elem_t2, ar2, ix2)), result_elem_type);
+      exprt bin_elem(
+        python_frontend::map_operator(op, result_elem_type), result_elem_type);
       bin_elem.copy_to_operands(array_item, casted_scalar);
       // Python/NumPy integer % is floored (sign of the divisor), unlike C's
       // truncated remainder; correct each element the same way the scalar path
