@@ -3358,6 +3358,30 @@ void python_list::copy_dict_view_elem_types(
   }
 }
 
+/// list(d.keys())[a:b] slices the copy just built, which nothing else can
+/// reach, so the dict view's types it carries still hold.
+void python_list::copy_list_of_dict_view_elem_types(
+  const exprt &array,
+  const std::string &sliced_id)
+{
+  const nlohmann::json &node = list_value_["value"];
+  if (
+    elem_types().size(sliced_id) != 0 || !array.is_symbol() ||
+    node.value("_type", "") != "Call" ||
+    node["func"].value("id", "") != "list" || node["args"].size() != 1)
+    return;
+
+  const nlohmann::json &arg = node["args"][0];
+  if (
+    arg.value("_type", "") != "Call" ||
+    arg["func"].value("_type", "") != "Attribute")
+    return;
+
+  const std::string view = arg["func"].value("attr", "");
+  if (view == "keys" || view == "values")
+    elem_types().assign_from(array.identifier().as_string(), sliced_id);
+}
+
 // A numpy array parameter (decayed to a pointer) is sliced through its
 // tracked shape, like a local array.
 std::optional<exprt> python_list::try_build_numpy_param_slice_view(
@@ -4010,21 +4034,7 @@ exprt python_list::handle_range_slice(
 
   copy_dict_view_elem_types(array, sliced_id);
 
-  // list(d.keys())[a:b] slices the copy just built, which nothing else can
-  // reach, so the dict view's types it carries still hold.
-  const nlohmann::json &sliced_node = list_value_["value"];
-  if (
-    elem_types().size(sliced_id) == 0 && array.is_symbol() &&
-    sliced_node.value("_type", "") == "Call" &&
-    sliced_node["func"].value("id", "") == "list" &&
-    sliced_node["args"].size() == 1 &&
-    sliced_node["args"][0].value("_type", "") == "Call" &&
-    sliced_node["args"][0]["func"].value("_type", "") == "Attribute")
-  {
-    const std::string view = sliced_node["args"][0]["func"].value("attr", "");
-    if (view == "keys" || view == "values")
-      elem_types().assign_from(array.identifier().as_string(), sliced_id);
-  }
+  copy_list_of_dict_view_elem_types(array, sliced_id);
 
   if (elem_types().size(sliced_id) == 0)
   {

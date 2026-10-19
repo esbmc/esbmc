@@ -1055,6 +1055,9 @@ private:
   // keep handle_range_slice's own decision count from growing further.
   void
   copy_dict_view_elem_types(const exprt &array, const std::string &sliced_id);
+  void copy_list_of_dict_view_elem_types(
+    const exprt &array,
+    const std::string &sliced_id);
 
   // Shared core of every ADR-NP-003 scalar pointer view producer; see
   // list_access.cpp for the full rationale, including when this declines.
