@@ -528,6 +528,22 @@ static bool spans_bytes(const type2tc &type, uint64_t n)
   return type_byte_size_bits(type).to_uint64() == n * 8;
 }
 
+// Whether [offset, offset+n) lies inside an object of @p type.
+static bool fits_bytes(const type2tc &type, uint64_t offset, uint64_t n)
+{
+  try
+  {
+    return offset + n <= type_byte_size(type).to_uint64();
+  }
+  catch (const array_type2t::dyn_sized_array_excp &)
+  {
+  }
+  catch (const array_type2t::inf_sized_array_excp &)
+  {
+  }
+  return false;
+}
+
 // Collect, shallowest first, every sub-object of @p root that occupies exactly
 // [offset, offset+n) bytes. A struct shares its byte range with a sole member,
 // so the shallowest match is not always the one whose type the destination
@@ -672,33 +688,67 @@ static expr2tc replace_subobject(
   return expr2tc();
 }
 
-/* Overwriting a whole float is a bitcast of the copied bytes. The C byte loop
- * would rebuild it a byte at a time, and an intermediate NaN loses its bits:
- * floating-point theory has a single NaN (#8711). Nil defers to that loop. */
-static expr2tc float_from_bytes(
+/** The @p n bytes of @p object from byte @p offset, as one bit-vector in the
+ * target's byte order. */
+static expr2tc object_bytes(const expr2tc &object, uint64_t offset, uint64_t n)
+{
+  const bool be = target_is_big_endian();
+  expr2tc value;
+  for (uint64_t i = 0; i < n; i++)
+  {
+    expr2tc byte = object_byte(object, offset + i, be);
+    if (!value)
+      value = byte;
+    else if (be)
+      value = concat2tc(get_uint_type((i + 1) * 8), value, byte);
+    else
+      value = concat2tc(get_uint_type((i + 1) * 8), byte, value);
+  }
+  return value;
+}
+
+/* @p dst with the float it holds at [dst_offset, dst_offset+n) read whole from
+ * @p src; null when that range is not a float or overruns @p src. The C byte
+ * loop would rebuild it a byte at a time, and an intermediate NaN loses its
+ * bits: floating-point theory has a single NaN (#8711). */
+static expr2tc copy_into_float(
   const expr2tc &dst,
-  const size_t dst_offset,
+  uint64_t dst_offset,
   const expr2tc &src,
-  const size_t src_offset,
-  const size_t num_of_bytes)
+  uint64_t src_offset,
+  uint64_t n)
 {
   if (
-    !is_floatbv_type(dst->type) || dst_offset || !is_array_type(src->type) ||
-    type_byte_size(dst->type).to_uint64() != num_of_bytes)
-  {
-    log_debug("memcpy", "Only primitives are supported for now");
+    is_pointer_type(src) || is_empty_type(src->type) ||
+    is_code_type(src->type) || !fits_bytes(src->type, src_offset, n))
     return expr2tc();
-  }
 
-  const bool be = target_is_big_endian();
-  expr2tc bytes =
-    object_byte(src, src_offset + (be ? 0 : num_of_bytes - 1), be);
-  for (size_t i = 1; i < num_of_bytes; i++)
-    bytes = concat2tc(
-      get_uint_type(bytes->type->get_width() + 8),
-      bytes,
-      object_byte(src, src_offset + (be ? i : num_of_bytes - 1 - i), be));
-  return bitcast2tc(dst->type, bytes);
+  std::vector<expr2tc> dst_subs;
+  collect_subobjects(dst, dst_offset, n, dst_subs);
+  for (const expr2tc &dst_sub : dst_subs)
+  {
+    if (!is_floatbv_type(dst_sub->type))
+      continue;
+    return replace_subobject(
+      dst,
+      dst_offset,
+      n,
+      bitcast2tc(dst_sub->type, object_bytes(src, src_offset, n)));
+  }
+  return expr2tc();
+}
+
+// gen_byte_memcpy, or the float copy when it declines.
+static expr2tc copy_primitive(
+  const expr2tc &dst,
+  uint64_t dst_offset,
+  const expr2tc &src,
+  uint64_t src_offset,
+  uint64_t n)
+{
+  expr2tc result =
+    goto_symex_utils::gen_byte_memcpy(src, dst, n, src_offset, dst_offset);
+  return result ? result : copy_into_float(dst, dst_offset, src, src_offset, n);
 }
 
 static inline expr2tc do_memcpy_expression(
@@ -741,7 +791,8 @@ static inline expr2tc do_memcpy_expression(
       }
     }
 
-    return float_from_bytes(dst, dst_offset, src, src_offset, num_of_bytes);
+    log_debug("memcpy", "Only primitives are supported for now");
+    return copy_into_float(dst, dst_offset, src, src_offset, num_of_bytes);
   }
 
   // gen_byte_memcpy asserts on get_width(), which throws
@@ -757,8 +808,7 @@ static inline expr2tc do_memcpy_expression(
   }
 
   // Base-case. Primitives!
-  return goto_symex_utils::gen_byte_memcpy(
-    src, dst, num_of_bytes, src_offset, dst_offset);
+  return copy_primitive(dst, dst_offset, src, src_offset, num_of_bytes);
 }
 
 static void offset_simplifier(expr2tc &e)
