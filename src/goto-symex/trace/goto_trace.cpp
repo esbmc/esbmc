@@ -659,6 +659,13 @@ void show_simplified_location(std::ostream &out, const locationt &location)
   out << dest << "\n";
 }
 
+static const irep_idt &
+frame_function_name(const namespacet &ns, const irep_idt &id)
+{
+  const symbolt *fn = ns.lookup(id);
+  return fn ? fn->name : id;
+}
+
 void show_goto_trace(
   std::ostream &out,
   const namespacet &ns,
@@ -700,8 +707,7 @@ void show_goto_trace(
           out << "Stack trace:" << std::endl;
           for (const auto &it : step.stack_trace)
           {
-            const symbolt *fn = ns.lookup(it.function);
-            const irep_idt &name = fn ? fn->name : it.function;
+            const irep_idt &name = frame_function_name(ns, it.function);
             if (it.src == nullptr)
               out << "  " << name << std::endl;
             else
