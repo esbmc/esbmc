@@ -101,28 +101,45 @@ class _Unroller(ast.NodeTransformer):
         unrolled = [stmt for cls in classes for stmt in _substitute(node.body, name, cls)]
         return unrolled + node.orelse
 
+    def _any_all_generator(self, node):
+        """The generator of an `any(...)` or `all(...)` call, else None."""
+        is_builtin = (isinstance(node.func, ast.Name) and node.func.id in ("any", "all")
+                      and not self.counts[node.func.id])
+        if is_builtin and len(node.args) == 1 and not node.keywords:
+            arg = node.args[0]
+            return arg if isinstance(arg, ast.GeneratorExp) else None
+        return None
+
     def visit_Call(self, node):
         """Turns any/all over the classes into an or/and of the element."""
         self.generic_visit(node)
-        if not (isinstance(node.func, ast.Name) and node.func.id in ("any", "all")
-                and not self.counts[node.func.id] and len(node.args) == 1 and not node.keywords
-                and isinstance(node.args[0], ast.GeneratorExp)):
+        gen = self._any_all_generator(node)
+        comp = _sole_unfiltered_name_loop(gen)
+        classes = self._class_names(comp.iter) if comp else None
+        if not classes or not _is_bool_test(gen.elt):
             return node
-        gen = node.args[0]
-        comp = gen.generators[0] if len(gen.generators) == 1 else None
-        # A comprehension's variable is local to it, unlike a loop's.
-        name = comp.target.id if comp and not comp.ifs and isinstance(comp.target,
-                                                                      ast.Name) else None
-        classes = self._class_names(comp.iter) if name else None
-        is_bool = isinstance(gen.elt, ast.Compare) or (isinstance(gen.elt, ast.Call) and isinstance(
-            gen.elt.func, ast.Name) and gen.elt.func.id == "isinstance")
-        if not classes or not is_bool:
-            return node
-        values = [_substitute([gen.elt], name, cls)[0] for cls in classes]
+        values = [_substitute([gen.elt], comp.target.id, cls)[0] for cls in classes]
         if len(values) == 1:
             return values[0]
         op = ast.Or() if node.func.id == "any" else ast.And()
         return ast.copy_location(ast.BoolOp(op=op, values=values), node)
+
+
+def _sole_unfiltered_name_loop(gen):
+    """The one `for name in ...` clause of `gen`, with no `if`, else None. A
+    comprehension's variable is local to it, unlike a loop's."""
+    if gen is None or len(gen.generators) != 1:
+        return None
+    comp = gen.generators[0]
+    return comp if not comp.ifs and isinstance(comp.target, ast.Name) else None
+
+
+def _is_bool_test(elt):
+    """Whether `elt` is a comparison or an isinstance() call, so an or/and of
+    its copies is the bool any/all would give."""
+    return isinstance(elt,
+                      ast.Compare) or (isinstance(elt, ast.Call) and isinstance(elt.func, ast.Name)
+                                       and elt.func.id == "isinstance")
 
 
 def unroll_type_tuple_loops(module):

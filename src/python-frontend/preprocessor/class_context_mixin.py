@@ -656,8 +656,13 @@ class ClassContextMixin:
             (k.value for k in call.keywords if by_keyword and k.arg == param), None)
         if isinstance(arg, ast.Name) and arg.id in known:
             return arg.id
-        # A literal tuple of classes, e.g. for `isinstance(v, a) for a in args`.
-        # Its parameter is dropped, which would misalign defaults.
+        return ClassContextMixin._class_tuple(arg, func, known)
+
+    @staticmethod
+    def _class_tuple(arg, func, known):
+        """The names of a literal tuple of known classes `arg`, e.g. for
+        `isinstance(v, a) for a in args`, else None. Its parameter is dropped,
+        which would misalign defaults, so `func` must have none."""
         if (isinstance(arg, ast.Tuple) and arg.elts and not func.args.defaults
                 and all(isinstance(e, ast.Name) and e.id in known for e in arg.elts)):
             return tuple(e.id for e in arg.elts)
