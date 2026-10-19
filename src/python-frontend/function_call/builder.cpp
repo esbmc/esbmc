@@ -1745,7 +1745,65 @@ exprt function_call_builder::build_method_call_on_receiver() const
   raise_if_none_receiver();
   if (receiver_class_defines_method())
     return nil_exprt();
+  exprt number_error = str_method_on_number_error();
+  if (!number_error.is_nil())
+    return number_error;
   return converter_.get_string_handler().handle_string_attribute_call(call_);
+}
+
+static std::string constant_number_type_name(const nlohmann::json &value)
+{
+  if (value.is_boolean())
+    return "bool";
+  if (value.is_number_float())
+    return "float";
+  return value.is_number() ? "int" : "";
+}
+
+exprt function_call_builder::str_method_on_number_error() const
+{
+  // set(dir(str)) - set(dir(int)) - set(dir(float)), public names only.
+  static const std::set<std::string> str_only_methods = {
+    "capitalize",   "casefold",     "center",    "count",     "encode",
+    "endswith",     "expandtabs",   "find",      "format",    "format_map",
+    "index",        "isalnum",      "isalpha",   "isascii",   "isdecimal",
+    "isdigit",      "isidentifier", "islower",   "isnumeric", "isprintable",
+    "isspace",      "istitle",      "isupper",   "join",      "ljust",
+    "lower",        "lstrip",       "maketrans", "partition", "removeprefix",
+    "removesuffix", "replace",      "rfind",     "rindex",    "rjust",
+    "rpartition",   "rsplit",       "rstrip",    "split",     "splitlines",
+    "startswith",   "strip",        "swapcase",  "title",     "translate",
+    "upper",        "zfill"};
+  const std::string method = call_["func"]["attr"].get<std::string>();
+  if (!str_only_methods.count(method))
+    return nil_exprt();
+
+  const nlohmann::json &recv = call_["func"]["value"];
+  std::string type_name;
+  if (recv.value("_type", "") == "Constant")
+    type_name = constant_number_type_name(recv["value"]);
+  else if (recv.value("_type", "") == "Name")
+  {
+    symbol_id sid = converter_.create_symbol_id();
+    sid.set_object(recv["id"].get<std::string>());
+    const symbolt *symbol = converter_.find_symbol(sid.to_string());
+    const type_handler &types = converter_.get_type_handler();
+    // get_expr follows a retype to str (`x = 3; x = "ab"`), the raw symbol not.
+    if (symbol && types.is_numeric_scalar_type(symbol->get_type()))
+    {
+      const typet current = converter_.get_expr(recv).type();
+      if (types.is_numeric_scalar_type(current))
+        type_name = types.get_python_type_name(current);
+    }
+  }
+  if (type_name.empty())
+    return nil_exprt();
+
+  exprt raise = converter_.get_exception_handler().gen_exception_raise(
+    "AttributeError",
+    "'" + type_name + "' object has no attribute '" + method + "'");
+  raise.location() = converter_.get_location_from_decl(call_);
+  return raise;
 }
 
 exprt function_call_builder::build() const
