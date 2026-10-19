@@ -610,6 +610,37 @@ exprt function_call_expr::abstract_instantiation_error(
   return raise;
 }
 
+exprt function_call_expr::call_argument_error(const symbolt &func_symbol) const
+{
+  exprt error =
+    check_argument_types(&func_symbol, call_["args"], call_["keywords"]);
+  return error.is_nil() ? unbound_method_error(func_symbol) : error;
+}
+
+exprt function_call_expr::unbound_method_error(const symbolt &func_symbol) const
+{
+  const nlohmann::json &func = call_["func"];
+  if (
+    function_type_ != FunctionType::ClassMethod ||
+    func["_type"] != "Attribute" || func["value"]["_type"] != "Name" ||
+    !call_["args"].empty() ||
+    (call_.contains("keywords") && !call_["keywords"].empty()))
+    return nil_exprt();
+  const std::string cls = func["value"]["id"].get<std::string>();
+  const code_typet &type = to_code_type(func_symbol.get_type());
+  if (
+    !json_utils::is_class(cls, converter_.get_ast_json()) ||
+    type.arguments().empty() || type.arguments()[0].get_base_name() != "self")
+    return nil_exprt();
+
+  exprt raise = converter_.get_exception_handler().gen_exception_raise(
+    "TypeError",
+    cls + "." + func["attr"].get<std::string>() +
+      "() missing 1 required positional argument: 'self'");
+  raise.location() = converter_.get_location_from_decl(call_);
+  return raise;
+}
+
 bool function_call_expr::is_input_call() const
 {
   const std::string &func_name = function_id_.get_function();
@@ -4577,8 +4608,7 @@ exprt function_call_expr::handle_general_function_call()
 
   if (func_symbol != nullptr)
   {
-    exprt type_error =
-      check_argument_types(func_symbol, call_["args"], call_["keywords"]);
+    exprt type_error = call_argument_error(*func_symbol);
     if (!type_error.is_nil())
       return type_error;
   }
@@ -6876,6 +6906,20 @@ typet function_call_expr::dict_param_value_type(const symbolt *func, size_t idx)
   return converter_.get_type_from_annotation(ann["slice"]["elts"][1], ann);
 }
 
+// A numpy string or complex array is read only element by element; a callee
+// would read its storage as numbers.
+static void reject_unmodelled_numpy_array_argument(const typet &type)
+{
+  if (type_utils::is_numpy_string_array(type))
+    throw std::runtime_error(
+      "TypeError: passing a numpy string array to a function is not "
+      "supported");
+  if (type_utils::is_numpy_complex_array(type))
+    throw std::runtime_error(
+      "TypeError: passing a numpy complex array to a function is not "
+      "supported");
+}
+
 std::optional<exprt> function_call_expr::build_positional_arguments(
   code_function_callt &call,
   size_t param_offset,
@@ -7223,6 +7267,8 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
       arg_index++;
       continue;
     }
+
+    reject_unmodelled_numpy_array_argument(arg.type());
 
     // All array function arguments (e.g. bytes type) are handled as pointers.
     if (arg.type().is_array())

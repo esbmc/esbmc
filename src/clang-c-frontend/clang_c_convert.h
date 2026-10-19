@@ -290,7 +290,7 @@ protected:
     const clang::CompoundAssignOperator &compop,
     exprt &new_expr);
 
-  bool
+  virtual bool
   get_unary_operator_expr(const clang::UnaryOperator &uniop, exprt &new_expr);
 
   bool get_atomic_expr(const clang::AtomicExpr &atm, exprt &new_expr);

@@ -299,6 +299,7 @@ public:
   exprt try_handle_len_string_fast_path(
     const nlohmann::json &call_json,
     const exprt &arg_expr);
+  exprt char_array_type_length(const exprt &arg_expr) const;
 
   // String method operations
 

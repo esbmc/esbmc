@@ -1,8 +1,0 @@
-import numpy as np
-
-x = np.array([[1, 2], [3, 4]])
-row = x[0]
-
-assert row[0] == 1
-assert row[1] == 2
-assert x[0][0] == 1

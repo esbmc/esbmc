@@ -1696,6 +1696,16 @@ exprt python_converter::get_right_operand_expr(
                                                  : get_expr(right);
 }
 
+static void
+reject_numpy_string_membership(const std::string &op, const exprt &rhs)
+{
+  if (
+    (op == "In" || op == "NotIn") &&
+    type_utils::is_numpy_string_array(rhs.type()))
+    throw std::runtime_error(
+      "TypeError: membership in a numpy string array is not supported");
+}
+
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
   if (std::optional<exprt> bound = try_bound_method_compare(element))
@@ -2009,6 +2019,7 @@ exprt python_converter::get_binary_operator_expr(
     return dict_result;
 
   // Handle membership operators
+  reject_numpy_string_membership(op, rhs);
   if (op == "In")
     return handle_membership_operator(lhs, rhs, element, false);
   if (op == "NotIn")
@@ -2638,6 +2649,16 @@ exprt python_converter::build_bytes_concat(const exprt &lhs, const exprt &rhs)
   return result;
 }
 
+// Complex arrays are stored and indexed; no arithmetic over them is modelled.
+static void reject_complex_array_arithmetic(const exprt &lhs, const exprt &rhs)
+{
+  if (
+    type_utils::is_numpy_complex_array(lhs.type()) ||
+    type_utils::is_numpy_complex_array(rhs.type()))
+    throw std::runtime_error(
+      "TypeError: arithmetic on a numpy complex array is not supported");
+}
+
 exprt python_converter::handle_array_operations(
   const std::string &op,
   exprt &lhs,
@@ -2646,6 +2667,7 @@ exprt python_converter::handle_array_operations(
   const nlohmann::json &right,
   const nlohmann::json &element)
 {
+  reject_complex_array_arithmetic(lhs, rhs);
   if (!lhs.type().is_array() && !rhs.type().is_array())
   {
     if (
