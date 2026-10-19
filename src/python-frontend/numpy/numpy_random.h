@@ -55,6 +55,7 @@ private:
   bool has_probabilities_ = false;
   std::vector<exprt> drawn_indices_;
 
+  exprt reject_unmodelled();
   void bind_arguments();
   void bind_positional();
   void bind_keywords();

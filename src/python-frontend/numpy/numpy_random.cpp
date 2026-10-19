@@ -129,9 +129,15 @@ exprt implies(const exprt &premise, const exprt &conclusion)
   return or_exprt(not_exprt(premise), conclusion);
 }
 
+/// IEEE arithmetic in the program's rounding mode (round to nearest unless
+/// the program changes it), as the rest of the frontend builds it.
 exprt arith(const exprt &lhs, const irep_idt &op, const exprt &rhs)
 {
-  return binary_exprt(lhs, op, rhs, double_type());
+  exprt result(op, double_type());
+  result.copy_to_operands(lhs, rhs);
+  result.add("rounding_mode") =
+    symbol_exprt("c:@__ESBMC_rounding_mode", int_type());
+  return result;
 }
 
 exprt rel(const exprt &lhs, const irep_idt &op, const exprt &rhs)
@@ -166,13 +172,19 @@ bool numpy_random::is_random_call(
     module.value("_type", "") != "Name" ||
     !is_imported_numpy_module_alias(ast, module["id"]))
     return false;
-  return signatures().count(canonical_name(func["attr"].get<std::string>()));
+  return true;
 }
 
 exprt numpy_random::get()
 {
   code_blockt *const saved_block = converter_.current_block;
   converter_.current_block = &block_;
+  if (!signatures().count(name_))
+  {
+    const exprt result = reject_unmodelled();
+    converter_.current_block = saved_block;
+    return finish(result);
+  }
   bind_arguments();
   validate();
   check_shape();
@@ -184,6 +196,30 @@ exprt numpy_random::get()
   }
   converter_.current_block = saved_block;
   return finish(result);
+}
+
+// Generator state (seed, get_state, default_rng, Generator, RandomState)
+// and the samplers without a model raise rather than run as a no-op.
+exprt numpy_random::reject_unmodelled()
+{
+  for (const auto &arg : call_["args"])
+  {
+    if (arg.value("_type", "") == "Starred")
+      reject_unpacked();
+    evaluate_once(arg, "");
+  }
+  if (call_.contains("keywords"))
+    for (const auto &kw : call_["keywords"])
+    {
+      if (!kw["arg"].is_string())
+        reject_unpacked();
+      evaluate_once(kw["value"], "");
+    }
+  raise_if(
+    true_exprt(),
+    "TypeError",
+    "numpy.random." + function_ + "() is not supported");
+  return fresh(long_long_int_type());
 }
 
 void numpy_random::bind_arguments()
@@ -589,7 +625,7 @@ void numpy_random::validate()
   }
   else if (name_ == "uniform")
     raise_if(
-      not_exprt(finite(arith(value("high"), exprt::minus, value("low")))),
+      not_exprt(finite(arith(value("high"), "ieee_sub", value("low")))),
       "OverflowError",
       "Range exceeds valid bounds");
 }
@@ -713,8 +749,8 @@ exprt numpy_random::sample()
     const exprt low = value("low");
     return arith(
       low,
-      exprt::plus,
-      arith(arith(value("high"), exprt::minus, low), exprt::mult, x));
+      "ieee_add",
+      arith(arith(value("high"), "ieee_sub", low), "ieee_mul", x));
   }
   if (name_ == "beta")
   {
@@ -727,7 +763,7 @@ exprt numpy_random::sample()
     if (name_ == "standard_normal")
       return x;
     return arith(
-      value("loc"), exprt::plus, arith(value("scale"), exprt::mult, x));
+      value("loc"), "ieee_add", arith(value("scale"), "ieee_mul", x));
   }
   // lognormal is exp() of a normal sample, which may overflow to infinity.
   assume(rel(x, ">=", zero));
@@ -740,7 +776,7 @@ exprt numpy_random::sample()
     assume(
       implies(equality_exprt(value("shape"), zero), equality_exprt(x, zero)));
   if (name_ == "exponential" || name_ == "gamma")
-    return arith(value("scale"), exprt::mult, x);
+    return arith(value("scale"), "ieee_mul", x);
   return x;
 }
 

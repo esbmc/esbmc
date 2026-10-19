@@ -67,10 +67,6 @@ def full_like(a: list, fill_value: Any) -> list:
     return out
 
 
-def seed(seed: int = None) -> None:
-    raise TypeError("numpy.random.seed() is not supported")
-
-
 def add(a: int, b: int) -> float:
     x: float = a + b
     return x
