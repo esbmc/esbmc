@@ -191,7 +191,7 @@ static bool is_bounded_round(const optionst &options)
 }
 
 bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
-  : options(opts), context(_context), ns(context)
+  : options(opts), context(_context), ns(context), program(funcs)
 {
   interleaving_number = 0;
   interleaving_failed = 0;
@@ -3688,6 +3688,30 @@ void bmct::seed_property_verdicts(const symex_target_equationt &eq) const
       property_verdictt::NotChecked,
       property_location(*step.source.pc, description));
   }
+
+  if (options.get_bool_option("report-unreached-claims"))
+    seed_unreached_claims(eq);
+}
+
+void bmct::seed_unreached_claims(const symex_target_equationt &eq) const
+{
+  std::unordered_set<const goto_programt::instructiont *> reached;
+  for (const auto &step : eq.SSA_steps)
+    if (step.is_assert())
+      reached.insert(&*step.source.pc);
+
+  for (const auto &[name, function] : program.function_map)
+    for (const auto &instruction : function.body.instructions)
+      if (instruction.is_assert() && !reached.count(&instruction))
+      {
+        const std::string description =
+          goto_symext::assertion_message(ns, instruction);
+        goto_functionst::property_verdicts.record(
+          property_key(instruction, description),
+          property_verdictt::Passed,
+          property_location(instruction, description),
+          unreached_claim_note);
+      }
 }
 
 bool bmct::reports_final_verdict(smt_resultt res) const
@@ -3882,6 +3906,9 @@ static void print_property_summary(
     oss << ", " << YELLOW << counts.unknown << " unknown" << RESET;
   if (counts.not_checked > 0)
     oss << ", " << YELLOW << counts.not_checked << " not checked" << RESET;
+  if (counts.unreached > 0)
+    oss << " (" << YELLOW << counts.unreached << " never reached" << RESET
+        << ")";
 
   log_result("{}", oss.str());
 }
