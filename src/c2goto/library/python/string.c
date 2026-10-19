@@ -1135,92 +1135,64 @@ __ESBMC_HIDE:;
   return -1;
 }
 
-long long __python_int(const char *s, int base)
+static _Bool __python_is_space(char c)
 {
 __ESBMC_HIDE:;
-  if (!s)
-    return 0;
+  return c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' ||
+         c == '\r';
+}
 
-  if (base != 0 && (base < 2 || base > 36))
-  {
-    __ESBMC_assert(0, "int() base must be >= 2 and <= 36, or 0");
-    return 0;
-  }
-
-  while (*s == ' ' || *s == '\t' || *s == '\n' || *s == '\v' || *s == '\f' ||
-         *s == '\r')
+static const char *__python_skip_space(const char *s)
+{
+__ESBMC_HIDE:;
+  while (__python_is_space(*s))
     s++;
+  return s;
+}
 
-  if (!*s)
-  {
-    __ESBMC_assert(0, "invalid literal for int() with empty string");
+/// Whether @p s starts with `0` and the prefix letter @p lower in either case.
+static _Bool __python_has_prefix(const char *s, char lower)
+{
+__ESBMC_HIDE:;
+  return s[0] == '0' && (s[1] == lower || s[1] == lower - 'a' + 'A');
+}
+
+/// Whether @p s starts with the prefix of @p prefix_base, which then becomes
+/// @p *base if it was still 0.
+static _Bool __python_takes_prefix(const char *s, int *base, int prefix_base)
+{
+__ESBMC_HIDE:;
+  const char lower = prefix_base == 16 ? 'x' : prefix_base == 2 ? 'b' : 'o';
+  if ((*base != 0 && *base != prefix_base) || !__python_has_prefix(s, lower))
     return 0;
-  }
+  *base = prefix_base;
+  return 1;
+}
 
-  int sign = 1;
-  if (*s == '-')
-  {
-    sign = -1;
-    s++;
-  }
-  else if (*s == '+')
-  {
-    s++;
-  }
+/// Resolves base 0 from the literal's prefix and skips a prefix that matches
+/// @p *base; returns the first character after it.
+static const char *__python_base_prefix(const char *s, int *base)
+{
+__ESBMC_HIDE:;
+  if (
+    __python_takes_prefix(s, base, 16) || __python_takes_prefix(s, base, 2) ||
+    __python_takes_prefix(s, base, 8))
+    return s + 2;
+  if (*base == 0)
+    *base = 10;
+  return s;
+}
 
-  const char *number_begin = s;
-
-  if (base == 0)
-  {
-    if (*s == '0')
-    {
-      if (*(s + 1) == 'x' || *(s + 1) == 'X')
-      {
-        base = 16;
-        s += 2;
-      }
-      else if (*(s + 1) == 'b' || *(s + 1) == 'B')
-      {
-        base = 2;
-        s += 2;
-      }
-      else if (*(s + 1) == 'o' || *(s + 1) == 'O')
-      {
-        base = 8;
-        s += 2;
-      }
-      else
-      {
-        base = 10;
-      }
-    }
-    else
-    {
-      base = 10;
-    }
-  }
-  else if (base == 16 && *s == '0' && (*(s + 1) == 'x' || *(s + 1) == 'X'))
-  {
-    s += 2;
-  }
-  else if (base == 2 && *s == '0' && (*(s + 1) == 'b' || *(s + 1) == 'B'))
-  {
-    s += 2;
-  }
-  else if (base == 8 && *s == '0' && (*(s + 1) == 'o' || *(s + 1) == 'O'))
-  {
-    s += 2;
-  }
-
-  if (!*s)
-  {
-    __ESBMC_assert(0, "invalid literal for int() - no digits");
-    return 0;
-  }
-
-  const _Bool prefix_consumed = (s != number_begin);
-
-  long long result = 0;
+/// Folds the digits at @p *sp into @p *result, advancing @p *sp past them and
+/// any trailing whitespace; returns the parse status (see __python_int).
+static int __python_parse_digits(
+  const char **sp,
+  int base,
+  _Bool prefix_consumed,
+  long long *result)
+{
+__ESBMC_HIDE:;
+  const char *s = *sp;
   _Bool found_digit = 0;
 
   while (*s)
@@ -1234,68 +1206,90 @@ __ESBMC_HIDE:;
     {
       const int next = __python_digit_value((unsigned char)*(s + 1));
       if ((!found_digit && !prefix_consumed) || next < 0 || next >= base)
-      {
-        __ESBMC_assert(0, "invalid literal for int() - invalid character");
-        return 0;
-      }
+        return 1;
       s++;
       continue;
     }
 
     int digit_value = __python_digit_value(c);
 
+    /* Whitespace may only follow the digits; the caller rejects anything
+     * after it. */
+    if (digit_value < 0 && __python_is_space(c))
+      break;
     if (digit_value < 0)
-    {
-      /* Whitespace may only follow the digits; the check below rejects
-       * anything after it. */
-      if (
-        c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' ||
-        c == '\r')
-        break;
-      __ESBMC_assert(0, "invalid literal for int() - invalid character");
-      return 0;
-    }
-
+      return 1;
     if (digit_value >= base)
     {
       if (found_digit)
-      {
         break;
-      }
-      __ESBMC_assert(
-        0, "invalid literal for int() - digit out of range for base");
-      return 0;
+      return 1;
     }
 
     found_digit = 1;
-
-    if (result > (LLONG_MAX / base))
-    {
-      __ESBMC_assert(0, "int() conversion overflow");
-      return 0;
-    }
-
-    result = result * base + digit_value;
+    if (*result > (LLONG_MAX / base))
+      return 2;
+    *result = *result * base + digit_value;
     s++;
   }
 
-  while (*s == ' ' || *s == '\t' || *s == '\n' || *s == '\v' || *s == '\f' ||
-         *s == '\r')
+  *sp = __python_skip_space(s);
+  return found_digit ? 0 : 1;
+}
+
+static long long __python_int_parse(const char *s, int base, int *status)
+{
+__ESBMC_HIDE:;
+  *status = 0;
+  if (!s)
+    return 0;
+
+  if (base != 0 && (base < 2 || base > 36))
+  {
+    *status = 1;
+    return 0;
+  }
+
+  s = __python_skip_space(s);
+
+  int sign = 1;
+  if (*s == '-' || *s == '+')
+  {
+    sign = *s == '-' ? -1 : 1;
     s++;
-
-  if (*s != '\0')
-  {
-    __ESBMC_assert(0, "invalid literal for int() - trailing characters");
-    return 0;
   }
 
-  if (!found_digit)
-  {
-    __ESBMC_assert(0, "invalid literal for int() - no valid digits");
-    return 0;
-  }
+  const char *number_begin = s;
+  s = __python_base_prefix(s, &base);
 
-  return sign * result;
+  long long result = 0;
+  *status =
+    *s ? __python_parse_digits(&s, base, s != number_begin, &result) : 1;
+  if (*status == 0 && *s != '\0')
+    *status = 1;
+  return *status == 0 ? sign * result : 0;
+}
+
+/* Parse status: 0 ok, 1 an invalid literal (ValueError in Python), 2 a value
+ * the model's long long cannot hold. */
+long long __python_int(const char *s, int base)
+{
+__ESBMC_HIDE:;
+  int status;
+  long long result = __python_int_parse(s, base, &status);
+  __ESBMC_assert(status != 2, "int() conversion overflow");
+  __ESBMC_assert(status != 1, "invalid literal for int()");
+  return result;
+}
+
+/* Whether int(s, base) accepts s, so the caller can raise ValueError (#8705).
+ */
+_Bool __python_str_is_int(const char *s, int base)
+{
+__ESBMC_HIDE:;
+  int status;
+  __python_int_parse(s, base, &status);
+  return status != 1;
 }
 
 /// Scan a run of decimal digits starting at s[*i], folding them into *value and

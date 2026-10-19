@@ -16,6 +16,7 @@ from preprocessor.import_typing_mixin import ImportTypingMixin
 from preprocessor.loop_mixin import LoopMixin
 from preprocessor.module_lifecycle_mixin import ModuleLifecycleMixin
 from preprocessor.module_rewrite_mixin import ModuleRewriteMixin
+from preprocessor.numpy_constructor_mixin import NumpyConstructorMixin
 from preprocessor.preprocessor_state_mixin import PreprocessorStateMixin
 from preprocessor.rejection import attach_location
 from preprocessor.sequence_iterator_mixin import SequenceIteratorMixin
@@ -40,6 +41,7 @@ class Preprocessor(
         LoopMixin,
         ModuleRewriteMixin,
         ModuleLifecycleMixin,
+        NumpyConstructorMixin,
         SequenceIteratorMixin,
         UnittestMixin,
         VarargMixin,
