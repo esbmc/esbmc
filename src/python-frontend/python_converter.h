@@ -165,6 +165,11 @@ public:
   /// Unknown, function or class-instance types: a call on such a value may
   /// succeed.
   bool may_be_callable(const typet &type);
+  exprt not_callable_function(
+    const typet &function,
+    const typet &value,
+    const locationt &location);
+  void decay_function_choice(exprt &then, exprt &else_expr);
 
   typet get_type_from_annotation(
     const nlohmann::json &annotation_node,
@@ -2147,6 +2152,8 @@ private:
   bool takes_numpy_view_argument(const nlohmann::json &call, std::size_t index);
   bool is_rank1_numpy_view(const nlohmann::json &node) const;
   bool is_rank1_numpy_array_name(const nlohmann::json &node) const;
+  void reject_builtin_over_complex_array(const nlohmann::json &node) const;
+  bool is_foldable_constant_index(const exprt &expr) const;
   bool adapt_numpy_view_builtin_arguments(nlohmann::json &node);
   std::optional<nlohmann::json>
   inline_numpy_view_lambda_call(const nlohmann::json &call);
@@ -2951,6 +2958,10 @@ private:
 
   /// Handle Optional value access
   exprt materialize_optional(const exprt &expr, const nlohmann::json &element);
+  exprt check_float_fits_int_return(
+    const nlohmann::json &ast_node,
+    const exprt &value,
+    codet &target_block);
   exprt coerce_optional_return(
     const exprt &value,
     const locationt &location,
@@ -3037,11 +3048,14 @@ private:
   namespacet ns;
   typet current_element_type;
   typet current_func_return_type_;
+  /// Whether the program annotates the current function `-> int`.
+  bool current_func_annotated_int_ = false;
   /// The target of a ternary that is itself a return value; see
   /// optional_ternary_type.
   typet ternary_return_target_;
   std::string main_python_file;
   std::string current_python_file;
+  size_t not_callable_count_ = 0;
   nlohmann::json imported_module_json;
   std::string current_func_name_;
   std::string current_class_name_;
@@ -3199,6 +3213,9 @@ private:
   /// literal or a name) shares; nothing when a stored value is not a function.
   std::optional<typet>
   dict_function_return_type(const nlohmann::json &container);
+  bool dict_values(
+    const nlohmann::json &container,
+    std::vector<nlohmann::json> &out);
   typet subscript_call_return_type(
     const exprt &func_ptr,
     const nlohmann::json &func_node);
@@ -3457,6 +3474,9 @@ private:
   bool is_importing_module = false;
   bool base_ctor_called = false;
   bool build_static_lists = false;
+  /// The element type a numpy constructor's dtype= gives the static array
+  /// get_static_array builds; empty when the literal's own type is used.
+  typet numpy_element_type;
 
   /// List symbols passed as an argument to a function/method call, keyed by
   /// symbol id. Such a list may have been mutated (e.g. appended to) by the

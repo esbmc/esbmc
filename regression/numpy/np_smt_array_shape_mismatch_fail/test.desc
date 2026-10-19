@@ -1,4 +1,0 @@
-CORE
-main.py
---incremental-bmc
-^ERROR: IndexError: boolean index did not match indexed array
