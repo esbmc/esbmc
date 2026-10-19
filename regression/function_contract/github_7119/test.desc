@@ -1,0 +1,4 @@
+CORE
+main.c
+--replace-call-with-contract add --unwind 5
+^VERIFICATION SUCCESSFUL$
