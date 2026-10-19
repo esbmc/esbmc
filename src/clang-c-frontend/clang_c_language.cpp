@@ -2,6 +2,8 @@
 #include <clang-c-frontend/clang_c_adjust_irep2.h>
 CC_DIAGNOSTIC_PUSH()
 CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
+#include <clang/Basic/TargetInfo.h>
+#include <clang/Basic/Version.inc>
 #include <clang/Frontend/ASTUnit.h>
 CC_DIAGNOSTIC_POP()
 
@@ -242,7 +244,6 @@ void clang_c_languaget::build_compiler_args(
   for (auto const &inc : config.ansi_c.warnings)
     compiler_args.push_back("-W" + inc);
 
-  compiler_args.emplace_back("-D__ESBMC_alloca=__builtin_alloca");
 
   // Lets a source tree tell an ESBMC run from an ordinary compile, and gates
   // include/esbmc.h so including it anywhere else is an error rather than a
@@ -355,6 +356,16 @@ static bool ast_failed(const std::unique_ptr<clang::ASTUnit> &unit)
   return !unit || unit->getDiagnostics().hasErrorOccurred();
 }
 
+static unsigned bitint_max_align(const clang::TargetInfo &target)
+{
+#if CLANG_VERSION_MAJOR >= 19
+  return target.getBitIntMaxAlign();
+#else
+  // Before clang 19, _BitInt alignment was capped at that of long long.
+  return target.getLongLongAlign();
+#endif
+}
+
 bool clang_c_languaget::parse(const std::string &path)
 {
   // preprocessing
@@ -444,6 +455,12 @@ bool clang_c_languaget::parse(const std::string &path)
     AST = std::move(newAST);
   else
     mergeASTs(newAST, AST);
+
+  const clang::TargetInfo &target = AST->getASTContext().getTargetInfo();
+  config.ansi_c.long_long_align = target.getLongLongAlign() / 8;
+  config.ansi_c.double_align = target.getDoubleAlign() / 8;
+  config.ansi_c.long_double_align = target.getLongDoubleAlign() / 8;
+  config.ansi_c.bitint_max_align = bitint_max_align(target) / 8;
 
   return false;
 }
@@ -576,6 +593,9 @@ extern __SIZE_TYPE__ __ESBMC_alloc_size[1];
 
 // Get object size
 __SIZE_TYPE__ __ESBMC_get_object_size(const void *);
+
+// alloca whose storage outlives the calling function, for the models
+void *__ESBMC_alloca(__SIZE_TYPE__);
 
 /* CBMC memory primitives (esbmc/esbmc#2457). Without these declarations the
  * names are implicitly declared as int-returning functions and havoc'd, so a
@@ -795,6 +815,19 @@ void __ESBMC_unroll(int);
 void __ESBMC_requires(_Bool);
 void __ESBMC_ensures(_Bool);
 int __ESBMC_return_value;
+/* Cumulative stack bits charged to contract-replaced (summarised) callees.
+ * When a contract clause constrains it, each --replace-call-with-contract site
+ * adds the callee's real frame size, the same per-local bit count ESBMC charges
+ * natively at DECL (framet::grow_stack_frame). Usable in __ESBMC_requires /
+ * __ESBMC_ensures like any ghost; __ESBMC_old() over it works unchanged.
+ * Zero-initialised. */
+__UINT64_TYPE__ __ESBMC_stack_used;
+/* The current contract function's frame size in bits, substituted by the
+ * contract engine with the exact amount charged to __ESBMC_stack_used on entry.
+ * Lets a contract scale a depth bound by the real per-frame size with no
+ * hand-written byte literal. Only meaningful inside __ESBMC_requires /
+ * __ESBMC_ensures of an enforced or replaced function. */
+__UINT64_TYPE__ __ESBMC_frame_size;
 void* __ESBMC_old_raw(void*);
 #define __ESBMC_old(x) (*(__typeof__(x)*)__ESBMC_old_raw((void*)(&(x))))
 #define __ESBMC_and(a, b) ((a) & (b))

@@ -59,7 +59,7 @@ const backendt *find_backend(const std::string &name)
 {
   log_error(
     "The {} solver has not been built into this version of ESBMC, sorry", name);
-  abort();
+  exit(6);
 }
 
 /** The solver the user asked for, or "" if they did not. The flags are

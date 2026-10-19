@@ -92,13 +92,13 @@ SCENARIO(
     // overflow_cast(x, bits) asks whether x lies in [0, 2^bits - 1]. The SMT
     // lowering built that bound in the operand's own type, where at equal
     // widths a signed operand wraps it to -1 and the check becomes a tautology
-    // (#7324). Only a unit test reaches the shape: goto_check builds it with
-    // bits == width solely under --ir, where the constant does not wrap.
-    THEN("32 bits over an int32 reduces to the sign test")
+    // (#7324). goto_check builds that shape solely under --ir, for a cast to
+    // the operand's own signed type, so it tests the type's range (#8661).
+    THEN("32 bits over an int32 never overflows a bitvector")
     {
       REQUIRE(
         check_simplification_equivalence(
-          overflow_cast2tc(x, 32), lessthan2tc(x, zero), ns, options) ==
+          overflow_cast2tc(x, 32), gen_false_expr(), ns, options) ==
         simplification_equivalencet::equivalent);
     }
     THEN("8 bits over an int32 still catches a value that does not fit")

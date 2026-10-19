@@ -4,6 +4,7 @@
 #include "iterator"
 #include "tuple"
 #include "utility"
+#include "stdexcept"
 
 #if __cplusplus >= 201703L
 #  define __ESBMC_ARRAY_CONSTEXPR_17 constexpr
@@ -53,14 +54,16 @@ struct array
     return elems[index];
   }
 
+  // [array.overview]: at throws out_of_range; a single return keeps the const
+  // overload a valid C++11 constexpr function.
   __ESBMC_ARRAY_CONSTEXPR_17 reference at(size_type index)
   {
-    return elems[index];
+    return index < N ? elems[index] : (throw std::out_of_range(), elems[0]);
   }
 
   constexpr const_reference at(size_type index) const
   {
-    return elems[index];
+    return index < N ? elems[index] : (throw std::out_of_range(), elems[0]);
   }
 
   constexpr size_type size() const noexcept

@@ -115,6 +115,25 @@ exprt python_list::build_list_at_call(
   // execution step purely to prove what the index's type already guarantees.
   const bool index_may_be_negative = !index.type().is_unsignedbv();
 
+  // A contract clause lowers to one ASSUME/ASSERT, which can hold neither the
+  // size call nor the IndexError branch below (#7629). An index out of range
+  // selects NULL, whose dereference the pointer checks report.
+  if (converter_.in_contract_clause() && list.type().is_pointer())
+  {
+    const exprt size = build_deref_member(list, "size", size_type());
+    exprt position = build_typecast(index, size_type());
+    if (index_may_be_negative)
+      position = build_if(
+        build_less_than(index, gen_zero(index.type())),
+        build_add(size, position, size_type()),
+        position);
+    const exprt items = build_deref_member(list, "items", obj_type);
+    return build_if(
+      build_less_than(position, size),
+      build_add(items, position, obj_type),
+      gen_zero(obj_type));
+  }
+
   // A discarded type probe only reads this call's type, and the real RHS
   // build re-emits the whole check; normalizing here would emit a second
   // __ESBMC_list_size call and IndexError guard per subscript assignment.
@@ -206,10 +225,37 @@ exprt python_list::build_list_at_call(
   return list_at_call;
 }
 
+// The mixed-numeric read dereferences the element three times (type_id,
+// float_idx, value), so bind the __ESBMC_list_at result to a temp first and
+// evaluate the access once instead of three times on the hot path. A contract
+// clause cannot hold the temp, so it reads the element three times instead.
+exprt python_list::bind_list_element(const exprt &list_at_call)
+{
+  if (converter_.in_contract_clause())
+    return list_at_call;
+
+  const locationt loc = converter_.get_location_from_decl(list_value_);
+  symbolt &elem_obj = converter_.create_tmp_symbol(
+    list_value_,
+    "$list_elem_obj$",
+    pointer_typet(converter_.get_type_handler().get_list_element_type()),
+    exprt());
+  code_declt obj_decl(build_symbol(elem_obj));
+  obj_decl.location() = loc;
+  converter_.add_instruction(obj_decl);
+  code_assignt obj_assign(build_symbol(elem_obj), list_at_call);
+  obj_assign.location() = loc;
+  converter_.add_instruction(obj_assign);
+  return build_symbol(elem_obj);
+}
+
 exprt python_list::index(const exprt &array, const nlohmann::json &slice_node)
 {
   if (slice_node["_type"] == "Slice") // arr[lower:upper]
   {
+    if (type_utils::is_numpy_string_array(array.type()))
+      throw std::runtime_error(
+        "TypeError: slicing a numpy string array is not supported");
     return handle_range_slice(array, slice_node);
   }
   else
@@ -5276,25 +5322,8 @@ exprt python_list::handle_index_access(
     // Build list access and cast result
     exprt list_at_call = build_list_at_call(array, pos_expr, list_value_);
 
-    // The mixed-numeric read dereferences the element three times (type_id,
-    // float_idx, value), so bind the __ESBMC_list_at result to a temp first and
-    // evaluate the access once instead of three times on the hot path.
     if (dispatch_numeric)
-    {
-      const locationt loc = converter_.get_location_from_decl(list_value_);
-      symbolt &elem_obj = converter_.create_tmp_symbol(
-        list_value_,
-        "$list_elem_obj$",
-        pointer_typet(converter_.get_type_handler().get_list_element_type()),
-        exprt());
-      code_declt obj_decl(build_symbol(elem_obj));
-      obj_decl.location() = loc;
-      converter_.add_instruction(obj_decl);
-      code_assignt obj_assign(build_symbol(elem_obj), list_at_call);
-      obj_assign.location() = loc;
-      converter_.add_instruction(obj_assign);
-      list_at_call = build_symbol(elem_obj);
-    }
+      list_at_call = bind_list_element(list_at_call);
 
     // Extract and dereference PyObject value. string_safe: a subscript read is
     // value-context (assigned to the target), so an any_type string element may

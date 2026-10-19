@@ -8,6 +8,7 @@
 #include <python-frontend/module/global_scope.h>
 #include <python-frontend/python-dict/python_dict_handler.h>
 #include <python-frontend/dynamic_type/dynamic_type_handler.h>
+#include <python-frontend/dynamic_type/literal_divergence.h>
 #include <python-frontend/math/python_math.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/type/element_type_registry.h>
@@ -164,6 +165,11 @@ public:
   /// Unknown, function or class-instance types: a call on such a value may
   /// succeed.
   bool may_be_callable(const typet &type);
+  exprt not_callable_function(
+    const typet &function,
+    const typet &value,
+    const locationt &location);
+  void decay_function_choice(exprt &then, exprt &else_expr);
 
   typet get_type_from_annotation(
     const nlohmann::json &annotation_node,
@@ -393,6 +399,16 @@ public:
     const nlohmann::json &element,
     const std::string &prefix);
 
+  /// Before an access to `var_name.attr_name` through a class pointer that
+  /// may be None, raises AttributeError when it is, as CPython does. Planted
+  /// only where the read runs exactly when the statement does, so never in an
+  /// and/or tail or a while test, whose reads are left as before.
+  void guard_attribute_on_none(
+    const symbolt &symbol,
+    const std::string &var_name,
+    const std::string &attr_name,
+    const nlohmann::json &element);
+
   void emit_guarded_raise(
     const exprt &cond,
     const std::string &exception,
@@ -527,6 +543,10 @@ public:
   {
     return in_contract_clause_;
   }
+  size_t current_block_statement_count() const
+  {
+    return current_block ? current_block->operands().size() : 0;
+  }
 
   /// The class a variable was last assigned as a value (`x = int`), or null.
   /// Kept here rather than read back from the symbol's value, which the IREP2
@@ -601,6 +621,13 @@ private:
   get_return_statements(const nlohmann::json &ast_node, codet &target_block);
 
   void get_function_definition(const nlohmann::json &function_node);
+
+  /// Before a call through `callee`, whose function type is unknown, refuses
+  /// the path where it holds a top-level function taking a different number
+  /// of parameters than @p call passes: such a call fills no defaults and
+  /// raises no TypeError.
+  void
+  refuse_mismatched_callees(const exprt &callee, const nlohmann::json &call);
 
   exprt get_function_body_or_unsupported(const nlohmann::json &function_node);
 
@@ -795,6 +822,18 @@ private:
   std::string create_normalized_self_key(const std::string &class_tag);
 
   std::string extract_class_name_from_tag(const std::string &tag_name);
+
+  /// The number bindings of `name` in the scope being converted that are
+  /// live at line `before`: the ones that reach it, or with `include_later`
+  /// also the ones that share its storage further on.
+  std::vector<dynamic_type_detail::numeric_bindingt> scope_numeric_bindings(
+    const std::string &name,
+    int before,
+    bool include_later) const;
+
+  void reject_inexact_number_join(
+    const nlohmann::json &element,
+    const exprt &expr) const;
 
   // The class name `t` names, or empty when it is neither a struct nor a
   // `tag-<Class>` symbol reference.
@@ -2113,6 +2152,8 @@ private:
   bool takes_numpy_view_argument(const nlohmann::json &call, std::size_t index);
   bool is_rank1_numpy_view(const nlohmann::json &node) const;
   bool is_rank1_numpy_array_name(const nlohmann::json &node) const;
+  void reject_builtin_over_complex_array(const nlohmann::json &node) const;
+  bool is_foldable_constant_index(const exprt &expr) const;
   bool adapt_numpy_view_builtin_arguments(nlohmann::json &node);
   std::optional<nlohmann::json>
   inline_numpy_view_lambda_call(const nlohmann::json &call);
@@ -2590,6 +2631,10 @@ private:
     const exprt &rhs,
     const nlohmann::json &ast_node,
     bool is_ctor_call);
+  void widen_int_target_for_float_call(
+    exprt &lhs,
+    const exprt &rhs,
+    bool is_ctor_call);
   void handle_function_call_rhs(
     const nlohmann::json &ast_node,
     symbolt *lhs_symbol,
@@ -2912,6 +2957,10 @@ private:
 
   /// Handle Optional value access
   exprt materialize_optional(const exprt &expr, const nlohmann::json &element);
+  exprt check_float_fits_int_return(
+    const nlohmann::json &ast_node,
+    const exprt &value,
+    codet &target_block);
   exprt coerce_optional_return(
     const exprt &value,
     const locationt &location,
@@ -2998,11 +3047,14 @@ private:
   namespacet ns;
   typet current_element_type;
   typet current_func_return_type_;
+  /// Whether the program annotates the current function `-> int`.
+  bool current_func_annotated_int_ = false;
   /// The target of a ternary that is itself a return value; see
   /// optional_ternary_type.
   typet ternary_return_target_;
   std::string main_python_file;
   std::string current_python_file;
+  size_t not_callable_count_ = 0;
   nlohmann::json imported_module_json;
   std::string current_func_name_;
   std::string current_class_name_;
@@ -3160,6 +3212,9 @@ private:
   /// literal or a name) shares; nothing when a stored value is not a function.
   std::optional<typet>
   dict_function_return_type(const nlohmann::json &container);
+  bool dict_values(
+    const nlohmann::json &container,
+    std::vector<nlohmann::json> &out);
   typet subscript_call_return_type(
     const exprt &func_ptr,
     const nlohmann::json &func_node);
@@ -3418,6 +3473,9 @@ private:
   bool is_importing_module = false;
   bool base_ctor_called = false;
   bool build_static_lists = false;
+  /// The element type a numpy constructor's dtype= gives the static array
+  /// get_static_array builds; empty when the literal's own type is used.
+  typet numpy_element_type;
 
   /// List symbols passed as an argument to a function/method call, keyed by
   /// symbol id. Such a list may have been mutated (e.g. appended to) by the

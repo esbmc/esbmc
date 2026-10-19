@@ -17,6 +17,11 @@ endif()
 # so the test that pinned ESBMC's copy went with the smtlib backend -- and with
 # it upstream's oneshot_verdict_test, which linked that library.
 
+# Solving under assumptions, which the transition-system BMC engine keys its
+# queries on. Every camada backend answers them, so whichever is built serves.
+new_unit_test(solver_assumptions_test "solver_assumptions.test.cpp"
+              "solvers;util_esbmc;filesystem;bigint")
+
 # The array and tuple flatteners went with fp_convt: camada encodes both
 # itself, natively or lowered (ArrayEncoding::Ackermann, TupleEncoding::Camada),
 # so the test that pinned array_convt's bounded select/store went with it.

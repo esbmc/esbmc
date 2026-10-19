@@ -543,14 +543,9 @@ static unsigned sort_fp_sw(smt_sortt s)
 
 } // namespace
 
-smt_resultt smt_solver_baset::dec_solve()
+static smt_resultt to_smt_result(camada::CheckResult r)
 {
-  if (oneshot)
-    return oneshot_dec_solve();
-
-  pre_solve();
-
-  switch (solver->check())
+  switch (r)
   {
   case camada::CheckResult::SAT:
     return P_SATISFIABLE;
@@ -560,6 +555,22 @@ smt_resultt smt_solver_baset::dec_solve()
     return P_ERROR;
   }
   std::unreachable();
+}
+
+smt_resultt smt_solver_baset::dec_solve()
+{
+  if (oneshot)
+    return oneshot_dec_solve();
+
+  pre_solve();
+  return to_smt_result(solver->check());
+}
+
+smt_resultt smt_solver_baset::dec_solve_assuming(const ast_vec &assumptions)
+{
+  assert(supports_assumptions());
+  pre_solve();
+  return to_smt_result(solver->checkSatAssuming(assumptions));
 }
 
 /* The one-shot solver answers with a verdict and then exits, so it cannot

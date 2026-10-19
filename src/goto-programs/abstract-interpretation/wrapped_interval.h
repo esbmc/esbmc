@@ -187,10 +187,10 @@ public:
 
     auto mod = get_upper_bound();
     assert(mod != 0);
-    auto card = (((*upper - *lower) % mod) + 1);
+    auto card = (*upper - *lower) % mod;
     if (card < 0)
       card += mod;
-    return card;
+    return card + 1;
   }
 
   bool contains(const BigInt &e) const override
@@ -228,6 +228,15 @@ public:
     wrapped_interval result(s.t);
     if (complement(s).is_included(t))
     {
+      return result;
+    }
+
+    // t overlaps the start of s, so the union runs from t's start to s's end;
+    // [s.lower, t.upper] would drop the part of s past t.upper (#8209).
+    if (t.contains(*s.lower) && s.contains(*t.upper))
+    {
+      result.lower = t.lower;
+      result.upper = s.upper;
       return result;
     }
 
@@ -282,8 +291,9 @@ public:
 
     for (unsigned i = 0; i < r.size(); ++i)
     {
-      if (
-        r[i].is_top() || (wrapped_le(*(r[i].upper), 0, *(r[i].lower), r[i].t)))
+      // Crossing the south pole means wrapping from 1^w to 0^w; a singleton
+      // does not, and seeding f with it opens a gap later operands cover.
+      if (r[i].is_top() || *r[i].upper < *r[i].lower)
       {
         f = extend(f, r[i]);
       }

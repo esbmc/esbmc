@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cstdlib>
 #include <irep2/irep2_utils.h>
 #include <irep2/irep2_type.h>
 #include <util/arith/arith_tools.h>
@@ -620,6 +621,46 @@ std::size_t ext_int_representation_bytes(const typet &type)
   return result;
 }
 
+/// An array, or a _Complex T, which is laid out as T[2] (C17 6.2.5p13).
+static bool aligns_as_subtype(const typet &type)
+{
+  return type.id() == typet::t_array || type.id() == typet::t_complex;
+}
+
+/// An 8-byte or wider scalar takes the target's ABI alignment when the C
+/// frontend recorded one, which may be below its size (i386, #8694).
+static BigInt abi_scalar_alignment(const typet &type, const BigInt &natural)
+{
+  const configt::ansi_ct &c = config.ansi_c;
+  const unsigned width = atoi(type.width().as_string().c_str());
+  unsigned abi = 0;
+  if (type.id() == typet::t_floatbv)
+    abi = width == c.double_width        ? c.double_align
+          : width == c.long_double_width ? c.long_double_align
+                                         : 0;
+  else if (
+    (type.id() == typet::t_signedbv || type.id() == typet::t_unsignedbv) &&
+    width == c.long_long_int_width)
+    abi = c.long_long_align;
+  return abi != 0 && abi < natural ? BigInt(abi) : natural;
+}
+
+/// A _BitInt aligns like the smallest integer holding it, capped by the
+/// target (#8692).
+static BigInt bitint_alignment(const typet &type)
+{
+  const std::size_t natural = ext_int_representation_bytes(type);
+  const unsigned cap = config.ansi_c.bitint_max_align;
+  return cap != 0 && cap < natural ? BigInt(cap) : BigInt(natural);
+}
+
+BigInt access_alignment(const BigInt &bytes)
+{
+  const configt::ansi_ct &c = config.ansi_c;
+  const unsigned abi = std::max(c.long_long_align, c.double_align);
+  return bytes == 8 && abi != 0 && abi < 8 ? BigInt(abi) : bytes;
+}
+
 BigInt alignment(const typet &type, const namespacet &ns)
 {
   // we need to consider a number of different cases:
@@ -654,7 +695,7 @@ BigInt alignment(const typet &type, const namespacet &ns)
   // compute default
   BigInt result = 0;
 
-  if (type.id() == typet::t_array)
+  if (aligns_as_subtype(type))
     result = alignment(type.subtype(), ns);
   else if (type.id() == typet::t_struct || type.id() == typet::t_union)
   {
@@ -671,7 +712,7 @@ BigInt alignment(const typet &type, const namespacet &ns)
     result = alignment(type.subtype(), ns);
   }
   else if (type.get_bool("#extint"))
-    result = ext_int_representation_bytes(type);
+    result = bitint_alignment(type);
   else if (
     type.id() == typet::t_unsignedbv || type.id() == typet::t_signedbv ||
     type.id() == typet::t_fixedbv || type.id() == typet::t_floatbv ||
@@ -679,6 +720,7 @@ BigInt alignment(const typet &type, const namespacet &ns)
   {
     type2tc thetype = migrate_type(type);
     result = type_byte_size(thetype);
+    result = abi_scalar_alignment(type, result);
   }
   else if (type.id() == typet::t_symbol)
     result = alignment(ns.follow(type), ns);

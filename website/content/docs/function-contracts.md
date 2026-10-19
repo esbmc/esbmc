@@ -367,6 +367,63 @@ esbmc tlv.c --replace-call-with-contract "*"
 Each function is analyzed once, independently. The cost of re-unrolling the same
 callee at every call site is eliminated.
 
+## Recursion depth and stack exhaustion
+
+A recursive function whose depth is driven by input can exhaust the stack
+(CWE-674). Proving a bound on it normally needs the recursion unwound to its
+maximum depth, which does not scale when that depth is keyed to an attacker's
+input. Contracts avoid the unwinding, through two built-ins:
+
+- `__ESBMC_stack_used` — a ghost holding the cumulative stack size, in bits, of
+  the recursive frames on the current path. Use it in `__ESBMC_requires`,
+  `__ESBMC_ensures` and `__ESBMC_old` like any other global.
+- `__ESBMC_frame_size` — the current function's own frame size in bits,
+  substituted by the engine with the exact amount it charges to
+  `__ESBMC_stack_used` on entry. It is the same per-frame byte count ESBMC's
+  `--stack-limit` accounting uses, so you never write a byte literal.
+
+On entry to an enforced function the engine charges `__ESBMC_stack_used` by that
+function's real frame size. At a contract-replaced recursive call it havocs the
+ghost, so the callee's `ensures` is the only thing that bounds it, and the whole
+folded subtree is admitted without unwinding.
+
+```c
+static void descend(unsigned len)
+{
+    char buf[1024];
+    buf[0] = 0;
+    /* descend(len) enters len/2 + 1 frames; the engine supplies the per-frame
+     * size, you supply how depth follows the input. */
+    __ESBMC_ensures(
+        __ESBMC_stack_used <=
+        __ESBMC_old(__ESBMC_stack_used) + (len / 2u + 1u) * __ESBMC_frame_size);
+    if (len < 2)
+        return;
+    descend(len - 2);
+}
+
+int main(void)
+{
+    unsigned len = nondet_uint();
+    __ESBMC_assume(len <= 65535u);
+    descend(len);
+    __ESBMC_assert(__ESBMC_stack_used <= 1000000u, "stack budget");
+    return 0;
+}
+```
+
+```bash
+esbmc descend.c --enforce-contract descend --replace-call-with-contract descend
+```
+
+The `ensures` is proven compositionally (one level), and the top-level budget
+assert fails for a large enough `len`, pinpointing the stack-exhaustion path
+with no `--unwind`. Bounding `len` instead (`__ESBMC_assume(len <= 4)`) makes the
+same budget hold, so the check tells a bounded recursion from an unbounded one.
+
+The depth-to-input relation (here `len / 2 + 1`) is your inductive invariant;
+the engine supplies the byte-accurate per-frame size and does the accounting.
+
 ## Loop contracts and the frame rule
 
 `__ESBMC_loop_assigns` and `--loop-frame-rule` extend loop invariants with a
@@ -548,6 +605,8 @@ available in Python.
 | `__ESBMC_return_value`          | Inside `ensures`       | Return value of the function          |
 | `__ESBMC_old(expr)`             | Inside `ensures`       | Value of `expr` at function entry     |
 | `__ESBMC_is_fresh(ptr, size)`   | `requires` / `ensures` | Memory freshness                      |
+| `__ESBMC_stack_used`            | `requires` / `ensures` | Cumulative recursive-frame stack, bits |
+| `__ESBMC_frame_size`            | `requires` / `ensures` | This function's frame size, bits       |
 | `__ESBMC_forall(&var, body)`    | `requires` / `ensures` | Universal quantifier (needs `--z3`)   |
 | `__ESBMC_exists(&var, body)`    | `requires` / `ensures` | Existential quantifier (needs `--z3`) |
 | `__ESBMC_loop_invariant(cond)`  | Before loop            | Loop invariant                        |

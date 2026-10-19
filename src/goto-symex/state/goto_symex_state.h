@@ -213,6 +213,9 @@ public:
     variable_name_sett declaration_history;
     /** Set of local variable l1 names. */
     variable_name_sett local_variables;
+    /** Pointers returned by alloca in this frame; their objects die when the
+     *  frame returns, not at the end of the enclosing block (alloca(3)). */
+    std::vector<expr2tc> alloca_objects;
 
     /** Record the first va_args index used in this function call, if any,
      *  otherwise UINT_MAX

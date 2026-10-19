@@ -328,20 +328,23 @@ smt_astt smt_solver_baset::overflow_cast(const expr2tc &expr)
   if (is_bool_type(ocast.operand->type))
     return solver->mkBool(false);
 
-  // Define unsigned bounds for the destination width
-  expr2tc lower_bound = constant_int2tc(ocast.operand->type, 0);
-
   /* 2^bits - 1 has to be representable in the operand's type. At equal widths
    * a signed operand cannot hold it, and constant_int2tc wraps it to -1, which
-   * leaves `operand < 0 || operand > -1` -- a tautology. A bound the type
-   * cannot reach is never exceeded, so clamp it to the type's own max (#7324).
+   * leaves `operand < 0 || operand > -1` -- a tautology. That shape comes only
+   * from --ir, where goto_check passes the cast itself, so the destination is
+   * the operand's own signed type: test against its range (#7324, #8661).
    */
   const BigInt type_max = type_max_value(ocast.operand->type);
-  BigInt bound = BigInt::power2(dst_width) - 1;
-  if (bound > type_max)
-    bound = type_max;
+  BigInt lower = 0;
+  BigInt upper = BigInt::power2(dst_width) - 1;
+  if (upper > type_max)
+  {
+    lower = -type_max - 1;
+    upper = type_max;
+  }
 
-  expr2tc upper_bound = constant_int2tc(ocast.operand->type, bound);
+  expr2tc lower_bound = constant_int2tc(ocast.operand->type, lower);
+  expr2tc upper_bound = constant_int2tc(ocast.operand->type, upper);
 
   // Check if the operand is within bounds
   expr2tc overflow_check = or2tc(

@@ -23,6 +23,25 @@ smt_resultt smt_convt::dec_solve()
   return solver_impl->dec_solve();
 }
 
+smt_resultt
+smt_convt::dec_solve_assuming(const std::vector<expr2tc> &assumptions)
+{
+  smt_solver_baset::ast_vec asts;
+  for (const expr2tc &a : assumptions)
+    asts.push_back(solver_impl->convert_ast(a));
+  return solver_impl->dec_solve_assuming(asts);
+}
+
+void smt_convt::define(const expr2tc &expr)
+{
+  solver_impl->define(expr);
+}
+
+bool smt_convt::supports_assumptions() const
+{
+  return solver_impl->supports_assumptions();
+}
+
 void smt_convt::pre_solve()
 {
   solver_impl->pre_solve();

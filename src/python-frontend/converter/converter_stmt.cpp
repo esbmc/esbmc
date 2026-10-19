@@ -4834,6 +4834,57 @@ symbolt *python_converter::create_symbol_for_unannotated_assign(
   return symbol_table_.move_symbol_to_context(symbol);
 }
 
+/// A function with `function`'s type whose only effect is to raise the
+/// TypeError CPython raises on calling a `value`-typed object (#8475).
+exprt python_converter::not_callable_function(
+  const typet &function,
+  const typet &value,
+  const locationt &location)
+{
+  const std::string name =
+    "$not_callable$" + std::to_string(++not_callable_count_);
+  symbolt symbol = create_symbol(
+    current_python_file,
+    name,
+    "py:" + current_python_file + "@F@" + name,
+    location,
+    function);
+  code_blockt body;
+  body.copy_to_operands(code_expressiont(
+    get_exception_handler().gen_exception_raise(
+      "TypeError",
+      "'" + type_handler_.type_to_string(value) + "' object is not callable")));
+  symbol.set_value(body);
+  return symbol_expr(*symbol_table_.move_symbol_to_context(symbol));
+}
+
+/// A choice between two functions of one type is a pointer to either. The
+/// result of a choice between types would have no single type (#8404). An
+/// arm that cannot be called becomes a function that raises when it is.
+void python_converter::decay_function_choice(exprt &then, exprt &else_expr)
+{
+  if (
+    then.type().is_code() && then.is_symbol() &&
+    !may_be_callable(else_expr.type()))
+    else_expr = not_callable_function(
+      then.type(), else_expr.type(), else_expr.location());
+  else if (
+    else_expr.type().is_code() && else_expr.is_symbol() &&
+    !may_be_callable(then.type()))
+    then =
+      not_callable_function(else_expr.type(), then.type(), then.location());
+  if (
+    !then.type().is_code() || !else_expr.type().is_code() ||
+    !then.is_symbol() || !else_expr.is_symbol())
+    return;
+  if (then.type() != else_expr.type())
+    throw std::runtime_error(
+      "a conditional expression choosing between functions of different "
+      "types is not supported");
+  then = python_expr::decay_function_to_pointer(then);
+  else_expr = python_expr::decay_function_to_pointer(else_expr);
+}
+
 /// The bare name an AST node denotes: `id` for a Name, `attr` for an Attribute
 /// -- a qualified `module.Class`, which is what a base inherited from an
 /// operational model looks like. \p fallback covers any other shape.
@@ -4928,6 +4979,22 @@ void python_converter::copy_elem_types_from_reordering_builtin(
   copy_homogeneous_elem_types(element_type_registry_, src, lhs_id);
 }
 
+// A float returned into an int-typed name widens the name, as a float
+// expression assigned to it does in adjust_statement_types. Binding the call's
+// result to the int slot would truncate it (#8417).
+void python_converter::widen_int_target_for_float_call(
+  exprt &lhs,
+  const exprt &rhs,
+  bool is_ctor_call)
+{
+  if (
+    is_ctor_call || !lhs.is_symbol() || !rhs.type().is_floatbv() ||
+    !type_utils::is_integer_type(lhs.type()))
+    return;
+  lhs.type() = rhs.type();
+  update_symbol(lhs);
+}
+
 void python_converter::handle_function_call_rhs(
   const nlohmann::json &ast_node,
   symbolt *lhs_symbol,
@@ -5016,6 +5083,8 @@ void python_converter::handle_function_call_rhs(
     lhs.type() = rhs.type();
     lhs_symbol->set_type(migrate_type(rhs.type()));
   }
+
+  widen_int_target_for_float_call(lhs, rhs, is_ctor_call);
 
   // Set return destination
   if (rhs.type().is_pointer() && !is_ctor_call)
@@ -6120,7 +6189,7 @@ python_converter::instantiated_class(const nlohmann::json &value) const
   return json_utils::is_class(name, *ast_json) ? name : "";
 }
 
-static bool ctor_arms_share_class(
+static bool ctor_arms_are_spellable(
   const nlohmann::json &ifexp,
   const std::string &then_class,
   const std::string &else_class)
@@ -6133,7 +6202,7 @@ static bool ctor_arms_share_class(
     return is_none(ifexp["body"]);
   if (else_class.empty())
     return is_none(ifexp["orelse"]);
-  return then_class == else_class;
+  return true;
 }
 
 bool python_converter::ternary_needs_if_spelling(
@@ -6149,11 +6218,12 @@ bool python_converter::ternary_needs_if_spelling(
       dynamic_type_detail::classify_literal_value_kind(ifexp["orelse"]);
     return !then_kind.empty() && !else_kind.empty() && then_kind != else_kind;
   }
-  if (!ctor_arms_share_class(ifexp, then_class, else_class))
-    // A method call on the target would dispatch on one class only (#8408).
+  // Arms constructing different classes are spelled as `if` too, where the
+  // preprocessor refuses what would resolve against one class only (#8408).
+  if (!ctor_arms_are_spellable(ifexp, then_class, else_class))
     throw std::runtime_error(
-      "a conditional expression instantiating a class must pick that class "
-      "or None in its other branch");
+      "a conditional expression instantiating a class must pick a class or "
+      "None in its other branch");
   return true;
 }
 
@@ -6264,6 +6334,26 @@ bool python_converter::try_dedicated_assign(
   return rewrite_divergent_conditional_assign(ast_node, block) ||
          try_tagged_var_assign(ast_node, block) ||
          try_bound_method_store(ast_node, block);
+}
+
+// NumPy truncates a string stored into a fixed-width string array to the
+// array's width and pads it with NULs.
+static void fit_numpy_string_store(const exprt &lhs, exprt &rhs)
+{
+  if (
+    lhs.id() != "index" || !lhs.type().is_array() || !rhs.type().is_array() ||
+    lhs.type().subtype() != char_type() ||
+    rhs.type().subtype() != char_type() || lhs.type() == rhs.type())
+    return;
+  if (!rhs.is_constant())
+    throw std::runtime_error(
+      "TypeError: storing a non-literal string of another width into a numpy "
+      "string array is not supported");
+  exprt fitted = gen_zero(lhs.type());
+  const std::size_t width = fitted.operands().size() - 1;
+  for (std::size_t i = 0; i < width && i < rhs.operands().size(); ++i)
+    fitted.operands()[i] = rhs.operands()[i];
+  rhs = fitted;
 }
 
 void python_converter::get_var_assign(
@@ -6929,6 +7019,7 @@ void python_converter::get_var_assign(
 
     // Handle string literal conversion
     rhs = handle_string_literal_rhs(effective_ast_node, lhs_type, rhs);
+    fit_numpy_string_store(lhs, rhs);
   }
 
   if (converted_value && rhs != exprt("_init_undefined"))
@@ -8485,6 +8576,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     // that migration to irep2 preserves the correct return type in if2t.
     then = to_value_expr(then, ns);
     else_expr = to_value_expr(else_expr, ns);
+    decay_function_choice(then, else_expr);
 
     bool then_is_none = (then.type() == none_type());
     bool else_is_none = (else_expr.type() == none_type());
@@ -8732,6 +8824,39 @@ bool python_converter::reject_or_defer_numpy_view_name_return(
   return true;
 }
 
+// Python does not enforce `-> int`: the caller sees the float itself, which
+// the int return slot holds only when it is finite and integral (#1966).
+exprt python_converter::check_float_fits_int_return(
+  const nlohmann::json &ast_node,
+  const exprt &value,
+  codet &target_block)
+{
+  if (!current_func_annotated_int_ || !value.type().is_floatbv())
+    return value;
+
+  const locationt location = get_location_from_decl(ast_node);
+  symbolt &tmp =
+    create_tmp_symbol(ast_node, "$int_return$", value.type(), exprt());
+  const exprt result = symbol_expr(tmp);
+  code_declt decl(result);
+  decl.location() = location;
+  target_block.copy_to_operands(decl);
+  code_assignt assign(result, value);
+  assign.location() = location;
+  target_block.copy_to_operands(assign);
+
+  const exprt round_trip = typecast_exprt(
+    typecast_exprt(result, current_func_return_type_), value.type());
+  code_assertt check(equality_exprt(round_trip, result));
+  check.location() = location;
+  check.location().user_provided(true);
+  check.location().comment(
+    "a function annotated to return int returns a float that int cannot "
+    "hold; not modelled");
+  target_block.copy_to_operands(check);
+  return result;
+}
+
 void python_converter::get_return_statements(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -8914,6 +9039,7 @@ void python_converter::get_return_statements(
     }
 
     coerce_to_tagged_return(ret_expr);
+    ret_expr = check_float_fits_int_return(ast_node, ret_expr, target_block);
 
     // Return the temporary variable
     code_returnt return_code;
@@ -8996,6 +9122,8 @@ void python_converter::get_return_statements(
     return_value = coerce_optional_return(return_value, location, target_block);
 
     coerce_to_tagged_return(return_value);
+    return_value =
+      check_float_fits_int_return(ast_node, return_value, target_block);
 
     code_returnt return_code;
     return_code.return_value() = return_value;
@@ -9437,17 +9565,55 @@ exprt python_converter::get_block(
   return block;
 }
 
+// The shape of the literal @p arr with @p element at its leaves.
+static typet numpy_typed_shape(
+  const type_handler &types,
+  const nlohmann::json &arr,
+  const typet &element)
+{
+  const auto &elts = arr["elts"];
+  const bool nested =
+    !elts.empty() && elts[0].value("_type", std::string()) == "List";
+  return types.build_array(
+    nested ? numpy_typed_shape(types, elts[0], element) : element, elts.size());
+}
+
+// @p value stored as an element of type @p element: a cast for a number, and
+// NUL padding to the array's fixed width for a string.
+static exprt as_numpy_element(const exprt &value, const typet &element)
+{
+  if (value.type() == element || !element.is_array())
+    return value.type() == element ? value : typecast_exprt(value, element);
+  exprt padded = gen_zero(element);
+  if (value.type().is_array() && !value.is_constant())
+    throw std::runtime_error(
+      "TypeError: a numpy string element must be a literal");
+  if (!value.type().is_array())
+  {
+    padded.operands().at(0) = typecast_exprt(value, element.subtype());
+    return padded;
+  }
+  for (std::size_t i = 0; i < value.operands().size(); ++i)
+    padded.operands().at(i) = value.operands()[i];
+  return padded;
+}
+
 exprt python_converter::get_static_array(
   const nlohmann::json &arr,
-  const typet &shape)
+  const typet &literal_shape)
 {
-  exprt zero = gen_zero(size_type());
+  const bool typed = !numpy_element_type.id().empty();
+  const typet shape =
+    typed ? numpy_typed_shape(type_handler_, arr, numpy_element_type)
+          : literal_shape;
   exprt list = gen_zero(shape);
 
   unsigned int i = 0;
   for (auto &e : arr["elts"])
   {
     exprt element_expr = get_expr(e);
+    if (typed && e.value("_type", "") != "List")
+      element_expr = as_numpy_element(element_expr, shape.subtype());
     list.operands().at(i++) = element_expr;
   }
 
