@@ -1098,6 +1098,13 @@ python_converter::numpy_shape_from_indexed_decl(const std::string &name) const
   return numpy_subscript_shape(*source_shape, decl["value"]["slice"]);
 }
 
+// The attributes numpy_shape_attr_expr answers; any other one, such as a
+// complex element's .imag, is not a shape.
+static bool is_numpy_shape_attribute(const std::string &attr_name)
+{
+  return attr_name == "shape" || attr_name == "ndim" || attr_name == "size";
+}
+
 exprt python_converter::numpy_shape_attr_expr(
   const std::vector<std::size_t> &shape,
   const std::string &attr_name)
@@ -1136,7 +1143,7 @@ std::optional<exprt> python_converter::try_get_numpy_shape_attr(
     return param_attr;
 
   const std::string name = symbol.name.as_string();
-  if (name.empty())
+  if (name.empty() || !is_numpy_shape_attribute(attr_name))
     return std::nullopt;
   if (
     std::optional<std::vector<std::size_t>> shape =
@@ -1182,7 +1189,7 @@ std::optional<exprt> python_converter::try_get_numpy_tracked_value_shape_attr(
   const nlohmann::json &base_node,
   const std::string &attr_name)
 {
-  if (!base_expr.is_symbol())
+  if (!base_expr.is_symbol() || !is_numpy_shape_attribute(attr_name))
     return std::nullopt;
 
   const std::string base_id = base_expr.identifier().as_string();

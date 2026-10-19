@@ -180,12 +180,25 @@ exprt python_converter::compare_constants_internal(
   return nil_exprt();
 }
 
+// A constant index whose base's initializer is its value: a numpy array is
+// written in place, so its initializer is not.
+bool python_converter::is_foldable_constant_index(const exprt &expr) const
+{
+  if (expr.id() != "index" || !expr.op1().is_constant())
+    return false;
+  const exprt &base = expr.op0();
+  return !base.is_symbol() ||
+         numpy_array_symbols_.count(base.identifier().as_string()) == 0;
+}
+
 exprt python_converter::handle_indexed_comparison_internal(
   const std::string &op,
   const exprt &lhs,
   const exprt &rhs)
 {
-  if (lhs.id() != "index" || !rhs.is_constant() || !rhs.type().is_array())
+  if (
+    !is_foldable_constant_index(lhs) || !rhs.is_constant() ||
+    !rhs.type().is_array())
     return nil_exprt();
 
   const exprt &index = lhs.operands()[1];
@@ -290,6 +303,14 @@ static bool either_is_string(const exprt &lhs, const exprt &rhs)
          type_utils::is_string_type(rhs.type());
 }
 
+// An index or member read of a char array has operands that are not its
+// characters; only a constant array spells them out.
+static bool is_constant_char_array(const exprt &expr)
+{
+  return expr.is_constant() && expr.type().is_array() &&
+         expr.type().subtype() == char_type();
+}
+
 exprt python_converter::handle_string_comparison(
   const std::string &op,
   exprt &lhs,
@@ -324,10 +345,7 @@ exprt python_converter::handle_string_comparison(
         candidate = &expr.op0();
       }
 
-      if (!candidate->type().is_array())
-        return false;
-
-      if (candidate->type().subtype() != char_type())
+      if (!is_constant_char_array(*candidate))
         return false;
 
       const std::string value =
@@ -871,6 +889,12 @@ expr2tc python_converter::build_is_equality(
     throw std::runtime_error(
       "'is' with an operand that lost its object type, which ESBMC cannot "
       "compare by identity");
+
+  // IEEE == calls a NaN not identical to itself (#8769). Comparing bit
+  // patterns would be exact, but SMT-LIB leaves a NaN's bits unspecified.
+  if (is_floatbv_type(lhs2->type) && lhs2->type == rhs2->type)
+    return or2tc(
+      equality2tc(lhs2, rhs2), and2tc(isnan2tc(lhs2), isnan2tc(rhs2)));
 
   return equality2tc(lhs2, rhs2);
 }
