@@ -40,6 +40,9 @@ if(ENABLE_BITWUZLA)
                 "solvers;util_esbmc;filesystem;bigint")
   target_include_directories(bitwuzla_sort_cache_test
     PRIVATE ${CMAKE_SOURCE_DIR}/src/solvers/bitwuzla)
+
+  new_unit_test(solver_assumptions_test "solver_assumptions.test.cpp"
+                "solvers;util_esbmc;filesystem;bigint")
 endif()
 
 if(ENABLE_SMTLIB)

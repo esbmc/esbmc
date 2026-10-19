@@ -184,8 +184,68 @@ class VarargMixin:
         spec.body = [pack] + spec.body
         self.functionParams[spec_name] = [arg.arg for arg in spec.args.args]
         self.functionKwonlyParams[spec_name] = []
+        if vararg_name not in self._names_bound_in(func_def.body):
+            self._spell_out_forwarded_varargs(spec, vararg_name, pad)
         ast.fix_missing_locations(spec)
         return spec
+
+    def _forwards_own_varargs(self, node):
+        """Whether each `*x` in call `node` forwards the visited def's own *args.
+
+        Each fixed-arity copy of the def spells such a call out, since the
+        copy knows how many arguments `x` packs (#8480).
+        """
+        func_def = self._vararg_scope_stack[-1] if self._vararg_scope_stack else None
+        if func_def is None or func_def.args.vararg is None or not isinstance(node.func, ast.Name):
+            return False
+        vararg = func_def.args.vararg.arg
+        params = func_def.args.posonlyargs + func_def.args.args + func_def.args.kwonlyargs
+        bound = self._names_bound_in(func_def.body) | {arg.arg for arg in params}
+        if vararg in bound or node.func.id in bound:
+            return False
+        return all(
+            isinstance(arg.value, ast.Name) and arg.value.id == vararg for arg in node.args
+            if isinstance(arg, ast.Starred))
+
+    def _names_bound_in(self, body):
+        return {
+            name
+            for stmt in body
+            for inner in ast.walk(stmt)
+            for name in self._bound_names(inner)
+        }
+
+    def _spell_out_forwarded_varargs(self, spec, vararg_name, pad):
+        """Pass each `*vararg_name` in `spec` as the names it packs, then bind the call."""
+        mixin = self
+
+        def forwarded(arg):
+            return (isinstance(arg, ast.Starred) and isinstance(arg.value, ast.Name)
+                    and arg.value.id == vararg_name)
+
+        class Forward(ast.NodeTransformer):
+            """Splice the packed names into each call that forwards `*vararg_name`."""
+
+            def visit_Call(self, node):  # pylint: disable=invalid-name,missing-function-docstring
+                self.generic_visit(node)
+                if not any(forwarded(arg) for arg in node.args):
+                    return node
+                args = []
+                for arg in node.args:
+                    if forwarded(arg):
+                        args.extend(
+                            ast.copy_location(ast.Name(id=name, ctx=ast.Load()), arg)
+                            for name in pad)
+                    else:
+                        args.append(arg)
+                node.args = args
+                raising = mixin._bind_call_arguments(node)  # pylint: disable=protected-access
+                if raising is not None:
+                    return raising
+                mixin._specialize_vararg_call(node)  # pylint: disable=protected-access
+                return node
+
+        Forward().visit(spec)
 
     def _inject_vararg_specializations(self, node, owner_key=None):
         """Put the specializations owned by `node` where their originals sat.

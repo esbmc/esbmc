@@ -3201,6 +3201,17 @@ regression/esbmc/github_8712_shared_counter_fail
 regression/esbmc/github_8712_local_counter_simplified
 regression/esbmc-cpp/try_catch/github_8695_catch_pointer_base
 regression/esbmc-cpp/try_catch/github_8695_catch_pointer_base_fail
+regression/python/github_8381_attribute_int_to_str_refused
+regression/python/github_8381_attribute_int_to_float_refused
+regression/python/github_8381_attribute_float_given_int
+regression/esbmc/github_7451
+regression/esbmc/github_7451_fail
+regression/esbmc-cpp/cpp/github_7451_namespace
+regression/python/github_8379_fail
+regression/python/github_8379_float_receiver_fail
+regression/python/github_8379_param_receiver_fail
+regression/python/github_8379_number_methods
+regression/python/github_8379_retyped_receiver
 regression/python/github_8705_int_valueerror
 regression/python/github_8705_int_base_valueerror
 regression/python/github_8705_int_valueerror_fail
@@ -3213,3 +3224,6 @@ regression/python/github_8704_hash_int_fail
 regression/esbmc/github_8517_assume_pins_pointer
 regression/esbmc/github_8517_assume_pins_pointer_fail
 regression/esbmc/github_8517_requires_pins_pointer
+regression/esbmc-cpp/cpp/github_8680_dtor_throw_unwind_fail
+regression/esbmc-cpp/cpp/github_8680_dtor_catch_unwind
+regression/esbmc-cpp/cpp/github_8680_dtor_throw_scope_exit

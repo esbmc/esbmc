@@ -1,0 +1,5 @@
+CORE
+main.c
+--bitwuzla --no-pointer-check --no-bounds-check --error-label ERROR --ts-bmc --ts-push-pop --max-k-step 10
+^Transition-system counterexample at step 4 
+^VERIFICATION FAILED$

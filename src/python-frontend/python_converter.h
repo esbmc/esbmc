@@ -2626,6 +2626,7 @@ private:
     const std::string &receiver,
     const std::string &class_name,
     const std::string &attr) const;
+  void reject_attribute_scalar_change(const exprt &lhs, const exprt &rhs);
   void reject_attribute_class_change(
     const exprt &lhs,
     const exprt &rhs,

@@ -1,0 +1,4 @@
+CORE
+main.py
+
+holds a int and is assigned a float; an attribute whose type changes is not modelled

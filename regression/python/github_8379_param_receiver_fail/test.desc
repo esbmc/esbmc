@@ -1,0 +1,5 @@
+CORE
+main.py
+
+line 2 +uncaught exception: AttributeError
+^VERIFICATION FAILED$
