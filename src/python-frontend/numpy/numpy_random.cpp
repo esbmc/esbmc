@@ -112,6 +112,26 @@ std::optional<long long> literal_dimension(const nlohmann::json &node)
   return negated ? -value : value;
 }
 
+/// The dimensions a random call spells for its output, or null when the call
+/// returns a scalar.
+const nlohmann::json *dimensions_of(
+  const nlohmann::json &call,
+  const std::string &function,
+  const std::vector<std::string> &params)
+{
+  if (function == "rand" || function == "randn")
+    return call["args"].empty() ? nullptr : &call["args"];
+  if (call.contains("keywords"))
+    for (const auto &kw : call["keywords"])
+      if (kw["arg"].is_string() && kw["arg"] == "size")
+        return is_none(kw["value"]) ? nullptr : &kw["value"];
+  const auto &args = call["args"];
+  for (std::size_t i = 0; i < args.size() && i < params.size(); ++i)
+    if (params[i] == "size")
+      return is_none(args[i]) ? nullptr : &args[i];
+  return nullptr;
+}
+
 exprt real(double value)
 {
   return from_double(value, double_type());
@@ -173,6 +193,46 @@ bool numpy_random::is_random_call(
     !is_imported_numpy_module_alias(ast, module["id"]))
     return false;
   return true;
+}
+
+std::optional<std::vector<std::size_t>> numpy_random::output_shape(
+  const nlohmann::json &call,
+  const nlohmann::json &ast)
+{
+  if (
+    !call.is_object() || call.value("_type", "") != "Call" ||
+    !is_random_call(call, ast))
+    return std::nullopt;
+  const std::string function = call["func"]["attr"].get<std::string>();
+  auto signature = signatures().find(canonical_name(function));
+  if (signature == signatures().end())
+    return std::nullopt;
+  const nlohmann::json *dims = dimensions_of(call, function, signature->second);
+  if (!dims)
+    return std::nullopt;
+  const bool listed = dims->is_array() || dims->value("_type", "") == "Tuple";
+  std::vector<std::size_t> shape;
+  long long samples = 1;
+  for (const auto &dim : dims->is_array() ? *dims
+                         : listed         ? (*dims)["elts"]
+                                          : nlohmann::json::array({*dims}))
+  {
+    std::optional<long long> dimension = literal_dimension(dim);
+    if (!dimension || *dimension < 0)
+      return std::nullopt;
+    samples *= *dimension;
+    if (samples > max_samples)
+      return std::nullopt;
+    shape.push_back(static_cast<std::size_t>(*dimension));
+  }
+  return shape;
+}
+
+std::string numpy_random::list_annotation(
+  const nlohmann::json &call,
+  const nlohmann::json &ast)
+{
+  return output_shape(call, ast) ? "list" : "";
 }
 
 exprt numpy_random::get()

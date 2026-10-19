@@ -2274,9 +2274,10 @@ std::string python_annotation<Json>::get_type_from_call(const Json &element)
         // Keep imported names intact here; the converter resolves them later.
         if (is_imported_name(func_id))
           return func_id;
-        if (const std::string type =
-              function_value_return_type(func, &element["value"]);
-            !type.empty())
+        if (
+          const std::string type =
+            function_value_return_type(func, &element["value"]);
+          !type.empty())
           return type;
         for (const auto &stmt : body)
         {
@@ -2415,10 +2416,9 @@ std::string python_annotation<Json>::function_value_return_type(
   {
     const auto signature = function_signature(function);
     if (
-      !signature ||
-      (agreed && (signature->second != agreed->second ||
-                  !json_utils::ast_equal_ignoring_location(
-                    signature->first, agreed->first))))
+      !signature || (agreed && (signature->second != agreed->second ||
+                                !json_utils::ast_equal_ignoring_location(
+                                  signature->first, agreed->first))))
       return "";
     agreed = signature;
   }
@@ -2431,10 +2431,10 @@ std::string python_annotation<Json>::function_value_return_type(
     });
   const std::size_t passed = call ? (*call)["args"].size() : 0;
   if (
-    call && (passed < static_cast<std::size_t>(required) ||
-             passed > agreed->first.size() || !(*call)["keywords"].empty() ||
-             std::any_of(
-               (*call)["args"].begin(), (*call)["args"].end(), is_starred)))
+    call &&
+    (passed < static_cast<std::size_t>(required) ||
+     passed > agreed->first.size() || !(*call)["keywords"].empty() ||
+     std::any_of((*call)["args"].begin(), (*call)["args"].end(), is_starred)))
     return "";
   return agreed->second;
 }
@@ -3223,6 +3223,18 @@ InferResult python_annotation<Json>::infer_type_from_ifexp(
   return InferResult::UNKNOWN;
 }
 
+// A numpy.random call that returns an array is annotated as the list a
+// numpy constructor is, so arithmetic on it is inferred as an array too.
+template <class Json>
+std::string
+python_annotation<Json>::get_type_from_call_or_random(const Json &element)
+{
+  const std::string random = numpy_random::list_annotation(
+    static_cast<const nlohmann::json &>(element["value"]),
+    static_cast<const nlohmann::json &>(ast_));
+  return random.empty() ? get_type_from_call(element) : random;
+}
+
 template <class Json>
 bool python_annotation<Json>::is_numpy_array_ctor_call(
   const Json &call_value) const
@@ -3538,7 +3550,7 @@ InferResult python_annotation<Json>::infer_type(
       return InferResult::UNKNOWN;
 
     // Try get_type_from_call first (checks builtin_functions map)
-    inferred_type = get_type_from_call(stmt);
+    inferred_type = get_type_from_call_or_random(stmt);
 
     // If that didn't work, try get_type_from_method
     if (inferred_type.empty())

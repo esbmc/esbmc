@@ -8,6 +8,7 @@
 #include <util/irep/std_types.h>
 
 #include <map>
+#include <optional>
 #include <set>
 #include <string>
 #include <vector>
@@ -28,6 +29,17 @@ public:
   is_random_call(const nlohmann::json &call, const nlohmann::json &ast);
 
   exprt get();
+
+  /// The literal output shape of a random call that returns an array, read
+  /// from the source; nullopt for a scalar result or a shape it rejects.
+  static std::optional<std::vector<std::size_t>>
+  output_shape(const nlohmann::json &call, const nlohmann::json &ast);
+
+  /// "list" for a random call that returns an array, so the annotator types
+  /// it and arithmetic on it as it does a numpy constructor's result; empty
+  /// for a scalar.
+  static std::string
+  list_annotation(const nlohmann::json &call, const nlohmann::json &ast);
 
 private:
   python_converter &converter_;
