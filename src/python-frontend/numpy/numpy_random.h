@@ -9,6 +9,7 @@
 #include <map>
 #include <set>
 #include <string>
+#include <vector>
 
 class python_converter;
 
@@ -42,6 +43,10 @@ private:
   /// The first binding error, raised as a TypeError once every argument has
   /// been evaluated.
   std::string error_;
+  /// The literal output shape when sized_, a scalar otherwise.
+  std::vector<long long> shape_;
+  bool sized_ = false;
+  static constexpr long long max_samples = 1024;
 
   void bind_arguments();
   void bind_positional();
@@ -49,6 +54,13 @@ private:
   void bind(const std::string &param, const nlohmann::json &arg);
   [[noreturn]] void reject_unpacked() const;
   std::string missing_argument() const;
+  bool takes_dimensions() const;
+  void bind_dimensions();
+  void read_shape(const nlohmann::json &size);
+  [[noreturn]] void reject_shape() const;
+  void check_shape();
+  exprt sample_array();
+  void fill(const exprt &target);
   exprt evaluate_once(const nlohmann::json &arg, const std::string &param);
   exprt value(const std::string &param) const;
 

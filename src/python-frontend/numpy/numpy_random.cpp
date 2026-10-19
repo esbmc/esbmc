@@ -9,6 +9,7 @@
 #include <util/lang/c_types.h>
 
 #include <algorithm>
+#include <optional>
 #include <set>
 #include <stdexcept>
 #include <vector>
@@ -79,20 +80,18 @@ bool is_none(const nlohmann::json &node)
          node["value"].is_null();
 }
 
-/// The size argument of @p call, or null when it has none.
-const nlohmann::json *size_argument(
-  const nlohmann::json &call,
-  const std::vector<std::string> &params)
+/// An integer literal, negated or not; nullopt for anything else.
+std::optional<long long> literal_dimension(const nlohmann::json &node)
 {
-  if (call.contains("keywords"))
-    for (const auto &kw : call["keywords"])
-      if (kw["arg"].is_string() && kw["arg"] == "size")
-        return &kw["value"];
-  const auto &args = call["args"];
-  for (std::size_t i = 0; i < args.size() && i < params.size(); ++i)
-    if (params[i] == "size")
-      return &args[i];
-  return nullptr;
+  const bool negated = node.value("_type", "") == "UnaryOp" &&
+                       node["op"].value("_type", "") == "USub";
+  const nlohmann::json &operand = negated ? node["operand"] : node;
+  if (
+    operand.value("_type", "") != "Constant" ||
+    !operand["value"].is_number_integer())
+    return std::nullopt;
+  const long long value = operand["value"].get<long long>();
+  return negated ? -value : value;
 }
 
 exprt real(double value)
@@ -149,15 +148,7 @@ bool numpy_random::is_random_call(
     module.value("_type", "") != "Name" ||
     !is_imported_numpy_module_alias(ast, module["id"]))
     return false;
-  const std::string name = func["attr"].get<std::string>();
-  const std::string canonical = canonical_name(name);
-  auto signature = signatures().find(canonical);
-  if (signature == signatures().end())
-    return false;
-  if ((name == "rand" || name == "randn") && !call["args"].empty())
-    return false;
-  const nlohmann::json *size = size_argument(call, signature->second);
-  return !size || is_none(*size);
+  return signatures().count(canonical_name(func["attr"].get<std::string>()));
 }
 
 exprt numpy_random::get()
@@ -166,7 +157,8 @@ exprt numpy_random::get()
   converter_.current_block = &block_;
   bind_arguments();
   validate();
-  exprt result = sample();
+  check_shape();
+  exprt result = sized_ ? sample_array() : sample();
   if (!result.is_symbol())
   {
     const exprt sampled = fresh(result.type(), result);
@@ -190,7 +182,9 @@ void numpy_random::bind(const std::string &param, const nlohmann::json &arg)
 {
   if (param == "dtype")
     dtype_ = extract_numpy_dtype_name(arg, converter_.ast());
-  else if (param != "size")
+  else if (param == "size")
+    read_shape(arg);
+  else
     values_[param] = evaluate_once(arg, param);
   bound_.insert(param);
 }
@@ -206,6 +200,8 @@ void numpy_random::reject_unpacked() const
 // before raising the TypeError.
 void numpy_random::bind_positional()
 {
+  if (takes_dimensions())
+    return bind_dimensions();
   const std::vector<std::string> &params = signatures().at(name_);
   const auto &args = call_["args"];
   for (std::size_t i = 0; i < args.size(); ++i)
@@ -229,7 +225,9 @@ void numpy_random::bind_keywords()
 {
   if (!call_.contains("keywords"))
     return;
-  const std::vector<std::string> &params = signatures().at(name_);
+  static const std::vector<std::string> none;
+  const std::vector<std::string> &params =
+    takes_dimensions() ? none : signatures().at(name_);
   for (const auto &kw : call_["keywords"])
   {
     if (!kw["arg"].is_string())
@@ -249,6 +247,99 @@ void numpy_random::bind_keywords()
           ? function_ + "() got multiple values for argument '" + param + "'"
           : function_ + "() got an unexpected keyword argument '" + param + "'";
   }
+}
+
+bool numpy_random::takes_dimensions() const
+{
+  return function_ == "rand" || function_ == "randn";
+}
+
+// rand(d0, d1, ...) and randn(d0, d1, ...) spell the shape as arguments.
+void numpy_random::bind_dimensions()
+{
+  const auto &args = call_["args"];
+  if (args.empty())
+    return;
+  for (const auto &arg : args)
+  {
+    std::optional<long long> dimension = literal_dimension(arg);
+    if (!dimension)
+      reject_shape();
+    shape_.push_back(*dimension);
+  }
+  sized_ = true;
+}
+
+void numpy_random::read_shape(const nlohmann::json &size)
+{
+  if (is_none(size))
+    return;
+  const bool tuple = size.value("_type", "") == "Tuple";
+  for (const auto &dim : tuple ? size["elts"] : nlohmann::json::array({size}))
+  {
+    std::optional<long long> dimension = literal_dimension(dim);
+    if (!dimension)
+      reject_shape();
+    shape_.push_back(*dimension);
+  }
+  sized_ = true;
+}
+
+[[noreturn]] void numpy_random::reject_shape() const
+{
+  throw std::runtime_error(
+    "TypeError: numpy.random." + function_ +
+    "() size must be an integer literal or a tuple of them");
+}
+
+// The output is unrolled one sample per element, so its size is capped.
+void numpy_random::check_shape()
+{
+  long long samples = 1;
+  for (long long dimension : shape_)
+  {
+    if (dimension < 0)
+      return raise_if(
+        true_exprt(), "ValueError", "negative dimensions are not allowed");
+    samples *= dimension;
+    if (samples > max_samples)
+      throw std::runtime_error(
+        "TypeError: numpy.random." + function_ + "() with more than " +
+        std::to_string(max_samples) + " samples is not supported");
+  }
+}
+
+exprt numpy_random::sample_array()
+{
+  typet type = is_integral_result(name_) ? long_long_int_type() : double_type();
+  for (auto it = shape_.rbegin(); it != shape_.rend(); ++it)
+    type = converter_.get_type_handler().build_array(
+      type, static_cast<std::size_t>(std::max(*it, 0LL)));
+  symbolt &array =
+    converter_.create_tmp_symbol(call_, "$np_random_array$", type, exprt());
+  const exprt result = symbol_expr(array);
+  code_declt decl(result);
+  decl.location() = location_;
+  converter_.add_instruction(decl);
+  fill(result);
+  return result;
+}
+
+// Each element is its own sample.
+void numpy_random::fill(const exprt &target)
+{
+  if (!target.type().is_array())
+  {
+    code_assignt assign(target, sample());
+    assign.location() = location_;
+    converter_.add_instruction(assign);
+    return;
+  }
+  const array_typet &type = to_array_type(target.type());
+  const long long size =
+    binary2integer(type.size().value().c_str(), false).to_int64();
+  for (long long i = 0; i < size; ++i)
+    fill(index_exprt(target, from_integer(i, index_type()), type.subtype()));
 }
 
 std::string numpy_random::missing_argument() const
@@ -394,6 +485,11 @@ void numpy_random::validate_randint()
 
   if (dtype_.empty() || dtype_ == "int64")
     return;
+  if (dtype_.find("float") == 0 || dtype_.find("complex") == 0)
+    return raise_if(
+      true_exprt(),
+      "TypeError",
+      "Unsupported dtype dtype('" + dtype_ + "') for randint");
   if (dtype_.find("int") == std::string::npos || dtype_ == "uint64")
     throw std::runtime_error(
       "TypeError: numpy.random.randint() dtype " + dtype_ +
