@@ -57,6 +57,18 @@ bool is_integer_param(const std::string &name, const std::string &param)
          (name == "randint" && (param == "low" || param == "high"));
 }
 
+bool contains_call(const nlohmann::json &node)
+{
+  if (node.is_object() && node.value("_type", "") == "Call")
+    return true;
+  if (!node.is_object() && !node.is_array())
+    return false;
+  for (const auto &child : node)
+    if (contains_call(child))
+      return true;
+  return false;
+}
+
 bool is_bool_literal(const nlohmann::json &node)
 {
   return node.value("_type", "") == "Constant" && node["value"].is_boolean();
@@ -266,8 +278,11 @@ void numpy_random::bind_keywords()
 exprt numpy_random::read_population(const nlohmann::json &arg)
 {
   const std::string kind = arg.value("_type", "");
-  if (kind != "List" && kind != "Tuple" && !holds_numpy_array(arg))
+  const bool literal = kind == "List" || kind == "Tuple";
+  if (!literal && !holds_numpy_array(arg))
     reject_population();
+  if (literal && contains_call(arg))
+    return materialize_population(arg["elts"]);
   nlohmann::json elements = arg;
   if (kind == "Tuple")
     elements["_type"] = "List";
@@ -281,6 +296,36 @@ exprt numpy_random::read_population(const nlohmann::json &arg)
     !population.type().is_array() ||
     !to_array_type(population.type()).size().is_constant())
     reject_population();
+  return population;
+}
+
+// Each element is read once, in order, before any sample is drawn.
+exprt numpy_random::materialize_population(const nlohmann::json &elements)
+{
+  std::vector<exprt> values;
+  bool real = false;
+  for (const auto &element : elements)
+  {
+    exprt value = evaluate_once(element, "");
+    const typet &type = value.type();
+    if (
+      !type.is_signedbv() && !type.is_unsignedbv() && !type.is_floatbv() &&
+      !type.is_bool())
+      reject_population();
+    real = real || type.is_floatbv();
+    values.push_back(value.is_constant() ? value : fresh(type, value));
+  }
+  const typet element = real ? double_type() : long_long_int_type();
+  const exprt population =
+    fresh(converter_.get_type_handler().build_array(element, values.size()));
+  for (std::size_t i = 0; i < values.size(); ++i)
+  {
+    code_assignt assign(
+      index_exprt(population, from_integer(i, index_type()), element),
+      typecast_exprt(values[i], element));
+    assign.location() = location_;
+    converter_.add_instruction(assign);
+  }
   return population;
 }
 

@@ -62,6 +62,7 @@ private:
   [[noreturn]] void reject_unpacked() const;
   std::string missing_argument() const;
   exprt read_population(const nlohmann::json &arg);
+  exprt materialize_population(const nlohmann::json &elements);
   [[noreturn]] void reject_population() const;
   bool holds_numpy_array(const nlohmann::json &arg) const;
   bool read_replace(const nlohmann::json &arg) const;
