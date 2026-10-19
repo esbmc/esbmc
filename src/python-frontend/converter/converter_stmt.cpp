@@ -4154,7 +4154,8 @@ void python_converter::record_numpy_constructor_binding(
   // a call to an undefined function named "tolist"/"sum".
   if (
     is_numpy_array_constructor_expr(rhs_node) ||
-    is_array_returning_call_expr(rhs_node, lhs))
+    is_array_returning_call_expr(rhs_node, lhs) ||
+    is_numpy_arithmetic_result(rhs_node, lhs))
   {
     numpy_array_symbols_.insert(lhs_id);
     if (unconditional_assignment)
@@ -4178,6 +4179,21 @@ void python_converter::record_numpy_constructor_binding(
     numpy_array_symbols_.erase(lhs_id);
     numpy_param_shapes_.erase(lhs_id);
   }
+}
+
+// `b = a * 2.0`: element-wise arithmetic yields a numeric array, which takes
+// the ndarray methods (`b.sum()`) as a constructor's result does.
+bool python_converter::is_numpy_arithmetic_result(
+  const nlohmann::json &rhs_node,
+  const exprt &lhs) const
+{
+  const typet &lhs_type = ns.follow(lhs.type());
+  return rhs_node.value("_type", "") == "BinOp" && lhs_type.is_array() &&
+         !type_handler_.is_string_type(lhs_type) &&
+         !type_utils::is_bytes_array(lhs_type) &&
+         (lhs_type.subtype().is_signedbv() ||
+          lhs_type.subtype().is_unsignedbv() ||
+          lhs_type.subtype().is_floatbv());
 }
 
 bool python_converter::is_array_returning_call_expr(

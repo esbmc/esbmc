@@ -2079,6 +2079,9 @@ private:
   // binding runs, so trust it instead of duplicating that resolution here.
   // Split out of update_numpy_array_binding to keep its own decision count
   // from growing further.
+  bool is_numpy_arithmetic_result(
+    const nlohmann::json &rhs_node,
+    const exprt &lhs) const;
   bool is_array_returning_call_expr(
     const nlohmann::json &rhs_node,
     const exprt &lhs) const;
