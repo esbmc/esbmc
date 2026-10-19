@@ -3210,3 +3210,6 @@ regression/esbmc/github_8661_ir_unsigned_to_int_fail
 regression/python/github_8704_hash_int
 regression/python/github_8704_hash_str
 regression/python/github_8704_hash_int_fail
+regression/esbmc/github_8517_assume_pins_pointer
+regression/esbmc/github_8517_assume_pins_pointer_fail
+regression/esbmc/github_8517_requires_pins_pointer
