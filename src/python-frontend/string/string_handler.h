@@ -104,6 +104,12 @@ public:
 
   exprt build_nondet_string_fallback(const locationt &location);
 
+  /// A bounded, NUL-terminated str of nondet content, as nondet_str() gives.
+  exprt build_nondet_string(const locationt &location);
+
+  /// The nondet str buffer size: --nondet-str-length plus the NUL.
+  static int nondet_str_buffer_size();
+
   /**
    * @brief Extract string content from array operands
    * @param array_expr Array expression containing characters
@@ -141,6 +147,10 @@ public:
    */
   exprt
   apply_format_specification(const exprt &expr, const std::string &format);
+
+  /// A spec on a value not folded at conversion time: a fixed-point float
+  /// through its model, anything else as a nondet string.
+  exprt format_runtime_value(const exprt &expr, const std::string &format);
 
   /**
    * @brief Convert f-string JSON to expression
@@ -260,6 +270,9 @@ public:
    * - "-".join(list_var) -> joined string
    */
   exprt handle_str_join(const nlohmann::json &call_json);
+  exprt join_unfoldable_iterable(
+    const exprt &separator,
+    const nlohmann::json &call_json);
 
   /// Convert a join() literal's elements into `elem_exprs`. Returns a TypeError
   /// raise for an element that is known not to be a str, nil otherwise.
@@ -286,6 +299,7 @@ public:
   exprt try_handle_len_string_fast_path(
     const nlohmann::json &call_json,
     const exprt &arg_expr);
+  exprt char_array_type_length(const exprt &arg_expr) const;
 
   // String method operations
 
@@ -901,6 +915,11 @@ private:
     const std::vector<unsigned char> &chars,
     const typet &type);
 
+  /// A one-character str holding the char `expr`.
+  exprt char_to_string(const exprt &expr);
+
+  exprt constant_to_string(const exprt &expr);
+
   exprt build_string_index_result(
     const nlohmann::json &call,
     const exprt &find_expr,
@@ -921,6 +940,8 @@ private:
   std::string ensure_string_function_symbol(const std::string &function_name);
 
   symbolt *find_cached_symbol(const std::string &symbol_id);
+  const symbolt *find_foldable_symbol(const std::string &symbol_id);
+  exprt symbol_to_string(const exprt &expr);
   symbolt *find_cached_c_function_symbol(const std::string &symbol_id);
   exprt try_len_fast_path_from_constant_arg(
     const nlohmann::json &arg_json,

@@ -413,6 +413,9 @@ public:
   view_element_count(const nlohmann::json &node, const strided_view_desc &view);
 
   /// sum / mean / min / max / any / all of a run-time-extent view, as loops.
+  std::optional<exprt> reduce_view_argextreme(
+    const std::string &function,
+    const nlohmann::json &arg);
   std::optional<exprt> try_reduce_symbolic_view(
     const std::string &function,
     const nlohmann::json &arg);
@@ -568,11 +571,18 @@ public:
    *
    * @p lhs is the subscript target `*(T *)item->value` of the list subscript
    * this handler was built for. When @p rhs is a tuple of another type than T
-   * (or T is a tuple and @p rhs is not), the pair is rewritten into
-   * `*item = *list_at(tmp, 0)`, with tmp a list holding @p rhs, so the slot
-   * gets the new value, type_id and size. Otherwise both are left unchanged.
+   * (or T is a tuple and @p rhs is not), or T is a non-scalar a list copy may
+   * share, the pair is rewritten into `*item = *list_at(tmp, 0)`, with tmp a
+   * list holding @p rhs, so the slot gets the new value, type_id and size.
+   * Otherwise both are left unchanged.
    */
   void retype_element_store(exprt &lhs, exprt &rhs);
+
+  bool has_shared_payload(const typet &type) const;
+
+  /// Allocates the instance a constructor stores to @p lhs and returns the
+  /// pointer to pass as `self`.
+  exprt allocate_constructed_object(const exprt &lhs);
 
   /// Records @p elem_type as the type of the element @p subscript stores to.
   void record_element_store(
@@ -638,6 +648,12 @@ public:
     const exprt &array,
     const nlohmann::json &slice_node) const;
 
+  /// Refuses an index other than a non-negative constant into a list
+  /// attribute whose recorded elements have different types (#8666).
+  void reject_mixed_member_element_read(
+    const exprt &array,
+    const nlohmann::json &slice_node) const;
+
   /**
    * @brief Create an empty set
    * @return Expression representing the empty set
@@ -673,8 +689,13 @@ public:
     const exprt &index,
     const locationt &location);
 
+  /// Whether storing a `new_type` value into an element read as `old_type`
+  /// replaces the element rather than writing into its storage.
+  bool
+  store_replaces_element(const typet &old_type, const typet &new_type) const;
+
   /// The __ESBMC_list_set_at call storing `rhs` into the list element `lhs`
-  /// reads, when `rhs` changes the element's type; nullopt otherwise.
+  /// reads, when store_replaces_element holds; nullopt otherwise.
   std::optional<exprt> build_element_replacement(
     const exprt &lhs,
     const exprt &rhs,
@@ -996,6 +1017,8 @@ private:
     const exprt &index,
     const nlohmann::json &element);
 
+  exprt bind_list_element(const exprt &list_at_call);
+
   list_elem_info
   get_list_element_info(const nlohmann::json &op, const exprt &elem);
 
@@ -1014,6 +1037,11 @@ private:
   list_elem_info
   get_tagged_element_info(const nlohmann::json &op, const exprt &elem);
 
+  /// Element info for a key that is only compared, never stored: a tagged key
+  /// forwards its runtime value/type_id/size.
+  list_elem_info
+  get_lookup_key_info(const nlohmann::json &op, const exprt &key);
+
   // The type_id a tagged scalar carries when it holds a float, or 0 when the
   // caller opts out of the float path (dict values compare via void*).
   exprt tagged_float_type_id(bool enable_float_path) const;
@@ -1023,20 +1051,10 @@ private:
   exprt
   handle_range_slice(const exprt &array, const nlohmann::json &slice_node);
 
-  // Propagate a dict view's element types onto its slice result. Split out for
-  // the same reason as normalize_negative_slice_bound below.
+  // Propagate a dict view's element types onto its slice result. Split out to
+  // keep handle_range_slice's own decision count from growing further.
   void
   copy_dict_view_elem_types(const exprt &array, const std::string &sliced_id);
-
-  // handle_range_slice's process_bound: normalizes a literal negative bound
-  // (-k) to logical_len - k, clamped for an out-of-range k -- see the call
-  // site's own comment for why the clamp differs by step direction. Split
-  // out to keep handle_range_slice's own decision count from growing
-  // further.
-  exprt normalize_negative_slice_bound(
-    const nlohmann::json &operand_node,
-    const exprt &logical_len,
-    bool negative_step);
 
   // Shared core of every ADR-NP-003 scalar pointer view producer; see
   // list_access.cpp for the full rationale, including when this declines.

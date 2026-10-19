@@ -9,6 +9,14 @@
 
 #include <assert.h>
 
+/* Writes the errno the program reads. After the #undef below, errno in this
+ * file names a different object. */
+static void __ESBMC_set_errno(int value)
+{
+__ESBMC_HIDE:;
+  errno = value;
+}
+
 #undef errno
 extern _Thread_local int errno;
 
@@ -138,61 +146,88 @@ DIV_DEF(lldiv, lldiv_t, long long int)
 
 #undef DIV_DEF
 
+/* Skips the whitespace, sign and 0x prefix of a strtol subject sequence and
+ * resolves base 0. A 0x not followed by a hex digit is left in place, so the
+ * '0' is the whole subject sequence (C11 7.22.1.4p3). Returns NULL for a base
+ * outside 0 and 2-36, which glibc rejects with EINVAL. */
+static const char *
+__ESBMC_strto_prefix(const char *str, int *base, int *negative)
+{
+__ESBMC_HIDE:;
+  if (*base < 0 || *base == 1 || *base > 36)
+  {
+    __ESBMC_set_errno(EINVAL);
+    return NULL;
+  }
+
+  while (isspace(*str))
+    str++;
+
+  *negative = *str == '-';
+  if (*str == '-' || *str == '+')
+    str++;
+
+  if (
+    (*base == 0 || *base == 16) && *str == '0' && tolower(str[1]) == 'x' &&
+    isxdigit(str[2]))
+  {
+    *base = 16;
+    str += 2;
+  }
+  else if (*base == 0)
+    *base = *str == '0' ? 8 : 10;
+
+  return str;
+}
+
+/* C11 7.22.1.4p3: the letters a-z and A-Z have the values 10 to 35. Any other
+ * character gets a value no base accepts. */
+static int __ESBMC_strto_digit(char c)
+{
+__ESBMC_HIDE:;
+  if (isdigit(c))
+    return c - '0';
+  if (isalpha(c))
+    return tolower(c) - 'a' + 10;
+  return 36;
+}
+
+/* The magnitude is accumulated unsigned against the limit for its sign, so
+ * TYPE_MIN converts without ERANGE. On overflow the remaining digits are still
+ * consumed; with no digits *endptr is nptr (C11 7.22.1.4p5-8). */
 #define STRTOL_DEF(name, type, TYPE)                                           \
-  type name(const char *str, char **endptr, int base)                          \
+  type name(const char *nptr, char **endptr, int base)                         \
   {                                                                            \
   __ESBMC_HIDE:;                                                               \
-    type result = 0;                                                           \
-    int sign = 1;                                                              \
+    int negative;                                                              \
+    const char *str = __ESBMC_strto_prefix(nptr, &base, &negative);            \
+    if (str == NULL)                                                           \
+      return 0;                                                                \
+    const unsigned type limit =                                                \
+      negative ? (unsigned type)TYPE##_MAX + 1 : (unsigned type)TYPE##_MAX;    \
+    unsigned type magnitude = 0;                                               \
+    const char *digits = str;                                                  \
+    int out_of_range = 0;                                                      \
                                                                                \
-    /* Handle whitespace */                                                    \
-    while (isspace(*str))                                                      \
-      str++;                                                                   \
-                                                                               \
-    /* Handle sign */                                                          \
-    if (*str == '-')                                                           \
+    for (int digit; (digit = __ESBMC_strto_digit(*str)) < base; str++)         \
     {                                                                          \
-      sign = -1;                                                               \
-      str++;                                                                   \
-    }                                                                          \
-    else if (*str == '+')                                                      \
-      str++;                                                                   \
-                                                                               \
-    /* Handle base */                                                          \
-    if (base == 0)                                                             \
-    {                                                                          \
-      if (*str == '0')                                                         \
-      {                                                                        \
-        base = 8;                                                              \
-        if (tolower(str[1]) == 'x')                                            \
-        {                                                                      \
-          base = 16;                                                           \
-          str += 2;                                                            \
-        }                                                                      \
-        else                                                                   \
-          str++;                                                               \
-      }                                                                        \
+      if (magnitude > (limit - digit) / base)                                  \
+        out_of_range = 1;                                                      \
       else                                                                     \
-        base = 10;                                                             \
-    }                                                                          \
-    else if (base == 16 && *str == '0' && tolower(str[1]) == 'x')              \
-      str += 2;                                                                \
-                                                                               \
-    /* Convert digits */                                                       \
-    while (isdigit(*str) || (base == 16 && isxdigit(*str)))                    \
-    {                                                                          \
-      int digit = isdigit(*str) ? *str - '0' : tolower(*str) - 'a' + 10;       \
-      if (result > (TYPE##_MAX - digit) / base)                                \
-        return sign == -1 ? TYPE##_MIN : TYPE##_MAX;                           \
-      result = result * base + digit;                                          \
-      str++;                                                                   \
+        magnitude = magnitude * base + digit;                                  \
     }                                                                          \
                                                                                \
-    /* Set end pointer */                                                      \
     if (endptr != NULL)                                                        \
-      *endptr = (char *)str;                                                   \
+      *endptr = (char *)(str == digits ? nptr : str);                          \
                                                                                \
-    return sign * result;                                                      \
+    if (out_of_range)                                                          \
+    {                                                                          \
+      __ESBMC_set_errno(ERANGE);                                               \
+      return negative ? TYPE##_MIN : TYPE##_MAX;                               \
+    }                                                                          \
+    if (!negative)                                                             \
+      return (type)magnitude;                                                  \
+    return magnitude == limit ? TYPE##_MIN : -(type)magnitude;                 \
   }
 
 STRTOL_DEF(strtol, long int, LONG)
@@ -204,55 +239,34 @@ STRTOL_DEF(strtoll, long long int, LLONG)
  * negate a leading '-' in the return type rather than clamping, and there is
  * no TYPE_MIN to saturate towards. */
 #define STRTOUL_DEF(name, type, TYPE)                                          \
-  type name(const char *str, char **endptr, int base)                          \
+  type name(const char *nptr, char **endptr, int base)                         \
   {                                                                            \
   __ESBMC_HIDE:;                                                               \
+    int negative;                                                              \
+    const char *str = __ESBMC_strto_prefix(nptr, &base, &negative);            \
+    if (str == NULL)                                                           \
+      return 0;                                                                \
     type result = 0;                                                           \
-    int negate = 0;                                                            \
+    const char *digits = str;                                                  \
+    int out_of_range = 0;                                                      \
                                                                                \
-    while (isspace(*str))                                                      \
-      str++;                                                                   \
-                                                                               \
-    if (*str == '-')                                                           \
+    for (int digit; (digit = __ESBMC_strto_digit(*str)) < base; str++)         \
     {                                                                          \
-      negate = 1;                                                              \
-      str++;                                                                   \
-    }                                                                          \
-    else if (*str == '+')                                                      \
-      str++;                                                                   \
-                                                                               \
-    if (base == 0)                                                             \
-    {                                                                          \
-      if (*str == '0')                                                         \
-      {                                                                        \
-        base = 8;                                                              \
-        if (tolower(str[1]) == 'x')                                            \
-        {                                                                      \
-          base = 16;                                                           \
-          str += 2;                                                            \
-        }                                                                      \
-        else                                                                   \
-          str++;                                                               \
-      }                                                                        \
-      else                                                                     \
-        base = 10;                                                             \
-    }                                                                          \
-    else if (base == 16 && *str == '0' && tolower(str[1]) == 'x')              \
-      str += 2;                                                                \
-                                                                               \
-    while (isdigit(*str) || (base == 16 && isxdigit(*str)))                    \
-    {                                                                          \
-      int digit = isdigit(*str) ? *str - '0' : tolower(*str) - 'a' + 10;       \
       if (result > (TYPE##_MAX - digit) / base)                                \
-        return TYPE##_MAX;                                                     \
-      result = result * base + digit;                                          \
-      str++;                                                                   \
+        out_of_range = 1;                                                      \
+      else                                                                     \
+        result = result * base + digit;                                        \
     }                                                                          \
                                                                                \
     if (endptr != NULL)                                                        \
-      *endptr = (char *)str;                                                   \
+      *endptr = (char *)(str == digits ? nptr : str);                          \
                                                                                \
-    return negate ? (type)0 - result : result;                                 \
+    if (out_of_range)                                                          \
+    {                                                                          \
+      __ESBMC_set_errno(ERANGE);                                               \
+      return TYPE##_MAX;                                                       \
+    }                                                                          \
+    return negative ? (type)0 - result : result;                               \
   }
 
 STRTOUL_DEF(strtoul, unsigned long int, ULONG)
@@ -260,18 +274,27 @@ STRTOUL_DEF(strtoull, unsigned long long int, ULLONG)
 
 #undef STRTOUL_DEF
 
-/* strtod and strtold were declared in stdlib.h but never defined, so they
- * returned an unconstrained value (and an unconstrained endptr). Share the
- * strtof body rather than duplicating it three times. The digit-by-digit
- * accumulation is approximate for values that are not exactly representable,
- * which is the accuracy strtof already had. */
-#define STRTOF_DEF(name, type, one_tenth)                                      \
+/* Digits accumulate into an integer significand and a decimal exponent. When
+ * both the significand and the power of ten are exact in the result type, one
+ * correctly rounded multiply or divide gives the correctly rounded result
+ * (C11 F.5); otherwise the result is approximate. */
+static double __ESBMC_exact_pow10(int n)
+{
+__ESBMC_HIDE:;
+  /* 10^n is exact in double for n <= 22, since 5^22 < 2^53. */
+  const double p[23] = {1e0,  1e1,  1e2,  1e3,  1e4,  1e5,  1e6,  1e7,
+                        1e8,  1e9,  1e10, 1e11, 1e12, 1e13, 1e14, 1e15,
+                        1e16, 1e17, 1e18, 1e19, 1e20, 1e21, 1e22};
+  return p[n];
+}
+
+#define STRTOF_DEF(name, type, mant_dig, max_exact_pow10)                      \
   type name(const char *str, char **endptr)                                    \
   {                                                                            \
   __ESBMC_HIDE:;                                                               \
-    type result = 0;                                                           \
+    unsigned long long mant = 0;                                               \
+    int dexp = 0;                                                              \
     int sign = 1;                                                              \
-    type decimal_factor = one_tenth;                                           \
                                                                                \
     while (isspace(*str))                                                      \
       str++;                                                                   \
@@ -286,7 +309,10 @@ STRTOUL_DEF(strtoull, unsigned long long int, ULLONG)
                                                                                \
     while (isdigit(*str))                                                      \
     {                                                                          \
-      result = result * 10 + (*str - '0');                                     \
+      if (mant < 1000000000000000000ULL)                                       \
+        mant = mant * 10 + (*str - '0');                                       \
+      else                                                                     \
+        dexp++;                                                                \
       str++;                                                                   \
     }                                                                          \
                                                                                \
@@ -295,8 +321,11 @@ STRTOUL_DEF(strtoull, unsigned long long int, ULLONG)
       str++;                                                                   \
       while (isdigit(*str))                                                    \
       {                                                                        \
-        result += (*str - '0') * decimal_factor;                               \
-        decimal_factor /= 10;                                                  \
+        if (mant < 1000000000000000000ULL)                                     \
+        {                                                                      \
+          mant = mant * 10 + (*str - '0');                                     \
+          dexp--;                                                              \
+        }                                                                      \
         str++;                                                                 \
       }                                                                        \
     }                                                                          \
@@ -316,12 +345,24 @@ STRTOUL_DEF(strtoull, unsigned long long int, ULLONG)
       int exponent = 0;                                                        \
       while (isdigit(*str))                                                    \
       {                                                                        \
-        exponent = exponent * 10 + (*str - '0');                               \
+        if (exponent < 100000)                                                 \
+          exponent = exponent * 10 + (*str - '0');                             \
         str++;                                                                 \
       }                                                                        \
                                                                                \
-      result *= pow(10, exp_sign * exponent);                                  \
+      dexp += exp_sign * exponent;                                             \
     }                                                                          \
+                                                                               \
+    type result = mant;                                                        \
+    if (                                                                       \
+      mant <= (1ULL << mant_dig) && dexp >= -(max_exact_pow10) &&              \
+      dexp <= (max_exact_pow10))                                               \
+    {                                                                          \
+      type p = __ESBMC_exact_pow10(dexp < 0 ? -dexp : dexp);                   \
+      result = dexp < 0 ? result / p : result * p;                             \
+    }                                                                          \
+    else if (mant != 0 && dexp != 0)                                           \
+      result *= pow(10, dexp);                                                 \
                                                                                \
     result *= sign;                                                            \
                                                                                \
@@ -331,11 +372,19 @@ STRTOUL_DEF(strtoull, unsigned long long int, ULLONG)
     return result;                                                             \
   }
 
-STRTOF_DEF(strtof, float, 0.1f)
-STRTOF_DEF(strtod, double, 0.1)
-STRTOF_DEF(strtold, long double, 0.1L)
+/* 5^10 < 2^24, so 10^n is exact in float for n <= 10. long double shares the
+ * double bounds, which are exact for any format at least as wide. */
+STRTOF_DEF(strtof, float, 24, 10)
+STRTOF_DEF(strtod, double, 53, 22)
+STRTOF_DEF(strtold, long double, 53, 22)
 
 #undef STRTOF_DEF
+
+double atof(const char *nptr)
+{
+__ESBMC_HIDE:;
+  return strtod(nptr, NULL);
+}
 
 /* one plus the numeric value, rest is zero */
 static const unsigned char get_atoi_map(unsigned char pos)

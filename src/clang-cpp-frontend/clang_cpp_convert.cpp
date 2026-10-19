@@ -469,6 +469,42 @@ bool clang_cpp_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   return clang_c_convertert::get_var(vd, new_expr);
 }
 
+bool clang_cpp_convertert::get_method_declaration(
+  const clang::CXXMethodDecl &md,
+  const symbolt *&symbol)
+{
+  std::string name, id;
+  get_decl_name(md, name, id);
+  symbol = context.find_symbol(id);
+  if (symbol)
+    return false;
+
+  code_typet type;
+  if (get_function_signature(md, type))
+    return true;
+
+  if (is_ConstructorOrDestructor(md))
+    annotate_ctor_dtor_rtn_type(md, type.return_type());
+
+  locationt location;
+  get_location_from_decl(md, location);
+
+  symbolt declaration;
+  get_default_symbol(
+    declaration,
+    get_modulename_from_path(location.file().as_string()),
+    type,
+    name,
+    id,
+    location);
+  declaration.lvalue = true;
+  declaration.is_extern = md.getStorageClass() == clang::SC_Extern ||
+                          md.getStorageClass() == clang::SC_PrivateExtern;
+  declaration.file_local = md.getStorageClass() == clang::SC_Static;
+  symbol = context.move_symbol_to_context(declaration);
+  return false;
+}
+
 bool clang_cpp_convertert::get_method(
   const clang::CXXMethodDecl &md,
   exprt &new_expr)
@@ -971,6 +1007,25 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       new_expr = true_exprt();
     else
       new_expr = false_exprt();
+    break;
+  }
+
+  case clang::Stmt::ConceptSpecializationExprClass:
+  {
+    const clang::ConceptSpecializationExpr &concept_expr =
+      static_cast<const clang::ConceptSpecializationExpr &>(stmt);
+
+    new_expr = gen_boolean(concept_expr.isSatisfied());
+    break;
+  }
+
+  // If this node is the template (not a specialization), then
+  // isSatisfied asserts an error.
+  case clang::Stmt::RequiresExprClass:
+  {
+    const auto &requires_expr = static_cast<const clang::RequiresExpr &>(stmt);
+
+    new_expr = gen_boolean(requires_expr.isSatisfied());
     break;
   }
 
@@ -3487,17 +3542,13 @@ bool clang_cpp_convertert::get_ctor_dtor_ref(
   std::string name, id;
   get_decl_name(md, name, id);
 
-  typet type;
-  if (get_type(md.getType(), type))
-    return true;
-
-  code_typet &fd_type = to_code_type(type);
-  if (get_function_params(md, fd_type.arguments()))
+  code_typet type;
+  if (get_function_signature(md, type))
     return true;
 
   // annotate return type - will be used to adjust the initiliazer or
   // decl-derived stmt
-  annotate_ctor_dtor_rtn_type(md, fd_type.return_type());
+  annotate_ctor_dtor_rtn_type(md, type.return_type());
 
   new_expr = exprt("symbol", type);
   new_expr.identifier(id);
@@ -3692,27 +3743,9 @@ bool clang_cpp_convertert::get_member_expr(
   if (
     const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(memb.getMemberDecl()))
   {
-    std::string id, name;
-    get_decl_name(*md, name, id);
-    if (!id.empty() && context.find_symbol(id) == nullptr)
-    {
-      typet sym_type;
-      if (get_type(md->getType(), sym_type))
-        return true;
-      symbolt symbol;
-      locationt loc;
-      get_location_from_decl(*md, loc);
-      get_default_symbol(
-        symbol,
-        get_modulename_from_path(loc.file().as_string()),
-        sym_type,
-        name,
-        id,
-        loc);
-      symbol.lvalue = true;
-      symbol.is_extern = true;
-      context.move_symbol_to_context(symbol);
-    }
+    const symbolt *symbol;
+    if (get_method_declaration(*md, symbol))
+      return true;
   }
 
   return clang_c_convertert::get_member_expr(memb, new_expr);

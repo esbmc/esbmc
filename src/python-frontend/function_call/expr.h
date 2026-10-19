@@ -103,6 +103,13 @@ private:
    * Returns TypeError exception if type mismatch is detected, nil_exprt
    * otherwise.
    */
+  /// The TypeError CPython raises when an instance method is called on its
+  /// class with no instance (`C.func()`), or nil.
+  exprt unbound_method_error(const symbolt &func_symbol) const;
+
+  /// The TypeError this call's arguments raise, or nil.
+  exprt call_argument_error(const symbolt &func_symbol) const;
+
   exprt check_argument_types(
     const symbolt *func_symbol,
     const nlohmann::json &args,
@@ -532,6 +539,7 @@ private:
   // List method detection and handling
   bool receiver_is_tracked_numpy_view(const std::string &recv_type) const;
   bool receiver_is_binop_or_list_symbol() const;
+  bool receiver_class_defines_method(const std::string &method_name) const;
   bool is_list_method_call() const;
   exprt handle_list_method() const;
   exprt handle_list_append() const;

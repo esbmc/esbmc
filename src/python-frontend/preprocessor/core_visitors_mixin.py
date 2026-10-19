@@ -269,6 +269,9 @@ class CoreVisitorsMixin:
         node.value = lowered_value
         if not prefix:
             return None
+        # These assigns skip visit_Assign's own bookkeeping, so a literal the
+        # target held must be forgotten here or later reads fold to it.
+        self._invalidate_list_literals_for_assign_targets(node.targets)
         assigns = []
         for target in node.targets:
             assign = ast.Assign(targets=[target], value=node.value)
@@ -277,6 +280,7 @@ class CoreVisitorsMixin:
             ast.fix_missing_locations(assign)
             if isinstance(target, ast.Name):
                 self.known_variable_types[target.id] = lowered_type
+                self._track_literal_binding(target.id, node.value)
             assigns.append(assign)
         return prefix + assigns
 
@@ -1522,24 +1526,12 @@ class CoreVisitorsMixin:
         """
         Handle assignment nodes, including multiple assignments and tuple unpacking.
         """
+        split = self._split_linspace_retstep(node)
+        if split is not None:
+            return [self.visit(statement) for statement in split]
         self._invalidate_list_literals_for_assign_targets(node.targets)
         self._update_assignment_call_origins(node.targets, node.value)
-        # Neutralise `x = sorted(...d.items()...)` to `x = []` when the scan
-        # certified x as eq-only with a known dict receiver; the cascade
-        # then recovers the assert against the tracked Call origin.
-        # Only sorted() is neutralised: plain `list(d.items())` still has a
-        # materialised list path elsewhere that other rewrites depend on.
-        neutralized_target = None
-        if (len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
-                and node.targets[0].id in self._eq_only_items_view_targets
-                and self._is_items_view_call(node.value) and node.value.func.id == "sorted"):
-            recv = self._items_view_receiver_name(node.value)
-            if recv is not None and self._is_known_dict_name(recv):
-                placeholder = ast.List(elts=[], ctx=ast.Load())
-                ast.copy_location(placeholder, node.value)
-                ast.fix_missing_locations(placeholder)
-                node.value = placeholder
-                neutralized_target = node.targets[0].id
+        neutralized_target = self._neutralize_sorted_items_view(node)
 
         if self._maybe_record_type_alias_assign(node):
             return None
@@ -1578,6 +1570,27 @@ class CoreVisitorsMixin:
             return self._handle_single_target_assign(node)
         return self._handle_multi_target_assign(node)
 
+    def _neutralize_sorted_items_view(self, node):
+        """Neutralise `x = sorted(...d.items()...)` to `x = []` and return x.
+
+        Only when the scan certified x as eq-only with a known dict receiver;
+        the cascade then recovers the assert against the tracked Call origin.
+        Only sorted() is neutralised: plain `list(d.items())` still has a
+        materialised list path elsewhere that other rewrites depend on.
+        """
+        if not (len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
+                and node.targets[0].id in self._eq_only_items_view_targets
+                and self._is_items_view_call(node.value) and node.value.func.id == "sorted"):
+            return None
+        recv = self._items_view_receiver_name(node.value)
+        if recv is None or not self._is_known_dict_name(recv):
+            return None
+        placeholder = ast.List(elts=[], ctx=ast.Load())
+        ast.copy_location(placeholder, node.value)
+        ast.fix_missing_locations(placeholder)
+        node.value = placeholder
+        return node.targets[0].id
+
     def _is_known_dict_name(self, name):
         """True when `name` is reliably known to be bound to a dict.
 
@@ -1612,7 +1625,7 @@ class CoreVisitorsMixin:
     def _maybe_rewrite_dict_to_list_call(self, node):
         """Rewrite iterating builtins over a dict to use d.keys().
 
-        list(d) -> d.keys(); sorted/max/min/sum(d, ...) -> ...(d.keys(), ...).
+        list(d) -> list(d.keys()); sorted/max/min/sum(d, ...) -> ...(d.keys(), ...).
         The bare builtins reinterpret the dict struct as a list (wrong length,
         unsound subscript / wrong reduction). Routing through d.keys() reuses the
         correctly-typed dict-keys list path — Python iterates a dict over its
@@ -1640,14 +1653,10 @@ class CoreVisitorsMixin:
         ast.copy_location(keys_call, node)
         ast.fix_missing_locations(keys_call)
 
-        if node.func.id == "list":
-            # list(d) yields the keys list; d.keys() is exactly that. Note this
-            # aliases the dict's keys member rather than copying it, so mutating
-            # the result also mutates the dict — acceptable here because the
-            # pre-fix relabeling was outright unsound, and the common uses
-            # (len/iteration/indexing/sorted) are read-only.
-            return self.visit(keys_call)
-
+        # list(d) -> list(d.keys()): the list() wrapper keeps the result a
+        # plain list rather than a keys view, which compares unequal to any
+        # list (#8689). It still aliases the dict's keys member rather than
+        # copying it, so mutating the result also mutates the dict.
         # sorted(d, key=..., reverse=...) -> sorted(d.keys(), key=..., reverse=...)
         node.args[0] = keys_call
         self.generic_visit(node)
@@ -1840,6 +1849,9 @@ class CoreVisitorsMixin:
         if rewritten_ratio is not None:
             return rewritten_ratio
 
+        raising = self._bind_numpy_constructor_call(node)
+        if raising is not None:
+            return raising
         self._normalize_builtin_keyword_args(node)
         self._normalize_math_gcd_lcm_variadic(node)
 

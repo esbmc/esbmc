@@ -575,7 +575,8 @@ std::optional<exprt> python_converter::try_get_numpy_subscript_pointer_view_len(
     return std::nullopt;
 
   const symbolt *source = symbol_table_.find_symbol(source_id);
-  if (!source)
+  // The characters of a numpy string array are not one of its axes.
+  if (!source || type_utils::is_string_type(source->get_type().subtype()))
     return std::nullopt;
 
   const namespacet ns(symbol_table_);
@@ -857,6 +858,17 @@ exprt python_converter::list_argument_expr(const nlohmann::json &arg)
   return elements ? *elements : get_expr(arg);
 }
 
+// list(xs) builds a new list; returning xs itself would alias the two.
+static exprt copy_named_list(
+  python_converter &converter,
+  const exprt &list,
+  const nlohmann::json &element)
+{
+  if (!list.is_symbol())
+    return list;
+  return python_list(converter, element).build_shallow_copy_call(list, element);
+}
+
 // Whether `node` is the name `name`.
 static bool is_name(const nlohmann::json &node, const std::string &name)
 {
@@ -920,6 +932,33 @@ static void collect_dict_values(
       collect_dict_values(child, name, out);
 }
 
+// The values the dict `container` may hold: a literal's, every value stored
+// into a named dict, or for `d[k]` the values of each dict literal d holds
+// (#8768). False when they cannot be listed.
+bool python_converter::dict_values(
+  const nlohmann::json &container,
+  std::vector<nlohmann::json> &out)
+{
+  const std::string type = container.value("_type", "");
+  if (type == "Dict")
+    push_dict_values(container, out);
+  else if (type == "Name")
+    collect_dict_values(*ast_json, container["id"], out);
+  else if (type == "Subscript")
+  {
+    std::vector<nlohmann::json> outer;
+    if (!dict_values(container["value"], outer))
+      return false;
+    for (const auto &v : outer)
+    {
+      if (v.value("_type", "") != "Dict")
+        return false;
+      push_dict_values(v, out);
+    }
+  }
+  return true;
+}
+
 typet python_converter::stored_function_return_type(const nlohmann::json &value)
 {
   if (value.value("_type", "") == "Lambda" && value.contains("body"))
@@ -935,10 +974,8 @@ std::optional<typet>
 python_converter::dict_function_return_type(const nlohmann::json &container)
 {
   std::vector<nlohmann::json> values;
-  if (container.value("_type", "") == "Dict")
-    push_dict_values(container, values);
-  else if (container.value("_type", "") == "Name")
-    collect_dict_values(*ast_json, container["id"], values);
+  if (!dict_values(container, values))
+    return std::nullopt;
 
   std::optional<typet> shared;
   for (const auto &v : values)
@@ -1173,7 +1210,11 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     // d.items() returns the keys member as a placeholder list (correct size).
     exprt arg_expr = list_argument_expr(list_arg);
     if (arg_expr.type() == type_handler_.get_list_type())
-      return arg_expr;
+    {
+      // list() of a keys view is a plain list, compared by order (#8689).
+      arg_expr.remove(PYTHON_KEYS_VIEW_ATTR);
+      return copy_named_list(*this, arg_expr, element);
+    }
 
     // list(tuple) — materialise the tuple's components into a real list.
     // Without this the tuple struct flows into the generic builder, which
@@ -1480,7 +1521,11 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       // Fallback for Any-typed (void*) function parameters: use any_type so
       // the indirect call expression has a well-formed type.
       if (!resolved)
+      {
         call.type() = any_type();
+        refuse_mismatched_callees(
+          python_expr::build_symbol(*var_symbol), element);
+      }
 
       // Process arguments
       if (element.contains("args"))
@@ -2132,4 +2177,68 @@ exprt python_converter::materialize_list_function_call(
 
   // Return reference to the temp variable
   return symbol_expr(tmp_var_symbol);
+}
+
+// Whether some load of `name` under `node` is not the callee of a call, so
+// the function it names is used as a value.
+static bool used_as_value(const nlohmann::json &node, const std::string &name)
+{
+  if (node.is_object() && node.value("_type", "") == "Call")
+  {
+    const nlohmann::json &func = node["func"];
+    const bool direct =
+      func.value("_type", "") == "Name" && func.value("id", "") == name;
+    for (auto it = node.begin(); it != node.end(); ++it)
+      if ((!direct || it.key() != "func") && used_as_value(it.value(), name))
+        return true;
+    return false;
+  }
+  if (
+    node.is_object() && node.value("_type", "") == "Name" &&
+    node.value("id", "") == name)
+    return true;
+  if (node.is_structured())
+    for (const auto &child : node)
+      if (used_as_value(child, name))
+        return true;
+  return false;
+}
+
+void python_converter::refuse_mismatched_callees(
+  const exprt &callee,
+  const nlohmann::json &call)
+{
+  if (!current_block)
+    return;
+  const std::size_t passed = call["args"].size() + call["keywords"].size();
+  const nlohmann::json &body = (*ast_json)["body"];
+  for (const auto &def : body)
+  {
+    if (def.value("_type", "") != "FunctionDef")
+      continue;
+    const nlohmann::json &args = def["args"];
+    const std::string name = def.value("name", "");
+    const std::size_t params = args["posonlyargs"].size() + args["args"].size();
+    if (
+      params == passed || args["vararg"].is_object() ||
+      !used_as_value(body, name))
+      continue;
+    const symbolt *function =
+      symbol_table_.find_symbol(symbol_id(python_file(), "", name).to_string());
+    if (!function)
+      continue;
+    exprt differs("notequal", bool_type());
+    differs.copy_to_operands(
+      callee,
+      python_expr::build_typecast(
+        python_expr::build_address_of(python_expr::build_symbol(*function)),
+        callee.type()));
+    code_assertt check(differs);
+    check.location() = get_location_from_decl(call);
+    check.location().user_provided(true);
+    check.location().comment(
+      "Unsupported: call through a function value that may take a "
+      "different number of arguments");
+    current_block->copy_to_operands(check);
+  }
 }

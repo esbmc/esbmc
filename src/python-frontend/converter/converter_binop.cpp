@@ -1,4 +1,5 @@
 #include <python-frontend/converter/converter_internal.h>
+#include <python-frontend/converter/value_kinds.h>
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_converter.h>
@@ -387,16 +388,18 @@ std::string py_percent_format(
 }
 
 // `%d` takes an int or bool only: int() of a float does not raise on inf/nan.
+// A char is a one-character str (`s[i]`), not an int.
 bool percent_d_accepts(const typet &t)
 {
-  return t.is_signedbv() || t.is_unsignedbv() || t.is_bool();
+  return (t.is_signedbv() || t.is_unsignedbv() || t.is_bool()) &&
+         !type_utils::is_char_type(t);
 }
 
 // `%s` is limited to the types whose f-string lowering matches str().
 bool percent_s_accepts(const typet &t)
 {
-  return percent_d_accepts(t) || t.is_floatbv() ||
-         type_utils::is_string_type(t);
+  return percent_d_accepts(t) || type_utils::is_char_type(t) ||
+         t.is_floatbv() || type_utils::is_string_type(t);
 }
 
 nlohmann::json ast_node(const char *type, const nlohmann::json &loc)
@@ -408,11 +411,16 @@ nlohmann::json ast_node(const char *type, const nlohmann::json &loc)
   return node;
 }
 
-// The f-string part for one %s/%d/%i conversion of `value`.
+// The f-string part for one %s/%d/%i/%f conversion of `value`.
 std::optional<nlohmann::json>
 formatted_part(char conversion, nlohmann::json value, const typet &type)
 {
-  if (conversion == 'd' || conversion == 'i')
+  if (conversion == 'f')
+  {
+    if (!type.is_floatbv())
+      return std::nullopt;
+  }
+  else if (conversion == 'd' || conversion == 'i')
   {
     if (!percent_d_accepts(type))
       return std::nullopt;
@@ -429,6 +437,11 @@ formatted_part(char conversion, nlohmann::json value, const typet &type)
   nlohmann::json part = ast_node("FormattedValue", value);
   part["value"] = value;
   part["conversion"] = -1;
+  if (conversion == 'f')
+  {
+    part["format_spec"] = ast_node("Constant", value);
+    part["format_spec"]["value"] = ".6f";
+  }
   return part;
 }
 
@@ -442,19 +455,22 @@ bool names_and_constants(const std::vector<nlohmann::json> &args)
     const std::string kind = a.value("_type", "");
     if (kind == "Constant")
       continue;
-    if (kind != "Name" && kind != "Attribute" && kind != "Call")
+    if (
+      kind != "Name" && kind != "Attribute" && kind != "Call" &&
+      kind != "Subscript")
       return false;
     has_name = true;
   }
   return has_name;
 }
 
-// An attribute (a property getter) or a call may run code.
+// An attribute (a property getter), a call or a subscript (which may raise)
+// may run code.
 bool may_run_code(const std::vector<nlohmann::json> &args)
 {
   return std::any_of(args.begin(), args.end(), [](const nlohmann::json &a) {
-    return a.value("_type", "") == "Attribute" ||
-           a.value("_type", "") == "Call";
+    const std::string kind = a.value("_type", "");
+    return kind == "Attribute" || kind == "Call" || kind == "Subscript";
   });
 }
 
@@ -471,7 +487,7 @@ bool is_literal_percent_format(const nlohmann::json &element, const exprt &lhs)
 }
 
 // `"id %d" % i` with a non-constant `i` as the f-string `f"id {int(i)}"`
-// (#8224). Only flag-free %s/%d/%i/%% are rewritten.
+// (#8224). Only flag-free %s/%d/%i/%f/%% are rewritten.
 std::optional<nlohmann::json> percent_format_as_fstring(
   const nlohmann::json &left,
   const std::vector<nlohmann::json> &args,
@@ -572,6 +588,25 @@ exprt python_converter::hoist_side_effecting_operand(
   assign.location() = loc;
   add_instruction(assign);
   return symbol_expr(tmp);
+}
+
+void python_converter::guard_attribute_on_none(
+  const symbolt &symbol,
+  const std::string &var_name,
+  const std::string &attr_name,
+  const nlohmann::json &element)
+{
+  const typet &type = symbol.get_type();
+  if (var_name == "self" || !type.is_pointer() || !can_emit_runtime_guard())
+    return;
+
+  exprt is_none("=", bool_type());
+  is_none.copy_to_operands(symbol_expr(symbol), gen_zero(type));
+  emit_guarded_raise(
+    is_none,
+    "AttributeError",
+    "'NoneType' object has no attribute '" + attr_name + "'",
+    get_location_from_decl(element));
 }
 
 void python_converter::emit_guarded_raise(
@@ -1622,7 +1657,11 @@ exprt python_converter::get_fstring_in_order(const nlohmann::json &joined)
         create_tmp_symbol(joined, "$str_mod$", part.type(), exprt());
       add_instruction(code_declt(symbol_expr(tmp)));
       add_instruction(code_assignt(symbol_expr(tmp), part));
-      part = string_handler_.convert_to_string(symbol_expr(tmp));
+      part = string_handler_.apply_format_specification(
+        symbol_expr(tmp),
+        value.contains("format_spec")
+          ? string_handler_.process_format_spec(value["format_spec"])
+          : std::string());
     }
     result = result.is_nil()
                ? part
@@ -1657,8 +1696,21 @@ exprt python_converter::get_right_operand_expr(
                                                  : get_expr(right);
 }
 
+static void
+reject_numpy_string_membership(const std::string &op, const exprt &rhs)
+{
+  if (
+    (op == "In" || op == "NotIn") &&
+    type_utils::is_numpy_string_array(rhs.type()))
+    throw std::runtime_error(
+      "TypeError: membership in a numpy string array is not supported");
+}
+
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
+  if (std::optional<exprt> bound = try_bound_method_compare(element))
+    return *bound;
+
   // Extract left and right operands from AST
   auto left = element.contains("left") ? element["left"] : element["target"];
 
@@ -1690,6 +1742,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   else if (element.contains("ops"))
     op = element["ops"][0]["_type"].get<std::string>();
   assert(!op.empty());
+  guard_none_attribute_operands(op, left, right, lhs, rhs, element);
 
   const exprt result =
     get_binary_operator_expr(element, left, right, op, lhs, rhs);
@@ -1753,6 +1806,48 @@ exprt python_converter::handle_dict_bitwise(
   throw std::runtime_error("bitwise operations on dict are not supported");
 }
 
+exprt python_converter::checked_erased_int(
+  exprt operand,
+  const nlohmann::json &node,
+  const nlohmann::json &element)
+{
+  if (operand.type().subtype().id() != "empty" || !current_block)
+    return operand;
+  // Only a value that can come from sources of different known kinds can be
+  // anything but the int the cast below assumes.
+  value_kinds kinds(*ast_json);
+  if (!kinds.diverges(node, kinds.scope_of(current_func_name_)))
+    return operand;
+
+  const locationt location = get_location_from_decl(element);
+  if (operand.is_function_call() || has_side_effect(operand))
+  {
+    convert_function_call_to_side_effect(operand);
+    symbolt &tmp =
+      create_tmp_symbol(element, "$erased$", operand.type(), exprt());
+    code_declt decl(symbol_expr(tmp));
+    decl.location() = location;
+    current_block->copy_to_operands(decl);
+    code_assignt assign(symbol_expr(tmp), operand);
+    assign.location() = location;
+    current_block->copy_to_operands(assign);
+    operand = symbol_expr(tmp);
+  }
+
+  // Symex answers from what the value points to, and refuses, as #8315 does,
+  // when it cannot tell.
+  expr2tc value2, int2;
+  migrate_expr(operand, value2);
+  migrate_expr(gen_zero(type_handler_.get_typet("int", 0)), int2);
+  code_assertt check(migrate_expr_back(isinstance2tc(value2, int2)));
+  check.location() = location;
+  check.location().user_provided(true);
+  check.location().comment(
+    "Unsupported: arithmetic on a value whose type was lost");
+  current_block->copy_to_operands(check);
+  return operand;
+}
+
 exprt python_converter::get_binary_operator_expr(
   const nlohmann::json &element,
   const nlohmann::json &left,
@@ -1764,7 +1859,21 @@ exprt python_converter::get_binary_operator_expr(
   if (
     type_handler_.is_tagged_scalar_type(lhs.type()) ||
     type_handler_.is_tagged_scalar_type(rhs.type()))
+  {
+    // A tagged operand coming straight from a call (e.g. `f(x) + 1`) is still
+    // a raw call/side-effect node here, not an addressable lvalue; the
+    // dispatch below does member access on it directly, so copy it into a
+    // temp first.
+    if (current_block)
+    {
+      lhs =
+        tuple_handler_->prepare_rhs_for_unpacking(element, lhs, *current_block);
+      rhs =
+        tuple_handler_->prepare_rhs_for_unpacking(element, rhs, *current_block);
+    }
+
     return handle_tagged_scalar_binop(op, lhs, rhs, left, right, element);
+  }
 
   // Handle type identity checks (e.g., y is int, x is str)
   exprt type_identity_result =
@@ -1910,6 +2019,7 @@ exprt python_converter::get_binary_operator_expr(
     return dict_result;
 
   // Handle membership operators
+  reject_numpy_string_membership(op, rhs);
   if (op == "In")
     return handle_membership_operator(lhs, rhs, element, false);
   if (op == "NotIn")
@@ -2254,9 +2364,9 @@ exprt python_converter::get_binary_operator_expr(
       rhs = typecast_exprt(rhs, int_type);
     }
     else if (is_any_ptr(lhs) && is_integer(rhs))
-      lhs = typecast_exprt(lhs, rhs.type());
+      lhs = typecast_exprt(checked_erased_int(lhs, left, element), rhs.type());
     else if (is_any_ptr(rhs) && is_integer(lhs))
-      rhs = typecast_exprt(rhs, lhs.type());
+      rhs = typecast_exprt(checked_erased_int(rhs, right, element), lhs.type());
   }
 
   // Handle Any-typed (void*) operands in comparisons.
@@ -2539,6 +2649,16 @@ exprt python_converter::build_bytes_concat(const exprt &lhs, const exprt &rhs)
   return result;
 }
 
+// Complex arrays are stored and indexed; no arithmetic over them is modelled.
+static void reject_complex_array_arithmetic(const exprt &lhs, const exprt &rhs)
+{
+  if (
+    type_utils::is_numpy_complex_array(lhs.type()) ||
+    type_utils::is_numpy_complex_array(rhs.type()))
+    throw std::runtime_error(
+      "TypeError: arithmetic on a numpy complex array is not supported");
+}
+
 exprt python_converter::handle_array_operations(
   const std::string &op,
   exprt &lhs,
@@ -2547,6 +2667,7 @@ exprt python_converter::handle_array_operations(
   const nlohmann::json &right,
   const nlohmann::json &element)
 {
+  reject_complex_array_arithmetic(lhs, rhs);
   if (!lhs.type().is_array() && !rhs.type().is_array())
   {
     if (

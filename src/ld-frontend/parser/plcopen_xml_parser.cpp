@@ -1758,17 +1758,21 @@ check_eno_consumers(const pugi::xml_node &blk, const std::string &what)
       throw UnsupportedConstructError("wired ENO on block " + what, 2);
 }
 
-// EN and ENO of a standard block are not modeled. An EN wired to the left power
-// rail (always true) is accepted; any other EN is refused, and so is an ENO
-// that feeds anything but the right power rail.
+// EN and ENO of a standard or user function block are not modeled. An EN
+// wired to the left power rail (always true) is accepted; any other EN is
+// refused, and so is an ENO that feeds anything but the right power rail.
 static void reject_wired_enable_pins(const pugi::xml_node &root)
 {
+  std::set<std::string> user_fbs;
+  for (auto pou : root.select_nodes("//pou[@pouType='functionBlock']"))
+    user_fbs.insert(pou.node().attribute("name").as_string());
+
   for (auto sel : root.select_nodes(
          "//pou[@pouType='program']//block | //pou[@pouType='program']//Block"))
   {
     const pugi::xml_node blk = sel.node();
     const std::string type = blk.attribute("typeName").as_string();
-    if (!fb_kind_of_std(type))
+    if (!fb_kind_of_std(type) && !user_fbs.count(type))
       continue;
     const std::string what =
       type + " (" + blk.attribute("instanceName").as_string() + ")";

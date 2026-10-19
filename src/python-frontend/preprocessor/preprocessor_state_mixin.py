@@ -36,6 +36,8 @@ class PreprocessorStateMixin:
         self._vararg_def_owners = {}
         self._vararg_owner_specs = {}
         self.listcomp_counter = 0
+        self.functools_reduce_names = set()
+        self.functools_module_names = set()
         self.minmax_key_counter = 0
         self.variable_annotations = {}
         self.function_return_annotations = {}
@@ -50,6 +52,8 @@ class PreprocessorStateMixin:
         self.defaultdict_alias = None
         self.collections_module_imported = False
         self.collections_module_alias = None
+        self.numpy_module_names = set()
+        self.numpy_constructor_names = {}
         self._subscript_inferred_vars = set()
         self.generator_funcs = set()
         self.early_return_generator_funcs = set()

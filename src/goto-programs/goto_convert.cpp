@@ -204,8 +204,8 @@ void goto_convertt::convert_switch_case(
           .first;
     }
 
-    exprt::operandst &case_op_dest = cases_entry->second->second;
-    case_op_dest.push_back(code.case_op());
+    cases_entry->second->second.push_back(
+      case_label(code.case_op(), code.case_range_hi()));
   }
 }
 
@@ -450,7 +450,29 @@ void goto_convertt::convert_throw(const exprt &expr_in, goto_programt &dest)
     stack.pop_back();
   }
 
-  unwind_destructor_stack(expr.location(), targets.throw_stack_size, dest);
+  // The exception object is initialised from the operand before any local is
+  // destroyed ([except.throw]p3), so `throw t.v` must not read t after ~T.
+  if (
+    detached.empty() && !expr.operands().empty() &&
+    std::any_of(
+      stack.begin() + targets.throw_stack_size,
+      stack.end(),
+      is_destructor_entry))
+  {
+    const exprt operand = expr.op0();
+    symbol_exprt value(new_tmp_symbol(operand.type()).id, operand.type());
+    code_assignt init(value, operand);
+    init.location() = expr.location();
+    copy(init, ASSIGN, dest);
+    expr.op0() = value;
+  }
+
+  goto_programt unwind;
+  unwind_destructor_stack(expr.location(), targets.throw_stack_size, unwind);
+  for (auto &instruction : unwind.instructions)
+    if (instruction.is_function_call())
+      instruction.location.set("#during_unwind", true);
+  dest.destructive_append(unwind);
 
   for (auto it = detached.rbegin(); it != detached.rend(); ++it)
     stack.push_back(*it);
@@ -2015,6 +2037,15 @@ void goto_convertt::convert_dowhile(const codet &code, goto_programt &dest)
   old_targets.restore(targets);
 }
 
+exprt goto_convertt::case_label(const exprt &lo, const exprt &hi)
+{
+  if (hi.is_nil())
+    return lo;
+  exprt range("case_range");
+  range.copy_to_operands(lo, hi);
+  return range;
+}
+
 void goto_convertt::case_guard(
   const exprt &value,
   const exprt::operandst &case_op,
@@ -2025,6 +2056,14 @@ void goto_convertt::case_guard(
 
   forall_expr (it, case_op)
   {
+    if (it->id() == "case_range")
+    {
+      dest.copy_to_operands(and_exprt(
+        binary_relation_exprt(value, ">=", it->op0()),
+        binary_relation_exprt(value, "<=", it->op1())));
+      continue;
+    }
+
     equality_exprt eq_expr;
     eq_expr.lhs() = value;
     eq_expr.rhs() = *it;

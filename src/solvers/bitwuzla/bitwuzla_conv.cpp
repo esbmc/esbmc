@@ -787,7 +787,8 @@ smt_astt bitwuzla_convt::overflow_arith(const expr2tc &expr)
       res = tm.mk_term(bitwuzla::Kind::BV_UMUL_OVERFLOW, {side1->a, side2->a});
     }
   }
-  else if (is_div2t(overflow.operand) || is_modulus2t(overflow.operand))
+  else if (
+    is_signed && (is_div2t(overflow.operand) || is_modulus2t(overflow.operand)))
   {
     res = tm.mk_term(bitwuzla::Kind::BV_SDIV_OVERFLOW, {side1->a, side2->a});
   }

@@ -1,0 +1,4 @@
+CORE
+main.c
+--enforce-contract "*" --function f
+^ERROR: --enforce-contract: cannot use 'c:@F@f': a contract clause calls 'c:@F@helper', whose result the clause cannot name outside the function body$

@@ -353,6 +353,28 @@ void goto_convertt::do_mem(
 
   locationt location = function.location();
 
+  // Symex ends an alloca's storage with its frame by recognising the
+  // `return_value$_<callee>$N` temp, which `p = alloca(n);` would bypass
+  // (#8709). The models' __ESBMC_alloca outlives its frame (#8691).
+  const std::string callee =
+    is_malloc ? "" : id2string(ns.lookup(function.identifier())->name);
+  if (!is_malloc && callee != "__ESBMC_alloca")
+  {
+    const std::string frame_temp = "return_value$_" + callee + "$";
+    const symbolt *lhs_sym =
+      lhs.is_symbol() ? ns.lookup(lhs.identifier()) : nullptr;
+    if (!lhs_sym || !has_prefix(id2string(lhs_sym->name), frame_temp))
+    {
+      const typet ptr_type = pointer_typet(empty_typet());
+      exprt temp = symbol_exprt(
+        tmp_symbol.new_symbol(context, ptr_type, frame_temp).id, ptr_type);
+      do_mem(is_malloc, temp, function, arguments, dest);
+      if (lhs.is_not_nil())
+        copy(code_assignt(lhs, typecast_exprt(temp, lhs.type())), ASSIGN, dest);
+      return;
+    }
+  }
+
   // `malloc(n);` with the result discarded still allocates, and the storage is
   // unreachable the moment the statement ends -- exactly what
   // --memory-leak-check exists to report. Dropping the call made that leak
@@ -1283,6 +1305,15 @@ void goto_convertt::do_operator_new(
   do_cpp_new(lhs, new_function, dest);
 }
 
+/// `__ESBMC_alloca` is the models' spelling: its temp is not a
+/// `return_value$_alloca$`/`___builtin_alloca$` name, so its storage never
+/// expires (#8691).
+static bool is_alloca_function(const std::string &base_name)
+{
+  return base_name == "alloca" || base_name == "__builtin_alloca" ||
+         base_name == "__ESBMC_alloca";
+}
+
 void goto_convertt::do_function_call_symbol(
   const exprt &lhs,
   const exprt &function,
@@ -1822,7 +1853,7 @@ void goto_convertt::do_function_call_symbol(
   {
     do_realloc(lhs, function, arguments, dest);
   }
-  else if (base_name == "alloca" || base_name == "__builtin_alloca")
+  else if (is_alloca_function(base_name))
   {
     do_alloca(lhs, function, arguments, dest);
   }
