@@ -858,17 +858,6 @@ exprt python_converter::list_argument_expr(const nlohmann::json &arg)
   return elements ? *elements : get_expr(arg);
 }
 
-// list(xs) builds a new list; returning xs itself would alias the two.
-static exprt copy_named_list(
-  python_converter &converter,
-  const exprt &list,
-  const nlohmann::json &element)
-{
-  if (!list.is_symbol())
-    return list;
-  return python_list(converter, element).build_shallow_copy_call(list, element);
-}
-
 // Whether `node` is the name `name`.
 static bool is_name(const nlohmann::json &node, const std::string &name)
 {
@@ -1262,13 +1251,12 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     // Handle list(iterable) where iterable evaluates to a list — e.g.
     // list(d.items()), list(d.keys()), list(d.values()), list(some_list).
     // d.items() returns the keys member as a placeholder list (correct size).
+    // The result is a new list, so mutating it must not reach the argument;
+    // the copy of a keys view is a plain list, compared by order (#8689).
     exprt arg_expr = list_argument_expr(list_arg);
     if (arg_expr.type() == type_handler_.get_list_type())
-    {
-      // list() of a keys view is a plain list, compared by order (#8689).
-      arg_expr.remove(PYTHON_KEYS_VIEW_ATTR);
-      return copy_named_list(*this, arg_expr, element);
-    }
+      return python_list(*this, element)
+        .build_shallow_copy_call(arg_expr, element);
 
     // list(tuple) — materialise the tuple's components into a real list.
     // Without this the tuple struct flows into the generic builder, which
