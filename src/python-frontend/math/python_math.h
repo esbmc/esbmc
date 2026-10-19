@@ -183,6 +183,9 @@ public:
    * @throws std::runtime_error if pow symbol not found
    */
   exprt handle_power_symbolic(exprt base, exprt exp);
+  /// An integer power whose exponent is not a constant: pow(), or the bits of
+  /// 2.0 ** n for a base of 2.
+  exprt handle_power_symbolic_exponent(exprt lhs, exprt rhs);
 
   /**
    * @brief Build power expression using exponentiation by squaring
