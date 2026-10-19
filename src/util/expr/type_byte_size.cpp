@@ -639,6 +639,15 @@ static BigInt abi_scalar_alignment(const typet &type, const BigInt &natural)
   return abi != 0 && abi < natural ? BigInt(abi) : natural;
 }
 
+/// A _BitInt aligns like the smallest integer holding it, capped by the
+/// target (#8692).
+static BigInt bitint_alignment(const typet &type)
+{
+  const std::size_t natural = ext_int_representation_bytes(type);
+  const unsigned cap = config.ansi_c.bitint_max_align;
+  return cap != 0 && cap < natural ? BigInt(cap) : BigInt(natural);
+}
+
 BigInt access_alignment(const BigInt &bytes)
 {
   const configt::ansi_ct &c = config.ansi_c;
@@ -697,7 +706,7 @@ BigInt alignment(const typet &type, const namespacet &ns)
     result = alignment(type.subtype(), ns);
   }
   else if (type.get_bool("#extint"))
-    result = ext_int_representation_bytes(type);
+    result = bitint_alignment(type);
   else if (
     type.id() == typet::t_unsignedbv || type.id() == typet::t_signedbv ||
     type.id() == typet::t_fixedbv || type.id() == typet::t_floatbv ||
