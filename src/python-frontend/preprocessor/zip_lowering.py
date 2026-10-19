@@ -23,21 +23,21 @@ def _bound_names(module):
     return names
 
 
+def _plain_call(node, name, nargs):
+    """Whether `node` is `name(...)` with `nargs` positional arguments."""
+    return (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == name
+            and len(node.args) == nargs and not node.keywords)
+
+
 def _zip_build(stmt):
     """`(target, zip_call)` for `target = dict(zip(a, b))`, else None."""
     if not (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1
-            and isinstance(stmt.targets[0], ast.Name)):
+            and isinstance(stmt.targets[0], ast.Name) and _plain_call(stmt.value, "dict", 1)):
         return None
-    call = stmt.value
-    if not (isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
-            and call.func.id == "dict" and len(call.args) == 1 and not call.keywords):
-        return None
-    inner = call.args[0]
-    if not (isinstance(inner, ast.Call) and isinstance(inner.func, ast.Name)
-            and inner.func.id == "zip" and len(inner.args) == 2 and not inner.keywords):
-        return None
+    inner = stmt.value.args[0]
     target = stmt.targets[0].id
-    if any(isinstance(n, ast.Name) and n.id == target for n in ast.walk(inner)):
+    if not _plain_call(inner, "zip", 2) or any(
+            isinstance(n, ast.Name) and n.id == target for n in ast.walk(inner)):
         return None
     return target, inner
 
