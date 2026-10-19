@@ -589,9 +589,9 @@ class ClassContextMixin:
         """Whether `arg` is `type(None)`, which has no builtin name; the frontend
         reads NoneType as it (#8764)."""
         return (isinstance(arg, ast.Call) and isinstance(arg.func, ast.Name)
-                and arg.func.id == "type" and {"type", "NoneType"} <= known
-                and not arg.keywords and len(arg.args) == 1
-                and isinstance(arg.args[0], ast.Constant) and arg.args[0].value is None)
+                and arg.func.id == "type" and {"type", "NoneType"} <= known and not arg.keywords
+                and len(arg.args) == 1 and isinstance(arg.args[0], ast.Constant)
+                and arg.args[0].value is None)
 
     @staticmethod
     def _class_argument(call, func, index, known):
