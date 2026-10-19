@@ -39,12 +39,10 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <iomanip>
 #include <limits>
 #include <optional>
 #include <set>
 #include <functional>
-#include <sstream>
 #include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
@@ -735,6 +733,73 @@ exprt string_handler::build_fstring_conversion(
   return make_char_array_expr(chars, string_type);
 }
 
+namespace
+{
+// Default length used for nondeterministic strings when the user has
+// not provided an explicit value via --nondet-str-length.
+constexpr int DEFAULT_NONDET_STR_LENGTH = 16;
+
+int get_nondet_str_length()
+{
+  std::string opt_value = config.options.get_option("nondet-str-length");
+  if (!opt_value.empty())
+  {
+    try
+    {
+      int length = std::stoi(opt_value);
+      if (length > 0)
+        return length;
+    }
+    catch (...)
+    {
+    }
+  }
+  return DEFAULT_NONDET_STR_LENGTH;
+}
+} // namespace
+
+// +1 for the NUL: --nondet-str-length N promises len() can reach N (#7377).
+int string_handler::nondet_str_buffer_size()
+{
+  const int length = get_nondet_str_length();
+  return length < std::numeric_limits<int>::max() ? length + 1 : length;
+}
+
+exprt string_handler::build_nondet_string(const locationt &location)
+{
+  const int max_str_length = nondet_str_buffer_size();
+
+  typet char_array_type =
+    array_typet(char_type(), from_integer(max_str_length, size_type()));
+
+  symbolt &nondet_str_symbol = converter_.create_tmp_symbol(
+    location, "$nondet_str$", char_array_type, exprt());
+
+  code_declt decl(symbol_expr(nondet_str_symbol));
+  decl.location() = location;
+  converter_.add_instruction(decl);
+
+  exprt nondet_value("sideeffect", char_array_type);
+  nondet_value.statement("nondet");
+
+  code_assignt nondet_assign(symbol_expr(nondet_str_symbol), nondet_value);
+  nondet_assign.location() = location;
+  converter_.add_instruction(nondet_assign);
+
+  // Ensure null terminator at the last position
+  exprt last_elem = build_index(
+    symbol_expr(nondet_str_symbol),
+    from_integer(max_str_length - 1, size_type()));
+  code_assignt null_assign(last_elem, from_integer(0, char_type()));
+  null_assign.location() = location;
+  converter_.add_instruction(null_assign);
+
+  // Return address of first element: &arr[0] which is char*
+  exprt first_elem =
+    build_index(symbol_expr(nondet_str_symbol), from_integer(0, size_type()));
+  return build_address_of(first_elem);
+}
+
 exprt string_handler::build_nondet_string_fallback(const locationt &location)
 {
   // Sound over-approximation when a str.*() handler cannot extract a
@@ -776,23 +841,7 @@ exprt string_handler::build_nondet_string_fallback(const locationt &location)
     return nondet;
   }
 
-  symbolt &tmp =
-    converter_.create_tmp_symbol(location, "$nondet_str$", ptr_type, exprt());
-
-  code_declt decl(symbol_expr(tmp));
-  decl.location() = location;
-  converter_.add_instruction(decl);
-
-  side_effect_expr_nondett nondet(ptr_type);
-  nondet.location() = location;
-
-  code_assignt assign(symbol_expr(tmp), nondet);
-  assign.location() = location;
-  converter_.add_instruction(assign);
-
-  exprt result = symbol_expr(tmp);
-  result.location() = location;
-  return result;
+  return build_nondet_string(location);
 }
 
 BigInt string_handler::get_string_size(const exprt &expr)
@@ -868,9 +917,9 @@ std::string string_handler::float_to_string(
   std::size_t width,
   int precision)
 {
-  // std::pow/std::round and the ostream conversion below honour the host FP
-  // rounding mode, which the pipeline can leave non-default; pin FE_TONEAREST
-  // so the decimal fold matches CPython regardless of the host's mode.
+  // snprintf honours the host FP rounding mode, which the pipeline can leave
+  // non-default; pin FE_TONEAREST so the decimal fold matches CPython
+  // regardless of the host's mode.
   const host_rounding_mode rounding_guard(FE_TONEAREST);
   double val = 0.0;
 
@@ -901,13 +950,16 @@ std::string string_handler::float_to_string(
     throw std::runtime_error("Invalid float bit width");
   }
 
-  // Use proper rounding to avoid IEEE 754 precision issues
-  double multiplier = std::pow(10.0, precision);
-  double rounded = std::round(val * multiplier) / multiplier;
-
-  std::ostringstream oss;
-  oss << std::fixed << std::setprecision(precision) << rounded;
-  return oss.str();
+  // CPython rounds the exact binary value half-to-even, as printf does:
+  // f"{0.125:.2f}" is "0.12" and f"{2.675:.2f}" is "2.67".
+  if (std::isnan(val))
+    return "nan";
+  const int n = std::snprintf(nullptr, 0, "%.*f", precision, val);
+  if (n < 0)
+    throw std::runtime_error("float formatting failed");
+  std::string out(static_cast<std::size_t>(n), '\0');
+  std::snprintf(&out[0], out.size() + 1, "%.*f", precision, val);
+  return out;
 }
 
 std::string string_handler::cpython_float_str(double d)
@@ -2500,6 +2552,26 @@ exprt string_handler::handle_string_to_int(
   if (!int_symbol)
   {
     throw std::runtime_error("__python_int function not found in symbol table");
+  }
+
+  // int() of an invalid literal raises a catchable ValueError (#8705), as
+  // float() does; the model's own assertion stays for unguarded callers.
+  if (
+    const symbolt *is_int =
+      find_cached_c_function_symbol("c:@F@__python_str_is_int"))
+  {
+    exprt valid = build_call_expr(*is_int, bool_type(), {str_addr, base_expr});
+    valid.location() = location;
+    codet throw_code("expression");
+    throw_code.operands().push_back(
+      converter_.get_exception_handler().gen_exception_raise(
+        "ValueError", "invalid literal for int()"));
+    code_ifthenelset guard;
+    guard.cond() = not_exprt(valid);
+    guard.then_case() = throw_code;
+    guard.location() = location;
+    guard.location().property("skipped");
+    converter_.add_instruction(guard);
   }
 
   // Call __python_int(str, base). The result is a 64-bit Python int (matching

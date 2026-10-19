@@ -354,10 +354,13 @@ void goto_convertt::do_mem(
   locationt location = function.location();
 
   // Symex ends an alloca's storage with its frame by recognising the
-  // `return_value$_alloca$N` temp, which `p = alloca(n);` would bypass (#8709).
-  const std::string frame_temp = "return_value$_alloca$";
-  if (!is_malloc && ns.lookup(function.identifier())->name == "alloca")
+  // `return_value$_<callee>$N` temp, which `p = alloca(n);` would bypass
+  // (#8709). The models' __ESBMC_alloca outlives its frame (#8691).
+  const std::string callee =
+    is_malloc ? "" : id2string(ns.lookup(function.identifier())->name);
+  if (!is_malloc && callee != "__ESBMC_alloca")
   {
+    const std::string frame_temp = "return_value$_" + callee + "$";
     const symbolt *lhs_sym =
       lhs.is_symbol() ? ns.lookup(lhs.identifier()) : nullptr;
     if (!lhs_sym || !has_prefix(id2string(lhs_sym->name), frame_temp))
@@ -1302,6 +1305,15 @@ void goto_convertt::do_operator_new(
   do_cpp_new(lhs, new_function, dest);
 }
 
+/// `__ESBMC_alloca` is the models' spelling: its temp is not a
+/// `return_value$_alloca$`/`___builtin_alloca$` name, so its storage never
+/// expires (#8691).
+static bool is_alloca_function(const std::string &base_name)
+{
+  return base_name == "alloca" || base_name == "__builtin_alloca" ||
+         base_name == "__ESBMC_alloca";
+}
+
 void goto_convertt::do_function_call_symbol(
   const exprt &lhs,
   const exprt &function,
@@ -1841,7 +1853,7 @@ void goto_convertt::do_function_call_symbol(
   {
     do_realloc(lhs, function, arguments, dest);
   }
-  else if (base_name == "alloca" || base_name == "__builtin_alloca")
+  else if (is_alloca_function(base_name))
   {
     do_alloca(lhs, function, arguments, dest);
   }
