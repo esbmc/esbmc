@@ -2876,6 +2876,29 @@ private:
    * @param element The full binary operation JSON AST node.
    * @return The result expression, or nil_exprt if not an array operation.
    */
+  exprt numpy_array_arithmetic(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs);
+  exprt numpy_elementwise(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const typet &type);
+  exprt raise_in_expression(
+    const std::string &exception,
+    const std::string &message,
+    const typet &type);
+  void reject_unmodelled_array_arithmetic(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &element);
+  exprt numpy_element_op(
+    const std::string &op,
+    const exprt &x,
+    const exprt &y,
+    const typet &type);
   exprt handle_array_operations(
     const std::string &op,
     exprt &lhs,

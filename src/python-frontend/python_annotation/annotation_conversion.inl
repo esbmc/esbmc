@@ -1428,7 +1428,9 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
        lhs["_type"] == "UnaryOp" ||
        (lhs["_type"] == "Constant" && lhs.contains("value") &&
         (lhs["value"].is_number_integer() || lhs["value"].is_number_float())));
-    if (rhs_is_float_literal && lhs_is_numeric_shape)
+    if (
+      rhs_is_float_literal && lhs_is_numeric_shape &&
+      !is_array_operand(lhs, body))
       return "float";
   }
 
@@ -1453,6 +1455,9 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
     };
     if (operand_is_complex(lhs) || operand_is_complex(rhs))
       return "complex";
+    // A number on the left of an array (`2 * a`) gives an array.
+    if (!is_array_operand(lhs, body) && is_array_operand(rhs, body))
+      return "list";
   }
 
   if (lhs["_type"] == "BinOp")
@@ -1462,7 +1467,9 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
   else if (lhs["_type"] == "Tuple")
     type = "tuple";
   // Floor division (//) operations always result in an integer value
-  else if (stmt.contains("value") && stmt["value"]["op"]["_type"] == "FloorDiv")
+  else if (
+    stmt.contains("value") && stmt["value"]["op"]["_type"] == "FloorDiv" &&
+    !is_array_operand(lhs, body))
     type = "int";
   else
   {
@@ -1579,6 +1586,31 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
   }
 
   return promote_to_float_operand(stmt, type);
+}
+
+/// Whether `operand` is a NumPy array: a constructor or sized random call, or
+/// a name annotated as the list such a call is.
+template <class Json>
+bool python_annotation<Json>::is_array_operand(
+  const Json &operand,
+  const Json &body)
+{
+  const std::string type = operand.value("_type", std::string());
+  if (type == "Call")
+    return is_numpy_array_ctor_call(operand) ||
+           !numpy_random::list_annotation(
+              static_cast<const nlohmann::json &>(operand),
+              static_cast<const nlohmann::json &>(ast_))
+              .empty();
+  if (type != "Name")
+    return false;
+  const std::string name = operand["id"].template get<std::string>();
+  Json decl = find_annotated_assign(
+    name, body.contains("body") ? body["body"] : ast_["body"]);
+  if (decl.empty())
+    decl = find_annotated_assign(name, ast_["body"]);
+  return !decl.empty() && decl.contains("annotation") &&
+         decl["annotation"].value("id", std::string()) == "list";
 }
 
 /// True division of an int or bool yields a float, and so does other
