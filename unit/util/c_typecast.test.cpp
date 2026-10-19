@@ -734,6 +734,15 @@ TEST_CASE(
       symbol_exprt("w", int128_type()),
       int128_type());
   }
+  SECTION("two 40-bit operands keep their width")
+  {
+    // C23 6.3.1.1p2: integer promotions leave a bit-precise type unchanged.
+    require_arith_result(
+      ns,
+      symbol_exprt("a", signedbv_typet(40)),
+      symbol_exprt("b", signedbv_typet(40)),
+      signedbv_typet(40));
+  }
   SECTION("int and unsigned __int128 promote to unsigned __int128")
   {
     require_arith_result(
