@@ -815,6 +815,14 @@ static void reject_execution_order(const pugi::xml_node &n)
     throw UnsupportedConstructError(t + " with an executionOrderId", 2);
 }
 
+// Jumps and returns skip networks (IEC 61131-3:2025 8.1.6, Table 72), which the
+// single scan loop cannot model; a label is refused as a jump target.
+static void reject_execution_control(const std::string &t)
+{
+  if (t == "jump" || t == "label" || t == "return")
+    throw UnsupportedConstructError(t, 2);
+}
+
 // Resolve a counter's Boolean control pin (R, LD) to the value it carries: the
 // power flow of a contact or block wired to it, or a variable wired to it
 // directly. Empty when the pin is unwired.
@@ -888,6 +896,7 @@ static bool parse_graphical_ld(
   for (auto child : ld_body.children())
   {
     std::string t = child.name();
+    reject_execution_control(t);
     int lid = child.attribute("localId").as_int(-1);
     if (lid < 0)
       continue;
