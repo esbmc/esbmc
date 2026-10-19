@@ -89,6 +89,35 @@ exprt python_converter::make_enum_member_struct_expr(
   return struct_val;
 }
 
+symbolt *python_converter::find_class_attribute_symbol(
+  const std::string &class_name,
+  const std::string &attr_name)
+{
+  auto lookup = [&](const std::string &cls) {
+    symbol_id sid = create_symbol_id();
+    sid.set_function("");
+    sid.set_class(cls);
+    sid.set_object(attr_name);
+    return symbol_table_.find_symbol(sid.to_string());
+  };
+
+  if (symbolt *found = lookup(class_name))
+    return found;
+
+  // Not found in the direct class — walk base classes (Python MRO).
+  auto class_node = json_utils::find_class((*ast_json)["body"], class_name);
+  if (class_node.empty() || !class_node.contains("bases"))
+    return nullptr;
+  for (const auto &base_node : class_node["bases"])
+  {
+    if (!base_node.contains("id"))
+      continue;
+    if (symbolt *found = lookup(base_node["id"].get<std::string>()))
+      return found;
+  }
+  return nullptr;
+}
+
 std::string
 python_converter::extract_class_name_from_tag(const std::string &tag_name)
 {

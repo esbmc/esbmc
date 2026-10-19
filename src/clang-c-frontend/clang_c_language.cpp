@@ -359,6 +359,19 @@ static unsigned bitint_max_align(const clang::TargetInfo &target)
 #endif
 }
 
+/// Takes the alignments the data model cannot express from clang's target.
+static void adopt_target_layout(const clang::TargetInfo &target)
+{
+  config.ansi_c.long_long_align = target.getLongLongAlign() / 8;
+  config.ansi_c.double_align = target.getDoubleAlign() / 8;
+  config.ansi_c.long_double_align = target.getLongDoubleAlign() / 8;
+  // Where long double is double (AArch64 Darwin, Windows), the data model's
+  // 128 bits would lay it out wider than clang does; other formats keep it.
+  if (&target.getLongDoubleFormat() == &llvm::APFloat::IEEEdouble())
+    config.ansi_c.long_double_width = target.getLongDoubleWidth();
+  config.ansi_c.bitint_max_align = bitint_max_align(target) / 8;
+}
+
 bool clang_c_languaget::parse(const std::string &path)
 {
   // preprocessing
@@ -449,12 +462,7 @@ bool clang_c_languaget::parse(const std::string &path)
   else
     mergeASTs(newAST, AST);
 
-  const clang::TargetInfo &target = AST->getASTContext().getTargetInfo();
-  config.ansi_c.long_long_align = target.getLongLongAlign() / 8;
-  config.ansi_c.double_align = target.getDoubleAlign() / 8;
-  config.ansi_c.long_double_align = target.getLongDoubleAlign() / 8;
-  config.ansi_c.bitint_max_align = bitint_max_align(target) / 8;
-
+  adopt_target_layout(AST->getASTContext().getTargetInfo());
   return false;
 }
 

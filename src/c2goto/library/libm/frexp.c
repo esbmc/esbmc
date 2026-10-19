@@ -38,6 +38,11 @@ _Static_assert(
  * LDBL_MANT_DIG describes the x87 format (64 on x86-64). */
 #  define LDBL_MANT_BITS 112
 typedef __uint128_t __UINT128_TYPE__;
+#elif __SIZEOF_LONG_DOUBLE__ == 8
+/* long double is double (AArch64 Darwin, Windows). */
+#  define LDBL_BITS 64
+#  define LDBL_EXP_BITS 11
+#  define LDBL_MANT_BITS 52
 #endif
 
 #define TYPE1(n) __UINT##n##_TYPE__
