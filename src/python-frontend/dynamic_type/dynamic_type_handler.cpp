@@ -125,7 +125,12 @@ std::unordered_set<std::string> dynamic_type_handler::detect_dynamic_type_names(
   }
 
   if (!collect_if_node_literal_kinds(
-        if_node, kinds, leaf_count, leaf_total, *scope_body, module_body))
+        if_node,
+        kinds,
+        leaf_count,
+        leaf_total,
+        *scope_body,
+        converter_.callable_function_stubs()))
     return dynamic_type_names;
 
   for (const auto &[name, kind_set] : kinds)
