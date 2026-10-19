@@ -1,0 +1,4 @@
+CORE
+main.c
+--symbol-table-only
+^\s*case 1 \.\.\. 5:$

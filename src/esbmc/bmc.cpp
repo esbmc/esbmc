@@ -615,7 +615,10 @@ void bmct::report_violation()
     !weak_invariant_detected ||
     goto_functionst::property_verdicts.has_violation())
   {
-    report_failure();
+    // A k-step strategy that owns the property table goes on past a
+    // base-case violation and prints the run's one verdict where it ends.
+    if (!strategy_owns_property_table(options))
+      report_failure();
     return;
   }
 

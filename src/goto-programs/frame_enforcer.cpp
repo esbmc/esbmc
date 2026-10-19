@@ -512,8 +512,11 @@ frame_enforcert::collect_global_variables(const contextt &context)
     if (s.get_type().is_code() || s.is_type || !s.lvalue)
       return;
 
-    // Only process static lifetime variables (globals and static locals)
-    if (!s.static_lifetime)
+    // Only process static lifetime variables (globals and static locals).
+    // Python module globals carry static_lifetime=false and are recognised
+    // by mode and file_local instead, as havoc_static_globals does.
+    const bool python_global = s.mode == "Python" && !s.file_local;
+    if (!s.static_lifetime && !python_global)
       return;
 
     // Skip internal ESBMC symbols

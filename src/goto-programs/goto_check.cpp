@@ -330,6 +330,43 @@ void goto_checkt::fp_to_int_range_check(
     guard);
 }
 
+/// Whether integer @p value lies outside @p dst's range; @p value must be
+/// wider than @p dst, or unsigned and as wide. overflow_cast tests only the
+/// unsigned range of its width, so a signed destination is spelled out in
+/// @p value's own type (#8661).
+static expr2tc narrowing_overflow(const expr2tc &value, const type2tc &dst)
+{
+  const unsigned int width = dst->get_width();
+  if (!is_signedbv_type(dst))
+    return overflow_cast2tc(value, width);
+  if (is_unsignedbv_type(value->type))
+    return overflow_cast2tc(value, width - 1);
+  const BigInt half = BigInt::power2(width - 1);
+  return or2tc(
+    lessthan2tc(value, constant_int2tc(value->type, -half)),
+    greaterthan2tc(value, constant_int2tc(value->type, half - 1)));
+}
+
+/// Under --ir an integer cast is the identity, but the simplifier folds a
+/// constant cast with wrap-around, so a signed destination checks the source
+/// rather than the result (#8661). Nil when the cast cannot overflow.
+static expr2tc int_encoding_cast_overflow(
+  const expr2tc &cast,
+  const type2tc &dst_type,
+  const type2tc &src_type)
+{
+  const unsigned int dst_width = dst_type->get_width();
+  if (!is_signedbv_type(dst_type) || !is_bv_type(src_type))
+    return overflow_cast2tc(cast, dst_width);
+
+  const unsigned int src_width = src_type->get_width();
+  if (
+    src_width < dst_width ||
+    (src_width == dst_width && is_signedbv_type(src_type)))
+    return expr2tc();
+  return narrowing_overflow(to_typecast2t(cast).from, dst_type);
+}
+
 void goto_checkt::cast_overflow_check(
   const expr2tc &expr,
   const guard2tc &guard,
@@ -366,22 +403,22 @@ void goto_checkt::cast_overflow_check(
   expr2tc cast_overflow;
   std::string claim_msg;
 
+  const typecast2t &cast = to_typecast2t(expr);
+  const type2tc &src_type = ns.follow(cast.from->type);
   if (is_solidity)
   {
     // Solidity: check the inner operand (before wrap) against the destination
     // width — required for narrowing casts like uint256 → uint8.
-    const typecast2t &cast = to_typecast2t(expr);
-    const type2tc &src_type = ns.follow(cast.from->type);
-    if (!is_signedbv_type(src_type) && !is_unsignedbv_type(src_type))
+    if (!is_bv_type(src_type) || dst_width >= src_type->get_width())
       return;
-    if (dst_width >= src_type->get_width())
-      return;
-    cast_overflow = overflow_cast2tc(cast.from, dst_width);
+    cast_overflow = narrowing_overflow(cast.from, resolved_type);
     claim_msg = "Narrowing cast overflow on ";
   }
   else
   {
-    cast_overflow = overflow_cast2tc(expr, dst_width);
+    cast_overflow = int_encoding_cast_overflow(expr, resolved_type, src_type);
+    if (is_nil_expr(cast_overflow))
+      return;
     claim_msg = "Cast arithmetic overflow on ";
   }
 
@@ -389,6 +426,15 @@ void goto_checkt::cast_overflow_check(
 
   add_guarded_claim(
     cast_overflow, claim_msg + get_expr_id(expr), "overflow", loc, guard);
+}
+
+/* Solidity checks no arithmetic inside an unchecked block, and never checks a
+ * shift: its result is truncated (Solidity docs, Types, "Shifts"). */
+static bool
+solidity_skips_overflow_check(const expr2tc &expr, const locationt &loc)
+{
+  return config.language.lid == language_idt::SOLIDITY &&
+         (loc.get("#sol_unchecked") == "1" || is_shl2t(expr));
 }
 
 static expr2tc overflow_expr(const expr2tc &expr)
@@ -415,10 +461,7 @@ void goto_checkt::overflow_check(
   if (is_lshr2t(expr) || is_ashr2t(expr))
     return;
 
-  // Skip overflow checks inside Solidity unchecked blocks
-  if (
-    config.language.lid == language_idt::SOLIDITY &&
-    loc.get("#sol_unchecked") == "1")
+  if (solidity_skips_overflow_check(expr, loc))
     return;
 
   // First, check type.
@@ -734,10 +777,12 @@ void goto_checkt::shift_check(
 
   // Negative shift distance and distance >= width are UB per C11 §6.5.7p3
   // and C++ [expr.shift]/1. Run the UB-distance assertions whenever the user
-  // asked for shift UB checks or for general overflow checking.
+  // asked for shift UB checks or for general overflow checking. Solidity
+  // defines a shift by any count (Solidity docs, Types, "Shifts").
   if (
-    !enable_ub_shift_check && !enable_overflow_check &&
-    !enable_unsigned_overflow_check)
+    (!enable_ub_shift_check && !enable_overflow_check &&
+     !enable_unsigned_overflow_check) ||
+    config.language.lid == language_idt::SOLIDITY)
     return;
 
   assert(is_lshr2t(expr) || is_ashr2t(expr) || is_shl2t(expr));
@@ -1388,6 +1433,12 @@ void goto_checkt::clz_zero_check(const expr2tc &code, const locationt &loc)
     guard);
 }
 
+static bool has_checked_operand(const expr2tc &code)
+{
+  return is_code_expression2t(code) || is_code_free2t(code) ||
+         is_code_cpp_delete2t(code) || is_code_cpp_del_array2t(code);
+}
+
 void goto_checkt::goto_check(goto_programt &goto_program)
 {
   // Not a ranged loop because we need it to be an iterator :/
@@ -1406,7 +1457,7 @@ void goto_checkt::goto_check(goto_programt &goto_program)
 
     if (i.is_other())
     {
-      if (is_code_expression2t(i.code))
+      if (has_checked_operand(i.code))
       {
         check(i.code, loc);
       }
@@ -1447,9 +1498,8 @@ void goto_checkt::goto_check(goto_programt &goto_program)
                  is_signedbv_type(inner_type)) &&
                 inner_type->get_width() < outer_type->get_width())
               {
-                unsigned int narrow_width = inner_type->get_width();
                 expr2tc cast_overflow =
-                  overflow_cast2tc(assign.source, narrow_width);
+                  narrowing_overflow(assign.source, inner_type);
                 make_not(cast_overflow);
                 guard2tc guard;
                 add_guarded_claim(

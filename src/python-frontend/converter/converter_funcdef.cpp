@@ -2082,6 +2082,17 @@ bool python_converter::seed_mixed_call_site_elements(
   // where the strings and numbers sit (#8472).
   if (!complete || !mixes_str_and_number(param_id + "$mixed_probe", pooled))
     return false;
+  if (
+    direct && param_keeps_positions(func_name, param_index) &&
+    std::all_of(
+      kinds.begin(),
+      kinds.end(),
+      [&](const auto &k) { return k == kinds[0]; }) &&
+    record_literal_positions(param_id, literals, kinds[0]))
+  {
+    positional_list_params_.insert(param_id);
+    return true;
+  }
   for (const typet &t : pooled)
     element_type_registry_.record(param_id, "", t);
   return true;
@@ -2378,6 +2389,83 @@ void python_converter::reject_if_symbolic_shape_param(
       ".shape/.ndim/.size/transpose()/sort()/argsort()");
 }
 
+// Argument is a module-level variable: look for its defining
+// `Assign`/`AnnAssign` among the module's top-level statements. The
+// typechecking pre-pass rewrites plain `Assign` nodes to `AnnAssign`
+// once it infers a type, so both forms need to be recognised.
+static const nlohmann::json *module_numpy_literal(
+  const nlohmann::json &module_body,
+  const std::string &arg_name)
+{
+  for (const auto &stmt : module_body)
+  {
+    const std::string stmt_type = stmt.value("_type", "");
+    std::string target_name;
+    if (
+      stmt_type == "Assign" && stmt.contains("targets") &&
+      !stmt["targets"].empty())
+      target_name = stmt["targets"][0].value("id", "");
+    else if (stmt_type == "AnnAssign" && stmt.contains("target"))
+      target_name = stmt["target"].value("id", "");
+
+    if (
+      target_name == arg_name &&
+      is_numpy_array_literal_call(stmt.value("value", nlohmann::json())))
+      return &stmt["value"];
+  }
+  return nullptr;
+}
+
+static std::size_t
+count_name_stores(const nlohmann::json &node, const std::string &name)
+{
+  if (node.is_array())
+  {
+    std::size_t stores = 0;
+    for (const auto &child : node)
+      stores += count_name_stores(child, name);
+    return stores;
+  }
+  if (!node.is_object())
+    return 0;
+  const std::string kind = node.value("_type", "");
+  if (
+    (kind == "Global" || kind == "Nonlocal") && node.contains("names") &&
+    std::find(node["names"].begin(), node["names"].end(), name) !=
+      node["names"].end())
+    return 2;
+  std::size_t stores =
+    (kind == "arg" && node.value("arg", "") == name) ||
+    (kind == "Name" && node.value("id", "") == name && node.contains("ctx") &&
+     node["ctx"].value("_type", "") != "Load");
+  for (const auto &child : node)
+    stores += count_name_stores(child, name);
+  return stores;
+}
+
+// The `np.array([...])` call a local of `def` is bound to, when a top-level
+// statement of its body is the only binding of that name, parameters
+// included: any other could give the argument another shape.
+static const nlohmann::json *
+sole_local_numpy_literal(const nlohmann::json &def, const std::string &name)
+{
+  if (count_name_stores(def, name) != 1)
+    return nullptr;
+  for (const auto &stmt : def["body"])
+  {
+    const nlohmann::json *target = nullptr;
+    if (stmt.value("_type", "") == "Assign" && stmt["targets"].size() == 1)
+      target = &stmt["targets"][0];
+    else if (stmt.value("_type", "") == "AnnAssign")
+      target = &stmt["target"];
+    if (
+      target != nullptr && is_name_target(*target, name) &&
+      is_numpy_array_literal_call(stmt.value("value", nlohmann::json())))
+      return &stmt["value"];
+  }
+  return nullptr;
+}
+
 bool python_converter::try_infer_numpy_param_type(
   const std::string &func_name,
   size_t param_index,
@@ -2436,40 +2524,29 @@ bool python_converter::try_infer_numpy_param_type(
 
     if (site.enclosing_function.empty())
     {
-      // Argument is a module-level variable: look for its defining
-      // `Assign`/`AnnAssign` among the module's top-level statements. The
-      // typechecking pre-pass rewrites plain `Assign` nodes to `AnnAssign`
-      // once it infers a type, so both forms need to be recognised.
-      for (const auto &stmt : module_body)
-      {
-        const std::string stmt_type = stmt.value("_type", "");
-        std::string target_name;
-        if (
-          stmt_type == "Assign" && stmt.contains("targets") &&
-          !stmt["targets"].empty())
-          target_name = stmt["targets"][0].value("id", "");
-        else if (stmt_type == "AnnAssign" && stmt.contains("target"))
-          target_name = stmt["target"].value("id", "");
+      if (
+        const nlohmann::json *literal =
+          module_numpy_literal(module_body, arg_name))
+        record(type_handler_.get_typet((*literal)["args"][0]));
+      continue;
+    }
 
-        if (
-          target_name == arg_name &&
-          is_numpy_array_literal_call(stmt.value("value", nlohmann::json())))
-        {
-          record(type_handler_.get_typet(stmt["value"]["args"][0]));
-          break;
-        }
-      }
+    const nlohmann::json *enclosing_def =
+      find_function_def(module_body, site.enclosing_function);
+    if (enclosing_def == nullptr)
+      continue;
+
+    if (
+      const nlohmann::json *literal =
+        sole_local_numpy_literal(*enclosing_def, arg_name))
+    {
+      record(type_handler_.get_typet((*literal)["args"][0]));
       continue;
     }
 
     // Argument is a name local to the caller: if it is itself one of the
     // caller's own parameters, resolve that parameter recursively (the
     // "forwarded through an intermediate function" case).
-    const nlohmann::json *enclosing_def =
-      find_function_def(module_body, site.enclosing_function);
-    if (enclosing_def == nullptr)
-      continue;
-
     const nlohmann::json &enclosing_params = (*enclosing_def)["args"]["args"];
     for (size_t i = 0; i < enclosing_params.size(); i++)
     {
@@ -3086,6 +3163,15 @@ std::optional<typet> python_converter::numpy_filled_array_type(
   return type;
 }
 
+static bool has_only_dtype_keyword(const nlohmann::json &call)
+{
+  const auto &keywords = call.value("keywords", nlohmann::json::array());
+  return std::all_of(
+    keywords.begin(), keywords.end(), [](const nlohmann::json &kw) {
+      return kw.value("arg", std::string()) == "dtype";
+    });
+}
+
 // Type of the array `np.arange` builds when bound to a name in `function`:
 // that of the literal its constant arguments materialize to, read the way
 // the conversion reads them.
@@ -3096,10 +3182,10 @@ std::optional<typet> python_converter::numpy_arange_array_type(
   if (
     !is_numpy_array_constructor_expr(value) ||
     value["func"].value("attr", "") != "arange" ||
-    !value.value("keywords", nlohmann::json::array()).empty())
+    !has_only_dtype_keyword(value))
     return std::nullopt;
   const std::optional<nlohmann::json> list =
-    numpy_call_expr::arange_literal(value["args"], function, *ast_json);
+    numpy_call_expr::arange_literal(value, function, *ast_json);
   if (!list || !list->contains("elts") || (*list)["elts"].empty())
     return std::nullopt;
   return type_handler_.get_typet(*list);
@@ -5016,6 +5102,13 @@ const nlohmann::json &python_converter::resolve_return_annotation_node(
   return returns;
 }
 
+/// Whether the program, not the annotator, wrote `-> int`.
+static bool is_written_int_annotation(const nlohmann::json &returns)
+{
+  return returns.is_object() && returns.value("id", "") == "int" &&
+         !returns.value("_inferred_annotation", false);
+}
+
 /// Whether a return in \p stmts (nested blocks included) satisfies \p pred.
 static bool any_return(
   const nlohmann::json &stmts,
@@ -5556,6 +5649,8 @@ void python_converter::get_function_definition(
   // Save function return type for use in get_return_statements
   typet saved_func_return_type = current_func_return_type_;
   current_func_return_type_ = type.return_type();
+  const bool saved_func_annotated_int = current_func_annotated_int_;
+  current_func_annotated_int_ = is_written_int_annotation(return_node);
 
   // Nondet stub functions (nondet_int/char/bool/float/str/complex and their
   // __VERIFIER_nondet_* aliases) are intercepted at their call sites by
@@ -5620,6 +5715,7 @@ void python_converter::get_function_definition(
 
   // Restore saved function return type (for nested function defs)
   current_func_return_type_ = saved_func_return_type;
+  current_func_annotated_int_ = saved_func_annotated_int;
 
   // If return type is empty/unannotated, try to infer from return statements
   if (type.return_type().is_empty())

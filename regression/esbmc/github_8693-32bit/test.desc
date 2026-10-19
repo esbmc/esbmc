@@ -1,0 +1,7 @@
+CORE
+main.c
+--32 --multi-property
+^  PASSED +\[main\.assertion\.1\]
+^  PASSED +\[main\.assertion\.2\]
+^  FAILED +\[main\.object-out-of-bounds\.1\]
+^VERIFICATION FAILED$

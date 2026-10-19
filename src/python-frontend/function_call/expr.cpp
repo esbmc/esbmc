@@ -465,20 +465,51 @@ bool function_call_expr::is_generic_hash_call() const
 
 exprt function_call_expr::handle_generic_hash()
 {
+  // hash() must agree on equal arguments (#8704). An int hashes to itself
+  // reduced modulo 2^61 - 1 with -1 mapped to -2, as CPython does; a str goes
+  // through a deterministic model. Anything else stays nondet.
   const typet int_type = type_handler::python_int_typet();
+  const locationt location = converter_.get_location_from_decl(call_);
+  exprt arg = converter_.get_expr(call_["args"][0]);
+
+  if (
+    arg.type().is_bool() || arg.type().is_signedbv() ||
+    arg.type().is_unsignedbv())
+  {
+    exprt n = typecast_exprt(arg, int_type);
+    exprt reduced("mod", int_type);
+    reduced.copy_to_operands(n, from_integer(BigInt::power2(61) - 1, int_type));
+    return if_exprt(
+      equality_exprt(reduced, from_integer(-1, int_type)),
+      from_integer(-2, int_type),
+      reduced);
+  }
+
   symbolt &tmp =
     converter_.create_tmp_symbol(call_, "$hash$", int_type, exprt());
-
   code_declt decl(build_symbol(tmp));
-  decl.location() = converter_.get_location_from_decl(call_);
+  decl.location() = location;
   converter_.add_instruction(decl);
+
+  const symbolt *str_hash =
+    converter_.symbol_table().find_symbol("c:@F@__python_str_hash");
+  if (type_utils::is_string_type(arg.type()) && str_hash)
+  {
+    code_function_callt call;
+    call.lhs() = build_symbol(tmp);
+    call.function() = build_symbol(*str_hash);
+    call.arguments().push_back(
+      converter_.get_string_handler().get_array_base_address(arg));
+    call.location() = location;
+    converter_.add_instruction(call);
+    return build_symbol(tmp);
+  }
 
   exprt nondet_value("sideeffect", int_type);
   nondet_value.statement("nondet");
   code_assignt nondet_assign(build_symbol(tmp), nondet_value);
-  nondet_assign.location() = converter_.get_location_from_decl(call_);
+  nondet_assign.location() = location;
   converter_.add_instruction(nondet_assign);
-
   return build_symbol(tmp);
 }
 
@@ -576,6 +607,37 @@ exprt function_call_expr::abstract_instantiation_error(
       " without an implementation for abstract method '" +
       unimplemented_abstract_method(ctor_call) + "'");
   raise.location() = converter_.get_location_from_decl(ctor_call);
+  return raise;
+}
+
+exprt function_call_expr::call_argument_error(const symbolt &func_symbol) const
+{
+  exprt error =
+    check_argument_types(&func_symbol, call_["args"], call_["keywords"]);
+  return error.is_nil() ? unbound_method_error(func_symbol) : error;
+}
+
+exprt function_call_expr::unbound_method_error(const symbolt &func_symbol) const
+{
+  const nlohmann::json &func = call_["func"];
+  if (
+    function_type_ != FunctionType::ClassMethod ||
+    func["_type"] != "Attribute" || func["value"]["_type"] != "Name" ||
+    !call_["args"].empty() ||
+    (call_.contains("keywords") && !call_["keywords"].empty()))
+    return nil_exprt();
+  const std::string cls = func["value"]["id"].get<std::string>();
+  const code_typet &type = to_code_type(func_symbol.get_type());
+  if (
+    !json_utils::is_class(cls, converter_.get_ast_json()) ||
+    type.arguments().empty() || type.arguments()[0].get_base_name() != "self")
+    return nil_exprt();
+
+  exprt raise = converter_.get_exception_handler().gen_exception_raise(
+    "TypeError",
+    cls + "." + func["attr"].get<std::string>() +
+      "() missing 1 required positional argument: 'self'");
+  raise.location() = converter_.get_location_from_decl(call_);
   return raise;
 }
 
@@ -2822,21 +2884,43 @@ bool function_call_expr::receiver_is_binop_or_list_symbol() const
   return sym != nullptr && sym->get_type() == type_handler_.get_list_type();
 }
 
+bool function_call_expr::receiver_class_defines_method(
+  const std::string &method_name) const
+{
+  std::string cls = function_id_.get_class();
+  if (cls.rfind("tag-", 0) == 0)
+    cls = cls.substr(4);
+  const auto &ast = converter_.ast();
+  return is_class(cls, ast) &&
+         json_utils::class_defines_method(ast["body"], cls, method_name);
+}
+
 bool function_call_expr::is_list_method_call() const
 {
   if (call_["func"]["_type"] != "Attribute")
     return false;
 
-  const std::string &method_name = function_id_.get_function();
+  static const std::unordered_set<std::string> list_methods = {
+    "append",
+    "pop",
+    "insert",
+    "remove",
+    "clear",
+    "extend",
+    "copy",
+    "sort",
+    "reverse",
+    "popleft",
+    "appendleft",
+    "count",
+    "index"};
 
-  if (
-    method_name != "append" && method_name != "pop" &&
-    method_name != "insert" && method_name != "remove" &&
-    method_name != "clear" && method_name != "extend" &&
-    method_name != "copy" && method_name != "sort" &&
-    method_name != "reverse" && method_name != "popleft" &&
-    method_name != "appendleft" && method_name != "count" &&
-    method_name != "index")
+  const std::string &method_name = function_id_.get_function();
+  if (!list_methods.count(method_name))
+    return false;
+
+  // A user class's own method of the same name (`e.remove(1)`) wins.
+  if (receiver_class_defines_method(method_name))
     return false;
 
   // Tuples are claimed earlier; only claim count/index here when the receiver
@@ -4524,8 +4608,7 @@ exprt function_call_expr::handle_general_function_call()
 
   if (func_symbol != nullptr)
   {
-    exprt type_error =
-      check_argument_types(func_symbol, call_["args"], call_["keywords"]);
+    exprt type_error = call_argument_error(*func_symbol);
     if (!type_error.is_nil())
       return type_error;
   }
@@ -5835,7 +5918,10 @@ std::optional<exprt> function_call_expr::try_indirect_variable_call()
         resolved = true;
       }
       if (!resolved)
+      {
         call.type() = any_type();
+        converter_.refuse_mismatched_callees(build_symbol(*var_symbol), call_);
+      }
 
       for (const auto &arg_node : call_["args"])
       {
@@ -6540,16 +6626,9 @@ size_t function_call_expr::bind_call_receiver(
             s->set_type(migrate_type(class_ptr));
       }
       if (converter_.current_lhs->type().is_pointer())
-      {
-        const symbolt *new_obj_sym =
-          converter_.symbol_table().find_symbol("c:@F@__ESBMC_new_object");
-        assert(new_obj_sym && "__ESBMC_new_object model required");
-        code_function_callt alloc_call;
-        alloc_call.lhs() = *converter_.current_lhs;
-        alloc_call.function() = symbol_expr(*new_obj_sym);
-        converter_.add_instruction(alloc_call);
-        call.arguments().push_back(*converter_.current_lhs);
-      }
+        call.arguments().push_back(
+          python_list(converter_, call_)
+            .allocate_constructed_object(*converter_.current_lhs));
       else
         call.arguments().push_back(gen_address_of(*converter_.current_lhs));
       param_offset = 1;
@@ -6825,6 +6904,20 @@ typet function_call_expr::dict_param_value_type(const symbolt *func, size_t idx)
     !ann["slice"].contains("elts") || ann["slice"]["elts"].size() != 2)
     return typet();
   return converter_.get_type_from_annotation(ann["slice"]["elts"][1], ann);
+}
+
+// A numpy string or complex array is read only element by element; a callee
+// would read its storage as numbers.
+static void reject_unmodelled_numpy_array_argument(const typet &type)
+{
+  if (type_utils::is_numpy_string_array(type))
+    throw std::runtime_error(
+      "TypeError: passing a numpy string array to a function is not "
+      "supported");
+  if (type_utils::is_numpy_complex_array(type))
+    throw std::runtime_error(
+      "TypeError: passing a numpy complex array to a function is not "
+      "supported");
 }
 
 std::optional<exprt> function_call_expr::build_positional_arguments(
@@ -7174,6 +7267,8 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
       arg_index++;
       continue;
     }
+
+    reject_unmodelled_numpy_array_argument(arg.type());
 
     // All array function arguments (e.g. bytes type) are handled as pointers.
     if (arg.type().is_array())

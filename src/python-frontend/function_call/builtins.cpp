@@ -6,6 +6,7 @@
 // exclusively by them. The class declaration and the remaining
 // implementations live in function_call/expr.{h,cpp}.
 
+#include <python-frontend/dynamic_type/literal_divergence.h>
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/math/complex_handler.h>
 #include <python-frontend/math/complex_handler_utils.h>
@@ -35,7 +36,6 @@
 #include <functional>
 #include <optional>
 #include <set>
-#include <limits>
 #include <stdexcept>
 
 using namespace json_utils;
@@ -43,35 +43,6 @@ using namespace python_expr;
 
 namespace
 {
-// Default length used for nondeterministic strings when the user has
-// not provided an explicit value via --nondet-str-length.
-constexpr int DEFAULT_NONDET_STR_LENGTH = 16;
-
-int get_nondet_str_length()
-{
-  std::string opt_value = config.options.get_option("nondet-str-length");
-  if (!opt_value.empty())
-  {
-    try
-    {
-      int length = std::stoi(opt_value);
-      if (length > 0)
-        return length;
-    }
-    catch (...)
-    {
-    }
-  }
-  return DEFAULT_NONDET_STR_LENGTH;
-}
-
-// +1 for the NUL: --nondet-str-length N promises len() can reach N (#7377).
-int get_nondet_str_buffer_size()
-{
-  const int length = get_nondet_str_length();
-  return length < std::numeric_limits<int>::max() ? length + 1 : length;
-}
-
 // Banker's rounding (IEEE 754 round-half-to-even): rounds to the nearest
 // integer, breaking ties toward the even neighbor. The tie_eps tolerates
 // small floating-point error around the .5 boundary so that values
@@ -142,7 +113,7 @@ exprt function_call_expr::handle_input() const
 {
   // input() returns a non-deterministic string
   // Model as a bounded C-string without embedded nulls.
-  int max_str_length = get_nondet_str_buffer_size();
+  int max_str_length = string_handler::nondet_str_buffer_size();
   typet string_type = type_handler_.get_typet("str", max_str_length);
 
   symbolt &input_sym =
@@ -202,43 +173,8 @@ exprt function_call_expr::build_nondet_call() const
   std::string type = func_name.substr(underscore_pos + 1);
 
   if (type == "str")
-  {
-    int max_str_length = get_nondet_str_buffer_size();
-
-    typet char_array_type =
-      array_typet(char_type(), from_integer(max_str_length, size_type()));
-
-    // Create a temporary variable to hold the nondeterministic string
-    symbolt &nondet_str_symbol = converter_.create_tmp_symbol(
-      call_, "$nondet_str$", char_array_type, exprt());
-
-    // Declare the temporary
-    code_declt decl(build_symbol(nondet_str_symbol));
-    decl.location() = converter_.get_location_from_decl(call_);
-    converter_.add_instruction(decl);
-
-    // Create nondet assignment for the array
-    exprt nondet_value("sideeffect", char_array_type);
-    nondet_value.statement("nondet");
-
-    code_assignt nondet_assign(build_symbol(nondet_str_symbol), nondet_value);
-    nondet_assign.location() = converter_.get_location_from_decl(call_);
-    converter_.add_instruction(nondet_assign);
-
-    // Ensure null terminator at the last position
-    exprt last_index = from_integer(max_str_length - 1, size_type());
-    exprt null_char = from_integer(0, char_type());
-
-    exprt last_elem = build_index(build_symbol(nondet_str_symbol), last_index);
-    code_assignt null_assign(last_elem, null_char);
-    null_assign.location() = converter_.get_location_from_decl(call_);
-    converter_.add_instruction(null_assign);
-
-    // Return address of first element: &arr[0] which is char*
-    exprt first_elem = build_index(
-      build_symbol(nondet_str_symbol), from_integer(0, size_type()));
-    return build_address_of(first_elem);
-  }
+    return converter_.get_string_handler().build_nondet_string(
+      converter_.get_location_from_decl(call_));
 
   if (type == "complex")
   {
@@ -357,72 +293,6 @@ bool function_call_expr::is_class_object_operand(
   return name && type_utils::is_type_identifier(*name);
 }
 
-namespace
-{
-/// Whether `stmt` assigns to `name`.
-bool assigns_name(const nlohmann::json &stmt, const std::string &name)
-{
-  const std::string kind = stmt.value("_type", "");
-  const nlohmann::json *target = nullptr;
-  if (kind == "AnnAssign")
-    target = &stmt["target"];
-  else if (kind == "Assign" && stmt["targets"].size() == 1)
-    target = &stmt["targets"][0];
-  return target && target->value("_type", "") == "Name" &&
-         target->value("id", "") == name;
-}
-
-/// The kind of number a binding of `name` stores: "int" (bool included),
-/// "float", or "" for anything else or another name.
-std::string
-numeric_binding_kind(const nlohmann::json &stmt, const std::string &name)
-{
-  if (!assigns_name(stmt, name))
-    return "";
-  const nlohmann::json &annotation = stmt.value("annotation", nlohmann::json());
-  const std::string type =
-    annotation.is_object() ? annotation.value("id", "") : "";
-  if (type == "int" || type == "bool")
-    return "int";
-  return type == "float" ? "float" : "";
-}
-
-/// Collects the number kinds bound to `name` in `body`, outside nested
-/// scopes, and whether any of those bindings sits inside a block. A binding
-/// on the straight-line spine before line `before` replaces every binding
-/// ahead of it on all paths, so those are dropped.
-void collect_numeric_bindings(
-  const nlohmann::json &body,
-  const std::string &name,
-  bool nested,
-  int before,
-  std::set<std::string> &kinds,
-  bool &in_block)
-{
-  for (const auto &stmt : body)
-  {
-    const std::string kind = stmt.value("_type", "");
-    if (kind == "FunctionDef" || kind == "ClassDef")
-      continue;
-    if (!nested && assigns_name(stmt, name) && stmt.value("lineno", 0) < before)
-    {
-      kinds.clear();
-      in_block = false;
-    }
-    const std::string number = numeric_binding_kind(stmt, name);
-    if (!number.empty())
-    {
-      kinds.insert(number);
-      in_block |= nested;
-    }
-    for (const char *key : {"body", "orelse", "finalbody", "handlers", "cases"})
-      if (stmt.contains(key) && stmt[key].is_array())
-        collect_numeric_bindings(
-          stmt[key], name, true, before, kinds, in_block);
-  }
-}
-} // namespace
-
 /// A name bound an int on one path and a float on another has one static C
 /// type, so isinstance would answer from that type on every path (#8417).
 void function_call_expr::refuse_isinstance_on_path_dependent_number(
@@ -436,22 +306,10 @@ void function_call_expr::refuse_isinstance_on_path_dependent_number(
     });
   if (!asks_number || obj_arg.value("_type", "") != "Name")
     return;
-  const nlohmann::json function = json_utils::find_function_by_path(
-    converter_.ast(),
-    json_utils::split_function_path(converter_.current_function_name()));
-  const nlohmann::json &body = function.is_object() && function.contains("body")
-                                 ? function["body"]
-                                 : converter_.ast()["body"];
-  std::set<std::string> kinds;
-  bool in_block = false;
-  collect_numeric_bindings(
-    body,
-    obj_arg["id"].get<std::string>(),
-    false,
-    obj_arg.value("lineno", 0),
-    kinds,
-    in_block);
-  if (kinds.size() == 2 && in_block)
+  if (
+    dynamic_type_detail::is_path_dependent_number(
+      converter_.scope_numeric_bindings(
+        obj_arg["id"].get<std::string>(), obj_arg.value("lineno", 0), true)))
     throw std::runtime_error(
       "isinstance() on '" + obj_arg["id"].get<std::string>() +
       "', which holds an int or a float depending on the path, is not "
@@ -1172,7 +1030,11 @@ exprt function_call_expr::handle_type_call() const
   if (!instance_class.empty())
     return converter_.make_class_object(instance_class);
 
-  std::string type_name = type_handler_.get_python_type_name(arg_expr.type());
+  // None's C type would otherwise name it "pointer" (#8764).
+  std::string type_name =
+    arg_expr.type() == none_type()
+      ? "NoneType"
+      : type_handler_.get_python_type_name(arg_expr.type());
   if (type_name.empty())
     type_name = arg_expr.type().id_string();
 
@@ -1648,8 +1510,8 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
   {
     if (arg["value"].is_number_integer())
     {
-      int value = arg["value"].get<int>();
-      arg["value"] = std::abs(value); // Apply abs to integer constant
+      const long long value = arg["value"].get<long long>();
+      arg["value"] = std::llabs(value); // Apply abs to integer constant
       arg["type"] = "int";
     }
     else if (arg["value"].is_number_float())
@@ -1738,7 +1600,7 @@ exprt function_call_expr::handle_round(nlohmann::json &arg) const
       // round(x) -> nearest integer (returns int)
       if (arg["value"].is_number_integer())
       {
-        int val = arg["value"].get<int>();
+        long long val = arg["value"].get<long long>();
         if (is_negated)
           val = -val;
         arg["value"] = val;
@@ -1782,9 +1644,7 @@ exprt function_call_expr::handle_round(nlohmann::json &arg) const
         int n = ndigits_arg["value"].get<int>();
         if (ndigits_negated)
           n = -n;
-        double val = arg["value"].is_number_integer()
-                       ? static_cast<double>(arg["value"].get<int>())
-                       : arg["value"].get<double>();
+        double val = arg["value"].get<double>();
         if (is_negated)
           val = -val;
         double rounded = round_to_ndigits_ties_even(val, n);

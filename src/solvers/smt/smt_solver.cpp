@@ -400,6 +400,22 @@ smt_astt smt_solver_baset::convert_assign(const expr2tc &expr)
   return side2;
 }
 
+// Brings a shift count to the width of the shifted value, as SMT requires. A
+// wider count is saturated rather than truncated, so x << 2^32 does not become
+// x << 0: shifting by the width already gives the result of any larger count.
+static expr2tc shift_count(const expr2tc &value, const expr2tc &count)
+{
+  const type2tc &type = value->type;
+  if (count->type->get_width() < type->get_width())
+    return typecast2tc(type, count);
+  const BigInt width(type->get_width());
+  return if2tc(
+    type,
+    greaterthanequal2tc(count, constant_int2tc(count->type, width)),
+    constant_int2tc(type, width),
+    typecast2tc(type, count));
+}
+
 // Returns true when convert_ast_node() would recurse into expr's operands
 // via the default operand walk. Mirrors the switch in convert_ast_node():
 // vector-typed nodes take dedicated rewrite paths, and the listed expr_ids
@@ -837,7 +853,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     }
     else if (int_encoding)
     {
-      a = mk_div(args[0], args[1]);
+      a = mk_truncated_div(d.type, args[0], args[1]);
     }
     else if (is_unsignedbv_type(d.side_1) && is_unsignedbv_type(d.side_2))
     {
@@ -1357,12 +1373,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   {
     const shl2t &shl = to_shl2t(expr);
     if (shl.side_1->type->get_width() != shl.side_2->type->get_width())
-    {
-      // frontend doesn't cast the second operand up to the width of
-      // the first, which SMT does not enjoy.
-      expr2tc cast = typecast2tc(shl.side_1->type, shl.side_2);
-      args[1] = convert_ast(cast);
-    }
+      args[1] = convert_ast(shift_count(shl.side_1, shl.side_2));
 
     if (int_encoding)
     {
@@ -1382,12 +1393,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   {
     const ashr2t &ashr = to_ashr2t(expr);
     if (ashr.side_1->type->get_width() != ashr.side_2->type->get_width())
-    {
-      // frontend doesn't cast the second operand up to the width of
-      // the first, which SMT does not enjoy.
-      expr2tc cast = typecast2tc(ashr.side_1->type, ashr.side_2);
-      args[1] = convert_ast(cast);
-    }
+      args[1] = convert_ast(shift_count(ashr.side_1, ashr.side_2));
 
     if (int_encoding)
     {
@@ -1407,12 +1413,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   {
     const lshr2t &lshr = to_lshr2t(expr);
     if (lshr.side_1->type->get_width() != lshr.side_2->type->get_width())
-    {
-      // frontend doesn't cast the second operand up to the width of
-      // the first, which SMT does not enjoy.
-      expr2tc cast = typecast2tc(lshr.side_1->type, lshr.side_2);
-      args[1] = convert_ast(cast);
-    }
+      args[1] = convert_ast(shift_count(lshr.side_1, lshr.side_2));
 
     if (int_encoding)
     {
@@ -1837,7 +1838,7 @@ smt_astt
 smt_solver_baset::convert_modulus(const modulus2t &m, smt_astt a, smt_astt b)
 {
   if (int_encoding)
-    return mk_mod(a, b);
+    return mk_truncated_rem(m.type, a, b);
   if (is_fixedbv_type(m.side_1) && is_fixedbv_type(m.side_2))
     return mk_bvsmod(a, b);
 
@@ -1850,6 +1851,39 @@ smt_solver_baset::convert_modulus(const modulus2t &m, smt_astt a, smt_astt b)
     return mk_bvsub(a, mk_bvmul(quot, b));
   }
   return both_unsigned ? mk_bvumod(a, b) : mk_bvsmod(a, b);
+}
+
+/// SMT-LIB integer div/mod are Euclidean (0 <= mod < |b|); C11 6.5.5p6
+/// truncates toward zero. The two agree on a non-negative dividend whatever
+/// b's sign, so apply them to |a| and give the result a's sign: one div or
+/// mod per operation, as before (#8662). Unsigned operations stay Euclidean:
+/// integer-mode byte extraction (smt_byteops.cpp) relies on that.
+static smt_astt
+with_dividend_sign(smt_solver_baset &s, smt_astt a, smt_astt of_abs_a)
+{
+  smt_astt a_neg = s.mk_lt(a, s.mk_smt_int(BigInt(0)));
+  return s.mk_ite(a_neg, s.mk_neg(of_abs_a), of_abs_a);
+}
+
+static smt_astt abs_int(smt_solver_baset &s, smt_astt a)
+{
+  return s.mk_ite(s.mk_lt(a, s.mk_smt_int(BigInt(0))), s.mk_neg(a), a);
+}
+
+smt_astt
+smt_solver_baset::mk_truncated_div(const type2tc &type, smt_astt a, smt_astt b)
+{
+  if (!is_signedbv_type(type) || a->sort->id != SMT_SORT_INT)
+    return mk_div(a, b);
+  return with_dividend_sign(*this, a, mk_div(abs_int(*this, a), b));
+}
+
+smt_astt
+smt_solver_baset::mk_truncated_rem(const type2tc &type, smt_astt a, smt_astt b)
+{
+  if (!is_signedbv_type(type) || a->sort->id != SMT_SORT_INT)
+    return mk_mod(a, b);
+  return with_dividend_sign(*this, a, mk_mod(abs_int(*this, a), b));
 }
 
 void smt_solver_baset::note_division_operands(const expr2tc &expr)
