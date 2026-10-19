@@ -177,6 +177,42 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
   return unit;
 }
 
+static void log_import_error(llvm::Error Err)
+{
+  llvm::errs() << "Error: " << Err << "\n";
+  consumeError(std::move(Err));
+}
+
+/// The importer maps a variable definition onto one already in the
+/// destination and drops its initializer, so the definition merged first
+/// wins. A strong definition must override a weak one wherever it appears, as
+/// at link time (#7451).
+static void override_weak_var(
+  clang::ASTImporter &Importer,
+  clang::VarDecl &FromVar,
+  clang::VarDecl &ToVar)
+{
+  if (
+    FromVar.isThisDeclarationADefinition() == clang::VarDecl::DeclarationOnly ||
+    FromVar.hasAttr<clang::WeakAttr>() || !ToVar.hasAttr<clang::WeakAttr>())
+    return;
+
+  clang::Expr *Init = nullptr;
+  if (FromVar.getInit())
+  {
+    llvm::Expected<clang::Expr *> InitOrErr =
+      Importer.Import(FromVar.getInit());
+    if (!InitOrErr)
+    {
+      log_import_error(InitOrErr.takeError());
+      return;
+    }
+    Init = *InitOrErr;
+  }
+  ToVar.setInit(Init);
+  ToVar.dropAttr<clang::WeakAttr>();
+}
+
 /// Import one decl from the source context into \p Importer's destination.
 /// Returns the imported decl, or nullptr if the import failed (the error is
 /// logged and consumed so the rest of the merge can proceed).
@@ -198,12 +234,15 @@ importDecl(clang::ASTImporter &Importer, clang::Decl *FromDecl)
   llvm::Expected<clang::Decl *> ImportedOrErr = Importer.Import(FromDecl);
   if (!ImportedOrErr)
   {
-    llvm::Error Err = ImportedOrErr.takeError();
-    llvm::errs() << "Error: " << Err << "\n";
-    consumeError(std::move(Err));
+    log_import_error(ImportedOrErr.takeError());
     return nullptr;
   }
   clang::Decl *Imported = *ImportedOrErr;
+
+  auto *FromVar = llvm::dyn_cast<clang::VarDecl>(FromDecl);
+  auto *ToVar = llvm::dyn_cast_or_null<clang::VarDecl>(Imported);
+  if (FromVar && ToVar && FromVar->isFileVarDecl())
+    override_weak_var(Importer, *FromVar, *ToVar);
 
   auto *FromLS = llvm::dyn_cast<clang::LinkageSpecDecl>(FromDecl);
   auto *ToLS = llvm::dyn_cast_or_null<clang::LinkageSpecDecl>(Imported);

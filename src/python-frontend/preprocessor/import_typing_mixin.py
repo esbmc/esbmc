@@ -154,6 +154,7 @@ class ImportTypingMixin:
             self._typing_classvar_names.add(alias.asname or alias.name)
 
     def visit_ImportFrom(self, node):
+        self._record_numpy_import(node)
         if node.module == "decimal":
             for alias in node.names:
                 self._handle_decimal_importfrom(alias)
@@ -170,6 +171,7 @@ class ImportTypingMixin:
         return node
 
     def visit_Import(self, node):
+        self._record_numpy_import(node)
         for alias in node.names:
             if alias.name == "decimal":
                 self.decimal_module_imported = True

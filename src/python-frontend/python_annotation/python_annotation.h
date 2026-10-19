@@ -132,6 +132,10 @@ private:
   std::string get_type_from_lhs(const std::string &id, const Json &body);
   std::string get_list_subtype(const Json &list);
   std::string get_list_type_from_literal(const Json &list_arg);
+  std::string subscript_annotation_type(const Json &annotation);
+  std::string
+  container_literal_type(const std::string &base_type, const Json &value);
+  std::string list_concat_type(const Json &binop);
   // Recover a `list[T]` type for a name bound to an *empty* list literal by
   // inspecting the first `<var_name>.append(arg)` in the enclosing scope.
   // Comprehensions lower to `tmp = []; tmp.append(elt)`, so the element type
@@ -178,6 +182,7 @@ private:
   std::string get_argument_type(const Json &arg);
   std::string get_dict_literal_type(const Json &dict_value);
   std::string get_call_type(const Json &arg);
+  std::string get_attribute_type(const Json &arg);
   std::string get_builtin_call_type(const Json &call);
   // Type of a builtin call whose result depends on its argument (abs, hash),
   // or empty for any other call.

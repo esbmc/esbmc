@@ -707,9 +707,10 @@ static expr2tc object_bytes(const expr2tc &object, uint64_t offset, uint64_t n)
   return value;
 }
 
-// @p dst with the float it holds at [dst_offset, dst_offset+n) read whole
-// from @p src; null when that range is not a float or overruns @p src. See
-// gen_byte_memcpy for why the C byte loop cannot copy a float.
+/* @p dst with the float it holds at [dst_offset, dst_offset+n) read whole from
+ * @p src; null when that range is not a float or overruns @p src. The C byte
+ * loop would rebuild it a byte at a time, and an intermediate NaN loses its
+ * bits: floating-point theory has a single NaN (#8711). */
 static expr2tc copy_into_float(
   const expr2tc &dst,
   uint64_t dst_offset,
@@ -813,6 +814,17 @@ static inline expr2tc do_memcpy_expression(
 static void offset_simplifier(expr2tc &e)
 {
   simplify(e);
+}
+
+void goto_symext::claim_not_code(const expr2tc &guard)
+{
+  if (options.get_bool_option("no-pointer-check"))
+    return;
+
+  // SAME_OBJECT(ptr, item) => DEREF ERROR
+  claim(
+    implies2tc(guard, gen_false_expr()),
+    "dereference failure: trying to deref a ptr code");
 }
 
 void goto_symext::claim_valid_operand(
@@ -1059,12 +1071,7 @@ void goto_symext::intrinsic_memcpy_impl(
         return;
       }
 
-      std::string error_msg =
-        fmt::format("dereference failure: trying to deref a ptr code");
-
-      // SAME_OBJECT(ptr, item) => DEREF ERROR
-      expr2tc check = implies2tc(item.guard, gen_false_expr());
-      claim(check, error_msg);
+      claim_not_code(item.guard);
       continue;
     }
 
@@ -1781,12 +1788,7 @@ void goto_symext::intrinsic_memset(
 
     if (is_code_type(item_object->type))
     {
-      std::string error_msg =
-        fmt::format("dereference failure: trying to deref a ptr code");
-
-      // SAME_OBJECT(ptr, item) => DEREF ERROR
-      expr2tc check = implies2tc(item.guard, gen_false_expr());
-      claim(check, error_msg);
+      claim_not_code(item.guard);
       continue;
     }
 

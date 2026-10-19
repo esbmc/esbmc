@@ -1,6 +1,4 @@
 CORE
 main.c
---multi-property
-^  PASSED .*assertion s\.f != s\.f$
-^  PASSED .*assertion g == h$
+
 ^VERIFICATION SUCCESSFUL$
