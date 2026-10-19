@@ -1,0 +1,5 @@
+CORE
+main.c
+--overflow-check --ir
+^VERIFICATION FAILED$
+^\s*FAILED\s+\[main\.cast-arithmetic-overflow\.1\]\s+line\s+6\s+Cast arithmetic overflow on typecast$
