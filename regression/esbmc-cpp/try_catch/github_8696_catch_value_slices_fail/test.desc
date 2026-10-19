@@ -1,0 +1,5 @@
+CORE
+main.cpp
+
+^VERIFICATION FAILED$
+^\s*FAILED\s+\[main\.assertion\.[0-9]+\]\s+line\s+21\s+assertion got == 2$

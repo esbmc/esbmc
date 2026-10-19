@@ -450,6 +450,23 @@ void goto_convertt::convert_throw(const exprt &expr_in, goto_programt &dest)
     stack.pop_back();
   }
 
+  // The exception object is initialised from the operand before any local is
+  // destroyed ([except.throw]p3), so `throw t.v` must not read t after ~T.
+  if (
+    detached.empty() && !expr.operands().empty() &&
+    std::any_of(
+      stack.begin() + targets.throw_stack_size,
+      stack.end(),
+      is_destructor_entry))
+  {
+    const exprt operand = expr.op0();
+    symbol_exprt value(new_tmp_symbol(operand.type()).id, operand.type());
+    code_assignt init(value, operand);
+    init.location() = expr.location();
+    copy(init, ASSIGN, dest);
+    expr.op0() = value;
+  }
+
   unwind_destructor_stack(expr.location(), targets.throw_stack_size, dest);
 
   for (auto it = detached.rbegin(); it != detached.rend(); ++it)

@@ -183,28 +183,25 @@ static void log_import_error(llvm::Error Err)
   consumeError(std::move(Err));
 }
 
-/// The importer maps a definition onto one already merged and keeps the
-/// latter's initialiser. A strong definition must win over a weak one, as at
-/// ELF link time (#7451), so hand the strong initialiser to the merged decl.
+/// The importer maps a variable definition onto one already in the
+/// destination and drops its initializer, so the definition merged first
+/// wins. A strong definition must override a weak one wherever it appears, as
+/// at link time (#7451).
 static void override_weak_var(
   clang::ASTImporter &Importer,
-  clang::Decl *FromDecl,
-  clang::Decl *Imported)
+  clang::VarDecl &FromVar,
+  clang::VarDecl &ToVar)
 {
-  auto *FromVar = llvm::dyn_cast<clang::VarDecl>(FromDecl);
-  auto *ToVar = llvm::dyn_cast_or_null<clang::VarDecl>(Imported);
-  if (!FromVar || !ToVar || FromVar->hasAttr<clang::WeakAttr>())
-    return;
-  clang::VarDecl *FromDef = FromVar->getDefinition();
-  clang::VarDecl *ToDef = ToVar->getDefinition();
-  if (FromDef != FromVar || !ToDef || !ToDef->hasAttr<clang::WeakAttr>())
+  if (
+    FromVar.isThisDeclarationADefinition() == clang::VarDecl::DeclarationOnly ||
+    FromVar.hasAttr<clang::WeakAttr>() || !ToVar.hasAttr<clang::WeakAttr>())
     return;
 
   clang::Expr *Init = nullptr;
-  if (FromVar->hasInit())
+  if (FromVar.getInit())
   {
     llvm::Expected<clang::Expr *> InitOrErr =
-      Importer.Import(FromVar->getInit());
+      Importer.Import(FromVar.getInit());
     if (!InitOrErr)
     {
       log_import_error(InitOrErr.takeError());
@@ -212,8 +209,8 @@ static void override_weak_var(
     }
     Init = *InitOrErr;
   }
-  ToDef->setInit(Init);
-  ToDef->dropAttr<clang::WeakAttr>();
+  ToVar.setInit(Init);
+  ToVar.dropAttr<clang::WeakAttr>();
 }
 
 /// As override_weak_var, for a function: its parameters map onto the merged
@@ -248,14 +245,17 @@ static void override_weak_function(
   Def->dropAttr<clang::WeakAttr>();
 }
 
-/// Applies both overrides to \p FromDecl and, since the importer brings in a
+/// Applies the overrides to \p FromDecl and, since the importer brings in a
 /// namespace's members itself, to every member of a namespace.
 static void override_weak(
   clang::ASTImporter &Importer,
   clang::Decl *FromDecl,
   clang::Decl *Imported)
 {
-  override_weak_var(Importer, FromDecl, Imported);
+  auto *FromVar = llvm::dyn_cast<clang::VarDecl>(FromDecl);
+  auto *ToVar = llvm::dyn_cast_or_null<clang::VarDecl>(Imported);
+  if (FromVar && ToVar && FromVar->isFileVarDecl())
+    override_weak_var(Importer, *FromVar, *ToVar);
   override_weak_function(Importer, FromDecl, Imported);
   if (auto *FromNS = llvm::dyn_cast<clang::NamespaceDecl>(FromDecl))
     for (clang::Decl *Child : FromNS->decls())
@@ -287,6 +287,7 @@ importDecl(clang::ASTImporter &Importer, clang::Decl *FromDecl)
     return nullptr;
   }
   clang::Decl *Imported = *ImportedOrErr;
+
   override_weak(Importer, FromDecl, Imported);
 
   auto *FromLS = llvm::dyn_cast<clang::LinkageSpecDecl>(FromDecl);

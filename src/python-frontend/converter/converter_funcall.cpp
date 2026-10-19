@@ -575,7 +575,8 @@ std::optional<exprt> python_converter::try_get_numpy_subscript_pointer_view_len(
     return std::nullopt;
 
   const symbolt *source = symbol_table_.find_symbol(source_id);
-  if (!source)
+  // The characters of a numpy string array are not one of its axes.
+  if (!source || type_utils::is_string_type(source->get_type().subtype()))
     return std::nullopt;
 
   const namespacet ns(symbol_table_);
@@ -857,6 +858,17 @@ exprt python_converter::list_argument_expr(const nlohmann::json &arg)
   return elements ? *elements : get_expr(arg);
 }
 
+// list(xs) builds a new list; returning xs itself would alias the two.
+static exprt copy_named_list(
+  python_converter &converter,
+  const exprt &list,
+  const nlohmann::json &element)
+{
+  if (!list.is_symbol())
+    return list;
+  return python_list(converter, element).build_shallow_copy_call(list, element);
+}
+
 // Whether `node` is the name `name`.
 static bool is_name(const nlohmann::json &node, const std::string &name)
 {
@@ -920,6 +932,33 @@ static void collect_dict_values(
       collect_dict_values(child, name, out);
 }
 
+// The values the dict `container` may hold: a literal's, every value stored
+// into a named dict, or for `d[k]` the values of each dict literal d holds
+// (#8768). False when they cannot be listed.
+bool python_converter::dict_values(
+  const nlohmann::json &container,
+  std::vector<nlohmann::json> &out)
+{
+  const std::string type = container.value("_type", "");
+  if (type == "Dict")
+    push_dict_values(container, out);
+  else if (type == "Name")
+    collect_dict_values(*ast_json, container["id"], out);
+  else if (type == "Subscript")
+  {
+    std::vector<nlohmann::json> outer;
+    if (!dict_values(container["value"], outer))
+      return false;
+    for (const auto &v : outer)
+    {
+      if (v.value("_type", "") != "Dict")
+        return false;
+      push_dict_values(v, out);
+    }
+  }
+  return true;
+}
+
 typet python_converter::stored_function_return_type(const nlohmann::json &value)
 {
   if (value.value("_type", "") == "Lambda" && value.contains("body"))
@@ -935,10 +974,8 @@ std::optional<typet>
 python_converter::dict_function_return_type(const nlohmann::json &container)
 {
   std::vector<nlohmann::json> values;
-  if (container.value("_type", "") == "Dict")
-    push_dict_values(container, values);
-  else if (container.value("_type", "") == "Name")
-    collect_dict_values(*ast_json, container["id"], values);
+  if (!dict_values(container, values))
+    return std::nullopt;
 
   std::optional<typet> shared;
   for (const auto &v : values)
@@ -1176,7 +1213,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     {
       // list() of a keys view is a plain list, compared by order (#8689).
       arg_expr.remove(PYTHON_KEYS_VIEW_ATTR);
-      return arg_expr;
+      return copy_named_list(*this, arg_expr, element);
     }
 
     // list(tuple) — materialise the tuple's components into a real list.
