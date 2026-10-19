@@ -467,7 +467,12 @@ void goto_convertt::convert_throw(const exprt &expr_in, goto_programt &dest)
     expr.op0() = value;
   }
 
-  unwind_destructor_stack(expr.location(), targets.throw_stack_size, dest);
+  goto_programt unwind;
+  unwind_destructor_stack(expr.location(), targets.throw_stack_size, unwind);
+  for (auto &instruction : unwind.instructions)
+    if (instruction.is_function_call())
+      instruction.location.set("#during_unwind", true);
+  dest.destructive_append(unwind);
 
   for (auto it = detached.rbegin(); it != detached.rend(); ++it)
     stack.push_back(*it);

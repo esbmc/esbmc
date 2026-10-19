@@ -213,6 +213,55 @@ static void override_weak_var(
   ToVar.dropAttr<clang::WeakAttr>();
 }
 
+/// As override_weak_var, for a function: its parameters map onto the merged
+/// decl's, so that the imported body refers to those.
+static void override_weak_function(
+  clang::ASTImporter &Importer,
+  clang::Decl *FromDecl,
+  clang::Decl *Imported)
+{
+  auto *FromFn = llvm::dyn_cast<clang::FunctionDecl>(FromDecl);
+  auto *ToFn = llvm::dyn_cast_or_null<clang::FunctionDecl>(Imported);
+  if (
+    !FromFn || !ToFn || !FromFn->doesThisDeclarationHaveABody() ||
+    FromFn->hasAttr<clang::WeakAttr>())
+    return;
+  const clang::FunctionDecl *ToDef = nullptr;
+  if (
+    !ToFn->hasBody(ToDef) || !ToDef->hasAttr<clang::WeakAttr>() ||
+    ToDef->getNumParams() != FromFn->getNumParams())
+    return;
+
+  auto *Def = const_cast<clang::FunctionDecl *>(ToDef);
+  for (unsigned i = 0; i < FromFn->getNumParams(); ++i)
+    Importer.MapImported(FromFn->getParamDecl(i), Def->getParamDecl(i));
+  llvm::Expected<clang::Stmt *> BodyOrErr = Importer.Import(FromFn->getBody());
+  if (!BodyOrErr)
+  {
+    log_import_error(BodyOrErr.takeError());
+    return;
+  }
+  Def->setBody(*BodyOrErr);
+  Def->dropAttr<clang::WeakAttr>();
+}
+
+/// Applies the overrides to \p FromDecl and, since the importer brings in a
+/// namespace's members itself, to every member of a namespace.
+static void override_weak(
+  clang::ASTImporter &Importer,
+  clang::Decl *FromDecl,
+  clang::Decl *Imported)
+{
+  auto *FromVar = llvm::dyn_cast<clang::VarDecl>(FromDecl);
+  auto *ToVar = llvm::dyn_cast_or_null<clang::VarDecl>(Imported);
+  if (FromVar && ToVar && FromVar->isFileVarDecl())
+    override_weak_var(Importer, *FromVar, *ToVar);
+  override_weak_function(Importer, FromDecl, Imported);
+  if (auto *FromNS = llvm::dyn_cast<clang::NamespaceDecl>(FromDecl))
+    for (clang::Decl *Child : FromNS->decls())
+      override_weak(Importer, Child, Importer.GetAlreadyImportedOrNull(Child));
+}
+
 /// Import one decl from the source context into \p Importer's destination.
 /// Returns the imported decl, or nullptr if the import failed (the error is
 /// logged and consumed so the rest of the merge can proceed).
@@ -239,10 +288,7 @@ importDecl(clang::ASTImporter &Importer, clang::Decl *FromDecl)
   }
   clang::Decl *Imported = *ImportedOrErr;
 
-  auto *FromVar = llvm::dyn_cast<clang::VarDecl>(FromDecl);
-  auto *ToVar = llvm::dyn_cast_or_null<clang::VarDecl>(Imported);
-  if (FromVar && ToVar && FromVar->isFileVarDecl())
-    override_weak_var(Importer, *FromVar, *ToVar);
+  override_weak(Importer, FromDecl, Imported);
 
   auto *FromLS = llvm::dyn_cast<clang::LinkageSpecDecl>(FromDecl);
   auto *ToLS = llvm::dyn_cast_or_null<clang::LinkageSpecDecl>(Imported);
