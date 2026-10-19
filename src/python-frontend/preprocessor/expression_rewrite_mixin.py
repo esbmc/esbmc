@@ -456,13 +456,14 @@ for {i} in range(0, len({seq})):
                 ast.fix_missing_locations(listcomp)
                 return self.visit(listcomp)
 
+            gen_call, arity_check = self.preprocessor._unguard_starred_call(node)
             if (isinstance(node.func, ast.Name) and node.func.id == "list" and len(node.args) == 1
-                    and not node.keywords and isinstance(node.args[0], ast.Call)
-                    and isinstance(node.args[0].func, ast.Name)
-                    and node.args[0].func.id in self.preprocessor.generator_funcs):
-                prefix, result = self.preprocessor._lower_list_gen_call(node.args[0], node)
+                    and not node.keywords and isinstance(gen_call, ast.Call)
+                    and isinstance(gen_call.func, ast.Name)
+                    and gen_call.func.id in self.preprocessor.generator_funcs):
+                prefix, result = self.preprocessor._lower_list_gen_call(gen_call, node)
                 if prefix is not None:
-                    self.statements.extend(prefix)
+                    self.statements.extend(arity_check + prefix)
                     return result
 
             # sum(range(EXPR)) -> (EXPR * (EXPR - 1) // 2 if EXPR > 0 else 0).

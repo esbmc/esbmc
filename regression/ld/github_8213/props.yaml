@@ -1,0 +1,6 @@
+format_version: "0.1"
+properties:
+  - id: P1
+    kind: invariant
+    expression: "!P"
+    justification: "#8213: P is INT, so it is not a Boolean operand."

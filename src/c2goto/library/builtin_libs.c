@@ -275,9 +275,22 @@ _Bool __CPROVER_same_object(const void *p, const void *q)
   return __ESBMC_same_object(p, q);
 }
 
+__SIZE_TYPE__ __ESBMC_builtin_object_size(const void *, int);
+
+/* The whole object's size in bytes: mode 4 (esbmc_object_size_whole in
+ * c_builtins.h). Types 0 and 2 agree on every object symex resolves and differ
+ * only in their fallbacks, so a mismatch marks a pointer with no known object,
+ * whose size stays unconstrained. */
+static __SIZE_TYPE__ __esbmc_object_bytes(const void *p)
+{
+  if (__ESBMC_builtin_object_size(p, 0) != __ESBMC_builtin_object_size(p, 2))
+    return nondet_ulong();
+  return __ESBMC_builtin_object_size(p, 4);
+}
+
 __SIZE_TYPE__ __CPROVER_OBJECT_SIZE(const void *p)
 {
-  return p == 0 ? 0 : __ESBMC_get_object_size(p);
+  return p == 0 ? 0 : __esbmc_object_bytes(p);
 }
 
 _Bool __CPROVER_DYNAMIC_OBJECT(const void *p)
@@ -308,7 +321,7 @@ _Bool __CPROVER_r_ok(const void *p, __SIZE_TYPE__ size)
   __PTRDIFF_TYPE__ offset = __ESBMC_POINTER_OFFSET(p);
   if (offset < 0)
     return 0;
-  __SIZE_TYPE__ object_size = __ESBMC_get_object_size(p);
+  __SIZE_TYPE__ object_size = __esbmc_object_bytes(p);
   if ((__SIZE_TYPE__)offset > object_size)
     return 0;
   return size <= object_size - (__SIZE_TYPE__)offset;
