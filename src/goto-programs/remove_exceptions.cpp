@@ -1668,6 +1668,10 @@ private:
     case exception_globals::terminate_reason_no_active:
       first->location.comment("throw with no active exception");
       break;
+    case exception_globals::terminate_reason_unwinding:
+      first->location.comment(
+        "exception escaped a destructor during stack unwinding");
+      break;
     default:
       first->location.comment("terminate called after throwing an exception");
       break;
@@ -2040,6 +2044,20 @@ private:
     goto_programt::targett dest)
   {
     const auto after = std::next(call);
+    // A destructor run by a throw's unwinding that lets an exception escape
+    // calls std::terminate ([except.terminate]p1.4).
+    if (call->location.get_bool("#during_unwind"))
+    {
+      call->location.remove("#during_unwind");
+      emit_terminate(
+        body,
+        after,
+        not2tc(thrown),
+        call->location,
+        call->function,
+        exception_globals::terminate_reason_unwinding);
+      return;
+    }
     const irept unwind = call->location.find("#exception_unwind");
     call->location.remove("#exception_unwind");
     auto add = [&]() {

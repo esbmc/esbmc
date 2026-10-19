@@ -1,0 +1,5 @@
+CORE
+main.c
+--bitwuzla --no-pointer-check --no-bounds-check --ts-bmc --max-k-step 10
+^WARNING: a loop or recursion inside a step runs more than once$
+^VERIFICATION FAILED$

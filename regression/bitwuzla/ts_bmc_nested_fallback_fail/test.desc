@@ -1,0 +1,5 @@
+CORE
+main.c
+--bitwuzla --no-pointer-check --no-bounds-check --error-label ERROR --ts-bmc --max-k-step 10
+^WARNING: main has more than one loop$
+^VERIFICATION FAILED$
