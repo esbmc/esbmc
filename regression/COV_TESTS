@@ -3204,6 +3204,11 @@ regression/esbmc-cpp/try_catch/github_8695_catch_pointer_base_fail
 regression/esbmc/github_7451
 regression/esbmc/github_7451_fail
 regression/esbmc-cpp/cpp/github_7451_namespace
+regression/python/github_8379_fail
+regression/python/github_8379_float_receiver_fail
+regression/python/github_8379_param_receiver_fail
+regression/python/github_8379_number_methods
+regression/python/github_8379_retyped_receiver
 regression/python/github_8705_int_valueerror
 regression/python/github_8705_int_base_valueerror
 regression/python/github_8705_int_valueerror_fail
@@ -3213,3 +3218,6 @@ regression/esbmc/github_8661_ir_unsigned_to_int_fail
 regression/python/github_8704_hash_int
 regression/python/github_8704_hash_str
 regression/python/github_8704_hash_int_fail
+regression/esbmc-cpp/cpp/github_8680_dtor_throw_unwind_fail
+regression/esbmc-cpp/cpp/github_8680_dtor_catch_unwind
+regression/esbmc-cpp/cpp/github_8680_dtor_throw_scope_exit
