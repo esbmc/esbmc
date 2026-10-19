@@ -2094,6 +2094,24 @@ bool python_converter::method_base_is_tracked_numpy_array(
          numpy_array_symbols_.count(method_base_id) != 0;
 }
 
+// `v[1].sum()`: a reducer over a subscript of a numpy array or view, read
+// as np.sum(v[1]); without the rewrite the method resolves to nothing and
+// its value is a placeholder.
+bool python_converter::is_numpy_subscript_reducer_receiver(
+  const nlohmann::json &method_base,
+  const std::string &method_name) const
+{
+  static const std::set<std::string> reducers = {
+    "sum", "mean", "min", "max", "prod", "std", "var", "argmin", "argmax"};
+  if (
+    method_base.value("_type", "") != "Subscript" ||
+    reducers.count(method_name) == 0)
+    return false;
+  const std::string root = root_name_from_subscript(method_base);
+  return method_base_is_tracked_numpy_array(root) ||
+         find_numpy_pointer_view_info(root) != nullptr;
+}
+
 std::tuple<bool, std::string, nlohmann::json, bool, bool>
 python_converter::classify_numpy_method_call(
   const nlohmann::json &call_node) const
@@ -2172,7 +2190,8 @@ python_converter::classify_numpy_method_call(
   const bool receiver_is_rewritable =
     !method_base_is_imported_module(method_base_name) &&
     (method_base_is_tracked_numpy_array(method_base_name) ||
-     receiver_is_raw_call_view_method);
+     receiver_is_raw_call_view_method ||
+     is_numpy_subscript_reducer_receiver(method_base, method_name));
 
   const bool supported_dispatch_rewrite_method =
     receiver_is_rewritable && dispatch_rewrite_methods.count(method_name) != 0;

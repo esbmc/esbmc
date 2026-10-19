@@ -2522,6 +2522,9 @@ private:
 
   std::optional<nlohmann::json>
   rewrite_numpy_method_call_node(const nlohmann::json &call_node) const;
+  bool is_numpy_subscript_reducer_receiver(
+    const nlohmann::json &method_base,
+    const std::string &method_name) const;
 
   // get_var_assign's RHS preprocessing step: rewrites `a.T` into
   // `np.transpose(a)` (numpy's own Attribute-shaped transpose sugar, with

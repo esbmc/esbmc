@@ -57,6 +57,13 @@ private:
   std::optional<exprt>
   try_hoist_call_arg_for_view_method(const std::string &function);
 
+  // The array a reducer receives, when only a name can carry it (see
+  // is_hoistable_array_arg), evaluated once into a named temporary that the
+  // reducer reads like any bound array. nullopt for any other argument.
+  std::optional<exprt> try_hoist_array_arg();
+  bool is_hoistable_array_arg(const nlohmann::json &call) const;
+  static exprt reduce_scalar(const std::string &function, const exprt &value);
+
   // A dispatch whose result shape the static annotator cannot model (e.g.
   // ravel()/flatten(), always 1-D of size = product of the input's dims)
   // reaches an assignment target still carrying the annotator's guess --
