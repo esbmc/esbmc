@@ -456,6 +456,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
      * value the parent still holds -- reporting the raised one is read as a
      * bug at that k. */
     const uint64_t no_answer_k = max_k_step;
+    bool unknown_base_case = false;
 
     // Run bmc and only send results in two occasions:
     // 1. A bug was found, we send the step where it was found
@@ -482,8 +483,14 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         return false;
       }
 
+      // Neither a bug nor a refuted base case, but a larger k may still find
+      // a real bug (#7516).
+      const bool abstraction_only =
+        res == P_SATISFIABLE && bmc.violates_only_the_abstraction();
+      unknown_base_case |= abstraction_only;
+
       // Send information to parent if no bug was found
-      if (res == P_SATISFIABLE)
+      if (res == P_SATISFIABLE && !abstraction_only)
       {
         r.k = k_step;
 
@@ -539,6 +546,13 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 
       // Otherwise, we just need to check the base case for k = a_result.k
       max_k_step = a_result.k + k_step_inc;
+    }
+
+    if (unknown_base_case)
+    {
+      report_no_answer(forward_pipe[1], r, no_answer_k);
+      log_status("Base case process finished (no answer).\n");
+      return false;
     }
 
     // Send information to parent that a bug was not found
@@ -735,6 +749,10 @@ tvt esbmc_parseoptionst::is_base_case_violated(
   switch (do_bmc(bmc))
   {
   case P_UNSATISFIABLE:
+    // start_bmc maps a counterexample against the invariant abstraction to
+    // UNSAT for the exit code; it does not refute the base case.
+    if (bmc.violates_only_the_abstraction())
+      break;
     return tvt(tvt::TV_FALSE);
 
   case P_SMTLIB:
