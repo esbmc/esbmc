@@ -777,18 +777,7 @@ exprt numpy_random::sample_choice()
     for (const exprt &drawn : drawn_indices_)
       assume(not_exprt(equality_exprt(index, drawn)));
   drawn_indices_.push_back(index);
-  const typet &element = population_.type().subtype();
-  if (!element.is_array())
-    return index_exprt(population_, index, element);
-  // A symbolic read of a string row is not encoded by the solver backends,
-  // so the row is picked by comparing the index with each constant one.
-  exprt picked = index_exprt(population_, gen_zero(index_type()), element);
-  for (long long i = 1; i < population_size(); ++i)
-    picked = if_exprt(
-      equality_exprt(index, from_integer(i, type)),
-      index_exprt(population_, from_integer(i, index_type()), element),
-      picked);
-  return picked;
+  return index_exprt(population_, index, population_.type().subtype());
 }
 
 exprt numpy_random::sample()
