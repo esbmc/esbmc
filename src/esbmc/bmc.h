@@ -67,6 +67,10 @@ public:
   virtual smt_resultt run(std::shared_ptr<symex_target_equationt> &eq);
   virtual ~bmct();
 
+  /// Whether every violation found refutes only the --loop-invariant-check
+  /// abstraction, so the run neither refutes nor proves the program (#7480).
+  bool violates_only_the_abstraction() const;
+
 protected:
   const contextt &context;
   namespacet ns;

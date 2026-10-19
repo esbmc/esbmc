@@ -1264,24 +1264,14 @@ std::string expr2ct::convert_constant(const exprt &src, unsigned &precedence)
     dest = ieee_floatt(to_constant_expr(src)).to_ansi_c_string();
 
     if (dest != "" && isdigit(dest[dest.size() - 1]))
-    {
-      if (src.type() == float_type())
-        dest += "f";
-      else if (src.type() == long_double_type())
-        dest += "l";
-    }
+      dest += c_float_literal_suffix(src.type());
   }
   else if (type.id() == "fixedbv")
   {
     dest = fixedbvt(to_constant_expr(src)).to_ansi_c_string();
 
     if (dest != "" && isdigit(dest[dest.size() - 1]))
-    {
-      if (src.type() == float_type())
-        dest += "f";
-      else if (src.type() == long_double_type())
-        dest += "l";
-    }
+      dest += c_float_literal_suffix(src.type());
   }
   else if (is_array_like(type))
   {

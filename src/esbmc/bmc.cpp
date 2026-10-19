@@ -605,15 +605,19 @@ void bmct::report_unknown()
   log_fail("\nVERIFICATION UNKNOWN");
 }
 
+bool bmct::violates_only_the_abstraction() const
+{
+  return weak_invariant_detected &&
+         !goto_functionst::property_verdicts.has_violation();
+}
+
 void bmct::report_violation()
 {
   // When every violated claim sits downstream of a --loop-invariant-check
   // havoc, no counterexample witnesses a state the program can reach. An
   // over-approximation can prove, never refute: the invariant being too weak
   // is "cannot prove", not "the program is wrong" (issue #7480).
-  if (
-    !weak_invariant_detected ||
-    goto_functionst::property_verdicts.has_violation())
+  if (!violates_only_the_abstraction())
   {
     // A k-step strategy that owns the property table goes on past a
     // base-case violation and prints the run's one verdict where it ends.
@@ -626,8 +630,15 @@ void bmct::report_violation()
     "every violated claim lies downstream of a loop invariant havoc, so its "
     "counterexample is against the abstraction rather than the program; "
     "strengthen the invariant to decide the claim");
-  report_unknown();
   verdict_is_unknown = true;
+  // The strategy goes on to the next k and prints the run's verdict.
+  if (
+    (options.get_bool_option("k-induction") ||
+     options.get_bool_option("incremental-bmc")) &&
+    !options.get_bool_option("multi-property"))
+    log_status("The base case is unknown");
+  else
+    report_unknown();
 }
 
 /// UNSAT iff no feasible path satisfies the kept claim. A violation found
