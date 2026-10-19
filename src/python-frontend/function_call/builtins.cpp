@@ -36,7 +36,6 @@
 #include <functional>
 #include <optional>
 #include <set>
-#include <limits>
 #include <stdexcept>
 
 using namespace json_utils;
@@ -44,35 +43,6 @@ using namespace python_expr;
 
 namespace
 {
-// Default length used for nondeterministic strings when the user has
-// not provided an explicit value via --nondet-str-length.
-constexpr int DEFAULT_NONDET_STR_LENGTH = 16;
-
-int get_nondet_str_length()
-{
-  std::string opt_value = config.options.get_option("nondet-str-length");
-  if (!opt_value.empty())
-  {
-    try
-    {
-      int length = std::stoi(opt_value);
-      if (length > 0)
-        return length;
-    }
-    catch (...)
-    {
-    }
-  }
-  return DEFAULT_NONDET_STR_LENGTH;
-}
-
-// +1 for the NUL: --nondet-str-length N promises len() can reach N (#7377).
-int get_nondet_str_buffer_size()
-{
-  const int length = get_nondet_str_length();
-  return length < std::numeric_limits<int>::max() ? length + 1 : length;
-}
-
 // Banker's rounding (IEEE 754 round-half-to-even): rounds to the nearest
 // integer, breaking ties toward the even neighbor. The tie_eps tolerates
 // small floating-point error around the .5 boundary so that values
@@ -143,7 +113,7 @@ exprt function_call_expr::handle_input() const
 {
   // input() returns a non-deterministic string
   // Model as a bounded C-string without embedded nulls.
-  int max_str_length = get_nondet_str_buffer_size();
+  int max_str_length = string_handler::nondet_str_buffer_size();
   typet string_type = type_handler_.get_typet("str", max_str_length);
 
   symbolt &input_sym =
@@ -203,43 +173,8 @@ exprt function_call_expr::build_nondet_call() const
   std::string type = func_name.substr(underscore_pos + 1);
 
   if (type == "str")
-  {
-    int max_str_length = get_nondet_str_buffer_size();
-
-    typet char_array_type =
-      array_typet(char_type(), from_integer(max_str_length, size_type()));
-
-    // Create a temporary variable to hold the nondeterministic string
-    symbolt &nondet_str_symbol = converter_.create_tmp_symbol(
-      call_, "$nondet_str$", char_array_type, exprt());
-
-    // Declare the temporary
-    code_declt decl(build_symbol(nondet_str_symbol));
-    decl.location() = converter_.get_location_from_decl(call_);
-    converter_.add_instruction(decl);
-
-    // Create nondet assignment for the array
-    exprt nondet_value("sideeffect", char_array_type);
-    nondet_value.statement("nondet");
-
-    code_assignt nondet_assign(build_symbol(nondet_str_symbol), nondet_value);
-    nondet_assign.location() = converter_.get_location_from_decl(call_);
-    converter_.add_instruction(nondet_assign);
-
-    // Ensure null terminator at the last position
-    exprt last_index = from_integer(max_str_length - 1, size_type());
-    exprt null_char = from_integer(0, char_type());
-
-    exprt last_elem = build_index(build_symbol(nondet_str_symbol), last_index);
-    code_assignt null_assign(last_elem, null_char);
-    null_assign.location() = converter_.get_location_from_decl(call_);
-    converter_.add_instruction(null_assign);
-
-    // Return address of first element: &arr[0] which is char*
-    exprt first_elem = build_index(
-      build_symbol(nondet_str_symbol), from_integer(0, size_type()));
-    return build_address_of(first_elem);
-  }
+    return converter_.get_string_handler().build_nondet_string(
+      converter_.get_location_from_decl(call_));
 
   if (type == "complex")
   {
