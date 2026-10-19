@@ -12,6 +12,12 @@ class exprt;
 class typet;
 class python_converter;
 
+/// The normalized scalar dtype a dtype= argument names, or a specific
+/// rejection when it names none.
+std::string extract_numpy_dtype_name(
+  const nlohmann::json &dtype_node,
+  const nlohmann::json &ast);
+
 class numpy_call_expr : public function_call_expr
 {
 public:

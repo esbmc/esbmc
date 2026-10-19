@@ -7,6 +7,7 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/lambda/python_lambda.h>
+#include <python-frontend/numpy/numpy_random.h>
 #include <python-frontend/python-list/python_list.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/string/string_handler.h>
@@ -652,6 +653,8 @@ exprt python_converter::get_call_expr(const nlohmann::json &element)
       "function that returns a function");
   if (std::optional<exprt> raise = call_property_value(element))
     return *raise;
+  if (numpy_random::is_random_call(element, *ast_json))
+    return numpy_random(*this, element).get();
   return get_function_call(element);
 }
 

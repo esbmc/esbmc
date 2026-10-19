@@ -2493,9 +2493,6 @@ materialize_arange_dtype(const nlohmann::json &args, const std::string &dtype)
 // Defined further down (dtype parsing/casting lives next to get_dtype());
 // forward-declared here so materialize_numpy_constructor_array can apply a
 // dtype= keyword instead of just tolerating its absence.
-static std::string extract_numpy_dtype_name(
-  const nlohmann::json &dtype_node,
-  const nlohmann::json &ast);
 static bool is_numpy_integer_dtype(const std::string &dtype);
 static nlohmann::json cast_numpy_literal_to_dtype(
   const nlohmann::json &node,
@@ -4857,7 +4854,7 @@ static bool is_named_numpy_dtype(const std::string &dtype)
 
 // The single normalization of a dtype= argument: a scalar type named by a
 // builtin, a numpy attribute or a string, or a specific rejection.
-static std::string extract_numpy_dtype_name(
+std::string extract_numpy_dtype_name(
   const nlohmann::json &dtype_node,
   const nlohmann::json &ast)
 {

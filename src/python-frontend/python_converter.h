@@ -596,6 +596,7 @@ private:
   friend class complex_handler;
   friend class function_call_expr;
   friend class numpy_call_expr;
+  friend class numpy_random;
   friend class function_call_builder;
   friend class type_handler;
   friend class python_list;
