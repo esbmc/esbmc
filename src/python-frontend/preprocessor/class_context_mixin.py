@@ -75,6 +75,24 @@ def _only_called_as_method(module, target):
                for n in ast.walk(module))
 
 
+def _identity_compared(module):
+    """The ids of the operands of each comparison in `module` made only with
+    `is` or `is not`, which run no user code on them."""
+    return {
+        id(operand)
+        for n in ast.walk(module)
+        if isinstance(n, ast.Compare) and all(isinstance(op, (ast.Is, ast.IsNot)) for op in n.ops)
+        for operand in (n.left, *n.comparators)
+    }
+
+
+def _escaping_type(node, compared):
+    """Whether `node` is a one-argument `type(...)` call whose class is used
+    other than as an operand in `compared` (#8963)."""
+    return (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+            and node.func.id == "type" and len(node.args) == 1 and id(node) not in compared)
+
+
 class _QualifyNestedClasses(ast.NodeTransformer):
     """Rewrite `Outer.Inner` to the hoisted class's module-level name."""
 
@@ -420,9 +438,9 @@ class ClassContextMixin:
     @staticmethod
     def _recovers_classes(module):
         """Whether `module` can reach a class from an instance or by name."""
+        compared = _identity_compared(module)
         return any(
-            isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "type"
-            and len(n.args) == 1 or isinstance(n, ast.Attribute) and n.attr == "__class__"
+            _escaping_type(n, compared) or isinstance(n, ast.Attribute) and n.attr == "__class__"
             or isinstance(n, ast.Name) and n.id in ("getattr", "vars", "globals")
             for n in ast.walk(module))
 
