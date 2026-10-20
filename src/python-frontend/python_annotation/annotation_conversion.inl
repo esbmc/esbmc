@@ -1869,7 +1869,18 @@ std::string python_annotation<Json>::get_function_return_type(
     current_func_name_context_ = func_name;
     std::string inferred_type =
       infer_from_return_statements(func_elem["body"], func_name);
+    std::set<std::string> branch_types;
+    if (inferred_type.empty())
+      collect_return_types(func_elem["body"], func_name, branch_types);
     current_func_name_context_ = saved_return_ctx;
+
+    // The branches return incompatible types (e.g. int and str): the
+    // top-level return below is only one of them (#8890).
+    if (!branch_types.empty())
+    {
+      functions_in_analysis_.erase(func_name);
+      return "";
+    }
 
     if (!inferred_type.empty() && inferred_type != "NoneType")
     {
