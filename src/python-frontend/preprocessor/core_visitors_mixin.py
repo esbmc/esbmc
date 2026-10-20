@@ -1930,6 +1930,10 @@ class CoreVisitorsMixin:
         # _unguard_starred_call inlines list(gen(*xs)) only behind a single guard.
         if required < len(slots) and function_name in self.generator_funcs:
             return None
+        # functionDefaults is keyed by bare name, so a second def or class of
+        # that name may have left defaults the global callee lacks.
+        if required < len(slots) and node.func.id in self._redefined_names:
+            return None
         node.args = node.args[:-1] + [
             ast.Subscript(value=ast.Name(id=operand.id, ctx=ast.Load()),
                           slice=ast.Constant(value=i),
@@ -1972,8 +1976,12 @@ class CoreVisitorsMixin:
         list or tuple display, and xs must not be rebound. A callee bound in the
         calling scope is not the global function whose signature the lowering
         reads."""
-        calls_to, loads = {}, {}
+        calls_to, loads, defined = {}, {}, set()
         for n in ast.walk(node):
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                if n.name in defined:
+                    self._redefined_names.add(n.name)
+                defined.add(n.name)
             if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
                 calls_to.setdefault(n.func.id, []).append(n)
             elif isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load):
