@@ -3242,6 +3242,8 @@ regression/python/github_8865_alias_then_import_refused
 regression/esbmc-cpp/cpp/github_8680_dtor_throw_unwind_fail
 regression/esbmc-cpp/cpp/github_8680_dtor_catch_unwind
 regression/esbmc-cpp/cpp/github_8680_dtor_throw_scope_exit
+regression/python/github_8412_is_returned_str
+regression/python/github_8412_is_returned_str_fail
 regression/python/github_8891_dict_call_value
 regression/python/github_8891_dict_call_value_fail
 regression/python/github_8877_pow2_iterator
