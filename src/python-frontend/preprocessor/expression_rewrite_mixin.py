@@ -278,9 +278,10 @@ for {i} in range(0, len({seq})):
     class _ListCompExpressionLowerer(ast.NodeTransformer):
         """Utility transformer that lowers list comprehensions, any(genexpr), and all(genexpr) inside an expression."""
 
-        def __init__(self, preprocessor):
+        def __init__(self, preprocessor, root):
             super().__init__()
             self.preprocessor = preprocessor
+            self.root = root
             self.statements = []
             # Prefix statements run unconditionally, so an expression that
             # might not be evaluated must not be lowered into them.
@@ -334,6 +335,41 @@ for {i} in range(0, len({seq})):
         def visit_GeneratorExp(self, node):
             """Lower a genexp not already handled above (any/all/join/...)."""
             return self._lower_as_listcomp(node)
+
+        def _other_code_may_run(self, comp):
+            """True when the expression may run code outside @p comp other than
+            the calls enclosing it, which hoisting @p comp would reorder."""
+            parents = {
+                id(child): parent
+                for parent in ast.walk(self.root)
+                for child in ast.iter_child_nodes(parent)
+            }
+            exempt = {id(n) for n in ast.walk(comp)}
+            node = comp
+            while id(node) in parents:
+                node = parents[id(node)]
+                exempt.add(id(node))
+            return any(
+                isinstance(n, (ast.Call, ast.NamedExpr, ast.Await, ast.Yield,
+                               ast.YieldFrom)) and id(n) not in exempt for n in ast.walk(self.root))
+
+        def visit_DictComp(self, node):
+            """Hoist a dict comprehension over a dict into a temp, so it takes
+            the for-loop lowering an assigned one gets (#5444)."""
+            if self.conditional_depth or self._other_code_may_run(node):
+                return self.generic_visit(node)
+            # pylint: disable=protected-access
+            tmp_id = f"ESBMC_dictcomp_{self.preprocessor.listcomp_counter}"
+            assign = ast.Assign(targets=[ast.Name(id=tmp_id, ctx=ast.Store())], value=node)
+            ast.copy_location(assign, node)
+            lowered = self.preprocessor._maybe_lower_dictcomp_over_items(assign)
+            if lowered is None:
+                return self.generic_visit(node)
+            self.preprocessor.listcomp_counter += 1
+            self.statements.extend(lowered)
+            result = ast.Name(id=tmp_id, ctx=ast.Load())
+            ast.copy_location(result, node)
+            return result
 
         def visit_Call(self, node):  # pylint: disable=protected-access,too-many-locals,too-many-boolean-expressions,too-many-statements
             if (isinstance(node.func, ast.Attribute) and node.func.attr == "join"

@@ -362,6 +362,53 @@ class CoreVisitorsMixin:
 
         return result
 
+    def _rename_dictcomp_targets(self, comp):
+        """A copy of @p comp whose targets have fresh names, so the for-loops it
+        lowers to do not rebind names of the enclosing scope: a Python 3
+        comprehension has its own scope."""
+        comp = copy.deepcopy(comp)
+        for index, gen in enumerate(comp.generators):
+            scopes = [gen.target, comp.key, comp.value] + gen.ifs + comp.generators[index + 1:]
+            for old in {n.id for n in ast.walk(gen.target) if isinstance(n, ast.Name)}:
+                new = f"ESBMC_compvar_{self.listcomp_counter}_{old}"
+                self.listcomp_counter += 1
+                for scope in scopes:
+                    self._rename_free_name(scope, old, new)
+        return comp
+
+    def _rename_free_name(self, node, old, new):
+        """Rename @p old to @p new in @p node, except inside a nested lambda or
+        comprehension that binds @p old itself."""
+        if isinstance(node, ast.Name):
+            if node.id == old:
+                node.id = new
+        elif isinstance(node, ast.Lambda):
+            self._rename_free_name_in_lambda(node, old, new)
+        elif isinstance(node, (ast.ListComp, ast.SetComp, ast.GeneratorExp, ast.DictComp)):
+            self._rename_free_name_in_comprehension(node, old, new)
+        else:
+            for child in ast.iter_child_nodes(node):
+                self._rename_free_name(child, old, new)
+
+    def _rename_free_name_in_lambda(self, node, old, new):
+        """Defaults are evaluated outside the lambda; the body only sees
+        @p old when no parameter shadows it."""
+        for default in node.args.defaults + [d for d in node.args.kw_defaults if d]:
+            self._rename_free_name(default, old, new)
+        if old not in {a.arg for a in ast.walk(node.args) if isinstance(a, ast.arg)}:
+            self._rename_free_name(node.body, old, new)
+
+    def _rename_free_name_in_comprehension(self, node, old, new):
+        """Rename up to the generator whose target rebinds @p old."""
+        for gen in node.generators:
+            self._rename_free_name(gen.iter, old, new)
+            if any(isinstance(n, ast.Name) and n.id == old for n in ast.walk(gen.target)):
+                return
+            for cond in gen.ifs:
+                self._rename_free_name(cond, old, new)
+        for part in ([node.key, node.value] if isinstance(node, ast.DictComp) else [node.elt]):
+            self._rename_free_name(part, old, new)
+
     def _maybe_lower_dictcomp_over_items(self, node):
         """Lower a dict comprehension whose iterable is a dict view into ``x = {}``
         followed by a population loop, e.g.
@@ -399,6 +446,7 @@ class CoreVisitorsMixin:
             return None
 
         target_id = node.targets[0].id
+        comp = self._rename_dictcomp_targets(comp)
 
         # x = {}
         init = ast.Assign(targets=[ast.Name(id=target_id, ctx=ast.Store())],
