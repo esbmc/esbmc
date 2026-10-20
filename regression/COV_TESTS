@@ -3248,3 +3248,5 @@ regression/python/github_8877_pow2_iterator
 regression/python/github_8877_pow2_iterator_fail
 regression/python/github_8877_pow2_iterator_func
 regression/python/github_8877_pow2_exact
+regression/python/github_8890_nested_mixed_return
+regression/python/github_8890_nested_mixed_return_fail
