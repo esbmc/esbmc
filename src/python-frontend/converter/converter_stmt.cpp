@@ -656,6 +656,47 @@ struct retype_alias_scope_guard
   }
 };
 
+// A str literal stored on a symbol is what folds read as the name's value. One
+// assigned inside a conditional or loop body is only that body's literal past
+// its end, and on a loop's next iteration no earlier literal holds, so drop
+// the body's literals when it ends, and all of them when a loop starts (#8413).
+struct str_value_scope_guard
+{
+  contextt &symbols;
+  std::unordered_set<std::string> &ids;
+  std::unordered_set<std::string> outer;
+  bool active;
+  str_value_scope_guard(
+    contextt &s,
+    std::unordered_set<std::string> &i,
+    bool act,
+    bool is_loop)
+    : symbols(s), ids(i), active(act)
+  {
+    if (is_loop)
+      forget();
+    outer.swap(ids);
+  }
+  ~str_value_scope_guard()
+  {
+    if (active)
+      forget();
+    ids.merge(outer);
+  }
+  void forget()
+  {
+    for (const std::string &id : ids)
+    {
+      symbolt *symbol = symbols.find_symbol(id);
+      if (
+        symbol && symbol->get_value().is_constant() &&
+        type_utils::is_string_type(symbol->get_value().type()))
+        symbol->set_value(nil_exprt());
+    }
+    ids.clear();
+  }
+};
+
 } // namespace
 
 std::optional<std::vector<std::size_t>>
@@ -1051,6 +1092,28 @@ void python_converter::adopt_tagged_element(
   lhs.type() = rhs.type();
 }
 
+/// A str rebound to a str of another length holds a char*: a char array fits
+/// one length only, and retyping it would reinterpret the stores already
+/// emitted at the old length.
+void python_converter::adopt_array_type(
+  symbolt &lhs_symbol,
+  exprt &lhs,
+  exprt &rhs)
+{
+  const typet &held = lhs_symbol.get_type();
+  typet type = rhs.type();
+  if (
+    lhs_symbol.get_value().is_not_nil() && held != type &&
+    type_utils::is_string_type(held) && held.is_array() &&
+    type_utils::is_string_type(type) && type.is_array())
+  {
+    type = gen_pointer_type(char_type());
+    rhs = string_handler_.get_array_base_address(rhs);
+  }
+  python_expr::set_symbol_type(lhs_symbol, type);
+  lhs.type() = type;
+}
+
 bool python_converter::annotation_yields_to_rhs(
   const nlohmann::json &ast_node,
   const exprt &rhs) const
@@ -1137,6 +1200,34 @@ void python_converter::reject_attribute_scalar_change(
     "; an attribute whose type changes is not modelled");
 }
 
+// Every assignment to a name takes the symbol's final type, so a reassigned
+// str literal of another length cannot share one fixed-size array once a read
+// may run past a join: retype the name to char*, as a conditional expression's
+// str is, and decay the rhs. On the straight-line spine, while the earlier
+// literal is still stored, reads fold and the array is kept.
+void python_converter::retype_resized_str(
+  symbolt &symbol,
+  exprt &lhs,
+  exprt &rhs)
+{
+  auto is_char_array = [](const typet &t) {
+    return t.is_array() && t.subtype() == char_type();
+  };
+  const bool may_join = block_nesting_ != function_body_depth_ + 1 ||
+                        !symbol.get_value().is_constant();
+  if (
+    may_join && rhs.is_constant() && !is_class_object(rhs) &&
+    is_char_array(rhs.type()) && is_char_array(symbol.get_type()) &&
+    rhs.type() != symbol.get_type() &&
+    str_assigned_symbols_.count(symbol.id.as_string()))
+  {
+    symbol.set_type(gen_pointer_type(char_type()));
+    symbol.set_value(nil_exprt());
+    lhs.type() = symbol.get_type();
+    rhs = string_handler_.get_array_base_address(rhs);
+  }
+}
+
 void python_converter::handle_assignment_type_adjustments(
   symbolt *lhs_symbol,
   exprt &lhs,
@@ -1150,8 +1241,7 @@ void python_converter::handle_assignment_type_adjustments(
   const bool has_annotation =
     ast_node.contains("annotation") && !ast_node["annotation"].is_null();
 
-  // Don't rewrite lhs_symbol's type for a subscript target.
-  if (assignment_target_is_subscript(ast_node))
+  if (settle_target_type(lhs_symbol, lhs, rhs, ast_node))
     return;
 
   rhs = wrap_stored_if_optional(rhs, lhs.type());
@@ -1272,6 +1362,7 @@ void python_converter::handle_assignment_type_adjustments(
         lhs_symbol->set_value(migrate_expr(rhs));
       return;
     }
+    retype_resized_str(*lhs_symbol, lhs, rhs);
     // Handle string-to-string variable assignments
     if (lhs_type == "str" && rhs.is_symbol())
     {
@@ -1342,10 +1433,7 @@ void python_converter::handle_assignment_type_adjustments(
             !lhs_symbol->get_type().is_nil() &&
             lhs_symbol->get_type() != type_handler_.get_list_type();
           if (!is_incompatible)
-          {
-            python_expr::set_symbol_type(*lhs_symbol, rhs.type());
-            lhs.type() = rhs.type();
-          }
+            adopt_array_type(*lhs_symbol, lhs, rhs);
         }
       }
     }
@@ -1398,9 +1486,122 @@ void python_converter::handle_assignment_type_adjustments(
   }
 }
 
+bool python_converter::settle_target_type(
+  symbolt *lhs_symbol,
+  exprt &lhs,
+  exprt &rhs,
+  const nlohmann::json &ast_node)
+{
+  // Don't rewrite lhs_symbol's type for a subscript target.
+  if (assignment_target_is_subscript(ast_node))
+    return true;
+  if (!lhs_symbol)
+    return false;
+  if (binds_runtime_class(ast_node, rhs))
+  {
+    rhs = as_class_value(rhs);
+    lhs_symbol->set_type(migrate_type(rhs.type()));
+    lhs.type() = rhs.type();
+    class_object_names_.erase(lhs_symbol->id);
+    return true;
+  }
+  if (
+    type_handler::is_class_value_type(lhs_symbol->get_type()) &&
+    as_class_value(rhs).is_nil())
+    throw std::runtime_error(
+      "Unsupported: a variable holding a class rebound to a value that is not "
+      "one");
+  return false;
+}
+
+// Whether `value` names classes only: a class, or a conditional between
+// such; each class it names is appended to `classes`.
+static bool names_classes(
+  const nlohmann::json &value,
+  const nlohmann::json &ast,
+  std::vector<std::string> &classes)
+{
+  if (value.value("_type", "") == "IfExp")
+    return names_classes(value["body"], ast, classes) &&
+           names_classes(value["orelse"], ast, classes);
+  if (value.value("_type", "") != "Name")
+    return false;
+  const std::string id = value["id"];
+  if (!type_utils::is_type_identifier(id) && !json_utils::is_class(id, ast))
+    return false;
+  classes.push_back(id);
+  return true;
+}
+
+// The variable a plain assignment `x = v` or `x: T = v` binds, else nullptr.
+static const nlohmann::json *assigned_name(const nlohmann::json &node)
+{
+  const std::string kind = node.value("_type", "");
+  const nlohmann::json *target =
+    kind == "AnnAssign"                               ? &node["target"]
+    : kind == "Assign" && node["targets"].size() == 1 ? &node["targets"][0]
+                                                      : nullptr;
+  return target && (*target)["_type"] == "Name" && node.contains("value") &&
+             !node["value"].is_null()
+           ? target
+           : nullptr;
+}
+
+// How many assignments `name = <classes>` there are under `node`.
+static size_t class_assignments(
+  const nlohmann::json &node,
+  const std::string &name,
+  const nlohmann::json &ast,
+  std::vector<std::string> &classes)
+{
+  size_t n = 0;
+  const nlohmann::json *target =
+    node.is_object() ? assigned_name(node) : nullptr;
+  if (
+    target && (*target)["id"] == name &&
+    names_classes(node["value"], ast, classes))
+    ++n;
+  for (const auto &child : node)
+    if (child.is_structured())
+      n += class_assignments(child, name, ast, classes);
+  return n;
+}
+
+bool python_converter::binds_runtime_class(
+  const nlohmann::json &ast_node,
+  const exprt &rhs)
+{
+  const nlohmann::json &target =
+    ast_node.contains("targets") ? ast_node["targets"][0] : ast_node["target"];
+  if (target.value("_type", "") != "Name" || as_class_value(rhs).is_nil())
+    return false;
+  // Every binding of the name must assign classes, so that it holds one on
+  // every path; each class gets its id now, before any read of the name.
+  const std::string name = target["id"];
+  const size_t bindings = count_bindings(*ast_json, name);
+  std::vector<std::string> classes;
+  if (class_assignments(*ast_json, name, *ast_json, classes) != bindings)
+    return false;
+  for (const std::string &c : classes)
+    class_value(c);
+  // A class on one path of several: a conditional, a value that already is
+  // one, or a name bound more than once.
+  return rhs.id() == "if" || type_handler::is_class_value_type(rhs.type()) ||
+         bindings > 1;
+}
+
 void python_converter::set_assigned_value(symbolt &symbol, const exprt &rhs)
 {
   symbol.set_value(rhs);
+  if (
+    rhs.is_constant() && type_utils::is_string_type(rhs.type()) &&
+    !is_class_object(rhs))
+  {
+    str_valued_symbols_.insert(symbol.id.as_string());
+    str_assigned_symbols_.insert(symbol.id.as_string());
+  }
+  else
+    str_valued_symbols_.erase(symbol.id.as_string());
   if (is_class_object(rhs))
     class_object_names_[symbol.id] = rhs.get_string("value");
   else
@@ -6010,7 +6211,9 @@ bool python_converter::try_tagged_var_assign(
   if (ast_node.contains("value") && !ast_node["value"].is_null())
   {
     const locationt location = get_location_from_decl(ast_node);
-    exprt rhs = get_expr(ast_node["value"]);
+    // A call runs first, so the tag holds its result rather than the call.
+    const exprt rhs = store_call_result(
+      get_expr(ast_node["value"]), location, "$tag_call$", &target_block);
     if (type_handler_.is_tagged_scalar_type(rhs.type()))
     {
       if (value_may_tag)
@@ -6142,6 +6345,43 @@ void python_converter::propagate_dict_member_list_type_info(
     element_type_registry_.record(lhs_identifier, std::string(), tuple_t);
 }
 
+/// "s" or "n" when every recorded element of list @p id is a str or a
+/// number, "[" and the same for the inner list when they are lists; empty
+/// when nothing or a mix is recorded.
+std::string python_converter::element_kind(const std::string &id) const
+{
+  const element_type_registry::entries *entries =
+    element_type_registry_.find(id);
+  if (!entries || element_type_registry_.mixes_str_and_number(id))
+    return "";
+  const typet &first = entries->front().second;
+  if (type_handler_.is_string_type(first))
+    return "s";
+  if (type_handler_.is_numeric_scalar_type(first))
+    return "n";
+  if (first != type_handler_.get_list_type())
+    return "";
+  std::string inner;
+  for (const auto &[elem_id, type] : *entries)
+  {
+    const std::string k = elem_id.empty() ? "" : element_kind(elem_id);
+    if (k.empty() || (!inner.empty() && k != inner))
+      return "";
+    inner = k;
+  }
+  return "[" + inner;
+}
+
+/// Whether lists @p a and @p b both have one recorded element kind, and the
+/// two differ.
+bool python_converter::element_kinds_differ(
+  const std::string &a,
+  const std::string &b) const
+{
+  const std::string ka = element_kind(a), kb = element_kind(b);
+  return !ka.empty() && !kb.empty() && ka != kb;
+}
+
 void python_converter::propagate_list_type_info(
   const exprt &lhs,
   const exprt &rhs,
@@ -6149,6 +6389,14 @@ void python_converter::propagate_list_type_info(
 {
   const std::string &lhs_identifier = lhs.identifier().as_string();
   const std::string &rhs_identifier = rhs.identifier().as_string();
+  // The registry keeps one record per name, so a rebinding under a branch or
+  // loop would retype every later read, including those on the other path.
+  if (
+    block_nesting_ != function_body_depth_ + 1 &&
+    element_kinds_differ(lhs_identifier, rhs_identifier))
+    throw std::runtime_error(
+      "rebinding '" + lhs_symbol->name.as_string() +
+      "' to a list of other element types on one path is not supported");
   // Every instance-attribute list shares the empty identifier, so its record
   // may be another attribute's; an annotated one gives its element type.
   const typet attr_elem_type =
@@ -7709,6 +7957,7 @@ void python_converter::get_compound_assign(
       symbolt *symbol = symbol_table_.find_symbol(sid.to_string());
       if (symbol)
       {
+        retype_resized_str(*symbol, lhs, concatenated);
         // Update the symbol's type to pointer if concatenated returns pointer
         symbol->set_type(migrate_type(concatenated.type()));
 
@@ -7718,9 +7967,7 @@ void python_converter::get_compound_assign(
         // For pointer results, don't update the value
         // (it will be assigned via the assignment statement)
         if (concatenated.type().is_array())
-        {
-          symbol->set_value(migrate_expr(concatenated));
-        }
+          set_assigned_value(*symbol, concatenated);
       }
     }
 
@@ -8112,8 +8359,11 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     throw std::runtime_error(
       "Walrus operator ':=' in a while-loop condition is not supported");
 
-  const loop_depth_guard loop_guard(
-    numpy_loop_depth_, ast_node.value("_type", "") == "While");
+  // A while test re-evaluates after the body, so no pre-loop literal holds.
+  const bool is_while = ast_node.value("_type", "") == "While";
+  const loop_depth_guard loop_guard(numpy_loop_depth_, is_while);
+  str_value_scope_guard test_guard(
+    symbol_table_, str_valued_symbols_, is_while, is_while);
 
   // Copy current type
   typet t = current_element_type;
@@ -9233,6 +9483,8 @@ exprt python_converter::get_block(
   // established before the loop.
   const bool is_conditional_body = (block_nesting_ != function_body_depth_ + 1);
   retype_alias_scope_guard retype_guard(retype_aliases_, is_conditional_body);
+  str_value_scope_guard str_guard(
+    symbol_table_, str_valued_symbols_, is_conditional_body, is_loop_body);
 
   // Entering any nested/conditional body (function, if/while/for, try/except):
   // straight-line flow-sensitive class tracking is no longer valid here, so

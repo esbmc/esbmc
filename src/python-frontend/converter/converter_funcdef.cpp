@@ -217,6 +217,22 @@ void count_bindings(
     count_bindings(child.value(), writes, nested || enters_scope);
 }
 
+/// Scalars and functions. A container (list/dict/str/instance) carries
+/// per-symbol element-type metadata keyed by its own id, which a
+/// differently-named cell would not inherit -- `c[0] += 1` over a captured
+/// list would then be typed list+int and raise TypeError (regression/python/
+/// closure_subscript_write). Those keep the scope walk, which already models
+/// the common case of a closure called inside the defining frame. A function
+/// arrives as a code pointer, or as `void *` from an unannotated parameter
+/// such as a decorator's (#8419); it carries no such metadata.
+bool is_cell_type(const typet &type)
+{
+  return type.is_bool() || type.is_signedbv() || type.is_unsignedbv() ||
+         type.is_floatbv() || type.is_fixedbv() ||
+         (type.is_pointer() &&
+          (type.subtype().is_code() || type.subtype().is_empty()));
+}
+
 /// Whether @p node, outside any nested scope, holds `return <lambda>`.
 bool returned_by(const nlohmann::json &node, const nlohmann::json &lambda)
 {
@@ -335,16 +351,8 @@ code_blockt python_converter::bind_capture_cells(
     if (source == nullptr || writes[name] > (source->is_parameter ? 0u : 1u))
       continue;
 
-    // Scalars only. A container (list/dict/str/instance) carries per-symbol
-    // element-type metadata keyed by its own id, which a differently-named
-    // cell would not inherit -- `c[0] += 1` over a captured list would then be
-    // typed list+int and raise TypeError (regression/python/
-    // closure_subscript_write). Those keep the scope walk, which already models
-    // the common case of a closure called inside the defining frame.
     const typet &cell_type = source->get_type();
-    if (!(cell_type.is_bool() || cell_type.is_signedbv() ||
-          cell_type.is_unsignedbv() || cell_type.is_floatbv() ||
-          cell_type.is_fixedbv()))
+    if (!is_cell_type(cell_type))
       continue;
 
     const std::string cell_id = func_id + "@" + name;
@@ -3858,6 +3866,7 @@ bool python_converter::try_infer_dynamic_param_type(
     return enclosing_def == nullptr ? nullptr : &(*enclosing_def)["body"];
   };
 
+  const nlohmann::json callables = callable_function_stubs();
   auto diverges_at_site =
     [&](const nlohmann::json &value_node, const numpy_param_call_site &site) {
       if (value_node.value("_type", "") != "Name")
@@ -3865,7 +3874,7 @@ bool python_converter::try_infer_dynamic_param_type(
       const nlohmann::json *scope_body = scope_body_for(site);
       return scope_body != nullptr &&
              dynamic_type_handler_.scope_assigns_divergent_literal_types(
-               value_node.value("id", ""), *scope_body, module_body);
+               value_node.value("id", ""), *scope_body, callables);
     };
 
   for (const numpy_param_call_site &site : call_sites)

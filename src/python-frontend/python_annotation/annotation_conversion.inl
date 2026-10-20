@@ -1120,16 +1120,18 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
   return ""; // Cannot determine type
 }
 
-/// The declared type of `obj.attr`, where `obj` is a name bound to an
-/// instance of a class defined in the program, or empty. Without it an
-/// unannotated parameter that receives `obj.attr` stays `void *` (#8672).
+/// The declared type of `obj.attr`, where `obj` is a name bound to, or a call
+/// returning, an instance of a class defined in the program, or empty. Without
+/// it an unannotated parameter that receives `obj.attr` stays `void *` (#8672).
 template <class Json>
 std::string python_annotation<Json>::get_attribute_type(const Json &arg)
 {
   const Json &obj = arg["value"];
+  const std::string obj_kind = obj.value("_type", "");
   if (
-    obj.value("_type", "") != "Name" ||
-    is_rebound_in_scope(obj["id"].template get<std::string>()))
+    obj_kind != "Call" &&
+    (obj_kind != "Name" ||
+     is_rebound_in_scope(obj["id"].template get<std::string>())))
     return "";
 
   const std::string attr = arg["attr"].template get<std::string>();
@@ -4627,10 +4629,17 @@ std::string python_annotation<Json>::infer_parameter_type_at_call_sites(
   const std::vector<Json> &function_calls,
   const Json &search_context)
 {
-  const std::string inferred =
+  std::string inferred =
     infer_parameter_type_from_calls(param_index, function_calls);
-  for (const std::string &type :
-       caller_arg_types(func_name, param_index, search_context))
+  const std::vector<std::string> callers =
+    caller_arg_types(func_name, param_index, search_context);
+  // Every call is made in another function, whose scope alone can type its
+  // argument (`find(pkt.ident)` with `pkt` a caller's local, #8672).
+  if (
+    inferred.empty() && !callers.empty() &&
+    callers.size() == function_calls.size())
+    inferred = callers.front();
+  for (const std::string &type : callers)
     if (!call_site_types_agree(type, inferred))
       return "";
   return inferred;
