@@ -341,6 +341,34 @@ std::optional<exprt> function_call_expr::list_isinstance(
     and2tc(notequal2tc(obj2, gen_zero(obj2->type)), not2tc(tuple2)));
 }
 
+/// isinstance(xs[i], int), float, bool or str on a number read from a list,
+/// answered from the type the element was stored with: a value that append or
+/// a comprehension byte-copied cannot be traced back to a typed object (#8950).
+std::optional<exprt> function_call_expr::list_element_isinstance(
+  const nlohmann::json &obj_arg,
+  const exprt &obj,
+  const std::string &type_name) const
+{
+  if (
+    type_name != "int" && type_name != "float" && type_name != "bool" &&
+    type_name != "str")
+    return std::nullopt;
+  const std::string static_type = type_handler_.type_to_string(obj.type());
+  if (static_type != "int" && static_type != "float" && static_type != "bool")
+    return std::nullopt;
+  if (
+    obj_arg["_type"] != "Subscript" ||
+    !python_converter::is_pure_read(obj_arg["value"]) ||
+    converter_.get_expr(obj_arg["value"]).type() !=
+      type_handler_.get_list_type())
+    return std::nullopt;
+  const exprt type_id = python_converter::list_element_type_id(obj);
+  if (type_id.is_nil())
+    return std::nullopt;
+  return converter_.dynamic_type_handler_.build_isinstance_check(
+    type_id.op0(), type_name, false);
+}
+
 exprt function_call_expr::isinstance_operand(
   const nlohmann::json &node,
   const std::function<exprt(const std::string &)> &build,
@@ -479,6 +507,11 @@ exprt function_call_expr::handle_isinstance() const
     if (type_handler_.is_tagged_scalar_type(obj_expr.type()))
       return converter_.dynamic_type_handler_.build_isinstance_check(
         obj_expr, type_name, json_utils::is_class(type_name, converter_.ast()));
+
+    if (
+      std::optional<exprt> stored =
+        list_element_isinstance(obj_arg, obj_expr, type_name))
+      return *stored;
 
     // Special case: Check if object is None (null pointer)
     if (type_name == "NoneType")
