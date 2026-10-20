@@ -58,6 +58,15 @@ std::string classify_return_literal_kind(
     auto it = param_kinds.find(value.value("id", ""));
     return it == param_kinds.end() ? "" : it->second;
   }
+  if (
+    value.value("_type", "") == "Call" &&
+    value["func"].value("_type", "") == "Name" && value["args"].empty())
+  {
+    const std::string callee = value["func"].value("id", "");
+    if (callee == "nondet_str")
+      return "str";
+    return callee == "nondet_int" || callee == "nondet_bool" ? "num" : "";
+  }
   if (value.value("_type", "") != "Constant" || !value.contains("value"))
     return "";
 
