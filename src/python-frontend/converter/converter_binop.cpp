@@ -3565,7 +3565,32 @@ exprt python_converter::handle_string_binary_operations(
       op, lhs, rhs, left, right, element);
   }
 
-  return nil_exprt();
+  return str_pointer_add_error(op, lhs, rhs, left, right);
+}
+
+exprt python_converter::str_pointer_add_error(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &left,
+  const nlohmann::json &right)
+{
+  // Char arrays were already handled by handle_array_operations; a char
+  // pointer would otherwise fall into C pointer arithmetic.
+  const bool lhs_str = type_utils::is_string_type(lhs.type());
+  if (op != "Add" || lhs_str == type_utils::is_string_type(rhs.type()))
+    return nil_exprt();
+  const exprt &other = lhs_str ? rhs : lhs;
+  // A char pointer also stands in for a multi-type union with None.
+  const std::string declared =
+    type_handler_.get_operand_type(lhs_str ? left : right);
+  if (get_python_type_category(other.type()) != "numeric" || declared != "str")
+    return nil_exprt();
+  return get_exception_handler().gen_exception_raise(
+    "TypeError",
+    "unsupported operand type(s) for +: '" +
+      type_handler_.get_python_type_name(lhs.type()) + "' and '" +
+      type_handler_.get_python_type_name(rhs.type()) + "'");
 }
 
 exprt python_converter::build_binary_expression(

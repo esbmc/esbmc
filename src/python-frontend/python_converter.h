@@ -2901,6 +2901,15 @@ private:
     const nlohmann::json &right,
     const nlohmann::json &element);
 
+  /// TypeError for `str + number` when the str is a char pointer (a
+  /// parameter, method result or attribute); nil otherwise (#8380).
+  exprt str_pointer_add_error(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
+
   /**
    * @brief Builds a binary expression with proper type and location.
    *
