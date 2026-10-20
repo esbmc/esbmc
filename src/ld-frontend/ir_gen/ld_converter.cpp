@@ -3,6 +3,7 @@
 #include <cctype>
 #include <algorithm>
 #include <util/arith/arith_tools.h>
+#include <util/arith/ieee_float.h>
 #include <util/arith/mp_arith.h>
 #include <util/config/config.h>
 #include <util/lang/c_types.h>
@@ -39,6 +40,8 @@ typet ld_converter::type_of_kind(VarKind kind) const
   case VarKind::BOOL:
     return bool_t();
   case VarKind::REAL:
+    return float_type(); // IEC 61131-3 Table 10: REAL is 32 bits
+  case VarKind::LREAL:
     return double_type();
   case VarKind::INT:
     return signedbv_typet(16); // IEC INT, and MATIEC's IEC_INT
@@ -111,9 +114,13 @@ symbol_exprt ld_converter::declare_variable(const VarDecl &v)
     sym.set_value(v.init_value ? exprt(true_exprt()) : exprt(false_exprt()));
     break;
   case VarKind::REAL:
-    sym.set_value(
-      from_double(static_cast<double>(v.init_value), double_type()));
+  case VarKind::LREAL:
+  {
+    ieee_floatt f(ieee_float_spect(to_floatbv_type(sym.get_type())));
+    f.from_integer(BigInt(v.init_value));
+    sym.set_value(f.to_expr());
     break;
+  }
   case VarKind::INT:
   case VarKind::DINT:
   case VarKind::TIME:
@@ -202,10 +209,7 @@ exprt ld_converter::bool_value_of(const symbol_exprt &var) const
   return not_exprt(equality_exprt(var, gen_zero(var.type())));
 }
 
-codet ld_converter::translate_contact(
-  const LdIRNode &n,
-  const exprt &pf_in,
-  exprt &pf_out)
+exprt ld_converter::translate_contact(const LdIRNode &n, code_blockt &blk)
 {
   symbol_exprt var = var_expr(n.variable);
   ContactKind eff_kind = n.contact_kind;
@@ -215,25 +219,25 @@ codet ld_converter::translate_contact(
                  : ContactKind::NormallyOpen;
 
   exprt base = bool_value_of(var);
-  // Transition-sensing contact (IEC 61131-3 §2.5.1.1): the edge is sensed on
-  // the operand, and the contact's polarity is applied to the result. The
-  // shadow holding the previous-scan sample is updated in the scan epilogue,
-  // not here, so every contact sensing the same operand agrees within a scan.
+  // IEC 61131-3 Ed. 3 Table 75 senses the edge "from one evaluation of this
+  // element to the next": like the R_TRIG/F_TRIG Beremiz emits for each coil
+  // a contact feeds, every evaluation keeps its own previous sample.
   if (n.contact_edge != ContactEdge::None)
   {
-    symbol_exprt prev =
-      declare_bool_shadow(ld_name("__edge_prev_" + n.variable));
-    edge_shadows_.insert({n.variable, prev});
-    base = (n.contact_edge == ContactEdge::Rising)
-             ? and_exprt(base, not_exprt(prev))
-             : and_exprt(not_exprt(base), prev);
+    const std::string id = std::to_string(edge_contacts_++) + "_" + n.variable;
+    symbol_exprt prev = declare_bool_shadow(ld_name("__edge_prev_" + id));
+    symbol_exprt q = declare_bool_shadow(ld_name("__edge_q_" + id));
+    exprt edge = (n.contact_edge == ContactEdge::Rising)
+                   ? and_exprt(base, not_exprt(prev))
+                   : and_exprt(not_exprt(base), prev);
+    blk.copy_to_operands(code_assignt(q, edge));
+    blk.copy_to_operands(code_assignt(prev, base));
+    base = q;
   }
 
-  exprt contact_val = (eff_kind == ContactKind::NormallyClosed)
-                        ? static_cast<exprt>(not_exprt(base))
-                        : base;
-  pf_out = and_exprt(pf_in, contact_val);
-  return code_skipt();
+  return (eff_kind == ContactKind::NormallyClosed)
+           ? static_cast<exprt>(not_exprt(base))
+           : base;
 }
 
 codet ld_converter::translate_coil(const LdIRNode &n, const exprt &pf)
@@ -723,24 +727,22 @@ code_blockt ld_converter::build_scan_body(const exprt &)
   for (const auto &rung : ir_.rungs)
   {
     code_blockt rung_blk;
-    exprt rung_pf = true_exprt();
+    std::vector<const LdIRNode *> contacts;
 
     for (const auto &node : rung.nodes)
     {
       switch (node.kind)
       {
       case LdIRNodeKind::ContactEval:
-      {
-        exprt pf_out;
-        codet c = translate_contact(node, rung_pf, pf_out);
-        if (c.get_statement() != "skip")
-          rung_blk.copy_to_operands(c);
-        rung_pf = pf_out;
+        contacts.push_back(&node);
         break;
-      }
       case LdIRNodeKind::CoilAssign:
       {
-        codet c = translate_coil(node, rung_pf);
+        // Each coil re-reads the contacts before it, after earlier writes.
+        exprt pf = true_exprt();
+        for (const LdIRNode *contact : contacts)
+          pf = and_exprt(pf, translate_contact(*contact, rung_blk));
+        codet c = translate_coil(node, pf);
         rung_blk.move_to_operands(c);
         break;
       }
@@ -776,13 +778,6 @@ code_blockt ld_converter::build_scan_body(const exprt &)
     codet fb = translate_user_fb(ex);
     scan_body.move_to_operands(fb);
   }
-
-  // Latch the operands sensed by edge contacts for the next scan's comparison.
-  // This runs after every rung so an edge contact sees the operand's value at
-  // the previous scan boundary rather than a mid-scan update.
-  for (const auto &[name, shadow] : edge_shadows_)
-    scan_body.copy_to_operands(
-      code_assignt(shadow, bool_value_of(var_expr(name))));
 
   return scan_body;
 }

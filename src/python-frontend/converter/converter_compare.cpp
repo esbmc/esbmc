@@ -865,19 +865,20 @@ expr2tc python_converter::build_is_equality(
   if (!owner.empty() && owner == sole_object_owner(ast(), right))
     return gen_true_expr();
 
-  expr2tc lhs2, rhs2;
-  if (lhs.type().is_array() && rhs.type().is_array())
-  {
-    // Compare base addresses of the arrays
-    migrate_expr(string_handler_.get_array_base_address(lhs), lhs2);
-    migrate_expr(string_handler_.get_array_base_address(rhs), rhs2);
-  }
-  else
-  {
-    // Default identity comparison
-    migrate_expr(lhs, lhs2);
-    migrate_expr(rhs, rhs2);
-  }
+  // An array is identified by its base address, which a pointer on the other
+  // side may hold: `b = get(v)` returns v's characters by pointer (#8412).
+  auto identity = [this](const exprt &e, const exprt &other) {
+    expr2tc out;
+    const bool as_address =
+      e.type().is_array() && (other.type().is_array() ||
+                              (other.type().is_pointer() &&
+                               other.type().subtype() == e.type().subtype()));
+    migrate_expr(
+      as_address ? string_handler_.get_array_base_address(e) : e, out);
+    return out;
+  };
+  expr2tc lhs2 = identity(lhs, rhs);
+  expr2tc rhs2 = identity(rhs, lhs);
 
   if (
     expr2tc fn = function_identity(
