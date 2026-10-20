@@ -16,6 +16,7 @@ class VarargMixin:
         for inner in ast.walk(node):
             for bound in self._bound_names(inner):
                 bind_counts[bound] = bind_counts.get(bound, 0) + 1
+        self._vararg_once_bound = {name for name, count in bind_counts.items() if count == 1}
         # Only a name no other statement rebinds or shadows calls this def.
         self._vararg_callee_defs = {
             stmt.name: stmt
@@ -99,11 +100,53 @@ class VarargMixin:
             return
         self._specialize_vararg_arguments(node)
         func_def = self._specialized_vararg_def(node.func.id)
-        if func_def is None or not self._is_specializable_vararg_call(node, func_def):
+        if func_def is None:
+            self._call_imported_vararg_spec(node)
+            return
+        if not self._is_specializable_vararg_call(node, func_def):
             return
         extra = len(node.args) - len(func_def.args.args)
         node.func = ast.Name(id=self._vararg_specialization(func_def, extra), ctx=ast.Load())
         ast.fix_missing_locations(node)
+
+    def _call_imported_vararg_spec(self, node):
+        """Call the fixed-arity copy the module of an imported variadic def built.
+
+        Each module is preprocessed on its own, so the copy is requested by the
+        importer's call arities before that module is finalized (#8480).
+        """
+        name = node.func.id
+        if (name not in self._vararg_once_bound or node.keywords
+                or any(isinstance(arg, ast.Starred) for arg in node.args)):
+            return
+        spec = self._imported_vararg_specs.get((name, len(node.args)))
+        if spec is None:
+            return
+        self._used_imported_vararg_specs.setdefault(name, set()).add(spec)
+        node.func = ast.copy_location(ast.Name(id=spec, ctx=ast.Load()), node.func)
+
+    def _specialize_external_varargs(self):
+        """Build the copies of this module's variadic defs that an importer calls."""
+        for name, arities in self.external_vararg_arities.items():
+            func_def = self._specialized_vararg_def(name)
+            if func_def is None or self._vararg_def_owners.get(id(func_def)) is not None:
+                continue
+            for arity in sorted(arities):
+                if self._is_specializable_vararg_arity(func_def, arity):
+                    extra = arity - len(func_def.args.args)
+                    self.exported_vararg_specs[(name, arity)] = self._vararg_specialization(
+                        func_def, extra)
+
+    def _import_used_vararg_specs(self, module):
+        """Import each called copy alongside the variadic def it stands for."""
+        for node in ast.walk(module):
+            if not isinstance(node, ast.ImportFrom):
+                continue
+            node.names += [
+                ast.copy_location(ast.alias(name=spec, asname=None), alias)
+                for alias in list(node.names) if alias.asname is None
+                for spec in sorted(self._used_imported_vararg_specs.get(alias.name, ()))
+            ]
 
     def _specialized_vararg_def(self, name):
         func_def = self._vararg_func_defs.get(name)
