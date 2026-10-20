@@ -691,7 +691,8 @@ class CoreVisitorsMixin:
         the binding, or None if it stays."""
         captures = self._captures_receiver(target, value)
         if not (resolvable and isinstance(target, ast.Name) and isinstance(value, ast.Attribute) and
-                (captures or isinstance(value.value, ast.Name)) and target.id in self.called_names):
+                (captures or isinstance(value.value, ast.Name))
+                and self._needs_no_method_value(target, value)):
             if isinstance(target, ast.Name):
                 self.bound_method_vars.pop(target.id, None)
             return None
@@ -706,6 +707,15 @@ class CoreVisitorsMixin:
         capture = ast.Assign(targets=[ast.Name(id=receiver, ctx=ast.Store())], value=value.value)
         self._update_variable_types_simple(capture.targets[0], value.value)
         return [ast.fix_missing_locations(ast.copy_location(capture, value))]
+
+    def _needs_no_method_value(self, target, value):
+        """Whether `target = obj.attr` needs no value for `obj.attr`: `target`
+        is called, so each call is resolved to `obj.attr`, or it is never
+        referenced and `obj.attr` is a method of a fixed instance, like an
+        unused target of an unpacking (#8957)."""
+        return target.id in self.called_names or (
+            target.id not in self.referenced_names and isinstance(value.value, ast.Name)
+            and value.attr in self.fixed_receivers.get(value.value.id, ()))
 
     def _captures_receiver(self, target, value):
         """Whether `target = obj.attr` stores `obj` for the calls of `target`:
