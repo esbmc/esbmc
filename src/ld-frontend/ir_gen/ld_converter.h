@@ -38,7 +38,7 @@ private:
   const LdIR &ir_;
   bool fault_injection_ = false;
 
-  // Edge contacts translated so far; each one keeps its own previous sample.
+  // Edge contact evaluations so far; each keeps its own previous sample.
   unsigned edge_contacts_ = 0;
 
   typet bool_t() const;
@@ -54,7 +54,7 @@ private:
 
   code_blockt build_scan_body(const exprt &pf_in);
 
-  codet translate_contact(const LdIRNode &n, const exprt &pf_in, exprt &pf_out);
+  exprt translate_contact(const LdIRNode &n, code_blockt &blk);
   codet translate_coil(const LdIRNode &n, const exprt &pf);
   codet translate_timer(const LdIRNode &n);
   codet translate_counter(const LdIRNode &n);
