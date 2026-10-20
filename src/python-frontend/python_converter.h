@@ -1346,6 +1346,8 @@ private:
     const exprt &lhs,
     const exprt &rhs);
 
+  typet
+  any_attribute_type(const nlohmann::json &stmt, const std::string &attr_name);
   void get_attributes_from_self(
     const nlohmann::json &func_node,
     struct_typet &clazz);
