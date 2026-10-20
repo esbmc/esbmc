@@ -4,15 +4,31 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 // Pure-AST literal-kind divergence detection, shared by dynamic_type_handler
 // and the annotation pre-pass (which has no symbol table to check against).
 namespace dynamic_type_detail
 {
-// Classifies a literal constant, a nondet_<type> builtin call, or a call to
-// a module-level function with a scalar return annotation (e.g. `mk()`
-// where `def mk() -> str`); "" otherwise. `module_body` may be left empty
+// The name a call's `func` spells, `m.f` for an attribute of a name, and
+// its last component; both "" for any other shape.
+inline std::pair<std::string, std::string>
+callee_names(const nlohmann::json &func)
+{
+  if (
+    func.value("_type", "") != "Attribute" || !func.contains("value") ||
+    func["value"].value("_type", "") != "Name")
+    return {func.value("id", ""), func.value("id", "")};
+  const std::string attr = func.value("attr", "");
+  return {func["value"].value("id", "") + "." + attr, attr};
+}
+
+// Classifies a literal constant, a nondet_<type> call, plain or qualified
+// by a module as in `_sv_verifier.nondet_str()`, or a call to a function
+// with a scalar return annotation (e.g. `mk()` where `def mk() -> str`);
+// "" otherwise. `module_body` holds the FunctionDefs a call may name, a
+// qualified call `m.mk()` naming one called `m.mk`. It may be left empty
 // where a caller has no access to the full module (the annotation
 // pre-pass).
 inline std::string classify_literal_value_kind(
@@ -29,32 +45,30 @@ inline std::string classify_literal_value_kind(
     return "";
   }
 
-  if (
-    value.value("_type", "") == "Call" && value.contains("func") &&
-    value["func"].value("_type", "") == "Name")
+  if (value.value("_type", "") != "Call" || !value.contains("func"))
+    return "";
+
+  const auto [callee, leaf] = callee_names(value["func"]);
+  if (leaf == "nondet_int" || leaf == "nondet_bool")
+    return "num";
+  if (leaf == "nondet_str")
+    return "str";
+
+  if (module_body.is_array())
   {
-    const std::string &callee = value["func"].value("id", "");
-    if (callee == "nondet_int" || callee == "nondet_bool")
-      return "num";
-    if (callee == "nondet_str")
-      return "str";
-
-    if (module_body.is_array())
+    for (const auto &stmt : module_body)
     {
-      for (const auto &stmt : module_body)
-      {
-        if (
-          !stmt.is_object() || stmt.value("_type", "") != "FunctionDef" ||
-          stmt.value("name", "") != callee || !stmt.contains("returns") ||
-          stmt["returns"].is_null())
-          continue;
+      if (
+        !stmt.is_object() || stmt.value("_type", "") != "FunctionDef" ||
+        stmt.value("name", "") != callee || !stmt.contains("returns") ||
+        stmt["returns"].is_null())
+        continue;
 
-        const std::string ret_name = stmt["returns"].value("id", "");
-        if (ret_name == "str")
-          return "str";
-        if (ret_name == "int" || ret_name == "bool")
-          return "num";
-      }
+      const std::string ret_name = stmt["returns"].value("id", "");
+      if (ret_name == "str")
+        return "str";
+      if (ret_name == "int" || ret_name == "bool")
+        return "num";
     }
   }
 

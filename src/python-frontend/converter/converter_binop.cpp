@@ -1553,9 +1553,10 @@ exprt python_converter::handle_membership_operator(
 //
 // The guard is a statement planted into the enclosing block, so it is emitted
 // only where the division is really code-generated in its execution context:
-// not for a lambda body converted at its definition, not during the discarded
-// type-probe pass over an assignment RHS, and not inside a clause, which is a
-// specification rather than code.
+// not during the discarded type-probe pass over an assignment RHS, and not
+// inside a clause, which is a specification rather than code. A lambda body
+// is converted while the enclosing block is current, so its guard goes into a
+// statement expression evaluated with the division (#8889).
 bool python_converter::needs_zero_division_guard(
   const std::string &op,
   const exprt &rhs) const
@@ -1568,8 +1569,7 @@ bool python_converter::needs_zero_division_guard(
     !rhs.type().is_floatbv())
     return false;
 
-  return !converting_lambda_body_ && !in_rhs_type_probe_ &&
-         !in_contract_clause_;
+  return !in_rhs_type_probe_ && !in_contract_clause_;
 }
 
 /// A tagged-scalar operand needs runtime dispatch instead of any of the
@@ -2481,9 +2481,10 @@ exprt python_converter::build_division_guarded_binop(
   // conditionally or repeatedly, so a guard planted ahead of the statement
   // would raise on a path Python never takes. There the hoist and the guard
   // go into a statement expression that is evaluated with the division.
+  const bool lazy = in_lazy_operand_ || converting_lambda_body_;
   code_blockt lazy_block;
   code_blockt *const saved_block = current_block;
-  if (in_lazy_operand_)
+  if (lazy)
     current_block = &lazy_block;
 
   // The divisor is referenced by both the zero-check guard and the division
@@ -2506,7 +2507,7 @@ exprt python_converter::build_division_guarded_binop(
   current_block = saved_block;
 
   exprt result = build_arithmetic_binop(op, lhs, rhs, element);
-  if (!in_lazy_operand_)
+  if (!lazy)
     return result;
 
   const locationt loc = get_location_from_decl(element);
@@ -3564,7 +3565,32 @@ exprt python_converter::handle_string_binary_operations(
       op, lhs, rhs, left, right, element);
   }
 
-  return nil_exprt();
+  return str_pointer_add_error(op, lhs, rhs, left, right);
+}
+
+exprt python_converter::str_pointer_add_error(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &left,
+  const nlohmann::json &right)
+{
+  // Char arrays were already handled by handle_array_operations; a char
+  // pointer would otherwise fall into C pointer arithmetic.
+  const bool lhs_str = type_utils::is_string_type(lhs.type());
+  if (op != "Add" || lhs_str == type_utils::is_string_type(rhs.type()))
+    return nil_exprt();
+  const exprt &other = lhs_str ? rhs : lhs;
+  // A char pointer also stands in for a multi-type union with None.
+  const std::string declared =
+    type_handler_.get_operand_type(lhs_str ? left : right);
+  if (get_python_type_category(other.type()) != "numeric" || declared != "str")
+    return nil_exprt();
+  return get_exception_handler().gen_exception_raise(
+    "TypeError",
+    "unsupported operand type(s) for +: '" +
+      type_handler_.get_python_type_name(lhs.type()) + "' and '" +
+      type_handler_.get_python_type_name(rhs.type()) + "'");
 }
 
 exprt python_converter::build_binary_expression(

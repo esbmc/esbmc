@@ -587,11 +587,69 @@ def process_collected_imports(output_dir: str,
     _emit_collected_import_json(parsed_trees, output_dir, callbacks)
 
 
+def _request_vararg_specializations(entry_tree: ast.Module, parsed_trees: ParsedTreeState) -> None:
+    """Hand each imported module the arities the entry module calls its names with.
+
+    A module builds the fixed-arity copies of a variadic def only for calls it
+    sees, and it is finalized before the entry module.
+    """
+    sources = {}
+    for node in ast.walk(entry_tree):
+        if (isinstance(node, ast.ImportFrom) and node.module in parsed_trees
+                and not is_imported_model(node.module)):
+            preprocessor = parsed_trees[node.module][2]
+            sources.update(
+                (alias.name, preprocessor) for alias in node.names if alias.asname is None)
+    for node in ast.walk(entry_tree):
+        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                and node.func.id in sources and not node.keywords
+                and not any(isinstance(arg, ast.Starred) for arg in node.args)):
+            arities = sources[node.func.id].external_vararg_arities
+            arities.setdefault(node.func.id, set()).add(len(node.args))
+
+
 def _finalize_parsed_trees(parsed_trees: ParsedTreeState, entry_tree: ast.Module | None) -> None:
-    for tree, _filename, preprocessor in parsed_trees.values():
-        preprocessor.finalize_module(tree)
+    if entry_tree is not None:
+        _request_vararg_specializations(entry_tree, parsed_trees)
+    started: set[str] = set()
+    done: set[str] = set()
+    for module_name in parsed_trees:
+        _finalize_after_imports(module_name, parsed_trees, started, done)
+    for module_name, (_tree, _filename, preprocessor) in parsed_trees.items():
+        module_imports[module_name]['specific_names'].update(
+            preprocessor.exported_vararg_specs.values())
     if entry_tree is not None:
         _separate_colliding_classes(entry_tree, parsed_trees)
+
+
+def _finalize_after_imports(module_name: str, parsed_trees: ParsedTreeState, started: set[str],
+                            done: set[str]) -> None:
+    """Finalize a module after the modules it imports names from.
+
+    It then adopts their signatures, as the entry module does, so a call it
+    makes into them is bound too: defaults filled, extra arguments a TypeError.
+    A module in an import cycle adopts only from those already finalized.
+    """
+    if module_name in started:
+        return
+    started.add(module_name)
+    tree, _filename, preprocessor = parsed_trees[module_name]
+    imports = [
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.module in parsed_trees
+    ]
+    for node in imports:
+        _finalize_after_imports(node.module, parsed_trees, started, done)
+    # The operational models are written against the converter, not checked
+    # against one another's signatures.
+    if not is_imported_model(module_name):
+        for node in (node for node in imports if node.module in done):
+            preprocessor.adopt_module_signatures(parsed_trees[node.module][2],
+                                                 {alias.name
+                                                  for alias in node.names},
+                                                 not is_imported_model(node.module))
+    preprocessor.finalize_module(tree)
+    done.add(module_name)
 
 
 def _separate_colliding_classes(entry_tree: ast.Module, parsed_trees: ParsedTreeState) -> None:

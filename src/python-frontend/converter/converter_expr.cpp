@@ -519,9 +519,8 @@ exprt python_converter::get_lambda_expr(
   const nlohmann::json &element,
   const std::vector<std::optional<typet>> &argument_types)
 {
-  // The body is converted here with the lambda's parameters still unbound, so
-  // any division inside it must not emit a ZeroDivisionError guard (which would
-  // fire on the unconstrained divisor); it is checked at the bound call site.
+  // The body is converted while the enclosing block is current, so nothing it
+  // emits may be planted there; its ZeroDivisionError guards stay in the body.
   bool saved = converting_lambda_body_;
   converting_lambda_body_ = true;
   exprt result = lambda_handler_->get_lambda_expr(element, argument_types);

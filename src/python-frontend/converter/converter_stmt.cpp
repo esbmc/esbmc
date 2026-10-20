@@ -6010,7 +6010,9 @@ bool python_converter::try_tagged_var_assign(
   if (ast_node.contains("value") && !ast_node["value"].is_null())
   {
     const locationt location = get_location_from_decl(ast_node);
-    exprt rhs = get_expr(ast_node["value"]);
+    // A call runs first, so the tag holds its result rather than the call.
+    const exprt rhs = store_call_result(
+      get_expr(ast_node["value"]), location, "$tag_call$", &target_block);
     if (type_handler_.is_tagged_scalar_type(rhs.type()))
     {
       if (value_may_tag)

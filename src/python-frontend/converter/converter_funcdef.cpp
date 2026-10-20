@@ -3858,6 +3858,7 @@ bool python_converter::try_infer_dynamic_param_type(
     return enclosing_def == nullptr ? nullptr : &(*enclosing_def)["body"];
   };
 
+  const nlohmann::json callables = callable_function_stubs();
   auto diverges_at_site =
     [&](const nlohmann::json &value_node, const numpy_param_call_site &site) {
       if (value_node.value("_type", "") != "Name")
@@ -3865,7 +3866,7 @@ bool python_converter::try_infer_dynamic_param_type(
       const nlohmann::json *scope_body = scope_body_for(site);
       return scope_body != nullptr &&
              dynamic_type_handler_.scope_assigns_divergent_literal_types(
-               value_node.value("id", ""), *scope_body, module_body);
+               value_node.value("id", ""), *scope_body, callables);
     };
 
   for (const numpy_param_call_site &site : call_sites)
@@ -5094,10 +5095,13 @@ const nlohmann::json &python_converter::resolve_return_annotation_node(
   // marked _inferred_annotation) -- an annotation the user actually wrote
   // (e.g. `def make() -> list:`) is authoritative and must not be silently
   // discarded even when the body happens to match the local-array-return
-  // shape.
+  // shape. A synthesized one also gives way to a tagged return (#8890).
   bool is_synthesized =
     returns.is_null() || returns.value("_inferred_annotation", false);
-  if (is_synthesized && local_var_numpy_array_return(function_node))
+  if (
+    is_synthesized &&
+    (local_var_numpy_array_return(function_node) ||
+     dynamic_type_handler_.detect_dynamic_return_type(function_node)))
     return null_return_annotation;
   return returns;
 }

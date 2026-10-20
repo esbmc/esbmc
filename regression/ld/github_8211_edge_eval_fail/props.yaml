@@ -1,0 +1,10 @@
+format_version: "0.1"
+properties:
+  # Rung 2 writes v after the edge contact on v ran. The contact must compare
+  # with v at its own previous evaluation (#8211), so the scan after go first
+  # rises sees the edge and hit is set.
+  - id: P1
+    kind: invariant
+    expression: "!hit"
+    description: "The edge contact on v never fires"
+    justification: "False: the edge on v is sensed one scan after go rises"
