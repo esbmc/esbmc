@@ -1666,6 +1666,10 @@ private:
     size_t param_index,
     typet &elem_type) const;
 
+  bool called_only_with_flat_list_displays(
+    const std::string &func_name,
+    size_t param_index) const;
+
   /// Types an unannotated parameter filled with constant list elements.
   void refine_any_param_from_elements(
     code_typet::argumentt &param_arg,
