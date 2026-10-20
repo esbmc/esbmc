@@ -1051,6 +1051,28 @@ void python_converter::adopt_tagged_element(
   lhs.type() = rhs.type();
 }
 
+/// A str rebound to a str of another length holds a char*: a char array fits
+/// one length only, and retyping it would reinterpret the stores already
+/// emitted at the old length.
+void python_converter::adopt_array_type(
+  symbolt &lhs_symbol,
+  exprt &lhs,
+  exprt &rhs)
+{
+  const typet &held = lhs_symbol.get_type();
+  typet type = rhs.type();
+  if (
+    lhs_symbol.get_value().is_not_nil() && held != type &&
+    type_utils::is_string_type(held) && held.is_array() &&
+    type_utils::is_string_type(type) && type.is_array())
+  {
+    type = gen_pointer_type(char_type());
+    rhs = string_handler_.get_array_base_address(rhs);
+  }
+  python_expr::set_symbol_type(lhs_symbol, type);
+  lhs.type() = type;
+}
+
 bool python_converter::annotation_yields_to_rhs(
   const nlohmann::json &ast_node,
   const exprt &rhs) const
@@ -1342,10 +1364,7 @@ void python_converter::handle_assignment_type_adjustments(
             !lhs_symbol->get_type().is_nil() &&
             lhs_symbol->get_type() != type_handler_.get_list_type();
           if (!is_incompatible)
-          {
-            python_expr::set_symbol_type(*lhs_symbol, rhs.type());
-            lhs.type() = rhs.type();
-          }
+            adopt_array_type(*lhs_symbol, lhs, rhs);
         }
       }
     }
@@ -6010,7 +6029,9 @@ bool python_converter::try_tagged_var_assign(
   if (ast_node.contains("value") && !ast_node["value"].is_null())
   {
     const locationt location = get_location_from_decl(ast_node);
-    exprt rhs = get_expr(ast_node["value"]);
+    // A call runs first, so the tag holds its result rather than the call.
+    const exprt rhs = store_call_result(
+      get_expr(ast_node["value"]), location, "$tag_call$", &target_block);
     if (type_handler_.is_tagged_scalar_type(rhs.type()))
     {
       if (value_may_tag)

@@ -425,6 +425,11 @@ public:
   symbolt *find_symbol(const std::string &symbol_id) const;
 
   bool is_imported_module(const std::string &module_name) const;
+  /// FunctionDef stubs, each only a `name` and its `returns`, for the
+  /// functions a call in the current module can name: its own and those an
+  /// import binds, as `mk` after `from helper import mk` and `helper.mk`
+  /// after `import helper`.
+  nlohmann::json callable_function_stubs() const;
   /// How one scope binds a name: by an import, by anything else, or by a
   /// `global`/`nonlocal` declaration handing it to an outer scope.
   struct scope_bindings
@@ -1448,10 +1453,13 @@ private:
     const nlohmann::json &args,
     const nlohmann::json &source_node) const;
 
+  /// Stores the result of @p call_expr in a fresh temporary declared in
+  /// @p block, current_block when null, and returns that temporary.
   exprt store_call_result(
     exprt call_expr,
     const locationt &location,
-    const std::string &temp_prefix);
+    const std::string &temp_prefix,
+    codet *block = nullptr);
 
   void process_module_imports(
     const nlohmann::json &module_ast,
@@ -2893,6 +2901,15 @@ private:
     const nlohmann::json &right,
     const nlohmann::json &element);
 
+  /// TypeError for `str + number` when the str is a char pointer (a
+  /// parameter, method result or attribute); nil otherwise (#8380).
+  exprt str_pointer_add_error(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
+
   /**
    * @brief Builds a binary expression with proper type and location.
    *
@@ -2968,6 +2985,8 @@ private:
     const std::string &member_name);
 
   void adopt_tagged_element(symbolt *lhs_symbol, exprt &lhs, const exprt &rhs);
+
+  void adopt_array_type(symbolt &lhs_symbol, exprt &lhs, exprt &rhs);
 
   /// Handle Optional value access
   exprt materialize_optional(const exprt &expr, const nlohmann::json &element);
@@ -3102,10 +3121,10 @@ private:
   }
   // The ZeroDivisionError guard (and its divisor hoist) must be emitted only
   // where the division is really code-generated in its execution context.
-  // Suppress it while a lambda body is converted at its definition (operands
-  // are still unbound parameters) and during the discarded type-probe pass of
-  // an assignment RHS (which would otherwise emit the guard twice as dead code
-  // and evaluate a side-effecting divisor an extra time).
+  // Keep it inside a lambda body converted at its definition (the enclosing
+  // block is still current) and suppress it during the discarded type-probe
+  // pass of an assignment RHS (which would otherwise emit the guard twice as
+  // dead code and evaluate a side-effecting divisor an extra time).
   bool converting_defaults_ = false;
   bool converting_lambda_body_ = false;
   bool in_rhs_type_probe_ = false;
@@ -3221,6 +3240,7 @@ private:
   exprt list_argument_expr(const nlohmann::json &arg);
   /// The return type of a function stored as a dict value: a lambda's
   /// inferred type, or a named function's declared one. Empty otherwise.
+  typet returned_function_return_type(const nlohmann::json &call);
   typet stored_function_return_type(const nlohmann::json &value);
   /// The return type every function stored into the dict `container` (a
   /// literal or a name) shares; nothing when a stored value is not a function.

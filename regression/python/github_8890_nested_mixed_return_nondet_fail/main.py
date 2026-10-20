@@ -1,4 +1,4 @@
-# github #8890
+# github #8890: the str path must reach the int comparison.
 def outer(flag):
     def nested():
         if flag:
@@ -8,5 +8,6 @@ def outer(flag):
     return nested()
 
 
-b = outer(False)
-assert b == 3
+c = nondet_bool()
+d = outer(c)
+assert d == 3

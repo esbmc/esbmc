@@ -1120,44 +1120,6 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
   return ""; // Cannot determine type
 }
 
-/// The annotation of `self.<attr>` in the `__init__` of @p class_node, or of
-/// `<attr>` in its body, or an empty Json.
-template <class Json>
-static Json
-find_attr_annotation(const Json &class_node, const std::string &attr)
-{
-  auto annotation_of = [&](const Json &stmt, bool on_self) -> Json {
-    if (stmt.value("_type", "") != "AnnAssign" || !stmt.contains("target"))
-      return Json();
-    const Json &target = stmt["target"];
-    const bool matches =
-      on_self
-        ? target.value("_type", "") == "Attribute" &&
-            target.value("attr", "") == attr && target.contains("value") &&
-            target["value"].value("id", "") == "self"
-        : target.value("_type", "") == "Name" && target.value("id", "") == attr;
-    return matches ? stmt["annotation"] : Json();
-  };
-
-  for (const Json &member : class_node["body"])
-  {
-    Json annotation = annotation_of(member, false);
-    if (!annotation.empty())
-      return annotation;
-    if (
-      member.value("_type", "") != "FunctionDef" ||
-      member["name"] != "__init__")
-      continue;
-    for (const Json &stmt : member["body"])
-    {
-      annotation = annotation_of(stmt, true);
-      if (!annotation.empty())
-        return annotation;
-    }
-  }
-  return Json();
-}
-
 /// The declared type of `obj.attr`, where `obj` is a name bound to an
 /// instance of a class defined in the program, or empty. Without it an
 /// unannotated parameter that receives `obj.attr` stays `void *` (#8672).
@@ -1176,7 +1138,7 @@ std::string python_annotation<Json>::get_attribute_type(const Json &arg)
     const Json class_node = json_utils::find_class(ast_["body"], cls);
     if (class_node.empty())
       return "";
-    const Json annotation = find_attr_annotation(class_node, attr);
+    const Json annotation = json_utils::find_attr_annotation(class_node, attr);
     if (!annotation.empty())
       return json_utils::render_annotation_type(annotation);
   }
@@ -1867,18 +1829,10 @@ std::string python_annotation<Json>::get_function_return_type(
     // (GitHub #5104, #5105).
     std::string saved_return_ctx = current_func_name_context_;
     current_func_name_context_ = func_name;
-    std::set<std::string> branch_types;
-    collect_return_types(func_elem["body"], func_name, branch_types);
+    bool divergent = false;
+    std::string inferred_type =
+      infer_from_return_statements(func_elem["body"], func_name, &divergent);
     current_func_name_context_ = saved_return_ctx;
-    std::string inferred_type = select_return_type(branch_types);
-
-    // The branches return incompatible types (e.g. int and str): the
-    // top-level return below is only one of them (#8890).
-    if (inferred_type.empty() && !branch_types.empty())
-    {
-      functions_in_analysis_.erase(func_name);
-      return "";
-    }
 
     if (!inferred_type.empty() && inferred_type != "NoneType")
     {
@@ -1897,6 +1851,15 @@ std::string python_annotation<Json>::get_function_return_type(
     auto return_node = json_utils::find_return_node(func_elem["body"]);
     if (!return_node.empty())
     {
+      // Branches returning incompatible types (e.g. int and str) have no
+      // single type; narrowing to the first top-level return would mistype
+      // the other path (#8890).
+      if (divergent)
+      {
+        functions_in_analysis_.erase(func_name);
+        return "";
+      }
+
       std::string fallback_type;
       std::string saved_fallback_ctx = current_func_name_context_;
       current_func_name_context_ = func_name;
@@ -3859,17 +3822,12 @@ void python_annotation<Json>::collect_return_types(
 template <class Json>
 std::string python_annotation<Json>::infer_from_return_statements(
   const Json &body,
-  const std::string &func_name)
+  const std::string &func_name,
+  bool *divergent)
 {
   std::set<std::string> types;
   collect_return_types(body, func_name, types);
-  return select_return_type(std::move(types));
-}
 
-template <class Json>
-std::string
-python_annotation<Json>::select_return_type(std::set<std::string> types)
-{
   // Drop non-informative markers when concrete return types are also present.
   //   - NoneType: a `return None` alongside value returns marks the function as
   //     Optional; that optionality is handled separately by the caller's
@@ -3965,6 +3923,8 @@ python_annotation<Json>::select_return_type(std::set<std::string> types)
   // which would otherwise make the cross-type `==`/`!=` fold collapse a valid
   // comparison against the other branch's type to a constant False
   // (GitHub #5157). Mirrors the mixed value+None -> Optional handling above.
+  if (divergent)
+    *divergent = true;
   return "";
 }
 

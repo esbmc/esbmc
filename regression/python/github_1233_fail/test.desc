@@ -1,0 +1,7 @@
+CORE
+main.py
+--show-stacktrace
+^Stack trace:$
+^  inner at file .*main\.py line 6 column 4 function outer$
+^  outer at file .*main\.py line 9 column 0$
+^VERIFICATION FAILED$

@@ -1,5 +1,3 @@
-# github #8890: a function returning a nested int-or-str call is typed by
-# both branches, not by the nested function's last return.
 def outer(flag):
     def nested():
         if flag:
@@ -9,9 +7,36 @@ def outer(flag):
     return nested()
 
 
-c = nondet_bool()
-d = outer(c)
-if c:
-    assert d == "s"
-else:
-    assert d == 3
+def through_local(flag):
+    def nested():
+        if flag:
+            return "s"
+        return 3
+
+    r = nested()
+    return r
+
+
+def captured(flag, n: int):
+    def nested():
+        if flag:
+            return "s"
+        return n
+
+    return nested()
+
+
+def pick(flag):
+    if flag:
+        return "s"
+    return 3
+
+
+def forward(flag):
+    return pick(flag)
+
+
+assert outer(False) == 3
+assert through_local(True) == "s"
+assert captured(False, 5) == 5
+assert forward(False) == 3
