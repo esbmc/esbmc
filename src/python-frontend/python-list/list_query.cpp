@@ -99,16 +99,21 @@ expr2tc python_list::stored_element_is(
   std::size_t i,
   const symbolt &elem)
 {
-  // A frontend temporary is assigned once, where the list was built, so only
-  // a user binding can have moved on since the append.
-  if (converter_.is_frontend_temporary(elem))
-    return gen_true_expr();
   const exprt at = build_list_at_call(
     build_symbol(list), from_integer(BigInt(i), size_type()), list_value_);
   expr2tc stored, current;
   migrate_expr(extract_pyobject_value(at, elem.get_type()), stored);
   migrate_expr(build_symbol(elem), current);
-  return equality2tc(stored, current);
+  // By object and offset: these fold through the casts the stored copy is read
+  // back with, where a pointer == stays symbolic and keeps the unbounded
+  // __ESBMC_list_eq fallback live.
+  return and2tc(
+    equality2tc(
+      pointer_object2tc(pointer_type2(), stored),
+      pointer_object2tc(pointer_type2(), current)),
+    equality2tc(
+      pointer_offset2tc(pointer_type2(), stored),
+      pointer_offset2tc(pointer_type2(), current)));
 }
 
 exprt python_list::compare(
