@@ -43,6 +43,10 @@ class S:
 
     def __init__(self, s):
         self.s = s
+        self.z = 3
+
+    def cube(self):
+        return self.z * self.z * self.z
 
     def twice(self):
         return self.s * 2
@@ -62,4 +66,8 @@ assert F(1.25).double() == 2.5
 g = G(2, True)
 assert g.inv() == 0.5
 assert g.inc() == 2
-assert S("ab").twice() == "abab"
+t = S("ab")
+assert t.twice() == "abab"
+v = t.cube()
+assert isinstance(v, int)
+assert v == 27

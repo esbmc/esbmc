@@ -1192,8 +1192,8 @@ static void count_attr_writers(
 /// The declared type of `self.attr` in a method of the class being annotated,
 /// or empty. An unannotated attribute takes the type of its first
 /// constructor call, so the type is given only when the attribute is stored
-/// once, by `__init__`, from a literal or from a parameter that every call of
-/// a class with no subclasses and no other uses passes a literal of that type.
+/// once, by `__init__` of a class used only in plain calls, from a literal of
+/// that type or from a parameter that every call passes such a literal.
 template <class Json>
 std::string python_annotation<Json>::self_attribute_type(const Json &node)
 {
@@ -1217,11 +1217,12 @@ std::string python_annotation<Json>::self_attribute_type(const Json &node)
     size_t name_reads = 0;
     count_attr_writers(ast_["body"], attr, cls, stores, name_reads);
     const Json annotation = json_utils::find_attr_annotation(class_node, attr);
-    if (stores != 1 || annotation.empty())
+    const std::vector<Json> calls = find_function_calls(cls, ast_["body"]);
+    if (stores != 1 || annotation.empty() || calls.size() != name_reads)
       return "";
     const std::string type = json_utils::render_annotation_type(annotation);
     if (value.value("_type", "") == "Constant")
-      return type;
+      return get_argument_type(value) == type ? type : "";
     if (value.value("_type", "") != "Name")
       return "";
 
@@ -1231,8 +1232,7 @@ std::string python_annotation<Json>::self_attribute_type(const Json &node)
     size_t index = 0;
     while (index < params.size() && params[index]["arg"] != value["id"])
       ++index;
-    const std::vector<Json> calls = find_function_calls(cls, ast_["body"]);
-    if (index == 0 || index == params.size() || calls.size() != name_reads)
+    if (index == 0 || index == params.size())
       return "";
     for (const Json &call : calls)
     {
@@ -1241,6 +1241,9 @@ std::string python_annotation<Json>::self_attribute_type(const Json &node)
         call["args"][index - 1].value("_type", "") != "Constant" ||
         get_argument_type(call["args"][index - 1]) != type)
         return "";
+      for (const Json &arg : call["args"])
+        if (arg.value("_type", "") == "Starred")
+          return "";
     }
     return type;
   }
@@ -1659,13 +1662,17 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
           type = it->second;
       }
       // The result is typed from the left operand: only when the right one
-      // is a number for a number (not a float that would be truncated), or
-      // an int or the same type for a str or list. A negative exponent
+      // is a literal or another such attribute, and a number for a number
+      // (not a float that would be truncated), or an int or the same type
+      // for a str or list. A negative exponent
       // gives a float, and arithmetic on a bool an int.
       const Json &value = stmt.contains("value") ? stmt["value"] : stmt;
       const std::string attr_type =
         type.empty() ? self_attribute_type(lhs) : std::string();
-      const std::string rhs_type = get_operand_type(value["right"]);
+      const Json &rhs = value["right"];
+      const std::string rhs_type = rhs.value("_type", "") == "Constant"
+                                     ? get_argument_type(rhs)
+                                     : self_attribute_type(rhs);
       const bool numeric = attr_type == "int" || attr_type == "float";
       const bool rhs_fits =
         numeric ? rhs_type == "int" || rhs_type == "float" || rhs_type == "bool"
