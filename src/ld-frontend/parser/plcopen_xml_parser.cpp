@@ -1821,7 +1821,8 @@ static void reject_wired_enable_pins(const pugi::xml_node &root)
 
 static void check_declaration(std::set<std::string> &seen, const VarDecl &v)
 {
-  for (const char *prefix : {"__edge_prev_", "__timer_prev_", "__ctr_prev_"})
+  for (const char *prefix :
+       {"__edge_prev_", "__edge_q_", "__timer_prev_", "__ctr_prev_"})
     if (v.name.rfind(prefix, 0) == 0)
       throw LdParseError(
         "variable " + v.name + " uses the reserved prefix " + prefix);

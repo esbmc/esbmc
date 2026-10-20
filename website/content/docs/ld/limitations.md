@@ -12,7 +12,8 @@ supported and the known restrictions.
 - **Contacts and coils** — normally-open and normally-closed contacts; output,
   Set, and Reset coils. Contacts carrying `edge="rising"` / `edge="falling"`
   (and the vendor spellings `positive`/`negative`, `R`/`P`, `F`/`N`) are sensed
-  against a previous-scan shadow rather than treated as level contacts.
+  against the operand's value at the contact's previous evaluation, one sample
+  per coil the contact feeds, rather than treated as level contacts.
 - **Rung topology** — parallel paths that reach the same coil are OR-ed, not
   overwritten by the last branch. Rungs are evaluated sequentially, as in the
   code Beremiz generates for MATIEC: each coil re-reads its contacts, so a rung
@@ -87,14 +88,14 @@ supported and the known restrictions.
   with `UnsupportedConstruct` rather than read as 0.
 - **Declarations and block pins.** The parser refuses, rather than reads as
   something else: a name declared twice in one interface, a name that starts
-  with `__edge_prev_`, `__timer_prev_` or `__ctr_prev_`, a variable of a derived
-  type used as a contact, coil or block pin, a coil `kind` or `storage` other
-  than `set`, `reset` or `none`, two timers or two counters that resolve to one
-  instance name (an unnamed block takes the name of its `Q` variable), an `EN`
-  of a standard block wired to anything but the left power rail, and an `ENO`
-  that feeds anything but the right power rail. A Boolean variable that only a
-  block pin reads (`IN`, `CU`, `CD`, `R`, `LD`) and nothing writes is a free
-  input, as one that only a contact reads is.
+  with `__edge_prev_`, `__edge_q_`, `__timer_prev_` or `__ctr_prev_`, a variable
+  of a derived type used as a contact, coil or block pin, a coil `kind` or
+  `storage` other than `set`, `reset` or `none`, two timers or two counters that
+  resolve to one instance name (an unnamed block takes the name of its `Q`
+  variable), an `EN` of a standard block wired to anything but the left power
+  rail, and an `ENO` that feeds anything but the right power rail. A Boolean
+  variable that only a block pin reads (`IN`, `CU`, `CD`, `R`, `LD`) and nothing
+  writes is a free input, as one that only a contact reads is.
 - **`TP` pulse timers.** `TP` blocks are modelled with `TON` (on-delay)
   semantics: `Q` rises after `IN` has been held for `PT` ticks, rather than
   emitting a fixed-width pulse on a rising edge of `IN`. Properties that depend
