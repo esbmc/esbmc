@@ -540,6 +540,8 @@ class ClassContextMixin:
             counts = Counter(name for n in ast.walk(module) for name in self._names_bound_by(n))
             if counts["*"]:
                 return
+            if self.is_entry_module and self._hoist_lambda_arguments(module, counts):
+                continue
             known = self._known_classes(module, counts)
             self._bind_local_type_values(module, known)
             if not self.is_entry_module:
@@ -605,6 +607,52 @@ class ClassContextMixin:
             for n in ast.walk(func) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
         }
         return {i for i, p in enumerate(func.args.posonlyargs + func.args.args) if p.arg in called}
+
+    @staticmethod
+    def _module_level_calls(node):
+        """The calls in `node` that run at module level, outside any def,
+        lambda or comprehension whose names a lambda could capture."""
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda,
+                             ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)):
+            return
+        if isinstance(node, ast.Call):
+            yield node
+        for child in ast.iter_child_nodes(node):
+            yield from ClassContextMixin._module_level_calls(child)
+
+    def _hoist_lambda_arguments(self, module, counts):
+        """Turn a lambda passed at module level to a top-level function that
+        calls that parameter into a def named for it, so that the function is
+        specialised on it as on any def (#8979); whether any was. At module
+        level a lambda's free names are globals either way."""
+        defs = {s.name: s for s in module.body if self._is_plain_function(s)}
+        hoisted = 0
+        for i, stmt in reversed(list(enumerate(module.body))):
+            new = []
+            for call in self._module_level_calls(stmt):
+                callee = defs.get(call.func.id) if isinstance(call.func, ast.Name) else None
+                if callee is None:
+                    continue
+                for index in self._called_parameters(callee):
+                    if index < len(call.args) and isinstance(call.args[index], ast.Lambda):
+                        name = f"ESBMC_lambda_arg_{hoisted}"
+                        while counts[name]:
+                            hoisted += 1
+                            name = f"ESBMC_lambda_arg_{hoisted}"
+                        hoisted += 1
+                        lam = call.args[index]
+                        new.append(
+                            ast.fix_missing_locations(
+                                ast.copy_location(
+                                    ast.FunctionDef(name=name,
+                                                    args=lam.args,
+                                                    body=[ast.Return(value=lam.body)],
+                                                    decorator_list=[],
+                                                    returns=None,
+                                                    type_params=[]), lam)))
+                        call.args[index] = ast.copy_location(ast.Name(id=name, ctx=ast.Load()), lam)
+            module.body[i:i] = new
+        return hoisted > 0
 
     def _lower_called_lambdas(self, module, known, counts):
         """Rewrite a top-level `f = lambda ...` that calls one of its
