@@ -4853,8 +4853,6 @@ static bool is_named_numpy_dtype(const std::string &dtype)
   throw std::runtime_error("TypeError: numpy dtype objects are not supported");
 }
 
-// The single normalization of a dtype= argument: a scalar type named by a
-// builtin, a numpy attribute or a string, or a specific rejection.
 // The dimensions of a zeros()/ones() shape tuple. A dimension known only at
 // run time has no static bound to build the array with.
 static std::vector<int>
@@ -4872,6 +4870,8 @@ literal_shape_dims(const nlohmann::json &elts, const std::string &function)
   return dims;
 }
 
+// The single normalization of a dtype= argument: a scalar type named by a
+// builtin, a numpy attribute or a string, or a specific rejection.
 std::string extract_numpy_dtype_name(
   const nlohmann::json &dtype_node,
   const nlohmann::json &ast)

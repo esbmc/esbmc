@@ -280,10 +280,10 @@ exprt build_xor(const exprt &a, const exprt &b)
     a, b, [](const expr2tc &x, const expr2tc &y) { return xor2tc(x, y); });
 }
 
-// Float arithmetic is built as the IEEE node in the program's rounding mode.
-// Left as a plain add, the C adjuster would attach __ESBMC_rounding_mode, a
-// symbol a Python program does not define, so the solver could pick any
-// rounding.
+// Float arithmetic is built as the IEEE node in the program's rounding mode,
+// c:@__ESBMC_rounding_mode (0, round to nearest). Left as a plain add, the C
+// adjuster names the mode `__ESBMC_rounding_mode` (CPROVER_PREFIX), which no
+// assignment reaches, so the solver could pick any rounding.
 static expr2tc rounding_mode()
 {
   return symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
