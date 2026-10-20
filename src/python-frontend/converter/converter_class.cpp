@@ -920,6 +920,24 @@ void python_converter::add_none_flag_component(
       python_frontend::build_component(current_class_name_, flag, bool_type()));
 }
 
+/// The type of `self.<attr_name>`, annotated `Any` by @p stmt: the instance
+/// itself for `self.attr = self` (#8927), else the class every use agrees on,
+/// else Any.
+typet python_converter::any_attribute_type(
+  const nlohmann::json &stmt,
+  const std::string &attr_name)
+{
+  const nlohmann::json &value = stmt.value("value", nlohmann::json());
+  if (
+    value.is_object() && value.value("_type", "") == "Name" &&
+    value.value("id", "") == "self")
+    return gen_pointer_type(type_handler_.get_typet(current_class_name_));
+  typet from_usage = infer_attr_type_from_usage(current_class_name_, attr_name);
+  return (from_usage.id().as_string().empty() || from_usage.is_nil())
+           ? type_handler_.get_typet(std::string("Any"))
+           : from_usage;
+}
+
 void python_converter::get_attributes_from_self(
   const nlohmann::json &func_node,
   struct_typet &clazz)
@@ -1119,11 +1137,7 @@ void python_converter::get_attributes_from_self(
         // the same way: if every construction/assignment of this attribute
         // across all reachable modules agrees on one class, adopt it; on any
         // conflict infer_attr_type_from_usage returns unset and we keep Any.
-        typet from_usage =
-          infer_attr_type_from_usage(current_class_name_, attr_name);
-        type = (from_usage.id().as_string().empty() || from_usage.is_nil())
-                 ? type_handler_.get_typet(annotated_type)
-                 : from_usage;
+        type = any_attribute_type(stmt, attr_name);
       }
       else
       {
