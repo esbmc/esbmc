@@ -3028,7 +3028,7 @@ regression/python/github_8359_heap_untyped_stores_fail
 regression/python/is_class_alias
 regression/python/is_class_alias_any_fail
 regression/python/is_class_alias_fail
-regression/python/is_class_alias_rebound_unsupported
+regression/python/is_class_alias_rebound
 regression/python/class_attribute_none_store
 regression/python/class_attribute_none_store_fail
 regression/python/github_8479
@@ -3118,7 +3118,7 @@ regression/python/github_8389_bool_fail
 regression/python/github_8389_escaping_function_unsupported
 regression/python/github_8389_fail
 regression/python/github_8389_local_fail
-regression/python/github_8389_local_in_branch_unsupported
+regression/python/github_8389_local_in_branch
 regression/python/github_8389_make_fail
 regression/python/github_8389_rebound_param_unsupported
 regression/python/github_8389_same_fail
@@ -3127,7 +3127,7 @@ regression/python/github_8389_tuple_arg_unsupported
 regression/python/github_8389_validator
 regression/python/github_8389_validator_fail
 regression/python/github_8389_rebound_class_unsupported
-regression/python/github_8389_local_rebound_unsupported
+regression/python/github_8389_local_rebound
 regression/python/github_8389_decorated_unsupported
 regression/python/github_8389_redefined_unsupported
 regression/python/github_8389_param_value
@@ -3249,6 +3249,9 @@ regression/python/github_8865_alias_then_import_refused
 regression/esbmc-cpp/cpp/github_8680_dtor_throw_unwind_fail
 regression/esbmc-cpp/cpp/github_8680_dtor_catch_unwind
 regression/esbmc-cpp/cpp/github_8680_dtor_throw_scope_exit
+regression/python/github_8283_dict_zip
+regression/python/github_8283_dict_zip_fail
+regression/python/github_8283_dict_zip_nondet
 regression/python/github_8412_is_returned_str
 regression/python/github_8412_is_returned_str_fail
 regression/python/github_8891_dict_call_value
@@ -3261,3 +3264,7 @@ regression/python/github_8890_nested_mixed_return
 regression/python/github_8890_nested_mixed_return_fail
 regression/python/github_8923_method_param_from_call
 regression/python/github_8923_method_param_from_call_fail
+regression/python/github_8926_user_method_get
+regression/python/github_8926_user_method_get_fail
+regression/python/github_8925_attr_off_call
+regression/python/github_8925_attr_off_call_fail
