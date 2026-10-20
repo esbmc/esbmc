@@ -2905,8 +2905,12 @@ void python_converter::reject_unmodelled_array_arithmetic(
     (!numeric_array_shape(lhs.type()) && !numeric_array_shape(rhs.type())))
     return;
   std::ostringstream msg;
-  msg << "TypeError: numpy element-wise '" << op
-      << "' is not supported for these operands";
+  if (numeric_array_shape(lhs.type()) && numeric_array_shape(rhs.type()))
+    msg << "TypeError: arithmetic on numeric arrays is not supported "
+           "(numpy broadcasting is not modelled)";
+  else
+    msg << "TypeError: numpy element-wise '" << op
+        << "' is not supported for these operands";
   const locationt loc = get_location_from_decl(element);
   if (!loc.is_nil())
     msg << " at " << loc.get_file() << ":" << loc.get_line();
