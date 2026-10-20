@@ -2144,6 +2144,38 @@ void python_converter::reject_attribute_added_on_some_paths(
     "AttributeError, which is not modelled");
 }
 
+// Forms converted before the expression-type switch: the walrus operator
+// `(target := value)`, which binds as a side effect and is not in the
+// expression-type map; an expression the converter already built and
+// referenced from synthesized source; and reads through an np.nditer (an
+// attribute or operand of the iterator, a name bound to what it yields).
+std::optional<exprt>
+python_converter::get_intercepted_expr(const nlohmann::json &element)
+{
+  if (!element.is_object())
+    return std::nullopt;
+  const std::string type = element.value("_type", "");
+  if (type == "NamedExpr")
+    return get_named_expr(element);
+  if (type == "EsbmcExpr")
+    return prebuilt_exprs_.at(element["slot"].get<std::size_t>());
+  if (numpy_nditers_.empty())
+    return std::nullopt;
+  numpy_nditer nditer(*this);
+  if (type == "Attribute")
+    return nditer.attribute(element);
+  if (type == "Subscript")
+    return nditer.subscript(element);
+  if (type != "Name")
+    return std::nullopt;
+  if (
+    numpy_nditers_.count(
+      numpy_nditer::key(current_func_name_, element["id"].get<std::string>())))
+    throw std::runtime_error(
+      "TypeError: a numpy.nditer() object used as a value is not supported");
+  return nditer.read_item(element);
+}
+
 exprt python_converter::get_expr(const nlohmann::json &element)
 {
   get_expr_depth_guard depth_guard(*this);
@@ -2151,8 +2183,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   // Walrus operator `(target := value)` — assign as a side effect, evaluate to
   // the bound value. Handled before the type switch since NamedExpr is not in
   // the expression-type map.
-  if (element.is_object() && element.value("_type", "") == "NamedExpr")
-    return get_named_expr(element);
+  if (std::optional<exprt> intercepted = get_intercepted_expr(element))
+    return *intercepted;
 
   // A walrus in a ternary branch (`a if c else b`) is evaluated conditionally,
   // but get_named_expr binds unconditionally. Refuse with a clean diagnostic

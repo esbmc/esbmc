@@ -1,6 +1,7 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/numpy/ndarray_shape.h>
 #include <python-frontend/numpy/numpy_call_expr.h>
+#include <python-frontend/numpy/numpy_nditer.h>
 #include <python-frontend/numpy/numpy_random.h>
 #include <python-frontend/numpy/numpy_reducer_shared.h>
 #include <python-frontend/python_converter.h>
@@ -3594,6 +3595,31 @@ exprt numpy_call_expr::handle_broadcast_to_call()
       "arrays");
 
   return converter_.get_expr(result);
+}
+
+// The elements a bare np.nditer(...) yields. A view whose layout is only
+// known at run time keeps the descriptor list it is iterated through.
+exprt numpy_call_expr::get_nditer_list(const nlohmann::json &arg)
+{
+  if (!is_runtime_layout_view(arg))
+    return numpy_nditer(converter_).as_list(call_);
+  reject_unsupported_nditer_keywords(arg);
+  if (
+    std::optional<exprt> descriptor_list =
+      try_build_nditer_descriptor_list(arg))
+    return *descriptor_list;
+  throw std::runtime_error(
+    "TypeError: numpy.nditer() over this view is not supported");
+}
+
+// A named view whose extent or stride is only known at run time.
+bool numpy_call_expr::is_runtime_layout_view(const nlohmann::json &arg) const
+{
+  if (arg.value("_type", "") != "Name")
+    return false;
+  const auto *info =
+    converter_.find_numpy_pointer_view_info(arg["id"].get<std::string>());
+  return info && info->is_symbolic();
 }
 
 std::optional<exprt>
@@ -10791,20 +10817,7 @@ exprt numpy_call_expr::get()
         "TypeError: numpy.nditer() currently supports a single operand");
 
     if (function == "nditer")
-    {
-      reject_unsupported_nditer_keywords(arr_arg);
-
-      if (
-        std::optional<exprt> descriptor_list =
-          try_build_nditer_descriptor_list(arr_arg))
-        return *descriptor_list;
-
-      auto literal_arg = get_literal_numpy_array_arg(arr_arg);
-      if (literal_arg.has_value())
-        arr_arg = std::move(*literal_arg);
-      else
-        resolve_numpy_var(arr_arg);
-    }
+      return get_nditer_list(arr_arg);
     else
     {
       resolve_numpy_var(arr_arg);

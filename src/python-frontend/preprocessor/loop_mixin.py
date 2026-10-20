@@ -222,6 +222,9 @@ class LoopMixin:
         lowered = self._lower_iterator_protocol_for(node)
         if lowered is not None:
             return lowered
+        if self._nditer_source(node.iter) is not None:
+            for_else_pre, for_else_post = self._lower_for_else(node)
+            return for_else_pre + self._lower_nditer_for(node) + for_else_post
         for_else_pre, for_else_post = self._lower_for_else(node)
         result = self._visit_for_inner(node)
         if not isinstance(result, list):
@@ -301,6 +304,82 @@ class LoopMixin:
         ast.fix_missing_locations(init)
         ast.fix_missing_locations(loop)
         return [self.visit(init), self.visit(loop)]
+
+    def _is_nditer_call(self, expr):
+        return (isinstance(expr, ast.Call) and isinstance(expr.func, ast.Attribute)
+                and expr.func.attr == "nditer" and isinstance(expr.func.value, ast.Name)
+                and expr.func.value.id in self.numpy_module_names)
+
+    def _nditer_source(self, expr):
+        """The `np.nditer(...)` call `expr` is, or the one a name was last
+        bound to; None otherwise."""
+        if isinstance(expr, ast.Name):
+            expr = self._assignment_call_origins.get(expr.id)
+        return expr if self._is_nditer_call(expr) else None
+
+    def _record_nditer_with_targets(self, node):
+        """`with np.nditer(...) as it:` binds `it` to the iterator itself."""
+        for item in node.items:
+            if isinstance(item.optional_vars, ast.Name) and self._is_nditer_call(item.context_expr):
+                self._assignment_call_origins[item.optional_vars.id] = item.context_expr
+
+    def _lower_nditer_for(self, node):
+        """Lower `for x in <nditer>` to the iterator's own protocol, so the
+        converter tracks its position (`multi_index`, write-back, exhaustion):
+
+            it = np.nditer(...)              # when the loop iterates a call
+            while True:
+                it._esbmc_nditer_advance()
+                if it.finished:
+                    break
+                x = it._esbmc_nditer_item()  # x = it[0]; y = it[1] for x, y
+                <body>
+        """
+        stmts = []
+        if isinstance(node.iter, ast.Name):
+            it_name = node.iter.id
+        else:
+            self._iter_counter += 1
+            it_name = f"ESBMC_nditer_{self._iter_counter}"
+            stmts.append(
+                ast.Assign(targets=[ast.Name(id=it_name, ctx=ast.Store())], value=node.iter))
+
+        def it_ref():
+            return ast.Name(id=it_name, ctx=ast.Load())
+
+        def call(attr):
+            return ast.Call(func=ast.Attribute(value=it_ref(), attr=attr, ctx=ast.Load()),
+                            args=[],
+                            keywords=[])
+
+        if isinstance(node.target, ast.Tuple):
+            binds = [
+                ast.Assign(targets=[elt],
+                           value=ast.Subscript(value=it_ref(),
+                                               slice=ast.Constant(value=i),
+                                               ctx=ast.Load()))
+                for i, elt in enumerate(node.target.elts)
+            ]
+        else:
+            binds = [ast.Assign(targets=[node.target], value=call("_esbmc_nditer_item"))]
+        loop = ast.While(
+            test=ast.Constant(value=True),
+            body=[
+                ast.Expr(value=call("_esbmc_nditer_advance")),
+                ast.If(test=ast.Attribute(value=it_ref(), attr="finished", ctx=ast.Load()),
+                       body=[ast.Break()],
+                       orelse=[]),
+            ] + binds + node.body,
+            orelse=[])
+        stmts.append(loop)
+        for new in stmts:
+            ast.copy_location(new, node)
+            ast.fix_missing_locations(new)
+        lowered = []
+        for new in stmts:
+            visited = self.visit(new)
+            lowered.extend(visited if isinstance(visited, list) else [visited])
+        return lowered
 
     def _constructs_iterator_class(self, expr):
         """Whether `expr` is `Cls(...)`, or a name bound only by `x = Cls(...)`
@@ -674,6 +753,7 @@ class LoopMixin:
         Multiple items are expanded left-to-right; __exit__ is called in reverse order.
         AsyncWith is handled identically via the class-level alias below.
         """
+        self._record_nditer_with_targets(node)
         node = self.generic_visit(node)
         result = []
         exit_start = self._with_counter

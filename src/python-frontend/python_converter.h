@@ -11,6 +11,7 @@
 #include <python-frontend/dynamic_type/dynamic_type_handler.h>
 #include <python-frontend/dynamic_type/literal_divergence.h>
 #include <python-frontend/math/python_math.h>
+#include <python-frontend/numpy/numpy_nditer.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/type/element_type_registry.h>
 #include <python-frontend/type/type_handler.h>
@@ -644,6 +645,7 @@ private:
   friend class function_call_expr;
   friend class numpy_call_expr;
   friend class numpy_random;
+  friend class numpy_nditer;
   friend class function_call_builder;
   friend class type_handler;
   friend class python_list;
@@ -1661,6 +1663,8 @@ private:
   /// An assignment get_var_assign leaves to a dedicated lowering, which
   /// returns true once it has converted it.
   bool try_dedicated_assign(const nlohmann::json &ast_node, codet &block);
+  bool try_numpy_nditer_assign(const nlohmann::json &ast_node);
+  std::optional<exprt> get_intercepted_expr(const nlohmann::json &element);
   void reject_bound_method_read(const nlohmann::json &element);
   void reject_method_value(const std::string &class_name, const std::string &m)
     const;
@@ -3373,6 +3377,14 @@ private:
   };
   std::unordered_map<std::string, numpy_scalar_pointer_view_infot>
     numpy_pointer_view_info_;
+  /// `np.nditer` objects and the names bound to what they yield, keyed by
+  /// numpy_nditer::key.
+  std::map<std::string, numpy_nditer_state> numpy_nditers_;
+  std::map<std::string, numpy_nditer_item> numpy_nditer_items_;
+  nlohmann::json current_nditer_call_;
+  std::string current_nditer_state_;
+  unsigned nditer_counter_ = 0;
+  std::vector<exprt> prebuilt_exprs_;
   const numpy_scalar_pointer_view_infot *
   find_numpy_pointer_view_info(const std::string &name) const;
   // Scans call sites of `func_name` for subscript view arguments at

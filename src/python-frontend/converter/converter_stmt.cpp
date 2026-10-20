@@ -6857,7 +6857,8 @@ bool python_converter::try_dedicated_assign(
   const nlohmann::json &ast_node,
   codet &block)
 {
-  return rewrite_divergent_conditional_assign(ast_node, block) ||
+  return try_numpy_nditer_assign(ast_node) ||
+         rewrite_divergent_conditional_assign(ast_node, block) ||
          try_tagged_var_assign(ast_node, block) ||
          try_bound_method_store(ast_node, block);
 }
@@ -6894,6 +6895,31 @@ exprt python_converter::fit_numpy_integer_store(
     lhs.type() != long_long_int_type() || !rhs.type().is_floatbv())
     return rhs;
   return typecast_exprt(guard_nonfinite_float_to_int(rhs, value), lhs.type());
+}
+
+// `it = np.nditer(...)`, and the names bound to what an iterator yields; a
+// name rebound to anything else stops reading through an iterator.
+bool python_converter::try_numpy_nditer_assign(const nlohmann::json &ast_node)
+{
+  if (!ast_node.contains("value") || !ast_node["value"].is_object())
+    return false;
+  const nlohmann::json &target =
+    ast_node.contains("targets") ? ast_node["targets"][0] : ast_node["target"];
+  const nlohmann::json &value = ast_node["value"];
+  numpy_nditer nditer(*this);
+  if (
+    target.value("_type", "") == "Name" &&
+    numpy_nditer::is_nditer_call(value, *ast_json))
+  {
+    nditer.create(target["id"].get<std::string>(), value);
+    return true;
+  }
+  if (nditer.bind(target, value))
+    return true;
+  if (target.value("_type", "") == "Name")
+    numpy_nditer_items_.erase(
+      numpy_nditer::key(current_func_name_, target["id"].get<std::string>()));
+  return false;
 }
 
 void python_converter::get_var_assign(

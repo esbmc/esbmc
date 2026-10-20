@@ -256,6 +256,8 @@ private:
     const std::pair<std::vector<std::size_t>, std::vector<exprt>>
       &materialized);
   void reject_unsupported_nditer_keywords(const nlohmann::json &arg) const;
+  bool is_runtime_layout_view(const nlohmann::json &arg) const;
+  exprt get_nditer_list(const nlohmann::json &arg);
   void reject_unsupported_transpose_axes_rank(const std::string &function);
 
   // sum/prod/min/max/mean/argmin/argmax's flattened fallback path (a
