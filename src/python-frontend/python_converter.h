@@ -1923,6 +1923,8 @@ private:
     const typet &current_type) const;
 
   std::string resolve_name_symbol_id(const std::string &name) const;
+  exprt
+  once_bound_exponent(const nlohmann::json &right, const exprt &rhs) const;
   symbolt *find_enclosing_scope_symbol(symbol_id sid) const;
   symbolt *find_global_symbol(const symbol_id &sid);
   exprt

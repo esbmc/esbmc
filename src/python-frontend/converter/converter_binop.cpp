@@ -2,6 +2,7 @@
 #include <python-frontend/converter/value_kinds.h>
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
+#include <python-frontend/lambda/python_lambda.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python-dict/python_dict_handler.h>
 #include <python-frontend/exception/python_exception_handler.h>
@@ -1706,6 +1707,26 @@ reject_numpy_string_membership(const std::string &op, const exprt &rhs)
       "TypeError: membership in a numpy string array is not supported");
 }
 
+// An exponent named by a variable bound once to a small int constant is that
+// constant, so `2 ** n` is an int as `2 ** 3` is (#8944). A larger one would
+// overflow an int anyway and keeps the pow() path.
+exprt python_converter::once_bound_exponent(
+  const nlohmann::json &right,
+  const exprt &rhs) const
+{
+  const symbolt *exponent =
+    rhs.is_symbol() ? symbol_table_.find_symbol(rhs.identifier()) : nullptr;
+  BigInt value;
+  if (
+    !exponent || !exponent->get_value().is_constant() ||
+    !exponent->get_value().type().is_signedbv() ||
+    to_integer(exponent->get_value(), value) || value > 64 ||
+    right.value("_type", "") != "Name" ||
+    count_bindings(*ast_json, right.value("id", "")) != 1)
+    return rhs;
+  return exponent->get_value();
+}
+
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
   if (std::optional<exprt> bound = try_bound_method_compare(element))
@@ -2442,7 +2463,7 @@ exprt python_converter::get_binary_operator_expr(
 
   // Handle special mathematical operations
   if (op == "Pow" || op == "power")
-    return math_handler_.handle_power(lhs, rhs);
+    return math_handler_.handle_power(lhs, once_bound_exponent(right, rhs));
 
   if (op == "Mod" && (lhs.type().is_floatbv() || rhs.type().is_floatbv()))
     return math_handler_.handle_modulo(lhs, rhs, element);
