@@ -297,7 +297,11 @@ void static_analysis_baset::do_function_call_rec(
   statet &new_state,
   const goto_functionst &goto_functions)
 {
-  if (is_symbol2t(function))
+  if (is_symbol2t(function) && !is_code_type(function->type))
+  {
+    // ignore, a data object can't be a function
+  }
+  else if (is_symbol2t(function))
   {
     irep_idt identifier = to_symbol2t(function).get_symbol_name();
 

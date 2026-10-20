@@ -1,0 +1,5 @@
+CORE
+label.ld
+--ld-props props.yaml --k-induction --unlimited-k-steps
+^ERROR: UnsupportedConstruct\(label, tier=2\)$
+^ERROR: PARSING ERROR$

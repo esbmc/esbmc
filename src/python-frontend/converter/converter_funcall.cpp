@@ -858,17 +858,6 @@ exprt python_converter::list_argument_expr(const nlohmann::json &arg)
   return elements ? *elements : get_expr(arg);
 }
 
-// list(xs) builds a new list; returning xs itself would alias the two.
-static exprt copy_named_list(
-  python_converter &converter,
-  const exprt &list,
-  const nlohmann::json &element)
-{
-  if (!list.is_symbol())
-    return list;
-  return python_list(converter, element).build_shallow_copy_call(list, element);
-}
-
 // Whether `node` is the name `name`.
 static bool is_name(const nlohmann::json &node, const std::string &name)
 {
@@ -932,6 +921,49 @@ static void collect_dict_values(
       collect_dict_values(child, name, out);
 }
 
+// The `return` statements of a function body, not of the defs nested in it.
+static void collect_own_returns(
+  const nlohmann::json &node,
+  std::vector<nlohmann::json> &out)
+{
+  const std::string type = node.is_object() ? node.value("_type", "") : "";
+  if (type == "Return")
+    out.push_back(node);
+  if (
+    type == "FunctionDef" || type == "AsyncFunctionDef" || type == "ClassDef" ||
+    type == "Lambda")
+    return;
+  if (node.is_object() || node.is_array())
+    for (const auto &child : node)
+      collect_own_returns(child, out);
+}
+
+// The values of the dict literals a top-level function returns, if every
+// return in its own body is one. False otherwise.
+static bool returned_dict_values(
+  const nlohmann::json &module,
+  const nlohmann::json &call,
+  std::vector<nlohmann::json> &out)
+{
+  if (call["func"].value("_type", "") != "Name")
+    return false;
+  const std::string name = call["func"]["id"];
+  for (const auto &def : module["body"])
+  {
+    if (def.value("_type", "") != "FunctionDef" || def["name"] != name)
+      continue;
+    std::vector<nlohmann::json> returns;
+    collect_own_returns(def["body"], returns);
+    for (const auto &ret : returns)
+      if (ret["value"].value("_type", "") != "Dict")
+        return false;
+    for (const auto &ret : returns)
+      push_dict_values(ret["value"], out);
+    return !returns.empty();
+  }
+  return false;
+}
+
 // The values the dict `container` may hold: a literal's, every value stored
 // into a named dict, or for `d[k]` the values of each dict literal d holds
 // (#8768). False when they cannot be listed.
@@ -943,7 +975,15 @@ bool python_converter::dict_values(
   if (type == "Dict")
     push_dict_values(container, out);
   else if (type == "Name")
-    collect_dict_values(*ast_json, container["id"], out);
+  {
+    std::vector<nlohmann::json> stored;
+    collect_dict_values(*ast_json, container["id"], stored);
+    for (const auto &v : stored)
+      if (
+        v.value("_type", "") != "Call" ||
+        !returned_dict_values(*ast_json, v, out))
+        out.push_back(v);
+  }
   else if (type == "Subscript")
   {
     std::vector<nlohmann::json> outer;
@@ -980,6 +1020,9 @@ python_converter::dict_function_return_type(const nlohmann::json &container)
   std::optional<typet> shared;
   for (const auto &v : values)
   {
+    // A literal is never the function called, so it decides nothing.
+    if (v.value("_type", "") == "Constant")
+      continue;
     const typet ret = stored_function_return_type(v);
     if (ret.is_nil() || ret.id().empty())
       return std::nullopt;
@@ -1208,13 +1251,12 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     // Handle list(iterable) where iterable evaluates to a list — e.g.
     // list(d.items()), list(d.keys()), list(d.values()), list(some_list).
     // d.items() returns the keys member as a placeholder list (correct size).
+    // The result is a new list, so mutating it must not reach the argument;
+    // the copy of a keys view is a plain list, compared by order (#8689).
     exprt arg_expr = list_argument_expr(list_arg);
     if (arg_expr.type() == type_handler_.get_list_type())
-    {
-      // list() of a keys view is a plain list, compared by order (#8689).
-      arg_expr.remove(PYTHON_KEYS_VIEW_ATTR);
-      return copy_named_list(*this, arg_expr, element);
-    }
+      return python_list(*this, element)
+        .build_shallow_copy_call(arg_expr, element);
 
     // list(tuple) — materialise the tuple's components into a real list.
     // Without this the tuple struct flows into the generic builder, which

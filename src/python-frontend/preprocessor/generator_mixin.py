@@ -1417,20 +1417,6 @@ class GeneratorMixin:
                            value=ast.copy_location(copy.deepcopy(lam), key_kw.value))
 
     @staticmethod
-    def _names_bound_by(node):
-        """The names @p node itself binds: a def or class, a Store/Del name, a
-        parameter, or a ``global`` declaration."""
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            return (node.name, )
-        if isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Load):
-            return (node.id, )
-        if isinstance(node, ast.arg):
-            return (node.arg, )
-        if isinstance(node, ast.Global):
-            return tuple(node.names)
-        return ()
-
-    @staticmethod
     def _binds_key(key_value):
         """Whether a scan binds its key lambda to a name before applying it."""
         return isinstance(key_value,
