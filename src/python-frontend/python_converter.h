@@ -1912,6 +1912,7 @@ private:
     const std::string &name,
     const nlohmann::json &element);
   void mark_global_bound(const nlohmann::json &stmt, code_blockt &block);
+  typet forward_function_return_type(const std::string &name, const exprt &fn);
   /// A parameter default, evaluated where the def is, so a method's default
   /// still sees the class body's names (#8200).
   exprt get_default_expr(const nlohmann::json &node);
