@@ -1867,16 +1867,14 @@ std::string python_annotation<Json>::get_function_return_type(
     // (GitHub #5104, #5105).
     std::string saved_return_ctx = current_func_name_context_;
     current_func_name_context_ = func_name;
-    std::string inferred_type =
-      infer_from_return_statements(func_elem["body"], func_name);
     std::set<std::string> branch_types;
-    if (inferred_type.empty())
-      collect_return_types(func_elem["body"], func_name, branch_types);
+    collect_return_types(func_elem["body"], func_name, branch_types);
     current_func_name_context_ = saved_return_ctx;
+    std::string inferred_type = select_return_type(branch_types);
 
     // The branches return incompatible types (e.g. int and str): the
     // top-level return below is only one of them (#8890).
-    if (!branch_types.empty())
+    if (inferred_type.empty() && !branch_types.empty())
     {
       functions_in_analysis_.erase(func_name);
       return "";
@@ -3865,7 +3863,13 @@ std::string python_annotation<Json>::infer_from_return_statements(
 {
   std::set<std::string> types;
   collect_return_types(body, func_name, types);
+  return select_return_type(std::move(types));
+}
 
+template <class Json>
+std::string
+python_annotation<Json>::select_return_type(std::set<std::string> types)
+{
   // Drop non-informative markers when concrete return types are also present.
   //   - NoneType: a `return None` alongside value returns marks the function as
   //     Optional; that optionality is handled separately by the caller's

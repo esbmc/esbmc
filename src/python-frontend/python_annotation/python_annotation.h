@@ -221,6 +221,9 @@ private:
   std::string infer_lambda_return_type(const Json &lambda_elem) const;
   std::string
   infer_from_return_statements(const Json &body, const std::string &func_name);
+  // The single type a set of collected return types narrows to, or empty
+  // when they are incompatible.
+  static std::string select_return_type(std::set<std::string> types);
   // The type a parameter's default value implies, or empty.
   std::string infer_type_from_parameter_default(
     const Json &function_element,
