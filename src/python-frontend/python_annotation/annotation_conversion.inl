@@ -5121,6 +5121,77 @@ void python_annotation<Json>::preprocess_method_calls(const Json &node)
   }
 }
 
+/// The FunctionDef of @p method in module-level class @p cls, or null.
+template <class Json>
+Json *
+python_annotation<Json>::class_method(const std::string &cls, const Json &method)
+{
+  for (Json &class_node : ast_["body"])
+    if (class_node["_type"] == "ClassDef" && class_node["name"] == cls)
+      for (Json &member : class_node["body"])
+        if (member["_type"] == "FunctionDef" && member["name"] == method)
+          return &member;
+  return nullptr;
+}
+
+/// Types the unannotated parameters of a method from its `obj.m(args)` calls
+/// at module level, where `obj` is a name bound once to an instance of a
+/// module class, when every such call passes one type (#8923). Calls inside a
+/// def are skipped: this pass has no scope to resolve their receiver in.
+template <class Json>
+void python_annotation<Json>::preprocess_receiver_method_calls()
+{
+  std::map<std::pair<Json *, size_t>, std::set<std::string>> seen;
+  std::function<void(const Json &)> walk = [&](const Json &node) {
+    if (node.is_array())
+    {
+      for (const Json &item : node)
+        walk(item);
+      return;
+    }
+    if (!node.is_object())
+      return;
+    const std::string kind = node.value("_type", "");
+    if (kind == "FunctionDef" || kind == "ClassDef" || kind == "Lambda")
+      return;
+    const Json &func = node.value("func", Json());
+    if (
+      kind == "Call" && func.value("_type", "") == "Attribute" &&
+      func["value"].value("_type", "") == "Name" &&
+      !is_rebound_in_scope(func["value"]["id"].template get<std::string>()))
+    {
+      for (const std::string &cls :
+           get_class_ancestors(get_argument_type(func["value"])))
+        if (Json *method = class_method(cls, func["attr"]))
+        {
+          // A static or class method has no `self` to skip.
+          if (!(*method)["decorator_list"].empty())
+            break;
+          const Json &params = (*method)["args"]["args"];
+          for (size_t i = 1; i < params.size(); ++i)
+            seen[{method, i}].insert(
+              i - 1 < node["args"].size()
+                ? get_argument_type(node["args"][i - 1])
+                : std::string());
+          break;
+        }
+    }
+    for (const auto &kv : node.items())
+      if (kv.value().is_structured())
+        walk(kv.value());
+  };
+  walk(ast_["body"]);
+
+  for (const auto &[key, types] : seen)
+  {
+    Json &param = (*key.first)["args"]["args"][key.second];
+    if (
+      types.size() == 1 && !types.begin()->empty() &&
+      param.value("annotation", Json()).is_null())
+      add_parameter_annotation(param, *types.begin());
+  }
+}
+
 /// Infer unannotated parameter types of top-level functions from the
 /// argument types at every plain `f(arg1, arg2)` call site (i.e.
 /// `Call.func._type == "Name"`). Method calls on instances and class
@@ -5325,6 +5396,7 @@ void python_annotation<Json>::add_type_annotation()
   preprocess_constructor_calls(ast_);
   // Also preprocess method calls on temporary instances: A().method(args)
   preprocess_method_calls(ast_);
+  preprocess_receiver_method_calls();
   // Preprocess top-level function calls f(arg) so unannotated parameters of
   // top-level functions inherit a type from their callers. Runs after the
   // constructor pass so `f(SharedResource())` resolves through the
