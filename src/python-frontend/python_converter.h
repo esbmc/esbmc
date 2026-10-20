@@ -2986,6 +2986,8 @@ private:
 
   void adopt_tagged_element(symbolt *lhs_symbol, exprt &lhs, const exprt &rhs);
 
+  void adopt_array_type(symbolt &lhs_symbol, exprt &lhs, exprt &rhs);
+
   /// Handle Optional value access
   exprt materialize_optional(const exprt &expr, const nlohmann::json &element);
   exprt check_float_fits_int_return(

@@ -1,0 +1,5 @@
+properties:
+  - id: P1
+    kind: invariant
+    expression: "Safe"
+    description: "#8212: an unsuffixed literal takes the REAL type of a, so a + 1.0 equals a"
