@@ -60,7 +60,7 @@ PlcopenXmlParser::var_kind_from_string(const std::string &s, bool derived)
     {"DINT", VarKind::DINT},
     {"TIME", VarKind::TIME},
     {"REAL", VarKind::REAL},
-    {"LREAL", VarKind::REAL},
+    {"LREAL", VarKind::LREAL},
   };
   auto it = table.find(s);
   if (it != table.end())

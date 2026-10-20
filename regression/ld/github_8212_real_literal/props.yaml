@@ -1,0 +1,5 @@
+properties:
+  - id: P1
+    kind: invariant
+    expression: "Safe"
+    description: "#8212: 0.1 stored in a REAL compares equal to the literal 0.1, both rounded to binary32"
