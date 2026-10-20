@@ -3246,3 +3246,6 @@ regression/python/github_8877_pow2_iterator
 regression/python/github_8877_pow2_iterator_fail
 regression/python/github_8877_pow2_iterator_func
 regression/python/github_8877_pow2_exact
+regression/python/list_rebind_other_elem_type_unsupported
+regression/python/list_rebind_same_elem_type
+regression/python/list_rebind_same_elem_type_fail
