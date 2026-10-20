@@ -391,6 +391,21 @@ exprt function_call_expr::isinstance_without_type_name(
   return nil_exprt();
 }
 
+/// The list item a read `*(T *)item->value` of a scalar element comes from, or
+/// nil. The cast is the frontend's guess at the element's type; the item's
+/// type_id records the type it was stored with.
+static exprt list_item_of_scalar_read(const exprt &read, const typet &item_type)
+{
+  if (read.id() != "dereference" || read.op0().id() != "typecast")
+    return nil_exprt();
+  const exprt &value = read.op0().op0();
+  if (
+    value.id() != "member" || value.get("component_name") != "value" ||
+    value.op0().type() != item_type)
+    return nil_exprt();
+  return value.op0();
+}
+
 exprt function_call_expr::handle_isinstance() const
 {
   const auto &args = call_["args"];
@@ -479,6 +494,14 @@ exprt function_call_expr::handle_isinstance() const
     if (type_handler_.is_tagged_scalar_type(obj_expr.type()))
       return converter_.dynamic_type_handler_.build_isinstance_check(
         obj_expr, type_name, json_utils::is_class(type_name, converter_.ast()));
+
+    static const std::set<std::string> scalars = {
+      "bool", "int", "float", "str"};
+    const exprt item = list_item_of_scalar_read(
+      obj_expr, type_handler_.get_tagged_object_type());
+    if (item.is_not_nil() && scalars.count(type_name))
+      return converter_.dynamic_type_handler_.build_isinstance_check(
+        item, type_name, false);
 
     // Special case: Check if object is None (null pointer)
     if (type_name == "NoneType")
