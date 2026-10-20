@@ -1,0 +1,8 @@
+CORE
+main.c
+--show-stacktrace
+^Stack trace:$
+^  inner at file .*main\.c line 10 column 3 function middle$
+^  middle at file .*main\.c line 15 column 3 function main$
+^  main at file .*main\.c line 13 column 1$
+^VERIFICATION FAILED$
