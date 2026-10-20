@@ -5094,10 +5094,13 @@ const nlohmann::json &python_converter::resolve_return_annotation_node(
   // marked _inferred_annotation) -- an annotation the user actually wrote
   // (e.g. `def make() -> list:`) is authoritative and must not be silently
   // discarded even when the body happens to match the local-array-return
-  // shape.
+  // shape. A synthesized one also gives way to a tagged return (#8890).
   bool is_synthesized =
     returns.is_null() || returns.value("_inferred_annotation", false);
-  if (is_synthesized && local_var_numpy_array_return(function_node))
+  if (
+    is_synthesized &&
+    (local_var_numpy_array_return(function_node) ||
+     dynamic_type_handler_.detect_dynamic_return_type(function_node)))
     return null_return_annotation;
   return returns;
 }

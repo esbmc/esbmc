@@ -79,8 +79,10 @@ list_elem_info python_list::get_list_element_info(
   const exprt &raw_elem)
 {
   // A function is stored by its address; storing the code symbol itself
-  // aborts with "got invalid code for function" (#6640, #8371).
-  const exprt elem = decay_function_to_pointer(raw_elem);
+  // aborts with "got invalid code for function" (#6640, #8371). A call comes
+  // back as a call statement, which the temp cannot hold (#4699, #8891).
+  const exprt elem =
+    decay_function_to_pointer(to_value_expr(raw_elem, converter_.name_space()));
   const type_handler type_handler_ = converter_.get_type_handler();
   reject_tagged_element(type_handler_, elem);
   locationt location = converter_.get_location_from_decl(op);
@@ -1742,6 +1744,38 @@ exprt python_list::build_copy_list_call(
   elem_types().append_from(list.id.as_string(), copied_list.id.as_string());
 
   return build_symbol(copied_list);
+}
+
+static const symbolt &
+list_model_function(python_converter &converter, const std::string &name)
+{
+  const symbolt *fn = converter.symbol_table().find_symbol("c:@F@" + name);
+  if (!fn)
+    throw std::runtime_error(name + " not found in symbol table");
+  return *fn;
+}
+
+exprt python_list::build_tuple_copy_call(
+  const exprt &src_list,
+  const nlohmann::json &element)
+{
+  // Marked in place, so the copy keeps its symbol and recorded element types
+  const exprt copy = build_shallow_copy_call(src_list, element);
+  code_function_callt mark;
+  mark.function() =
+    build_symbol(list_model_function(converter_, "__ESBMC_list_mark_tuple"));
+  mark.arguments().push_back(copy);
+  mark.location() = converter_.get_location_from_decl(element);
+  converter_.add_instruction(mark);
+  return copy;
+}
+
+exprt python_list::build_is_tuple_call(const exprt &list)
+{
+  return build_call_expr(
+    list_model_function(converter_, "__ESBMC_list_is_tuple"),
+    bool_type(),
+    {list});
 }
 
 exprt python_list::build_shallow_copy_call(
