@@ -78,15 +78,43 @@ std::string constant_type_name(const nlohmann::json &node)
   return "";
 }
 
-/// A `tuple[T0, ...]` annotation for a tuple literal of constants, so that the
-/// parameter is typed by the very code path a hand-written annotation takes.
-/// Null for a tuple this pass cannot type (empty, or a non-constant element).
-nlohmann::json tuple_annotation_of(const nlohmann::json &tuple_literal)
+/// The type a tuple element names: a constant's type, or the `int`, `float`
+/// or `str` annotation of a parameter of @p scope (the innermost enclosing
+/// def, or null) that the def never rebinds. "" otherwise.
+std::string
+element_type_name(const nlohmann::json &elt, const nlohmann::json *scope)
+{
+  if (!is_node(elt, "Name") || scope == nullptr)
+    return constant_type_name(elt);
+
+  const std::string &id = elt["id"].get<std::string>();
+  if (json_utils::count_name_bindings(*scope, id) != 1)
+    return "";
+  for (const auto &arg : (*scope)["args"]["args"])
+  {
+    if (arg["arg"] != id)
+      continue;
+    const nlohmann::json &annotation =
+      arg.value("annotation", nlohmann::json());
+    const std::string type =
+      is_node(annotation, "Name") ? annotation["id"].get<std::string>() : "";
+    return type == "int" || type == "float" || type == "str" ? type : "";
+  }
+  return "";
+}
+
+/// A `tuple[T0, ...]` annotation for a tuple literal of constants or typed
+/// parameters of @p scope, so that the parameter is typed by the very code
+/// path a hand-written annotation takes. Null for a tuple this pass cannot
+/// type (empty, or an element element_type_name cannot type).
+nlohmann::json tuple_annotation_of(
+  const nlohmann::json &tuple_literal,
+  const nlohmann::json *scope = nullptr)
 {
   nlohmann::json elts = nlohmann::json::array();
   for (const auto &elt : tuple_literal["elts"])
   {
-    const std::string type_name = constant_type_name(elt);
+    const std::string type_name = element_type_name(elt, scope);
     if (type_name.empty())
       return nlohmann::json();
     elts.push_back({{"_type", "Name"}, {"id", type_name}});
@@ -385,7 +413,8 @@ private:
   stored_elem_annotation(const std::string &var, size_t module) const
   {
     std::vector<nlohmann::json> items;
-    collect_stored_items(modules_[module].read->at("body"), var, module, items);
+    collect_stored_items(
+      modules_[module].read->at("body"), var, module, nullptr, items);
 
     if (items.empty())
       return nlohmann::json();
@@ -396,21 +425,29 @@ private:
   }
 
   /// Push onto @p items the tuple annotation of each item stored into @p var,
-  /// or null for a store this pass cannot type.
+  /// or null for a store this pass cannot type. @p scope is the innermost def
+  /// enclosing @p node; a lambda's parameters may shadow it, so none is
+  /// tracked inside one.
   void collect_stored_items(
     const nlohmann::json &node,
     const std::string &var,
     size_t module,
+    const nlohmann::json *scope,
     std::vector<nlohmann::json> &items) const
   {
     if (node.is_array())
     {
       for (const auto &elem : node)
-        collect_stored_items(elem, var, module, items);
+        collect_stored_items(elem, var, module, scope, items);
       return;
     }
     if (!node.is_object())
       return;
+
+    if (is_node(node, "FunctionDef"))
+      scope = &node;
+    else if (is_node(node, "Lambda"))
+      scope = nullptr;
 
     if (is_untyped_store(node, var))
       items.push_back(nlohmann::json());
@@ -419,12 +456,12 @@ private:
       const std::optional<nlohmann::json> item = stored_item(node, var, module);
       if (item)
         items.push_back(
-          is_node(*item, "Tuple") ? tuple_annotation_of(*item)
+          is_node(*item, "Tuple") ? tuple_annotation_of(*item, scope)
                                   : nlohmann::json());
     }
 
     for (const auto &child : node)
-      collect_stored_items(child, var, module, items);
+      collect_stored_items(child, var, module, scope, items);
   }
 
   /// The item a call stores into @p var, or none when it stores nothing.

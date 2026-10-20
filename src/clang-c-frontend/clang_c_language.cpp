@@ -359,6 +359,19 @@ static unsigned bitint_max_align(const clang::TargetInfo &target)
 #endif
 }
 
+/// Takes the alignments the data model cannot express from clang's target.
+static void adopt_target_layout(const clang::TargetInfo &target)
+{
+  config.ansi_c.long_long_align = target.getLongLongAlign() / 8;
+  config.ansi_c.double_align = target.getDoubleAlign() / 8;
+  config.ansi_c.long_double_align = target.getLongDoubleAlign() / 8;
+  // Where long double is double (AArch64 Darwin, Windows), the data model's
+  // 128 bits would lay it out wider than clang does; other formats keep it.
+  if (&target.getLongDoubleFormat() == &llvm::APFloat::IEEEdouble())
+    config.ansi_c.long_double_width = target.getLongDoubleWidth();
+  config.ansi_c.bitint_max_align = bitint_max_align(target) / 8;
+}
+
 bool clang_c_languaget::parse(const std::string &path)
 {
   // preprocessing
@@ -449,12 +462,7 @@ bool clang_c_languaget::parse(const std::string &path)
   else
     mergeASTs(newAST, AST);
 
-  const clang::TargetInfo &target = AST->getASTContext().getTargetInfo();
-  config.ansi_c.long_long_align = target.getLongLongAlign() / 8;
-  config.ansi_c.double_align = target.getDoubleAlign() / 8;
-  config.ansi_c.long_double_align = target.getLongDoubleAlign() / 8;
-  config.ansi_c.bitint_max_align = bitint_max_align(target) / 8;
-
+  adopt_target_layout(AST->getASTContext().getTargetInfo());
   return false;
 }
 
@@ -744,18 +752,6 @@ void __ESBMC_loop_assigns_impl(const void *, ...);
 #define __ESBMC_loop_assigns_5(a,b,c,d,e) __ESBMC_loop_assigns_impl(&(a),&(b),&(c),&(d),&(e))
 #define __ESBMC_loop_assigns_N(_0,_1,_2,_3,_4,_5,N,...) __ESBMC_loop_assigns_##N
 #define __ESBMC_loop_assigns(...) __ESBMC_loop_assigns_N(~,##__VA_ARGS__,5,4,3,2,1,0)(__VA_ARGS__)
-
-/* offsetof has to be an integer constant expression (C23 7.21p3,
- * [support.types.layout]/1) and this expansion is not, so under it no constexpr
- * or non-type template argument may be spelt with offsetof. clang's
- * OffsetOfExpr is lowered in clang_c_convert.cpp and agrees with the expansion
- * on every layout in regression/esbmc-cpp/cpp/offsetof_layout_parity. C keeps
- * the expansion because dropping it there exposes #7127, a void*-arithmetic
- * dereference defect that regression/esbmc/github_2512_* stands on. */
-#ifndef __cplusplus
-#define __builtin_offsetof(type, member) \
-    ((size_t)__ESBMC_POINTER_OFFSET(&((type*)0)->member))
-#endif
 
 #define __builtin_object_size(ptr, type) \
     __ESBMC_builtin_object_size(ptr, type)

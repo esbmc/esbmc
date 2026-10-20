@@ -1037,7 +1037,15 @@ bool goto_symext::run_next_function_ptr_target(bool first)
   if (cur_state->top().cur_function_ptr_targets.size() == 0)
     cur_frame.orig_func_ptr_call = expr2tc();
 
+  const size_t depth = cur_state->call_stack.size();
   symex_function_call_code(state_call);
+
+  // A target whose body is not entered (e.g. at the recursion bound) never
+  // reaches the END_FUNCTION that runs the next target, so run it here.
+  // Otherwise the remaining targets are dropped and their merge snapshots
+  // stay in this frame.
+  if (cur_state->call_stack.size() == depth)
+    run_next_function_ptr_target(false);
 
   return true;
 }

@@ -11,6 +11,7 @@
 #include <util/lang/c_types.h>
 #include <util/irep/migrate.h>
 #include <util/lang/python_types.h>
+#include <algorithm>
 #include <set>
 
 namespace
@@ -37,6 +38,16 @@ exprt compare_class_objects(
                           lhs.get("value") == rhs.get("value");
   return gen_bool(same_class == (op == "Eq"));
 }
+
+// A char array copied from a variable (`{ x[0], x[1], ... }`) can still carry
+// the constant id; only one whose every character is a literal folds.
+bool is_folded_constant(const exprt &e)
+{
+  return e.is_constant() && std::all_of(
+                              e.operands().begin(),
+                              e.operands().end(),
+                              [](const exprt &op) { return op.is_constant(); });
+}
 } // namespace
 
 std::pair<exprt, exprt> python_converter::resolve_comparison_operands_internal(
@@ -50,14 +61,14 @@ std::pair<exprt, exprt> python_converter::resolve_comparison_operands_internal(
   if (lhs.is_symbol() && lhs.type().is_array())
   {
     const symbolt *sym = symbol_table_.find_symbol(lhs.identifier());
-    if (sym && sym->get_value().is_constant())
+    if (sym && is_folded_constant(sym->get_value()))
       resolved_lhs = sym->get_value();
   }
 
   if (rhs.is_symbol() && rhs.type().is_array())
   {
     const symbolt *sym = symbol_table_.find_symbol(rhs.identifier());
-    if (sym && sym->get_value().is_constant())
+    if (sym && is_folded_constant(sym->get_value()))
       resolved_rhs = sym->get_value();
   }
 
@@ -81,7 +92,7 @@ exprt python_converter::compare_constants_internal(
   const exprt &lhs,
   const exprt &rhs)
 {
-  if (!lhs.is_constant() || !rhs.is_constant())
+  if (!is_folded_constant(lhs) || !is_folded_constant(rhs))
     return nil_exprt();
 
   // Resolve an op plus a three-way comparison sign (cmp < 0 / == 0 / > 0) to a

@@ -1,5 +1,5 @@
-# Typing a tuple() argument as a list would make this isinstance check fail
-# where CPython passes it. The parameter must stay refused instead.
+# A tuple() argument is a list marked as a tuple, so isinstance(t, tuple)
+# holds in the callee as it does in CPython (#8777).
 
 
 def f(t):

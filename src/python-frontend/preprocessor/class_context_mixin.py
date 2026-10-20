@@ -557,7 +557,8 @@ class ClassContextMixin:
             and counts[s.name] == 1
         }
         builtin = {n for n, v in vars(builtins).items() if isinstance(v, type) and not counts[n]}
-        return defined | builtin
+        none_type = set() if counts["NoneType"] else {"NoneType"}
+        return defined | builtin | none_type
 
     @staticmethod
     def _is_plain_function(stmt):
@@ -644,6 +645,15 @@ class ClassContextMixin:
                     self._replace_reads(func.body[i + 1:], stmt.targets[0].id, stmt.value.id)
 
     @staticmethod
+    def _is_type_of_none(arg, known):
+        """Whether `arg` is `type(None)`, which has no builtin name; the frontend
+        reads NoneType as it (#8764)."""
+        return (isinstance(arg, ast.Call) and isinstance(arg.func, ast.Name)
+                and arg.func.id == "type" and {"type", "NoneType"} <= known and not arg.keywords
+                and len(arg.args) == 1 and isinstance(arg.args[0], ast.Constant)
+                and arg.args[0].value is None)
+
+    @staticmethod
     def _class_argument(call, func, index, known):
         """The known class `call` passes for `func`'s positional parameter
         `index`, else None."""
@@ -656,6 +666,8 @@ class ClassContextMixin:
             (k.value for k in call.keywords if by_keyword and k.arg == param), None)
         if isinstance(arg, ast.Name) and arg.id in known:
             return arg.id
+        if ClassContextMixin._is_type_of_none(arg, known):
+            return "NoneType"
         return ClassContextMixin._class_tuple(arg, func, known)
 
     @staticmethod
