@@ -805,6 +805,13 @@ public:
   exprt
   build_shallow_copy_call(const exprt &src_list, const nlohmann::json &element);
 
+  /// tuple(x) of a list: a shallow copy marked as a tuple (#8777).
+  exprt
+  build_tuple_copy_call(const exprt &src_list, const nlohmann::json &element);
+
+  /// Whether `list` was built by tuple(x) (#8777).
+  exprt build_is_tuple_call(const exprt &list);
+
   /**
    * @brief Build a list remove operation (removes first matching element).
    * Raises ValueError (via assertion) if element is not found.
@@ -1055,6 +1062,9 @@ private:
   // keep handle_range_slice's own decision count from growing further.
   void
   copy_dict_view_elem_types(const exprt &array, const std::string &sliced_id);
+  void copy_list_of_dict_view_elem_types(
+    const exprt &array,
+    const std::string &sliced_id);
 
   // Shared core of every ADR-NP-003 scalar pointer view producer; see
   // list_access.cpp for the full rationale, including when this declines.
