@@ -409,6 +409,10 @@ public:
     const std::string &attr_name,
     const nlohmann::json &element);
 
+  codet get_compound_store(
+    const exprt &lhs,
+    const exprt &rhs,
+    const locationt &location);
   void emit_guarded_raise(
     const exprt &cond,
     const std::string &exception,
@@ -419,6 +423,11 @@ public:
   // @p operand is converted to int; returns the operand to convert.
   exprt
   guard_nonfinite_float_to_int(exprt operand, const nlohmann::json &element);
+
+  exprt fit_numpy_integer_store(
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &value);
 
   void update_symbol(const exprt &expr) const;
 
@@ -596,6 +605,7 @@ private:
   friend class complex_handler;
   friend class function_call_expr;
   friend class numpy_call_expr;
+  friend class numpy_random;
   friend class function_call_builder;
   friend class type_handler;
   friend class python_list;
@@ -2073,6 +2083,9 @@ private:
   // binding runs, so trust it instead of duplicating that resolution here.
   // Split out of update_numpy_array_binding to keep its own decision count
   // from growing further.
+  bool is_numpy_arithmetic_result(
+    const nlohmann::json &rhs_node,
+    const exprt &lhs) const;
   bool is_array_returning_call_expr(
     const nlohmann::json &rhs_node,
     const exprt &lhs) const;
@@ -2189,6 +2202,16 @@ private:
     const exprt &rhs,
     const std::string &lhs_id) const;
   bool is_numpy_array_to_view_rebind(
+    const exprt &lhs,
+    const exprt &rhs,
+    const std::string &lhs_id) const;
+  void
+  reject_numpy_array_retype(const symbolt &symbol, const typet &type) const;
+  bool needs_fresh_numpy_array_slot(
+    const exprt &lhs,
+    const exprt &rhs,
+    const std::string &lhs_id) const;
+  bool is_numpy_array_reshape_rebind(
     const exprt &lhs,
     const exprt &rhs,
     const std::string &lhs_id) const;
@@ -2520,6 +2543,9 @@ private:
 
   std::optional<nlohmann::json>
   rewrite_numpy_method_call_node(const nlohmann::json &call_node) const;
+  bool is_numpy_subscript_reducer_receiver(
+    const nlohmann::json &method_base,
+    const std::string &method_name) const;
 
   // get_var_assign's RHS preprocessing step: rewrites `a.T` into
   // `np.transpose(a)` (numpy's own Attribute-shaped transpose sugar, with
@@ -2863,6 +2889,29 @@ private:
    * @param element The full binary operation JSON AST node.
    * @return The result expression, or nil_exprt if not an array operation.
    */
+  exprt numpy_array_arithmetic(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs);
+  exprt numpy_elementwise(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const typet &type);
+  exprt raise_in_expression(
+    const std::string &exception,
+    const std::string &message,
+    const typet &type);
+  void reject_unmodelled_array_arithmetic(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &element);
+  exprt numpy_element_op(
+    const std::string &op,
+    const exprt &x,
+    const exprt &y,
+    const typet &type);
   exprt handle_array_operations(
     const std::string &op,
     exprt &lhs,
