@@ -638,7 +638,20 @@ class ClassContextMixin:
         }
         builtin = {n for n, v in vars(builtins).items() if isinstance(v, type) and not counts[n]}
         none_type = set() if counts["NoneType"] else {"NoneType"}
-        return defined | builtin | none_type
+        return defined | builtin | none_type | ClassContextMixin._typing_any(module)
+
+    @staticmethod
+    def _typing_any(module):
+        """The names `from typing import Any` binds, when nothing rebinds them.
+        Counted afresh, as `self._names_bound_by` resolves to
+        GeneratorMixin's, which skips imports."""
+        bound = Counter(name for n in ast.walk(module)
+                        for name in ClassContextMixin._names_bound_by(n))
+        return {
+            a.asname or a.name
+            for s in module.body if isinstance(s, ast.ImportFrom) and s.module == "typing"
+            for a in s.names if a.name == "Any" and bound[a.asname or a.name] == 1
+        }
 
     @staticmethod
     def _is_plain_function(stmt):

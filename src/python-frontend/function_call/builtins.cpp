@@ -341,6 +341,56 @@ std::optional<exprt> function_call_expr::list_isinstance(
     and2tc(notequal2tc(obj2, gen_zero(obj2->type)), not2tc(tuple2)));
 }
 
+exprt function_call_expr::isinstance_operand(
+  const nlohmann::json &node,
+  const std::function<exprt(const std::string &)> &build,
+  const std::function<std::string(const nlohmann::json &)> &type_name) const
+{
+  const symbolt *symbol = nullptr;
+  if (node["_type"] == "Name")
+  {
+    symbol_id sid = converter_.create_symbol_id();
+    sid.set_object(node["id"].get<std::string>());
+    symbol = converter_.find_symbol(sid.to_string());
+    sid.set_function("");
+    symbol = symbol ? symbol : converter_.find_symbol(sid.to_string());
+  }
+  if (!symbol || !type_handler::is_class_value_type(symbol->get_type()))
+    return build(type_name(node));
+
+  // A runtime class value (#8390): it is one of the classes given an id, so
+  // test each against the object under the guard that it is that class.
+  const exprt cls = converter_.get_expr(node);
+  const std::map<std::string, int> ids = converter_.class_ids_;
+  exprt result = false_exprt();
+  for (const auto &[name, id] : ids)
+  {
+    exprt same("=", bool_type());
+    same.copy_to_operands(
+      member_exprt(cls, "id", int_type()), from_integer(id, int_type()));
+    result = or_exprt(result, and_exprt(same, build(name)));
+  }
+  return result;
+}
+
+exprt function_call_expr::isinstance_without_type_name(
+  const nlohmann::json &obj_arg,
+  const exprt &obj_expr,
+  const std::vector<nlohmann::json> &types) const
+{
+  if (is_class_object_operand(obj_arg, obj_expr))
+    return gen_boolean(admits_class_object(types));
+
+  const auto is_any = [&](const nlohmann::json &t) {
+    return t["_type"] == "Name" && t["id"] == "Any" &&
+           json_utils::is_imported_from(converter_.ast(), "typing", "Any");
+  };
+  if (std::any_of(types.begin(), types.end(), is_any))
+    return converter_.get_exception_handler().gen_exception_raise(
+      "TypeError", "typing.Any cannot be used with isinstance()");
+  return nil_exprt();
+}
+
 exprt function_call_expr::handle_isinstance() const
 {
   const auto &args = call_["args"];
@@ -356,8 +406,9 @@ exprt function_call_expr::handle_isinstance() const
   collect_classinfo(args[1], types);
   refuse_isinstance_on_path_dependent_number(obj_arg, types);
 
-  if (is_class_object_operand(obj_arg, obj_expr))
-    return gen_boolean(admits_class_object(types));
+  const exprt decided = isinstance_without_type_name(obj_arg, obj_expr, types);
+  if (decided.is_not_nil())
+    return decided;
 
   // Extract type name from various AST node formats
   auto extract_type_name = [](const nlohmann::json &node) -> std::string {
@@ -516,12 +567,14 @@ exprt function_call_expr::handle_isinstance() const
   if (types.empty())
     throw std::runtime_error("isinstance() tuple cannot be empty");
 
-  exprt result = build_isinstance(extract_type_name(types[0]));
+  exprt result =
+    isinstance_operand(types[0], build_isinstance, extract_type_name);
   for (size_t i = 1; i < types.size(); ++i)
   {
     exprt or_expr("or", typet("bool"));
     or_expr.move_to_operands(result);
-    or_expr.copy_to_operands(build_isinstance(extract_type_name(types[i])));
+    or_expr.copy_to_operands(
+      isinstance_operand(types[i], build_isinstance, extract_type_name));
     result = or_expr;
   }
   return result;

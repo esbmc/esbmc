@@ -26,6 +26,7 @@ class PreprocessorStateMixin:
         self._unobservable_builtin_keys = frozenset()
         self._closed_lambda_bindings = {}
         self._fixed_length_starred = {}
+        self._redefined_names = set()
         self.functionVarargs = set()
         self._vararg_func_defs = {}
         self._vararg_module_defs = set()

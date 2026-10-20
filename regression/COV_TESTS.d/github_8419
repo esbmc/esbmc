@@ -1,0 +1,5 @@
+regression/python/github_8419
+regression/python/github_8419_factory_unsupported
+regression/python/github_8419_fail
+regression/python/github_8419_method_unsupported
+regression/python/github_8419_decorated_decorator_unsupported
