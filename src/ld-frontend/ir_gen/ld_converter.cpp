@@ -215,25 +215,32 @@ codet ld_converter::translate_contact(
                  : ContactKind::NormallyOpen;
 
   exprt base = bool_value_of(var);
-  // Transition-sensing contact (IEC 61131-3 §2.5.1.1): the edge is sensed on
-  // the operand, and the contact's polarity is applied to the result. The
-  // shadow holding the previous-scan sample is updated in the scan epilogue,
-  // not here, so every contact sensing the same operand agrees within a scan.
+  code_blockt sample;
+  // Transition-sensing contact (IEC 61131-3 Ed. 3 Table 75): the edge is
+  // sensed "from one evaluation of this element to the next", so each contact
+  // keeps its own previous sample and updates it where it is evaluated, as the
+  // R_TRIG/F_TRIG Beremiz emits per contact does. The contact's polarity is
+  // applied to the result.
   if (n.contact_edge != ContactEdge::None)
   {
-    symbol_exprt prev =
-      declare_bool_shadow(ld_name("__edge_prev_" + n.variable));
-    edge_shadows_.insert({n.variable, prev});
-    base = (n.contact_edge == ContactEdge::Rising)
-             ? and_exprt(base, not_exprt(prev))
-             : and_exprt(not_exprt(base), prev);
+    const std::string id = std::to_string(edge_contacts_++);
+    symbol_exprt prev = declare_bool_shadow(ld_name("__edge_prev_" + id));
+    symbol_exprt q = declare_bool_shadow(ld_name("__edge_q_" + id));
+    exprt edge = (n.contact_edge == ContactEdge::Rising)
+                   ? and_exprt(base, not_exprt(prev))
+                   : and_exprt(not_exprt(base), prev);
+    sample.copy_to_operands(code_assignt(q, edge));
+    sample.copy_to_operands(code_assignt(prev, base));
+    base = q;
   }
 
   exprt contact_val = (eff_kind == ContactKind::NormallyClosed)
                         ? static_cast<exprt>(not_exprt(base))
                         : base;
   pf_out = and_exprt(pf_in, contact_val);
-  return code_skipt();
+  if (sample.operands().empty())
+    return code_skipt();
+  return sample;
 }
 
 codet ld_converter::translate_coil(const LdIRNode &n, const exprt &pf)
@@ -776,13 +783,6 @@ code_blockt ld_converter::build_scan_body(const exprt &)
     codet fb = translate_user_fb(ex);
     scan_body.move_to_operands(fb);
   }
-
-  // Latch the operands sensed by edge contacts for the next scan's comparison.
-  // This runs after every rung so an edge contact sees the operand's value at
-  // the previous scan boundary rather than a mid-scan update.
-  for (const auto &[name, shadow] : edge_shadows_)
-    scan_body.copy_to_operands(
-      code_assignt(shadow, bool_value_of(var_expr(name))));
 
   return scan_body;
 }
