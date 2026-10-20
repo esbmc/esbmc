@@ -98,6 +98,8 @@ private:
   void validate_randint();
   exprt sample();
   exprt sample_integer();
+  exprt sample_real();
+  exprt nan_from_parameters(const exprt &sample);
 
   /// A new temporary holding @p value, or a nondeterministic one.
   exprt fresh(const typet &type, const exprt &value = nil_exprt());

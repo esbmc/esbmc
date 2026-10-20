@@ -9,6 +9,7 @@
 #include <util/lang/c_types.h>
 
 #include <algorithm>
+#include <cmath>
 #include <optional>
 #include <set>
 #include <stdexcept>
@@ -142,6 +143,21 @@ exprt finite(const exprt &value)
   expr2tc v;
   migrate_expr(value, v);
   return migrate_expr_back(not2tc(or2tc(isinf2tc(v), isnan2tc(v))));
+}
+
+exprt is_nan(const exprt &value)
+{
+  expr2tc v;
+  migrate_expr(value, v);
+  return migrate_expr_back(isnan2tc(v));
+}
+
+/// Set for a negative number and for -0.0.
+exprt sign_bit(const exprt &value)
+{
+  expr2tc v;
+  migrate_expr(value, v);
+  return migrate_expr_back(typecast2tc(get_bool_type(), signbit2tc(v)));
 }
 
 exprt implies(const exprt &premise, const exprt &conclusion)
@@ -634,26 +650,37 @@ void numpy_random::validate()
     return validate_randint();
   if (name_ == "choice")
     return validate_choice();
+  // NumPy's constraints (numpy/random/_common.pyx): a non-negative parameter
+  // rejects a set sign bit, -0.0 included, and lets NaN through; a positive
+  // one rejects `x <= 0`, which NaN is not.
   const exprt zero = real(0.0);
-  auto below = [&](const std::string &param, const exprt &bound) {
-    // `!(x >= bound)` also rejects NaN.
-    return not_exprt(rel(value(param), ">=", bound));
+  auto negative = [&](const std::string &param) {
+    return and_exprt(not_exprt(is_nan(value(param))), sign_bit(value(param)));
   };
-  auto not_above = [&](const std::string &param, const exprt &bound) {
-    return not_exprt(rel(value(param), ">", bound));
+  auto not_positive = [&](const std::string &param) {
+    return rel(value(param), "<=", zero);
+  };
+  // `p` outside [0, 1] (or (0, 1] for a strict lower bound), NaN included.
+  auto outside_unit = [&](const irep_idt &lower) {
+    return or_exprt(
+      not_exprt(rel(value("p"), lower, zero)),
+      not_exprt(rel(value("p"), "<=", real(1.0))));
   };
 
   if (name_ == "normal" || name_ == "exponential")
-    raise_if(below("scale", zero), "ValueError", "scale < 0");
+    raise_if(negative("scale"), "ValueError", "scale < 0");
   else if (name_ == "lognormal")
-    raise_if(below("sigma", zero), "ValueError", "sigma < 0");
+    raise_if(negative("sigma"), "ValueError", "sigma < 0");
   else if (name_ == "weibull")
-    raise_if(below("a", zero), "ValueError", "a < 0");
+    raise_if(negative("a"), "ValueError", "a < 0");
   else if (name_ == "chisquare")
-    raise_if(not_above("df", zero), "ValueError", "df <= 0");
+    raise_if(not_positive("df"), "ValueError", "df <= 0");
   else if (name_ == "poisson")
   {
-    raise_if(below("lam", zero), "ValueError", "lam < 0");
+    raise_if(
+      not_exprt(rel(value("lam"), ">=", zero)),
+      "ValueError",
+      "lam < 0 or lam is NaN");
     raise_if(
       rel(value("lam"), ">", real(9.223372006484771e18)),
       "ValueError",
@@ -661,28 +688,25 @@ void numpy_random::validate()
   }
   else if (name_ == "gamma")
   {
-    raise_if(below("shape", zero), "ValueError", "shape < 0");
-    raise_if(below("scale", zero), "ValueError", "scale < 0");
+    raise_if(negative("shape"), "ValueError", "shape < 0");
+    raise_if(negative("scale"), "ValueError", "scale < 0");
   }
   else if (name_ == "beta")
   {
-    raise_if(not_above("a", zero), "ValueError", "a <= 0");
-    raise_if(not_above("b", zero), "ValueError", "b <= 0");
+    raise_if(not_positive("a"), "ValueError", "a <= 0");
+    raise_if(not_positive("b"), "ValueError", "b <= 0");
   }
   else if (name_ == "binomial")
   {
+    raise_if(outside_unit(">="), "ValueError", "p < 0, p > 1 or p is NaN");
     raise_if(
       rel(value("n"), "<", gen_zero(long_long_int_type())),
       "ValueError",
       "n < 0");
-    raise_if(below("p", zero), "ValueError", "p < 0");
-    raise_if(rel(value("p"), ">", real(1.0)), "ValueError", "p > 1");
   }
   else if (name_ == "geometric")
-  {
-    raise_if(not_above("p", zero), "ValueError", "p <= 0");
-    raise_if(rel(value("p"), ">", real(1.0)), "ValueError", "p > 1");
-  }
+    raise_if(
+      outside_unit(">"), "ValueError", "p <= 0, p > 1 or p contains NaNs");
   else if (name_ == "uniform")
     raise_if(
       not_exprt(finite(arith(value("high"), "ieee_sub", value("low")))),
@@ -786,7 +810,21 @@ exprt numpy_random::sample()
     return sample_choice();
   if (is_integral_result(name_))
     return sample_integer();
+  return nan_from_parameters(sample_real());
+}
 
+// A NaN parameter that passed validation gives a NaN sample, as in NumPy.
+exprt numpy_random::nan_from_parameters(const exprt &sample)
+{
+  exprt any_nan = false_exprt();
+  for (const std::string &param : signatures().at(name_))
+    if (param != "size")
+      any_nan = or_exprt(any_nan, is_nan(value(param)));
+  return if_exprt(any_nan, real(std::nan("")), sample);
+}
+
+exprt numpy_random::sample_real()
+{
   const exprt zero = real(0.0);
   const exprt x = fresh(double_type());
   if (name_ == "random" || name_ == "uniform")
