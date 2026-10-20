@@ -1728,8 +1728,17 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   // every operand would otherwise alias (#6257).
   exprt *saved_lhs = current_lhs;
   current_lhs = nullptr;
+  const auto saved_compared = type_compared_operands_;
+  type_compared_operands_ = {};
+  if (element.contains("ops") && element["ops"].size() == 1)
+  {
+    const std::string cmp = element["ops"][0]["_type"];
+    if (cmp == "Is" || cmp == "IsNot" || cmp == "Eq" || cmp == "NotEq")
+      type_compared_operands_ = {&left, &right};
+  }
   exprt lhs = get_expr(left);
   exprt rhs = get_right_operand_expr(element, right, lhs);
+  type_compared_operands_ = saved_compared;
   current_lhs = saved_lhs;
 
   // Resolve dictionary subscript types for proper comparison

@@ -1110,8 +1110,19 @@ exprt python_converter::handle_type_comparison(
   if (!runtime.is_nil())
     return runtime;
   const exprt erased = handle_erased_type_comparison(op, left, right);
-  return erased.is_nil() ? handle_type_identity_check(op, lhs, rhs, left, right)
-                         : erased;
+  if (!erased.is_nil())
+    return erased;
+  auto unknown = [](const exprt &e) {
+    return e.get_string("value") == unknown_class_name;
+  };
+  if (unknown(lhs) || unknown(rhs))
+  {
+    log_warning(
+      "type() of a value whose class is not known statically is compared "
+      "as nondet");
+    return side_effect_expr_nondett(bool_type());
+  }
+  return handle_type_identity_check(op, lhs, rhs, left, right);
 }
 
 static bool may_hold_class(const exprt &expr);

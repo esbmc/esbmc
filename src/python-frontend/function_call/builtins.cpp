@@ -1108,6 +1108,20 @@ exprt function_call_expr::handle_type_call() const
   if (type_name.empty())
     type_name = arg_expr.type().id_string();
 
+  // Any other pointer may be None, an instance of a subclass, or of any class
+  // at all when erased to void *, so only a comparison can over-approximate it.
+  if (
+    arg_expr.type().is_pointer() && type_name != "str" &&
+    type_name != "NoneType")
+  {
+    const auto &compared = converter_.type_compared_operands_;
+    if (&call_ != compared[0] && &call_ != compared[1])
+      throw std::runtime_error(
+        "type() of a value whose class is not known statically is only "
+        "supported as an operand of is, is not, == or !=");
+    type_name = python_converter::unknown_class_name;
+  }
+
   return converter_.make_class_object(type_name);
 }
 
