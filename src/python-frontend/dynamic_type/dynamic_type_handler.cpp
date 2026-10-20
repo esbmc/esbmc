@@ -58,6 +58,9 @@ std::string classify_return_literal_kind(
     auto it = param_kinds.find(value.value("id", ""));
     return it == param_kinds.end() ? "" : it->second;
   }
+  // `return nondet_str()` is as much a str as `return "a"` (#8977).
+  if (value.value("_type", "") == "Call")
+    return dynamic_type_detail::classify_literal_value_kind(value);
   if (value.value("_type", "") != "Constant" || !value.contains("value"))
     return "";
 

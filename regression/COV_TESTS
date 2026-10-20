@@ -3273,3 +3273,5 @@ regression/python/github_8926_user_method_get
 regression/python/github_8926_user_method_get_fail
 regression/python/github_8925_attr_off_call
 regression/python/github_8925_attr_off_call_fail
+regression/python/github_8977_nondet_return_kind
+regression/python/github_8977_nondet_return_kind_fail
