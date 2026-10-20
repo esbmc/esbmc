@@ -406,6 +406,22 @@ static exprt list_item_of_scalar_read(const exprt &read, const typet &item_type)
   return value.op0();
 }
 
+/// The tagged object whose type_id answers isinstance(@p obj, @p type_name):
+/// @p obj itself when it is a tagged scalar, the list item a scalar element
+/// read comes from when @p type_name is a scalar type, else nil.
+static exprt tagged_isinstance_operand(
+  const exprt &obj,
+  const std::string &type_name,
+  const type_handler &types)
+{
+  if (types.is_tagged_scalar_type(obj.type()))
+    return obj;
+  static const std::set<std::string> scalars = {"bool", "int", "float", "str"};
+  if (!scalars.count(type_name))
+    return nil_exprt();
+  return list_item_of_scalar_read(obj, types.get_tagged_object_type());
+}
+
 exprt function_call_expr::handle_isinstance() const
 {
   const auto &args = call_["args"];
@@ -491,17 +507,11 @@ exprt function_call_expr::handle_isinstance() const
     // A tagged-scalar operand's real type lives in the runtime `.type_id`
     // field rather than in a single static C type, so it needs its own
     // check instead of the static-type comparisons below.
-    if (type_handler_.is_tagged_scalar_type(obj_expr.type()))
+    const exprt tagged =
+      tagged_isinstance_operand(obj_expr, type_name, type_handler_);
+    if (tagged.is_not_nil())
       return converter_.dynamic_type_handler_.build_isinstance_check(
-        obj_expr, type_name, json_utils::is_class(type_name, converter_.ast()));
-
-    static const std::set<std::string> scalars = {
-      "bool", "int", "float", "str"};
-    const exprt item = list_item_of_scalar_read(
-      obj_expr, type_handler_.get_tagged_object_type());
-    if (item.is_not_nil() && scalars.count(type_name))
-      return converter_.dynamic_type_handler_.build_isinstance_check(
-        item, type_name, false);
+        tagged, type_name, json_utils::is_class(type_name, converter_.ast()));
 
     // Special case: Check if object is None (null pointer)
     if (type_name == "NoneType")
