@@ -1132,10 +1132,20 @@ std::string python_annotation<Json>::get_attribute_type(const Json &arg)
     is_rebound_in_scope(obj["id"].template get<std::string>()))
     return "";
 
-  const std::string attr = arg["attr"].template get<std::string>();
-  for (const std::string &cls : get_class_ancestors(get_argument_type(obj)))
+  return class_attribute_type(
+    get_argument_type(obj), arg["attr"].template get<std::string>());
+}
+
+/// The declared type of attribute `attr` on an instance of class `cls`, read
+/// from `cls` and its bases, or empty.
+template <class Json>
+std::string python_annotation<Json>::class_attribute_type(
+  const std::string &cls,
+  const std::string &attr)
+{
+  for (const std::string &ancestor : get_class_ancestors(cls))
   {
-    const Json class_node = json_utils::find_class(ast_["body"], cls);
+    const Json class_node = json_utils::find_class(ast_["body"], ancestor);
     if (class_node.empty())
       return "";
     const Json annotation = json_utils::find_attr_annotation(class_node, attr);
@@ -1143,6 +1153,29 @@ std::string python_annotation<Json>::get_attribute_type(const Json &arg)
       return json_utils::render_annotation_type(annotation);
   }
   return "";
+}
+
+/// The declared type of `self.attr` in a method of the class being annotated,
+/// or empty.
+template <class Json>
+std::string python_annotation<Json>::self_attribute_type(const Json &node)
+{
+  if (
+    node.value("_type", "") != "Attribute" ||
+    node["value"].value("_type", "") != "Name" ||
+    node["value"].value("id", "") != "self" || current_class_name_.empty() ||
+    is_rebound_in_scope("self"))
+    return "";
+  return class_attribute_type(
+    current_class_name_, node["attr"].template get<std::string>());
+}
+
+/// The type of a binary operand, with `self.attr` read from the class.
+template <class Json>
+std::string python_annotation<Json>::get_operand_type(const Json &node)
+{
+  const std::string type = get_argument_type(node);
+  return type.empty() ? self_attribute_type(node) : type;
 }
 
 // Recursively search a statement subtree for the first
@@ -1548,6 +1581,17 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
         if (it != builtin_functions().end())
           type = it->second;
       }
+      // The result is typed from the left operand, which an unknown float
+      // right operand or a negative exponent would truncate, and arithmetic
+      // on a bool yields an int.
+      const Json &value = stmt.contains("value") ? stmt["value"] : stmt;
+      const std::string rhs_type = get_operand_type(value["right"]);
+      const std::string attr_type =
+        type.empty() ? self_attribute_type(lhs) : std::string();
+      if (
+        !rhs_type.empty() && rhs_type != "Any" && attr_type != "bool" &&
+        value["op"].value("_type", "") != "Pow")
+        type = attr_type;
     }
   }
 
@@ -1600,7 +1644,7 @@ std::string python_annotation<Json>::promote_to_float_operand(
   if (op == "Div")
     return "float";
   return arithmetic.count(op) != 0 &&
-             get_argument_type(expr["right"]) == "float"
+             get_operand_type(expr["right"]) == "float"
            ? "float"
            : type;
 }
