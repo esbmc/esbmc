@@ -1952,13 +1952,15 @@ class CoreVisitorsMixin:
         """Spell `f(a, *xs)` out as `f(a, xs[0], ..., xs[k-1]) if len(xs) == k else e()`.
 
         Only for a call _scan_starred_calls marked, to a known function with a
-        fixed positional signature (no *args, no defaults among the starred
-        slots). CPython raises TypeError when len(xs) does not fill the k
-        remaining parameters; _starred_arity_error raises it before any
-        element is read. The frontend has no Starred expression, so without
-        this every such call was refused. Constant indices let the frontend
-        type each element on its own (#8472). Returns the guarding IfExp,
-        whose body is `node`, or None.
+        fixed positional signature (no *args). CPython raises TypeError when
+        len(xs) does not fill the k remaining parameters; _starred_arity_error
+        raises it before any element is read. When the last of those
+        parameters have defaults, each length from the required count up to k
+        gets its own arm, and binding fills the defaults of the shorter ones.
+        The frontend has no Starred expression, so without this every such
+        call was refused. Constant indices let the frontend type each element
+        on its own (#8472). Returns the guarding IfExp, whose body is `node`,
+        or None.
         """
         if not getattr(node, "esbmc_starred_sequence", False):
             return None
@@ -1970,31 +1972,43 @@ class CoreVisitorsMixin:
             return None
         fixed = len(node.args) - 1
         slots = expected_args[fixed:]
-        if not slots or any((function_name, arg) in self.functionDefaults for arg in slots):
+        if not slots:
             return None
-        length_ok = ast.Compare(left=ast.Call(func=ast.Name(id="len", ctx=ast.Load()),
-                                              args=[ast.Name(id=operand.id, ctx=ast.Load())],
-                                              keywords=[]),
-                                ops=[ast.Eq()],
-                                comparators=[ast.Constant(value=len(slots))])
-        arity_error = ast.Call(func=ast.Name(id="_starred_arity_error", ctx=ast.Load()),
-                               args=[],
-                               keywords=[])
+        required = sum((function_name, arg) not in self.functionDefaults for arg in slots)
+        # _unguard_starred_call inlines list(gen(*xs)) only behind a single guard.
+        if required < len(slots) and function_name in self.generator_funcs:
+            return None
+        # functionDefaults is keyed by bare name, so a second def or class of
+        # that name may have left defaults the global callee lacks.
+        if required < len(slots) and node.func.id in self._redefined_names:
+            return None
         node.args = node.args[:-1] + [
             ast.Subscript(value=ast.Name(id=operand.id, ctx=ast.Load()),
                           slice=ast.Constant(value=i),
                           ctx=ast.Load()) for i in range(len(slots))
         ]
-        ast.copy_location(length_ok, node)
         ast.fix_missing_locations(node)
-        # The raising arm reads as `(e(), f(...))[1]` so both arms carry
+        arity_error = ast.Call(func=ast.Name(id="_starred_arity_error", ctx=ast.Load()),
+                               args=[],
+                               keywords=[])
+        # The raising arm reads as `(e(), f(...))[1]` so every arm carries
         # f's result type; e() raises before f is reached.
         unreached = copy.deepcopy(node)
         unreached.esbmc_starred_sequence = False
-        raising = ast.Subscript(value=ast.Tuple(elts=[arity_error, unreached], ctx=ast.Load()),
-                                slice=ast.Constant(value=1),
-                                ctx=ast.Load())
-        guard = ast.IfExp(test=length_ok, body=node, orelse=raising)
+        guard = ast.Subscript(value=ast.Tuple(elts=[arity_error, unreached], ctx=ast.Load()),
+                              slice=ast.Constant(value=1),
+                              ctx=ast.Load())
+        for length in range(required, len(slots) + 1):
+            call = node
+            if length < len(slots):
+                call = copy.deepcopy(unreached)
+                call.args = call.args[:fixed + length]
+            length_ok = ast.Compare(left=ast.Call(func=ast.Name(id="len", ctx=ast.Load()),
+                                                  args=[ast.Name(id=operand.id, ctx=ast.Load())],
+                                                  keywords=[]),
+                                    ops=[ast.Eq()],
+                                    comparators=[ast.Constant(value=length)])
+            guard = ast.IfExp(test=length_ok, body=call, orelse=guard)
         ast.copy_location(guard, node)
         ast.fix_missing_locations(guard)
         return guard
@@ -2010,8 +2024,12 @@ class CoreVisitorsMixin:
         list or tuple display, and xs must not be rebound. A callee bound in the
         calling scope is not the global function whose signature the lowering
         reads."""
-        calls_to, loads = {}, {}
+        calls_to, loads, defined = {}, {}, set()
         for n in ast.walk(node):
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                if n.name in defined:
+                    self._redefined_names.add(n.name)
+                defined.add(n.name)
             if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
                 calls_to.setdefault(n.func.id, []).append(n)
             elif isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load):
