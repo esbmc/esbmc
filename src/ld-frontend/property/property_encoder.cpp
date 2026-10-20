@@ -71,7 +71,11 @@ property_encoder::var_expr(const std::string &name, const LdProperty &p) const
   
   if (!sym)
     throw std::runtime_error(undeclared_message(name, p));
-  
+
+  if (!sym->get_type().is_bool())
+    throw std::runtime_error(
+      "property '" + p.id + "': variable '" + name + "' is not BOOL");
+
   return symbol_exprt(ld_name(name), sym->get_type());
 }
 
