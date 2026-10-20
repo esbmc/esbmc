@@ -135,7 +135,8 @@ def _uses(nodes, name):
         if _is_call(n, "next", 1) and isinstance(n.args[0], ast.Name) and n.args[0].id == name
     ]
     reads = [
-        n for n in nodes if isinstance(n, ast.Name) and n.id == name and isinstance(n.ctx, ast.Load)
+        n for n in nodes
+        if isinstance(n, ast.Name) and n.id == name and isinstance(n.ctx, ast.Load)
     ]
     return nexts, reads
 
