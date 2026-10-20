@@ -1106,9 +1106,68 @@ exprt python_converter::handle_type_comparison(
   const nlohmann::json &left,
   const nlohmann::json &right)
 {
+  const exprt runtime = compare_class_values(op, lhs, rhs);
+  if (!runtime.is_nil())
+    return runtime;
   const exprt erased = handle_erased_type_comparison(op, left, right);
   return erased.is_nil() ? handle_type_identity_check(op, lhs, rhs, left, right)
                          : erased;
+}
+
+static bool may_hold_class(const exprt &expr);
+
+exprt python_converter::class_value(const std::string &name)
+{
+  const int id =
+    class_ids_.emplace(name, static_cast<int>(class_ids_.size()) + 1)
+      .first->second;
+  exprt value("struct", type_handler::class_value_type());
+  value.copy_to_operands(from_integer(id, int_type()));
+  return value;
+}
+
+exprt python_converter::as_class_value(const exprt &e)
+{
+  if (type_handler::is_class_value_type(e.type()))
+    return e;
+  if (is_class_object(e))
+    return class_value(e.get_string("value"));
+  if (e.id() != "if")
+    return nil_exprt();
+  const exprt then_value = as_class_value(e.op1());
+  const exprt else_value = as_class_value(e.op2());
+  if (then_value.is_nil() || else_value.is_nil())
+    return nil_exprt();
+  return if_exprt(e.op0(), then_value, else_value);
+}
+
+exprt python_converter::compare_class_values(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs)
+{
+  if (
+    (op != "Is" && op != "IsNot" && op != "Eq" && op != "NotEq") ||
+    (!type_handler::is_class_value_type(lhs.type()) &&
+     !type_handler::is_class_value_type(rhs.type())))
+    return nil_exprt();
+  const exprt l = as_class_value(lhs);
+  const exprt r = as_class_value(rhs);
+  if (l.is_nil() || r.is_nil())
+  {
+    // A value that cannot hold a class, an int or None say, is never one.
+    // A string shares a class object's char-array model, and an erased
+    // value may be either, so for those the answer is not known.
+    const exprt &other = l.is_nil() ? lhs : rhs;
+    if (!may_hold_class(other))
+      return gen_bool(op == "IsNot" || op == "NotEq");
+    throw std::runtime_error(
+      "Unsupported: comparing a class value with a value that may be one");
+  }
+  const typet id = int_type();
+  exprt same("=", bool_type());
+  same.copy_to_operands(member_exprt(l, "id", id), member_exprt(r, "id", id));
+  return op == "Is" || op == "Eq" ? same : not_exprt(same);
 }
 
 static bool is_type_call(const nlohmann::json &node)
