@@ -612,6 +612,22 @@ python_annotation<Json>::resolve_object_class_name(const std::string &obj)
   return "";
 }
 
+/// The type of element @p index of a value typed @p type: the matching
+/// parameter of `tuple[...]`, the element of `list[T]`, else "Any".
+inline std::string
+unpacked_name_element_type(const std::string &type, size_t index)
+{
+  if (type.empty() || type.back() != ']')
+    return "Any";
+  if (type.rfind("list[", 0) == 0)
+    return type.substr(5, type.size() - 6);
+  if (type.rfind("tuple[", 0) != 0)
+    return "Any";
+  const auto elems =
+    json_utils::split_top_level_params(type.substr(6, type.size() - 7));
+  return index < elems.size() ? elems[index] : "Any";
+}
+
 template <class Json>
 std::string python_annotation<Json>::infer_unpacked_element_type(
   const Json &rhs,
@@ -628,6 +644,20 @@ std::string python_annotation<Json>::infer_unpacked_element_type(
   {
     std::string t = get_argument_type(rhs["elts"][index]);
     return t.empty() ? "Any" : t;
+  }
+
+  // A target typed "Any" makes `return x + 1` a float, which loses precision
+  // past 2**53 (GitHub #8358).
+  if (kind == "Name")
+  {
+    // get_argument_type flattens a parameter's `tuple[int, int]` to "tuple".
+    const Json decl =
+      find_var_node_for_inference(rhs["id"].template get<std::string>());
+    const std::string type =
+      has_annotation(decl)
+        ? json_utils::render_annotation_type(decl["annotation"])
+        : get_argument_type(rhs);
+    return unpacked_name_element_type(type, index);
   }
 
   if (
@@ -715,10 +745,37 @@ std::string python_annotation<Json>::list_copy_type(
     (func_name != "list" && func_name != "tuple") || !call.contains("args") ||
     call["args"].size() != 1)
     return "";
-  const std::string source = get_argument_type(call["args"][0]);
+  const Json &iterable = call["args"][0];
+  const std::string source = get_argument_type(iterable);
   if (source == "range")
     return "list[int]";
-  return source.rfind("list[", 0) == 0 ? source : "";
+  if (source.rfind("list[", 0) == 0)
+    return source;
+  return dict_view_list_type(iterable);
+}
+
+/// `list[K]` or `list[V]` for `d.keys()` or `d.values()` on a `dict[K, V]`,
+/// or empty (GitHub #8358).
+template <class Json>
+std::string python_annotation<Json>::dict_view_list_type(const Json &call)
+{
+  if (
+    call.value("_type", "") != "Call" || !call["args"].empty() ||
+    call["func"].value("_type", "") != "Attribute")
+    return "";
+  const std::string dict_type = get_argument_type(call["func"]["value"]);
+  if (dict_type.rfind("dict[", 0) != 0 || dict_type.back() != ']')
+    return "";
+  const auto kv = json_utils::split_top_level_params(
+    dict_type.substr(5, dict_type.size() - 6));
+  if (kv.size() != 2)
+    return "";
+  const std::string method = call["func"].value("attr", "");
+  if (method == "keys")
+    return "list[" + kv[0] + "]";
+  if (method == "values")
+    return "list[" + kv[1] + "]";
+  return "";
 }
 
 // Infer generic dict type from literal: {key: value, ...}

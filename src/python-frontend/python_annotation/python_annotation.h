@@ -189,6 +189,7 @@ private:
   // or empty for any other call.
   std::string arg_dependent_call_type(const Json &call);
   std::string list_copy_type(const std::string &func_name, const Json &call);
+  std::string dict_view_list_type(const Json &call);
   std::string get_type_from_binary_expr(const Json &stmt, const Json &body);
   bool is_array_operand(const Json &operand, const Json &body);
   std::string get_type_from_rhs_variable(const Json &element, const Json &body);
