@@ -941,7 +941,12 @@ typet python_converter::stored_function_return_type(const nlohmann::json &value)
     return typet();
   const exprt fn = get_expr(value);
   const typet &t = fn.type().is_pointer() ? fn.type().subtype() : fn.type();
-  return t.is_code() ? to_code_type(t).return_type() : typet();
+  if (!t.is_code())
+    return typet();
+  const typet &ret = to_code_type(t).return_type();
+  return ret.is_nil() && fn.is_symbol()
+           ? forward_function_return_type(value["id"], fn)
+           : ret;
 }
 
 /// The return type shared by every function `call` may return, e.g. `pick()`
