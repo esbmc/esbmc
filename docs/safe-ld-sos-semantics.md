@@ -33,8 +33,9 @@ store that agrees with σ everywhere except at v, where it takes the value x.
 
 Two derived stores are carried alongside σ, written together as π = (π_e, π_f):
 
-- **π_e** — the *edge store*, mapping each operand sensed by a
-  transition-sensing contact to its value at the previous scan boundary;
+- **π_e** — the *edge store*, mapping each edge-contact *instance* (an edge
+  contact paired with a coil that consumes it, §3.2) to the value its operand
+  had at that instance's evaluation in the previous scan;
 - **π_f** — the *function-block store*, mapping each timer or counter
   *instance* i to the value its enable pin (IN, CU or CD) had at the
   instance's own step in the previous scan. It is read and written only by
@@ -150,10 +151,9 @@ One scan cycle is:
 
 ```
                          σ₁ = read_inputs(σ)
-      ⟨R₁, σ₁, π⟩ → ⟨σ₂, π_f²⟩    …    ⟨R_n, σ_n, (π_e, π_f^n)⟩ → ⟨σ_{n+1}, π_f^{n+1}⟩
-                         π_e' = latch(σ_{n+1})
+      ⟨R₁, σ₁, π⟩ → ⟨σ₂, π²⟩    …    ⟨R_n, σ_n, π^n⟩ → ⟨σ_{n+1}, π^{n+1}⟩
       ───────────────────────────────────────────────────────────────────  [SCAN]
-                    ⟨P, σ, π⟩ ⟹ ⟨σ_{n+1}, (π_e', π_f^{n+1})⟩
+                    ⟨P, σ, π⟩ ⟹ ⟨σ_{n+1}, π^{n+1}⟩
 ```
 
 where
@@ -165,9 +165,6 @@ where
   Every variable the program does not own and that another task may write
   (an externally written variable) is read the same way, unless
   `--ld-closed-world` assumes nothing else writes it.
-- `latch(σ)` binds each edge-sensed operand v to ⌊σ(v)⌋, once, at the end of the
-  scan after the last rung, so that all contacts sensing v within one scan
-  compare against the same previous-scan sample regardless of rung order.
 
 The scan relation is deterministic in σ given the input choice: for
 each scan there is at most one σ_{n+1}, and exactly one unless an integer
@@ -191,15 +188,18 @@ A rung is a sequence of elements e₁ … e_m evaluated left to right, starting
 from the left power rail, which always supplies power:
 
 ```
-   p_k = ⋀ { cond(e_i)(σ_k, π_e) : i < k, e_i a contact }      (the empty conjunction is tt)
+   p_k = ⋀ { cond(e_i)(σ_k, π_e^k(i, k)) : i < k, e_i a contact }      (the empty conjunction is tt)
+   π_e^{k+1} = π_e^k[(i, k) ↦ ⌊σ_k(v_i)⌋ : i < k, e_i an edge contact on v_i]    (π_e^k if e_k is not a coil)
    ⟨e_k, σ_k, π_f^k⟩ → ⟨σ_{k+1}, π_f^{k+1}⟩    for each element e_k, a coil consuming p_k
    ─────────────────────────────────────────────────────────────────────────  [RUNG]
-                  ⟨e₁ … e_m, σ₁, π_f^1⟩ → ⟨σ_{m+1}, π_f^{m+1}⟩
+         ⟨e₁ … e_m, σ₁, (π_e^1, π_f^1)⟩ → ⟨σ_{m+1}, (π_e^{m+1}, π_f^{m+1})⟩
 ```
 
 Here cond(e)(σ, π_e) is the contact's value of §4.1 and §4.2 (static, or edge on the operand,
 then the contact's polarity); contacts leave σ and π_f unchanged, and function blocks leave p alone and
-take their pins from σ. The power a coil consumes is the conjunction of the rung's earlier contacts
+take their pins from σ. An edge contact is evaluated once for each coil that consumes it; each
+such instance (i, k) reads its own entry of π_e and then stores its operand's current value there, as
+the `R_TRIG`/`F_TRIG` Beremiz emits per contact and consuming coil does. The power a coil consumes is the conjunction of the rung's earlier contacts
 **evaluated in the store σ_k current when that coil runs**, not the value that the contacts read at their own
 position: a coil that follows a reset of a variable a contact read sees the reset. In
 `go -(S)- a`, `a -(R)- a -( )- b`, the last coil assigns b the conjunction
@@ -249,30 +249,24 @@ every scan on which `--[P]--` does not.
      ⟨--[P]-- v, …⟩ ⇓ p                        ⟨--[N]-- v, …⟩ ⇓ p
 ```
 
-and ⇓ ff otherwise; here π(v) is π_e(v). A contact with normally closed polarity
+and ⇓ ff otherwise; here π(v) is the entry π_e(i, k) of the instance being evaluated
+(§3.2). A contact with normally closed polarity
 conducts when its edge test fails:
 
 ```
-   ⟨--[/P]-- v, …⟩ ⇓ p  iff  ¬(val(v) = tt ∧ π_e(v) = ff)        ⟨--[/N]-- v, …⟩ ⇓ p  iff  ¬(val(v) = ff ∧ π_e(v) = tt)
+   ⟨--[/P]-- v, …⟩ ⇓ p  iff  ¬(val(v) = tt ∧ π(v) = ff)        ⟨--[/N]-- v, …⟩ ⇓ p  iff  ¬(val(v) = ff ∧ π(v) = tt)
 ```
 
-Because π_e is updated only by `latch` at the end of the scan, an edge contact
-conducts for exactly one scan per transition, and two contacts sensing the same
-operand agree unless a coil writes the operand between them. Beremiz instead gives each edge
-contact consumer its own `R_TRIG`/`F_TRIG` instance, fed the operand at that
-consumer; a second sink after a reset of the operand therefore re-evaluates the
-edge, as this semantics does
-(translation validation: UNSAT). The two differ only in the previous value, which
-Beremiz keeps per instance at its own evaluation and this semantics keeps from the
-end of the scan.
+Each instance compares its operand with the value it read at its own previous
+evaluation, which is how the standard senses a transition, "from one evaluation
+of this element to the next" (§8.2.4, Table 75 rows 3 and 4; the R_TRIG body,
+§6.6.3.5.3), and how Beremiz's per-consumer `R_TRIG`/`F_TRIG` does
+(esbmc/esbmc#8211). A coil that writes the sensed variable later in the scan
+is therefore seen by the next evaluation, not hidden by an end-of-scan sample.
 Applying the contact's own negation after the edge test (so `--[/P]--` is the
 Boolean negation of `--[P]--`, not an edge test on `¬v`) is an extension:
 IEC 61131-3 Ed. 3 §8.2.4, Table 75 defines only positive and negative
-transition-sensing contacts (rows 3 and 4). The standard also senses a
-transition from one evaluation of the element itself to the next (as its
-R_TRIG body does, §6.6.3.5.3), where this semantics latches at the end of the
-scan; the two differ if a later coil writes the sensed variable in the same
-scan (departure 1, §10).
+transition-sensing contacts (rows 3 and 4).
 
 ### 4.3 Coils
 
@@ -518,7 +512,7 @@ value on entry to the network. IEC 61131-3 Ed. 3 §8.1.5.2
 once the element that outputs it has run, its new value is used until the
 element runs again, which agrees with reading the live store. A departure from
 the normative text is recorded, not corrected, since the semantics' purpose is
-to match what ESBMC-PLC verifies against (departures 2 and 3, §10).
+to match what ESBMC-PLC verifies against (departures 1 and 2, §10).
 
 ### 6.4 Graphical well-formedness
 
@@ -664,16 +658,15 @@ over-approximated, not how many real writers were missed.
 The translation `ld_converter` performs is a rule-by-rule refinement of the
 above. With R ⊆ Σ × S the relation of §3.7 — (σ, s) ∈ R iff σ(v) = s(`ld::v`)
 for every LD variable v, extended to π through the shadow symbols
-`ld::__edge_prev_v`, `ld::__timer_prev_<instance>` and
+`ld::__edge_prev_<n>_v`, `ld::__timer_prev_<instance>` and
 `ld::__ctr_prev_<instance>`, each rule maps to:
 
 | Rule | GOTO IR |
 |---|---|
 | [SCAN] | `code_whilet(true, scan_body)` in `ld::scan_loop` |
 | read_inputs | `code_assignt(v, side_effect_expr_nondett)` per input, at scan top |
-| latch | `code_assignt(prev_v, ⌊v⌋)` per sensed operand, at scan bottom |
 | [NO-*] / [NC-*] | `and_exprt(pf, v)` / `and_exprt(pf, not_exprt(v))` |
-| [P-EDGE] / [N-EDGE] | `and_exprt(v, not_exprt(prev_v))` / `and_exprt(not_exprt(v), prev_v)` |
+| [P-EDGE] / [N-EDGE] | before each consuming coil, `code_assignt(q, and_exprt(v, not_exprt(prev)))` / `code_assignt(q, and_exprt(not_exprt(v), prev))`, then `code_assignt(prev, ⌊v⌋)`; the contact reads `q` (`ld::__edge_q_<n>_v`) |
 | [COIL] | `code_assignt(v, pf)` |
 | [SET] / [RESET] | `code_ifthenelset(pf, code_assignt(v, true/false))` |
 | [TON] / [TOF] / [TP] | the `code_ifthenelset` chains of `translate_timer` |
@@ -796,18 +789,14 @@ unrecognised pin name on a recognised block type is ignored. (7) ET is held at P
 
 **Departures from the normative text, kept because the semantics matches the reference toolchain.**
 
-1. An edge contact compares against the end-of-scan latch (`π_e`); the standard compares against the value at the
-   element's previous evaluation (§8.2.4, Table 75 rows 3 and 4), and Beremiz keeps that value in an `R_TRIG`
-   instance per consumer. The two differ only when a later coil writes the sensed variable in the same scan
-   (esbmc/esbmc#8211; MATIEC `hit` = 0, 1, 0, 0 against ESBMC never).
-2. A coil takes the rung's contacts evaluated in the store at the coil (§3.2). Read literally, §8.2.5 passes the left
+1. A coil takes the rung's contacts evaluated in the store at the coil (§3.2). Read literally, §8.2.5 passes the left
    link's evaluated state to the right link, so a coil after a reset of the variable a contact read would still see ON.
    Beremiz and MATIEC re-evaluate at the coil, as ESBMC does (translation validation UNSAT, also for edge contacts).
-3. REAL and LREAL are both modeled as a double; the standard gives REAL 32 bits (Table 10, footnote e) and MATIEC's
+2. REAL and LREAL are both modeled as a double; the standard gives REAL 32 bits (Table 10, footnote e) and MATIEC's
    `IEC_REAL` is a float (esbmc/esbmc#8212).
-4. An arithmetic result outside the range of its type is an error in the standard (§6.6.2.5.8, §7.3.2); MATIEC's C
+3. An arithmetic result outside the range of its type is an error in the standard (§6.6.2.5.8, §7.3.2); MATIEC's C
    wraps. The semantics reports it as a checked property (`--overflow-check`), which matches the standard.
-5. The EN input and ENO output of a user function block are ignored (esbmc/esbmc#8210), and user function blocks run
+4. The EN input and ENO output of a user function block are ignored (esbmc/esbmc#8210), and user function blocks run
    after all rungs where Beremiz calls them at their position (not probed).
 
 **Hypotheses and who enforces them.** The theorem's hypotheses H1 to H10 (the translation theorem, §4) are enforced

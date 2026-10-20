@@ -24,7 +24,7 @@ enum class ContactKind
 
 // IEC 61131-3 §2.5.1.1 transition-sensing contacts. An edge contact conducts
 // for exactly one scan: the scan in which the operand takes the sensed
-// transition, measured against its value at the previous scan.
+// transition, measured against its value at the contact's previous evaluation.
 enum class ContactEdge
 {
   None,

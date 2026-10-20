@@ -79,8 +79,10 @@ list_elem_info python_list::get_list_element_info(
   const exprt &raw_elem)
 {
   // A function is stored by its address; storing the code symbol itself
-  // aborts with "got invalid code for function" (#6640, #8371).
-  const exprt elem = decay_function_to_pointer(raw_elem);
+  // aborts with "got invalid code for function" (#6640, #8371). A call comes
+  // back as a call statement, which the temp cannot hold (#4699, #8891).
+  const exprt elem =
+    decay_function_to_pointer(to_value_expr(raw_elem, converter_.name_space()));
   const type_handler type_handler_ = converter_.get_type_handler();
   reject_tagged_element(type_handler_, elem);
   locationt location = converter_.get_location_from_decl(op);

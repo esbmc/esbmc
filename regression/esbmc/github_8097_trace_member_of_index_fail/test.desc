@@ -1,0 +1,6 @@
+CORE
+main.c
+
+^  s->c\[.*\]\.x = .*\.x=2 
+^  c holds 1 and 2$
+^VERIFICATION FAILED$
