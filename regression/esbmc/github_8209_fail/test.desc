@@ -1,0 +1,5 @@
+CORE
+main.c
+--interval-analysis --interval-analysis-wrapped --interval-analysis-arithmetic
+FAILED +\[main\.assertion\.1\] +line +18 +assertion x != 2
+^VERIFICATION FAILED$

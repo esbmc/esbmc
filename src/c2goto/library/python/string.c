@@ -12,6 +12,20 @@ __ESBMC_HIDE:;
   return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
 }
 
+// A deterministic str hash: equal strings hash equal, as hash() requires.
+// FNV-1a, shifted so the result is never negative, and so never -1.
+long __python_str_hash(const char *s)
+{
+__ESBMC_HIDE:;
+  unsigned long h = 14695981039346656037UL;
+  while (*s)
+  {
+    h ^= (unsigned char)*s++;
+    h *= 1099511628211UL;
+  }
+  return (long)(h >> 3);
+}
+
 size_t __python_strnlen_bounded(const char *s, size_t max_len)
 {
 __ESBMC_HIDE:;
@@ -1098,6 +1112,7 @@ __ESBMC_HIDE:;
   }
 
   list->type = NULL;
+  list->is_tuple = false;
   list->items = items;
   list->size = count;
   return list;
@@ -1121,92 +1136,64 @@ __ESBMC_HIDE:;
   return -1;
 }
 
-long long __python_int(const char *s, int base)
+static _Bool __python_is_space(char c)
 {
 __ESBMC_HIDE:;
-  if (!s)
-    return 0;
+  return c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' ||
+         c == '\r';
+}
 
-  if (base != 0 && (base < 2 || base > 36))
-  {
-    __ESBMC_assert(0, "int() base must be >= 2 and <= 36, or 0");
-    return 0;
-  }
-
-  while (*s == ' ' || *s == '\t' || *s == '\n' || *s == '\v' || *s == '\f' ||
-         *s == '\r')
+static const char *__python_skip_space(const char *s)
+{
+__ESBMC_HIDE:;
+  while (__python_is_space(*s))
     s++;
+  return s;
+}
 
-  if (!*s)
-  {
-    __ESBMC_assert(0, "invalid literal for int() with empty string");
+/// Whether @p s starts with `0` and the prefix letter @p lower in either case.
+static _Bool __python_has_prefix(const char *s, char lower)
+{
+__ESBMC_HIDE:;
+  return s[0] == '0' && (s[1] == lower || s[1] == lower - 'a' + 'A');
+}
+
+/// Whether @p s starts with the prefix of @p prefix_base, which then becomes
+/// @p *base if it was still 0.
+static _Bool __python_takes_prefix(const char *s, int *base, int prefix_base)
+{
+__ESBMC_HIDE:;
+  const char lower = prefix_base == 16 ? 'x' : prefix_base == 2 ? 'b' : 'o';
+  if ((*base != 0 && *base != prefix_base) || !__python_has_prefix(s, lower))
     return 0;
-  }
+  *base = prefix_base;
+  return 1;
+}
 
-  int sign = 1;
-  if (*s == '-')
-  {
-    sign = -1;
-    s++;
-  }
-  else if (*s == '+')
-  {
-    s++;
-  }
+/// Resolves base 0 from the literal's prefix and skips a prefix that matches
+/// @p *base; returns the first character after it.
+static const char *__python_base_prefix(const char *s, int *base)
+{
+__ESBMC_HIDE:;
+  if (
+    __python_takes_prefix(s, base, 16) || __python_takes_prefix(s, base, 2) ||
+    __python_takes_prefix(s, base, 8))
+    return s + 2;
+  if (*base == 0)
+    *base = 10;
+  return s;
+}
 
-  const char *number_begin = s;
-
-  if (base == 0)
-  {
-    if (*s == '0')
-    {
-      if (*(s + 1) == 'x' || *(s + 1) == 'X')
-      {
-        base = 16;
-        s += 2;
-      }
-      else if (*(s + 1) == 'b' || *(s + 1) == 'B')
-      {
-        base = 2;
-        s += 2;
-      }
-      else if (*(s + 1) == 'o' || *(s + 1) == 'O')
-      {
-        base = 8;
-        s += 2;
-      }
-      else
-      {
-        base = 10;
-      }
-    }
-    else
-    {
-      base = 10;
-    }
-  }
-  else if (base == 16 && *s == '0' && (*(s + 1) == 'x' || *(s + 1) == 'X'))
-  {
-    s += 2;
-  }
-  else if (base == 2 && *s == '0' && (*(s + 1) == 'b' || *(s + 1) == 'B'))
-  {
-    s += 2;
-  }
-  else if (base == 8 && *s == '0' && (*(s + 1) == 'o' || *(s + 1) == 'O'))
-  {
-    s += 2;
-  }
-
-  if (!*s)
-  {
-    __ESBMC_assert(0, "invalid literal for int() - no digits");
-    return 0;
-  }
-
-  const _Bool prefix_consumed = (s != number_begin);
-
-  long long result = 0;
+/// Folds the digits at @p *sp into @p *result, advancing @p *sp past them and
+/// any trailing whitespace; returns the parse status (see __python_int).
+static int __python_parse_digits(
+  const char **sp,
+  int base,
+  _Bool prefix_consumed,
+  long long *result)
+{
+__ESBMC_HIDE:;
+  const char *s = *sp;
   _Bool found_digit = 0;
 
   while (*s)
@@ -1220,69 +1207,90 @@ __ESBMC_HIDE:;
     {
       const int next = __python_digit_value((unsigned char)*(s + 1));
       if ((!found_digit && !prefix_consumed) || next < 0 || next >= base)
-      {
-        __ESBMC_assert(0, "invalid literal for int() - invalid character");
-        return 0;
-      }
+        return 1;
       s++;
       continue;
     }
 
     int digit_value = __python_digit_value(c);
 
+    /* Whitespace may only follow the digits; the caller rejects anything
+     * after it. */
+    if (digit_value < 0 && __python_is_space(c))
+      break;
     if (digit_value < 0)
-    {
-      if (
-        c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' ||
-        c == '\r')
-      {
-        s++;
-        continue;
-      }
-      __ESBMC_assert(0, "invalid literal for int() - invalid character");
-      return 0;
-    }
-
+      return 1;
     if (digit_value >= base)
     {
       if (found_digit)
-      {
         break;
-      }
-      __ESBMC_assert(
-        0, "invalid literal for int() - digit out of range for base");
-      return 0;
+      return 1;
     }
 
     found_digit = 1;
-
-    if (result > (LLONG_MAX / base))
-    {
-      __ESBMC_assert(0, "int() conversion overflow");
-      return 0;
-    }
-
-    result = result * base + digit_value;
+    if (*result > (LLONG_MAX / base))
+      return 2;
+    *result = *result * base + digit_value;
     s++;
   }
 
-  while (*s == ' ' || *s == '\t' || *s == '\n' || *s == '\v' || *s == '\f' ||
-         *s == '\r')
+  *sp = __python_skip_space(s);
+  return found_digit ? 0 : 1;
+}
+
+static long long __python_int_parse(const char *s, int base, int *status)
+{
+__ESBMC_HIDE:;
+  *status = 0;
+  if (!s)
+    return 0;
+
+  if (base != 0 && (base < 2 || base > 36))
+  {
+    *status = 1;
+    return 0;
+  }
+
+  s = __python_skip_space(s);
+
+  int sign = 1;
+  if (*s == '-' || *s == '+')
+  {
+    sign = *s == '-' ? -1 : 1;
     s++;
-
-  if (*s != '\0')
-  {
-    __ESBMC_assert(0, "invalid literal for int() - trailing characters");
-    return 0;
   }
 
-  if (!found_digit)
-  {
-    __ESBMC_assert(0, "invalid literal for int() - no valid digits");
-    return 0;
-  }
+  const char *number_begin = s;
+  s = __python_base_prefix(s, &base);
 
-  return sign * result;
+  long long result = 0;
+  *status =
+    *s ? __python_parse_digits(&s, base, s != number_begin, &result) : 1;
+  if (*status == 0 && *s != '\0')
+    *status = 1;
+  return *status == 0 ? sign * result : 0;
+}
+
+/* Parse status: 0 ok, 1 an invalid literal (ValueError in Python), 2 a value
+ * the model's long long cannot hold. */
+long long __python_int(const char *s, int base)
+{
+__ESBMC_HIDE:;
+  int status;
+  long long result = __python_int_parse(s, base, &status);
+  __ESBMC_assert(status != 2, "int() conversion overflow");
+  __ESBMC_assert(status != 1, "invalid literal for int()");
+  return result;
+}
+
+/* Whether int(s, base) accepts s, so the caller can raise ValueError (#8705).
+ */
+_Bool __python_str_is_int(const char *s, int base)
+{
+__ESBMC_HIDE:;
+  int status;
+  __python_int_parse(s, base, &status);
+  return status != 1;
 }
 
 /// Scan a run of decimal digits starting at s[*i], folding them into *value and
@@ -1595,14 +1603,19 @@ __ESBMC_HIDE:;
 }
 
 // Python str.join - concatenates the elements of `list` separated by `sep`.
-// Empty / NULL list returns "". NULL sep is treated as "". An element whose
-// `value` is NULL is silently skipped; CPython raises TypeError there, but the
-// rest of the str.* OM family takes the same lenient stance and well-typed
-// `List[str]` programs never hit this path. Mirrors the 511-byte fixed-buffer
-// pattern used by __python_str_concat: overflow is detected by checking that
-// the input was fully drained when an inner loop exits, not by inspecting the
-// final pos.
-char *__python_str_join(const char *sep, struct __ESBMC_PyListObj *list)
+// Empty / NULL list returns "". NULL sep is treated as "". An int, float or
+// bool element is a TypeError, as in CPython. An element whose `value` is NULL
+// is silently skipped; CPython raises TypeError there too, but the rest of the
+// str.* OM family takes the same lenient stance. Mirrors the 511-byte
+// fixed-buffer pattern used by __python_str_concat: overflow is detected by
+// checking that the input was fully drained when an inner loop exits, not by
+// inspecting the final pos.
+char *__python_str_join(
+  const char *sep,
+  struct __ESBMC_PyListObj *list,
+  size_t int_type_id,
+  size_t float_type_id,
+  size_t bool_type_id)
 {
 __ESBMC_HIDE:;
   char *buffer = __ESBMC_alloca(512);
@@ -1629,6 +1642,12 @@ __ESBMC_HIDE:;
       }
       __ESBMC_assert(sep[j] == '\0', "join: result exceeds 511 characters");
     }
+
+    size_t type_id = list->items[i].type_id;
+    __ESBMC_assert(
+      type_id != int_type_id && type_id != float_type_id &&
+        type_id != bool_type_id,
+      "TypeError: sequence item: expected str instance");
 
     const char *s = (const char *)list->items[i].value;
     if (s)
@@ -2012,5 +2031,84 @@ unrendered:
   // the 24 characters of "-1.7976931348623157e+308".
   __ESBMC_assume(buffer[0] != '\0' && buffer[1] != '\0' && buffer[2] != '\0');
   buffer[24] = '\0';
+  return buffer;
+}
+
+// format(v, '.<prec>f') for 0 <= prec <= 15, exact where it is rendered at all.
+char *__python_float_to_fixed_str(double v, long long prec)
+{
+__ESBMC_HIDE:;
+  // "-", 309 integral digits, "." and 15 fractional digits.
+  char *buffer = __ESBMC_alloca(328);
+
+  if (v != v)
+  {
+    buffer[0] = 'n';
+    buffer[1] = 'a';
+    buffer[2] = 'n';
+    buffer[3] = '\0';
+    return buffer;
+  }
+
+  size_t pos = 0;
+  if (__builtin_signbit(v))
+  {
+    buffer[pos++] = '-';
+    v = -v;
+  }
+
+  if (v > 1.7976931348623157e+308)
+  {
+    buffer[pos++] = 'i';
+    buffer[pos++] = 'n';
+    buffer[pos++] = 'f';
+    buffer[pos] = '\0';
+    return buffer;
+  }
+
+  unsigned long long scale = 1;
+  for (long long i = 0; i < prec; ++i)
+    scale *= 10;
+
+  // CPython rounds the exact v * 10**prec half to even. That product is t + e:
+  // fma gives the rounding error e of t exactly, and below 2**52 the fraction
+  // of t and its distance r from one half are exact too.
+  const double t = v * (double)scale;
+  if (!(t < 4503599627370496.0))
+    goto unrendered;
+  const double e = __builtin_fma(v, (double)scale, -t);
+  unsigned long long d = (unsigned long long)t;
+  const double r = (t - (double)d) - 0.5;
+  if (r > -e || (r == -e && (d & 1U)))
+    ++d;
+
+  unsigned long long ip = d / scale;
+  unsigned long long frac = d % scale;
+
+  char digits[20];
+  size_t n = 0;
+  do
+  {
+    digits[n++] = (char)('0' + ip % 10);
+    ip /= 10;
+  } while (ip > 0);
+  while (n > 0)
+    buffer[pos++] = digits[--n];
+
+  if (prec > 0)
+  {
+    buffer[pos++] = '.';
+    for (unsigned long long s = scale / 10; s > 0; s /= 10)
+    {
+      buffer[pos++] = (char)('0' + frac / s);
+      frac %= s;
+    }
+  }
+  buffer[pos] = '\0';
+  return buffer;
+
+unrendered:
+  __ESBMC_assume(buffer[0] != '\0');
+  buffer[327] = '\0';
   return buffer;
 }

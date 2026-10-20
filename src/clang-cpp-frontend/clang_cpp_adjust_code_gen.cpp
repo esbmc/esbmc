@@ -18,6 +18,26 @@ static irep_idt ctor_class_id(const code_typet &ctor_type)
   return ctor_type.arguments().front().type().subtype().identifier();
 }
 
+/// The block holding a ctor's initializers: its body, or the try block a ctor
+/// that destroys its built subobjects on unwind puts them in.
+static code_blockt &initializer_block(code_blockt &body)
+{
+  exprt::operandst &ops = body.operands();
+  if (ops.size() == 2 && ops[1].get_bool("#subobject_unwind"))
+    return to_code_block(to_code(ops[1].op0()));
+  return body;
+}
+
+/// A leading base-subobject construction: a base ctor call (tagged
+/// `#is_base_ctor_call`), one wrapped in `if(__is_complete){...}`
+/// (esbmc/esbmc#938), or the progress marker before one.
+static bool is_base_construction(const exprt &op)
+{
+  return (op.has_operands() && op.op0().get_bool("#is_base_ctor_call")) ||
+         op.get_bool("#base_ctor_call_guard") ||
+         op.get_bool("#construction_progress");
+}
+
 void gen_vptr_initializations(contextt &context, symbolt &symbol)
 {
   /*
@@ -73,7 +93,7 @@ void gen_vptr_initializations(contextt &context, symbolt &symbol)
 
   // Read-modify-set the value to mutate the body and clear need_vptr_init.
   exprt value = symbol.get_value();
-  code_blockt &ctor_body = to_code_block(to_code(value));
+  code_blockt &ctor_body = initializer_block(to_code_block(to_code(value)));
 
   // Find where to insert the vptr assignments.  A destructor sets the vptr at
   // the very start of its body.  A constructor sets it after the leading
@@ -83,11 +103,7 @@ void gen_vptr_initializations(contextt &context, symbolt &symbol)
   exprt::operandst &body_ops = ctor_body.operands();
   std::size_t insert_at = 0;
   while (!is_dtor && insert_at < body_ops.size() &&
-         ((body_ops[insert_at].has_operands() &&
-           body_ops[insert_at].op0().get_bool("#is_base_ctor_call")) ||
-          // A virtual-base ctor call wrapped in `if(__is_complete){...}`
-          // (esbmc/esbmc#938) is still a leading base-subobject construction.
-          body_ops[insert_at].get_bool("#base_ctor_call_guard")))
+         is_base_construction(body_ops[insert_at]))
     ++insert_at;
 
   // Build the `*this` lvalue that every vptr assignment is rooted at.

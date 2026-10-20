@@ -115,6 +115,8 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
     return;
   }
 
+  flush_deferred_assumptions();
+
   // Perform incremental SMT-based verification if enabled
   if (
     options.get_bool_option("smt-symex-assert") &&
@@ -269,6 +271,39 @@ void goto_symext::assume(const expr2tc &the_assumption)
     cur_state->guard.make_false();
 }
 
+void goto_symext::defer_assumption(const expr2tc &the_assumption)
+{
+  expr2tc assumption = the_assumption;
+  cur_state->rename(assumption);
+  do_simplify(assumption);
+
+  if (is_true(assumption))
+    return;
+
+  // A path that certainly ends is cheap to cut now.
+  if (is_false(assumption))
+  {
+    assume(the_assumption);
+    return;
+  }
+
+  cur_state->guard.guard_expr(assumption);
+  deferred_assumptions.push_back(
+    {cur_state->guard.as_expr(), assumption, cur_state->source, first_loop});
+}
+
+void goto_symext::flush_deferred_assumptions()
+{
+  // The forward condition asks only whether the bound is exhausted; a path
+  // on which a Python assert fails within the bound is the base case's,
+  // which checks that assert (goto conversion keeps ends_path only then).
+  if (claim_skips_deferred || forward_condition)
+    return;
+  for (const deferred_assumptiont &a : deferred_assumptions)
+    target->assumption(a.guard, a.cond, a.source, a.loop_number);
+  deferred_assumptions.clear();
+}
+
 goto_symext::symex_resultt goto_symext::get_symex_result()
 {
   return goto_symext::symex_resultt(
@@ -293,6 +328,17 @@ void goto_symext::key_intrinsic_pointer_reads(
   for (const expr2tc &operand : call.operands)
     if (is_pointer_type(operand))
       analyze_args(dereference2tc(get_uint_type(8), operand));
+}
+
+/* Symex models intrinsics, builtins and input functions itself and returns
+ * before process_instruction, so their writes are fed here (#8083). */
+static void havoc_modelled_writes(
+  std::optional<interval_domaint> &domain,
+  bool reachable,
+  const code_function_call2t &call)
+{
+  if (domain && reachable)
+    domain->havoc_written_arguments(call);
 }
 
 void goto_symext::symex_step(reachability_treet &art)
@@ -408,6 +454,9 @@ void goto_symext::symex_step(reachability_treet &art)
       if (!is_nil_expr(operand))
         dereference(operand, dereferencet::READ);
 
+    havoc_modelled_writes(
+      interval_domain_state, !cur_state->guard.is_false(), call);
+
     // Always run intrinsics, whether guard is false or not. This is due to the
     // unfortunate circumstance where a thread starts with false guard due to
     // decision taken in another thread in this trace. In that case the
@@ -510,12 +559,20 @@ void goto_symext::symex_assume()
     return;
 
   expr2tc cond = cur_state->source.pc->guard;
+  const bool ends_path = cur_state->source.pc->location.get_bool("ends_path");
 
   replace_nondet(cond);
-  dereference(cond, dereferencet::READ);
+  // The assert before an ends_path assume already checked these dereferences.
+  dereference(cond, dereferencet::READ, ends_path);
   replace_dynamic_allocation(cond);
+  // An assume can carry an assert's condition, so lower its Python predicates
+  // as symex_assert does: no SMT rule converts them.
+  simplify_python_builtins(cond);
 
-  assume(cond);
+  if (ends_path)
+    defer_assumption(cond);
+  else
+    assume(cond);
   propagate_assume_equality(cond);
 }
 
@@ -552,7 +609,9 @@ void goto_symext::symex_assert()
   replace_races_check(tmp);
   simplify_python_builtins(tmp);
 
+  claim_skips_deferred = instruction.location.get_bool("ends_path");
   claim(tmp, msg);
+  claim_skips_deferred = false;
 }
 
 /* The frontend must bind __ESBMC_new_object's result to a pointer; a
@@ -914,6 +973,12 @@ void goto_symext::run_intrinsic(
     return;
   }
 
+  if (symname == "c:@F@__ESBMC_havoc_object")
+  {
+    intrinsic_havoc_object(func_call);
+    return;
+  }
+
   if (has_prefix(symname, "c:@F@__ESBMC_init_object"))
   {
     assert(
@@ -1261,7 +1326,7 @@ void goto_symext::run_intrinsic(
     "(NB: the C spec reserves the __ prefix for the compiler and "
     "environment)",
     symname);
-  abort();
+  exit(6);
 }
 
 namespace

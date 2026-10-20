@@ -9,6 +9,7 @@
 #include <util/irep/std_code.h>
 #include <util/irep/std_types.h>
 #include <util/symtab/symbol_generator.h>
+#include <unordered_map>
 
 // Forward dec, to avoid bringing in clang headers
 namespace clang
@@ -112,6 +113,13 @@ protected:
    */
   code_blockt *current_block;
 
+  /** A block-scope VLA's size, bound to a local just before its declarator
+   *  (C11 6.7.6.2p5, 6.7.8p3). Keyed by clang's size expression, which every
+   *  expression typed by that declarator shares. */
+  std::unordered_map<const clang::Expr *, exprt> vla_size_snapshots;
+  bool snapshot_vla_sizes(const clang::Decl &decl, codet &dest);
+  bool get_vla_size(const clang::Expr &size, exprt &new_expr);
+
   clang::SourceManager *sm;
 
   const clang::FunctionDecl *current_functionDecl;
@@ -155,6 +163,8 @@ protected:
     internal_copies;
 
   virtual bool get_function(const clang::FunctionDecl &fd, exprt &new_expr);
+
+  bool get_function_signature(const clang::FunctionDecl &fd, code_typet &type);
 
   virtual bool get_function_body(
     const clang::FunctionDecl &fd,
@@ -280,7 +290,7 @@ protected:
     const clang::CompoundAssignOperator &compop,
     exprt &new_expr);
 
-  bool
+  virtual bool
   get_unary_operator_expr(const clang::UnaryOperator &uniop, exprt &new_expr);
 
   bool get_atomic_expr(const clang::AtomicExpr &atm, exprt &new_expr);
@@ -450,6 +460,8 @@ protected:
     const clang::Decl &d,
     std::string &name,
     std::string &id) const;
+
+  bool is_unlowered_math_builtin(const std::string &name) const;
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

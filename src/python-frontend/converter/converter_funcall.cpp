@@ -23,6 +23,7 @@
 #include <util/irep/std_code.h>
 #include <util/expr/string_constant.h>
 
+#include <algorithm>
 #include <optional>
 #include <sstream>
 
@@ -574,7 +575,8 @@ std::optional<exprt> python_converter::try_get_numpy_subscript_pointer_view_len(
     return std::nullopt;
 
   const symbolt *source = symbol_table_.find_symbol(source_id);
-  if (!source)
+  // The characters of a numpy string array are not one of its axes.
+  if (!source || type_utils::is_string_type(source->get_type().subtype()))
     return std::nullopt;
 
   const namespacet ns(symbol_table_);
@@ -618,16 +620,458 @@ std::optional<exprt> python_converter::try_get_numpy_named_pointer_view_len(
   if (arg.value("_type", "") != "Name")
     return std::nullopt;
 
-  const std::string arg_id =
-    resolve_name_symbol_id(arg["id"].get<std::string>());
-  if (arg_id.empty())
+  const std::string arg_name = arg["id"].get<std::string>();
+  if (std::optional<exprt> length = symbolic_numpy_view_length(arg_name))
+    return typecast_exprt(*length, long_long_int_type());
+
+  if (
+    std::optional<std::vector<std::size_t>> shape =
+      tracked_numpy_shape_from_name(arg_name))
+    return from_integer(shape->front(), long_long_int_type());
+
+  if (
+    std::optional<std::vector<std::size_t>> shape =
+      numpy_shape_from_indexed_decl(arg_name))
+    return from_integer(shape->front(), long_long_int_type());
+
+  return std::nullopt;
+}
+
+exprt python_converter::get_call_expr(const nlohmann::json &element)
+{
+  reject_numpy_view_callee(element);
+  reject_inline_runtime_numpy_slice(element);
+  if (std::optional<nlohmann::json> folded = fold_numpy_view_call(element))
+    return get_expr(*folded);
+  if (std::optional<exprt> call = call_returned_function(element))
+    return *call;
+  if (element["func"].value("_type", "") == "Call")
+    throw std::runtime_error(
+      "calling the result of a call is only supported through a module "
+      "function that returns a function");
+  if (std::optional<exprt> raise = call_property_value(element))
+    return *raise;
+  return get_function_call(element);
+}
+
+// `obj.prop()` on a @property: CPython runs the getter, then calls the value
+// it returns (#8250). A value that may itself be callable is refused.
+std::optional<exprt>
+python_converter::call_property_value(const nlohmann::json &element)
+{
+  const nlohmann::json &func = element["func"];
+  if (
+    func.value("_type", "") != "Attribute" ||
+    element.value("_property_getter", false) ||
+    !json_utils::any_class_has_property(
+      (*ast_json)["body"], func.value("attr", "")))
+    return std::nullopt;
+  const symbol_id callee =
+    function_call_builder(*this, element).build_function_id();
+  if (!json_utils::is_property_method(
+        (*ast_json)["body"], callee.get_class(), callee.get_function()))
     return std::nullopt;
 
-  const auto it = numpy_pointer_view_info_.find(arg_id);
-  if (it == numpy_pointer_view_info_.end())
+  if (
+    func["value"].value("_type", "") == "Name" &&
+    is_class(func["value"].value("id", ""), *ast_json))
+    return get_exception_handler().gen_exception_raise(
+      "TypeError", "'property' object is not callable");
+
+  const std::string unsupported =
+    "calling the value of @property '" + callee.get_function() + "'";
+  if (!element["args"].empty() || !element["keywords"].empty())
+    throw std::runtime_error(unsupported + " with arguments is not supported");
+
+  nlohmann::json getter_call = element;
+  getter_call["_property_getter"] = true;
+  const exprt value = get_expr(getter_call);
+  const typet &type = value.type();
+  if (may_be_callable(type))
+    throw std::runtime_error(unsupported + " is not supported");
+
+  if (value.is_code())
+    current_block->copy_to_operands(value);
+  else if (value.id() == "sideeffect")
+    current_block->copy_to_operands(code_expressiont(value));
+  return get_exception_handler().gen_exception_raise(
+    "TypeError",
+    "'" + type_handler_.type_to_string(type) + "' object is not callable");
+}
+
+bool python_converter::may_be_callable(const typet &type)
+{
+  return type.is_nil() || type.id().empty() || type.is_code() ||
+         (type.is_pointer() && type.subtype().is_code()) ||
+         is_user_class_pointer(type) || is_user_class_struct_type(type);
+}
+
+/// A call converted as a statement, as a side-effect expression: goto-convert
+/// hoists it in evaluation order (short-circuit, loop guards).
+static exprt call_as_value(const exprt &call)
+{
+  if (
+    !call.is_code() || call.statement() != "function_call" ||
+    !to_code_function_call(to_code(call)).function().type().is_code())
+    return call;
+  const code_function_callt &code = to_code_function_call(to_code(call));
+  side_effect_expr_function_callt value;
+  value.location() = code.location();
+  value.function() = code.function();
+  value.arguments() = code.arguments();
+  value.type() = to_code_type(code.function().type()).return_type();
+  return value;
+}
+
+/// The function a call of `callee` returns, when its type is known before
+/// converting it: `get()` or `get()()` where `get` is a module function.
+std::optional<code_typet>
+python_converter::returned_function(const nlohmann::json &callee)
+{
+  if (callee.value("_type", "") != "Call")
+    return std::nullopt;
+  const nlohmann::json &func = callee["func"];
+  typet returned;
+  if (func.value("_type", "") == "Name")
+  {
+    // A variable of that name, such as a parameter, shadows the function.
+    const std::string name = func["id"].get<std::string>();
+    const symbolt *fn =
+      resolve_name_symbol_id(name).empty()
+        ? find_symbol(symbol_id(current_python_file, "", name).to_string())
+        : nullptr;
+    if (!fn || !fn->get_type().is_code())
+      return std::nullopt;
+    returned = to_code_type(fn->get_type()).return_type();
+  }
+  else if (std::optional<code_typet> outer = returned_function(func))
+    returned = outer->return_type();
+  if (!returned.is_pointer() || !returned.subtype().is_code())
+    return std::nullopt;
+  return to_code_type(returned.subtype());
+}
+
+/// Keyword, starred and default arguments of a call of an expression's result
+/// are not bound.
+static void
+refuse_unbound_arguments(const nlohmann::json &element, bool is_lambda)
+{
+  const auto is_starred = [](const nlohmann::json &arg) {
+    return arg.value("_type", "") == "Starred";
+  };
+  if (
+    (element.contains("keywords") && !element["keywords"].empty()) ||
+    std::any_of(element["args"].begin(), element["args"].end(), is_starred) ||
+    (is_lambda && !element["func"]["args"]["defaults"].empty()))
+    throw std::runtime_error(
+      "calling the result of an expression with keyword, starred or default "
+      "arguments is not supported");
+}
+
+/// Whether an argument of type `arg` binds `param` as it is, a string
+/// decaying to a pointer to its first character.
+static bool passes_as(const typet &arg, const code_typet::argumentt &param)
+{
+  return arg == param.type() || (arg.is_array() && param.type().is_pointer() &&
+                                 arg.subtype() == param.type().subtype());
+}
+
+static void refuse_unbound_parameters(
+  const side_effect_expr_function_callt &call,
+  const code_typet &callee_type,
+  bool is_lambda)
+{
+  if (callee_type.arguments().size() != call.arguments().size())
+    throw std::runtime_error(
+      "calling the result of an expression with a different number of "
+      "arguments is not supported");
+  for (std::size_t i = 0; is_lambda && i < call.arguments().size(); ++i)
+    if (!passes_as(call.arguments()[i].type(), callee_type.arguments()[i]))
+      throw std::runtime_error(
+        "calling a lambda directly with an argument of this type is not "
+        "supported");
+}
+
+void python_converter::convert_lambda_call(
+  const nlohmann::json &element,
+  side_effect_expr_function_callt &call)
+{
+  // A lambda's conversion emits no code, so its arguments may be converted
+  // first and give a scalar parameter its type. A list parameter is not
+  // modelled (#7328), so other arguments must match the parameter as it is.
+  std::vector<std::optional<typet>> types;
+  for (const auto &arg : element["args"])
+  {
+    call.arguments().push_back(call_as_value(get_expr(arg)));
+    const typet &type = call.arguments().back().type();
+    types.push_back(
+      type.is_signedbv() || type.is_floatbv() || type.is_bool()
+        ? std::optional<typet>(type)
+        : std::nullopt);
+  }
+  call.function() = get_lambda_expr(element["func"], types);
+}
+
+std::optional<exprt>
+python_converter::call_returned_function(const nlohmann::json &element)
+{
+  const nlohmann::json &inner = element["func"];
+  const bool is_lambda = inner.value("_type", "") == "Lambda";
+  std::optional<code_typet> callee_type = returned_function(inner);
+  if (!is_lambda && !callee_type)
+    return std::nullopt;
+  refuse_unbound_arguments(element, is_lambda);
+
+  side_effect_expr_function_callt call;
+  call.location() = get_location_from_decl(element);
+  if (is_lambda)
+  {
+    convert_lambda_call(element, call);
+    callee_type = to_code_type(call.function().type());
+  }
+  else
+  {
+    call.function() = call_as_value(get_expr(inner));
+    for (const auto &arg : element["args"])
+      call.arguments().push_back(call_as_value(get_expr(arg)));
+  }
+  refuse_unbound_parameters(call, *callee_type, is_lambda);
+  call.type() = callee_type->return_type();
+  return call;
+}
+
+// The argument of list(...). A 1-D numpy array held in a static array
+// becomes the list of its elements, as a.tolist() builds it: the array
+// itself would reach list operations that expect a list object.
+exprt python_converter::list_argument_expr(const nlohmann::json &arg)
+{
+  const std::string id = arg.value("_type", "") == "Name"
+                           ? resolve_name_symbol_id(arg.value("id", ""))
+                           : std::string();
+  const symbolt *symbol = id.empty() ? nullptr : symbol_table_.find_symbol(id);
+  if (symbol == nullptr || numpy_array_symbols_.count(id) == 0)
+    return get_expr(arg);
+  const typet type = ns.follow(symbol->get_type());
+  std::optional<exprt> elements;
+  if (type.is_array() && !ns.follow(type.subtype()).is_array())
+    elements = build_numpy_descriptor_materialized_list(arg, true);
+  return elements ? *elements : get_expr(arg);
+}
+
+// Whether `node` is the name `name`.
+static bool is_name(const nlohmann::json &node, const std::string &name)
+{
+  return node.is_object() && node.value("_type", "") == "Name" &&
+         node.value("id", "") == name;
+}
+
+// Append every value of a dict literal, or `value` itself when it is not one.
+static void
+push_dict_values(const nlohmann::json &value, std::vector<nlohmann::json> &out)
+{
+  if (value.is_object() && value.value("_type", "") == "Dict")
+    for (const auto &v : value["values"])
+      out.push_back(v);
+  else
+    out.push_back(value);
+}
+
+// The values a store statement puts into the dict `name`: `name = {...}`,
+// `name[k] = v`, `name.update({...})` and `name.setdefault(k, v)`.
+static void collect_dict_stores(
+  const nlohmann::json &node,
+  const std::string &name,
+  std::vector<nlohmann::json> &out)
+{
+  const std::string type = node.value("_type", "");
+  if (type == "Assign" || type == "AnnAssign")
+  {
+    const nlohmann::json targets = type == "Assign"
+                                     ? node["targets"]
+                                     : nlohmann::json::array({node["target"]});
+    for (const auto &t : targets)
+      if (
+        is_name(t, name) ||
+        (t.value("_type", "") == "Subscript" && is_name(t["value"], name)))
+        push_dict_values(node["value"], out);
+    return;
+  }
+  if (
+    type != "Call" || node["func"].value("_type", "") != "Attribute" ||
+    !is_name(node["func"]["value"], name) || node["args"].empty())
+    return;
+  const std::string attr = node["func"].value("attr", "");
+  if (attr == "update")
+    push_dict_values(node["args"][0], out);
+  else if (attr == "setdefault" && node["args"].size() > 1)
+    out.push_back(node["args"][1]);
+}
+
+// Every value the program may store into the dict named `name`. Scoping is
+// ignored, so a same-named dict elsewhere only adds candidates.
+static void collect_dict_values(
+  const nlohmann::json &node,
+  const std::string &name,
+  std::vector<nlohmann::json> &out)
+{
+  if (node.is_object())
+    collect_dict_stores(node, name, out);
+  if (node.is_object() || node.is_array())
+    for (const auto &child : node)
+      collect_dict_values(child, name, out);
+}
+
+// The `return` statements of a function body, not of the defs nested in it.
+static void collect_own_returns(
+  const nlohmann::json &node,
+  std::vector<nlohmann::json> &out)
+{
+  const std::string type = node.is_object() ? node.value("_type", "") : "";
+  if (type == "Return")
+    out.push_back(node);
+  if (
+    type == "FunctionDef" || type == "AsyncFunctionDef" || type == "ClassDef" ||
+    type == "Lambda")
+    return;
+  if (node.is_object() || node.is_array())
+    for (const auto &child : node)
+      collect_own_returns(child, out);
+}
+
+// The values of the dict literals a top-level function returns, if every
+// return in its own body is one. False otherwise.
+static bool returned_dict_values(
+  const nlohmann::json &module,
+  const nlohmann::json &call,
+  std::vector<nlohmann::json> &out)
+{
+  if (call["func"].value("_type", "") != "Name")
+    return false;
+  const std::string name = call["func"]["id"];
+  for (const auto &def : module["body"])
+  {
+    if (def.value("_type", "") != "FunctionDef" || def["name"] != name)
+      continue;
+    std::vector<nlohmann::json> returns;
+    collect_own_returns(def["body"], returns);
+    for (const auto &ret : returns)
+      if (ret["value"].value("_type", "") != "Dict")
+        return false;
+    for (const auto &ret : returns)
+      push_dict_values(ret["value"], out);
+    return !returns.empty();
+  }
+  return false;
+}
+
+// The values the dict `container` may hold: a literal's, every value stored
+// into a named dict, or for `d[k]` the values of each dict literal d holds
+// (#8768). False when they cannot be listed.
+bool python_converter::dict_values(
+  const nlohmann::json &container,
+  std::vector<nlohmann::json> &out)
+{
+  const std::string type = container.value("_type", "");
+  if (type == "Dict")
+    push_dict_values(container, out);
+  else if (type == "Name")
+  {
+    std::vector<nlohmann::json> stored;
+    collect_dict_values(*ast_json, container["id"], stored);
+    for (const auto &v : stored)
+      if (
+        v.value("_type", "") != "Call" ||
+        !returned_dict_values(*ast_json, v, out))
+        out.push_back(v);
+  }
+  else if (type == "Subscript")
+  {
+    std::vector<nlohmann::json> outer;
+    if (!dict_values(container["value"], outer))
+      return false;
+    for (const auto &v : outer)
+    {
+      if (v.value("_type", "") != "Dict")
+        return false;
+      push_dict_values(v, out);
+    }
+  }
+  return true;
+}
+
+typet python_converter::stored_function_return_type(const nlohmann::json &value)
+{
+  if (value.value("_type", "") == "Lambda" && value.contains("body"))
+    return lambda_handler_->infer_lambda_return_type(value["body"]);
+  if (value.value("_type", "") != "Name")
+    return typet();
+  const exprt fn = get_expr(value);
+  const typet &t = fn.type().is_pointer() ? fn.type().subtype() : fn.type();
+  return t.is_code() ? to_code_type(t).return_type() : typet();
+}
+
+std::optional<typet>
+python_converter::dict_function_return_type(const nlohmann::json &container)
+{
+  std::vector<nlohmann::json> values;
+  if (!dict_values(container, values))
     return std::nullopt;
 
-  return from_integer(it->second.length, long_long_int_type());
+  std::optional<typet> shared;
+  for (const auto &v : values)
+  {
+    // A literal is never the function called, so it decides nothing.
+    if (v.value("_type", "") == "Constant")
+      continue;
+    const typet ret = stored_function_return_type(v);
+    if (ret.is_nil() || ret.id().empty())
+      return std::nullopt;
+    if (shared && *shared != ret)
+      throw std::runtime_error(
+        "unsupported: a dict holds functions with different return types, "
+        "so the type of a call through it is not known");
+    shared = ret;
+  }
+  return shared;
+}
+
+typet python_converter::subscript_call_return_type(
+  const exprt &func_ptr,
+  const nlohmann::json &func_node)
+{
+  // A function read from a list keeps its code type, so its own return type
+  // is known; the enclosing function's return type is only a guess.
+  const typet &ptr_type = func_ptr.type();
+  if (ptr_type.is_pointer() && ptr_type.subtype().is_code())
+  {
+    const typet &ret = to_code_type(ptr_type.subtype()).return_type();
+    if (!ret.is_nil() && !ret.is_empty())
+      return ret;
+  }
+
+  // A dict holds its functions by a pointer with no return type, so take the
+  // one every function stored into that dict returns.
+  if (
+    std::optional<typet> stored = dict_function_return_type(func_node["value"]))
+    return *stored;
+
+  // Otherwise prefer the current function's declared return type, then try
+  // to infer from any lambda body in the dict literal.
+  typet ret_type = current_func_return_type_;
+  if (ret_type.is_empty() && func_node["value"]["_type"] == "Dict")
+  {
+    for (const auto &val : func_node["value"]["values"])
+    {
+      if (val["_type"] == "Lambda" && val.contains("body"))
+      {
+        ret_type = lambda_handler_->infer_lambda_return_type(val["body"]);
+        break;
+      }
+    }
+  }
+  if (ret_type.is_empty())
+    ret_type = double_type();
+  return ret_type;
 }
 
 exprt python_converter::get_function_call(const nlohmann::json &element)
@@ -635,7 +1079,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   if (!element.contains("func") || element["_type"] != "Call")
     throw std::runtime_error("Invalid function call");
 
-  reject_unknown_numpy_view_call(element);
+  track_numpy_view_call_escape(element);
 
   // A callable instance: `c(args)` where c is an object whose class defines
   // __call__. Calling the instance directly treats it as a function and aborts
@@ -723,11 +1167,15 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     }
   }
 
-  // Handle direct range(...) calls by converting to list
+  // Handle direct range(...) calls by converting to list. A bare range() is
+  // consumed by len() or as a for-iterable, so its backing list only needs
+  // the right size; materialising the elements would add unwinding that a
+  // task with a fixed --unwind cannot afford (regression range36-nondet).
   if (element["func"]["_type"] == "Name" && element["func"]["id"] == "range")
   {
     const auto &range_args = element["args"];
-    return python_list::build_list_from_range(*this, range_args, element);
+    return python_list::build_list_from_range(
+      *this, range_args, element, /*materialise_elements=*/false);
   }
 
   // Handle direct slice(...) calls by materialising a PySliceObject value.
@@ -803,9 +1251,12 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     // Handle list(iterable) where iterable evaluates to a list — e.g.
     // list(d.items()), list(d.keys()), list(d.values()), list(some_list).
     // d.items() returns the keys member as a placeholder list (correct size).
-    exprt arg_expr = get_expr(list_arg);
+    // The result is a new list, so mutating it must not reach the argument;
+    // the copy of a keys view is a plain list, compared by order (#8689).
+    exprt arg_expr = list_argument_expr(list_arg);
     if (arg_expr.type() == type_handler_.get_list_type())
-      return arg_expr;
+      return python_list(*this, element)
+        .build_shallow_copy_call(arg_expr, element);
 
     // list(tuple) — materialise the tuple's components into a real list.
     // Without this the tuple struct flows into the generic builder, which
@@ -1033,27 +1484,10 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     else
       func_ptr = get_expr(element["func"]);
 
-    // Determine return type: prefer current function's declared return type,
-    // then try to infer from any lambda body in the dict literal.
-    typet ret_type = current_func_return_type_;
-    if (ret_type.is_empty() && func_node["value"]["_type"] == "Dict")
-    {
-      for (const auto &val : func_node["value"]["values"])
-      {
-        if (val["_type"] == "Lambda" && val.contains("body"))
-        {
-          ret_type = lambda_handler_->infer_lambda_return_type(val["body"]);
-          break;
-        }
-      }
-    }
-    if (ret_type.is_empty())
-      ret_type = double_type();
-
     side_effect_expr_function_callt call;
     call.location() = get_location_from_decl(element);
     call.function() = func_ptr;
-    call.type() = ret_type;
+    call.type() = subscript_call_return_type(func_ptr, func_node);
     if (element.contains("args"))
       for (const auto &arg : element["args"])
       {
@@ -1129,7 +1563,11 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       // Fallback for Any-typed (void*) function parameters: use any_type so
       // the indirect call expression has a well-formed type.
       if (!resolved)
+      {
         call.type() = any_type();
+        refuse_mismatched_callees(
+          python_expr::build_symbol(*var_symbol), element);
+      }
 
       // Process arguments
       if (element.contains("args"))
@@ -1781,4 +2219,68 @@ exprt python_converter::materialize_list_function_call(
 
   // Return reference to the temp variable
   return symbol_expr(tmp_var_symbol);
+}
+
+// Whether some load of `name` under `node` is not the callee of a call, so
+// the function it names is used as a value.
+static bool used_as_value(const nlohmann::json &node, const std::string &name)
+{
+  if (node.is_object() && node.value("_type", "") == "Call")
+  {
+    const nlohmann::json &func = node["func"];
+    const bool direct =
+      func.value("_type", "") == "Name" && func.value("id", "") == name;
+    for (auto it = node.begin(); it != node.end(); ++it)
+      if ((!direct || it.key() != "func") && used_as_value(it.value(), name))
+        return true;
+    return false;
+  }
+  if (
+    node.is_object() && node.value("_type", "") == "Name" &&
+    node.value("id", "") == name)
+    return true;
+  if (node.is_structured())
+    for (const auto &child : node)
+      if (used_as_value(child, name))
+        return true;
+  return false;
+}
+
+void python_converter::refuse_mismatched_callees(
+  const exprt &callee,
+  const nlohmann::json &call)
+{
+  if (!current_block)
+    return;
+  const std::size_t passed = call["args"].size() + call["keywords"].size();
+  const nlohmann::json &body = (*ast_json)["body"];
+  for (const auto &def : body)
+  {
+    if (def.value("_type", "") != "FunctionDef")
+      continue;
+    const nlohmann::json &args = def["args"];
+    const std::string name = def.value("name", "");
+    const std::size_t params = args["posonlyargs"].size() + args["args"].size();
+    if (
+      params == passed || args["vararg"].is_object() ||
+      !used_as_value(body, name))
+      continue;
+    const symbolt *function =
+      symbol_table_.find_symbol(symbol_id(python_file(), "", name).to_string());
+    if (!function)
+      continue;
+    exprt differs("notequal", bool_type());
+    differs.copy_to_operands(
+      callee,
+      python_expr::build_typecast(
+        python_expr::build_address_of(python_expr::build_symbol(*function)),
+        callee.type()));
+    code_assertt check(differs);
+    check.location() = get_location_from_decl(call);
+    check.location().user_provided(true);
+    check.location().comment(
+      "Unsupported: call through a function value that may take a "
+      "different number of arguments");
+    current_block->copy_to_operands(check);
+  }
 }

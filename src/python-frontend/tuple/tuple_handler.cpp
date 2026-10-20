@@ -4,6 +4,8 @@
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/function_call/expr.h>
+#include <python-frontend/exception/python_exception_handler.h>
+#include <python-frontend/python-list/python_list.h>
 #include <util/arith/arith_tools.h>
 #include <util/expr/base_type.h>
 #include <util/lang/c_types.h>
@@ -118,7 +120,10 @@ exprt tuple_handler::get_tuple_expr(const nlohmann::json &element)
   // the GOTO RETURN and crashes on a null operand (issue #5036). Normalise it
   // to a value expression and spill it into a temporary, exactly as the list
   // literal path does in python_list::get() for issue #4699.
-  auto materialize_tuple_elem = [&](const exprt &elem) -> exprt {
+  auto materialize_tuple_elem = [&](const exprt &raw_elem) -> exprt {
+    // A struct member cannot have code type, so a function is stored by its
+    // address, as a list element is.
+    const exprt elem = decay_function_to_pointer(raw_elem);
     if (elem.is_symbol())
       return elem;
 
@@ -457,14 +462,26 @@ exprt tuple_handler::handle_tuple_subscript(
   return result;
 }
 
+static bool has_side_effect(const exprt &expr)
+{
+  if (expr.id() == "sideeffect")
+    return true;
+  for (const auto &op : expr.operands())
+    if (has_side_effect(op))
+      return true;
+  return false;
+}
+
 exprt tuple_handler::prepare_rhs_for_unpacking(
   const nlohmann::json &ast_node,
   exprt &rhs,
   codet &target_block)
 {
   // If RHS is a function call, we need to create a temporary variable first
-  // because we can't do member access on a side effect expression
-  if (rhs.is_function_call() || rhs.id() == "sideeffect")
+  // because we can't do member access on a side effect expression. A call
+  // nested in the RHS (`*(T *)xs.pop()->value`) is bound too, or each target
+  // would run it again.
+  if (rhs.is_function_call() || has_side_effect(rhs))
   {
     locationt loc = converter_.get_location_from_decl(ast_node);
     std::string temp_name =
@@ -524,38 +541,65 @@ void tuple_handler::handle_tuple_unpacking(
   }
 
   const auto &targets = target["elts"];
+  const size_t n = tuple_type.components().size();
+  const size_t star_idx = starred_target_index(targets);
 
-  if (targets.size() != tuple_type.components().size())
+  if (star_idx == targets.size() && targets.size() != n)
   {
     throw std::runtime_error(
       "Cannot unpack tuple: expected " + std::to_string(targets.size()) +
-      " values, got " + std::to_string(tuple_type.components().size()));
+      " values, got " + std::to_string(n));
+  }
+
+  // A tuple's length is static, so a starred target short of values is a
+  // ValueError known at conversion time.
+  if (n + 1 < targets.size())
+  {
+    codet raise("expression");
+    raise.copy_to_operands(
+      converter_.get_exception_handler().gen_exception_raise(
+        "ValueError",
+        "not enough values to unpack (expected at least " +
+          std::to_string(targets.size() - 1) + ", got " + std::to_string(n) +
+          ")"));
+    raise.location() = converter_.get_location_from_decl(ast_node);
+    target_block.copy_to_operands(raise);
+    return;
   }
 
   // Create assignments: x = temp.element_0, y = temp.element_1, ...
-  for (size_t i = 0; i < targets.size(); i++)
+  for (size_t t = 0; t < targets.size(); t++)
   {
-    const std::string tgt_type = targets[i]["_type"].get<std::string>();
+    if (t == star_idx)
+    {
+      assign_starred_elements(
+        ast_node,
+        targets[t]["value"],
+        rhs,
+        t,
+        n + 1 - targets.size(),
+        target_block);
+      continue;
+    }
 
-    // Nested tuple/list target, e.g. `(a, b), c = pair_and_value`. Resolve the
-    // element's (possibly symbol-referenced) type to a concrete struct, build
-    // the member access temp.element_i, and recurse so the sub-pattern is
-    // unpacked element-wise.
+    // Targets after the starred one take the tuple's trailing elements
+    const size_t i = t < star_idx ? t : t + n - targets.size();
+    const std::string tgt_type = targets[t]["_type"].get<std::string>();
+
+    // Nested tuple/list target, e.g. `(a, b), c = pair_and_value`. A literal's
+    // operand is the element itself, so a list built in place keeps its
+    // recorded element types.
     if (tgt_type == "Tuple" || tgt_type == "List")
     {
-      const typet resolved =
-        converter_.name_space().follow(tuple_type.components()[i].type());
-      // Guard before recursing: unpacking a non-tuple element into a nested
-      // pattern (e.g. `(a, b), c = (5, 3)`) is a TypeError in Python. Reject it
-      // explicitly so the recursive to_struct_type() never casts a non-struct.
-      if (!is_tuple_type(resolved))
-      {
-        throw std::runtime_error(
-          "Cannot unpack non-tuple element into nested target");
-      }
-      std::string member_name = "element_" + std::to_string(i);
-      exprt nested_rhs = build_member(rhs, member_name, resolved);
-      handle_tuple_unpacking(ast_node, targets[i], nested_rhs, target_block);
+      converter_.unpack_nested_target(
+        ast_node,
+        targets[t],
+        rhs.id() == "struct" ? rhs.operands()[i]
+                             : build_member(
+                                 rhs,
+                                 "element_" + std::to_string(i),
+                                 tuple_type.components()[i].type()),
+        target_block);
       continue;
     }
 
@@ -565,63 +609,195 @@ void tuple_handler::handle_tuple_unpacking(
         "Tuple unpacking only supports simple names, not " + tgt_type);
     }
 
-    std::string var_name = targets[i]["id"].get<std::string>();
-    symbol_id var_sid = converter_.create_symbol_id();
-    var_sid.set_object(var_name);
-
-    symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
-
-    if (!var_symbol)
-    {
-      locationt loc = converter_.get_location_from_decl(targets[i]);
-      const typet &elem_type = tuple_type.components()[i].type();
-
-      symbolt new_symbol = converter_.create_symbol(
-        loc.get_file().as_string(),
-        var_name,
-        var_sid.to_string(),
-        loc,
-        elem_type);
-      new_symbol.lvalue = true;
-      new_symbol.file_local = true;
-      new_symbol.is_extern = false;
-      var_symbol = converter_.symbol_table().move_symbol_to_context(new_symbol);
-    }
-
     // Create member access: temp.element_i
     std::string member_name = "element_" + std::to_string(i);
     const typet &member_type = tuple_type.components()[i].type();
     exprt member_access = build_member(rhs, member_name, member_type);
-    const locationt loc = converter_.get_location_from_decl(ast_node);
-    const exprt target = build_symbol(*var_symbol);
+    const exprt target = build_symbol(
+      unpack_target_symbol(targets[t], unpack_target_type(rhs, member_type)));
+    assign_unpacked_element(
+      target,
+      member_access,
+      converter_.get_location_from_decl(ast_node),
+      target_block);
+  }
+}
 
-    // A tuple held in a list is reached through a dereference, and the
-    // dereference layer refuses to build a whole-array rvalue, as C does. A
-    // string element is such an array, so copy it element by element; its size
-    // is static, so the two are the same assignment (#7693).
-    if (
-      member_type.is_array() && to_array_type(member_type).size().is_constant())
-    {
-      const array_typet &arr_t = to_array_type(member_type);
-      const BigInt n =
-        binary2integer(to_constant_expr(arr_t.size()).value().c_str(), false);
-      for (BigInt k = 0; k < n; k = k + 1)
-      {
-        const exprt idx = from_integer(k, index_type());
-        code_assignt store(
-          build_index(target, idx, arr_t.subtype()),
-          build_index(member_access, idx, arr_t.subtype()));
-        store.location() = loc;
-        target_block.copy_to_operands(store);
-      }
-      continue;
-    }
+// A str element of a tuple held in a list or dict (reached through a
+// dereference) outlives the target, so the target can point at it; a later
+// rebinding to a call's char* result then keeps the symbol's type (#8667). A
+// local tuple, such as a loop variable, can expire first, so it is copied.
+typet tuple_handler::unpack_target_type(
+  const exprt &rhs,
+  const typet &member_type) const
+{
+  if (member_type.is_array() && rhs.id() == "dereference")
+    return pointer_typet(member_type.subtype());
+  return member_type;
+}
 
-    // Create assignment
-    code_assignt assign(target, member_access);
+void tuple_handler::assign_unpacked_element(
+  const exprt &target,
+  const exprt &member_access,
+  const locationt &loc,
+  codet &target_block)
+{
+  const typet &member_type = member_access.type();
+
+  // A pointer target shares the element's storage: a str is immutable.
+  if (member_type.is_array() && target.type().is_pointer())
+  {
+    exprt addr = build_address_of(build_index(
+      member_access,
+      from_integer(0, index_type()),
+      to_array_type(member_type).subtype()));
+    if (addr.type() != target.type())
+      addr = typecast_exprt(addr, target.type());
+    code_assignt assign(target, addr);
     assign.location() = loc;
     target_block.copy_to_operands(assign);
+    return;
   }
+
+  // A tuple held in a list is reached through a dereference, and the
+  // dereference layer refuses to build a whole-array rvalue, as C does. A
+  // string element is such an array, so copy it element by element; its size
+  // is static, so the two are the same assignment (#7693).
+  if (member_type.is_array() && to_array_type(member_type).size().is_constant())
+  {
+    const array_typet &arr_t = to_array_type(member_type);
+    const BigInt n =
+      binary2integer(to_constant_expr(arr_t.size()).value().c_str(), false);
+    for (BigInt k = 0; k < n; k = k + 1)
+    {
+      const exprt idx = from_integer(k, index_type());
+      code_assignt store(
+        build_index(target, idx, arr_t.subtype()),
+        build_index(member_access, idx, arr_t.subtype()));
+      store.location() = loc;
+      target_block.copy_to_operands(store);
+    }
+    return;
+  }
+
+  code_assignt assign(target, member_access);
+  assign.location() = loc;
+  target_block.copy_to_operands(assign);
+}
+
+size_t tuple_handler::starred_target_index(const nlohmann::json &targets) const
+{
+  size_t i = 0;
+  while (i < targets.size() && targets[i]["_type"] != "Starred")
+    i++;
+  return i;
+}
+
+symbolt &tuple_handler::unpack_target_symbol(
+  const nlohmann::json &name_node,
+  const typet &type)
+{
+  symbol_id var_sid = converter_.create_symbol_id();
+  var_sid.set_object(name_node["id"].get<std::string>());
+
+  if (symbolt *existing = converter_.find_symbol(var_sid.to_string()))
+    return *existing;
+
+  locationt loc = converter_.get_location_from_decl(name_node);
+  symbolt new_symbol = converter_.create_symbol(
+    loc.get_file().as_string(),
+    name_node["id"].get<std::string>(),
+    var_sid.to_string(),
+    loc,
+    type);
+  new_symbol.lvalue = true;
+  new_symbol.file_local = true;
+  new_symbol.is_extern = false;
+  return *converter_.symbol_table().move_symbol_to_context(new_symbol);
+}
+
+void tuple_handler::assign_starred_elements(
+  const nlohmann::json &ast_node,
+  const nlohmann::json &star_value,
+  const exprt &rhs,
+  size_t first,
+  size_t count,
+  codet &target_block)
+{
+  if (star_value["_type"] != "Name")
+    throw std::runtime_error(
+      "Starred unpacking only supports simple names, not " +
+      star_value["_type"].get<std::string>());
+
+  const struct_typet &tuple_type = to_struct_type(rhs.type());
+  std::vector<exprt> elems;
+  for (size_t k = first; k < first + count; k++)
+    elems.push_back(build_member(
+      rhs, "element_" + std::to_string(k), tuple_type.components()[k].type()));
+
+  // The list's pushes go through add_instruction. Collect them so they land
+  // after what target_block already holds, such as the temporary that a
+  // call on the right-hand side was stored in.
+  code_blockt list_block;
+  code_blockt *const saved_block = converter_.current_block;
+  converter_.current_block = &list_block;
+  const exprt list_expr =
+    python_list(converter_, ast_node).build_list_from_exprs(elems);
+  converter_.current_block = saved_block;
+  for (const exprt &op : list_block.operands())
+    target_block.copy_to_operands(op);
+
+  const exprt star =
+    build_symbol(unpack_target_symbol(star_value, list_expr.type()));
+  // Retyping a symbol in place would corrupt its earlier uses
+  if (star.type() != list_expr.type())
+    throw std::runtime_error(
+      "Starred unpacking into " + star_value["id"].get<std::string>() +
+      ", which already holds a non-list value, is not supported");
+  converter_.get_element_type_registry().assign_from(
+    list_expr.identifier().as_string(), star.identifier().as_string());
+
+  code_assignt assign(star, list_expr);
+  assign.location() = converter_.get_location_from_decl(ast_node);
+  target_block.copy_to_operands(assign);
+}
+
+/* A str member's length is unknown from a bare 'str' annotation, so use the
+ * fixed width get_tuple_expr pads stored strings to; get_typet("str") with
+ * no size would yield a degenerate char[0] that can never match a stored
+ * value (#5571). The #5444 preprocessor path may stamp a concrete string
+ * literal in place of the bare 'str' name (see
+ * core_visitors_mixin.py::_size_tuple_str_components) to recover a
+ * param-dict tuple[str, ...] key shape across the call boundary; that
+ * literal recovers the *structure*, but the member is still sized to the
+ * same fixed width so the struct byte layout agrees with the char array
+ * get_tuple_expr pads and stores at runtime. bytes members are rejected
+ * loudly: bytes values are modelled as int-list objects, and neither
+ * get_typet("bytes") (a degenerate int64[0] array) nor the list-pointer
+ * type lines up with how tuple construction stores them — reads through
+ * such an annotation produce silent false alarms rather than a crash. */
+typet tuple_handler::tuple_member_type_from_annotation(
+  const nlohmann::json &node)
+{
+  if (
+    node.contains("_type") && node["_type"] == "Constant" &&
+    node.contains("value") && node["value"].is_string())
+    return type_handler_.get_typet("str", tuple_str_member_size);
+  if (node.contains("id") && node["id"].is_string())
+  {
+    const std::string &id = node["id"].get<std::string>();
+    if (id == "str" || id == "string")
+      return type_handler_.get_typet("str", tuple_str_member_size);
+    if (id == "bytes")
+      throw std::runtime_error(
+        "tuple[bytes, ...] annotations are not supported");
+    return type_handler_.get_typet(id);
+  }
+  // get_typet(json) unwraps list[int] to the bare name `list`, which it
+  // then looks up as a variable and types void (#8511).
+  if (node.contains("_type") && node["_type"] == "Subscript")
+    return converter_.get_type_from_annotation(node, node);
+  return type_handler_.get_typet(node);
 }
 
 typet tuple_handler::get_tuple_type_from_annotation(
@@ -638,43 +814,11 @@ typet tuple_handler::get_tuple_type_from_annotation(
   // Build tag name matching the pattern used in get_tuple_expr
   std::vector<typet> element_types;
 
-  // A str member's length is unknown from a bare 'str' annotation, so use the
-  // fixed width get_tuple_expr pads stored strings to; get_typet("str") with
-  // no size would yield a degenerate char[0] that can never match a stored
-  // value (#5571). The #5444 preprocessor path may stamp a concrete string
-  // literal in place of the bare 'str' name (see
-  // core_visitors_mixin.py::_size_tuple_str_components) to recover a
-  // param-dict tuple[str, ...] key shape across the call boundary; that
-  // literal recovers the *structure*, but the member is still sized to the
-  // same fixed width so the struct byte layout agrees with the char array
-  // get_tuple_expr pads and stores at runtime. bytes members are rejected
-  // loudly: bytes values are modelled as int-list objects, and neither
-  // get_typet("bytes") (a degenerate int64[0] array) nor the list-pointer
-  // type lines up with how tuple construction stores them — reads through
-  // such an annotation produce silent false alarms rather than a crash.
-  auto elem_type_from = [this](const nlohmann::json &node) -> typet {
-    if (
-      node.contains("_type") && node["_type"] == "Constant" &&
-      node.contains("value") && node["value"].is_string())
-      return type_handler_.get_typet("str", tuple_str_member_size);
-    if (node.contains("id") && node["id"].is_string())
-    {
-      const std::string &id = node["id"].get<std::string>();
-      if (id == "str" || id == "string")
-        return type_handler_.get_typet("str", tuple_str_member_size);
-      if (id == "bytes")
-        throw std::runtime_error(
-          "tuple[bytes, ...] annotations are not supported");
-      return type_handler_.get_typet(id);
-    }
-    return type_handler_.get_typet(node);
-  };
-
   if (slice.contains("elts"))
   {
     // Multiple element types: tuple[int, str, float]
     for (const auto &elt : slice["elts"])
-      element_types.push_back(elem_type_from(elt));
+      element_types.push_back(tuple_member_type_from_annotation(elt));
   }
   else
   {
@@ -682,7 +826,7 @@ typet tuple_handler::get_tuple_type_from_annotation(
     // (a bare Name or nested subscript), not an elts list. Without this the
     // tuple would get zero components — the opaque struct the callers of this
     // function are specifically avoiding.
-    element_types.push_back(elem_type_from(slice));
+    element_types.push_back(tuple_member_type_from_annotation(slice));
   }
 
   return create_tuple_struct_type(element_types);

@@ -34,3 +34,13 @@
 #include <functional>
 
 #include "list_type_inference.h"
+
+// Row-major element strides of a contiguous array of `shape`.
+inline std::vector<long long>
+contiguous_strides(const std::vector<long long> &shape)
+{
+  std::vector<long long> strides(shape.size(), 1);
+  for (std::size_t axis = shape.size(); axis-- > 1;)
+    strides[axis - 1] = strides[axis] * shape[axis];
+  return strides;
+}

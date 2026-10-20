@@ -118,6 +118,4 @@ Therefore:
   what is compared, so descriptors with no flags line (whose regex line is
   mis-parsed as bogus args, exactly as the real suite does) still yield a stable,
   comparable digest.
-- Both scripts clean up `/tmp/esbmc-headers-*` on exit (per the repo's /tmp
-  hygiene rule).
 - macOS `bash` 3.2 compatible (no associative arrays / `mapfile`).

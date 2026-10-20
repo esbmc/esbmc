@@ -516,6 +516,20 @@ static void ensure_nonempty(goto_programt &p, const expr2tc &stmt)
   p.instructions.back().location = statement_location(stmt);
 }
 
+bool goto_convert_functionst::convert_native_full_expression(
+  const expr2tc &code2,
+  goto_programt &dest,
+  const locationt &inherited)
+{
+  const std::size_t stack_size = targets.destructor_stack.size();
+  if (!convert_native_rec(code2, dest, inherited))
+    return false;
+  if (is_code_expression2t(code2))
+    destroy_full_expression_temporaries(
+      stack_size, to_code_expression2t(code2).location, dest);
+  return true;
+}
+
 bool goto_convert_functionst::convert_native_rec(
   const expr2tc &code2,
   goto_programt &dest,
@@ -536,7 +550,7 @@ bool goto_convert_functionst::convert_native_rec(
     const locationt &here = effective_location(block.location, inherited);
 
     for (const expr2tc &stmt : block.operands)
-      if (!convert_native_rec(stmt, dest, here))
+      if (!convert_native_full_expression(stmt, dest, here))
       {
         // Fallback: undo any code_dead this partial walk pushed, so the
         // caller's goto_convert_rec re-converts against a clean destructor
@@ -1202,7 +1216,7 @@ bool goto_convert_functionst::convert_native_rec(
       exprt cond = migrate_expr_back(dw.cond);
       if (!here.get_file().empty())
         stamp_value_locations(cond, here);
-      remove_sideeffects(cond, sideeffects);
+      remove_condition_sideeffects(cond, sideeffects);
       migrate_expr(cond, guard);
     }
 
@@ -1320,7 +1334,7 @@ bool goto_convert_functionst::convert_native_rec(
       exprt cond = migrate_expr_back(f.cond);
       if (!here.get_file().empty())
         stamp_value_locations(cond, here);
-      remove_sideeffects(cond, sideeffects);
+      remove_condition_sideeffects(cond, sideeffects);
       migrate_expr(cond, guard);
     }
 
@@ -1353,7 +1367,7 @@ bool goto_convert_functionst::convert_native_rec(
       tmp_x.instructions.back().location = f.location;
     }
     else
-      iter_ok = convert_native_rec(f.iter, tmp_x, here);
+      iter_ok = convert_native_full_expression(f.iter, tmp_x, here);
 
     if (!iter_ok || tmp_x.instructions.empty())
     {
@@ -1439,7 +1453,7 @@ bool goto_convert_functionst::convert_native_rec(
     {
       if (!here.get_file().empty())
         stamp_value_locations(argument, here);
-      remove_sideeffects(argument, sideeffects);
+      remove_condition_sideeffects(argument, sideeffects);
     }
 
     break_switch_targetst old_targets(targets);
@@ -1532,7 +1546,8 @@ bool goto_convert_functionst::convert_native_rec(
         targets.cases_map.insert(std::make_pair(target, --targets.cases.end()))
           .first;
     }
-    entry->second->second.push_back(migrate_expr_back(sc.case_op));
+    entry->second->second.push_back(case_label(
+      migrate_expr_back(sc.case_op), migrate_expr_back(sc.case_op_hi)));
     return true;
   }
 
@@ -1593,18 +1608,20 @@ bool goto_convert_functionst::convert_native_rec(
       return true;
     }
 
-    // --no-assertions: convert_assert removes side effects (a no-op here)
-    // and returns without emitting an ASSERT — match that exactly, an empty
-    // conversion rather than falling back.
-    if (options.get_bool_option("no-assertions"))
-      return true;
-
-    goto_programt::targett t = dest.add_instruction(ASSERT);
-    t->guard = normalise_native_code(
+    const expr2tc guard = normalise_native_code(
       a.guard, effective_location(a.location, inherited), ns);
-    t->location = a.location;
-    t->location.property("assertion");
-    t->location.user_provided(true);
+
+    // Match convert_assert, which removes side effects (a no-op here) and
+    // emits the ASSERT only when emits_assert says so.
+    if (emits_assert(a.location))
+    {
+      goto_programt::targett t = dest.add_instruction(ASSERT);
+      t->guard = guard;
+      t->location = a.location;
+      t->location.property("assertion");
+      t->location.user_provided(true);
+    }
+    assume_if_ends_path(guard, a.location, dest);
     return true;
   }
 
@@ -1673,6 +1690,7 @@ bool goto_convert_functionst::convert_native_rec(
     t->make_function_call(normalise_native_code(
       code2, effective_location(f.location, inherited), ns));
     t->location = f.location;
+    record_exception_unwind(*t);
     return true;
   }
 

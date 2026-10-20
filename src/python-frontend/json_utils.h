@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <string>
 #include <functional>
+#include <map>
 #include <unordered_map>
 #include <vector>
 #include <nlohmann/json.hpp>
@@ -82,6 +83,28 @@ ast_equal_ignoring_location(const nlohmann::json &a, const nlohmann::json &b)
 }
 
 /// True for `X = Y` between two bare names, such as `_Elem = int`.
+// True if the AST subtree contains a function-call node. Used to gate
+// constant-folding of assertion tests to expressions that actually invoke a
+// (potentially pure) function — plain symbolic asserts stay on the solver path.
+inline bool ast_contains_call(const nlohmann::json &n)
+{
+  if (n.is_object())
+  {
+    if (n.contains("_type") && n["_type"] == "Call")
+      return true;
+    for (auto it = n.begin(); it != n.end(); ++it)
+      if (ast_contains_call(it.value()))
+        return true;
+  }
+  else if (n.is_array())
+  {
+    for (const auto &e : n)
+      if (ast_contains_call(e))
+        return true;
+  }
+  return false;
+}
+
 inline bool is_name_alias(const nlohmann::json &stmt)
 {
   return stmt.value("_type", "") == "Assign" && stmt["targets"].size() == 1 &&
@@ -142,6 +165,96 @@ JsonType find_class(const JsonType &ast_json, const std::string &class_name)
     });
 
   return (it != ast_json.end()) ? *it : JsonType();
+}
+
+template <typename JsonType>
+bool is_property_def(const JsonType &function_def)
+{
+  if (function_def.contains("decorator_list"))
+    for (const auto &dec : function_def["decorator_list"])
+      if (
+        dec.value("_type", std::string()) == "Name" &&
+        dec.value("id", std::string()) == "property")
+        return true;
+  return false;
+}
+
+/// True when a module-level class in @p ast_body defines a @property named
+/// @p name.
+template <typename JsonType>
+bool any_class_has_property(const JsonType &ast_body, const std::string &name)
+{
+  for (const auto &cls : ast_body)
+    if (cls.value("_type", std::string()) == "ClassDef" && cls.contains("body"))
+      for (const auto &stmt : cls["body"])
+        if (
+          stmt.value("_type", std::string()) == "FunctionDef" &&
+          stmt.value("name", std::string()) == name && is_property_def(stmt))
+          return true;
+  return false;
+}
+
+// True when `method_name` is a method decorated with @property in `class_name`
+// or one of its (transitive) base classes. Reading `obj.prop` then invokes the
+// getter. A same-named non-property method in a derived class shadows a base
+// property (Python MRO), so a match that is not @property stops the search.
+template <typename JsonType>
+bool is_property_method(
+  const JsonType &ast_body,
+  const std::string &class_name,
+  const std::string &method_name)
+{
+  const JsonType cls = find_class(ast_body, class_name);
+  if (cls.empty() || !cls.contains("body"))
+    return false;
+
+  for (const auto &stmt : cls["body"])
+  {
+    if (
+      stmt.value("_type", std::string()) != "FunctionDef" ||
+      stmt.value("name", std::string()) != method_name)
+      continue;
+    return is_property_def(stmt); // a plain method shadows any base property
+  }
+
+  if (cls.contains("bases"))
+    for (const auto &base : cls["bases"])
+      if (
+        base.contains("id") &&
+        is_property_method(
+          ast_body, base["id"].template get<std::string>(), method_name))
+        return true;
+
+  return false;
+}
+
+/// True when `class_name` or one of its (transitive) base classes defines a
+/// method named `method_name`.
+template <typename JsonType>
+bool class_defines_method(
+  const JsonType &ast_body,
+  const std::string &class_name,
+  const std::string &method_name)
+{
+  const JsonType cls = find_class(ast_body, class_name);
+  if (cls.empty() || !cls.contains("body"))
+    return false;
+
+  for (const auto &stmt : cls["body"])
+    if (
+      stmt.value("_type", std::string()) == "FunctionDef" &&
+      stmt.value("name", std::string()) == method_name)
+      return true;
+
+  if (cls.contains("bases"))
+    for (const auto &base : cls["bases"])
+      if (
+        base.contains("id") && base["id"] != class_name &&
+        class_defines_method(
+          ast_body, base["id"].template get<std::string>(), method_name))
+        return true;
+
+  return false;
 }
 
 /// Counts every ClassDef under @p node, at any depth.
@@ -388,6 +501,69 @@ find_imported_function(const JsonType &ast, const std::string &func_name)
     }
   }
   throw std::runtime_error("Function " + func_name + " not found\n");
+}
+
+/// The dotted name a Name or Attribute node spells, e.g. "collections.abc.Set".
+inline std::string dotted_name(const nlohmann::json &node)
+{
+  if (!node.is_object())
+    return {};
+
+  const std::string type = node.value("_type", "");
+  if (type == "Name")
+    return node.value("id", "");
+
+  if (type == "Attribute")
+  {
+    std::string left =
+      dotted_name(node.value("value", nlohmann::json::object()));
+    std::string right = node.value("attr", "");
+    if (!left.empty() && !right.empty())
+      return left + "." + right;
+    return right.empty() ? left : right;
+  }
+
+  return {};
+}
+
+/// What dotted @p name denotes through the module's imports, e.g. "m.Set"
+/// after `import collections.abc as m` is "collections.abc.Set"; @p name
+/// itself when no import binds its head.
+inline std::string
+resolve_import(const nlohmann::json &ast, const std::string &name)
+{
+  for (const auto &node : ast["body"])
+  {
+    const std::string type = node.value("_type", "");
+    if (type != "Import" && type != "ImportFrom")
+      continue;
+    const std::string from = type == "ImportFrom" && node["module"].is_string()
+                               ? node["module"].get<std::string>() + "."
+                               : "";
+    for (const auto &alias : node["names"])
+    {
+      const std::string bound = alias["asname"].is_string()
+                                  ? alias["asname"].get<std::string>()
+                                  : alias["name"].get<std::string>();
+      if (name == bound || name.starts_with(bound + "."))
+        return from + alias["name"].get<std::string>() +
+               name.substr(bound.size());
+    }
+  }
+  return name;
+}
+
+/// The collections.abc class that dotted @p name denotes, or empty.
+inline std::string
+collections_abc_class(const nlohmann::json &ast, const std::string &name)
+{
+  const std::string prefix = "collections.abc.";
+  const std::string resolved = resolve_import(ast, name);
+  if (
+    !resolved.starts_with(prefix) ||
+    resolved.find('.', prefix.size()) != std::string::npos)
+    return {};
+  return resolved.substr(prefix.size());
 }
 
 template <typename JsonType>
@@ -781,6 +957,75 @@ const JsonType get_var_value(
   return value;
 }
 
+// Whether `node` itself binds `name`, other than as a Store/Del Name.
+inline std::size_t binds_by_field(
+  const nlohmann::json &node,
+  const std::string &kind,
+  const std::string &name)
+{
+  static const std::map<std::string, std::string> name_field = {
+    {"arg", "arg"},
+    {"FunctionDef", "name"},
+    {"AsyncFunctionDef", "name"},
+    {"ClassDef", "name"},
+    {"ExceptHandler", "name"},
+    {"MatchAs", "name"},
+    {"MatchStar", "name"},
+    {"Global", "names"},
+    {"Nonlocal", "names"}};
+  const auto it = name_field.find(kind);
+  if (it == name_field.end() || !node.contains(it->second))
+    return 0;
+  const nlohmann::json &field = node[it->second];
+  return field.is_array() ? std::count(field.begin(), field.end(), name)
+                          : field == name;
+}
+
+// Counts every construct under `node` that binds `name`, in any scope: a
+// Store/Del Name (assignment, walrus, loop and with targets), a
+// global/nonlocal declaration, a parameter, a def/class, an import alias.
+inline std::size_t
+count_name_bindings(const nlohmann::json &node, const std::string &name)
+{
+  std::size_t n = 0;
+  if (node.is_object())
+  {
+    const std::string kind = node.value("_type", "");
+    if (kind == "Name")
+      n += node.value("id", "") == name &&
+           node["ctx"].value("_type", "") != "Load";
+    else if (kind == "alias")
+      n += (node["asname"].is_null() ? node["name"] : node["asname"]) == name;
+    else
+      n += binds_by_field(node, kind, name);
+  }
+  for (const auto &child : node)
+    if (child.is_structured())
+      n += count_name_bindings(child, name);
+  return n;
+}
+
+// The value a top-level `name = ...` or `name: T = ...` statement assigns.
+inline const nlohmann::json *
+top_level_value(const nlohmann::json &module, const std::string &name)
+{
+  auto binds = [&](const nlohmann::json &target) {
+    return target.value("_type", "") == "Name" && target["id"] == name;
+  };
+  for (const auto &stmt : module["body"])
+  {
+    const std::string type = stmt.value("_type", "");
+    if (
+      type == "Assign" && stmt["targets"].size() == 1 &&
+      binds(stmt["targets"][0]))
+      return &stmt["value"];
+    if (
+      type == "AnnAssign" && binds(stmt["target"]) && !stmt["value"].is_null())
+      return &stmt["value"];
+  }
+  return nullptr;
+}
+
 template <typename JsonType>
 bool has_multiple_assignments_in_block(
   const std::string &var_name,
@@ -1082,6 +1327,23 @@ imported_function_return_type(const std::string &name, const JsonType &ast_json)
   }
 
   return "";
+}
+
+// Every `return` value under `node`, through nested blocks but not nested
+// definitions.
+inline void collect_return_values(
+  const nlohmann::json &node,
+  std::vector<nlohmann::json> &values)
+{
+  if (!node.is_object() && !node.is_array())
+    return;
+  const std::string type = node.is_object() ? node.value("_type", "") : "";
+  if (type == "FunctionDef" || type == "ClassDef" || type == "Lambda")
+    return;
+  if (type == "Return" && node.contains("value") && !node["value"].is_null())
+    values.push_back(node["value"]);
+  for (const auto &child : node)
+    collect_return_values(child, values);
 }
 
 } // namespace json_utils

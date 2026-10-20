@@ -18,12 +18,14 @@
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/tuple/tuple_handler.h>
 #include <python-frontend/dynamic_type/dynamic_type_handler.h>
+#include <python-frontend/dynamic_type/literal_divergence.h>
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/type/type_utils.h>
 #include <irep2/irep2_utils.h>
 #include <util/arith/arith_tools.h>
 #include <util/expr/base_type.h>
 #include <util/arith/bitvector.h>
+#include <util/lang/c_expr2string.h>
 #include <util/lang/c_typecast.h>
 #include <util/lang/c_types.h>
 #include <util/config/config.h>
@@ -39,6 +41,7 @@
 
 #include <algorithm>
 #include <array>
+#include <functional>
 #include <numeric>
 #include <stdexcept>
 
@@ -74,51 +77,85 @@ bool is_incompatible_scalar_string_retype(
          (th.is_string_type(lhs) && th.is_numeric_scalar_type(rhs));
 }
 
-// True if the AST subtree contains a function-call node. Used to gate
-// constant-folding of assertion tests to expressions that actually invoke a
-// (potentially pure) function — plain symbolic asserts stay on the solver path.
-bool ast_contains_call(const nlohmann::json &n)
+// Whether the rebinding needs a fresh symbol. An int rebound to a float would
+// otherwise promote the shared symbol in place, so reads before the rebind see
+// a float (#8402). That case is taken only on the unconditional spine: an alias
+// made in a conditional body is dropped at the join, where the in-place
+// promotion is still needed.
+bool is_scalar_retype(
+  const type_handler &th,
+  const typet &lhs,
+  const typet &rhs,
+  bool on_spine)
 {
-  if (n.is_object())
+  return is_incompatible_scalar_string_retype(th, lhs, rhs) ||
+         (on_spine && type_utils::is_integer_type(lhs) && rhs.is_floatbv());
+}
+
+using python_frontend::is_literal_int_node;
+using python_frontend::literal_int_value;
+
+bool has_runtime_slice_axis(const nlohmann::json &subscript)
+{
+  if (!subscript.contains("slice") || !subscript["slice"].is_object())
+    return false;
+  const nlohmann::json &slice = subscript["slice"];
+  std::vector<nlohmann::json> axes;
+  if (slice.value("_type", "") == "Tuple" && slice.contains("elts"))
+    axes.assign(slice["elts"].begin(), slice["elts"].end());
+  else
+    axes.push_back(slice);
+  for (const nlohmann::json &axis : axes)
   {
-    if (n.contains("_type") && n["_type"] == "Call")
-      return true;
-    for (auto it = n.begin(); it != n.end(); ++it)
-      if (ast_contains_call(it.value()))
-        return true;
-  }
-  else if (n.is_array())
-  {
-    for (const auto &e : n)
-      if (ast_contains_call(e))
+    if (axis.value("_type", "") != "Slice")
+      continue;
+    for (const char *key : {"lower", "upper", "step"})
+      if (
+        axis.contains(key) && !axis[key].is_null() &&
+        !literal_int_value(axis[key]))
         return true;
   }
   return false;
 }
 
-bool is_literal_int_node(const nlohmann::json &node)
+std::optional<std::size_t> positive_literal_slice_length(
+  const nlohmann::json &slice,
+  std::size_t source_len)
 {
-  if (
-    node.value("_type", "") == "Constant" && node.contains("value") &&
-    node["value"].is_number_integer())
-    return true;
-
-  return node.value("_type", "") == "UnaryOp" && node.contains("op") &&
-         node["op"].value("_type", "") == "USub" && node.contains("operand") &&
-         node["operand"].value("_type", "") == "Constant" &&
-         node["operand"].contains("value") &&
-         node["operand"]["value"].is_number_integer();
+  if (slice.value("_type", "") != "Slice")
+    return std::nullopt;
+  const std::optional<long long> step =
+    python_frontend::literal_slice_step(slice);
+  if (!step || *step < 0)
+    return std::nullopt;
+  return python_frontend::literal_slice_length(source_len, slice);
 }
 
-std::optional<long long> literal_int_value(const nlohmann::json &node)
+std::optional<std::pair<std::string, nlohmann::json>>
+declared_name_slice_source(
+  const nlohmann::json &arg,
+  const std::string &function_name,
+  const nlohmann::json &ast)
 {
-  if (!is_literal_int_node(node))
+  if (
+    !arg.is_object() || arg.value("_type", "") != "Name" ||
+    !arg.contains("id") || !arg["id"].is_string())
     return std::nullopt;
 
-  if (node.value("_type", "") == "Constant")
-    return node["value"].get<long long>();
+  nlohmann::json decl =
+    json_utils::find_var_decl(arg["id"].get<std::string>(), function_name, ast);
+  if (!decl.contains("value") || !decl["value"].is_object())
+    return std::nullopt;
 
-  return -node["operand"]["value"].get<long long>();
+  const nlohmann::json &value = decl["value"];
+  if (
+    value.value("_type", "") != "Subscript" || !value.contains("value") ||
+    !value["value"].is_object() ||
+    value["value"].value("_type", "") != "Name" || !value.contains("slice") ||
+    !value["slice"].is_object())
+    return std::nullopt;
+
+  return std::make_pair(value["value"].value("id", ""), value["slice"]);
 }
 
 std::vector<long long>
@@ -154,30 +191,6 @@ subscript_indices_from_root(const nlohmann::json &node, std::string &root_name)
   return indices;
 }
 
-exprt build_numpy_array_cell(
-  const namespacet &ns,
-  const symbolt &symbol,
-  const std::vector<long long> &indices)
-{
-  exprt cell = symbol_expr(symbol);
-  typet cell_type = ns.follow(symbol.get_type());
-
-  for (long long index : indices)
-  {
-    if (cell_type.is_pointer())
-      cell_type = ns.follow(cell_type.subtype());
-    if (!cell_type.is_array())
-      return exprt();
-
-    const typet elem_type = ns.follow(to_array_type(cell_type).subtype());
-    cell = python_expr::build_index(cell, from_integer(index, size_type()));
-    cell.type() = elem_type;
-    cell_type = elem_type;
-  }
-
-  return cell;
-}
-
 bool is_numpy_transpose_call_node(const nlohmann::json &node)
 {
   return node.value("_type", "") == "Call" && node.contains("func") &&
@@ -203,87 +216,6 @@ bool is_numpy_transpose_view_call_node(const nlohmann::json &node)
          is_numpy_axis_permutation_call_node(node);
 }
 
-const nlohmann::json *
-numpy_transpose_source_node(const nlohmann::json &node, bool &swaps_axes)
-{
-  if (
-    !is_numpy_transpose_view_call_node(node) || !node.contains("args") ||
-    !node["args"].is_array() || node["args"].empty())
-    return nullptr;
-
-  const nlohmann::json *source = &node["args"][0];
-  swaps_axes = true;
-  if (
-    is_numpy_transpose_call_node(*source) && source->contains("args") &&
-    (*source)["args"].is_array() && !(*source)["args"].empty())
-  {
-    swaps_axes = false;
-    source = &(*source)["args"][0];
-  }
-
-  return source;
-}
-
-std::optional<bool> numpy_axis_permutation_swaps_axes(
-  const nlohmann::json &node,
-  std::size_t rank,
-  bool default_swaps_axes)
-{
-  if (!is_numpy_axis_permutation_call_node(node))
-    return default_swaps_axes;
-
-  if (rank > 2 || node["args"].size() < 3)
-    return std::nullopt;
-
-  std::array<long long, 2> axes{};
-  for (std::size_t i = 0; i < axes.size(); ++i)
-  {
-    std::optional<long long> axis = literal_int_value(node["args"][i + 1]);
-    if (!axis)
-      return std::nullopt;
-
-    axes[i] = *axis;
-    if (axes[i] < 0)
-      axes[i] += static_cast<long long>(rank);
-    if (axes[i] < 0 || axes[i] >= static_cast<long long>(rank))
-      return std::nullopt;
-  }
-
-  return axes[0] != axes[1];
-}
-
-bool is_numpy_reshape_call_node(const nlohmann::json &node)
-{
-  return node.value("_type", "") == "Call" && node.contains("func") &&
-         node["func"].is_object() &&
-         node["func"].value("_type", "") == "Attribute" &&
-         node["func"].value("attr", "") == "reshape";
-}
-
-bool is_numpy_squeeze_call_node(const nlohmann::json &node)
-{
-  return node.value("_type", "") == "Call" && node.contains("func") &&
-         node["func"].is_object() &&
-         node["func"].value("_type", "") == "Attribute" &&
-         node["func"].value("attr", "") == "squeeze";
-}
-
-bool is_numpy_expand_dims_call_node(const nlohmann::json &node)
-{
-  return node.value("_type", "") == "Call" && node.contains("func") &&
-         node["func"].is_object() &&
-         node["func"].value("_type", "") == "Attribute" &&
-         node["func"].value("attr", "") == "expand_dims";
-}
-
-bool is_numpy_broadcast_to_call_node(const nlohmann::json &node)
-{
-  return node.value("_type", "") == "Call" && node.contains("func") &&
-         node["func"].is_object() &&
-         node["func"].value("_type", "") == "Attribute" &&
-         node["func"].value("attr", "") == "broadcast_to";
-}
-
 bool is_numpy_shape_only_view_call_node(const nlohmann::json &node)
 {
   const std::string attr = node.contains("func") && node["func"].is_object()
@@ -291,18 +223,6 @@ bool is_numpy_shape_only_view_call_node(const nlohmann::json &node)
                              : "";
   return attr == "reshape" || attr == "squeeze" || attr == "expand_dims" ||
          attr == "broadcast_to";
-}
-
-std::optional<std::size_t>
-normalize_numpy_axis(long long axis, std::size_t rank, bool insertion_axis)
-{
-  const long long upper =
-    static_cast<long long>(rank) + (insertion_axis ? 1 : 0);
-  if (axis < 0)
-    axis += upper;
-  if (axis < 0 || axis >= upper)
-    return std::nullopt;
-  return static_cast<std::size_t>(axis);
 }
 
 std::vector<std::size_t>
@@ -325,12 +245,6 @@ numpy_shape_from_type(const namespacet &ns, typet source_type)
     source_type = ns.follow(array_type.subtype());
   }
   return shape;
-}
-
-std::size_t numpy_shape_element_count(const std::vector<std::size_t> &shape)
-{
-  return std::accumulate(
-    shape.begin(), shape.end(), std::size_t{1}, std::multiplies<>());
 }
 
 std::optional<std::vector<std::size_t>>
@@ -495,330 +409,6 @@ numpy_constructor_shape(const nlohmann::json &node)
   return std::nullopt;
 }
 
-std::optional<std::vector<long long>>
-numpy_raw_reshape_sequence(const nlohmann::json &shape_arg)
-{
-  if (!shape_arg.contains("elts"))
-    return std::nullopt;
-
-  std::vector<long long> raw_shape;
-  for (const auto &dim_node : shape_arg["elts"])
-  {
-    std::optional<long long> dim = literal_int_value(dim_node);
-    if (!dim)
-      return std::nullopt;
-    raw_shape.push_back(*dim);
-  }
-
-  return raw_shape;
-}
-
-std::optional<std::vector<long long>>
-numpy_raw_reshape_method_shape(const nlohmann::json &args)
-{
-  std::vector<long long> raw_shape;
-  for (std::size_t i = 1; i < args.size(); ++i)
-  {
-    std::optional<long long> dim = literal_int_value(args[i]);
-    if (!dim)
-      return std::nullopt;
-    raw_shape.push_back(*dim);
-  }
-
-  return raw_shape;
-}
-
-std::optional<std::vector<long long>>
-numpy_raw_reshape_shape(const nlohmann::json &node)
-{
-  if (
-    !is_numpy_reshape_call_node(node) || !node.contains("args") ||
-    !node["args"].is_array() || node["args"].size() < 2)
-    return std::nullopt;
-
-  const nlohmann::json &shape_arg = node["args"][1];
-  if (
-    shape_arg.is_object() && shape_arg.contains("_type") &&
-    (shape_arg["_type"] == "Tuple" || shape_arg["_type"] == "List"))
-    return numpy_raw_reshape_sequence(shape_arg);
-
-  if (node.value("_numpy_method_form", false) && node["args"].size() > 2)
-    return numpy_raw_reshape_method_shape(node["args"]);
-
-  std::optional<long long> dim = literal_int_value(shape_arg);
-  if (!dim)
-    return std::nullopt;
-
-  return std::vector<long long>{*dim};
-}
-
-std::optional<std::vector<std::size_t>> normalize_numpy_reshape_shape(
-  const std::vector<long long> &raw_shape,
-  std::size_t total)
-{
-  std::vector<std::size_t> shape;
-  std::size_t inferred_idx = raw_shape.size();
-  std::size_t known_product = 1;
-  for (std::size_t i = 0; i < raw_shape.size(); ++i)
-  {
-    if (raw_shape[i] == -1)
-    {
-      if (inferred_idx != raw_shape.size())
-        return std::nullopt;
-      inferred_idx = i;
-      shape.push_back(0);
-      continue;
-    }
-    if (raw_shape[i] < 0)
-      return std::nullopt;
-    shape.push_back(static_cast<std::size_t>(raw_shape[i]));
-    known_product *= shape.back();
-  }
-
-  if (inferred_idx != raw_shape.size())
-  {
-    if (known_product == 0 || total % known_product != 0)
-      return std::nullopt;
-    shape[inferred_idx] = total / known_product;
-  }
-
-  return numpy_shape_element_count(shape) == total
-           ? std::optional<std::vector<std::size_t>>(shape)
-           : std::nullopt;
-}
-
-std::optional<std::vector<std::size_t>>
-parse_numpy_reshape_shape(const nlohmann::json &node, std::size_t total)
-{
-  std::optional<std::vector<long long>> raw_shape =
-    numpy_raw_reshape_shape(node);
-  if (!raw_shape)
-    return std::nullopt;
-
-  return normalize_numpy_reshape_shape(*raw_shape, total);
-}
-
-std::optional<std::vector<std::size_t>> numpy_squeeze_view_shape(
-  const nlohmann::json &node,
-  const std::vector<std::size_t> &source_shape)
-{
-  if (
-    !is_numpy_squeeze_call_node(node) || !node.contains("args") ||
-    !node["args"].is_array() || node["args"].empty())
-    return std::nullopt;
-
-  std::vector<std::size_t> view_shape;
-  if (node["args"].size() == 1)
-  {
-    for (std::size_t dim : source_shape)
-      if (dim != 1)
-        view_shape.push_back(dim);
-    return view_shape;
-  }
-
-  std::optional<long long> raw_axis = literal_int_value(node["args"][1]);
-  if (!raw_axis)
-    return std::nullopt;
-
-  std::optional<std::size_t> axis =
-    normalize_numpy_axis(*raw_axis, source_shape.size(), false);
-  if (!axis || source_shape[*axis] != 1)
-    return std::nullopt;
-
-  for (std::size_t i = 0; i < source_shape.size(); ++i)
-    if (i != *axis)
-      view_shape.push_back(source_shape[i]);
-  return view_shape;
-}
-
-std::optional<std::vector<std::size_t>> numpy_expand_dims_view_shape(
-  const nlohmann::json &node,
-  const std::vector<std::size_t> &source_shape)
-{
-  if (
-    !is_numpy_expand_dims_call_node(node) || !node.contains("args") ||
-    !node["args"].is_array() || node["args"].size() < 2)
-    return std::nullopt;
-
-  std::optional<long long> raw_axis = literal_int_value(node["args"][1]);
-  if (!raw_axis)
-    return std::nullopt;
-
-  std::optional<std::size_t> axis =
-    normalize_numpy_axis(*raw_axis, source_shape.size(), true);
-  if (!axis)
-    return std::nullopt;
-
-  std::vector<std::size_t> view_shape = source_shape;
-  view_shape.insert(view_shape.begin() + *axis, 1);
-  return view_shape;
-}
-
-bool numpy_shapes_broadcast_to(
-  const std::vector<std::size_t> &source_shape,
-  const std::vector<std::size_t> &view_shape)
-{
-  if (source_shape.size() > view_shape.size())
-    return false;
-
-  const std::size_t offset = view_shape.size() - source_shape.size();
-  for (std::size_t axis = 0; axis < source_shape.size(); ++axis)
-  {
-    const std::size_t source_dim = source_shape[axis];
-    const std::size_t view_dim = view_shape[axis + offset];
-    if (source_dim != view_dim && source_dim != 1)
-      return false;
-  }
-  return true;
-}
-
-std::optional<std::vector<std::size_t>> numpy_broadcast_to_view_shape(
-  const nlohmann::json &node,
-  const std::vector<std::size_t> &source_shape)
-{
-  if (
-    !is_numpy_broadcast_to_call_node(node) || !node.contains("args") ||
-    !node["args"].is_array() || node["args"].size() < 2)
-    return std::nullopt;
-
-  std::optional<std::vector<long long>> raw_shape =
-    numpy_raw_reshape_sequence(node["args"][1]);
-  if (!raw_shape)
-    return std::nullopt;
-
-  std::vector<std::size_t> view_shape;
-  for (long long dim : *raw_shape)
-  {
-    if (dim < 0)
-      return std::nullopt;
-    view_shape.push_back(static_cast<std::size_t>(dim));
-  }
-
-  if (view_shape.empty() || view_shape.size() > 2)
-    return std::nullopt;
-  return numpy_shapes_broadcast_to(source_shape, view_shape)
-           ? std::optional<std::vector<std::size_t>>(view_shape)
-           : std::nullopt;
-}
-
-std::optional<std::vector<std::size_t>> numpy_shape_only_view_shape(
-  const nlohmann::json &node,
-  const std::vector<std::size_t> &source_shape)
-{
-  if (is_numpy_reshape_call_node(node))
-    return parse_numpy_reshape_shape(
-      node, numpy_shape_element_count(source_shape));
-  if (is_numpy_squeeze_call_node(node))
-    return numpy_squeeze_view_shape(node, source_shape);
-  if (is_numpy_expand_dims_call_node(node))
-    return numpy_expand_dims_view_shape(node, source_shape);
-  if (is_numpy_broadcast_to_call_node(node))
-    return numpy_broadcast_to_view_shape(node, source_shape);
-  return std::nullopt;
-}
-
-std::optional<std::vector<long long>> numpy_broadcast_source_indices(
-  const std::vector<long long> &view_indices,
-  const std::vector<std::size_t> &view_shape,
-  const std::vector<std::size_t> &source_shape)
-{
-  if (view_indices.size() != view_shape.size())
-    return std::nullopt;
-
-  const std::size_t offset = view_shape.size() - source_shape.size();
-  std::vector<long long> source_indices;
-  for (std::size_t axis = 0; axis < source_shape.size(); ++axis)
-  {
-    const long long view_index = view_indices[axis + offset];
-    source_indices.push_back(source_shape[axis] == 1 ? 0 : view_index);
-  }
-  return source_indices;
-}
-
-bool numpy_indices_equal(
-  const std::vector<long long> &lhs,
-  const std::vector<long long> &rhs)
-{
-  return lhs.size() == rhs.size() &&
-         std::equal(lhs.begin(), lhs.end(), rhs.begin());
-}
-
-std::vector<std::vector<long long>> numpy_broadcast_view_indices_for_source(
-  const std::vector<long long> &source_indices,
-  const std::vector<std::size_t> &view_shape,
-  const std::vector<std::size_t> &source_shape)
-{
-  std::vector<std::vector<long long>> matches;
-  if (view_shape.empty() || view_shape.size() > 2)
-    return matches;
-
-  const std::size_t outer = view_shape[0];
-  const std::size_t inner = view_shape.size() == 1 ? 1 : view_shape[1];
-  for (std::size_t i = 0; i < outer; ++i)
-  {
-    for (std::size_t j = 0; j < inner; ++j)
-    {
-      std::vector<long long> current{static_cast<long long>(i)};
-      if (view_shape.size() == 2)
-        current.push_back(static_cast<long long>(j));
-
-      std::optional<std::vector<long long>> mapped =
-        numpy_broadcast_source_indices(current, view_shape, source_shape);
-      if (mapped && numpy_indices_equal(*mapped, source_indices))
-        matches.push_back(std::move(current));
-    }
-  }
-  return matches;
-}
-
-std::optional<std::size_t> numpy_flat_index(
-  const std::vector<long long> &indices,
-  const std::vector<std::size_t> &shape)
-{
-  if (indices.size() != shape.size())
-    return std::nullopt;
-
-  std::size_t flat = 0;
-  for (std::size_t i = 0; i < shape.size(); ++i)
-  {
-    if (indices[i] < 0 || static_cast<std::size_t>(indices[i]) >= shape[i])
-      return std::nullopt;
-    flat = flat * shape[i] + static_cast<std::size_t>(indices[i]);
-  }
-  return flat;
-}
-
-std::optional<std::vector<long long>>
-numpy_unravel_index(std::size_t flat, const std::vector<std::size_t> &shape)
-{
-  if (shape.empty() || shape.size() > 2)
-    return std::nullopt;
-
-  if (shape.size() == 1)
-    return std::vector<long long>{static_cast<long long>(flat)};
-
-  if (shape[1] == 0)
-    return std::nullopt;
-
-  return std::vector<long long>{
-    static_cast<long long>(flat / shape[1]),
-    static_cast<long long>(flat % shape[1])};
-}
-
-std::optional<std::vector<long long>> numpy_shape_view_source_indices(
-  const std::vector<long long> &view_indices,
-  const std::vector<std::size_t> &view_shape,
-  const std::vector<std::size_t> &source_shape,
-  const bool broadcast)
-{
-  if (broadcast)
-    return numpy_broadcast_source_indices(
-      view_indices, view_shape, source_shape);
-
-  std::optional<std::size_t> flat = numpy_flat_index(view_indices, view_shape);
-  return flat ? numpy_unravel_index(*flat, source_shape) : std::nullopt;
-}
-
 nlohmann::json numpy_constant_index_node(const std::size_t value)
 {
   return {{"_type", "Constant"}, {"value", static_cast<long long>(value)}};
@@ -847,35 +437,6 @@ nlohmann::json numpy_subscript_node(
   for (const std::size_t index : indices)
     node = numpy_subscript_node(std::move(node), index);
   return node;
-}
-
-std::size_t numpy_array_rank(const namespacet &ns, typet source_type)
-{
-  if (source_type.is_pointer())
-    source_type = ns.follow(source_type.subtype());
-
-  std::size_t rank = 0;
-  for (typet current = source_type; current.is_array();
-       current = ns.follow(to_array_type(current).subtype()))
-    ++rank;
-  return rank;
-}
-
-std::optional<std::vector<long long>> numpy_transpose_cell_indices(
-  std::size_t rank,
-  bool swaps_axes,
-  const std::vector<long long> &indices)
-{
-  if (rank == 1 && indices.size() == 1)
-    return std::vector<long long>{indices[0]};
-
-  if (rank != 2 || indices.size() != 2)
-    return std::nullopt;
-
-  if (swaps_axes)
-    return std::vector<long long>{indices[1], indices[0]};
-
-  return std::vector<long long>{indices[0], indices[1]};
 }
 
 // A bare `:` slice axis (no lower/upper/step), matching
@@ -940,6 +501,28 @@ bool assignment_target_is_subscript(const nlohmann::json &ast_node)
          (ast_node.contains("target") && is_subscript(ast_node["target"]));
 }
 
+static bool is_array_into_scalar(const typet &lhs_type, const typet &rhs_type)
+{
+  return rhs_type.is_array() && !lhs_type.is_array() && !lhs_type.is_pointer();
+}
+
+static bool emit_list_element_replacement(
+  python_converter &converter,
+  const nlohmann::json &ast_node,
+  const exprt &lhs,
+  const exprt &rhs,
+  codet &target_block)
+{
+  if (!assignment_target_is_subscript(ast_node))
+    return false;
+  python_list list(converter, ast_node);
+  const std::optional<exprt> replacement =
+    list.build_element_replacement(lhs, rhs, ast_node);
+  if (replacement)
+    target_block.copy_to_operands(*replacement);
+  return replacement.has_value();
+}
+
 bool is_same_name_assignment(
   const nlohmann::json &target,
   const nlohmann::json &ast_node)
@@ -952,12 +535,38 @@ bool is_same_name_assignment(
          target.value("id", "") == value.value("id", "");
 }
 
+std::string short_symbol_name(std::string id)
+{
+  const std::size_t at = id.rfind('@');
+  if (at != std::string::npos && at + 1 < id.size())
+    return id.substr(at + 1);
+  return id;
+}
+
+bool same_numpy_storage_id(const std::string &lhs, const std::string &rhs)
+{
+  return lhs == rhs || short_symbol_name(lhs) == short_symbol_name(rhs);
+}
+
+// A view local to another function is out of scope at this rebind; with the
+// short-name match above, its parameter source can collide with a global.
+bool is_local_to_other_function(
+  const std::string &id,
+  const std::string &current_function)
+{
+  // The function path of a nested function's local is outer@F@inner.
+  const std::size_t marker = id.find("@F@");
+  if (marker == std::string::npos)
+    return false;
+  const std::size_t path_begin = marker + 3;
+  return id.substr(path_begin, id.rfind('@') - path_begin) != current_function;
+}
+
 bool should_detach_numpy_pointer_views_for_assignment(
   const nlohmann::json &target,
-  const nlohmann::json &ast_node,
-  const symbolt *lhs_symbol)
+  const nlohmann::json &ast_node)
 {
-  return target.value("_type", "") == "Name" && lhs_symbol &&
+  return target.value("_type", "") == "Name" &&
          !is_same_name_assignment(target, ast_node);
 }
 
@@ -1106,21 +715,34 @@ static bool convert_scalar_rhs(const typet &lhs_type, exprt &rhs)
 {
   const typet rhs_type = rhs.type();
   // is_bool() must be explicit since is_integer_type() excludes bool.
-  const bool is_real = rhs_type.is_floatbv() ||
-                       type_utils::is_integer_type(rhs_type) ||
-                       rhs_type.is_bool();
-  if (is_complex_type(lhs_type) && !is_complex_type(rhs_type) && is_real)
+  const bool rhs_is_real = rhs_type.is_floatbv() ||
+                           type_utils::is_integer_type(rhs_type) ||
+                           rhs_type.is_bool();
+  const bool lhs_is_real = lhs_type.is_floatbv() ||
+                           type_utils::is_integer_type(lhs_type) ||
+                           lhs_type.is_bool();
+
+  if (is_complex_type(lhs_type) && !is_complex_type(rhs_type) && rhs_is_real)
   {
     rhs = promote_to_complex(rhs);
     return true;
   }
-  if (
-    rhs_type.is_bool() &&
-    (lhs_type.is_floatbv() || type_utils::is_integer_type(lhs_type)))
+  if (rhs_type.is_bool() && lhs_is_real && !lhs_type.is_bool())
   {
     rhs = typecast_exprt(rhs, lhs_type);
     return true;
   }
+
+  // Lower None to nondet to prevent invalid typecasts to primitive types
+  // (#8132).
+  if (rhs_type == none_type() && lhs_is_real)
+  {
+    auto loc = rhs.location();
+    rhs = side_effect_expr_nondett(lhs_type);
+    rhs.location() = loc;
+    return true;
+  }
+
   return false;
 }
 
@@ -1429,6 +1051,92 @@ void python_converter::adopt_tagged_element(
   lhs.type() = rhs.type();
 }
 
+bool python_converter::annotation_yields_to_rhs(
+  const nlohmann::json &ast_node,
+  const exprt &rhs) const
+{
+  const bool inferred = ast_node.value("_inferred_annotation", false);
+  // A scalar guessed before an imported callee was retyped from its call
+  // sites, e.g. `a = heappop(h)` on a heap of tuples (#8359).
+  if (inferred && tuple_handler_->is_tuple_type(rhs.type()))
+    return true;
+
+  return ast_node["annotation"].value("id", std::string()) == "Any" &&
+         (inferred || ast_node.value("esbmc_synthesized", false) ||
+          !json_utils::is_imported_from(*ast_json, "typing", "Any"));
+}
+
+/// The user class whose instance a value of @p type is, or "".
+std::string python_converter::user_class_of(const typet &type)
+{
+  const typet &raw = type.is_pointer() ? type.subtype() : type;
+  // A class defined later in the module has no symbol yet.
+  if (raw.is_symbol() && !ns.lookup(raw))
+    return "";
+  const typet &held = ns.follow(raw);
+  if (!held.is_struct())
+    return "";
+  const std::string name =
+    extract_class_name_from_tag(to_struct_type(held).tag().as_string());
+  return json_utils::is_class(name, *ast_json) ? name : "";
+}
+
+/// An attribute is typed by the class of the instance it first holds, so
+/// storing an instance of an unrelated class would read one class's storage
+/// as the other's (#8461).
+void python_converter::reject_attribute_class_change(
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &ast_node,
+  bool is_ctor_call)
+{
+  if (!lhs.is_member())
+    return;
+  const std::string held = user_class_of(lhs.type());
+  const std::string assigned =
+    is_ctor_call
+      ? get_typechecker().get_constructor_name(ast_node["value"]["func"])
+      : user_class_of(rhs.type());
+  if (
+    held.empty() || !json_utils::is_class(assigned, *ast_json) ||
+    type_handler_.class_derives_from(assigned, held))
+    return;
+  throw std::runtime_error(
+    "unsupported: attribute '" + lhs.component_name().as_string() +
+    "' holds a '" + held + "' and is assigned a '" + assigned +
+    "'; an attribute holding instances of unrelated classes is not modelled");
+}
+
+/// An attribute keeps the scalar type it first holds, so storing a value its
+/// type cannot hold (an int attribute given a float or a str) would convert
+/// it rather than rebind it (#8381). An int into a float attribute is exact.
+void python_converter::reject_attribute_scalar_change(
+  const exprt &lhs,
+  const exprt &rhs)
+{
+  if (!lhs.is_member())
+    return;
+  auto kind = [](const typet &t) -> std::string {
+    if (type_utils::is_string_type(t))
+      return "str";
+    if (t.is_floatbv())
+      return "float";
+    if (t.is_signedbv() || t.is_unsignedbv())
+      return "int";
+    return "";
+  };
+  const std::string held = kind(lhs.type());
+  const std::string assigned = kind(rhs.type());
+  if (
+    held.empty() || assigned.empty() || held == assigned ||
+    (held == "float" && assigned == "int"))
+    return;
+  throw std::runtime_error(
+    "unsupported: attribute '" + lhs.component_name().as_string() +
+    "' holds a " + held + " and is assigned a " + assigned +
+    "; an attribute whose type changes is not modelled");
+}
+
 void python_converter::handle_assignment_type_adjustments(
   symbolt *lhs_symbol,
   exprt &lhs,
@@ -1437,6 +1145,8 @@ void python_converter::handle_assignment_type_adjustments(
   const nlohmann::json &ast_node,
   bool is_ctor_call)
 {
+  reject_attribute_class_change(lhs, rhs, ast_node, is_ctor_call);
+  reject_attribute_scalar_change(lhs, rhs);
   const bool has_annotation =
     ast_node.contains("annotation") && !ast_node["annotation"].is_null();
 
@@ -1444,7 +1154,7 @@ void python_converter::handle_assignment_type_adjustments(
   if (assignment_target_is_subscript(ast_node))
     return;
 
-  rhs = wrap_literal_if_optional(rhs, lhs.type());
+  rhs = wrap_stored_if_optional(rhs, lhs.type());
 
   // Assigning to a struct member (self.attr = value): an unannotated parameter
   // is typed as the any-type carrier (void*, i.e. a pointer whose subtype is
@@ -1646,7 +1356,8 @@ void python_converter::handle_assignment_type_adjustments(
       // store a typed NULL, so a later `x = Class(...)` construction allocates
       // a properly-sized object. Retyping it to none_type() (pointer-to-bool)
       // would shrink the pointee and corrupt the allocation.
-      if (is_user_class_pointer(lhs.type()))
+      // An Optional[dict] keeps its dict pointer type the same way.
+      if (keeps_pointer_type_on_none(lhs.type()))
         rhs = typecast_exprt(rhs, lhs.type());
       else
       {
@@ -1664,11 +1375,7 @@ void python_converter::handle_assignment_type_adjustments(
     // a tuple dict-value read then misfolds every component access (#5444
     // latent item).
     else if (
-      (!has_annotation ||
-       (ast_node["annotation"].value("id", std::string()) == "Any" &&
-        (ast_node.value("_inferred_annotation", false) ||
-         ast_node.value("esbmc_synthesized", false) ||
-         !json_utils::is_imported_from(*ast_json, "typing", "Any")))) &&
+      (!has_annotation || annotation_yields_to_rhs(ast_node, rhs)) &&
       !rhs.type().is_empty() && lhs.type() != rhs.type() &&
       !rhs.type().is_code() &&
       !(rhs.type().is_pointer() && rhs.type().subtype().id() == "empty") &&
@@ -1807,11 +1514,15 @@ void python_converter::handle_list_literal_unpacking(
   // Assign targets before the star
   for (size_t i = 0; i < before_star; i++)
   {
+    is_converting_rhs = true;
+    // A call is a statement until it is turned into the value it returns
+    exprt elem_expr = to_value_expr(get_expr(elements[i]), ns);
+    is_converting_rhs = false;
+
     if (targets[i]["_type"] != "Name")
     {
-      throw std::runtime_error(
-        "List unpacking only supports simple names, not " +
-        targets[i]["_type"].get<std::string>());
+      unpack_nested_target(ast_node, targets[i], elem_expr, target_block);
+      continue;
     }
 
     std::string var_name = targets[i]["id"].get<std::string>();
@@ -1819,10 +1530,6 @@ void python_converter::handle_list_literal_unpacking(
     var_sid.set_object(var_name);
 
     symbolt *var_symbol = find_symbol(var_sid.to_string());
-
-    is_converting_rhs = true;
-    exprt elem_expr = get_expr(elements[i]);
-    is_converting_rhs = false;
 
     if (!var_symbol)
     {
@@ -1901,11 +1608,16 @@ void python_converter::handle_list_literal_unpacking(
     size_t target_idx = static_cast<size_t>(star_idx) + 1 + i;
     size_t elem_idx = elements.size() - after_star + i;
 
+    is_converting_rhs = true;
+    // A call is a statement until it is turned into the value it returns
+    exprt elem_expr = to_value_expr(get_expr(elements[elem_idx]), ns);
+    is_converting_rhs = false;
+
     if (targets[target_idx]["_type"] != "Name")
     {
-      throw std::runtime_error(
-        "List unpacking only supports simple names, not " +
-        targets[target_idx]["_type"].get<std::string>());
+      unpack_nested_target(
+        ast_node, targets[target_idx], elem_expr, target_block);
+      continue;
     }
 
     std::string var_name = targets[target_idx]["id"].get<std::string>();
@@ -1913,10 +1625,6 @@ void python_converter::handle_list_literal_unpacking(
     var_sid.set_object(var_name);
 
     symbolt *var_symbol = find_symbol(var_sid.to_string());
-
-    is_converting_rhs = true;
-    exprt elem_expr = get_expr(elements[elem_idx]);
-    is_converting_rhs = false;
 
     if (!var_symbol)
     {
@@ -2337,6 +2045,13 @@ std::optional<nlohmann::json> python_converter::rewrite_numpy_method_call_node(
 
   if (supported_copy_method)
   {
+    // `b = v.copy()` is modelled as the assignment `b = v`, which copies an
+    // array; a view is a pointer, so it needs a real copy of its elements.
+    if (
+      method_base.value("_type", "") == "Name" &&
+      find_numpy_pointer_view_info(method_base.value("id", "")) != nullptr)
+      return build_numpy_method_rewrite_node(call_node, "copy", method_base);
+
     nlohmann::json copied = method_base;
     copied["_numpy_copy_method"] = true;
     return copied;
@@ -2357,7 +2072,15 @@ bool python_converter::is_numpy_view_copy_call_node(
     return false;
 
   static const std::set<std::string> view_functions = {
-    "transpose", "reshape", "ravel", "diagonal"};
+    "transpose",
+    "swapaxes",
+    "moveaxis",
+    "reshape",
+    "ravel",
+    "diagonal",
+    "squeeze",
+    "expand_dims",
+    "broadcast_to"};
   return view_functions.count(node["func"].value("attr", "")) != 0;
 }
 
@@ -2418,7 +2141,13 @@ bool python_converter::is_tracked_numpy_view_name_node(
     return false;
 
   const std::string id = resolve_name_symbol_id(node["id"].get<std::string>());
-  return !id.empty() && is_tracked_numpy_view_id(id);
+  // is_tracked_numpy_view_id alone misses pointer-backed views (row/column/
+  // diagonal/ravel/slice, ADR-NP-003 etapa 2): those are never registered in
+  // numpy_view_copy_sources_, so escape detection has to check
+  // numpy_pointer_view_info_ here too, or `row = a[0]; consume(row)` escapes
+  // undetected.
+  return !id.empty() && (is_tracked_numpy_view_id(id) ||
+                         numpy_pointer_view_info_.count(id) != 0);
 }
 
 bool python_converter::is_basic_numpy_view_subscript_escape(
@@ -2461,8 +2190,10 @@ exprt python_converter::probe_expr(const nlohmann::json &node)
   code_blockt scratch_block;
   code_blockt *saved_block = current_block;
   exprt *saved_lhs = current_lhs;
+  const bool saved_scratch_probe = in_scratch_probe_;
   current_block = &scratch_block;
   current_lhs = nullptr;
+  in_scratch_probe_ = true;
   exprt probe;
   try
   {
@@ -2472,10 +2203,12 @@ exprt python_converter::probe_expr(const nlohmann::json &node)
   {
     current_block = saved_block;
     current_lhs = saved_lhs;
+    in_scratch_probe_ = saved_scratch_probe;
     throw;
   }
   current_block = saved_block;
   current_lhs = saved_lhs;
+  in_scratch_probe_ = saved_scratch_probe;
   return probe;
 }
 
@@ -2545,7 +2278,9 @@ void python_converter::reject_numpy_view_mutating_method_call(
   if (root_id.empty())
     return;
 
-  if (numpy_view_copy_sources_.count(root_id) != 0)
+  if (
+    numpy_view_copy_sources_.count(root_id) != 0 ||
+    numpy_pointer_view_info_.count(root_id) != 0)
     throw std::runtime_error(
       "TypeError: writing through a copied numpy view is not supported");
 }
@@ -2553,20 +2288,62 @@ void python_converter::reject_numpy_view_mutating_method_call(
 bool python_converter::is_tracked_numpy_view_id(
   const std::string &symbol_id) const
 {
-  return numpy_view_copy_sources_.count(symbol_id) != 0 ||
-         numpy_transpose_view_info_.count(symbol_id) != 0 ||
-         numpy_reshape_view_info_.count(symbol_id) != 0;
+  return numpy_view_copy_sources_.count(symbol_id) != 0;
+}
+
+// The first target of an Assign node, or a null node when it has none.
+static const nlohmann::json &first_assign_target(const nlohmann::json &ast_node)
+{
+  static const nlohmann::json none;
+  return ast_node.contains("targets") && ast_node["targets"].is_array() &&
+             !ast_node["targets"].empty()
+           ? ast_node["targets"][0]
+           : none;
 }
 
 void python_converter::reject_nonconstant_numpy_view_write(
   const nlohmann::json &target) const
 {
+  if (!target.is_object() || target.value("_type", "") != "Subscript")
+    return;
+  std::string constant_root;
+  subscript_indices_from_root(target, constant_root);
+  if (!constant_root.empty())
+    return;
+
   const std::string root_name = root_name_from_subscript(target);
   const std::string root_id = resolve_name_symbol_id(root_name);
   if (!root_id.empty() && is_tracked_numpy_view_id(root_id))
     throw std::runtime_error(
       "TypeError: writing through a numpy view with a non-constant index is "
       "not supported");
+}
+
+std::optional<std::vector<std::size_t>>
+python_converter::get_empty_numpy_literal_slice_shape(
+  const nlohmann::json &arg) const
+{
+  auto source = declared_name_slice_source(arg, current_function_name(), ast());
+  if (!source)
+    return std::nullopt;
+
+  const std::string source_id = resolve_name_symbol_id(source->first);
+  if (source_id.empty() || numpy_array_symbols_.count(source_id) == 0)
+    return std::nullopt;
+
+  std::optional<std::vector<std::size_t>> source_shape =
+    get_numpy_nditer_logical_shape(source_id);
+  if (!source_shape || source_shape->empty())
+    return std::nullopt;
+
+  std::optional<std::size_t> length =
+    positive_literal_slice_length(source->second, source_shape->front());
+  if (!length || *length != 0)
+    return std::nullopt;
+
+  std::vector<std::size_t> empty_shape = *source_shape;
+  empty_shape.front() = 0;
+  return empty_shape;
 }
 
 std::optional<std::vector<nlohmann::json>>
@@ -2585,22 +2362,25 @@ python_converter::build_numpy_nditer_logical_elements(
 
   std::optional<std::vector<std::size_t>> shape =
     get_numpy_nditer_logical_shape(root_id);
-  if (!shape || shape->empty() || shape->size() > 2)
+  if (!shape || shape->empty())
     return std::nullopt;
 
   std::vector<nlohmann::json> result;
-  if (shape->size() == 1)
-  {
-    for (std::size_t i = 0; i < (*shape)[0]; ++i)
-      result.push_back(
-        numpy_subscript_node(root_name, std::vector<std::size_t>{i}));
-    return result;
-  }
+  std::vector<std::size_t> indices(shape->size(), 0);
+  std::function<void(std::size_t)> append_elements = [&](std::size_t axis) {
+    if (axis == shape->size())
+    {
+      result.push_back(numpy_subscript_node(root_name, indices));
+      return;
+    }
 
-  for (std::size_t i = 0; i < (*shape)[0]; ++i)
-    for (std::size_t j = 0; j < (*shape)[1]; ++j)
-      result.push_back(
-        numpy_subscript_node(root_name, std::vector<std::size_t>{i, j}));
+    for (std::size_t i = 0; i < (*shape)[axis]; ++i)
+    {
+      indices[axis] = i;
+      append_elements(axis + 1);
+    }
+  };
+  append_elements(0);
   return result;
 }
 
@@ -2608,6 +2388,11 @@ std::optional<exprt> python_converter::build_numpy_descriptor_materialized_list(
   const nlohmann::json &arg,
   const bool nested)
 {
+  if (
+    std::optional<exprt> runtime_list =
+      python_list(*this, arg).try_build_symbolic_view_list(arg, nested))
+    return runtime_list;
+
   auto materialized = build_numpy_descriptor_materialized_elements(
     arg,
     "TypeError: numpy.ndarray.tolist() currently supports rank 1 or 2 arrays");
@@ -2623,16 +2408,110 @@ std::optional<exprt> python_converter::build_numpy_descriptor_materialized_list(
   if (!nested || shape.size() == 1)
     return list.build_list_from_exprs(elems);
 
-  std::vector<exprt> rows;
-  const std::size_t cols = shape[1];
-  for (std::size_t row = 0; row < shape[0]; ++row)
+  std::function<exprt(std::size_t, std::size_t &)> build_nested =
+    [&](std::size_t axis, std::size_t &offset) -> exprt {
+    if (axis + 1 == shape.size())
+    {
+      const auto first = elems.begin() + static_cast<std::ptrdiff_t>(offset);
+      offset += shape[axis];
+      const auto last = elems.begin() + static_cast<std::ptrdiff_t>(offset);
+      return list.build_list_from_exprs(std::vector<exprt>(first, last));
+    }
+
+    std::vector<exprt> children;
+    children.reserve(shape[axis]);
+    for (std::size_t i = 0; i < shape[axis]; ++i)
+      children.push_back(build_nested(axis + 1, offset));
+    return list.build_list_from_exprs(children);
+  };
+
+  std::size_t offset = 0;
+  return build_nested(0, offset);
+}
+
+// Reads through a view's pointer are copied into named temporaries so that the
+// element list can be used inside larger expressions without leaving a
+// dereference in them.
+exprt python_converter::hoist_numpy_element(const exprt &element)
+{
+  if (current_block == nullptr)
+    return element;
+  symbolt &tmp =
+    create_tmp_symbol(locationt(), "$view_elem$", element.type(), exprt());
+  const exprt tmp_expr = symbol_expr(tmp);
+  code_declt decl(tmp_expr);
+  current_block->copy_to_operands(decl);
+  current_block->copy_to_operands(code_assignt(tmp_expr, element));
+  return tmp_expr;
+}
+
+// N-D strided view: read each element through its own stride vector.
+std::vector<exprt> python_converter::read_strided_view_elements(
+  const exprt &base,
+  const std::vector<long long> &strides,
+  const std::vector<std::size_t> &shape)
+{
+  const namespacet ns(symbol_table_);
+  const typet pointer_type = ns.follow(base.type());
+  std::vector<exprt> elems;
+  std::vector<std::size_t> index(shape.size(), 0);
+  std::size_t count = 1;
+  for (std::size_t dim : shape)
+    count *= dim;
+  for (; count > 0; --count)
   {
-    const auto first = elems.begin() + static_cast<std::ptrdiff_t>(row * cols);
-    const auto last = first + static_cast<std::ptrdiff_t>(cols);
-    const std::vector<exprt> row_elems(first, last);
-    rows.push_back(list.build_list_from_exprs(row_elems));
+    long long delta = 0;
+    for (std::size_t axis = 0; axis < index.size(); ++axis)
+      delta += static_cast<long long>(index[axis]) * strides[axis];
+    exprt element_ptr = python_expr::build_add(
+      base, from_integer(delta, size_type()), pointer_type);
+    elems.push_back(hoist_numpy_element(
+      python_expr::build_dereference(
+        element_ptr, ns.follow(pointer_type.subtype()))));
+    for (std::size_t axis = index.size(); axis-- > 0;)
+    {
+      if (++index[axis] < shape[axis])
+        break;
+      index[axis] = 0;
+    }
   }
-  return list.build_list_from_exprs(rows);
+  return elems;
+}
+
+// A 1-D view with one stride, or a rank-3+ subarray view that points at rows
+// of the source and is read through a scalar pointer over its storage.
+std::vector<exprt> python_converter::read_contiguous_view_elements(
+  exprt base,
+  std::size_t count,
+  long long stride,
+  const std::vector<std::size_t> &shape)
+{
+  const namespacet ns(symbol_table_);
+  typet base_type = ns.follow(base.type());
+  typet elem_type = ns.follow(base_type.subtype());
+  if (elem_type.is_array())
+  {
+    while (elem_type.is_array())
+      elem_type = ns.follow(to_array_type(elem_type).subtype());
+    base_type = pointer_typet(elem_type);
+    base = python_expr::build_typecast(base, base_type);
+    count = 1;
+    for (std::size_t dim : shape)
+      count *= dim;
+    stride = 1;
+  }
+  std::vector<exprt> elems;
+  elems.reserve(count);
+  for (std::size_t i = 0; i < count; ++i)
+  {
+    exprt element_ptr = python_expr::build_add(
+      base,
+      from_integer(static_cast<long long>(i) * stride, size_type()),
+      base_type);
+    elems.push_back(hoist_numpy_element(
+      python_expr::build_dereference(element_ptr, elem_type)));
+  }
+  return elems;
 }
 
 std::optional<std::pair<std::vector<std::size_t>, std::vector<exprt>>>
@@ -2650,8 +2529,12 @@ python_converter::build_numpy_descriptor_materialized_elements(
   std::optional<std::vector<std::size_t>> shape =
     get_numpy_nditer_logical_shape(root_id);
   if (!shape)
+  {
+    if (auto empty_shape = get_empty_numpy_literal_slice_shape(arg))
+      return std::make_pair(*empty_shape, std::vector<exprt>{});
     return std::nullopt;
-  if (shape->empty() || shape->size() > 2)
+  }
+  if (shape->empty())
     throw std::runtime_error(unsupported_rank_error);
 
   if (
@@ -2667,18 +2550,14 @@ python_converter::build_numpy_descriptor_materialized_elements(
     if (!pointer_type.is_pointer())
       return std::nullopt;
 
-    const typet elem_type = ns.follow(pointer_type.subtype());
-    std::vector<exprt> elems;
-    elems.reserve(pointer_it->second.length);
-    for (std::size_t i = 0; i < pointer_it->second.length; ++i)
-    {
-      const long long offset =
-        static_cast<long long>(i) * pointer_it->second.stride;
-      exprt element_ptr = python_expr::build_add(
-        symbol_expr(*symbol), from_integer(offset, size_type()), pointer_type);
-      elems.push_back(python_expr::build_dereference(element_ptr, elem_type));
-    }
-    return std::make_pair(*shape, elems);
+    reject_symbolic_numpy_view(pointer_it->second);
+    const exprt base = symbol_expr(*symbol);
+    return std::make_pair(
+      *shape,
+      pointer_it->second.strides.empty()
+        ? read_contiguous_view_elements(
+            base, pointer_it->second.length, pointer_it->second.stride, *shape)
+        : read_strided_view_elements(base, pointer_it->second.strides, *shape));
   }
 
   std::optional<std::vector<nlohmann::json>> element_nodes =
@@ -2700,29 +2579,37 @@ static exprt build_numpy_descriptor_array_value(
   const typet &elem_type,
   type_handler &type_handler)
 {
-  typet result_type = type_handler.build_array(elem_type, shape.back());
-  if (shape.size() == 2)
-    result_type = type_handler.build_array(result_type, shape[0]);
+  typet result_type = elem_type;
+  for (auto dim = shape.rbegin(); dim != shape.rend(); ++dim)
+    result_type = type_handler.build_array(result_type, *dim);
 
   exprt value = gen_zero(result_type);
-  if (shape.size() == 1)
-  {
-    for (std::size_t i = 0; i < elems.size(); ++i)
-      value.operands().at(i) = elems[i];
-    return value;
-  }
-
-  const std::size_t cols = shape[1];
-  for (std::size_t row = 0; row < shape[0]; ++row)
-    for (std::size_t col = 0; col < cols; ++col)
-      value.operands().at(row).operands().at(col) = elems[(row * cols) + col];
+  std::size_t next = 0;
+  std::function<void(exprt &, std::size_t)> fill =
+    [&](exprt &node, std::size_t axis) {
+      for (exprt &child : node.operands())
+      {
+        if (axis + 1 == shape.size())
+          child = elems[next++];
+        else
+          fill(child, axis + 1);
+      }
+    };
+  fill(value, 0);
   return value;
 }
 
 std::optional<exprt>
 python_converter::build_numpy_descriptor_materialized_array(
-  const nlohmann::json &arg)
+  const nlohmann::json &arg,
+  const std::vector<std::size_t> *reshape_to)
 {
+  if (!reshape_to)
+    if (
+      std::optional<exprt> runtime_copy =
+        python_list(*this, arg).try_copy_symbolic_view(arg))
+      return runtime_copy;
+
   auto materialized = build_numpy_descriptor_materialized_elements(
     arg,
     "TypeError: numpy descriptor materialization currently supports rank 1 "
@@ -2743,11 +2630,25 @@ python_converter::build_numpy_descriptor_materialized_array(
   const typet &elem_type = materialized->second.empty()
                              ? *empty_elem_type
                              : materialized->second.front().type();
-  exprt value = build_numpy_descriptor_array_value(
-    materialized->first, materialized->second, elem_type, type_handler_);
+  return materialize_numpy_elements(
+    arg,
+    reshape_to ? *reshape_to : materialized->first,
+    materialized->second,
+    elem_type);
+}
 
-  symbolt &tmp =
-    create_tmp_symbol(arg, "$numpy_descriptor_copy$", value.type(), value);
+exprt python_converter::materialize_numpy_elements(
+  const nlohmann::json &location_node,
+  const std::vector<std::size_t> &shape,
+  const std::vector<exprt> &elems,
+  const typet &elem_type)
+{
+  numpy_result_is_fresh_copy_ = true;
+  exprt value =
+    build_numpy_descriptor_array_value(shape, elems, elem_type, type_handler_);
+
+  symbolt &tmp = create_tmp_symbol(
+    location_node, "$numpy_descriptor_copy$", value.type(), value);
   exprt tmp_expr = symbol_expr(tmp);
   code_declt decl(tmp_expr);
   decl.operands().push_back(value);
@@ -2772,42 +2673,20 @@ python_converter::get_numpy_nditer_logical_shape(
   if (
     auto pointer_it = numpy_pointer_view_info_.find(root_id);
     pointer_it != numpy_pointer_view_info_.end())
-    return std::vector<std::size_t>{pointer_it->second.length};
-
-  if (
-    auto reshape_it = numpy_reshape_view_info_.find(root_id);
-    reshape_it != numpy_reshape_view_info_.end())
-    return reshape_it->second.view_shape;
-
-  if (
-    auto transpose_it = numpy_transpose_view_info_.find(root_id);
-    transpose_it != numpy_transpose_view_info_.end())
   {
-    const symbolt *source = symbol_table_.find_symbol(
-      resolve_numpy_array_storage_alias_id(transpose_it->second.source_id));
-    if (source == nullptr)
-      return std::nullopt;
-
-    const namespacet ns(symbol_table_);
-    std::vector<std::size_t> shape =
-      numpy_shape_from_type(ns, ns.follow(source->get_type()));
-    if (transpose_it->second.rank == 2 && transpose_it->second.swaps_axes)
-      std::reverse(shape.begin(), shape.end());
-    return shape;
+    reject_symbolic_numpy_view(pointer_it->second);
+    return pointer_it->second.shape.empty()
+             ? std::vector<std::size_t>{pointer_it->second.length}
+             : pointer_it->second.shape;
   }
 
-  // Fallback: no registered pointer/reshape/transpose view entry for this
+  // Fallback: no registered pointer view entry for this
   // id (this also covers a plain ndarray and a view-copy tracked only via
   // numpy_view_copy_sources_, both of which still carry their own concrete
   // array_typet). Derive shape straight from that type, the same way every
   // view branch above eventually does for its source. This is what lets
   // .tolist()/.any()/.all() reuse the exact same descriptor materialization
   // path for a bare `np.array(...)` instead of needing one of their own.
-  // Rank is capped at 2 to match that path's own scope -- without it, a
-  // 3-D+ array would get a shape here instead of declining, and reach the
-  // descriptor path's "rank 1 or 2" rejection instead of this family's own
-  // "constant numeric inputs only" one (regression/numpy/
-  // sum_constructor_non_numeric_fail pins the latter).
   if (numpy_array_symbols_.count(root_id) == 0)
     return std::nullopt;
 
@@ -2818,7 +2697,7 @@ python_converter::get_numpy_nditer_logical_shape(
   const namespacet ns(symbol_table_);
   std::vector<std::size_t> shape =
     numpy_shape_from_type(ns, ns.follow(plain->get_type()));
-  if (shape.empty() || shape.size() > 2)
+  if (shape.empty())
     return std::nullopt;
   return shape;
 }
@@ -2859,58 +2738,7 @@ bool python_converter::is_numpy_readonly_view_arg(
     pointer_it != numpy_pointer_view_info_.end())
     return pointer_it->second.readonly;
 
-  if (
-    auto reshape_it = numpy_reshape_view_info_.find(root_id);
-    reshape_it != numpy_reshape_view_info_.end())
-    return reshape_it->second.readonly;
-
   return false;
-}
-
-bool python_converter::has_numpy_transpose_view_of(
-  const std::string &source_id) const
-{
-  if (numpy_transpose_view_info_.count(source_id) != 0)
-    return true;
-
-  const std::string storage_id =
-    resolve_numpy_array_storage_alias_id(source_id);
-  for (const auto &entry : numpy_transpose_view_info_)
-  {
-    if (
-      resolve_numpy_array_storage_alias_id(entry.second.source_id) ==
-      storage_id)
-      return true;
-  }
-
-  return false;
-}
-
-void python_converter::reject_unknown_numpy_view_call(
-  const nlohmann::json &node)
-{
-  if (
-    !node.is_object() || node.value("_type", "") != "Call" ||
-    !node.contains("func") || !node["func"].is_object() ||
-    !node.contains("args") || !node["args"].is_array())
-    return;
-
-  if (node["func"].value("_type", "") != "Name")
-    return;
-
-  const std::string func_name = node["func"].value("id", "");
-  if (
-    func_name == "len" || func_name == "bool" || func_name == "int" ||
-    func_name == "float")
-    return;
-
-  for (const auto &arg : node["args"])
-  {
-    if (contains_tracked_numpy_view_name(arg))
-      throw std::runtime_error(
-        "TypeError: passing a copied numpy view to an unknown function is not "
-        "supported");
-  }
 }
 
 void python_converter::reject_numpy_view_identity_query(
@@ -3351,14 +3179,9 @@ void python_converter::reject_unsafe_numpy_view_write_to(
   // *through* the view itself is refused.
   {
     auto it = numpy_pointer_view_info_.find(root_id);
-    if (it != numpy_pointer_view_info_.end() && it->second.readonly)
-      throw std::runtime_error(
-        "ValueError: assignment destination is read-only");
-  }
-
-  {
-    auto it = numpy_reshape_view_info_.find(root_id);
-    if (it != numpy_reshape_view_info_.end() && it->second.readonly)
+    if (
+      numpy_readonly_arrays_.count(root_id) != 0 ||
+      (it != numpy_pointer_view_info_.end() && it->second.readonly))
       throw std::runtime_error(
         "ValueError: assignment destination is read-only");
   }
@@ -3408,6 +3231,21 @@ void python_converter::reject_numpy_view_slice_assignment(
       "TypeError: slice assignment through a numpy view is not supported");
 }
 
+// An element read out of a view parameter, or into the temporary an operand
+// is bound to, is a scalar, not a view.
+bool python_converter::is_scalar_read_of_numpy_view_param(
+  const exprt &lhs,
+  const std::string &storage_id) const
+{
+  const typet &type = lhs.type();
+  const bool operand_temporary =
+    lhs.identifier().as_string().find("$numpy_view_tmp$") != std::string::npos;
+  return (operand_temporary ||
+          numpy_view_param_symbols_.count(storage_id) != 0) &&
+         (type.is_signedbv() || type.is_unsignedbv() || type.is_floatbv() ||
+          type.is_bool());
+}
+
 void python_converter::record_numpy_view_copy(
   const exprt &lhs,
   const nlohmann::json &rhs_node)
@@ -3454,115 +3292,49 @@ void python_converter::record_numpy_view_copy(
   const std::string storage_id =
     resolve_numpy_array_storage_alias_id(source_id);
 
-  if (numpy_array_symbols_.count(storage_id) == 0)
+  if (
+    is_scalar_read_of_numpy_view_param(lhs, storage_id) ||
+    (numpy_array_symbols_.count(storage_id) == 0 &&
+     numpy_param_shapes_.count(storage_id) == 0))
   {
     clear_numpy_view_copy(lhs);
     return;
   }
 
   const std::string lhs_id = lhs.identifier().as_string();
+  if (
+    auto pointer_view = numpy_pointer_view_info_.find(lhs_id);
+    pointer_view != numpy_pointer_view_info_.end())
+  {
+    // The view builders decline a target that is already a view unless the
+    // new view has the same layout and storage, so this statement's value is
+    // a copy while the entry still describes the old view.
+    if (!numpy_result_is_view_)
+      reject_numpy_view_rebind();
+    // A pointer view aliases its source through the pointer itself, so it is
+    // not a copy to mirror writes into; the source is kept to detach it when
+    // the source name is rebound.
+    pointer_view->second.source_id = numpy_view_source_of(storage_id);
+    record_numpy_view_layout(lhs_id, storage_id);
+    numpy_view_copy_sources_.erase(lhs_id);
+    numpy_array_symbols_.insert(lhs_id);
+    return;
+  }
+
   numpy_view_copy_sources_[lhs_id] = storage_id;
   numpy_array_symbols_.insert(lhs_id);
 }
 
-bool python_converter::record_numpy_transpose_view(
-  const exprt &lhs,
-  const nlohmann::json &view_node)
+// A view of a view is detached together with its parent, so it records the
+// storage the parent views.
+std::string
+python_converter::numpy_view_source_of(const std::string &storage_id) const
 {
-  if (!lhs.is_symbol())
-    return false;
-
-  bool swaps_axes = true;
-  const nlohmann::json *source_node =
-    numpy_transpose_source_node(view_node, swaps_axes);
-  if (!source_node)
-    return false;
-
-  const std::string root_name = root_name_from_subscript(*source_node);
-  const std::string source_id = resolve_name_symbol_id(root_name);
-  if (source_id.empty())
-    return false;
-
-  const symbolt *source = symbol_table_.find_symbol(source_id);
-  if (!source)
-    return false;
-
-  const std::size_t rank = numpy_array_rank(ns, ns.follow(source->get_type()));
-
-  if (rank == 0 || rank > 2)
-    return false;
-
-  std::optional<bool> axis_swaps =
-    numpy_axis_permutation_swaps_axes(view_node, rank, swaps_axes);
-  if (!axis_swaps)
-    return false;
-  swaps_axes = *axis_swaps;
-
-  const std::string lhs_id = lhs.identifier().as_string();
-  const std::string view_source_id =
-    resolve_numpy_array_storage_alias_id(source_id);
-  numpy_transpose_view_info_[lhs_id] = {
-    view_source_id, rank, swaps_axes && rank == 2};
-  numpy_array_symbols_.insert(lhs_id);
-  return true;
-}
-
-bool python_converter::record_numpy_reshape_view(
-  const exprt &lhs,
-  const nlohmann::json &view_node)
-{
-  if (!lhs.is_symbol() || !is_numpy_shape_only_view_call_node(view_node))
-    return false;
-
-  if (
-    !view_node.contains("args") || !view_node["args"].is_array() ||
-    view_node["args"].empty())
-    return false;
-
-  const std::string root_name = root_name_from_subscript(view_node["args"][0]);
-  const std::string source_id = resolve_name_symbol_id(root_name);
-  if (source_id.empty() || is_tracked_numpy_view_id(source_id))
-    return false;
-
-  const symbolt *source = symbol_table_.find_symbol(source_id);
-  if (!source)
-    return false;
-
-  const std::vector<std::size_t> source_shape =
-    numpy_shape_from_type(ns, ns.follow(source->get_type()));
-  if (source_shape.empty() || source_shape.size() > 2)
-    return false;
-
-  std::optional<std::vector<std::size_t>> view_shape =
-    numpy_shape_only_view_shape(view_node, source_shape);
-  if (!view_shape || view_shape->empty() || view_shape->size() > 2)
-    return false;
-
-  const std::string lhs_id = lhs.identifier().as_string();
-  const bool readonly = is_numpy_broadcast_to_call_node(view_node);
-  numpy_reshape_view_info_[lhs_id] = {
-    source_id, source_shape, *view_shape, readonly, readonly};
-  numpy_array_symbols_.insert(lhs_id);
-  return true;
-}
-
-bool python_converter::record_numpy_shape_stride_view(
-  const exprt &lhs,
-  const nlohmann::json &rhs_node)
-{
-  if (is_numpy_transpose_view_call_node(rhs_node))
-  {
-    clear_numpy_view_copy(lhs);
-    return record_numpy_transpose_view(lhs, rhs_node);
-  }
-
-  if (is_numpy_shape_only_view_call_node(rhs_node))
-  {
-    clear_numpy_view_copy(lhs);
-    return record_numpy_reshape_view(lhs, rhs_node);
-  }
-
-  return false;
+  const auto parent = numpy_pointer_view_info_.find(storage_id);
+  return parent != numpy_pointer_view_info_.end() &&
+             !parent->second.source_id.empty()
+           ? parent->second.source_id
+           : storage_id;
 }
 
 symbolt *
@@ -3603,372 +3375,324 @@ void python_converter::clear_numpy_view_copy(const exprt &lhs)
   const std::string lhs_id = lhs.identifier().as_string();
   numpy_view_copy_sources_.erase(lhs_id);
   numpy_pointer_view_info_.erase(lhs_id);
-  numpy_transpose_view_info_.erase(lhs_id);
-  numpy_reshape_view_info_.erase(lhs_id);
 }
 
-void python_converter::detach_numpy_pointer_views_of(
-  const std::string &rebound_id,
-  const locationt &location,
-  codet &target_block)
+std::vector<std::string>
+python_converter::numpy_views_of(const std::string &rebound_id) const
 {
-  const namespacet ns(symbol_table_);
-
-  // numpy_view_copy_sources_ is mutated below (erase), so collect the
-  // matching keys first rather than erasing mid-iteration.
   std::vector<std::string> view_ids;
   for (const auto &entry : numpy_view_copy_sources_)
     if (entry.second == rebound_id)
       view_ids.push_back(entry.first);
-
-  for (const std::string &view_id : view_ids)
+  const std::string rebound_storage_id =
+    resolve_numpy_array_storage_alias_id(rebound_id);
+  for (const auto &entry : numpy_pointer_view_info_)
   {
-    auto info_it = numpy_pointer_view_info_.find(view_id);
-    if (info_it == numpy_pointer_view_info_.end())
-      continue; // a plain copied view (etapa 1); already independent
-
-    symbolt *view_symbol = symbol_table_.find_symbol(view_id);
-    if (!view_symbol)
-      continue;
-
-    // The view's own DECL was already emitted with pointer_typet at its
-    // creation point; retyping the symbol table entry now would desync it
-    // from that DECL. Keep the declared type and just repoint the pointer
-    // *value* at a fresh, independent snapshot instead.
-    const exprt old_ptr = symbol_expr(*view_symbol);
-    const typet ptr_type = old_ptr.type();
-    const typet elem_type = ns.follow(view_symbol->get_type()).subtype();
-    const std::size_t length = info_it->second.length;
-    const long long stride = info_it->second.stride;
-
-    array_typet snapshot_type(elem_type, from_integer(length, size_type()));
-    symbolt &snapshot =
-      create_tmp_symbol(location, "$view_snapshot$", snapshot_type, exprt());
-    code_declt snap_decl(symbol_expr(snapshot));
-    snap_decl.location() = location;
-    target_block.copy_to_operands(snap_decl);
-
-    // Copy what the view currently sees (still the pre-rebind source
-    // storage at this point in program order) into the snapshot. The
-    // source read is scaled by the view's own stride (1 for a unit-stride
-    // slice/row view, but e.g. num_cols for a column view); the snapshot
-    // itself is always densely packed, so the destination index is not.
-    for (std::size_t i = 0; i < length; ++i)
-    {
-      // stride is signed (row/column/unit-stride views are positive; a
-      // reversed slice is negative) but src_idx is unsigned size_type():
-      // i*stride's two's-complement bit pattern for a negative product is
-      // exactly SIZE_MAX-derived, and the pointer add below (as well as
-      // ESBMC's own SMT-level bounds reasoning over it) treats that
-      // correctly as a backward offset -- confirmed by a rebind-detach
-      // regression over a[::-1] (view_strided_reverse_rebind_source_edge).
-      exprt src_idx =
-        from_integer(static_cast<long long>(i) * stride, size_type());
-      exprt dst_idx = from_integer(i, size_type());
-      exprt src = python_expr::build_index(old_ptr, src_idx, elem_type);
-      exprt dst =
-        python_expr::build_index(symbol_expr(snapshot), dst_idx, elem_type);
-      code_assignt elem_assign(dst, src);
-      elem_assign.location() = location;
-      target_block.copy_to_operands(elem_assign);
-    }
-
-    // Address-of the snapshot symbol directly rather than
-    // build_index(snapshot, 0, ...): a zero-length view (e.g. a[3:3])
-    // makes that index2tc an out-of-bounds subscript on an empty array.
-    exprt new_ptr = python_expr::build_typecast(
-      python_expr::build_address_of(symbol_expr(snapshot)), ptr_type);
-    code_assignt repoint(old_ptr, new_ptr);
-    repoint.location() = location;
-    target_block.copy_to_operands(repoint);
-
-    // The detached view's own storage is a fresh, densely-packed snapshot,
-    // so it is unit-stride from here regardless of what stride it had into
-    // rebound_id's buffer; length and read-only-ness (a diagonal view) are
-    // unchanged by detaching.
-    info_it->second.stride = 1;
-
-    // The view no longer aliases rebound_id's storage; drop the source
-    // link so a later write to the (new) rebound_id array is not held
-    // responsible for a view it can no longer affect.
-    numpy_view_copy_sources_.erase(view_id);
+    const std::string view_source_id =
+      resolve_numpy_array_storage_alias_id(entry.second.source_id);
+    const bool other_source = std::any_of(
+      entry.second.other_sources.begin(),
+      entry.second.other_sources.end(),
+      [&](const std::string &other) {
+        return same_numpy_storage_id(
+          resolve_numpy_array_storage_alias_id(other), rebound_storage_id);
+      });
+    if (
+      (other_source ||
+       same_numpy_storage_id(view_source_id, rebound_storage_id)) &&
+      !is_local_to_other_function(entry.first, current_func_name_))
+      view_ids.push_back(entry.first);
   }
+  std::sort(view_ids.begin(), view_ids.end());
+  view_ids.erase(std::unique(view_ids.begin(), view_ids.end()), view_ids.end());
+  return view_ids;
 }
 
-void python_converter::clear_numpy_transpose_views_of(
-  const std::string &source_id)
-{
-  for (auto it = numpy_transpose_view_info_.begin();
-       it != numpy_transpose_view_info_.end();)
-  {
-    if (it->second.source_id == source_id)
-      it = numpy_transpose_view_info_.erase(it);
-    else
-      ++it;
-  }
-
-  for (auto it = numpy_reshape_view_info_.begin();
-       it != numpy_reshape_view_info_.end();)
-  {
-    if (it->second.source_id == source_id)
-      it = numpy_reshape_view_info_.erase(it);
-    else
-      ++it;
-  }
-}
-
-void python_converter::emit_numpy_view_cell_assignment(
-  const std::string &symbol_id,
-  const std::vector<long long> &cell_indices,
-  const exprt &rhs,
+void python_converter::detach_numpy_pointer_view(
+  const std::string &view_id,
   const locationt &location,
   codet &target_block)
 {
-  const symbolt *symbol = symbol_table_.find_symbol(symbol_id);
-  if (!symbol)
+  const auto info_it = numpy_pointer_view_info_.find(view_id);
+  symbolt *view_symbol = symbol_table_.find_symbol(view_id);
+  if (info_it == numpy_pointer_view_info_.end() || !view_symbol)
     return;
 
+  // The view's own DECL was already emitted with pointer_typet at its
+  // creation point; retyping the symbol table entry now would desync it
+  // from that DECL. Keep the declared type and just repoint the pointer
+  // *value* at a fresh, independent snapshot instead.
+  info_it->second.source_id =
+    info_it->second.is_symbolic()
+      ? snapshot_symbolic_numpy_view(
+          symbol_expr(*view_symbol), info_it->second, location, target_block)
+      : snapshot_constant_numpy_view(
+          *view_symbol, info_it->second, location, target_block);
+
+  // The view no longer aliases the rebound storage; drop the source link so
+  // a later write to the (new) rebound array is not held responsible for a
+  // view it can no longer affect.
+  numpy_view_copy_sources_.erase(view_id);
+}
+
+// What a constant-shape view reads, as a shape and per-axis element strides
+// over a scalar pointer (a contiguous N-D view points at rows of its source).
+static void constant_view_layout(
+  const std::vector<std::size_t> &view_shape,
+  std::size_t length,
+  const std::vector<long long> &view_strides,
+  long long stride,
+  std::vector<long long> &shape,
+  std::vector<long long> &strides)
+{
+  shape.assign(view_shape.begin(), view_shape.end());
+  if (shape.empty())
+    shape = {static_cast<long long>(length)};
+  strides = view_strides;
+  if (!strides.empty())
+    return;
+  strides.assign(shape.size(), 1);
+  if (shape.size() == 1)
+    strides[0] = stride;
+  else
+    for (std::size_t axis = shape.size() - 1; axis-- > 0;)
+      strides[axis] = strides[axis + 1] * shape[axis + 1];
+}
+
+std::string python_converter::snapshot_constant_numpy_view(
+  const symbolt &view_symbol,
+  numpy_scalar_pointer_view_infot &info,
+  const locationt &location,
+  codet &target_block)
+{
   const namespacet ns(symbol_table_);
-  exprt cell = build_numpy_array_cell(ns, *symbol, cell_indices);
-  if (cell.is_nil())
-    return;
+  const exprt old_ptr = symbol_expr(view_symbol);
+  const typet elem_type = ns.follow(view_symbol.get_type()).subtype();
+  typet scalar_type = elem_type;
+  while (scalar_type.is_array())
+    scalar_type = ns.follow(to_array_type(scalar_type).subtype());
+  std::vector<long long> shape;
+  std::vector<long long> strides;
+  constant_view_layout(
+    info.shape, info.length, info.strides, info.stride, shape, strides);
+  std::size_t count = 1;
+  for (long long dim : shape)
+    count *= static_cast<std::size_t>(dim);
+  const exprt scalar_base =
+    elem_type.is_array()
+      ? python_expr::build_typecast(old_ptr, pointer_typet(scalar_type))
+      : old_ptr;
 
-  code_assignt mirror(cell, rhs);
-  mirror.location() = location;
-  target_block.copy_to_operands(mirror);
-}
+  array_typet snapshot_type(scalar_type, from_integer(count, size_type()));
+  symbolt &snapshot =
+    create_tmp_symbol(location, "$view_snapshot$", snapshot_type, exprt());
+  code_declt snap_decl(symbol_expr(snapshot));
+  snap_decl.location() = location;
+  target_block.copy_to_operands(snap_decl);
 
-void python_converter::mirror_numpy_source_write_to_views(
-  const std::string &source_id,
-  const std::vector<long long> &source_indices,
-  const exprt &rhs,
-  const locationt &location,
-  codet &target_block,
-  const std::string &skip_view_id)
-{
-  const std::string storage_source_id =
-    resolve_numpy_array_storage_alias_id(source_id);
-
-  for (const auto &entry : numpy_transpose_view_info_)
+  // Copy what the view currently sees (still the pre-rebind source
+  // storage at this point in program order) into a densely packed
+  // snapshot. A negative stride's product is unsigned size_type()'s
+  // two's-complement bit pattern, which the pointer add treats as a
+  // backward offset (view_strided_reverse_rebind_source_edge).
+  std::vector<long long> index(shape.size(), 0);
+  for (std::size_t i = 0; i < count; ++i)
   {
-    if (entry.first == skip_view_id)
-      continue;
-
-    const numpy_transpose_view_infot &view = entry.second;
-    if (
-      resolve_numpy_array_storage_alias_id(view.source_id) != storage_source_id)
-      continue;
-
-    std::optional<std::vector<long long>> view_indices =
-      numpy_transpose_cell_indices(view.rank, view.swaps_axes, source_indices);
-    if (view_indices)
-      emit_numpy_view_cell_assignment(
-        entry.first, *view_indices, rhs, location, target_block);
-  }
-
-  for (const auto &entry : numpy_reshape_view_info_)
-  {
-    if (entry.first == skip_view_id)
-      continue;
-
-    const numpy_reshape_view_infot &view = entry.second;
-    if (
-      resolve_numpy_array_storage_alias_id(view.source_id) != storage_source_id)
-      continue;
-
-    if (view.broadcast)
+    long long delta = 0;
+    for (std::size_t axis = 0; axis < index.size(); ++axis)
+      delta += index[axis] * strides[axis];
+    exprt src = python_expr::build_index(
+      scalar_base, from_integer(delta, size_type()), scalar_type);
+    exprt dst = python_expr::build_index(
+      symbol_expr(snapshot), from_integer(i, size_type()), scalar_type);
+    code_assignt elem_assign(dst, src);
+    elem_assign.location() = location;
+    target_block.copy_to_operands(elem_assign);
+    for (std::size_t axis = index.size(); axis-- > 0;)
     {
-      for (const auto &current : numpy_broadcast_view_indices_for_source(
-             source_indices, view.view_shape, view.source_shape))
-        emit_numpy_view_cell_assignment(
-          entry.first, current, rhs, location, target_block);
-      continue;
+      if (++index[axis] < shape[axis])
+        break;
+      index[axis] = 0;
     }
-
-    std::optional<std::size_t> flat =
-      numpy_flat_index(source_indices, view.source_shape);
-    std::optional<std::vector<long long>> view_indices =
-      flat ? numpy_unravel_index(*flat, view.view_shape) : std::nullopt;
-    if (view_indices)
-      emit_numpy_view_cell_assignment(
-        entry.first, *view_indices, rhs, location, target_block);
   }
+
+  // Address-of the snapshot symbol directly rather than
+  // build_index(snapshot, 0, ...): a zero-length view (e.g. a[3:3])
+  // makes that index2tc an out-of-bounds subscript on an empty array.
+  exprt new_ptr = python_expr::build_typecast(
+    python_expr::build_address_of(symbol_expr(snapshot)), old_ptr.type());
+  code_assignt repoint(old_ptr, new_ptr);
+  repoint.location() = location;
+  target_block.copy_to_operands(repoint);
+
+  // The detached view's storage is a fresh, densely-packed snapshot, so it
+  // is unit-stride (row-major for an N-D view) from here; length and
+  // read-only-ness (a diagonal view) are unchanged by detaching.
+  if (!info.strides.empty())
+  {
+    for (std::size_t axis = shape.size(); axis-- > 0;)
+      info.strides[axis] =
+        axis + 1 == shape.size() ? 1 : info.strides[axis + 1] * shape[axis + 1];
+    info.stride = info.strides.front();
+  }
+  else
+    info.stride = 1;
+  return snapshot.id.as_string();
 }
 
-void python_converter::emit_numpy_transpose_mirror_assignment(
-  const std::string &symbol_id,
-  const std::vector<long long> &cell_indices,
-  const exprt &rhs,
+void python_converter::emit_strided_copy(
+  codet &block,
+  const exprt &dst,
+  const exprt &src,
+  const exprt &offset,
+  const std::vector<strided_copy_axis> &axes,
+  const locationt &location)
+{
+  const typet ll_type = signedbv_typet(64);
+
+  std::vector<exprt> index;
+  for (std::size_t axis = 0; axis < axes.size(); ++axis)
+  {
+    symbolt &idx =
+      create_tmp_symbol(location, "$strided_copy_i$", ll_type, exprt());
+    code_declt idx_decl(symbol_expr(idx));
+    idx_decl.location() = location;
+    block.copy_to_operands(idx_decl);
+    index.push_back(symbol_expr(idx));
+  }
+
+  // The pointer add treats the two's-complement bit pattern of a negative
+  // product as a backward offset, as in the constant-stride snapshot.
+  exprt source_position = python_expr::build_typecast(offset, ll_type);
+  for (std::size_t axis = 0; axis < axes.size(); ++axis)
+    source_position = python_expr::build_add(
+      source_position,
+      python_expr::build_mul(index[axis], axes[axis].stride, ll_type),
+      ll_type);
+  // The destination is one flat array filled in row-major order: nested
+  // variable-length arrays are not supported downstream.
+  const typet elem_type = to_array_type(ns.follow(dst.type())).subtype();
+  exprt target_position = from_integer(0, ll_type);
+  for (std::size_t axis = 0; axis < axes.size(); ++axis)
+    target_position = python_expr::build_add(
+      python_expr::build_mul(target_position, axes[axis].extent, ll_type),
+      index[axis],
+      ll_type);
+  const exprt target = python_expr::build_index(
+    dst, python_expr::build_typecast(target_position, size_type()), elem_type);
+  code_assignt copy(
+    target,
+    python_expr::build_index(
+      src,
+      python_expr::build_typecast(source_position, size_type()),
+      elem_type));
+  copy.location() = location;
+
+  std::function<codet(std::size_t)> loops = [&](std::size_t axis) -> codet {
+    code_blockt scope;
+    scope.copy_to_operands(code_assignt(index[axis], from_integer(0, ll_type)));
+    code_blockt body;
+    if (axis + 1 == axes.size())
+      body.copy_to_operands(copy);
+    else
+      body.copy_to_operands(loops(axis + 1));
+    body.copy_to_operands(code_assignt(
+      index[axis],
+      python_expr::build_add(index[axis], from_integer(1, ll_type), ll_type)));
+    codet loop;
+    loop.set_statement("while");
+    loop.copy_to_operands(
+      python_expr::build_less_than(index[axis], axes[axis].extent), body);
+    loop.location() = location;
+    scope.copy_to_operands(loop);
+    return scope;
+  };
+  block.copy_to_operands(loops(0));
+}
+
+std::string python_converter::snapshot_symbolic_numpy_view(
+  const exprt &old_ptr,
+  numpy_scalar_pointer_view_infot &info,
   const locationt &location,
   codet &target_block)
 {
-  emit_numpy_view_cell_assignment(
-    symbol_id, cell_indices, rhs, location, target_block);
+  const typet ll_type = signedbv_typet(64);
+  const std::size_t rank = info.shape.empty() ? 1 : info.shape.size();
 
-  auto view_it = numpy_transpose_view_info_.find(symbol_id);
-  if (view_it == numpy_transpose_view_info_.end())
-    return;
-
-  std::optional<std::vector<long long>> source_indices =
-    numpy_transpose_cell_indices(
-      view_it->second.rank, view_it->second.swaps_axes, cell_indices);
-  if (!source_indices)
-    return;
-
-  const std::string source_id = view_it->second.source_id;
-  emit_numpy_transpose_mirror_assignment(
-    source_id, *source_indices, rhs, location, target_block);
-  const std::string storage_source_id =
-    resolve_numpy_array_storage_alias_id(source_id);
-  if (storage_source_id != source_id)
-    emit_numpy_view_cell_assignment(
-      storage_source_id, *source_indices, rhs, location, target_block);
-  mirror_numpy_source_write_to_views(
-    storage_source_id, *source_indices, rhs, location, target_block, symbol_id);
-}
-
-void python_converter::mirror_numpy_transpose_assignment(
-  const nlohmann::json &target,
-  const exprt &rhs,
-  const locationt &location,
-  codet &target_block)
-{
-  if (!target.is_object() || target.value("_type", "") != "Subscript")
-    return;
-
-  std::string root_name;
-  const std::vector<long long> indices =
-    subscript_indices_from_root(target, root_name);
-  if (root_name.empty())
+  std::vector<strided_copy_axis> axes;
+  exprt count = from_integer(1, ll_type);
+  for (std::size_t axis = 0; axis < rank; ++axis)
   {
-    reject_nonconstant_numpy_view_write(target);
-    return;
+    axes.push_back(
+      {numpy_view_extent(info, axis), numpy_view_stride(info, axis)});
+    count = python_expr::build_mul(count, axes.back().extent, ll_type);
   }
+  symbolt &count_temp =
+    create_tmp_symbol(location, "$view_snapshot_count$", ll_type, exprt());
+  code_declt count_decl(symbol_expr(count_temp));
+  count_decl.location() = location;
+  target_block.copy_to_operands(count_decl);
+  code_assignt count_init(symbol_expr(count_temp), count);
+  count_init.location() = location;
+  target_block.copy_to_operands(count_init);
+  const array_typet snapshot_type(
+    old_ptr.type().subtype(),
+    python_expr::build_typecast(symbol_expr(count_temp), size_type()));
 
-  const std::string root_id = resolve_name_symbol_id(root_name);
-  if (root_id.empty())
-    return;
-  const std::string storage_root_id =
-    resolve_numpy_array_storage_alias_id(root_id);
+  symbolt &snapshot =
+    create_tmp_symbol(location, "$view_snapshot$", snapshot_type, exprt());
+  code_declt snap_decl(symbol_expr(snapshot));
+  snap_decl.location() = location;
+  target_block.copy_to_operands(snap_decl);
+  emit_strided_copy(
+    target_block,
+    symbol_expr(snapshot),
+    old_ptr,
+    from_integer(0, size_type()),
+    axes,
+    location);
 
-  auto direct = numpy_transpose_view_info_.find(root_id);
-  if (direct != numpy_transpose_view_info_.end())
+  const exprt new_ptr = python_expr::build_typecast(
+    python_expr::build_address_of(symbol_expr(snapshot)), old_ptr.type());
+  code_assignt repoint(old_ptr, new_ptr);
+  repoint.location() = location;
+  target_block.copy_to_operands(repoint);
+
+  // The snapshot is densely packed row-major: every stride is the product of
+  // the extents after it. Assign the existing stride temporaries in place so
+  // reads that already captured them keep reading valid values.
+  info.strides.assign(rank, 1);
+  info.stride_symbols.assign(rank, std::string());
+  exprt running = from_integer(1, ll_type);
+  bool running_is_constant = true;
+  long long running_constant = 1;
+  for (std::size_t axis = rank; axis-- > 0;)
   {
-    std::optional<std::vector<long long>> cell_indices =
-      numpy_transpose_cell_indices(
-        direct->second.rank, direct->second.swaps_axes, indices);
-    if (cell_indices)
+    if (running_is_constant)
     {
-      const std::string source_id = direct->second.source_id;
-      emit_numpy_transpose_mirror_assignment(
-        source_id, *cell_indices, rhs, location, target_block);
-      const std::string storage_source_id =
-        resolve_numpy_array_storage_alias_id(source_id);
-      mirror_numpy_source_write_to_views(
-        storage_source_id, *cell_indices, rhs, location, target_block, root_id);
+      info.strides[axis] = running_constant;
     }
-    return;
-  }
-
-  for (const auto &entry : numpy_transpose_view_info_)
-  {
-    const numpy_transpose_view_infot &view = entry.second;
-    if (resolve_numpy_array_storage_alias_id(view.source_id) != storage_root_id)
-      continue;
-
-    std::optional<std::vector<long long>> cell_indices =
-      numpy_transpose_cell_indices(view.rank, view.swaps_axes, indices);
-    if (cell_indices)
-      emit_numpy_transpose_mirror_assignment(
-        entry.first, *cell_indices, rhs, location, target_block);
-  }
-}
-
-void python_converter::mirror_numpy_reshape_assignment(
-  const nlohmann::json &target,
-  const exprt &rhs,
-  const locationt &location,
-  codet &target_block)
-{
-  if (!target.is_object() || target.value("_type", "") != "Subscript")
-    return;
-
-  std::string root_name;
-  const std::vector<long long> indices =
-    subscript_indices_from_root(target, root_name);
-  if (root_name.empty())
-  {
-    reject_nonconstant_numpy_view_write(target);
-    return;
-  }
-
-  const std::string root_id = resolve_name_symbol_id(root_name);
-  if (root_id.empty())
-    return;
-
-  auto direct = numpy_reshape_view_info_.find(root_id);
-  if (direct != numpy_reshape_view_info_.end())
-  {
-    std::optional<std::vector<long long>> source_indices =
-      numpy_shape_view_source_indices(
-        indices,
-        direct->second.view_shape,
-        direct->second.source_shape,
-        direct->second.broadcast);
-    if (source_indices)
+    else
     {
-      const std::string source_id =
-        resolve_numpy_array_storage_alias_id(direct->second.source_id);
-      emit_numpy_view_cell_assignment(
-        source_id, *source_indices, rhs, location, target_block);
-      mirror_numpy_source_write_to_views(
-        source_id, *source_indices, rhs, location, target_block, root_id);
+      symbolt &stride_temp =
+        create_tmp_symbol(location, "$view_snapshot_stride$", ll_type, exprt());
+      code_declt stride_decl(symbol_expr(stride_temp));
+      stride_decl.location() = location;
+      target_block.copy_to_operands(stride_decl);
+      code_assignt stride_init(symbol_expr(stride_temp), running);
+      stride_init.location() = location;
+      target_block.copy_to_operands(stride_init);
+      info.stride_symbols[axis] = stride_temp.id.as_string();
     }
-    return;
+    const exprt extent = numpy_view_extent(info, axis);
+    if (axis < info.shape_symbols.size() && !info.shape_symbols[axis].empty())
+      running_is_constant = false;
+    else
+      running_constant *= static_cast<long long>(info.shape[axis]);
+    running = python_expr::build_mul(running, extent, ll_type);
   }
-
-  const std::string storage_root_id =
-    resolve_numpy_array_storage_alias_id(root_id);
-  for (const auto &entry : numpy_reshape_view_info_)
-  {
-    const numpy_reshape_view_infot &view = entry.second;
-    if (resolve_numpy_array_storage_alias_id(view.source_id) != storage_root_id)
-      continue;
-
-    if (view.broadcast)
-    {
-      for (const auto &current : numpy_broadcast_view_indices_for_source(
-             indices, view.view_shape, view.source_shape))
-        emit_numpy_transpose_mirror_assignment(
-          entry.first, current, rhs, location, target_block);
-      continue;
-    }
-
-    std::optional<std::size_t> flat =
-      numpy_flat_index(indices, view.source_shape);
-    std::optional<std::vector<long long>> view_indices =
-      flat ? numpy_unravel_index(*flat, view.view_shape) : std::nullopt;
-    if (view_indices)
-      emit_numpy_transpose_mirror_assignment(
-        entry.first, *view_indices, rhs, location, target_block);
-  }
-}
-
-void python_converter::mirror_numpy_transpose_assignment_from_targets(
-  const nlohmann::json &ast_node,
-  const exprt &rhs,
-  const locationt &location,
-  codet &target_block)
-{
-  if (
-    !ast_node.contains("targets") || !ast_node["targets"].is_array() ||
-    ast_node["targets"].empty())
-    return;
-
-  mirror_numpy_transpose_assignment(
-    ast_node["targets"][0], rhs, location, target_block);
-  mirror_numpy_reshape_assignment(
-    ast_node["targets"][0], rhs, location, target_block);
+  info.stride = info.strides.empty() ? 1 : info.strides.front();
+  return snapshot.id.as_string();
 }
 
 bool python_converter::preserve_conditional_numpy_alias_shape(
@@ -4068,6 +3792,8 @@ bool python_converter::update_numpy_array_binding_from_name(
     return true;
   }
 
+  if (bind_numpy_pointer_view_alias(lhs, lhs_id, rhs_id))
+    return true;
   if (numpy_array_symbols_.count(rhs_id) == 0)
     return false;
 
@@ -4082,6 +3808,49 @@ bool python_converter::update_numpy_array_binding_from_name(
   return true;
 }
 
+// True when the RHS registered `lhs_id` as a view of its own; otherwise a
+// pointer-view entry left from an earlier binding is dropped.
+bool python_converter::keep_numpy_result_view(const std::string &lhs_id)
+{
+  if (numpy_pointer_view_info_.count(lhs_id) == 0)
+    return false;
+  numpy_array_symbols_.insert(lhs_id);
+  // A numpy call that is not view-shaped (np.copy of a view with run-time
+  // extents) registered its own result as a view.
+  if (numpy_result_is_view_)
+    return true;
+  // rhs_node isn't a view-copy expression, so the entry is stale from an
+  // earlier statement's binding (its DECL already committed pointer_typet,
+  // so the assignment itself still goes through array-to-pointer decay).
+  // Drop it so a fresh shape gets registered for the rebound symbol;
+  // otherwise len()/shape on it keeps reporting the old view's length.
+  numpy_pointer_view_info_.erase(lhs_id);
+  numpy_view_copy_sources_.erase(lhs_id);
+  return false;
+}
+
+// A view of a read-only array is read-only: anything indexed out of a
+// broadcast_to() result, or a view of a name already bound to one.
+bool python_converter::is_readonly_numpy_view_expr(
+  const nlohmann::json &node) const
+{
+  const nlohmann::json *root = &node;
+  while (root->is_object() && root->value("_type", "") == "Subscript" &&
+         root->contains("value"))
+    root = &(*root)["value"];
+  if (
+    root->is_object() && root->value("_type", "") == "Call" &&
+    (*root)["func"].is_object() &&
+    (*root)["func"].value("attr", "") == "broadcast_to")
+    return true;
+
+  if (numpy_result_is_fresh_copy_ || !is_numpy_view_copy_expr(node))
+    return false;
+  const std::string source_id =
+    resolve_name_symbol_id(root_name_from_numpy_view_copy_expr(node));
+  return numpy_readonly_arrays_.count(source_id) != 0;
+}
+
 void python_converter::update_numpy_array_binding(
   const exprt &lhs,
   const nlohmann::json &rhs_node)
@@ -4090,6 +3859,10 @@ void python_converter::update_numpy_array_binding(
     return;
 
   const std::string lhs_id = lhs.identifier().as_string();
+  if (is_readonly_numpy_view_expr(rhs_node))
+    numpy_readonly_arrays_.insert(lhs_id);
+  else
+    numpy_readonly_arrays_.erase(lhs_id);
   const bool unconditional_assignment =
     block_nesting_ == function_body_depth_ + 1;
   if (
@@ -4097,7 +3870,6 @@ void python_converter::update_numpy_array_binding(
       lhs, lhs_id, rhs_node, unconditional_assignment))
     return;
 
-  clear_numpy_transpose_views_of(lhs_id);
   clear_numpy_array_storage_aliases_for(lhs_id);
   numpy_param_shapes_.erase(lhs_id);
   if (unconditional_assignment)
@@ -4106,8 +3878,20 @@ void python_converter::update_numpy_array_binding(
   if (record_numpy_view_copy_from_returned_argument(lhs, lhs_id, rhs_node))
     return;
 
-  if (record_numpy_shape_stride_view(lhs, rhs_node))
+  if (numpy_result_is_fresh_copy_ && is_numpy_view_copy_expr(rhs_node))
+  {
+    // Lowered to an independent copy (e.g. ravel of a non-contiguous view):
+    // nothing aliases it, so writes through it are plain writes.
+    clear_numpy_view_copy(lhs);
+    numpy_array_symbols_.insert(lhs_id);
     return;
+  }
+
+  if (
+    numpy_pointer_view_info_.count(lhs_id) == 0 &&
+    (is_numpy_transpose_view_call_node(rhs_node) ||
+     is_numpy_shape_only_view_call_node(rhs_node)))
+    clear_numpy_view_copy(lhs);
 
   if (is_numpy_view_copy_expr(rhs_node))
   {
@@ -4115,9 +3899,22 @@ void python_converter::update_numpy_array_binding(
     return;
   }
 
+  if (keep_numpy_result_view(lhs_id))
+    return;
+
   if (unconditional_assignment || numpy_view_copy_sources_.count(lhs_id) == 0)
     clear_numpy_view_copy(lhs);
 
+  record_numpy_constructor_binding(
+    lhs, lhs_id, rhs_node, unconditional_assignment);
+}
+
+void python_converter::record_numpy_constructor_binding(
+  const exprt &lhs,
+  const std::string &lhs_id,
+  const nlohmann::json &rhs_node,
+  bool unconditional_assignment)
+{
   // `y = identity(x)`: a call to a locally-defined function returning a numpy
   // array used to fall through to the erase below -- registering `y`'s type
   // correctly as an array (Commit 4's own array-return fix) but leaving it
@@ -4207,6 +4004,40 @@ void python_converter::bind_numpy_array_storage_alias(
     resolve_numpy_array_storage_alias_id(rhs_id);
 }
 
+static std::optional<std::string>
+nested_subscript_root_name(const nlohmann::json &node)
+{
+  if (
+    !node.is_object() || node.value("_type", "") != "Subscript" ||
+    !node.contains("value") || !node["value"].is_object())
+    return std::nullopt;
+
+  const nlohmann::json &inner = node["value"];
+  if (
+    inner.value("_type", "") != "Subscript" || !inner.contains("value") ||
+    !inner["value"].is_object() || inner["value"].value("_type", "") != "Name")
+    return std::nullopt;
+
+  if (
+    !is_literal_int_node(inner["slice"]) || !is_literal_int_node(node["slice"]))
+    return std::nullopt;
+  return inner["value"].value("id", "");
+}
+
+static std::size_t fixed_array_depth(const typet &type, const namespacet &ns)
+{
+  std::size_t depth = 0;
+  typet current = ns.follow(type);
+  if (current.is_pointer())
+    current = ns.follow(current.subtype());
+  while (current.is_array())
+  {
+    ++depth;
+    current = ns.follow(to_array_type(current).subtype());
+  }
+  return depth;
+}
+
 bool python_converter::should_rebuild_cached_numpy_row_subscript_rhs(
   const nlohmann::json &rhs_node) const
 {
@@ -4214,6 +4045,15 @@ bool python_converter::should_rebuild_cached_numpy_row_subscript_rhs(
     !has_cached_any_subscript_rhs_ ||
     rhs_node.value("_type", "") != "Subscript")
     return false;
+
+  if (
+    std::optional<std::string> root_name = nested_subscript_root_name(rhs_node))
+  {
+    const std::string source_id = resolve_name_symbol_id(*root_name);
+    const symbolt *source = symbol_table_.find_symbol(source_id);
+    return source && numpy_array_symbols_.count(source_id) != 0 &&
+           fixed_array_depth(source->get_type(), ns) > 2;
+  }
 
   if (
     !rhs_node.contains("value") ||
@@ -4346,6 +4186,29 @@ std::string python_converter::infer_type_from_any_annotation(
   return lhs_type;
 }
 
+bool python_converter::is_numpy_param_slice(
+  const nlohmann::json &subscript) const
+{
+  if (
+    !subscript.contains("value") || !subscript["value"].is_object() ||
+    subscript["value"].value("_type", "") != "Name" ||
+    !subscript.contains("slice") || !subscript["slice"].is_object())
+    return false;
+
+  const nlohmann::json &slice = subscript["slice"];
+  const bool has_slice_axis =
+    slice.value("_type", "") == "Slice" ||
+    (slice.value("_type", "") == "Tuple" && slice.contains("elts") &&
+     std::any_of(
+       slice["elts"].begin(), slice["elts"].end(), [](const auto &axis) {
+         return axis.value("_type", "") == "Slice";
+       }));
+  const std::string id =
+    resolve_name_symbol_id(subscript["value"].value("id", ""));
+  return has_slice_axis && (numpy_param_shapes_.count(id) != 0 ||
+                            numpy_pointer_view_info_.count(id) != 0);
+}
+
 typet python_converter::resolve_any_subscript_array_type(
   const nlohmann::json &ast_node,
   const typet &current_type)
@@ -4353,6 +4216,14 @@ typet python_converter::resolve_any_subscript_array_type(
   if (
     current_type != any_type() || ast_node["value"].is_null() ||
     ast_node["value"].value("_type", std::string()) != "Subscript")
+    return current_type;
+
+  // A slice with run-time bounds, or any slice of a numpy parameter, is
+  // lowered to a view of the source by the real conversion; probing it here
+  // would emit a copy no one uses.
+  if (
+    has_runtime_slice_axis(ast_node["value"]) ||
+    is_numpy_param_slice(ast_node["value"]))
     return current_type;
 
   // Evaluate the actual subscript result before deciding anything: a fully
@@ -4368,91 +4239,55 @@ typet python_converter::resolve_any_subscript_array_type(
   if (!probed_type.is_array())
     return current_type;
 
-  // A supported N-D mixed slice/index tuple (exactly one full-slice axis `:`
-  // and every other axis a literal/resolvable integer, e.g. `a[:, 0, 0]` -
-  // see build_mixed_slice_tuple_select) legitimately produces a 1-D result
-  // from a 3-D+ source, so it must skip the depth check below rather than be
-  // rejected just because the source is deep.
-  bool is_supported_mixed_slice_tuple = false;
+  const nlohmann::json &source_node = ast_node["value"]["value"];
   if (
-    ast_node["value"].contains("slice") &&
-    ast_node["value"]["slice"].value("_type", "") == "Tuple" &&
-    ast_node["value"]["slice"].contains("elts"))
+    std::optional<std::string> root_name =
+      nested_subscript_root_name(ast_node["value"]))
   {
-    auto is_full_slice = [](const nlohmann::json &node) {
-      if (node.value("_type", "") != "Slice")
-        return false;
-      auto absent = [&](const char *k) {
-        return !node.contains(k) || node[k].is_null();
-      };
-      return absent("lower") && absent("upper") && absent("step");
-    };
-    auto is_literal_int = [](const nlohmann::json &node) {
-      if (
-        node.value("_type", "") == "Constant" && node.contains("value") &&
-        node["value"].is_number_integer())
-        return true;
-      return node.value("_type", "") == "UnaryOp" && node.contains("op") &&
-             node["op"].value("_type", "") == "USub" &&
-             node.contains("operand") &&
-             node["operand"].value("_type", "") == "Constant" &&
-             node["operand"].contains("value") &&
-             node["operand"]["value"].is_number_integer();
-    };
-    auto is_supported_slice = [&](const nlohmann::json &node) {
-      if (is_full_slice(node))
-        return true;
-      for (const char *key : {"lower", "upper", "step"})
-        if (
-          node.contains(key) && !node[key].is_null() &&
-          !is_literal_int(node[key]))
-          return false;
-      return true;
-    };
-
-    std::size_t slice_count = 0;
-    bool all_slices_supported = true;
-    for (const auto &elt : ast_node["value"]["slice"]["elts"])
+    const std::string root_id = resolve_name_symbol_id(*root_name);
+    const symbolt *root_symbol = symbol_table_.find_symbol(root_id);
+    const auto root_view = numpy_pointer_view_info_.find(root_id);
+    // A contiguous N-D view's subscript is itself a view of its storage.
+    const bool root_is_nd_view = root_view != numpy_pointer_view_info_.end() &&
+                                 root_view->second.shape.size() >= 2;
+    if (
+      root_symbol && numpy_array_symbols_.count(root_id) != 0 &&
+      (fixed_array_depth(root_symbol->get_type(), ns) > 2 || root_is_nd_view))
     {
-      if (elt.value("_type", "") != "Slice")
-        continue;
-      ++slice_count;
-      if (!is_supported_slice(elt))
-        all_slices_supported = false;
+      any_subscript_array_needs_copy_ = false;
+      has_cached_any_subscript_rhs_ = false;
+      return pointer_typet(ns.follow(to_array_type(probed_type).subtype()));
     }
-    is_supported_mixed_slice_tuple = slice_count != 0 && all_slices_supported;
   }
 
-  // Reject a source array of more than 2 dimensions: n-D indexing is out of
-  // scope, and the resulting slice's nesting depth alone can't be told apart
-  // from a legitimate 2-D row/column/fancy/mask selection (both are a
-  // 2-level nested array), so the check has to look at the source instead.
-  const nlohmann::json &source_node = ast_node["value"]["value"];
   exprt source_probe = get_expr(source_node);
-  if (!contains_cpp_throw(source_probe) && !is_supported_mixed_slice_tuple)
+  if (!contains_cpp_throw(source_probe))
   {
-    std::size_t source_depth = 0;
     typet source_type = ns.follow(source_probe.type());
-    // A numpy array crossing a function boundary is pointer-to-array (e.g.
-    // int (*)[N][M]), not a plain array_typet; peel the pointer so the depth
-    // walk below still sees through to the real dimensionality instead of
-    // stopping at 0 and silently letting a 3-D+ source slip past.
     if (source_type.is_pointer())
       source_type = ns.follow(source_type.subtype());
-    while (source_type.is_array())
+
+    std::size_t source_depth = 0;
+    typet depth_type = source_type;
+    while (depth_type.is_array())
     {
       ++source_depth;
-      source_type = ns.follow(to_array_type(source_type).subtype());
+      depth_type = ns.follow(to_array_type(depth_type).subtype());
     }
-    if (source_depth > 2)
+
+    const std::string source_id =
+      source_node.value("_type", "") == "Name"
+        ? resolve_name_symbol_id(source_node.value("id", ""))
+        : std::string();
+    const auto source_view = numpy_pointer_view_info_.find(source_id);
+    const bool source_is_nd_view =
+      source_view != numpy_pointer_view_info_.end() &&
+      source_view->second.shape.size() >= 2;
+    if (source_depth > 2 || source_is_nd_view)
     {
-      std::ostringstream msg;
-      msg << "TypeError: assigning a 3-D+ array-typed subscript result to "
-             "a variable is not supported";
-      const locationt loc = get_location_from_decl(ast_node);
-      if (!loc.is_nil())
-        msg << " at " << loc.get_file() << ":" << loc.get_line();
-      throw std::runtime_error(msg.str());
+      any_subscript_array_needs_copy_ = false;
+      has_cached_any_subscript_rhs_ = false;
+      return pointer_typet(ns.follow(to_array_type(probed_type).subtype()));
     }
   }
 
@@ -4506,6 +4341,40 @@ typet python_converter::resolve_call_argument_array_type(
   has_cached_any_subscript_rhs_ = true;
 
   return probed_type;
+}
+
+typet python_converter::resolve_lambda_call_result_type(
+  const nlohmann::json &ast_node,
+  const typet &current_type) const
+{
+  const nlohmann::json &call = ast_node["value"];
+  if (
+    !ast_node.value("_inferred_annotation", false) || !call.is_object() ||
+    call.value("_type", "") != "Call" ||
+    call["func"].value("_type", "") != "Name")
+    return current_type;
+
+  const std::string name = call["func"]["id"].get<std::string>();
+  const symbolt *var = symbol_table_.find_symbol(resolve_name_symbol_id(name));
+  if (
+    !var || !var->get_type().is_pointer() ||
+    !var->get_type().subtype().is_code())
+    return current_type;
+
+  const nlohmann::json scope = json_utils::find_function_by_path(
+    *ast_json, json_utils::split_function_path(current_func_name_));
+  if (
+    python_annotation_parser::find_lambda_in_body(name, (*ast_json)["body"])
+      .empty() &&
+    (!scope.contains("body") ||
+     python_annotation_parser::find_lambda_in_body(name, scope["body"])
+       .empty()))
+    return current_type;
+
+  const typet &ret = to_code_type(var->get_type().subtype()).return_type();
+  return ret.is_signedbv() || ret.is_unsignedbv() || ret.is_bool()
+           ? ret
+           : current_type;
 }
 
 typet python_converter::resolve_numpy_reducer_call_array_type(
@@ -4614,6 +4483,25 @@ bool python_converter::handle_unpacking_assignment(
     }
   }
 
+  // Restored on return: converting the RHS may unpack in turn
+  struct restore_trust
+  {
+    bool &flag;
+    const bool saved;
+    ~restore_trust()
+    {
+      flag = saved;
+    }
+  } restore{unpack_record_trusted_, unpack_record_trusted_};
+  unpack_record_trusted_ = unpack_record_is_trusted(ast_node["value"]);
+
+  // The literal path evaluates each element once, so the RHS is not built
+  if (ast_node["value"]["_type"] == "List")
+  {
+    handle_list_literal_unpacking(ast_node, target, target_block);
+    return true;
+  }
+
   // Get RHS
   is_converting_rhs = true;
   exprt rhs = get_expr(ast_node["value"]);
@@ -4648,12 +4536,6 @@ bool python_converter::handle_unpacking_assignment(
       return true;
     }
 
-    const auto &value_node = ast_node["value"];
-    if (value_node["_type"] == "List")
-    {
-      handle_list_literal_unpacking(ast_node, target, target_block);
-      return true;
-    }
     if (rhs.type() == get_type_handler().get_list_type())
     {
       python_list list(*this, ast_node["value"]);
@@ -4665,6 +4547,115 @@ bool python_converter::handle_unpacking_assignment(
   throw std::runtime_error(
     "Cannot unpack " + rhs.type().id_string() +
     " - only tuples and arrays can be unpacked");
+}
+
+namespace
+{
+// A literal whose every element is a literal or a constant: no list it
+// builds can be reached from anywhere else.
+bool is_plain_literal(const nlohmann::json &node)
+{
+  const std::string kind = node.value("_type", "");
+  if (kind == "Constant")
+    return true;
+  if (kind == "UnaryOp")
+    return is_plain_literal(node["operand"]);
+  if (kind != "List" && kind != "Tuple")
+    return false;
+  for (const auto &elt : node["elts"])
+    if (!is_plain_literal(elt))
+      return false;
+  return true;
+}
+
+// The names @p node reads, other than the callee of a call.
+void collect_read_names(
+  const nlohmann::json &node,
+  std::vector<std::string> &names)
+{
+  if (node.is_object() && node.value("_type", "") == "Name")
+    names.push_back(node.value("id", ""));
+  for (const auto &[key, child] : node.items())
+    if (child.is_structured() && !(key == "func" && node.is_object()))
+      collect_read_names(child, names);
+}
+
+std::size_t
+count_name_nodes(const nlohmann::json &node, const std::string &name)
+{
+  std::size_t n = node.is_object() && node.value("_type", "") == "Name" &&
+                  node.value("id", "") == name;
+  for (const auto &child : node)
+    if (child.is_structured())
+      n += count_name_nodes(child, name);
+  return n;
+}
+} // namespace
+
+// The registry records types flow-insensitively, and a store through an alias
+// does not update it. Trust it only for lists the right-hand side builds
+// itself or reads from a variable bound once, to a plain literal, and named
+// nowhere else, so no branch, loop or alias can have changed its elements.
+bool python_converter::unpack_record_is_trusted(
+  const nlohmann::json &value) const
+{
+  std::vector<std::string> names;
+  collect_read_names(value, names);
+  for (const std::string &name : names)
+  {
+    const nlohmann::json decl =
+      json_utils::find_var_decl(name, current_function_name(), ast());
+    if (
+      json_utils::count_name_bindings(ast(), name) != 1 ||
+      count_name_nodes(ast(), name) != 2 || !decl.contains("value") ||
+      !is_plain_literal(decl["value"]))
+      return false;
+  }
+  return true;
+}
+
+void python_converter::unpack_nested_target(
+  const nlohmann::json &ast_node,
+  const nlohmann::json &target,
+  const exprt &value,
+  codet &target_block)
+{
+  const std::string &tgt_type = target["_type"].get<std::string>();
+  if (tgt_type != "Tuple" && tgt_type != "List")
+    throw std::runtime_error(
+      "List unpacking only supports simple names, not " + tgt_type);
+
+  exprt rhs = value;
+  // A call is read once per element unless its result is held
+  if (value.id() == "sideeffect")
+  {
+    symbolt &tmp =
+      create_tmp_symbol(ast_node, "$unpack_elem$", value.type(), exprt());
+    code_declt decl(symbol_expr(tmp));
+    decl.copy_to_operands(value);
+    target_block.copy_to_operands(decl);
+    rhs = symbol_expr(tmp);
+  }
+  rhs.type() = ns.follow(value.type());
+  if (tuple_handler_->is_tuple_type(rhs.type()))
+  {
+    tuple_handler_->handle_tuple_unpacking(ast_node, target, rhs, target_block);
+    return;
+  }
+
+  // Without exactly recorded element types the targets could not be typed
+  if (
+    unpack_record_trusted_ && value.is_symbol() &&
+    value.type() == get_type_handler().get_list_type() &&
+    element_type_registry_.find(value.identifier().as_string()))
+  {
+    python_list(*this, ast_node["value"])
+      .handle_list_var_unpacking(ast_node, target, value, target_block);
+    return;
+  }
+
+  throw std::runtime_error(
+    "Cannot unpack non-tuple element into nested target");
 }
 
 void python_converter::desugar_unpacking_with_lvalue_targets(
@@ -4874,6 +4865,57 @@ symbolt *python_converter::create_symbol_for_unannotated_assign(
   return symbol_table_.move_symbol_to_context(symbol);
 }
 
+/// A function with `function`'s type whose only effect is to raise the
+/// TypeError CPython raises on calling a `value`-typed object (#8475).
+exprt python_converter::not_callable_function(
+  const typet &function,
+  const typet &value,
+  const locationt &location)
+{
+  const std::string name =
+    "$not_callable$" + std::to_string(++not_callable_count_);
+  symbolt symbol = create_symbol(
+    current_python_file,
+    name,
+    "py:" + current_python_file + "@F@" + name,
+    location,
+    function);
+  code_blockt body;
+  body.copy_to_operands(code_expressiont(
+    get_exception_handler().gen_exception_raise(
+      "TypeError",
+      "'" + type_handler_.type_to_string(value) + "' object is not callable")));
+  symbol.set_value(body);
+  return symbol_expr(*symbol_table_.move_symbol_to_context(symbol));
+}
+
+/// A choice between two functions of one type is a pointer to either. The
+/// result of a choice between types would have no single type (#8404). An
+/// arm that cannot be called becomes a function that raises when it is.
+void python_converter::decay_function_choice(exprt &then, exprt &else_expr)
+{
+  if (
+    then.type().is_code() && then.is_symbol() &&
+    !may_be_callable(else_expr.type()))
+    else_expr = not_callable_function(
+      then.type(), else_expr.type(), else_expr.location());
+  else if (
+    else_expr.type().is_code() && else_expr.is_symbol() &&
+    !may_be_callable(then.type()))
+    then =
+      not_callable_function(else_expr.type(), then.type(), then.location());
+  if (
+    !then.type().is_code() || !else_expr.type().is_code() ||
+    !then.is_symbol() || !else_expr.is_symbol())
+    return;
+  if (then.type() != else_expr.type())
+    throw std::runtime_error(
+      "a conditional expression choosing between functions of different "
+      "types is not supported");
+  then = python_expr::decay_function_to_pointer(then);
+  else_expr = python_expr::decay_function_to_pointer(else_expr);
+}
+
 /// The bare name an AST node denotes: `id` for a Name, `attr` for an Attribute
 /// -- a qualified `module.Class`, which is what a base inherited from an
 /// operational model looks like. \p fallback covers any other shape.
@@ -4968,6 +5010,22 @@ void python_converter::copy_elem_types_from_reordering_builtin(
   copy_homogeneous_elem_types(element_type_registry_, src, lhs_id);
 }
 
+// A float returned into an int-typed name widens the name, as a float
+// expression assigned to it does in adjust_statement_types. Binding the call's
+// result to the int slot would truncate it (#8417).
+void python_converter::widen_int_target_for_float_call(
+  exprt &lhs,
+  const exprt &rhs,
+  bool is_ctor_call)
+{
+  if (
+    is_ctor_call || !lhs.is_symbol() || !rhs.type().is_floatbv() ||
+    !type_utils::is_integer_type(lhs.type()))
+    return;
+  lhs.type() = rhs.type();
+  update_symbol(lhs);
+}
+
 void python_converter::handle_function_call_rhs(
   const nlohmann::json &ast_node,
   symbolt *lhs_symbol,
@@ -5056,6 +5114,8 @@ void python_converter::handle_function_call_rhs(
     lhs.type() = rhs.type();
     lhs_symbol->set_type(migrate_type(rhs.type()));
   }
+
+  widen_int_target_for_float_call(lhs, rhs, is_ctor_call);
 
   // Set return destination
   if (rhs.type().is_pointer() && !is_ctor_call)
@@ -5154,8 +5214,7 @@ void python_converter::handle_function_call_rhs(
   }
 
   target_block.copy_to_operands(rhs);
-  mirror_numpy_transpose_assignment_from_targets(
-    ast_node, lhs, location, target_block);
+  reject_nonconstant_numpy_view_write(first_assign_target(ast_node));
 }
 
 exprt python_converter::handle_string_literal_rhs(
@@ -5196,6 +5255,147 @@ bool python_converter::is_global_variable(const symbol_id &sid) const
       return true;
   }
   return false;
+}
+
+static bool is_name(const nlohmann::json &node, const std::string &name)
+{
+  return node.is_object() && node.value("_type", "") == "Name" &&
+         node.value("id", "") == name;
+}
+
+static bool any_child(
+  const nlohmann::json &node,
+  const std::string &name,
+  bool (*pred)(const nlohmann::json &, const std::string &))
+{
+  return node.is_structured() &&
+         std::any_of(node.begin(), node.end(), [&](const auto &child) {
+           return pred(child, name);
+         });
+}
+
+/// `name = v`, `name: T = v` or `name op= v`: the forms whose target resolves
+/// through redirect_nonlocal.
+static bool is_plain_rebind(const nlohmann::json &node, const std::string &name)
+{
+  const std::string kind = node.value("_type", "");
+  if (kind == "Assign")
+    return node.value("targets", nlohmann::json()).size() == 1 &&
+           is_name(node["targets"][0], name);
+  return (kind == "AnnAssign" || kind == "AugAssign") &&
+         is_name(node.value("target", nlohmann::json()), name);
+}
+
+/// Whether @p node binds @p name through a string field: a def, class, except
+/// handler, import alias or match capture.
+static bool binds_by_field(const nlohmann::json &node, const std::string &name)
+{
+  for (const char *key : {"name", "asname"})
+    if (node.contains(key) && node[key].is_string() && node[key] == name)
+      return true;
+  return false;
+}
+
+/// Whether @p node binds @p name other than by a plain rebind. Nested defs,
+/// classes and lambdas are scopes of their own.
+static bool
+binds_name_otherwise(const nlohmann::json &node, const std::string &name)
+{
+  if (node.is_object())
+  {
+    const std::string kind = node.value("_type", "");
+    if (
+      kind == "FunctionDef" || kind == "AsyncFunctionDef" || kind == "ClassDef")
+      return binds_by_field(node, name);
+    if (kind == "Lambda")
+      return false;
+    if (is_plain_rebind(node, name))
+      return binds_name_otherwise(node.value("value", nlohmann::json()), name);
+    if (kind == "Name")
+      return node.value("id", "") == name &&
+             node.value("ctx", nlohmann::json::object()).value("_type", "") !=
+               "Load";
+    if (binds_by_field(node, name))
+      return true;
+  }
+  return any_child(node, name, binds_name_otherwise);
+}
+
+static bool mentions_name(const nlohmann::json &node, const std::string &name)
+{
+  return is_name(node, name) || any_child(node, name, mentions_name);
+}
+
+/// Whether @p node uses @p func other than by calling it, so that it may run
+/// after the frame owning its nonlocal names has returned. Another nested
+/// scope may itself outlive the frame, so any mention there counts.
+static bool used_uncalled(const nlohmann::json &node, const std::string &func)
+{
+  if (is_name(node, func))
+    return true;
+  const std::string kind = node.is_object() ? node.value("_type", "") : "";
+  if (
+    kind == "Lambda" ||
+    ((kind == "FunctionDef" || kind == "AsyncFunctionDef") &&
+     node.value("name", "") != func))
+    return mentions_name(node, func);
+  if (kind == "Call" && is_name(node.value("func", nlohmann::json()), func))
+    return used_uncalled(node.value("args", nlohmann::json()), func) ||
+           used_uncalled(node.value("keywords", nlohmann::json()), func);
+  return any_child(node, func, used_uncalled);
+}
+
+void python_converter::declare_nonlocal(const nlohmann::json &element)
+{
+  const std::size_t sep = current_func_name_.rfind("@F@");
+  if (
+    sep == std::string::npos || !current_class_name_.empty() ||
+    enclosing_function_node_ == nullptr)
+    throw std::runtime_error(
+      "nonlocal statements are only supported in a function nested directly "
+      "in another function");
+
+  const std::string outer = current_func_name_.substr(0, sep);
+  const std::string inner = current_func_name_.substr(sep + 3);
+  const nlohmann::json &inner_node = *enclosing_function_node_;
+  const nlohmann::json outer_node = json_utils::find_function_by_path(
+    *ast_json, json_utils::split_function_path(outer));
+  // The enclosing local lives in the enclosing frame, so a function that can
+  // outlive that frame has nothing to write to.
+  if (
+    !outer_node.is_object() ||
+    !inner_node.value("decorator_list", nlohmann::json()).empty() ||
+    used_uncalled(outer_node.value("body", nlohmann::json()), inner))
+    throw std::runtime_error(
+      "nonlocal statements are only supported in a nested function that is "
+      "only called, not decorated, stored, passed or returned");
+
+  for (const auto &item : element["names"])
+  {
+    const std::string name = item.get<std::string>();
+    symbol_id local = create_symbol_id();
+    local.set_object(name);
+    symbol_id target(current_python_file, "", outer);
+    target.set_object(name);
+    if (!symbol_table_.find_symbol(target.to_string()))
+      throw std::runtime_error(
+        "nonlocal '" + name +
+        "' is only supported for a variable the enclosing function binds "
+        "before the nested def");
+    if (binds_name_otherwise(inner_node.value("body", nlohmann::json()), name))
+      throw std::runtime_error(
+        "nonlocal '" + name +
+        "' is only supported when the nested function rebinds it by plain "
+        "assignment");
+    nonlocal_scopes_[local.to_string()] = outer;
+  }
+}
+
+void python_converter::redirect_nonlocal(symbol_id &sid) const
+{
+  auto it = nonlocal_scopes_.find(sid.to_string());
+  if (it != nonlocal_scopes_.end())
+    sid.set_function(it->second);
 }
 
 // np.ravel(a): the array is the call's first argument (this is the shape
@@ -5338,10 +5538,6 @@ bool python_converter::try_handle_flat_index_assignment(
     if (!root_id.empty())
     {
       reject_unsafe_numpy_view_write_to(root_id);
-      if (has_numpy_transpose_view_of(root_id))
-        throw std::runtime_error(
-          "TypeError: mutation through .flat with a live numpy transpose view "
-          "is not supported");
     }
   }
 
@@ -5472,8 +5668,8 @@ void python_converter::preregister_global_variables(
 
     // Skip implicitly inferred annotations (plain Assign converted by the
     // annotator). Only preregister variables that the user explicitly annotated
-    // (e.g., `x: SomeClass = ...`). Inferred globals like `l = [1, 2, 3]`
-    // should not be visible inside functions that don't declare `global l`.
+    // (e.g., `x: SomeClass = ...`). An inferred global like `l = [1, 2, 3]`
+    // is registered only when a read reaches it first (find_global_symbol).
     if (element.value("_inferred_annotation", false))
       continue;
 
@@ -5622,6 +5818,19 @@ std::string python_converter::flow_rhs_class(const nlohmann::json &rhs) const
   return "";
 }
 
+std::string python_converter::alias_rhs_class(const nlohmann::json &rhs)
+{
+  const std::string cls = flow_rhs_class(rhs);
+  if (!cls.empty() || rhs.value("_type", "") != "Name")
+    return cls;
+  symbol_id sid = create_symbol_id();
+  sid.set_object(rhs["id"].get<std::string>());
+  const symbolt *symbol = find_symbol(sid.to_string());
+  return symbol && is_user_class_pointer(symbol->get_type())
+           ? class_name_of(symbol->get_type().subtype())
+           : "";
+}
+
 std::string python_converter::call_return_class(const nlohmann::json &rhs) const
 {
   if (
@@ -5661,6 +5870,44 @@ std::string python_converter::call_return_class(const nlohmann::json &rhs) const
     cls = ret["value"].get<std::string>();
 
   return json_utils::is_class(cls, *ast_json) ? cls : std::string();
+}
+
+// A tuple-struct variable (adopted from an explicit-Any binding) being
+// rebound to a non-tuple value needs the same fresh slot: retyping the
+// shared symbol would turn earlier member reads into member-of-scalar,
+// which trips member2t's source-type assert at GOTO conversion.
+// Code-typed and unknown (void*) rhs are excluded exactly as in the
+// propagate branch of handle_assignment_type_adjustments: neither
+// yields a usable alias slot type.
+bool python_converter::needs_fresh_retype_slot(
+  const exprt &lhs,
+  const exprt &rhs,
+  const std::string &lhs_id) const
+{
+  const bool tuple_to_nontuple_rebind =
+    tuple_handler_->is_tuple_type(lhs.type()) && !rhs.type().is_empty() &&
+    !tuple_handler_->is_tuple_type(rhs.type()) && !rhs.type().is_code() &&
+    !(rhs.type().is_pointer() && rhs.type().subtype().id() == "empty");
+  return tuple_to_nontuple_rebind ||
+         is_numpy_array_to_view_rebind(lhs, rhs, lhs_id);
+}
+
+// A NumPy array rebound to a view of itself, `x = x[1]`: retyping x in
+// place would turn the view's own `&x` into the address of a pointer.
+bool python_converter::is_numpy_array_to_view_rebind(
+  const exprt &lhs,
+  const exprt &rhs,
+  const std::string &lhs_id) const
+{
+  return block_nesting_ == function_body_depth_ + 1 && lhs.type().is_array() &&
+         rhs.type().is_pointer() && numpy_array_symbols_.count(lhs_id) != 0;
+}
+
+bool python_converter::is_attribute_store_of_numpy_view(
+  const nlohmann::json &target,
+  const nlohmann::json &value)
+{
+  return target.value("_type", "") == "Attribute" && passes_numpy_view(value);
 }
 
 symbolt *python_converter::mint_retyped_symbol(
@@ -5961,11 +6208,190 @@ bool python_converter::module_scope_rhs_needs_type_probe(
          dynamic_type_handler_.is_tagged(value["id"].get<std::string>());
 }
 
+// The class `value` instantiates, or "" if it is not a constructor call.
+std::string
+python_converter::instantiated_class(const nlohmann::json &value) const
+{
+  if (
+    value.value("_type", "") != "Call" || !value.contains("func") ||
+    value["func"].value("_type", "") != "Name")
+    return "";
+  const std::string name = value["func"].value("id", "");
+  return json_utils::is_class(name, *ast_json) ? name : "";
+}
+
+static bool ctor_arms_are_spellable(
+  const nlohmann::json &ifexp,
+  const std::string &then_class,
+  const std::string &else_class)
+{
+  auto is_none = [](const nlohmann::json &v) {
+    return v.value("_type", "") == "Constant" && v.contains("value") &&
+           v["value"].is_null();
+  };
+  if (then_class.empty())
+    return is_none(ifexp["body"]);
+  if (else_class.empty())
+    return is_none(ifexp["orelse"]);
+  return true;
+}
+
+bool python_converter::ternary_needs_if_spelling(
+  const nlohmann::json &ifexp) const
+{
+  const std::string then_class = instantiated_class(ifexp["body"]);
+  const std::string else_class = instantiated_class(ifexp["orelse"]);
+  if (then_class.empty() && else_class.empty())
+  {
+    const std::string then_kind =
+      dynamic_type_detail::classify_literal_value_kind(ifexp["body"]);
+    const std::string else_kind =
+      dynamic_type_detail::classify_literal_value_kind(ifexp["orelse"]);
+    return !then_kind.empty() && !else_kind.empty() && then_kind != else_kind;
+  }
+  // Arms constructing different classes are spelled as `if` too, where the
+  // preprocessor refuses what would resolve against one class only (#8408).
+  if (!ctor_arms_are_spellable(ifexp, then_class, else_class))
+    throw std::runtime_error(
+      "a conditional expression instantiating a class must pick a class or "
+      "None in its other branch");
+  return true;
+}
+
+bool python_converter::rewrite_divergent_conditional_assign(
+  const nlohmann::json &ast_node,
+  codet &target_block)
+{
+  if (!ast_node.contains("value") || !ast_node["value"].is_object())
+    return false;
+
+  const nlohmann::json &value = ast_node["value"];
+  if (
+    value.value("_type", "") != "IfExp" || !value.contains("test") ||
+    !value.contains("body") || !value.contains("orelse"))
+    return false;
+
+  const nlohmann::json &target =
+    ast_node.contains("targets") ? ast_node["targets"][0] : ast_node["target"];
+  if (target.value("_type", "") != "Name")
+    return false;
+
+  if (!ternary_needs_if_spelling(value))
+    return false;
+
+  // Each arm keeps the assignment's own location, so a violation still points
+  // at the line the ternary is written on. A constructor arm is annotated
+  // with its class, which it needs to allocate the instance through a
+  // pointer, as the annotation pass does for the `if` spelling.
+  auto arm = [&](const nlohmann::json &branch) {
+    nlohmann::json assign = ast_node;
+    const std::string cls = instantiated_class(branch);
+    if (!cls.empty())
+    {
+      assign["_type"] = "AnnAssign";
+      assign["target"] = target;
+      assign.erase("targets");
+      assign["annotation"] = {{"_type", "Name"}, {"id", cls}};
+      assign["simple"] = 1;
+      assign["value"] = branch;
+      return nlohmann::json::array({assign});
+    }
+    assign["_type"] = "Assign";
+    assign["targets"] = nlohmann::json::array({target});
+    assign.erase("target");
+    assign.erase("annotation");
+    assign.erase("simple");
+    assign["value"] = branch;
+    return nlohmann::json::array({assign});
+  };
+
+  nlohmann::json if_node = nlohmann::json::object();
+  if_node["_type"] = "If";
+  if_node["test"] = value["test"];
+  if_node["body"] = arm(value["body"]);
+  if_node["orelse"] = arm(value["orelse"]);
+  for (const char *key :
+       {"lineno", "col_offset", "end_lineno", "end_col_offset"})
+    if (ast_node.contains(key))
+      if_node[key] = ast_node[key];
+
+  target_block.copy_to_operands(get_conditional_stm(if_node));
+  return true;
+}
+
+/// `self.a = self.m`, where every store to `a` binds a method of its
+/// receiver: store the method itself, and let a call through `a` pass the
+/// receiver again.
+bool python_converter::try_bound_method_store(
+  const nlohmann::json &ast_node,
+  codet &block)
+{
+  const nlohmann::json &target =
+    ast_node.contains("targets") ? ast_node["targets"][0] : ast_node["target"];
+  const nlohmann::json &value = ast_node.value("value", nlohmann::json());
+  if (
+    target.value("_type", "") != "Attribute" || !value.is_object() ||
+    value.value("_type", "") != "Attribute")
+    return false;
+  const attribute_functions *held =
+    function_attribute(target["attr"].get<std::string>());
+  if (!held || !held->bound)
+    return false;
+
+  const locationt location = get_location_from_decl(ast_node);
+  current_element_type = any_type();
+  const exprt lhs = create_lhs_expression(target, nullptr, location);
+  if (lhs.type() != any_type())
+    throw std::runtime_error(
+      "storing a bound method in typed attribute '" +
+      target["attr"].get<std::string>() + "' is not supported");
+  const std::string id =
+    bound_method_id(current_class_name_, value["attr"].get<std::string>())
+      .value();
+  const symbolt *method = find_symbol(id);
+  const exprt function =
+    method ? symbol_expr(*method) : symbol_exprt(id, code_typet());
+  code_assignt store(
+    lhs, typecast_exprt(address_of_exprt(function), lhs.type()));
+  store.location() = location;
+  block.copy_to_operands(store);
+  return true;
+}
+
+bool python_converter::try_dedicated_assign(
+  const nlohmann::json &ast_node,
+  codet &block)
+{
+  return rewrite_divergent_conditional_assign(ast_node, block) ||
+         try_tagged_var_assign(ast_node, block) ||
+         try_bound_method_store(ast_node, block);
+}
+
+// NumPy truncates a string stored into a fixed-width string array to the
+// array's width and pads it with NULs.
+static void fit_numpy_string_store(const exprt &lhs, exprt &rhs)
+{
+  if (
+    lhs.id() != "index" || !lhs.type().is_array() || !rhs.type().is_array() ||
+    lhs.type().subtype() != char_type() ||
+    rhs.type().subtype() != char_type() || lhs.type() == rhs.type())
+    return;
+  if (!rhs.is_constant())
+    throw std::runtime_error(
+      "TypeError: storing a non-literal string of another width into a numpy "
+      "string array is not supported");
+  exprt fitted = gen_zero(lhs.type());
+  const std::size_t width = fitted.operands().size() - 1;
+  for (std::size_t i = 0; i < width && i < rhs.operands().size(); ++i)
+    fitted.operands()[i] = rhs.operands()[i];
+  rhs = fitted;
+}
+
 void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
 {
-  if (try_tagged_var_assign(ast_node, target_block))
+  if (try_dedicated_assign(ast_node, target_block))
     return;
 
   // Extract type information
@@ -6002,7 +6428,8 @@ void python_converter::get_var_assign(
     ast_node.contains("value") && ast_node["value"].is_object() &&
     contains_tracked_numpy_view_name(ast_node["value"]))
   {
-    if (target.value("_type", "") == "Attribute")
+    // `self.n = len(v)` or `self.x = v[0]` stores a scalar read of it.
+    if (is_attribute_store_of_numpy_view(target, ast_node["value"]))
       throw std::runtime_error(
         "TypeError: storing a copied numpy view in an attribute is not "
         "supported");
@@ -6023,7 +6450,7 @@ void python_converter::get_var_assign(
   if (ast_node.contains("value") && ast_node["value"].is_object())
   {
     reject_numpy_view_identity_query(ast_node["value"]);
-    reject_unknown_numpy_view_call(ast_node["value"]);
+    track_numpy_view_call_escape(ast_node["value"]);
   }
 
   // Stage 1 object-model migration (#3067/#4773): a simple Name target bound to
@@ -6044,7 +6471,7 @@ void python_converter::get_var_assign(
       ast_node["value"]["func"].contains("id"))
       cls = ast_node["value"]["func"]["id"].get<std::string>();
     else
-      cls = flow_rhs_class(ast_node["value"]); // aliasing: `b = a`
+      cls = alias_rhs_class(ast_node["value"]); // aliasing: `b = a`
     // `y = f(...)` where f returns a class: type y as `Cls*` so the returned
     // reference is bound (not value-copied into a struct local).
     if (cls.empty())
@@ -6192,6 +6619,14 @@ void python_converter::get_var_assign(
       return;
     }
 
+    const namespacet ns(symbol_table_);
+    const typet resolved_container = ns.follow(container_type);
+    const typet resolved_list = ns.follow(type_handler_.get_list_type());
+    const bool container_is_list =
+      resolved_container == resolved_list ||
+      (resolved_container.is_pointer() &&
+       ns.follow(resolved_container.subtype()) == resolved_list);
+
     // List slice assignment (a[i:j:k] = ...) is lowered to the
     // __ESBMC_list_slice_assign model, which mutates the target list in
     // place with CPython semantics. Falling through to the generic store
@@ -6206,14 +6641,6 @@ void python_converter::get_var_assign(
       target.contains("slice") && target["slice"].is_object() &&
       target["slice"].value("_type", "") == "Slice")
     {
-      const namespacet ns(symbol_table_);
-      const typet resolved_container = ns.follow(container_type);
-      const typet resolved_list = ns.follow(type_handler_.get_list_type());
-      const bool container_is_list =
-        resolved_container == resolved_list ||
-        (resolved_container.is_pointer() &&
-         ns.follow(resolved_container.subtype()) == resolved_list);
-
       if (
         container_is_list && ast_node.contains("value") &&
         !ast_node["value"].is_null())
@@ -6228,6 +6655,24 @@ void python_converter::get_var_assign(
       throw std::runtime_error(
         "Slice assignment is only supported on list targets");
     }
+
+    if (
+      container_is_list && target.contains("slice") &&
+      target["slice"].is_object() && ast_node.contains("value") &&
+      !ast_node["value"].is_null())
+    {
+      is_converting_rhs = true;
+      exprt rhs = get_expr(ast_node["value"]);
+      is_converting_rhs = false;
+
+      if (rhs.type() == none_type())
+      {
+        python_list list_handler(*this, target);
+        list_handler.handle_subscript_assign_none(
+          container_expr, target["slice"]);
+        return;
+      }
+    }
   }
 
   if (ast_node["_type"] == "AnnAssign")
@@ -6235,6 +6680,7 @@ void python_converter::get_var_assign(
     // Extract name and set in symbol ID
     std::string name = extract_target_name(target);
     sid.set_object(name);
+    redirect_nonlocal(sid);
     annotated_name = name;
 
     // Check if this is a forward declaration with union type and no value
@@ -6334,6 +6780,8 @@ void python_converter::get_var_assign(
       resolve_call_argument_array_type(ast_node, current_element_type);
     current_element_type =
       resolve_numpy_reducer_call_array_type(ast_node, current_element_type);
+    current_element_type =
+      resolve_lambda_call_result_type(ast_node, current_element_type);
 
     // Location and symbol lookup
     location_begin = get_location_from_decl(target);
@@ -6457,6 +6905,7 @@ void python_converter::get_var_assign(
     // Normal assignment handling
     std::string name = extract_target_name(target);
     sid.set_object(name);
+    redirect_nonlocal(sid);
     lhs_symbol = resolve_subscript_base_symbol(
       target, name, symbol_table_.find_symbol(sid.to_string()));
 
@@ -6557,14 +7006,14 @@ void python_converter::get_var_assign(
   // unannotated assignment branches above -- the annotator may inject an
   // annotation onto what the user wrote as a plain `a = ...`, routing it
   // through either one.
-  if (
-    should_detach_numpy_pointer_views_for_assignment(
-      target, ast_node, lhs_symbol))
+  if (should_detach_numpy_pointer_views_for_assignment(target, ast_node))
     detach_numpy_pointer_views_of(
-      lhs_symbol->id.as_string(), location_begin, target_block);
+      lhs.identifier().as_string(), location_begin, target_block);
 
   reject_copied_numpy_view_in_container(ast_node, {"List", "Tuple", "Dict"});
 
+  numpy_result_is_fresh_copy_ = false;
+  numpy_result_is_view_ = false;
   // Get RHS
   nlohmann::json effective_ast_node = rewrite_assign_rhs_node(ast_node);
 
@@ -6601,6 +7050,7 @@ void python_converter::get_var_assign(
 
     // Handle string literal conversion
     rhs = handle_string_literal_rhs(effective_ast_node, lhs_type, rhs);
+    fit_numpy_string_store(lhs, rhs);
   }
 
   if (converted_value && rhs != exprt("_init_undefined"))
@@ -6716,22 +7166,13 @@ void python_converter::get_var_assign(
         }
       }
 
-      // A tuple-struct variable (adopted from an explicit-Any binding) being
-      // rebound to a non-tuple value needs the same fresh slot: retyping the
-      // shared symbol would turn earlier member reads into member-of-scalar,
-      // which trips member2t's source-type assert at GOTO conversion.
-      // Code-typed and unknown (void*) rhs are excluded exactly as in the
-      // propagate branch of handle_assignment_type_adjustments: neither
-      // yields a usable alias slot type.
-      const bool tuple_to_nontuple_rebind =
-        tuple_handler_->is_tuple_type(lhs.type()) && !rhs.type().is_empty() &&
-        !tuple_handler_->is_tuple_type(rhs.type()) && !rhs.type().is_code() &&
-        !(rhs.type().is_pointer() && rhs.type().subtype().id() == "empty");
-
       if (
-        is_incompatible_scalar_string_retype(
-          type_handler_, lhs.type(), rhs.type()) ||
-        tuple_to_nontuple_rebind)
+        is_scalar_retype(
+          type_handler_,
+          lhs.type(),
+          rhs.type(),
+          block_nesting_ == function_body_depth_ + 1) ||
+        needs_fresh_retype_slot(lhs, rhs, orig_id))
       {
         symbolt *new_symbol_ptr = mint_retyped_symbol(
           *lhs_symbol, orig_id, rhs.type(), location_begin, sid, target_block);
@@ -6796,6 +7237,7 @@ void python_converter::get_var_assign(
     // Handle type adjustments
     handle_assignment_type_adjustments(
       lhs_symbol, lhs, rhs, lhs_type, ast_node, is_ctor_call);
+    set_none_flag(lhs, ast_node, target_block);
 
     // Propagate $input_str$ → $input_len$ companion mapping so that len()
     // on any alias of an input() string can use the symbolic length directly.
@@ -6881,10 +7323,7 @@ void python_converter::get_var_assign(
     // which would coerce rhs type to match lhs, hiding the mismatch.
     // Only enforce when type assertions are enabled (--is-instance-check).
     if (
-      type_assertions_enabled() && lhs.type() != rhs.type() &&
-      !rhs.type().is_code() && !rhs.type().is_empty() &&
-      rhs.type().is_array() && !lhs.type().is_array() &&
-      !lhs.type().is_pointer())
+      type_assertions_enabled() && is_array_into_scalar(lhs.type(), rhs.type()))
     {
       // V.3: build the always-fail assert condition in IREP2.
       code_assertt type_assert(migrate_expr_back(gen_false_expr()));
@@ -6905,6 +7344,12 @@ void python_converter::get_var_assign(
     }
 
     reject_conditional_numpy_alias_rebind(lhs, effective_ast_node);
+
+    if (emit_list_element_replacement(*this, ast_node, lhs, rhs, target_block))
+    {
+      current_lhs = nullptr;
+      return;
+    }
 
     adjust_statement_types(lhs, rhs);
 
@@ -6985,12 +7430,11 @@ void python_converter::get_var_assign(
       return;
     }
 
+    python_list(*this, target).retype_element_store(lhs, rhs);
     code_assignt code_assign(lhs, rhs);
     code_assign.location() = location_begin;
     target_block.copy_to_operands(code_assign);
-    mirror_numpy_transpose_assignment(
-      target, rhs, location_begin, target_block);
-    mirror_numpy_reshape_assignment(target, rhs, location_begin, target_block);
+    reject_nonconstant_numpy_view_write(target);
     if (
       effective_ast_node.contains("value") &&
       effective_ast_node["value"].is_object())
@@ -7305,6 +7749,19 @@ void python_converter::get_compound_assign(
   target_block.copy_to_operands(code_assign);
 }
 
+// The length lives in an array's type, so branches of different lengths have
+// no common type to select between; truncating one proved #8239 wrongly.
+static const typet &common_array_type(const typet &a, const typet &b)
+{
+  BigInt a_size, b_size;
+  if (
+    a.subtype() != b.subtype() || to_integer(to_array_type(a).size(), a_size) ||
+    to_integer(to_array_type(b).size(), b_size) || a_size != b_size)
+    throw std::runtime_error(
+      "unsupported: conditional expression over arrays of different lengths");
+  return a;
+}
+
 typet resolve_ternary_type(
   const typet &then_type,
   const typet &else_type,
@@ -7331,9 +7788,8 @@ typet resolve_ternary_type(
   if (then_is_string && else_is_string)
     return gen_pointer_type(char_type());
 
-  // Both arrays (non-strings)
   if (then_type.is_array() && else_type.is_array())
-    return then_type;
+    return common_array_type(then_type, else_type);
 
   // Mixed signed/unsigned integers - prefer signed for safety
   if (then_type.is_signedbv() && else_type.is_unsignedbv())
@@ -7370,6 +7826,65 @@ bool python_converter::contains_named_expr(const nlohmann::json &node)
         return true;
   }
   return false;
+}
+
+bool python_converter::contains_nested_scope_named_expr(
+  const nlohmann::json &node)
+{
+  static const std::set<std::string> scopes = {
+    "Lambda", "ListComp", "SetComp", "DictComp", "GeneratorExp"};
+  if (node.is_object() && scopes.count(node.value("_type", "")))
+    return contains_named_expr(node);
+  if (node.is_object() || node.is_array())
+    for (const auto &child : node)
+      if (contains_nested_scope_named_expr(child))
+        return true;
+  return false;
+}
+
+// Whether a str array constant is empty, reading it as strlen does; nullopt for
+// any other value. Symex never ends strlen's loop over the address of an array
+// constant (#8713), so a literal's truth value is folded instead.
+static std::optional<bool> constant_string_is_empty(const exprt &str)
+{
+  if (!str.is_constant() || !str.type().is_array() || str.operands().empty())
+    return std::nullopt;
+  const exprt &first = str.operands().front();
+  if (!first.is_constant())
+    return std::nullopt;
+  return first.is_zero();
+}
+
+exprt python_converter::apply_string_truthiness(
+  const exprt &str,
+  const locationt &location)
+{
+  if (!type_utils::is_string_type(str.type()))
+    return str;
+
+  if (const auto empty = constant_string_is_empty(str))
+  {
+    exprt cond = *empty ? exprt(false_exprt()) : exprt(true_exprt());
+    cond.location() = location;
+    return cond;
+  }
+
+  const symbolt *strlen_sym = symbol_table_.find_symbol("c:@F@strlen");
+  if (!strlen_sym)
+    throw std::runtime_error("strlen not found for string truthiness check");
+
+  // V.3: build `strlen(s) != 0` in IREP2, back-migrating once. The call is
+  // built directly in IREP2; it carries no IREP2 location, so the location is
+  // re-attached to the back-migrated operand below.
+  expr2tc strlen_arg2;
+  migrate_expr(string_handler_.get_array_base_address(str), strlen_arg2);
+  expr2tc strlen_call2 = side_effect_function_call2tc(
+    migrate_type(size_type()), symbol_expr2tc(*strlen_sym), {strlen_arg2});
+  exprt cond = migrate_expr_back(
+    notequal2tc(strlen_call2, gen_zero(migrate_type(size_type()))));
+  cond.location() = location;
+  cond.op0().location() = location;
+  return cond;
 }
 
 /// Truth-testing an object calls its __bool__ when the class defines one. The
@@ -7461,20 +7976,137 @@ typet python_converter::optional_ternary_type(
   return result_type;
 }
 
+namespace
+{
+// Statements the condition conversion emitted (an index normalisation, an
+// IndexError check) must run before every evaluation of the condition, so
+// the loop becomes `while True: prelude; if not cond: orelse; break; body`.
+codet lower_while_with_condition_prelude(
+  const code_blockt &prelude,
+  const exprt &cond,
+  const exprt &body,
+  const exprt &orelse,
+  const locationt &location)
+{
+  expr2tc cond2;
+  migrate_expr(cond, cond2);
+
+  code_blockt exit_block;
+  if (!orelse.id_string().empty())
+    exit_block.copy_to_operands(orelse);
+  code_breakt break_stmt;
+  break_stmt.location() = location;
+  exit_block.copy_to_operands(break_stmt);
+
+  code_ifthenelset exit_if;
+  exit_if.cond() = migrate_expr_back(not2tc(cond2));
+  exit_if.then_case() = exit_block;
+  exit_if.location() = location;
+
+  code_blockt loop_body = prelude;
+  loop_body.copy_to_operands(exit_if, body);
+
+  codet while_code;
+  while_code.set_statement("while");
+  while_code.location() = location;
+  while_code.copy_to_operands(migrate_expr_back(gen_true_expr()), loop_body);
+  return while_code;
+}
+
+// The `ifthenelse` or `while` statement for a converted condition and body.
+codet build_conditional_code(
+  const std::string &kind,
+  const code_blockt &cond_prelude,
+  const exprt &cond,
+  const exprt &then,
+  const exprt &else_expr,
+  const locationt &location)
+{
+  if (!cond_prelude.operands().empty())
+    return lower_while_with_condition_prelude(
+      cond_prelude, cond, then, else_expr, location);
+
+  codet code;
+  if (kind == "If")
+    code.set_statement("ifthenelse");
+  else if (kind == "While")
+    code.set_statement("while");
+  code.location() = location;
+  code.copy_to_operands(cond, then);
+  if (!else_expr.id_string().empty())
+    code.copy_to_operands(else_expr);
+  return code;
+}
+} // namespace
+
+// The block that receives the statements a loop condition emits: a `while`
+// test collects them so they can be re-run on every iteration.
+code_blockt *python_converter::while_condition_block(
+  const nlohmann::json &ast_node,
+  code_blockt &cond_prelude)
+{
+  return ast_node.value("_type", "") == "While" && current_block
+           ? &cond_prelude
+           : current_block;
+}
+
+exprt python_converter::get_flat_boolop_test(
+  const nlohmann::json &test_node,
+  const std::function<exprt(const exprt &, const nlohmann::json &)> &to_bool)
+{
+  exprt boolop_expr(
+    python_frontend::map_operator(test_node["op"]["_type"], bool_type()),
+    bool_type());
+  std::vector<code_blockt> effects;
+  for (const auto &operand : test_node["values"])
+    boolop_expr.copy_to_operands(
+      to_bool(get_boolop_operand(operand, effects), operand));
+
+  const auto planted = [](const code_blockt &b) {
+    return !b.operands().empty();
+  };
+  if (std::none_of(effects.begin(), effects.end(), planted))
+    return boolop_expr;
+  return emit_guarded_boolop(
+    boolop_expr,
+    effects,
+    [](const exprt &e) { return e; },
+    get_location_from_decl(test_node));
+}
+
+namespace
+{
+struct loop_depth_guard
+{
+  unsigned &depth;
+  const bool active;
+  loop_depth_guard(unsigned &d, bool a) : depth(d), active(a)
+  {
+    depth += active;
+  }
+  ~loop_depth_guard()
+  {
+    depth -= active;
+  }
+};
+} // namespace
+
 exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 {
-  // A walrus in a `while` test re-evaluates every iteration, but get_named_expr
-  // emits the binding once into the enclosing block (it would go stale). Refuse
-  // with a clean diagnostic rather than return an unsound verdict. A plain `if`
-  // condition and a comprehension filter evaluate the walrus exactly once, so
-  // they remain supported. (Ternary-branch and short-circuit-operand walrus are
-  // refused at their own lowering sites: get_expr and
-  // get_logical_operator_expr.)
+  // A walrus in a `while` test binds into the condition prelude, which runs
+  // before every evaluation of the test. One inside a lambda or comprehension
+  // there is deferred or hoisted out of the loop, so it is refused with a
+  // clean diagnostic rather than given an unsound verdict. (Ternary-branch and
+  // nested short-circuit-operand walrus are refused at their own lowering
+  // sites: get_expr and get_logical_operator_expr.)
   if (
     ast_node.value("_type", "") == "While" && ast_node.contains("test") &&
-    contains_named_expr(ast_node["test"]))
+    contains_nested_scope_named_expr(ast_node["test"]))
     throw std::runtime_error(
       "Walrus operator ':=' in a while-loop condition is not supported");
+
+  const loop_depth_guard loop_guard(
+    numpy_loop_depth_, ast_node.value("_type", "") == "While");
 
   // Copy current type
   typet t = current_element_type;
@@ -7600,6 +8232,10 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   // Extract condition from AST
   exprt cond;
 
+  code_blockt cond_prelude;
+  code_blockt *const enclosing_block = current_block;
+  current_block = while_condition_block(ast_node, cond_prelude);
+
   // Keep `and` and `or` in conditions short-circuited.
   const bool coverage_mode = is_coverage_mode();
   const bool pytest_generation_mode = is_pytest_generation_mode();
@@ -7633,6 +8269,8 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       value_expr = side_effect;
     }
 
+    value_expr =
+      apply_string_truthiness(value_expr, get_location_from_decl(value_node));
     if (value_expr.type().is_bool())
       return value_expr;
 
@@ -7678,9 +8316,12 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     return bool_expr;
   };
 
-  if (
-    test_type == "BoolOp" && current_block && type != "While" &&
-    !coverage_mode && !pytest_generation_mode && !model_mode)
+  const bool old_in_lazy_operand = in_lazy_operand_;
+  in_lazy_operand_ |= type == "While";
+  const bool short_circuit_boolop = test_type == "BoolOp" && current_block &&
+                                    !coverage_mode && !pytest_generation_mode &&
+                                    !model_mode;
+  if (short_circuit_boolop)
   {
     const auto &test_node = ast_node["test"];
     const auto &operands = test_node["values"];
@@ -7746,17 +8387,13 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       cond = result_expr;
     }
   }
-  else if (test_type == "BoolOp" && !model_mode)
-  {
-    exprt boolop_expr(
-      python_frontend::map_operator(
-        ast_node["test"]["op"]["_type"], bool_type()),
-      bool_type());
-    for (const auto &operand : ast_node["test"]["values"])
-      boolop_expr.copy_to_operands(
-        to_bool_condition(get_expr(operand), operand));
-    cond = boolop_expr;
-  }
+  // An operand converted here is not guarded by the while test's prelude, so
+  // a walrus in a `while` test takes the general path, whose and/or lowering
+  // refuses it.
+  else if (
+    test_type == "BoolOp" && !model_mode &&
+    !(type == "While" && contains_named_expr(ast_node["test"])))
+    cond = get_flat_boolop_test(ast_node["test"], to_bool_condition);
   else if (has_nested_call)
   {
     locationt location = get_location_from_decl(call_node);
@@ -7812,9 +8449,9 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     // Normal path: no function call to materialize
     cond = get_expr(ast_node["test"]);
   }
+  in_lazy_operand_ = old_in_lazy_operand;
 
-  if (!(test_type == "BoolOp" && current_block && type != "While" &&
-        !coverage_mode && !pytest_generation_mode && !model_mode))
+  if (!short_circuit_boolop)
   {
     cond.location() = get_location_from_decl(ast_node["test"]);
 
@@ -7869,28 +8506,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       }
 
       // Python treats strings in conditions by their length: "" is falsy.
-      if (type_utils::is_string_type(cond.type()))
-      {
-        const symbolt *strlen_sym = symbol_table_.find_symbol("c:@F@strlen");
-        if (!strlen_sym)
-          throw std::runtime_error(
-            "strlen not found for string truthiness check");
-
-        // V.3: build `strlen(s) != 0` in IREP2, back-migrating once (mirrors
-        // the string-truthiness path at converter_unop.cpp). The call is built
-        // directly in IREP2; it carries no IREP2 location, so the location is
-        // re-attached to the back-migrated operand below.
-        expr2tc strlen_arg2;
-        migrate_expr(string_handler_.get_array_base_address(cond), strlen_arg2);
-        expr2tc strlen_call2 = side_effect_function_call2tc(
-          migrate_type(size_type()),
-          symbol_expr2tc(*strlen_sym),
-          {strlen_arg2});
-        cond = migrate_expr_back(
-          notequal2tc(strlen_call2, gen_zero(migrate_type(size_type()))));
-        cond.location() = location;
-        cond.op0().location() = location;
-      }
+      cond = apply_string_truthiness(cond, location);
     }
   }
 
@@ -7906,6 +8522,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 
   // Recover type
   current_element_type = t;
+  current_block = enclosing_block;
 
   // Declares the flagged variable's tagged-object symbol before either
   // branch converts, so goto-symex's struct-merge resolves the join for
@@ -7990,6 +8607,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     // that migration to irep2 preserves the correct return type in if2t.
     then = to_value_expr(then, ns);
     else_expr = to_value_expr(else_expr, ns);
+    decay_function_choice(then, else_expr);
 
     bool then_is_none = (then.type() == none_type());
     bool else_is_none = (else_expr.type() == none_type());
@@ -8071,22 +8689,13 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     return if_expr;
   }
 
-  // Create if or while code
-  codet code;
-  if (type == "If")
-    code.set_statement("ifthenelse");
-  else if (type == "While")
-    code.set_statement("while");
-
-  // Set location for the conditional statement
-  code.location() = get_location_from_decl(ast_node);
-
-  // Append "then" block
-  code.copy_to_operands(cond, then);
-  if (!else_expr.id_string().empty())
-    code.copy_to_operands(else_expr);
-
-  return code;
+  return build_conditional_code(
+    ast_node.value("_type", ""),
+    cond_prelude,
+    cond,
+    then,
+    else_expr,
+    get_location_from_decl(ast_node));
 }
 exprt python_converter::box_value_on_heap(
   const exprt &value,
@@ -8166,6 +8775,119 @@ exprt python_converter::get_return_value(const nlohmann::json &value)
   return result;
 }
 
+// The AST node of the user function being converted, or an empty node when
+// the current scope is the module, a model, or not part of the program.
+nlohmann::json python_converter::current_user_function_node() const
+{
+  if (
+    current_func_name_.empty() || current_func_name_ == "python_user_main" ||
+    !ast_json || !ast_json->contains("filename") ||
+    !is_program_file((*ast_json)["filename"].get<std::string>()))
+    return nlohmann::json();
+  const nlohmann::json func_node = json_utils::find_function_by_path(
+    *ast_json, json_utils::split_function_path(current_func_name_));
+  return func_node.empty() || is_model_file(func_node) ? nlohmann::json()
+                                                       : func_node;
+}
+
+// Whether `root_name` names a parameter of the function being converted, in a
+// module that imports numpy.
+bool python_converter::is_numpy_module_param(const std::string &root_name) const
+{
+  if (root_name.empty() || !ast_imports_numpy_module(*ast_json))
+    return false;
+  const nlohmann::json root_decl =
+    json_utils::find_var_decl(root_name, current_func_name_, *ast_json);
+  return root_decl.is_object() && root_decl.value("_type", "") == "arg";
+}
+
+// Whether the local `name` was bound to a copied view of a numpy array or of
+// an array parameter. A subscript of a pointer-backed view parameter is an
+// element, not a view.
+bool python_converter::is_copied_numpy_view_local(const std::string &name) const
+{
+  const nlohmann::json decl =
+    json_utils::find_var_decl(name, current_func_name_, *ast_json);
+  if (
+    !decl.is_object() || decl.value("_type", "") == "arg" ||
+    !decl.contains("value") || !is_numpy_view_copy_expr(decl["value"]))
+    return false;
+  const std::string root_name =
+    root_name_from_numpy_view_copy_expr(decl["value"]);
+  const std::string root_id =
+    root_name.empty() ? std::string() : resolve_name_symbol_id(root_name);
+  if (!root_id.empty() && numpy_pointer_view_info_.count(root_id) != 0)
+    return false;
+  const bool root_is_tracked_numpy =
+    !root_id.empty() && (numpy_array_symbols_.count(root_id) != 0 ||
+                         numpy_view_copy_sources_.count(root_id) != 0);
+  return root_is_tracked_numpy || is_numpy_module_param(root_name);
+}
+
+// Rejects or defers a `return name` that would hand a numpy view out of a
+// user function; true when the return statement was consumed here.
+bool python_converter::reject_or_defer_numpy_view_name_return(
+  const nlohmann::json &ast_node,
+  codet &target_block)
+{
+  const nlohmann::json &value = ast_node["value"];
+  const nlohmann::json func_node = current_user_function_node();
+  if (
+    func_node.empty() || value.value("_type", "") != "Name" ||
+    !value.contains("id"))
+    return false;
+
+  // Callers bind the result to their own argument, so the view never leaves.
+  if (
+    json_utils::split_function_path(current_func_name_).size() == 1 &&
+    returns_bound_numpy_view_param(func_node))
+    return false;
+
+  const bool in_program_file =
+    is_program_file(get_location_from_decl(ast_node).get_file().as_string());
+  if (
+    !contains_tracked_numpy_view_name(value) &&
+    !(in_program_file &&
+      is_copied_numpy_view_local(value["id"].get<std::string>())))
+    return false;
+
+  reject_or_defer_numpy_view_return(ast_node, target_block);
+  return true;
+}
+
+// Python does not enforce `-> int`: the caller sees the float itself, which
+// the int return slot holds only when it is finite and integral (#1966).
+exprt python_converter::check_float_fits_int_return(
+  const nlohmann::json &ast_node,
+  const exprt &value,
+  codet &target_block)
+{
+  if (!current_func_annotated_int_ || !value.type().is_floatbv())
+    return value;
+
+  const locationt location = get_location_from_decl(ast_node);
+  symbolt &tmp =
+    create_tmp_symbol(ast_node, "$int_return$", value.type(), exprt());
+  const exprt result = symbol_expr(tmp);
+  code_declt decl(result);
+  decl.location() = location;
+  target_block.copy_to_operands(decl);
+  code_assignt assign(result, value);
+  assign.location() = location;
+  target_block.copy_to_operands(assign);
+
+  const exprt round_trip = typecast_exprt(
+    typecast_exprt(result, current_func_return_type_), value.type());
+  code_assertt check(equality_exprt(round_trip, result));
+  check.location() = location;
+  check.location().user_provided(true);
+  check.location().comment(
+    "a function annotated to return int returns a float that int cannot "
+    "hold; not modelled");
+  target_block.copy_to_operands(check);
+  return result;
+}
+
 void python_converter::get_return_statements(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -8214,62 +8936,11 @@ void python_converter::get_return_statements(
   // instead of an Assign target.
   reject_copied_numpy_view_in_container(ast_node, {"List", "Tuple", "Dict"});
 
-  bool is_user_defined_function = false;
-  if (
-    !current_func_name_.empty() && current_func_name_ != "python_user_main" &&
-    ast_json && ast_json->contains("filename") &&
-    is_program_file((*ast_json)["filename"].get<std::string>()))
-  {
-    const std::vector<std::string> function_path =
-      json_utils::split_function_path(current_func_name_);
-    const nlohmann::json func_node =
-      json_utils::find_function_by_path(*ast_json, function_path);
-    is_user_defined_function = !func_node.empty() && !is_model_file(func_node);
-  }
-  const bool returns_name = ast_node["value"].value("_type", "") == "Name" &&
-                            ast_node["value"].contains("id");
-  if (
-    is_user_defined_function && returns_name &&
-    contains_tracked_numpy_view_name(ast_node["value"]))
-    throw std::runtime_error(
-      "TypeError: returning a copied numpy view is not supported");
-  const locationt return_location = get_location_from_decl(ast_node);
-  const std::string return_file = return_location.get_file().as_string();
-  if (
-    returns_name && ast_json && is_user_defined_function &&
-    is_program_file(return_file))
-  {
-    const std::string name = ast_node["value"]["id"].get<std::string>();
-    const nlohmann::json decl =
-      json_utils::find_var_decl(name, current_func_name_, *ast_json);
-    if (
-      decl.is_object() && decl.value("_type", "") != "arg" &&
-      decl.contains("value") && is_numpy_view_copy_expr(decl["value"]))
-    {
-      const std::string root_name =
-        root_name_from_numpy_view_copy_expr(decl["value"]);
-      const std::string root_id =
-        root_name.empty() ? std::string() : resolve_name_symbol_id(root_name);
-      const bool root_is_tracked_numpy =
-        !root_id.empty() && (numpy_array_symbols_.count(root_id) != 0 ||
-                             numpy_view_copy_sources_.count(root_id) != 0);
-      bool root_is_numpy_param = false;
-      if (!root_name.empty() && ast_json && ast_imports_numpy_module(*ast_json))
-      {
-        const nlohmann::json root_decl =
-          json_utils::find_var_decl(root_name, current_func_name_, *ast_json);
-        root_is_numpy_param =
-          root_decl.is_object() && root_decl.value("_type", "") == "arg";
-      }
-      if (root_is_tracked_numpy || root_is_numpy_param)
-      {
-        throw std::runtime_error(
-          "TypeError: returning a copied numpy view is not supported");
-      }
-    }
-  }
+  if (reject_or_defer_numpy_view_name_return(ast_node, target_block))
+    return;
 
-  exprt return_value = get_return_value(ast_node["value"]);
+  exprt return_value =
+    python_expr::decay_function_to_pointer(get_return_value(ast_node["value"]));
   locationt location = get_location_from_decl(ast_node);
 
   // Coerces `val` to a tagged-object value when the function's return type
@@ -8399,6 +9070,7 @@ void python_converter::get_return_statements(
     }
 
     coerce_to_tagged_return(ret_expr);
+    ret_expr = check_float_fits_int_return(ast_node, ret_expr, target_block);
 
     // Return the temporary variable
     code_returnt return_code;
@@ -8481,6 +9153,8 @@ void python_converter::get_return_statements(
     return_value = coerce_optional_return(return_value, location, target_block);
 
     coerce_to_tagged_return(return_value);
+    return_value =
+      check_float_fits_int_return(ast_node, return_value, target_block);
 
     code_returnt return_code;
     return_code.return_value() = return_value;
@@ -8518,6 +9192,16 @@ exprt python_converter::narrow_optional_return(
   return unwrap_optional_if_needed(base);
 }
 
+static std::string unsupported_statement_message(const nlohmann::json &element)
+{
+  // The preprocessor lowers a match whose patterns are all literals, values,
+  // captures, wildcards or alternatives of these.
+  if (element["_type"] == "Match")
+    return "match statements with sequence, mapping or class patterns, or "
+           "with a guard that has a nested scope, are not supported";
+  return element["_type"].get<std::string>() + " statements are not supported";
+}
+
 exprt python_converter::get_block(
   const nlohmann::json &ast_block,
   bool is_function_body,
@@ -8553,8 +9237,17 @@ exprt python_converter::get_block(
   current_block = &block;
 
   // Iterate over block statements
-  for (auto &element : ast_block)
+  for (auto &raw_element : ast_block)
   {
+    nlohmann::json rewritten_element, adapted_element, hoisted_element;
+    const nlohmann::json &element = adapt_numpy_view_builtin_calls(
+      hoist_unnamed_numpy_view_arguments(
+        resolve_numpy_view_containers(raw_element, rewritten_element),
+        hoisted_element,
+        block),
+      adapted_element);
+    check_numpy_view_statement(element);
+    bind_runtime_numpy_view_arguments(element, block);
     StatementType type = python_frontend::get_statement_type(element);
 
     switch (type)
@@ -8562,7 +9255,8 @@ exprt python_converter::get_block(
     case StatementType::VARIABLE_ASSIGN:
     {
       // Add an assignment to the block
-      get_var_assign(element, block);
+      get_folded_var_assign(element, block);
+      mark_global_bound(element, block);
       break;
     }
     case StatementType::IF_STATEMENT:
@@ -8595,9 +9289,10 @@ exprt python_converter::get_block(
       // saved state is empty, so this matches the previous behaviour.
       std::vector<std::string> saved_globals = global_declarations;
       std::vector<std::string> saved_loads = local_loads;
-      get_function_definition(element);
+      get_unfolded_function_definition(element);
       global_declarations = std::move(saved_globals);
       local_loads = std::move(saved_loads);
+      mark_global_bound(element, block);
 
       // Bind the closure's capture cells where the `def` executes (#6256).
       exprt::operandst &bindings = pending_captures_.operands();
@@ -8638,7 +9333,9 @@ exprt python_converter::get_block(
       }
 
       current_element_type = bool_type();
+      asserted_test_ = &element["test"];
       exprt test = get_expr(element["test"]);
+      asserted_test_ = nullptr;
       // An object asserted directly is truth-tested like any condition, so a
       // class with __bool__ decides the answer. Without this `assert obj` cast
       // the object to bool and passed whatever the dunder said.
@@ -8701,7 +9398,10 @@ exprt python_converter::get_block(
       }
 
       // Attach assertion message if present
-      auto attach_assert_message = [&element](code_assertt &assert_code) {
+      auto attach_assert_message = [this, &element](code_assertt &assert_code) {
+        // A failing assert raises AssertionError, which ends the program, so
+        // nothing after it runs on that path.
+        assert_code.location().set("ends_path", true);
         if (element.contains("msg") && !element["msg"].is_null())
         {
           std::string msg;
@@ -8720,7 +9420,9 @@ exprt python_converter::get_block(
           }
 
           if (!msg.empty())
-            assert_code.location().comment(msg);
+            assert_code.location().comment(
+              "assertion " + c_expr2string(assert_code.assertion(), ns) + ": " +
+              msg);
         }
       };
 
@@ -8793,10 +9495,12 @@ exprt python_converter::get_block(
       // Function calls are handled here
       reject_numpy_view_identity_query(element["value"]);
       reject_numpy_view_mutating_method_call(element["value"]);
-      reject_unknown_numpy_view_call(element["value"]);
+      numpy_discarded_call_ = &element["value"];
+      track_numpy_view_call_escape(element["value"]);
 
       exprt empty;
       exprt expr = get_expr(element["value"]);
+      numpy_discarded_call_ = nullptr;
       if (expr != empty)
       {
         codet code_stmt = convert_expression_to_code(expr);
@@ -8848,6 +9552,11 @@ exprt python_converter::get_block(
       }
       break;
     }
+    case StatementType::NONLOCAL:
+    {
+      declare_nonlocal(element);
+      break;
+    }
     case StatementType::TRY:
     {
       exception_handler_->get_try_statement(element, block);
@@ -8878,8 +9587,7 @@ exprt python_converter::get_block(
       break;
     case StatementType::UNKNOWN:
     default:
-      throw std::runtime_error(
-        element["_type"].get<std::string>() + " statements are not supported");
+      throw std::runtime_error(unsupported_statement_message(element));
     }
   }
 
@@ -8888,17 +9596,55 @@ exprt python_converter::get_block(
   return block;
 }
 
+// The shape of the literal @p arr with @p element at its leaves.
+static typet numpy_typed_shape(
+  const type_handler &types,
+  const nlohmann::json &arr,
+  const typet &element)
+{
+  const auto &elts = arr["elts"];
+  const bool nested =
+    !elts.empty() && elts[0].value("_type", std::string()) == "List";
+  return types.build_array(
+    nested ? numpy_typed_shape(types, elts[0], element) : element, elts.size());
+}
+
+// @p value stored as an element of type @p element: a cast for a number, and
+// NUL padding to the array's fixed width for a string.
+static exprt as_numpy_element(const exprt &value, const typet &element)
+{
+  if (value.type() == element || !element.is_array())
+    return value.type() == element ? value : typecast_exprt(value, element);
+  exprt padded = gen_zero(element);
+  if (value.type().is_array() && !value.is_constant())
+    throw std::runtime_error(
+      "TypeError: a numpy string element must be a literal");
+  if (!value.type().is_array())
+  {
+    padded.operands().at(0) = typecast_exprt(value, element.subtype());
+    return padded;
+  }
+  for (std::size_t i = 0; i < value.operands().size(); ++i)
+    padded.operands().at(i) = value.operands()[i];
+  return padded;
+}
+
 exprt python_converter::get_static_array(
   const nlohmann::json &arr,
-  const typet &shape)
+  const typet &literal_shape)
 {
-  exprt zero = gen_zero(size_type());
+  const bool typed = !numpy_element_type.id().empty();
+  const typet shape =
+    typed ? numpy_typed_shape(type_handler_, arr, numpy_element_type)
+          : literal_shape;
   exprt list = gen_zero(shape);
 
   unsigned int i = 0;
   for (auto &e : arr["elts"])
   {
     exprt element_expr = get_expr(e);
+    if (typed && e.value("_type", "") != "List")
+      element_expr = as_numpy_element(element_expr, shape.subtype());
     list.operands().at(i++) = element_expr;
   }
 

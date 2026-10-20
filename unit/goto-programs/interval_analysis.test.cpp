@@ -244,6 +244,81 @@ TEST_CASE("Interval Analysis - Base Unsigned", "[ai][interval-analysis]")
   T.run_configs();
 }
 
+TEST_CASE(
+  "Interval Analysis - Unsigned negation wraps",
+  "[ai][interval-analysis]")
+{
+  test_program T;
+  T.code =
+    "int main() {\n"
+    "unsigned int one = 1;\n"
+    "unsigned int a = -one;\n"
+    "int b;\n"
+    "return a;\n"
+    "}";
+
+  T.property["4"].push_back({"@F@main@a", (long)pow(2, 32) - 1, true});
+
+  T.run_configs();
+}
+
+TEST_CASE(
+  "Interval Analysis - Unsigned negation of a range wraps",
+  "[ai][interval-analysis]")
+{
+  test_program T;
+  T.code =
+    "int main() {\n"
+    "unsigned int a = nondet_uint() ? 1 : 5;\n"
+    "unsigned int b = -a;\n"
+    "int c;\n"
+    "return b;\n"
+    "}";
+
+  T.property["4"].push_back({"@F@main@b", (long)pow(2, 32) - 1, true});
+  T.property["4"].push_back({"@F@main@b", (long)pow(2, 32) - 5, true});
+
+  T.run_configs();
+}
+
+TEST_CASE(
+  "Interval Analysis - Unsigned negation of a range containing zero",
+  "[ai][interval-analysis]")
+{
+  test_program T;
+  T.code =
+    "int main() {\n"
+    "unsigned int a = nondet_uint() ? 0 : 5;\n"
+    "unsigned int b = -a;\n"
+    "int c;\n"
+    "return b;\n"
+    "}";
+
+  T.property["4"].push_back({"@F@main@b", 0, true});
+  T.property["4"].push_back({"@F@main@b", (long)pow(2, 32) - 5, true});
+
+  T.run_configs();
+}
+
+TEST_CASE(
+  "Interval Analysis - Negation of a half-bounded range",
+  "[ai][interval-analysis]")
+{
+  test_program T;
+  T.code =
+    "int main() {\n"
+    "int a = nondet_int();\n"
+    "if (a < 0) return 0;\n"
+    "int b = -a;\n"
+    "int c;\n"
+    "return b;\n"
+    "}";
+
+  T.property["5"].push_back({"@F@main@b", -2147483647, true});
+
+  T.run_configs();
+}
+
 TEST_CASE("Interval Analysis - Ternary", "[ai][interval-analysis]")
 {
   // Setup global options here
@@ -837,14 +912,15 @@ TEST_CASE("Interval Analysis - Typecast (unsigned)", "[ai][interval-analysis]")
     "unsigned char a = 0;\n"
     "if(nondet_int()) a = 250;"
     "unsigned  b = (unsigned ) a;\n"
-    "return a;\n" // a: [0, 250], b: [0,250]
+    "return a;\n" // a: [250, 0], b: [0, 255]
     "}";
 
   T.property["4"].push_back({"@F@main@a", 0, true});
   T.property["4"].push_back({"@F@main@a", 250, true});
+  T.property["4"].push_back({"@F@main@a", 100, false});
   T.property["5"].push_back({"@F@main@b", 0, true});
   T.property["5"].push_back({"@F@main@b", 250, true});
-  T.property["5"].push_back({"@F@main@b", 251, false});
+  T.property["5"].push_back({"@F@main@b", 256, false});
 
   T.run_configs(true);
 }
@@ -908,14 +984,15 @@ TEST_CASE(
     "char a = 100;\n"
     "if(nondet_int()) a = -2;"
     "unsigned char  b = (unsigned char ) a;\n"
-    "return a;\n" // a: [-1, 5], b: [5,128]
+    "return a;\n" // a: [-2, 100], b: [254, 100]
     "}";
 
   T.property["4"].push_back({"@F@main@a", -2, true});
   T.property["4"].push_back({"@F@main@a", 100, true});
+  T.property["4"].push_back({"@F@main@a", 101, false});
   T.property["5"].push_back({"@F@main@b", 100, true});
   T.property["5"].push_back({"@F@main@b", 254, true});
-  T.property["5"].push_back({"@F@main@b", 255, false});
+  T.property["5"].push_back({"@F@main@b", 200, false});
 
   T.run_configs(true);
 }

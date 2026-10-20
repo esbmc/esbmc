@@ -305,7 +305,7 @@ public:
      *  DFS the complete schedules are
      *  `schedules_explored - pruned_by_mpor - pruned_by_hash`. Comparing this
      *  figure across configurations without that subtraction reads a reduction
-     *  that is working as one that made the search bigger (issue #6831 W1.4).
+     *  that is working as one that made the search bigger (issue #6831, #6953).
      */
     unsigned long schedules_explored = 0;
     /** These three prune counters share a unit: context-switch points at which

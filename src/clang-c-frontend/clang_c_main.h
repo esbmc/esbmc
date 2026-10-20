@@ -16,8 +16,12 @@ public:
   void init_variable(codet &dest, const symbolt &sym);
   virtual void adjust_init(code_assignt &assignment, codet &adjusted);
   void static_lifetime_init(const contextt &context, codet &dest);
+  virtual void static_lifetime_destroy(codet &dest);
 
 protected:
+  bool atexit_may_register() const;
+  void add_exit_code(codet &dest, const locationt &location);
+
   contextt &context;
 };
 

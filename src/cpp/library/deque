@@ -724,16 +724,16 @@ public:
 
   const_reference at(size_type n) const
   {
-    assert(0 <= n);
-    assert(n < _size);
+    if (n < 0 || n >= _size)
+      throw std::out_of_range();
     assert(_size <= DEQUE_CAPACITY);
     n++;
     return buf[n];
   }
   reference at(size_type n)
   {
-    assert(0 <= n);
-    assert(n < _size);
+    if (n < 0 || n >= _size)
+      throw std::out_of_range();
     assert(_size <= DEQUE_CAPACITY);
     n++;
     return buf[n];

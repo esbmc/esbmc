@@ -45,6 +45,8 @@ void goto_convertt::do_function_call(
     remove_sideeffects(*it, dest);
   }
 
+  const std::size_t size_before = dest.instructions.size();
+
   // split on the function
   if (
     new_function.id() == "dereference" ||
@@ -93,6 +95,11 @@ void goto_convertt::do_function_call(
     throw "do_function_call: unexpected callee expression (id: " +
       new_function.id_string() + ")";
   }
+
+  if (
+    dest.instructions.size() > size_before &&
+    dest.instructions.back().is_function_call())
+    record_exception_unwind(dest.instructions.back());
 }
 
 void goto_convertt::do_function_call_if(

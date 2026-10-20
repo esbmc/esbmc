@@ -1,0 +1,5 @@
+CORE
+main.c
+--loop-invariant-check
+^VERIFICATION FAILED$
+^\s+assertion x == 0$

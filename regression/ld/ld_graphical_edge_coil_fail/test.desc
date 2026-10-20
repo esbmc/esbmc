@@ -1,0 +1,4 @@
+CORE
+coil.ld
+--ld-props props.yaml 
+^ERROR: UnsupportedConstruct\(coil \(var=y\) with a negated or edge attribute, tier=2\)

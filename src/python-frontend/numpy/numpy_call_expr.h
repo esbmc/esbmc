@@ -1,6 +1,7 @@
 #pragma once
 
 #include <python-frontend/function_call/expr.h>
+#include <python-frontend/python-list/python_list.h>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <utility>
@@ -71,6 +72,43 @@ private:
   // get() to keep that function's own decision count from growing further.
   exprt get_arange_expr();
 
+public:
+  /// The literal list the `np.arange` @p call builds, in its dtype, a Name
+  /// among its arguments read from its declaration for code in @p function;
+  /// nullopt when the arguments are not constants.
+  static std::optional<nlohmann::json> arange_literal(
+    const nlohmann::json &call,
+    const std::string &function,
+    const nlohmann::json &ast);
+
+private:
+  bool binds_static_array(const nlohmann::json &list) const;
+  long long eye_diagonal_offset(const std::string &function) const;
+  static std::size_t eye_dimension(const nlohmann::json &node);
+  nlohmann::json eye_literal(
+    const std::string &function,
+    std::size_t rows,
+    std::size_t cols) const;
+  exprt full_size_temporary(exprt size_expr);
+  exprt literal_constructor_expr(const nlohmann::json &list);
+  // The element type of the array built from the literal @p list: a fixed-width
+  // string, or empty for the literal's own.
+  typet constructor_element_type(const nlohmann::json &list) const;
+  void reject_complex_array_operands(const std::string &function) const;
+  bool is_complex_operand(const nlohmann::json &arg) const;
+  // @p build run with constructor_element_type(@p list) at the leaves of
+  // the static arrays it builds.
+  exprt with_element_type(
+    const nlohmann::json &list,
+    const std::function<exprt(const nlohmann::json &)> &build);
+  exprt typed_static_array(const nlohmann::json &list, const typet &shape);
+  exprt full_of_runtime_fill(const std::vector<std::size_t> &dims);
+  // The points of this linspace() call as a literal list.
+  nlohmann::json linspace_literal(
+    const nlohmann::json &start_node,
+    const nlohmann::json &stop_node,
+    const nlohmann::json &num_node) const;
+
   bool is_math_function() const;
 
   void broadcast_check(const nlohmann::json &operands) const;
@@ -122,6 +160,12 @@ private:
   std::optional<exprt> handle_ravel_pointer_view_attempt();
   exprt handle_axis_permutation_view_call(const std::string &function);
 
+  exprt return_retyped_or_temp(exprt value);
+
+  exprt build_default_axis_transpose_expr(
+    const exprt &source_expr,
+    const std::string &error_message);
+
   // numpy.transpose()'s parameter-shaped fast path: when `t` (the single-
   // pointer-unwrapped type of `arg`) isn't a fully nested 2-D array -- most
   // commonly a 2-D parameter, whose C-ABI row-pointer decay
@@ -168,6 +212,28 @@ private:
   exprt handle_broadcast_to_call();
   std::optional<exprt>
   try_build_nditer_descriptor_list(const nlohmann::json &arg);
+  std::vector<std::size_t>
+  resolve_reshape_shape(std::optional<std::size_t> total) const;
+  std::optional<exprt> try_build_reshape_pointer_view();
+  std::optional<exprt> reshape_strided_view(
+    python_list &list,
+    const python_list::strided_view_desc &strided,
+    const nlohmann::json &arg,
+    bool as_view) const;
+  static bool
+  axes_are_symbolic(const std::vector<python_list::strided_axis> &axes);
+  bool describe_view_operand(
+    const nlohmann::json &arg,
+    python_list &list,
+    std::optional<python_list::strided_view_desc> &source);
+  exprt emit_strided_result(
+    python_list &list,
+    const python_list::strided_view_desc &source,
+    const std::vector<python_list::strided_axis> &axes,
+    bool readonly);
+  std::optional<exprt> try_build_view_flatten_copy();
+  std::optional<exprt> try_build_axis_permutation_view();
+  std::optional<exprt> try_build_shape_only_view();
   std::optional<exprt> try_materialize_descriptor_copy_call();
   std::optional<exprt>
   try_materialize_descriptor_array_call(nlohmann::json &array_arg);

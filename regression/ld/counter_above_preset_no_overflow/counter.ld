@@ -11,7 +11,7 @@
         </inputVars>
         <localVars>
           <variable name="PV"><type><INT/></type><initialValue><simpleValue value="3"/></initialValue></variable>
-          <variable name="CVu"><type><INT/></type><initialValue><simpleValue value="2147483647"/></initialValue></variable>
+          <variable name="CVu"><type><INT/></type><initialValue><simpleValue value="32767"/></initialValue></variable>
         </localVars>
         <outputVars>
           <variable name="CUQ"><type><BOOL/></type></variable>

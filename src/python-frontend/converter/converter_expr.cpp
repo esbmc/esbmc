@@ -1,5 +1,6 @@
 #include <python-frontend/converter/converter_internal.h>
 #include <optional>
+#include <limits>
 #include <python-frontend/math/convert_float_literal.h>
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
@@ -13,7 +14,6 @@
 #include <python-frontend/lambda/python_lambda.h>
 #include <python-frontend/python-list/python_list.h>
 #include <python-frontend/math/python_math.h>
-#include <python-frontend/numpy/ndarray_descriptor.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/symbol_id.h>
@@ -157,6 +157,18 @@ static void throw_numpy_multidim_index_error(
   throw std::runtime_error(msg.str());
 }
 
+// A str value is stored in a member as `char*`, as python_class_builder types
+// string members; the annotation type (char or a sized char array) would not
+// match the literal assigned to it (#8383).
+static typet stored_member_type(const typet &value_type)
+{
+  if (
+    type_utils::is_string_type(value_type) ||
+    type_utils::is_char_type(value_type))
+    return gen_pointer_type(char_type());
+  return value_type;
+}
+
 // True for a bare `:` slice, i.e. Slice(lower=None, upper=None, step=None).
 // Used to recognize the two 2-D slicing patterns this frontend supports,
 // `a[:, j]` and `a[i, :]`; any other slice (bounded or stepped) inside a
@@ -210,45 +222,6 @@ public:
 private:
   python_converter &converter;
 };
-
-// True when `method_name` is a method decorated with @property in `class_name`
-// or one of its (transitive) base classes. Reading `obj.prop` then invokes the
-// getter. A same-named non-property method in a derived class shadows a base
-// property (Python MRO), so a match that is not @property stops the search.
-static bool is_property_method(
-  const nlohmann::json &ast_body,
-  const std::string &class_name,
-  const std::string &method_name)
-{
-  const nlohmann::json cls = json_utils::find_class(ast_body, class_name);
-  if (cls.empty() || !cls.contains("body"))
-    return false;
-
-  for (const auto &stmt : cls["body"])
-  {
-    if (
-      stmt.value("_type", std::string()) != "FunctionDef" ||
-      stmt.value("name", std::string()) != method_name)
-      continue;
-    if (stmt.contains("decorator_list"))
-      for (const auto &dec : stmt["decorator_list"])
-        if (
-          dec.value("_type", std::string()) == "Name" &&
-          dec.value("id", std::string()) == "property")
-          return true;
-    return false; // method exists but is not a property: shadows any base
-  }
-
-  if (cls.contains("bases"))
-    for (const auto &base : cls["bases"])
-      if (
-        base.contains("id") &&
-        is_property_method(
-          ast_body, base["id"].template get<std::string>(), method_name))
-        return true;
-
-  return false;
-}
 
 static ExpressionType get_expression_type(const nlohmann::json &element)
 {
@@ -318,6 +291,42 @@ exprt python_converter::make_class_object(const std::string &name)
   expr.set("value", name);
   return expr;
 }
+
+ExpressionType
+python_converter::expression_type(const nlohmann::json &element) const
+{
+  if (
+    element.is_object() && element.value("_type", "") == "Attribute" &&
+    element.value("attr", "") == "__mro__" &&
+    element["value"].value("_type", "") == "Name")
+  {
+    const std::string &name = element["value"]["id"];
+    if (is_class(name, *ast_json) && class_mro(name))
+      return ExpressionType::CLASS_MRO;
+  }
+  return get_expression_type(element);
+}
+
+exprt python_converter::class_mro_tuple(const nlohmann::json &element)
+{
+  const auto mro = class_mro(element["value"]["id"]);
+
+  // Build the tuple as the literal `(Cls, ..., object)` would be, so it
+  // compares equal to one written in the source.
+  nlohmann::json tuple = element;
+  tuple["_type"] = "Tuple";
+  tuple["elts"] = nlohmann::json::array();
+  nlohmann::json name = element["value"];
+  for (const std::string &cls : *mro)
+  {
+    name["id"] = cls;
+    tuple["elts"].push_back(name);
+  }
+  name["id"] = "object";
+  tuple["elts"].push_back(name);
+  return get_expr(tuple);
+}
+
 /// Convert Python AST literal to expression.
 /// Handles integers, booleans, floats, chars, strings, and byte literals.
 /// Example: {"_type": "Constant", "value": 42} -> integer constant expr
@@ -506,14 +515,16 @@ bool python_converter::is_bytes_literal(const nlohmann::json &element)
   return false;
 }
 
-exprt python_converter::get_lambda_expr(const nlohmann::json &element)
+exprt python_converter::get_lambda_expr(
+  const nlohmann::json &element,
+  const std::vector<std::optional<typet>> &argument_types)
 {
   // The body is converted here with the lambda's parameters still unbound, so
   // any division inside it must not emit a ZeroDivisionError guard (which would
   // fire on the unconstrained divisor); it is checked at the bound call site.
   bool saved = converting_lambda_body_;
   converting_lambda_body_ = true;
-  exprt result = lambda_handler_->get_lambda_expr(element);
+  exprt result = lambda_handler_->get_lambda_expr(element, argument_types);
   converting_lambda_body_ = saved;
   return result;
 }
@@ -598,6 +609,224 @@ symbolt *python_converter::contract_return_value_symbol(
   return add_symbol_and_get_ptr(ret_symbol);
 }
 
+/// A bare name a function does not bind: its class scope when the function
+/// is a class body statement, otherwise the module. A class body is not an
+/// enclosing scope for its methods, so a method never sees a class attribute
+/// by its bare name (#8196).
+symbolt *python_converter::find_enclosing_scope_symbol(symbol_id sid) const
+{
+  if (
+    sid.get_class().empty() || sid.get_function().empty() ||
+    converting_defaults_)
+  {
+    sid.set_function("");
+    if (symbolt *symbol = find_symbol(sid.to_string()))
+      return symbol;
+  }
+  return find_symbol(sid.global_to_string());
+}
+
+/// The name \p stmt binds, if it is a def or an annotated assignment to a
+/// name; otherwise empty.
+static std::string module_binding_name(const nlohmann::json &stmt)
+{
+  const std::string kind = stmt.value("_type", "");
+  if (kind == "FunctionDef")
+    return stmt["name"].get<std::string>();
+  if (kind == "AnnAssign")
+    return stmt["target"].value("id", "");
+  return "";
+}
+
+/// The statement binding \p name in \p body or in a block nested in it at
+/// module scope (an if, loop or try), or nullptr.
+static const nlohmann::json *
+find_module_binding(const nlohmann::json &body, const std::string &name)
+{
+  for (const auto &stmt : body)
+  {
+    if (module_binding_name(stmt) == name)
+      return &stmt;
+    const std::string kind = stmt.value("_type", "");
+    if (
+      kind == "FunctionDef" || kind == "AsyncFunctionDef" || kind == "ClassDef")
+      continue;
+    for (const char *field : {"body", "orelse", "finalbody", "handlers"})
+      if (stmt.contains(field) && stmt[field].is_array())
+        if (
+          const nlohmann::json *found = find_module_binding(stmt[field], name))
+          return found;
+  }
+  return nullptr;
+}
+
+/// Whether \p aug adds to a global of annotated type \p type a constant that
+/// leaves it that type.
+static bool keeps_type(const nlohmann::json &aug, const std::string &type)
+{
+  const nlohmann::json &value = aug["value"];
+  if (aug["op"].value("_type", "") == "Div" || value["_type"] != "Constant")
+    return false;
+  const nlohmann::json &constant = value["value"];
+  return (type == "int" && constant.is_number_integer()) ||
+         (type == "float" && constant.is_number()) ||
+         (type == "str" && constant.is_string());
+}
+
+/// The augmented assignments to \p name under \p node that keep it \p type.
+static std::size_t count_type_keeping_aug_assigns(
+  const nlohmann::json &node,
+  const std::string &name,
+  const std::string &type)
+{
+  std::size_t n = node.is_object() && node.value("_type", "") == "AugAssign" &&
+                  node["target"].value("id", "") == name &&
+                  keeps_type(node, type);
+  for (const auto &child : node)
+    if (child.is_structured())
+      n += count_type_keeping_aug_assigns(child, name, type);
+  return n;
+}
+
+/// The module-scope statement binding \p name when that is the one binding
+/// of the name anywhere in the module, or nullptr. Any other binding (a second
+/// one, a local) leaves the name's value at a read depending on which binding
+/// ran. An augmented assignment that keeps the binding's type does not count:
+/// it reads the name first, so it raises unless the binding has already run.
+static const nlohmann::json *
+sole_module_binding(const nlohmann::json &module, const std::string &name)
+{
+  const nlohmann::json *binding = find_module_binding(module["body"], name);
+  if (!binding)
+    return nullptr;
+  const std::string type = binding->contains("annotation")
+                             ? (*binding)["annotation"].value("id", "")
+                             : "";
+  if (
+    json_utils::count_name_bindings(module, name) -
+      count_type_keeping_aug_assigns(module, name, type) !=
+    1)
+    return nullptr;
+  return binding;
+}
+
+/// The module global \p sid names for a read in an enclosing scope. Code
+/// converted before the module binds the global, as a function body is, finds
+/// no symbol yet (#8369). Python resolves the name when the read runs, so
+/// register the global from its binding and let a flag tell the read whether
+/// that binding has run yet.
+symbolt *python_converter::find_global_symbol(const symbol_id &sid)
+{
+  if (symbolt *symbol = find_enclosing_scope_symbol(sid))
+    return symbol;
+  const nlohmann::json *binding =
+    sole_module_binding(*ast_json, sid.get_object());
+  if (!binding || binding->value("_type", "") != "AnnAssign")
+    return nullptr;
+  nlohmann::json annotated = *binding;
+  annotated.erase("_inferred_annotation");
+  preregister_global_variables(nlohmann::json::array({annotated}));
+  symbol_id global(current_python_file, "", "");
+  global.set_object(sid.get_object());
+  symbolt *symbol = symbol_table_.find_symbol(global.to_string());
+  if (symbol)
+    track_unbound_global(global.to_string(), *binding, symbol->get_type());
+  return symbol;
+}
+
+/// The module function \p name as a value, or nil. A function the module
+/// defines after this read is tracked like a global (find_global_symbol).
+exprt python_converter::module_function_expr(
+  const std::string &name,
+  const nlohmann::json &element)
+{
+  symbol_id sid(current_python_file, "", name);
+  const symbolt *symbol = symbol_table_.find_symbol(sid.to_string());
+  if (symbol && symbol->get_type().is_code())
+    return symbol_expr(*symbol);
+  const nlohmann::json *binding = sole_module_binding(*ast_json, name);
+  if (!binding || binding->value("_type", "") != "FunctionDef")
+    return nil_exprt();
+  track_unbound_global(sid.to_string(), element, typet());
+  guard_unbound_global(sid.to_string(), name, element);
+  return symbol_exprt(sid.to_string(), code_typet());
+}
+
+void python_converter::track_unbound_global(
+  const std::string &id,
+  const nlohmann::json &binding,
+  const typet &type)
+{
+  if (unbound_global_flags_.count(id))
+    return;
+  const std::string flag_id = id + "$bound";
+  symbolt flag = create_symbol(
+    current_python_file,
+    flag_id,
+    flag_id,
+    get_location_from_decl(binding),
+    bool_type());
+  flag.lvalue = true;
+  flag.static_lifetime = true;
+  flag.set_value(migrate_expr(false_exprt()));
+  symbol_table_.add(flag);
+  unbound_global_flags_.emplace(id, std::make_pair(flag_id, type));
+}
+
+/// Raises NameError at a read of \p id while its binding has not run.
+void python_converter::guard_unbound_global(
+  const std::string &id,
+  const std::string &name,
+  const nlohmann::json &element)
+{
+  const auto flag = unbound_global_flags_.find(id);
+  if (flag == unbound_global_flags_.end())
+    return;
+  emit_guarded_raise(
+    not_exprt(symbol_expr(*symbol_table_.find_symbol(flag->second.first))),
+    "NameError",
+    "name '" + name + "' is not defined",
+    get_location_from_decl(element));
+}
+
+/// Sets the flag of the global \p stmt binds, once it has run. Later reads
+/// need no guard, so the global stops being tracked. Reads converted earlier
+/// took the global's type from its annotation, so refuse a binding that gave
+/// it another.
+void python_converter::mark_global_bound(
+  const nlohmann::json &stmt,
+  code_blockt &block)
+{
+  const std::string name = module_binding_name(stmt);
+  const bool is_def = stmt.value("_type", "") == "FunctionDef";
+  symbol_id sid(current_python_file, "", is_def ? name : "");
+  if (!is_def)
+    sid.set_object(name);
+  const auto flag = unbound_global_flags_.find(sid.to_string());
+  if (name.empty() || flag == unbound_global_flags_.end())
+    return;
+  if (
+    !is_def && symbol_table_.find_symbol(sid.to_string())->get_type() !=
+                 flag->second.second)
+    throw std::runtime_error(
+      fmt::format(
+        "Variable '{}' is read before its binding at line {} as a different "
+        "type than that binding gives it",
+        name,
+        get_location_from_decl(stmt).get_line().as_string()));
+  block.copy_to_operands(code_assignt(
+    symbol_expr(*symbol_table_.find_symbol(flag->second.first)), true_exprt()));
+  unbound_global_flags_.erase(flag);
+}
+
+exprt python_converter::get_default_expr(const nlohmann::json &node)
+{
+  converting_defaults_ = true;
+  exprt default_expr = get_expr(node);
+  converting_defaults_ = false;
+  return default_expr;
+}
+
 /// The "variable is not defined" diagnostic for a Name that resolved to no
 /// symbol, naming the enclosing function when the reference is inside one.
 static std::string undefined_variable_message(
@@ -615,25 +844,96 @@ static std::string undefined_variable_message(
   return error_msg.str();
 }
 
-// v.shape / v.ndim where v is a pointer-backed numpy view (ADR-NP-003 etapa
-// 2, 1-D slice views): its own logical length is tracked separately, since
-// unwrapping the pointer reaches only the scalar element type, not a shape.
-// Views are always rank 1 in this PR's scope.
+const python_converter::numpy_scalar_pointer_view_infot *
+python_converter::find_numpy_pointer_view_info(const std::string &name) const
+{
+  for (const std::string &id : {name, resolve_name_symbol_id(name)})
+  {
+    const auto view = numpy_pointer_view_info_.find(id);
+    if (view != numpy_pointer_view_info_.end())
+      return &view->second;
+  }
+  return nullptr;
+}
+
+exprt python_converter::numpy_view_extent(
+  const numpy_scalar_pointer_view_infot &info,
+  std::size_t axis) const
+{
+  if (axis < info.shape_symbols.size() && !info.shape_symbols[axis].empty())
+    return symbol_expr(*symbol_table_.find_symbol(info.shape_symbols[axis]));
+  const std::size_t extent =
+    info.shape.empty() ? info.length : info.shape[axis];
+  return from_integer(extent, signedbv_typet(64));
+}
+
+exprt python_converter::numpy_view_stride(
+  const numpy_scalar_pointer_view_infot &info,
+  std::size_t axis) const
+{
+  const typet ll_type = signedbv_typet(64);
+  if (axis < info.stride_symbols.size() && !info.stride_symbols[axis].empty())
+    return symbol_expr(*symbol_table_.find_symbol(info.stride_symbols[axis]));
+  if (!info.strides.empty())
+    return from_integer(info.strides[axis], ll_type);
+  if (info.shape.size() <= 1)
+    return from_integer(info.stride, ll_type);
+  long long stride = 1;
+  for (std::size_t later = axis + 1; later < info.shape.size(); ++later)
+    stride *= static_cast<long long>(info.shape[later]);
+  return from_integer(stride, ll_type);
+}
+
+std::optional<exprt>
+python_converter::symbolic_numpy_view_length(const std::string &name) const
+{
+  const numpy_scalar_pointer_view_infot *info =
+    find_numpy_pointer_view_info(name);
+  if (!info || !info->is_symbolic())
+    return std::nullopt;
+  return numpy_view_extent(*info, 0);
+}
+
+void python_converter::reject_symbolic_numpy_view(
+  const numpy_scalar_pointer_view_infot &info)
+{
+  if (info.is_symbolic())
+    throw std::runtime_error(
+      "TypeError: this operation does not support a numpy view whose extent "
+      "or stride is only known at run time");
+}
+
+// v.shape / v.ndim / v.size where v is a pointer-backed numpy view: its own
+// logical shape is tracked separately, since unwrapping the pointer reaches
+// only the scalar element type, not a shape.
 std::optional<exprt> python_converter::try_get_numpy_pointer_view_shape_attr(
   const symbolt &symbol,
   const std::string &attr_name)
 {
-  const auto it = numpy_pointer_view_info_.find(symbol.id.as_string());
+  auto it = numpy_pointer_view_info_.find(symbol.id.as_string());
+  if (it == numpy_pointer_view_info_.end() && !symbol.name.empty())
+    it = numpy_pointer_view_info_.find(symbol.name.as_string());
   if (it == numpy_pointer_view_info_.end())
     return std::nullopt;
 
+  const numpy_scalar_pointer_view_infot &info = it->second;
+  const std::size_t rank = info.shape.empty() ? 1 : info.shape.size();
+  std::vector<exprt> dims;
+  dims.reserve(rank);
+  exprt size = from_integer(1, signedbv_typet(64));
+  for (std::size_t axis = 0; axis < rank; ++axis)
+  {
+    const exprt extent = numpy_view_extent(info, axis);
+    dims.push_back(typecast_exprt(extent, int_type()));
+    size = python_expr::build_mul(size, extent, signedbv_typet(64));
+  }
+
   if (attr_name == "shape")
-    return build_shape_tuple_expr(
-      *this, {from_integer(it->second.length, int_type())});
+    return build_shape_tuple_expr(*this, dims);
   if (attr_name == "ndim")
-    return from_integer(1, int_type());
+    return from_integer(rank, int_type());
   if (attr_name == "size")
-    return from_integer(it->second.length, int_type());
+    return typecast_exprt(size, int_type());
   return std::nullopt;
 }
 
@@ -672,9 +972,162 @@ std::optional<exprt> python_converter::try_get_numpy_param_shape_attr(
   return std::nullopt;
 }
 
-// Tries both tracked-shape sources for a `.shape`/`.ndim`/`.size` attribute
-// access: a pointer-view symbol, then a numpy array parameter. One combined
-// check so get_expr's own Attribute dispatch needs a single `if` for both,
+static bool is_numpy_shape_subscript_node(const nlohmann::json &element)
+{
+  if (
+    !element.is_object() || element.value("_type", "") != "Subscript" ||
+    !element.contains("value") || !element["value"].is_object())
+    return false;
+
+  const nlohmann::json &value = element["value"];
+  if (
+    value.value("_type", "") != "Attribute" ||
+    value.value("attr", "") != "shape" || !value.contains("value") ||
+    !value["value"].is_object() || value["value"].value("_type", "") != "Name")
+    return false;
+
+  const nlohmann::json &slice = element["slice"];
+  return slice.is_object() && slice.value("_type", "") == "Constant" &&
+         slice.contains("value") && slice["value"].is_number_integer();
+}
+
+static std::optional<exprt> numpy_shape_dim_expr(
+  const std::vector<std::size_t> &shape,
+  const nlohmann::json &slice)
+{
+  long long index = slice["value"].get<long long>();
+  if (index < 0)
+    index += static_cast<long long>(shape.size());
+  if (index < 0 || static_cast<std::size_t>(index) >= shape.size())
+    return std::nullopt;
+  return from_integer(shape[static_cast<std::size_t>(index)], int_type());
+}
+
+static std::optional<std::vector<std::size_t>> numpy_subscript_shape(
+  const std::vector<std::size_t> &source_shape,
+  const nlohmann::json &slice_node)
+{
+  std::vector<nlohmann::json> indices;
+  if (slice_node.is_object() && slice_node.value("_type", "") == "Tuple")
+  {
+    if (!slice_node.contains("elts") || !slice_node["elts"].is_array())
+      return std::nullopt;
+    for (const auto &elt : slice_node["elts"])
+      indices.push_back(elt);
+  }
+  else
+    indices.push_back(slice_node);
+
+  if (indices.size() > source_shape.size())
+    return std::nullopt;
+
+  std::vector<std::size_t> result;
+  for (std::size_t axis = 0; axis < indices.size(); ++axis)
+  {
+    const nlohmann::json &index = indices[axis];
+    if (index.is_object() && index.value("_type", "") == "Slice")
+    {
+      std::optional<std::size_t> len =
+        python_frontend::literal_slice_length(source_shape[axis], index);
+      if (!len)
+        return std::nullopt;
+      result.push_back(*len);
+      continue;
+    }
+
+    std::optional<long long> literal_index =
+      python_frontend::literal_int_value(index);
+    if (!literal_index)
+      return std::nullopt;
+    long long normalized = *literal_index;
+    if (normalized < 0)
+      normalized += static_cast<long long>(source_shape[axis]);
+    if (
+      normalized < 0 ||
+      normalized >= static_cast<long long>(source_shape[axis]))
+      return std::nullopt;
+  }
+
+  result.insert(
+    result.end(), source_shape.begin() + indices.size(), source_shape.end());
+  return result;
+}
+
+std::optional<std::vector<std::size_t>>
+python_converter::tracked_numpy_shape_from_name(const std::string &name) const
+{
+  for (const std::string &id : {name, resolve_name_symbol_id(name)})
+  {
+    if (
+      auto view = numpy_pointer_view_info_.find(id);
+      view != numpy_pointer_view_info_.end())
+    {
+      reject_symbolic_numpy_view(view->second);
+      return view->second.shape.empty()
+               ? std::vector<std::size_t>{view->second.length}
+               : view->second.shape;
+    }
+    if (
+      auto param = numpy_param_shapes_.find(id);
+      param != numpy_param_shapes_.end())
+      return param->second;
+  }
+  return std::nullopt;
+}
+
+std::optional<std::vector<std::size_t>>
+python_converter::numpy_shape_from_indexed_decl(const std::string &name) const
+{
+  if (!ast_json)
+    return std::nullopt;
+
+  const nlohmann::json decl =
+    json_utils::find_var_decl(name, current_func_name_, *ast_json);
+  if (
+    !decl.contains("value") || !decl["value"].is_object() ||
+    decl["value"].value("_type", "") != "Subscript" ||
+    !decl["value"].contains("value") || !decl["value"]["value"].is_object() ||
+    decl["value"]["value"].value("_type", "") != "Name")
+    return std::nullopt;
+
+  const std::string source_name = decl["value"]["value"].value("id", "");
+  std::optional<std::vector<std::size_t>> source_shape =
+    tracked_numpy_shape_from_name(source_name);
+  if (!source_shape)
+    return std::nullopt;
+  return numpy_subscript_shape(*source_shape, decl["value"]["slice"]);
+}
+
+// The attributes numpy_shape_attr_expr answers; any other one, such as a
+// complex element's .imag, is not a shape.
+static bool is_numpy_shape_attribute(const std::string &attr_name)
+{
+  return attr_name == "shape" || attr_name == "ndim" || attr_name == "size";
+}
+
+exprt python_converter::numpy_shape_attr_expr(
+  const std::vector<std::size_t> &shape,
+  const std::string &attr_name)
+{
+  std::vector<exprt> dims;
+  dims.reserve(shape.size());
+  std::size_t total = 1;
+  for (std::size_t dim : shape)
+  {
+    dims.push_back(from_integer(dim, int_type()));
+    total *= dim;
+  }
+  if (attr_name == "shape")
+    return build_shape_tuple_expr(*this, dims);
+  if (attr_name == "ndim")
+    return from_integer(shape.size(), int_type());
+  return from_integer(total, int_type());
+}
+
+// Tries the tracked-shape sources for a `.shape`/`.ndim`/`.size` attribute
+// access: a pointer-view symbol, a numpy array parameter, then the shape of
+// the indexed array a name was declared from. One combined check so
+// get_expr's own Attribute dispatch needs a single `if` for all of them,
 // instead of growing its own decision count by one per source.
 std::optional<exprt> python_converter::try_get_numpy_shape_attr(
   const symbolt &symbol,
@@ -684,7 +1137,74 @@ std::optional<exprt> python_converter::try_get_numpy_shape_attr(
     std::optional<exprt> view_attr =
       try_get_numpy_pointer_view_shape_attr(symbol, attr_name))
     return view_attr;
-  return try_get_numpy_param_shape_attr(symbol, attr_name);
+  if (
+    std::optional<exprt> param_attr =
+      try_get_numpy_param_shape_attr(symbol, attr_name))
+    return param_attr;
+
+  const std::string name = symbol.name.as_string();
+  if (name.empty() || !is_numpy_shape_attribute(attr_name))
+    return std::nullopt;
+  if (
+    std::optional<std::vector<std::size_t>> shape =
+      numpy_shape_from_indexed_decl(name))
+    return numpy_shape_attr_expr(*shape, attr_name);
+  return std::nullopt;
+}
+
+std::optional<exprt> python_converter::try_get_numpy_shape_subscript(
+  const nlohmann::json &element) const
+{
+  if (!is_numpy_shape_subscript_node(element))
+    return std::nullopt;
+
+  const nlohmann::json &value = element["value"];
+  const std::string name = value["value"].value("id", "");
+  if (
+    const auto *view = find_numpy_pointer_view_info(name);
+    view && view->is_symbolic())
+  {
+    const long long rank = view->shape.empty() ? 1 : view->shape.size();
+    std::optional<long long> axis =
+      python_frontend::literal_int_value(element["slice"]);
+    if (axis && *axis < 0)
+      *axis += rank;
+    if (!axis || *axis < 0 || *axis >= rank)
+      throw std::runtime_error(
+        "IndexError: tuple index out of range for this numpy view");
+    return typecast_exprt(
+      numpy_view_extent(*view, static_cast<std::size_t>(*axis)), int_type());
+  }
+  std::optional<std::vector<std::size_t>> shape =
+    tracked_numpy_shape_from_name(name);
+  if (!shape)
+    shape = numpy_shape_from_indexed_decl(name);
+  if (!shape)
+    return std::nullopt;
+  return numpy_shape_dim_expr(*shape, element["slice"]);
+}
+
+std::optional<exprt> python_converter::try_get_numpy_tracked_value_shape_attr(
+  const exprt &base_expr,
+  const nlohmann::json &base_node,
+  const std::string &attr_name)
+{
+  if (!base_expr.is_symbol() || !is_numpy_shape_attribute(attr_name))
+    return std::nullopt;
+
+  const std::string base_id = base_expr.identifier().as_string();
+  if (
+    std::optional<std::vector<std::size_t>> shape =
+      tracked_numpy_shape_from_name(base_id))
+    return numpy_shape_attr_expr(*shape, attr_name);
+
+  if (!base_node.is_object() || base_node.value("_type", "") != "Name")
+    return std::nullopt;
+  if (
+    std::optional<std::vector<std::size_t>> shape =
+      numpy_shape_from_indexed_decl(base_node.value("id", "")))
+    return numpy_shape_attr_expr(*shape, attr_name);
+  return std::nullopt;
 }
 
 std::optional<exprt> python_converter::try_get_numpy_value_shape_attr(
@@ -694,6 +1214,11 @@ std::optional<exprt> python_converter::try_get_numpy_value_shape_attr(
 {
   if (attr_name != "shape" && attr_name != "ndim" && attr_name != "size")
     return std::nullopt;
+
+  if (
+    std::optional<exprt> tracked_attr =
+      try_get_numpy_tracked_value_shape_attr(base_expr, base_node, attr_name))
+    return tracked_attr;
 
   if (
     std::optional<std::vector<std::size_t>> shape =
@@ -724,13 +1249,7 @@ std::optional<exprt> python_converter::try_get_numpy_value_shape_attr(
     if (attr_name == "shape")
       return build_shape_tuple_expr(*this, dim_exprs);
     if (attr_name == "ndim")
-    {
-      std::vector<int> dims = type_handler_.get_array_type_shape(base_type);
-      ndarray_descriptor descriptor(
-        std::vector<long long>(dims.begin(), dims.end()), "", 0);
-      descriptor.validate();
-      return from_integer(descriptor.rank(), int_type());
-    }
+      return from_integer(dim_exprs.size(), int_type());
     return build_shape_size_expr(dim_exprs);
   }
 
@@ -981,6 +1500,12 @@ std::optional<exprt> python_converter::try_dispatch_multidim_tuple_axes(
   const nlohmann::json &element,
   const std::vector<nlohmann::json> &idx_nodes)
 {
+  if (
+    std::optional<exprt> view =
+      python_list(*this, element)
+        .try_build_strided_basic_view(array, idx_nodes))
+    return view;
+
   // 2-D slicing: a[:, j] (column select) and a[i, :] (row select,
   // equivalent to chained a[i][:]). Any other slice/index tuple
   // combination (partial bounds, both dims sliced, 3+ dims, ...)
@@ -1047,7 +1572,11 @@ std::optional<exprt> python_converter::try_dispatch_chained_axis_index(
         throw_numpy_too_many_indices_error(*this, element, idx_nodes.size());
     }
 
+    exprt *outer_lhs = current_lhs;
+    if (axis + 1 < idx_nodes.size())
+      current_lhs = nullptr;
     current = list.index(current, idx_nodes[axis]);
+    current_lhs = outer_lhs;
     if (contains_cpp_throw(current))
       break;
   }
@@ -1273,10 +1802,34 @@ std::optional<exprt> python_converter::try_dispatch_dunder_getitem(
   return get_function_call(call_node);
 }
 
+// Whether `node` is a name declared `Any`, as a for loop's tuple target
+// variable is when the iterable's element type is unknown.
+static bool is_declared_any(
+  const nlohmann::json &node,
+  const std::string &function,
+  const nlohmann::json &ast)
+{
+  if (node.value("_type", "") != "Name")
+    return false;
+  const nlohmann::json decl =
+    json_utils::find_var_decl(node.value("id", ""), function, ast);
+  return decl.value("_type", "") == "AnnAssign" &&
+         decl["annotation"].value("id", "") == "Any";
+}
+
 void python_converter::reject_scalar_subscript(
   const typet &array_type,
   const nlohmann::json &element) const
 {
+  // A void* value declared Any has no element type, so indexing it reads void
+  // (#8358). A numpy value of unknown type is a void* too, but is not
+  // declared Any, and its own lowering reads it.
+  if (
+    array_type.is_pointer() && array_type.subtype().is_empty() &&
+    is_declared_any(element["value"], current_func_name_, *ast_json))
+    throw std::runtime_error(
+      "subscripting a value whose type is not known is not supported");
+
   // Reject subscripting scalar numeric / boolean values up front. CPython
   // raises "TypeError: 'int'/'float'/'bool' object is not subscriptable";
   // the list handler below silently produces an unresolved-type value that
@@ -1313,6 +1866,18 @@ exprt python_converter::handle_subscript_expr(const nlohmann::json &element)
   // this needs to be special-cased ahead of the generic Subscript path.
   if (std::optional<exprt> flat_value = try_build_flat_index_read(element))
     return *flat_value;
+
+  // An N-D strided view has no C array type, so its whole index chain is
+  // lowered at once.
+  {
+    python_list list(*this, element);
+    if (
+      std::optional<exprt> strided = list.try_build_strided_view_index(element))
+      return *strided;
+  }
+
+  if (std::optional<exprt> shape_dim = try_get_numpy_shape_subscript(element))
+    return *shape_dim;
 
   exprt array;
   if (std::optional<exprt> early = resolve_subscript_base(element, array))
@@ -1385,6 +1950,114 @@ exprt python_converter::handle_subscript_expr(const nlohmann::json &element)
   return list.index(array, normalize_bool_index_node(slice));
 }
 
+/// A field holding a bound method is only called: read as a value it would
+/// lose the receiver a call passes again (#8370).
+void python_converter::reject_bound_method_read(const nlohmann::json &element)
+{
+  const std::string &attr = element["attr"].get_ref<const std::string &>();
+  const attribute_functions *held = function_attribute(attr);
+  if (!is_converting_lhs && held && held->bound)
+    throw std::runtime_error(
+      "reading attribute '" + attr +
+      "', which holds a bound method, as a value is not supported");
+}
+
+/// `obj.m` for a method `m` is a bound method, which has no value here.
+void python_converter::reject_method_value(
+  const std::string &class_name,
+  const std::string &m) const
+{
+  const auto mro = class_mro(class_name);
+  if (mro && std::any_of(mro->begin(), mro->end(), [&](const auto &cls) {
+        return class_binds_name(cls, m);
+      }))
+    throw std::runtime_error(
+      "using method '" + class_name + "." + m +
+      "' as a value is not supported");
+}
+
+// Whether `node` contains a `self.<attr>` access.
+static bool
+mentions_self_attribute(const nlohmann::json &node, const std::string &attr)
+{
+  if (
+    node.is_object() && node.value("_type", "") == "Attribute" &&
+    node.value("attr", "") == attr && node["value"].value("id", "") == "self")
+    return true;
+  if (node.is_object() || node.is_array())
+    for (const auto &child : node)
+      if (mentions_self_attribute(child, attr))
+        return true;
+  return false;
+}
+
+// Whether a class body assigns `attr` as a class attribute.
+static bool
+assigns_class_attribute(const nlohmann::json &body, const std::string &attr)
+{
+  for (const auto &stmt : body)
+  {
+    const nlohmann::json targets = stmt.value("_type", "") == "Assign"
+                                     ? stmt["targets"]
+                                   : stmt.value("_type", "") == "AnnAssign"
+                                     ? nlohmann::json::array({stmt["target"]})
+                                     : nlohmann::json::array();
+    for (const auto &t : targets)
+      if (t.value("id", "") == attr)
+        return true;
+  }
+  return false;
+}
+
+// Whether `class_name` or a class it derives from binds `attr` itself. A
+// builtin exception binds only `args` and dunder attributes. Any other class
+// not defined in this module, such as an imported one, is assumed to.
+static bool class_binds_attribute(
+  const nlohmann::json &ast,
+  const std::string &class_name,
+  const std::string &attr)
+{
+  if (class_name == "object")
+    return false;
+  if (type_utils::is_python_exceptions(class_name))
+    return attr == "args" || attr.rfind("__", 0) == 0;
+  for (const auto &stmt : ast["body"])
+  {
+    if (
+      stmt.value("_type", "") != "ClassDef" ||
+      stmt.value("name", "") != class_name)
+      continue;
+    if (
+      assigns_class_attribute(stmt["body"], attr) ||
+      mentions_self_attribute(stmt["body"], attr))
+      return true;
+    for (const auto &base : stmt["bases"])
+      if (class_binds_attribute(ast, base.value("id", ""), attr))
+        return true;
+    return false;
+  }
+  return true;
+}
+
+// A store `obj.attr = v` from outside the class, of an attribute the class
+// never binds, made on only some paths: a later read on another path raises
+// AttributeError in CPython, which the instance's struct cannot tell apart
+// from a read of the stored value. Refuse it (#8632).
+void python_converter::reject_attribute_added_on_some_paths(
+  const std::string &receiver,
+  const std::string &class_name,
+  const std::string &attr) const
+{
+  if (
+    receiver == "self" || block_nesting_ == function_body_depth_ + 1 ||
+    class_name.empty() || class_binds_attribute(*ast_json, class_name, attr))
+    return;
+  throw std::runtime_error(
+    "unsupported: attribute '" + attr + "' is added to a '" + class_name +
+    "' instance on only some paths; reading it on another path would raise "
+    "AttributeError, which is not modelled");
+}
+
 exprt python_converter::get_expr(const nlohmann::json &element)
 {
   get_expr_depth_guard depth_guard(*this);
@@ -1408,7 +2081,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
   exprt expr;
 
-  ExpressionType type = get_expression_type(element);
+  ExpressionType type = expression_type(element);
 
   switch (type)
   {
@@ -1476,6 +2149,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     expr = list.get();
     break;
   }
+  case ExpressionType::CLASS_MRO:
+    expr = class_mro_tuple(element);
+    break;
   case ExpressionType::VARIABLE_REF:
   {
     std::string var_name;
@@ -1492,6 +2168,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     }
     else if (element["_type"] == "Attribute")
     {
+      reject_bound_method_read(element);
       // Resolve `<base>.<attr>` after unwrapping Optional[T] /
       // pointer-to-struct / complex types. Returns nil if the attribute cannot
       // be resolved.
@@ -1581,6 +2258,15 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             return migrate_expr_back(
               member2tc(migrate_type(clean_type), src2, attr_name));
           }
+          // No instance member: read the class attribute, never write it.
+          // The receiver is dropped, so only a symbol qualifies (e.g. the
+          // temporary a constructor call is hoisted into); dropping a call
+          // left in the expression would lose its effects.
+          if (!is_converting_lhs && base_expr.is_symbol())
+            if (
+              symbolt *class_attr = find_class_attribute_symbol(
+                struct_type.tag().as_string(), attr_name))
+              return symbol_expr(*class_attr);
         }
 
         return nil_exprt();
@@ -1596,7 +2282,10 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         if (base_type.is_pointer())
           base_type = base_type.subtype();
         if (base_type.id() == "symbol")
+        {
+          build_forward_class(base_type);
           base_type = ns.follow(base_type);
+        }
 
         // Handle enum member attribute access before the general struct path.
         // e.g., TrafficLight.RED.value  -> the integer value of the member
@@ -1798,16 +2487,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       // Fallback for global variables accessed inside functions or class
       // methods
       if (!is_class_attr && element["_type"] == "Name")
-      {
-        sid.set_function(""); // remove function scope
-        sid_str = sid.to_string();
-        symbol = find_symbol(sid_str);
-        if (!symbol)
-        {
-          // also try module-level global (strips class scope too)
-          symbol = find_symbol(sid.global_to_string());
-        }
-      }
+        symbol = find_global_symbol(sid);
       if (!symbol)
       {
         // Check if this Name refers to a function
@@ -1820,12 +2500,11 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             break;
           }
 
-          symbol_id func_sid(current_python_file, "", var_name);
-          symbolt *func_symbol =
-            symbol_table_.find_symbol(func_sid.to_string());
-          if (func_symbol && func_symbol->get_type().is_code())
+          if (
+            exprt func = module_function_expr(var_name, element);
+            func.is_not_nil())
           {
-            expr = symbol_expr(*func_symbol);
+            expr = func;
             break;
           }
 
@@ -1861,6 +2540,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           var_name, current_func_name_, get_location_from_decl(element)));
       }
     }
+    guard_unbound_global(symbol->id.as_string(), var_name, element);
 
     // Straight-line dynamic retyping (#4770, #4774): if this variable was
     // reassigned across the numeric<->string boundary, get_var_assign minted a
@@ -1883,6 +2563,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     }
 
     expr = symbol_expr(*symbol);
+    reject_inexact_number_join(element, expr);
 
     // If the looked-up symbol is an enum class attribute with int type,
     // wrap it in the proper enum struct expression so callers that expect
@@ -1946,8 +2627,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         }
       }
 
-      // `.ndim`: mirrors the `.shape` block above (see the general
-      // attribute-access path for the descriptor-backed rank computation).
+      // `.ndim`: mirrors the `.shape` block above.
       if (attr_name == "ndim")
       {
         typet sym_type = symbol->get_type();
@@ -1960,11 +2640,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           sym_type.is_array() &&
           numpy_array_symbols_.count(symbol->id.as_string()) != 0)
         {
-          std::vector<int> dims = type_handler_.get_array_type_shape(sym_type);
-          ndarray_descriptor descriptor(
-            std::vector<long long>(dims.begin(), dims.end()), "", 0);
-          descriptor.validate();
-          expr = from_integer(descriptor.rank(), int_type());
+          expr = from_integer(
+            type_handler_.get_array_type_shape(sym_type).size(), int_type());
           break;
         }
 
@@ -2211,6 +2888,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       typet class_symbol_type = class_symbol->get_type();
       struct_typet &class_type = static_cast<struct_typet &>(class_symbol_type);
       auto build_member_expr_from_class = [&](const typet &attr_type) -> exprt {
+        guard_attribute_on_none(*symbol, var_name, attr_name, element);
         typet clean_type = clean_attribute_type(attr_type);
         exprt base = symbol_expr(*symbol);
         typet base_type = base.type();
@@ -2249,11 +2927,15 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
       if (is_converting_lhs)
       {
+        reject_attribute_added_on_some_paths(
+          var_name, extract_class_name_from_tag(obj_type_name), attr_name);
         // Add member in the class if not exists
         if (!class_type.has_component(attr_name))
         {
           struct_typet::componentt comp = python_frontend::build_component(
-            class_type.tag().as_string(), attr_name, current_element_type);
+            class_type.tag().as_string(),
+            attr_name,
+            stored_member_type(current_element_type));
           class_type.components().push_back(comp);
           // Persist the mutation back to the symbol (read-modify-set).
           class_symbol->set_type(migrate_type(class_symbol_type));
@@ -2295,41 +2977,16 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         (instance_has_attr || symbol->is_parameter ||
          is_complex_type(class_type)))
       {
+        reject_maybe_unset_instance_attr(
+          instance_has_attr, *symbol, var_name, attr_name, obj_type_name);
         const typet &attr_type = class_type.get_component(attr_name).type();
         expr = build_member_expr_from_class(attr_type);
       }
       // Otherwise use class attribute
       else
       {
-        sid.set_function("");
-        sid.set_class(extract_class_name_from_tag(obj_type_name));
-        sid.set_object(attr_name);
-        symbolt *class_attr_symbol = symbol_table_.find_symbol(sid.to_string());
-
-        if (!class_attr_symbol)
-        {
-          // Not found in the direct class — walk base classes (Python MRO).
-          const std::string derived_name =
-            extract_class_name_from_tag(obj_type_name);
-          auto class_node =
-            json_utils::find_class((*ast_json)["body"], derived_name);
-          if (!class_node.empty() && class_node.contains("bases"))
-          {
-            for (const auto &base_node : class_node["bases"])
-            {
-              if (!base_node.contains("id"))
-                continue;
-              symbol_id base_sid = create_symbol_id();
-              base_sid.set_function("");
-              base_sid.set_class(base_node["id"].get<std::string>());
-              base_sid.set_object(attr_name);
-              class_attr_symbol =
-                symbol_table_.find_symbol(base_sid.to_string());
-              if (class_attr_symbol)
-                break;
-            }
-          }
-        }
+        symbolt *class_attr_symbol = find_class_attribute_symbol(
+          extract_class_name_from_tag(obj_type_name), attr_name);
 
         if (!class_attr_symbol)
         {
@@ -2343,7 +3000,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             expr = build_member_expr_from_class(attr_type);
           }
           else if (
-            is_property_method(
+            json_utils::is_property_method(
               (*ast_json)["body"],
               extract_class_name_from_tag(obj_type_name),
               attr_name))
@@ -2357,6 +3014,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             call_node["func"] = element;
             call_node["args"] = nlohmann::json::array();
             call_node["keywords"] = nlohmann::json::array();
+            call_node["_property_getter"] = true;
             copy_location_fields_from_decl(element, call_node);
             expr = get_expr(call_node);
           }
@@ -2365,6 +3023,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             // Instance of a known class but the attribute genuinely does not
             // exist: raise a catchable AttributeError (issue #5904) instead of
             // aborting conversion.
+            reject_method_value(
+              extract_class_name_from_tag(obj_type_name), attr_name);
             expr = get_exception_handler().gen_exception_raise(
               "AttributeError",
               "'" + extract_class_name_from_tag(obj_type_name) +
@@ -2393,7 +3053,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     if (element["_type"] == "Lambda")
       expr = get_lambda_expr(element);
     else
-      expr = get_function_call(element);
+      expr = get_call_expr(element);
     break;
   }
   // Ternary operator
@@ -2567,4 +3227,70 @@ exprt python_converter::build_slice_from_args(
       std::to_string(args.size()));
   }
   return make_slice_struct_expr(*this, lower, upper, step, source_node);
+}
+
+std::vector<dynamic_type_detail::numeric_bindingt>
+python_converter::scope_numeric_bindings(
+  const std::string &name,
+  int before,
+  bool include_later) const
+{
+  const nlohmann::json function = json_utils::find_function_by_path(
+    *ast_json, json_utils::split_function_path(current_function_name()));
+  const nlohmann::json &body = function.is_object() && function.contains("body")
+                                 ? function["body"]
+                                 : (*ast_json)["body"];
+  std::vector<dynamic_type_detail::numeric_bindingt> bindings;
+  dynamic_type_detail::collect_numeric_bindings(
+    body, name, false, before, include_later, bindings);
+  return bindings;
+}
+
+/// Whether `value` survives the C type `type` unchanged: a float is exact
+/// only for an integral literal, and an int in a double only for a literal
+/// of at most 2**53.
+static bool stored_exactly(const nlohmann::json &value, const typet &type)
+{
+  if (value.value("_type", "") != "Constant")
+    return false;
+  const nlohmann::json &literal = value["value"];
+  if (type.is_floatbv())
+    return literal.is_boolean() ||
+           (literal.is_number_integer() &&
+            std::abs(literal.get<long long>()) <= (1LL << 53));
+  return literal.is_number_float() &&
+         literal.get<double>() == static_cast<long long>(literal.get<double>());
+}
+
+/// A name bound an int on one path and a float on another ends up one C
+/// double, but a read converted before the float binding still sees an int.
+/// On the path whose value the variable cannot hold, a read sees a rounded
+/// value (#8418).
+void python_converter::reject_inexact_number_join(
+  const nlohmann::json &element,
+  const exprt &expr) const
+{
+  const bool is_double = expr.type().is_floatbv();
+  if (
+    element.value("_type", "") != "Name" ||
+    !(is_double || expr.type().is_signedbv()) || is_loading_models ||
+    is_model_file(element))
+    return;
+  const std::string name = element["id"].get<std::string>();
+  const int line = element.value("lineno", 0);
+  if (!dynamic_type_detail::is_path_dependent_number(
+        scope_numeric_bindings(name, line, true)))
+    return;
+  for (const auto &binding : scope_numeric_bindings(name, line, false))
+  {
+    const bool is_int = binding.kind == "int";
+    if (
+      (is_int && !stored_exactly(binding.value, double_type())) ||
+      (!is_int && !is_double && !stored_exactly(binding.value, expr.type())))
+      throw std::runtime_error(
+        "reading '" + name +
+        "' is not supported: it holds an int or a float depending on the "
+        "path, and the " +
+        binding.kind + " is not stored exactly");
+  }
 }

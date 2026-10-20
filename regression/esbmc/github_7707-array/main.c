@@ -1,9 +1,7 @@
 #include <stdint.h>
 
-/* Residual of #7707: build_reference_to() routes an array-typed object to
- * bounds_check() rather than check_data_obj_access(), and construct_from_array()
- * recurses into a structure subtype before its own alignment check, so no
- * alignment claim is generated for an element of an array of packed structs. */
+/* #7707 for an element of an array of packed structs: the array's base is
+ * unconstrained, so the load really can be misaligned. */
 
 struct __attribute__((packed)) S
 {

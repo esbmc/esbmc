@@ -436,7 +436,7 @@ smt_astt smt_solver_baset::convert_typecast_to_ptr(const typecast2t &cast)
   std::vector<smt_astt> obj_ids(addr_space_data.back().size());
   std::vector<smt_astt> obj_starts(addr_space_data.back().size());
 
-  std::map<unsigned, unsigned>::const_iterator it;
+  std::map<unsigned, bool>::const_iterator it;
   unsigned int i;
   for (it = addr_space_data.back().begin(), i = 0;
        it != addr_space_data.back().end();

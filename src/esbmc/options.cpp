@@ -160,6 +160,11 @@ const struct group_opt_templ all_cmd_options[] = {
     {"no-cprover-additions",
      NULL,
      "Do not auto-link ESBMC additions when reading a CBMC goto-binary"},
+    {"ignore-property-class",
+     boost::program_options::value<std::vector<std::string>>()->value_name(
+       "class"),
+     "Skip the assertions a CBMC goto-binary tags with this property class "
+     "(repeatable), e.g. Kani's reachability_check and cover"},
     {"dont-care-about-missing-extensions",
      NULL,
      "Don't crash on unsupported extensions"},
@@ -224,6 +229,17 @@ const struct group_opt_templ all_cmd_options[] = {
       NULL,
       "Enforce strict type checking for function arguments during "
       "verification"},
+     {"python-ignore-assertions",
+      NULL,
+      "Treat the program's own assert statements as assumptions, keeping the "
+      "frontend's and the operational model's exception checks (unlike "
+      "--no-assertions, which drops those too)"},
+     {"python-check-exceptions",
+      boost::program_options::value<std::string>()->value_name("types"),
+      "Report only an uncaught exception whose type is one of the "
+      "comma-separated types or a subclass of one. Any other uncaught "
+      "exception ends its path unreported, and the program's assert "
+      "statements become assumptions unless AssertionError is covered"},
      {"python-no-fold",
       NULL,
       "Disable NumPy constant folding in the Python frontend"},
@@ -263,6 +279,10 @@ const struct group_opt_templ all_cmd_options[] = {
      "unsupported constructs (function calls, member access) leave the body "
      "untranslated, so the block's outputs take any value each scan, instead "
      "of only those constructs being over-approximated"},
+    {"ld-closed-world",
+     NULL,
+     "Assume only the program writes its VAR_IN_OUT, VAR_EXTERNAL and %M "
+     "variables; by default they take any value at the start of each scan"},
     {"ld-scan-watchdog",
      NULL,
      "Instrument WHILE loops in user function-block bodies with a "
@@ -542,7 +562,24 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Extract the main loop as a transition system, print one TS-CHECK line "
      "saying whether it is one, and stop"},
-    {"ts-dump", NULL, "With --ts-check, also print the transition system"}}},
+    {"ts-dump",
+     NULL,
+     "With another --ts option, also print the extracted transition system"},
+    {"ts-bmc", NULL, "Bounded model checking over the transition system"},
+    {"ts-no-fallback",
+     NULL,
+     "Report UNKNOWN instead of falling back when the program is not a "
+     "transition system"},
+    {"ts-no-live-filter",
+     NULL,
+     "Keep every havocked variable as state instead of slicing to the "
+     "properties' cone of influence"},
+    {"ts-fresh-solver",
+     NULL,
+     "With --ts-bmc, solve each bound as one formula in a new solver"},
+    {"ts-push-pop",
+     NULL,
+     "Use push/pop instead of assumptions in --ts-bmc (cross-check)"}}},
   {"k-induction",
    {{"base-case", NULL, "Check the base case"},
     {"forward-condition", NULL, "Check the forward condition"},
@@ -671,6 +708,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"cvc5", NULL, "Use CVC5"},
     {"yices", NULL, "Use Yices"},
     {"bitwuzla", NULL, "Use Bitwuzla (default)"},
+    {"bitwuzla-opt",
+     boost::program_options::value<std::vector<std::string>>()->value_name(
+       "name=value"),
+     "Set a Bitwuzla option, e.g. rewrite-level=1 (repeatable)"},
     {"bitwuzllob",
      NULL,
      "Use Bitwuzllob (Bitwuzla on the massively parallel Mallob platform) by "
@@ -768,6 +809,10 @@ const struct group_opt_templ all_cmd_options[] = {
    {{"multi-property",
      NULL,
      "Verify satisfiability of all claims of the current bound"},
+    {"report-unreached-claims",
+     NULL,
+     "List each claim no path reaches within the bound in the property "
+     "table, as passed vacuously"},
     {"multi-property-interleavings",
      boost::program_options::value<int>()->value_name("n"),
      "In multi-property mode, keep exploring thread interleavings after a "
@@ -881,6 +926,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"force-malloc-success", NULL, "Do not check for malloc/new failure"},
     {"force-realloc-success", NULL, "Do not check for realloc failure"},
     {"malloc-zero-is-null", NULL, "Also explore malloc(0) returning NULL"},
+    {"reserve-first-page",
+     NULL,
+     "Place no object below address 4096, as CBMC does, so a pointer made "
+     "from a small integer never aliases one"},
     {"max-symbolic-realloc-copy",
      boost::program_options::value<int>()->default_value(128)->value_name("nr"),
      "Set maximum number of elements to copy symbolically in realloc (default "

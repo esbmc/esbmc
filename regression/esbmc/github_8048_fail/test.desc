@@ -1,0 +1,5 @@
+CORE
+main.c
+--no-slice --multi-property
+^VERIFICATION FAILED$
+^\s+FAILED\s+\[main\.assertion\.\d+\]\s+line 12\s+assertion n != -1$

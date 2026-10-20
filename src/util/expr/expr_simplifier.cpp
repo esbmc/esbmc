@@ -1455,6 +1455,12 @@ static bool same_value_and_sign(const expr2tc &a, const expr2tc &b)
   return a == b && float_signs_agree(a, b);
 }
 
+/** Whether a constant is zero, and +0.0 if it is a float. */
+static bool is_plus_zero(const expr2tc &e)
+{
+  return is_false(e) && same_value_and_sign(e, gen_zero(e->type));
+}
+
 /* An index may be out of bounds. That's an error in the program, but not in
  * the model we're generating, so permit it. Can't simplify it though. */
 static bool index_outside(const constant_int2t &index, size_t size)
@@ -3451,9 +3457,17 @@ expr2tc bitcast2t::do_simplify() const
   // and offset components (without it, every pointer-as-pointer use stays
   // an array index, which generates a much larger case-split tree).
 
-  /* A pointer bitcast must stay a bitcast: it reinterprets the bits ESBMC
-   * stored, which convert_bitcast() models as an injection, while a typecast
-   * means the numeric address, which does not identify a pointer (#7855). */
+  /* Between two pointer types a bitcast keeps the (object, offset) pair, as
+   * a typecast does, and only the typecast is seen through by the null,
+   * same-object and constant-propagation rules: a pointer read back through
+   * a pointer to another pointer type otherwise names no object. */
+  if (is_pointer_type(type) && is_pointer_type(from->type))
+    return typecast2tc(type, from);
+
+  /* A bitcast between a pointer and a bit-vector must stay a bitcast: it
+   * reinterprets the bits ESBMC stored, which convert_bitcast() models as an
+   * injection, while a typecast means the numeric address, which does not
+   * identify a pointer (#7855). */
   if (is_pointer_type(type) || is_pointer_type(from->type))
     return expr2tc();
 
@@ -3494,6 +3508,9 @@ static bool address_of_is_provably_non_null(const expr2tc &e)
  * to a pointer; a null-guard rule has to accept either. */
 static bool is_null_pointer_value(const expr2tc &expr)
 {
+  // `p != NULL` against a `T *` reaches here as (T *)NULL.
+  if (is_typecast2t(expr) && is_pointer_type(expr->type))
+    return is_null_pointer_value(to_typecast2t(expr).from);
   return is_null_pointer(expr) || is_null_pointer_constant(expr);
 }
 
@@ -5275,11 +5292,11 @@ expr2tc if2t::do_simplify() const
 
   if (
     is_constant_number(true_value) && is_true(true_value) &&
-    (gen_one(true_value->type) == true_value) && is_false(false_value))
+    (gen_one(true_value->type) == true_value) && is_plus_zero(false_value))
     return typecast_check_return(type, cond);
 
   if (
-    is_constant_number(false_value) && is_false(true_value) &&
+    is_constant_number(false_value) && is_plus_zero(true_value) &&
     (gen_one(false_value->type) == false_value) && is_true(false_value))
     return typecast_check_return(type, not2tc(cond));
 
@@ -5376,7 +5393,9 @@ expr2tc if2t::do_simplify() const
 expr2tc overflow_cast2t::do_simplify() const
 {
   // SMT lowering (smt_overflow.cpp:overflow_cast) defines this as
-  // `operand < 0 || operand > 2^bits - 1` — an unsigned narrowing check.
+  // `operand < 0 || operand > 2^bits - 1` — an unsigned narrowing check —
+  // except for a signed operand at its own width, which is tested against
+  // its type's range.
   // Bool operand: always fits (true=1, false=0), so the cast never overflows.
   if (is_bool_type(operand->type))
     return gen_false_expr();
@@ -5390,6 +5409,12 @@ expr2tc overflow_cast2t::do_simplify() const
   if (is_constant_int2t(operand))
   {
     const BigInt &v = to_constant_int2t(operand).value;
+    const unsigned width = operand->type->get_width();
+    if (is_signedbv_type(operand->type) && bits >= width)
+    {
+      const BigInt half = BigInt::power2(width - 1);
+      return v < -half || v >= half ? gen_true_expr() : gen_false_expr();
+    }
     if (v.is_negative())
       return gen_true_expr();
     return v > BigInt::power2(bits) - 1 ? gen_true_expr() : gen_false_expr();
@@ -5470,16 +5495,40 @@ static expr2tc handle_symmetric_cases(const expr2tc &a, const expr2tc &b)
   return expr2tc(); // no match
 }
 
+/* Whether a symbol under `&` names one object of its own: a declared
+ * variable or a symex-made dynamic object. Pointer-typed symbols, unions,
+ * types not yet resolved, and the NULL and invalid placeholders are refused,
+ * so a caller treats them as possibly the same as anything. */
+static bool symbol_is_own_object(const symbol2t &s)
+{
+  if (
+    is_pointer_type(s.type) || is_union_type(s.type) || is_symbol_type(s.type))
+    return false;
+  const std::string &name = s.thename.as_string();
+  return name != "NULL" && name != "INVALID" &&
+         name.rfind("symex::invalid_object", 0) != 0;
+}
+
+/* Two such symbols with different names are different objects: each
+ * declaration and each allocation gets its own name, and the SMT pointer
+ * model numbers objects the same way. The same name at different renaming
+ * levels can be one object or two (a recursive call's local), so that case
+ * stays undecided. */
+static bool distinct_named_objects(const symbol2t &a, const symbol2t &b)
+{
+  return a.thename != b.thename && symbol_is_own_object(a) &&
+         symbol_is_own_object(b);
+}
+
 static expr2tc obj_equals_addr_of(const expr2tc &a, const expr2tc &b)
 {
   if (is_symbol2t(a) && is_symbol2t(b))
   {
     if (a == b)
       return gen_true_expr();
-    else
-      // In symbolic execution, different symbols could potentially
-      // have the same value, so let the SMT solver decide
-      return expr2tc();
+    if (distinct_named_objects(to_symbol2t(a), to_symbol2t(b)))
+      return gen_false_expr();
+    return expr2tc();
   }
   else if (is_index2t(a) && is_index2t(b))
   {

@@ -6,6 +6,10 @@
 #include <util/arith/arith_tools.h>
 #include <util/lang/c_typecast.h>
 #include <util/irep/std_expr.h>
+#include <util/base/prefix.h>
+#include <optional>
+#include <string_view>
+#include <unordered_set>
 #ifdef ENABLE_GOTO_CONTRACTOR
 #  include <goto-programs/goto_contractor.h>
 #endif
@@ -211,9 +215,8 @@ interval_domaint::get_interval_from_const(const expr2tc &e) const
 
 template <>
 interval_domaint::integer_intervalt interval_domaint::generate_modular_interval<
-  interval_domaint::integer_intervalt>(const symbol2t sym) const
+  interval_domaint::integer_intervalt>(const type2tc &t) const
 {
-  auto t = sym.type;
   interval_domaint::integer_intervalt result;
   if (is_unsignedbv_type(t))
   {
@@ -238,7 +241,7 @@ interval_domaint::integer_intervalt interval_domaint::generate_modular_interval<
 template <>
 interval_domaint::real_intervalt
 interval_domaint::generate_modular_interval<interval_domaint::real_intervalt>(
-  const symbol2t) const
+  const type2tc &) const
 {
   // TODO: Support this
   interval_domaint::real_intervalt t;
@@ -248,11 +251,40 @@ interval_domaint::generate_modular_interval<interval_domaint::real_intervalt>(
 
 template <>
 wrapped_interval interval_domaint::generate_modular_interval<wrapped_interval>(
-  const symbol2t sym) const
+  const type2tc &t) const
 {
   // Wrapped intervals are modular by definition
-  wrapped_interval t(sym.type);
-  return t;
+  return wrapped_interval(t);
+}
+
+template <class Interval>
+Interval
+interval_domaint::wrap_to_type(const Interval &i, const type2tc &) const
+{
+  return i;
+}
+
+template <>
+interval_domaint::integer_intervalt interval_domaint::wrap_to_type(
+  const integer_intervalt &i,
+  const type2tc &t) const
+{
+  if (!is_bv_type(t) || !i.lower || !i.upper)
+    return integer_intervalt();
+
+  // Shift both bounds by the multiple of 2^width that brings the lower bound
+  // into range; if the upper bound then leaves it, the image is not an
+  // interval.
+  const BigInt lower = binary2integer(
+    integer2binary(i.get_lower(), t->get_width()), is_signedbv_type(t));
+  const BigInt upper = i.get_upper() + (lower - i.get_lower());
+  if (!generate_modular_interval<integer_intervalt>(t).contains(upper))
+    return integer_intervalt();
+
+  integer_intervalt result;
+  result.set_lower(lower);
+  result.set_upper(upper);
+  return result;
 }
 
 template <class T>
@@ -268,7 +300,7 @@ void interval_domaint::apply_assignment(
   auto b = get_interval<T>(rhs);
   if (enable_modular_intervals)
   {
-    auto a = generate_modular_interval<T>(sym);
+    auto a = generate_modular_interval<T>(sym.type);
     b.intersect_with(a);
   }
 
@@ -344,6 +376,30 @@ T interval_domaint::interpolate_intervals(const T &before, const T &after)
 }
 
 template <class T>
+T interval_domaint::get_interval_from_typecast(const typecast2t &cast, T result)
+  const
+{
+  // Special case: boolean
+  if (is_bool_type(cast.type))
+  {
+    tvt truth = eval_boolean_expression(cast.from, *this);
+    result.set_lower(0);
+    result.set_upper(1);
+
+    if (truth.is_true())
+      result.set_lower(1);
+
+    if (truth.is_false())
+      result.set_upper(0);
+
+    return result;
+  }
+  if (!T::is_representable(cast.from->type))
+    return result;
+  return T::cast(get_interval<T>(cast.from), cast.type);
+}
+
+template <class T>
 T interval_domaint::get_interval(const expr2tc &e) const
 {
   T result = get_top_interval_from_expr<T>(e);
@@ -367,7 +423,7 @@ T interval_domaint::get_interval(const expr2tc &e) const
     break;
 
   case expr2t::neg_id:
-    result = -get_interval<T>(to_neg2t(e).value);
+    result = wrap_to_type(-get_interval<T>(to_neg2t(e).value), e->type);
     break;
 
   case expr2t::not_id:
@@ -475,26 +531,8 @@ T interval_domaint::get_interval(const expr2tc &e) const
   }
 
   case expr2t::typecast_id:
-  {
-    // Special case: boolean
-    if (is_bool_type(to_typecast2t(e).type))
-    {
-      tvt truth = eval_boolean_expression(to_typecast2t(e).from, *this);
-      result.set_lower(0);
-      result.set_upper(1);
-
-      if (truth.is_true())
-        result.set_lower(1);
-
-      if (truth.is_false())
-        result.set_upper(0);
-
-      break;
-    }
-    auto inner = get_interval<T>(to_typecast2t(e).from);
-    result = T::cast(inner, to_typecast2t(e).type);
+    result = get_interval_from_typecast<T>(to_typecast2t(e), result);
     break;
-  }
 
   case expr2t::add_id:
   case expr2t::sub_id:
@@ -519,6 +557,8 @@ T interval_domaint::get_interval(const expr2tc &e) const
 
       else if (is_modulus2t(e))
         result = lhs % rhs;
+
+      result = wrap_to_type(result, e->type);
     }
     break;
 
@@ -569,6 +609,8 @@ T interval_domaint::get_interval(const expr2tc &e) const
   {
     const expr2tc &lhs = *e->get_sub_expr(0);
     const expr2tc &rhs = *e->get_sub_expr(1);
+    if (!T::is_representable(lhs->type) || !T::is_representable(rhs->type))
+      break;
 
     auto lhs_i = get_interval<T>(lhs);
     auto rhs_i = get_interval<T>(rhs);
@@ -807,7 +849,7 @@ expr2tc interval_domaint::make_expression_helper(const expr2tc &symbol) const
   // Although this is expected (when modular intervals are off)
   // We still need to deal with the out-of-bounds when generating
   // the expressions, as 256 would be converted to 0.
-  T type_interval = generate_modular_interval<T>(src);
+  T type_interval = generate_modular_interval<T>(src.type);
   interval.intersect_with(type_interval);
 
   if (interval.is_top())
@@ -992,6 +1034,9 @@ void interval_domaint::transform(
     break;
 
   case FUNCTION_CALL:
+    havoc_written_arguments(to_code_function_call2t(instruction.code));
+    break;
+
   case END_FUNCTION:
   case ATOMIC_BEGIN:
   case ATOMIC_END:
@@ -1270,6 +1315,78 @@ void interval_domaint::assign(const expr2tc &expr, const bool recursive)
   else
     // Unmodelled assignment: the old range must not survive the write.
     havoc_rec(c.target);
+}
+
+/* The first argument a body-less call that symex models may write through,
+ * or none: the input functions write past their format, its intrinsics and
+ * builtins anywhere. An intrinsic missing from read_only is assumed to write,
+ * which costs precision, never soundness. */
+static std::optional<size_t> first_written_argument(const irep_idt &callee)
+{
+  static const std::unordered_set<std::string_view> read_only = {
+    "c:@F@__ESBMC_memcmp",
+    "c:@F@__ESBMC_memchr",
+    "c:@F@__ESBMC_r_ok",
+    "c:@F@__ESBMC_is_fresh",
+    "c:@F@__ESBMC_get_object_size",
+    "c:@F@__ESBMC_builtin_object_size"};
+  const std::string &id = callee.as_string();
+  if (id == "c:@F@scanf")
+    return 1;
+  if (id == "c:@F@sscanf" || id == "c:@F@fscanf")
+    return 2;
+  if (
+    read_only.count(id) ||
+    !(has_prefix(id, "c:@F@__ESBMC") || has_prefix(id, "c:@F@__builtin")))
+    return std::nullopt;
+  return 0;
+}
+
+/// The object @p address points into, or nil when that is not statically known.
+static expr2tc pointed_object(expr2tc address)
+{
+  while (is_typecast2t(address))
+    address = to_typecast2t(address).from;
+  if (!is_address_of2t(address))
+    return expr2tc();
+  expr2tc object = to_address_of2t(address).ptr_obj;
+  while (is_index2t(object) || is_member2t(object))
+    object = is_index2t(object) ? to_index2t(object).source_value
+                                : to_member2t(object).source_value;
+  return object;
+}
+
+bool interval_domaint::havoc_pointee(const expr2tc &arg, bool any_type)
+{
+  const expr2tc object = pointed_object(arg);
+  if (object && is_constant_expr(object))
+    return true;
+  if (object && is_symbol2t(object))
+  {
+    havoc_rec(object);
+    return true;
+  }
+  return !is_pointer_type(arg) && !any_type;
+}
+
+void interval_domaint::havoc_written_arguments(const code_function_call2t &call)
+{
+  if (!is_symbol2t(call.function))
+    return;
+  const std::optional<size_t> first =
+    first_written_argument(to_symbol2t(call.function).thename);
+  if (!first)
+    return;
+  // symex_input writes through each input argument whatever its type.
+  const bool any_type = *first > 0;
+  for (size_t i = *first; i < call.operands.size(); ++i)
+    if (
+      !is_nil_expr(call.operands[i]) &&
+      !havoc_pointee(call.operands[i], any_type))
+    {
+      clear_state();
+      return;
+    }
 }
 
 void interval_domaint::havoc_rec(const expr2tc &expr)

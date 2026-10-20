@@ -17,6 +17,7 @@
 #include <util/base/prefix.h>
 #include <util/irep/std_code.h>
 #include <util/expr/type_byte_size.h>
+#include <unordered_set>
 
 clang_c_adjust::clang_c_adjust(contextt &_context)
   : context(_context), ns(namespacet(context))
@@ -1392,6 +1393,19 @@ bool clang_c_adjust::shadows_user_definition(
     context, identifier, to_symbol_expr(f_op).get_identifier());
 }
 
+static bool is_popcount_builtin(const irep_idt &identifier)
+{
+  static const std::unordered_set<std::string> names = {
+    "__popcnt16",
+    "__popcnt",
+    "__popcnt64",
+    "__builtin_popcount",
+    "__builtin_popcountl",
+    "__builtin_popcountll",
+    "__builtin_popcountg"};
+  return names.count(identifier.as_string()) != 0;
+}
+
 void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
 {
   const exprt &f_op = expr.function();
@@ -1528,11 +1542,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       sign_expr.operands() = expr.arguments();
       expr.swap(sign_expr);
     }
-    else if (
-      identifier == "__popcnt16" || identifier == "__popcnt" ||
-      identifier == "__popcnt64" || identifier == "__builtin_popcount" ||
-      identifier == "__builtin_popcountl" ||
-      identifier == "__builtin_popcountll")
+    else if (is_popcount_builtin(identifier))
     {
       exprt popcount_expr("popcount", int_type());
       popcount_expr.operands() = expr.arguments();

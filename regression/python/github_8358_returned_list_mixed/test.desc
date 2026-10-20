@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: subscripting a value whose type is not known is not supported$

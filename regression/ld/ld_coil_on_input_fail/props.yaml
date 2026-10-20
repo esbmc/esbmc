@@ -1,0 +1,6 @@
+format_version: "0.1"
+properties:
+  - id: P1
+    kind: invariant
+    expression: "q || !q"
+    justification: "The property is trivially true; the test is the refusal."

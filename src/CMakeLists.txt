@@ -31,6 +31,11 @@ add_subdirectory(solvers)
 add_subdirectory(clang-cpp-frontend)
 add_subdirectory(goto-symex)
 add_subdirectory(transition-system)
+
+if(ENABLE_LLM)
+  add_subdirectory(llm)
+endif()
+
 add_subdirectory(esbmc)
 
 add_subdirectory(goto2c)
@@ -43,5 +48,9 @@ foreach(esbmc_target
     clangcfrontend clangcppfrontend)
   esbmc_add_alias(${esbmc_target})
 endforeach()
+
+if(ENABLE_LLM)
+  esbmc_add_alias(llm)
+endif()
 
 set(ESBMC_AVAILABLE_SOLVERS "${ESBMC_AVAILABLE_SOLVERS}" PARENT_SCOPE)

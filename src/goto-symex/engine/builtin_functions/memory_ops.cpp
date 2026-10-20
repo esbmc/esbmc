@@ -16,6 +16,66 @@
 #include <util/irep/std_types.h>
 #include <algorithm>
 
+/* The array whose elements hold @p object's bytes, or nil. The SMT layer
+ * cannot byte-address an array; one of byte-wide integers the simplifier turns
+ * into element reads, any other has to be indexed down to the element. */
+static const array_type2t *multibyte_array(const expr2tc &object)
+{
+  if (!is_array_type(object))
+    return nullptr;
+  const array_type2t &arr = to_array_type(object->type);
+  return is_bv_type(arr.subtype) && arr.subtype->get_width() == 8 ? nullptr
+                                                                  : &arr;
+}
+
+/** Byte @p offset of @p object. */
+static expr2tc
+object_byte(const expr2tc &object, uint64_t offset, bool big_endian)
+{
+  const array_type2t *arr = multibyte_array(object);
+  if (!arr)
+    return byte_extract2tc(
+      get_uint8_type(), object, gen_ulong(offset), big_endian);
+  const uint64_t size = type_byte_size(arr->subtype).to_uint64();
+  return object_byte(
+    index2tc(arr->subtype, object, gen_ulong(offset / size)),
+    offset % size,
+    big_endian);
+}
+
+/** @p object with byte @p offset replaced by @p byte. */
+static expr2tc update_object_byte(
+  const expr2tc &object,
+  uint64_t offset,
+  const expr2tc &byte,
+  bool big_endian)
+{
+  const array_type2t *arr = multibyte_array(object);
+  if (!arr)
+    return byte_update2tc(
+      object->type, object, gen_ulong(offset), byte, big_endian);
+  const uint64_t size = type_byte_size(arr->subtype).to_uint64();
+  const expr2tc index = gen_ulong(offset / size);
+  return with2tc(
+    object->type,
+    object,
+    index,
+    update_object_byte(
+      index2tc(arr->subtype, object, index), offset % size, byte, big_endian));
+}
+
+static bool target_is_big_endian()
+{
+  return config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN;
+}
+
+/* The shift, in bytes, that moves the low byte of a value into the place of
+ * the @p n bytes at byte @p offset of a scalar of @p type. */
+static size_t byte_shift(const type2tc &type, size_t offset, size_t n)
+{
+  return target_is_big_endian() ? type->get_width() / 8 - offset - n : offset;
+}
+
 // Computes the equivalent object value when considering a memset operation on
 // it
 static inline expr2tc gen_byte_expression_byte_update(
@@ -55,7 +115,7 @@ static inline expr2tc gen_byte_expression_byte_update(
       result,
       add2tc(off->type, off, increment),
       value_downcast,
-      false);
+      target_is_big_endian());
   }
 
   if (found_constant)
@@ -156,7 +216,7 @@ static inline expr2tc gen_byte_expression(
   }
 
   // Do the rest of the offset!
-  for (unsigned i = 0; i < offset; i++)
+  for (size_t i = 0; i < byte_shift(type, offset, num_of_bytes); i++)
   {
     result = shl2tc(type, result, eight);
     mask = shl2tc(type, mask, eight);
@@ -238,8 +298,7 @@ static inline expr2tc gen_value_by_byte(
       }
       else
       {
-        uint64_t bytes_to_write =
-          bytes_left < base_size ? bytes_left : base_size;
+        uint64_t bytes_to_write = std::min(bytes_left, base_size - offset_left);
         data.datatype_members[i] = gen_value_by_byte(
           to_array_type(type).subtype,
           local_member,
@@ -248,8 +307,7 @@ static inline expr2tc gen_value_by_byte(
           offset_left);
         if (!data.datatype_members[i])
           return expr2tc();
-        bytes_left =
-          bytes_left <= base_size ? 0 : bytes_left - (base_size - offset_left);
+        bytes_left -= bytes_to_write;
         offset_left = 0;
       }
     }
@@ -300,7 +358,8 @@ static inline expr2tc gen_value_by_byte(
       else
       {
         assert(offset_left < current_member_size);
-        uint64_t bytes_to_write = std::min(bytes_left, current_member_size);
+        uint64_t bytes_to_write =
+          std::min(bytes_left, current_member_size - offset_left);
         data.datatype_members[i] = gen_value_by_byte(
           current_member_type,
           local_member,
@@ -311,9 +370,7 @@ static inline expr2tc gen_value_by_byte(
         if (!data.datatype_members[i])
           return expr2tc();
 
-        bytes_left = bytes_left < current_member_size
-                       ? 0
-                       : bytes_left - (current_member_size - offset_left);
+        bytes_left -= bytes_to_write;
         offset_left = 0;
       }
     }
@@ -391,9 +448,18 @@ expr2tc goto_symex_utils::gen_byte_memcpy(
   if (is_pointer_type(src) || is_pointer_type(dst))
     return expr2tc();
 
-  // TODO: Not sure how to deal with different types
   if (src->type != dst->type)
+  {
+    // A copy of the whole object is a bitcast. The C byte loop would rebuild
+    // a float a byte at a time, and an intermediate NaN loses its bits:
+    // floating-point theory has a single NaN.
+    const unsigned width = num_of_bytes * 8;
+    if (
+      !src_offset && !dst_offset && src->type->get_width() == width &&
+      dst->type->get_width() == width)
+      return bitcast2tc(dst->type, src);
     return expr2tc();
+  }
 
   expr2tc src_mask = gen_zero(src->type);
   expr2tc dst_mask = gen_zero(dst->type);
@@ -410,23 +476,23 @@ expr2tc goto_symex_utils::gen_byte_memcpy(
       dst_mask = bitor2tc(dst->type, dst_mask, one);
     }
 
-  for (unsigned i = 0; i < dst_offset; i++)
+  const size_t dst_shift = byte_shift(dst->type, dst_offset, num_of_bytes);
+  const size_t src_shift = byte_shift(src->type, src_offset, num_of_bytes);
+  for (size_t i = 0; i < dst_shift; i++)
     dst_mask = shl2tc(dst->type, dst_mask, eight);
 
   dst_mask = bitnot2tc(dst->type, dst_mask);
   dst_mask = bitand2tc(dst->type, dst, dst_mask);
 
-  for (unsigned i = 0; i < src_offset; i++)
+  for (size_t i = 0; i < src_shift; i++)
     src_mask = shl2tc(dst->type, src_mask, eight);
 
   src_mask = bitand2tc(dst->type, src, src_mask);
 
-  // When dst_offset > src_offset
-  for (unsigned i = src_offset; i < dst_offset; i++)
+  for (size_t i = src_shift; i < dst_shift; i++)
     src_mask = shl2tc(dst->type, src_mask, eight);
 
-  // When dst_offsett < src_offset
-  for (unsigned i = dst_offset; i < src_offset; i++)
+  for (size_t i = dst_shift; i < src_shift; i++)
     src_mask = lshr2tc(dst->type, src_mask, eight);
 
   expr2tc result = bitor2tc(dst->type, dst_mask, src_mask);
@@ -460,6 +526,22 @@ static bool member_byte_range(
 static bool spans_bytes(const type2tc &type, uint64_t n)
 {
   return type_byte_size_bits(type).to_uint64() == n * 8;
+}
+
+// Whether [offset, offset+n) lies inside an object of @p type.
+static bool fits_bytes(const type2tc &type, uint64_t offset, uint64_t n)
+{
+  try
+  {
+    return offset + n <= type_byte_size(type).to_uint64();
+  }
+  catch (const array_type2t::dyn_sized_array_excp &)
+  {
+  }
+  catch (const array_type2t::inf_sized_array_excp &)
+  {
+  }
+  return false;
 }
 
 // Collect, shallowest first, every sub-object of @p root that occupies exactly
@@ -606,6 +688,69 @@ static expr2tc replace_subobject(
   return expr2tc();
 }
 
+/** The @p n bytes of @p object from byte @p offset, as one bit-vector in the
+ * target's byte order. */
+static expr2tc object_bytes(const expr2tc &object, uint64_t offset, uint64_t n)
+{
+  const bool be = target_is_big_endian();
+  expr2tc value;
+  for (uint64_t i = 0; i < n; i++)
+  {
+    expr2tc byte = object_byte(object, offset + i, be);
+    if (!value)
+      value = byte;
+    else if (be)
+      value = concat2tc(get_uint_type((i + 1) * 8), value, byte);
+    else
+      value = concat2tc(get_uint_type((i + 1) * 8), byte, value);
+  }
+  return value;
+}
+
+/* @p dst with the float it holds at [dst_offset, dst_offset+n) read whole from
+ * @p src; null when that range is not a float or overruns @p src. The C byte
+ * loop would rebuild it a byte at a time, and an intermediate NaN loses its
+ * bits: floating-point theory has a single NaN (#8711). */
+static expr2tc copy_into_float(
+  const expr2tc &dst,
+  uint64_t dst_offset,
+  const expr2tc &src,
+  uint64_t src_offset,
+  uint64_t n)
+{
+  if (
+    is_pointer_type(src) || is_empty_type(src->type) ||
+    is_code_type(src->type) || !fits_bytes(src->type, src_offset, n))
+    return expr2tc();
+
+  std::vector<expr2tc> dst_subs;
+  collect_subobjects(dst, dst_offset, n, dst_subs);
+  for (const expr2tc &dst_sub : dst_subs)
+  {
+    if (!is_floatbv_type(dst_sub->type))
+      continue;
+    return replace_subobject(
+      dst,
+      dst_offset,
+      n,
+      bitcast2tc(dst_sub->type, object_bytes(src, src_offset, n)));
+  }
+  return expr2tc();
+}
+
+// gen_byte_memcpy, or the float copy when it declines.
+static expr2tc copy_primitive(
+  const expr2tc &dst,
+  uint64_t dst_offset,
+  const expr2tc &src,
+  uint64_t src_offset,
+  uint64_t n)
+{
+  expr2tc result =
+    goto_symex_utils::gen_byte_memcpy(src, dst, n, src_offset, dst_offset);
+  return result ? result : copy_into_float(dst, dst_offset, src, src_offset, n);
+}
+
 static inline expr2tc do_memcpy_expression(
   const expr2tc &dst,
   const size_t &dst_offset,
@@ -647,7 +792,7 @@ static inline expr2tc do_memcpy_expression(
     }
 
     log_debug("memcpy", "Only primitives are supported for now");
-    return expr2tc();
+    return copy_into_float(dst, dst_offset, src, src_offset, num_of_bytes);
   }
 
   // gen_byte_memcpy asserts on get_width(), which throws
@@ -663,13 +808,47 @@ static inline expr2tc do_memcpy_expression(
   }
 
   // Base-case. Primitives!
-  return goto_symex_utils::gen_byte_memcpy(
-    src, dst, num_of_bytes, src_offset, dst_offset);
+  return copy_primitive(dst, dst_offset, src, src_offset, num_of_bytes);
 }
 
 static void offset_simplifier(expr2tc &e)
 {
   simplify(e);
+}
+
+void goto_symext::claim_not_code(const expr2tc &guard)
+{
+  if (options.get_bool_option("no-pointer-check"))
+    return;
+
+  // SAME_OBJECT(ptr, item) => DEREF ERROR
+  claim(
+    implies2tc(guard, gen_false_expr()),
+    "dereference failure: trying to deref a ptr code");
+}
+
+void goto_symext::claim_valid_operand(
+  const expr2tc &ptr,
+  const expr2tc &n,
+  const std::string &func)
+{
+  if (options.get_bool_option("no-pointer-check"))
+    return;
+
+  expr2tc l1_ptr = ptr;
+  cur_state->top().level1.rename(l1_ptr);
+  value_setst::valuest targets;
+  cur_state->value_set.get_value_set(l1_ptr, targets);
+  if (std::none_of(targets.begin(), targets.end(), [](const expr2tc &t) {
+        return is_unknown2t(t) || is_invalid2t(t);
+      }))
+    return;
+
+  expr2tc check =
+    or2tc(equality2tc(n, gen_zero(n->type)), not2tc(invalid_pointer2tc(ptr)));
+  replace_dynamic_allocation(check);
+  cur_state->guard.guard_expr(check);
+  claim(check, "dereference failure: invalid pointer on " + func);
 }
 
 // Shared core for memcpy and memmove. The optimised path computes the new
@@ -680,8 +859,12 @@ static void offset_simplifier(expr2tc &e)
 void goto_symext::memcpy_finish(
   const code_function_call2t &func_call,
   const expr2tc &dst_arg,
-  const expr2tc &src_arg)
+  const expr2tc &src_arg,
+  const expr2tc &n_arg)
 {
+  claim_valid_operand(dst_arg, n_arg, "DST");
+  claim_valid_operand(src_arg, n_arg, "SRC");
+
   if (!options.get_bool_option("no-pointer-check"))
   {
     expr2tc null_sym = symbol2tc(dst_arg->type, "NULL");
@@ -752,14 +935,11 @@ bool goto_symext::memcpy_symbolic_length(
   expr2tc res = dst_obj;
   for (uint64_t i = 0; i < nbytes; ++i)
   {
-    expr2tc src_byte =
-      byte_extract2tc(byte_t, src_obj, gen_ulong(src_off + i), be);
-    expr2tc dst_byte =
-      byte_extract2tc(byte_t, dst_obj, gen_ulong(dst_off + i), be);
+    expr2tc src_byte = object_byte(src_obj, src_off + i, be);
+    expr2tc dst_byte = object_byte(dst_obj, dst_off + i, be);
     expr2tc within = lessthan2tc(constant_int2tc(n_t, BigInt(i)), n_arg);
     expr2tc new_byte = if2tc(byte_t, within, src_byte, dst_byte);
-    res =
-      byte_update2tc(dst_obj->type, res, gen_ulong(dst_off + i), new_byte, be);
+    res = update_object_byte(res, dst_off + i, new_byte, be);
   }
 
   symex_assign(code_assign2tc(dst_obj, res), false, cur_state->guard);
@@ -812,7 +992,7 @@ void goto_symext::intrinsic_memcpy_impl(
       bump_call(func_call, bump_name);
       return;
     }
-    memcpy_finish(func_call, dst_arg, src_arg);
+    memcpy_finish(func_call, dst_arg, src_arg, n_arg);
     return;
   }
 
@@ -891,12 +1071,7 @@ void goto_symext::intrinsic_memcpy_impl(
         return;
       }
 
-      std::string error_msg =
-        fmt::format("dereference failure: trying to deref a ptr code");
-
-      // SAME_OBJECT(ptr, item) => DEREF ERROR
-      expr2tc check = implies2tc(item.guard, gen_false_expr());
-      claim(check, error_msg);
+      claim_not_code(item.guard);
       continue;
     }
 
@@ -1005,7 +1180,7 @@ void goto_symext::intrinsic_memcpy_impl(
         code_assign2tc(item.object, new_object), false, assignment_guard);
     }
   }
-  memcpy_finish(func_call, dst_arg, src_arg);
+  memcpy_finish(func_call, dst_arg, src_arg, n_arg);
 }
 
 void goto_symext::intrinsic_memcpy(
@@ -1094,6 +1269,23 @@ bool goto_symext::memcmp_resolve_operand(
   object = item.object;
   avail_bytes = type_size - offset;
   return true;
+}
+
+// Resolving an operand drops a NULL target, so claim it separately. Only a
+// call that reads bytes needs a valid pointer, as in the C model's loop.
+void goto_symext::claim_nonnull_operand(
+  const expr2tc &ptr,
+  const expr2tc &n,
+  const std::string &func)
+{
+  if (options.get_bool_option("no-pointer-check"))
+    return;
+
+  expr2tc null_sym = symbol2tc(ptr->type, "NULL");
+  expr2tc check = or2tc(
+    equality2tc(n, gen_zero(n->type)), not2tc(same_object2tc(ptr, null_sym)));
+  cur_state->guard.guard_expr(check);
+  claim(check, "dereference failure: NULL pointer on " + func);
 }
 
 void goto_symext::intrinsic_memcmp(
@@ -1197,13 +1389,17 @@ void goto_symext::intrinsic_memcmp(
       "dereference failure: memcmp length exceeds object bounds");
   }
 
+  claim_valid_operand(s1_arg, n_arg, "memcmp");
+  claim_valid_operand(s2_arg, n_arg, "memcmp");
+  claim_nonnull_operand(s1_arg, n_arg, "memcmp");
+  claim_nonnull_operand(s2_arg, n_arg, "memcmp");
+
   // Build the lexicographic result as a nested ite over the byte reads, from
   // the last byte backwards so the first differing byte dominates:
   //   res = ite(active[0] && b1[0] != b2[0], (int)b1[0] - (int)b2[0],
   //         ite(active[1] && ..., ..., 0))
   // where active[i] is (i < n) for symbolic n, or always-true for constant n.
   // No loop is emitted, so nothing unwinds.
-  const type2tc byte_t = get_uint_type(8);
   const type2tc int_t = signedbv_type2tc(config.ansi_c.int_width);
   const bool be = config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN;
   const type2tc n_t = n_arg->type;
@@ -1211,10 +1407,8 @@ void goto_symext::intrinsic_memcmp(
   expr2tc res = gen_zero(int_t);
   for (long i = (long)nbytes - 1; i >= 0; --i)
   {
-    expr2tc b1 =
-      byte_extract2tc(byte_t, obj1, gen_ulong(off1 + (uint64_t)i), be);
-    expr2tc b2 =
-      byte_extract2tc(byte_t, obj2, gen_ulong(off2 + (uint64_t)i), be);
+    expr2tc b1 = object_byte(obj1, off1 + (uint64_t)i, be);
+    expr2tc b2 = object_byte(obj2, off2 + (uint64_t)i, be);
     expr2tc diff =
       sub2tc(int_t, typecast2tc(int_t, b1), typecast2tc(int_t, b2));
     expr2tc differs = notequal2tc(b1, b2);
@@ -1318,6 +1512,10 @@ void goto_symext::intrinsic_memchr(
   const type2tc ret_type = ret_ref->type;
   const expr2tc null_result = symbol2tc(ret_type, "NULL");
 
+  // The result on a target the resolution dropped, an invalid or NULL buf,
+  // which only n == 0 leaves without a failed claim.
+  symex_assign(code_assign2tc(ret_ref, null_result), false, cur_state->guard);
+
   // Byte value to search for: (unsigned char)ch.
   const expr2tc ch_byte = typecast2tc(get_uint_type(8), ch_arg);
 
@@ -1392,11 +1590,8 @@ void goto_symext::intrinsic_memchr(
     expr2tc result = null_result;
     for (unsigned long k = number_of_bytes; k-- > 0;)
     {
-      expr2tc byte = byte_extract2tc(
-        get_uint_type(8),
-        item_object,
-        gen_ulong(number_of_offset + k),
-        is_big_endian);
+      expr2tc byte =
+        object_byte(item_object, number_of_offset + k, is_big_endian);
       expr2tc match = equality2tc(byte, ch_byte);
       expr2tc hit = add2tc(ret_type, buf_arg, gen_ulong(k));
       result = if2tc(ret_type, match, hit, result);
@@ -1415,6 +1610,7 @@ void goto_symext::intrinsic_memchr(
     ex_state.cur_state->guard.guard_expr(null_check);
     claim(null_check, " dereference failure: NULL pointer on memchr");
   }
+  claim_valid_operand(buf_arg, n_arg, "memchr");
 }
 
 /**
@@ -1592,12 +1788,7 @@ void goto_symext::intrinsic_memset(
 
     if (is_code_type(item_object->type))
     {
-      std::string error_msg =
-        fmt::format("dereference failure: trying to deref a ptr code");
-
-      // SAME_OBJECT(ptr, item) => DEREF ERROR
-      expr2tc check = implies2tc(item.guard, gen_false_expr());
-      claim(check, error_msg);
+      claim_not_code(item.guard);
       continue;
     }
 
@@ -1632,6 +1823,7 @@ void goto_symext::intrinsic_memset(
     // 4. Assign the new object
     symex_assign(code_assign2tc(item.object, new_object), false, guard);
   }
+  claim_valid_operand(arg0, arg2, "memset");
   // Lastly, let's add a NULL ptr check
   if (!options.get_bool_option("no-pointer-check"))
   {
@@ -1648,4 +1840,22 @@ void goto_symext::intrinsic_memset(
     dereference(ret_ref, dereferencet::READ);
     symex_assign(code_assign2tc(ret_ref, arg0), false, cur_state->guard);
   }
+}
+
+void goto_symext::intrinsic_havoc_object(const code_function_call2t &call)
+{
+  assert(call.operands.size() == 1);
+  if (cur_state->guard.is_false())
+    return;
+
+  internal_deref_items.clear();
+  expr2tc deref = dereference2tc(get_empty_type(), call.operands[0]);
+  dereference(deref, dereferencet::INTERNAL);
+  for (const auto &item : internal_deref_items)
+    // Anything else is a constant, such as a string literal, or a function.
+    if (is_symbol2t(item.object) && !is_code_type(item.object->type))
+      symex_assign(
+        code_assign2tc(item.object, gen_nondet(item.object->type)),
+        false,
+        cur_state->guard);
 }

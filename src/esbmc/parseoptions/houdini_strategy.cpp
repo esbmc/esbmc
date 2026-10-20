@@ -226,5 +226,5 @@ int esbmc_parseoptionst::do_houdini_strategy(
   // prints FAILED over a table reading "0 properties failed" -- which
   // parse_result() in esbmc-wrapper.py would score as a refutation.
   bmc.report_violation();
-  return bmc.violation_is_abstraction_only() ? 0 : result;
+  return bmc.violates_only_the_abstraction() ? 0 : result;
 }

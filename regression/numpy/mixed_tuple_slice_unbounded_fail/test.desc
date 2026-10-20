@@ -1,4 +1,0 @@
-CORE
-main.py
---incremental-bmc
-^ERROR: TypeError: mixed slice/index tuple indexing requires literal slice bounds

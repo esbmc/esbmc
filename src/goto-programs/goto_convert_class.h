@@ -3,6 +3,7 @@
 
 #include <goto-programs/goto_program.h>
 #include <list>
+#include <optional>
 #include <queue>
 #include <set>
 #include <stack>
@@ -70,6 +71,12 @@ protected:
     goto_programt &dest,
     bool result_is_used = true);
 
+  /// Lowers the condition of an if, loop, for or switch statement, a
+  /// full-expression whose temporaries are destroyed before the branch
+  /// ([class.temporary]/4).
+  void remove_condition_sideeffects(exprt &cond, goto_programt &dest);
+  bool in_short_circuit = false;
+
   // Recursively flatten a (possibly nested) &&/|| contract clause
   // (__ESBMC_requires / __ESBMC_ensures), hoisting side effects (e.g.
   // __ESBMC_old()) only at the leaves so no conjunct is dropped (#6298).
@@ -82,12 +89,16 @@ protected:
   void generate_dynamic_size_vla(
     exprt &var,
     const locationt &loc,
-    goto_programt &dest);
+    goto_programt &dest,
+    bool allow_zero_size = false);
 
   bool has_sideeffect(const exprt &expr);
   // IREP2 overload (W1, esbmc/esbmc#4715): native recursive scan for a
   // sideeffect2t node, mirroring the legacy exprt overload above.
   bool has_sideeffect(const expr2tc &expr);
+  /// True if lowering expr may create a temporary with a destructor.
+  bool has_destructible_sideeffect(const exprt &expr);
+  bool splits_and_condition(const exprt &cond);
 
   // Used by remove_sideeffects() to process a quantifier body expression.
   // Recursively walks || and && sub-expressions without converting them to
@@ -125,6 +136,8 @@ protected:
   remove_function_call(exprt &expr, goto_programt &dest, bool result_is_used);
   void remove_cpp_new(exprt &expr, goto_programt &dest, bool result_is_used);
   void remove_cpp_delete(exprt &expr, goto_programt &dest);
+  void remove_operand_sideeffects(exprt &expr, goto_programt &dest);
+  void drop_destructor(const symbol_exprt &object, std::size_t from);
   void remove_temporary_object(exprt &expr, goto_programt &dest);
   void remove_statement_expression(
     exprt &expr,
@@ -136,6 +149,12 @@ protected:
   do_cpp_new(const exprt &lhs, const exprt &rhs, goto_programt &dest);
 
   static void replace_new_object(const exprt &object, exprt &dest);
+
+  void cpp_new_at(
+    const exprt &lhs,
+    const exprt &placement,
+    const locationt &location,
+    goto_programt &dest);
 
   void cpp_new_initializer(
     const exprt &lhs,
@@ -154,6 +173,7 @@ protected:
     const exprt &offset,
     const exprt &init,
     const locationt &location,
+    const exprt &built,
     code_blockt &out);
 
   bool cpp_new_init_list(
@@ -161,7 +181,17 @@ protected:
     const exprt &rhs,
     const exprt &init,
     const exprt &elem_count,
+    const exprt &built,
+    code_blockt &out);
+
+  void convert_cpp_new_elements(
+    const exprt &base,
+    const exprt &built,
+    const codet &construction,
     goto_programt &dest);
+
+  bool user_code_throws();
+  std::optional<bool> user_code_throws_cache;
 
   //
   // function calls
@@ -203,16 +233,37 @@ protected:
   void convert_block(const codet &code, goto_programt &dest);
   void convert_controlled(const codet &code, goto_programt &dest);
   void convert_decl(const codet &code, goto_programt &dest);
+  void discard_comma_operands(exprt &initializer, goto_programt &dest);
+  void remove_comma_operand(exprt &operand, goto_programt &dest);
+  void destroy_comma_operand_temporaries(
+    std::size_t stack_size,
+    const locationt &location,
+    goto_programt &dest);
+  /// Temporaries created by a comma's discarded operands.
+  std::set<irep_idt> comma_operand_temporaries;
   void convert_decl_initializer(
     const exprt &var,
     exprt &initializer,
     const codet &new_code,
     const symbolt &s,
     goto_programt &dest);
+  bool construct_in_place(
+    const exprt &object,
+    const exprt &initializer,
+    goto_programt &dest);
+  void remove_initializer_sideeffects(
+    const exprt &object,
+    exprt &initializer,
+    goto_programt &dest);
   void convert_dynamic_static_init(
     const codet &decl,
     const symbolt &s,
     const symbolt &guard,
+    goto_programt &dest);
+  void construct_array_elements(
+    const exprt &base,
+    const typet &type,
+    const side_effect_expr_function_callt &ctor,
     goto_programt &dest);
   void schedule_array_element_destructors(const exprt &base, const typet &type);
 
@@ -235,9 +286,15 @@ protected:
   void convert_dowhile(const codet &code, goto_programt &dest);
   void convert_assume(const codet &code, goto_programt &dest);
   void convert_assert(const codet &code, goto_programt &dest);
+  bool emits_assert(const locationt &location) const;
+  void assume_if_ends_path(
+    const expr2tc &guard,
+    const locationt &location,
+    goto_programt &dest);
   void convert_switch(const codet &code, goto_programt &dest);
   void convert_break(const code_breakt &code, goto_programt &dest);
   void convert_return(const code_returnt &code, goto_programt &dest);
+  void remove_return_value_sideeffects(exprt &value, goto_programt &dest);
   void convert_continue(const code_continuet &code, goto_programt &dest);
   void convert_ifthenelse(const codet &code, goto_programt &dest);
   void convert_init(const codet &code, goto_programt &dest);
@@ -258,6 +315,19 @@ protected:
 
   typedef std::vector<codet> destructor_stackt;
 
+  /// Converts a statement that is a full-expression ([class.temporary]/4), so
+  /// the temporaries it creates are destroyed when it ends.
+  void convert_full_expression(const codet &code, goto_programt &dest);
+  /// Emits the scope-exit entries pushed above `stack_size` when one of them
+  /// is a destructor call, as the temporaries of a full-expression; plain
+  /// DEADs of C temporaries keep block scope.
+  bool destroy_full_expression_temporaries(
+    std::size_t stack_size,
+    const locationt &,
+    goto_programt &dest);
+  std::size_t keep_reference_member_temporaries(
+    const exprt &initializer,
+    std::size_t stack_size);
   void unwind_destructor_stack(
     const locationt &,
     std::size_t stack_size,
@@ -267,6 +337,16 @@ protected:
     std::size_t stack_size,
     goto_programt &dest,
     destructor_stackt &stack);
+  /// A destructor call on the destructor stack, possibly guarded by
+  /// guard_arm_destructors; the other entries are DEADs.
+  static bool is_destructor_entry(const codet &entry);
+  void guard_arm_destructors(
+    exprt &cond,
+    std::size_t true_size,
+    std::size_t false_size,
+    const locationt &location,
+    goto_programt &dest);
+  void record_exception_unwind(goto_programt::instructiont &call);
 
   //
   // Try-catch conversion
@@ -449,6 +529,7 @@ protected:
   };
 
   void case_guard(const exprt &value, const caset &case_op, exprt &dest);
+  static exprt case_label(const exprt &lo, const exprt &hi);
 
   // if(cond) { true_case } else { false_case }
   void generate_ifthenelse(

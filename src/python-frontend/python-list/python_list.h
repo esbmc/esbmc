@@ -1,10 +1,13 @@
 #pragma once
 
+#include <irep2/irep2.h>
 #include <nlohmann/json.hpp>
 #include <python-frontend/type/element_type_registry.h>
 #include <util/irep/type.h>
 #include <util/irep/expr.h>
+#include <util/irep/std_expr.h>
 #include <util/symtab/symbol.h>
+#include <functional>
 #include <optional>
 #include <set>
 #include <utility>
@@ -21,6 +24,12 @@ struct list_elem_info
   symbolt *elem_symbol;
   exprt elem_size;
   locationt location;
+};
+
+struct flat_array_shape_info
+{
+  typet elem_type;
+  long long total_length;
 };
 
 class python_list
@@ -71,11 +80,14 @@ public:
    * @param size     Expression giving the number of elements (often symbolic).
    * @param fill_value Element value pushed on each iteration.
    * @param elem_type  IRep2 type of @p fill_value, recorded in the registry.
+   * @param index_base When non-null, each element is @p index_base plus the
+   *        loop index rather than @p fill_value, which is what a range needs.
    */
   exprt build_symbolic_fill_list(
     const exprt &size,
     const exprt &fill_value,
-    const typet &elem_type);
+    const typet &elem_type,
+    const exprt *index_base = nullptr);
 
   exprt index(const exprt &array, const nlohmann::json &slice_node);
 
@@ -250,6 +262,229 @@ public:
    */
   std::optional<exprt> try_build_ravel_pointer_view(const exprt &array);
 
+  /// One axis of a strided view, in elements: its extent and stride are
+  /// constants unless the matching expression is set (a signed 64-bit
+  /// temporary computed at run time).
+  struct strided_axis
+  {
+    long long extent = 0;
+    exprt extent_expr = nil_exprt();
+    long long stride = 0;
+    exprt stride_expr = nil_exprt();
+
+    bool symbolic() const
+    {
+      return extent_expr.is_not_nil() || stride_expr.is_not_nil();
+    }
+  };
+
+  /// A numpy array or view as a scalar base pointer plus its axes: the
+  /// descriptor every N-D view is built from.
+  struct strided_view_desc
+  {
+    exprt base;
+    typet elem_type;
+    std::vector<strided_axis> axes;
+    /// A view of a read-only view (broadcast_to, diagonal) is read-only.
+    bool readonly = false;
+  };
+
+  std::optional<strided_view_desc> describe_strided_view(const exprt &array);
+  std::optional<exprt> try_build_numpy_param_slice_view(
+    const exprt &array,
+    const typet &resolved_array_type,
+    const nlohmann::json &slice_node);
+  bool is_runtime_numpy_slice(
+    const exprt &array,
+    const typet &elem_type,
+    const nlohmann::json &slice_node) const;
+  std::optional<exprt> unnamed_nd_view_placeholder(
+    const strided_view_desc &view,
+    bool as_view,
+    bool flat_result,
+    const char *unnamed_error) const;
+  std::optional<exprt> alias_contiguous_ravel(
+    const nlohmann::json &arg,
+    const strided_view_desc &view);
+  exprt emit_view_copy_buffer(
+    const nlohmann::json &arg,
+    const strided_view_desc &view,
+    const exprt &count);
+  std::vector<strided_axis> owned_copy_axes(
+    const nlohmann::json &arg,
+    const strided_view_desc &view,
+    bool flatten,
+    const exprt &count);
+  void emit_reshape_size_guard(
+    const nlohmann::json &arg,
+    const exprt &count,
+    const std::vector<std::size_t> &new_shape);
+  void scale_split_axis_strides(
+    const nlohmann::json &arg,
+    const strided_axis &source,
+    std::vector<strided_axis> &axes);
+  void reshape_registered_copy(
+    const std::string &lhs_id,
+    const std::vector<std::size_t> &new_shape);
+  exprt emit_view_accumulator(
+    const nlohmann::json &arg,
+    const typet &type,
+    const exprt &init);
+  exprt reduce_view_truth(
+    bool is_any,
+    const nlohmann::json &arg,
+    const strided_view_desc &view);
+  exprt reduce_view_extreme(
+    const std::string &function,
+    const nlohmann::json &arg,
+    const strided_view_desc &view,
+    const exprt &count);
+  bool strided_basic_view_declines(
+    const exprt &array,
+    const std::vector<nlohmann::json> &idx_nodes,
+    bool allow_plain_array) const;
+  std::optional<strided_axis> runtime_slice_axis(
+    const strided_axis &source,
+    const nlohmann::json &node,
+    exprt &offset);
+  std::optional<strided_axis> slice_strided_axis(
+    const strided_axis &source,
+    const nlohmann::json &node,
+    exprt &offset);
+  bool index_strided_axis(
+    const strided_axis &source,
+    const nlohmann::json &node,
+    exprt &offset);
+  exprt strided_index_offset(
+    const strided_view_desc &src,
+    const std::vector<nlohmann::json> &indices);
+  std::optional<strided_view_desc> contiguous_view_desc(
+    const exprt &array,
+    const typet &elem_type,
+    const std::vector<std::size_t> &shape) const;
+  /// Axes of the pointer view registered under `view_id`.
+  std::vector<strided_axis> tracked_view_axes(const std::string &view_id) const;
+
+  /// `base + offset` as a registered view with these axes for the assignment
+  /// target (offset is a size_type element count).
+  exprt register_strided_view(
+    const strided_view_desc &source,
+    const exprt &offset,
+    const std::vector<strided_axis> &axes,
+    bool readonly = false);
+
+  /// Independent array holding the elements a view with these axes reads, in
+  /// row-major order. `out_shape` (constant axes only) lays them out in
+  /// another shape of the same size.
+  exprt copy_strided_view(
+    const strided_view_desc &source,
+    const exprt &offset,
+    const std::vector<strided_axis> &axes,
+    const std::vector<std::size_t> *out_shape = nullptr);
+
+  static exprt axis_extent(const strided_axis &axis);
+  static exprt axis_stride(const strided_axis &axis);
+
+  /// The descriptor of the named view when its extents or strides are known
+  /// only at run time; nullopt for anything else.
+  std::optional<strided_view_desc>
+  symbolic_view_operand(const nlohmann::json &arg);
+
+  /// Element lvalue of a view at a signed 64-bit multi-index.
+  exprt view_element(
+    const strided_view_desc &view,
+    const std::vector<exprt> &index) const;
+
+  /// `idx = 0; while (idx < extent) { body(idx); idx++; }`, with the body's
+  /// statements emitted inside the loop.
+  void emit_counted_loop(
+    const nlohmann::json &node,
+    const exprt &extent,
+    const std::function<void(const exprt &)> &body);
+
+  /// Nested loops over every index of a view; `leaf` is called once, inside
+  /// the innermost body, with the element lvalue.
+  void emit_view_loops(
+    const nlohmann::json &node,
+    const strided_view_desc &view,
+    const std::function<void(const exprt &)> &leaf);
+
+  exprt
+  view_element_count(const nlohmann::json &node, const strided_view_desc &view);
+
+  /// sum / mean / min / max / any / all of a run-time-extent view, as loops.
+  std::optional<exprt> reduce_view_argextreme(
+    const std::string &function,
+    const nlohmann::json &arg);
+  std::optional<exprt> try_reduce_symbolic_view(
+    const std::string &function,
+    const nlohmann::json &arg);
+
+  /// A Python list of a run-time-extent view's elements (nested per axis when
+  /// `nested`, flat otherwise).
+  std::optional<exprt>
+  try_build_symbolic_view_list(const nlohmann::json &arg, bool nested);
+
+  enum class view_contiguity
+  {
+    contiguous,
+    not_contiguous,
+    unknown // depends on a run-time stride
+  };
+
+  /// Whether a view covers its storage densely in row-major order.
+  static view_contiguity
+  classify_view_contiguity(const strided_view_desc &view);
+
+  /// reshape of a run-time-extent view to constant `new_shape`: an alias when
+  /// it is contiguous, a copy otherwise; ValueError if the sizes differ.
+  std::optional<exprt> try_reshape_symbolic_view(
+    const nlohmann::json &arg,
+    const std::vector<std::size_t> &new_shape);
+
+  /// np.copy / np.array / .copy of a run-time-extent view.
+  std::optional<exprt> try_copy_symbolic_view(
+    const nlohmann::json &arg,
+    bool flatten = false,
+    bool alias_if_contiguous = false);
+
+  /// Signed 64-bit temporary holding `value`, assigned once here.
+  exprt emit_ll_temp(
+    const nlohmann::json &node,
+    const char *name,
+    const exprt &value);
+
+  /// `v = a[i, :, 1:3, ...]` over a rank-3+ array or any N-D view, with
+  /// literal or run-time indices and slice bounds: a view into the source's
+  /// own storage (aliasing in both directions) when assigned to a bare name,
+  /// otherwise an independent copy. Declines for anything else.
+  std::optional<exprt> try_build_strided_basic_view(
+    const exprt &array,
+    const std::vector<nlohmann::json> &idx_nodes,
+    bool allow_plain_array = false);
+
+  /// `b[i][j]`, `b[i, j]` or `x = b[i]` over a registered N-D strided view.
+  std::optional<exprt>
+  try_build_strided_view_index(const nlohmann::json &element);
+
+  /// Total element count and scalar element type of a fixed-shape array of
+  /// any rank, or of a contiguous N-D subarray view.
+  std::optional<flat_array_shape_info>
+  flat_shape_info_of(const exprt &array) const;
+
+  /// Pointer into `array`'s own contiguous storage, `offset` elements in,
+  /// that reads as an N-D array of `shape`; registers it for the assignment
+  /// target. Declines unless `array` is a fixed-shape array or contiguous view.
+  std::optional<exprt> build_contiguous_shaped_view(
+    const exprt &array,
+    const std::vector<std::size_t> &shape,
+    std::size_t offset,
+    bool readonly);
+
+  /// `array`'s storage as a pointer to its scalar element type.
+  exprt scalar_storage_pointer(const exprt &array, const typet &scalar_ptr_type)
+    const;
+
   /**
    * @brief a.flat[i] = x: builds a dereferenced-pointer lvalue into a's own
    * buffer at flat index i (bounds-checked and negative-index-normalized
@@ -316,6 +551,10 @@ public:
     const nlohmann::json &slice_node,
     const nlohmann::json &value_node);
 
+  void handle_subscript_assign_none(
+    const exprt &list_expr,
+    const nlohmann::json &slice_node);
+
   exprt compare(const exprt &l1, const exprt &l2, const std::string &op);
 
   exprt contains(const exprt &item, const exprt &list);
@@ -325,6 +564,40 @@ public:
     const nlohmann::json &right_node,
     const exprt &lhs,
     const exprt &rhs);
+
+  /**
+   * @brief Turn the store @p lhs = @p rhs into a replacement of the element
+   * record when the value cannot be written through the element's type.
+   *
+   * @p lhs is the subscript target `*(T *)item->value` of the list subscript
+   * this handler was built for. When @p rhs is a tuple of another type than T
+   * (or T is a tuple and @p rhs is not), or T is a non-scalar a list copy may
+   * share, the pair is rewritten into `*item = *list_at(tmp, 0)`, with tmp a
+   * list holding @p rhs, so the slot gets the new value, type_id and size.
+   * Otherwise both are left unchanged.
+   */
+  void retype_element_store(exprt &lhs, exprt &rhs);
+
+  bool has_shared_payload(const typet &type) const;
+
+  /// Allocates the instance a constructor stores to @p lhs and returns the
+  /// pointer to pass as `self`.
+  exprt allocate_constructed_object(const exprt &lhs);
+
+  /// Records @p elem_type as the type of the element @p subscript stores to.
+  void record_element_store(
+    const nlohmann::json &subscript,
+    const std::string &elem_id,
+    const typet &elem_type);
+
+  /// Equality of two list elements read as @p lhs_type and @p rhs_type for
+  /// compare()'s fast path, or nullopt when it cannot relate them. Both types
+  /// are numeric, bool or tuple.
+  std::optional<expr2tc> fast_elem_equality(
+    exprt lhs_val,
+    exprt rhs_val,
+    const typet &lhs_type,
+    const typet &rhs_type) const;
 
   exprt build_push_list_call(
     const symbolt &list,
@@ -364,7 +637,22 @@ public:
   typet bare_list_param_elem_type(
     const nlohmann::json &param_node,
     const std::string &param_id,
-    const typet &annotated);
+    const typet &annotated,
+    size_t index);
+
+  /// True when the recorded elements of \p id mix a list with another type.
+  bool mixes_list_and_other(const std::string &id) const;
+
+  /// Refuses a read that no single recorded element type answers (#8472).
+  void reject_unresolved_element_read(
+    const exprt &array,
+    const nlohmann::json &slice_node) const;
+
+  /// Refuses an index other than a non-negative constant into a list
+  /// attribute whose recorded elements have different types (#8666).
+  void reject_mixed_member_element_read(
+    const exprt &array,
+    const nlohmann::json &slice_node) const;
 
   /**
    * @brief Create an empty set
@@ -390,6 +678,28 @@ public:
     const symbolt &list,
     const exprt &index,
     const nlohmann::json &element);
+
+  /**
+   * @brief Inside a try body, raises a catchable IndexError ahead of a pop()
+   * whose list is empty or whose index is out of range, before
+   * __ESBMC_list_pop asserts it
+   */
+  void guard_pop_index(
+    const symbolt &list,
+    const exprt &index,
+    const locationt &location);
+
+  /// Whether storing a `new_type` value into an element read as `old_type`
+  /// replaces the element rather than writing into its storage.
+  bool
+  store_replaces_element(const typet &old_type, const typet &new_type) const;
+
+  /// The __ESBMC_list_set_at call storing `rhs` into the list element `lhs`
+  /// reads, when store_replaces_element holds; nullopt otherwise.
+  std::optional<exprt> build_element_replacement(
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &op);
 
   /**
    * @brief Extract and dereference value from a PyObject* expression
@@ -460,7 +770,8 @@ public:
   static exprt build_list_from_range(
     python_converter &converter,
     const nlohmann::json &range_args,
-    const nlohmann::json &element);
+    const nlohmann::json &element,
+    bool materialise_elements = true);
 
   /**
    * @brief Materialise a tuple value into a fresh list, pushing each component
@@ -493,6 +804,13 @@ public:
    */
   exprt
   build_shallow_copy_call(const exprt &src_list, const nlohmann::json &element);
+
+  /// tuple(x) of a list: a shallow copy marked as a tuple (#8777).
+  exprt
+  build_tuple_copy_call(const exprt &src_list, const nlohmann::json &element);
+
+  /// Whether `list` was built by tuple(x) (#8777).
+  exprt build_is_tuple_call(const exprt &list);
 
   /**
    * @brief Build a list remove operation (removes first matching element).
@@ -574,6 +892,18 @@ public:
    */
   BigInt uniform_elem_size(const exprt &list) const;
 
+  /// Whether the list stored at index @p i of @p list is the one @p elem holds
+  /// now. The type map names a nested element by the symbol it was appended
+  /// from, and a later assignment can rebind that symbol when it is a user
+  /// variable.
+  expr2tc
+  stored_element_is(const symbolt &list, std::size_t i, const symbolt &elem);
+
+  /// The element type a subscript's base declares when the type map has no
+  /// record of the list: a name's annotation, or a called function's return
+  /// annotation. Empty when neither gives one.
+  typet unrecorded_base_elem_type();
+
   // True when the list's recorded element types include a tagged scalar, whose
   // payload width is per-element and symbolic (#7716).
   bool has_tagged_elements(const exprt &list) const;
@@ -638,6 +968,40 @@ public:
     codet &target_block);
 
 private:
+  /// Emits `size = len(list_expr)` and a ValueError unless it fits @p fixed
+  /// targets (at least @p fixed when @p starred); returns the size.
+  exprt check_unpack_length(
+    const exprt &list_expr,
+    size_t fixed,
+    bool starred,
+    const locationt &loc,
+    codet &target_block);
+
+  typet unpack_elem_type(
+    const std::string &list_id,
+    size_t i,
+    const typet &fallback) const;
+
+  /// The recorded index @p from_end entries from the end, or SIZE_MAX.
+  size_t
+  recorded_index_from_end(const std::string &list_id, size_t from_end) const;
+
+  void record_starred_elem_types(
+    const std::string &list_id,
+    const std::string &star_id,
+    size_t before_star,
+    size_t after_star,
+    const typet &elem_type);
+
+  /// Binds @p val, element @p i of the list @p list_id, to @p tgt_node.
+  void assign_unpack_target(
+    const nlohmann::json &ast_node,
+    const nlohmann::json &tgt_node,
+    const std::string &list_id,
+    size_t i,
+    const exprt &val,
+    codet &target_block);
+
   friend class python_dict_handler;
 
   // Evaluates value_node once and snapshots it into a fresh temporary, so a
@@ -660,6 +1024,8 @@ private:
     const exprt &index,
     const nlohmann::json &element);
 
+  exprt bind_list_element(const exprt &list_at_call);
+
   list_elem_info
   get_list_element_info(const nlohmann::json &op, const exprt &elem);
 
@@ -678,6 +1044,11 @@ private:
   list_elem_info
   get_tagged_element_info(const nlohmann::json &op, const exprt &elem);
 
+  /// Element info for a key that is only compared, never stored: a tagged key
+  /// forwards its runtime value/type_id/size.
+  list_elem_info
+  get_lookup_key_info(const nlohmann::json &op, const exprt &key);
+
   // The type_id a tagged scalar carries when it holds a float, or 0 when the
   // caller opts out of the float path (dict values compare via void*).
   exprt tagged_float_type_id(bool enable_float_path) const;
@@ -687,20 +1058,13 @@ private:
   exprt
   handle_range_slice(const exprt &array, const nlohmann::json &slice_node);
 
-  // Propagate a dict view's element types onto its slice result. Split out for
-  // the same reason as normalize_negative_slice_bound below.
+  // Propagate a dict view's element types onto its slice result. Split out to
+  // keep handle_range_slice's own decision count from growing further.
   void
   copy_dict_view_elem_types(const exprt &array, const std::string &sliced_id);
-
-  // handle_range_slice's process_bound: normalizes a literal negative bound
-  // (-k) to logical_len - k, clamped for an out-of-range k -- see the call
-  // site's own comment for why the clamp differs by step direction. Split
-  // out to keep handle_range_slice's own decision count from growing
-  // further.
-  exprt normalize_negative_slice_bound(
-    const nlohmann::json &operand_node,
-    const exprt &logical_len,
-    bool negative_step);
+  void copy_list_of_dict_view_elem_types(
+    const exprt &array,
+    const std::string &sliced_id);
 
   // Shared core of every ADR-NP-003 scalar pointer view producer; see
   // list_access.cpp for the full rationale, including when this declines.
@@ -732,9 +1096,29 @@ private:
     const exprt &array,
     const nlohmann::json &slice_node);
 
+  std::optional<exprt> try_build_nd_subarray_pointer_view(
+    const exprt &array,
+    const nlohmann::json &slice_node);
+
+  std::optional<exprt> try_build_chained_subarray_pointer_view();
+
+  std::optional<exprt> try_build_pointer_array_index(
+    const exprt &array,
+    const exprt &pos_expr,
+    const nlohmann::json &slice_node);
+
+  exprt build_numpy_array_index_access(
+    const exprt &array,
+    const exprt &pos_expr,
+    const nlohmann::json &slice_node);
+
   std::optional<exprt> try_build_column_pointer_view(
     const exprt &array,
     const nlohmann::json &col_index_node);
+
+  std::optional<exprt> try_build_numpy_view_subview(
+    const exprt &array,
+    const nlohmann::json &slice_node);
 
   std::optional<exprt> try_copy_numpy_pointer_view_slice(
     const exprt &array,
@@ -753,7 +1137,42 @@ private:
     long long stride,
     const nlohmann::json &slice_node);
 
+  exprt normalize_and_scale_index(
+    const exprt &index,
+    const exprt &length,
+    const exprt &stride,
+    const nlohmann::json &slice_node);
+
+  struct symbolic_slice_params
+  {
+    exprt offset;
+    exprt stride;
+    exprt length;
+  };
+
+  /// Emits the runtime offset/stride/length of a[lo:hi:st] over a length-n
+  /// axis, raising ValueError for st == 0.
+  symbolic_slice_params emit_symbolic_slice_params(
+    const nlohmann::json &slice_node,
+    const exprt &extent);
+
+  /**
+   * @brief a[lo:hi:st] with a non-literal step st. Assigned to a bare name it
+   * is a pointer view whose offset, length and stride are runtime values
+   * computed with CPython's slice rules (a step of zero raises ValueError);
+   * anywhere else it is an independent copy. Throws TypeError unless a is a
+   * tracked 1-D numpy array and the target is not already a registered view.
+   */
+  exprt build_symbolic_step_slice(
+    const exprt &array,
+    const nlohmann::json &slice_node);
+
   exprt guard_numpy_pointer_view_index(
+    const exprt &array,
+    const exprt &index,
+    const nlohmann::json &slice_node);
+
+  exprt guard_numpy_static_array_index(
     const exprt &array,
     const exprt &index,
     const nlohmann::json &slice_node);
@@ -844,18 +1263,6 @@ private:
     const nlohmann::json &element);
 
   /**
-   * @brief Handle symbolic (non-constant) range arguments
-   * @param converter The python converter instance
-   * @param range_args The range arguments from the AST
-   * @param element The AST element for location tracking
-   * @return Expression representing the symbolic range list
-   */
-  static exprt handle_symbolic_range(
-    python_converter &converter,
-    const nlohmann::json &range_args,
-    const nlohmann::json &element);
-
-  /**
    * @brief Set symbolic size on a list structure
    * @param converter The python converter instance
    * @param list_expr The list expression to modify
@@ -867,6 +1274,25 @@ private:
     exprt &list_expr,
     const exprt &size_expr,
     const nlohmann::json &element);
+
+  /**
+   * @brief Handle symbolic (non-constant) range arguments
+   * @param converter The python converter instance
+   * @param range_args The range arguments from the AST
+   * @param element The AST element for location tracking
+   * @param materialise_elements Write each element, which a `list(range(...))`
+   *        needs because its elements are read. A bare `range(...)` passes
+   *        false and keeps the size-only list it has always produced: its
+   *        elements are read by `x in range(...)` but materialising them
+   *        costs unwinding that `len(range(n))` cannot afford under a fixed
+   *        `--unwind`.
+   * @return Expression representing the symbolic range list
+   */
+  static exprt handle_symbolic_range(
+    python_converter &converter,
+    const nlohmann::json &range_args,
+    const nlohmann::json &element,
+    bool materialise_elements);
 
   /**
    * @brief Build a concrete range with constant bounds

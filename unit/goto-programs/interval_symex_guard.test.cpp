@@ -140,7 +140,7 @@ TEST_CASE(
   "process_instruction: ASSIGN with arithmetic propagates interval",
   "[interval][process_instruction]")
 {
-  // Construct ASSUME x >= 3 then ASSIGN x = x + 1; domain must prove x >= 4.
+  // ASSUME 3 <= x <= 10 then ASSIGN x = x + 1; domain must prove x >= 4.
   reset_interval_flags();
   interval_domaint::enable_interval_arithmetic = true;
 
@@ -148,26 +148,24 @@ TEST_CASE(
   expr2tc x = symbol2tc(int_type, irep_idt("x"));
   expr2tc three = constant_int2tc(int_type, BigInt(3));
   expr2tc four = constant_int2tc(int_type, BigInt(4));
+  expr2tc ten = constant_int2tc(int_type, BigInt(10));
   expr2tc one = constant_int2tc(int_type, BigInt(1));
 
-  goto_programt::instructionst instrs;
-
-  // ASSUME x >= 3
-  instrs.emplace_back();
-  auto assume_it = instrs.begin();
-  assume_it->type = ASSUME;
-  assume_it->guard = greaterthanequal2tc(x, three);
-
-  // ASSIGN x = x + 1
-  instrs.emplace_back();
-  auto assign_it = std::next(instrs.begin());
-  assign_it->type = ASSIGN;
-  assign_it->code = code_assign2tc(x, add2tc(int_type, x, one));
+  goto_programt::instructionst instrs(3);
+  auto it = instrs.begin();
+  it->type = ASSUME;
+  it->guard = greaterthanequal2tc(x, three);
+  ++it;
+  it->type = ASSUME;
+  it->guard = lessthanequal2tc(x, ten);
+  ++it;
+  it->type = ASSIGN;
+  it->code = code_assign2tc(x, add2tc(int_type, x, one));
 
   interval_domaint domain;
   domain.make_top();
-  domain.process_instruction(assume_it); // x ∈ [3, +∞)
-  domain.process_instruction(assign_it); // x ∈ [4, +∞)
+  for (auto i = instrs.begin(); i != instrs.end(); ++i)
+    domain.process_instruction(i); // x ∈ [4, 11]
 
   // x >= 3 must still hold (x >= 4 implies x >= 3).
   tvt geq3 = interval_domaint::eval_boolean_expression(
@@ -178,6 +176,37 @@ TEST_CASE(
   tvt geq4 = interval_domaint::eval_boolean_expression(
     greaterthanequal2tc(x, four), domain);
   CHECK(geq4.is_true());
+}
+
+TEST_CASE(
+  "process_instruction: ASSIGN with arithmetic may wrap",
+  "[interval][process_instruction]")
+{
+  // ASSUME x >= 3 then ASSIGN x = x + 1: x == INT_MAX wraps to INT_MIN (#8102).
+  reset_interval_flags();
+  interval_domaint::enable_interval_arithmetic = true;
+
+  auto int_type = get_int32_type();
+  expr2tc x = symbol2tc(int_type, irep_idt("x"));
+  expr2tc three = constant_int2tc(int_type, BigInt(3));
+  expr2tc one = constant_int2tc(int_type, BigInt(1));
+
+  goto_programt::instructionst instrs(2);
+  auto it = instrs.begin();
+  it->type = ASSUME;
+  it->guard = greaterthanequal2tc(x, three);
+  ++it;
+  it->type = ASSIGN;
+  it->code = code_assign2tc(x, add2tc(int_type, x, one));
+
+  interval_domaint domain;
+  domain.make_top();
+  for (auto i = instrs.begin(); i != instrs.end(); ++i)
+    domain.process_instruction(i);
+
+  tvt geq3 = interval_domaint::eval_boolean_expression(
+    greaterthanequal2tc(x, three), domain);
+  CHECK(geq3.is_unknown());
 }
 
 TEST_CASE(

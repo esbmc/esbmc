@@ -4,6 +4,24 @@
 #include <util/expr/expr_util.h>
 #include <util/symtab/namespace.h>
 #include <util/irep/std_expr.h>
+#include <unordered_set>
+
+static bool is_untracked_global(const irep_idt &name)
+{
+  static const std::unordered_set<std::string> names = {
+    "__ESBMC_alloc",
+    "__ESBMC_alloc_size",
+    "stdin",
+    "stdout",
+    "stderr",
+    "sys_nerr",
+    "operator=::ref",
+    "this",
+    "__ESBMC_atexit_count",
+    "__ESBMC_atexit_registered",
+    "__ESBMC_stdlib_atexit_key"};
+  return names.count(name.as_string()) != 0;
+}
 
 // Follow pointer arithmetic and typecasts down to the root pointer/array/object
 // symbol of an address expression (`A + i` -> A, `(T *)p` -> p), or return null
@@ -217,15 +235,8 @@ void rw_sett::read_write_rec(
       return; // ignore for now
     }
 
-    if (
-      symbol->name == "__ESBMC_alloc" || symbol->name == "__ESBMC_alloc_size" ||
-      symbol->name == "stdin" || symbol->name == "stdout" ||
-      symbol->name == "stderr" || symbol->name == "sys_nerr" ||
-      symbol->name == "operator=::ref" || symbol->name == "this" ||
-      symbol->name == "__ESBMC_atexits")
-    {
+    if (is_untracked_global(symbol->name))
       return; // ignore for now
-    }
 
     // Improvements for CUDA features
     if (symbol->name == "indexOfThread" || symbol->name == "indexOfBlock")

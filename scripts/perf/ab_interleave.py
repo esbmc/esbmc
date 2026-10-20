@@ -10,7 +10,7 @@ ratios -- pairing cancels drift that a ratio of two independent medians keeps.
 
 Counts are the other half. A commit that moves VCCs or symex assignments has
 changed what the solver is asked to prove; one that moves only wall time has
-not, which is the distinction the #6831 W0 bisect stops on.
+not, which is the distinction the #6831 bisect (#7042) stops on.
 
   scripts/perf/ab_interleave.py --a old/esbmc --b new/esbmc --pairs 12 \\
       -- scripts/perf/oracles/loop10k.c --unwind 10000 --overflow-check --quiet

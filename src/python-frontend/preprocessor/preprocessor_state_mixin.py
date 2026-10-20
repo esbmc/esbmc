@@ -14,21 +14,30 @@ class PreprocessorStateMixin:
         self.range_loop_counter = 0
         self.iterable_loop_counter = 0
         self.enumerate_loop_counter = 0
+        self._iter_counter = 0
+        self.iterator_classes = set()
+        self.iterator_params = set()
         self.helper_functions_added = False
         self.functionKwonlyParams = {}
         self.static_methods = set()
         self.is_entry_module = False
+        self._hoisted_classes = {}
         self._builtin_shadow_names = None
         self._unobservable_builtin_keys = frozenset()
+        self._closed_lambda_bindings = {}
+        self._fixed_length_starred = {}
         self.functionVarargs = set()
         self._vararg_func_defs = {}
         self._vararg_module_defs = set()
+        self._vararg_callee_defs = {}
         self._vararg_specializations = {}
         self._vararg_dropped_defs = set()
         self._vararg_scope_stack = []
         self._vararg_def_owners = {}
         self._vararg_owner_specs = {}
         self.listcomp_counter = 0
+        self.functools_reduce_names = set()
+        self.functools_module_names = set()
         self.minmax_key_counter = 0
         self.variable_annotations = {}
         self.function_return_annotations = {}
@@ -43,6 +52,8 @@ class PreprocessorStateMixin:
         self.defaultdict_alias = None
         self.collections_module_imported = False
         self.collections_module_alias = None
+        self.numpy_module_names = set()
+        self.numpy_constructor_names = {}
         self._subscript_inferred_vars = set()
         self.generator_funcs = set()
         self.early_return_generator_funcs = set()
@@ -50,6 +61,7 @@ class PreprocessorStateMixin:
         self.generator_func_defs = {}
         self.generator_next_index = {}
         self.generator_emitted_init = set()
+        self._gen_next_blacklist = set()
         # Sequence-iterator protocol lowering (range_iter): maps a name bound to
         # a statically-sized sequence (range()/list/tuple literal) to that
         # length, an iterator var (from ``seq.__iter__()``) to its captured
@@ -77,10 +89,21 @@ class PreprocessorStateMixin:
         # agrees (see _recover_param_dict_annotation).
         self._dict_param_call_shapes = {}
         self.bound_method_vars = {}
+        # Filled by _scan_fixed_receivers; empty, an unpacked bound method
+        # is never resolved at its calls.
+        self.fixed_receivers = {}
+        self.once_bound_names = set()
+        self.module_statements = {}
+        self.variable_names = set()
+        self.scope_binding_counts = {}
+        self.in_order_bindings = set()
         self.called_names = set()
         # nondet_list/nondet_dict the module defines itself, so the
         # rewrite to a typed builder must leave those calls alone.
         self.shadowed_nondet_collections = set()
+        # Names bound only by a module-level `import`, whose attributes may
+        # name nondet functions as the bare imported names do.
+        self.imported_module_names = set()
         self.list_literal_values = {}
         # Names bound to a dict literal, mapped to that literal; invalidated on
         # any mutation, scoped like list_literal_values.
@@ -124,3 +147,4 @@ class PreprocessorStateMixin:
         self.exported_range_wrappers = {}
         self.module_dunder_all = None
         self._pending_method_default_inits = []
+        self._class_stack = []

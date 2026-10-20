@@ -59,6 +59,13 @@ public:
     const typet &elem_type,
     type_slot slot = type_slot::elements);
 
+  /// Updates the type of the element at @p index.
+  void set_element_type(
+    const std::string &id,
+    size_t index,
+    const typet &elem_type,
+    type_slot slot = type_slot::elements);
+
   /// Replaces @p to's entries with @p from's, leaving @p to untouched when
   /// @p from has nothing recorded.
   void assign_from(
@@ -82,6 +89,16 @@ public:
   /// Mirrors an in-place reversal so later index-based lookups stay correct.
   /// A no-op for an unknown or single-element instance.
   void reverse(const std::string &id, type_slot slot = type_slot::elements);
+
+  /// Mirrors a store of @p elem_id, of type @p elem_type, into element
+  /// @p index. An index outside the recorded entries (e.g. one not known
+  /// statically) erases the instance, since no single entry can be updated.
+  void replace(
+    const std::string &id,
+    size_t index,
+    const std::string &elem_id,
+    const typet &elem_type,
+    type_slot slot = type_slot::elements);
 
   size_t
   size(const std::string &id, type_slot slot = type_slot::elements) const;

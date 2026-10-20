@@ -1,0 +1,4 @@
+CORE
+ctr.ld
+--ld-props props.yaml
+^ERROR: .*counter 'c1' CV port is narrower than PV

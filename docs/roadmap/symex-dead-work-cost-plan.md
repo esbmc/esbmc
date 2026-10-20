@@ -1,26 +1,32 @@
 # Plan — cost paid for paths that cannot execute (the #7361 defect class)
 
-**Status:** W1, W2, W3, W5.1 and W6 implemented and in review (PRs
-[#7432](https://github.com/esbmc/esbmc/pull/7432),
+**Status (2026-10-01):** W1, W2, W3, W5.1 and W6 are merged
+([#7432](https://github.com/esbmc/esbmc/pull/7432),
 [#7435](https://github.com/esbmc/esbmc/pull/7435),
-[#7436](https://github.com/esbmc/esbmc/pull/7436) — stacked on #7435 —
+[#7436](https://github.com/esbmc/esbmc/pull/7436),
 [#7437](https://github.com/esbmc/esbmc/pull/7437),
-[#7438](https://github.com/esbmc/esbmc/pull/7438)). **W4 was re-scoped after
+[#7438](https://github.com/esbmc/esbmc/pull/7438), between 2026-08-31 and
+2026-09-01). **W4 was re-scoped after
 measurement and not implemented as written**: §6 records why, and what replaces
 it — the revised item landed as
 [#7440](https://github.com/esbmc/esbmc/pull/7440), with the underlying
 simplifier gap fixed by [#7441](https://github.com/esbmc/esbmc/pull/7441).
 §6.4 records the one taxed operation deliberately left alone, `remove`, and the
-measurement that rejected the obvious fix. W5.2 is now localised to a single
-condition (§7) but is still not a specified change.
-measurement that rejected the obvious fix. W5.2 is still an unlocalised
-investigation.
+measurement that rejected the obvious fix.
+
+Still open: **W5.2**, localised to a single condition (§7) but not a specified
+change, and the §7 reduction still unwinds; W1's index-permutation sort; W5.1's
+audit of the other reallocating containers (`std::string`, `std::deque`, the
+Python list arena); and whether `memset` needs W6's treatment
+(`intrinsic_memset` still calls `__memset_impl` for a symbolic length).
+#7505, open, propagates aggregates with immutable scalar leaves and does not
+cover W5.2's heap pointer.
 **Origin:** [#7361](https://github.com/esbmc/esbmc/pull/7361), *"[python] Avoid
 duplicated shifts in `list.remove()`"*, which split a search loop and a shift
 loop that had been nested. This plan generalises that fix into a screening test
 (§2) and applies it across the Python and C++ operational models and the
 `memcpy`/`memcmp` intrinsics.
-**Last updated:** 2026-08-30 (§6 re-scoped against measurement).
+**Last updated:** 2026-10-01 (status); 2026-08-31 (§7, W5.2 localised).
 
 **Measurement environment.** All numbers below were measured on an aarch64 macOS
 host against `build/src/esbmc/esbmc`, ESBMC 8.5.0, built from master
@@ -413,7 +419,7 @@ mechanism.
 
 **The mechanism.** `goto_symex_statet::constant_propagation` propagates a
 struct only when *every* update in its `with` chain is itself propagatable
-(`goto_symex_state.cpp:313`). A malloc'd address is not propagatable, an
+(`src/goto-symex/state/goto_symex_state.cpp`). A malloc'd address is not propagatable, an
 `address_of` or NULL is. So storing a heap pointer into one field silently
 drops the propagated constants of **every other field of that struct** — which
 is why `_size` and `_capacity` stopped folding the moment `reserve` allocated.
@@ -447,8 +453,9 @@ arena.
 
 ## 8. W6 — `memcpy`'s intrinsic gives up where `memcmp`'s does not
 
-**Where.** `src/goto-symex/builtin_functions/memory_ops.cpp:662`,
-`goto_symext::intrinsic_memcpy_impl`, against `:1076`, `intrinsic_memcmp`.
+**Where.** `src/goto-symex/engine/builtin_functions/memory_ops.cpp`,
+`goto_symext::intrinsic_memcpy_impl`, against `intrinsic_memcmp` in the same
+file.
 
 This is the amplifier under W1, W2 and W3: it is what turns "the fallback arm is
 explored" into "the fallback arm costs `--unwind` iterations".
@@ -509,16 +516,16 @@ Python gains.
 
 ## 10. What this plan does *not* establish
 
-- **W1, W2, W3, W5.1 and W6 are implemented and in review; nothing is merged.**
+- **W1, W2, W3, W5.1 and W6 are merged.**
   The measurements quoted inside each section are the survey's, taken before any
   patch; the before/after numbers live in the pull requests. W4 was re-scoped
-  rather than implemented (§6) and W5.2 is still unlocalised, so two of the
+  rather than implemented (§6) and W5.2 is localised but unfixed, so two of the
   seven items remain proposals.
 - **No verdict changes were observed or looked for.** Every program measured
   returns `VERIFICATION SUCCESSFUL` on master; this plan is about cost, and none
   of the items is a soundness finding.
 - **W5's symex half (§7, level 2) is localised but unfixed.** It is the
-  all-or-nothing aggregate rule at `goto_symex_state.cpp:313`. What is not
+  all-or-nothing aggregate rule in `src/goto-symex/state/goto_symex_state.cpp`. What is not
   established is whether propagating a partially-symbolic aggregate is sound;
   that, not finding the line, is the remaining work.
 - **The regression-suite impact is unmeasured.** How much of the suite's wall

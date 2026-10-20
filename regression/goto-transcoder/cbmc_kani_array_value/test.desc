@@ -1,0 +1,4 @@
+CORE
+cbmc_kani_array_value.goto
+--binary --function _RNvCsjqRHnRYvut6_9arr_value7harness --ignore-property-class reachability_check --ignore-property-class cover
+^VERIFICATION SUCCESSFUL$

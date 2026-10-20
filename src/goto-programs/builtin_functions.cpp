@@ -3,9 +3,12 @@
 #include <ac_config.h>
 
 #include <cassert>
+#include <functional>
+#include <goto-programs/destructor.h>
 #include <goto-programs/goto_convert_class.h>
 #include <regex>
 #include <util/arith/arith_tools.h>
+#include <util/base/filesystem.h>
 #include <util/lang/c_types.h>
 #include <util/symtab/cprover_prefix.h>
 #include <util/expr/expr_util.h>
@@ -350,6 +353,28 @@ void goto_convertt::do_mem(
 
   locationt location = function.location();
 
+  // Symex ends an alloca's storage with its frame by recognising the
+  // `return_value$_<callee>$N` temp, which `p = alloca(n);` would bypass
+  // (#8709). The models' __ESBMC_alloca outlives its frame (#8691).
+  const std::string callee =
+    is_malloc ? "" : id2string(ns.lookup(function.identifier())->name);
+  if (!is_malloc && callee != "__ESBMC_alloca")
+  {
+    const std::string frame_temp = "return_value$_" + callee + "$";
+    const symbolt *lhs_sym =
+      lhs.is_symbol() ? ns.lookup(lhs.identifier()) : nullptr;
+    if (!lhs_sym || !has_prefix(id2string(lhs_sym->name), frame_temp))
+    {
+      const typet ptr_type = pointer_typet(empty_typet());
+      exprt temp = symbol_exprt(
+        tmp_symbol.new_symbol(context, ptr_type, frame_temp).id, ptr_type);
+      do_mem(is_malloc, temp, function, arguments, dest);
+      if (lhs.is_not_nil())
+        copy(code_assignt(lhs, typecast_exprt(temp, lhs.type())), ASSIGN, dest);
+      return;
+    }
+  }
+
   // `malloc(n);` with the result discarded still allocates, and the storage is
   // unreachable the moment the statement ends -- exactly what
   // --memory-leak-check exists to report. Dropping the call made that leak
@@ -472,6 +497,7 @@ void goto_convertt::do_cpp_new(
   // two objects alias, which a fresh built-in allocation hides (github #6494).
   const exprt &alloc_function =
     static_cast<const exprt &>(rhs.find("alloc_function"));
+  const exprt &placement = static_cast<const exprt &>(rhs.find("placement"));
 
   // The element count drives both the allocation size and the construction
   // loop, and `new T[f()]` evaluates f() exactly once, so evaluate it here --
@@ -494,7 +520,7 @@ void goto_convertt::do_cpp_new(
     expr2tc alloc_units;
     migrate_expr(alloc_size, alloc_units);
 
-    BigInt sz = type_byte_size(subtype);
+    BigInt sz = type_byte_size(subtype, &ns);
     expr2tc sz_expr = constant_int2tc(size_type2(), sz);
     expr2tc byte_size = mul2tc(size_type2(), alloc_units, sz_expr);
     alloc_size = migrate_expr_back(byte_size);
@@ -508,8 +534,10 @@ void goto_convertt::do_cpp_new(
   // object well enough. Storage from a replaced operator new is not fresh --
   // the program decides its contents ([expr.new]/17 default-initialises a
   // scalar to nothing at all) -- so zero-filling it would overwrite what the
-  // replacement just returned.
-  if (alloc_function.is_nil() || rhs.initializer().is_not_nil())
+  // replacement just returned, and the same holds for placement storage.
+  if (
+    (alloc_function.is_nil() && placement.is_nil()) ||
+    rhs.initializer().is_not_nil())
     cpp_new_initializer(lhs, rhs, elem_count, tmp_initializer);
 
   if (alloc_size.is_nil())
@@ -521,7 +549,9 @@ void goto_convertt::do_cpp_new(
     simplify_via_irep2(alloc_size);
   }
 
-  if (alloc_function.is_not_nil())
+  if (placement.is_not_nil())
+    cpp_new_at(lhs, placement, rhs.find_location(), dest);
+  else if (alloc_function.is_not_nil())
   {
     // operator new takes a byte count. alloc_size is already scaled by the
     // element size for the array form; the scalar form allocates one T.
@@ -538,6 +568,12 @@ void goto_convertt::do_cpp_new(
     call.lhs() = raw;
     call.function() = alloc_function;
     call.arguments().push_back(byte_size);
+    for (exprt arg :
+         static_cast<const exprt &>(rhs.find("alloc_arguments")).operands())
+    {
+      remove_sideeffects(arg, dest);
+      call.arguments().push_back(arg);
+    }
     call.location() = rhs.find_location();
 
     goto_programt::targett t_a = dest.add_instruction(FUNCTION_CALL);
@@ -567,6 +603,21 @@ void goto_convertt::do_cpp_new(
 
   // run initializer
   dest.destructive_append(tmp_initializer);
+}
+
+void goto_convertt::cpp_new_at(
+  const exprt &lhs,
+  const exprt &placement,
+  const locationt &location,
+  goto_programt &dest)
+{
+  exprt place = placement;
+  remove_sideeffects(place, dest);
+  place.make_typecast(lhs.type());
+
+  goto_programt::targett t = dest.add_instruction(ASSIGN);
+  migrate_expr(code_assignt(lhs, place), t->code);
+  t->location = location;
 }
 
 // Locate the element constructor inside a cpp_new[] initializer, by shape.
@@ -601,48 +652,6 @@ static exprt *find_cpp_new_constructor(exprt &e)
   return nullptr;
 }
 
-// Zero the elements a value-initialising `new T[n]()` just allocated:
-//
-//   for (size_type i = 0; i < n; ++i)
-//     *(lhs + i) = <zero of T>;
-//
-// An assignment loop rather than a memset call: n need not be a compile-time
-// constant, and __ESBMC_memset falls back to a library body that is only linked
-// when the program itself calls memset.
-void goto_convertt::cpp_new_zero_fill(
-  const exprt &lhs,
-  const exprt &rhs,
-  const exprt &elem_count,
-  goto_programt &dest)
-{
-  const typet &subtype = ns.follow(rhs.type().subtype());
-
-  symbol_exprt index(new_tmp_symbol(size_type()).id, size_type());
-
-  // Pointer arithmetic on lhs, for the reason spelled out at the element
-  // constructor loop below: &lhs[i] does not survive symex.
-  plus_exprt element_addr(lhs, index);
-  element_addr.type() = lhs.type();
-
-  exprt element("dereference", subtype);
-  element.copy_to_operands(element_addr);
-
-  code_assignt body(element, gen_zero(subtype));
-  body.location() = rhs.find_location();
-
-  plus_exprt next(index, from_integer(1, size_type()));
-  next.type() = size_type();
-
-  code_fort loop;
-  loop.init() = code_assignt(index, from_integer(0, size_type()));
-  loop.cond() = binary_relation_exprt(index, "<", elem_count);
-  loop.iter() = code_assignt(index, next);
-  loop.body() = body;
-  loop.location() = rhs.find_location();
-
-  convert(loop, dest);
-}
-
 // The non-array type at the bottom of `type`, and how many of it one `type`
 // holds. False if an array level has no constant size.
 static bool
@@ -665,8 +674,84 @@ array_leaves(const namespacet &ns, const typet &type, typet &leaf, BigInt &n)
   return true;
 }
 
+// Zero the elements a value-initialising `new T[n]()` just allocated:
+//
+//   for (size_type i = 0; i < n; ++i)
+//     *(lhs + i) = <zero of T>;
+//
+// An assignment loop rather than a memset call: n need not be a compile-time
+// constant, and __ESBMC_memset falls back to a library body that is only linked
+// when the program itself calls memset.
+void goto_convertt::cpp_new_zero_fill(
+  const exprt &lhs,
+  const exprt &rhs,
+  const exprt &elem_count,
+  goto_programt &dest)
+{
+  // `new T[n][m]()` zeroes n * m leaves through a pointer to the leaf type,
+  // since symex rejects a dereference that yields an array.
+  typet leaf;
+  BigInt stride;
+  if (!array_leaves(ns, rhs.type().subtype(), leaf, stride))
+    return;
+  const typet &subtype = ns.follow(leaf);
+
+  exprt base = lhs;
+  exprt count = elem_count;
+  if (ns.follow(rhs.type().subtype()).is_array())
+  {
+    base = typecast_exprt(lhs, pointer_typet(leaf));
+    count = mult_exprt(elem_count, from_integer(stride, size_type()));
+    count.type() = size_type();
+  }
+
+  symbol_exprt index(new_tmp_symbol(size_type()).id, size_type());
+
+  // Pointer arithmetic on lhs, for the reason spelled out at the element
+  // constructor loop below: &lhs[i] does not survive symex.
+  plus_exprt element_addr(base, index);
+  element_addr.type() = base.type();
+
+  exprt element("dereference", subtype);
+  element.copy_to_operands(element_addr);
+
+  code_assignt body(element, gen_zero(subtype));
+  body.location() = rhs.find_location();
+
+  plus_exprt next(index, from_integer(1, size_type()));
+  next.type() = size_type();
+
+  code_fort loop;
+  loop.init() = code_assignt(index, from_integer(0, size_type()));
+  loop.cond() = binary_relation_exprt(index, "<", count);
+  loop.iter() = code_assignt(index, next);
+  loop.body() = body;
+  loop.location() = rhs.find_location();
+
+  convert(loop, dest);
+}
+
+// A list's elements; a string literal's are its characters and the zeros
+// padding it to its array type ([dcl.init.string]/3).
+static std::size_t list_size(const exprt &init)
+{
+  if (init.id() != "string-constant")
+    return init.operands().size();
+  BigInt n;
+  to_integer(to_array_type(init.type()).size(), n);
+  return n.to_uint64();
+}
+
+static exprt list_element(const exprt &init, std::size_t i)
+{
+  if (init.id() != "string-constant")
+    return init.operands()[i];
+  return index_exprt(
+    init, from_integer(i, index_type()), init.type().subtype());
+}
+
 // Whether every nested list in `init` is spelled element by element, so
-// cpp_new_store_element can reach each leaf (a string literal row is not).
+// cpp_new_store_element can reach each leaf.
 static bool is_splittable_list(const namespacet &ns, const exprt &init)
 {
   if (!ns.follow(init.type()).is_array())
@@ -675,7 +760,8 @@ static bool is_splittable_list(const namespacet &ns, const exprt &init)
   typet leaf;
   BigInt n;
   if (
-    (!init.is_constant() && init.id() != "array") ||
+    (!init.is_constant() && init.id() != "array" &&
+     init.id() != "string-constant") ||
     !array_leaves(ns, init.type(), leaf, n))
     return false;
 
@@ -705,6 +791,7 @@ void goto_convertt::cpp_new_store_element(
   const exprt &offset,
   const exprt &init,
   const locationt &location,
+  const exprt &built,
   code_blockt &out)
 {
   const typet &type = ns.follow(init.type());
@@ -713,15 +800,19 @@ void goto_convertt::cpp_new_store_element(
     typet leaf;
     BigInt stride;
     array_leaves(ns, type.subtype(), leaf, stride);
-    for (std::size_t i = 0; i < init.operands().size(); ++i)
+    for (std::size_t i = 0; i < list_size(init); ++i)
     {
       exprt at = plus_exprt(offset, from_integer(stride * i, size_type()));
       at.type() = size_type();
       simplify_via_irep2(at);
-      cpp_new_store_element(base, at, init.operands()[i], location, out);
+      cpp_new_store_element(
+        base, at, list_element(init, i), location, built, out);
     }
     return;
   }
+
+  if (built.is_not_nil())
+    out.copy_to_operands(code_assignt(built, offset));
 
   plus_exprt element_addr(base, offset);
   element_addr.type() = base.type();
@@ -748,13 +839,15 @@ void goto_convertt::cpp_new_store_element(
  * frontend attached one ([dcl.init.aggr]/5). A nested list is stored leaf by
  * leaf through a pointer to the leaf type, since symex rejects a dereference
  * that yields an array. The initializer is the list decayed to
- * `&list[0]...[0]`; false for any other initializer. */
+ * `&list[0]...[0]`; false for any other initializer. A non-nil `built` is set
+ * to each leaf's index before it is initialised. */
 bool goto_convertt::cpp_new_init_list(
   const exprt &lhs,
   const exprt &rhs,
   const exprt &decayed,
   const exprt &elem_count,
-  goto_programt &dest)
+  const exprt &built,
+  code_blockt &out)
 {
   if (!decayed.is_address_of())
     return false;
@@ -780,9 +873,8 @@ bool goto_convertt::cpp_new_init_list(
     base = typecast_exprt(lhs, pointer_typet(leaf));
   const locationt &location = rhs.find_location();
 
-  code_blockt block;
   cpp_new_store_element(
-    base, from_integer(0, size_type()), *init, location, block);
+    base, from_integer(0, size_type()), *init, location, built, out);
 
   symbol_exprt index(new_tmp_symbol(size_type()).id, size_type());
   exprt at = index;
@@ -792,26 +884,101 @@ bool goto_convertt::cpp_new_init_list(
     at.type() = size_type();
   }
   code_blockt body;
-  cpp_new_store_element(base, at, filler, location, body);
+  cpp_new_store_element(base, at, filler, location, built, body);
 
   plus_exprt next(index, from_integer(1, size_type()));
   next.type() = size_type();
 
   code_fort tail;
   tail.init() =
-    code_assignt(index, from_integer(init->operands().size(), size_type()));
+    code_assignt(index, from_integer(list_size(*init), size_type()));
   tail.cond() = binary_relation_exprt(index, "<", elem_count);
   tail.iter() = code_assignt(index, next);
   tail.body() = body;
   tail.location() = location;
-  block.move_to_operands(tail);
+  out.move_to_operands(tail);
+  return true;
+}
 
+bool goto_convertt::user_code_throws()
+{
+  if (user_code_throws_cache)
+    return *user_code_throws_cache;
+
+  std::function<bool(const irept &)> throws = [&](const irept &irep) {
+    const irep_idt &statement = irep.statement();
+    if (statement == "cpp-throw" || statement == "cpp-catch")
+      return true;
+    for (const irept &sub : irep.get_sub())
+      if (throws(sub))
+        return true;
+    for (const auto &named : irep.get_named_sub())
+      if (throws(named.second))
+        return true;
+    return false;
+  };
+
+  bool result = false;
+  context.foreach_operand([&](const symbolt &s) {
+    if (
+      !result && s.get_type().is_code() &&
+      !file_operations::is_bundled_source(s.location.file().as_string()))
+      result = throws(s.get_value());
+  });
+  user_code_throws_cache = result;
+  return result;
+}
+
+/* Convert the code constructing the elements of a `new T[n]`. When an element's
+ * initialization exits by an exception, the elements already constructed are
+ * destroyed in reverse order ([except.ctor]/3): `construction`
+ * then runs in a try block whose catch-all destroys the `built` leaves before
+ * `base + built`, newest first, and rethrows. */
+void goto_convertt::convert_cpp_new_elements(
+  const exprt &base,
+  const exprt &built,
+  const codet &construction,
+  goto_programt &dest)
+{
   // A class-typed element may lower to a temporary copied into place, which
-  // must not get its own scope-exit destructor, as for the element loop below.
-  std::size_t stack_size = targets.destructor_stack.size();
+  // must not get its own scope-exit destructor.
+  const std::size_t stack_size = targets.destructor_stack.size();
+  code_function_callt destructor;
+  if (built.is_nil() || !get_destructor(ns, base.type().subtype(), destructor))
+  {
+    convert(construction, dest);
+    targets.destructor_stack.resize(stack_size);
+    return;
+  }
+
+  const locationt &location = construction.location();
+  exprt prev("-", size_type());
+  prev.copy_to_operands(built, from_integer(1, size_type()));
+  plus_exprt element_addr(base, built);
+  element_addr.type() = base.type();
+  destructor.arguments().push_back(element_addr);
+
+  code_blockt destroy;
+  destroy.copy_to_operands(code_assignt(built, prev), destructor);
+  code_whilet unwind;
+  unwind.cond() =
+    binary_relation_exprt(built, ">", from_integer(0, size_type()));
+  unwind.body() = destroy;
+
+  code_blockt handler;
+  handler.set("exception_id", "ellipsis");
+  handler.copy_to_operands(unwind, codet("cpp-throw"));
+
+  codet guarded("cpp-catch");
+  guarded.location() = location;
+  guarded.copy_to_operands(construction, handler);
+
+  code_blockt block;
+  block.location() = location;
+  block.copy_to_operands(
+    code_assignt(built, from_integer(0, size_type())), guarded);
   convert(block, dest);
   targets.destructor_stack.resize(stack_size);
-  return true;
 }
 
 void goto_convertt::cpp_new_initializer(
@@ -878,12 +1045,7 @@ void goto_convertt::cpp_new_initializer(
       // every element the constructor -- if any -- does not write itself
       // ([expr.new]/24, github #6588). The frontend flags exactly those forms,
       // so plain `new T[n]` keeps its indeterminate elements.
-      // An array element type (`new T[n][m]()`) is skipped here: symex rejects
-      // a dereference yielding an array, and cpp_new_init_list zeroes it leaf
-      // by leaf.
-      if (
-        rhs.get_bool("zero_initialized") &&
-        !ns.follow(rhs.type().subtype()).is_array())
+      if (rhs.get_bool("zero_initialized"))
         cpp_new_zero_fill(lhs, rhs, elem_count, dest);
 
       // Construct every element: what the scalar arm below does once, done for
@@ -895,16 +1057,42 @@ void goto_convertt::cpp_new_initializer(
       //
       //   for (size_type i = 0; i < n; ++i)
       //     <element constructor, with `this` = lhs + i>
-      if (cpp_new_init_list(lhs, rhs, initializer.op0(), elem_count, dest))
+      // do_cpp_new already evaluated the count for the allocation; reusing it
+      // is what keeps `new T[f()]` from calling f() a second time here.
+      exprt count = elem_count;
+
+      // `new T[n][m]` constructs n * m class elements: step through them
+      // with a pointer to the class, not to a row.
+      exprt base = lhs;
+      typet leaf = rhs.type().subtype();
+      while (ns.follow(leaf).is_array())
+      {
+        BigInt size;
+        if (to_integer(to_array_type(ns.follow(leaf)).size(), size))
+          return;
+        count = mult_exprt(count, from_integer(size, size_type()));
+        count.type() = size_type();
+        leaf = ns.follow(leaf).subtype();
+        base = typecast_exprt(lhs, pointer_typet(leaf));
+      }
+
+      exprt built = nil_exprt();
+      if (user_code_throws())
+        built = symbol_exprt(new_tmp_symbol(size_type()).id, size_type());
+
+      code_blockt construction;
+      construction.location() = rhs.find_location();
+      if (
+        cpp_new_init_list(
+          lhs, rhs, initializer.op0(), elem_count, built, construction))
+      {
+        convert_cpp_new_elements(base, built, construction, dest);
         return;
+      }
 
       exprt *ctor = find_cpp_new_constructor(initializer);
       if (ctor == nullptr)
         return;
-
-      // do_cpp_new already evaluated the count for the allocation; reusing it
-      // is what keeps `new T[f()]` from calling f() a second time here.
-      const exprt &count = elem_count;
 
       symbol_exprt index(new_tmp_symbol(size_type()).id, size_type());
 
@@ -914,8 +1102,8 @@ void goto_convertt::cpp_new_initializer(
       // trips the "no sudden transition back to scalars" assertion. `p[i]` in
       // user code only reaches symex as a dereference because the adjuster
       // rewrites it, and this runs after adjust.
-      plus_exprt element_addr(lhs, index);
-      element_addr.type() = lhs.type();
+      plus_exprt element_addr(base, index);
+      element_addr.type() = base.type();
 
       // The frontend's initializer is shaped for the whole array: a
       // temporary_object of type T[n] wrapping the element constructor, whose
@@ -923,8 +1111,10 @@ void goto_convertt::cpp_new_initializer(
       // at lhs + i, so each iteration constructs its own element in place.
       exprt call = *ctor;
       call.op1().operands().at(0) = element_addr;
-      code_expressiont body;
-      body.expression() = call;
+      code_blockt body;
+      if (built.is_not_nil())
+        body.copy_to_operands(code_assignt(built, index));
+      body.copy_to_operands(code_expressiont(call));
       body.location() = rhs.find_location();
 
       plus_exprt next(index, from_integer(1, size_type()));
@@ -936,13 +1126,7 @@ void goto_convertt::cpp_new_initializer(
       loop.iter() = code_assignt(index, next);
       loop.body() = body;
       loop.location() = rhs.find_location();
-
-      // Same reasoning as the scalar arm: a class-typed initializer may lower
-      // to a stack temporary copied into the element, and that slot must not
-      // get its own scope-exit destructor.
-      std::size_t stack_size = targets.destructor_stack.size();
-      convert(loop, dest);
-      targets.destructor_stack.resize(stack_size);
+      convert_cpp_new_elements(base, built, loop, dest);
     }
     else if (rhs.statement() == "cpp_new")
     {
@@ -1119,6 +1303,15 @@ void goto_convertt::do_operator_new(
   new_function.type().add("#location") = function.cmt_location();
 
   do_cpp_new(lhs, new_function, dest);
+}
+
+/// `__ESBMC_alloca` is the models' spelling: its temp is not a
+/// `return_value$_alloca$`/`___builtin_alloca$` name, so its storage never
+/// expires (#8691).
+static bool is_alloca_function(const std::string &base_name)
+{
+  return base_name == "alloca" || base_name == "__builtin_alloca" ||
+         base_name == "__ESBMC_alloca";
 }
 
 void goto_convertt::do_function_call_symbol(
@@ -1660,7 +1853,7 @@ void goto_convertt::do_function_call_symbol(
   {
     do_realloc(lhs, function, arguments, dest);
   }
-  else if (base_name == "alloca" || base_name == "__builtin_alloca")
+  else if (is_alloca_function(base_name))
   {
     do_alloca(lhs, function, arguments, dest);
   }

@@ -2437,6 +2437,18 @@ void solidity_convertert::get_current_contract_name(
   log_debug("solidity", "\tcurrent contract name={}", contract_name);
 }
 
+// A checked ** overflows in the model exactly when the result does; an
+// unchecked one wraps modulo 2^256.
+static std::pair<std::string, typet>
+pow_model(bool unchecked, const typet &result_type)
+{
+  if (unchecked)
+    return {"sol_pow_wrap", unsignedbv_typet(256)};
+  if (result_type.is_signedbv())
+    return {"sol_pow_int", signedbv_typet(256)};
+  return {"sol_pow_uint", unsignedbv_typet(256)};
+}
+
 bool solidity_convertert::get_binary_operator_expr(
   const nlohmann::json &expr,
   exprt &new_expr)
@@ -3076,10 +3088,11 @@ bool solidity_convertert::get_binary_operator_expr(
       // Solidity ** is purely integer arithmetic.
       unsignedbv_typet u256(256);
       side_effect_expr_function_callt call_expr;
+      const auto [pow_fn, pow_type] = pow_model(in_unchecked_block, t);
       get_library_function_call_no_args(
-        "sol_pow_uint", "c:@F@sol_pow_uint", u256, lhs.location(), call_expr);
+        pow_fn, "c:@F@" + pow_fn, pow_type, lhs.location(), call_expr);
 
-      call_expr.arguments().push_back(typecast_exprt(lhs, u256));
+      call_expr.arguments().push_back(typecast_exprt(lhs, call_expr.type()));
       call_expr.arguments().push_back(typecast_exprt(rhs, u256));
 
       new_expr = call_expr;
@@ -3101,13 +3114,13 @@ bool solidity_convertert::get_binary_operator_expr(
   }
 
   // 4.1 check if it needs implicit type conversion
-  if (common_type.id() != "")
-  {
-    convert_type_expr(ns, lhs, common_type, expr);
-    convert_type_expr(ns, rhs, common_type, expr);
-  }
-  else if (lhs.type() != rhs.type())
-    convert_type_expr(ns, rhs, lhs, expr);
+  convert_operand_types(
+    lhs,
+    rhs,
+    common_type,
+    opcode == SolidityGrammar::ExpressionT::BO_Shl ||
+      opcode == SolidityGrammar::ExpressionT::BO_Shr,
+    expr);
 
   // 4.2 Copy to operands
   new_expr.copy_to_operands(lhs, rhs);
@@ -3238,17 +3251,37 @@ bool solidity_convertert::get_compound_assign_expr(
     return true;
   }
 
-  if (common_type.id() != "")
-  {
-    convert_type_expr(ns, lhs, common_type, expr);
-    convert_type_expr(ns, rhs, common_type, expr);
-  }
-  else if (lhs.type() != rhs.type())
-    convert_type_expr(ns, rhs, lhs, expr);
+  convert_operand_types(
+    lhs,
+    rhs,
+    common_type,
+    opcode == SolidityGrammar::ExpressionT::BO_ShlAssign ||
+      opcode == SolidityGrammar::ExpressionT::BO_ShrAssign,
+    expr);
 
   new_expr.copy_to_operands(lhs, rhs);
   new_expr.location() = location;
   return false;
+}
+
+void solidity_convertert::convert_operand_types(
+  exprt &lhs,
+  exprt &rhs,
+  const typet &common_type,
+  bool is_shift,
+  const nlohmann::json &expr)
+{
+  if (common_type.id() != "")
+    convert_type_expr(ns, lhs, common_type, expr);
+
+  // A shift's commonType is its left operand's type, but the count must not
+  // be truncated to it (Solidity docs, Types, "Shifts").
+  if (is_shift)
+    convert_type_expr(ns, rhs, unsignedbv_typet(256), expr);
+  else if (common_type.id() != "")
+    convert_type_expr(ns, rhs, common_type, expr);
+  else if (lhs.type() != rhs.type())
+    convert_type_expr(ns, rhs, lhs, expr);
 }
 
 bool solidity_convertert::get_unary_operator_expr(

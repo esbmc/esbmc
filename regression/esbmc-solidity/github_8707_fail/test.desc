@@ -1,0 +1,7 @@
+CORE
+contract.solast
+--sol contract.sol --contract C --unwind 10 --no-unwinding-assertions --overflow-check --unsigned-overflow-check --multi-property
+FAILED\s+\[sol_pow_uint\.arithmetic-overflow\.\d+\]\s+line\s+\d+\s+arithmetic overflow on mul
+FAILED\s+\[sol_pow_int\.arithmetic-overflow\.\d+\]\s+line\s+\d+\s+arithmetic overflow on mul
+FAILED\s+\[w\.assertion\.1\]\s+line\s+16\s
+^VERIFICATION FAILED$

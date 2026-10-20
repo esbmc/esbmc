@@ -376,12 +376,14 @@ private:
    *  @param guard A guard expression representing the execution conditions
    *         under which the dereference occurs; violations are only triggered
    *         when the guard holds.
+   *  @param what The points-to target being dereferenced.
    */
   void check_pointer_alignment(
     modet mode,
     const type2tc &type,
     const expr2tc &deref_expr,
-    const guard2tc &guard);
+    const guard2tc &guard,
+    const expr2tc &what);
 
   /** Construct an expression representing the pointer's offset, in bits, from
    *  the base of the containing object. This is used for alignment checking
@@ -606,7 +608,22 @@ private:
     const guard2tc &guard,
     modet mode,
     unsigned long alignment = 0);
+  /// Builds a vector or array destination; false for any other type.
+  bool construct_value_ref(
+    expr2tc &value,
+    const expr2tc &offset,
+    const type2tc &type,
+    const guard2tc &guard,
+    modet mode,
+    unsigned long alignment);
   void construct_vector_ref(
+    expr2tc &value,
+    const expr2tc &offset,
+    const type2tc &type,
+    const guard2tc &guard,
+    modet mode,
+    unsigned long alignment);
+  void construct_array_ref(
     expr2tc &value,
     const expr2tc &offset,
     const type2tc &type,

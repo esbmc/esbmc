@@ -1,0 +1,4 @@
+CORE
+init.ld
+--ld-props props.yaml
+^ERROR: .*init.ld:.*initial value 40000 of .Big. is outside INT$

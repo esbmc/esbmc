@@ -2,9 +2,11 @@
 #include <util/arith/arith_tools.h>
 #include <util/lang/c_types.h>
 #include <util/config/config.h>
+#include <cassert>
 #include <cctype>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 // Configuration toggle for reproducing the two paper configurations from one
 // binary.  Selected by the --ld-sound-mode CLI flag so the chosen semantics is
@@ -253,10 +255,65 @@ static irep_idt arith_id(const irep_idt &op, bool real)
     return "ieee_div";
   return op;
 }
+static bool is_integer(const typet &t)
+{
+  return t.id() == "signedbv" || t.id() == "unsignedbv";
+}
+
+// A literal takes its context's type when it fits (IEC 61131-3), so `i + 1`
+// stays cast-free and k-induction still converges (#8194).
+// Returns false for an integer literal that does not fit the other type.
+static bool retype_literal(exprt &lit, const exprt &other)
+{
+  if (
+    !lit.is_constant() || !is_integer(lit.type()) || !is_integer(other.type()))
+    return true;
+  const typet &t = other.type();
+  BigInt v;
+  const bool parsed = !to_integer(lit, v);
+  assert(parsed);
+  const std::size_t width = std::stoul(t.get("width").as_string());
+  const BigInt bound = power(2, width - 1);
+  if (v < -bound || v >= bound)
+    return false;
+  lit = from_integer(v, t);
+  return true;
+}
+
+static exprt assigned_value(exprt rhs, const symbol_exprt &lhs)
+{
+  if (!retype_literal(rhs, lhs))
+    throw std::runtime_error(
+      "st_fb_translator: literal outside the range of '" +
+      lhs.get_identifier().as_string() + "'");
+  return rhs.type() == lhs.type()
+           ? rhs
+           : static_cast<exprt>(typecast_exprt(rhs, lhs.type()));
+}
+
+// Integers of different widths meet at 32 bits, which holds both.
+static void unify_integers(exprt &a, exprt &b)
+{
+  if (a.type() == b.type())
+    return;
+  retype_literal(b, a);
+  retype_literal(a, b);
+  if (a.type() != b.type())
+  {
+    a = typecast_exprt(a, int_type());
+    b = typecast_exprt(b, int_type());
+  }
+}
+
 static exprt make_binary_arith(const irep_idt &op, exprt lhs, exprt rhs)
 {
   const bool real = is_floating(lhs.type()) || is_floating(rhs.type());
-  const typet result = real ? double_type() : int_type();
+  if (!real)
+    unify_integers(lhs, rhs);
+  const typet result = real ? double_type()
+                       : lhs.type() == rhs.type() && is_integer(lhs.type())
+                         ? lhs.type()
+                         : int_type();
   if (lhs.type() != result)
     lhs = typecast_exprt(lhs, result);
   if (rhs.type() != result)
@@ -330,6 +387,8 @@ static void promote_numeric(exprt &a, exprt &b)
     b = typecast_exprt(b, double_type());
   else if (is_floating(b.type()) && !is_floating(a.type()))
     a = typecast_exprt(a, double_type());
+  else if (is_integer(a.type()) && is_integer(b.type()))
+    unify_integers(a, b);
 }
 
 exprt st_fb_translator::parse_condition()
@@ -549,9 +608,7 @@ codet st_fb_translator::parse_stmt()
   symbol_exprt lhs = resolve_(name);
   exprt rhs = parse_condition();
   expect_sym(";");
-  if (rhs.type() != lhs.type())
-    rhs = typecast_exprt(rhs, lhs.type());
-  return code_assignt(lhs, rhs);
+  return code_assignt(lhs, assigned_value(std::move(rhs), lhs));
 }
 
 void st_fb_translator::parse_stmt_list(

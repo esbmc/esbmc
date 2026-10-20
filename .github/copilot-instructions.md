@@ -3,6 +3,13 @@
 ## Project Context
 ESBMC is a context-bounded model checker for embedded C/C++ software. Reviews should prioritize correctness, safety, and maintainability given the critical nature of formal verification tools.
 
+## Repository Rules
+Agent rules for this repository live in `AGENTS.md` and `docs/agents/`. In
+particular, a PR that changes verification behaviour needs a pair of
+regression tests, one expecting `VERIFICATION SUCCESSFUL` and one expecting
+`VERIFICATION FAILED` (`docs/agents/regression-tests.md`); flag a PR that adds
+only one.
+
 ## Key Review Focus Areas
 
 ### 1. Correctness & Safety

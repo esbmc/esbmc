@@ -122,6 +122,13 @@ then produce ambiguity errors at parse time.
 - Classes, member functions, member access control
 - Constructors and destructors, including default, copy and move forms
 - Static and non-static data members; default member initialisers
+- A member initialised from a prvalue of its own class (`C impl_ = C::make();`)
+  is built in place as that prvalue's result object, with no temporary copied
+  in and destroyed
+- A function-local static with a dynamic initialiser is initialised on the
+  first pass through its declaration, not before `main` ([stmt.dcl]/3)
+- Under `--std c++14` and earlier, the copy clang elides in `C c = C::make();`
+  and `return C(x);` is elided, as it is natively
 - Unions, including anonymous unions
 - `typeid` on a polymorphic glvalue reports the *dynamic* type, and the
   `type_info` name string is NUL-terminated
@@ -166,6 +173,9 @@ case. See [Limitations](/docs/c-cpp/limitations#constructor-and-destructor-order
 - Variable templates (C++14) and variable template declarations (C++17)
 - Class template argument deduction (CTAD)
 - Concepts and `requires` clauses (C++20)
+- Class-type non-type template arguments (`g<S{1}>()`, C++20)
+- Specialisations and overloads that differ only in a pointer-to-member type
+  (`f<int A::*>` and `f<long B::*>`) are kept apart
 
 ### Inheritance and polymorphism
 
@@ -187,6 +197,9 @@ case. See [Limitations](/docs/c-cpp/limitations#constructor-and-destructor-order
 - `new` / `delete` and `new[]` / `delete[]`
 - `new T[n]` runs `T`'s constructor on every element and `delete[]` runs its
   destructor; `new T[n]()` value-initialises them
+- A braced list after `new T[n]` builds each listed element in place and fills
+  the rest with clang's array filler, so `new C[3]{C(1)}` calls `C(1)` once and
+  `C()` twice, and `new int[2]{1, 2}` stores both values
 - An array of class objects with automatic storage destroys its elements at end
   of scope, in reverse index order and recursing through nested array types, as
   [class.dtor] requires
@@ -199,7 +212,9 @@ case. See [Limitations](/docs/c-cpp/limitations#constructor-and-destructor-order
   (`std::align_val_t`) and user-placement forms are not routed and keep the
   built-in path
 - Detection of dangling pointers, double `delete` and mismatched operators
-- Placement `new`, including the form without an initialiser
+- Placement `new`, including the form without an initialiser; the address is
+  evaluated once, before the initialiser, so `new (std::addressof(buf)) T(...)`
+  constructs into `buf`
 - `delete` dispatches through the virtual destructor slot; deleting through a
   base subobject whose destructor is not virtual is rejected
 
@@ -285,9 +300,9 @@ constructor is constrained so it does not hijack `vector<int>(3, 0)`.
 
 | Header | Notes |
 | --- | --- |
-| `<string>` | `(const char*, size_t)` range and fill constructors; length-aware `operator<`/`operator>`/`operator<=`/`operator>=` including free overloads against `const char*`; `const` `substr(pos, n)`; C++20 `starts_with`/`ends_with`; `at` throws `std::out_of_range`; `clear`, `find_last_not_of`; the full `sto*` family (`stoi`, `stol`, `stoll`, `stoul`, `stoull`, `stof`, `stod`, `stold`). The iterators carry their `iterator_traits` typedefs, `compare` takes its argument by const reference, and `operator+` accepts a `const CharT*`. `size`, `resize`, `max_size` and `rfind` agree with the standard, and the constructor and comparison loops run to a concrete trip count so they converge under a bound. [string.access] pairs `charT&` with `const charT&` for `at`, `front` and `back`, and C++17's non-const `data()` returns `charT*`, so writing through any of them parses |
+| `<string>` | `(const char*, size_t)` range and fill constructors; length-aware `operator<`/`operator>`/`operator<=`/`operator>=` including free overloads against `const char*`; `const` `substr(pos, n)`; C++20 `starts_with`/`ends_with`; the `u16string` and `u32string` typedefs; `at` throws `std::out_of_range`; `clear`, `find_last_not_of`; the full `sto*` family (`stoi`, `stol`, `stoll`, `stoul`, `stoull`, `stof`, `stod`, `stold`). The iterators carry their `iterator_traits` typedefs, `compare` takes its argument by const reference, and `operator+` accepts a `const CharT*`. `size`, `resize`, `max_size` and `rfind` agree with the standard, and the constructor and comparison loops run to a concrete trip count so they converge under a bound. [string.access] pairs `charT&` with `const charT&` for `at`, `front` and `back`, and C++17's non-const `data()` returns `charT*`, so writing through any of them parses |
 | `<string_view>` | An instantiation of `basic_string_view`, so `wstring_view` and friends name the same template. Search members, `string` → `string_view` conversion, `hash<string_view>` |
-| `<iostream>`, `<istream>`, `<ostream>`, `<ios>`, `<iosfwd>` | Standard stream objects, `ios::widen`/`narrow`, `ios::exceptions`, `ios::copyfmt`, and [ios.overview]'s member types so `std::ios::pos_type` names something. `<iosfwd>` declares the `basic_*` stream aliases and `basic_string` where [iosfwd.syn] puts them, so a translation unit including only `<iosfwd>` can name `std::basic_istream<char>`. `<iostream>` reaches `<exception>`, `<cstdlib>`, `<cctype>`, `<new>` and the two-value `std::min`/`std::max`, as libstdc++ and libc++ do |
+| `<iostream>`, `<istream>`, `<ostream>`, `<ios>`, `<iosfwd>` | Standard stream objects, `ios::widen`/`narrow`, `ios::exceptions`, `ios::copyfmt`, the `std::ws` manipulator (`is >> std::ws`), and [ios.overview]'s member types so `std::ios::pos_type` names something. `<iosfwd>` declares the `basic_*` stream aliases and `basic_string` where [iosfwd.syn] puts them, so a translation unit including only `<iosfwd>` can name `std::basic_istream<char>`. `<iostream>` reaches `<exception>`, `<cstdlib>`, `<cctype>`, `<new>` and the two-value `std::min`/`std::max`, as libstdc++ and libc++ do |
 | `<sstream>`, `<fstream>`, `<streambuf>`, `<iomanip>` | `ostringstream` accumulates into the buffer its `str()` reports; the string streams are templated on their character type and `streambuf` is an instantiation of `basic_streambuf`; `operator<<` is modelled for the built-in types; `<iomanip>` has `std::put_time`. `basic_streambuf` holds real get and put areas, so [streambuf.get.area]'s postconditions hold after `setg` and a derived buffer's `underflow`/`overflow` arithmetic runs over its own area rather than over nondeterministic pointers. `<fstream>` and `<istream>` declare the class templates [fstream.syn] and [istream.syn] specify, not only the `char` instantiations |
 | `<syncstream>` | C++23. The wrapper API only: `basic_syncbuf` and `basic_osyncstream` transfer no characters, since `basic_streambuf`'s `sputc`/`sputn`/`pubsync` are declared and not defined |
 | `<locale>` | |
@@ -307,7 +322,7 @@ members are `constexpr`, and `char_traits<char>` compares as `unsigned char`
 | --- | --- |
 | `<type_traits>` | Classification traits and the `_t` / `_v` forms, including `is_trivial`, `is_standard_layout`, `is_aggregate`, `is_assignable` and the copy/move/destructible variants, `remove_cvref`, `aligned_storage`, `invoke_result`, and the logical traits `conjunction` / `disjunction` / `negation`. Also `is_object`, `is_scalar`, `is_compound`, `is_fundamental`, `rank`, `add_cv`, `add_volatile`, `has_virtual_destructor`, `is_member_object_pointer`, `is_member_function_pointer`, `is_default_constructible`, `is_move_constructible` / `is_move_assignable`, and the `is_nothrow_*` and `is_trivially_*_constructible` families. `is_convertible` is defined by copy-initialization rather than `static_cast`, so an explicit constructor no longer makes it `true` ([meta.rel]). The `_t` aliases that were missing from [meta.trans] are there — `add_volatile_t`, `add_cv_t` and `add_rvalue_reference_t` alongside the traits themselves — and `remove_all_extents` is modelled, with `type_identity` gated on C++20 as P0887R1 specifies |
 | `<utility>` | Including `index_sequence_for` and C++23 `std::unreachable` |
-| `<functional>`, `<memory>`, `<initializer_list>` | `<functional>` has the transparent operation functors (`plus<>`, `less<>`, …), `std::reference_wrapper` with `ref`/`cref` and its call operator, `std::placeholders`, and a `std::function` whose call target is templated on its signature; `<memory>` has `std::allocate_shared`, a correct default-constructed `unique_ptr`, the `uninitialized_copy` / `uninitialized_fill` family, and an `allocator_traits` that works with a minimal allocator — `rebind_alloc`, the nothrow copy traits, and `construct`/`destroy` templated on the pointee |
+| `<functional>`, `<memory>`, `<initializer_list>` | `<functional>` has the transparent operation functors (`plus<>`, `less<>`, …), `std::reference_wrapper` with `ref`/`cref` and its call operator, `std::placeholders`, and a `std::function` whose call target is templated on its signature; `<memory>` has `std::allocate_shared`, a correct default-constructed `unique_ptr`, `shared_ptr<void>` and `unique_ptr<void, D>`, the `uninitialized_copy` / `uninitialized_fill` family, and an `allocator_traits` that works with a minimal allocator — `rebind_alloc`, the nothrow copy traits, and `construct`/`destroy` templated on the pointee |
 | `<tuple>` | `std::tie`, `std::ignore`, structured binding over a tuple, `tuple_size_v` |
 | `<optional>` | `emplace`, `swap`, `std::make_optional`; comparison and ordering against a bare value as well as another `optional` |
 | `<variant>`, `<any>` | `std::visit` calls the visitor on the currently held alternative; the converting constructor does not hijack copies |
@@ -390,6 +405,8 @@ does not have; and `jthread`.
 `<csignal>`, `<cstdalign>`, `<cstdarg>`, `<cstdbool>`, `<cstddef>`,
 `<cstdint>`, `<cstdio>`, `<cstdlib>`, `<cstring>`, `<ctgmath>`, `<ctime>`,
 `<cuchar>`, `<cwchar>` and `<cwctype>` are available.
+`<cstdio>` also declares POSIX `getline`, modelled as returning a fresh buffer
+of nondeterministic bytes read from the stream.
 
 `<csignal>` declares `signal` and `raise` with their C11 7.14 signatures in both
 namespaces, along with `sig_atomic_t` and the `SIG*` macros. The dispositions

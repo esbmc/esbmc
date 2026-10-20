@@ -4,6 +4,13 @@
 > `python_adjust` flip), whose G4 whole-corpus census cannot classify a test it
 > cannot run. Supersedes the diagnosis in
 > `scope-coupled-arith-assign-conversion.md` §19.2–§19.7.
+>
+> **Status at 2026-10-01 (`791ed8d1b8`): still open.** Both §1 programs give no
+> verdict on either adjuster path. The worklist loop has not changed since
+> #3471; §4's choice of bound has not been made and no issue tracks it. The
+> two census rows this was opened for, `class10` and `class12`, now finish on
+> both paths, so it no longer blocks those rows; any test that reaches the
+> model still hangs. `regression/python/list_eq_bounded` pins the bounded case.
 
 ## 1. The symptom, and what it is not
 
@@ -41,7 +48,7 @@ they are the reason the corpus looked healthy.
 
 ## 2. Why it diverges
 
-`__ESBMC_list_eq` (`src/c2goto/library/python/list.c:298`) walks an explicit
+`__ESBMC_list_eq` (`src/c2goto/library/python/list.c`, the `while (top > 0)` loop) walks an explicit
 worklist:
 
 ```c
@@ -70,7 +77,7 @@ unbounded unwinding for a program that has none.*
 
 The model already has the shape of the answer. Nested descent is bounded by
 `depth_limit`, and exceeding it is **reported** rather than silently truncated
-(`list.c:381-390`):
+(the `depth_limit` check in the same function):
 
 ```c
 if ((size_t)top >= depth_limit)

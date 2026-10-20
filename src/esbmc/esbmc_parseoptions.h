@@ -95,6 +95,7 @@ protected:
   /// goto_houdini_invariants.h.
   int do_houdini_strategy(optionst &options, goto_functionst &goto_functions);
   int do_ts_strategy(optionst &options, goto_functionst &goto_functions);
+  bool ts_strategy_requested() const;
 
   int do_context_bound_deepening(
     optionst &options,

@@ -22,6 +22,7 @@ CC_DIAGNOSTIC_POP()
 
 #include <ac_config.h>
 #include <clang-c-frontend/clang_c_convert.h>
+#include <clang-c-frontend/builtin_names.h>
 #include <clang-c-frontend/typecast.h>
 #include <irep2/irep2_utils.h>
 #include <util/arith/arith_tools.h>
@@ -410,6 +411,9 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   struct_union_typet t(c_tag);
   t.tag(name);
 
+  /* Struct not complete yet. Still need methods. */
+  t.incomplete(true);
+
   /* update location with that of the type's definition */
   get_location_from_decl(*rd_def, t.location());
 
@@ -438,9 +442,10 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   sym = context.find_symbol(id);
   assert(sym && "symbol disappeared from context during field conversion");
 
-  /* That recursion can also re-enter this very record and complete it (#2323).
-   * Completing it again would run the method pass a second time and add the
-   * vtable variable symbol twice, which aborts conversion (#7643). */
+  /* Recursive field conversion can re-enter this record and complete it.
+   * The incomplete flag is removed only after all fields and methods have
+   * been processed, so a complete type here means another invocation has
+   * already completed this type. */
   if (!holds_incomplete_record(sym->get_type()))
     return false;
 
@@ -454,6 +459,8 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
       sym->set_type(std::move(t));
       return true;
     }
+    // Struct is complete
+    t.remove(irept::a_incomplete);
     sym->set_type(std::move(t));
   }
 
@@ -495,14 +502,12 @@ bool clang_c_convertert::get_struct_union_class_methods_decls(
 
 /// A C++ function-local static whose initializer is not a constant runs it
 /// on the first pass through the declaration ([stmt.dcl]/3), so it must not be
-/// hoisted into static_lifetime_init. Arrays keep the hoisted form, and the
-/// IREP2 adjuster, which drops the declaration's marker, keeps it too.
+/// hoisted into static_lifetime_init. The IREP2 adjuster, which drops the
+/// declaration's marker, keeps the hoisted form.
 bool clang_c_convertert::has_dynamic_local_init(const clang::VarDecl &vd) const
 {
   return ASTContext->getLangOpts().CPlusPlus && vd.isStaticLocal() &&
-         vd.hasInit() && !vd.getType()->isArrayType() &&
-         !vd.getInit()->isConstantInitializer(
-           *ASTContext, vd.getType()->isReferenceType()) &&
+         vd.hasInit() && !vd.hasConstantInitialization() &&
          !config.options.get_bool_option("clang-cpp-irep2-adjust-only");
 }
 
@@ -636,6 +641,71 @@ void clang_c_convertert::add_init_guard(const symbolt &var)
   context.move_symbol_to_context(guard);
 }
 
+bool clang_c_convertert::snapshot_vla_sizes(
+  const clang::Decl &decl,
+  codet &dest)
+{
+  clang::QualType type;
+  if (const auto *vd = llvm::dyn_cast<clang::VarDecl>(&decl))
+    type = vd->getType();
+  else if (const auto *td = llvm::dyn_cast<clang::TypedefNameDecl>(&decl))
+    type = td->getUnderlyingType();
+  if (!current_block || type.isNull())
+    return false;
+
+  locationt loc;
+  get_location_from_decl(decl, loc);
+  const clang::Type *t = type.getTypePtr();
+  while (t)
+  {
+    t = t->getUnqualifiedDesugaredType();
+    if (const auto *ptr = llvm::dyn_cast<clang::PointerType>(t))
+    {
+      t = ptr->getPointeeType().getTypePtr();
+      continue;
+    }
+    const auto *arr = llvm::dyn_cast<clang::ArrayType>(t);
+    if (!arr)
+      break;
+    t = arr->getElementType().getTypePtr();
+
+    const auto *vla = llvm::dyn_cast<clang::VariableArrayType>(arr);
+    const clang::Expr *size = vla ? vla->getSizeExpr() : nullptr;
+    if (!size || vla_size_snapshots.count(size))
+      continue;
+
+    exprt value;
+    if (get_expr(*size, value))
+      return true;
+
+    const std::string path = loc.file().as_string();
+    symbolt &sym = anon_symbol.new_symbol(
+      context,
+      value.type(),
+      path + ":" + loc.get_line().as_string() + "$vla-size$");
+    get_default_symbol(
+      sym, get_modulename_from_path(path), value.type(), sym.name, sym.id, loc);
+    sym.file_local = true;
+    sym.lvalue = true;
+
+    code_declt decl(symbol_expr(sym));
+    decl.copy_to_operands(value);
+    decl.location() = loc;
+    dest.move_to_operands(decl);
+    vla_size_snapshots.emplace(size, symbol_expr(sym));
+  }
+  return false;
+}
+
+bool clang_c_convertert::get_vla_size(const clang::Expr &size, exprt &new_expr)
+{
+  auto snap = vla_size_snapshots.find(&size);
+  if (snap == vla_size_snapshots.end())
+    return get_expr(size, new_expr);
+  new_expr = snap->second;
+  return false;
+}
+
 const clang::Expr &
 clang_c_convertert::elided_copy_source(const clang::Expr &init)
 {
@@ -753,6 +823,45 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   return false;
 }
 
+bool clang_c_convertert::get_function_signature(
+  const clang::FunctionDecl &fd,
+  code_typet &type)
+{
+  if (get_type(fd.getReturnType(), type.return_type()))
+    return true;
+
+  if (fd.isVariadic())
+    type.make_ellipsis();
+
+  if (fd.isInlined())
+    type.inlined(true);
+
+  if (get_function_params(fd, type.arguments()))
+    return true;
+
+  // Check for __ESBMC_contract annotation
+  if (fd.hasAttrs())
+  {
+    for (const auto *attr : fd.getAttrs())
+    {
+      if (const auto *annot = llvm::dyn_cast<clang::AnnotateAttr>(attr))
+      {
+        if (annot->getAnnotation().str() == "__ESBMC_contract")
+        {
+          type.set("#annotated_contract", true);
+          break;
+        }
+      }
+    }
+  }
+
+  // Record the C++ exception specification (noexcept / dynamic throw(...)) as
+  // function-boundary metadata on the type. No-op for C.
+  annotate_exception_specification(fd, type);
+
+  return false;
+}
+
 bool clang_c_convertert::get_function(
   const clang::FunctionDecl &fd,
   exprt &new_expr)
@@ -784,18 +893,9 @@ bool clang_c_convertert::get_function(
   // This will be reset every time a function is parsed
   current_scope_var_num = 1;
 
-  // Build function's type
   code_typet type;
-
-  // Return type
-  if (get_type(fd.getReturnType(), type.return_type()))
+  if (get_function_signature(fd, type))
     return true;
-
-  if (fd.isVariadic())
-    type.make_ellipsis();
-
-  if (fd.isInlined())
-    type.inlined(true);
 
   locationt location_begin;
   get_location_from_decl(fd, location_begin);
@@ -817,32 +917,8 @@ bool clang_c_convertert::get_function(
                      fd.getStorageClass() == clang::SC_PrivateExtern;
   symbol.file_local = (fd.getStorageClass() == clang::SC_Static);
 
+  // Publish the function only after its parameter types are complete.
   symbolt &added_symbol = *context.move_symbol_to_context(symbol);
-
-  // We convert the parameters first so their symbol are added to context
-  // before converting the body, as they may appear on the function body
-  if (get_function_params(fd, type.arguments()))
-    return true;
-
-  // Check for __ESBMC_contract annotation
-  if (fd.hasAttrs())
-  {
-    for (const auto *attr : fd.getAttrs())
-    {
-      if (const auto *annot = llvm::dyn_cast<clang::AnnotateAttr>(attr))
-      {
-        if (annot->getAnnotation().str() == "__ESBMC_contract")
-        {
-          type.set("#annotated_contract", true);
-          break;
-        }
-      }
-    }
-  }
-
-  // Record the C++ exception specification (noexcept / dynamic throw(...)) as
-  // function-boundary metadata on the type. No-op for C.
-  annotate_exception_specification(fd, type);
 
   // A bodyless re-declaration must not clobber the type of a function that is
   // already defined. The definition's argument list carries the parameter
@@ -1238,7 +1314,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
     if (auto const *s = arr.getSizeExpr())
     {
       exprt size_expr;
-      if (get_expr(*s, size_expr))
+      if (get_vla_size(*s, size_expr))
         return true;
 
       typet subtype;
@@ -1591,6 +1667,14 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
 
     complex_typet t;
     t.set_base_type(elem_type);
+    // C11 6.2.5p13 gives a complex type its real type's alignment, which the
+    // target ABI decides (4 for double in an i386 struct) and alignment()
+    // cannot derive from the element.
+    t.set(
+      "alignment",
+      constant_exprt(
+        BigInt(ASTContext->getTypeAlignInChars(&ct).getQuantity()),
+        size_type()));
     new_type = t;
     break;
   }
@@ -2478,8 +2562,8 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     else
     {
       /* Clang failed, i.e., a dynamic offsetof, something like
-       * offsetof(struct S, member[idx]). We're building the equivalent of the
-       * manual offsetof() macro definition. Details below. */
+       * offsetof(struct S, member[idx]). We're building the equivalent of
+       * `(size_t)&((struct S *)0)->member[idx]`. Details below. */
 
       /* TODO: It would be good to put the expression we're constructing here
        *       into compute_pointer_offset(), e.g., already in the adjuster.
@@ -2639,6 +2723,12 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     typet type;
     clang::QualType qtype = function_call.getCallReturnType(*ASTContext);
+    // Sema types a custom-typechecked builtin's call itself: on an unsigned
+    // char, __sync_fetch_and_add calls the char-returning _1 variant.
+    if (
+      const unsigned id = function_call.getBuiltinCallee();
+      id && ASTContext->BuiltinInfo.hasCustomTypechecking(id))
+      qtype = function_call.getType();
     if (get_type(qtype, type))
       return true;
 
@@ -2649,7 +2739,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     for (const clang::Expr *arg : function_call.arguments())
     {
       exprt single_arg;
-      if (get_expr(*arg, single_arg))
+      if (get_expr(elided_copy_source(*arg), single_arg))
         return true;
 
       call.arguments().push_back(single_arg);
@@ -2725,11 +2815,17 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     {
       /* The underlying storage is automatic here, i.e., local. In order for
        * it to be recognized as being local in ESBMC, it requires a declaration,
-       * see, e.g., goto_programt::get_decl_identifiers(). So we'll add one. */
-      code_declt decl(new_expr);
-      decl.operands().push_back(initializer);
+       * see, e.g., goto_programt::get_decl_identifiers(). So we'll add one.
+       * It goes before the enclosing statement, which may be a loop or a
+       * labelled statement, so the object is initialised where the literal is
+       * evaluated, each time it is (C17 6.5.2.5p5). */
+      current_block->operands().push_back(code_declt(new_expr));
 
-      current_block->operands().push_back(decl);
+      side_effect_exprt assign("assign", t);
+      assign.copy_to_operands(new_expr, initializer);
+      exprt comma("comma", t);
+      comma.copy_to_operands(assign, new_expr);
+      new_expr = comma;
     }
     else
     {
@@ -3201,6 +3297,12 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
           elem_type = to_vector_type(t).subtype();
 
         gen_typecast(ns, init, elem_type);
+        // Unlike a braced list, this does not extend the lifetime of a
+        // temporary bound to a reference member ([class.temporary]/6);
+        // the cast keeps goto_convert from treating it as extended.
+        if (
+          init.id() == "address_of" && is_lvalue_or_rvalue_reference(elem_type))
+          init = typecast_exprt(init, elem_type);
         inits.operands().at(i) = init;
       }
     }
@@ -3299,7 +3401,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     for (auto it : declgroup)
     {
       exprt single_decl;
-      if (get_decl(*it, single_decl))
+      if (snapshot_vla_sizes(*it, decls) || get_decl(*it, single_decl))
         return true;
 
       decls.operands().push_back(single_decl);
@@ -3345,8 +3447,11 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::CaseStmt &case_stmt =
       static_cast<const clang::CaseStmt &>(stmt);
 
-    exprt value;
-    if (get_expr(*case_stmt.getLHS(), value))
+    exprt value, range_hi = nil_exprt();
+    if (
+      get_expr(*case_stmt.getLHS(), value) ||
+      (case_stmt.caseStmtIsGNURange() &&
+       get_expr(*case_stmt.getRHS(), range_hi)))
       return true;
 
     exprt sub_stmt;
@@ -3355,6 +3460,8 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     code_switch_caset switch_case;
     switch_case.case_op() = value;
+    if (range_hi.is_not_nil())
+      switch_case.case_range_hi() = range_hi;
 
     convert_expression_to_code(sub_stmt);
     switch_case.code() = to_code(sub_stmt);
@@ -4035,13 +4142,7 @@ bool clang_c_convertert::get_enum_value(
   assert(e);
 
   if (!e->getInitExpr())
-  {
-    new_expr = constant_exprt(
-      integer2binary(e->getInitVal().getSExtValue(), bv_width(int_type())),
-      integer2string(e->getInitVal().getSExtValue()),
-      int_type());
-    return false;
-  }
+    return get_APValue_expr(clang::APValue(e->getInitVal()), new_expr);
 
   if (get_expr(*e->getInitExpr(), new_expr))
     return true;
@@ -4136,6 +4237,24 @@ bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
   log_error("{}", oss.str());
   return true;
 }
+
+/// `__builtin_copysign` and the other `__builtin_` spellings of a <math.h>
+/// function have no body; the plain name has an operational model. Those
+/// that clang_c_adjust lowers by their own spelling keep it.
+bool clang_c_convertert::is_unlowered_math_builtin(
+  const std::string &name) const
+{
+  llvm::StringRef lib_name(name);
+  if (
+    is_name_matched_builtin(name) || compare_unscore_builtin(name, "nan") ||
+    !lib_name.consume_front("__builtin_"))
+    return false;
+
+  unsigned lib_id = ASTContext->Idents.get(lib_name).getBuiltinID();
+  return lib_id && llvm::StringRef(
+                     ASTContext->BuiltinInfo.getHeaderName(lib_id)) == "math.h";
+}
+
 void clang_c_convertert::rewrite_builtin_ref(
   const clang::Decl &d,
   std::string &name,
@@ -4159,8 +4278,10 @@ void clang_c_convertert::rewrite_builtin_ref(
     unsigned builtin_id = fd->getBuiltinID();
     if (
       builtin_id && ASTContext->BuiltinInfo.isLibFunction(builtin_id) &&
-      std::find(builtins_to_rewrite.begin(), builtins_to_rewrite.end(), name) !=
-        builtins_to_rewrite.end())
+      (std::find(
+         builtins_to_rewrite.begin(), builtins_to_rewrite.end(), name) !=
+         builtins_to_rewrite.end() ||
+       is_unlowered_math_builtin(name)))
     {
       boost::replace_all(name, "__builtin_", "");
       boost::replace_all(id, "__builtin_", "");
@@ -4892,8 +5013,10 @@ static bool atomic_has_value_operand(clang::AtomicExpr::AtomicOp op)
   {
   case clang::AtomicExpr::AO__c11_atomic_load:
   case clang::AtomicExpr::AO__atomic_load_n:
+#if CLANG_VERSION_MAJOR >= 20
   case clang::AtomicExpr::AO__atomic_test_and_set:
   case clang::AtomicExpr::AO__atomic_clear:
+#endif
     return false;
   default:
     return true;
@@ -5041,6 +5164,7 @@ bool clang_c_convertert::get_atomic_expr(
     name = "__atomic_nand_fetch";
     break;
 
+#if CLANG_VERSION_MAJOR >= 20
   case clang::AtomicExpr::AO__atomic_test_and_set:
     name = "__atomic_test_and_set";
     break;
@@ -5048,6 +5172,7 @@ bool clang_c_convertert::get_atomic_expr(
   case clang::AtomicExpr::AO__atomic_clear:
     name = "__atomic_clear";
     break;
+#endif
 
   default:
     log_error("Unknown Atomic expression");
@@ -5984,11 +6109,13 @@ bool clang_c_convertert::get_APValue_expr(
   case clang::APValue::Int:
   {
     const llvm::APSInt &Int = value.getInt();
-    int width = Int.getBitWidth();
-    assert(width <= 64);
-    int64_t v = Int.getSExtValue();
-    new_expr = constant_exprt(
-      integer2binary(v, width), integer2string(v), signedbv_typet(width));
+    const unsigned width = Int.getBitWidth();
+    llvm::SmallString<40> digits;
+    Int.toString(digits, 10);
+    const BigInt v = string2integer(std::string(digits));
+    const typet t = Int.isUnsigned() ? typet(unsignedbv_typet(width))
+                                     : typet(signedbv_typet(width));
+    new_expr = constant_exprt(integer2binary(v, width), integer2string(v), t);
     break;
   }
 

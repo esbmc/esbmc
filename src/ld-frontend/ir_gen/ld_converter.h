@@ -46,9 +46,9 @@ private:
   std::map<std::string, symbol_exprt> edge_shadows_;
 
   typet bool_t() const;
-  typet int32_t_() const;
+  typet dint_type() const;
   typet type_of_kind(VarKind kind) const; // IEC 61131-3 type -> ESBMC typet
-  exprt int_const(long long value) const;
+  exprt int_const(long long value, const typet &type) const;
 
   symbol_exprt declare_variable(const VarDecl &v);
   symbol_exprt declare_bool_shadow(const std::string &id);

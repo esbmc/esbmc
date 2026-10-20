@@ -1,0 +1,6 @@
+CORE
+main.c
+--report-unreached-claims
+^VERIFICATION SUCCESSFUL$
+^\s+PASSED\s+\[main\.assertion\.1\]\s+line\s+6\s+assertion 0 \(never reached\)$
+^\*\* 0 of 2 properties failed, 2 passed \(1 never reached\)$

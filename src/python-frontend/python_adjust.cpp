@@ -740,10 +740,9 @@ void python_adjust::adjust_expr(expr2tc &expr)
       // Reproduce legacy's two steps at this seam -- decay the literal to
       // &lit[0], then cast that pointer to the target array type -- which is
       // the shape clang_c_adjust emits and the only one the working default
-      // path produces. Phase 1 of
-      // docs/roadmap/scope-array-assignment-conversion.md; its Phase 0
-      // established that the conversion is the defect, not the literal or the
-      // char[0] declaration that every passing variant also carries.
+      // path produces (#6700). Measuring first established that the
+      // conversion is the defect, not the literal or the char[0] declaration
+      // that every passing variant also carries.
       const type2tc &elem = to_array_type(a.source->type).subtype;
       expr2tc decayed =
         address_of2tc(elem, index2tc(elem, a.source, gen_zero(index_type2())));

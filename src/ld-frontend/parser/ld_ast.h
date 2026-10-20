@@ -183,8 +183,12 @@ struct VarDecl
   VarKind kind = VarKind::BOOL;
   bool is_input = false;
   bool is_output = false;
+  // Writable from outside the program (program VAR_IN_OUT or VAR_EXTERNAL,
+  // %M memory): sampled each scan unless --ld-closed-world.
+  bool shared = false;
   bool synthesized =
     false; // invented by the graphical resolver (pins, power flow)
+  std::string derived_type; // type name when declared <derived>, else empty
   // Initial value for numeric variables. Graphical LD wires FB presets from
   // <inVariable> literals rather than declared variables, so the synthesised
   // preset symbol carries the literal here.
@@ -204,7 +208,7 @@ struct VarDecl
 struct FBVarDecl
 {
   std::string name;
-  VarKind kind = VarKind::INT; // numeric default for an untyped FB variable
+  VarKind kind = VarKind::DINT; // numeric default for an untyped FB variable
 };
 
 struct UserFBDef

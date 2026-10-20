@@ -63,12 +63,6 @@ public:
   /** Mirrors reachability_treet::cs_bound_pruned; valid after start_bmc(). */
   bool cs_bound_pruned = false;
 
-  /// Whether a satisfiable answer rests only on claims downstream of a
-  /// --loop-invariant-check havoc, so no model witnesses a state the program
-  /// can reach (issue #7480). report_violation maps such a run to UNKNOWN;
-  /// a driver that defers the verdict must ask this rather than re-derive it.
-  bool violation_is_abstraction_only() const;
-
   /// Emit the verdict for a satisfiable run: FAILED, or UNKNOWN when every
   /// violated claim was abstraction-derived (issue #7480). Public so a driver
   /// that suppressed the global verdict can emit it once its own guards have
@@ -79,9 +73,14 @@ public:
   virtual smt_resultt run(std::shared_ptr<symex_target_equationt> &eq);
   virtual ~bmct();
 
+  /// Whether every violation found refutes only the --loop-invariant-check
+  /// abstraction, so the run neither refutes nor proves the program (#7480).
+  bool violates_only_the_abstraction() const;
+
 protected:
   const contextt &context;
   namespacet ns;
+  const goto_functionst &program;
 
   std::unique_ptr<smt_convt> runtime_solver;
   std::unique_ptr<reachability_treet> symex;
@@ -230,6 +229,8 @@ private:
   /// the report covers the whole program rather than only those properties
   /// some phase happened to reach a verdict on (discussion #7023).
   void seed_property_verdicts(const symex_target_equationt &eq) const;
+  /// Records each assertion of the program that no step of \p eq raised.
+  void seed_unreached_claims(const symex_target_equationt &eq) const;
 
   /// Record the verdict a satisfiable answer earns for one claim: Failed, or
   /// Unknown when the model witnesses only the invariant abstraction rather

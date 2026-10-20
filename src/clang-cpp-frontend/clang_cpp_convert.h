@@ -5,6 +5,7 @@
 #define __STDC_FORMAT_MACROS
 
 #include <clang-c-frontend/clang_c_convert.h>
+#include <optional>
 
 class clang_cpp_convertert : public clang_c_convertert
 {
@@ -41,6 +42,10 @@ protected:
   bool get_type(const clang::Type &the_type, typet &new_type) override;
 
   bool get_method(const clang::CXXMethodDecl &md, exprt &new_expr);
+
+  bool get_method_declaration(
+    const clang::CXXMethodDecl &md,
+    const symbolt *&symbol);
 
   void annotate_exception_specification(
     const clang::FunctionDecl &fd,
@@ -182,6 +187,82 @@ protected:
   bool
   build_destructor_chain(const clang::CXXDestructorDecl &dd, code_blockt &body);
 
+public:
+  /*
+   * The destructor calls of one subobject of a class, and the subobject's
+   * position in construction order: the direct non-virtual bases, then the
+   * members, numbered from 0.
+   */
+  struct subobject_destructort
+  {
+    std::size_t position;
+    code_blockt calls;
+  };
+
+protected:
+  const this_mapt::mapped_type &
+  method_this(const clang::CXXMethodDecl &md) const;
+  const symbolt *nontrivial_destructor(const clang::CXXRecordDecl *rec);
+  bool member_destructor(
+    const clang::FieldDecl &field,
+    const exprt &deref,
+    code_blockt &calls);
+  code_function_callt base_destructor(
+    const symbolt &sym,
+    const clang::CXXRecordDecl &base,
+    const clang::CXXMethodDecl &md);
+
+  /*
+   * The members and direct non-virtual bases of md's class whose destructor
+   * is non-trivial, in destruction order, with `this` taken from md.
+   */
+  bool subobject_destructors(
+    const clang::CXXMethodDecl &md,
+    std::vector<subobject_destructort> &out);
+
+  /*
+   * Whether this translation unit's own code throws or catches. If not, no
+   * constructor gets the handler that unwinds its subobjects, so the program
+   * stays out of exception lowering and pays nothing for it.
+   */
+  std::optional<bool> uses_exceptions;
+  bool user_code_uses_exceptions();
+
+  /*
+   * try { tried } catch (...) { handler; throw; }
+   */
+  codet rethrowing_catch(const code_blockt &tried, code_blockt handler);
+
+  /*
+   * Run cd's class destructor when the body of the delegating constructor cd,
+   * which starts at body_start in body, exits by an exception.
+   */
+  bool destroy_object_on_body_unwind(
+    const clang::CXXConstructorDecl &cd,
+    std::size_t body_start,
+    code_blockt &body);
+
+  /*
+   * Destroy the subobjects a constructor has built when an exception leaves
+   * it ([except.ctor]/3), or a delegating constructor's object when its body
+   * throws ([except.ctor]/4). starts[i] is where the code of cd's i-th
+   * initializer begins in body, and starts.back() where its own body does.
+   */
+  bool unwind_constructed_subobjects(
+    const clang::CXXConstructorDecl &cd,
+    const std::vector<std::size_t> &starts,
+    code_blockt &body);
+
+  /*
+   * Put a constructor's converted initializers at the start of its body.
+   */
+  bool insert_constructor_initializers(
+    const clang::CXXConstructorDecl &cd,
+    exprt::operandst &initializers,
+    std::vector<std::size_t> starts,
+    const symbolt *array_init_sym,
+    code_blockt &body);
+
   /*
    * The `this` a base destructor is called with: the address of the derived
    * object's base subobject, not the derived object itself.
@@ -268,6 +349,12 @@ protected:
   void annotate_ctor_dtor_rtn_type(
     const clang::CXXMethodDecl &cxxmdd,
     typet &rtn_type);
+
+  /*
+   * A reference to the ctor or dtor md, with its `this` parameter, whether or
+   * not md has been converted yet.
+   */
+  bool get_ctor_dtor_ref(const clang::CXXMethodDecl &md, exprt &new_expr);
   bool is_copy_or_move_ctor(const clang::DeclContext &dcxt);
   bool is_defaulted_ctor(const clang::CXXMethodDecl &md);
 
@@ -387,11 +474,17 @@ protected:
   static struct_typet::componentt
   rtti_name_component(const irep_idt &vtable_type_id);
   /* The single spelling of a type used as typeid identity; see #6310. */
-  static std::string rtti_type_name(const clang::QualType &qtype);
-  static std::string rtti_type_name(const clang::CXXRecordDecl &rd);
+  std::string rtti_type_name(const clang::QualType &qtype);
+  std::string rtti_type_name(const clang::CXXRecordDecl &rd);
+  exprt typeid_object(
+    const exprt &value,
+    const std::string &type_name,
+    const clang::Stmt &stmt,
+    bool dynamic);
   // if a class/struct has vptr component, it needs to be initialized in ctor
   bool has_vptr_component = false;
   std::string thunk_prefix = "thunk::";
+  std::string vcall_prefix = "virtual_call::";
   using function_switch = std::map<irep_idt, exprt>;
   using switch_table = std::map<irep_idt, function_switch>;
   using overriden_map = std::map<std::string, const clang::CXXMethodDecl &>;
@@ -662,28 +755,37 @@ protected:
    * Get the vtable poitner dereferencing for VFT bound MemberExpr
    *
    * Params:
-   *  - member: the method to which this MemberExpr refers
+   *  - md: the method to which this MemberExpr refers
    *  - new_expr: ESBMC IR to represent X@Vtable_ptr dereferencing as in
    * `x->X@vtable_ptr->F`
    *  - base_deref: the base dereferencing expression incorporated in vtable
    * pointer dereferencing expression
    */
   void get_vft_binding_expr_vtable_ptr(
-    const clang::MemberExpr &member,
+    const clang::CXXMethodDecl &md,
     exprt &new_expr,
     const exprt &base_deref);
   /*
    * Get the Function for VFT bound MemberExpr
    *
    * Params:
-   *  - member: the method to which this MemberExpr refers
+   *  - md: the method to which this MemberExpr refers
    *  - new_expr: ESBMC IR to represent F in `x->X@vtable_ptr->F`
    *  - vtable_ptr_deref: the vtable pointer dereferencing expression
    */
   bool get_vft_binding_expr_function(
-    const clang::MemberExpr &member,
+    const clang::CXXMethodDecl &md,
     exprt &new_expr,
     const exprt &vtable_ptr_deref);
+  /*
+   * Get the function a pointer to the virtual member function md points to
+   */
+  bool get_virtual_member_function_pointer(
+    const clang::CXXMethodDecl &md,
+    exprt &new_expr);
+  bool get_unary_operator_expr(
+    const clang::UnaryOperator &uniop,
+    exprt &new_expr) override;
 
   bool is_aggregate_type(const clang::QualType &q_type) override;
   /*
@@ -715,6 +817,13 @@ protected:
     const clang::ConditionalOperator &ternary,
     exprt &new_expr,
     bool &elided);
+
+  bool get_new_storage(const clang::CXXNewExpr &ne, exprt &new_expr);
+  bool get_dealloc_function(const clang::CXXDeleteExpr &de, exprt &new_expr);
+  bool get_align_val(
+    const clang::QualType &type,
+    const clang::ParmVarDecl &param,
+    exprt &align);
 
   /* Lower a non-allocating placement new to
    * comma(<initialize *(T*)place>, (T*)place); a side-effecting place is

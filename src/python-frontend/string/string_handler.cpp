@@ -8,9 +8,11 @@
 #include <python-frontend/string/string_handler.h>
 #include <algorithm>
 #include <charconv>
+#include <optional>
 #include <python-frontend/string/string_handler_utils.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/exception/python_exception_handler.h>
+#include <python-frontend/function_call/expr.h>
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/tuple/tuple_handler.h>
@@ -37,13 +39,13 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <iomanip>
 #include <limits>
 #include <optional>
+#include <set>
 #include <functional>
-#include <sstream>
 #include <stdexcept>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 using namespace python_expr;
@@ -304,78 +306,160 @@ static int count_name_assignments_in_node(
   return count;
 }
 
-// Returns true if `var_name` is mutated in place anywhere within `node`: an
-// in-place list method call (append/extend/insert/remove/pop/clear/sort/
-// reverse) or a subscript store (`var_name[i] = ...`). str.join uses this to
-// decide whether the static fold of a list variable's initializer is still
-// valid: once the list is mutated, the declaration initialiser no longer
-// reflects the runtime contents (e.g. `new_lst = []; new_lst.append(w)` folds
-// to "", #5163), so the join must go through the runtime model instead.
-// Conservative by design -- a false "mutated" only costs the (correct)
-// runtime dispatch, never correctness.
-static bool
-list_var_is_mutated(const nlohmann::json &node, const std::string &var_name)
+static bool is_name_node(const nlohmann::json &node, const std::string &id)
 {
-  if (!node.is_object() && !node.is_array())
-    return false;
+  return node.is_object() && node.contains("_type") &&
+         node["_type"] == "Name" && node.contains("id") && node["id"] == id;
+}
 
-  if (node.is_object() && node.contains("_type"))
+struct list_use_scan
+{
+  const std::string &var_name;
+  unsigned stores = 0;
+  // Reads of var_name that can neither change the list nor hand it to other
+  // code, keyed by address in the AST being scanned.
+  std::unordered_set<const nlohmann::json *> safe_reads;
+};
+
+static void mark_if_list_name(const nlohmann::json &node, list_use_scan &scan)
+{
+  if (is_name_node(node, scan.var_name))
+    scan.safe_reads.insert(&node);
+}
+
+static void
+mark_safe_call_reads(const nlohmann::json &call, list_use_scan &scan)
+{
+  static const std::set<std::string> pure_methods = {"count", "index", "copy"};
+  static const std::set<std::string> pure_builtins = {
+    "len",
+    "list",
+    "tuple",
+    "set",
+    "sorted",
+    "str",
+    "min",
+    "max",
+    "sum",
+    "any",
+    "all",
+    "enumerate",
+    "reversed",
+    "print"};
+
+  const auto &func = call["func"];
+  bool args_safe = false;
+  if (func["_type"] == "Attribute")
   {
-    const std::string type = node["_type"].get<std::string>();
-
-    // <var_name>.<mutator>(...): in-place list mutators
-    if (type == "Call" && node.contains("func"))
-    {
-      const auto &func = node["func"];
-      if (
-        func.contains("_type") && func["_type"] == "Attribute" &&
-        func.contains("attr") && func.contains("value") &&
-        func["value"].contains("_type") && func["value"]["_type"] == "Name" &&
-        func["value"].contains("id") && func["value"]["id"] == var_name)
-      {
-        static const std::array<const char *, 8> mutators = {
-          {"append",
-           "extend",
-           "insert",
-           "remove",
-           "pop",
-           "clear",
-           "sort",
-           "reverse"}};
-        const std::string attr = func["attr"].get<std::string>();
-        for (const char *m : mutators)
-          if (attr == m)
-            return true;
-      }
-    }
-
-    // <var_name>[i] = ...: subscript store
-    if (type == "Assign" && node.contains("targets"))
-    {
-      for (const auto &tgt : node["targets"])
-        if (
-          tgt.contains("_type") && tgt["_type"] == "Subscript" &&
-          tgt.contains("value") && tgt["value"].contains("_type") &&
-          tgt["value"]["_type"] == "Name" && tgt["value"].contains("id") &&
-          tgt["value"]["id"] == var_name)
-          return true;
-    }
+    const std::string attr = func["attr"].get<std::string>();
+    if (pure_methods.count(attr))
+      mark_if_list_name(func["value"], scan);
+    args_safe = attr == "join";
   }
+  else if (func["_type"] == "Name")
+    args_safe = pure_builtins.count(func["id"].get<std::string>()) > 0;
 
+  if (args_safe)
+    for (const auto &arg : call["args"])
+      mark_if_list_name(arg, scan);
+}
+
+static void
+mark_safe_list_reads(const nlohmann::json &node, list_use_scan &scan)
+{
+  const std::string type = node["_type"].get<std::string>();
+  if (type == "Call" && node.contains("func") && node.contains("args"))
+    mark_safe_call_reads(node, scan);
+  else if (
+    type == "Subscript" && node.contains("ctx") &&
+    node["ctx"]["_type"] == "Load")
+    mark_if_list_name(node["value"], scan);
+  else if (type == "For" || type == "AsyncFor" || type == "comprehension")
+    mark_if_list_name(node["iter"], scan);
+  else if (type == "Compare")
+  {
+    mark_if_list_name(node["left"], scan);
+    for (const auto &cmp : node["comparators"])
+      mark_if_list_name(cmp, scan);
+  }
+}
+
+static bool declares_list_name_outer(
+  const nlohmann::json &node,
+  const std::string &var_name)
+{
+  return (node["_type"] == "Global" || node["_type"] == "Nonlocal") &&
+         std::find(node["names"].begin(), node["names"].end(), var_name) !=
+           node["names"].end();
+}
+
+// Returns true if the list bound to `scan.var_name` may hold something other
+// than its initialiser when it is read: the name is bound more than once, or
+// some read of it can mutate the list or let another name or a callee reach
+// it (`ys = xs; ys.append(..)`, #8422). str.join folds a list variable from
+// its initialiser only when this is false. Conservative by design: a false
+// "may change" only costs the (correct) runtime dispatch.
+static bool list_var_may_change(const nlohmann::json &node, list_use_scan &scan)
+{
   if (node.is_array())
   {
     for (const auto &elem : node)
-      if (list_var_is_mutated(elem, var_name))
+      if (list_var_may_change(elem, scan))
         return true;
+    return false;
   }
-  else if (node.is_object())
-  {
-    for (const auto &item : node.items())
-      if (list_var_is_mutated(item.value(), var_name))
-        return true;
-  }
+  if (!node.is_object() || !node.contains("_type"))
+    return false;
 
+  if (is_name_node(node, scan.var_name))
+  {
+    if (node.contains("ctx") && node["ctx"]["_type"] == "Store")
+      return ++scan.stores > 1;
+    return scan.safe_reads.count(&node) == 0;
+  }
+  if (declares_list_name_outer(node, scan.var_name))
+    return true;
+
+  mark_safe_list_reads(node, scan);
+  for (const auto &item : node.items())
+    if (list_var_may_change(item.value(), scan))
+      return true;
   return false;
+}
+
+static bool
+list_var_may_change(const std::string &var_name, python_converter &converter)
+{
+  list_use_scan scan{var_name, 0, {}};
+  return list_var_may_change(converter.get_ast_json()["body"], scan);
+}
+
+bool is_list_or_tuple_literal(const nlohmann::json &node)
+{
+  return node.contains("_type") &&
+         (node["_type"] == "List" || node["_type"] == "Tuple");
+}
+
+bool is_none_constant(const nlohmann::json &node)
+{
+  return node.value("_type", "") == "Constant" && node.contains("value") &&
+         node["value"].is_null();
+}
+
+// A char-typed value is a 1-char str, and a value of unknown type may still
+// hold a str at run time, so only these are known to make join() raise.
+bool is_non_str_join_item(const nlohmann::json &elem, const typet &type)
+{
+  return is_none_constant(elem) || type.is_bool() || type.is_floatbv() ||
+         (type_utils::is_integer_type(type) && !type_utils::is_char_type(type));
+}
+
+bool is_nonempty_constants(const nlohmann::json &elements)
+{
+  return !elements.empty() &&
+         std::all_of(elements.begin(), elements.end(), [](const auto &elem) {
+           return elem.value("_type", "") == "Constant";
+         });
 }
 
 } // namespace
@@ -649,6 +733,73 @@ exprt string_handler::build_fstring_conversion(
   return make_char_array_expr(chars, string_type);
 }
 
+namespace
+{
+// Default length used for nondeterministic strings when the user has
+// not provided an explicit value via --nondet-str-length.
+constexpr int DEFAULT_NONDET_STR_LENGTH = 16;
+
+int get_nondet_str_length()
+{
+  std::string opt_value = config.options.get_option("nondet-str-length");
+  if (!opt_value.empty())
+  {
+    try
+    {
+      int length = std::stoi(opt_value);
+      if (length > 0)
+        return length;
+    }
+    catch (...)
+    {
+    }
+  }
+  return DEFAULT_NONDET_STR_LENGTH;
+}
+} // namespace
+
+// +1 for the NUL: --nondet-str-length N promises len() can reach N (#7377).
+int string_handler::nondet_str_buffer_size()
+{
+  const int length = get_nondet_str_length();
+  return length < std::numeric_limits<int>::max() ? length + 1 : length;
+}
+
+exprt string_handler::build_nondet_string(const locationt &location)
+{
+  const int max_str_length = nondet_str_buffer_size();
+
+  typet char_array_type =
+    array_typet(char_type(), from_integer(max_str_length, size_type()));
+
+  symbolt &nondet_str_symbol = converter_.create_tmp_symbol(
+    location, "$nondet_str$", char_array_type, exprt());
+
+  code_declt decl(symbol_expr(nondet_str_symbol));
+  decl.location() = location;
+  converter_.add_instruction(decl);
+
+  exprt nondet_value("sideeffect", char_array_type);
+  nondet_value.statement("nondet");
+
+  code_assignt nondet_assign(symbol_expr(nondet_str_symbol), nondet_value);
+  nondet_assign.location() = location;
+  converter_.add_instruction(nondet_assign);
+
+  // Ensure null terminator at the last position
+  exprt last_elem = build_index(
+    symbol_expr(nondet_str_symbol),
+    from_integer(max_str_length - 1, size_type()));
+  code_assignt null_assign(last_elem, from_integer(0, char_type()));
+  null_assign.location() = location;
+  converter_.add_instruction(null_assign);
+
+  // Return address of first element: &arr[0] which is char*
+  exprt first_elem =
+    build_index(symbol_expr(nondet_str_symbol), from_integer(0, size_type()));
+  return build_address_of(first_elem);
+}
+
 exprt string_handler::build_nondet_string_fallback(const locationt &location)
 {
   // Sound over-approximation when a str.*() handler cannot extract a
@@ -690,23 +841,7 @@ exprt string_handler::build_nondet_string_fallback(const locationt &location)
     return nondet;
   }
 
-  symbolt &tmp =
-    converter_.create_tmp_symbol(location, "$nondet_str$", ptr_type, exprt());
-
-  code_declt decl(symbol_expr(tmp));
-  decl.location() = location;
-  converter_.add_instruction(decl);
-
-  side_effect_expr_nondett nondet(ptr_type);
-  nondet.location() = location;
-
-  code_assignt assign(symbol_expr(tmp), nondet);
-  assign.location() = location;
-  converter_.add_instruction(assign);
-
-  exprt result = symbol_expr(tmp);
-  result.location() = location;
-  return result;
+  return build_nondet_string(location);
 }
 
 BigInt string_handler::get_string_size(const exprt &expr)
@@ -782,9 +917,9 @@ std::string string_handler::float_to_string(
   std::size_t width,
   int precision)
 {
-  // std::pow/std::round and the ostream conversion below honour the host FP
-  // rounding mode, which the pipeline can leave non-default; pin FE_TONEAREST
-  // so the decimal fold matches CPython regardless of the host's mode.
+  // snprintf honours the host FP rounding mode, which the pipeline can leave
+  // non-default; pin FE_TONEAREST so the decimal fold matches CPython
+  // regardless of the host's mode.
   const host_rounding_mode rounding_guard(FE_TONEAREST);
   double val = 0.0;
 
@@ -815,13 +950,16 @@ std::string string_handler::float_to_string(
     throw std::runtime_error("Invalid float bit width");
   }
 
-  // Use proper rounding to avoid IEEE 754 precision issues
-  double multiplier = std::pow(10.0, precision);
-  double rounded = std::round(val * multiplier) / multiplier;
-
-  std::ostringstream oss;
-  oss << std::fixed << std::setprecision(precision) << rounded;
-  return oss.str();
+  // CPython rounds the exact binary value half-to-even, as printf does:
+  // f"{0.125:.2f}" is "0.12" and f"{2.675:.2f}" is "2.67".
+  if (std::isnan(val))
+    return "nan";
+  const int n = std::snprintf(nullptr, 0, "%.*f", precision, val);
+  if (n < 0)
+    throw std::runtime_error("float formatting failed");
+  std::string out(static_cast<std::size_t>(n), '\0');
+  std::snprintf(&out[0], out.size() + 1, "%.*f", precision, val);
+  return out;
 }
 
 std::string string_handler::cpython_float_str(double d)
@@ -989,7 +1127,7 @@ exprt string_handler::apply_format_specification(
     if (v.is_symbol())
     {
       const symbolt *sym =
-        find_cached_symbol(to_symbol_expr(v).get_identifier().as_string());
+        find_foldable_symbol(to_symbol_expr(v).get_identifier().as_string());
       if (sym && !sym->get_value().is_nil())
         v = sym->get_value();
     }
@@ -1058,7 +1196,7 @@ exprt string_handler::apply_format_specification(
     exprt fmt_expr = expr;
     if (fmt_expr.is_symbol())
     {
-      const symbolt *sym = find_cached_symbol(
+      const symbolt *sym = find_foldable_symbol(
         to_symbol_expr(fmt_expr).get_identifier().as_string());
       if (sym && !sym->get_value().is_nil())
       {
@@ -1128,7 +1266,7 @@ exprt string_handler::apply_format_specification(
     if (v.is_symbol())
     {
       const symbolt *sym =
-        find_cached_symbol(to_symbol_expr(v).get_identifier().as_string());
+        find_foldable_symbol(to_symbol_expr(v).get_identifier().as_string());
       if (sym && !sym->get_value().is_nil())
         v = sym->get_value();
     }
@@ -1153,7 +1291,7 @@ exprt string_handler::apply_format_specification(
     if (v.is_symbol())
     {
       const symbolt *sym =
-        find_cached_symbol(to_symbol_expr(v).get_identifier().as_string());
+        find_foldable_symbol(to_symbol_expr(v).get_identifier().as_string());
       if (sym && !sym->get_value().is_nil())
         v = sym->get_value();
     }
@@ -1232,7 +1370,7 @@ exprt string_handler::apply_format_specification(
           {
             const symbol_exprt &sym_expr = to_symbol_expr(expr);
             const symbolt *symbol =
-              find_cached_symbol(sym_expr.get_identifier().as_string());
+              find_foldable_symbol(sym_expr.get_identifier().as_string());
 
             if (symbol && symbol->get_value().is_constant())
               float_bits = &symbol->get_value().value().as_string();
@@ -1284,6 +1422,41 @@ exprt string_handler::apply_format_specification(
     }
   }
 
+  return format_runtime_value(expr, format);
+}
+
+// The precision of a bare "f" or ".<digits>f" spec of at most 15 digits.
+static std::optional<long long> fixed_point_precision(const std::string &format)
+{
+  if (format == "f")
+    return 6;
+  if (
+    format.size() < 3 || format.size() > 4 || format.front() != '.' ||
+    format.back() != 'f')
+    return std::nullopt;
+  const std::string digits = format.substr(1, format.size() - 2);
+  if (!std::all_of(digits.begin(), digits.end(), [](unsigned char c) {
+        return std::isdigit(c);
+      }))
+    return std::nullopt;
+  const long long precision = std::stoll(digits);
+  return precision <= 15 ? std::optional<long long>(precision) : std::nullopt;
+}
+
+exprt string_handler::format_runtime_value(
+  const exprt &expr,
+  const std::string &format)
+{
+  const std::optional<long long> precision = fixed_point_precision(format);
+  symbolt *fixed_symbol =
+    find_cached_c_function_symbol("c:@F@__python_float_to_fixed_str");
+  if (expr.type().is_floatbv() && precision && fixed_symbol)
+    return build_call_expr(
+      *fixed_symbol,
+      gen_pointer_type(char_type()),
+      {build_typecast(expr, double_type()),
+       from_integer(*precision, long_long_int_type())});
+
   // Any other spec (e.g. "x", ",", combined width+precision) changes the
   // rendered text; folding to the unformatted value would be a wrong value
   // that can satisfy a false assertion. Fall back to a sound nondet string.
@@ -1304,6 +1477,96 @@ exprt string_handler::make_char_array_expr(
   return arr;
 }
 
+exprt string_handler::char_to_string(const exprt &expr)
+{
+  const typet str_type = type_handler_.build_array(char_type(), 2);
+  if (expr.is_constant())
+    return make_char_array_expr(
+      {static_cast<unsigned char>(
+         binary2integer(expr.value().as_string(), true).to_int64()),
+       '\0'},
+      str_type);
+  symbolt &tmp = converter_.create_tmp_symbol(
+    expr.location(), "$char_to_str$", str_type, exprt());
+  const exprt str = build_symbol(tmp);
+  converter_.add_instruction(code_declt(str));
+  converter_.add_instruction(
+    code_assignt(build_index(str, from_integer(0, size_type())), expr));
+  converter_.add_instruction(code_assignt(
+    build_index(str, from_integer(1, size_type())), gen_zero(char_type())));
+  return str;
+}
+
+/// The str of a constant int, float or bool, or nil for any other constant.
+exprt string_handler::constant_to_string(const exprt &expr)
+{
+  const typet &t = expr.type();
+  if (type_utils::is_integer_type(t))
+  {
+    BigInt value = binary2integer(expr.value().as_string(), t.is_signedbv());
+    std::string str_value = std::to_string(value.to_int64());
+
+    typet string_type =
+      type_handler_.build_array(char_type(), str_value.size() + 1);
+    std::vector<unsigned char> chars(str_value.begin(), str_value.end());
+    chars.push_back('\0'); // null terminator
+
+    return make_char_array_expr(chars, string_type);
+  }
+  else if (t.is_floatbv())
+  {
+    // Fold to CPython's shortest round-trip repr. Only a 64-bit double with a
+    // concrete value is rendered; a 32-bit float or an empty (nondet) value
+    // stays a sound nondet string.
+    std::optional<std::string> folded;
+    if (!expr.value().empty() && bv_width(t) == 64)
+    {
+      ieee_floatt f;
+      f.from_expr(to_constant_expr(expr));
+      folded = cpython_float_str(f.to_double());
+    }
+    if (!folded)
+      return build_nondet_string_fallback(expr.location());
+
+    typet string_type =
+      type_handler_.build_array(char_type(), folded->size() + 1);
+    std::vector<unsigned char> chars(folded->begin(), folded->end());
+    chars.push_back('\0');
+
+    return make_char_array_expr(chars, string_type);
+  }
+  else if (t.is_bool())
+  {
+    // Convert boolean to string
+    bool value = expr.is_true();
+    std::string str_value = value ? "True" : "False";
+
+    typet string_type =
+      type_handler_.build_array(char_type(), str_value.size() + 1);
+    std::vector<unsigned char> chars(str_value.begin(), str_value.end());
+    chars.push_back('\0');
+
+    return make_char_array_expr(chars, string_type);
+  }
+  return nil_exprt();
+}
+
+/// A str symbol itself, the str of a foldable constant value, or nil.
+exprt string_handler::symbol_to_string(const exprt &expr)
+{
+  const symbolt *symbol = find_cached_symbol(expr.identifier().as_string());
+  if (symbol == nullptr)
+    return nil_exprt();
+  if (
+    symbol->get_type().is_array() &&
+    symbol->get_type().subtype() == char_type())
+    return expr;
+  const symbolt *foldable = find_foldable_symbol(expr.identifier().as_string());
+  if (foldable != nullptr && foldable->get_value().is_constant())
+    return convert_to_string(foldable->get_value());
+  return nil_exprt();
+}
+
 exprt string_handler::convert_to_string(const exprt &expr)
 {
   const typet &t = expr.type();
@@ -1312,74 +1575,22 @@ exprt string_handler::convert_to_string(const exprt &expr)
   if (t.is_array() && t.subtype() == char_type())
     return expr;
 
-  // Handle symbol references
+  // A char is a one-character str (an element of a str), not an int.
+  if (t == char_type())
+    return char_to_string(expr);
+
   if (expr.is_symbol())
   {
-    const symbolt *symbol = find_cached_symbol(expr.identifier().as_string());
-    if (symbol)
-    {
-      // If symbol has string type, return it
-      if (
-        symbol->get_type().is_array() &&
-        symbol->get_type().subtype() == char_type())
-        return expr;
-
-      // If symbol has a constant value, convert that
-      if (symbol->get_value().is_constant())
-        return convert_to_string(symbol->get_value());
-    }
+    const exprt from_symbol = symbol_to_string(expr);
+    if (from_symbol.is_not_nil())
+      return from_symbol;
   }
 
-  // Handle constants
   if (expr.is_constant())
   {
-    if (type_utils::is_integer_type(t))
-    {
-      BigInt value = binary2integer(expr.value().as_string(), t.is_signedbv());
-      std::string str_value = std::to_string(value.to_int64());
-
-      typet string_type =
-        type_handler_.build_array(char_type(), str_value.size() + 1);
-      std::vector<unsigned char> chars(str_value.begin(), str_value.end());
-      chars.push_back('\0'); // null terminator
-
-      return make_char_array_expr(chars, string_type);
-    }
-    else if (t.is_floatbv())
-    {
-      // Fold to CPython's shortest round-trip repr. Only a 64-bit double with a
-      // concrete value is rendered; a 32-bit float or an empty (nondet) value
-      // stays a sound nondet string.
-      std::optional<std::string> folded;
-      if (!expr.value().empty() && bv_width(t) == 64)
-      {
-        ieee_floatt f;
-        f.from_expr(to_constant_expr(expr));
-        folded = cpython_float_str(f.to_double());
-      }
-      if (!folded)
-        return build_nondet_string_fallback(expr.location());
-
-      typet string_type =
-        type_handler_.build_array(char_type(), folded->size() + 1);
-      std::vector<unsigned char> chars(folded->begin(), folded->end());
-      chars.push_back('\0');
-
-      return make_char_array_expr(chars, string_type);
-    }
-    else if (t.is_bool())
-    {
-      // Convert boolean to string
-      bool value = expr.is_true();
-      std::string str_value = value ? "True" : "False";
-
-      typet string_type =
-        type_handler_.build_array(char_type(), str_value.size() + 1);
-      std::vector<unsigned char> chars(str_value.begin(), str_value.end());
-      chars.push_back('\0');
-
-      return make_char_array_expr(chars, string_type);
-    }
+    exprt folded = constant_to_string(expr);
+    if (folded.is_not_nil())
+      return folded;
   }
 
   // Handle pointer types from struct member access (e.g. self.name).
@@ -1410,6 +1621,59 @@ exprt string_handler::convert_to_string(const exprt &expr)
     return converter_.get_string_builder().build_runtime_str_conversion_call(
       "__python_float_to_str", double_type(), expr);
 
+  // A tagged scalar's own type_id, not `t`, decides which OM conversion
+  // applies. Only int vs str is modelled here (bool/float tagged values
+  // fall through to the nondet fallback below) since the test suite
+  // exercises isinstance()-guarded int/str joins.
+  if (type_handler_.is_tagged_scalar_type(t))
+  {
+    const locationt &location = expr.location();
+    const typet char_ptr_type = gen_pointer_type(char_type());
+    symbolt &result_sym = converter_.create_tmp_symbol(
+      location, "$tagged_to_str$", char_ptr_type, exprt());
+    code_declt result_decl(build_symbol(result_sym));
+    result_decl.location() = location;
+    converter_.add_instruction(result_decl);
+
+    exprt value_ptr = build_member(expr, "value", pointer_typet(empty_typet()));
+    exprt tagged_type_id = build_member(expr, "type_id", size_type());
+    exprt str_id =
+      type_handler_.tagged_scalar_type_id(type_handler_.get_typet("str", 0));
+    exprt int_id = type_handler_.tagged_scalar_type_id(long_long_int_type());
+
+    code_assignt str_assign(
+      build_symbol(result_sym), build_typecast(value_ptr, char_ptr_type));
+    str_assign.location() = location;
+
+    exprt as_int = build_dereference(
+      build_typecast(value_ptr, pointer_typet(long_long_int_type())),
+      long_long_int_type());
+    code_assignt int_assign(
+      build_symbol(result_sym),
+      converter_.get_string_builder().build_runtime_str_conversion_call(
+        "__python_int_to_str", long_long_int_type(), as_int));
+    int_assign.location() = location;
+
+    code_assignt fallback_assign(
+      build_symbol(result_sym), build_nondet_string_fallback(location));
+    fallback_assign.location() = location;
+
+    code_ifthenelset inner;
+    inner.cond() = build_equal(tagged_type_id, int_id);
+    inner.location() = location;
+    inner.then_case() = int_assign;
+    inner.else_case() = fallback_assign;
+
+    code_ifthenelset outer;
+    outer.cond() = build_equal(tagged_type_id, str_id);
+    outer.location() = location;
+    outer.then_case() = str_assign;
+    outer.else_case() = inner;
+
+    converter_.add_instruction(outer);
+    return build_symbol(result_sym);
+  }
+
   // Anything else (struct, array of non-char, etc.) is currently unsupported.
   std::string placeholder = "<expr>";
   typet string_type =
@@ -1433,6 +1697,15 @@ exprt string_handler::format_fstring_part(const nlohmann::json &value)
     (value.contains("conversion") && value["conversion"].is_number())
       ? value["conversion"].get<int>()
       : -1;
+
+  // A format spec or conversion may render a nondet string that drops the
+  // operand, so a call there runs as its own statement first. Elsewhere it
+  // becomes a side effect, hoisted when the enclosing statement is emitted
+  // rather than during the RHS type probe.
+  if ((has_spec || conversion != -1) && converter_.can_emit_runtime_guard())
+    expr = converter_.store_call_result(expr, expr.location(), "fstring_arg");
+  converter_.convert_function_call_to_side_effect(expr);
+
   if (conversion != -1 && conversion != 's')
     return has_spec ? build_nondet_string_fallback(expr.location())
                     : build_fstring_conversion(
@@ -1624,6 +1897,13 @@ exprt string_handler::get_array_base_address(const exprt &arr)
 {
   if (arr.type().is_pointer())
     return arr;
+  // `c ? "a" : "b"` addresses the chosen array, not an element of the choice,
+  // which the solver cannot take the address of (#8784).
+  if (arr.id() == "if")
+    return build_if(
+      arr.op0(),
+      get_array_base_address(arr.op1()),
+      get_array_base_address(arr.op2()));
   // arr is non-pointer (array) here; index2t source ok, address_of of a
   // non-constant/non-address_of expr is a valid address_of2t source.
   exprt index = build_index(arr, from_integer(0, index_type()));
@@ -1953,6 +2233,23 @@ symbolt *string_handler::find_cached_symbol(const std::string &symbol_id)
   return symbol;
 }
 
+// A symbol's value is its last static assignment, which is the value a read
+// sees only when the name is bound once and is not a parameter.
+const symbolt *
+string_handler::find_foldable_symbol(const std::string &symbol_id)
+{
+  const symbolt *symbol = find_cached_symbol(symbol_id);
+  if (symbol == nullptr || symbol->get_value().is_nil())
+    return nullptr;
+  const std::string name = symbol->name.as_string();
+  const std::string &function = converter_.get_current_func_name();
+  const nlohmann::json &ast = converter_.get_ast_json();
+  if (json_utils::has_multiple_assignments_in_scope(name, function, ast))
+    return nullptr;
+  const nlohmann::json decl = json_utils::find_var_decl(name, function, ast);
+  return decl.value("_type", "") == "arg" ? nullptr : symbol;
+}
+
 symbolt *
 string_handler::find_cached_c_function_symbol(const std::string &symbol_id)
 {
@@ -1995,6 +2292,42 @@ static bool python_str_replace(
   return true;
 }
 
+// Resolve a join() iterable, following a single Name binding, to a literal
+// list/tuple.
+static bool resolve_join_iterable(
+  const nlohmann::json &arg,
+  python_converter &converter,
+  nlohmann::json &seq)
+{
+  seq = arg;
+  if (seq.contains("_type") && seq["_type"] == "Name" && seq.contains("id"))
+  {
+    const std::string id = seq["id"].get<std::string>();
+    if (list_var_may_change(id, converter))
+      return false;
+    nlohmann::json decl = json_utils::get_var_value(
+      id, converter.get_current_func_name(), converter.get_ast_json());
+    if (decl.empty() || !decl.contains("value"))
+      return false;
+    seq = decl["value"];
+  }
+  return seq.contains("_type") &&
+         (seq["_type"] == "List" || seq["_type"] == "Tuple") &&
+         seq.contains("elts");
+}
+
+static bool is_name_or_split_call(const nlohmann::json &arg)
+{
+  const std::string type = arg.value("_type", "");
+  if (type == "Name")
+    return true;
+  if (type != "Call" || !arg.contains("func"))
+    return false;
+  const auto &func = arg["func"];
+  return func.value("_type", "") == "Attribute" &&
+         func.value("attr", "") == "split";
+}
+
 // Fold a constant string-valued method call: `sep.join([...])` over a literal
 // list/tuple of constant strings, or `subject.replace(old, new[, count])`.
 // Only positional, constant-foldable arguments are handled; anything else
@@ -2027,23 +2360,8 @@ static bool fold_string_method_call(
       !fold_constant_string(func["value"], converter, sep, depth + 1))
       return false;
 
-    // Resolve the iterable, following a single Name binding, to a literal
-    // list/tuple of constant strings.
-    nlohmann::json seq = args[0];
-    if (seq.contains("_type") && seq["_type"] == "Name" && seq.contains("id"))
-    {
-      nlohmann::json decl = json_utils::get_var_value(
-        seq["id"].get<std::string>(),
-        converter.get_current_func_name(),
-        converter.get_ast_json());
-      if (decl.empty() || !decl.contains("value"))
-        return false;
-      seq = decl["value"];
-    }
-    if (
-      !seq.contains("_type") ||
-      (seq["_type"] != "List" && seq["_type"] != "Tuple") ||
-      !seq.contains("elts"))
+    nlohmann::json seq;
+    if (!resolve_join_iterable(args[0], converter, seq))
       return false;
 
     out.clear();
@@ -2234,6 +2552,26 @@ exprt string_handler::handle_string_to_int(
   if (!int_symbol)
   {
     throw std::runtime_error("__python_int function not found in symbol table");
+  }
+
+  // int() of an invalid literal raises a catchable ValueError (#8705), as
+  // float() does; the model's own assertion stays for unguarded callers.
+  if (
+    const symbolt *is_int =
+      find_cached_c_function_symbol("c:@F@__python_str_is_int"))
+  {
+    exprt valid = build_call_expr(*is_int, bool_type(), {str_addr, base_expr});
+    valid.location() = location;
+    codet throw_code("expression");
+    throw_code.operands().push_back(
+      converter_.get_exception_handler().gen_exception_raise(
+        "ValueError", "invalid literal for int()"));
+    code_ifthenelset guard;
+    guard.cond() = not_exprt(valid);
+    guard.then_case() = throw_code;
+    guard.location() = location;
+    guard.location().property("skipped");
+    converter_.add_instruction(guard);
   }
 
   // Call __python_int(str, base). The result is a 64-bit Python int (matching
@@ -2492,25 +2830,29 @@ exprt string_handler::try_handle_len_string_fast_path(
     }
   }
 
+  return char_array_type_length(arg_expr);
+}
+
+// The length a char array's type gives @p arg_expr, or nil. An element of a
+// numpy string array is NUL-padded to the array's width, so only strlen
+// knows its length.
+exprt string_handler::char_array_type_length(const exprt &arg_expr) const
+{
+  if (arg_expr.id() == "index" && arg_expr.op0().type().is_array())
+    return nil_exprt();
   typet actual_type = arg_expr.type();
   if (actual_type.is_pointer())
     actual_type = actual_type.subtype();
   if (actual_type.id() == "symbol")
     actual_type = converter_.ns.follow(actual_type);
-
-  if (actual_type.id() == "array")
-  {
-    const array_typet &arr_type = to_array_type(actual_type);
-    if (
-      type_utils::is_char_type(arr_type.subtype()) &&
-      arr_type.size().is_constant())
-    {
-      BigInt sz;
-      if (!to_integer(arr_type.size(), sz) && sz > 0)
-        return from_integer(sz - 1, size_type());
-    }
-  }
-
+  if (actual_type.id() != "array")
+    return nil_exprt();
+  const array_typet &arr_type = to_array_type(actual_type);
+  BigInt sz;
+  if (
+    type_utils::is_char_type(arr_type.subtype()) &&
+    arr_type.size().is_constant() && !to_integer(arr_type.size(), sz) && sz > 0)
+    return from_integer(sz - 1, size_type());
   return nil_exprt();
 }
 
@@ -2701,6 +3043,20 @@ exprt string_handler::try_len_fast_path_from_name_arg(
   return nil_exprt();
 }
 
+/// Whether @p receiver is a Name for a module the program imported, and no
+/// binding in scope at the call @p use shadows it.
+static bool names_imported_module(
+  const python_converter &converter,
+  const nlohmann::json &receiver,
+  const nlohmann::json &use)
+{
+  return receiver.value("_type", "") == "Name" &&
+         receiver.value("id", nlohmann::json()).is_string() &&
+         !converter.get_imported_module_path(receiver["id"].get<std::string>())
+            .empty() &&
+         !converter.name_shadows_module(receiver, use);
+}
+
 exprt string_handler::handle_string_attribute_call(
   const nlohmann::json &call_json)
 {
@@ -2734,17 +3090,14 @@ exprt string_handler::handle_string_attribute_call(
   // true when a model .py file merely exists. The latter would misfire for a
   // local variable that shares a module's name (e.g. a parameter named
   // `string`), wrongly diverting `string.lower()` away from the str handler.
-  if (
-    receiver_json.contains("_type") && receiver_json["_type"] == "Name" &&
-    receiver_json.contains("id") && receiver_json["id"].is_string() &&
-    !converter_.get_imported_module_path(receiver_json["id"].get<std::string>())
-       .empty())
+  if (names_imported_module(converter_, receiver_json, call_json))
     return nil_exprt();
 
   std::optional<exprt> cached_receiver_expr;
   auto get_receiver_expr = [&]() -> exprt {
     if (!cached_receiver_expr.has_value())
-      cached_receiver_expr = converter_.get_expr(receiver_json);
+      cached_receiver_expr =
+        to_value_expr(converter_.get_expr(receiver_json), converter_.ns);
     return *cached_receiver_expr;
   };
 
@@ -3351,6 +3704,57 @@ exprt string_handler::handle_string_attribute_call(
   return nil_exprt();
 }
 
+exprt string_handler::convert_join_items(
+  const nlohmann::json &elements,
+  std::vector<exprt> &elem_exprs)
+{
+  // Raising here would drop the calls in the other elements, which CPython
+  // evaluates before join() sees a bad item.
+  const bool may_raise = !json_utils::ast_contains_call(elements);
+  for (const auto &elem : elements)
+  {
+    exprt elem_expr = converter_.get_expr(elem);
+    if (may_raise && is_non_str_join_item(elem, elem_expr.type()))
+      return converter_.get_exception_handler().gen_exception_raise(
+        "TypeError",
+        "sequence item " + std::to_string(elem_exprs.size()) +
+          ": expected str instance, " +
+          (is_none_constant(elem)
+             ? std::string("NoneType")
+             : type_handler_.get_python_type_name(elem_expr.type())) +
+          " found");
+    ensure_string_array(elem_expr);
+    elem_exprs.push_back(elem_expr);
+  }
+  return nil_exprt();
+}
+
+exprt string_handler::join_unfoldable_iterable(
+  const exprt &separator,
+  const nlohmann::json &call_json)
+{
+  // A list built at run time, such as s.split(" ") on a symbolic s, is read
+  // by the runtime join model rather than left nondet.
+  const nlohmann::json &list_arg = call_json["args"][0];
+  if (is_name_or_split_call(list_arg))
+  {
+    exprt list_expr = converter_.get_expr(list_arg);
+    if (list_expr.type() == type_handler_.get_list_type())
+      return string_builder_->build_runtime_str_join_call(separator, list_expr);
+  }
+
+  // Iterable arg isn't a literal `List` and couldn't be folded (e.g.
+  // a `sorted(...)`, list comprehension, or unannotated parameter).
+  // Fall back to a sound nondet `char *` instead of aborting GOTO
+  // conversion. Same pattern as PRs #4814 (splitlines), #4815
+  // (partition/format), #4818..#4826 (str.* runtime models).
+  log_debug(
+    "python-string",
+    "join() iterable arg not a foldable List literal: nondet fallback");
+  return build_nondet_string_fallback(
+    converter_.get_location_from_decl(call_json));
+}
+
 exprt string_handler::handle_str_join(const nlohmann::json &call_json)
 {
   // Validate JSON structure: ensure we have the required keys
@@ -3412,33 +3816,20 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
       return string_builder_->build_runtime_str_join_call(separator, list_expr);
     }
 
-    // If the list is mutated in place after initialisation (e.g.
+    // If the list can change after initialisation (e.g.
     // new_lst = []; new_lst.append(w)), its declaration initialiser no longer
     // reflects the runtime contents, so the static fold below would join the
     // stale value -- an appended-to empty list folds to "" (#5163). Dispatch
-    // to the runtime model, which reads the actual list object. Scope the scan
-    // to the variable's own function (module body when at top level), matching
-    // how find_var_decl resolved it above.
+    // to the runtime model, which reads the actual list object.
+    if (list_var_may_change(var_name, converter_))
     {
-      const std::string &scope_func = converter_.get_current_func_name();
-      const nlohmann::json &ast = converter_.get_ast_json();
-      const nlohmann::json func_node =
-        scope_func.empty()
-          ? nlohmann::json()
-          : json_utils::try_find_function(ast["body"], scope_func);
-      const nlohmann::json &scan_body =
-        func_node.contains("body") ? func_node["body"] : ast["body"];
-      if (list_var_is_mutated(scan_body, var_name))
-      {
-        exprt list_expr = converter_.get_expr(list_arg);
-        return string_builder_->build_runtime_str_join_call(
-          separator, list_expr);
-      }
+      exprt list_expr = converter_.get_expr(list_arg);
+      return string_builder_->build_runtime_str_join_call(separator, list_expr);
     }
 
     list_node = &var_decl["value"];
   }
-  else if (list_arg.contains("_type") && list_arg["_type"] == "List")
+  else if (is_list_or_tuple_literal(list_arg))
   {
     list_node = &list_arg;
   }
@@ -3525,80 +3916,59 @@ exprt string_handler::handle_str_join(const nlohmann::json &call_json)
 
   if (
     !list_node || !list_node->contains("_type") ||
-    (*list_node)["_type"] != "List" || !list_node->contains("elts"))
+    ((*list_node)["_type"] != "List" && list_node != &list_arg) ||
+    !list_node->contains("elts"))
   {
-    // Iterable arg isn't a literal `List` and couldn't be folded (e.g.
-    // a `sorted(...)`, list comprehension, or unannotated parameter).
-    // Fall back to a sound nondet `char *` instead of aborting GOTO
-    // conversion. Same pattern as PRs #4814 (splitlines), #4815
-    // (partition/format), #4818..#4826 (str.* runtime models).
-    log_debug(
-      "python-string",
-      "join() iterable arg not a foldable List literal: nondet fallback");
-    return build_nondet_string_fallback(
-      converter_.get_location_from_decl(call_json));
+    return join_unfoldable_iterable(separator, call_json);
   }
 
   // Get the list elements from the AST
   const auto &elements = (*list_node)["elts"];
 
+  // A Name variable whose declared initialiser is an empty list may still be
+  // populated at runtime. The preprocessor lowers ''.join(<generator>) and
+  // ''.join(<comprehension>) to `tmp = []` followed by appends, so folding
+  // the empty initialiser here would wrongly yield "". An element that is not
+  // a literal must be read where the list was built, not here, where
+  // the names it refers to may since have been rebound. Dispatch both to the
+  // runtime __python_str_join model, which reads the list's runtime contents
+  // (and still returns "" for a genuinely empty list).
+  if (list_arg.value("_type", "") == "Name" && !is_nonempty_constants(elements))
+  {
+    log_debug(
+      "python-string",
+      "join() iterable is a runtime-built list: runtime dispatch");
+    exprt list_expr = converter_.get_expr(list_arg);
+    return string_builder_->build_runtime_str_join_call(separator, list_expr);
+  }
+
   // Edge case: empty list literal
   if (elements.empty())
   {
-    // A Name variable whose declared initialiser is an empty list may still be
-    // populated at runtime. The preprocessor lowers ''.join(<generator>) and
-    // ''.join(<comprehension>) to `tmp = []` followed by appends, so folding
-    // the empty initialiser here would wrongly yield "". Dispatch to the
-    // runtime __python_str_join model, which reads the list's runtime contents
-    // (and still returns "" for a genuinely empty list).
-    if (list_arg.contains("_type") && list_arg["_type"] == "Name")
-    {
-      log_debug(
-        "python-string",
-        "join() iterable is a runtime-built list: runtime dispatch");
-      exprt list_expr = converter_.get_expr(list_arg);
-      return string_builder_->build_runtime_str_join_call(separator, list_expr);
-    }
-
     typet empty_string_type = type_handler_.build_array(char_type(), 1);
     exprt empty_str = gen_zero(empty_string_type);
     empty_str.operands().at(0) = from_integer(0, char_type());
     return empty_str;
   }
 
-  // Convert JSON elements to ESBMC expressions
   std::vector<exprt> elem_exprs;
-  for (const auto &elem : elements)
-  {
-    exprt elem_expr = converter_.get_expr(elem);
-    ensure_string_array(elem_expr);
-    elem_exprs.push_back(elem_expr);
-  }
+  const exprt raise = convert_join_items(elements, elem_exprs);
+  if (raise.is_not_nil())
+    return raise;
 
   // Edge case: single element returns the element itself (no separator)
   if (elem_exprs.size() == 1)
     return elem_exprs[0];
 
-  // Build the joined string by extracting characters from all elements
-  // and separators, then constructing a single string.
-  std::vector<exprt> all_chars;
-
-  std::vector<exprt> first_chars =
-    string_builder_->extract_string_chars(elem_exprs[0]);
-  all_chars.insert(all_chars.end(), first_chars.begin(), first_chars.end());
-
+  // Concatenate pairwise: concatenate_strings folds constant operands and
+  // falls back to the runtime model for an element whose characters are not
+  // known here (a parameter, a call result), which would otherwise be dropped.
+  exprt joined = elem_exprs[0];
   for (size_t i = 1; i < elem_exprs.size(); ++i)
-  {
-    std::vector<exprt> sep_chars =
-      string_builder_->extract_string_chars(separator);
-    all_chars.insert(all_chars.end(), sep_chars.begin(), sep_chars.end());
+    joined = string_builder_->concatenate_strings(
+      string_builder_->concatenate_strings(joined, separator), elem_exprs[i]);
 
-    std::vector<exprt> elem_chars =
-      string_builder_->extract_string_chars(elem_exprs[i]);
-    all_chars.insert(all_chars.end(), elem_chars.begin(), elem_chars.end());
-  }
-
-  return string_builder_->build_null_terminated_string(all_chars);
+  return joined;
 }
 
 exprt string_handler::create_char_comparison_expr(

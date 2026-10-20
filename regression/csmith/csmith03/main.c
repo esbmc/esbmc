@@ -1,7 +1,7 @@
 /*
 
 ESBMC PARAMETERS
---no-unwinding-assertions --unwind 15 --direct-interleavings --round-robin --ppc-macos --show-loops --print-stack-traces --boolector --ssa-full-names --z3 --memstats
+--no-unwinding-assertions --unwind 15 --direct-interleavings --print-stack-traces --z3 --memstats
 
  * This is a RANDOMLY GENERATED PROGRAM.
  *

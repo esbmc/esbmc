@@ -1,6 +1,7 @@
 #include "goto-programs/goto_binary_reader.h"
 #include <util/base/stack_budget.h>
 #include "irep2/irep2_expr.h"
+#include <util/lang/c_builtins.h>
 #include <util/lang/c_sizeof.h>
 #include <util/lang/c_typecast.h>
 #include <util/lang/c_types.h>
@@ -1153,8 +1154,8 @@ static expr2tc migrate_pointer_ok(const exprt &expr)
   // call out of this predicate once the binary is loaded.
   const typet size_t_type = expr.op1().type();
   constant_exprt kind(size_t_type);
-  kind.set_value(
-    integer2binary(0, atoi(size_t_type.width().as_string().c_str())));
+  kind.set_value(integer2binary(
+    esbmc_object_size_whole, atoi(size_t_type.width().as_string().c_str())));
   expr2tc extent = invoke_intrinsic(
     "c:@F@__ESBMC_builtin_object_size", size_t_type, {expr.op0(), kind});
 
@@ -1274,6 +1275,41 @@ static bool migrate_right_shift(const exprt &expr, expr2tc &new_expr_ref)
   return true;
 }
 
+// The parts of a cpp_delete side effect that sideeffect2t has no field for.
+static void migrate_cpp_delete(const exprt &expr, std::vector<expr2tc> &args)
+{
+  const exprt &destructor = static_cast<const exprt &>(expr.find("destructor"));
+  if (destructor.is_not_nil())
+  {
+    expr2tc d;
+    migrate_expr(destructor, d);
+    args.push_back(d);
+  }
+
+  // A replaced operator delete rides in arguments[1], mirroring the
+  // allocation side (github #6494).
+  const exprt &dealloc_function =
+    static_cast<const exprt &>(expr.find("dealloc_function"));
+  if (dealloc_function.is_not_nil())
+  {
+    if (args.empty())
+      args.emplace_back();
+    expr2tc fn;
+    migrate_expr(dealloc_function, fn);
+    args.push_back(fn);
+  }
+
+  // An aligned operator delete's alignment rides in arguments[2].
+  const exprt &dealloc_alignment =
+    static_cast<const exprt &>(expr.find("dealloc_alignment"));
+  if (dealloc_alignment.is_not_nil())
+  {
+    expr2tc align;
+    migrate_expr(dealloc_alignment, align);
+    args.push_back(align);
+  }
+}
+
 // The parts of a cpp_new side effect that sideeffect2t has no field for.
 static void
 migrate_cpp_new(const exprt &expr, expr2tc &thesize, std::vector<expr2tc> &args)
@@ -1325,6 +1361,152 @@ migrate_cpp_new(const exprt &expr, expr2tc &thesize, std::vector<expr2tc> &args)
     migrate_expr(filler, f);
     args.push_back(f);
   }
+
+  // An array placement new's address rides in arguments[4].
+  const exprt &placement = static_cast<const exprt &>(expr.find("placement"));
+  if (placement.is_not_nil())
+  {
+    args.resize(4);
+    expr2tc place;
+    migrate_expr(placement, place);
+    args.push_back(place);
+  }
+
+  // A user-placement operator new's placement arguments ride in
+  // arguments[5] onwards.
+  const exprt &alloc_args =
+    static_cast<const exprt &>(expr.find("alloc_arguments"));
+  if (alloc_args.is_not_nil())
+  {
+    args.resize(5);
+    for (const exprt &a : alloc_args.operands())
+    {
+      expr2tc arg;
+      migrate_expr(a, arg);
+      args.push_back(arg);
+    }
+  }
+}
+
+// Kani pads a union variant into `{ v: T, v_padding: <N-byte bv> }` but
+// initialises the union with the bare T: wrap it, padding left free.
+static void wrap_padded_union_member(
+  const type2tc &type,
+  const irep_idt &component,
+  std::vector<expr2tc> &members)
+{
+  if (!is_union_type(type) || members.size() != 1)
+    return;
+  const auto n = struct_union_get_component_number(type, component);
+  if (!n || !is_struct_type(to_union_type(type).members[*n]))
+    return;
+  const struct_type2t &padded = to_struct_type(to_union_type(type).members[*n]);
+  if (padded.members.empty() || padded.members[0] != members[0]->type)
+    return;
+
+  std::vector<expr2tc> fields{members[0]};
+  for (size_t i = 1; i < padded.members.size(); ++i)
+    fields.push_back(gen_nondet(padded.members[i]));
+  members[0] = constant_struct2tc(to_union_type(type).members[*n], fields);
+}
+
+static bool is_all_zero_bytes(const expr2tc &e)
+{
+  if (is_constant_int2t(e))
+    return to_constant_int2t(e).value.is_zero();
+  if (is_constant_floatbv2t(e))
+  {
+    const ieee_floatt &f = to_constant_floatbv2t(e).value;
+    return f.is_zero() && !f.get_sign();
+  }
+  if (
+    !is_constant_struct2t(e) && !is_constant_union2t(e) &&
+    !is_constant_array2t(e) && !is_constant_vector2t(e))
+    return false;
+  bool zero = true;
+  e->foreach_operand(
+    [&zero](const expr2tc &op) { zero = zero && is_all_zero_bytes(op); });
+  return zero;
+}
+
+// CBMC initialises a union through a member other than its first as a
+// byte_update of the zero union at offset 0; a union constant of that member
+// keeps the value whole, which a pointer member needs for its value set.
+static expr2tc union_member_update(
+  const type2tc &type,
+  const expr2tc &source,
+  const expr2tc &offs,
+  const expr2tc &update)
+{
+  if (
+    !is_union_type(type) || !is_all_zero_bytes(source) ||
+    !is_constant_int2t(offs) || !to_constant_int2t(offs).value.is_zero())
+    return expr2tc();
+
+  const union_type2t &u = to_union_type(type);
+  for (size_t i = 0; i < u.members.size(); ++i)
+    if (u.members[i] == update->type)
+      return constant_union2tc(
+        type, u.member_names[i], std::vector<expr2tc>{update});
+  return expr2tc();
+}
+
+// ESBMC's byte_update2t writes one byte; a CBMC byte_update writes all of
+// update's bytes from offs on, so it is lowered to one byte_update2t per byte.
+static expr2tc byte_update_bytes(
+  const type2tc &type,
+  expr2tc result,
+  const expr2tc &offs,
+  const expr2tc &update,
+  bool big_endian)
+{
+  if (is_array_type(update))
+  {
+    const array_type2t &arr = to_array_type(update->type);
+    const BigInt elem_size = type_byte_size(arr.subtype);
+    const BigInt n = to_constant_int2t(arr.array_size).value;
+    for (BigInt i = 0; i < n; ++i)
+      result = byte_update_bytes(
+        type,
+        result,
+        add2tc(offs->type, offs, constant_int2tc(offs->type, i * elem_size)),
+        index2tc(arr.subtype, update, gen_ulong(i.to_uint64())),
+        big_endian);
+    return result;
+  }
+
+  const unsigned width = update->type->get_width();
+  if (width == 8 && is_bv_type(update))
+    return byte_update2tc(type, result, offs, update, big_endian);
+  if (width % 8 != 0)
+    throw std::string(
+      "byte_update of a value that is not a whole number of bytes");
+
+  for (unsigned i = 0; i < width / 8; ++i)
+  {
+    const expr2tc offs_i =
+      add2tc(offs->type, offs, constant_int2tc(offs->type, BigInt(i)));
+    const expr2tc byte = byte_extract2tc(
+      get_uint8_type(),
+      update,
+      constant_int2tc(offs->type, BigInt(i)),
+      big_endian);
+    result = byte_update2tc(type, result, offs_i, byte, big_endian);
+  }
+  return result;
+}
+
+static expr2tc migrate_byte_update(
+  const type2tc &type,
+  const expr2tc &source,
+  const expr2tc &offs,
+  const expr2tc &update,
+  bool big_endian)
+{
+  const expr2tc whole = union_member_update(type, source, offs, update);
+  return is_nil_expr(whole)
+           ? byte_update_bytes(type, source, offs, update, big_endian)
+           : whole;
 }
 
 void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
@@ -1511,6 +1693,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
       members.push_back(new_ref);
     }
+
+    wrap_padded_union_member(type, expr.component_name(), members);
 
     new_expr_ref = constant_union2tc(type, expr.component_name(), members);
     return;
@@ -2025,7 +2209,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     bool big_endian = (expr.id() == "byte_update_big_endian") ? true : false;
 
-    new_expr_ref = byte_update2tc(type, sourceval, offs, update, big_endian);
+    new_expr_ref =
+      migrate_byte_update(type, sourceval, offs, update, big_endian);
     return;
   }
 
@@ -2510,27 +2695,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       t = expr.statement() == "cpp_delete"
             ? sideeffect2t::allockind::cpp_delete
             : sideeffect2t::allockind::cpp_delete_array;
-      const exprt &destructor =
-        static_cast<const exprt &>(expr.find("destructor"));
-      if (destructor.is_not_nil())
-      {
-        expr2tc d;
-        migrate_expr(destructor, d);
-        args.push_back(d);
-      }
-
-      // A replaced operator delete rides in arguments[1], mirroring the
-      // allocation side (github #6494).
-      const exprt &dealloc_function =
-        static_cast<const exprt &>(expr.find("dealloc_function"));
-      if (dealloc_function.is_not_nil())
-      {
-        if (args.empty())
-          args.emplace_back();
-        expr2tc fn;
-        migrate_expr(dealloc_function, fn);
-        args.push_back(fn);
-      }
+      migrate_cpp_delete(expr, args);
     }
     else if (expr.statement() == "temporary_object")
     {
@@ -2952,12 +3117,13 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   if (expr.id() == "code" && expr.statement() == "switch_case")
   {
     const auto &sc = to_code_switch_case(to_code(expr));
-    expr2tc case_op, body;
+    expr2tc case_op, case_op_hi, body;
     if (!sc.is_default())
       migrate_expr(sc.case_op(), case_op);
+    migrate_expr(sc.case_range_hi(), case_op_hi);
     migrate_expr(sc.code(), body);
-    new_expr_ref =
-      code_switch_case2tc(sc.is_default(), case_op, body, expr.location());
+    new_expr_ref = code_switch_case2tc(
+      sc.is_default(), case_op, body, expr.location(), case_op_hi);
     return;
   }
 
@@ -3052,7 +3218,10 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc theval;
     migrate_expr(expr.op0(), theval);
 
-    new_expr_ref = popcount2tc(theval);
+    // popcount2t is always int; a CBMC binary types the count itself (Kani
+    // emits u32), so keep that type for whatever the count is assigned to.
+    new_expr_ref =
+      coerce_to_type(popcount2tc(theval), migrate_type(expr.type()));
     return;
   }
 
@@ -3119,8 +3288,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     // array's element count, so it agreed only for char.
     const std::string function = "c:@F@__ESBMC_builtin_object_size";
     constant_exprt kind(expr.type());
-    kind.set_value(
-      integer2binary(0, atoi(expr.type().width().as_string().c_str())));
+    kind.set_value(integer2binary(
+      esbmc_object_size_whole, atoi(expr.type().width().as_string().c_str())));
     const std::vector<exprt> args = {expr.op0(), kind};
 
     // The result is a *call*: object_size resolves its object by dereference,
@@ -3600,13 +3769,16 @@ static const char *back_sideeffect_statement(sideeffect2t::allockind kind)
 static void back_sideeffect_cpp_delete(const sideeffect2t &ref2, exprt &theexpr)
 {
   // op0 = pointer (in `operand`); arguments[0] = destructor call, if any,
-  // arguments[1] = replaced operator delete, if any. remove_cpp_delete
-  // asserts exactly one operand and reads both named subs back out.
+  // arguments[1] = replaced operator delete, if any, arguments[2] = its
+  // alignment, if aligned. remove_cpp_delete asserts exactly one operand and
+  // reads the named subs back out.
   theexpr.copy_to_operands(migrate_expr_back(ref2.operand));
   if (!ref2.arguments.empty() && !is_nil_expr(ref2.arguments[0]))
     theexpr.set("destructor", migrate_expr_back(ref2.arguments[0]));
   if (ref2.arguments.size() > 1 && !is_nil_expr(ref2.arguments[1]))
     theexpr.add("dealloc_function") = migrate_expr_back(ref2.arguments[1]);
+  if (ref2.arguments.size() > 2)
+    theexpr.add("dealloc_alignment") = migrate_expr_back(ref2.arguments[2]);
 }
 
 static void back_sideeffect_cpp_new(const sideeffect2t &ref2, exprt &theexpr)
@@ -3614,7 +3786,9 @@ static void back_sideeffect_cpp_new(const sideeffect2t &ref2, exprt &theexpr)
   // cpp_new has no operands in source form (size lives in the size field,
   // handled below; the initializer, if any, is carried in arguments[0], a
   // replaced operator new in arguments[1], the value-initialisation marker in
-  // arguments[2], and the braced list's filler in arguments[3]).
+  // arguments[2], the braced list's filler in arguments[3], an array
+  // placement new's address in arguments[4], and a user-placement operator
+  // new's placement arguments from arguments[5]).
   if (!ref2.arguments.empty() && !is_nil_expr(ref2.arguments[0]))
     theexpr.initializer(migrate_expr_back(ref2.arguments[0]));
   if (ref2.arguments.size() > 1 && !is_nil_expr(ref2.arguments[1]))
@@ -3623,6 +3797,15 @@ static void back_sideeffect_cpp_new(const sideeffect2t &ref2, exprt &theexpr)
     theexpr.set("zero_initialized", true);
   if (ref2.arguments.size() > 3)
     theexpr.add("array_filler") = migrate_expr_back(ref2.arguments[3]);
+  if (ref2.arguments.size() > 4)
+    theexpr.add("placement") = migrate_expr_back(ref2.arguments[4]);
+  if (ref2.arguments.size() > 5)
+  {
+    exprt alloc_args("arguments");
+    for (std::size_t i = 5; i < ref2.arguments.size(); ++i)
+      alloc_args.copy_to_operands(migrate_expr_back(ref2.arguments[i]));
+    theexpr.add("alloc_arguments") = alloc_args;
+  }
 }
 
 static void back_sideeffect_operands(const sideeffect2t &ref2, exprt &theexpr)
@@ -3804,6 +3987,8 @@ static exprt migrate_expr_back_rest6(const expr2tc &ref)
       sc.set_default(true);
     else
       sc.op0() = migrate_expr_back(ref2.case_op);
+    if (!is_nil_expr(ref2.case_op_hi))
+      sc.case_range_hi() = migrate_expr_back(ref2.case_op_hi);
     sc.op1() = migrate_expr_back(ref2.code);
     if (ref2.location.is_not_nil())
       sc.location() = ref2.location;

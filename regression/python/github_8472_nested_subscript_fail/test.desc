@@ -1,0 +1,5 @@
+CORE
+main.py
+--multi-property --unwind 8 --no-unwinding-assertions
+^\s+FAILED\s+\[global\.assertion\.[0-9]+\]\s+line\s+6\s+assertion
+^VERIFICATION FAILED$

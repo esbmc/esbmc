@@ -213,6 +213,9 @@ public:
     variable_name_sett declaration_history;
     /** Set of local variable l1 names. */
     variable_name_sett local_variables;
+    /** Pointers returned by alloca in this frame; their objects die when the
+     *  frame returns, not at the end of the enclosing block (alloca(3)). */
+    std::vector<expr2tc> alloca_objects;
 
     /** Record the first va_args index used in this function call, if any,
      *  otherwise UINT_MAX
@@ -365,6 +368,7 @@ public:
   void rename(expr2tc &expr);
 
   void rename_type(expr2tc &expr);
+  void rename_array_sizes(type2tc &type);
 
   /**
    *  Perform renaming of contents of an address_of operation.
@@ -394,6 +398,10 @@ public:
    *  @param rhs Value being assigned to symbol.
    */
   void assignment(expr2tc &lhs, const expr2tc &rhs);
+
+  /** @p rhs with the earlier writes under its top-level array `with`
+   *  replaced by @p l1_lhs, when they all write that same object. */
+  expr2tc shallow_array_update(const expr2tc &rhs, const expr2tc &l1_lhs) const;
 
   /**
    *  Determine whether to constant propagate the value of an expression.

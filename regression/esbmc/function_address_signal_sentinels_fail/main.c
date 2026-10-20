@@ -10,6 +10,6 @@ void handler(int sig)
 int main(void)
 {
   void (*f)(int) = handler;
-  assert(f != (void (*)(int))16);
+  assert(f != (void (*)(int))4096);
   return 0;
 }

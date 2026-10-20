@@ -14,11 +14,13 @@
 #include <util/irep/std_types.h>
 #include <util/irep/std_expr.h>
 #include <util/message/message.h>
+#include <util/config/options.h>
 #include <util/expr/type_byte_size.h>
 #include <util/lang/c_types.h>
 #include <irep2/irep2_utils.h>
 
 #include <optional>
+#include <sstream>
 #include <tuple>
 
 #include <algorithm>
@@ -107,9 +109,15 @@ struct sitet
 class exception_loweringt
 {
 public:
-  exception_loweringt(contextt &context, const namespacet &ns)
+  exception_loweringt(
+    contextt &context,
+    const namespacet &ns,
+    const std::set<irep_idt> &unreported,
+    const std::vector<irep_idt> &checked)
     : context(context),
       ns(ns),
+      unreported(unreported),
+      checked(checked),
       registry(ns),
       thrown(mk_global(exception_globals::thrown_id)),
       type_id(mk_global(exception_globals::typeid_id)),
@@ -438,6 +446,8 @@ public:
 private:
   contextt &context;
   const namespacet &ns;
+  const std::set<irep_idt> &unreported;
+  const std::vector<irep_idt> &checked;
   exception_typeidt registry;
   expr2tc thrown, type_id, value, uncaught_count, terminate_reason, site;
   std::set<irep_idt> may_throw;
@@ -1356,6 +1366,97 @@ private:
     return result;
   }
 
+  /// Point every vtable pointer of `obj`, a `catch (T v)` parameter or one of
+  /// its base subobjects, at T's own vtables: v is copy-initialised as a T, so
+  /// its dynamic type is T, not the thrown class ([except.handle]p15, #8696).
+  void reset_vptrs(
+    goto_programt &body,
+    goto_programt::targett &after,
+    const expr2tc &obj,
+    const irep_idt &object_tag)
+  {
+    const type2tc st = ns.follow(obj->type);
+    if (!is_struct_type(st))
+      return;
+    const struct_type2t &s = to_struct_type(st);
+    const std::string vptr_suffix = "::@vtable_pointer";
+    for (std::size_t i = 0; i < s.members.size(); ++i)
+    {
+      const std::string name = id2string(s.member_names[i]);
+      const expr2tc member = member2tc(s.members[i], obj, s.member_names[i]);
+      if (
+        name.compare(0, BASE_SUBOBJECT_PREFIX.size(), BASE_SUBOBJECT_PREFIX) ==
+        0)
+      {
+        reset_vptrs(body, after, member, object_tag);
+        continue;
+      }
+      if (
+        name.size() <= vptr_suffix.size() ||
+        name.compare(
+          name.size() - vptr_suffix.size(), vptr_suffix.size(), vptr_suffix) !=
+          0)
+        continue;
+      const std::string vptr_class =
+        name.substr(0, name.size() - vptr_suffix.size());
+      const symbolt *vtable = ns.lookup(
+        irep_idt("virtual_table::" + vptr_class + "@" + id2string(object_tag)));
+      if (!vtable)
+        continue;
+      const expr2tc table =
+        symbol2tc(migrate_type(vtable->get_type()), vtable->id);
+      auto assign = body.insert(std::next(after));
+      assign->make_assignment();
+      assign->code = code_assign2tc(
+        member, typecast2tc(s.members[i], address_of2tc(table->type, table)));
+      assign->location = after->location;
+      assign->function = after->function;
+      after = assign;
+    }
+  }
+
+  /// The value a `catch (T *)` binds: the thrown pointer, converted to `T *`
+  /// ([except.handle]p3). A thrown `D *` whose `T` base sits at a non-zero
+  /// offset moves to that subobject, and a null pointer stays null (#8695).
+  expr2tc
+  catch_pointer_value(const type2tc &var_type, const irep_idt &catch_type)
+  {
+    const type2tc char_ptr = pointer_type2tc(get_uint8_type());
+    const expr2tc thrown_ptr =
+      dereference2tc(char_ptr, typecast2tc(pointer_type2tc(char_ptr), value));
+    expr2tc result = typecast2tc(var_type, thrown_ptr);
+
+    const std::string suffix = "_ptr";
+    auto pointee = [&suffix](const irep_idt &name) {
+      const std::string s = id2string(name);
+      return s.substr(0, s.size() - suffix.size());
+    };
+    const irep_idt target_tag = "tag-" + pointee(catch_type);
+    for (const auto &[dname, id] : registry.concrete_subtypes(catch_type))
+    {
+      const symbolt *dsym = ns.lookup(irep_idt("tag-" + pointee(dname)));
+      if (!dsym)
+        continue;
+      std::optional<BigInt> off =
+        direct_base_offset(migrate_type(dsym->get_type()), target_tag);
+      if (!off || *off == 0)
+        continue;
+      expr2tc rebased = if2tc(
+        var_type,
+        equality2tc(thrown_ptr, gen_zero(char_ptr)),
+        gen_zero(var_type),
+        typecast2tc(
+          var_type,
+          add2tc(char_ptr, thrown_ptr, constant_int2tc(index_type2(), *off))));
+      result = if2tc(
+        var_type,
+        equality2tc(type_id, constant_int2tc(type_id->type, BigInt(id))),
+        rebased,
+        result);
+    }
+    return result;
+  }
+
   /// Insert `__ESBMC_exc_thrown = false` before a handler and rewrite its
   /// `var = NONDET` binding to read the thrown object via __ESBMC_exc_value:
   ///   catch (T &v): v is a T* — bind the address      v = (T*)value
@@ -1397,8 +1498,17 @@ private:
         ref_catch ? var->type : pointer_type2tc(var->type);
       expr2tc obj_ptr = catch_object_pointer(catch_ptr_type, h.type);
       expr2tc src = ref_catch ? obj_ptr : dereference2tc(var->type, obj_ptr);
+      if (is_pointer_catch(h.type) && is_pointer_type(var->type))
+        src = catch_pointer_value(var->type, h.type);
       bind->code = code_assign2tc(var, src);
       before_body = bind;
+      // `var` referred into the code just replaced; read the target back.
+      if (!ref_catch && !is_pointer_catch(h.type))
+        reset_vptrs(
+          body,
+          before_body,
+          to_code_assign2t(bind->code).target,
+          "tag-" + id2string(h.type));
     }
 
     auto insert_after = before_body;
@@ -1558,11 +1668,22 @@ private:
     case exception_globals::terminate_reason_no_active:
       first->location.comment("throw with no active exception");
       break;
+    case exception_globals::terminate_reason_unwinding:
+      first->location.comment(
+        "exception escaped a destructor during stack unwinding");
+      break;
     default:
       first->location.comment("terminate called after throwing an exception");
       break;
     }
     return first;
+  }
+
+  /// Whether an escaping exception of type @p name is a property. One that is
+  /// not still ends the run, so nothing after its raise is reached.
+  bool reports_escape(const irep_idt &name) const
+  {
+    return !unreported.count(name) && checks_exception(registry, name, checked);
   }
 
   /// The uncaught-exception check at a program-entry epilogue, partitioned by
@@ -1613,6 +1734,8 @@ private:
     {
       expr2tc eq = typeid_eq(name);
       known_disj = is_nil_expr(known_disj) ? eq : or2tc(known_disj, eq);
+      if (!reports_escape(name))
+        continue;
       const expr2tc t_escapes = and2tc(thrown, eq);
       const std::vector<throw_sitet> &sites = throw_sites(name);
 
@@ -1911,25 +2034,121 @@ private:
   }
 
   /// After a call that may throw, branch to the enclosing dispatch / epilogue
-  /// if the callee left an exception in flight.
+  /// if the callee left an exception in flight, first destroying the caller's
+  /// automatic objects goto_convertt::record_exception_unwind attached to the
+  /// call. `thrown` is cleared while they run, so their destructors are not
+  /// cut short by their own propagation guards or noexcept checks.
   void wire_call(
     goto_programt &body,
     goto_programt::targett call,
     goto_programt::targett dest)
   {
-    auto g = body.insert(std::next(call));
-    g->make_goto(dest, thrown);
-    g->location = call->location;
-    g->location.property("skipped");
-    g->function = call->function;
+    const auto after = std::next(call);
+    // A destructor run by a throw's unwinding that lets an exception escape
+    // calls std::terminate ([except.terminate]p1.4).
+    if (call->location.get_bool("#during_unwind"))
+    {
+      call->location.remove("#during_unwind");
+      emit_terminate(
+        body,
+        after,
+        not2tc(thrown),
+        call->location,
+        call->function,
+        exception_globals::terminate_reason_unwinding);
+      return;
+    }
+    const irept unwind = call->location.find("#exception_unwind");
+    call->location.remove("#exception_unwind");
+    auto add = [&]() {
+      auto t = body.insert(after);
+      t->location = call->location;
+      t->function = call->function;
+      return t;
+    };
+
+    if (unwind.get_sub().empty())
+    {
+      auto g = add();
+      g->make_goto(dest, thrown);
+      g->location.property("skipped");
+      return;
+    }
+
+    auto skip = add();
+    skip->make_goto(after, not2tc(thrown));
+    skip->location.property("skipped");
+    auto clear = add();
+    clear->make_assignment();
+    clear->code = code_assign2tc(thrown, gen_false_expr());
+    for (const irept &entry : unwind.get_sub())
+    {
+      expr2tc code;
+      migrate_expr(static_cast<const exprt &>(entry), code);
+      auto t = add();
+      if (is_code_dead2t(code))
+        t->make_dead();
+      else
+        t->make_function_call(code);
+      t->code = code;
+    }
+    auto set = add();
+    set->make_assignment();
+    set->code = code_assign2tc(thrown, gen_true_expr());
+    add()->make_goto(dest);
   }
 };
+} // namespace
+
+bool checks_exception(
+  const exception_typeidt &types,
+  const irep_idt &type,
+  const std::vector<irep_idt> &checked)
+{
+  return checked.empty() ||
+         std::any_of(checked.begin(), checked.end(), [&](const irep_idt &c) {
+           return types.is_subtype(type, c);
+         });
+}
+
+namespace
+{
+// An operational model raises a Python exception it cannot throw as an assert
+// whose comment reads "<Type>: <message>", e.g. "KeyError: key not found".
+// When no checked type covers <Type>, assume the condition instead, so the
+// path ends there unreported, as an unchecked raise does. No assert precedes
+// the assume, so it is a plain one, which the forward condition sees. A Python
+// assert, whose message may look the same, raises AssertionError instead.
+void assume_unchecked_model_exceptions(
+  goto_functionst &goto_functions,
+  const namespacet &ns,
+  const std::vector<irep_idt> &checked)
+{
+  const exception_typeidt types(ns);
+  for (auto &[id, fn] : goto_functions.function_map)
+    for (goto_programt::instructiont &i : fn.body.instructions)
+    {
+      const std::string &comment = i.location.comment().as_string();
+      const std::size_t colon = comment.find(':');
+      if (
+        !i.is_assert() || colon == std::string::npos ||
+        i.location.get_bool("ends_path"))
+        continue;
+      const irep_idt type = comment.substr(0, colon);
+      if (
+        types.is_subtype(type, "BaseException") &&
+        !checks_exception(types, type, checked))
+        i.make_assumption(expr2tc(i.guard));
+    }
+}
 } // namespace
 
 void remove_exceptions(
   goto_functionst &goto_functions,
   contextt &context,
-  const namespacet &ns)
+  const namespacet &ns,
+  const std::set<irep_idt> &unreported,
+  const std::vector<irep_idt> &checked)
 {
   // A program with no throw/catch needs no exception machinery. Skip entirely
   // so the pass is a true no-op for exception-free programs — otherwise it
@@ -1937,8 +2156,19 @@ void remove_exceptions(
   // that inspect program state on programs that have nothing to do with
   // exceptions (e.g. termination's recurrent-set search, function-contract
   // frames).
+  if (!checked.empty())
+    assume_unchecked_model_exceptions(goto_functions, ns, checked);
   if (!exception_loweringt::program_uses_exceptions(goto_functions))
     return;
   create_exception_state_symbols(context);
-  exception_loweringt(context, ns).run(goto_functions);
+  exception_loweringt(context, ns, unreported, checked).run(goto_functions);
+}
+
+std::vector<irep_idt> python_checked_exceptions(const optionst &options)
+{
+  std::vector<irep_idt> checked;
+  std::istringstream listed(options.get_option("python-check-exceptions"));
+  for (std::string name; std::getline(listed, name, ',');)
+    checked.emplace_back(name);
+  return checked;
 }

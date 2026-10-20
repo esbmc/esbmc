@@ -1,0 +1,5 @@
+CORE
+cbmc_static_init_function_fail.goto
+--binary --function harness
+^VERIFICATION FAILED$
+unlinked extern is nondet

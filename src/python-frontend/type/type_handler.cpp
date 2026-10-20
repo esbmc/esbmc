@@ -102,6 +102,18 @@ bool type_handler::is_pointer_free(const typet &t) const
   return true; // primitives
 }
 
+exprt type_handler::ptr_free_arg(const exprt &payload, const typet &elem_type)
+  const
+{
+  namespacet ns(converter_.symbol_table());
+  const bool payload_is_a_pointer =
+    payload.id() == "address_of" &&
+    ns.follow(payload.op0().type()).is_pointer();
+  return from_integer(
+    payload_is_a_pointer ? 2 : (is_pointer_free(elem_type) ? 1 : 0),
+    int_type());
+}
+
 bool type_handler::is_constructor_call(const nlohmann::json &json) const
 {
   if (
@@ -238,7 +250,7 @@ std::string type_handler::get_python_type_name(const typet &t) const
 std::string type_handler::get_var_type(const std::string &var_name) const
 {
   nlohmann::json ref = json_utils::find_var_decl(
-    var_name, converter_.current_function_name(), converter_.ast());
+    var_name, converter_.current_ast_scope(), converter_.ast());
 
   if (ref.empty())
     return std::string();
@@ -863,6 +875,37 @@ typet type_handler::get_typet_from_call_func(const nlohmann::json &func) const
   throw std::runtime_error("Invalid type");
 }
 
+std::optional<typet>
+type_handler::scalar_array_element_type(const nlohmann::json &elem) const
+{
+  if (
+    elem.value("_type", "") != "Subscript" ||
+    elem["slice"].value("_type", "") == "Slice" ||
+    elem["value"].value("_type", "") != "Name")
+    return std::nullopt;
+  symbol_id sid(
+    converter_.python_file(),
+    converter_.current_classname(),
+    converter_.current_function_name());
+  sid.set_object(elem["value"]["id"].get<std::string>());
+  const symbolt *symbol = converter_.find_symbol(sid.to_string());
+  if (!symbol)
+    symbol = converter_.find_symbol(sid.global_to_string());
+  // A NumPy view is a pointer into its source's storage.
+  if (
+    !symbol ||
+    (!symbol->get_type().is_array() && !symbol->get_type().is_pointer()))
+    return std::nullopt;
+  const typet &subtype = symbol->get_type().subtype();
+  if (
+    !subtype.is_signedbv() && !subtype.is_unsignedbv() &&
+    !subtype.is_floatbv() && !subtype.is_bool())
+    return std::nullopt;
+  if (subtype == char_type())
+    return std::nullopt;
+  return subtype;
+}
+
 typet type_handler::get_typet(const nlohmann::json &elem) const
 {
   // Handle null/empty values
@@ -1100,6 +1143,7 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
       }
       else
         t = empty_typet();
+
       // Phase 4.3 (Part IV §5): build the pointer type IREP2-internal and lower
       // at the seam. The pointee arrives as a legacy typet, so migrate it in.
       return lower_to_seam(pointer_type2tc(migrate_type(t)));
