@@ -1,6 +1,5 @@
 #include <solvers/smt/smt_solver.h>
 #include <util/expr/type_byte_size.h>
-#include <algorithm>
 #include <functional>
 
 /**
@@ -233,21 +232,12 @@ void smt_solver_baset::record_flattened_pointer(
   smt_astt address,
   smt_astt pointer)
 {
-  smt_astt guard = step_guard ? step_guard : mk_smt_bool(true);
-  /* A byte-wise store flattens one pointer once per byte, each in its own
-   * step; as distinct entries they fill max_rebuild_sources (#7855). The
-   * entry moves last, as decode_pointer_repr() keeps the latest. */
-  for (auto it = ptr_flatten_history.begin(); it != ptr_flatten_history.end();
-       ++it)
-    if (it->address == address && it->pointer == pointer && it->guard == guard)
-    {
-      step_flattens.insert(it->id);
-      std::rotate(it, it + 1, ptr_flatten_history.end());
-      return;
-    }
-
   const ptr_flatten_entry flat{
-    address, pointer, guard, ctx_level, flatten_count++};
+    address,
+    pointer,
+    step_guard ? step_guard : mk_smt_bool(true),
+    ctx_level,
+    flatten_count++};
   step_flattens.insert(flat.id);
 
   for (const ptr_flatten_entry &prev : ptr_flatten_history)
