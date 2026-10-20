@@ -382,25 +382,32 @@ class CoreVisitorsMixin:
         if isinstance(node, ast.Name):
             if node.id == old:
                 node.id = new
-            return
-        if isinstance(node, ast.Lambda):
-            for default in node.args.defaults + [d for d in node.args.kw_defaults if d]:
-                self._rename_free_name(default, old, new)
-            if old not in {a.arg for a in ast.walk(node.args) if isinstance(a, ast.arg)}:
-                self._rename_free_name(node.body, old, new)
-            return
-        if isinstance(node, (ast.ListComp, ast.SetComp, ast.GeneratorExp, ast.DictComp)):
-            for gen in node.generators:
-                self._rename_free_name(gen.iter, old, new)
-                if any(isinstance(n, ast.Name) and n.id == old for n in ast.walk(gen.target)):
-                    return
-                for cond in gen.ifs:
-                    self._rename_free_name(cond, old, new)
-            for part in ([node.key, node.value] if isinstance(node, ast.DictComp) else [node.elt]):
-                self._rename_free_name(part, old, new)
-            return
-        for child in ast.iter_child_nodes(node):
-            self._rename_free_name(child, old, new)
+        elif isinstance(node, ast.Lambda):
+            self._rename_free_name_in_lambda(node, old, new)
+        elif isinstance(node, (ast.ListComp, ast.SetComp, ast.GeneratorExp, ast.DictComp)):
+            self._rename_free_name_in_comprehension(node, old, new)
+        else:
+            for child in ast.iter_child_nodes(node):
+                self._rename_free_name(child, old, new)
+
+    def _rename_free_name_in_lambda(self, node, old, new):
+        """Defaults are evaluated outside the lambda; the body only sees
+        @p old when no parameter shadows it."""
+        for default in node.args.defaults + [d for d in node.args.kw_defaults if d]:
+            self._rename_free_name(default, old, new)
+        if old not in {a.arg for a in ast.walk(node.args) if isinstance(a, ast.arg)}:
+            self._rename_free_name(node.body, old, new)
+
+    def _rename_free_name_in_comprehension(self, node, old, new):
+        """Rename up to the generator whose target rebinds @p old."""
+        for gen in node.generators:
+            self._rename_free_name(gen.iter, old, new)
+            if any(isinstance(n, ast.Name) and n.id == old for n in ast.walk(gen.target)):
+                return
+            for cond in gen.ifs:
+                self._rename_free_name(cond, old, new)
+        for part in ([node.key, node.value] if isinstance(node, ast.DictComp) else [node.elt]):
+            self._rename_free_name(part, old, new)
 
     def _maybe_lower_dictcomp_over_items(self, node):
         """Lower a dict comprehension whose iterable is a dict view into ``x = {}``
