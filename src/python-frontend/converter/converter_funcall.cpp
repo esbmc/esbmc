@@ -2,6 +2,7 @@
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/json_utils.h>
+#include <python-frontend/python_annotation/function_values.h>
 #include <python-frontend/consteval/python_consteval.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_expr_builder.h>
@@ -1003,11 +1004,40 @@ typet python_converter::stored_function_return_type(const nlohmann::json &value)
 {
   if (value.value("_type", "") == "Lambda" && value.contains("body"))
     return lambda_handler_->infer_lambda_return_type(value["body"]);
+  if (value.value("_type", "") == "Call")
+    return returned_function_return_type(value);
   if (value.value("_type", "") != "Name")
     return typet();
   const exprt fn = get_expr(value);
   const typet &t = fn.type().is_pointer() ? fn.type().subtype() : fn.type();
   return t.is_code() ? to_code_type(t).return_type() : typet();
+}
+
+/// The return type shared by every function `call` may return, e.g. `pick()`
+/// returning `f` (#8891); nil when they are not all of this module or differ.
+typet python_converter::returned_function_return_type(
+  const nlohmann::json &call)
+{
+  function_values values(*ast_json, {});
+  const auto candidates = values.of(call);
+  if (!candidates)
+    return typet();
+  std::optional<typet> shared;
+  for (const function_values::candidate &c : *candidates)
+  {
+    if (c.module != ast_json)
+      return typet();
+    nlohmann::json name = {
+      {"_type", "Name"},
+      {"id", (*c.def)["name"]},
+      {"ctx", {{"_type", "Load"}}}};
+    copy_location_fields_from_decl(call, name);
+    const typet ret = stored_function_return_type(name);
+    if (ret.is_nil() || ret.id().empty() || (shared && *shared != ret))
+      return typet();
+    shared = ret;
+  }
+  return shared ? *shared : typet();
 }
 
 std::optional<typet>
