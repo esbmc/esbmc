@@ -6359,6 +6359,43 @@ void python_converter::propagate_dict_member_list_type_info(
     element_type_registry_.record(lhs_identifier, std::string(), tuple_t);
 }
 
+/// "s" or "n" when every recorded element of list @p id is a str or a
+/// number, "[" and the same for the inner list when they are lists; empty
+/// when nothing or a mix is recorded.
+std::string python_converter::element_kind(const std::string &id) const
+{
+  const element_type_registry::entries *entries =
+    element_type_registry_.find(id);
+  if (!entries || element_type_registry_.mixes_str_and_number(id))
+    return "";
+  const typet &first = entries->front().second;
+  if (type_handler_.is_string_type(first))
+    return "s";
+  if (type_handler_.is_numeric_scalar_type(first))
+    return "n";
+  if (first != type_handler_.get_list_type())
+    return "";
+  std::string inner;
+  for (const auto &[elem_id, type] : *entries)
+  {
+    const std::string k = elem_id.empty() ? "" : element_kind(elem_id);
+    if (k.empty() || (!inner.empty() && k != inner))
+      return "";
+    inner = k;
+  }
+  return "[" + inner;
+}
+
+/// Whether lists @p a and @p b both have one recorded element kind, and the
+/// two differ.
+bool python_converter::element_kinds_differ(
+  const std::string &a,
+  const std::string &b) const
+{
+  const std::string ka = element_kind(a), kb = element_kind(b);
+  return !ka.empty() && !kb.empty() && ka != kb;
+}
+
 void python_converter::propagate_list_type_info(
   const exprt &lhs,
   const exprt &rhs,
@@ -6366,6 +6403,14 @@ void python_converter::propagate_list_type_info(
 {
   const std::string &lhs_identifier = lhs.identifier().as_string();
   const std::string &rhs_identifier = rhs.identifier().as_string();
+  // The registry keeps one record per name, so a rebinding under a branch or
+  // loop would retype every later read, including those on the other path.
+  if (
+    block_nesting_ != function_body_depth_ + 1 &&
+    element_kinds_differ(lhs_identifier, rhs_identifier))
+    throw std::runtime_error(
+      "rebinding '" + lhs_symbol->name.as_string() +
+      "' to a list of other element types on one path is not supported");
   element_type_registry_.assign_from(rhs_identifier, lhs_identifier);
 
   // When rhs is dict_sym.keys / dict_sym.values (a member expression

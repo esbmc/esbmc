@@ -1356,6 +1356,8 @@ private:
     const exprt &lhs,
     const exprt &rhs);
 
+  typet
+  any_attribute_type(const nlohmann::json &stmt, const std::string &attr_name);
   void get_attributes_from_self(
     const nlohmann::json &func_node,
     struct_typet &clazz);
@@ -1809,6 +1811,8 @@ private:
     const nlohmann::json &ast_node,
     bool is_ctor_call);
 
+  std::string element_kind(const std::string &id) const;
+  bool element_kinds_differ(const std::string &a, const std::string &b) const;
   /// Carries the list element-type map from @p rhs to @p lhs on a
   /// container-level list assignment, resolving dict `.keys`/`.values`
   /// members to the dict's internal list symbol.
