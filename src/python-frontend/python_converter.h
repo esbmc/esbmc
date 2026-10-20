@@ -2545,11 +2545,17 @@ private:
   bool unpack_record_is_trusted(const nlohmann::json &value) const;
 
   /// Unpacks @p value, an element of an enclosing unpacking, into the nested
-  /// Tuple or List @p target. A list must be a symbol with element types
-  /// recorded exactly; any other value or target is refused.
+  /// Tuple or List @p target. A list must be a symbol, or a member of a tuple
+  /// variable, with element types recorded exactly; any other value or target
+  /// is refused.
   void unpack_nested_target(
     const nlohmann::json &ast_node,
     const nlohmann::json &target,
+    const exprt &value,
+    codet &target_block);
+
+  exprt hold_tuple_member_list(
+    const nlohmann::json &ast_node,
     const exprt &value,
     codet &target_block);
 

@@ -4633,6 +4633,44 @@ bool python_converter::unpack_record_is_trusted(
   return true;
 }
 
+// A list read from a tuple variable, `t.element_i`, is held in a temporary
+// that takes the element types recorded for the list the tuple was assigned.
+// The symbol's value is that assignment's literal; under a trusted record the
+// tuple is bound once and read only here, so it is still current.
+exprt python_converter::hold_tuple_member_list(
+  const nlohmann::json &ast_node,
+  const exprt &value,
+  codet &target_block)
+{
+  if (
+    !unpack_record_trusted_ || value.id() != "member" ||
+    !value.op0().is_symbol() ||
+    value.type() != get_type_handler().get_list_type())
+    return value;
+  const symbolt *tuple = find_symbol(value.op0().identifier().as_string());
+  const typet tuple_type = ns.follow(value.op0().type());
+  if (
+    !tuple || tuple->get_value().id() != "struct" ||
+    !tuple_handler_->is_tuple_type(tuple_type))
+    return value;
+  const std::size_t i =
+    to_struct_type(tuple_type).component_number(value.get("component_name"));
+  const exprt &source = tuple->get_value().operands().at(i);
+  if (
+    !source.is_symbol() ||
+    !element_type_registry_.find(source.identifier().as_string()))
+    return value;
+
+  symbolt &held =
+    create_tmp_symbol(ast_node, "$unpack_elem$", value.type(), exprt());
+  code_declt decl(symbol_expr(held));
+  decl.copy_to_operands(value);
+  target_block.copy_to_operands(decl);
+  element_type_registry_.assign_from(
+    source.identifier().as_string(), held.id.as_string());
+  return symbol_expr(held);
+}
+
 void python_converter::unpack_nested_target(
   const nlohmann::json &ast_node,
   const nlohmann::json &target,
@@ -4663,13 +4701,14 @@ void python_converter::unpack_nested_target(
   }
 
   // Without exactly recorded element types the targets could not be typed
+  const exprt list = hold_tuple_member_list(ast_node, value, target_block);
   if (
-    unpack_record_trusted_ && value.is_symbol() &&
-    value.type() == get_type_handler().get_list_type() &&
-    element_type_registry_.find(value.identifier().as_string()))
+    unpack_record_trusted_ && list.is_symbol() &&
+    list.type() == get_type_handler().get_list_type() &&
+    element_type_registry_.find(list.identifier().as_string()))
   {
     python_list(*this, ast_node["value"])
-      .handle_list_var_unpacking(ast_node, target, value, target_block);
+      .handle_list_var_unpacking(ast_node, target, list, target_block);
     return;
   }
 
