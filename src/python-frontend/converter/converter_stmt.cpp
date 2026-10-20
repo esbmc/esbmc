@@ -4544,9 +4544,29 @@ typet python_converter::resolve_call_argument_array_type(
   return probed_type;
 }
 
+const code_typet *python_converter::lambda_call_callee(
+  const nlohmann::json &call,
+  const symbolt &var)
+{
+  if (const symbolt *copy = lambda_copy_for_call(call, var))
+    return &to_code_type(copy->get_type());
+
+  const std::string name = call["func"]["id"].get<std::string>();
+  const nlohmann::json scope = json_utils::find_function_by_path(
+    *ast_json, json_utils::split_function_path(current_func_name_));
+  if (
+    python_annotation_parser::find_lambda_in_body(name, (*ast_json)["body"])
+      .empty() &&
+    (!scope.contains("body") ||
+     python_annotation_parser::find_lambda_in_body(name, scope["body"])
+       .empty()))
+    return nullptr;
+  return &to_code_type(var.get_type().subtype());
+}
+
 typet python_converter::resolve_lambda_call_result_type(
   const nlohmann::json &ast_node,
-  const typet &current_type) const
+  const typet &current_type)
 {
   const nlohmann::json &call = ast_node["value"];
   if (
@@ -4562,17 +4582,11 @@ typet python_converter::resolve_lambda_call_result_type(
     !var->get_type().subtype().is_code())
     return current_type;
 
-  const nlohmann::json scope = json_utils::find_function_by_path(
-    *ast_json, json_utils::split_function_path(current_func_name_));
-  if (
-    python_annotation_parser::find_lambda_in_body(name, (*ast_json)["body"])
-      .empty() &&
-    (!scope.contains("body") ||
-     python_annotation_parser::find_lambda_in_body(name, scope["body"])
-       .empty()))
+  const code_typet *callee = lambda_call_callee(call, *var);
+  if (!callee)
     return current_type;
 
-  const typet &ret = to_code_type(var->get_type().subtype()).return_type();
+  const typet &ret = callee->return_type();
   return ret.is_signedbv() || ret.is_unsignedbv() || ret.is_bool()
            ? ret
            : current_type;

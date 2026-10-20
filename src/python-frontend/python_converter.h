@@ -161,6 +161,16 @@ public:
   void convert_lambda_call(
     const nlohmann::json &element,
     side_effect_expr_function_callt &call);
+  /// The copy of the once-bound lambda @p var points to, converted for a call
+  /// passing an int where its one signature has a float (#8941), or null.
+  const symbolt *
+  lambda_copy_for_call(const nlohmann::json &call, const symbolt &var);
+  /// Retarget @p call to that copy, if there is one.
+  bool call_lambda_copy(
+    const nlohmann::json &element,
+    const symbolt &var,
+    side_effect_expr_function_callt &call,
+    const code_typet *&callee_type);
   std::optional<exprt> call_property_value(const nlohmann::json &element);
   /// Unknown, function or class-instance types: a call on such a value may
   /// succeed.
@@ -1918,9 +1928,13 @@ private:
    *   `name(...)` with `name` bound to a lambda, as the annotator sees it,
    *   and to a function pointer; otherwise `current_type`.
    */
+  /// The callee type of `name(...)` with `name` bound to a lambda: the copy
+  /// lambda_copy_for_call makes, else the lambda @p var points to, else null.
+  const code_typet *
+  lambda_call_callee(const nlohmann::json &call, const symbolt &var);
   typet resolve_lambda_call_result_type(
     const nlohmann::json &ast_node,
-    const typet &current_type) const;
+    const typet &current_type);
 
   std::string resolve_name_symbol_id(const std::string &name) const;
   symbolt *find_enclosing_scope_symbol(symbol_id sid) const;
@@ -3151,6 +3165,7 @@ private:
   // dead code and evaluate a side-effecting divisor an extra time).
   bool converting_defaults_ = false;
   bool converting_lambda_body_ = false;
+  std::map<std::string, irep_idt> lambda_copies_;
   bool in_rhs_type_probe_ = false;
   // Set while probe_expr() evaluates a node only to inspect its result.
   bool in_scratch_probe_ = false;
