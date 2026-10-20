@@ -107,13 +107,14 @@ expr2tc python_list::stored_element_is(
   // By object and offset: these fold through the casts the stored copy is read
   // back with, where a pointer == stays symbolic and keeps the unbounded
   // __ESBMC_list_eq fallback live.
+  const type2tc offset_type = get_int_type(config.ansi_c.address_width);
   return and2tc(
     equality2tc(
       pointer_object2tc(pointer_type2(), stored),
       pointer_object2tc(pointer_type2(), current)),
     equality2tc(
-      pointer_offset2tc(pointer_type2(), stored),
-      pointer_offset2tc(pointer_type2(), current)));
+      pointer_offset2tc(offset_type, stored),
+      pointer_offset2tc(offset_type, current)));
 }
 
 exprt python_list::compare(
