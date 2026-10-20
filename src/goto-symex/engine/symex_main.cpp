@@ -236,8 +236,13 @@ void goto_symext::propagate_assume_equality(const expr2tc &the_assumption)
   // assignment() emits no SSA step: lift only a value level2 records (#7974).
   // IEEE-754 +0.0 and -0.0 compare equal but have distinct bit patterns;
   // propagating either would mask signbit-sensitive bugs.
+  // `p == &obj` pins p as a constant does: a requires() naming one object
+  // then reaches the dereferences of p (#8517).
   auto is_liftable = [this](const expr2tc &e) {
-    return is_constant_expr(e) && cur_state->constant_propagation(e) &&
+    const bool pinned_address =
+      is_address_of2t(e) && is_symbol2t(to_address_of2t(e).ptr_obj);
+    return (is_constant_expr(e) || pinned_address) &&
+           cur_state->constant_propagation(e) &&
            !(is_constant_floatbv2t(e) &&
              to_constant_floatbv2t(e).value.is_zero());
   };

@@ -35,6 +35,13 @@ class PreprocessorStateMixin:
         self._vararg_scope_stack = []
         self._vararg_def_owners = {}
         self._vararg_owner_specs = {}
+        # (name, arity) -> copy of a variadic def an importer calls; see
+        # _specialize_external_varargs and _call_imported_vararg_spec.
+        self.external_vararg_arities = {}
+        self.exported_vararg_specs = {}
+        self._imported_vararg_specs = {}
+        self._used_imported_vararg_specs = {}
+        self._vararg_once_bound = set()
         self.listcomp_counter = 0
         self.functools_reduce_names = set()
         self.functools_module_names = set()

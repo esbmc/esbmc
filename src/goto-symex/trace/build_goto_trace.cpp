@@ -4,6 +4,8 @@
 #include <goto-symex/witness/witnesses.h>
 #include <solvers/smt/smt_conv.h>
 
+static bool reads_through_dereference(const expr2tc &e);
+
 expr2tc build_lhs(smt_convt &smt_conv, const expr2tc &lhs)
 {
   if (is_nil_expr(lhs))
@@ -19,7 +21,11 @@ expr2tc build_lhs(smt_convt &smt_conv, const expr2tc &lhs)
     // Build new source value, it might be an index, in case of
     // multidimensional arrays
     expr2tc new_source_value = build_lhs(smt_conv, index.source_value);
-    expr2tc new_value = smt_conv.get(index.index);
+    // Symex renames this index but leaves its dereference in place, which the
+    // solver cannot evaluate.
+    expr2tc new_value = reads_through_dereference(index.index)
+                          ? index.index
+                          : smt_conv.get(index.index);
     new_lhs = index2tc(new_lhs->type, new_source_value, new_value);
     break;
   }
@@ -124,7 +130,9 @@ static expr2tc rebase_on_ssa_lhs(
   {
     const index2t &index = to_index2t(lvalue);
     expr2tc src = rebase_on_ssa_lhs(smt_conv, index.source_value, ssa_lhs);
-    if (is_nil_expr(src) || !is_array_type(src->type))
+    if (
+      is_nil_expr(src) || !is_array_type(src->type) ||
+      reads_through_dereference(index.index))
       return expr2tc();
 
     expr2tc idx = smt_conv.get(index.index);

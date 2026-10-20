@@ -46,6 +46,10 @@ class ModuleLifecycleMixin:
                 if owner in imported_names and (include_methods or not dot):
                     flags.add(name)
 
+        for (name, arity), spec in other.exported_vararg_specs.items():
+            if name in imported_names:
+                self._imported_vararg_specs.setdefault((name, arity), spec)
+
     def finalize_module(self, node):
         """Run generic_visit and inject helper nodes requested during traversal."""
         self._bind_classmethod_constructors(node)
@@ -66,6 +70,7 @@ class ModuleLifecycleMixin:
         self._assignment_call_origins.clear()
         try:
             node = self.generic_visit(node)
+            self._import_used_vararg_specs(node)
 
             if self._needs_dataclass_initvar_import:
                 self._ensure_dataclass_initvar_import(node)
@@ -85,6 +90,7 @@ class ModuleLifecycleMixin:
                 helper_fn = self._build_dataclass_replace_error_helper(node)
                 node.body = [helper_fn] + node.body
 
+            self._specialize_external_varargs()
             self._inject_vararg_specializations(node)
 
             if self._needs_dataclass_getattr_helper:
