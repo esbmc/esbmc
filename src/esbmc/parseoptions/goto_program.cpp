@@ -232,6 +232,9 @@ static bool retarget_esbmc_main(
       to_symbol2t(call.function).thename == "c:@F@main")
     {
       call.function = symbol2tc(get_empty_type(), target);
+      // main's argc/argv must not bind the target's parameters, which symex
+      // leaves nondet when the call supplies no argument.
+      call.operands.clear();
       entry->second.body.destructive_insert(it, init);
     }
   }
@@ -340,8 +343,19 @@ static bool bridge_binary_entry_point(
     goto_programt init;
     if (cbmc_additions)
       init = cbmc_static_init(context, options, preexisting);
-    return retarget_esbmc_main(
-      goto_functions, cmdline.getval("function"), init);
+    irep_idt target = cmdline.getval("function");
+    if (!cbmc_additions)
+    {
+      // ESBMC names a C function by its clang USR, a CBMC binary plainly.
+      const irep_idt usr = "c:@F@" + id2string(target);
+      if (
+        !goto_functions.function_map.count(target) &&
+        goto_functions.function_map.count(usr))
+        target = usr;
+      if (target == "c:@F@main")
+        return false;
+    }
+    return retarget_esbmc_main(goto_functions, target, init);
   }
 
   if (cbmc_additions && goto_functions.function_map.count("__CPROVER__start"))

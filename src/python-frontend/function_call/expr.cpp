@@ -975,7 +975,7 @@ exprt function_call_expr::build_constant_from_arg() const
     {
       // Covers list literals, variables, and list-returning calls.
       python_list list_handler(converter_, call_);
-      return list_handler.build_shallow_copy_call(expr, call_);
+      return list_handler.build_tuple_copy_call(expr, call_);
     }
     // tuple("...") — a constant string yields a tuple of single-character
     // strings (CPython: tuple("ab") == ('a', 'b')). Lower to a tuple literal so

@@ -123,6 +123,42 @@ static void report_no_answer(int pipe_fd, resultt &r, uint64_t max_k_step)
   assert(len == sizeof(r) && "short write");
   (void)len; // ndebug
 }
+
+/** Whether a base-case run found a bug. A run that only refutes the
+ *  loop-invariant abstraction found none, but leaves the base case unknown
+ *  while a larger k may still find a real bug (#7516). */
+static bool
+base_case_found_bug(smt_resultt res, const bmct &bmc, bool &unknown_base_case)
+{
+  if (res != P_SATISFIABLE)
+    return false;
+  if (!bmc.violates_only_the_abstraction())
+    return true;
+  unknown_base_case = true;
+  return false;
+}
+
+/** Tell the parent the base case found no bug, or no answer if one k left it
+ *  unknown. */
+static void report_base_case_end(
+  int pipe_fd,
+  resultt &r,
+  uint64_t no_answer_k,
+  bool unknown_base_case)
+{
+  if (unknown_base_case)
+  {
+    report_no_answer(pipe_fd, r, no_answer_k);
+    log_status("Base case process finished (no answer).\n");
+    return;
+  }
+
+  r.k = 0;
+  auto const len = write(pipe_fd, &r, sizeof(r));
+  assert(len == sizeof(r) && "short write");
+  (void)len; // ndebug
+  log_status("Base case process finished (no bug found).\n");
+}
 #endif
 
 // This is the parallel version of k-induction algorithm.
@@ -456,6 +492,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
      * value the parent still holds -- reporting the raised one is read as a
      * bug at that k. */
     const uint64_t no_answer_k = max_k_step;
+    bool unknown_base_case = false;
 
     // Run bmc and only send results in two occasions:
     // 1. A bug was found, we send the step where it was found
@@ -483,7 +520,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       }
 
       // Send information to parent if no bug was found
-      if (res == P_SATISFIABLE)
+      if (base_case_found_bug(res, bmc, unknown_base_case))
       {
         r.k = k_step;
 
@@ -541,14 +578,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       max_k_step = a_result.k + k_step_inc;
     }
 
-    // Send information to parent that a bug was not found
-    r.k = 0;
-
-    auto const len = write(forward_pipe[1], &r, sizeof(r));
-    assert(len == sizeof(r) && "short write");
-    (void)len; // ndebug
-
-    log_status("Base case process finished (no bug found).\n");
+    report_base_case_end(forward_pipe[1], r, no_answer_k, unknown_base_case);
     return false;
   }
 
@@ -735,6 +765,10 @@ tvt esbmc_parseoptionst::is_base_case_violated(
   switch (do_bmc(bmc))
   {
   case P_UNSATISFIABLE:
+    // start_bmc maps a counterexample against the invariant abstraction to
+    // UNSAT for the exit code; it does not refute the base case.
+    if (bmc.violates_only_the_abstraction())
+      break;
     return tvt(tvt::TV_FALSE);
 
   case P_SMTLIB:
