@@ -10,6 +10,7 @@ from preprocessor.namedtuple_lowering import lower_namedtuples
 from preprocessor.function_value_types import reject_mixed_function_values
 from preprocessor.receiver_classes import refuse_path_dependent_receivers
 from preprocessor.skipped_base_init import refuse_skipped_base_init
+from preprocessor.zip_lowering import lower_zip_builds
 from preprocessor.unbound_locals import guard_unbound_locals
 # pylint: disable=too-many-branches,too-many-boolean-expressions
 
@@ -534,6 +535,7 @@ class ModuleRewriteMixin:
     def prepare_module(self, node, alias_seed=frozenset(), wrapper_seed=None):
         """Run pre-visit analyses and range-alias/wrapper canonicalization."""
         _rename_shadowed_classes(node)
+        lower_zip_builds(node)
         reject_mixed_function_values(node, self.module_name)
         lower_match_statements(node)
         lower_itertools(node)
