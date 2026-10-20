@@ -425,6 +425,11 @@ public:
   symbolt *find_symbol(const std::string &symbol_id) const;
 
   bool is_imported_module(const std::string &module_name) const;
+  /// FunctionDef stubs, each only a `name` and its `returns`, for the
+  /// functions a call in the current module can name: its own and those an
+  /// import binds, as `mk` after `from helper import mk` and `helper.mk`
+  /// after `import helper`.
+  nlohmann::json callable_function_stubs() const;
   /// How one scope binds a name: by an import, by anything else, or by a
   /// `global`/`nonlocal` declaration handing it to an outer scope.
   struct scope_bindings
@@ -1448,10 +1453,13 @@ private:
     const nlohmann::json &args,
     const nlohmann::json &source_node) const;
 
+  /// Stores the result of @p call_expr in a fresh temporary declared in
+  /// @p block, current_block when null, and returns that temporary.
   exprt store_call_result(
     exprt call_expr,
     const locationt &location,
-    const std::string &temp_prefix);
+    const std::string &temp_prefix,
+    codet *block = nullptr);
 
   void process_module_imports(
     const nlohmann::json &module_ast,
