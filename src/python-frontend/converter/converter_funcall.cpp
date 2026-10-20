@@ -980,10 +980,17 @@ bool python_converter::dict_values(
     std::vector<nlohmann::json> stored;
     collect_dict_values(*ast_json, container["id"], stored);
     for (const auto &v : stored)
+    {
+      // A nondet collection's elements are never functions (#8947).
+      if (
+        v.value("_type", "") == "Call" &&
+        type_utils::is_nondet_collection_builder(v["func"].value("id", "")))
+        continue;
       if (
         v.value("_type", "") != "Call" ||
         !returned_dict_values(*ast_json, v, out))
         out.push_back(v);
+    }
   }
   else if (type == "Subscript")
   {
