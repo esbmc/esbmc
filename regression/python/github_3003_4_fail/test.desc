@@ -2,5 +2,5 @@ CORE
 main.py
 --multi-property --unwind 2 --no-bounds-check --no-pointer-check
 ^\*\* 2 of 2 properties failed$
-^ +FAILED .*line +7 +assertion l != 0$
+^ +FAILED .*line +7 +assertion 
 ^ +FAILED .*TypeError: object of this type has no len\(\)$

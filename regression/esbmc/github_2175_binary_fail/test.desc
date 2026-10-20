@@ -1,0 +1,5 @@
+CORE
+main.goto
+--binary --function foo
+^  x is nondet$
+^VERIFICATION FAILED$

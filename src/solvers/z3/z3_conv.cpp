@@ -103,6 +103,7 @@ smt_resultt z3_convt::dec_solve()
   if (result == z3::unsat)
     return P_UNSATISFIABLE;
 
+  log_warning("Z3 solver returned unknown: {}", solver.reason_unknown());
   return P_ERROR;
 }
 

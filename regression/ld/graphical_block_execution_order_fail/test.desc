@@ -1,0 +1,5 @@
+CORE
+timer.ld
+--ld-props props.yaml --k-induction --unlimited-k-steps
+^ERROR: UnsupportedConstruct\(block with an executionOrderId, tier=2\)$
+^ERROR: PARSING ERROR$
