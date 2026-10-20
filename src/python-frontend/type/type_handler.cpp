@@ -1669,3 +1669,16 @@ typet type_handler::get_dict_type(const nlohmann::json &dict_value) const
   // In the future, this could infer specific key/value types
   return get_dict_type();
 }
+
+typet type_handler::class_value_type()
+{
+  struct_typet type;
+  type.tag("__ESBMC_PyClass");
+  type.components().push_back(struct_typet::componentt("id", "id", int_type()));
+  return type;
+}
+
+bool type_handler::is_class_value_type(const typet &type)
+{
+  return type.is_struct() && to_struct_type(type).tag() == "__ESBMC_PyClass";
+}

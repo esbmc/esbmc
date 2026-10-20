@@ -1,0 +1,4 @@
+regression/python/str_rebind_length
+regression/python/str_rebind_length_fail
+regression/python/str_rebind_length_call
+regression/python/str_rebind_length_call_fail
