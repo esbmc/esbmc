@@ -28,12 +28,12 @@ class F:
 
 class G:
 
-    def __init__(self, w: int, b: bool):
-        self.w = w
+    def __init__(self, n: int, b: bool):
+        self.n = n
         self.b = b
 
     def inv(self):
-        return self.w**-1
+        return self.n**-1
 
     def inc(self):
         return self.b + 1
@@ -48,16 +48,18 @@ class S:
         return self.s * 2
 
 
-a = R(3, 4, 0.5).area()
+r = R(3, 4, 0.5)
+a = r.area()
 assert isinstance(a, int)
 assert a == 9
-b = R(3, 4, 0.5).size()
+b = r.size()
 assert isinstance(b, int)
 assert b == 16
-c = R(3, 4, 0.5).scaled()
+c = r.scaled()
 assert isinstance(c, float)
 assert c == 1.5
 assert F(1.25).double() == 2.5
-assert G(2, True).inv() == 0.5
-assert G(2, True).inc() == 2
+g = G(2, True)
+assert g.inv() == 0.5
+assert g.inc() == 2
 assert S("ab").twice() == "abab"
