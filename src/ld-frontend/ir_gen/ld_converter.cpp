@@ -3,6 +3,7 @@
 #include <cctype>
 #include <algorithm>
 #include <util/arith/arith_tools.h>
+#include <util/arith/ieee_float.h>
 #include <util/arith/mp_arith.h>
 #include <util/config/config.h>
 #include <util/lang/c_types.h>
@@ -39,6 +40,8 @@ typet ld_converter::type_of_kind(VarKind kind) const
   case VarKind::BOOL:
     return bool_t();
   case VarKind::REAL:
+    return float_type(); // IEC 61131-3 Table 10: REAL is 32 bits
+  case VarKind::LREAL:
     return double_type();
   case VarKind::INT:
     return signedbv_typet(16); // IEC INT, and MATIEC's IEC_INT
@@ -111,9 +114,13 @@ symbol_exprt ld_converter::declare_variable(const VarDecl &v)
     sym.set_value(v.init_value ? exprt(true_exprt()) : exprt(false_exprt()));
     break;
   case VarKind::REAL:
-    sym.set_value(
-      from_double(static_cast<double>(v.init_value), double_type()));
+  case VarKind::LREAL:
+  {
+    ieee_floatt f(ieee_float_spect(to_floatbv_type(sym.get_type())));
+    f.from_integer(BigInt(v.init_value));
+    sym.set_value(f.to_expr());
     break;
+  }
   case VarKind::INT:
   case VarKind::DINT:
   case VarKind::TIME:
