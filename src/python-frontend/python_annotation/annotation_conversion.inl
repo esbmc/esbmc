@@ -1867,8 +1867,9 @@ std::string python_annotation<Json>::get_function_return_type(
     // (GitHub #5104, #5105).
     std::string saved_return_ctx = current_func_name_context_;
     current_func_name_context_ = func_name;
+    bool divergent = false;
     std::string inferred_type =
-      infer_from_return_statements(func_elem["body"], func_name);
+      infer_from_return_statements(func_elem["body"], func_name, &divergent);
     current_func_name_context_ = saved_return_ctx;
 
     if (!inferred_type.empty() && inferred_type != "NoneType")
@@ -1888,6 +1889,15 @@ std::string python_annotation<Json>::get_function_return_type(
     auto return_node = json_utils::find_return_node(func_elem["body"]);
     if (!return_node.empty())
     {
+      // Branches returning incompatible types (e.g. int and str) have no
+      // single type; narrowing to the first top-level return would mistype
+      // the other path (#8890).
+      if (divergent)
+      {
+        functions_in_analysis_.erase(func_name);
+        return "";
+      }
+
       std::string fallback_type;
       std::string saved_fallback_ctx = current_func_name_context_;
       current_func_name_context_ = func_name;
@@ -3850,7 +3860,8 @@ void python_annotation<Json>::collect_return_types(
 template <class Json>
 std::string python_annotation<Json>::infer_from_return_statements(
   const Json &body,
-  const std::string &func_name)
+  const std::string &func_name,
+  bool *divergent)
 {
   std::set<std::string> types;
   collect_return_types(body, func_name, types);
@@ -3950,6 +3961,8 @@ std::string python_annotation<Json>::infer_from_return_statements(
   // which would otherwise make the cross-type `==`/`!=` fold collapse a valid
   // comparison against the other branch's type to a constant False
   // (GitHub #5157). Mirrors the mixed value+None -> Optional handling above.
+  if (divergent)
+    *divergent = true;
   return "";
 }
 
