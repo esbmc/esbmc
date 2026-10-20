@@ -504,6 +504,29 @@ public:
   /// also held in `value` for the folds that read it back.
   exprt make_class_object(const std::string &name);
 
+  /// The runtime class value (#8390) of the class `name`.
+  exprt class_value(const std::string &name);
+  /// `e` as a runtime class value when it is one, a class object, or a
+  /// conditional between such; nil otherwise.
+  exprt as_class_value(const exprt &e);
+  /// `is`, `is not`, `==` or `!=` with a runtime class value on a side; nil
+  /// when neither side is one.
+  exprt compare_class_values(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs);
+  /// Whether assigning `rhs` to the variable `ast_node` targets makes that
+  /// variable a runtime class value: a class on one of several paths.
+  bool binds_runtime_class(const nlohmann::json &ast_node, const exprt &rhs);
+  /// Whether the assignment's target type is settled without the usual
+  /// adjustments: a subscript keeps its own, and a variable that
+  /// binds_runtime_class takes the class-value type, as does `rhs`.
+  bool settle_target_type(
+    symbolt *lhs_symbol,
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &ast_node);
+
   /// The category get_expr converts @p element as; CLASS_MRO for
   /// `Cls.__mro__` on a class whose MRO is known.
   ExpressionType expression_type(const nlohmann::json &element) const;
@@ -3159,6 +3182,8 @@ private:
   bool has_cached_any_subscript_rhs_ = false;
   std::set<std::string> numpy_array_symbols_;
   std::unordered_map<irep_idt, std::string, irep_id_hash> class_object_names_;
+  /// Ids of the classes used as runtime class values.
+  std::map<std::string, int> class_ids_;
 
   /// Whether the element types recorded for the lists the current unpacking
   /// reaches are exact; see unpack_record_is_trusted.

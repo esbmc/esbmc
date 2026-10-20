@@ -3028,7 +3028,7 @@ regression/python/github_8359_heap_untyped_stores_fail
 regression/python/is_class_alias
 regression/python/is_class_alias_any_fail
 regression/python/is_class_alias_fail
-regression/python/is_class_alias_rebound_unsupported
+regression/python/is_class_alias_rebound
 regression/python/class_attribute_none_store
 regression/python/class_attribute_none_store_fail
 regression/python/github_8479
@@ -3118,7 +3118,7 @@ regression/python/github_8389_bool_fail
 regression/python/github_8389_escaping_function_unsupported
 regression/python/github_8389_fail
 regression/python/github_8389_local_fail
-regression/python/github_8389_local_in_branch_unsupported
+regression/python/github_8389_local_in_branch
 regression/python/github_8389_make_fail
 regression/python/github_8389_rebound_param_unsupported
 regression/python/github_8389_same_fail
@@ -3127,7 +3127,7 @@ regression/python/github_8389_tuple_arg_unsupported
 regression/python/github_8389_validator
 regression/python/github_8389_validator_fail
 regression/python/github_8389_rebound_class_unsupported
-regression/python/github_8389_local_rebound_unsupported
+regression/python/github_8389_local_rebound
 regression/python/github_8389_decorated_unsupported
 regression/python/github_8389_redefined_unsupported
 regression/python/github_8389_param_value

@@ -1172,8 +1172,7 @@ void python_converter::handle_assignment_type_adjustments(
   const bool has_annotation =
     ast_node.contains("annotation") && !ast_node["annotation"].is_null();
 
-  // Don't rewrite lhs_symbol's type for a subscript target.
-  if (assignment_target_is_subscript(ast_node))
+  if (settle_target_type(lhs_symbol, lhs, rhs, ast_node))
     return;
 
   rhs = wrap_stored_if_optional(rhs, lhs.type());
@@ -1415,6 +1414,110 @@ void python_converter::handle_assignment_type_adjustments(
     if (!rhs.type().is_empty() && !is_ctor_call)
       set_assigned_value(*lhs_symbol, rhs);
   }
+}
+
+bool python_converter::settle_target_type(
+  symbolt *lhs_symbol,
+  exprt &lhs,
+  exprt &rhs,
+  const nlohmann::json &ast_node)
+{
+  // Don't rewrite lhs_symbol's type for a subscript target.
+  if (assignment_target_is_subscript(ast_node))
+    return true;
+  if (!lhs_symbol)
+    return false;
+  if (binds_runtime_class(ast_node, rhs))
+  {
+    rhs = as_class_value(rhs);
+    lhs_symbol->set_type(migrate_type(rhs.type()));
+    lhs.type() = rhs.type();
+    class_object_names_.erase(lhs_symbol->id);
+    return true;
+  }
+  if (
+    type_handler::is_class_value_type(lhs_symbol->get_type()) &&
+    as_class_value(rhs).is_nil())
+    throw std::runtime_error(
+      "Unsupported: a variable holding a class rebound to a value that is not "
+      "one");
+  return false;
+}
+
+// Whether `value` names classes only: a class, or a conditional between
+// such; each class it names is appended to `classes`.
+static bool names_classes(
+  const nlohmann::json &value,
+  const nlohmann::json &ast,
+  std::vector<std::string> &classes)
+{
+  if (value.value("_type", "") == "IfExp")
+    return names_classes(value["body"], ast, classes) &&
+           names_classes(value["orelse"], ast, classes);
+  if (value.value("_type", "") != "Name")
+    return false;
+  const std::string id = value["id"];
+  if (!type_utils::is_type_identifier(id) && !json_utils::is_class(id, ast))
+    return false;
+  classes.push_back(id);
+  return true;
+}
+
+// The variable a plain assignment `x = v` or `x: T = v` binds, else nullptr.
+static const nlohmann::json *assigned_name(const nlohmann::json &node)
+{
+  const std::string kind = node.value("_type", "");
+  const nlohmann::json *target =
+    kind == "AnnAssign"                               ? &node["target"]
+    : kind == "Assign" && node["targets"].size() == 1 ? &node["targets"][0]
+                                                      : nullptr;
+  return target && (*target)["_type"] == "Name" && node.contains("value") &&
+             !node["value"].is_null()
+           ? target
+           : nullptr;
+}
+
+// How many assignments `name = <classes>` there are under `node`.
+static size_t class_assignments(
+  const nlohmann::json &node,
+  const std::string &name,
+  const nlohmann::json &ast,
+  std::vector<std::string> &classes)
+{
+  size_t n = 0;
+  const nlohmann::json *target =
+    node.is_object() ? assigned_name(node) : nullptr;
+  if (
+    target && (*target)["id"] == name &&
+    names_classes(node["value"], ast, classes))
+    ++n;
+  for (const auto &child : node)
+    if (child.is_structured())
+      n += class_assignments(child, name, ast, classes);
+  return n;
+}
+
+bool python_converter::binds_runtime_class(
+  const nlohmann::json &ast_node,
+  const exprt &rhs)
+{
+  const nlohmann::json &target =
+    ast_node.contains("targets") ? ast_node["targets"][0] : ast_node["target"];
+  if (target.value("_type", "") != "Name" || as_class_value(rhs).is_nil())
+    return false;
+  // Every binding of the name must assign classes, so that it holds one on
+  // every path; each class gets its id now, before any read of the name.
+  const std::string name = target["id"];
+  const size_t bindings = count_bindings(*ast_json, name);
+  std::vector<std::string> classes;
+  if (class_assignments(*ast_json, name, *ast_json, classes) != bindings)
+    return false;
+  for (const std::string &c : classes)
+    class_value(c);
+  // A class on one path of several: a conditional, a value that already is
+  // one, or a name bound more than once.
+  return rhs.id() == "if" || type_handler::is_class_value_type(rhs.type()) ||
+         bindings > 1;
 }
 
 void python_converter::set_assigned_value(symbolt &symbol, const exprt &rhs)
