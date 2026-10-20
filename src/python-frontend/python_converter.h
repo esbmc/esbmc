@@ -425,6 +425,11 @@ public:
   symbolt *find_symbol(const std::string &symbol_id) const;
 
   bool is_imported_module(const std::string &module_name) const;
+  /// FunctionDef stubs, each only a `name` and its `returns`, for the
+  /// functions a call in the current module can name: its own and those an
+  /// import binds, as `mk` after `from helper import mk` and `helper.mk`
+  /// after `import helper`.
+  nlohmann::json callable_function_stubs() const;
   /// How one scope binds a name: by an import, by anything else, or by a
   /// `global`/`nonlocal` declaration handing it to an outer scope.
   struct scope_bindings
@@ -498,6 +503,29 @@ public:
   /// A class used as a value (`x = int`, `type(v)`): its name as a char array,
   /// also held in `value` for the folds that read it back.
   exprt make_class_object(const std::string &name);
+
+  /// The runtime class value (#8390) of the class `name`.
+  exprt class_value(const std::string &name);
+  /// `e` as a runtime class value when it is one, a class object, or a
+  /// conditional between such; nil otherwise.
+  exprt as_class_value(const exprt &e);
+  /// `is`, `is not`, `==` or `!=` with a runtime class value on a side; nil
+  /// when neither side is one.
+  exprt compare_class_values(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs);
+  /// Whether assigning `rhs` to the variable `ast_node` targets makes that
+  /// variable a runtime class value: a class on one of several paths.
+  bool binds_runtime_class(const nlohmann::json &ast_node, const exprt &rhs);
+  /// Whether the assignment's target type is settled without the usual
+  /// adjustments: a subscript keeps its own, and a variable that
+  /// binds_runtime_class takes the class-value type, as does `rhs`.
+  bool settle_target_type(
+    symbolt *lhs_symbol,
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &ast_node);
 
   /// The category get_expr converts @p element as; CLASS_MRO for
   /// `Cls.__mro__` on a class whose MRO is known.
@@ -1318,6 +1346,8 @@ private:
     const exprt &lhs,
     const exprt &rhs);
 
+  typet
+  any_attribute_type(const nlohmann::json &stmt, const std::string &attr_name);
   void get_attributes_from_self(
     const nlohmann::json &func_node,
     struct_typet &clazz);
@@ -1448,10 +1478,13 @@ private:
     const nlohmann::json &args,
     const nlohmann::json &source_node) const;
 
+  /// Stores the result of @p call_expr in a fresh temporary declared in
+  /// @p block, current_block when null, and returns that temporary.
   exprt store_call_result(
     exprt call_expr,
     const locationt &location,
-    const std::string &temp_prefix);
+    const std::string &temp_prefix,
+    codet *block = nullptr);
 
   void process_module_imports(
     const nlohmann::json &module_ast,
@@ -1752,6 +1785,7 @@ private:
     codet &target_block);
 
   void set_assigned_value(symbolt &symbol, const exprt &rhs);
+  void retype_resized_str(symbolt &symbol, exprt &lhs, exprt &rhs);
 
   /// True when an assignment's annotation is only a guess that the rhs type
   /// should replace.
@@ -1767,6 +1801,8 @@ private:
     const nlohmann::json &ast_node,
     bool is_ctor_call);
 
+  std::string element_kind(const std::string &id) const;
+  bool element_kinds_differ(const std::string &a, const std::string &b) const;
   /// Carries the list element-type map from @p rhs to @p lhs on a
   /// container-level list assignment, resolving dict `.keys`/`.values`
   /// members to the dict's internal list symbol.
@@ -2893,6 +2929,15 @@ private:
     const nlohmann::json &right,
     const nlohmann::json &element);
 
+  /// TypeError for `str + number` when the str is a char pointer (a
+  /// parameter, method result or attribute); nil otherwise (#8380).
+  exprt str_pointer_add_error(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
+
   /**
    * @brief Builds a binary expression with proper type and location.
    *
@@ -2968,6 +3013,8 @@ private:
     const std::string &member_name);
 
   void adopt_tagged_element(symbolt *lhs_symbol, exprt &lhs, const exprt &rhs);
+
+  void adopt_array_type(symbolt &lhs_symbol, exprt &lhs, exprt &rhs);
 
   /// Handle Optional value access
   exprt materialize_optional(const exprt &expr, const nlohmann::json &element);
@@ -3140,6 +3187,8 @@ private:
   bool has_cached_any_subscript_rhs_ = false;
   std::set<std::string> numpy_array_symbols_;
   std::unordered_map<irep_idt, std::string, irep_id_hash> class_object_names_;
+  /// Ids of the classes used as runtime class values.
+  std::map<std::string, int> class_ids_;
 
   /// Whether the element types recorded for the lists the current unpacking
   /// reaches are exact; see unpack_record_is_trusted.
@@ -3534,6 +3583,10 @@ private:
   /// mapped to the flag its binding sets and the type the reads took (#8369).
   std::unordered_map<std::string, std::pair<std::string, typet>>
     unbound_global_flags_;
+  /// Symbols whose stored value is a str literal; see str_value_scope_guard.
+  std::unordered_set<std::string> str_valued_symbols_;
+  /// Symbols ever assigned a str literal; see retype_resized_str.
+  std::unordered_set<std::string> str_assigned_symbols_;
 
   /// Flow-sensitive class tracking (#4771/#4772). Maps a straight-line lvalue
   /// access path -- "v" for a Name `v`, "v.attr" for an `obj.attr` lvalue -- to

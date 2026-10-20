@@ -620,6 +620,11 @@ void tuple_handler::handle_tuple_unpacking(
       member_access,
       converter_.get_location_from_decl(ast_node),
       target_block);
+    // A list taken out of a tuple literal keeps its element types (#8928).
+    if (rhs.id() == "struct" && rhs.operands()[i].is_symbol())
+      converter_.get_element_type_registry().assign_from(
+        rhs.operands()[i].identifier().as_string(),
+        target.identifier().as_string());
   }
 }
 
