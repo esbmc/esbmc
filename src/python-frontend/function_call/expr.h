@@ -5,6 +5,7 @@
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/type/type_handler.h>
 #include <util/irep/expr.h>
+#include <functional>
 #include <map>
 #include <set>
 #include <unordered_map>
@@ -316,6 +317,21 @@ private:
   exprt handle_isinstance() const;
   std::optional<exprt>
   list_isinstance(const exprt &obj, const std::string &type_name) const;
+
+  /// isinstance's test against the classinfo @p node: @p build of its
+  /// @p type_name, or, for a variable holding a runtime class value (#8390),
+  /// @p build of each class it may hold, guarded by that class's id.
+  exprt isinstance_operand(
+    const nlohmann::json &node,
+    const std::function<exprt(const std::string &)> &build,
+    const std::function<std::string(const nlohmann::json &)> &type_name) const;
+
+  /// isinstance decided without naming a type: on a class object, or
+  /// against typing.Any (a TypeError); nil otherwise.
+  exprt isinstance_without_type_name(
+    const nlohmann::json &obj_arg,
+    const exprt &obj_expr,
+    const std::vector<nlohmann::json> &types) const;
 
   /// Whether isinstance's first argument is a class object: a class named
   /// directly (`int`, `A`) or a variable last assigned a builtin type.

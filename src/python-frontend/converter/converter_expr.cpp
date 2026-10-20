@@ -2175,6 +2175,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
                                       exprt base_expr,
                                       const nlohmann::json &base_node,
                                       const std::string &attr_name) -> exprt {
+        // `make().x` reads off a call statement, which a member expression
+        // cannot hold; as a side effect the call is hoisted (#8925).
+        base_expr = to_value_expr(base_expr, ns);
         typet base_type = base_expr.type();
         if (base_type.is_pointer())
           base_type = base_type.subtype();
