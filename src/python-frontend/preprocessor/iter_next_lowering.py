@@ -119,20 +119,25 @@ class _Lowering:  # pylint: disable=too-few-public-methods
             name, value = _single_assignment(stmt)
             if not name or not _is_call(value, "iter", 1):
                 continue
-            nexts = [
-                n for n in nodes if _is_call(n, "next", 1) and isinstance(n.args[0], ast.Name)
-                and n.args[0].id == name
-            ]
-            reads = [
-                n for n in nodes
-                if isinstance(n, ast.Name) and n.id == name and isinstance(n.ctx, ast.Load)
-            ]
+            nexts, reads = _uses(nodes, name)
             if self.bound[name] != 1 or not nexts or len(reads) != len(nexts):
                 continue
             stmt.value = ast.copy_location(self._iterator_source(stmt.value, instances), stmt.value)
             for call in nexts:
                 call.func = ast.Attribute(value=call.args[0], attr="__next__", ctx=ast.Load())
                 call.args = []
+
+
+def _uses(nodes, name):
+    """The `next(name)` calls among `nodes`, and every read of `name`."""
+    nexts = [
+        n for n in nodes
+        if _is_call(n, "next", 1) and isinstance(n.args[0], ast.Name) and n.args[0].id == name
+    ]
+    reads = [
+        n for n in nodes if isinstance(n, ast.Name) and n.id == name and isinstance(n.ctx, ast.Load)
+    ]
+    return nexts, reads
 
 
 def lower_iter_next(module):
