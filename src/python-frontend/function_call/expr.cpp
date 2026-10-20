@@ -2294,7 +2294,8 @@ bool function_call_expr::is_dict_method_call() const
   // "__python_dict__" struct tag; class instances carry "tag-<Class>". An
   // unresolved or genuinely dict-typed receiver is left to the dict handler, so
   // existing dict dispatch is unchanged. Mirrors the list guard for pop below.
-  if (receiver_is_non_dict_object())
+  if (
+    receiver_is_non_dict_object() || receiver_class_defines_method(method_name))
     return false;
 
   // For "pop", which exists on both list and dict, treat as dict.pop() when
