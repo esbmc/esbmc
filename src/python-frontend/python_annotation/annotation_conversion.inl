@@ -1120,16 +1120,18 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
   return ""; // Cannot determine type
 }
 
-/// The declared type of `obj.attr`, where `obj` is a name bound to an
-/// instance of a class defined in the program, or empty. Without it an
-/// unannotated parameter that receives `obj.attr` stays `void *` (#8672).
+/// The declared type of `obj.attr`, where `obj` is a name bound to, or a call
+/// returning, an instance of a class defined in the program, or empty. Without
+/// it an unannotated parameter that receives `obj.attr` stays `void *` (#8672).
 template <class Json>
 std::string python_annotation<Json>::get_attribute_type(const Json &arg)
 {
   const Json &obj = arg["value"];
+  const std::string obj_kind = obj.value("_type", "");
   if (
-    obj.value("_type", "") != "Name" ||
-    is_rebound_in_scope(obj["id"].template get<std::string>()))
+    obj_kind != "Call" &&
+    (obj_kind != "Name" ||
+     is_rebound_in_scope(obj["id"].template get<std::string>())))
     return "";
 
   const std::string attr = arg["attr"].template get<std::string>();
@@ -1428,7 +1430,9 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
        lhs["_type"] == "UnaryOp" ||
        (lhs["_type"] == "Constant" && lhs.contains("value") &&
         (lhs["value"].is_number_integer() || lhs["value"].is_number_float())));
-    if (rhs_is_float_literal && lhs_is_numeric_shape)
+    if (
+      rhs_is_float_literal && lhs_is_numeric_shape &&
+      !is_array_operand(lhs, body))
       return "float";
   }
 
@@ -1453,6 +1457,9 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
     };
     if (operand_is_complex(lhs) || operand_is_complex(rhs))
       return "complex";
+    // A number on the left of an array (`2 * a`) gives an array.
+    if (!is_array_operand(lhs, body) && is_array_operand(rhs, body))
+      return "list";
   }
 
   if (lhs["_type"] == "BinOp")
@@ -1462,7 +1469,9 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
   else if (lhs["_type"] == "Tuple")
     type = "tuple";
   // Floor division (//) operations always result in an integer value
-  else if (stmt.contains("value") && stmt["value"]["op"]["_type"] == "FloorDiv")
+  else if (
+    stmt.contains("value") && stmt["value"]["op"]["_type"] == "FloorDiv" &&
+    !is_array_operand(lhs, body))
     type = "int";
   else
   {
@@ -1579,6 +1588,31 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
   }
 
   return promote_to_float_operand(stmt, type);
+}
+
+/// Whether `operand` is a NumPy array: a constructor or sized random call, or
+/// a name annotated as the list such a call is.
+template <class Json>
+bool python_annotation<Json>::is_array_operand(
+  const Json &operand,
+  const Json &body)
+{
+  const std::string type = operand.value("_type", std::string());
+  if (type == "Call")
+    return is_numpy_array_ctor_call(operand) ||
+           !numpy_random::list_annotation(
+              static_cast<const nlohmann::json &>(operand),
+              static_cast<const nlohmann::json &>(ast_))
+              .empty();
+  if (type != "Name")
+    return false;
+  const std::string name = operand["id"].template get<std::string>();
+  Json decl = find_annotated_assign(
+    name, body.contains("body") ? body["body"] : ast_["body"]);
+  if (decl.empty())
+    decl = find_annotated_assign(name, ast_["body"]);
+  return !decl.empty() && decl.contains("annotation") &&
+         decl["annotation"].value("id", std::string()) == "list";
 }
 
 /// True division of an int or bool yields a float, and so does other
@@ -2274,9 +2308,10 @@ std::string python_annotation<Json>::get_type_from_call(const Json &element)
         // Keep imported names intact here; the converter resolves them later.
         if (is_imported_name(func_id))
           return func_id;
-        if (const std::string type =
-              function_value_return_type(func, &element["value"]);
-            !type.empty())
+        if (
+          const std::string type =
+            function_value_return_type(func, &element["value"]);
+          !type.empty())
           return type;
         for (const auto &stmt : body)
         {
@@ -2415,10 +2450,9 @@ std::string python_annotation<Json>::function_value_return_type(
   {
     const auto signature = function_signature(function);
     if (
-      !signature ||
-      (agreed && (signature->second != agreed->second ||
-                  !json_utils::ast_equal_ignoring_location(
-                    signature->first, agreed->first))))
+      !signature || (agreed && (signature->second != agreed->second ||
+                                !json_utils::ast_equal_ignoring_location(
+                                  signature->first, agreed->first))))
       return "";
     agreed = signature;
   }
@@ -2431,10 +2465,10 @@ std::string python_annotation<Json>::function_value_return_type(
     });
   const std::size_t passed = call ? (*call)["args"].size() : 0;
   if (
-    call && (passed < static_cast<std::size_t>(required) ||
-             passed > agreed->first.size() || !(*call)["keywords"].empty() ||
-             std::any_of(
-               (*call)["args"].begin(), (*call)["args"].end(), is_starred)))
+    call &&
+    (passed < static_cast<std::size_t>(required) ||
+     passed > agreed->first.size() || !(*call)["keywords"].empty() ||
+     std::any_of((*call)["args"].begin(), (*call)["args"].end(), is_starred)))
     return "";
   return agreed->second;
 }
@@ -3223,6 +3257,18 @@ InferResult python_annotation<Json>::infer_type_from_ifexp(
   return InferResult::UNKNOWN;
 }
 
+// A numpy.random call that returns an array is annotated as the list a
+// numpy constructor is, so arithmetic on it is inferred as an array too.
+template <class Json>
+std::string
+python_annotation<Json>::get_type_from_call_or_random(const Json &element)
+{
+  const std::string random = numpy_random::list_annotation(
+    static_cast<const nlohmann::json &>(element["value"]),
+    static_cast<const nlohmann::json &>(ast_));
+  return random.empty() ? get_type_from_call(element) : random;
+}
+
 template <class Json>
 bool python_annotation<Json>::is_numpy_array_ctor_call(
   const Json &call_value) const
@@ -3538,7 +3584,7 @@ InferResult python_annotation<Json>::infer_type(
       return InferResult::UNKNOWN;
 
     // Try get_type_from_call first (checks builtin_functions map)
-    inferred_type = get_type_from_call(stmt);
+    inferred_type = get_type_from_call_or_random(stmt);
 
     // If that didn't work, try get_type_from_method
     if (inferred_type.empty())
@@ -4627,10 +4673,17 @@ std::string python_annotation<Json>::infer_parameter_type_at_call_sites(
   const std::vector<Json> &function_calls,
   const Json &search_context)
 {
-  const std::string inferred =
+  std::string inferred =
     infer_parameter_type_from_calls(param_index, function_calls);
-  for (const std::string &type :
-       caller_arg_types(func_name, param_index, search_context))
+  const std::vector<std::string> callers =
+    caller_arg_types(func_name, param_index, search_context);
+  // Every call is made in another function, whose scope alone can type its
+  // argument (`find(pkt.ident)` with `pkt` a caller's local, #8672).
+  if (
+    inferred.empty() && !callers.empty() &&
+    callers.size() == function_calls.size())
+    inferred = callers.front();
+  for (const std::string &type : callers)
     if (!call_site_types_agree(type, inferred))
       return "";
   return inferred;

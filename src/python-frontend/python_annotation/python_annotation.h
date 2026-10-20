@@ -5,6 +5,7 @@
 #include <python-frontend/module/global_scope.h>
 #include <python-frontend/module/module_manager.h>
 #include <python-frontend/module/module.h>
+#include <python-frontend/numpy/numpy_random.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/type/type_utils.h>
 #include <python-frontend/python_annotation/annotation_intrinsics.h>
@@ -189,9 +190,11 @@ private:
   std::string arg_dependent_call_type(const Json &call);
   std::string list_copy_type(const std::string &func_name, const Json &call);
   std::string get_type_from_binary_expr(const Json &stmt, const Json &body);
+  bool is_array_operand(const Json &operand, const Json &body);
   std::string get_type_from_rhs_variable(const Json &element, const Json &body);
   std::string get_type_from_call(const Json &element);
   std::string get_type_from_method(const Json &call);
+  std::string get_type_from_call_or_random(const Json &element);
   InferResult infer_type_from_ifexp(
     const Json &ifexp_node,
     const Json &body,
