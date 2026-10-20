@@ -784,13 +784,16 @@ set(_very_slow_regression_tests
     # but on the DebugOpt Linux runner it is still mid-symex when the 120s cap
     # fires, so 2x has no guaranteed headroom; give it the 3x budget.
     "regression/python/list-slice-step-reverse"
-    # The github_1352 trio pinned --boolector, which camada does not carry, so
-    # they now run on the default backend and no longer fit the 1x budget:
-    # ~625s locally against the 1200s cap, and over it on the slower CI runner.
-    # The query itself is unchanged, only which solver answers it. --fp2bv does
-    # not help -- bit-blasting this one is slower still, timing out even at 3x.
-    "regression/esbmc/github_1352"
-    "regression/esbmc/github_1352-32bit"
+    # Z3 5.x is far slower on this query: master's own formula takes 9s under
+    # Z3 4.14.1, 31s under 4.15.0 and 130s under 5.1.0, and camada ships 5.3.1
+    # for its fp.rem/fma fixes. Camada's formula takes ~1.4x more on top; it
+    # took 118s of the 120s budget in CI before running out.
+    "regression/z3/github_6100_library"
+    # Bitwuzla solves this formula 2-3x slower than master's equivalent one:
+    # camada folds the bit reinterpretation of a float constant (frexp of 2.0
+    # and 1.0) to a literal, where master asserts a fresh variable equal to it.
+    # Folding master's two constants by hand moves it from 61s to ~175s.
+    "regression/python/int_subclass_ctor_symbolic_pow_mod_fail"
     # problem1_fail was FUTURE for scalability (#4932); it converges now, at
     # ~90s under the harness on a local RelWithDebInfo build. humaneval_62
     # above is ~70s locally against ~248s with assertions on, and that ratio
@@ -844,6 +847,10 @@ set(_bitwuzla_bv_regression_tests
     "regression/floats-regression/nn-tanh_5_unsafe"
     # ~525s locally, against 511s for the same query on master.
     "regression/esbmc/github_1352-fail-32bit"
+    # Its siblings, the same query: ~427s and ~541s locally against ~414s and
+    # ~461s for master on Bitwuzla; both outgrew the 3x tier in CI.
+    "regression/esbmc/github_1352"
+    "regression/esbmc/github_1352-32bit"
 )
 foreach(_t IN LISTS _bitwuzla_bv_regression_tests)
     if(TEST ${_t})
