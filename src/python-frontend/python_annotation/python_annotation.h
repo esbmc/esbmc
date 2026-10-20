@@ -219,8 +219,11 @@ private:
   std::string
   get_function_return_type(const std::string &func_name, const Json &ast);
   std::string infer_lambda_return_type(const Json &lambda_elem) const;
-  std::string
-  infer_from_return_statements(const Json &body, const std::string &func_name);
+  // Sets *divergent when branches return incompatible types.
+  std::string infer_from_return_statements(
+    const Json &body,
+    const std::string &func_name,
+    bool *divergent = nullptr);
   // The type a parameter's default value implies, or empty.
   std::string infer_type_from_parameter_default(
     const Json &function_element,

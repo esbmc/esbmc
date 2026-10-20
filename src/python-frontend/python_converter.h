@@ -3104,10 +3104,10 @@ private:
   }
   // The ZeroDivisionError guard (and its divisor hoist) must be emitted only
   // where the division is really code-generated in its execution context.
-  // Suppress it while a lambda body is converted at its definition (operands
-  // are still unbound parameters) and during the discarded type-probe pass of
-  // an assignment RHS (which would otherwise emit the guard twice as dead code
-  // and evaluate a side-effecting divisor an extra time).
+  // Keep it inside a lambda body converted at its definition (the enclosing
+  // block is still current) and suppress it during the discarded type-probe
+  // pass of an assignment RHS (which would otherwise emit the guard twice as
+  // dead code and evaluate a side-effecting divisor an extra time).
   bool converting_defaults_ = false;
   bool converting_lambda_body_ = false;
   bool in_rhs_type_probe_ = false;
@@ -3223,6 +3223,7 @@ private:
   exprt list_argument_expr(const nlohmann::json &arg);
   /// The return type of a function stored as a dict value: a lambda's
   /// inferred type, or a named function's declared one. Empty otherwise.
+  typet returned_function_return_type(const nlohmann::json &call);
   typet stored_function_return_type(const nlohmann::json &value);
   /// The return type every function stored into the dict `container` (a
   /// literal or a name) shares; nothing when a stored value is not a function.

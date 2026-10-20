@@ -3242,6 +3242,8 @@ regression/python/github_8865_alias_then_import_refused
 regression/esbmc-cpp/cpp/github_8680_dtor_throw_unwind_fail
 regression/esbmc-cpp/cpp/github_8680_dtor_catch_unwind
 regression/esbmc-cpp/cpp/github_8680_dtor_throw_scope_exit
+regression/python/github_8891_dict_call_value
+regression/python/github_8891_dict_call_value_fail
 regression/python/github_8877_pow2_iterator
 regression/python/github_8877_pow2_iterator_fail
 regression/python/github_8877_pow2_iterator_func
@@ -3249,3 +3251,5 @@ regression/python/github_8877_pow2_exact
 regression/python/list_rebind_other_elem_type_unsupported
 regression/python/list_rebind_same_elem_type
 regression/python/list_rebind_same_elem_type_fail
+regression/python/github_8890_nested_mixed_return
+regression/python/github_8890_nested_mixed_return_fail
