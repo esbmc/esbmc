@@ -3574,6 +3574,14 @@ private:
   /// block_nesting_ == 1 (an unconditional top-level statement), where there is
   /// no control-flow join that could make the runtime type ambiguous.
   std::unordered_map<std::string, std::string> retype_aliases_;
+  /// The symbol holding @p symbol's current value after a retype, else
+  /// @p symbol itself, which may be null.
+  symbolt *follow_retype_alias(symbolt *symbol) const;
+  /// The symbol a retyping store to @p target writes, given its @p lhs.
+  symbolt *retype_store_symbol(
+    const nlohmann::json &target,
+    const exprt &lhs,
+    symbolt *lhs_symbol);
 
   /// A module global or function read by code converted before its binding,
   /// mapped to the flag its binding sets and the type the reads took (#8369).

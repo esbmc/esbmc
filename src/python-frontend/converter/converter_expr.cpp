@@ -2548,15 +2548,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     // reassigned across the numeric<->string boundary, get_var_assign minted a
     // fresh symbol of the new type and recorded it here. Redirect the load to
     // that symbol so it observes the variable's current type and value.
+    symbol = follow_retype_alias(symbol);
     if (!is_class_attr)
     {
-      auto alias = retype_aliases_.find(symbol->id.as_string());
-      if (alias != retype_aliases_.end())
-      {
-        if (symbolt *retyped = symbol_table_.find_symbol(alias->second))
-          symbol = retyped;
-      }
-
       symbol = resolve_numpy_array_storage_alias(symbol);
 
       // Also resolve reads through a permanent tagged-object alias, if a

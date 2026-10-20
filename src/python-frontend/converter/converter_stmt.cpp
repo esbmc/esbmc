@@ -6150,6 +6150,31 @@ symbolt *python_converter::mint_retyped_symbol(
   return new_symbol_ptr;
 }
 
+symbolt *python_converter::follow_retype_alias(symbolt *symbol) const
+{
+  if (!symbol)
+    return nullptr;
+  auto alias = retype_aliases_.find(symbol->id.as_string());
+  if (alias == retype_aliases_.end())
+    return symbol;
+  symbolt *retyped = symbol_table_.find_symbol(alias->second);
+  return retyped ? retyped : symbol;
+}
+
+/// `C.v = ...` at module scope stores into the class attribute, whereas
+/// @p lhs_symbol is named after the attribute alone (#8943).
+symbolt *python_converter::retype_store_symbol(
+  const nlohmann::json &target,
+  const exprt &lhs,
+  symbolt *lhs_symbol)
+{
+  if (!current_func_name_.empty() || target.value("_type", "") != "Attribute")
+    return lhs_symbol;
+  symbolt *stored =
+    symbol_table_.find_symbol(to_symbol_expr(lhs).get_identifier());
+  return stored ? stored : lhs_symbol;
+}
+
 /// The Name a single-target Assign/AnnAssign binds, or a null json.
 static nlohmann::json assign_name_target(const nlohmann::json &ast_node)
 {
@@ -7357,6 +7382,7 @@ void python_converter::get_var_assign(
       // same-type write lands in the live slot (mirrors the load redirect in
       // converter_expr). The alias is always keyed by the original id, which is
       // what loads resolve before redirecting.
+      lhs_symbol = retype_store_symbol(target, lhs, lhs_symbol);
       const std::string orig_id = lhs_symbol->id.as_string();
       auto existing = retype_aliases_.find(orig_id);
       if (existing != retype_aliases_.end())
