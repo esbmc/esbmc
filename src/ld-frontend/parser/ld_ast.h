@@ -174,7 +174,8 @@ enum class VarKind
   INT,
   DINT,
   TIME, // used for timer PT/ET fields
-  REAL, // IEEE floating point (analog process variables)
+  REAL, // IEC 60559 binary32 (analog process variables)
+  LREAL, // IEC 60559 binary64
 };
 
 struct VarDecl
