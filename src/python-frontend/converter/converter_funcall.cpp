@@ -1040,6 +1040,30 @@ typet python_converter::subscript_call_return_type(
   return ret_type;
 }
 
+// Appends to `args` the defaults of the parameters of `type` it leaves out.
+// Stops at a parameter with no default, or with a string/array default: one is
+// stored raw (a char array) and needs the string_constantt/address-of
+// conversion finalize_call applies to direct calls; pushing it here would pass
+// an unconverted array->pointer argument (right content but wrong len()).
+// Returns whether every parameter is then covered.
+static bool
+append_default_arguments(const code_typet &type, exprt::operandst &args)
+{
+  const auto &params = type.arguments();
+  for (std::size_t i = args.size(); i < params.size(); ++i)
+  {
+    if (!params[i].has_default_value())
+      return false;
+    exprt default_val = params[i].default_value();
+    if (default_val.type().is_array())
+      return false;
+    if (default_val.type().is_code() && default_val.is_symbol())
+      default_val = address_of_exprt(default_val);
+    args.push_back(default_val);
+  }
+  return args.size() == params.size();
+}
+
 exprt python_converter::get_function_call(const nlohmann::json &element)
 {
   if (!element.contains("func") || element["_type"] != "Call")
@@ -1483,11 +1507,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       // Fallback for Any-typed (void*) function parameters: use any_type so
       // the indirect call expression has a well-formed type.
       if (!resolved)
-      {
         call.type() = any_type();
-        refuse_mismatched_callees(
-          python_expr::build_symbol(*var_symbol), element);
-      }
 
       // Process arguments
       if (element.contains("args"))
@@ -1508,27 +1528,13 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
 
       // Fill omitted trailing parameters that carry a default value (e.g. a
       // `lambda x, y=2: ...` called with fewer arguments), so symex does not
-      // model them as nondet. Stop at the first parameter that cannot be
-      // filled so the remaining positional arguments stay aligned: either it
-      // has no default, or its default is a string/array. A string default is
-      // stored raw (a char array) and needs the string_constantt/address-of
-      // conversion finalize_call applies to direct calls; pushing it here would
-      // pass an unconverted array->pointer argument (right content but wrong
-      // len()), so leave it — and everything after it — nondet as before.
+      // model them as nondet.
       if (resolved_func_type)
-      {
-        const auto &params = resolved_func_type->arguments();
-        for (size_t i = call.arguments().size(); i < params.size(); ++i)
-        {
-          if (!params[i].has_default_value())
-            break;
-          const exprt &default_val = params[i].default_value();
-          if (default_val.type().is_array())
-            break;
-          call.arguments().push_back(default_val);
-        }
-      }
+        append_default_arguments(*resolved_func_type, call.arguments());
 
+      if (!resolved)
+        return dispatch_mismatched_callees(
+          python_expr::build_symbol(*var_symbol), element, call);
       return call;
     }
   }
@@ -2169,12 +2175,14 @@ static bool used_as_value(const nlohmann::json &node, const std::string &name)
   return false;
 }
 
-void python_converter::refuse_mismatched_callees(
+exprt python_converter::dispatch_mismatched_callees(
   const exprt &callee,
-  const nlohmann::json &call)
+  const nlohmann::json &call,
+  const side_effect_expr_function_callt &call_expr)
 {
+  exprt result = call_expr;
   if (!current_block)
-    return;
+    return result;
   const std::size_t passed = call["args"].size() + call["keywords"].size();
   const nlohmann::json &body = (*ast_json)["body"];
   for (const auto &def : body)
@@ -2192,13 +2200,24 @@ void python_converter::refuse_mismatched_callees(
       symbol_table_.find_symbol(symbol_id(python_file(), "", name).to_string());
     if (!function)
       continue;
-    exprt differs("notequal", bool_type());
-    differs.copy_to_operands(
+    const equality_exprt holds(
       callee,
       python_expr::build_typecast(
         python_expr::build_address_of(python_expr::build_symbol(*function)),
         callee.type()));
-    code_assertt check(differs);
+
+    side_effect_expr_function_callt filled = call_expr;
+    if (
+      call["keywords"].empty() && passed < params &&
+      function->get_type().is_code() &&
+      append_default_arguments(
+        to_code_type(function->get_type()), filled.arguments()))
+    {
+      result = if_exprt(holds, filled, result);
+      continue;
+    }
+
+    code_assertt check{not_exprt(holds)};
     check.location() = get_location_from_decl(call);
     check.location().user_provided(true);
     check.location().comment(
@@ -2206,4 +2225,5 @@ void python_converter::refuse_mismatched_callees(
       "different number of arguments");
     current_block->copy_to_operands(check);
   }
+  return result;
 }

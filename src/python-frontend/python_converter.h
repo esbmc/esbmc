@@ -667,12 +667,15 @@ private:
 
   void get_function_definition(const nlohmann::json &function_node);
 
-  /// Before a call through `callee`, whose function type is unknown, refuses
-  /// the path where it holds a top-level function taking a different number
-  /// of parameters than @p call passes: such a call fills no defaults and
-  /// raises no TypeError.
-  void
-  refuse_mismatched_callees(const exprt &callee, const nlohmann::json &call);
+  /// Returns @p call_expr, a call through `callee` whose function type is
+  /// unknown, made to pass the defaults of a top-level function `callee` may
+  /// hold whose parameters @p call leaves out. Refuses the path where it
+  /// holds one taking a different number of parameters that defaults cannot
+  /// make up: such a call raises no TypeError.
+  exprt dispatch_mismatched_callees(
+    const exprt &callee,
+    const nlohmann::json &call,
+    const side_effect_expr_function_callt &call_expr);
 
   exprt get_function_body_or_unsupported(const nlohmann::json &function_node);
 
