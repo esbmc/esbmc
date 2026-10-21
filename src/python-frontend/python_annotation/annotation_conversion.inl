@@ -2260,6 +2260,38 @@ std::string python_annotation<Json>::get_type_from_rhs_variable(
     return "Any"; // Default for cases where annotation is missing or null
 }
 
+/// Whether `name` is a variable that may hold a function or a callable
+/// instance, whose calls the converter types instead.
+template <class Json>
+bool python_annotation<Json>::holds_callable_value(
+  const std::string &name) const
+{
+  const nlohmann::json &body =
+    static_cast<const nlohmann::json &>(ast_["body"]);
+  for (const auto &stmt : body)
+  {
+    if (!stmt.contains("_type"))
+      continue;
+    const std::string &stype = stmt["_type"];
+    // Top-level assignment: g = f
+    if (stype == "Assign" && stmt.contains("targets"))
+    {
+      for (const auto &t : stmt["targets"])
+        if (t.contains("id") && t["id"] == name)
+          return true;
+    }
+    // A callable instance: s = S() is already annotated as s: S
+    if (
+      stype == "AnnAssign" && stmt["target"].value("id", "") == name &&
+      json_utils::class_defines_method(
+        body, stmt["annotation"].value("id", ""), "__call__"))
+      return true;
+  }
+  // A local such as a loop variable over callable instances (#8351)
+  return current_func != nullptr &&
+         json_utils::count_name_bindings(*current_func, name) > 0;
+}
+
 template <class Json>
 std::string python_annotation<Json>::get_type_from_call(const Json &element)
 {
@@ -2303,8 +2335,6 @@ std::string python_annotation<Json>::get_type_from_call(const Json &element)
       }
       catch (std::runtime_error &)
       {
-        const nlohmann::json &body =
-          static_cast<const nlohmann::json &>(ast_["body"]);
         // Keep imported names intact here; the converter resolves them later.
         if (is_imported_name(func_id))
           return func_id;
@@ -2313,19 +2343,8 @@ std::string python_annotation<Json>::get_type_from_call(const Json &element)
             function_value_return_type(func, &element["value"]);
           !type.empty())
           return type;
-        for (const auto &stmt : body)
-        {
-          if (!stmt.contains("_type"))
-            continue;
-          const std::string &stype = stmt["_type"];
-          // Top-level assignment: g = f
-          if (stype == "Assign" && stmt.contains("targets"))
-          {
-            for (const auto &t : stmt["targets"])
-              if (t.contains("id") && t["id"] == func_id)
-                return "";
-          }
-        }
+        if (holds_callable_value(func_id))
+          return "";
         throw; // func_id is not a known variable: propagate the error
       }
     }

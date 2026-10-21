@@ -192,6 +192,7 @@ private:
   std::string get_type_from_binary_expr(const Json &stmt, const Json &body);
   bool is_array_operand(const Json &operand, const Json &body);
   std::string get_type_from_rhs_variable(const Json &element, const Json &body);
+  bool holds_callable_value(const std::string &name) const;
   std::string get_type_from_call(const Json &element);
   std::string get_type_from_method(const Json &call);
   std::string get_type_from_call_or_random(const Json &element);
