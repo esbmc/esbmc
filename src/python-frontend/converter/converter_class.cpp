@@ -322,6 +322,129 @@ void python_converter::update_instance_from_self(
   copy_instance_attributes(sid.to_string(), obj_symbol_id);
 }
 
+/// The struct a `self` argument or parameter of type \p t points to, or null.
+static const struct_typet *self_struct(const typet &t, const namespacet &ns)
+{
+  if (!t.is_pointer())
+    return nullptr;
+  const typet &pointee = ns.follow(t.subtype());
+  return pointee.is_struct() ? &to_struct_type(pointee) : nullptr;
+}
+
+/// The attributes \p body reads or writes through the pointer \p self,
+/// including in the methods it passes \p self on to.
+static void collect_self_members(
+  const exprt &body,
+  const irep_idt &self,
+  const contextt &symbols,
+  std::set<irep_idt> &visited,
+  std::set<irep_idt> &names)
+{
+  if (
+    body.id() == "member" && body.op0().id() == "dereference" &&
+    body.op0().op0().is_symbol() && body.op0().op0().identifier() == self)
+    names.insert(body.component_name());
+  if (body.is_code() && to_code(body).get_statement() == "function_call")
+  {
+    const code_function_callt &call = to_code_function_call(to_code(body));
+    exprt arg = call.arguments().empty() ? exprt() : call.arguments().front();
+    while (arg.id() == "typecast")
+      arg = arg.op0();
+    const symbolt *callee =
+      call.function().is_symbol()
+        ? symbols.find_symbol(call.function().identifier())
+        : nullptr;
+    if (
+      arg.is_symbol() && arg.identifier() == self && callee &&
+      callee->get_type().is_code() && visited.insert(callee->id).second)
+    {
+      const auto &params = to_code_type(callee->get_type()).arguments();
+      if (!params.empty())
+        collect_self_members(
+          callee->get_value(),
+          params.front().get_identifier(),
+          symbols,
+          visited,
+          names);
+    }
+  }
+  for (const exprt &op : body.operands())
+    collect_self_members(op, self, symbols, visited, names);
+}
+
+static std::optional<std::size_t>
+component_index(const struct_typet &st, const irep_idt &name)
+{
+  const auto &comps = st.components();
+  for (std::size_t i = 0; i < comps.size(); ++i)
+    if (comps[i].get_name() == name)
+      return i;
+  return std::nullopt;
+}
+
+/// A method receives an instance of a subclass as a pointer to its own class,
+/// so it reads and writes that instance at its own class's field offsets.
+/// Under multiple inheritance only the first base's fields lead the subclass;
+/// a method of a later base would touch another attribute's slot and prove a
+/// wrong result, so refuse the call instead (#8408).
+void python_converter::refuse_misaligned_self_calls() const
+{
+  const namespacet ns(symbol_table_);
+  std::function<void(const exprt &)> visit = [&](const exprt &e) {
+    for (const exprt &op : e.operands())
+      visit(op);
+    if (!e.is_code() || to_code(e).get_statement() != "function_call")
+      return;
+    const code_function_callt &call = to_code_function_call(to_code(e));
+    const symbolt *callee =
+      call.function().is_symbol()
+        ? symbol_table_.find_symbol(call.function().identifier())
+        : nullptr;
+    if (!callee || !callee->get_type().is_code() || call.arguments().empty())
+      return;
+    const code_typet::argumentst &params =
+      to_code_type(callee->get_type()).arguments();
+    if (params.empty() || params.front().get_base_name() != "self")
+      return;
+    exprt arg = call.arguments().front();
+    while (arg.id() == "typecast")
+      arg = arg.op0();
+    const struct_typet *own = self_struct(params.front().type(), ns);
+    const struct_typet *given = self_struct(arg.type(), ns);
+    if (!own || !given || own->tag() == given->tag())
+      return;
+    const std::string cls = own->tag().as_string();
+    const auto mro = class_mro(given->tag().as_string());
+    if (!mro || std::find(mro->begin(), mro->end(), cls) == mro->end())
+      return;
+
+    std::set<irep_idt> visited{callee->id}, accessed;
+    collect_self_members(
+      callee->get_value(),
+      params.front().get_identifier(),
+      symbol_table_,
+      visited,
+      accessed);
+    for (const irep_idt &name : accessed)
+    {
+      const auto at = component_index(*given, name);
+      if (at && at == component_index(*own, name))
+        continue;
+      const std::string method =
+        callee->name == cls ? "__init__" : callee->name.as_string();
+      throw std::runtime_error(
+        call.location().as_string() + ": calling " + cls + "." + method +
+        " on an instance of " + given->tag().as_string() + ", whose '" +
+        name.as_string() + "' is not where " + cls +
+        " keeps it, is not supported");
+    }
+  };
+  symbol_table_.foreach_operand_in_order([&](const symbolt &s) {
+    if (s.get_type().is_code())
+      visit(s.get_value());
+  });
+}
+
 // Record `owner` for each `class_name(...)` call under `node` whose argument
 // `param_idx` is `self`. Nested scopes are skipped: `self` may name another
 // object there.
