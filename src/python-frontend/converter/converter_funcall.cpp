@@ -870,8 +870,32 @@ static void collect_own_returns(
       collect_own_returns(child, out);
 }
 
-// The values of the dict literals a top-level function returns, if every
-// return in its own body is one. False otherwise.
+// Whether `body` assigns a dict literal to the name `name`.
+static bool
+binds_dict_literal(const nlohmann::json &body, const nlohmann::json &name)
+{
+  if (name.value("_type", "") != "Name")
+    return false;
+  for (const auto &stmt : body)
+  {
+    const std::string type = stmt.value("_type", "");
+    if (
+      (type != "Assign" && type != "AnnAssign") || !stmt["value"].is_object() ||
+      stmt["value"].value("_type", "") != "Dict")
+      continue;
+    const nlohmann::json targets = type == "Assign"
+                                     ? stmt["targets"]
+                                     : nlohmann::json::array({stmt["target"]});
+    for (const auto &t : targets)
+      if (is_name(t, name["id"]))
+        return true;
+  }
+  return false;
+}
+
+// The values of the dicts a top-level function returns, if every return in
+// its own body is a dict literal or a name bound to one (#8946). False
+// otherwise.
 static bool returned_dict_values(
   const nlohmann::json &module,
   const nlohmann::json &call,
@@ -887,13 +911,51 @@ static bool returned_dict_values(
     std::vector<nlohmann::json> returns;
     collect_own_returns(def["body"], returns);
     for (const auto &ret : returns)
-      if (ret["value"].value("_type", "") != "Dict")
+      if (
+        ret["value"].value("_type", "") != "Dict" &&
+        !binds_dict_literal(def["body"], ret["value"]))
         return false;
     for (const auto &ret : returns)
-      push_dict_values(ret["value"], out);
+      if (ret["value"]["_type"] == "Name")
+        collect_dict_values(module, ret["value"]["id"], out);
+      else
+        push_dict_values(ret["value"], out);
     return !returns.empty();
   }
   return false;
+}
+
+// The root name and depth of a subscript chain, e.g. `d` and 2 for `d[a][b]`.
+static const nlohmann::json &
+subscript_root(const nlohmann::json &node, int &depth)
+{
+  if (node.value("_type", "") != "Subscript")
+    return node;
+  ++depth;
+  return subscript_root(node["value"], depth);
+}
+
+// The values stored through a subscript chain as deep as `container[k]`,
+// e.g. `f` in `d[a][b] = f` for `d[a]` (#8946).
+static void collect_nested_stores(
+  const nlohmann::json &node,
+  const nlohmann::json &container,
+  std::vector<nlohmann::json> &out)
+{
+  int depth = 1;
+  const nlohmann::json &root = subscript_root(container, depth);
+  if (root.value("_type", "") != "Name")
+    return;
+  if (node.is_object() && node.value("_type", "") == "Assign")
+    for (const auto &t : node["targets"])
+    {
+      int d = 0;
+      if (is_name(subscript_root(t, d), root["id"]) && d == depth)
+        push_dict_values(node["value"], out);
+    }
+  if (node.is_object() || node.is_array())
+    for (const auto &child : node)
+      collect_nested_stores(child, container, out);
 }
 
 // The values the dict `container` may hold: a literal's, every value stored
@@ -934,8 +996,16 @@ bool python_converter::dict_values(
         return false;
       push_dict_values(v, out);
     }
+    collect_nested_stores(*ast_json, container, out);
   }
   return true;
+}
+
+[[noreturn]] static void refuse_mixed_return_types()
+{
+  throw std::runtime_error(
+    "unsupported: a dict holds functions with different return types, "
+    "so the type of a call through it is not known");
 }
 
 typet python_converter::stored_function_return_type(const nlohmann::json &value)
@@ -976,8 +1046,10 @@ typet python_converter::returned_function_return_type(
       {"ctx", {{"_type", "Load"}}}};
     copy_location_fields_from_decl(call, name);
     const typet ret = stored_function_return_type(name);
-    if (ret.is_nil() || ret.id().empty() || (shared && *shared != ret))
+    if (ret.is_nil() || ret.id().empty())
       return typet();
+    if (shared && *shared != ret)
+      refuse_mixed_return_types();
     shared = ret;
   }
   return shared ? *shared : typet();
@@ -1000,9 +1072,7 @@ python_converter::dict_function_return_type(const nlohmann::json &container)
     if (ret.is_nil() || ret.id().empty())
       return std::nullopt;
     if (shared && *shared != ret)
-      throw std::runtime_error(
-        "unsupported: a dict holds functions with different return types, "
-        "so the type of a call through it is not known");
+      refuse_mixed_return_types();
     shared = ret;
   }
   return shared;
