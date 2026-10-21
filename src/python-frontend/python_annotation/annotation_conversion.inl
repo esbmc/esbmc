@@ -3777,6 +3777,18 @@ bool python_annotation<Json>::expr_calls_function(
 }
 
 template <class Json>
+bool python_annotation<Json>::arithmetic_reads_attribute(const Json &node)
+{
+  const std::string type = node.value("_type", std::string());
+  if (type == "Attribute")
+    return true;
+  if (type == "BinOp")
+    return arithmetic_reads_attribute(node["left"]) ||
+           arithmetic_reads_attribute(node["right"]);
+  return type == "UnaryOp" && arithmetic_reads_attribute(node["operand"]);
+}
+
+template <class Json>
 void python_annotation<Json>::collect_return_types(
   const Json &body,
   const std::string &func_name,
@@ -3869,9 +3881,14 @@ void python_annotation<Json>::collect_return_types(
         continue;
       }
 
-      // Reuse get_argument_type to infer the return value type
+      // Reuse get_argument_type to infer the return value type. "Any" for
+      // arithmetic over an attribute read only means the attribute's type is
+      // unknown here. The converter types the result from the class's member
+      // types, whereas an "Any" return would make it a double (#8942).
       std::string inferred_type = get_argument_type(return_val);
-      if (!inferred_type.empty())
+      if (
+        !inferred_type.empty() &&
+        (inferred_type != "Any" || !arithmetic_reads_attribute(return_val)))
         types.insert(inferred_type);
     }
 

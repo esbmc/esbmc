@@ -251,6 +251,9 @@ private:
   // inference so they don't re-enter the analysis (stack overflow).
   static bool
   expr_calls_function(const Json &node, const std::string &func_name);
+  // True if the arithmetic expression @p node has an attribute read among its
+  // operands, at any depth.
+  static bool arithmetic_reads_attribute(const Json &node);
 
   // ----- annotation-node constructors (annotation_expr.inl) -----
   Json create_name_annotation(
