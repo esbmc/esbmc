@@ -672,6 +672,18 @@ private:
     const expr2tc &extent_bytes,
     size_t snap_idx) const;
 
+  /// __ESBMC_old(ptr[j]) where ptr is not a parameter (e.g. this->buf): no
+  /// is_fresh extent names the region, so snapshot the rest of the object ptr
+  /// addresses, by a quantified assume rather than a copy loop so a symbolic
+  /// size adds no unwinding.
+  expr2tc materialize_ptr_object_old_snapshot(
+    const expr2tc &ptr,
+    const type2tc &region_elem_type,
+    goto_programt &dest,
+    const std::string &func_name,
+    const locationt &location,
+    size_t snap_idx) const;
+
   /// \brief Materialize old snapshots in wrapper function (enforce-contract
   /// mode) Creates DECL and ASSIGN instructions for snapshot variables before
   /// function call. A region snapshot (__ESBMC_old(ptr[j]), ptr a pointer

@@ -4315,6 +4315,64 @@ void code_contractst::emit_arr_elem_assertions(
   }
 }
 
+expr2tc code_contractst::materialize_ptr_object_old_snapshot(
+  const expr2tc &ptr,
+  const type2tc &region_elem_type,
+  goto_programt &dest,
+  const std::string &func_name,
+  const locationt &location,
+  size_t snap_idx) const
+{
+  const type2tc elem_type = ns.follow(region_elem_type);
+  const BigInt elem_sz = type_byte_size(elem_type, &ns);
+  if (elem_sz <= 0)
+  {
+    log_error(
+      "{}: cannot size an __ESBMC_old(...[...]) object snapshot", func_name);
+    abort();
+  }
+  const std::string tag = func_name + "_" + std::to_string(snap_idx);
+  auto local = [&](const std::string &name, const type2tc &type) {
+    expr2tc s = declare_local_symbol(name + tag, type);
+    goto_programt::targett d = dest.add_instruction(DECL);
+    d->code = code_decl2tc(type, to_symbol2t(s).thename);
+    d->location = location;
+    return s;
+  };
+
+  // Type 0: the bytes from ptr to the end of the object it addresses.
+  const expr2tc bytes = local("__ESBMC_old_object_bytes_", size_type2());
+  goto_programt::targett call = dest.add_instruction(FUNCTION_CALL);
+  call->code = code_function_call2tc(
+    bytes,
+    // Symex dispatches the intrinsic by name; the call need not be declared.
+    symbol2tc(get_empty_type(), "c:@F@__ESBMC_builtin_object_size"),
+    std::vector<expr2tc>{ptr, gen_zero(get_int32_type())});
+  call->location = location;
+
+  const expr2tc n = div2tc(
+    size_type2(), bytes, constant_int2tc(size_type2(), elem_sz));
+  const expr2tc snap = local(
+    "__ESBMC_old_object_snapshot_", array_type2tc(elem_type, n, false));
+  const expr2tc i = local("__ESBMC_old_object_i_", size_type2());
+
+  const type2tc elem_ptr = pointer_type2tc(elem_type);
+  const expr2tc p = typecast2tc(elem_ptr, ptr);
+  const expr2tc in_range =
+    and2tc(notequal2tc(p, gen_zero(elem_ptr)), lessthan2tc(i, n));
+  const expr2tc same = equality2tc(
+    index2tc(elem_type, snap, i),
+    dereference2tc(elem_type, add2tc(elem_ptr, p, i)));
+  goto_programt::targett a = dest.add_instruction(ASSUME);
+  a->guard = forall2tc(
+    get_bool_type(),
+    address_of2tc(pointer_type2tc(size_type2()), i),
+    or2tc(not2tc(in_range), same));
+  a->location = location;
+  a->location.comment("__ESBMC_old object snapshot");
+  return snap;
+}
+
 expr2tc code_contractst::materialize_ptr_region_old_snapshot(
   const expr2tc &original_expr,
   const type2tc &region_elem_type,
@@ -4481,7 +4539,15 @@ void code_contractst::materialize_old_snapshots_at_wrapper(
     {
       const size_t snap_idx = unique_snapshot_count++;
 
-      if (old_snapshots[i].is_ptr_region)
+      if (old_snapshots[i].is_ptr_region && !is_symbol2t(original_expr))
+        new_snapshot_var = materialize_ptr_object_old_snapshot(
+          original_expr,
+          old_snapshots[i].region_elem_type,
+          wrapper,
+          func_name,
+          location,
+          snap_idx);
+      else if (old_snapshots[i].is_ptr_region)
       {
         // Wrapper mode: original_expr is always the callee's own parameter
         // symbol (never an array-decay expression, since this path never
@@ -4601,7 +4667,15 @@ code_contractst::materialize_old_snapshots_at_callsite(
 
     expr2tc snapshot_var;
 
-    if (old_snapshots[i].is_ptr_region)
+    if (old_snapshots[i].is_ptr_region && !is_symbol2t(raw_ptr_param))
+      snapshot_var = materialize_ptr_object_old_snapshot(
+        original_expr,
+        old_snapshots[i].region_elem_type,
+        replacement,
+        id2string(function_symbol.name) + "_call",
+        call_location,
+        i);
+    else if (old_snapshots[i].is_ptr_region)
     {
       // __ESBMC_old(ptr[j]), ptr a pointer parameter: no named object to
       // snapshot at the call site either, same as the
@@ -4678,6 +4752,7 @@ code_contractst::materialize_old_snapshots_at_callsite(
     code_contractst::old_snapshot_t snap_entry;
     snap_entry.original_expr = temp_var;    // what to find in ensures
     snap_entry.snapshot_var = snapshot_var; // what to replace with
+    snap_entry.is_ptr_region = old_snapshots[i].is_ptr_region;
     callsite_snapshots.push_back(snap_entry);
   }
 

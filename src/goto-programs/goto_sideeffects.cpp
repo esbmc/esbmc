@@ -164,7 +164,8 @@ static const exprt *bound_ptr_param_offset(
     return nullptr;
   if (
     !mentions_symbol(offset.op1(), bound_vars) ||
-    offset.op0().type().id() != "pointer" || offset.op0().id() != "symbol")
+    offset.op0().type().id() != "pointer" ||
+    (offset.op0().id() != "symbol" && offset.op0().id() != exprt::member))
     return nullptr;
   return &offset;
 }
