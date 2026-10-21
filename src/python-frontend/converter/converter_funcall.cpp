@@ -744,6 +744,113 @@ void python_converter::convert_lambda_call(
   call.function() = get_lambda_expr(element["func"], types);
 }
 
+/// Whether every name @p node reads is one of @p params.
+static bool
+reads_only(const nlohmann::json &node, const std::set<std::string> &params)
+{
+  if (node.is_object() && node.value("_type", "") == "Name")
+    return params.count(node.value("id", "")) != 0;
+  for (const auto &child : node)
+    if (child.is_structured() && !reads_only(child, params))
+      return false;
+  return true;
+}
+
+/// The lambda @p name is bound to in @p body: `name = lambda ...`, or
+/// `name = make()` where `make` returns a lambda reading only its parameters.
+static nlohmann::json lambda_bound_to(
+  const std::string &name,
+  const nlohmann::json &body,
+  const nlohmann::json &ast)
+{
+  for (const auto &stmt : body)
+  {
+    const nlohmann::json *target = binding_target(stmt);
+    if (target == nullptr || target->value("id", "") != name)
+      continue;
+    const nlohmann::json &value = stmt["value"];
+    if (value.value("_type", "") == "Lambda")
+      return value;
+    if (
+      value.value("_type", "") != "Call" ||
+      value["func"].value("_type", "") != "Name")
+      return nlohmann::json();
+    const nlohmann::json make =
+      json_utils::try_find_function(ast["body"], value["func"].value("id", ""));
+    if (!make.contains("body"))
+      return nlohmann::json();
+    for (const auto &ret : make["body"])
+    {
+      const nlohmann::json &lambda =
+        ret.value("_type", "") == "Return" ? ret["value"] : nlohmann::json();
+      if (!lambda.is_object() || lambda.value("_type", "") != "Lambda")
+        continue;
+      std::set<std::string> params;
+      for (const auto &arg : lambda["args"]["args"])
+        params.insert(arg.value("arg", ""));
+      if (reads_only(lambda["body"], params))
+        return lambda;
+    }
+    return nlohmann::json();
+  }
+  return nlohmann::json();
+}
+
+const symbolt *python_converter::lambda_copy_for_call(
+  const nlohmann::json &call,
+  const symbolt &var)
+{
+  const typet &type = var.get_type();
+  const std::string name = call["func"].value("id", "");
+  if (
+    !type.is_pointer() || !type.subtype().is_code() ||
+    current_func_name_.find("lam") == 0 || count_bindings(*ast_json, name) != 1)
+    return nullptr;
+
+  nlohmann::json scope = json_utils::find_function_by_path(
+    *ast_json, json_utils::split_function_path(current_func_name_));
+  if (!scope.contains("body"))
+    scope = *ast_json;
+  nlohmann::json lambda = lambda_bound_to(name, scope["body"], *ast_json);
+  if (lambda.empty())
+    lambda = lambda_bound_to(name, (*ast_json)["body"], *ast_json);
+  if (lambda.empty())
+    return nullptr;
+
+  const std::vector<std::optional<typet>> types =
+    lambda_handler_->narrowed_parameter_types(
+      call, scope, to_code_type(type.subtype()));
+  if (types.empty())
+    return nullptr;
+
+  std::string key = var.id.as_string();
+  for (const auto &t : types)
+    key += t->is_signedbv() ? 'i' : '-';
+  auto [it, inserted] = lambda_copies_.try_emplace(key);
+  if (inserted)
+  {
+    const typet saved_element_type = current_element_type;
+    it->second = get_lambda_expr(lambda, types).identifier();
+    current_element_type = saved_element_type;
+  }
+  return symbol_table_.find_symbol(it->second);
+}
+
+bool python_converter::call_lambda_copy(
+  const nlohmann::json &element,
+  const symbolt &var,
+  side_effect_expr_function_callt &call,
+  const code_typet *&callee_type)
+{
+  const symbolt *copy = lambda_copy_for_call(element, var);
+  if (!copy)
+    return false;
+  call.function() = symbol_expr(*copy);
+  callee_type = &to_code_type(copy->get_type());
+  call.type() = callee_type->return_type();
+  return true;
+}
+
 std::optional<exprt>
 python_converter::call_returned_function(const nlohmann::json &element)
 {
@@ -1548,6 +1655,9 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
           resolved = true;
         }
       }
+
+      resolved |=
+        call_lambda_copy(element, *var_symbol, call, resolved_func_type);
 
       // Try to get return type from the pointer's subtype
       if (!resolved && var_symbol->get_type().subtype().is_code())
