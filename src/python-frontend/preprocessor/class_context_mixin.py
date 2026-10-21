@@ -419,10 +419,18 @@ class ClassContextMixin:
 
     @staticmethod
     def _recovers_classes(module):
-        """Whether `module` can reach a class from an instance or by name."""
+        """Whether `module` can reach a class from an instance or by name. A
+        `type(x)` that is only an operand of `is` or `is not` reaches no method."""
+        compared = {
+            id(operand)
+            for n in ast.walk(module) if isinstance(n, ast.Compare) and all(
+                isinstance(op, (ast.Is, ast.IsNot)) for op in n.ops)
+            for operand in (n.left, *n.comparators)
+        }
         return any(
             isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "type"
-            and len(n.args) == 1 or isinstance(n, ast.Attribute) and n.attr == "__class__"
+            and len(n.args) == 1 and id(n) not in compared
+            or isinstance(n, ast.Attribute) and n.attr == "__class__"
             or isinstance(n, ast.Name) and n.id in ("getattr", "vars", "globals")
             for n in ast.walk(module))
 
