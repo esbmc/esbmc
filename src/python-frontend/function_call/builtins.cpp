@@ -467,6 +467,23 @@ exprt function_call_expr::handle_isinstance() const
   if (decided.is_not_nil())
     return evaluate_after(binding, decided);
 
+  // is_none and value both read an Optional operand: evaluate it once.
+  exprt optional_binding = nil_exprt();
+  if (type_utils::is_optional_struct(obj_expr.type()))
+  {
+    exprt reread;
+    const exprt bound =
+      converter_.bind_operand_read_twice(obj_expr, call_, reread);
+    if (bound.is_nil())
+      throw std::runtime_error(
+        "isinstance() on this Optional operand is not supported here");
+    if (bound != reread)
+    {
+      optional_binding = bound;
+      obj_expr = reread;
+    }
+  }
+
   // Extract type name from various AST node formats
   auto extract_type_name = [](const nlohmann::json &node) -> std::string {
     const std::string node_type = node["_type"];
@@ -529,7 +546,24 @@ exprt function_call_expr::handle_isinstance() const
   };
 
   // Build isinstance check for a given type name
+  std::function<exprt(const exprt &, const std::string &)> build_on;
   auto build_isinstance = [&](const std::string &type_name) -> exprt {
+    return build_on(obj_expr, type_name);
+  };
+  build_on = [&](const exprt &obj_expr, const std::string &type_name) -> exprt {
+    // An Optional[T] struct holds a T only when its is_none flag is clear.
+    if (type_utils::is_optional_struct(obj_expr.type()))
+    {
+      const exprt is_none = member_exprt(obj_expr, "is_none", bool_type());
+      if (type_name == "NoneType")
+        return is_none;
+      const typet &value_type =
+        to_struct_type(obj_expr.type()).get_component("value").type();
+      return and_exprt(
+        not_exprt(is_none),
+        build_on(member_exprt(obj_expr, "value", value_type), type_name));
+    }
+
     // A tagged-scalar operand's real type lives in the runtime `.type_id`
     // field rather than in a single static C type, so it needs its own
     // check instead of the static-type comparisons below.
@@ -636,7 +670,7 @@ exprt function_call_expr::handle_isinstance() const
       isinstance_operand(types[i], build_isinstance, extract_type_name));
     result = or_expr;
   }
-  return evaluate_after(binding, result);
+  return evaluate_after(binding, evaluate_after(optional_binding, result));
 }
 
 std::optional<exprt> function_call_expr::module_hasattr(
