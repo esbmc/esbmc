@@ -155,6 +155,7 @@ public:
     const std::string &name,
     const nlohmann::json &return_node,
     const nlohmann::json &function_node);
+  typet named_callee_type(const std::string &name);
   std::optional<code_typet> returned_function(const nlohmann::json &callee);
   /// `get()()`: a call through the function pointer that `get()` returns.
   /// `(lambda x: ...)(a)`: a call of the lambda, typed by its arguments.
@@ -572,6 +573,19 @@ public:
     const nlohmann::json &element,
     expr2tc &lt,
     expr2tc &eq);
+
+  size_t unordered_tuple_component(
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &element);
+
+  void raise_on_unordered_tie(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    size_t unordered,
+    const expr2tc &prefix_eq,
+    const nlohmann::json &element);
 
   python_typechecking &get_typechecker();
   const python_typechecking &get_typechecker() const;
@@ -1652,6 +1666,11 @@ private:
     const std::string &class_name,
     const std::string &func_name,
     const std::string &obj_symbol_id);
+
+  void refuse_misaligned_self_calls() const;
+  void refuse_misaligned_self_call(
+    const code_function_callt &call,
+    const namespacet &ns) const;
 
   size_t get_type_size(const nlohmann::json &ast_node);
 

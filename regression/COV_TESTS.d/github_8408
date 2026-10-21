@@ -1,0 +1,7 @@
+regression/python/github_8408_c3_mro
+regression/python/github_8408_c3_mro_fail
+regression/python/github_8408_c3_mro_attr_fail
+regression/python/github_8408_c3_receiver_unsupported
+regression/python/github_8408_first_base_layout
+regression/python/github_8408_first_base_layout_fail
+regression/python/github_8408_later_base_unsupported
