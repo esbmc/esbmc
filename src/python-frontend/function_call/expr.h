@@ -932,6 +932,13 @@ private:
 
   /// Indirect call through a function pointer held in an instance field.
   std::optional<exprt> try_indirect_member_call();
+  /// Refuse `x.attr(...)` on a @p class_name receiver when every store of
+  /// @p attr puts a method on `self` and no class in the MRO binds it: only
+  /// a subclass instance holds it, and the receiver's runtime class is not
+  /// tracked (#8956).
+  void refuse_unheld_attribute(
+    const std::string &class_name,
+    const std::string &attr) const;
   /// The functions field @p attr of @p class_name holds, when it is untyped
   /// and no class in its MRO binds @p attr too.
   const python_converter::attribute_functions *held_functions(
