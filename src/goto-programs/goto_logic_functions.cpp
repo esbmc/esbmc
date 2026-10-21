@@ -2,6 +2,7 @@
 #include <irep2/irep2_utils.h>
 #include <util/irep/migrate.h>
 #include <util/message/message.h>
+#include <functional>
 #include <map>
 #include <set>
 
@@ -200,10 +201,92 @@ void check_acyclic(const std::map<irep_idt, std::set<irep_idt>> &calls)
   }
 }
 
+/// Logic function -> the first one with a structurally identical definition.
+/// Applications are named after it, so equal definitions under different names
+/// (a version-isolated copy of one) are congruent: they are one function.
+std::map<irep_idt, irep_idt> representative;
+
+/// The definition with parameters and locals named by position and logic
+/// callees by their own canonical form; equal strings mean equal functions.
+std::string canonical(
+  const irep_idt &f,
+  const goto_functionst &goto_functions,
+  const namespacet &ns,
+  std::map<irep_idt, std::string> &memo)
+{
+  auto known = memo.find(f);
+  if (known != memo.end())
+    return known->second;
+  memo[f] = "";
+  const goto_functiont &gf = goto_functions.function_map.at(f);
+  const code_type2t &ct = to_code_type(gf.type);
+  std::map<irep_idt, std::string> names;
+  for (size_t i = 0; i < ct.argument_names.size(); i++)
+    names[ct.argument_names[i]] = "$p" + std::to_string(i);
+  std::map<const goto_programt::instructiont *, unsigned> index;
+  unsigned n = 0, locals = 0;
+  forall_goto_program_instructions (it, gf.body)
+  {
+    index[&*it] = n++;
+    if (it->is_decl())
+      names[to_code_decl2t(it->code).value] = "$l" + std::to_string(locals++);
+  }
+
+  std::function<void(expr2tc &)> rename = [&](expr2tc &e) {
+    if (is_nil_expr(e))
+      return;
+    if (is_symbol2t(e))
+    {
+      const irep_idt &id = to_symbol2t(e).thename;
+      auto it = names.find(id);
+      if (it != names.end())
+        e = symbol2tc(e->type, it->second);
+      else if (is_code_type(e->type) && is_logic(ns, id))
+        // The code type names its parameters, so leave it out.
+        e = symbol2tc(
+          get_empty_type(),
+          id == f ? std::string("$self")
+                  : "$logic(" + canonical(id, goto_functions, ns, memo) + ")");
+      return;
+    }
+    e = e->clone();
+    e->Foreach_operand(rename);
+  };
+
+  std::string out = ct.ret_type->pretty(0);
+  for (const type2tc &t : ct.arguments)
+    out += t->pretty(0);
+  forall_goto_program_instructions (it, gf.body)
+  {
+    expr2tc code = it->code, guard = it->guard;
+    rename(code);
+    rename(guard);
+    out += "\n" + std::to_string(it->type);
+    // A DECL/DEAD carries its local's name as a field, not an operand.
+    if (is_nil_expr(code))
+      ;
+    else if (is_code_decl2t(code))
+      out += names[to_code_decl2t(code).value] + code->type->pretty(0);
+    else if (is_code_dead2t(code))
+      out += names[to_code_dead2t(code).value];
+    else
+      out += code->pretty(0);
+    if (!is_nil_expr(guard))
+      out += guard->pretty(0);
+    for (const auto &t : it->targets)
+      out += " ->" + std::to_string(index.at(&*t));
+  }
+  return memo[f] = out;
+}
+
 expr2tc app_symbol(const code_function_call2t &c)
 {
-  const symbol2t &s = to_symbol2t(c.function);
-  return symbol2tc(c.function->type, kLogicAppPrefix + id2string(s.thename));
+  const irep_idt &f = to_symbol2t(c.function).thename;
+  auto rep = representative.find(f);
+  return symbol2tc(
+    c.function->type,
+    kLogicAppPrefix +
+      id2string(rep == representative.end() ? f : rep->second));
 }
 
 irep_idt unfold_name(const irep_idt &f)
@@ -417,6 +500,13 @@ void goto_logic_functions(goto_functionst &goto_functions, contextt &context)
   if (calls.empty())
     return;
   check_acyclic(calls);
+
+  representative.clear();
+  std::map<irep_idt, std::string> memo;
+  std::map<std::string, irep_idt> first;
+  for (const auto &[id, callees] : calls)
+    representative[id] =
+      first.emplace(canonical(id, goto_functions, ns, memo), id).first->second;
 
   for (const auto &[id, callees] : calls)
     declare_unfold(id, goto_functions.function_map.at(id), context);
