@@ -331,6 +331,61 @@ static const struct_typet *self_struct(const typet &t, const namespacet &ns)
   return pointee.is_struct() ? &to_struct_type(pointee) : nullptr;
 }
 
+static const code_function_callt *as_function_call(const exprt &e)
+{
+  return e.is_code() && to_code(e).get_statement() == "function_call"
+           ? &to_code_function_call(to_code(e))
+           : nullptr;
+}
+
+static const symbolt *
+called_function(const code_function_callt &call, const contextt &symbols)
+{
+  const symbolt *callee = call.function().is_symbol()
+                            ? symbols.find_symbol(call.function().identifier())
+                            : nullptr;
+  return callee && callee->get_type().is_code() ? callee : nullptr;
+}
+
+/// The call's first argument with its casts stripped, or nil.
+static exprt call_receiver(const code_function_callt &call)
+{
+  exprt arg = call.arguments().empty() ? exprt() : call.arguments().front();
+  while (arg.id() == "typecast")
+    arg = arg.op0();
+  return arg;
+}
+
+static bool is_member_through(const exprt &e, const irep_idt &self)
+{
+  return e.id() == "member" && e.op0().id() == "dereference" &&
+         e.op0().op0().is_symbol() && e.op0().op0().identifier() == self;
+}
+
+static void collect_self_members(
+  const exprt &body,
+  const irep_idt &self,
+  const contextt &symbols,
+  std::set<irep_idt> &visited,
+  std::set<irep_idt> &names);
+
+/// The attributes \p method reads or writes through its first parameter.
+static void collect_method_self_members(
+  const symbolt &method,
+  const contextt &symbols,
+  std::set<irep_idt> &visited,
+  std::set<irep_idt> &names)
+{
+  const auto &params = to_code_type(method.get_type()).arguments();
+  if (!params.empty())
+    collect_self_members(
+      method.get_value(),
+      params.front().get_identifier(),
+      symbols,
+      visited,
+      names);
+}
+
 /// The attributes \p body reads or writes through the pointer \p self,
 /// including in the methods it passes \p self on to.
 static void collect_self_members(
@@ -340,33 +395,16 @@ static void collect_self_members(
   std::set<irep_idt> &visited,
   std::set<irep_idt> &names)
 {
-  if (
-    body.id() == "member" && body.op0().id() == "dereference" &&
-    body.op0().op0().is_symbol() && body.op0().op0().identifier() == self)
+  if (is_member_through(body, self))
     names.insert(body.component_name());
-  if (body.is_code() && to_code(body).get_statement() == "function_call")
+  if (const code_function_callt *call = as_function_call(body))
   {
-    const code_function_callt &call = to_code_function_call(to_code(body));
-    exprt arg = call.arguments().empty() ? exprt() : call.arguments().front();
-    while (arg.id() == "typecast")
-      arg = arg.op0();
-    const symbolt *callee =
-      call.function().is_symbol()
-        ? symbols.find_symbol(call.function().identifier())
-        : nullptr;
+    const exprt arg = call_receiver(*call);
+    const symbolt *callee = called_function(*call, symbols);
     if (
       arg.is_symbol() && arg.identifier() == self && callee &&
-      callee->get_type().is_code() && visited.insert(callee->id).second)
-    {
-      const auto &params = to_code_type(callee->get_type()).arguments();
-      if (!params.empty())
-        collect_self_members(
-          callee->get_value(),
-          params.front().get_identifier(),
-          symbols,
-          visited,
-          names);
-    }
+      visited.insert(callee->id).second)
+      collect_method_self_members(*callee, symbols, visited, names);
   }
   for (const exprt &op : body.operands())
     collect_self_members(op, self, symbols, visited, names);
@@ -382,6 +420,59 @@ component_index(const struct_typet &st, const irep_idt &name)
   return std::nullopt;
 }
 
+static bool same_slot(
+  const struct_typet &own,
+  const struct_typet &given,
+  const irep_idt &name)
+{
+  const auto at = component_index(given, name);
+  return at && at == component_index(own, name);
+}
+
+static std::runtime_error misaligned_call_error(
+  const code_function_callt &call,
+  const symbolt &callee,
+  const struct_typet &own,
+  const struct_typet &given,
+  const irep_idt &name)
+{
+  const std::string cls = own.tag().as_string();
+  const std::string method =
+    callee.name == cls ? "__init__" : callee.name.as_string();
+  return std::runtime_error(
+    call.location().as_string() + ": calling " + cls + "." + method +
+    " on an instance of " + given.tag().as_string() + ", whose '" +
+    name.as_string() + "' is not where " + cls + " keeps it, is not supported");
+}
+
+void python_converter::refuse_misaligned_self_call(
+  const code_function_callt &call,
+  const namespacet &ns) const
+{
+  const symbolt *callee = called_function(call, symbol_table_);
+  if (!callee)
+    return;
+  const code_typet::argumentst &params =
+    to_code_type(callee->get_type()).arguments();
+  if (params.empty() || params.front().get_base_name() != "self")
+    return;
+  const struct_typet *own = self_struct(params.front().type(), ns);
+  const struct_typet *given = self_struct(call_receiver(call).type(), ns);
+  if (!own || !given || own->tag() == given->tag())
+    return;
+  const auto mro = class_mro(given->tag().as_string());
+  if (
+    !mro ||
+    std::find(mro->begin(), mro->end(), own->tag().as_string()) == mro->end())
+    return;
+
+  std::set<irep_idt> visited{callee->id}, accessed;
+  collect_method_self_members(*callee, symbol_table_, visited, accessed);
+  for (const irep_idt &name : accessed)
+    if (!same_slot(*own, *given, name))
+      throw misaligned_call_error(call, *callee, *own, *given, name);
+}
+
 /// A method receives an instance of a subclass as a pointer to its own class,
 /// so it reads and writes that instance at its own class's field offsets.
 /// Under multiple inheritance only the first base's fields lead the subclass;
@@ -393,51 +484,8 @@ void python_converter::refuse_misaligned_self_calls() const
   std::function<void(const exprt &)> visit = [&](const exprt &e) {
     for (const exprt &op : e.operands())
       visit(op);
-    if (!e.is_code() || to_code(e).get_statement() != "function_call")
-      return;
-    const code_function_callt &call = to_code_function_call(to_code(e));
-    const symbolt *callee =
-      call.function().is_symbol()
-        ? symbol_table_.find_symbol(call.function().identifier())
-        : nullptr;
-    if (!callee || !callee->get_type().is_code() || call.arguments().empty())
-      return;
-    const code_typet::argumentst &params =
-      to_code_type(callee->get_type()).arguments();
-    if (params.empty() || params.front().get_base_name() != "self")
-      return;
-    exprt arg = call.arguments().front();
-    while (arg.id() == "typecast")
-      arg = arg.op0();
-    const struct_typet *own = self_struct(params.front().type(), ns);
-    const struct_typet *given = self_struct(arg.type(), ns);
-    if (!own || !given || own->tag() == given->tag())
-      return;
-    const std::string cls = own->tag().as_string();
-    const auto mro = class_mro(given->tag().as_string());
-    if (!mro || std::find(mro->begin(), mro->end(), cls) == mro->end())
-      return;
-
-    std::set<irep_idt> visited{callee->id}, accessed;
-    collect_self_members(
-      callee->get_value(),
-      params.front().get_identifier(),
-      symbol_table_,
-      visited,
-      accessed);
-    for (const irep_idt &name : accessed)
-    {
-      const auto at = component_index(*given, name);
-      if (at && at == component_index(*own, name))
-        continue;
-      const std::string method =
-        callee->name == cls ? "__init__" : callee->name.as_string();
-      throw std::runtime_error(
-        call.location().as_string() + ": calling " + cls + "." + method +
-        " on an instance of " + given->tag().as_string() + ", whose '" +
-        name.as_string() + "' is not where " + cls +
-        " keeps it, is not supported");
-    }
+    if (const code_function_callt *call = as_function_call(e))
+      refuse_misaligned_self_call(*call, ns);
   };
   symbol_table_.foreach_operand_in_order([&](const symbolt &s) {
     if (s.get_type().is_code())
