@@ -5902,6 +5902,7 @@ std::optional<exprt> function_call_expr::try_indirect_variable_call()
     {
       side_effect_expr_function_callt call;
       call.location() = converter_.get_location_from_decl(call_);
+      call.type() = any_type();
       exprt func_expr = build_symbol(*var_symbol);
       if (
         !var_symbol->get_type().is_pointer() ||
@@ -5931,11 +5932,6 @@ std::optional<exprt> function_call_expr::try_indirect_variable_call()
           to_code_type(var_symbol->get_type().subtype()).return_type();
         resolved = true;
       }
-      if (!resolved)
-      {
-        call.type() = any_type();
-        converter_.refuse_mismatched_callees(build_symbol(*var_symbol), call_);
-      }
 
       for (const auto &arg_node : call_["args"])
       {
@@ -5946,6 +5942,9 @@ std::optional<exprt> function_call_expr::try_indirect_variable_call()
           arg = build_address_of(arg);
         call.arguments().push_back(arg);
       }
+      if (!resolved)
+        return converter_.dispatch_mismatched_callees(
+          build_symbol(*var_symbol), call_, call);
       return call;
     }
   }
