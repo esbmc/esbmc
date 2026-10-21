@@ -562,7 +562,24 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "Extract the main loop as a transition system, print one TS-CHECK line "
      "saying whether it is one, and stop"},
-    {"ts-dump", NULL, "With --ts-check, also print the transition system"}}},
+    {"ts-dump",
+     NULL,
+     "With another --ts option, also print the extracted transition system"},
+    {"ts-bmc", NULL, "Bounded model checking over the transition system"},
+    {"ts-no-fallback",
+     NULL,
+     "Report UNKNOWN instead of falling back when the program is not a "
+     "transition system"},
+    {"ts-no-live-filter",
+     NULL,
+     "Keep every havocked variable as state instead of slicing to the "
+     "properties' cone of influence"},
+    {"ts-fresh-solver",
+     NULL,
+     "With --ts-bmc, solve each bound as one formula in a new solver"},
+    {"ts-push-pop",
+     NULL,
+     "Use push/pop instead of assumptions in --ts-bmc (cross-check)"}}},
   {"k-induction",
    {{"base-case", NULL, "Check the base case"},
     {"forward-condition", NULL, "Check the forward condition"},
@@ -684,6 +701,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"cvc5", NULL, "Use CVC5"},
     {"yices", NULL, "Use Yices"},
     {"bitwuzla", NULL, "Use Bitwuzla (default)"},
+    {"bitwuzla-opt",
+     boost::program_options::value<std::vector<std::string>>()->value_name(
+       "name=value"),
+     "Set a Bitwuzla option, e.g. rewrite-level=1 (repeatable)"},
     {"bitwuzllob",
      NULL,
      "Use Bitwuzllob (Bitwuzla on the massively parallel Mallob platform) by "
@@ -781,6 +802,10 @@ const struct group_opt_templ all_cmd_options[] = {
    {{"multi-property",
      NULL,
      "Verify satisfiability of all claims of the current bound"},
+    {"report-unreached-claims",
+     NULL,
+     "List each claim no path reaches within the bound in the property "
+     "table, as passed vacuously"},
     {"multi-property-interleavings",
      boost::program_options::value<int>()->value_name("n"),
      "In multi-property mode, keep exploring thread interleavings after a "
@@ -1097,6 +1122,10 @@ const struct group_opt_templ all_cmd_options[] = {
       "object (unsound)"},
      {"abort-on-recursion", NULL, "Abort if the program contains recursion"},
      {"ltl", NULL, "Enable Linear Temporal Logic property checking"},
+     {"ltl-sample-points",
+      NULL,
+      "Step the LTL monitor only at __ESBMC_ltl_sample() calls, not after "
+      "every update of a global its propositions read"},
      {"break-at",
       boost::program_options::value<std::string>(),
       "Trigger a breakpoint at the given GOTO instruction number"},

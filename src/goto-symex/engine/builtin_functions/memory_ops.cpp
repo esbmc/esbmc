@@ -528,6 +528,22 @@ static bool spans_bytes(const type2tc &type, uint64_t n)
   return type_byte_size_bits(type).to_uint64() == n * 8;
 }
 
+// Whether [offset, offset+n) lies inside an object of @p type.
+static bool fits_bytes(const type2tc &type, uint64_t offset, uint64_t n)
+{
+  try
+  {
+    return offset + n <= type_byte_size(type).to_uint64();
+  }
+  catch (const array_type2t::dyn_sized_array_excp &)
+  {
+  }
+  catch (const array_type2t::inf_sized_array_excp &)
+  {
+  }
+  return false;
+}
+
 // Collect, shallowest first, every sub-object of @p root that occupies exactly
 // [offset, offset+n) bytes. A struct shares its byte range with a sole member,
 // so the shallowest match is not always the one whose type the destination
@@ -672,6 +688,69 @@ static expr2tc replace_subobject(
   return expr2tc();
 }
 
+/** The @p n bytes of @p object from byte @p offset, as one bit-vector in the
+ * target's byte order. */
+static expr2tc object_bytes(const expr2tc &object, uint64_t offset, uint64_t n)
+{
+  const bool be = target_is_big_endian();
+  expr2tc value;
+  for (uint64_t i = 0; i < n; i++)
+  {
+    expr2tc byte = object_byte(object, offset + i, be);
+    if (!value)
+      value = byte;
+    else if (be)
+      value = concat2tc(get_uint_type((i + 1) * 8), value, byte);
+    else
+      value = concat2tc(get_uint_type((i + 1) * 8), byte, value);
+  }
+  return value;
+}
+
+/* @p dst with the float it holds at [dst_offset, dst_offset+n) read whole from
+ * @p src; null when that range is not a float or overruns @p src. The C byte
+ * loop would rebuild it a byte at a time, and an intermediate NaN loses its
+ * bits: floating-point theory has a single NaN (#8711). */
+static expr2tc copy_into_float(
+  const expr2tc &dst,
+  uint64_t dst_offset,
+  const expr2tc &src,
+  uint64_t src_offset,
+  uint64_t n)
+{
+  if (
+    is_pointer_type(src) || is_empty_type(src->type) ||
+    is_code_type(src->type) || !fits_bytes(src->type, src_offset, n))
+    return expr2tc();
+
+  std::vector<expr2tc> dst_subs;
+  collect_subobjects(dst, dst_offset, n, dst_subs);
+  for (const expr2tc &dst_sub : dst_subs)
+  {
+    if (!is_floatbv_type(dst_sub->type))
+      continue;
+    return replace_subobject(
+      dst,
+      dst_offset,
+      n,
+      bitcast2tc(dst_sub->type, object_bytes(src, src_offset, n)));
+  }
+  return expr2tc();
+}
+
+// gen_byte_memcpy, or the float copy when it declines.
+static expr2tc copy_primitive(
+  const expr2tc &dst,
+  uint64_t dst_offset,
+  const expr2tc &src,
+  uint64_t src_offset,
+  uint64_t n)
+{
+  expr2tc result =
+    goto_symex_utils::gen_byte_memcpy(src, dst, n, src_offset, dst_offset);
+  return result ? result : copy_into_float(dst, dst_offset, src, src_offset, n);
+}
+
 static inline expr2tc do_memcpy_expression(
   const expr2tc &dst,
   const size_t &dst_offset,
@@ -713,7 +792,7 @@ static inline expr2tc do_memcpy_expression(
     }
 
     log_debug("memcpy", "Only primitives are supported for now");
-    return expr2tc();
+    return copy_into_float(dst, dst_offset, src, src_offset, num_of_bytes);
   }
 
   // gen_byte_memcpy asserts on get_width(), which throws
@@ -729,13 +808,23 @@ static inline expr2tc do_memcpy_expression(
   }
 
   // Base-case. Primitives!
-  return goto_symex_utils::gen_byte_memcpy(
-    src, dst, num_of_bytes, src_offset, dst_offset);
+  return copy_primitive(dst, dst_offset, src, src_offset, num_of_bytes);
 }
 
 static void offset_simplifier(expr2tc &e)
 {
   simplify(e);
+}
+
+void goto_symext::claim_not_code(const expr2tc &guard)
+{
+  if (options.get_bool_option("no-pointer-check"))
+    return;
+
+  // SAME_OBJECT(ptr, item) => DEREF ERROR
+  claim(
+    implies2tc(guard, gen_false_expr()),
+    "dereference failure: trying to deref a ptr code");
 }
 
 void goto_symext::claim_valid_operand(
@@ -982,12 +1071,7 @@ void goto_symext::intrinsic_memcpy_impl(
         return;
       }
 
-      std::string error_msg =
-        fmt::format("dereference failure: trying to deref a ptr code");
-
-      // SAME_OBJECT(ptr, item) => DEREF ERROR
-      expr2tc check = implies2tc(item.guard, gen_false_expr());
-      claim(check, error_msg);
+      claim_not_code(item.guard);
       continue;
     }
 
@@ -1704,12 +1788,7 @@ void goto_symext::intrinsic_memset(
 
     if (is_code_type(item_object->type))
     {
-      std::string error_msg =
-        fmt::format("dereference failure: trying to deref a ptr code");
-
-      // SAME_OBJECT(ptr, item) => DEREF ERROR
-      expr2tc check = implies2tc(item.guard, gen_false_expr());
-      claim(check, error_msg);
+      claim_not_code(item.guard);
       continue;
     }
 

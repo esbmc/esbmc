@@ -362,6 +362,53 @@ class CoreVisitorsMixin:
 
         return result
 
+    def _rename_dictcomp_targets(self, comp):
+        """A copy of @p comp whose targets have fresh names, so the for-loops it
+        lowers to do not rebind names of the enclosing scope: a Python 3
+        comprehension has its own scope."""
+        comp = copy.deepcopy(comp)
+        for index, gen in enumerate(comp.generators):
+            scopes = [gen.target, comp.key, comp.value] + gen.ifs + comp.generators[index + 1:]
+            for old in {n.id for n in ast.walk(gen.target) if isinstance(n, ast.Name)}:
+                new = f"ESBMC_compvar_{self.listcomp_counter}_{old}"
+                self.listcomp_counter += 1
+                for scope in scopes:
+                    self._rename_free_name(scope, old, new)
+        return comp
+
+    def _rename_free_name(self, node, old, new):
+        """Rename @p old to @p new in @p node, except inside a nested lambda or
+        comprehension that binds @p old itself."""
+        if isinstance(node, ast.Name):
+            if node.id == old:
+                node.id = new
+        elif isinstance(node, ast.Lambda):
+            self._rename_free_name_in_lambda(node, old, new)
+        elif isinstance(node, (ast.ListComp, ast.SetComp, ast.GeneratorExp, ast.DictComp)):
+            self._rename_free_name_in_comprehension(node, old, new)
+        else:
+            for child in ast.iter_child_nodes(node):
+                self._rename_free_name(child, old, new)
+
+    def _rename_free_name_in_lambda(self, node, old, new):
+        """Defaults are evaluated outside the lambda; the body only sees
+        @p old when no parameter shadows it."""
+        for default in node.args.defaults + [d for d in node.args.kw_defaults if d]:
+            self._rename_free_name(default, old, new)
+        if old not in {a.arg for a in ast.walk(node.args) if isinstance(a, ast.arg)}:
+            self._rename_free_name(node.body, old, new)
+
+    def _rename_free_name_in_comprehension(self, node, old, new):
+        """Rename up to the generator whose target rebinds @p old."""
+        for gen in node.generators:
+            self._rename_free_name(gen.iter, old, new)
+            if any(isinstance(n, ast.Name) and n.id == old for n in ast.walk(gen.target)):
+                return
+            for cond in gen.ifs:
+                self._rename_free_name(cond, old, new)
+        for part in ([node.key, node.value] if isinstance(node, ast.DictComp) else [node.elt]):
+            self._rename_free_name(part, old, new)
+
     def _maybe_lower_dictcomp_over_items(self, node):
         """Lower a dict comprehension whose iterable is a dict view into ``x = {}``
         followed by a population loop, e.g.
@@ -399,6 +446,7 @@ class CoreVisitorsMixin:
             return None
 
         target_id = node.targets[0].id
+        comp = self._rename_dictcomp_targets(comp)
 
         # x = {}
         init = ast.Assign(targets=[ast.Name(id=target_id, ctx=ast.Store())],
@@ -691,7 +739,8 @@ class CoreVisitorsMixin:
         the binding, or None if it stays."""
         captures = self._captures_receiver(target, value)
         if not (resolvable and isinstance(target, ast.Name) and isinstance(value, ast.Attribute) and
-                (captures or isinstance(value.value, ast.Name)) and target.id in self.called_names):
+                (captures or isinstance(value.value, ast.Name))
+                and self._needs_no_method_value(target, value)):
             if isinstance(target, ast.Name):
                 self.bound_method_vars.pop(target.id, None)
             return None
@@ -706,6 +755,15 @@ class CoreVisitorsMixin:
         capture = ast.Assign(targets=[ast.Name(id=receiver, ctx=ast.Store())], value=value.value)
         self._update_variable_types_simple(capture.targets[0], value.value)
         return [ast.fix_missing_locations(ast.copy_location(capture, value))]
+
+    def _needs_no_method_value(self, target, value):
+        """Whether `target = obj.attr` needs no value for `obj.attr`: `target`
+        is called, so each call is resolved to `obj.attr`, or it is never
+        referenced and `obj.attr` is a method of a fixed instance, like an
+        unused target of an unpacking (#8957)."""
+        return target.id in self.called_names or (
+            target.id not in self.referenced_names and isinstance(value.value, ast.Name)
+            and value.attr in self.fixed_receivers.get(value.value.id, ()))
 
     def _captures_receiver(self, target, value):
         """Whether `target = obj.attr` stores `obj` for the calls of `target`:
@@ -1142,6 +1200,8 @@ class CoreVisitorsMixin:
 
         if (function_name not in self.functionVarargs
                 and any(isinstance(arg, ast.Starred) for arg in node.args)):
+            if self._forwards_own_varargs(node):
+                return False
             raise NotImplementedError(
                 f"Unpacking *x into {self._display_name(function_name)}() is supported only "
                 "when x is a list or tuple of statically known length")
@@ -1526,24 +1586,12 @@ class CoreVisitorsMixin:
         """
         Handle assignment nodes, including multiple assignments and tuple unpacking.
         """
+        split = self._split_linspace_retstep(node)
+        if split is not None:
+            return [self.visit(statement) for statement in split]
         self._invalidate_list_literals_for_assign_targets(node.targets)
         self._update_assignment_call_origins(node.targets, node.value)
-        # Neutralise `x = sorted(...d.items()...)` to `x = []` when the scan
-        # certified x as eq-only with a known dict receiver; the cascade
-        # then recovers the assert against the tracked Call origin.
-        # Only sorted() is neutralised: plain `list(d.items())` still has a
-        # materialised list path elsewhere that other rewrites depend on.
-        neutralized_target = None
-        if (len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
-                and node.targets[0].id in self._eq_only_items_view_targets
-                and self._is_items_view_call(node.value) and node.value.func.id == "sorted"):
-            recv = self._items_view_receiver_name(node.value)
-            if recv is not None and self._is_known_dict_name(recv):
-                placeholder = ast.List(elts=[], ctx=ast.Load())
-                ast.copy_location(placeholder, node.value)
-                ast.fix_missing_locations(placeholder)
-                node.value = placeholder
-                neutralized_target = node.targets[0].id
+        neutralized_target = self._neutralize_sorted_items_view(node)
 
         if self._maybe_record_type_alias_assign(node):
             return None
@@ -1581,6 +1629,27 @@ class CoreVisitorsMixin:
         if len(node.targets) == 1:
             return self._handle_single_target_assign(node)
         return self._handle_multi_target_assign(node)
+
+    def _neutralize_sorted_items_view(self, node):
+        """Neutralise `x = sorted(...d.items()...)` to `x = []` and return x.
+
+        Only when the scan certified x as eq-only with a known dict receiver;
+        the cascade then recovers the assert against the tracked Call origin.
+        Only sorted() is neutralised: plain `list(d.items())` still has a
+        materialised list path elsewhere that other rewrites depend on.
+        """
+        if not (len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
+                and node.targets[0].id in self._eq_only_items_view_targets
+                and self._is_items_view_call(node.value) and node.value.func.id == "sorted"):
+            return None
+        recv = self._items_view_receiver_name(node.value)
+        if recv is None or not self._is_known_dict_name(recv):
+            return None
+        placeholder = ast.List(elts=[], ctx=ast.Load())
+        ast.copy_location(placeholder, node.value)
+        ast.fix_missing_locations(placeholder)
+        node.value = placeholder
+        return node.targets[0].id
 
     def _is_known_dict_name(self, name):
         """True when `name` is reliably known to be bound to a dict.
@@ -1840,6 +1909,9 @@ class CoreVisitorsMixin:
         if rewritten_ratio is not None:
             return rewritten_ratio
 
+        raising = self._bind_numpy_constructor_call(node)
+        if raising is not None:
+            return raising
         self._normalize_builtin_keyword_args(node)
         self._normalize_math_gcd_lcm_variadic(node)
 
@@ -1890,13 +1962,15 @@ class CoreVisitorsMixin:
         """Spell `f(a, *xs)` out as `f(a, xs[0], ..., xs[k-1]) if len(xs) == k else e()`.
 
         Only for a call _scan_starred_calls marked, to a known function with a
-        fixed positional signature (no *args, no defaults among the starred
-        slots). CPython raises TypeError when len(xs) does not fill the k
-        remaining parameters; _starred_arity_error raises it before any
-        element is read. The frontend has no Starred expression, so without
-        this every such call was refused. Constant indices let the frontend
-        type each element on its own (#8472). Returns the guarding IfExp,
-        whose body is `node`, or None.
+        fixed positional signature (no *args). CPython raises TypeError when
+        len(xs) does not fill the k remaining parameters; _starred_arity_error
+        raises it before any element is read. When the last of those
+        parameters have defaults, each length from the required count up to k
+        gets its own arm, and binding fills the defaults of the shorter ones.
+        The frontend has no Starred expression, so without this every such
+        call was refused. Constant indices let the frontend type each element
+        on its own (#8472). Returns the guarding IfExp, whose body is `node`,
+        or None.
         """
         if not getattr(node, "esbmc_starred_sequence", False):
             return None
@@ -1908,31 +1982,43 @@ class CoreVisitorsMixin:
             return None
         fixed = len(node.args) - 1
         slots = expected_args[fixed:]
-        if not slots or any((function_name, arg) in self.functionDefaults for arg in slots):
+        if not slots:
             return None
-        length_ok = ast.Compare(left=ast.Call(func=ast.Name(id="len", ctx=ast.Load()),
-                                              args=[ast.Name(id=operand.id, ctx=ast.Load())],
-                                              keywords=[]),
-                                ops=[ast.Eq()],
-                                comparators=[ast.Constant(value=len(slots))])
-        arity_error = ast.Call(func=ast.Name(id="_starred_arity_error", ctx=ast.Load()),
-                               args=[],
-                               keywords=[])
+        required = sum((function_name, arg) not in self.functionDefaults for arg in slots)
+        # _unguard_starred_call inlines list(gen(*xs)) only behind a single guard.
+        if required < len(slots) and function_name in self.generator_funcs:
+            return None
+        # functionDefaults is keyed by bare name, so a second def or class of
+        # that name may have left defaults the global callee lacks.
+        if required < len(slots) and node.func.id in self._redefined_names:
+            return None
         node.args = node.args[:-1] + [
             ast.Subscript(value=ast.Name(id=operand.id, ctx=ast.Load()),
                           slice=ast.Constant(value=i),
                           ctx=ast.Load()) for i in range(len(slots))
         ]
-        ast.copy_location(length_ok, node)
         ast.fix_missing_locations(node)
-        # The raising arm reads as `(e(), f(...))[1]` so both arms carry
+        arity_error = ast.Call(func=ast.Name(id="_starred_arity_error", ctx=ast.Load()),
+                               args=[],
+                               keywords=[])
+        # The raising arm reads as `(e(), f(...))[1]` so every arm carries
         # f's result type; e() raises before f is reached.
         unreached = copy.deepcopy(node)
         unreached.esbmc_starred_sequence = False
-        raising = ast.Subscript(value=ast.Tuple(elts=[arity_error, unreached], ctx=ast.Load()),
-                                slice=ast.Constant(value=1),
-                                ctx=ast.Load())
-        guard = ast.IfExp(test=length_ok, body=node, orelse=raising)
+        guard = ast.Subscript(value=ast.Tuple(elts=[arity_error, unreached], ctx=ast.Load()),
+                              slice=ast.Constant(value=1),
+                              ctx=ast.Load())
+        for length in range(required, len(slots) + 1):
+            call = node
+            if length < len(slots):
+                call = copy.deepcopy(unreached)
+                call.args = call.args[:fixed + length]
+            length_ok = ast.Compare(left=ast.Call(func=ast.Name(id="len", ctx=ast.Load()),
+                                                  args=[ast.Name(id=operand.id, ctx=ast.Load())],
+                                                  keywords=[]),
+                                    ops=[ast.Eq()],
+                                    comparators=[ast.Constant(value=length)])
+            guard = ast.IfExp(test=length_ok, body=call, orelse=guard)
         ast.copy_location(guard, node)
         ast.fix_missing_locations(guard)
         return guard
@@ -1948,8 +2034,12 @@ class CoreVisitorsMixin:
         list or tuple display, and xs must not be rebound. A callee bound in the
         calling scope is not the global function whose signature the lowering
         reads."""
-        calls_to, loads = {}, {}
+        calls_to, loads, defined = {}, {}, set()
         for n in ast.walk(node):
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                if n.name in defined:
+                    self._redefined_names.add(n.name)
+                defined.add(n.name)
             if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
                 calls_to.setdefault(n.func.id, []).append(n)
             elif isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load):

@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: passing a dynamically-typed variable to a function is not yet supported$

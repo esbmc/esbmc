@@ -10,6 +10,7 @@
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/math/complex_handler.h>
 #include <python-frontend/math/complex_handler_utils.h>
+#include <python-frontend/python-list/python_list.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/lambda/python_lambda.h>
 #include <python-frontend/exception/python_exception_handler.h>
@@ -36,7 +37,6 @@
 #include <functional>
 #include <optional>
 #include <set>
-#include <limits>
 #include <stdexcept>
 
 using namespace json_utils;
@@ -44,35 +44,6 @@ using namespace python_expr;
 
 namespace
 {
-// Default length used for nondeterministic strings when the user has
-// not provided an explicit value via --nondet-str-length.
-constexpr int DEFAULT_NONDET_STR_LENGTH = 16;
-
-int get_nondet_str_length()
-{
-  std::string opt_value = config.options.get_option("nondet-str-length");
-  if (!opt_value.empty())
-  {
-    try
-    {
-      int length = std::stoi(opt_value);
-      if (length > 0)
-        return length;
-    }
-    catch (...)
-    {
-    }
-  }
-  return DEFAULT_NONDET_STR_LENGTH;
-}
-
-// +1 for the NUL: --nondet-str-length N promises len() can reach N (#7377).
-int get_nondet_str_buffer_size()
-{
-  const int length = get_nondet_str_length();
-  return length < std::numeric_limits<int>::max() ? length + 1 : length;
-}
-
 // Banker's rounding (IEEE 754 round-half-to-even): rounds to the nearest
 // integer, breaking ties toward the even neighbor. The tie_eps tolerates
 // small floating-point error around the .5 boundary so that values
@@ -143,7 +114,7 @@ exprt function_call_expr::handle_input() const
 {
   // input() returns a non-deterministic string
   // Model as a bounded C-string without embedded nulls.
-  int max_str_length = get_nondet_str_buffer_size();
+  int max_str_length = string_handler::nondet_str_buffer_size();
   typet string_type = type_handler_.get_typet("str", max_str_length);
 
   symbolt &input_sym =
@@ -203,43 +174,8 @@ exprt function_call_expr::build_nondet_call() const
   std::string type = func_name.substr(underscore_pos + 1);
 
   if (type == "str")
-  {
-    int max_str_length = get_nondet_str_buffer_size();
-
-    typet char_array_type =
-      array_typet(char_type(), from_integer(max_str_length, size_type()));
-
-    // Create a temporary variable to hold the nondeterministic string
-    symbolt &nondet_str_symbol = converter_.create_tmp_symbol(
-      call_, "$nondet_str$", char_array_type, exprt());
-
-    // Declare the temporary
-    code_declt decl(build_symbol(nondet_str_symbol));
-    decl.location() = converter_.get_location_from_decl(call_);
-    converter_.add_instruction(decl);
-
-    // Create nondet assignment for the array
-    exprt nondet_value("sideeffect", char_array_type);
-    nondet_value.statement("nondet");
-
-    code_assignt nondet_assign(build_symbol(nondet_str_symbol), nondet_value);
-    nondet_assign.location() = converter_.get_location_from_decl(call_);
-    converter_.add_instruction(nondet_assign);
-
-    // Ensure null terminator at the last position
-    exprt last_index = from_integer(max_str_length - 1, size_type());
-    exprt null_char = from_integer(0, char_type());
-
-    exprt last_elem = build_index(build_symbol(nondet_str_symbol), last_index);
-    code_assignt null_assign(last_elem, null_char);
-    null_assign.location() = converter_.get_location_from_decl(call_);
-    converter_.add_instruction(null_assign);
-
-    // Return address of first element: &arr[0] which is char*
-    exprt first_elem = build_index(
-      build_symbol(nondet_str_symbol), from_integer(0, size_type()));
-    return build_address_of(first_elem);
-  }
+    return converter_.get_string_handler().build_nondet_string(
+      converter_.get_location_from_decl(call_));
 
   if (type == "complex")
   {
@@ -381,6 +317,111 @@ void function_call_expr::refuse_isinstance_on_path_dependent_number(
       "supported");
 }
 
+/// isinstance(obj, list) or isinstance(obj, tuple) when either answer comes
+/// from the list model: a list that tuple(x) built is marked as a tuple
+/// (#8777), and None is neither. Empty for any other check.
+std::optional<exprt> function_call_expr::list_isinstance(
+  const exprt &obj,
+  const std::string &type_name) const
+{
+  const bool list_typed = obj.type() == type_handler_.get_list_type();
+  if (!list_typed)
+    return type_name == "list" ? std::optional<exprt>(false_exprt())
+                               : std::nullopt;
+  if (type_name != "list" && type_name != "tuple")
+    return std::nullopt;
+  const exprt is_tuple =
+    python_list(converter_, call_).build_is_tuple_call(obj);
+  if (type_name == "tuple")
+    return is_tuple;
+  expr2tc obj2, tuple2;
+  migrate_expr(obj, obj2);
+  migrate_expr(is_tuple, tuple2);
+  return migrate_expr_back(
+    and2tc(notequal2tc(obj2, gen_zero(obj2->type)), not2tc(tuple2)));
+}
+
+exprt function_call_expr::isinstance_operand(
+  const nlohmann::json &node,
+  const std::function<exprt(const std::string &)> &build,
+  const std::function<std::string(const nlohmann::json &)> &type_name) const
+{
+  const symbolt *symbol = nullptr;
+  if (node["_type"] == "Name")
+  {
+    symbol_id sid = converter_.create_symbol_id();
+    sid.set_object(node["id"].get<std::string>());
+    symbol = converter_.find_symbol(sid.to_string());
+    sid.set_function("");
+    symbol = symbol ? symbol : converter_.find_symbol(sid.to_string());
+  }
+  if (!symbol || !type_handler::is_class_value_type(symbol->get_type()))
+    return build(type_name(node));
+
+  // A runtime class value (#8390): it is one of the classes given an id, so
+  // test each against the object under the guard that it is that class.
+  const exprt cls = converter_.get_expr(node);
+  const std::map<std::string, int> ids = converter_.class_ids_;
+  exprt result = false_exprt();
+  for (const auto &[name, id] : ids)
+  {
+    exprt same("=", bool_type());
+    same.copy_to_operands(
+      member_exprt(cls, "id", int_type()), from_integer(id, int_type()));
+    result = or_exprt(result, and_exprt(same, build(name)));
+  }
+  return result;
+}
+
+exprt function_call_expr::isinstance_without_type_name(
+  const nlohmann::json &obj_arg,
+  const exprt &obj_expr,
+  const std::vector<nlohmann::json> &types) const
+{
+  if (is_class_object_operand(obj_arg, obj_expr))
+    return gen_boolean(admits_class_object(types));
+
+  const auto is_any = [&](const nlohmann::json &t) {
+    return t["_type"] == "Name" && t["id"] == "Any" &&
+           json_utils::is_imported_from(converter_.ast(), "typing", "Any");
+  };
+  if (std::any_of(types.begin(), types.end(), is_any))
+    return converter_.get_exception_handler().gen_exception_raise(
+      "TypeError", "typing.Any cannot be used with isinstance()");
+  return nil_exprt();
+}
+
+/// The list item a read `*(T *)item->value` of a scalar element comes from, or
+/// nil. The cast is the frontend's guess at the element's type; the item's
+/// type_id records the type it was stored with.
+static exprt list_item_of_scalar_read(const exprt &read, const typet &item_type)
+{
+  if (read.id() != "dereference" || read.op0().id() != "typecast")
+    return nil_exprt();
+  const exprt &value = read.op0().op0();
+  if (
+    value.id() != "member" || value.get("component_name") != "value" ||
+    value.op0().type() != item_type)
+    return nil_exprt();
+  return value.op0();
+}
+
+/// The tagged object whose type_id answers isinstance(@p obj, @p type_name):
+/// @p obj itself when it is a tagged scalar, the list item a scalar element
+/// read comes from when @p type_name is a scalar type, else nil.
+static exprt tagged_isinstance_operand(
+  const exprt &obj,
+  const std::string &type_name,
+  const type_handler &types)
+{
+  if (types.is_tagged_scalar_type(obj.type()))
+    return obj;
+  static const std::set<std::string> scalars = {"bool", "int", "float", "str"};
+  if (!scalars.count(type_name))
+    return nil_exprt();
+  return list_item_of_scalar_read(obj, types.get_tagged_object_type());
+}
+
 exprt function_call_expr::handle_isinstance() const
 {
   const auto &args = call_["args"];
@@ -396,8 +437,9 @@ exprt function_call_expr::handle_isinstance() const
   collect_classinfo(args[1], types);
   refuse_isinstance_on_path_dependent_number(obj_arg, types);
 
-  if (is_class_object_operand(obj_arg, obj_expr))
-    return gen_boolean(admits_class_object(types));
+  const exprt decided = isinstance_without_type_name(obj_arg, obj_expr, types);
+  if (decided.is_not_nil())
+    return decided;
 
   // Extract type name from various AST node formats
   auto extract_type_name = [](const nlohmann::json &node) -> std::string {
@@ -465,9 +507,11 @@ exprt function_call_expr::handle_isinstance() const
     // A tagged-scalar operand's real type lives in the runtime `.type_id`
     // field rather than in a single static C type, so it needs its own
     // check instead of the static-type comparisons below.
-    if (type_handler_.is_tagged_scalar_type(obj_expr.type()))
+    const exprt tagged =
+      tagged_isinstance_operand(obj_expr, type_name, type_handler_);
+    if (tagged.is_not_nil())
       return converter_.dynamic_type_handler_.build_isinstance_check(
-        obj_expr, type_name, json_utils::is_class(type_name, converter_.ast()));
+        tagged, type_name, json_utils::is_class(type_name, converter_.ast()));
 
     // Special case: Check if object is None (null pointer)
     if (type_name == "NoneType")
@@ -495,16 +539,8 @@ exprt function_call_expr::handle_isinstance() const
     // are incompatible. When the static type is a list pointer, emit a
     // runtime null check so that Optional[list] parameters (None at runtime)
     // correctly return False.
-    if (type_name == "list")
-    {
-      if (obj_expr.type() == type_handler_.get_list_type())
-      {
-        expr2tc obj2;
-        migrate_expr(obj_expr, obj2);
-        return migrate_expr_back(notequal2tc(obj2, gen_zero(obj2->type)));
-      }
-      return false_exprt();
-    }
+    if (std::optional<exprt> listed = list_isinstance(obj_expr, type_name))
+      return *listed;
 
     // String special case: get_typet("str") returns char[0], which the
     // generic encoding lowers to gen_zero(char[0]) — an empty array
@@ -564,12 +600,14 @@ exprt function_call_expr::handle_isinstance() const
   if (types.empty())
     throw std::runtime_error("isinstance() tuple cannot be empty");
 
-  exprt result = build_isinstance(extract_type_name(types[0]));
+  exprt result =
+    isinstance_operand(types[0], build_isinstance, extract_type_name);
   for (size_t i = 1; i < types.size(); ++i)
   {
     exprt or_expr("or", typet("bool"));
     or_expr.move_to_operands(result);
-    or_expr.copy_to_operands(build_isinstance(extract_type_name(types[i])));
+    or_expr.copy_to_operands(
+      isinstance_operand(types[i], build_isinstance, extract_type_name));
     result = or_expr;
   }
   return result;
@@ -1102,6 +1140,20 @@ exprt function_call_expr::handle_type_call() const
       : type_handler_.get_python_type_name(arg_expr.type());
   if (type_name.empty())
     type_name = arg_expr.type().id_string();
+
+  // Any other pointer may be None, an instance of a subclass, or of any class
+  // at all when erased to void *, so only a comparison can over-approximate it.
+  if (
+    arg_expr.type().is_pointer() && type_name != "str" &&
+    type_name != "NoneType")
+  {
+    const auto &compared = converter_.type_compared_operands_;
+    if (&call_ != compared[0] && &call_ != compared[1])
+      throw std::runtime_error(
+        "type() of a value whose class is not known statically is only "
+        "supported as an operand of is, is not, == or !=");
+    type_name = python_converter::unknown_class_name;
+  }
 
   return converter_.make_class_object(type_name);
 }

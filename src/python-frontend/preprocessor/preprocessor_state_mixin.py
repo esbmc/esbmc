@@ -26,6 +26,7 @@ class PreprocessorStateMixin:
         self._unobservable_builtin_keys = frozenset()
         self._closed_lambda_bindings = {}
         self._fixed_length_starred = {}
+        self._redefined_names = set()
         self.functionVarargs = set()
         self._vararg_func_defs = {}
         self._vararg_module_defs = set()
@@ -35,6 +36,13 @@ class PreprocessorStateMixin:
         self._vararg_scope_stack = []
         self._vararg_def_owners = {}
         self._vararg_owner_specs = {}
+        # (name, arity) -> copy of a variadic def an importer calls; see
+        # _specialize_external_varargs and _call_imported_vararg_spec.
+        self.external_vararg_arities = {}
+        self.exported_vararg_specs = {}
+        self._imported_vararg_specs = {}
+        self._used_imported_vararg_specs = {}
+        self._vararg_once_bound = set()
         self.listcomp_counter = 0
         self.functools_reduce_names = set()
         self.functools_module_names = set()
@@ -52,6 +60,8 @@ class PreprocessorStateMixin:
         self.defaultdict_alias = None
         self.collections_module_imported = False
         self.collections_module_alias = None
+        self.numpy_module_names = set()
+        self.numpy_constructor_names = {}
         self._subscript_inferred_vars = set()
         self.generator_funcs = set()
         self.early_return_generator_funcs = set()
@@ -96,6 +106,7 @@ class PreprocessorStateMixin:
         self.scope_binding_counts = {}
         self.in_order_bindings = set()
         self.called_names = set()
+        self.referenced_names = set()
         # nondet_list/nondet_dict the module defines itself, so the
         # rewrite to a typed builder must leave those calls alone.
         self.shadowed_nondet_collections = set()

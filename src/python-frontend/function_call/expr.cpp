@@ -465,20 +465,51 @@ bool function_call_expr::is_generic_hash_call() const
 
 exprt function_call_expr::handle_generic_hash()
 {
+  // hash() must agree on equal arguments (#8704). An int hashes to itself
+  // reduced modulo 2^61 - 1 with -1 mapped to -2, as CPython does; a str goes
+  // through a deterministic model. Anything else stays nondet.
   const typet int_type = type_handler::python_int_typet();
+  const locationt location = converter_.get_location_from_decl(call_);
+  exprt arg = converter_.get_expr(call_["args"][0]);
+
+  if (
+    arg.type().is_bool() || arg.type().is_signedbv() ||
+    arg.type().is_unsignedbv())
+  {
+    exprt n = typecast_exprt(arg, int_type);
+    exprt reduced("mod", int_type);
+    reduced.copy_to_operands(n, from_integer(BigInt::power2(61) - 1, int_type));
+    return if_exprt(
+      equality_exprt(reduced, from_integer(-1, int_type)),
+      from_integer(-2, int_type),
+      reduced);
+  }
+
   symbolt &tmp =
     converter_.create_tmp_symbol(call_, "$hash$", int_type, exprt());
-
   code_declt decl(build_symbol(tmp));
-  decl.location() = converter_.get_location_from_decl(call_);
+  decl.location() = location;
   converter_.add_instruction(decl);
+
+  const symbolt *str_hash =
+    converter_.symbol_table().find_symbol("c:@F@__python_str_hash");
+  if (type_utils::is_string_type(arg.type()) && str_hash)
+  {
+    code_function_callt call;
+    call.lhs() = build_symbol(tmp);
+    call.function() = build_symbol(*str_hash);
+    call.arguments().push_back(
+      converter_.get_string_handler().get_array_base_address(arg));
+    call.location() = location;
+    converter_.add_instruction(call);
+    return build_symbol(tmp);
+  }
 
   exprt nondet_value("sideeffect", int_type);
   nondet_value.statement("nondet");
   code_assignt nondet_assign(build_symbol(tmp), nondet_value);
-  nondet_assign.location() = converter_.get_location_from_decl(call_);
+  nondet_assign.location() = location;
   converter_.add_instruction(nondet_assign);
-
   return build_symbol(tmp);
 }
 
@@ -576,6 +607,37 @@ exprt function_call_expr::abstract_instantiation_error(
       " without an implementation for abstract method '" +
       unimplemented_abstract_method(ctor_call) + "'");
   raise.location() = converter_.get_location_from_decl(ctor_call);
+  return raise;
+}
+
+exprt function_call_expr::call_argument_error(const symbolt &func_symbol) const
+{
+  exprt error =
+    check_argument_types(&func_symbol, call_["args"], call_["keywords"]);
+  return error.is_nil() ? unbound_method_error(func_symbol) : error;
+}
+
+exprt function_call_expr::unbound_method_error(const symbolt &func_symbol) const
+{
+  const nlohmann::json &func = call_["func"];
+  if (
+    function_type_ != FunctionType::ClassMethod ||
+    func["_type"] != "Attribute" || func["value"]["_type"] != "Name" ||
+    !call_["args"].empty() ||
+    (call_.contains("keywords") && !call_["keywords"].empty()))
+    return nil_exprt();
+  const std::string cls = func["value"]["id"].get<std::string>();
+  const code_typet &type = to_code_type(func_symbol.get_type());
+  if (
+    !json_utils::is_class(cls, converter_.get_ast_json()) ||
+    type.arguments().empty() || type.arguments()[0].get_base_name() != "self")
+    return nil_exprt();
+
+  exprt raise = converter_.get_exception_handler().gen_exception_raise(
+    "TypeError",
+    cls + "." + func["attr"].get<std::string>() +
+      "() missing 1 required positional argument: 'self'");
+  raise.location() = converter_.get_location_from_decl(call_);
   return raise;
 }
 
@@ -913,7 +975,7 @@ exprt function_call_expr::build_constant_from_arg() const
     {
       // Covers list literals, variables, and list-returning calls.
       python_list list_handler(converter_, call_);
-      return list_handler.build_shallow_copy_call(expr, call_);
+      return list_handler.build_tuple_copy_call(expr, call_);
     }
     // tuple("...") — a constant string yields a tuple of single-character
     // strings (CPython: tuple("ab") == ('a', 'b')). Lower to a tuple literal so
@@ -1708,20 +1770,40 @@ function_call_expr::get_object_list_symbol(std::string &display_name) const
   if (func_value["_type"] == "Subscript")
   {
     const auto &base_node = func_value["value"];
-    if (!base_node.contains("id"))
-      return nullptr;
+    const auto &slice_node = func_value["slice"];
+    const typet list_type = converter_.get_type_handler().get_list_type();
+    std::string base_name;
 
-    std::string base_name = base_node["id"].get<std::string>();
-    base_name = json_utils::get_object_alias(converter_.ast(), base_name);
+    // Lists are reference-typed (PyListObject *), so a method called through
+    // a temp holding the element mutates the element itself.
+    auto hold_in_temp = [&](const exprt &element) -> const symbolt * {
+      if (element.type() != list_type)
+        return nullptr;
+      symbolt &tmp =
+        converter_.create_tmp_symbol(call_, "$dict_list$", list_type, element);
+      std::string idx_str = "(expr)";
+      if (slice_node.contains("id"))
+        idx_str = slice_node["id"].get<std::string>();
+      else if (
+        slice_node["_type"] == "Constant" &&
+        slice_node["value"].is_number_integer())
+        idx_str = std::to_string(slice_node["value"].get<size_t>());
+      display_name = base_name + "[" + idx_str + "]";
+      return &tmp;
+    };
+
+    // `self.cells[i].remove(v)`: no name to look the base up by (#8916).
+    if (!base_node.contains("id"))
+      return hold_in_temp(converter_.get_expr(func_value));
+
+    base_name = json_utils::get_object_alias(
+      converter_.ast(), base_node["id"].get<std::string>());
 
     symbol_id base_sym_id = converter_.create_symbol_id();
     base_sym_id.set_object(base_name);
     const symbolt *base_sym = converter_.find_symbol(base_sym_id.to_string());
     if (!base_sym)
       return nullptr;
-
-    const auto &slice_node = func_value["slice"];
-    const typet list_type = converter_.get_type_handler().get_list_type();
     const std::string &base_id = base_sym->id.as_string();
 
     // Nested list (list-of-list) path: only meaningful when the base is itself
@@ -1737,18 +1819,16 @@ function_call_expr::get_object_list_symbol(std::string &display_name) const
       {
         const size_t index = slice_node["value"].get<size_t>();
 
-        if (
-          converter_.get_element_type_registry().element_type(base_id, index) !=
-          list_type)
-          return nullptr;
-
         const std::string inner_id =
           converter_.get_element_type_registry().element_id(base_id, index);
-        if (inner_id.empty())
-          return nullptr;
-
-        display_name = base_name + "[" + std::to_string(index) + "]";
-        return converter_.find_symbol(inner_id);
+        if (
+          converter_.get_element_type_registry().element_type(base_id, index) ==
+            list_type &&
+          !inner_id.empty())
+        {
+          display_name = base_name + "[" + std::to_string(index) + "]";
+          return converter_.find_symbol(inner_id);
+        }
       }
 
       // Non-constant index (e.g. nested[i].append(v)): delegate to the existing
@@ -1770,7 +1850,9 @@ function_call_expr::get_object_list_symbol(std::string &display_name) const
           return sym;
         }
       }
-      return nullptr;
+      // The element is read at runtime, as from a parameter whose inner
+      // lists were never recorded (#8916).
+      return hold_in_temp(subscript_expr);
     }
 
     // Dict subscript whose value is a list (e.g. d[k].append(v) where
@@ -1780,23 +1862,7 @@ function_call_expr::get_object_list_symbol(std::string &display_name) const
     // List mutations through the temp alias the dict slot because lists in
     // the Python model are reference-typed (PyListObject *).  Mirrors the
     // $attr_list$ / $call_list$ pattern below.
-    const exprt subscript_expr = converter_.get_expr(func_value);
-    if (subscript_expr.type() == list_type)
-    {
-      symbolt &tmp = converter_.create_tmp_symbol(
-        call_, "$dict_list$", list_type, subscript_expr);
-      std::string idx_str = "(expr)";
-      if (slice_node.contains("id"))
-        idx_str = slice_node["id"].get<std::string>();
-      else if (
-        slice_node["_type"] == "Constant" &&
-        slice_node["value"].is_number_integer())
-        idx_str = std::to_string(slice_node["value"].get<size_t>());
-      display_name = base_name + "[" + idx_str + "]";
-      return &tmp;
-    }
-
-    return nullptr;
+    return hold_in_temp(converter_.get_expr(func_value));
   }
 
   // Attribute case: e.g. obj.mutable_attr.append(1)
@@ -2232,7 +2298,8 @@ bool function_call_expr::is_dict_method_call() const
   // "__python_dict__" struct tag; class instances carry "tag-<Class>". An
   // unresolved or genuinely dict-typed receiver is left to the dict handler, so
   // existing dict dispatch is unchanged. Mirrors the list guard for pop below.
-  if (receiver_is_non_dict_object())
+  if (
+    receiver_is_non_dict_object() || receiver_class_defines_method(method_name))
     return false;
 
   // For "pop", which exists on both list and dict, treat as dict.pop() when
@@ -4546,8 +4613,7 @@ exprt function_call_expr::handle_general_function_call()
 
   if (func_symbol != nullptr)
   {
-    exprt type_error =
-      check_argument_types(func_symbol, call_["args"], call_["keywords"]);
+    exprt type_error = call_argument_error(*func_symbol);
     if (!type_error.is_nil())
       return type_error;
   }
@@ -5543,6 +5609,15 @@ static void reject_unfoldable_key(
         "the key function cannot be applied and would be ignored");
 }
 
+// A str variable is passed as &s[0]: a later rebinding to a str of another
+// length retypes it to char*, and &s would then name the pointer itself.
+static exprt array_argument_address(const exprt &arg)
+{
+  if (!arg.is_symbol() || !type_utils::is_string_type(arg.type()))
+    return build_address_of(arg);
+  return build_address_of(build_index(arg, from_integer(0, size_type())));
+}
+
 // A Python tuple is lowered to a struct tagged "tag-tuple...".
 static bool is_tuple_struct(const typet &type)
 {
@@ -5827,6 +5902,7 @@ std::optional<exprt> function_call_expr::try_indirect_variable_call()
     {
       side_effect_expr_function_callt call;
       call.location() = converter_.get_location_from_decl(call_);
+      call.type() = any_type();
       exprt func_expr = build_symbol(*var_symbol);
       if (
         !var_symbol->get_type().is_pointer() ||
@@ -5856,11 +5932,6 @@ std::optional<exprt> function_call_expr::try_indirect_variable_call()
           to_code_type(var_symbol->get_type().subtype()).return_type();
         resolved = true;
       }
-      if (!resolved)
-      {
-        call.type() = any_type();
-        converter_.refuse_mismatched_callees(build_symbol(*var_symbol), call_);
-      }
 
       for (const auto &arg_node : call_["args"])
       {
@@ -5871,6 +5942,9 @@ std::optional<exprt> function_call_expr::try_indirect_variable_call()
           arg = build_address_of(arg);
         call.arguments().push_back(arg);
       }
+      if (!resolved)
+        return converter_.dispatch_mismatched_callees(
+          build_symbol(*var_symbol), call_, call);
       return call;
     }
   }
@@ -6845,6 +6919,20 @@ typet function_call_expr::dict_param_value_type(const symbolt *func, size_t idx)
   return converter_.get_type_from_annotation(ann["slice"]["elts"][1], ann);
 }
 
+// A numpy string or complex array is read only element by element; a callee
+// would read its storage as numbers.
+static void reject_unmodelled_numpy_array_argument(const typet &type)
+{
+  if (type_utils::is_numpy_string_array(type))
+    throw std::runtime_error(
+      "TypeError: passing a numpy string array to a function is not "
+      "supported");
+  if (type_utils::is_numpy_complex_array(type))
+    throw std::runtime_error(
+      "TypeError: passing a numpy complex array to a function is not "
+      "supported");
+}
+
 std::optional<exprt> function_call_expr::build_positional_arguments(
   code_function_callt &call,
   size_t param_offset,
@@ -7193,6 +7281,8 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
       continue;
     }
 
+    reject_unmodelled_numpy_array_argument(arg.type());
+
     // All array function arguments (e.g. bytes type) are handled as pointers.
     if (arg.type().is_array())
     {
@@ -7245,7 +7335,7 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
         converter_.current_block->copy_to_operands(tmp_assign);
         arg = build_symbol(tmp);
       }
-      call.arguments().push_back(build_address_of(arg));
+      call.arguments().push_back(array_argument_address(arg));
     }
     else
       call.arguments().push_back(arg);

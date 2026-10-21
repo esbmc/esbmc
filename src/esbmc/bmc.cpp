@@ -191,7 +191,7 @@ static bool is_bounded_round(const optionst &options)
 }
 
 bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
-  : options(opts), context(_context), ns(context)
+  : options(opts), context(_context), ns(context), program(funcs)
 {
   interleaving_number = 0;
   interleaving_failed = 0;
@@ -605,17 +605,24 @@ void bmct::report_unknown()
   log_fail("\nVERIFICATION UNKNOWN");
 }
 
+bool bmct::violates_only_the_abstraction() const
+{
+  return weak_invariant_detected &&
+         !goto_functionst::property_verdicts.has_violation();
+}
+
 void bmct::report_violation()
 {
   // When every violated claim sits downstream of a --loop-invariant-check
   // havoc, no counterexample witnesses a state the program can reach. An
   // over-approximation can prove, never refute: the invariant being too weak
   // is "cannot prove", not "the program is wrong" (issue #7480).
-  if (
-    !weak_invariant_detected ||
-    goto_functionst::property_verdicts.has_violation())
+  if (!violates_only_the_abstraction())
   {
-    report_failure();
+    // A k-step strategy that owns the property table goes on past a
+    // base-case violation and prints the run's one verdict where it ends.
+    if (!strategy_owns_property_table(options))
+      report_failure();
     return;
   }
 
@@ -623,8 +630,15 @@ void bmct::report_violation()
     "every violated claim lies downstream of a loop invariant havoc, so its "
     "counterexample is against the abstraction rather than the program; "
     "strengthen the invariant to decide the claim");
-  report_unknown();
   verdict_is_unknown = true;
+  // The strategy goes on to the next k and prints the run's verdict.
+  if (
+    (options.get_bool_option("k-induction") ||
+     options.get_bool_option("incremental-bmc")) &&
+    !options.get_bool_option("multi-property"))
+    log_status("The base case is unknown");
+  else
+    report_unknown();
 }
 
 /// UNSAT iff no feasible path satisfies the kept claim. A violation found
@@ -3674,6 +3688,30 @@ void bmct::seed_property_verdicts(const symex_target_equationt &eq) const
       property_verdictt::NotChecked,
       property_location(*step.source.pc, description));
   }
+
+  if (options.get_bool_option("report-unreached-claims"))
+    seed_unreached_claims(eq);
+}
+
+void bmct::seed_unreached_claims(const symex_target_equationt &eq) const
+{
+  std::unordered_set<const goto_programt::instructiont *> reached;
+  for (const auto &step : eq.SSA_steps)
+    if (step.is_assert())
+      reached.insert(&*step.source.pc);
+
+  for (const auto &[name, function] : program.function_map)
+    for (const auto &instruction : function.body.instructions)
+      if (instruction.is_assert() && !reached.count(&instruction))
+      {
+        const std::string description =
+          goto_symext::assertion_message(ns, instruction);
+        goto_functionst::property_verdicts.record(
+          property_key(instruction, description),
+          property_verdictt::Passed,
+          property_location(instruction, description),
+          unreached_claim_note);
+      }
 }
 
 bool bmct::reports_final_verdict(smt_resultt res) const
@@ -3868,6 +3906,9 @@ static void print_property_summary(
     oss << ", " << YELLOW << counts.unknown << " unknown" << RESET;
   if (counts.not_checked > 0)
     oss << ", " << YELLOW << counts.not_checked << " not checked" << RESET;
+  if (counts.unreached > 0)
+    oss << " (" << YELLOW << counts.unreached << " never reached" << RESET
+        << ")";
 
   log_result("{}", oss.str());
 }

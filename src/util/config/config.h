@@ -104,6 +104,8 @@ public:
     unsigned long_long_align = 0;
     unsigned double_align = 0;
     unsigned long_double_align = 0;
+    /* Cap on _BitInt alignment in bytes (x86-64: 8, AArch64: 16; #8692). */
+    unsigned bitint_max_align = 0;
 
     unsigned pointer_width() const noexcept
     {

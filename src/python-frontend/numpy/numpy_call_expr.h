@@ -12,6 +12,12 @@ class exprt;
 class typet;
 class python_converter;
 
+/// The normalized scalar dtype a dtype= argument names, or a specific
+/// rejection when it names none.
+std::string extract_numpy_dtype_name(
+  const nlohmann::json &dtype_node,
+  const nlohmann::json &ast);
+
 class numpy_call_expr : public function_call_expr
 {
 public:
@@ -51,6 +57,13 @@ private:
   std::optional<exprt>
   try_hoist_call_arg_for_view_method(const std::string &function);
 
+  // The array a reducer receives, when only a name can carry it (see
+  // is_hoistable_array_arg), evaluated once into a named temporary that the
+  // reducer reads like any bound array. nullopt for any other argument.
+  std::optional<exprt> try_hoist_array_arg();
+  bool is_hoistable_array_arg(const nlohmann::json &call) const;
+  static exprt reduce_scalar(const std::string &function, const exprt &value);
+
   // A dispatch whose result shape the static annotator cannot model (e.g.
   // ravel()/flatten(), always 1-D of size = product of the input's dims)
   // reaches an assignment target still carrying the annotator's guess --
@@ -73,11 +86,11 @@ private:
   exprt get_arange_expr();
 
 public:
-  /// The literal list `np.arange` builds from @p args, a Name among them
-  /// read from its declaration for code in @p function; nullopt when the
-  /// arguments are not constants.
+  /// The literal list the `np.arange` @p call builds, in its dtype, a Name
+  /// among its arguments read from its declaration for code in @p function;
+  /// nullopt when the arguments are not constants.
   static std::optional<nlohmann::json> arange_literal(
-    const nlohmann::json &args,
+    const nlohmann::json &call,
     const std::string &function,
     const nlohmann::json &ast);
 
@@ -91,6 +104,23 @@ private:
     std::size_t cols) const;
   exprt full_size_temporary(exprt size_expr);
   exprt literal_constructor_expr(const nlohmann::json &list);
+  // The element type of the array built from the literal @p list: a fixed-width
+  // string, or empty for the literal's own.
+  typet constructor_element_type(const nlohmann::json &list) const;
+  void reject_complex_array_operands(const std::string &function) const;
+  bool is_complex_operand(const nlohmann::json &arg) const;
+  // @p build run with constructor_element_type(@p list) at the leaves of
+  // the static arrays it builds.
+  exprt with_element_type(
+    const nlohmann::json &list,
+    const std::function<exprt(const nlohmann::json &)> &build);
+  exprt typed_static_array(const nlohmann::json &list, const typet &shape);
+  exprt full_of_runtime_fill(const std::vector<std::size_t> &dims);
+  // The points of this linspace() call as a literal list.
+  nlohmann::json linspace_literal(
+    const nlohmann::json &start_node,
+    const nlohmann::json &stop_node,
+    const nlohmann::json &num_node) const;
 
   bool is_math_function() const;
 

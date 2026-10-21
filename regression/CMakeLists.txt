@@ -35,13 +35,20 @@ set(ESBMC_REGRESS_MEMORY_LIMIT 8192 CACHE STRING
 # cov-regression: the minimal coverage suite. One test name per line;
 # together with the unit tests it covers exactly the lines the full
 # regression suite covers (100% parity, line-level verified).
-set(ESBMC_COV_TESTS "")
+# A pull request lists its new tests in a file of its own under COV_TESTS.d,
+# so concurrent pull requests do not conflict at the end of COV_TESTS.
+file(GLOB cov_manifests CONFIGURE_DEPENDS
+     "${CMAKE_CURRENT_SOURCE_DIR}/COV_TESTS.d/*")
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/COV_TESTS")
-    file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/COV_TESTS" cov_manifest)
+    list(PREPEND cov_manifests "${CMAKE_CURRENT_SOURCE_DIR}/COV_TESTS")
+endif()
+set(ESBMC_COV_TESTS "")
+foreach(manifest IN LISTS cov_manifests)
+    file(STRINGS "${manifest}" cov_manifest)
     list(FILTER cov_manifest EXCLUDE REGEX "^#")
     list(FILTER cov_manifest EXCLUDE REGEX "^[ \t]*$")
-    set(ESBMC_COV_TESTS "${cov_manifest}")
-endif()
+    list(APPEND ESBMC_COV_TESTS ${cov_manifest})
+endforeach()
 
 option(ENABLE_SANITIZER_CI
     "Restrict regression to CORE mode for sanitizer-instrumented CI runs" OFF)
@@ -588,13 +595,6 @@ set(_slow_regression_tests
     # budget. It stays KNOWNBUG; the larger inner timeout lets testing_tool
     # record the KNOWNBUG verdict instead of ctest hard-killing the run.
     "regression/humaneval/humaneval_90"
-    # humaneval_158 used to fast-abort with "__ESBMC_list_size ... got empty,
-    # expected pointer" when find_max()'s inline sorted(words)[0] subscript was
-    # lowered. With the materialise-the-call fix the abort is gone and ESBMC
-    # reaches the real sorted-with-key symex, which does not converge under the
-    # default budget. It stays KNOWNBUG; the larger inner timeout lets
-    # testing_tool record the KNOWNBUG verdict instead of ctest hard-killing.
-    "regression/humaneval/humaneval_158"
     # humaneval_39 used to fast-abort in get_significand_width when prime_fib's
     # math.sqrt() was applied to an any-typed value. With the nondet
     # over-approximation fix the abort is gone and ESBMC reaches the real
@@ -651,6 +651,9 @@ set(_slow_regression_tests
     # verdict instead of ctest hard-killing the run.
     "regression/quixbugs/next_permutation"
     "regression/quixbugs/next_permutation_fail"
+    # powerset_fail reaches VERIFICATION FAILED since #8537 but takes 91-124s
+    # on the DebugOpt Linux runner, so the 120s cap kills it intermittently.
+    "regression/quixbugs/powerset_fail"
     # depth_first_search_fail builds a small Node graph and recurses over each
     # node's `successors` list. Under the object-model migration (#3067) every
     # instance is a heap Class* and a Class* read out of a list into a recursive

@@ -586,6 +586,29 @@ class GeneratorMixin:
             return None
         return result
 
+    @staticmethod
+    def _unguard_starred_call(call):
+        """The one argument of `call`, with a statement raising the arity
+        TypeError when it is the guard _lower_starred_call_argument spells
+        `f(a, *xs)` as: then `f(xs[0], ..., xs[k-1])` and the statement.
+        list(gen(*xs)) is inlined as statements, so the guard moves ahead of
+        them (#8670)."""
+        if len(call.args) != 1:
+            return None, []
+        node = call.args[0]
+        raising = node.orelse if isinstance(node, ast.IfExp) else None
+        if not (isinstance(raising, ast.Subscript) and isinstance(raising.value, ast.Tuple)
+                and len(raising.value.elts) == 2 and isinstance(raising.value.elts[0], ast.Call)
+                and isinstance(raising.value.elts[0].func, ast.Name)
+                and raising.value.elts[0].func.id == "_starred_arity_error"):
+            return node, []
+        check = ast.If(test=ast.UnaryOp(op=ast.Not(), operand=node.test),
+                       body=[ast.Expr(value=raising.value.elts[0])],
+                       orelse=[])
+        ast.copy_location(check, node)
+        ast.fix_missing_locations(check)
+        return node.body, [check]
+
     def _lower_list_gen_call(self, gen_call_node, parent_node):
         """Lower list(gen_func(args...)) to an inline list construction.
 
@@ -1128,7 +1151,7 @@ class GeneratorMixin:
             # clause naming a temporary the contract wrapper never declares.
             # Leave it as written; the frontend's clause check rejects by name.
             return [], expr, "Any"
-        lowerer = self._ListCompExpressionLowerer(self)
+        lowerer = self._ListCompExpressionLowerer(self, expr)
         new_expr = lowerer.visit(expr)
         result_type = self._infer_type_from_value(new_expr)
         return lowerer.statements, new_expr, result_type
@@ -1392,20 +1415,6 @@ class GeneratorMixin:
             return key_kw
         return ast.keyword(arg=key_kw.arg,
                            value=ast.copy_location(copy.deepcopy(lam), key_kw.value))
-
-    @staticmethod
-    def _names_bound_by(node):
-        """The names @p node itself binds: a def or class, a Store/Del name, a
-        parameter, or a ``global`` declaration."""
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            return (node.name, )
-        if isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Load):
-            return (node.id, )
-        if isinstance(node, ast.arg):
-            return (node.arg, )
-        if isinstance(node, ast.Global):
-            return tuple(node.names)
-        return ()
 
     @staticmethod
     def _binds_key(key_value):

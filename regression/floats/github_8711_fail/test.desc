@@ -1,0 +1,6 @@
+CORE
+main.c
+--multi-property
+^  PASSED .*assertion f == 1\.0f$
+^  FAILED .*assertion f != 1\.0f$
+^VERIFICATION FAILED$

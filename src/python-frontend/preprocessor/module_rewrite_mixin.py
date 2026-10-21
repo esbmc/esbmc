@@ -3,11 +3,81 @@ import copy
 from collections import Counter
 
 from preprocessor.bound_method_dispatch import dispatch_rebound_methods
+from preprocessor.decorator_lowering import lower_user_decorators
+from preprocessor.itertools_lowering import lower_itertools
 from preprocessor.match_lowering import lower_match_statements
+from preprocessor.namedtuple_lowering import lower_namedtuples
 from preprocessor.function_value_types import reject_mixed_function_values
 from preprocessor.receiver_classes import refuse_path_dependent_receivers
+from preprocessor.skipped_base_init import refuse_skipped_base_init
+from preprocessor.zip_lowering import lower_zip_builds
 from preprocessor.unbound_locals import guard_unbound_locals
 # pylint: disable=too-many-branches,too-many-boolean-expressions
+
+
+def _reads_now(stmt, name):
+    """Whether running `stmt` reads `name`: function and lambda bodies run
+    later, so only their decorators and defaults count."""
+    stack = [stmt]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, ast.Name) and node.id == name and isinstance(node.ctx, ast.Load):
+            return True
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            stack.extend(node.decorator_list + node.args.defaults +
+                         [d for d in node.args.kw_defaults if d])
+        elif isinstance(node, ast.Lambda):
+            stack.extend(node.args.defaults + [d for d in node.args.kw_defaults if d])
+        else:
+            stack.extend(ast.iter_child_nodes(node))
+    return False
+
+
+def _binds(stmt, name):
+    """Whether the module-level statement `stmt` always rebinds `name`."""
+    if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        return stmt.name == name
+    if isinstance(stmt, ast.Assign):
+        return any(isinstance(t, ast.Name) and t.id == name for t in stmt.targets)
+    if isinstance(stmt, ast.AnnAssign):
+        return stmt.value is not None and isinstance(stmt.target,
+                                                     ast.Name) and stmt.target.id == name
+    if isinstance(stmt, (ast.Import, ast.ImportFrom)):
+        return any((a.asname or a.name.split(".")[0]) == name for a in stmt.names)
+    return False
+
+
+def _rename_shadowed_classes(module):
+    """Rename a module-level class that a later module-level statement rebinds
+    before anything reads it, as in `class C: ...` then `C = f`. Every read of
+    `C` then means the new binding, which the converter would otherwise take
+    for the class (#8343)."""
+    taken = {n.id for n in ast.walk(module) if isinstance(n, ast.Name)}
+    for i, stmt in enumerate(module.body):
+        if not isinstance(stmt, ast.ClassDef):
+            continue
+        for later in module.body[i + 1:]:
+            if _reads_now(later, stmt.name):
+                break
+            if _binds(later, stmt.name):
+                renamed = f"{stmt.name}__esbmc_shadowed"
+                while renamed in taken:
+                    renamed += "_"
+                taken.add(renamed)
+                stmt.name = renamed
+                break
+
+
+def _referenced_names(module):
+    """The names `module` reads, deletes or updates in place."""
+    return {
+        n.id
+        for n in ast.walk(module) if isinstance(n, ast.Name) and not isinstance(n.ctx, ast.Store)
+    } | {
+        n.target.id
+        for n in ast.walk(module)
+        if isinstance(n, ast.AugAssign) and isinstance(n.target, ast.Name)
+    }
 
 
 class ModuleRewriteMixin:
@@ -476,9 +546,15 @@ class ModuleRewriteMixin:
 
     def prepare_module(self, node, alias_seed=frozenset(), wrapper_seed=None):
         """Run pre-visit analyses and range-alias/wrapper canonicalization."""
+        _rename_shadowed_classes(node)
+        lower_zip_builds(node)
         reject_mixed_function_values(node, self.module_name)
         lower_match_statements(node)
+        lower_itertools(node)
+        lower_namedtuples(node, self.module_name)
+        lower_user_decorators(node, self.module_name)
         refuse_path_dependent_receivers(node, self.module_name)
+        refuse_skipped_base_init(node, self.module_name)
         self.expand_unittest_main(node)
         self._rewrite_module_aliases(node)
         self._rewrite_map_values(node)
@@ -492,6 +568,7 @@ class ModuleRewriteMixin:
         for n in ast.walk(node):
             if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
                 self.called_names.add(n.func.id)
+        self.referenced_names = _referenced_names(node)
         self._scan_fixed_receivers(node)
         self.variable_names = self._variable_names(node)
         self.scope_binding_counts = self._scope_binding_counts(node)
