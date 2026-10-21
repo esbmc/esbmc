@@ -1667,6 +1667,11 @@ private:
     const std::string &func_name,
     const std::string &obj_symbol_id);
 
+  void refuse_misaligned_self_calls() const;
+  void refuse_misaligned_self_call(
+    const code_function_callt &call,
+    const namespacet &ns) const;
+
   size_t get_type_size(const nlohmann::json &ast_node);
 
   void append_models_from_directory(

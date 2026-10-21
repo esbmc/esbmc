@@ -945,6 +945,19 @@ symbolt *python_converter::find_function_in_base_classes(
   const std::size_t span =
     std::string("@C@" + class_name + "@F@" + current_func_name).length();
 
+  // Under multiple inheritance the bases are searched in C3 order, which a
+  // depth-first walk breaks: `class D(B, C)` with `B(A)`, `C(A)` must find
+  // C's method before A's.
+  if (const auto mro = class_mro(class_name))
+    for (auto cls = std::next(mro->begin()); cls != mro->end(); ++cls)
+    {
+      std::string sym_id = symbol_id;
+      sym_id.replace(
+        pos, span, "@C@" + *cls + "@F@" + (is_ctor ? *cls : method_name));
+      if (symbolt *func = symbol_table_.find_symbol(sym_id.c_str()))
+        return func;
+    }
+
   // Search the method in every base class, transitively (walk the MRO).
   // Python enforces acyclic inheritance, so this recursion terminates.
   for (const auto &base_class_node : class_node["bases"])
