@@ -28,6 +28,13 @@ public:
   detect_dynamic_type_names(const nlohmann::json &if_node) const;
 
   /**
+   * @brief Attribute names of `class_name` assigned incompatible literal
+   * kinds anywhere in the program.
+   */
+  std::unordered_set<std::string>
+  detect_dynamic_type_attributes(const std::string &class_name) const;
+
+  /**
    * @brief Declares (or aliases) each name's tagged-object symbol before
    * either branch converts, so goto-symex's struct-merge resolves the join
    * for free
@@ -71,6 +78,15 @@ public:
    * variable was aliased for it; no-op otherwise
    */
   void resolve_read(symbolt *&symbol) const;
+
+  /**
+   * @brief Fills in a tagged-object lvalue's fields from a plain RHS value.
+   */
+  void assign_to_lvalue(
+    const exprt &rhs,
+    const locationt &location,
+    const exprt &tagged_lvalue,
+    codet &target_block);
 
   /**
    * @brief Dispatches Eq/NotEq/Lt/LtE/Gt/GtE between a tagged-scalar
@@ -183,7 +199,7 @@ private:
    * its prior value)
    */
   std::vector<codet> build_tag_field_assigns(
-    symbolt &tag_symbol,
+    const exprt &tag_expr,
     const exprt &rhs,
     const locationt &location);
 

@@ -7938,6 +7938,18 @@ void python_converter::get_var_assign(
     }
 
     python_list(*this, target).retype_element_store(lhs, rhs);
+
+    // Box a plain value into a dynamically-typed attribute's fields.
+    if (
+      type_handler_.is_tagged_scalar_type(lhs.type()) &&
+      !type_handler_.is_tagged_scalar_type(rhs.type()))
+    {
+      dynamic_type_handler_.assign_to_lvalue(
+        rhs, location_begin, lhs, target_block);
+      current_lhs = nullptr;
+      return;
+    }
+
     code_assignt code_assign(lhs, rhs);
     code_assign.location() = location_begin;
     target_block.copy_to_operands(code_assign);
