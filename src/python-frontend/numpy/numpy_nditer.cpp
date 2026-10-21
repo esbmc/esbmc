@@ -150,6 +150,57 @@ const json *keyword(const json &call, const std::string &arg)
   return nullptr;
 }
 
+/// A shape as NumPy spells it in a message: `(2,)`, `(2,3)`.
+std::string shape_text(const std::vector<long long> &shape)
+{
+  std::string text = "(";
+  for (std::size_t i = 0; i < shape.size(); ++i)
+    text += std::to_string(shape[i]) +
+            (shape.size() == 1 || i + 1 < shape.size() ? "," : "");
+  return text + ")";
+}
+
+/// The flags of each operand: `op_flags=[...]` applies to every operand,
+/// `op_flags=[[...], [...]]` lists them per operand.
+std::vector<std::vector<std::string>>
+operand_flags(const json &call, std::size_t operands)
+{
+  std::vector<std::vector<std::string>> result(operands);
+  const json *value = keyword(call, "op_flags");
+  if (!value)
+    return result;
+  auto strings = [](const json &list) {
+    std::vector<std::string> flags;
+    const std::string type = list.value("_type", "");
+    if (type != "List" && type != "Tuple")
+      throw std::runtime_error(
+        "TypeError: numpy.nditer() op_flags must be literal lists of strings");
+    for (const json &flag : list["elts"])
+    {
+      if (flag.value("_type", "") != "Constant" || !flag["value"].is_string())
+        throw std::runtime_error(
+          "TypeError: numpy.nditer() op_flags must be literal lists of "
+          "strings");
+      flags.push_back(flag["value"].get<std::string>());
+    }
+    return flags;
+  };
+  const json &elts = (*value).value("elts", json::array());
+  const bool per_operand =
+    !elts.empty() && elts[0].value("_type", "") != "Constant";
+  if (per_operand && elts.size() != operands)
+    throw std::runtime_error(
+      "ValueError: numpy.nditer() op_flags must list one entry per operand");
+  for (std::size_t op = 0; op < operands; ++op)
+    result[op] = strings(per_operand ? elts[op] : *value);
+  return result;
+}
+
+bool writable(const std::vector<std::string> &flags)
+{
+  return has(flags, "readwrite") || has(flags, "writeonly");
+}
+
 /// The stride of operand `op` along iteration axis `axis`, as visited (a
 /// flipped axis walks the other way); 0 when the operand is broadcast.
 long long visited_stride(
@@ -282,73 +333,63 @@ std::string numpy_nditer::order(const json &call)
   return (*value)["value"].get<std::string>();
 }
 
-// The layout of a named array or view, in elements. A 1-D view keeps a
-// run-time extent and stride as expressions; any other view whose layout is
-// only known at run time, or that is bound to different arrays on different
-// paths, has no order to iterate it in.
-numpy_nditer_operand numpy_nditer::operand(const json &node, std::size_t index)
+// The operand as a name: an expression is first bound to a hidden variable,
+// evaluated once where the iterator is created.
+json numpy_nditer::named_operand(const json &node, std::size_t index)
 {
-  json array = node;
-  if (array.value("_type", "") != "Name")
-  {
-    const std::string temp =
-      converter_.current_nditer_state_ + "$op" + std::to_string(index);
-    assign(temp, node);
-    array = name(temp);
-    locate(array, converter_.current_nditer_call_);
-  }
+  if (node.value("_type", "") == "Name")
+    return node;
+  const std::string temp =
+    converter_.current_nditer_state_ + "$op" + std::to_string(index);
+  assign(temp, node);
+  json array = name(temp);
+  locate(array, converter_.current_nditer_call_);
+  return array;
+}
 
-  const std::string id =
-    converter_.resolve_name_symbol_id(array["id"].get<std::string>());
-  if (id.empty() || converter_.numpy_array_symbols_.count(id) == 0)
+template <class Info>
+void numpy_nditer::runtime_layout(
+  const Info &info,
+  numpy_nditer_operand &result)
+{
+  if (info.shape.size() > 1)
     throw std::runtime_error(
-      "TypeError: numpy.nditer() operand must be a numpy array");
+      "TypeError: numpy.nditer() over an N-D view whose layout is only known "
+      "at run time is not supported");
+  auto runtime_value =
+    [&](const std::vector<std::string> &ids, long long fallback) {
+      if (ids.empty() || ids.front().empty())
+        return constant(fallback);
+      const symbolt *symbol = converter_.symbol_table_.find_symbol(ids.front());
+      if (!symbol)
+        throw std::runtime_error(
+          "TypeError: numpy.nditer() lost a run-time view extent");
+      return prebuilt(symbol_expr(*symbol));
+    };
+  result.shape = {0};
+  result.strides = {info.stride};
+  result.extent = runtime_value(
+    info.shape_symbols,
+    info.shape.empty() ? static_cast<long long>(info.length)
+                       : static_cast<long long>(info.shape.front()));
+  result.stride = runtime_value(info.stride_symbols, info.stride);
+}
 
-  numpy_nditer_operand result;
-  result.array = array;
-  auto view = converter_.numpy_pointer_view_info_.find(id);
-  if (view == converter_.numpy_pointer_view_info_.end())
-  {
-    std::optional<std::vector<std::size_t>> shape =
-      converter_.get_numpy_nditer_logical_shape(id);
-    if (!shape)
-      throw std::runtime_error(
-        "TypeError: numpy.nditer() operand has no static shape");
-    result.shape.assign(shape->begin(), shape->end());
-    result.strides = c_strides(result.shape);
-    return result;
-  }
-
-  const auto &info = view->second;
+// A view's shape and strides. A 1-D view keeps a run-time extent and stride
+// as expressions; any other view whose layout is only known at run time, or
+// that is bound to different arrays on different paths, has no order to
+// iterate it in.
+template <class Info>
+void numpy_nditer::view_layout(const Info &info, numpy_nditer_operand &result)
+{
   if (!info.other_sources.empty())
     throw std::runtime_error(
       "TypeError: numpy.nditer() over a view bound to different arrays on "
       "different paths is not supported");
   if (info.is_symbolic())
   {
-    if (info.shape.size() > 1)
-      throw std::runtime_error(
-        "TypeError: numpy.nditer() over an N-D view whose layout is only "
-        "known at run time is not supported");
-    auto runtime_value =
-      [&](const std::vector<std::string> &ids, long long fallback) {
-        if (ids.empty() || ids.front().empty())
-          return constant(fallback);
-        const symbolt *symbol =
-          converter_.symbol_table_.find_symbol(ids.front());
-        if (!symbol)
-          throw std::runtime_error(
-            "TypeError: numpy.nditer() lost a run-time view extent");
-        return prebuilt(symbol_expr(*symbol));
-      };
-    result.shape = {0};
-    result.strides = {info.stride};
-    result.extent = runtime_value(
-      info.shape_symbols,
-      info.shape.empty() ? static_cast<long long>(info.length)
-                         : static_cast<long long>(info.shape.front()));
-    result.stride = runtime_value(info.stride_symbols, info.stride);
-    return result;
+    runtime_layout(info, result);
+    return;
   }
   if (info.shape.empty())
     result.shape = {static_cast<long long>(info.length)};
@@ -360,97 +401,151 @@ numpy_nditer_operand numpy_nditer::operand(const json &node, std::size_t index)
     result.strides = {info.stride};
   else
     result.strides = c_strides(result.shape);
+}
+
+// The layout of a named array or view, in elements; a number is a 0-d
+// operand, broadcast to every position.
+numpy_nditer_operand numpy_nditer::operand(const json &node, std::size_t index)
+{
+  numpy_nditer_operand result;
+  result.array = named_operand(node, index);
+  const std::string id =
+    converter_.resolve_name_symbol_id(result.array["id"].get<std::string>());
+  const bool array =
+    !id.empty() && converter_.numpy_array_symbols_.count(id) != 0;
+  const symbolt *symbol =
+    id.empty() ? nullptr : converter_.symbol_table_.find_symbol(id);
+  if (
+    !array && symbol && !symbol->get_type().is_array() &&
+    !symbol->get_type().is_pointer())
+    return result;
+  if (!array)
+    throw std::runtime_error(
+      "TypeError: numpy.nditer() operand must be a numpy array or a number");
+
+  auto view = converter_.numpy_pointer_view_info_.find(id);
+  if (view != converter_.numpy_pointer_view_info_.end())
+  {
+    view_layout(view->second, result);
+    return result;
+  }
+  std::optional<std::vector<std::size_t>> shape =
+    converter_.get_numpy_nditer_logical_shape(id);
+  if (!shape)
+    throw std::runtime_error(
+      "TypeError: numpy.nditer() operand has no static shape");
+  result.shape.assign(shape->begin(), shape->end());
+  result.strides = c_strides(result.shape);
   return result;
 }
 
-// NumPy's iteration order. C and F are forced; A is F when every operand is
-// Fortran- but not C-contiguous; K sorts the axes by stride magnitude with
-// npyiter_find_best_axis_ordering's insertion sort, then walks backwards
-// along an axis every operand has a non-positive stride on
-// (npyiter_flip_negative_strides).
-void numpy_nditer::order_axes(numpy_nditer_state &it, const std::string &order)
-  const
+namespace
+{
+// Whether every operand steps through memory in C (or Fortran) order.
+bool contiguous(const numpy_nditer_state &it, bool fortran)
 {
   const std::size_t ndim = it.shape.size();
-  it.flipped.assign(ndim, false);
-  it.axes.clear();
-  for (std::size_t axis = 0; axis < ndim; ++axis)
-    it.axes.push_back(axis);
-
-  auto stride = [&](std::size_t op, std::size_t axis) {
-    return visited_stride(it, op, axis, false);
-  };
-  auto contiguous = [&](bool fortran) {
-    for (std::size_t op = 0; op < it.operands.size(); ++op)
-    {
-      long long expected = 1;
-      for (std::size_t i = 0; i < ndim; ++i)
-      {
-        const std::size_t axis = fortran ? i : ndim - 1 - i;
-        if (it.shape[axis] != 1 && stride(op, axis) != expected)
-          return false;
-        expected *= it.shape[axis];
-      }
-    }
-    return true;
-  };
-
-  if (order == "F" || (order == "A" && contiguous(true) && !contiguous(false)))
+  for (std::size_t op = 0; op < it.operands.size(); ++op)
   {
-    std::reverse(it.axes.begin(), it.axes.end());
-    return;
+    long long expected = 1;
+    for (std::size_t i = 0; i < ndim; ++i)
+    {
+      const std::size_t axis = fortran ? i : ndim - 1 - i;
+      if (
+        it.shape[axis] != 1 && visited_stride(it, op, axis, false) != expected)
+        return false;
+      expected *= it.shape[axis];
+    }
   }
-  if (order != "K")
-    return;
-  it.flip_negative = true;
+  return true;
+}
 
-  // perm[0] is the innermost axis, as in NumPy's axis data.
-  std::vector<std::size_t> perm(it.axes.rbegin(), it.axes.rend());
-  for (std::size_t i0 = 1; i0 < ndim; ++i0)
+// Whether axis `outer` goes inside axis `inner` for NumPy's K order: the
+// first operand that strides along both decides a swap, and any operand with
+// the smaller stride on `inner` keeps the order. Empty when no operand
+// strides along both.
+std::optional<bool>
+swaps(const numpy_nditer_state &it, std::size_t outer, std::size_t inner)
+{
+  std::optional<bool> swap;
+  for (std::size_t op = 0; op < it.operands.size(); ++op)
+  {
+    const long long s0 = visited_stride(it, op, outer, false);
+    const long long s1 = visited_stride(it, op, inner, false);
+    if (s0 == 0 || s1 == 0)
+      continue;
+    if (std::llabs(s1) <= std::llabs(s0))
+      swap = false;
+    else if (!swap)
+      swap = true;
+  }
+  return swap;
+}
+
+// npyiter_find_best_axis_ordering: an insertion sort of the axes, innermost
+// first, by stride magnitude.
+std::vector<std::size_t> k_order(const numpy_nditer_state &it)
+{
+  std::vector<std::size_t> perm;
+  for (std::size_t axis = it.shape.size(); axis-- > 0;)
+    perm.push_back(axis);
+  for (std::size_t i0 = 1; i0 < perm.size(); ++i0)
   {
     std::size_t ipos = i0;
     const std::size_t j0 = perm[i0];
     for (std::size_t i1 = i0; i1-- > 0;)
     {
-      bool ambiguous = true;
-      bool swap = false;
-      for (std::size_t op = 0; op < it.operands.size(); ++op)
-      {
-        const long long s0 = stride(op, j0);
-        const long long s1 = stride(op, perm[i1]);
-        if (s0 == 0 || s1 == 0)
-          continue;
-        if (std::llabs(s1) <= std::llabs(s0))
-          swap = false;
-        else if (ambiguous)
-          swap = true;
-        ambiguous = false;
-      }
-      if (ambiguous)
-        continue;
-      if (!swap)
+      const std::optional<bool> swap = swaps(it, j0, perm[i1]);
+      if (swap && !*swap)
         break;
-      ipos = i1;
+      if (swap)
+        ipos = i1;
     }
-    if (ipos != i0)
-    {
-      perm.erase(perm.begin() + i0);
-      perm.insert(perm.begin() + ipos, j0);
-    }
+    perm.erase(perm.begin() + i0);
+    perm.insert(perm.begin() + ipos, j0);
   }
-  it.axes.assign(perm.rbegin(), perm.rend());
+  return {perm.rbegin(), perm.rend()};
+}
 
-  for (std::size_t axis = 0; axis < ndim; ++axis)
+// npyiter_flip_negative_strides: an axis every operand has a non-positive,
+// and some a negative, stride on is walked backwards.
+std::vector<bool> flip_negative(const numpy_nditer_state &it)
+{
+  std::vector<bool> flipped(it.shape.size(), false);
+  for (std::size_t axis = 0; axis < it.shape.size(); ++axis)
   {
     bool negative = false;
     bool positive = false;
     for (std::size_t op = 0; op < it.operands.size(); ++op)
     {
-      negative = negative || stride(op, axis) < 0;
-      positive = positive || stride(op, axis) > 0;
+      negative = negative || visited_stride(it, op, axis, false) < 0;
+      positive = positive || visited_stride(it, op, axis, false) > 0;
     }
-    it.flipped[axis] = negative && !positive;
+    flipped[axis] = negative && !positive;
   }
+  return flipped;
+}
+} // namespace
+
+// NumPy's iteration order. C and F are forced; A is F when every operand is
+// Fortran- but not C-contiguous; K sorts the axes by stride magnitude and
+// undoes negative strides.
+void numpy_nditer::order_axes(numpy_nditer_state &it, const std::string &order)
+  const
+{
+  it.flipped.assign(it.shape.size(), false);
+  it.axes.clear();
+  for (std::size_t axis = 0; axis < it.shape.size(); ++axis)
+    it.axes.push_back(axis);
+  if (
+    order == "F" ||
+    (order == "A" && contiguous(it, true) && !contiguous(it, false)))
+    std::reverse(it.axes.begin(), it.axes.end());
+  if (order != "K")
+    return;
+  it.flip_negative = true;
+  it.axes = k_order(it);
+  it.flipped = flip_negative(it);
 }
 
 // The elements an external loop yields at once: the whole iteration when
@@ -473,12 +568,10 @@ void numpy_nditer::set_chunk(numpy_nditer_state &it) const
   it.chunk = reported_shape(it).back();
 }
 
-std::optional<numpy_nditer_state>
-numpy_nditer::describe(const json &call, const std::string &state)
+namespace
 {
-  converter_.current_nditer_call_ = call;
-  converter_.current_nditer_state_ = state;
-
+void check_keywords(const json &call)
+{
   if (call["args"].size() != 1)
     throw std::runtime_error(
       "TypeError: numpy.nditer() takes its operands as the only positional "
@@ -487,44 +580,113 @@ numpy_nditer::describe(const json &call, const std::string &state)
   {
     const std::string arg =
       kw["arg"].is_string() ? kw["arg"].get<std::string>() : "";
-    if (arg == "op_flags")
-    {
-      if (converter_.is_numpy_readonly_view_arg(call["args"][0]))
-        throw std::runtime_error(
-          "ValueError: assignment destination is read-only");
-      throw std::runtime_error(
-        "TypeError: numpy.nditer() op_flags are not supported");
-    }
-    if (arg != "flags" && arg != "order")
+    if (arg != "flags" && arg != "order" && arg != "op_flags")
       throw std::runtime_error(
         "TypeError: numpy.nditer() keyword '" + arg + "' is not supported");
   }
+}
 
-  const json &ops = call["args"][0];
-  if (ops.value("_type", "") == "List" || ops.value("_type", "") == "Tuple")
-    throw std::runtime_error(
-      "TypeError: numpy.nditer() currently supports a single operand");
+std::vector<json> operand_nodes(const json &call)
+{
+  const json &arg = call["args"][0];
+  const std::string type = arg.value("_type", "");
+  if (type == "List" || type == "Tuple")
+    return arg["elts"].get<std::vector<json>>();
+  return {arg};
+}
+} // namespace
 
-  const std::vector<std::string> flag_list = flags(call);
+// The message NumPy raises for the global flags or the order, or empty.
+std::string numpy_nditer::invalid_setup(
+  const std::vector<std::string> &flag_list,
+  const std::string &order_name) const
+{
   for (const std::string &flag : flag_list)
   {
     if (!numpy_flags().count(flag))
-    {
-      raise("ValueError", "Unexpected iterator global flag \"" + flag + "\"");
-      return std::nullopt;
-    }
+      return "Unexpected iterator global flag \"" + flag + "\"";
     if (!modelled_flags().count(flag))
       throw std::runtime_error(
         "TypeError: numpy.nditer() flag '" + flag + "' is not supported");
   }
-  const std::string order_name = order(call);
   if (
     order_name != "C" && order_name != "F" && order_name != "A" &&
     order_name != "K")
+    return "order must be one of 'C', 'F', 'A', or 'K' (got '" + order_name +
+           "')";
+  if (has(flag_list, "external_loop") && has(flag_list, "multi_index"))
+    return "Iterator flag EXTERNAL_LOOP cannot be used if an index or "
+           "multi-index is being tracked";
+  return "";
+}
+
+// A writable operand must cover the whole iteration: NumPy does not
+// broadcast into an output.
+bool numpy_nditer::writable_operands_fit(
+  const numpy_nditer_state &it,
+  const std::vector<std::vector<std::string>> &op_flags)
+{
+  for (std::size_t op = 0; op < op_flags.size(); ++op)
+    if (writable(op_flags[op]) && it.operands[op].shape != it.shape)
+    {
+      raise(
+        "ValueError",
+        "non-broadcastable output operand with shape " +
+          shape_text(it.operands[op].shape) +
+          " doesn't match the broadcast shape " + shape_text(it.shape));
+      return false;
+    }
+  for (const std::vector<std::string> &flags : op_flags)
+    if (writable(flags))
+      throw std::runtime_error(
+        "TypeError: numpy.nditer() op_flags are not supported");
+  return true;
+}
+
+// Zero-sized iteration is an error unless `zerosize_ok`; a run-time extent is
+// checked when the iterator is created.
+bool numpy_nditer::check_size(numpy_nditer_state &it, bool zerosize_ok)
+{
+  if (it.runtime)
   {
-    raise(
-      "ValueError",
-      "order must be one of 'C', 'F', 'A', or 'K' (got '" + order_name + "')");
+    if (!zerosize_ok)
+      raise_if(
+        compare(it.operands.front().extent, "Eq", constant(0)),
+        "ValueError",
+        "Iteration of zero-sized operands is not enabled");
+    return true;
+  }
+  it.size = product(it.shape);
+  if (it.size == 0 && !zerosize_ok)
+  {
+    raise("ValueError", "Iteration of zero-sized operands is not enabled");
+    return false;
+  }
+  set_chunk(it);
+  return true;
+}
+
+std::optional<numpy_nditer_state>
+numpy_nditer::describe(const json &call, const std::string &state)
+{
+  converter_.current_nditer_call_ = call;
+  converter_.current_nditer_state_ = state;
+  check_keywords(call);
+  const std::vector<json> ops = operand_nodes(call);
+  const std::vector<std::vector<std::string>> op_flags =
+    operand_flags(call, ops.size());
+  for (std::size_t op = 0; op < ops.size(); ++op)
+    if (
+      writable(op_flags[op]) && converter_.is_numpy_readonly_view_arg(ops[op]))
+      throw std::runtime_error(
+        "ValueError: assignment destination is read-only");
+
+  const std::vector<std::string> flag_list = flags(call);
+  const std::string order_name = order(call);
+  const std::string error = invalid_setup(flag_list, order_name);
+  if (!error.empty())
+  {
+    raise("ValueError", error);
     return std::nullopt;
   }
 
@@ -534,40 +696,53 @@ numpy_nditer::describe(const json &call, const std::string &state)
   it.multi_index = has(flag_list, "multi_index");
   it.external_loop = has(flag_list, "external_loop");
   it.buffered = has(flag_list, "buffered");
-  if (it.external_loop && it.multi_index)
-  {
-    raise(
-      "ValueError",
-      "Iterator flag EXTERNAL_LOOP cannot be used if an index or multi-index "
-      "is being tracked");
+  for (std::size_t op = 0; op < ops.size(); ++op)
+    it.operands.push_back(operand(ops[op], op));
+  if (!broadcast(it) || !writable_operands_fit(it, op_flags))
     return std::nullopt;
-  }
-
-  it.operands.push_back(operand(ops, 0));
-  it.shape = it.operands.front().shape;
-  it.runtime = !it.operands.front().extent.is_null();
   if (it.runtime && it.external_loop)
     throw std::runtime_error(
       "TypeError: numpy.nditer() external_loop over a view whose layout is "
       "only known at run time is not supported");
   order_axes(it, order_name);
-  if (it.runtime)
-  {
-    if (!has(flag_list, "zerosize_ok"))
-      raise_if(
-        compare(it.operands.front().extent, "Eq", constant(0)),
-        "ValueError",
-        "Iteration of zero-sized operands is not enabled");
-    return it;
-  }
-  it.size = product(it.shape);
-  if (it.size == 0 && !has(flag_list, "zerosize_ok"))
-  {
-    raise("ValueError", "Iteration of zero-sized operands is not enabled");
+  if (!check_size(it, has(flag_list, "zerosize_ok")))
     return std::nullopt;
-  }
-  set_chunk(it);
   return it;
+}
+
+// The iteration shape: the operands' shapes broadcast together, aligned on
+// their last axes. A 1-D view with a run-time layout is iterated alone.
+bool numpy_nditer::broadcast(numpy_nditer_state &it)
+{
+  it.runtime = !it.operands.front().extent.is_null();
+  if (it.runtime && it.operands.size() > 1)
+    throw std::runtime_error(
+      "TypeError: numpy.nditer() over several operands with a view whose "
+      "layout is only known at run time is not supported");
+  for (const numpy_nditer_operand &o : it.operands)
+    if (o.shape.size() > it.shape.size())
+      it.shape.insert(it.shape.begin(), o.shape.size() - it.shape.size(), 1);
+  for (const numpy_nditer_operand &o : it.operands)
+  {
+    const std::size_t lead = it.shape.size() - o.shape.size();
+    for (std::size_t j = 0; j < o.shape.size(); ++j)
+    {
+      long long &extent = it.shape[j + lead];
+      if (extent == 1)
+        extent = o.shape[j];
+      else if (o.shape[j] != 1 && o.shape[j] != extent)
+      {
+        std::string shapes;
+        for (const numpy_nditer_operand &each : it.operands)
+          shapes += shape_text(each.shape) + " ";
+        raise(
+          "ValueError",
+          "operands could not be broadcast together with shapes " + shapes);
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 void numpy_nditer::create(const std::string &target, const json &call)
@@ -780,41 +955,53 @@ void numpy_nditer::bind_name(
     item;
 }
 
+namespace
+{
+// The iterator a binding or call reads from, and how: a method call,
+// `next(it)`, `it.value` or `it[i]`; a null receiver for anything else.
+std::pair<const json *, std::string> source(const json &value)
+{
+  const std::string type = value.value("_type", "");
+  const json &func = value.value("func", json::object());
+  if (type == "Call" && func.value("_type", "") == "Attribute")
+    return {&value["func"]["value"], func["attr"].get<std::string>()};
+  if (
+    type == "Call" && func.value("_type", "") == "Name" &&
+    func["id"] == "next" && value["args"].size() == 1)
+    return {&value["args"][0], "next"};
+  if (type == "Attribute" && value["attr"] == "value")
+    return {&value["value"], "value"};
+  if (type == "Subscript")
+    return {&value["value"], "[]"};
+  return {nullptr, ""};
+}
+
+bool binds_item(const std::string &form)
+{
+  return form == "_esbmc_nditer_item" || form == "next" || form == "value" ||
+         form == "[]";
+}
+} // namespace
+
+// The current item of every operand, a tuple for several.
+json numpy_nditer::current_values(const numpy_nditer_state &it) const
+{
+  std::vector<json> values;
+  for (std::size_t op = 0; op < it.operands.size(); ++op)
+    values.push_back(element(it, op, position(it)));
+  return values.size() == 1 ? values.front() : tuple(values);
+}
+
 bool numpy_nditer::bind(const json &target, const json &value)
 {
-  const json *receiver = nullptr;
-  std::string form;
-  const std::string type = value.value("_type", "");
-  if (type == "Call" && value["func"].value("_type", "") == "Attribute")
-  {
-    receiver = &value["func"]["value"];
-    form = value["func"]["attr"].get<std::string>();
-  }
-  else if (
-    type == "Call" && value["func"].value("_type", "") == "Name" &&
-    value["func"]["id"] == "next" && value["args"].size() == 1)
-  {
-    receiver = &value["args"][0];
-    form = "next";
-  }
-  else if (type == "Attribute" && value["attr"] == "value")
-  {
-    receiver = &value["value"];
-    form = "value";
-  }
-  else if (type == "Subscript")
-  {
-    receiver = &value["value"];
-    form = "[]";
-  }
+  const auto [receiver, form] = source(value);
   const numpy_nditer_state *found = receiver ? find(*receiver) : nullptr;
-  if (!found)
+  if (!found || (form != "__enter__" && !binds_item(form)))
     return false;
   const numpy_nditer_state it = *found;
   const std::string iterator =
     key(converter_.current_func_name_, (*receiver)["id"].get<std::string>());
   converter_.current_nditer_call_ = value;
-
   if (form == "__enter__")
   {
     if (target.value("_type", "") != "Name")
@@ -824,11 +1011,6 @@ bool numpy_nditer::bind(const json &target, const json &value)
       converter_.current_func_name_, target["id"].get<std::string>())] = it;
     return true;
   }
-  if (
-    form != "_esbmc_nditer_item" && form != "next" && form != "value" &&
-    form != "[]")
-    return false;
-
   if (form == "next")
   {
     advance(it);
@@ -836,21 +1018,38 @@ bool numpy_nditer::bind(const json &target, const json &value)
   }
   else if (form != "_esbmc_nditer_item")
     raise_if(finished(it), "ValueError", "Iterator is past the end");
-
   if (form == "[]")
-  {
-    const json &index = value["slice"];
-    if (
-      index.value("_type", "") != "Constant" ||
-      !index["value"].is_number_integer() ||
-      index["value"].get<long long>() < 0 ||
-      index["value"].get<std::size_t>() >= it.operands.size())
-      throw std::runtime_error(
-        "TypeError: numpy.nditer() operands are indexed by an integer "
-        "literal in range");
+    bind_operand(target, it, iterator, value["slice"]);
+  else
+    bind_items(target, it, iterator);
+  return true;
+}
+
+// `x = it[i]`: operand i, or an IndexError past the last operand.
+void numpy_nditer::bind_operand(
+  const json &target,
+  const numpy_nditer_state &it,
+  const std::string &iterator,
+  const json &index)
+{
+  if (
+    index.value("_type", "") != "Constant" ||
+    !index["value"].is_number_integer() || index["value"].get<long long>() < 0)
+    throw std::runtime_error(
+      "TypeError: numpy.nditer() operands are indexed by a non-negative "
+      "integer literal");
+  if (index["value"].get<std::size_t>() >= it.operands.size())
+    raise("IndexError", "Iterator operand index is out of bounds");
+  else
     bind_name(target, it, iterator, index["value"].get<std::size_t>());
-    return true;
-  }
+}
+
+// `x = next(it)` and the for-loop item: one name per operand.
+void numpy_nditer::bind_items(
+  const json &target,
+  const numpy_nditer_state &it,
+  const std::string &iterator)
+{
   if (target.value("_type", "") == "Tuple" && it.operands.size() > 1)
   {
     if (target["elts"].size() != it.operands.size())
@@ -858,14 +1057,64 @@ bool numpy_nditer::bind(const json &target, const json &value)
         "ValueError: numpy.nditer() yields one item per operand");
     for (std::size_t op = 0; op < it.operands.size(); ++op)
       bind_name(target["elts"][op], it, iterator, op);
-    return true;
+    return;
   }
   if (it.operands.size() != 1)
     throw std::runtime_error(
       "TypeError: binding the items of a multi-operand numpy.nditer() to one "
       "name is not supported");
   bind_name(target, it, iterator, 0);
-  return true;
+}
+
+// What the iterator reports about itself, independent of its position; null
+// for an attribute of the current position.
+json numpy_nditer::layout_attribute(
+  const numpy_nditer_state &it,
+  const std::string &attr) const
+{
+  if (attr == "finished")
+    return finished(it);
+  if (attr == "itersize")
+    return it.runtime ? items(it) : constant(it.size);
+  if (attr == "operands")
+  {
+    std::vector<json> arrays;
+    for (const numpy_nditer_operand &o : it.operands)
+      arrays.push_back(o.array);
+    return tuple(arrays);
+  }
+  if (attr != "shape" && attr != "ndim")
+    return json();
+  std::vector<json> extents;
+  if (it.runtime)
+    extents.push_back(items(it));
+  else
+    for (long long extent : reported_shape(it))
+      extents.push_back(constant(extent));
+  return attr == "shape" ? tuple(extents)
+                         : constant(static_cast<long long>(extents.size()));
+}
+
+// `multi_index`, `iterindex` and `value`: they raise past the end, and
+// `multi_index` without the flag.
+json numpy_nditer::position_attribute(
+  const numpy_nditer_state &it,
+  const std::string &attr)
+{
+  if (attr != "multi_index" && attr != "iterindex" && attr != "value")
+    throw std::runtime_error(
+      "TypeError: numpy.nditer attribute '" + attr + "' is not supported");
+  if (attr == "multi_index" && !it.multi_index)
+  {
+    raise("ValueError", "Iterator is not tracking a multi-index");
+    return tuple(std::vector<json>(it.shape.size(), constant(0)));
+  }
+  raise_if(finished(it), "ValueError", "Iterator is past the end");
+  if (attr == "multi_index")
+    return tuple(indices(it, position(it)));
+  if (attr == "iterindex")
+    return binop(position(it), "Mult", constant(it.chunk));
+  return current_values(it);
 }
 
 std::optional<exprt> numpy_nditer::attribute(const json &node)
@@ -873,62 +1122,30 @@ std::optional<exprt> numpy_nditer::attribute(const json &node)
   const numpy_nditer_state *found = find(node["value"]);
   if (!found)
     return std::nullopt;
-  const numpy_nditer_state &it = *found;
   converter_.current_nditer_call_ = node;
   const std::string attr = node["attr"].get<std::string>();
-  json result;
-  if (attr == "finished")
-    result = finished(it);
-  else if (attr == "itersize")
-    result = it.runtime ? items(it) : constant(it.size);
-  else if (attr == "shape" || attr == "ndim")
-  {
-    std::vector<json> extents;
-    if (it.runtime)
-      extents.push_back(items(it));
-    else
-      for (long long extent : reported_shape(it))
-        extents.push_back(constant(extent));
-    result = attr == "shape" ? tuple(extents)
-                             : constant(static_cast<long long>(extents.size()));
-  }
-  else if (attr == "operands")
-  {
-    std::vector<json> arrays;
-    for (const numpy_nditer_operand &o : it.operands)
-      arrays.push_back(o.array);
-    result = tuple(arrays);
-  }
-  else if (attr == "multi_index")
-  {
-    if (!it.multi_index)
-      raise("ValueError", "Iterator is not tracking a multi-index");
-    else
-      raise_if(finished(it), "ValueError", "Iterator is past the end");
-    result = tuple(
-      it.multi_index ? indices(it, position(it))
-                     : std::vector<json>(it.shape.size(), constant(0)));
-  }
-  else if (attr == "iterindex" || attr == "value")
-  {
-    raise_if(finished(it), "ValueError", "Iterator is past the end");
-    if (attr == "iterindex")
-      result = binop(position(it), "Mult", constant(it.chunk));
-    else if (it.operands.size() == 1)
-      result = element(it, 0, position(it));
-    else
-    {
-      std::vector<json> values;
-      for (std::size_t op = 0; op < it.operands.size(); ++op)
-        values.push_back(element(it, op, position(it)));
-      result = tuple(values);
-    }
-  }
-  else
-    throw std::runtime_error(
-      "TypeError: numpy.nditer attribute '" + attr + "' is not supported");
+  json result = layout_attribute(*found, attr);
+  if (result.is_null())
+    result = position_attribute(*found, attr);
   locate(result, node);
   return converter_.get_expr(result);
+}
+
+// `for x, y in it` with a different number of names than operands.
+void numpy_nditer::check_unpack(
+  const numpy_nditer_state &it,
+  long long expected)
+{
+  const long long got = static_cast<long long>(it.operands.size());
+  if (expected > got)
+    raise(
+      "ValueError",
+      "not enough values to unpack (expected " + std::to_string(expected) +
+        ", got " + std::to_string(got) + ")");
+  else if (expected < got)
+    raise(
+      "ValueError",
+      "too many values to unpack (expected " + std::to_string(expected) + ")");
 }
 
 std::optional<exprt> numpy_nditer::call(const json &node)
@@ -937,60 +1154,47 @@ std::optional<exprt> numpy_nditer::call(const json &node)
   converter_.current_nditer_call_ = node;
   if (substitute_chunks(substituted))
     return converter_.get_expr(substituted);
-
-  const json &func = node["func"];
-  const bool next_call = func.value("_type", "") == "Name" &&
-                         func["id"] == "next" && node["args"].size() == 1;
-  const json *receiver =
-    next_call
-      ? &node["args"][0]
-      : (func.value("_type", "") == "Attribute" ? &func["value"] : nullptr);
-  const numpy_nditer_state *found = receiver ? find(*receiver) : nullptr;
+  const auto [receiver, method] = source(node);
+  const numpy_nditer_state *found =
+    receiver && node.value("_type", "") == "Call" ? find(*receiver) : nullptr;
   if (!found)
     return std::nullopt;
-  const numpy_nditer_state it = *found;
-  const std::string method =
-    next_call ? "next" : func["attr"].get<std::string>();
-  json none = {{"_type", "Constant"}, {"value", nullptr}};
-  locate(none, node);
+  json result = call_method(*found, method, node);
+  locate(result, node);
+  return converter_.get_expr(result);
+}
 
-  if (method == "_esbmc_nditer_advance")
-  {
+json numpy_nditer::call_method(
+  const numpy_nditer_state &it,
+  const std::string &method,
+  const json &node)
+{
+  const json none = {{"_type", "Constant"}, {"value", nullptr}};
+  const json k = position(it);
+  if (method == "_esbmc_nditer_unpack")
+    check_unpack(it, node["args"][0]["value"].get<long long>());
+  else if (method == "_esbmc_nditer_advance" || method == "next")
     advance(it);
-    return converter_.get_expr(none);
-  }
-  if (method == "next")
+  else if (method == "iternext")
   {
-    advance(it);
-    raise_if(finished(it), "StopIteration", "");
-    std::vector<json> values;
-    for (std::size_t op = 0; op < it.operands.size(); ++op)
-      values.push_back(element(it, op, position(it)));
-    json value = values.size() == 1 ? values.front() : tuple(values);
-    locate(value, node);
-    return converter_.get_expr(value);
-  }
-  if (method == "iternext")
-  {
-    const json k = position(it);
     assign(
       it.state + "$k",
       if_exp(compare(k, "Lt", items(it)), binop(k, "Add", constant(1)), k));
     assign(it.state + "$started", boolean(true));
-    json more = compare(k, "Lt", items(it));
-    locate(more, node);
-    return converter_.get_expr(more);
+    return compare(k, "Lt", items(it));
   }
-  if (method == "reset")
+  else if (method == "reset")
   {
     assign(it.state + "$k", constant(0));
     assign(it.state + "$started", boolean(false));
-    return converter_.get_expr(none);
   }
-  if (method == "__enter__" || method == "__exit__" || method == "close")
-    return converter_.get_expr(none);
-  throw std::runtime_error(
-    "TypeError: numpy.nditer method '" + method + "' is not supported");
+  else if (method != "__enter__" && method != "__exit__" && method != "close")
+    throw std::runtime_error(
+      "TypeError: numpy.nditer method '" + method + "' is not supported");
+  if (method != "next")
+    return none;
+  raise_if(finished(it), "StopIteration", "");
+  return current_values(it);
 }
 
 std::optional<exprt> numpy_nditer::read_item(const json &node)
@@ -1074,7 +1278,10 @@ exprt numpy_nditer::as_list(const json &call)
   if (it)
     for (long long position = 0; position < it->size; ++position)
     {
-      json node = element(*it, 0, constant(position));
+      std::vector<json> values;
+      for (std::size_t op = 0; op < it->operands.size(); ++op)
+        values.push_back(element(*it, op, constant(position)));
+      json node = values.size() == 1 ? values.front() : tuple(values);
       locate(node, call);
       elements.push_back(converter_.get_expr(node));
     }

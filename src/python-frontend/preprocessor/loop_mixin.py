@@ -353,11 +353,15 @@ class LoopMixin:
                             keywords=[])
 
         if isinstance(node.target, ast.Tuple):
-            binds = [
+            unpack = ast.Call(func=ast.Attribute(value=it_ref(),
+                                                 attr="_esbmc_nditer_unpack",
+                                                 ctx=ast.Load()),
+                              args=[ast.Constant(value=len(node.target.elts))],
+                              keywords=[])
+            binds = [ast.Expr(value=unpack)] + [
                 ast.Assign(targets=[elt],
-                           value=ast.Subscript(value=it_ref(),
-                                               slice=ast.Constant(value=i),
-                                               ctx=ast.Load()))
+                           value=ast.Subscript(
+                               value=it_ref(), slice=ast.Constant(value=i), ctx=ast.Load()))
                 for i, elt in enumerate(node.target.elts)
             ]
         else:

@@ -10810,11 +10810,6 @@ exprt numpy_call_expr::get()
         "TypeError: numpy." + function + "() requires an array argument");
 
     nlohmann::json arr_arg = call_["args"][0];
-    if (
-      function == "nditer" && arr_arg.is_object() &&
-      arr_arg.value("_type", "") == "List")
-      throw std::runtime_error(
-        "TypeError: numpy.nditer() currently supports a single operand");
 
     if (function == "nditer")
       return get_nditer_list(arr_arg);

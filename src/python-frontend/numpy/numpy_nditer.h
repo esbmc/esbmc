@@ -96,10 +96,25 @@ private:
   std::optional<numpy_nditer_state>
   describe(const nlohmann::json &call, const std::string &state);
   numpy_nditer_operand operand(const nlohmann::json &node, std::size_t index);
+  nlohmann::json named_operand(const nlohmann::json &node, std::size_t index);
+  /// `Info` is python_converter's view description, complete only where
+  /// these are defined.
+  template <class Info>
+  void view_layout(const Info &info, numpy_nditer_operand &result);
+  template <class Info>
+  void runtime_layout(const Info &info, numpy_nditer_operand &result);
+  std::string invalid_setup(
+    const std::vector<std::string> &flag_list,
+    const std::string &order_name) const;
+  bool writable_operands_fit(
+    const numpy_nditer_state &it,
+    const std::vector<std::vector<std::string>> &op_flags);
+  bool check_size(numpy_nditer_state &it, bool zerosize_ok);
   std::vector<std::string> flags(const nlohmann::json &call);
   std::string order(const nlohmann::json &call);
   void order_axes(numpy_nditer_state &it, const std::string &order) const;
   void set_chunk(numpy_nditer_state &it) const;
+  bool broadcast(numpy_nditer_state &it);
 
   nlohmann::json position(const numpy_nditer_state &it) const;
   nlohmann::json items(const numpy_nditer_state &it) const;
@@ -130,4 +145,23 @@ private:
     const numpy_nditer_state &it,
     const std::string &iterator,
     std::size_t op);
+  void bind_operand(
+    const nlohmann::json &target,
+    const numpy_nditer_state &it,
+    const std::string &iterator,
+    const nlohmann::json &index);
+  void bind_items(
+    const nlohmann::json &target,
+    const numpy_nditer_state &it,
+    const std::string &iterator);
+  nlohmann::json current_values(const numpy_nditer_state &it) const;
+  nlohmann::json
+  layout_attribute(const numpy_nditer_state &it, const std::string &attr) const;
+  nlohmann::json
+  position_attribute(const numpy_nditer_state &it, const std::string &attr);
+  void check_unpack(const numpy_nditer_state &it, long long expected);
+  nlohmann::json call_method(
+    const numpy_nditer_state &it,
+    const std::string &method,
+    const nlohmann::json &node);
 };
