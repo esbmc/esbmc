@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <set>
 #include <stdexcept>
+#include <tuple>
 
 namespace
 {
@@ -199,6 +200,53 @@ operand_flags(const json &call, std::size_t operands)
 bool writable(const std::vector<std::string> &flags)
 {
   return has(flags, "readwrite") || has(flags, "writeonly");
+}
+
+const std::set<std::string> &numpy_op_flags()
+{
+  static const std::set<std::string> flags = {
+    "aligned",
+    "allocate",
+    "arraymask",
+    "contig",
+    "copy",
+    "nbo",
+    "no_broadcast",
+    "no_subtype",
+    "overlap_assume_elementwise",
+    "readonly",
+    "readwrite",
+    "updateifcopy",
+    "virtual",
+    "writemasked",
+    "writeonly"};
+  return flags;
+}
+
+// The message NumPy raises for an operand's flags, or empty.
+std::string invalid_op_flags(const std::vector<std::string> &flags)
+{
+  int modes = 0;
+  for (const std::string &flag : flags)
+  {
+    if (!numpy_op_flags().count(flag))
+      return "Unexpected per-op iterator flag \"" + flag + "\"";
+    if (flag != "readonly" && flag != "readwrite" && flag != "writeonly")
+      throw std::runtime_error(
+        "TypeError: numpy.nditer() op_flag '" + flag + "' is not supported");
+    ++modes;
+  }
+  if (modes > 1)
+    return "Only one of the iterator flags READWRITE, READONLY, and WRITEONLY "
+           "may be specified for an operand";
+  return "";
+}
+
+// `x[...]` or `x[()]`: the whole 0-d item.
+bool whole_item(const json &index)
+{
+  return (index.value("_type", "") == "Constant" && index["value"] == "...") ||
+         (index.value("_type", "") == "Tuple" && index["elts"].empty());
 }
 
 /// The stride of operand `op` along iteration axis `axis`, as visited (a
@@ -636,10 +684,18 @@ bool numpy_nditer::writable_operands_fit(
           " doesn't match the broadcast shape " + shape_text(it.shape));
       return false;
     }
-  for (const std::vector<std::string> &flags : op_flags)
-    if (writable(flags))
+  for (std::size_t op = 0; op < op_flags.size(); ++op)
+  {
+    if (!writable(op_flags[op]))
+      continue;
+    if (it.operands[op].shape.empty())
       throw std::runtime_error(
-        "TypeError: numpy.nditer() op_flags are not supported");
+        "TypeError: numpy.nditer() writes only to array operands");
+    if (it.buffered)
+      throw std::runtime_error(
+        "TypeError: numpy.nditer() writes through a buffered iterator are "
+        "not supported");
+  }
   return true;
 }
 
@@ -683,7 +739,9 @@ numpy_nditer::describe(const json &call, const std::string &state)
 
   const std::vector<std::string> flag_list = flags(call);
   const std::string order_name = order(call);
-  const std::string error = invalid_setup(flag_list, order_name);
+  std::string error = invalid_setup(flag_list, order_name);
+  for (std::size_t op = 0; op < ops.size() && error.empty(); ++op)
+    error = invalid_op_flags(op_flags[op]);
   if (!error.empty())
   {
     raise("ValueError", error);
@@ -697,7 +755,10 @@ numpy_nditer::describe(const json &call, const std::string &state)
   it.external_loop = has(flag_list, "external_loop");
   it.buffered = has(flag_list, "buffered");
   for (std::size_t op = 0; op < ops.size(); ++op)
+  {
     it.operands.push_back(operand(ops[op], op));
+    it.operands.back().writable = writable(op_flags[op]);
+  }
   if (!broadcast(it) || !writable_operands_fit(it, op_flags))
     return std::nullopt;
   if (it.runtime && it.external_loop)
@@ -1237,6 +1298,8 @@ std::optional<exprt> numpy_nditer::subscript(const json &node)
   if (!item)
     return std::nullopt;
   const numpy_nditer_state &it = converter_.numpy_nditers_.at(item->iterator);
+  if (!it.external_loop && whole_item(index))
+    return read_item(base);
   if (!it.external_loop || index.value("_type", "") == "Slice")
     return std::nullopt;
   json offset = index;
@@ -1260,6 +1323,60 @@ std::optional<exprt> numpy_nditer::subscript(const json &node)
       binop(name(item->position), "Mult", constant(it.chunk)), "Add", offset));
   locate(value, node);
   return converter_.get_expr(value);
+}
+
+// The operand and position a subscript target writes: `x[...]` on a bound
+// item, or `it[i][...]` on the iterator's current position.
+std::optional<std::tuple<const numpy_nditer_state *, std::size_t, json>>
+numpy_nditer::written(const json &target)
+{
+  const json &base = target["value"];
+  if (const numpy_nditer_item *item = find_item(base))
+  {
+    const numpy_nditer_state &it = converter_.numpy_nditers_.at(item->iterator);
+    if (it.external_loop)
+      throw std::runtime_error(
+        "TypeError: writing a numpy.nditer() external-loop chunk is not "
+        "supported");
+    return std::make_tuple(&it, item->operand, name(item->position));
+  }
+  if (base.value("_type", "") != "Subscript")
+    return std::nullopt;
+  const numpy_nditer_state *it = find(base["value"]);
+  const json &index = base["slice"];
+  if (
+    !it || index.value("_type", "") != "Constant" ||
+    !index["value"].is_number_integer() ||
+    index["value"].get<long long>() < 0 ||
+    index["value"].get<std::size_t>() >= it->operands.size())
+    return std::nullopt;
+  raise_if(finished(*it), "ValueError", "Iterator is past the end");
+  return std::make_tuple(it, index["value"].get<std::size_t>(), position(*it));
+}
+
+bool numpy_nditer::write(const json &target, const json &value)
+{
+  if (target.value("_type", "") != "Subscript")
+    return false;
+  converter_.current_nditer_call_ = target;
+  const auto destination = written(target);
+  if (!destination)
+    return false;
+  const auto &[it, op, at] = *destination;
+  if (!whole_item(target["slice"]))
+    raise("IndexError", "too many indices for array: array is 0-dimensional");
+  else if (!it->operands[op].writable)
+    raise("ValueError", "assignment destination is read-only");
+  else
+  {
+    json store = element(*it, op, at);
+    store["ctx"] = {{"_type", "Store"}};
+    json statement = {
+      {"_type", "Assign"}, {"targets", json::array({store})}, {"value", value}};
+    locate(statement, target);
+    converter_.emit_statement_into_current_block(statement);
+  }
+  return true;
 }
 
 exprt numpy_nditer::as_list(const json &call)

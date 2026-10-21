@@ -5,6 +5,7 @@
 
 #include <optional>
 #include <string>
+#include <tuple>
 #include <vector>
 
 class python_converter;
@@ -16,6 +17,7 @@ class python_converter;
 struct numpy_nditer_operand
 {
   nlohmann::json array;
+  bool writable = false;
   std::vector<long long> shape;
   std::vector<long long> strides;
   nlohmann::json extent;
@@ -84,6 +86,8 @@ public:
   std::optional<exprt> call(const nlohmann::json &node);
   std::optional<exprt> read_item(const nlohmann::json &name);
   std::optional<exprt> subscript(const nlohmann::json &node);
+  /// `x[...] = value` on what the iterator yields; false for other targets.
+  bool write(const nlohmann::json &target, const nlohmann::json &value);
 
   static std::string key(const std::string &function, const std::string &name);
 
@@ -160,6 +164,9 @@ private:
   nlohmann::json
   position_attribute(const numpy_nditer_state &it, const std::string &attr);
   void check_unpack(const numpy_nditer_state &it, long long expected);
+  std::optional<
+    std::tuple<const numpy_nditer_state *, std::size_t, nlohmann::json>>
+  written(const nlohmann::json &target);
   nlohmann::json call_method(
     const numpy_nditer_state &it,
     const std::string &method,

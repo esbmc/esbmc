@@ -6914,7 +6914,7 @@ bool python_converter::try_numpy_nditer_assign(const nlohmann::json &ast_node)
     nditer.create(target["id"].get<std::string>(), value);
     return true;
   }
-  if (nditer.bind(target, value))
+  if (nditer.bind(target, value) || nditer.write(target, value))
     return true;
   if (target.value("_type", "") == "Name")
     numpy_nditer_items_.erase(
