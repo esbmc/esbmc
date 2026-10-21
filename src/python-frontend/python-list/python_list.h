@@ -1061,6 +1061,11 @@ private:
   list_elem_info
   get_lookup_key_info(const nlohmann::json &op, const exprt &key);
 
+  /// As get_lookup_key_info for a key that is not tagged: a list element read
+  /// at an erased (any) type forwards the element's own value/type_id/size.
+  list_elem_info
+  get_erased_key_info(const nlohmann::json &op, const exprt &key);
+
   // The type_id a tagged scalar carries when it holds a float, or 0 when the
   // caller opts out of the float path (dict values compare via void*).
   exprt tagged_float_type_id(bool enable_float_path) const;
