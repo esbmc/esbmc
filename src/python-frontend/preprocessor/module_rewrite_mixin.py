@@ -68,6 +68,18 @@ def _rename_shadowed_classes(module):
                 break
 
 
+def _referenced_names(module):
+    """The names `module` reads, deletes or updates in place."""
+    return {
+        n.id
+        for n in ast.walk(module) if isinstance(n, ast.Name) and not isinstance(n.ctx, ast.Store)
+    } | {
+        n.target.id
+        for n in ast.walk(module)
+        if isinstance(n, ast.AugAssign) and isinstance(n.target, ast.Name)
+    }
+
+
 class ModuleRewriteMixin:
     called_names: set
     shadowed_nondet_collections: set
@@ -556,6 +568,7 @@ class ModuleRewriteMixin:
         for n in ast.walk(node):
             if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
                 self.called_names.add(n.func.id)
+        self.referenced_names = _referenced_names(node)
         self._scan_fixed_receivers(node)
         self.variable_names = self._variable_names(node)
         self.scope_binding_counts = self._scope_binding_counts(node)
