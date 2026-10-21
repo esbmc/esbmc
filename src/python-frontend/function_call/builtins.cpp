@@ -391,6 +391,32 @@ exprt function_call_expr::isinstance_without_type_name(
   return nil_exprt();
 }
 
+/// @p result evaluated after @p binding, or @p result alone if it is nil.
+static exprt evaluate_after(const exprt &binding, const exprt &result)
+{
+  if (binding.is_nil())
+    return result;
+  code_blockt block;
+  block.copy_to_operands(code_expressiont(binding), code_expressiont(result));
+  side_effect_exprt sequence("statement_expression", result.type());
+  sequence.copy_to_operands(block);
+  return sequence;
+}
+
+exprt function_call_expr::bind_isinstance_call(exprt &obj_expr) const
+{
+  if (!obj_expr.is_function_call() || converter_.in_rhs_type_probe_)
+    return nil_exprt();
+  exprt result;
+  const exprt binding = converter_.bind_operand_read_twice(
+    to_value_expr(obj_expr, converter_.ns), call_, result);
+  if (binding.is_nil())
+    throw std::runtime_error(
+      "isinstance() on a call result is not supported here");
+  obj_expr = result;
+  return binding;
+}
+
 /// The list item a read `*(T *)item->value` of a scalar element comes from, or
 /// nil. The cast is the frontend's guess at the element's type; the item's
 /// type_id records the type it was stored with.
@@ -430,8 +456,8 @@ exprt function_call_expr::handle_isinstance() const
   if (args.size() != 2)
     throw std::runtime_error("isinstance() expects 2 arguments");
 
-  // Convert the first argument (the object being checked) into an expression
-  const exprt &obj_expr = converter_.get_expr(args[0]);
+  exprt obj_expr = converter_.get_expr(args[0]);
+  const exprt binding = bind_isinstance_call(obj_expr);
   const auto &obj_arg = args[0];
   std::vector<nlohmann::json> types;
   collect_classinfo(args[1], types);
@@ -439,7 +465,7 @@ exprt function_call_expr::handle_isinstance() const
 
   const exprt decided = isinstance_without_type_name(obj_arg, obj_expr, types);
   if (decided.is_not_nil())
-    return decided;
+    return evaluate_after(binding, decided);
 
   // Extract type name from various AST node formats
   auto extract_type_name = [](const nlohmann::json &node) -> std::string {
@@ -610,7 +636,7 @@ exprt function_call_expr::handle_isinstance() const
       isinstance_operand(types[i], build_isinstance, extract_type_name));
     result = or_expr;
   }
-  return result;
+  return evaluate_after(binding, result);
 }
 
 std::optional<exprt> function_call_expr::module_hasattr(
@@ -673,7 +699,8 @@ exprt function_call_expr::handle_hasattr() const
   if (std::optional<exprt> known = module_hasattr(args[0], attr_name))
     return *known;
 
-  const exprt &obj_expr = converter_.get_expr(args[0]);
+  const exprt obj_expr =
+    to_value_expr(converter_.get_expr(args[0]), converter_.ns);
   typet attr_type = array_typet(
     unsigned_char_type(), from_integer(attr_name.size() + 1, size_type()));
   string_constantt attr_expr(attr_name, attr_type, string_constantt::k_default);
