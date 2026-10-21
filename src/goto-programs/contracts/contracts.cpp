@@ -4356,14 +4356,22 @@ expr2tc code_contractst::materialize_ptr_object_old_snapshot(
 
   const expr2tc n = div2tc(
     size_type2(), bytes, constant_int2tc(size_type2(), elem_sz));
-  const type2tc arr_type = array_type2tc(elem_type, n, false);
-  const expr2tc snap = local("__ESBMC_old_object_snapshot_", arr_type);
-  // One array-valued read of the object: no per-element constraint, so a
-  // symbolic size costs nothing extra.
-  goto_programt::targett a = dest.add_instruction(ASSIGN);
-  a->code = code_assign2tc(
-    snap,
-    dereference2tc(arr_type, typecast2tc(pointer_type2tc(arr_type), ptr)));
+  const expr2tc snap = local(
+    "__ESBMC_old_object_snapshot_", array_type2tc(elem_type, n, false));
+  const expr2tc i = local("__ESBMC_old_object_i_", size_type2());
+
+  const type2tc elem_ptr = pointer_type2tc(elem_type);
+  const expr2tc p = typecast2tc(elem_ptr, ptr);
+  const expr2tc in_range =
+    and2tc(notequal2tc(p, gen_zero(elem_ptr)), lessthan2tc(i, n));
+  const expr2tc same = equality2tc(
+    index2tc(elem_type, snap, i),
+    dereference2tc(elem_type, add2tc(elem_ptr, p, i)));
+  goto_programt::targett a = dest.add_instruction(ASSUME);
+  a->guard = forall2tc(
+    get_bool_type(),
+    address_of2tc(pointer_type2tc(size_type2()), i),
+    or2tc(not2tc(in_range), same));
   a->location = location;
   a->location.comment("__ESBMC_old object snapshot");
   return snap;
