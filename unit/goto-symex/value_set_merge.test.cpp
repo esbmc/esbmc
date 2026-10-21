@@ -280,3 +280,34 @@ TEST_CASE(
   keep.make_union(produced.values, true);
   REQUIRE(has_id(keep, "c:@p"));
 }
+
+TEST_CASE(
+  "a struct-typed ternary leaves no temporary behind",
+  "[symex][value-set]")
+{
+  // value_sett::assign routes `c ? x : y` through a fresh temporary and then
+  // erases it. A struct temporary is stored per member, so erasing its bare
+  // name alone would keep its ".p" entry in every later state.
+  engine e(R"(
+struct S { int *p; };
+int a, b;
+struct S s, x, y;
+int nondet_int(void);
+int main(void)
+{
+  x.p = &a;
+  y.p = &b;
+  s = nondet_int() ? x : y;
+  return *s.p;
+}
+)");
+  e.run();
+
+  const std::set<std::string> targets = targets_of(e.value_set(), "c:@s");
+  REQUIRE(points_to(targets, "@a"));
+  REQUIRE(points_to(targets, "@b"));
+
+  for (const auto &entry : e.value_set().values)
+    REQUIRE(
+      entry.second.identifier.find("__ESBMC_xchg_ptr") == std::string::npos);
+}
