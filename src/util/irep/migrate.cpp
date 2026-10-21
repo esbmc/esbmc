@@ -426,7 +426,12 @@ static type2tc migrate_type0(const typet &type)
     unsigned int width_bits = to_fixedbv_type(type).get_width();
     unsigned int int_bits = to_fixedbv_type(type).get_integer_bits();
 
-    return fixedbv_type2tc(width_bits, int_bits);
+    /* Absent attributes mean the legacy signed, non-saturating layout. */
+    return fixedbv_type2tc(
+      width_bits,
+      int_bits,
+      type.get("#esbmc_unsigned") != "1",
+      type.get("#esbmc_saturating") == "1");
   }
 
   if (type.id() == typet::t_floatbv)
@@ -1228,6 +1233,32 @@ static bool migrate_before_dispatch(const exprt &expr, expr2tc &new_expr_ref)
   expr2tc inner;
   migrate_expr(unmarked, inner);
   new_expr_ref = typecast2tc(inner->type, inner, base);
+  return true;
+}
+
+/// One-operand value operations that keep their irep's type.
+static bool migrate_unary_value_op(const exprt &expr, expr2tc &new_expr_ref)
+{
+  const irep_idt &id = expr.id();
+  if (
+    id != "popcount" && id != "fixedbv_sqrt" && id != "fixedbv_exp" &&
+    id != "bswap")
+    return false;
+
+  expr2tc theval;
+  migrate_expr(expr.op0(), theval);
+  const type2tc type = migrate_type(expr.type());
+
+  if (id == "popcount")
+    // popcount2t is always int; a CBMC binary types the count itself (Kani
+    // emits u32), so keep that type for whatever the count is assigned to.
+    new_expr_ref = coerce_to_type(popcount2tc(theval), type);
+  else if (id == "fixedbv_sqrt")
+    new_expr_ref = fixedbv_sqrt2tc(type, theval);
+  else if (id == "fixedbv_exp")
+    new_expr_ref = fixedbv_exp2tc(type, theval);
+  else
+    new_expr_ref = bswap2tc(type, theval);
   return true;
 }
 
@@ -3213,27 +3244,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     return;
   }
 
-  if (expr.id() == "popcount")
-  {
-    expr2tc theval;
-    migrate_expr(expr.op0(), theval);
-
-    // popcount2t is always int; a CBMC binary types the count itself (Kani
-    // emits u32), so keep that type for whatever the count is assigned to.
-    new_expr_ref =
-      coerce_to_type(popcount2tc(theval), migrate_type(expr.type()));
+  if (migrate_unary_value_op(expr, new_expr_ref))
     return;
-  }
-
-  if (expr.id() == "bswap")
-  {
-    expr2tc theval;
-    migrate_expr(expr.op0(), theval);
-    type = migrate_type(expr.type());
-
-    new_expr_ref = bswap2tc(type, theval);
-    return;
-  }
 
   if (expr.id() == "concat")
   {
@@ -3616,6 +3628,12 @@ static typet migrate_type_back_uncached(const type2tc &ref)
     fixedbv_typet thetype;
     thetype.set_integer_bits(ref2.integer_bits);
     thetype.set_width(ref2.width);
+    /* Only mark the non-legacy variants, so round-tripping the historical
+     * signed non-saturating layout stays byte-identical. */
+    if (!ref2.is_signed)
+      thetype.set("#esbmc_unsigned", "1");
+    if (ref2.is_saturating)
+      thetype.set("#esbmc_saturating", "1");
     return thetype;
   }
   case type2t::floatbv_id:

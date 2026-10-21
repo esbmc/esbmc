@@ -6,8 +6,8 @@
 
 #include <memory>
 #include <irep2/irep2_utils.h>
-#include <solvers/smt/smt_conv.h>
-#include <solvers/smt/smt_result.h>
+#include <solvers/smt_conv.h>
+#include <solvers/smt_result.h>
 #include <solvers/solve.h>
 #include <util/arith/arith_tools.h>
 #include <util/config/config.h>
@@ -16,13 +16,13 @@
 #include <util/symtab/context.h>
 #include <util/symtab/namespace.h>
 
-SCENARIO("assumptions hold for one query", "[solvers][bitwuzla]")
+SCENARIO("assumptions hold for one query", "[solvers]")
 {
   config.ansi_c.set_data_model(configt::LP64);
   contextt ctx;
   namespacet ns(ctx);
   optionst options;
-  std::unique_ptr<smt_convt> solver{create_solver("bitwuzla", ns, options)};
+  std::unique_ptr<smt_convt> solver{create_solver(ns, options)};
   REQUIRE(solver->supports_assumptions());
 
   const type2tc u8 = get_uint8_type();

@@ -1,4 +1,4 @@
 CORE
 main.c
---bitwuzllob --bitwuzllob-prog fake-mallob.sh --bitwuzllob-model-prog "z3 -in"
+--smtlib --smtlib-oneshot-prog fake-mallob.sh --smtlib-oneshot-model-prog "z3 -in"
 ^VERIFICATION SUCCESSFUL$

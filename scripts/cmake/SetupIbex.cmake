@@ -17,6 +17,32 @@ if(DOWNLOAD_DEPENDENCIES AND (NOT DEFINED IBEX_DIR))
    if(EXISTS "${_ibex_install_dir}/lib/libibex.a")
       message("[ibex] Found existing ibex installation, skipping build")
    else()
+      # gaol's init() installs a process-wide round-toward-+infinity FPU mode
+      # and never restores it, which is only safe if nothing else in the
+      # process does floating-point. It is not: CaDiCaL's local-search
+      # tabulates scores with `for (e = n; n; n = e * base)`, a loop that
+      # terminates only when the sequence underflows to zero. Rounding upwards
+      # pins it at DBL_TRUE_MIN, so the table grows until the process dies
+      # (8 GB observed). Building gaol with GAOL_PRESERVE_ROUNDING makes each
+      # interval operation save, set and restore the mode instead, which is
+      # what its MinGW and MSVC configurations already do. The option is a
+      # plain set() in gaol's CMakeLists, so -D cannot override it.
+      set(_gaol_cmakelists
+         "${ibex_SOURCE_DIR}/interval_lib_wrapper/gaol/3rd/gaol-4.2.3alpha0/CMakeLists.txt")
+      if(EXISTS "${_gaol_cmakelists}")
+         file(READ "${_gaol_cmakelists}" _gaol_contents)
+         string(REPLACE "set (GAOL_PRESERVE_ROUNDING OFF)"
+                        "set (GAOL_PRESERVE_ROUNDING ON)"
+                        _gaol_patched "${_gaol_contents}")
+         if(NOT _gaol_patched STREQUAL _gaol_contents)
+            message("[ibex] Enabling GAOL_PRESERVE_ROUNDING")
+            file(WRITE "${_gaol_cmakelists}" "${_gaol_patched}")
+         endif()
+      else()
+         message(WARNING "[ibex] gaol CMakeLists not found at ${_gaol_cmakelists}; "
+                         "GAOL_PRESERVE_ROUNDING not enabled")
+      endif()
+
       message("[ibex] Configuring ibex with CMake")
       set(_ibex_cmake_args
          -DCMAKE_INSTALL_PREFIX=${_ibex_install_dir}

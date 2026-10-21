@@ -27,7 +27,7 @@ ts_enginet::ts_enginet(
     });
   if (no_preprocess)
     bitwuzla.push_back("preprocess=0");
-  solver.reset(create_solver("", ns, options));
+  solver = create_solver(ns, options);
   if (no_preprocess)
     bitwuzla.pop_back();
   if (incremental && !solver->supports_assumptions())

@@ -1,5 +1,7 @@
 // --bitwuzla-opt reaches Bitwuzla's own option parser, which rejects an
 // out-of-range value before the solver is built.
+// KNOWNBUG on the camada branch: camada has no way to pass a raw backend
+// option, so --bitwuzla-opt is not registered.
 int nondet_int(void);
 
 int main()
