@@ -1893,10 +1893,7 @@ std::string python_annotation<Json>::get_function_return_type(
         if (
           !should_override && elem.contains("returns") &&
           !elem["returns"].is_null() && elem["returns"].contains("id"))
-        {
-          functions_in_analysis_.erase(func_name);
           return elem["returns"]["id"];
-        }
 
         // Try to infer from return statements (excluding recursive calls).
         // Resolve names in func_name's own scope (see the non-recursive path
@@ -1906,18 +1903,9 @@ std::string python_annotation<Json>::get_function_return_type(
         std::string inferred =
           infer_from_return_statements(elem["body"], func_name);
         current_func_name_context_ = saved_rec_ctx;
-        if (!inferred.empty())
-        {
-          functions_in_analysis_.erase(func_name);
-          return inferred;
-        }
-
-        // No annotation and can't infer: return empty to avoid crash
-        functions_in_analysis_.erase(func_name);
-        return "";
+        return inferred;
       }
     }
-    functions_in_analysis_.erase(func_name);
     return "";
   }
 
@@ -2656,6 +2644,12 @@ std::string python_annotation<Json>::function_value_return_type(
   std::optional<std::pair<Json, std::string>> agreed;
   for (const function_values::candidate &function : *functions)
   {
+    // A recursive call through the value returns what the other candidates
+    // return.
+    if (
+      function.module == &ast_ &&
+      functions_in_analysis_.count((*function.def)["name"]) > 0)
+      continue;
     const auto signature = function_signature(function);
     if (
       !signature || (agreed && (signature->second != agreed->second ||
@@ -2664,6 +2658,8 @@ std::string python_annotation<Json>::function_value_return_type(
       return "";
     agreed = signature;
   }
+  if (!agreed)
+    return "";
   const auto is_starred = [](const Json &arg) {
     return arg.value("_type", "") == "Starred";
   };

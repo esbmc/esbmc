@@ -322,6 +322,16 @@ static bool is_constant_char_array(const exprt &expr)
          expr.type().subtype() == char_type();
 }
 
+// A pointer to the characters of `expr`, reading an Any (void *) operand as
+// the str strcmp() would see.
+static exprt char_pointer_of(const exprt &expr)
+{
+  exprt ptr = expr.type().is_pointer() ? expr : address_of_exprt(expr);
+  if (ptr.type().subtype().is_empty())
+    ptr = typecast_exprt(ptr, gen_pointer_type(char_type()));
+  return ptr;
+}
+
 exprt python_converter::handle_string_comparison(
   const std::string &op,
   exprt &lhs,
@@ -388,9 +398,7 @@ exprt python_converter::handle_string_comparison(
       // (nil, since char_type() is not a pointer type) rather than tp
       // itself; migrate_type(char_type().subtype()) reproduces that exact
       // quirk byte-for-byte.
-      exprt ptr = expr;
-      if (!ptr.type().is_pointer())
-        ptr = address_of_exprt(expr);
+      const exprt ptr = char_pointer_of(expr);
       expr2tc ptr2, index2;
       migrate_expr(ptr, ptr2);
       migrate_expr(index, index2);
