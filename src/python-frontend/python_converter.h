@@ -1011,6 +1011,10 @@ private:
     const nlohmann::json &ast_node,
     codet &target_block);
 
+  bool target_ternary_needs_if_spelling(
+    const nlohmann::json &ifexp,
+    const nlohmann::json &target) const;
+
   std::string instantiated_class(const nlohmann::json &value) const;
 
   bool ternary_needs_if_spelling(const nlohmann::json &ifexp) const;

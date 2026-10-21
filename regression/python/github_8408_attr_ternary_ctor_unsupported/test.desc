@@ -1,0 +1,4 @@
+CORE
+main.py
+--unwind 8 --no-unwinding-assertions
+^ERROR: a conditional expression stored in attribute 'c' must construct the same class in both branches$

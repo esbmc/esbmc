@@ -6721,6 +6721,28 @@ bool python_converter::ternary_needs_if_spelling(
   return true;
 }
 
+// An attribute takes the class of the instance it first holds, so a
+// conditional storing instances of different classes, or None, would be read
+// as one class on every path (#8408).
+bool python_converter::target_ternary_needs_if_spelling(
+  const nlohmann::json &ifexp,
+  const nlohmann::json &target) const
+{
+  const std::string kind = target.value("_type", "");
+  if (kind != "Attribute")
+    return kind == "Name" && ternary_needs_if_spelling(ifexp);
+  const std::string then_class = instantiated_class(ifexp["body"]);
+  const std::string else_class = instantiated_class(ifexp["orelse"]);
+  if (then_class.empty() && else_class.empty())
+    return false;
+  if (then_class != else_class)
+    throw std::runtime_error(
+      "a conditional expression stored in attribute '" +
+      target.value("attr", std::string()) +
+      "' must construct the same class in both branches");
+  return true;
+}
+
 bool python_converter::rewrite_divergent_conditional_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -6736,11 +6758,9 @@ bool python_converter::rewrite_divergent_conditional_assign(
 
   const nlohmann::json &target =
     ast_node.contains("targets") ? ast_node["targets"][0] : ast_node["target"];
-  if (target.value("_type", "") != "Name")
+  if (!target_ternary_needs_if_spelling(value, target))
     return false;
-
-  if (!ternary_needs_if_spelling(value))
-    return false;
+  const bool is_name = target.value("_type", "") == "Name";
 
   // Each arm keeps the assignment's own location, so a violation still points
   // at the line the ternary is written on. A constructor arm is annotated
@@ -6749,7 +6769,7 @@ bool python_converter::rewrite_divergent_conditional_assign(
   auto arm = [&](const nlohmann::json &branch) {
     nlohmann::json assign = ast_node;
     const std::string cls = instantiated_class(branch);
-    if (!cls.empty())
+    if (!cls.empty() && is_name)
     {
       assign["_type"] = "AnnAssign";
       assign["target"] = target;
