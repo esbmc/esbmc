@@ -1433,7 +1433,10 @@ void python_converter::handle_assignment_type_adjustments(
             !lhs_symbol->get_type().is_nil() &&
             lhs_symbol->get_type() != type_handler_.get_list_type();
           if (!is_incompatible)
+          {
+            reject_numpy_array_retype(*lhs_symbol, rhs.type());
             adopt_array_type(*lhs_symbol, lhs, rhs);
+          }
         }
       }
     }
@@ -1880,14 +1883,23 @@ exprt python_converter::get_rhs_with_dict_resolution(
 std::string
 python_converter::resolve_name_symbol_id(const std::string &name) const
 {
+  // A NumPy array rebound to another shape lives in its retype slot, which
+  // holds the metadata of the live binding.
+  const auto live_id = [this](const std::string &id) {
+    const auto alias = retype_aliases_.find(id);
+    return alias != retype_aliases_.end() &&
+               numpy_array_symbols_.count(alias->second) != 0
+             ? alias->second
+             : id;
+  };
   symbol_id sid = create_symbol_id();
   sid.set_object(name);
   if (symbol_table_.find_symbol(sid.to_string()) != nullptr)
-    return sid.to_string();
+    return live_id(sid.to_string());
 
   sid.set_function("");
   if (symbol_table_.find_symbol(sid.to_string()) != nullptr)
-    return sid.to_string();
+    return live_id(sid.to_string());
 
   return "";
 }
@@ -2094,6 +2106,24 @@ bool python_converter::method_base_is_tracked_numpy_array(
          numpy_array_symbols_.count(method_base_id) != 0;
 }
 
+// `v[1].sum()`: a reducer over a subscript of a numpy array or view, read
+// as np.sum(v[1]); without the rewrite the method resolves to nothing and
+// its value is a placeholder.
+bool python_converter::is_numpy_subscript_reducer_receiver(
+  const nlohmann::json &method_base,
+  const std::string &method_name) const
+{
+  static const std::set<std::string> reducers = {
+    "sum", "mean", "min", "max", "prod", "std", "var", "argmin", "argmax"};
+  if (
+    method_base.value("_type", "") != "Subscript" ||
+    reducers.count(method_name) == 0)
+    return false;
+  const std::string root = root_name_from_subscript(method_base);
+  return method_base_is_tracked_numpy_array(root) ||
+         find_numpy_pointer_view_info(root) != nullptr;
+}
+
 std::tuple<bool, std::string, nlohmann::json, bool, bool>
 python_converter::classify_numpy_method_call(
   const nlohmann::json &call_node) const
@@ -2172,7 +2202,8 @@ python_converter::classify_numpy_method_call(
   const bool receiver_is_rewritable =
     !method_base_is_imported_module(method_base_name) &&
     (method_base_is_tracked_numpy_array(method_base_name) ||
-     receiver_is_raw_call_view_method);
+     receiver_is_raw_call_view_method ||
+     is_numpy_subscript_reducer_receiver(method_base, method_name));
 
   const bool supported_dispatch_rewrite_method =
     receiver_is_rewritable && dispatch_rewrite_methods.count(method_name) != 0;
@@ -4123,7 +4154,8 @@ void python_converter::record_numpy_constructor_binding(
   // a call to an undefined function named "tolist"/"sum".
   if (
     is_numpy_array_constructor_expr(rhs_node) ||
-    is_array_returning_call_expr(rhs_node, lhs))
+    is_array_returning_call_expr(rhs_node, lhs) ||
+    is_numpy_arithmetic_result(rhs_node, lhs))
   {
     numpy_array_symbols_.insert(lhs_id);
     if (unconditional_assignment)
@@ -4147,6 +4179,21 @@ void python_converter::record_numpy_constructor_binding(
     numpy_array_symbols_.erase(lhs_id);
     numpy_param_shapes_.erase(lhs_id);
   }
+}
+
+// `b = a * 2.0`: element-wise arithmetic yields a numeric array, which takes
+// the ndarray methods (`b.sum()`) as a constructor's result does.
+bool python_converter::is_numpy_arithmetic_result(
+  const nlohmann::json &rhs_node,
+  const exprt &lhs) const
+{
+  const typet &lhs_type = ns.follow(lhs.type());
+  return rhs_node.value("_type", "") == "BinOp" && lhs_type.is_array() &&
+         !type_handler_.is_string_type(lhs_type) &&
+         !type_utils::is_bytes_array(lhs_type) &&
+         (lhs_type.subtype().is_signedbv() ||
+          lhs_type.subtype().is_unsignedbv() ||
+          lhs_type.subtype().is_floatbv());
 }
 
 bool python_converter::is_array_returning_call_expr(
@@ -4544,9 +4591,29 @@ typet python_converter::resolve_call_argument_array_type(
   return probed_type;
 }
 
+const code_typet *python_converter::lambda_call_callee(
+  const nlohmann::json &call,
+  const symbolt &var)
+{
+  if (const symbolt *copy = lambda_copy_for_call(call, var))
+    return &to_code_type(copy->get_type());
+
+  const std::string name = call["func"]["id"].get<std::string>();
+  const nlohmann::json scope = json_utils::find_function_by_path(
+    *ast_json, json_utils::split_function_path(current_func_name_));
+  if (
+    python_annotation_parser::find_lambda_in_body(name, (*ast_json)["body"])
+      .empty() &&
+    (!scope.contains("body") ||
+     python_annotation_parser::find_lambda_in_body(name, scope["body"])
+       .empty()))
+    return nullptr;
+  return &to_code_type(var.get_type().subtype());
+}
+
 typet python_converter::resolve_lambda_call_result_type(
   const nlohmann::json &ast_node,
-  const typet &current_type) const
+  const typet &current_type)
 {
   const nlohmann::json &call = ast_node["value"];
   if (
@@ -4562,17 +4629,11 @@ typet python_converter::resolve_lambda_call_result_type(
     !var->get_type().subtype().is_code())
     return current_type;
 
-  const nlohmann::json scope = json_utils::find_function_by_path(
-    *ast_json, json_utils::split_function_path(current_func_name_));
-  if (
-    python_annotation_parser::find_lambda_in_body(name, (*ast_json)["body"])
-      .empty() &&
-    (!scope.contains("body") ||
-     python_annotation_parser::find_lambda_in_body(name, scope["body"])
-       .empty()))
+  const code_typet *callee = lambda_call_callee(call, *var);
+  if (!callee)
     return current_type;
 
-  const typet &ret = to_code_type(var->get_type().subtype()).return_type();
+  const typet &ret = callee->return_type();
   return ret.is_signedbv() || ret.is_unsignedbv() || ret.is_bool()
            ? ret
            : current_type;
@@ -4815,6 +4876,44 @@ bool python_converter::unpack_record_is_trusted(
   return true;
 }
 
+// A list read from a tuple variable, `t.element_i`, is held in a temporary
+// that takes the element types recorded for the list the tuple was assigned.
+// The symbol's value is that assignment's literal; under a trusted record the
+// tuple is bound once and read only here, so it is still current.
+exprt python_converter::hold_tuple_member_list(
+  const nlohmann::json &ast_node,
+  const exprt &value,
+  codet &target_block)
+{
+  if (
+    !unpack_record_trusted_ || value.id() != "member" ||
+    !value.op0().is_symbol() ||
+    value.type() != get_type_handler().get_list_type())
+    return value;
+  const symbolt *tuple = find_symbol(value.op0().identifier().as_string());
+  const typet tuple_type = ns.follow(value.op0().type());
+  if (
+    !tuple || tuple->get_value().id() != "struct" ||
+    !tuple_handler_->is_tuple_type(tuple_type))
+    return value;
+  const std::size_t i =
+    to_struct_type(tuple_type).component_number(value.get("component_name"));
+  const exprt &source = tuple->get_value().operands().at(i);
+  if (
+    !source.is_symbol() ||
+    !element_type_registry_.find(source.identifier().as_string()))
+    return value;
+
+  symbolt &held =
+    create_tmp_symbol(ast_node, "$unpack_elem$", value.type(), exprt());
+  code_declt decl(symbol_expr(held));
+  decl.copy_to_operands(value);
+  target_block.copy_to_operands(decl);
+  element_type_registry_.assign_from(
+    source.identifier().as_string(), held.id.as_string());
+  return symbol_expr(held);
+}
+
 void python_converter::unpack_nested_target(
   const nlohmann::json &ast_node,
   const nlohmann::json &target,
@@ -4845,13 +4944,14 @@ void python_converter::unpack_nested_target(
   }
 
   // Without exactly recorded element types the targets could not be typed
+  const exprt list = hold_tuple_member_list(ast_node, value, target_block);
   if (
-    unpack_record_trusted_ && value.is_symbol() &&
-    value.type() == get_type_handler().get_list_type() &&
-    element_type_registry_.find(value.identifier().as_string()))
+    unpack_record_trusted_ && list.is_symbol() &&
+    list.type() == get_type_handler().get_list_type() &&
+    element_type_registry_.find(list.identifier().as_string()))
   {
     python_list(*this, ast_node["value"])
-      .handle_list_var_unpacking(ast_node, target, value, target_block);
+      .handle_list_var_unpacking(ast_node, target, list, target_block);
     return;
   }
 
@@ -6090,7 +6190,90 @@ bool python_converter::needs_fresh_retype_slot(
     !tuple_handler_->is_tuple_type(rhs.type()) && !rhs.type().is_code() &&
     !(rhs.type().is_pointer() && rhs.type().subtype().id() == "empty");
   return tuple_to_nontuple_rebind ||
-         is_numpy_array_to_view_rebind(lhs, rhs, lhs_id);
+         needs_fresh_numpy_array_slot(lhs, rhs, lhs_id);
+}
+
+bool python_converter::needs_fresh_numpy_array_slot(
+  const exprt &lhs,
+  const exprt &rhs,
+  const std::string &lhs_id) const
+{
+  return is_numpy_array_to_view_rebind(lhs, rhs, lhs_id) ||
+         is_numpy_array_reshape_rebind(lhs, rhs, lhs_id);
+}
+
+static bool is_read_in_other_scope(
+  const nlohmann::json &node,
+  const std::string &name,
+  const std::string &current,
+  bool nested);
+
+static bool is_read_in_other_scope_of_children(
+  const nlohmann::json &node,
+  const std::string &name,
+  const std::string &current,
+  bool nested)
+{
+  for (const auto &child : node)
+    if (
+      child.is_structured() &&
+      is_read_in_other_scope(child, name, current, nested))
+      return true;
+  return false;
+}
+
+// Whether `name` is read inside a function, lambda or class other than
+// `current`: such a body may run after a rebind, through the old symbol.
+static bool is_read_in_other_scope(
+  const nlohmann::json &node,
+  const std::string &name,
+  const std::string &current,
+  bool nested)
+{
+  const std::string type = node.is_object() ? node.value("_type", "") : "";
+  if (nested && type == "Name" && node.value("id", "") == name)
+    return true;
+  const bool scope = type == "FunctionDef" || type == "AsyncFunctionDef" ||
+                     type == "Lambda" || type == "ClassDef";
+  return is_read_in_other_scope_of_children(
+    node,
+    name,
+    current,
+    nested || (scope && node.value("name", "") != current));
+}
+
+// A NumPy array rebound to another shape or dtype where it cannot get its own
+// symbol (in a branch or loop, or read by another function): retyping the
+// symbol in place would retype every read of the earlier binding.
+void python_converter::reject_numpy_array_retype(
+  const symbolt &symbol,
+  const typet &type) const
+{
+  if (
+    symbol.get_type().is_array() &&
+    numpy_array_symbols_.count(symbol.id.as_string()) != 0 &&
+    migrate_type(symbol.get_type()) != migrate_type(type))
+    throw std::runtime_error(
+      "TypeError: rebinding a numpy array to another shape or dtype inside a "
+      "branch or loop, or while a function reads it, is not supported");
+}
+
+// A NumPy array rebound to an array of another shape or dtype: the symbol
+// holds one type, so retyping it in place would retype every earlier read.
+bool python_converter::is_numpy_array_reshape_rebind(
+  const exprt &lhs,
+  const exprt &rhs,
+  const std::string &lhs_id) const
+{
+  if (
+    block_nesting_ != function_body_depth_ + 1 || !lhs.type().is_array() ||
+    !rhs.type().is_array() || lhs.type() == rhs.type() ||
+    numpy_array_symbols_.count(lhs_id) == 0)
+    return false;
+  const symbolt *symbol = symbol_table_.find_symbol(lhs_id);
+  return symbol &&
+         !is_read_in_other_scope(
+           *ast_json, symbol->name.as_string(), current_func_name_, false);
 }
 
 // A NumPy array rebound to a view of itself, `x = x[1]`: retyping x in
@@ -6148,6 +6331,31 @@ symbolt *python_converter::mint_retyped_symbol(
 
   retype_aliases_[alias_key] = new_id;
   return new_symbol_ptr;
+}
+
+symbolt *python_converter::follow_retype_alias(symbolt *symbol) const
+{
+  if (!symbol)
+    return nullptr;
+  auto alias = retype_aliases_.find(symbol->id.as_string());
+  if (alias == retype_aliases_.end())
+    return symbol;
+  symbolt *retyped = symbol_table_.find_symbol(alias->second);
+  return retyped ? retyped : symbol;
+}
+
+/// `C.v = ...` at module scope stores into the class attribute, whereas
+/// @p lhs_symbol is named after the attribute alone (#8943).
+symbolt *python_converter::retype_store_symbol(
+  const nlohmann::json &target,
+  const exprt &lhs,
+  symbolt *lhs_symbol)
+{
+  if (!current_func_name_.empty() || target.value("_type", "") != "Attribute")
+    return lhs_symbol;
+  symbolt *stored =
+    symbol_table_.find_symbol(to_symbol_expr(lhs).get_identifier());
+  return stored ? stored : lhs_symbol;
 }
 
 /// The Name a single-target Assign/AnnAssign binds, or a null json.
@@ -6397,7 +6605,14 @@ void python_converter::propagate_list_type_info(
     throw std::runtime_error(
       "rebinding '" + lhs_symbol->name.as_string() +
       "' to a list of other element types on one path is not supported");
-  element_type_registry_.assign_from(rhs_identifier, lhs_identifier);
+  // Every instance-attribute list shares the empty identifier, so its record
+  // may be another attribute's; an annotated one gives its element type.
+  const typet attr_elem_type =
+    python_list(*this, nlohmann::json()).attribute_elem_type(rhs);
+  if (attr_elem_type != typet())
+    element_type_registry_.assign(lhs_identifier, attr_elem_type);
+  else
+    element_type_registry_.assign_from(rhs_identifier, lhs_identifier);
 
   // When rhs is dict_sym.keys / dict_sym.values (a member expression
   // rather than a list symbol), rhs_identifier is empty and
@@ -6633,6 +6848,20 @@ static void fit_numpy_string_store(const exprt &lhs, exprt &rhs)
   for (std::size_t i = 0; i < width && i < rhs.operands().size(); ++i)
     fitted.operands()[i] = rhs.operands()[i];
   rhs = fitted;
+}
+
+// NumPy truncates a float stored into an integer array, raising for NaN and
+// infinity as int() does.
+exprt python_converter::fit_numpy_integer_store(
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &value)
+{
+  if (
+    lhs.id() != "index" || !lhs.op0().type().is_array() ||
+    lhs.type() != long_long_int_type() || !rhs.type().is_floatbv())
+    return rhs;
+  return typecast_exprt(guard_nonfinite_float_to_int(rhs, value), lhs.type());
 }
 
 void python_converter::get_var_assign(
@@ -7299,6 +7528,7 @@ void python_converter::get_var_assign(
     // Handle string literal conversion
     rhs = handle_string_literal_rhs(effective_ast_node, lhs_type, rhs);
     fit_numpy_string_store(lhs, rhs);
+    rhs = fit_numpy_integer_store(lhs, rhs, effective_ast_node["value"]);
   }
 
   if (converted_value && rhs != exprt("_init_undefined"))
@@ -7402,6 +7632,7 @@ void python_converter::get_var_assign(
       // same-type write lands in the live slot (mirrors the load redirect in
       // converter_expr). The alias is always keyed by the original id, which is
       // what loads resolve before redirecting.
+      lhs_symbol = retype_store_symbol(target, lhs, lhs_symbol);
       const std::string orig_id = lhs_symbol->id.as_string();
       auto existing = retype_aliases_.find(orig_id);
       if (existing != retype_aliases_.end())
@@ -7990,10 +8221,28 @@ void python_converter::get_compound_assign(
   }
 
   mark_augassign_list_escaped(lhs, rhs);
+  target_block.copy_to_operands(get_compound_store(lhs, rhs, loc));
+}
 
-  code_assignt code_assign(lhs, rhs);
-  code_assign.location() = loc;
-  target_block.copy_to_operands(code_assign);
+// NumPy's in-place ufuncs cast with the same_kind rule: a float result does
+// not fit an integer array (UFuncTypeError, a TypeError).
+codet python_converter::get_compound_store(
+  const exprt &lhs,
+  const exprt &rhs,
+  const locationt &location)
+{
+  codet store = code_assignt(lhs, rhs);
+  if (
+    lhs.type().is_array() && rhs.type().is_array() &&
+    type_utils::is_integer_type(lhs.type().subtype()) &&
+    rhs.type().subtype().is_floatbv())
+    store = code_expressiont(
+      get_exception_handler().gen_exception_raise(
+        "TypeError",
+        "Cannot cast ufunc output from dtype('float64') to dtype('int64') "
+        "with casting rule 'same_kind'"));
+  store.location() = location;
+  return store;
 }
 
 // The length lives in an array's type, so branches of different lengths have
