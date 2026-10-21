@@ -651,6 +651,9 @@ set(_slow_regression_tests
     # verdict instead of ctest hard-killing the run.
     "regression/quixbugs/next_permutation"
     "regression/quixbugs/next_permutation_fail"
+    # powerset_fail reaches VERIFICATION FAILED since #8537 but takes 91-124s
+    # on the DebugOpt Linux runner, so the 120s cap kills it intermittently.
+    "regression/quixbugs/powerset_fail"
     # depth_first_search_fail builds a small Node graph and recurses over each
     # node's `successors` list. Under the object-model migration (#3067) every
     # instance is a heap Class* and a Class* read out of a list into a recursive

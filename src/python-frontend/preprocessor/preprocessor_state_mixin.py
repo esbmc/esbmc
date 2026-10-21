@@ -106,6 +106,7 @@ class PreprocessorStateMixin:
         self.scope_binding_counts = {}
         self.in_order_bindings = set()
         self.called_names = set()
+        self.referenced_names = set()
         # nondet_list/nondet_dict the module defines itself, so the
         # rewrite to a typed builder must leave those calls alone.
         self.shadowed_nondet_collections = set()
