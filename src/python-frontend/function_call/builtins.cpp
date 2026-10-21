@@ -422,6 +422,29 @@ static exprt tagged_isinstance_operand(
   return list_item_of_scalar_read(obj, types.get_tagged_object_type());
 }
 
+exprt function_call_expr::bind_isinstance_call(
+  exprt &obj,
+  const nlohmann::json &arg) const
+{
+  if (!obj.is_function_call())
+    return nil_exprt();
+  python_converter::convert_function_call_to_side_effect(obj);
+  exprt reread;
+  const exprt first_read = converter_.bind_operand_read_twice(obj, arg, reread);
+  obj = reread;
+  return first_read;
+}
+
+/// @p checks, preceded by @p first_read when it is not nil.
+static exprt after_evaluating(const exprt &first_read, const exprt &checks)
+{
+  if (first_read.is_nil())
+    return checks;
+  exprt comma("comma", checks.type());
+  comma.copy_to_operands(first_read, checks);
+  return comma;
+}
+
 exprt function_call_expr::handle_isinstance() const
 {
   const auto &args = call_["args"];
@@ -439,25 +462,11 @@ exprt function_call_expr::handle_isinstance() const
 
   // A call operand is evaluated once, before the checks below read its
   // result (one read per type in a tuple or per class a class value may be).
-  exprt first_read = nil_exprt();
-  if (obj_expr.is_function_call())
-  {
-    python_converter::convert_function_call_to_side_effect(obj_expr);
-    exprt reread;
-    first_read = converter_.bind_operand_read_twice(obj_expr, obj_arg, reread);
-    obj_expr = reread;
-  }
-  auto after_operand = [&](const exprt &checks) -> exprt {
-    if (first_read.is_nil())
-      return checks;
-    exprt comma("comma", checks.type());
-    comma.copy_to_operands(first_read, checks);
-    return comma;
-  };
+  const exprt first_read = bind_isinstance_call(obj_expr, obj_arg);
 
   const exprt decided = isinstance_without_type_name(obj_arg, obj_expr, types);
   if (decided.is_not_nil())
-    return after_operand(decided);
+    return after_evaluating(first_read, decided);
 
   // Extract type name from various AST node formats
   auto extract_type_name = [](const nlohmann::json &node) -> std::string {
@@ -628,7 +637,7 @@ exprt function_call_expr::handle_isinstance() const
       isinstance_operand(types[i], build_isinstance, extract_type_name));
     result = or_expr;
   }
-  return after_operand(result);
+  return after_evaluating(first_read, result);
 }
 
 std::optional<exprt> function_call_expr::module_hasattr(

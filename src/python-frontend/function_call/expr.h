@@ -315,6 +315,10 @@ private:
     const nlohmann::json &obj_arg,
     const std::vector<nlohmann::json> &types) const;
   exprt handle_isinstance() const;
+  /// Binds a call @p obj to a temporary read in its place, so isinstance's
+  /// checks read one evaluation. Returns the expression that evaluates it,
+  /// nil when @p obj is not a call or cannot be bound.
+  exprt bind_isinstance_call(exprt &obj, const nlohmann::json &arg) const;
   std::optional<exprt>
   list_isinstance(const exprt &obj, const std::string &type_name) const;
 
