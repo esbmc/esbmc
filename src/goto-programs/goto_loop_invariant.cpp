@@ -983,10 +983,42 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
   // assume the side-effect-dependent conjuncts.
   for (const auto &conjunct : pure)
     emit_assume(conjunct);
+  // Assume each remaining conjunct, in written order, as soon as the side
+  // effects it reads are defined: a quantifier hoisted into the side effects
+  // then dereferences pointers the earlier conjuncts have already pinned.
+  std::set<irep_idt> defined;
+  size_t next = 0;
+  auto ready = [&](const expr2tc &conjunct) {
+    std::set<irep_idt> syms;
+    collect_symbols_local(conjunct, syms);
+    for (const auto &s : syms)
+      if (side_effect_defs.count(s) && !defined.count(s))
+        return false;
+    return true;
+  };
+  auto flush = [&]() {
+    while (next < impure.size() && ready(impure[next]))
+      emit_assume(impure[next++]);
+  };
   for (const auto &instr : side_effects.instructions)
+  {
+    flush();
     dest.instructions.push_back(instr);
-  for (const auto &conjunct : impure)
-    emit_assume(conjunct);
+    if (instr.is_assign() && is_code_assign2t(instr.code))
+    {
+      const code_assign2t &a = to_code_assign2t(instr.code);
+      if (is_symbol2t(a.target))
+        defined.insert(to_symbol2t(a.target).get_symbol_name());
+    }
+    else if (instr.is_function_call() && is_code_function_call2t(instr.code))
+    {
+      const code_function_call2t &fc = to_code_function_call2t(instr.code);
+      if (!is_nil_expr(fc.ret) && is_symbol2t(fc.ret))
+        defined.insert(to_symbol2t(fc.ret).get_symbol_name());
+    }
+  }
+  while (next < impure.size())
+    emit_assume(impure[next++]);
 
   // Note: active_frame_enforcer is NOT deleted here.
   // It is reused in insert_inductive_step_and_termination for the ASSERT
