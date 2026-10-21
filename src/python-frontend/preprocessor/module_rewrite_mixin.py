@@ -9,6 +9,7 @@ from preprocessor.match_lowering import lower_match_statements
 from preprocessor.namedtuple_lowering import lower_namedtuples
 from preprocessor.function_value_types import reject_mixed_function_values
 from preprocessor.receiver_classes import refuse_path_dependent_receivers
+from preprocessor.sibling_defs import define_read_siblings_first
 from preprocessor.skipped_base_init import refuse_skipped_base_init
 from preprocessor.zip_lowering import lower_zip_builds
 from preprocessor.unbound_locals import guard_unbound_locals
@@ -553,6 +554,7 @@ class ModuleRewriteMixin:
         lower_itertools(node)
         lower_namedtuples(node, self.module_name)
         lower_user_decorators(node, self.module_name)
+        define_read_siblings_first(node)
         refuse_path_dependent_receivers(node, self.module_name)
         refuse_skipped_base_init(node, self.module_name)
         self.expand_unittest_main(node)
