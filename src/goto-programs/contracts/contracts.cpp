@@ -4706,30 +4706,25 @@ code_contractst::materialize_old_snapshots_at_callsite(
                                *params,
                                actual_args,
                                extent_size);
+      // No stated extent: the caller's argument still addresses a real
+      // object, so snapshot the rest of it.
       if (!found)
-      {
-        log_error(
-          "{}: __ESBMC_old({}[...]) needs its pointer parameter's extent "
-          "stated by an unconditional, direct __ESBMC_is_fresh({}, N); "
-          "none found (#7057)",
-          id2string(function_symbol.name),
-          is_symbol2t(raw_ptr_param)
-            ? id2string(to_symbol2t(raw_ptr_param).thename)
-            : "<non-symbol>",
-          is_symbol2t(raw_ptr_param)
-            ? id2string(to_symbol2t(raw_ptr_param).thename)
-            : "<non-symbol>");
-        abort();
-      }
-
-      snapshot_var = materialize_ptr_region_old_snapshot(
-        original_expr,
-        old_snapshots[i].region_elem_type,
-        replacement,
-        id2string(function_symbol.name) + "_call",
-        call_location,
-        extent_size,
-        i);
+        snapshot_var = materialize_ptr_object_old_snapshot(
+          original_expr,
+          old_snapshots[i].region_elem_type,
+          replacement,
+          id2string(function_symbol.name) + "_call",
+          call_location,
+          i);
+      else
+        snapshot_var = materialize_ptr_region_old_snapshot(
+          original_expr,
+          old_snapshots[i].region_elem_type,
+          replacement,
+          id2string(function_symbol.name) + "_call",
+          call_location,
+          extent_size,
+          i);
     }
     else
     {
