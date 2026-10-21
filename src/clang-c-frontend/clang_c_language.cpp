@@ -786,6 +786,8 @@ __UINT64_TYPE__ __ESBMC_stack_used;
 __UINT64_TYPE__ __ESBMC_frame_size;
 void* __ESBMC_old_raw(void*);
 #define __ESBMC_old(x) (*(__typeof__(x)*)__ESBMC_old_raw((void*)(&(x))))
+/* In a loop invariant __ESBMC_old already reads the value at loop entry. */
+#define __ESBMC_loop_entry(x) __ESBMC_old(x)
 #define __ESBMC_and(a, b) ((a) & (b))
 #define __ESBMC_or(a, b) ((a) | (b))
 #define __ESBMC_implies(a, b) ((!(a)) | (b))

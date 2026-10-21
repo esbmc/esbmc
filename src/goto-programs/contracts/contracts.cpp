@@ -4320,25 +4320,29 @@ void code_contractst::emit_arr_elem_assertions(
   }
 }
 
-expr2tc code_contractst::materialize_ptr_object_old_snapshot(
+expr2tc snapshot_object_from(
   const expr2tc &ptr,
   const type2tc &region_elem_type,
   goto_programt &dest,
-  const std::string &func_name,
+  const std::string &tag,
   const locationt &location,
-  size_t snap_idx) const
+  contextt &context,
+  const namespacet &ns)
 {
   const type2tc elem_type = ns.follow(region_elem_type);
   const BigInt elem_sz = type_byte_size(elem_type, &ns);
   if (elem_sz <= 0)
   {
-    log_error(
-      "{}: cannot size an __ESBMC_old(...[...]) object snapshot", func_name);
+    log_error("{}: cannot size an __ESBMC_old(...[...]) object snapshot", tag);
     abort();
   }
-  const std::string tag = func_name + "_" + std::to_string(snap_idx);
   auto local = [&](const std::string &name, const type2tc &type) {
-    expr2tc s = declare_local_symbol(name + tag, type);
+    symbolt symbol;
+    symbol.name = symbol.id = name + tag;
+    set_symbol_type(symbol, type);
+    symbol.lvalue = true;
+    expr2tc s =
+      symbol2tc(type, context.move_symbol_to_context(symbol)->id);
     goto_programt::targett d = dest.add_instruction(DECL);
     d->code = code_decl2tc(type, to_symbol2t(s).thename);
     d->location = location;
@@ -4376,6 +4380,24 @@ expr2tc code_contractst::materialize_ptr_object_old_snapshot(
   a->location = location;
   a->location.comment("__ESBMC_old object snapshot");
   return snap;
+}
+
+expr2tc code_contractst::materialize_ptr_object_old_snapshot(
+  const expr2tc &ptr,
+  const type2tc &region_elem_type,
+  goto_programt &dest,
+  const std::string &func_name,
+  const locationt &location,
+  size_t snap_idx) const
+{
+  return snapshot_object_from(
+    ptr,
+    region_elem_type,
+    dest,
+    func_name + "_" + std::to_string(snap_idx),
+    location,
+    context,
+    ns);
 }
 
 expr2tc code_contractst::materialize_ptr_region_old_snapshot(

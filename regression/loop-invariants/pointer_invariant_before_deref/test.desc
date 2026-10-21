@@ -1,0 +1,4 @@
+CORE
+main.c
+--force-malloc-success --loop-invariant-check --loop-frame-rule
+^VERIFICATION SUCCESSFUL$
