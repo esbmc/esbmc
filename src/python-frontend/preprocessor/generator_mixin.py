@@ -1151,7 +1151,7 @@ class GeneratorMixin:
             # clause naming a temporary the contract wrapper never declares.
             # Leave it as written; the frontend's clause check rejects by name.
             return [], expr, "Any"
-        lowerer = self._ListCompExpressionLowerer(self)
+        lowerer = self._ListCompExpressionLowerer(self, expr)
         new_expr = lowerer.visit(expr)
         result_type = self._infer_type_from_value(new_expr)
         return lowerer.statements, new_expr, result_type
@@ -1415,20 +1415,6 @@ class GeneratorMixin:
             return key_kw
         return ast.keyword(arg=key_kw.arg,
                            value=ast.copy_location(copy.deepcopy(lam), key_kw.value))
-
-    @staticmethod
-    def _names_bound_by(node):
-        """The names @p node itself binds: a def or class, a Store/Del name, a
-        parameter, or a ``global`` declaration."""
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            return (node.name, )
-        if isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Load):
-            return (node.id, )
-        if isinstance(node, ast.arg):
-            return (node.arg, )
-        if isinstance(node, ast.Global):
-            return tuple(node.names)
-        return ()
 
     @staticmethod
     def _binds_key(key_value):

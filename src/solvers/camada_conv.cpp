@@ -543,7 +543,28 @@ static unsigned sort_fp_sw(smt_sortt s)
 
 } // namespace
 
-static smt_resultt to_smt_result(camada::CheckResult r)
+static const char *unknown_reason_text(camada::UnknownReason r)
+{
+  switch (r)
+  {
+  case camada::UnknownReason::Timeout:
+    return "timeout";
+  case camada::UnknownReason::Incomplete:
+    return "incomplete";
+  case camada::UnknownReason::BackendError:
+    return "backend error";
+  case camada::UnknownReason::ProtocolError:
+    return "protocol error";
+  case camada::UnknownReason::NotApplicable:
+    break;
+  }
+  return "no reason given";
+}
+
+/* An unknown answer otherwise surfaces only as a generic solver failure, so
+ * say why (#8832); the detail is the backend's own wording, when it has one. */
+static smt_resultt
+to_smt_result(camada::CheckResult r, const camada::SMTSolver &solver)
 {
   switch (r)
   {
@@ -552,9 +573,16 @@ static smt_resultt to_smt_result(camada::CheckResult r)
   case camada::CheckResult::UNSAT:
     return P_UNSATISFIABLE;
   case camada::CheckResult::UNKNOWN:
-    return P_ERROR;
+    break;
   }
-  std::unreachable();
+  const std::string detail = solver.reasonUnknownDetail();
+  log_warning(
+    "{} returned unknown: {}{}{}",
+    solver.getSolverNameAndVersion(),
+    unknown_reason_text(solver.reasonUnknown()),
+    detail.empty() ? "" : ": ",
+    detail);
+  return P_ERROR;
 }
 
 smt_resultt smt_solver_baset::dec_solve()
@@ -563,14 +591,14 @@ smt_resultt smt_solver_baset::dec_solve()
     return oneshot_dec_solve();
 
   pre_solve();
-  return to_smt_result(solver->check());
+  return to_smt_result(solver->check(), *solver);
 }
 
 smt_resultt smt_solver_baset::dec_solve_assuming(const ast_vec &assumptions)
 {
   assert(supports_assumptions());
   pre_solve();
-  return to_smt_result(solver->checkSatAssuming(assumptions));
+  return to_smt_result(solver->checkSatAssuming(assumptions), *solver);
 }
 
 /* The one-shot solver answers with a verdict and then exits, so it cannot

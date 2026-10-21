@@ -563,6 +563,46 @@ exprt python_math::build_power_expression(const exprt &base, const BigInt &exp)
   return result.has_value() ? *result : from_integer(1, base.type());
 }
 
+/// 2.0 ** n for an integer n, as the IEEE double those bits spell: exact,
+/// like pow(), but bit-vector arithmetic the solver need not treat as floating
+/// point (#8877).
+static exprt power_of_two(const exprt &exponent)
+{
+  expr2tc n;
+  migrate_expr(exponent, n);
+  const type2tc i64 = get_int_type(64);
+  const type2tc u64 = get_uint_type(64);
+  n = typecast2tc(i64, n);
+  auto i = [&i64](long v) { return constant_int2tc(i64, BigInt(v)); };
+  auto u = [&u64](const char *v) {
+    return constant_int2tc(u64, string2integer(v));
+  };
+  const expr2tc normal =
+    shl2tc(u64, typecast2tc(u64, add2tc(i64, n, i(1023))), u("52"));
+  const expr2tc subnormal =
+    shl2tc(u64, u("1"), typecast2tc(u64, add2tc(i64, n, i(1074))));
+  const expr2tc bits = if2tc(
+    u64,
+    greaterthan2tc(n, i(1023)),
+    u("9218868437227405312"), // +inf
+    if2tc(
+      u64,
+      greaterthanequal2tc(n, i(-1022)),
+      normal,
+      if2tc(u64, greaterthanequal2tc(n, i(-1074)), subnormal, u("0"))));
+  return migrate_expr_back(bitcast2tc(double_type2(), bits));
+}
+
+exprt python_math::handle_power_symbolic_exponent(exprt lhs, exprt rhs)
+{
+  if (
+    try_fold_int_constant(lhs) == BigInt(2) &&
+    config.ansi_c.double_width == 64 &&
+    !config.options.get_bool_option("int-encoding"))
+    return power_of_two(rhs);
+  return handle_power_symbolic(lhs, rhs);
+}
+
 exprt python_math::handle_power(exprt lhs, exprt rhs)
 {
   // Handle pow symbolically if one of the operands is floatbv
@@ -578,7 +618,7 @@ exprt python_math::handle_power(exprt lhs, exprt rhs)
   // safe to call directly.
   const std::optional<BigInt> exponent_opt = try_fold_int_constant(rhs);
   if (!exponent_opt.has_value())
-    return handle_power_symbolic(lhs, rhs);
+    return handle_power_symbolic_exponent(lhs, rhs);
   const BigInt exponent = *exponent_opt;
 
   // Negative exponents: Python returns a float (e.g. 2**-1 == 0.5)

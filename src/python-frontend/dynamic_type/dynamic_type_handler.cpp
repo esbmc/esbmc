@@ -41,6 +41,17 @@ param_kinds_t collect_param_kinds(const nlohmann::json &function_node)
   return kinds;
 }
 
+// "str" for `nondet_str()`, "num" for `nondet_int()` or `nondet_bool()`.
+std::string nondet_call_kind(const nlohmann::json &call)
+{
+  if (call["func"].value("_type", "") != "Name" || !call["args"].empty())
+    return "";
+  const std::string callee = call["func"].value("id", "");
+  if (callee == "nondet_str")
+    return "str";
+  return callee == "nondet_int" || callee == "nondet_bool" ? "num" : "";
+}
+
 // Classifies a single `return <literal>` or `return <param>` statement:
 // "num", "str", or "" if neither applies.
 std::string classify_return_literal_kind(
@@ -58,6 +69,8 @@ std::string classify_return_literal_kind(
     auto it = param_kinds.find(value.value("id", ""));
     return it == param_kinds.end() ? "" : it->second;
   }
+  if (value.value("_type", "") == "Call")
+    return nondet_call_kind(value);
   if (value.value("_type", "") != "Constant" || !value.contains("value"))
     return "";
 
@@ -94,6 +107,177 @@ void collect_branch_return_kinds(
   if (!kind.empty())
     kinds.insert(kind);
 }
+
+bool has_divergent_literal_returns(
+  const nlohmann::json &function_node,
+  const param_kinds_t &param_kinds)
+{
+  const nlohmann::json &function_body = function_node["body"];
+  if (!function_body.is_array())
+    return false;
+
+  for (size_t i = 0; i < function_body.size(); ++i)
+  {
+    const auto &stmt = function_body[i];
+    if (!stmt.is_object() || stmt.value("_type", "") != "If")
+      continue;
+    if (!stmt.contains("body") || stmt["body"].empty())
+      continue;
+
+    std::unordered_set<std::string> kinds;
+    collect_branch_return_kinds(stmt["body"], param_kinds, kinds);
+
+    if (stmt.contains("orelse") && !stmt["orelse"].empty())
+      collect_branch_return_kinds(stmt["orelse"], param_kinds, kinds);
+    else if (i + 1 < function_body.size())
+    {
+      // No else: an idiomatic early return falls through to the next
+      // statement at this level.
+      const std::string next_kind =
+        classify_return_literal_kind(function_body[i + 1], param_kinds);
+      if (!next_kind.empty())
+        kinds.insert(next_kind);
+    }
+
+    if (kinds.size() > 1)
+      return true;
+  }
+
+  return false;
+}
+
+bool returns_dynamic_value(
+  const nlohmann::json &function_node,
+  const nlohmann::json &module_body,
+  unsigned depth);
+
+bool is_param(const nlohmann::json &function_node, const std::string &name)
+{
+  for (const auto &arg : function_node["args"].value("args", nlohmann::json()))
+    if (arg.value("arg", "") == name)
+      return true;
+  return false;
+}
+
+// True when a return in `block` (if/else arms included) yields a Name that
+// is not one of `function_node`'s own parameters.
+bool returns_free_name(
+  const nlohmann::json &block,
+  const nlohmann::json &function_node)
+{
+  for (const auto &stmt : block)
+  {
+    const nlohmann::json &value = stmt.value("value", nlohmann::json());
+    if (
+      stmt.value("_type", "") == "Return" && value.is_object() &&
+      value.value("_type", "") == "Name" &&
+      !is_param(function_node, value.value("id", "")))
+      return true;
+    for (const char *arm : {"body", "orelse"})
+      if (
+        stmt.value("_type", "") == "If" &&
+        returns_free_name(stmt[arm], function_node))
+        return true;
+  }
+  return false;
+}
+
+// The def whose body directly holds `fn`, searched from `node` down.
+const nlohmann::json *
+enclosing_def(const nlohmann::json &node, const nlohmann::json &fn)
+{
+  if (node.is_object() && node.value("_type", "") == "FunctionDef")
+    for (const auto &stmt : node["body"])
+      if (&stmt == &fn)
+        return &node;
+  if (node.is_structured())
+    for (const auto &child : node)
+      if (const nlohmann::json *def = enclosing_def(child, fn))
+        return def;
+  return nullptr;
+}
+
+// Kinds of `function_node`'s parameters, plus those of the def enclosing it
+// that a nested def can return through its closure.
+param_kinds_t return_param_kinds(
+  const nlohmann::json &function_node,
+  const nlohmann::json &module_body)
+{
+  param_kinds_t kinds = collect_param_kinds(function_node);
+  if (!returns_free_name(function_node["body"], function_node))
+    return kinds;
+  if (const nlohmann::json *outer = enclosing_def(module_body, function_node))
+    kinds.merge(collect_param_kinds(*outer));
+  return kinds;
+}
+
+// The def `name` names: one nested in `function_body`, else a module-level one.
+const nlohmann::json *find_callee_def(
+  const nlohmann::json &function_body,
+  const nlohmann::json &module_body,
+  const std::string &name)
+{
+  for (const nlohmann::json *scope : {&function_body, &module_body})
+    for (const auto &stmt : *scope)
+      if (
+        stmt.value("_type", "") == "FunctionDef" &&
+        stmt.value("name", "") == name)
+        return &stmt;
+  return nullptr;
+}
+
+// `value` is a call to a function that itself returns a dynamic value.
+bool calls_dynamic_function(
+  const nlohmann::json &value,
+  const nlohmann::json &function_node,
+  const nlohmann::json &module_body,
+  unsigned depth)
+{
+  if (
+    !value.is_object() || value.value("_type", "") != "Call" ||
+    value["func"].value("_type", "") != "Name")
+    return false;
+  const nlohmann::json *callee = find_callee_def(
+    function_node["body"], module_body, value["func"].value("id", ""));
+  return callee && callee != &function_node &&
+         returns_dynamic_value(*callee, module_body, depth + 1);
+}
+
+// True when `function_node` returns divergent literal kinds, or forwards the
+// result of a function that does, directly or through a local (#8890).
+bool returns_dynamic_value(
+  const nlohmann::json &function_node,
+  const nlohmann::json &module_body,
+  unsigned depth)
+{
+  if (
+    has_divergent_literal_returns(
+      function_node, return_param_kinds(function_node, module_body)))
+    return true;
+  if (depth > 8)
+    return false;
+  std::unordered_set<std::string> forwarded;
+  for (const auto &stmt : function_node["body"])
+  {
+    const std::string type = stmt.value("_type", "");
+    if (type != "Return" && type != "Assign" && type != "AnnAssign")
+      continue;
+    const nlohmann::json &value = stmt["value"];
+    if (
+      type == "Return" && value.is_object() &&
+      forwarded.count(value.value("id", "")))
+      return true;
+    if (!calls_dynamic_function(value, function_node, module_body, depth))
+      continue;
+    if (type == "Return")
+      return true;
+    if (type == "AnnAssign")
+      forwarded.insert(stmt["target"].value("id", ""));
+    else if (stmt["targets"].size() == 1)
+      forwarded.insert(stmt["targets"][0].value("id", ""));
+  }
+  return false;
+}
 } // namespace
 
 dynamic_type_handler::dynamic_type_handler(
@@ -125,7 +309,12 @@ std::unordered_set<std::string> dynamic_type_handler::detect_dynamic_type_names(
   }
 
   if (!collect_if_node_literal_kinds(
-        if_node, kinds, leaf_count, leaf_total, *scope_body, module_body))
+        if_node,
+        kinds,
+        leaf_count,
+        leaf_total,
+        *scope_body,
+        converter_.callable_function_stubs()))
     return dynamic_type_names;
 
   for (const auto &[name, kind_set] : kinds)
@@ -921,39 +1110,7 @@ exprt dynamic_type_handler::build_isinstance_check(
 bool dynamic_type_handler::detect_dynamic_return_type(
   const nlohmann::json &function_node) const
 {
-  const nlohmann::json &function_body = function_node["body"];
-  if (!function_body.is_array())
-    return false;
-  const param_kinds_t param_kinds = collect_param_kinds(function_node);
-
-  for (size_t i = 0; i < function_body.size(); ++i)
-  {
-    const auto &stmt = function_body[i];
-    if (!stmt.is_object() || stmt.value("_type", "") != "If")
-      continue;
-    if (!stmt.contains("body") || stmt["body"].empty())
-      continue;
-
-    std::unordered_set<std::string> kinds;
-    collect_branch_return_kinds(stmt["body"], param_kinds, kinds);
-
-    if (stmt.contains("orelse") && !stmt["orelse"].empty())
-      collect_branch_return_kinds(stmt["orelse"], param_kinds, kinds);
-    else if (i + 1 < function_body.size())
-    {
-      // No else: an idiomatic early return falls through to the next
-      // statement at this level.
-      const std::string next_kind =
-        classify_return_literal_kind(function_body[i + 1], param_kinds);
-      if (!next_kind.empty())
-        kinds.insert(next_kind);
-    }
-
-    if (kinds.size() > 1)
-      return true;
-  }
-
-  return false;
+  return returns_dynamic_value(function_node, converter_.ast()["body"], 0);
 }
 
 bool dynamic_type_handler::scope_assigns_divergent_literal_types(

@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: .*main\.py:21:4: unsupported: 'C\.__init__' does not call the base __init__ that sets 'a', so reading 'a' on a 'C' instance raises AttributeError, which is not modelled$

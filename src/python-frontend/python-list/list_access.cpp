@@ -3361,6 +3361,30 @@ void python_list::copy_dict_view_elem_types(
   }
 }
 
+/// list(d.keys())[a:b] slices the copy just built, which nothing else can
+/// reach, so the dict view's types it carries still hold.
+void python_list::copy_list_of_dict_view_elem_types(
+  const exprt &array,
+  const std::string &sliced_id)
+{
+  const nlohmann::json &node = list_value_["value"];
+  if (
+    elem_types().size(sliced_id) != 0 || !array.is_symbol() ||
+    node.value("_type", "") != "Call" ||
+    node["func"].value("id", "") != "list" || node["args"].size() != 1)
+    return;
+
+  const nlohmann::json &arg = node["args"][0];
+  if (
+    arg.value("_type", "") != "Call" ||
+    arg["func"].value("_type", "") != "Attribute")
+    return;
+
+  const std::string view = arg["func"].value("attr", "");
+  if (view == "keys" || view == "values")
+    elem_types().assign_from(array.identifier().as_string(), sliced_id);
+}
+
 // A numpy array parameter (decayed to a pointer) is sliced through its
 // tracked shape, like a local array.
 std::optional<exprt> python_list::try_build_numpy_param_slice_view(
@@ -4013,6 +4037,8 @@ exprt python_list::handle_range_slice(
 
   copy_dict_view_elem_types(array, sliced_id);
 
+  copy_list_of_dict_view_elem_types(array, sliced_id);
+
   if (elem_types().size(sliced_id) == 0)
   {
     if (list_value_.contains("value") && list_value_["value"].contains("id"))
@@ -4512,8 +4538,7 @@ std::optional<exprt> python_list::resolve_nested_list_element(
   // Check for nested list access
   if (array.type() == converter_.get_type_handler().get_list_type())
   {
-    const auto &key = array.identifier().as_string();
-    if (const auto *recorded = elem_types().find(key))
+    if (const auto *recorded = recorded_elem_types(array))
     {
       // Homogeneous lists (e.g. list comprehensions) record a single
       // element-type entry; ESBMC models lists as homogeneous, so reuse
@@ -4579,6 +4604,57 @@ std::optional<exprt> python_list::resolve_nested_list_element(
     }
   }
   return std::nullopt;
+}
+
+typet python_list::attribute_elem_type(const exprt &array) const
+{
+  if (array.id() != "member")
+    return typet();
+  const member_exprt &member = to_member_expr(array);
+  const typet &object_type = converter_.ns.follow(member.struct_op().type());
+  if (!object_type.is_struct())
+    return typet();
+
+  const auto mro = converter_.class_mro(converter_.extract_class_name_from_tag(
+    to_struct_type(object_type).tag().as_string()));
+  if (!mro)
+    return typet();
+  const std::string attr = member.get_component_name().as_string();
+  for (const std::string &cls : *mro)
+  {
+    nlohmann::json decl;
+    decl["annotation"] =
+      json_utils::find_attr_annotation(*converter_.sole_binding(cls), attr);
+    if (decl["annotation"].empty())
+      continue;
+    // A bare `list`, as the annotation pass writes, names no element type,
+    // and a nested list's inner element types live only in the type map.
+    const typet elem_type =
+      decl["annotation"].value("_type", "") == "Subscript"
+        ? get_elem_type_from_annotation(decl, converter_.get_type_handler())
+        : typet();
+    return elem_type == converter_.get_type_handler().get_list_type()
+             ? typet()
+             : elem_type;
+  }
+  return typet();
+}
+
+const element_type_registry::entries *
+python_list::recorded_elem_types(const exprt &array) const
+{
+  // Every instance-attribute list has the empty identifier, so the record
+  // under it may be another attribute's; an annotated one reads its
+  // annotation instead.
+  return attribute_elem_type(array) == typet()
+           ? elem_types().find(array.identifier().as_string())
+           : nullptr;
+}
+
+typet python_list::attribute_elem_type_or_any(const exprt &array) const
+{
+  const typet elem_type = attribute_elem_type(array);
+  return elem_type == typet() ? any_type() : elem_type;
 }
 
 typet python_list::unrecorded_base_elem_type()
@@ -4800,7 +4876,7 @@ exprt python_list::handle_index_access(
 
     // Determine element type
     const std::string &list_name = array.identifier().as_string();
-    const auto *recorded = elem_types().find(list_name);
+    const auto *recorded = recorded_elem_types(array);
 
     if (
       recorded && index < recorded->size() &&
@@ -5082,7 +5158,7 @@ exprt python_list::handle_index_access(
     // If we resolved the index but not the element type, treat elements as Any
     // instead of raising a frontend conversion error.
     if (pos_expr != exprt() && elem_type == typet())
-      elem_type = any_type();
+      elem_type = attribute_elem_type_or_any(array);
 
     if (pos_expr == exprt() || elem_type == typet())
     {

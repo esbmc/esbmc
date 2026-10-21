@@ -3,3 +3,4 @@ main.c
 --32
 ^VERIFICATION FAILED$
 Incorrect alignment when accessing data object
+REQUIRES x87_long_double

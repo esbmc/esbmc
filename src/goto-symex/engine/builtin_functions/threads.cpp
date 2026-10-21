@@ -233,6 +233,12 @@ void goto_symext::intrinsic_switch_to_monitor(reachability_treet &art)
   if (cur_state->source.pc->function == "__ESBMC_main")
     return;
 
+  // Intrinsics run under a false guard too. A monitor entered there inherits
+  // it, falls out of its loop and ends without switching back, so the paths
+  // still pending in the caller never reach ltl2ba_finish_monitor.
+  if (cur_state->guard.is_false())
+    return;
+
   ex_state.switch_to_monitor();
 }
 

@@ -336,6 +336,12 @@ DYNAMIC_CAPABILITY_PROBES = {
         "source": '_Static_assert(__LDBL_MANT_DIG__ == 64, "x87 long double");\n'
         "int main() { return 0; }\n",
     },
+    # `long double` is wider than `double`. It is double itself on AArch64
+    # Darwin and Windows, where a declaration mixing the two mixes nothing.
+    "wide_long_double": {
+        "source": '_Static_assert(sizeof(long double) > sizeof(double), "wide");\n'
+        "int main() { return 0; }\n",
+    },
     # The host's C++ standard library headers are reachable, which is what the
     # tests passing --no-abstracted-cpp-includes, --no-library or
     # --mix-cpp-host-headers read instead of the bundled OMs. Installing

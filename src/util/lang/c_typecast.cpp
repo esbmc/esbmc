@@ -307,16 +307,18 @@ c_typecastt::c_typet c_typecastt::rank_integer(unsigned width, bool is_signed)
     return is_signed ? CHAR : UCHAR;
   if (width <= config.ansi_c.int_width)
     return is_signed ? INT : UINT;
-  if (width <= config.ansi_c.long_int_width)
+  // Above int, only the exact standard widths rank: a _BitInt(N) is a signedbv
+  // of its own width, and ranking it as the next wider type makes
+  // implicit_typecast_arithmetic widen it, moving the overflow boundary
+  // --overflow-check tests (#7363). The #extint marker cannot gate this
+  // instead: migrate_type rebuilds signedbv from width alone (migrate.cpp), so
+  // the expr2tc overload cannot see it and the two copies would diverge. That
+  // is also why a _BitInt narrower than int, indistinguishable from a
+  // bit-field, still promotes.
+  if (width == config.ansi_c.long_int_width)
     return is_signed ? LONG : ULONG;
-  if (width <= config.ansi_c.long_long_int_width)
+  if (width == config.ansi_c.long_long_int_width)
     return is_signed ? LONGLONG : ULONGLONG;
-  // Exactly 128, not <=: a _BitInt(65..127) is a signedbv of its own width,
-  // and ranking it INT128 makes implicit_typecast_arithmetic widen it to 128
-  // bits, moving the overflow boundary --overflow-check tests. The #extint
-  // marker cannot gate this instead: migrate_type rebuilds signedbv from width
-  // alone (migrate.cpp), so the expr2tc overload cannot see it and the two
-  // copies would diverge.
   if (width == config.ansi_c.int_128_width)
     return is_signed ? INT128 : UINT128;
   return OTHER;

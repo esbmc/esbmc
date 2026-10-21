@@ -792,6 +792,10 @@ const struct group_opt_templ all_cmd_options[] = {
    {{"multi-property",
      NULL,
      "Verify satisfiability of all claims of the current bound"},
+    {"report-unreached-claims",
+     NULL,
+     "List each claim no path reaches within the bound in the property "
+     "table, as passed vacuously"},
     {"multi-property-interleavings",
      boost::program_options::value<int>()->value_name("n"),
      "In multi-property mode, keep exploring thread interleavings after a "
@@ -1108,6 +1112,10 @@ const struct group_opt_templ all_cmd_options[] = {
       "object (unsound)"},
      {"abort-on-recursion", NULL, "Abort if the program contains recursion"},
      {"ltl", NULL, "Enable Linear Temporal Logic property checking"},
+     {"ltl-sample-points",
+      NULL,
+      "Step the LTL monitor only at __ESBMC_ltl_sample() calls, not after "
+      "every update of a global its propositions read"},
      {"break-at",
       boost::program_options::value<std::string>(),
       "Trigger a breakpoint at the given GOTO instruction number"},

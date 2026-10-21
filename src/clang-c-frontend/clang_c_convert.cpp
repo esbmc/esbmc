@@ -2629,8 +2629,8 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     else
     {
       /* Clang failed, i.e., a dynamic offsetof, something like
-       * offsetof(struct S, member[idx]). We're building the equivalent of the
-       * manual offsetof() macro definition. Details below. */
+       * offsetof(struct S, member[idx]). We're building the equivalent of
+       * `(size_t)&((struct S *)0)->member[idx]`. Details below. */
 
       /* TODO: It would be good to put the expression we're constructing here
        *       into compute_pointer_offset(), e.g., already in the adjuster.

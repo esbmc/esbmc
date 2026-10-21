@@ -3141,6 +3141,23 @@ bool smt_solver_baset::decompose_stores(
   return expand_row_stores(w.update_value, origin, stores);
 }
 
+/* A whole row of a flattened multi-dimensional array read as a value (`s =
+ * a[k]` with `s` itself an array) has no term of its own: the flat select
+ * yields an element. Build the row from its elements instead, each a read the
+ * flattener encodes. Nil when the row's length is not a constant. */
+static expr2tc materialize_flattened_row(const expr2tc &row)
+{
+  const array_type2t &type = to_array_type(row->type);
+  if (is_nil_expr(type.array_size) || !is_constant_int2t(type.array_size))
+    return expr2tc();
+  const uint64_t size = to_constant_int2t(type.array_size).value.to_uint64();
+  std::vector<expr2tc> elements;
+  for (uint64_t i = 0; i < size; ++i)
+    elements.push_back(
+      index2tc(type.subtype, row, constant_int2tc(index_type2(), BigInt(i))));
+  return constant_array2tc(row->type, elements);
+}
+
 // A subscript of a subscript selects another flattened dimension, except
 // through an infinite array or a vector (get_flattened_array_subtype).
 static bool selects_flattened_dimension(const index2t &index)
@@ -3159,6 +3176,13 @@ smt_astt smt_solver_baset::convert_array_index(const expr2tc &expr)
   expr2tc lowered = lower_flattened_row_select(index);
   if (!is_nil_expr(lowered))
     return convert_ast(lowered);
+
+  if (is_flattened_row(expr))
+  {
+    expr2tc row = materialize_flattened_row(expr);
+    if (!is_nil_expr(row))
+      return convert_ast(row);
+  }
 
   expr2tc src_value = index.source_value;
 
