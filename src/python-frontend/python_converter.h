@@ -573,6 +573,19 @@ public:
     expr2tc &lt,
     expr2tc &eq);
 
+  size_t unordered_tuple_component(
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &element);
+
+  void raise_on_unordered_tie(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    size_t unordered,
+    const expr2tc &prefix_eq,
+    const nlohmann::json &element);
+
   python_typechecking &get_typechecker();
   const python_typechecking &get_typechecker() const;
 
