@@ -1818,7 +1818,7 @@ void goto_convertt::remove_sideeffects(
         const std::string &fname = id2string(fsym->name);
         if (
           fname == "__ESBMC_requires" || fname == "__ESBMC_ensures" ||
-          fname == "__ESBMC_assigns_impl")
+          fname == "__ESBMC_assigns_impl" || fname == "__ESBMC_frees")
         {
           expr.make_nil();
           return;

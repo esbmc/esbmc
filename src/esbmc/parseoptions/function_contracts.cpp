@@ -10,6 +10,14 @@
 #include <string>
 
 // Process function contracts if enabled
+// Operational models are the functions ESBMC serves from its VFS.
+static bool is_operational_model(contextt &ctx, const irep_idt &id)
+{
+  const symbolt *sym = ctx.find_symbol(id);
+  return sym &&
+         id2string(sym->location.get_file()).rfind(clang_vfs_root(), 0) == 0;
+}
+
 bool esbmc_parseoptionst::process_function_contracts(
   goto_functionst &goto_functions,
   bool has_replace,
@@ -43,6 +51,9 @@ bool esbmc_parseoptionst::process_function_contracts(
         // "c:@F@fst#*1I#") instead of a raw '#' string filter, which would
         // incorrectly skip all C++ functions with parameters.
         if (contracts.is_compiler_generated(func_name))
+          continue;
+        // Model contracts are acted on only by --contract-operational-models.
+        if (is_operational_model(ctx, it->first))
           continue;
 
         // Check for explicit contract clauses in function body
@@ -199,14 +210,11 @@ bool esbmc_parseoptionst::process_function_contracts(
 
   if (has_om)
   {
-    // Operational models are the functions ESBMC serves from its VFS.
     std::set<std::string> models;
     forall_goto_functions (it, goto_functions)
     {
-      const symbolt *sym = ctx.find_symbol(it->first);
       if (
-        it->second.body_available && sym &&
-        id2string(sym->location.get_file()).rfind(clang_vfs_root(), 0) == 0 &&
+        it->second.body_available && is_operational_model(ctx, it->first) &&
         contracts.has_contracts(it->second.body))
         models.insert(id2string(it->first));
     }

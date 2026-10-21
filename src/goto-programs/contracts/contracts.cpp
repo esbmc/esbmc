@@ -472,9 +472,15 @@ std::string code_contractst::clause_call_callee(const goto_programt &body) const
     select_clause_calls(referenced, declared_in(body), body);
 
   forall_goto_program_instructions (it, body)
-    if (selected.count(it))
-      return id2string(
-        to_symbol2t(to_code_function_call2t(it->code).function).thename);
+  {
+    if (!selected.count(it))
+      continue;
+    const irep_idt &callee =
+      to_symbol2t(to_code_function_call2t(it->code).function).thename;
+    // generate_replacement_at_call re-issues this one at the call site.
+    if (callee != "c:@F@__ESBMC_get_object_size")
+      return id2string(callee);
+  }
 
   return std::string();
 }
@@ -1353,6 +1359,46 @@ static void assign_stack_used(
   t->location.comment(comment);
 }
 
+/// A clause's __ESBMC_get_object_size(p) is a symex intrinsic call whose
+/// result temp the clause reads; re-issue the call into \p dest, in the state
+/// the clause is evaluated in, so the temp is defined there.
+static void reissue_object_size(
+  const goto_programt &body,
+  const expr2tc &clause,
+  const std::function<expr2tc(const expr2tc &)> &instantiate,
+  goto_programt &dest,
+  const locationt &location)
+{
+  std::set<irep_idt> used;
+  collect_symbol_names(clause, used);
+  forall_goto_program_instructions (c, body)
+  {
+    if (!c->is_function_call() || !is_code_function_call2t(c->code))
+      continue;
+    const code_function_call2t &call = to_code_function_call2t(c->code);
+    if (
+      !is_symbol2t(call.function) ||
+      to_symbol2t(call.function).thename != "c:@F@__ESBMC_get_object_size" ||
+      !is_symbol2t(call.ret) || !used.count(to_symbol2t(call.ret).thename))
+      continue;
+    goto_programt::targett r = dest.add_instruction(FUNCTION_CALL);
+    r->code = code_function_call2tc(
+      call.ret,
+      call.function,
+      std::vector<expr2tc>{instantiate(call.operands[0])});
+    r->location = location;
+    r->location.comment("contract clause object size");
+  }
+}
+
+static bool is_frees_call(const goto_programt::instructiont &i)
+{
+  return i.is_function_call() && is_code_function_call2t(i.code) &&
+         is_symbol2t(to_code_function_call2t(i.code).function) &&
+         to_symbol2t(to_code_function_call2t(i.code).function).thename ==
+           "c:@F@__ESBMC_frees";
+}
+
 static bool is_clause_assume(const goto_programt::instructiont &i)
 {
   if (!i.is_assume())
@@ -1417,6 +1463,8 @@ static void remove_clause_assumes(goto_programt &body)
   std::set<goto_programt::targett> doomed;
   for (auto it = body.instructions.begin(); it != body.instructions.end(); ++it)
   {
+    if (is_frees_call(*it))
+      doomed.insert(it);
     if (!is_clause_assume(*it))
       continue;
     doomed.insert(it);
@@ -1455,6 +1503,17 @@ std::set<std::string> code_contractst::enforce_contracts(
 
     // Find the function in goto_functions
     auto func_it = goto_functions.function_map.find(func_sym->id);
+    if (func_it != goto_functions.function_map.end())
+      for (const auto &i : func_it->second.body.instructions)
+        if (is_frees_call(i))
+        {
+          // shortcut: no check that the body frees only what is listed;
+          // add one before enforcing a contract that uses __ESBMC_frees.
+          log_error(
+            "{}: enforcing a contract with __ESBMC_frees is not supported",
+            function_name);
+          abort();
+        }
     if (
       func_it == goto_functions.function_map.end() ||
       !func_it->second.body_available)
@@ -1971,6 +2030,8 @@ goto_programt code_contractst::generate_checking_wrapper(
   // that reads __ESBMC_old itself cannot precede its own snapshots, so that
   // case keeps the original order.
   const bool requires_reads_old = reads_old(requires_clause);
+  const auto same = [](const expr2tc &e) { return e; };
+  reissue_object_size(original_body, requires_clause, same, wrapper, location);
 
   if (!requires_reads_old)
     add_contract_clause(requires_clause, ASSUME, "contract requires");
@@ -2301,6 +2362,7 @@ goto_programt code_contractst::generate_checking_wrapper(
   // transformations
   ensures_guard =
     normalize_ensures_guard_for_return_value(ensures_guard, ret_val);
+  reissue_object_size(original_body, ensures_guard, same, wrapper, location);
 
   // Add ASSERT instruction for ensures clause with property
   if (should_add_clause_instruction(ensures_guard, ASSERT))
@@ -2346,6 +2408,19 @@ expr2tc code_contractst::replace_return_value_in_expr(
 {
   if (is_nil_expr(expr))
     return expr;
+
+  // __ESBMC_return_value is declared int, so a pointer result reaches here as
+  // (T)(int)rv; the int cast would truncate the pointer, so keep only T.
+  if (is_typecast2t(expr) && is_pointer_type(ret_val->type))
+  {
+    expr2tc inner = expr;
+    while (is_typecast2t(inner))
+      inner = to_typecast2t(inner).from;
+    if (is_symbol2t(inner) && is_return_value_symbol(to_symbol2t(inner)))
+      return base_type_eq(expr->type, ret_val->type, ns)
+               ? ret_val
+               : typecast2tc(expr->type, ret_val);
+  }
 
   // Handle address_of(index(symbol(__ESBMC_return_value))) pattern
   // This is how __ESBMC_return_value appears in GOTO programs when declared as
@@ -5885,8 +5960,42 @@ void code_contractst::generate_replacement_at_call(
         "pointer argument",
         "contract requires");
   }
+  auto instantiate = [&](const expr2tc &e) {
+    bool unused = false;
+    return instantiate_assigns_target(e, function_symbol, actual_args, unused);
+  };
+  reissue_object_size(
+    function_body, requires_clause, instantiate, replacement, call_location);
   add_contract_clause(
     requires_clause, ASSERT, "contract requires", "contract requires");
+
+  // __ESBMC_frees(p): the removed body released p's object. Take p's value
+  // before the havoc and free it after the ensures, which may still read the
+  // old object through an __ESBMC_old snapshot.
+  std::vector<expr2tc> freed;
+  forall_goto_program_instructions (c, function_body)
+  {
+    if (!is_frees_call(*c))
+      continue;
+    for (expr2tc p : to_code_function_call2t(c->code).operands)
+    {
+      while (is_typecast2t(p))
+        p = to_typecast2t(p).from;
+      bool unused = false;
+      p = instantiate_assigns_target(p, function_symbol, actual_args, unused);
+      expr2tc v = declare_local_symbol(
+        "__ESBMC_frees_" + id2string(function_symbol.name) + "_" +
+          std::to_string(freed.size()),
+        p->type);
+      goto_programt::targett d = replacement.add_instruction(DECL);
+      d->code = code_decl2tc(p->type, to_symbol2t(v).thename);
+      d->location = call_location;
+      goto_programt::targett a = replacement.add_instruction(ASSIGN);
+      a->code = code_assign2tc(v, p);
+      a->location = call_location;
+      freed.push_back(v);
+    }
+  }
 
   // 2. Havoc all potentially modified locations
   // In replace_calls mode, we must havoc everything the function might modify,
@@ -6135,9 +6244,19 @@ void code_contractst::generate_replacement_at_call(
         replace_is_fresh_temps(ensures_guard, fresh, /*require_dynamic=*/true);
   }
 
+  reissue_object_size(
+    function_body, ensures_guard, instantiate, replacement, call_location);
   // 4. Assume ensures clause (assume postcondition at call site)
   add_contract_clause(
     ensures_guard, ASSUME, "contract ensures", "contract ensures");
+
+  for (const expr2tc &v : freed)
+  {
+    goto_programt::targett f = replacement.add_instruction(OTHER);
+    f->code = code_free2tc(v);
+    f->location = call_location;
+    f->location.comment("contract frees");
+  }
 
   // 4.b The caller's place takes the result only now.
   write_back_call_result(ret_val, call_result, call_location, replacement);

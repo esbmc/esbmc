@@ -1,0 +1,6 @@
+CORE
+main.c
+--replace-call-with-contract mylen --multi-property
+PASSED .*line 17 +len$
+FAILED .*line 19 +contract requires$
+^VERIFICATION FAILED$

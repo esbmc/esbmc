@@ -86,9 +86,25 @@ __ESBMC_HIDE:;
   return start;
 }
 
+static size_t __ESBMC_strlen_qv;
+
 size_t strlen(const char *s)
 {
 __ESBMC_HIDE:;
+  __ESBMC_requires(__ESBMC_exists(
+    &__ESBMC_strlen_qv,
+    __ESBMC_strlen_qv <
+        __ESBMC_get_object_size(s) - __ESBMC_POINTER_OFFSET(s) &&
+      s[__ESBMC_strlen_qv] == 0));
+  __ESBMC_assigns();
+  __ESBMC_ensures(
+    __ESBMC_return_value <
+      __ESBMC_get_object_size(s) - __ESBMC_POINTER_OFFSET(s) &&
+    s[__ESBMC_return_value] == 0);
+  __ESBMC_ensures(__ESBMC_forall(
+    &__ESBMC_strlen_qv,
+    !(__ESBMC_strlen_qv < __ESBMC_return_value) ||
+      s[__ESBMC_strlen_qv] != 0));
   size_t len = 0;
   while (s[len] != 0)
     len++;

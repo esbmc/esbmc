@@ -469,6 +469,7 @@ public:
   {
     // Elements compared byte-wise, so T needs no operator==.
     __ESBMC_assigns(this->_size, this->_capacity, this->buf);
+    __ESBMC_frees(this->buf);
     __ESBMC_ensures(this->_size == n && this->_capacity == n);
     __ESBMC_ensures(__ESBMC_is_fresh(this->buf, n * sizeof(T)));
     __ESBMC_ensures(__ESBMC_forall(

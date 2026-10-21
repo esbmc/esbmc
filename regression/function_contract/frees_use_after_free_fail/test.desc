@@ -1,0 +1,4 @@
+CORE
+main.c
+--replace-call-with-contract g --force-malloc-success
+^VERIFICATION FAILED$

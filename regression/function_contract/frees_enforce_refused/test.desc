@@ -1,0 +1,5 @@
+CORE
+main.c
+--enforce-contract g
+^ERROR: g: enforcing a contract with __ESBMC_frees is not supported$
+\A(?!(.|\n)*VERIFICATION)
