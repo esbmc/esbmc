@@ -612,6 +612,22 @@ python_annotation<Json>::resolve_object_class_name(const std::string &obj)
   return "";
 }
 
+/// The type of element @p index of a value typed @p type: the matching
+/// parameter of `tuple[...]`, the element of `list[T]`, else "Any".
+inline std::string
+unpacked_name_element_type(const std::string &type, size_t index)
+{
+  if (type.empty() || type.back() != ']')
+    return "Any";
+  if (type.rfind("list[", 0) == 0)
+    return type.substr(5, type.size() - 6);
+  if (type.rfind("tuple[", 0) != 0)
+    return "Any";
+  const auto elems =
+    json_utils::split_top_level_params(type.substr(6, type.size() - 7));
+  return index < elems.size() ? elems[index] : "Any";
+}
+
 template <class Json>
 std::string python_annotation<Json>::infer_unpacked_element_type(
   const Json &rhs,
@@ -628,6 +644,20 @@ std::string python_annotation<Json>::infer_unpacked_element_type(
   {
     std::string t = get_argument_type(rhs["elts"][index]);
     return t.empty() ? "Any" : t;
+  }
+
+  // A target typed "Any" makes `return x + 1` a float, which loses precision
+  // past 2**53 (GitHub #8358).
+  if (kind == "Name")
+  {
+    // get_argument_type flattens a parameter's `tuple[int, int]` to "tuple".
+    const Json decl =
+      find_var_node_for_inference(rhs["id"].template get<std::string>());
+    const std::string type =
+      has_annotation(decl)
+        ? json_utils::render_annotation_type(decl["annotation"])
+        : get_argument_type(rhs);
+    return unpacked_name_element_type(type, index);
   }
 
   if (
@@ -715,10 +745,37 @@ std::string python_annotation<Json>::list_copy_type(
     (func_name != "list" && func_name != "tuple") || !call.contains("args") ||
     call["args"].size() != 1)
     return "";
-  const std::string source = get_argument_type(call["args"][0]);
+  const Json &iterable = call["args"][0];
+  const std::string source = get_argument_type(iterable);
   if (source == "range")
     return "list[int]";
-  return source.rfind("list[", 0) == 0 ? source : "";
+  if (source.rfind("list[", 0) == 0)
+    return source;
+  return dict_view_list_type(iterable);
+}
+
+/// `list[K]` or `list[V]` for `d.keys()` or `d.values()` on a `dict[K, V]`,
+/// or empty (GitHub #8358).
+template <class Json>
+std::string python_annotation<Json>::dict_view_list_type(const Json &call)
+{
+  if (
+    call.value("_type", "") != "Call" || !call["args"].empty() ||
+    call["func"].value("_type", "") != "Attribute")
+    return "";
+  const std::string dict_type = get_argument_type(call["func"]["value"]);
+  if (dict_type.rfind("dict[", 0) != 0 || dict_type.back() != ']')
+    return "";
+  const auto kv = json_utils::split_top_level_params(
+    dict_type.substr(5, dict_type.size() - 6));
+  if (kv.size() != 2)
+    return "";
+  const std::string method = call["func"].value("attr", "");
+  if (method == "keys")
+    return "list[" + kv[0] + "]";
+  if (method == "values")
+    return "list[" + kv[1] + "]";
+  return "";
 }
 
 // Infer generic dict type from literal: {key: value, ...}
@@ -1836,10 +1893,7 @@ std::string python_annotation<Json>::get_function_return_type(
         if (
           !should_override && elem.contains("returns") &&
           !elem["returns"].is_null() && elem["returns"].contains("id"))
-        {
-          functions_in_analysis_.erase(func_name);
           return elem["returns"]["id"];
-        }
 
         // Try to infer from return statements (excluding recursive calls).
         // Resolve names in func_name's own scope (see the non-recursive path
@@ -1849,18 +1903,9 @@ std::string python_annotation<Json>::get_function_return_type(
         std::string inferred =
           infer_from_return_statements(elem["body"], func_name);
         current_func_name_context_ = saved_rec_ctx;
-        if (!inferred.empty())
-        {
-          functions_in_analysis_.erase(func_name);
-          return inferred;
-        }
-
-        // No annotation and can't infer: return empty to avoid crash
-        functions_in_analysis_.erase(func_name);
-        return "";
+        return inferred;
       }
     }
-    functions_in_analysis_.erase(func_name);
     return "";
   }
 
@@ -2601,6 +2646,12 @@ std::string python_annotation<Json>::function_value_return_type(
   std::optional<std::pair<Json, std::string>> agreed;
   for (const function_values::candidate &function : *functions)
   {
+    // A recursive call through the value returns what the other candidates
+    // return.
+    if (
+      function.module == &ast_ &&
+      functions_in_analysis_.count((*function.def)["name"]) > 0)
+      continue;
     const auto signature = function_signature(function);
     if (
       !signature || (agreed && (signature->second != agreed->second ||
@@ -2609,6 +2660,8 @@ std::string python_annotation<Json>::function_value_return_type(
       return "";
     agreed = signature;
   }
+  if (!agreed)
+    return "";
   const auto is_starred = [](const Json &arg) {
     return arg.value("_type", "") == "Starred";
   };
