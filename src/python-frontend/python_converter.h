@@ -161,6 +161,16 @@ public:
   void convert_lambda_call(
     const nlohmann::json &element,
     side_effect_expr_function_callt &call);
+  /// The copy of the once-bound lambda @p var points to, converted for a call
+  /// passing an int where its one signature has a float (#8941), or null.
+  const symbolt *
+  lambda_copy_for_call(const nlohmann::json &call, const symbolt &var);
+  /// Retarget @p call to that copy, if there is one.
+  bool call_lambda_copy(
+    const nlohmann::json &element,
+    const symbolt &var,
+    side_effect_expr_function_callt &call,
+    const code_typet *&callee_type);
   std::optional<exprt> call_property_value(const nlohmann::json &element);
   /// Unknown, function or class-instance types: a call on such a value may
   /// succeed.
@@ -285,14 +295,6 @@ public:
   /// The current function as the AST lookups in json_utils name it: a method
   /// is "Cls@C@m", so a same-named method of another class is not found.
   std::string current_ast_scope() const;
-
-  /// Whether @p symbol is one of the converter's own temporaries, which are
-  /// assigned once where they are made. A Python local is file-local too, so
-  /// that flag does not tell the two apart.
-  bool is_frontend_temporary(const symbolt &symbol) const
-  {
-    return has_prefix(symbol.id.as_string(), sym_generator_.prefix);
-  }
 
   const namespacet &name_space() const
   {
@@ -1709,6 +1711,10 @@ private:
     size_t param_index,
     typet &elem_type) const;
 
+  bool called_only_with_flat_list_displays(
+    const std::string &func_name,
+    size_t param_index) const;
+
   /// Types an unannotated parameter filled with constant list elements.
   void refine_any_param_from_elements(
     code_typet::argumentt &param_arg,
@@ -1932,9 +1938,13 @@ private:
    *   `name(...)` with `name` bound to a lambda, as the annotator sees it,
    *   and to a function pointer; otherwise `current_type`.
    */
+  /// The callee type of `name(...)` with `name` bound to a lambda: the copy
+  /// lambda_copy_for_call makes, else the lambda @p var points to, else null.
+  const code_typet *
+  lambda_call_callee(const nlohmann::json &call, const symbolt &var);
   typet resolve_lambda_call_result_type(
     const nlohmann::json &ast_node,
-    const typet &current_type) const;
+    const typet &current_type);
 
   std::string resolve_name_symbol_id(const std::string &name) const;
   symbolt *find_enclosing_scope_symbol(symbol_id sid) const;
@@ -3211,6 +3221,7 @@ private:
   // dead code and evaluate a side-effecting divisor an extra time).
   bool converting_defaults_ = false;
   bool converting_lambda_body_ = false;
+  std::map<std::string, irep_idt> lambda_copies_;
   bool in_rhs_type_probe_ = false;
   // Set while probe_expr() evaluates a node only to inspect its result.
   bool in_scratch_probe_ = false;
@@ -3634,6 +3645,14 @@ private:
   /// block_nesting_ == 1 (an unconditional top-level statement), where there is
   /// no control-flow join that could make the runtime type ambiguous.
   std::unordered_map<std::string, std::string> retype_aliases_;
+  /// The symbol holding @p symbol's current value after a retype, else
+  /// @p symbol itself, which may be null.
+  symbolt *follow_retype_alias(symbolt *symbol) const;
+  /// The symbol a retyping store to @p target writes, given its @p lhs.
+  symbolt *retype_store_symbol(
+    const nlohmann::json &target,
+    const exprt &lhs,
+    symbolt *lhs_symbol);
 
   /// A module global or function read by code converted before its binding,
   /// mapped to the flag its binding sets and the type the reads took (#8369).

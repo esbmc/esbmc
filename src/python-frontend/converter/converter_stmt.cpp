@@ -4591,9 +4591,29 @@ typet python_converter::resolve_call_argument_array_type(
   return probed_type;
 }
 
+const code_typet *python_converter::lambda_call_callee(
+  const nlohmann::json &call,
+  const symbolt &var)
+{
+  if (const symbolt *copy = lambda_copy_for_call(call, var))
+    return &to_code_type(copy->get_type());
+
+  const std::string name = call["func"]["id"].get<std::string>();
+  const nlohmann::json scope = json_utils::find_function_by_path(
+    *ast_json, json_utils::split_function_path(current_func_name_));
+  if (
+    python_annotation_parser::find_lambda_in_body(name, (*ast_json)["body"])
+      .empty() &&
+    (!scope.contains("body") ||
+     python_annotation_parser::find_lambda_in_body(name, scope["body"])
+       .empty()))
+    return nullptr;
+  return &to_code_type(var.get_type().subtype());
+}
+
 typet python_converter::resolve_lambda_call_result_type(
   const nlohmann::json &ast_node,
-  const typet &current_type) const
+  const typet &current_type)
 {
   const nlohmann::json &call = ast_node["value"];
   if (
@@ -4609,17 +4629,11 @@ typet python_converter::resolve_lambda_call_result_type(
     !var->get_type().subtype().is_code())
     return current_type;
 
-  const nlohmann::json scope = json_utils::find_function_by_path(
-    *ast_json, json_utils::split_function_path(current_func_name_));
-  if (
-    python_annotation_parser::find_lambda_in_body(name, (*ast_json)["body"])
-      .empty() &&
-    (!scope.contains("body") ||
-     python_annotation_parser::find_lambda_in_body(name, scope["body"])
-       .empty()))
+  const code_typet *callee = lambda_call_callee(call, *var);
+  if (!callee)
     return current_type;
 
-  const typet &ret = to_code_type(var->get_type().subtype()).return_type();
+  const typet &ret = callee->return_type();
   return ret.is_signedbv() || ret.is_unsignedbv() || ret.is_bool()
            ? ret
            : current_type;
@@ -6319,6 +6333,31 @@ symbolt *python_converter::mint_retyped_symbol(
   return new_symbol_ptr;
 }
 
+symbolt *python_converter::follow_retype_alias(symbolt *symbol) const
+{
+  if (!symbol)
+    return nullptr;
+  auto alias = retype_aliases_.find(symbol->id.as_string());
+  if (alias == retype_aliases_.end())
+    return symbol;
+  symbolt *retyped = symbol_table_.find_symbol(alias->second);
+  return retyped ? retyped : symbol;
+}
+
+/// `C.v = ...` at module scope stores into the class attribute, whereas
+/// @p lhs_symbol is named after the attribute alone (#8943).
+symbolt *python_converter::retype_store_symbol(
+  const nlohmann::json &target,
+  const exprt &lhs,
+  symbolt *lhs_symbol)
+{
+  if (!current_func_name_.empty() || target.value("_type", "") != "Attribute")
+    return lhs_symbol;
+  symbolt *stored =
+    symbol_table_.find_symbol(to_symbol_expr(lhs).get_identifier());
+  return stored ? stored : lhs_symbol;
+}
+
 /// The Name a single-target Assign/AnnAssign binds, or a null json.
 static nlohmann::json assign_name_target(const nlohmann::json &ast_node)
 {
@@ -6566,7 +6605,14 @@ void python_converter::propagate_list_type_info(
     throw std::runtime_error(
       "rebinding '" + lhs_symbol->name.as_string() +
       "' to a list of other element types on one path is not supported");
-  element_type_registry_.assign_from(rhs_identifier, lhs_identifier);
+  // Every instance-attribute list shares the empty identifier, so its record
+  // may be another attribute's; an annotated one gives its element type.
+  const typet attr_elem_type =
+    python_list(*this, nlohmann::json()).attribute_elem_type(rhs);
+  if (attr_elem_type != typet())
+    element_type_registry_.assign(lhs_identifier, attr_elem_type);
+  else
+    element_type_registry_.assign_from(rhs_identifier, lhs_identifier);
 
   // When rhs is dict_sym.keys / dict_sym.values (a member expression
   // rather than a list symbol), rhs_identifier is empty and
@@ -7586,6 +7632,7 @@ void python_converter::get_var_assign(
       // same-type write lands in the live slot (mirrors the load redirect in
       // converter_expr). The alias is always keyed by the original id, which is
       // what loads resolve before redirecting.
+      lhs_symbol = retype_store_symbol(target, lhs, lhs_symbol);
       const std::string orig_id = lhs_symbol->id.as_string();
       auto existing = retype_aliases_.find(orig_id);
       if (existing != retype_aliases_.end())

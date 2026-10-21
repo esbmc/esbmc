@@ -30,6 +30,14 @@ public:
   // Handle lambda assignment type adjustments
   void handle_lambda_assignment(symbolt *lhs_symbol, exprt &lhs, exprt &rhs);
 
+  // The parameter types a copy of the lambda needs for @p call, which passes
+  // an int where @p signature, taken from calls that disagree, has a float
+  // (#8941). Names resolve in @p scope. Empty when @p signature serves it.
+  std::vector<std::optional<typet>> narrowed_parameter_types(
+    const nlohmann::json &call,
+    const nlohmann::json &scope,
+    const code_typet &signature) const;
+
   // Infer return type from a lambda body node
   typet infer_lambda_return_type(const nlohmann::json &body_node);
 
