@@ -800,7 +800,10 @@ typet python_converter::forward_function_return_type(
   const exprt &fn)
 {
   const auto flag = unbound_global_flags_.find(fn.identifier().as_string());
-  const nlohmann::json *def = sole_module_binding(*ast_json, name);
+  const nlohmann::json *def = sole_module_binding(
+    *ast_json, name, [](const std::string &, const std::string &) {
+      return false;
+    });
   if (flag == unbound_global_flags_.end() || !def)
     return typet();
   const nlohmann::json &returns = resolve_return_annotation_node(*def);
