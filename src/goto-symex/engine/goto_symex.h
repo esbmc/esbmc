@@ -605,6 +605,11 @@ protected:
     const code_function_call2t &call,
     const irep_idt &identifier);
 
+  /** Model an application of an __ESBMC_logic function (goto_logic_functions):
+   *  a fresh result, equal to an earlier application's when the arguments are
+   *  equal and the memory they reach is the same SSA state. */
+  void symex_logic_application(const code_function_call2t &call);
+
   /**
    *  Discover whether recursion bound has been exceeded.
    *  @see get_unwind
@@ -1765,6 +1770,16 @@ protected:
     const std::vector<expr2tc> &arguments,
     const expr2tc &result,
     const type2tc &ret_type);
+
+  struct logic_applicationt
+  {
+    std::vector<expr2tc> arguments;
+    std::vector<expr2tc> memory;
+    expr2tc result;
+  };
+  /** Per-function history of __ESBMC_logic applications.
+   *  @see symex_logic_application */
+  std::map<irep_idt, std::vector<logic_applicationt>> logic_applications;
 
   /** Level-1 identities (base name, activation, thread) of va_list objects
    *  initialised by va_start, or by va_copy from a started source, and

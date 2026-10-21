@@ -441,13 +441,17 @@ static std::set<irep_idt> declared_in(const goto_programt &body)
 }
 
 /// Clause calls whose value is a function of their operands and the state:
-/// symex intrinsics, and uninterpreted functions.
-static bool is_reissued_clause_call(const irep_idt &id)
+/// symex intrinsics, uninterpreted functions and __ESBMC_logic functions.
+static bool is_reissued_clause_call(const irep_idt &id, const namespacet &ns)
 {
   const std::string &s = id2string(id);
-  return s == "c:@F@__ESBMC_get_object_size" ||
-         s == "c:@F@__ESBMC_builtin_object_size" ||
-         s.rfind("c:@F@__ESBMC_uninterpreted_", 0) == 0;
+  if (
+    s == "c:@F@__ESBMC_get_object_size" ||
+    s == "c:@F@__ESBMC_builtin_object_size" ||
+    s.rfind("c:@F@__ESBMC_uninterpreted_", 0) == 0)
+    return true;
+  const symbolt *sym = ns.lookup(id);
+  return sym != nullptr && sym->get_type().get_bool("#logic_function");
 }
 
 /// Name of the first non-intrinsic call whose result a clause in \p body
@@ -488,7 +492,7 @@ std::string code_contractst::clause_call_callee(const goto_programt &body) const
     const irep_idt &callee =
       to_symbol2t(to_code_function_call2t(it->code).function).thename;
     // reissue_clause_calls re-issues these where the clause is evaluated.
-    if (!is_reissued_clause_call(callee))
+    if (!is_reissued_clause_call(callee, ns))
       return id2string(callee);
   }
 
@@ -1333,14 +1337,16 @@ static BigInt callee_frame_bits(const goto_programt &body, const namespacet &ns)
 // Substitute the built-in __ESBMC_frame_size with the function's real frame
 // size in bits, so a contract can scale a depth bound by the exact amount the
 // enforce-side entry charge adds; the literal and the charge then always agree.
-static expr2tc substitute_frame_size(const expr2tc &e, const BigInt &bits)
+// \p bits is computed only on use: sizing a frame with a VLA local throws.
+static expr2tc
+substitute_frame_size(const expr2tc &e, const std::function<BigInt()> &bits)
 {
   if (is_nil_expr(e))
     return e;
   if (
     is_symbol2t(e) && to_symbol2t(e).thename.as_string().find(
                         "__ESBMC_frame_size") != std::string::npos)
-    return constant_int2tc(e->type, bits);
+    return constant_int2tc(e->type, bits());
 
   expr2tc result = e->clone();
   result->Foreach_operand(
@@ -1377,7 +1383,8 @@ static void reissue_clause_calls(
   const expr2tc &clause,
   const std::function<expr2tc(const expr2tc &)> &instantiate,
   goto_programt &dest,
-  const locationt &location)
+  const locationt &location,
+  const namespacet &ns)
 {
   std::set<irep_idt> used;
   collect_symbol_names(clause, used);
@@ -1388,7 +1395,7 @@ static void reissue_clause_calls(
     const code_function_call2t &call = to_code_function_call2t(c->code);
     if (
       !is_symbol2t(call.function) ||
-      !is_reissued_clause_call(to_symbol2t(call.function).thename) ||
+      !is_reissued_clause_call(to_symbol2t(call.function).thename, ns) ||
       !is_symbol2t(call.ret) || !used.count(to_symbol2t(call.ret).thename))
       continue;
     std::vector<expr2tc> args;
@@ -1397,7 +1404,7 @@ static void reissue_clause_calls(
     goto_programt::targett r = dest.add_instruction(FUNCTION_CALL);
     r->code = code_function_call2tc(call.ret, call.function, args);
     r->location = location;
-    r->location.comment("contract clause object size");
+    r->location.comment("contract clause call");
   }
 }
 
@@ -1560,7 +1567,9 @@ std::set<std::string> code_contractst::enforce_contracts(
     // Resolve __ESBMC_frame_size to this function's real frame bits, the same
     // amount the stack-used entry charge adds in generate_checking_wrapper.
     {
-      BigInt frame_bits = callee_frame_bits(original_body_copy, ns);
+      auto frame_bits = [&] {
+        return callee_frame_bits(original_body_copy, ns);
+      };
       requires_clause = substitute_frame_size(requires_clause, frame_bits);
       ensures_clause = substitute_frame_size(ensures_clause, frame_bits);
     }
@@ -2045,7 +2054,8 @@ goto_programt code_contractst::generate_checking_wrapper(
   // case keeps the original order.
   const bool requires_reads_old = reads_old(requires_clause);
   const auto same = [](const expr2tc &e) { return e; };
-  reissue_clause_calls(original_body, requires_clause, same, wrapper, location);
+  reissue_clause_calls(
+    original_body, requires_clause, same, wrapper, location, ns);
 
   if (!requires_reads_old)
     add_contract_clause(requires_clause, ASSUME, "contract requires");
@@ -2377,7 +2387,8 @@ goto_programt code_contractst::generate_checking_wrapper(
   // transformations
   ensures_guard =
     normalize_ensures_guard_for_return_value(ensures_guard, ret_val);
-  reissue_clause_calls(original_body, ensures_guard, same, wrapper, location);
+  reissue_clause_calls(
+    original_body, ensures_guard, same, wrapper, location, ns);
 
   // Add ASSERT instruction for ensures clause with property
   if (should_add_clause_instruction(ensures_guard, ASSERT))
@@ -6158,7 +6169,7 @@ void code_contractst::generate_replacement_at_call(
   // Resolve __ESBMC_frame_size to the replaced callee's real frame bits, so a
   // clause scales depth by the same per-frame amount the enforce side charges.
   {
-    BigInt frame_bits = callee_frame_bits(function_body, ns);
+    auto frame_bits = [&] { return callee_frame_bits(function_body, ns); };
     requires_clause = substitute_frame_size(requires_clause, frame_bits);
     ensures_clause = substitute_frame_size(ensures_clause, frame_bits);
   }
@@ -6290,7 +6301,12 @@ void code_contractst::generate_replacement_at_call(
     return instantiate_assigns_target(e, function_symbol, actual_args, unused);
   };
   reissue_clause_calls(
-    function_body, requires_clause, instantiate, replacement, call_location);
+    function_body,
+    requires_clause,
+    instantiate,
+    replacement,
+    call_location,
+    ns);
   add_contract_clause(
     requires_clause, ASSERT, "contract requires", "contract requires");
 
@@ -6452,7 +6468,12 @@ void code_contractst::generate_replacement_at_call(
     replacement);
 
   reissue_clause_calls(
-    function_body, ensures_guard, instantiate, replacement, call_location);
+    function_body,
+    ensures_guard,
+    instantiate,
+    replacement,
+    call_location,
+    ns);
   // 4. Assume ensures clause (assume postcondition at call site)
   add_contract_clause(
     ensures_guard, ASSUME, "contract ensures", "contract ensures");

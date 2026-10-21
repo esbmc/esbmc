@@ -839,7 +839,7 @@ bool clang_c_convertert::get_function_signature(
   if (get_function_params(fd, type.arguments()))
     return true;
 
-  // Check for __ESBMC_contract annotation
+  // Check for __ESBMC_contract / __ESBMC_logic annotations
   if (fd.hasAttrs())
   {
     for (const auto *attr : fd.getAttrs())
@@ -847,10 +847,9 @@ bool clang_c_convertert::get_function_signature(
       if (const auto *annot = llvm::dyn_cast<clang::AnnotateAttr>(attr))
       {
         if (annot->getAnnotation().str() == "__ESBMC_contract")
-        {
           type.set("#annotated_contract", true);
-          break;
-        }
+        else if (annot->getAnnotation().str() == "__ESBMC_logic")
+          type.set("#logic_function", true);
       }
     }
   }

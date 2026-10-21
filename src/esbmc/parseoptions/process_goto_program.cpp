@@ -34,6 +34,7 @@
 #include <goto-programs/goto_loop_simplify.h>
 #include <goto-programs/goto_invariant_synthesis.h>
 #include <goto-programs/goto_loop_invariant.h>
+#include <goto-programs/goto_logic_functions.h>
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
 #include <goto-programs/abstract-interpretation/gcse.h>
 #include <goto-programs/loop_numbers.h>
@@ -615,6 +616,7 @@ bool esbmc_parseoptionst::process_goto_program(
 
     if (contract_pass_requested() && process_function_contracts(goto_functions))
       return true;
+    goto_logic_functions(goto_functions, context);
 
     // add re-evaluations of monitored properties
     add_property_monitors(goto_functions, ns);

@@ -763,6 +763,10 @@ void __ESBMC_loop_assigns_impl(const void *, ...);
 void __ESBMC_unroll(int);
 
 #define __ESBMC_contract __attribute__((annotate("__ESBMC_contract")))
+/* A pure function usable in clauses and invariants, defined by its body like an
+ * ACSL logic function. It may recurse on itself if its last argument decreases
+ * and stays non-negative; it reads memory only through its pointer parameters. */
+#define __ESBMC_logic __attribute__((annotate("__ESBMC_logic")))
 
 /* Function contract annotations: always available so annotated files compile
  * with any ESBMC mode (direct BMC, --enforce-contract, --replace-call-with-contract).

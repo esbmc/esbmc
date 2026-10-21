@@ -4,6 +4,7 @@
 #include <unordered_set>
 #include <goto-symex/scheduler/execution_state.h>
 #include <goto-symex/engine/goto_symex.h>
+#include <goto-programs/goto_logic_functions.h>
 #include <langapi/language_util.h>
 #include <util/arith/arith_tools.h>
 #include <util/expr/base_type.h>
@@ -513,6 +514,85 @@ bool goto_symext::symex_uninterpreted_function(
   return true;
 }
 
+void goto_symext::symex_logic_application(const code_function_call2t &call)
+{
+  if (cur_state->guard.is_false() || is_nil_expr(call.ret))
+    return;
+  const irep_idt &id = to_symbol2t(call.function).thename;
+
+  // The memory a pointer argument may reach, as the current SSA term of each
+  // object in its value set. Equal terms mean unchanged contents; a target the
+  // value set cannot name rules congruence out for this application.
+  std::vector<expr2tc> memory;
+  bool keyed = true;
+  for (const expr2tc &arg : call.operands)
+  {
+    if (!is_pointer_type(arg->type))
+      continue;
+    expr2tc l1 = arg;
+    cur_state->top().level1.rename(l1);
+    value_setst::valuest targets;
+    cur_state->value_set.get_value_set(l1, targets);
+    for (const expr2tc &t : targets)
+    {
+      if (!is_object_descriptor2t(t))
+      {
+        keyed = false;
+        continue;
+      }
+      expr2tc obj = to_object_descriptor2t(t).object;
+      while (is_member2t(obj) || is_index2t(obj) || is_typecast2t(obj))
+        obj = is_member2t(obj)  ? to_member2t(obj).source_value
+              : is_index2t(obj) ? to_index2t(obj).source_value
+                                : to_typecast2t(obj).from;
+      if (is_null_object2t(obj))
+        continue;
+      if (!is_symbol2t(obj))
+      {
+        keyed = false;
+        continue;
+      }
+      cur_state->rename(obj);
+      memory.push_back(obj);
+    }
+  }
+  expr2tc rounding = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
+  cur_state->rename(rounding);
+  memory.push_back(rounding);
+  std::sort(memory.begin(), memory.end());
+
+  std::vector<expr2tc> arguments = call.operands;
+  for (auto &argument : arguments)
+  {
+    cur_state->rename(argument);
+    do_simplify(argument);
+  }
+
+  expr2tc result = sideeffect2tc(
+    call.ret->type,
+    expr2tc(),
+    expr2tc(),
+    std::vector<expr2tc>(),
+    type2tc(),
+    sideeffect2t::allockind::nondet);
+  replace_nondet(result);
+
+  if (keyed)
+  {
+    for (const logic_applicationt &prev : logic_applications[id])
+    {
+      if (prev.memory != memory || prev.arguments.size() != arguments.size())
+        continue;
+      expr2tc same = gen_true_expr();
+      for (size_t i = 0; i < arguments.size(); i++)
+        same = and2tc(same, equality2tc(arguments[i], prev.arguments[i]));
+      assume(implies2tc(same, equality2tc(result, prev.result)));
+    }
+    logic_applications[id].push_back({arguments, memory, result});
+  }
+  symex_assign(code_assign2tc(call.ret, result));
+}
+
 // A local lives from entry to its block (C11 6.2.4p6), and a jump past its
 // declaration must not leave it naming the caller's instance or a global.
 // Its DECL may be gone as unreachable, as in `switch (k) { int y; ... }`.
@@ -540,6 +620,12 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
   // before inlining any body.
   if (symex_uninterpreted_function(call, identifier))
   {
+    cur_state->source.pc++;
+    return;
+  }
+  if (has_prefix(identifier.as_string(), kLogicAppPrefix))
+  {
+    symex_logic_application(call);
     cur_state->source.pc++;
     return;
   }
