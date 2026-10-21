@@ -659,12 +659,12 @@ find_module_binding(const nlohmann::json &body, const std::string &name)
   return nullptr;
 }
 
-/// Whether \p aug adds to a global of annotated type \p type a constant that
-/// leaves it that type.
-static bool keeps_type(const nlohmann::json &aug, const std::string &type)
+/// Whether \p value is a constant that leaves a global of annotated type
+/// \p type that type when added to it.
+static bool
+constant_keeps_type(const nlohmann::json &value, const std::string &type)
 {
-  const nlohmann::json &value = aug["value"];
-  if (aug["op"].value("_type", "") == "Div" || value["_type"] != "Constant")
+  if (value["_type"] != "Constant")
     return false;
   const nlohmann::json &constant = value["value"];
   return (type == "int" && constant.is_number_integer()) ||
@@ -672,18 +672,38 @@ static bool keeps_type(const nlohmann::json &aug, const std::string &type)
          (type == "str" && constant.is_string());
 }
 
+/// Whether a name has a given annotated type where it is read.
+using name_type_test =
+  std::function<bool(const std::string &, const std::string &)>;
+
+/// Whether \p aug adds to a global of annotated type \p type a constant, or
+/// a name \p has_type gives that type, that leaves it that type.
+static bool keeps_type(
+  const nlohmann::json &aug,
+  const std::string &type,
+  const name_type_test &has_type)
+{
+  const nlohmann::json &value = aug["value"];
+  if (aug["op"].value("_type", "") == "Div")
+    return false;
+  return value["_type"] == "Name"
+           ? has_type(value["id"].get<std::string>(), type)
+           : constant_keeps_type(value, type);
+}
+
 /// The augmented assignments to \p name under \p node that keep it \p type.
 static std::size_t count_type_keeping_aug_assigns(
   const nlohmann::json &node,
   const std::string &name,
-  const std::string &type)
+  const std::string &type,
+  const name_type_test &has_type)
 {
   std::size_t n = node.is_object() && node.value("_type", "") == "AugAssign" &&
                   node["target"].value("id", "") == name &&
-                  keeps_type(node, type);
+                  keeps_type(node, type, has_type);
   for (const auto &child : node)
     if (child.is_structured())
-      n += count_type_keeping_aug_assigns(child, name, type);
+      n += count_type_keeping_aug_assigns(child, name, type, has_type);
   return n;
 }
 
@@ -692,8 +712,10 @@ static std::size_t count_type_keeping_aug_assigns(
 /// one, a local) leaves the name's value at a read depending on which binding
 /// ran. An augmented assignment that keeps the binding's type does not count:
 /// it reads the name first, so it raises unless the binding has already run.
-static const nlohmann::json *
-sole_module_binding(const nlohmann::json &module, const std::string &name)
+static const nlohmann::json *sole_module_binding(
+  const nlohmann::json &module,
+  const std::string &name,
+  const name_type_test &has_type)
 {
   const nlohmann::json *binding = find_module_binding(module["body"], name);
   if (!binding)
@@ -703,10 +725,22 @@ sole_module_binding(const nlohmann::json &module, const std::string &name)
                              : "";
   if (
     json_utils::count_name_bindings(module, name) -
-      count_type_keeping_aug_assigns(module, name, type) !=
+      count_type_keeping_aug_assigns(module, name, type, has_type) !=
     1)
     return nullptr;
   return binding;
+}
+
+/// Whether the module global \p name is already bound with annotated type
+/// \p type.
+bool python_converter::global_has_type(
+  const std::string &name,
+  const std::string &type) const
+{
+  symbol_id sid(current_python_file, "", "");
+  sid.set_object(name);
+  const symbolt *symbol = symbol_table_.find_symbol(sid.to_string());
+  return symbol && symbol->get_type() == type_handler_.get_typet(type);
 }
 
 /// The module global \p sid names for a read in an enclosing scope. Code
@@ -718,8 +752,12 @@ symbolt *python_converter::find_global_symbol(const symbol_id &sid)
 {
   if (symbolt *symbol = find_enclosing_scope_symbol(sid))
     return symbol;
-  const nlohmann::json *binding =
-    sole_module_binding(*ast_json, sid.get_object());
+  const nlohmann::json *binding = sole_module_binding(
+    *ast_json,
+    sid.get_object(),
+    [this](const std::string &name, const std::string &type) {
+      return global_has_type(name, type);
+    });
   if (!binding || binding->value("_type", "") != "AnnAssign")
     return nullptr;
   nlohmann::json annotated = *binding;
@@ -743,7 +781,10 @@ exprt python_converter::module_function_expr(
   const symbolt *symbol = symbol_table_.find_symbol(sid.to_string());
   if (symbol && symbol->get_type().is_code())
     return symbol_expr(*symbol);
-  const nlohmann::json *binding = sole_module_binding(*ast_json, name);
+  const nlohmann::json *binding = sole_module_binding(
+    *ast_json, name, [](const std::string &, const std::string &) {
+      return false;
+    });
   if (!binding || binding->value("_type", "") != "FunctionDef")
     return nil_exprt();
   track_unbound_global(sid.to_string(), element, typet());
