@@ -1204,10 +1204,15 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
     return find_symbol_in_import(obj, symbol_id, lookup_name);
   };
 
+  // A `from m import name` binds the name itself, so it takes precedence over
+  // a plain `import m`, which reaches it only through the module (#9046).
   std::deque<nlohmann::json> submodules;
-  for (const nlohmann::json *import : import_nodes(submodules))
-    if (symbolt *func_symbol = find_in_import(*import))
-      return func_symbol;
+  const std::vector<const nlohmann::json *> imports = import_nodes(submodules);
+  for (const bool from_import : {true, false})
+    for (const nlohmann::json *import : imports)
+      if (((*import)["_type"] == "ImportFrom") == from_import)
+        if (symbolt *func_symbol = find_in_import(*import))
+          return func_symbol;
 
   return nullptr;
 }
@@ -1247,6 +1252,13 @@ symbolt *python_converter::find_symbol(const std::string &sym_id) const
   // stub) shadow operational models (e.g. nondet.py's nondet_list).
   if (!is_loading_models)
   {
+    // Imports bind names in the module being converted only: an id in another
+    // module's file already names that module's symbol (#9046).
+    const std::string file = symbol_id::from_string(sym_id).get_filename();
+    if (!file.empty() && file != current_python_file)
+      if (symbolt *symbol = symbol_table_.find_symbol(sym_id))
+        return symbol;
+
     if (symbolt *imported = find_imported_symbol(sym_id))
     {
       const std::string &imp_id = imported->id.as_string();
