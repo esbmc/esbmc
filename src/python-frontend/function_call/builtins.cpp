@@ -391,6 +391,37 @@ exprt function_call_expr::isinstance_without_type_name(
   return nil_exprt();
 }
 
+/// The list item a read `*(T *)item->value` of a scalar element comes from, or
+/// nil. The cast is the frontend's guess at the element's type; the item's
+/// type_id records the type it was stored with.
+static exprt list_item_of_scalar_read(const exprt &read, const typet &item_type)
+{
+  if (read.id() != "dereference" || read.op0().id() != "typecast")
+    return nil_exprt();
+  const exprt &value = read.op0().op0();
+  if (
+    value.id() != "member" || value.get("component_name") != "value" ||
+    value.op0().type() != item_type)
+    return nil_exprt();
+  return value.op0();
+}
+
+/// The tagged object whose type_id answers isinstance(@p obj, @p type_name):
+/// @p obj itself when it is a tagged scalar, the list item a scalar element
+/// read comes from when @p type_name is a scalar type, else nil.
+static exprt tagged_isinstance_operand(
+  const exprt &obj,
+  const std::string &type_name,
+  const type_handler &types)
+{
+  if (types.is_tagged_scalar_type(obj.type()))
+    return obj;
+  static const std::set<std::string> scalars = {"bool", "int", "float", "str"};
+  if (!scalars.count(type_name))
+    return nil_exprt();
+  return list_item_of_scalar_read(obj, types.get_tagged_object_type());
+}
+
 exprt function_call_expr::handle_isinstance() const
 {
   const auto &args = call_["args"];
@@ -476,9 +507,11 @@ exprt function_call_expr::handle_isinstance() const
     // A tagged-scalar operand's real type lives in the runtime `.type_id`
     // field rather than in a single static C type, so it needs its own
     // check instead of the static-type comparisons below.
-    if (type_handler_.is_tagged_scalar_type(obj_expr.type()))
+    const exprt tagged =
+      tagged_isinstance_operand(obj_expr, type_name, type_handler_);
+    if (tagged.is_not_nil())
       return converter_.dynamic_type_handler_.build_isinstance_check(
-        obj_expr, type_name, json_utils::is_class(type_name, converter_.ast()));
+        tagged, type_name, json_utils::is_class(type_name, converter_.ast()));
 
     // Special case: Check if object is None (null pointer)
     if (type_name == "NoneType")
@@ -1107,6 +1140,20 @@ exprt function_call_expr::handle_type_call() const
       : type_handler_.get_python_type_name(arg_expr.type());
   if (type_name.empty())
     type_name = arg_expr.type().id_string();
+
+  // Any other pointer may be None, an instance of a subclass, or of any class
+  // at all when erased to void *, so only a comparison can over-approximate it.
+  if (
+    arg_expr.type().is_pointer() && type_name != "str" &&
+    type_name != "NoneType")
+  {
+    const auto &compared = converter_.type_compared_operands_;
+    if (&call_ != compared[0] && &call_ != compared[1])
+      throw std::runtime_error(
+        "type() of a value whose class is not known statically is only "
+        "supported as an operand of is, is not, == or !=");
+    type_name = python_converter::unknown_class_name;
+  }
 
   return converter_.make_class_object(type_name);
 }

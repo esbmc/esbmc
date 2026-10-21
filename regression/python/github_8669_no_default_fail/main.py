@@ -2,7 +2,7 @@ def f3():
     return "x"
 
 
-def f2(a=f3):
+def f2(a):
     return a()
 
 
@@ -15,3 +15,4 @@ if nondet_bool():
 else:
     b = f2
 c = f1(f2, b)
+assert c == "x"
