@@ -3,8 +3,10 @@
 #include <python-frontend/python-list/python_list.h>
 #include <python-frontend/python_converter.h>
 #include <util/irep/std_expr.h>
+#include <util/lang/c_types.h>
 
 #include <algorithm>
+#include <map>
 #include <set>
 #include <stdexcept>
 #include <tuple>
@@ -628,7 +630,9 @@ void check_keywords(const json &call)
   {
     const std::string arg =
       kw["arg"].is_string() ? kw["arg"].get<std::string>() : "";
-    if (arg != "flags" && arg != "order" && arg != "op_flags")
+    if (
+      arg != "flags" && arg != "order" && arg != "op_flags" &&
+      arg != "op_dtypes" && arg != "op_axes" && arg != "casting")
       throw std::runtime_error(
         "TypeError: numpy.nditer() keyword '" + arg + "' is not supported");
   }
@@ -759,7 +763,9 @@ numpy_nditer::describe(const json &call, const std::string &state)
     it.operands.push_back(operand(ops[op], op));
     it.operands.back().writable = writable(op_flags[op]);
   }
-  if (!broadcast(it) || !writable_operands_fit(it, op_flags))
+  if (
+    !apply_op_axes(it, call) || !broadcast(it) ||
+    !writable_operands_fit(it, op_flags) || !apply_op_dtypes(it, call))
     return std::nullopt;
   if (it.runtime && it.external_loop)
     throw std::runtime_error(
@@ -769,6 +775,271 @@ numpy_nditer::describe(const json &call, const std::string &state)
   if (!check_size(it, has(flag_list, "zerosize_ok")))
     return std::nullopt;
   return it;
+}
+
+namespace
+{
+// An integer literal, possibly negated; nullopt for anything else.
+std::optional<long long> literal_int(const json &node)
+{
+  if (
+    node.value("_type", "") == "Constant" && node["value"].is_number_integer())
+    return node["value"].get<long long>();
+  if (
+    node.value("_type", "") == "UnaryOp" &&
+    node["op"].value("_type", "") == "USub")
+    if (std::optional<long long> value = literal_int(node["operand"]))
+      return -*value;
+  return std::nullopt;
+}
+
+// The `op_axes` entry of each operand, null when the operand has none.
+std::vector<json>
+per_operand(const json &call, const std::string &arg, std::size_t operands)
+{
+  const json *value = keyword(call, arg);
+  if (!value)
+    return std::vector<json>(operands);
+  const std::string type = value->value("_type", "");
+  if (
+    (type != "List" && type != "Tuple") || (*value)["elts"].size() != operands)
+    throw std::runtime_error(
+      "TypeError: numpy.nditer() " + arg +
+      " must be a literal list with one entry per operand");
+  std::vector<json> entries;
+  for (const json &entry : (*value)["elts"])
+    entries.push_back(
+      entry.value("_type", "") == "Constant" && entry["value"].is_null()
+        ? json()
+        : entry);
+  return entries;
+}
+} // namespace
+
+// `op_axes`: iteration axis i reads axis op_axes[op][i] of the operand, or a
+// new length-1 axis for -1. Every operand axis must be iterated (a reduction
+// is not modelled).
+bool numpy_nditer::apply_op_axes(numpy_nditer_state &it, const json &call)
+{
+  const std::vector<json> entries =
+    per_operand(call, "op_axes", it.operands.size());
+  for (std::size_t op = 0; op < entries.size(); ++op)
+  {
+    if (entries[op].is_null())
+      continue;
+    numpy_nditer_operand &o = it.operands[op];
+    if (!o.extent.is_null())
+      throw std::runtime_error(
+        "TypeError: numpy.nditer() op_axes over a view whose layout is only "
+        "known at run time is not supported");
+    std::vector<long long> axes;
+    for (const json &axis : entries[op].value("elts", json::array()))
+    {
+      const std::optional<long long> value = literal_int(axis);
+      if (!value)
+        throw std::runtime_error(
+          "TypeError: numpy.nditer() op_axes must be integer literals");
+      axes.push_back(*value);
+    }
+    const std::string error = invalid_op_axes(o, axes, op);
+    if (!error.empty())
+    {
+      raise("ValueError", error);
+      return false;
+    }
+    std::vector<long long> shape, strides;
+    for (long long axis : axes)
+    {
+      shape.push_back(axis < 0 ? 1 : o.shape[axis]);
+      strides.push_back(axis < 0 ? 0 : o.strides[axis]);
+    }
+    o.shape = shape;
+    o.strides = strides;
+    o.axes = axes;
+  }
+  return true;
+}
+
+// The message NumPy raises for an operand's op_axes, or empty.
+std::string numpy_nditer::invalid_op_axes(
+  const numpy_nditer_operand &o,
+  const std::vector<long long> &axes,
+  std::size_t op) const
+{
+  const long long rank = static_cast<long long>(o.shape.size());
+  std::vector<bool> seen(o.shape.size(), false);
+  for (std::size_t i = 0; i < axes.size(); ++i)
+  {
+    if (axes[i] < -1 || axes[i] >= rank)
+      return "Iterator input op_axes[" + std::to_string(op) + "][" +
+             std::to_string(i) + "] (==" + std::to_string(axes[i]) +
+             ") is not a valid axis of op[" + std::to_string(op) +
+             "], which has " + std::to_string(rank) + " dimensions ";
+    if (axes[i] < 0)
+      continue;
+    if (seen[axes[i]])
+      return "The 'op_axes' provided to the iterator constructor for operand " +
+             std::to_string(op) + " contained duplicate value " +
+             std::to_string(axes[i]);
+    seen[axes[i]] = true;
+  }
+  if (std::find(seen.begin(), seen.end(), false) != seen.end())
+    throw std::runtime_error(
+      "TypeError: numpy.nditer() op_axes that leave an operand axis out (a "
+      "reduction) are not supported");
+  return "";
+}
+
+namespace
+{
+/// A dtype by NumPy name, alias, scalar type or builtin; an empty type when
+/// unknown.
+typet dtype_type(const json &node)
+{
+  std::string name;
+  if (node.value("_type", "") == "Constant" && node["value"].is_string())
+    name = node["value"].get<std::string>();
+  else if (node.value("_type", "") == "Attribute")
+    name = node["attr"].get<std::string>();
+  else if (node.value("_type", "") == "Name")
+    name = node["id"].get<std::string>();
+  static const std::map<std::string, std::pair<char, unsigned>> table = {
+    {"bool", {'b', 1}},    {"?", {'b', 1}},        {"bool_", {'b', 1}},
+    {"int8", {'i', 8}},    {"i1", {'i', 8}},       {"int16", {'i', 16}},
+    {"i2", {'i', 16}},     {"int32", {'i', 32}},   {"i4", {'i', 32}},
+    {"int64", {'i', 64}},  {"i8", {'i', 64}},      {"int", {'i', 64}},
+    {"uint8", {'u', 8}},   {"u1", {'u', 8}},       {"uint16", {'u', 16}},
+    {"u2", {'u', 16}},     {"uint32", {'u', 32}},  {"u4", {'u', 32}},
+    {"uint64", {'u', 64}}, {"u8", {'u', 64}},      {"float32", {'f', 32}},
+    {"f4", {'f', 32}},     {"float64", {'f', 64}}, {"f8", {'f', 64}},
+    {"float", {'f', 64}},  {"double", {'f', 64}}};
+  auto it = table.find(name);
+  if (it == table.end())
+    return typet();
+  const auto [kind, width] = it->second;
+  if (kind == 'b')
+    return bool_type();
+  if (kind == 'f')
+    return width == 32 ? float_type() : double_type();
+  return kind == 'i' ? typet(signedbv_typet(width))
+                     : typet(unsignedbv_typet(width));
+}
+
+char dtype_kind(const typet &type)
+{
+  if (type.is_bool())
+    return 'b';
+  if (type.is_floatbv())
+    return 'f';
+  return type.is_unsignedbv() ? 'u' : 'i';
+}
+
+unsigned dtype_width(const typet &type)
+{
+  if (type.is_bool())
+    return 1;
+  return std::stoul(type.width().as_string());
+}
+
+/// NumPy's "safe" casting: no value of `from` changes in `to`.
+bool safe_cast(char fk, unsigned fw, char tk, unsigned tw)
+{
+  if (fk == 'b' || (fk == tk && fw <= tw))
+    return true;
+  if (fk == 'u' && tk == 'i')
+    return fw < tw;
+  return tk == 'f' && fk != 'f' && (fw < tw || tw == 64);
+}
+
+/// NumPy's can_cast for the bool, integer and float dtypes.
+bool can_cast(const typet &from, const typet &to, const std::string &rule)
+{
+  const char fk = dtype_kind(from), tk = dtype_kind(to);
+  const unsigned fw = dtype_width(from), tw = dtype_width(to);
+  if (rule == "unsafe")
+    return true;
+  if (rule == "no" || rule == "equiv")
+    return fk == tk && fw == tw;
+  const bool safe = safe_cast(fk, fw, tk, tw);
+  return safe ||
+         (rule == "same_kind" && (fk == tk || (fk == 'u' && tk == 'i')));
+}
+
+std::string dtype_name(const typet &type)
+{
+  const char kind = dtype_kind(type);
+  if (kind == 'b')
+    return "bool";
+  const std::string width = std::to_string(dtype_width(type));
+  return (kind == 'f' ? "float" : kind == 'u' ? "uint" : "int") + width;
+}
+} // namespace
+
+// `op_dtypes`: each operand is read through a cast to its dtype, which NumPy
+// allows under the `casting` rule and only through a buffer.
+bool numpy_nditer::apply_op_dtypes(numpy_nditer_state &it, const json &call)
+{
+  const std::vector<json> entries =
+    per_operand(call, "op_dtypes", it.operands.size());
+  const json *casting = keyword(call, "casting");
+  const std::string rule =
+    casting ? casting->value("value", json("")).get<std::string>() : "safe";
+  if (
+    rule != "no" && rule != "equiv" && rule != "safe" && rule != "same_kind" &&
+    rule != "unsafe")
+  {
+    raise(
+      "ValueError",
+      "casting must be one of 'no', 'equiv', 'safe', 'same_kind', or 'unsafe'");
+    return false;
+  }
+  for (std::size_t op = 0; op < entries.size(); ++op)
+  {
+    if (entries[op].is_null())
+      continue;
+    numpy_nditer_operand &o = it.operands[op];
+    const typet to = dtype_type(entries[op]);
+    const typet from = element_type(o);
+    if (to.id().empty())
+      throw std::runtime_error(
+        "TypeError: numpy.nditer() op_dtypes entry is not a supported dtype");
+    if (from == to)
+      continue;
+    std::string error;
+    if (!it.buffered)
+      error =
+        "Iterator operand required copying or buffering, but neither "
+        "copying nor buffering was enabled";
+    else if (!can_cast(from, to, rule))
+      error = "Iterator operand " + std::to_string(op) +
+              " dtype could not be cast from dtype('" + dtype_name(from) +
+              "') to dtype('" + dtype_name(to) + "') according to the rule '" +
+              rule + "'";
+    if (!error.empty())
+    {
+      raise("TypeError", error);
+      return false;
+    }
+    o.dtype = to;
+  }
+  return true;
+}
+
+// The element type an operand holds.
+typet numpy_nditer::element_type(const numpy_nditer_operand &o) const
+{
+  json first = o.array;
+  if (!o.shape.empty())
+  {
+    std::size_t rank = o.axes.empty() ? o.shape.size() : 0;
+    for (long long axis : o.axes)
+      rank += axis >= 0;
+    first = index_node(
+      o.array,
+      rank == 1 ? constant(0) : tuple(std::vector<json>(rank, constant(0))));
+  }
+  locate(first, converter_.current_nditer_call_);
+  return converter_.get_expr(first).type();
 }
 
 // The iteration shape: the operands' shapes broadcast together, aligned on
@@ -919,9 +1190,37 @@ json numpy_nditer::element(
       !it.runtime && o.shape[j] == 1 && it.shape[axis] != 1 ? constant(0)
                                                             : axis_index[axis]);
   }
+  if (!o.axes.empty())
+  {
+    // Operand axis o.axes[i] is iterated as axis i; -1 is a new axis.
+    std::vector<json> mapped(index.size());
+    std::size_t rank = 0;
+    for (std::size_t i = 0; i < o.axes.size(); ++i)
+      if (o.axes[i] >= 0)
+      {
+        mapped[o.axes[i]] = index[i];
+        ++rank;
+      }
+    mapped.resize(rank);
+    index = mapped;
+  }
   if (index.empty())
     return o.array;
   return index_node(o.array, index.size() == 1 ? index.front() : tuple(index));
+}
+
+// The element as a read sees it: cast to the operand's requested dtype.
+json numpy_nditer::value(
+  const numpy_nditer_state &it,
+  std::size_t op,
+  const json &element_position)
+{
+  json node = element(it, op, element_position);
+  const typet &type = it.operands[op].dtype;
+  if (type.id().empty())
+    return node;
+  locate(node, converter_.current_nditer_call_);
+  return prebuilt(typecast_exprt(converter_.get_expr(node), type));
 }
 
 // The chunk an external loop yields, read from the operand now.
@@ -933,7 +1232,7 @@ exprt numpy_nditer::chunk_value(
   std::vector<exprt> elements;
   for (long long j = 0; j < it.chunk; ++j)
   {
-    json node = element(it, item.operand, binop(start, "Add", constant(j)));
+    json node = value(it, item.operand, binop(start, "Add", constant(j)));
     locate(node, converter_.current_nditer_call_);
     elements.push_back(converter_.get_expr(node));
   }
@@ -1045,11 +1344,11 @@ bool binds_item(const std::string &form)
 } // namespace
 
 // The current item of every operand, a tuple for several.
-json numpy_nditer::current_values(const numpy_nditer_state &it) const
+json numpy_nditer::current_values(const numpy_nditer_state &it)
 {
   std::vector<json> values;
   for (std::size_t op = 0; op < it.operands.size(); ++op)
-    values.push_back(element(it, op, position(it)));
+    values.push_back(value(it, op, position(it)));
   return values.size() == 1 ? values.front() : tuple(values);
 }
 
@@ -1267,9 +1566,9 @@ std::optional<exprt> numpy_nditer::read_item(const json &node)
   converter_.current_nditer_call_ = node;
   if (it.external_loop)
     return chunk_value(it, *item);
-  json value = element(it, item->operand, name(item->position));
-  locate(value, node);
-  return converter_.get_expr(value);
+  json read = value(it, item->operand, name(item->position));
+  locate(read, node);
+  return converter_.get_expr(read);
 }
 
 std::optional<exprt> numpy_nditer::subscript(const json &node)
@@ -1288,7 +1587,8 @@ std::optional<exprt> numpy_nditer::subscript(const json &node)
         "TypeError: numpy.nditer() operands are indexed by an integer "
         "literal in range");
     raise_if(finished(*it), "ValueError", "Iterator is past the end");
-    json value = element(*it, index["value"].get<std::size_t>(), position(*it));
+    json value =
+      this->value(*it, index["value"].get<std::size_t>(), position(*it));
     locate(value, node);
     return converter_.get_expr(value);
   }
@@ -1397,7 +1697,7 @@ exprt numpy_nditer::as_list(const json &call)
     {
       std::vector<json> values;
       for (std::size_t op = 0; op < it->operands.size(); ++op)
-        values.push_back(element(*it, op, constant(position)));
+        values.push_back(value(*it, op, constant(position)));
       json node = values.size() == 1 ? values.front() : tuple(values);
       locate(node, call);
       elements.push_back(converter_.get_expr(node));

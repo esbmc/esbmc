@@ -22,6 +22,11 @@ struct numpy_nditer_operand
   std::vector<long long> strides;
   nlohmann::json extent;
   nlohmann::json stride;
+  /// The operand axis each iteration axis reads (`op_axes`), -1 for a new
+  /// axis; empty for the default alignment on the last axes.
+  std::vector<long long> axes;
+  /// The dtype reads are cast to (`op_dtypes`); empty for the operand's own.
+  typet dtype;
 };
 
 /// The static description of an `np.nditer`: its operands, the iteration
@@ -119,6 +124,17 @@ private:
   void order_axes(numpy_nditer_state &it, const std::string &order) const;
   void set_chunk(numpy_nditer_state &it) const;
   bool broadcast(numpy_nditer_state &it);
+  bool apply_op_axes(numpy_nditer_state &it, const nlohmann::json &call);
+  std::string invalid_op_axes(
+    const numpy_nditer_operand &o,
+    const std::vector<long long> &axes,
+    std::size_t op) const;
+  bool apply_op_dtypes(numpy_nditer_state &it, const nlohmann::json &call);
+  typet element_type(const numpy_nditer_operand &o) const;
+  nlohmann::json value(
+    const numpy_nditer_state &it,
+    std::size_t op,
+    const nlohmann::json &element_position);
 
   nlohmann::json position(const numpy_nditer_state &it) const;
   nlohmann::json items(const numpy_nditer_state &it) const;
@@ -158,7 +174,7 @@ private:
     const nlohmann::json &target,
     const numpy_nditer_state &it,
     const std::string &iterator);
-  nlohmann::json current_values(const numpy_nditer_state &it) const;
+  nlohmann::json current_values(const numpy_nditer_state &it);
   nlohmann::json
   layout_attribute(const numpy_nditer_state &it, const std::string &attr) const;
   nlohmann::json
