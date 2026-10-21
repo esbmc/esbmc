@@ -3,6 +3,7 @@ import copy
 from collections import Counter
 
 from preprocessor.bound_method_dispatch import dispatch_rebound_methods
+from preprocessor.dotted_imports import alias_dotted_imports
 from preprocessor.decorator_lowering import lower_user_decorators
 from preprocessor.itertools_lowering import lower_itertools
 from preprocessor.match_lowering import lower_match_statements
@@ -548,6 +549,7 @@ class ModuleRewriteMixin:
     def prepare_module(self, node, alias_seed=frozenset(), wrapper_seed=None):
         """Run pre-visit analyses and range-alias/wrapper canonicalization."""
         _rename_shadowed_classes(node)
+        alias_dotted_imports(node)
         lower_iter_next(node)
         lower_zip_builds(node)
         reject_mixed_function_values(node, self.module_name)

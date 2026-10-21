@@ -423,15 +423,18 @@ smt_astt smt_solver_baset::decode_pointer_repr(
   for (const ptr_flatten_entry &flat : ptr_flatten_history)
     if (step_sources.count(flat.id))
       sources.push_back(&flat);
-  /* Past the cap the rebuilt pointer is the address-space reconstruction
-   * alone, as before #7895: each source adds an ite over pointer tuples, and
-   * data flow can hand one rebuild hundreds, which ran the C++ stream and map
-   * suites out of memory. The reconstruction is not tied, so #7965 cannot
-   * recur; what is lost is the flattened pointer's provenance. */
-  if (sources.size() <= max_rebuild_sources)
-    for (const ptr_flatten_entry *flat : sources)
-      pointer = flat->pointer->ite(
-        this, mk_and(flat->guard, mk_eq(address, flat->address)), pointer);
+  /* Only the latest sources are kept: each adds an ite over pointer tuples,
+   * and data flow can hand one rebuild hundreds, which ran the C++ stream and
+   * map suites out of memory. An address only a dropped source holds gets the
+   * untied reconstruction, as before #7895, so #7965 cannot recur. */
+  const size_t first = sources.size() > max_rebuild_sources
+                         ? sources.size() - max_rebuild_sources
+                         : 0;
+  for (size_t i = first; i < sources.size(); ++i)
+    pointer = sources[i]->pointer->ite(
+      this,
+      mk_and(sources[i]->guard, mk_eq(address, sources[i]->address)),
+      pointer);
   if (same.pointer)
     pointer = original->ite(this, convert_ast(same.untouched), pointer);
   return pointer;

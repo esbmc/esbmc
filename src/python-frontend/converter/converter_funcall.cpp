@@ -655,8 +655,25 @@ static exprt call_as_value(const exprt &call)
   return value;
 }
 
+/// The type of the function a call of the name `name` runs: the function a
+/// variable holds, else a nested or module function of that name.
+typet python_converter::named_callee_type(const std::string &name)
+{
+  // A variable of that name, such as a parameter, shadows the function.
+  const std::string var_id = resolve_name_symbol_id(name);
+  if (!var_id.empty())
+  {
+    const typet &type = symbol_table_.find_symbol(var_id)->get_type();
+    return type.is_pointer() ? type.subtype() : typet();
+  }
+  const symbolt *fn = find_nested_function_symbol(name);
+  if (!fn)
+    fn = find_symbol(symbol_id(current_python_file, "", name).to_string());
+  return fn ? fn->get_type() : typet();
+}
+
 /// The function a call of `callee` returns, when its type is known before
-/// converting it: `get()` or `get()()` where `get` is a module function.
+/// converting it: `get()` or `get()()` where `get` names a function.
 std::optional<code_typet>
 python_converter::returned_function(const nlohmann::json &callee)
 {
@@ -666,15 +683,10 @@ python_converter::returned_function(const nlohmann::json &callee)
   typet returned;
   if (func.value("_type", "") == "Name")
   {
-    // A variable of that name, such as a parameter, shadows the function.
-    const std::string name = func["id"].get<std::string>();
-    const symbolt *fn =
-      resolve_name_symbol_id(name).empty()
-        ? find_symbol(symbol_id(current_python_file, "", name).to_string())
-        : nullptr;
-    if (!fn || !fn->get_type().is_code())
+    const typet fn = named_callee_type(func["id"].get<std::string>());
+    if (!fn.is_code())
       return std::nullopt;
-    returned = to_code_type(fn->get_type()).return_type();
+    returned = to_code_type(fn).return_type();
   }
   else if (std::optional<code_typet> outer = returned_function(func))
     returned = outer->return_type();

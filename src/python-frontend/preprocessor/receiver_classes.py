@@ -66,21 +66,42 @@ def _classinfo_names(node):
     return None
 
 
-def _defining_class(cls, attr, classes, seen=frozenset()):
-    """The class whose body defines `attr` as a method, searching the bases
-    depth first; None when no class of this module defines it. A method no
-    class defines is missing from every class alike."""
+def _mro(cls, classes, seen=frozenset()):
+    """The C3 linearisation of class `cls` over the classes of this module,
+    or None when it has none."""
     if cls in seen:
         return None
-    node = classes[cls]
-    if any(isinstance(s, ast.FunctionDef) and s.name == attr for s in node.body):
+    bases = [b.id for b in classes[cls].bases if isinstance(b, ast.Name) and b.id in classes]
+    seqs = [_mro(base, classes, seen | {cls}) for base in bases] + [bases]
+    if None in seqs:
+        return None
+    merged = _c3_merge(seqs)
+    return None if merged is None else [cls] + merged
+
+
+def _c3_merge(seqs):
+    """The C3 merge of the linearisations `seqs`, or None when they conflict."""
+    merged = []
+    while any(seqs):
+        seqs = [s for s in seqs if s]
+        head = next((s[0] for s in seqs if not any(s[0] in t[1:] for t in seqs)), None)
+        if head is None:
+            return None
+        merged.append(head)
+        seqs = [s[1:] if s[0] == head else s for s in seqs]
+    return merged
+
+
+def _defining_class(cls, attr, classes):
+    """The class whose body defines `attr` as a method, searching the bases
+    in C3 order; None when no class of this module defines it. A method no
+    class defines is missing from every class alike. A class with no MRO
+    answers itself, so that it is never taken to share a method."""
+    mro = _mro(cls, classes)
+    if mro is None:
         return cls
-    for base in node.bases:
-        if isinstance(base, ast.Name) and base.id in classes:
-            found = _defining_class(base.id, attr, classes, seen | {cls})
-            if found is not None:
-                return found
-    return None
+    return next((c for c in mro if any(
+        isinstance(s, ast.FunctionDef) and s.name == attr for s in classes[c].body)), None)
 
 
 def _scope_nodes(body):
