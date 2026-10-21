@@ -751,6 +751,28 @@ exprt python_converter::module_function_expr(
   return symbol_exprt(sid.to_string(), code_typet());
 }
 
+/// The return type of the module function \p name, read before its `def` as
+/// \p fn, from the annotation its `def` carries: one of int, float, bool or
+/// str, or nil. mark_global_bound refuses a `def` converted to another one.
+typet python_converter::forward_function_return_type(
+  const std::string &name,
+  const exprt &fn)
+{
+  const auto flag = unbound_global_flags_.find(fn.identifier().as_string());
+  const nlohmann::json *def = sole_module_binding(*ast_json, name);
+  if (flag == unbound_global_flags_.end() || !def)
+    return typet();
+  const nlohmann::json &returns = resolve_return_annotation_node(*def);
+  const std::string id = returns.is_object() && returns["_type"] == "Name"
+                           ? returns.value("id", "")
+                           : "";
+  if (id != "int" && id != "float" && id != "bool" && id != "str")
+    return typet();
+  flag->second.second = id == "str" ? gen_pointer_type(char_type())
+                                    : named_return_type(id, returns, *def);
+  return flag->second.second;
+}
+
 void python_converter::track_unbound_global(
   const std::string &id,
   const nlohmann::json &binding,
@@ -804,9 +826,11 @@ void python_converter::mark_global_bound(
   const auto flag = unbound_global_flags_.find(sid.to_string());
   if (name.empty() || flag == unbound_global_flags_.end())
     return;
+  const typet &bound = symbol_table_.find_symbol(sid.to_string())->get_type();
   if (
-    !is_def && symbol_table_.find_symbol(sid.to_string())->get_type() !=
-                 flag->second.second)
+    is_def ? !flag->second.second.id().empty() &&
+               to_code_type(bound).return_type() != flag->second.second
+           : bound != flag->second.second)
     throw std::runtime_error(
       fmt::format(
         "Variable '{}' is read before its binding at line {} as a different "
@@ -2175,6 +2199,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
                                       exprt base_expr,
                                       const nlohmann::json &base_node,
                                       const std::string &attr_name) -> exprt {
+        // `make().x` reads off a call statement, which a member expression
+        // cannot hold; as a side effect the call is hoisted (#8925).
+        base_expr = to_value_expr(base_expr, ns);
         typet base_type = base_expr.type();
         if (base_type.is_pointer())
           base_type = base_type.subtype();
@@ -2545,15 +2572,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     // reassigned across the numeric<->string boundary, get_var_assign minted a
     // fresh symbol of the new type and recorded it here. Redirect the load to
     // that symbol so it observes the variable's current type and value.
+    symbol = follow_retype_alias(symbol);
     if (!is_class_attr)
     {
-      auto alias = retype_aliases_.find(symbol->id.as_string());
-      if (alias != retype_aliases_.end())
-      {
-        if (symbolt *retyped = symbol_table_.find_symbol(alias->second))
-          symbol = retyped;
-      }
-
       symbol = resolve_numpy_array_storage_alias(symbol);
 
       // Also resolve reads through a permanent tagged-object alias, if a

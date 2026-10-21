@@ -543,10 +543,90 @@ class ClassContextMixin:
             known = self._known_classes(module, counts)
             self._bind_local_type_values(module, known)
             if not self.is_entry_module:
+                self._unroll_class_tuples(module, known, counts)
                 return
             self._lower_called_lambdas(module, known, counts)
             if not self._specialise_one_function(module, known, counts):
+                self._unroll_class_tuples(module, known, counts)
                 return
+
+    def _unroll_class_tuples(self, module, known, counts):
+        """Unroll a `for` loop, and an `any`/`all` over a generator, that runs
+        over a tuple of known classes, so each copy reads one class by name
+        (#8765). A loop qualifies when its target is a name and it has no
+        `break`, `continue` or `else`; the target is left bound to the last
+        class, as the loop leaves it. The tuple is written in place, or bound
+        to a name nothing else binds."""
+        tuples = {
+            n.targets[0].id: n.value
+            for n in ast.walk(module) if isinstance(n, ast.Assign) and len(n.targets) == 1
+            and isinstance(n.targets[0], ast.Name) and counts[n.targets[0].id] == 1
+        }
+
+        def classes(it):
+            spelled = self._class_value(
+                tuples.get(it.id) if isinstance(it, ast.Name) else it, known)
+            if spelled is None or not spelled.startswith("("):
+                return None
+            return [ast.unparse(e) for e in ast.parse(spelled, mode="eval").body.elts]
+
+        def copies(nodes, name, values):
+            out = []
+            for value in values:
+                copied = copy.deepcopy(nodes)
+                self._replace_reads(copied, name, value)
+                out.append(copied)
+            return out
+
+        mixin = self
+
+        class Unroll(ast.NodeTransformer):
+
+            def visit_For(self, node):
+                self.generic_visit(node)
+                values = classes(node.iter)
+                if (not values or not isinstance(node.target, ast.Name) or node.orelse or any(
+                        isinstance(n, (ast.Break, ast.Continue)) for s in node.body
+                        for n in ast.walk(s))):
+                    return node
+                body = [s for c in copies(node.body, node.target.id, values) for s in c]
+                last = ast.parse(f"{node.target.id} = {values[-1]}").body[0]
+                return [ast.copy_location(s, node) for s in body + [last]]
+
+            def visit_Call(self, node):
+                self.generic_visit(node)
+                folded = mixin._fold_class_generator(node, classes, copies, counts)
+                return ast.copy_location(folded, node) if folded else node
+
+        Unroll().visit(module)
+        ast.fix_missing_locations(module)
+
+    @staticmethod
+    def _fold_class_generator(node, classes, copies, counts):
+        """`bool(e1 or e2 ...)` for `any(e for x in <classes>)`, with `and`
+        for `all`, else None."""
+        gen = ClassContextMixin._class_generator(node, counts)
+        values = classes(gen.iter) if gen else None
+        if not values:
+            return None
+        elts = [c[0] for c in copies([node.args[0].elt], gen.target.id, values)]
+        joined = elts[0] if len(elts) == 1 else ast.BoolOp(
+            op=ast.Or() if node.func.id == "any" else ast.And(), values=elts)
+        return ast.Call(func=ast.Name(id="bool", ctx=ast.Load()), args=[joined], keywords=[])
+
+    @staticmethod
+    def _class_generator(node, counts):
+        """The one plain `for x in ...` clause of a call `any(...)` or
+        `all(...)` on a generator, with neither name rebound, else None."""
+        if (not isinstance(node.func, ast.Name) or node.func.id not in ("any", "all")
+                or counts[node.func.id] or counts["bool"] or node.keywords or len(node.args) != 1
+                or not isinstance(node.args[0], ast.GeneratorExp)):
+            return None
+        gen = node.args[0].generators
+        if len(gen) != 1 or gen[0].ifs or gen[0].is_async or not isinstance(
+                gen[0].target, ast.Name):
+            return None
+        return gen[0]
 
     @staticmethod
     def _known_classes(module, counts):
@@ -558,7 +638,20 @@ class ClassContextMixin:
         }
         builtin = {n for n, v in vars(builtins).items() if isinstance(v, type) and not counts[n]}
         none_type = set() if counts["NoneType"] else {"NoneType"}
-        return defined | builtin | none_type
+        return defined | builtin | none_type | ClassContextMixin._typing_any(module)
+
+    @staticmethod
+    def _typing_any(module):
+        """The names `from typing import Any` binds, when nothing rebinds them.
+        Counted afresh, as `self._names_bound_by` resolves to
+        GeneratorMixin's, which skips imports."""
+        bound = Counter(name for n in ast.walk(module)
+                        for name in ClassContextMixin._names_bound_by(n))
+        return {
+            a.asname or a.name
+            for s in module.body if isinstance(s, ast.ImportFrom) and s.module == "typing"
+            for a in s.names if a.name == "Any" and bound[a.asname or a.name] == 1
+        }
 
     @staticmethod
     def _is_plain_function(stmt):
@@ -630,10 +723,22 @@ class ClassContextMixin:
 
     @staticmethod
     def _replace_reads(nodes, name, value):
-        for stmt in nodes:
-            for n in ast.walk(stmt):
-                if isinstance(n, ast.Name) and n.id == name and isinstance(n.ctx, ast.Load):
+        """Reads of `name` in `nodes` become `value`: a class name, or the
+        source of a tuple of classes."""
+
+        class Reads(ast.NodeTransformer):
+
+            def visit_Name(self, n):
+                if n.id != name or not isinstance(n.ctx, ast.Load):
+                    return n
+                if value.isidentifier():
                     n.id = value
+                    return n
+                spelled = ast.parse(value, mode="eval").body
+                return ast.fix_missing_locations(ast.copy_location(spelled, n))
+
+        for stmt in nodes:
+            Reads().visit(stmt)
 
     def _bind_local_type_values(self, module, known):
         for func in ast.walk(module):
@@ -664,9 +769,32 @@ class ClassContextMixin:
         by_keyword = index >= len(func.args.posonlyargs)
         arg = call.args[index] if index < len(call.args) else next(
             (k.value for k in call.keywords if by_keyword and k.arg == param), None)
-        if isinstance(arg, ast.Name) and arg.id in known:
-            return arg.id
-        return "NoneType" if ClassContextMixin._is_type_of_none(arg, known) else None
+        return ClassContextMixin._class_value(arg, known)
+
+    @staticmethod
+    def _class_value(node, known):
+        """The source of the known class, `type(None)`, or tuple of them that
+        `node` spells, else None."""
+        if isinstance(node, ast.Tuple) and isinstance(node.ctx, ast.Load):
+            return ClassContextMixin._class_tuple(node, known)
+        return ClassContextMixin._class_name(node, known)
+
+    @staticmethod
+    def _class_tuple(node, known):
+        """The source of a tuple whose elements each spell a known class or
+        `type(None)`, else None."""
+        parts = [ClassContextMixin._class_name(e, known) for e in node.elts]
+        if not parts or not all(parts):
+            return None
+        return "(" + ", ".join(parts) + ("," if len(parts) == 1 else "") + ")"
+
+    @staticmethod
+    def _class_name(node, known):
+        """The known class `node` names, or `NoneType` for `type(None)`, else
+        None."""
+        if ClassContextMixin._is_type_of_none(node, known):
+            return "NoneType"
+        return node.id if isinstance(node, ast.Name) and node.id in known else None
 
     def _type_parameters(self, func, known, calls):
         """The indexes of the parameters `func` reads and never rebinds, for
@@ -698,6 +826,7 @@ class ClassContextMixin:
             return False
         for call, key in zip(calls, keys):
             call.func.id = names[key]
+            self._drop_tuple_arguments(call, func, indexes, key)
         params = [p.arg for p in func.args.posonlyargs + func.args.args]
         at = module.body.index(func)
         module.body[at:at + 1] = [
@@ -705,6 +834,23 @@ class ClassContextMixin:
             for key, name in names.items()
         ]
         return True
+
+    @staticmethod
+    def _drop_tuple_arguments(call, func, indexes, key):
+        """Pass `None` for each tuple of classes `call` gives a specialised
+        parameter: the copy reads the tuple in place, and spelling it has no
+        effect to keep, while a tuple argument would not match the copy's
+        unread, untyped parameter."""
+        params = [p.arg for p in func.args.posonlyargs + func.args.args]
+        for index, value in zip(indexes, key):
+            if not value.startswith("("):
+                continue
+            if index < len(call.args):
+                call.args[index] = ast.copy_location(ast.Constant(value=None), call.args[index])
+                continue
+            for keyword in call.keywords:
+                if keyword.arg == params[index]:
+                    keyword.value = ast.copy_location(ast.Constant(value=None), keyword.value)
 
     @staticmethod
     def _construction(stmt):

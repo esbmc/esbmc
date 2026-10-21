@@ -1,0 +1,5 @@
+CORE
+prog.c
+--ltl notphi.c -DLTL_PREFIX_BOUND=20
+^Final lowest outcome: LTL_BAD$
+^VERIFICATION FAILED$

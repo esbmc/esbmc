@@ -1151,7 +1151,7 @@ class GeneratorMixin:
             # clause naming a temporary the contract wrapper never declares.
             # Leave it as written; the frontend's clause check rejects by name.
             return [], expr, "Any"
-        lowerer = self._ListCompExpressionLowerer(self)
+        lowerer = self._ListCompExpressionLowerer(self, expr)
         new_expr = lowerer.visit(expr)
         result_type = self._infer_type_from_value(new_expr)
         return lowerer.statements, new_expr, result_type
