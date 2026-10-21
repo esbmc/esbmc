@@ -245,6 +245,11 @@ public:
   std::string
   diagnose_contract_target(const std::string &function_name, bool for_replace);
 
+  /// \brief Find function symbol
+  /// \param function_name Function name (can be full ID or simple name)
+  /// \return Pointer to function symbol, or nullptr if not found
+  symbolt *find_function_symbol(const std::string &function_name);
+
 private:
   goto_functionst &goto_functions;
   contextt &context;
@@ -266,10 +271,6 @@ private:
   /// recorded extent whenever one exists.
   static constexpr size_t WITNESS_IDX_FALLBACK_ELEMS = 100;
 
-  /// \brief Find function symbol
-  /// \param function_name Function name (can be full ID or simple name)
-  /// \return Pointer to function symbol, or nullptr if not found
-  symbolt *find_function_symbol(const std::string &function_name);
 
   /// \brief Rename function
   /// \param old_id Original function ID

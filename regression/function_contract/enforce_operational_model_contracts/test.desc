@@ -1,0 +1,5 @@
+CORE
+main.c
+--enforce-operational-model-contracts --force-malloc-success --unwind 10
+^Enforcing 1 operational-model contract\(s\)$
+^VERIFICATION SUCCESSFUL$

@@ -160,6 +160,22 @@ bool esbmc_parseoptionst::process_function_contracts(
 
   if (has_enforce)
     to_enforce = process_function_list(cmdline.get_values("enforce-contract"));
+  // Model contracts are checked once, by
+  // --enforce-operational-model-contracts, not by every user enforce run.
+  for (auto it = to_enforce.begin(); it != to_enforce.end();)
+  {
+    const symbolt *sym = contracts.find_function_symbol(*it);
+    if (sym && is_operational_model(ctx, sym->id))
+    {
+      log_warning(
+        "--enforce-contract: skipping operational model '{}'; use "
+        "--enforce-operational-model-contracts",
+        *it);
+      it = to_enforce.erase(it);
+    }
+    else
+      ++it;
+  }
   if (has_replace)
     to_replace =
       process_function_list(cmdline.get_values("replace-call-with-contract"));
@@ -208,16 +224,26 @@ bool esbmc_parseoptionst::process_function_contracts(
   if (has_replace_all)
     contracts.replace_calls(annotated);
 
-  if (has_om)
-  {
+  auto contracted_models = [&]() {
     std::set<std::string> models;
     forall_goto_functions (it, goto_functions)
-    {
       if (
         it->second.body_available && is_operational_model(ctx, it->first) &&
         contracts.has_contracts(it->second.body))
         models.insert(id2string(it->first));
-    }
+    return models;
+  };
+
+  if (cmdline.isset("enforce-operational-model-contracts"))
+    log_status(
+      "Enforcing {} operational-model contract(s)",
+      contracts
+        .enforce_contracts(contracted_models(), entry_function, true)
+        .size());
+
+  if (cmdline.isset("contract-operational-models"))
+  {
+    const std::set<std::string> models = contracted_models();
     log_status(
       "Replacing {} operational model(s) with contracts", models.size());
     contracts.replace_calls(models);

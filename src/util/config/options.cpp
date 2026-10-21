@@ -87,5 +87,6 @@ bool optionst::contracts_enabled() const
          get_bool_option("enforce-all-contracts") ||
          get_bool_option("replace-all-contracts") ||
          get_bool_option("contract-operational-models") ||
+         get_bool_option("enforce-operational-model-contracts") ||
          get_bool_option("building-c-library");
 }

@@ -1,0 +1,6 @@
+CORE
+main.c
+--enforce-contract f --enforce-contract strlen
+^WARNING: --enforce-contract: skipping operational model .strlen.
+^Enforcing contracts for 1 function\(s\)$
+^VERIFICATION SUCCESSFUL$

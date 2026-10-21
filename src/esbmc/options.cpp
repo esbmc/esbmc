@@ -513,7 +513,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"contract-operational-models",
      nullptr,
      "Replace calls to ESBMC's operational models that carry a contract with "
-     "that contract"}}},
+     "that contract"},
+    {"enforce-operational-model-contracts",
+     nullptr,
+     "Check ESBMC's operational-model contracts against the model bodies"}}},
   {"BMC",
    {{"unwind",
      boost::program_options::value<int>()->value_name("nr"),

@@ -618,7 +618,8 @@ bool esbmc_parseoptionst::process_goto_program(
     bool has_replace = cmdline.isset("replace-call-with-contract");
     bool has_enforce_all = cmdline.isset("enforce-all-contracts");
     bool has_replace_all = cmdline.isset("replace-all-contracts");
-    bool has_om = cmdline.isset("contract-operational-models");
+    bool has_om = cmdline.isset("contract-operational-models") ||
+                  cmdline.isset("enforce-operational-model-contracts");
     if (
       has_enforce || has_replace || has_enforce_all || has_replace_all ||
       has_om)
