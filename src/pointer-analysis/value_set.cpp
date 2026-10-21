@@ -228,16 +228,11 @@ void value_sett::retire_objectless_operand(
   }
 }
 
-/* Index of, and bytes spanned by, the leading component `rest` names. Member
- * names are not identifiers -- clang spells an anonymous member
- * "S::(anonymous at f.c:4:9)", which contains '.' -- so the component is the
- * longest declared name `rest` continues on a component boundary, never
- * whatever precedes the next '.' or '['. Longest-match is unambiguous because
- * two distinct names can only both boundary-match when one is the other
- * followed by '.' or '[', which no name clang emits can be. A tie is therefore
- * a duplicate name, and resolves to nullopt as the lookup in
- * struct_union_get_component_number does. */
-static std::optional<std::pair<size_t, size_t>> match_leading_component(
+/* Longest-match is unambiguous because two distinct names can only both
+ * boundary-match when one is the other followed by '.' or '[', which no name
+ * clang emits can be. A tie is therefore a duplicate name, and resolves to
+ * nullopt as the lookup in struct_union_get_component_number does. */
+std::optional<std::pair<size_t, size_t>> match_leading_component(
   const std::vector<irep_idt> &names,
   const std::string &rest)
 {
