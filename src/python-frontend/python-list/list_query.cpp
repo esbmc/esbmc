@@ -425,13 +425,11 @@ exprt python_list::compare(
 
       const std::string lhs_list_id = resolve_map_id(lhs_list);
       const std::string rhs_list_id = resolve_map_id(rhs_list);
-      const auto *lhs_recorded = elem_types().find(lhs_list_id);
-      const auto *rhs_recorded = elem_types().find(rhs_list_id);
-      if (!lhs_recorded || !rhs_recorded)
-        return false;
-
-      const std::size_t lhs_size = lhs_recorded->size();
-      const std::size_t rhs_size = rhs_recorded->size();
+      // An empty list records nothing. Reading an unrecorded list as empty is
+      // sound because sizes_ok checks the size at run time, and it keeps an
+      // inner [] off the __ESBMC_list_eq loop, which never converges.
+      const std::size_t lhs_size = elem_types().size(lhs_list_id);
+      const std::size_t rhs_size = elem_types().size(rhs_list_id);
       sizes_ok = and2tc(
         sizes_ok,
         and2tc(size_is(*lhs_list, lhs_size), size_is(*rhs_list, rhs_size)));
