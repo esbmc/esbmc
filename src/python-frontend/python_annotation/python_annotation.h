@@ -103,6 +103,10 @@ public:
   void add_extra_subscript_inference_source(const Json &ast);
 
 private:
+  Json *
+  class_init(const std::string &class_name, unsigned depth, bool &inherited);
+  /// Argument types each inherited __init__ parameter receives, by parameter.
+  std::map<Json *, std::set<std::string>> inherited_init_args_;
   // Implementations live in annotation_conversion.inl unless noted.
 
   // ----- AST lookup and walk helpers -----
