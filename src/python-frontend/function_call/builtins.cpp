@@ -431,15 +431,33 @@ exprt function_call_expr::handle_isinstance() const
     throw std::runtime_error("isinstance() expects 2 arguments");
 
   // Convert the first argument (the object being checked) into an expression
-  const exprt &obj_expr = converter_.get_expr(args[0]);
+  exprt obj_expr = converter_.get_expr(args[0]);
   const auto &obj_arg = args[0];
   std::vector<nlohmann::json> types;
   collect_classinfo(args[1], types);
   refuse_isinstance_on_path_dependent_number(obj_arg, types);
 
+  // A call operand is evaluated once, before the checks below read its
+  // result (one read per type in a tuple or per class a class value may be).
+  exprt first_read = nil_exprt();
+  if (obj_expr.is_function_call())
+  {
+    python_converter::convert_function_call_to_side_effect(obj_expr);
+    exprt reread;
+    first_read = converter_.bind_operand_read_twice(obj_expr, obj_arg, reread);
+    obj_expr = reread;
+  }
+  auto after_operand = [&](const exprt &checks) -> exprt {
+    if (first_read.is_nil())
+      return checks;
+    exprt comma("comma", checks.type());
+    comma.copy_to_operands(first_read, checks);
+    return comma;
+  };
+
   const exprt decided = isinstance_without_type_name(obj_arg, obj_expr, types);
   if (decided.is_not_nil())
-    return decided;
+    return after_operand(decided);
 
   // Extract type name from various AST node formats
   auto extract_type_name = [](const nlohmann::json &node) -> std::string {
@@ -610,7 +628,7 @@ exprt function_call_expr::handle_isinstance() const
       isinstance_operand(types[i], build_isinstance, extract_type_name));
     result = or_expr;
   }
-  return result;
+  return after_operand(result);
 }
 
 std::optional<exprt> function_call_expr::module_hasattr(
@@ -673,7 +691,8 @@ exprt function_call_expr::handle_hasattr() const
   if (std::optional<exprt> known = module_hasattr(args[0], attr_name))
     return *known;
 
-  const exprt &obj_expr = converter_.get_expr(args[0]);
+  exprt obj_expr = converter_.get_expr(args[0]);
+  python_converter::convert_function_call_to_side_effect(obj_expr);
   typet attr_type = array_typet(
     unsigned_char_type(), from_integer(attr_name.size() + 1, size_type()));
   string_constantt attr_expr(attr_name, attr_type, string_constantt::k_default);
