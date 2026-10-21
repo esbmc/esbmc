@@ -4204,12 +4204,13 @@ bool python_converter::is_numpy_arithmetic_result(
   const exprt &lhs) const
 {
   const typet &lhs_type = ns.follow(lhs.type());
+  typet leaf = lhs_type;
+  while (leaf.is_array())
+    leaf = ns.follow(leaf.subtype());
   return rhs_node.value("_type", "") == "BinOp" && lhs_type.is_array() &&
          !type_handler_.is_string_type(lhs_type) &&
          !type_utils::is_bytes_array(lhs_type) &&
-         (lhs_type.subtype().is_signedbv() ||
-          lhs_type.subtype().is_unsignedbv() ||
-          lhs_type.subtype().is_floatbv());
+         (leaf.is_signedbv() || leaf.is_unsignedbv() || leaf.is_floatbv());
 }
 
 bool python_converter::is_array_returning_call_expr(

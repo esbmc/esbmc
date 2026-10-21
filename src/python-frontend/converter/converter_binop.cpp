@@ -2785,39 +2785,65 @@ static bool is_elementwise_op(const std::string &op)
   return ops.count(op) != 0 || bitwise_ops().count(op) != 0;
 }
 
-// The shape of an element-wise operation over `lhs` and `rhs`: a numeric
-// array with a number on either side, or two arrays of one shape.
+// The shape of a numeric operand: its array shape, or no axes for a number;
+// nullopt for anything else.
+static std::optional<std::vector<long long>> operand_shape(const typet &type)
+{
+  if (is_numeric_scalar_type(type))
+    return std::vector<long long>();
+  return numeric_array_shape(type);
+}
+
+// A shape as NumPy spells it in a message: `(3,)`, `(2,2)`.
+static std::string shape_text(const std::vector<long long> &shape)
+{
+  std::string text = "(";
+  for (std::size_t i = 0; i < shape.size(); ++i)
+    text += std::to_string(shape[i]) +
+            (shape.size() == 1 || i + 1 < shape.size() ? "," : "");
+  return text + ")";
+}
+
+// NumPy broadcasting: the shapes aligned on their last axes, each axis equal
+// or 1 in one of them.
+static std::optional<std::vector<long long>>
+broadcast_shapes(std::vector<long long> a, std::vector<long long> b)
+{
+  if (a.size() < b.size())
+    std::swap(a, b);
+  b.insert(b.begin(), a.size() - b.size(), 1);
+  for (std::size_t i = 0; i < a.size(); ++i)
+  {
+    if (a[i] != b[i] && a[i] != 1 && b[i] != 1)
+      return std::nullopt;
+    a[i] = a[i] == 1 ? b[i] : a[i];
+  }
+  return a;
+}
+
+// The shape of an element-wise operation over two numeric operands, at least
+// one an array; shapes that do not broadcast are rejected as NumPy raises.
 static std::optional<std::vector<long long>>
 elementwise_shape(const std::string &op, const exprt &lhs, const exprt &rhs)
 {
-  if (!is_elementwise_op(op))
-    return std::nullopt;
-  const auto lhs_shape = numeric_array_shape(lhs.type());
-  const auto rhs_shape = numeric_array_shape(rhs.type());
+  const auto lhs_shape = operand_shape(lhs.type());
+  const auto rhs_shape = operand_shape(rhs.type());
   if (
-    lhs_shape && (is_numeric_scalar_type(rhs.type()) || rhs_shape == lhs_shape))
-    return lhs_shape;
-  if (rhs_shape && is_numeric_scalar_type(lhs.type()))
-    return rhs_shape;
-  return std::nullopt;
+    !is_elementwise_op(op) || !lhs_shape || !rhs_shape ||
+    (lhs_shape->empty() && rhs_shape->empty()))
+    return std::nullopt;
+  std::optional<std::vector<long long>> shape =
+    broadcast_shapes(*lhs_shape, *rhs_shape);
+  if (!shape)
+    throw std::runtime_error(
+      "operands could not be broadcast together with shapes " +
+      shape_text(*lhs_shape) + " " + shape_text(*rhs_shape) + " ");
+  return shape;
 }
 
-// The forms the model computes: `%` only as `int array % int`, and an integer
-// power only by a constant non-negative exponent (a negative one is NumPy's
-// ValueError).
-static bool is_modelled_elementwise(
-  const std::string &op,
-  const exprt &lhs,
-  const exprt &rhs,
-  const typet &result_elem)
+static std::size_t array_rank(const typet &type)
 {
-  BigInt exponent;
-  if (op == "Mod")
-    return lhs.type().is_array() && !rhs.type().is_array() &&
-           !result_elem.is_floatbv();
-  if (op == "Pow" && !result_elem.is_floatbv())
-    return rhs.is_constant() && !to_integer(rhs, exponent) && exponent >= 0;
-  return true;
+  return type.is_array() ? 1 + array_rank(type.subtype()) : 0;
 }
 
 // NumPy's ufunc for a bitwise operator, named in its TypeError.
@@ -2842,6 +2868,17 @@ exprt python_converter::numpy_element_op(
 {
   if (op == "Pow")
     return cast_to(math_handler_.handle_power(x, y), type);
+  if (op == "Mod" && type.is_floatbv())
+  {
+    // The remainder takes the divisor's sign: x - floor(x / y) * y; a zero
+    // divisor gives NaN through the infinite quotient.
+    exprt quotient(python_frontend::map_operator("Div", type), type);
+    quotient.copy_to_operands(x, y);
+    const exprt floored =
+      cast_to(math_handler_.handle_floor_division(x, y, quotient), type);
+    return python_expr::build_sub(
+      x, python_expr::build_mul(floored, y, type), type);
+  }
   exprt raw(python_frontend::map_operator(op, type), type);
   raw.copy_to_operands(x, y);
   if (op == "FloorDiv")
@@ -2869,14 +2906,20 @@ exprt python_converter::numpy_elementwise(
   BigInt length;
   to_integer(to_array_type(type).size(), length);
   const typet index_type = size_type();
+  const std::size_t rank = array_rank(type);
   expr2tc result = gen_zero(migrate_type(type));
   for (long long i = 0; i < length.to_int64(); ++i)
   {
+    // An operand with fewer axes, or extent 1 on this one, is broadcast.
     const auto row = [&](const exprt &operand) -> exprt {
-      if (!operand.type().is_array())
+      if (array_rank(operand.type()) < rank)
         return operand;
+      BigInt extent;
+      to_integer(to_array_type(operand.type()).size(), extent);
       return index_exprt(
-        operand, from_integer(i, index_type), operand.type().subtype());
+        operand,
+        from_integer(extent == 1 ? 0 : i, index_type),
+        operand.type().subtype());
     };
     expr2tc value;
     migrate_expr(
@@ -2890,13 +2933,50 @@ exprt python_converter::numpy_elementwise(
   return migrate_expr_back(result);
 }
 
-// Element-wise arithmetic, `%`, `**` and bitwise operators between a numeric
-// NumPy array and a number (on either side) or another array of the same
-// shape. Nil for any other operand pair.
+// The elements of a numeric operand, a number being its own one element.
+static std::vector<exprt> flat_elements(const exprt &operand)
+{
+  if (!operand.type().is_array())
+    return {operand};
+  std::vector<exprt> elements;
+  BigInt length;
+  to_integer(to_array_type(operand.type()).size(), length);
+  for (long long i = 0; i < length.to_int64(); ++i)
+    for (const exprt &e : flat_elements(index_exprt(
+           operand, from_integer(i, size_type()), operand.type().subtype())))
+      elements.push_back(e);
+  return elements;
+}
+
+// An integer raised to a negative integer power is NumPy's ValueError, raised
+// when the operation runs.
+void python_converter::guard_negative_exponents(
+  const exprt &exponents,
+  const locationt &location)
+{
+  exprt negative = false_exprt();
+  for (const exprt &e : flat_elements(exponents))
+    negative =
+      or_exprt(negative, binary_relation_exprt(e, "<", gen_zero(e.type())));
+  if (!can_emit_runtime_guard())
+    throw std::runtime_error(
+      "TypeError: an integer numpy power is only supported where its "
+      "exponent check can run");
+  emit_guarded_raise(
+    negative,
+    "ValueError",
+    "Integers to negative integer powers are not allowed.",
+    location);
+}
+
+// Element-wise arithmetic, `%`, `**` and bitwise operators between numeric
+// NumPy arrays and numbers, broadcast as NumPy does. Nil for any other
+// operand pair.
 exprt python_converter::numpy_array_arithmetic(
   const std::string &op,
   const exprt &lhs,
-  const exprt &rhs)
+  const exprt &rhs,
+  const locationt &location)
 {
   const std::optional<std::vector<long long>> shape =
     elementwise_shape(op, lhs, rhs);
@@ -2906,9 +2986,9 @@ exprt python_converter::numpy_array_arithmetic(
   const typet &rhs_leaf = leaf_type(rhs.type());
   const typet result_leaf = elementwise_result_type(
     op, lhs.type().is_array() ? lhs_leaf : rhs_leaf, lhs_leaf, rhs_leaf);
-  if (!is_modelled_elementwise(op, lhs, rhs, result_leaf))
-    return nil_exprt();
   const typet result_type = shaped_type(result_leaf, *shape);
+  if (op == "Pow" && !result_leaf.is_floatbv())
+    guard_negative_exponents(rhs, location);
   if (bitwise_ops().count(op) && result_leaf.is_floatbv())
     return raise_in_expression(
       "TypeError",
@@ -2934,9 +3014,9 @@ exprt python_converter::raise_in_expression(
   return value;
 }
 
-// An element-wise operator over a numeric array that numpy_array_arithmetic
-// does not model (broadcasting across shapes, a float operand of a bitwise
-// operator, ...) is rejected rather than lowered as scalar arithmetic.
+// An element-wise operator between a numeric array and an operand
+// numpy_array_arithmetic does not model is rejected rather than lowered as
+// scalar arithmetic.
 void python_converter::reject_unmodelled_array_arithmetic(
   const std::string &op,
   const exprt &lhs,
@@ -2948,12 +3028,8 @@ void python_converter::reject_unmodelled_array_arithmetic(
     (!numeric_array_shape(lhs.type()) && !numeric_array_shape(rhs.type())))
     return;
   std::ostringstream msg;
-  if (numeric_array_shape(lhs.type()) && numeric_array_shape(rhs.type()))
-    msg << "TypeError: arithmetic on numeric arrays is not supported "
-           "(numpy broadcasting is not modelled)";
-  else
-    msg << "TypeError: numpy element-wise '" << op
-        << "' is not supported for these operands";
+  msg << "TypeError: numpy element-wise '" << op
+      << "' is not supported for these operands";
   const locationt loc = get_location_from_decl(element);
   if (!loc.is_nil())
     msg << " at " << loc.get_file() << ":" << loc.get_line();
@@ -3029,7 +3105,8 @@ exprt python_converter::handle_array_operations(
     return false;
   };
 
-  const exprt elementwise = numpy_array_arithmetic(op, lhs, rhs);
+  const exprt elementwise =
+    numpy_array_arithmetic(op, lhs, rhs, get_location_from_decl(element));
   if (!elementwise.is_nil())
     return elementwise;
 

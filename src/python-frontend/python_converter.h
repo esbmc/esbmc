@@ -2971,7 +2971,10 @@ private:
   exprt numpy_array_arithmetic(
     const std::string &op,
     const exprt &lhs,
-    const exprt &rhs);
+    const exprt &rhs,
+    const locationt &location);
+  void
+  guard_negative_exponents(const exprt &exponents, const locationt &location);
   exprt numpy_elementwise(
     const std::string &op,
     const exprt &lhs,
