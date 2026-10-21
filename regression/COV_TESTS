@@ -3275,3 +3275,5 @@ regression/python/github_8926_user_method_get
 regression/python/github_8926_user_method_get_fail
 regression/python/github_8925_attr_off_call
 regression/python/github_8925_attr_off_call_fail
+regression/python/github_8968_imported_default_param
+regression/python/github_8968_imported_default_param_fail
