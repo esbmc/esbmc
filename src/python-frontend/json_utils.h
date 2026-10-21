@@ -231,6 +231,25 @@ bool any_class_has_property(const JsonType &ast_body, const std::string &name)
   return false;
 }
 
+/// True when a class anywhere under @p node defines a method named @p name.
+template <typename JsonType>
+bool any_class_defines_method(const JsonType &node, const std::string &name)
+{
+  if (
+    node.is_object() && node.value("_type", "") == "ClassDef" &&
+    node.contains("body"))
+    for (const auto &stmt : node["body"])
+      if (
+        stmt.value("_type", "") == "FunctionDef" &&
+        stmt.value("name", "") == name)
+        return true;
+  if (node.is_object() || node.is_array())
+    for (const auto &child : node)
+      if (any_class_defines_method(child, name))
+        return true;
+  return false;
+}
+
 // True when `method_name` is a method decorated with @property in `class_name`
 // or one of its (transitive) base classes. Reading `obj.prop` then invokes the
 // getter. A same-named non-property method in a derived class shadows a base
