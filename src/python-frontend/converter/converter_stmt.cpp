@@ -6605,7 +6605,14 @@ void python_converter::propagate_list_type_info(
     throw std::runtime_error(
       "rebinding '" + lhs_symbol->name.as_string() +
       "' to a list of other element types on one path is not supported");
-  element_type_registry_.assign_from(rhs_identifier, lhs_identifier);
+  // Every instance-attribute list shares the empty identifier, so its record
+  // may be another attribute's; an annotated one gives its element type.
+  const typet attr_elem_type =
+    python_list(*this, nlohmann::json()).attribute_elem_type(rhs);
+  if (attr_elem_type != typet())
+    element_type_registry_.assign(lhs_identifier, attr_elem_type);
+  else
+    element_type_registry_.assign_from(rhs_identifier, lhs_identifier);
 
   // When rhs is dict_sym.keys / dict_sym.values (a member expression
   // rather than a list symbol), rhs_identifier is empty and
