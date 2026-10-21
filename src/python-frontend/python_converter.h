@@ -296,14 +296,6 @@ public:
   /// is "Cls@C@m", so a same-named method of another class is not found.
   std::string current_ast_scope() const;
 
-  /// Whether @p symbol is one of the converter's own temporaries, which are
-  /// assigned once where they are made. A Python local is file-local too, so
-  /// that flag does not tell the two apart.
-  bool is_frontend_temporary(const symbolt &symbol) const
-  {
-    return has_prefix(symbol.id.as_string(), sym_generator_.prefix);
-  }
-
   const namespacet &name_space() const
   {
     return ns;
