@@ -41,6 +41,17 @@ param_kinds_t collect_param_kinds(const nlohmann::json &function_node)
   return kinds;
 }
 
+// "str" for `nondet_str()`, "num" for `nondet_int()` or `nondet_bool()`.
+std::string nondet_call_kind(const nlohmann::json &call)
+{
+  if (call["func"].value("_type", "") != "Name" || !call["args"].empty())
+    return "";
+  const std::string callee = call["func"].value("id", "");
+  if (callee == "nondet_str")
+    return "str";
+  return callee == "nondet_int" || callee == "nondet_bool" ? "num" : "";
+}
+
 // Classifies a single `return <literal>` or `return <param>` statement:
 // "num", "str", or "" if neither applies.
 std::string classify_return_literal_kind(
@@ -58,9 +69,8 @@ std::string classify_return_literal_kind(
     auto it = param_kinds.find(value.value("id", ""));
     return it == param_kinds.end() ? "" : it->second;
   }
-  // `return nondet_str()` is as much a str as `return "a"` (#8977).
   if (value.value("_type", "") == "Call")
-    return dynamic_type_detail::classify_literal_value_kind(value);
+    return nondet_call_kind(value);
   if (value.value("_type", "") != "Constant" || !value.contains("value"))
     return "";
 
