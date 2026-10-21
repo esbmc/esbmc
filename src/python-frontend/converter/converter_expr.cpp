@@ -1493,7 +1493,7 @@ std::optional<exprt> python_converter::try_dispatch_dict_subscript(
   exprt &array,
   const typet &array_type_for_dict,
   bool array_is_dict_pointer,
-  const nlohmann::json &slice)
+  const nlohmann::json &element)
 {
   // Handle dictionary subscript with type inference from annotations
   if (
@@ -1513,9 +1513,28 @@ std::optional<exprt> python_converter::try_dispatch_dict_subscript(
   typet expected_type =
     dict_handler_->resolve_expected_type_for_dict_subscript(array);
 
+  // A dict read out of a list, as in rows[0]["k"], has no symbol to type its
+  // value by, and the handler's default reads it as a str. Take the type the
+  // list's dicts were built with; a later store may change it, so check it.
+  const nlohmann::json &base = element["value"];
+  bool check_type = false;
+  if (
+    (expected_type.is_nil() || expected_type.is_empty()) &&
+    base.value("_type", "") == "Subscript" &&
+    base["value"].value("_type", "") == "Name")
+  {
+    symbol_id list_id = create_symbol_id();
+    list_id.set_object(base["value"]["id"].get<std::string>());
+    if (const symbolt *list = find_symbol(list_id.to_string()))
+      expected_type =
+        dict_handler_->uniform_list_dict_value_type(list->id.as_string());
+    check_type = !expected_type.is_empty();
+  }
+
   // Pass the expected type to the dict handler
   // If empty, the handler will use its default heuristics
-  return dict_handler_->handle_dict_subscript(array, slice, expected_type);
+  return dict_handler_->handle_dict_subscript(
+    array, element["slice"], expected_type, check_type);
 }
 
 std::optional<exprt> python_converter::try_dispatch_multidim_tuple_axes(
@@ -1934,7 +1953,7 @@ exprt python_converter::handle_subscript_expr(const nlohmann::json &element)
 
   if (
     std::optional<exprt> dict_result = try_dispatch_dict_subscript(
-      array, array_type_for_dict, array_is_dict_pointer, slice))
+      array, array_type_for_dict, array_is_dict_pointer, element))
     return *dict_result;
 
   const typet list_type = type_handler_.get_list_type();

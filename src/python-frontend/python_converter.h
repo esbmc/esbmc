@@ -2344,7 +2344,7 @@ private:
     exprt &array,
     const typet &array_type_for_dict,
     bool array_is_dict_pointer,
-    const nlohmann::json &slice);
+    const nlohmann::json &element);
   bool subscript_targets_list_model(
     const typet &array_type,
     const typet &list_type) const;
