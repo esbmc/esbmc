@@ -3640,6 +3640,22 @@ python_converter::numpy_views_of(const std::string &rebound_id) const
   return view_ids;
 }
 
+// The names that read `rebound_id`'s storage through `b = a`, in this
+// function.
+std::vector<std::string>
+python_converter::numpy_storage_aliases_of(const std::string &rebound_id) const
+{
+  std::vector<std::string> aliases;
+  for (const auto &[alias, storage] : numpy_array_storage_aliases_)
+    if (
+      alias != rebound_id &&
+      resolve_numpy_array_storage_alias_id(alias) == rebound_id &&
+      !is_local_to_other_function(alias, current_func_name_))
+      aliases.push_back(alias);
+  std::sort(aliases.begin(), aliases.end());
+  return aliases;
+}
+
 void python_converter::detach_numpy_pointer_view(
   const std::string &view_id,
   const locationt &location,

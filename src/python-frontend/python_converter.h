@@ -2602,6 +2602,13 @@ private:
     const std::string &storage_id,
     const std::vector<std::string> &view_ids,
     const locationt &location,
+    codet &target_block,
+    const std::string &heir_id = "");
+  std::vector<std::string>
+  numpy_storage_aliases_of(const std::string &rebound_id) const;
+  std::string hand_numpy_storage_to_alias(
+    const std::string &rebound_id,
+    const locationt &location,
     codet &target_block);
 
   bool should_rebuild_cached_numpy_row_subscript_rhs(
