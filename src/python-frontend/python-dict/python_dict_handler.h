@@ -233,6 +233,13 @@ public:
     const typet &expected_type = typet(),
     bool check_type = false);
 
+  /// When @p enabled, assert that the PyObject @p obj holds a value of @p type.
+  void check_value_type(
+    bool enabled,
+    const exprt &obj,
+    const typet &type,
+    const locationt &location);
+
   /**
    * @brief Handles dictionary subscript assignment (e.g., `dict['key'] =
    * value`).
