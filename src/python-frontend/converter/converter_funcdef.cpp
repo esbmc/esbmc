@@ -217,6 +217,36 @@ void count_bindings(
     count_bindings(child.value(), writes, nested || enters_scope);
 }
 
+/// Whether every use of @p name in @p node is a direct call outside any nested
+/// scope, so the function it names cannot run once the frame is gone.
+bool only_called_in_frame(
+  const nlohmann::json &node,
+  const std::string &name,
+  bool nested = false)
+{
+  if (node.is_array())
+    return std::all_of(node.begin(), node.end(), [&](const auto &item) {
+      return only_called_in_frame(item, name, nested);
+    });
+  if (!node.is_object())
+    return true;
+
+  const std::string kind = node.value("_type", "");
+  if (kind == "Name" && node.value("id", "") == name)
+    return false;
+  const nlohmann::json &func = field(node, "func");
+  const bool calls_name = !nested && kind == "Call" && func.is_object() &&
+                          func.value("_type", "") == "Name" &&
+                          func.value("id", "") == name;
+  const bool enters_scope = nested || scope_kinds.count(kind) != 0;
+  for (const auto &child : node.items())
+    if (
+      !(calls_name && child.key() == "func") &&
+      !only_called_in_frame(child.value(), name, enters_scope))
+      return false;
+  return true;
+}
+
 /// Scalars and functions. A container (list/dict/str/instance) carries
 /// per-symbol element-type metadata keyed by its own id, which a
 /// differently-named cell would not inherit -- `c[0] += 1` over a captured
@@ -273,6 +303,14 @@ code_blockt python_converter::create_capture_cells(
   if (
     current_func_name_.find("@F@") == std::string::npos ||
     !current_class_name_.empty())
+    return code_blockt();
+  // Called only within its frame, it reads the live enclosing local, which a
+  // cell would poison once two calls of the frame bind different values.
+  if (
+    enclosing_function_node_ != nullptr &&
+    only_called_in_frame(
+      field(*enclosing_function_node_, "body"),
+      function_node.value("name", "")))
     return code_blockt();
 
   const std::string func_id = id.to_string();
