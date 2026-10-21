@@ -1630,6 +1630,14 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
     // A number on the left of an array (`2 * a`) gives an array.
     if (!is_array_operand(lhs, body) && is_array_operand(rhs, body))
       return "list";
+    // Only a list concatenates or repeats with a list (`a + [x]`, `n * [x]`);
+    // a list literal on the left keeps its element type below.
+    const Json &value = stmt.contains("value") ? stmt["value"] : stmt;
+    const std::string op = value["op"].value("_type", "");
+    if (
+      (op == "Add" || op == "Mult") && lhs["_type"] != "List" &&
+      (rhs["_type"] == "List" || rhs["_type"] == "ListComp"))
+      return "list";
   }
 
   if (lhs["_type"] == "BinOp")
@@ -1666,25 +1674,11 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
           find_annotated_assign(lhs["id"], (*current_func)["args"]["args"]);
       }
 
-      if (
-        !left_op.empty() && left_op.contains("annotation") &&
-        left_op["annotation"].contains("id") &&
-        left_op["annotation"]["id"].is_string())
-      {
-        type = left_op["annotation"]["id"];
-      }
+      type = operand_annotation_type(left_op);
       // As a fallback, check global scope for prior annotation
       if (type.empty())
-      {
-        Json global_op = find_annotated_assign(lhs["id"], ast_["body"]);
-        if (
-          !global_op.empty() && global_op.contains("annotation") &&
-          global_op["annotation"].contains("id") &&
-          global_op["annotation"]["id"].is_string())
-        {
-          type = global_op["annotation"]["id"];
-        }
-      }
+        type = operand_annotation_type(
+          find_annotated_assign(lhs["id"], ast_["body"]));
     }
     else if (lhs["_type"] == "UnaryOp")
     {
@@ -1759,15 +1753,8 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
     if (rhs["_type"] == "Constant")
       type = get_type_from_constant(rhs);
     else if (rhs["_type"] == "Name")
-    {
-      Json right_op = find_annotated_assign(
-        rhs["id"], body.contains("body") ? body["body"] : ast_["body"]);
-      if (
-        right_op.contains("annotation") &&
-        right_op["annotation"].contains("id") &&
-        right_op["annotation"]["id"].is_string())
-        type = right_op["annotation"]["id"];
-    }
+      type = operand_annotation_type(find_annotated_assign(
+        rhs["id"], body.contains("body") ? body["body"] : ast_["body"]));
 
     if (
       type.empty() && stmt.contains("value") && stmt["value"].contains("op") &&
@@ -1778,6 +1765,22 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
   }
 
   return promote_to_float_operand(stmt, type);
+}
+
+/// The type a declaration's annotation names, or empty. A `list[T]` or
+/// `tuple[...]` gives its base: the result of `+` or `*` on one keeps the
+/// container but not its element types.
+template <class Json>
+std::string python_annotation<Json>::operand_annotation_type(const Json &decl)
+{
+  if (decl.empty() || !decl.contains("annotation"))
+    return "";
+  const Json &annotation = decl["annotation"];
+  if (annotation.contains("id") && annotation["id"].is_string())
+    return annotation["id"];
+  const std::string base = json_utils::get_annotation_type_name(annotation);
+  const std::string base_name = base.substr(0, base.find('['));
+  return base_name == "list" || base_name == "tuple" ? base_name : "";
 }
 
 /// Whether `operand` is a NumPy array: a constructor or sized random call, or
