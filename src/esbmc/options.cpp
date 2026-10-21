@@ -1122,6 +1122,10 @@ const struct group_opt_templ all_cmd_options[] = {
       "object (unsound)"},
      {"abort-on-recursion", NULL, "Abort if the program contains recursion"},
      {"ltl", NULL, "Enable Linear Temporal Logic property checking"},
+     {"ltl-sample-points",
+      NULL,
+      "Step the LTL monitor only at __ESBMC_ltl_sample() calls, not after "
+      "every update of a global its propositions read"},
      {"break-at",
       boost::program_options::value<std::string>(),
       "Trigger a breakpoint at the given GOTO instruction number"},

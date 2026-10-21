@@ -217,6 +217,36 @@ void count_bindings(
     count_bindings(child.value(), writes, nested || enters_scope);
 }
 
+/// Whether every use of @p name in @p node is a direct call outside any nested
+/// scope, so the function it names cannot run once the frame is gone.
+bool only_called_in_frame(
+  const nlohmann::json &node,
+  const std::string &name,
+  bool nested = false)
+{
+  if (node.is_array())
+    return std::all_of(node.begin(), node.end(), [&](const auto &item) {
+      return only_called_in_frame(item, name, nested);
+    });
+  if (!node.is_object())
+    return true;
+
+  const std::string kind = node.value("_type", "");
+  if (kind == "Name" && node.value("id", "") == name)
+    return false;
+  const nlohmann::json &func = field(node, "func");
+  const bool calls_name = !nested && kind == "Call" && func.is_object() &&
+                          func.value("_type", "") == "Name" &&
+                          func.value("id", "") == name;
+  const bool enters_scope = nested || scope_kinds.count(kind) != 0;
+  for (const auto &child : node.items())
+    if (
+      !(calls_name && child.key() == "func") &&
+      !only_called_in_frame(child.value(), name, enters_scope))
+      return false;
+  return true;
+}
+
 /// Scalars and functions. A container (list/dict/str/instance) carries
 /// per-symbol element-type metadata keyed by its own id, which a
 /// differently-named cell would not inherit -- `c[0] += 1` over a captured
@@ -273,6 +303,14 @@ code_blockt python_converter::create_capture_cells(
   if (
     current_func_name_.find("@F@") == std::string::npos ||
     !current_class_name_.empty())
+    return code_blockt();
+  // Called only within its frame, it reads the live enclosing local, which a
+  // cell would poison once two calls of the frame bind different values.
+  if (
+    enclosing_function_node_ != nullptr &&
+    only_called_in_frame(
+      field(*enclosing_function_node_, "body"),
+      function_node.value("name", "")))
     return code_blockt();
 
   const std::string func_id = id.to_string();
@@ -1598,6 +1636,38 @@ static bool list_literal_for_call_arg(
   return out.value("_type", "") == "List";
 }
 
+/// Whether \p name appears in \p node, at least once, and only as an operand
+/// of a single `==` or `!=`.
+static bool
+only_compared_for_equality(const nlohmann::json &node, const std::string &name)
+{
+  bool compared = false;
+  std::function<bool(const nlohmann::json &)> walk =
+    [&](const nlohmann::json &n) -> bool {
+    if (!n.is_object() && !n.is_array())
+      return true;
+    if (n.is_object() && n.value("_type", "") == "Name")
+      return n.value("id", "") != name;
+    if (
+      n.is_object() && n.value("_type", "") == "Compare" &&
+      n["ops"].size() == 1 &&
+      (n["ops"][0].value("_type", "") == "Eq" ||
+       n["ops"][0].value("_type", "") == "NotEq"))
+    {
+      for (const nlohmann::json *side : {&n["left"], &n["comparators"][0]})
+      {
+        if (side->value("_type", "") == "Name" && side->value("id", "") == name)
+          compared = true;
+        else if (!walk(*side))
+          return false;
+      }
+      return true;
+    }
+    return std::all_of(n.begin(), n.end(), walk);
+  };
+  return walk(node) && compared;
+}
+
 /// Refines one unannotated (Any) parameter to the list model when the body
 /// or the call sites show it holds a list, and records the element type when
 /// one is known.
@@ -1613,18 +1683,30 @@ void python_converter::refine_any_param_to_list(
   if (param_arg.type() != any_type())
     return;
 
+  const std::string param_id = param_arg.cmt_identifier().as_string();
   typet elem_type;
-  if (!param_is_list_like(param_name, body, func_name, param_index, elem_type))
+  // A list the annotator could not type, such as [10, "-"], is still a list
+  // when every call passes a display, provided its elements get recorded.
+  // Only an equality reads it through the recorded tags (#8898).
+  const bool list_like =
+    param_is_list_like(param_name, body, func_name, param_index, elem_type);
+  if (
+    !list_like &&
+    (!only_compared_for_equality(body, param_name) ||
+     !called_only_with_flat_list_displays(func_name, param_index)))
+    return;
+  const bool seeded = !param_id.empty() && seed_mixed_call_site_elements(
+                                             param_id, func_name, param_index);
+  if (!list_like && !seeded)
     return;
 
   param_arg.type() = type_handler_.get_list_type();
 
-  const std::string param_id = param_arg.cmt_identifier().as_string();
   if (param_id.empty())
     return;
   if (symbolt *param_sym = symbol_table_.find_symbol(param_id))
     python_expr::set_symbol_type_if_carried(*param_sym, param_arg.type());
-  if (seed_mixed_call_site_elements(param_id, func_name, param_index))
+  if (seeded)
     return;
   if (elem_type != typet())
     element_type_registry_.record(param_id, "", elem_type);
@@ -1788,6 +1870,51 @@ bool python_converter::param_keeps_positions(
            (*def)["body"],
            (*def)["args"]["args"][param_index].value("arg", ""),
            any_index);
+}
+
+/// Whether every call of \p func_name passes parameter \p param_index a list
+/// display without nested lists, or such a display taken from a list
+/// parameter's elements, and nothing else can reach the parameter: a
+/// decorator may call it with anything. A nested list beside a scalar has no
+/// element type a comparison can bound.
+bool python_converter::called_only_with_flat_list_displays(
+  const std::string &func_name,
+  size_t param_index) const
+{
+  const nlohmann::json *def = find_function_def((*ast_json)["body"], func_name);
+  if (
+    def == nullptr || !def->value("decorator_list", nlohmann::json()).empty() ||
+    !only_called_directly(*ast_json, func_name))
+    return false;
+  std::vector<numpy_param_call_site> call_sites;
+  collect_call_sites(*ast_json, "", call_sites);
+  bool called = false;
+  for (const numpy_param_call_site &site : call_sites)
+  {
+    const nlohmann::json &call = *site.call;
+    if (call.value("func", nlohmann::json()).value("id", "") != func_name)
+      continue;
+    const nlohmann::json &args = call["args"];
+    if (
+      args.size() <= param_index ||
+      std::any_of(args.begin(), args.end(), [](const nlohmann::json &a) {
+        return a.value("_type", "") == "Starred";
+      }))
+      return false;
+    called = true;
+  }
+  std::vector<nlohmann::json> literals;
+  bool direct = true;
+  return called &&
+         call_site_list_literals(func_name, param_index, literals, direct, 0) &&
+         direct &&
+         std::none_of(
+           literals.begin(), literals.end(), [](const nlohmann::json &l) {
+             return std::any_of(
+               l["elts"].begin(), l["elts"].end(), [](const nlohmann::json &e) {
+                 return e.value("_type", "") == "List";
+               });
+           });
 }
 
 /// Collects the values \p arg can be when it is an element `p[i]` of a
