@@ -30,6 +30,14 @@ void element_type_registry::record(
   map_for(slot)[id].emplace_back(elem_id, elem_type);
 }
 
+void element_type_registry::assign(
+  const std::string &id,
+  const typet &elem_type,
+  type_slot slot)
+{
+  map_for(slot)[id] = {entry(std::string(), elem_type)};
+}
+
 void element_type_registry::set_element_type(
   const std::string &id,
   size_t index,

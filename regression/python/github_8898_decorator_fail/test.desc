@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 8 --no-unwinding-assertions
+^\s+file \S*main\.py line 12 column 4 function \S*check$
+^VERIFICATION FAILED$
