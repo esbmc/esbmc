@@ -29,25 +29,27 @@ class VarargMixin:
 
         `f = my_sum` qualifies when it is a statement of the module body below
         the def and both names are bound once in the whole module, so a call of
-        `f` below it calls `my_sum` (#8959).
+        `f` below it calls `my_sum` (#8959). A star import can rebind either
+        name unseen, and another module can import the alias, so only the entry
+        module without star imports qualifies.
         """
-        bind_counts = {}
-        for node in ast.walk(module):
-            for bound in self._bound_names(node):
-                bind_counts[bound] = bind_counts.get(bound, 0) + 1
         self._vararg_alias_stmts = []
+        if not self.is_entry_module or any(
+                isinstance(node, ast.ImportFrom) and any(a.name == "*" for a in node.names)
+                for node in ast.walk(module)):
+            return {}
         variadic = set()
         calls = {}
         for index, stmt in enumerate(module.body):
             if isinstance(stmt, ast.FunctionDef) and stmt.args.vararg:
-                if bind_counts.get(stmt.name) == 1:
+                if stmt.name in self._vararg_once_bound:
                     variadic.add(stmt.name)
                 continue
             if not (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1):
                 continue
             alias, value = stmt.targets[0], stmt.value
             if not (isinstance(alias, ast.Name) and isinstance(value, ast.Name)
-                    and value.id in variadic and bind_counts.get(alias.id) == 1):
+                    and value.id in variadic and alias.id in self._vararg_once_bound):
                 continue
             self._vararg_alias_stmts.append(stmt)
             for node in (n for s in module.body[index + 1:] for n in ast.walk(s)):
