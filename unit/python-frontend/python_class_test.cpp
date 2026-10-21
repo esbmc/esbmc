@@ -115,8 +115,7 @@ TEST_CASE("python_class::parse - ClassDef with a simple base (Dog : Animal)")
   REQUIRE(pc.attributes().empty());
 
   // Should collect Animal as the only base
-  REQUIRE(
-    std::count(pc.bases().begin(), pc.bases().end(), "Animal") == 1);
+  REQUIRE(std::count(pc.bases().begin(), pc.bases().end(), "Animal") == 1);
 }
 
 //
