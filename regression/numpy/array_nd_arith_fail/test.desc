@@ -1,0 +1,5 @@
+CORE
+main.py
+--incremental-bmc
+^VERIFICATION FAILED$
+  assertion t\[1\]\[0\] == 3$

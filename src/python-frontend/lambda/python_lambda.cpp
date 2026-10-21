@@ -910,6 +910,28 @@ std::vector<std::optional<typet>> python_lambda::call_site_argument_types(
   return types;
 }
 
+std::vector<std::optional<typet>> python_lambda::narrowed_parameter_types(
+  const nlohmann::json &call,
+  const nlohmann::json &scope,
+  const code_typet &signature) const
+{
+  const auto &params = signature.arguments();
+  if (call["args"].size() != params.size())
+    return {};
+  std::vector<std::optional<typet>> types;
+  bool narrowed = false;
+  for (size_t i = 0; i < params.size(); ++i)
+  {
+    const std::optional<typet> arg =
+      scalar_argument_type(call["args"][i], scope, type_handler_);
+    const bool narrows =
+      arg && arg->is_signedbv() && params[i].type().is_floatbv();
+    narrowed |= narrows;
+    types.push_back(narrows ? *arg : params[i].type());
+  }
+  return narrowed ? types : std::vector<std::optional<typet>>();
+}
+
 // The `double` default rejects any body that indexes its parameter (#7328), so
 // the call site is consulted when neither an annotation nor string usage says
 // otherwise.

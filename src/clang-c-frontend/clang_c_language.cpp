@@ -574,6 +574,7 @@ _Bool __ESBMC_same_object(const void *, const void *);
 void __ESBMC_yield();
 void __ESBMC_atomic_begin();
 void __ESBMC_atomic_end();
+void __ESBMC_ltl_sample();
 
 // Explicitly initialize a new object
 void __ESBMC_init_object(void*);
