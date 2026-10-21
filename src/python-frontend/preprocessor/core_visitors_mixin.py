@@ -1905,6 +1905,7 @@ class CoreVisitorsMixin:
         self._normalize_builtin_keyword_args(node)
         self._normalize_math_gcd_lcm_variadic(node)
 
+        self._resolve_vararg_alias_call(node)
         guard = self._lower_starred_call_argument(node)
         raising = self._bind_call_arguments(node)
         if raising is not None:

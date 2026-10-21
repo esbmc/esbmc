@@ -24,6 +24,51 @@ class VarargMixin:
             if isinstance(stmt, ast.FunctionDef) and bind_counts.get(stmt.name) == 1
         }
 
+    def _scan_vararg_alias_calls(self, module):
+        """Map each call through a module-level alias of a variadic def to the def.
+
+        `f = my_sum` qualifies when it is a statement of the module body below
+        the def and both names are bound once in the whole module, so a call of
+        `f` below it calls `my_sum` (#8959).
+        """
+        bind_counts = {}
+        for node in ast.walk(module):
+            for bound in self._bound_names(node):
+                bind_counts[bound] = bind_counts.get(bound, 0) + 1
+        self._vararg_alias_stmts = []
+        variadic = set()
+        calls = {}
+        for index, stmt in enumerate(module.body):
+            if isinstance(stmt, ast.FunctionDef) and stmt.args.vararg:
+                if bind_counts.get(stmt.name) == 1:
+                    variadic.add(stmt.name)
+                continue
+            if not (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1):
+                continue
+            alias, value = stmt.targets[0], stmt.value
+            if not (isinstance(alias, ast.Name) and isinstance(value, ast.Name)
+                    and value.id in variadic and bind_counts.get(alias.id) == 1):
+                continue
+            self._vararg_alias_stmts.append(stmt)
+            for node in (n for s in module.body[index + 1:] for n in ast.walk(s)):
+                if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                        and node.func.id == alias.id):
+                    calls[node] = value.id
+        return calls
+
+    def _resolve_vararg_alias_call(self, node):
+        name = self._vararg_alias_calls.get(node)
+        if name is not None:
+            node.func = ast.copy_location(ast.Name(id=name, ctx=ast.Load()), node.func)
+
+    def _drop_unused_vararg_aliases(self, module):
+        """Drop an alias no call reads any more, so it keeps no variadic def alive."""
+        module.body = [
+            stmt for stmt in module.body
+            if not any(stmt is alias for alias in self._vararg_alias_stmts) or self._name_is_used(
+                [other for other in module.body if other is not stmt], stmt.targets[0].id)
+        ]
+
     def _enter_vararg_scope(self, node):
         """Open the scope of `node`, returning the def table to restore on exit.
 
