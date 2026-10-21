@@ -802,13 +802,20 @@ private:
       poisoned_.insert(name);
       return;
     }
-    for (size_t i = 0; i < required; ++i)
+    // A parameter the call leaves out takes its default, typed in the
+    // callee's module (#8968).
+    for (size_t i = 0; i < params.size(); ++i)
+    {
       if (
-        !params[i].contains("annotation") || params[i]["annotation"].is_null())
-        bind(
-          param_key{*callee, name, i},
-          arg_type(call["args"][i], caller),
-          *callee != caller);
+        params[i].contains("annotation") && !params[i]["annotation"].is_null())
+        continue;
+      const bool passed = i < call["args"].size();
+      bind(
+        param_key{*callee, name, i},
+        passed ? arg_type(call["args"][i], caller)
+               : arg_type(def["args"]["defaults"][i - required], *callee),
+        *callee != caller);
+    }
   }
 
   /// The function name @p node may carry outside callee position: a Name or

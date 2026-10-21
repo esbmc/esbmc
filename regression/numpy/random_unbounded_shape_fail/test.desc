@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+size must be an integer literal
