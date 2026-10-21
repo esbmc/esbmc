@@ -1134,10 +1134,20 @@ std::string python_annotation<Json>::get_attribute_type(const Json &arg)
      is_rebound_in_scope(obj["id"].template get<std::string>())))
     return "";
 
-  const std::string attr = arg["attr"].template get<std::string>();
-  for (const std::string &cls : get_class_ancestors(get_argument_type(obj)))
+  return class_attribute_type(
+    get_argument_type(obj), arg["attr"].template get<std::string>());
+}
+
+/// The declared type of attribute `attr` on an instance of class `cls`, read
+/// from `cls` and its bases, or empty.
+template <class Json>
+std::string python_annotation<Json>::class_attribute_type(
+  const std::string &cls,
+  const std::string &attr)
+{
+  for (const std::string &ancestor : get_class_ancestors(cls))
   {
-    const Json class_node = json_utils::find_class(ast_["body"], cls);
+    const Json class_node = json_utils::find_class(ast_["body"], ancestor);
     if (class_node.empty())
       return "";
     const Json annotation = json_utils::find_attr_annotation(class_node, attr);
@@ -1145,6 +1155,109 @@ std::string python_annotation<Json>::get_attribute_type(const Json &arg)
       return json_utils::render_annotation_type(annotation);
   }
   return "";
+}
+
+/// Counts the nodes under @p node that may store to an attribute named
+/// @p attr, a `setattr` call or a `__class__` read, and the uses of @p name
+/// outside annotations.
+template <class Json>
+static void count_attr_writers(
+  const Json &node,
+  const std::string &attr,
+  const std::string &name,
+  size_t &stores,
+  size_t &name_reads)
+{
+  if (node.is_array())
+  {
+    for (const Json &child : node)
+      count_attr_writers(child, attr, name, stores, name_reads);
+    return;
+  }
+  if (!node.is_object())
+    return;
+  const std::string type = node.value("_type", "");
+  const std::string ctx =
+    node.contains("ctx") ? node["ctx"].value("_type", "") : "";
+  if (
+    (type == "Attribute" && node.value("attr", "") == attr && ctx != "Load") ||
+    (type == "Attribute" && node.value("attr", "") == "__class__") ||
+    (type == "Name" && node.value("id", "") == "setattr"))
+    ++stores;
+  if (type == "Name" && node.value("id", "") == name)
+    ++name_reads;
+  for (auto it = node.begin(); it != node.end(); ++it)
+    if (it.key() != "annotation" && it.key() != "returns")
+      count_attr_writers(it.value(), attr, name, stores, name_reads);
+}
+
+/// The declared type of `self.attr` in a method of the class being annotated,
+/// or empty. An unannotated attribute takes the type of its first
+/// constructor call, so the type is given only when the attribute is stored
+/// once, by `__init__` of a class used only in plain calls, from a literal of
+/// that type or from a parameter that every call passes such a literal.
+template <class Json>
+std::string python_annotation<Json>::self_attribute_type(const Json &node)
+{
+  if (
+    node.value("_type", "") != "Attribute" ||
+    node["value"].value("_type", "") != "Name" ||
+    node["value"].value("id", "") != "self" || current_class_name_.empty() ||
+    is_rebound_in_scope("self"))
+    return "";
+  const std::string attr = node["attr"].template get<std::string>();
+  for (const std::string &cls : get_class_ancestors(current_class_name_))
+  {
+    const Json class_node = json_utils::find_class(ast_["body"], cls);
+    if (class_node.empty())
+      return "";
+    const Json value = python_annotation_parser::find_self_attr_init_rhs(
+      cls, attr, ast_["body"]);
+    if (value.empty())
+      continue;
+    size_t stores = 0;
+    size_t name_reads = 0;
+    count_attr_writers(ast_["body"], attr, cls, stores, name_reads);
+    const Json annotation = json_utils::find_attr_annotation(class_node, attr);
+    const std::vector<Json> calls = find_function_calls(cls, ast_["body"]);
+    if (stores != 1 || annotation.empty() || calls.size() != name_reads)
+      return "";
+    const std::string type = json_utils::render_annotation_type(annotation);
+    if (value.value("_type", "") == "Constant")
+      return get_argument_type(value) == type ? type : "";
+    if (value.value("_type", "") != "Name")
+      return "";
+
+    const Json init =
+      json_utils::try_find_function(class_node["body"], "__init__");
+    const Json &params = init["args"]["args"];
+    size_t index = 0;
+    while (index < params.size() && params[index]["arg"] != value["id"])
+      ++index;
+    if (index == 0 || index == params.size())
+      return "";
+    for (const Json &call : calls)
+    {
+      if (
+        !call["keywords"].empty() || call["args"].size() < index ||
+        call["args"][index - 1].value("_type", "") != "Constant" ||
+        get_argument_type(call["args"][index - 1]) != type)
+        return "";
+      for (const Json &arg : call["args"])
+        if (arg.value("_type", "") == "Starred")
+          return "";
+    }
+    return type;
+  }
+  return "";
+}
+
+/// The type of a binary operand, with `self.attr` read from the class.
+template <class Json>
+std::string python_annotation<Json>::get_operand_type(const Json &node)
+{
+  const std::string type = get_argument_type(node);
+  return type.empty() ? self_attribute_type(node) : type;
 }
 
 // Recursively search a statement subtree for the first
@@ -1557,6 +1670,26 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
         if (it != builtin_functions().end())
           type = it->second;
       }
+      // The result is typed from the left operand: only when the right one
+      // is a literal or another such attribute, and a number for a number
+      // (not a float that would be truncated), or an int or the same type
+      // for a str or list. A negative exponent
+      // gives a float, and arithmetic on a bool an int.
+      const Json &value = stmt.contains("value") ? stmt["value"] : stmt;
+      const std::string attr_type =
+        type.empty() ? self_attribute_type(lhs) : std::string();
+      const Json &rhs = value["right"];
+      const std::string rhs_type = rhs.value("_type", "") == "Constant"
+                                     ? get_argument_type(rhs)
+                                     : self_attribute_type(rhs);
+      const bool numeric = attr_type == "int" || attr_type == "float";
+      const bool rhs_fits =
+        numeric ? rhs_type == "int" || rhs_type == "float" || rhs_type == "bool"
+                : rhs_type == "int" || rhs_type == attr_type;
+      if (
+        !attr_type.empty() && attr_type != "bool" && rhs_fits &&
+        value["op"].value("_type", "") != "Pow")
+        type = attr_type;
     }
   }
 
@@ -1633,8 +1766,7 @@ std::string python_annotation<Json>::promote_to_float_operand(
   const std::string op = expr["op"].value("_type", "");
   if (op == "Div")
     return "float";
-  return arithmetic.count(op) != 0 &&
-             get_argument_type(expr["right"]) == "float"
+  return arithmetic.count(op) != 0 && get_operand_type(expr["right"]) == "float"
            ? "float"
            : type;
 }
