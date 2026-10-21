@@ -34,9 +34,7 @@ class VarargMixin:
         module without star imports qualifies.
         """
         self._vararg_alias_stmts = []
-        if not self.is_entry_module or any(
-                isinstance(node, ast.ImportFrom) and any(a.name == "*" for a in node.names)
-                for node in ast.walk(module)):
+        if not self.is_entry_module or self._has_star_import(module):
             return {}
         variadic = set()
         calls = {}
@@ -45,18 +43,31 @@ class VarargMixin:
                 if stmt.name in self._vararg_once_bound:
                     variadic.add(stmt.name)
                 continue
-            if not (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1):
-                continue
-            alias, value = stmt.targets[0], stmt.value
-            if not (isinstance(alias, ast.Name) and isinstance(value, ast.Name)
-                    and value.id in variadic and alias.id in self._vararg_once_bound):
+            alias = self._vararg_alias_name(stmt, variadic)
+            if alias is None:
                 continue
             self._vararg_alias_stmts.append(stmt)
             for node in (n for s in module.body[index + 1:] for n in ast.walk(s)):
                 if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-                        and node.func.id == alias.id):
-                    calls[node] = value.id
+                        and node.func.id == alias):
+                    calls[node] = stmt.value.id
         return calls
+
+    @staticmethod
+    def _has_star_import(module):
+        return any(
+            isinstance(node, ast.ImportFrom) and any(a.name == "*" for a in node.names)
+            for node in ast.walk(module))
+
+    def _vararg_alias_name(self, stmt, variadic):
+        """The name `stmt` binds once to one of the `variadic` defs, or None."""
+        if not (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1):
+            return None
+        alias, value = stmt.targets[0], stmt.value
+        if (isinstance(alias, ast.Name) and isinstance(value, ast.Name) and value.id in variadic
+                and alias.id in self._vararg_once_bound):
+            return alias.id
+        return None
 
     def _resolve_vararg_alias_call(self, node):
         name = self._vararg_alias_calls.get(node)
