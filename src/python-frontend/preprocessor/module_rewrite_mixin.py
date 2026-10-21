@@ -3,12 +3,14 @@ import copy
 from collections import Counter
 
 from preprocessor.bound_method_dispatch import dispatch_rebound_methods
+from preprocessor.decorator_lowering import lower_user_decorators
 from preprocessor.itertools_lowering import lower_itertools
 from preprocessor.match_lowering import lower_match_statements
 from preprocessor.namedtuple_lowering import lower_namedtuples
 from preprocessor.function_value_types import reject_mixed_function_values
 from preprocessor.receiver_classes import refuse_path_dependent_receivers
 from preprocessor.skipped_base_init import refuse_skipped_base_init
+from preprocessor.zip_lowering import lower_zip_builds
 from preprocessor.unbound_locals import guard_unbound_locals
 # pylint: disable=too-many-branches,too-many-boolean-expressions
 
@@ -64,6 +66,18 @@ def _rename_shadowed_classes(module):
                 taken.add(renamed)
                 stmt.name = renamed
                 break
+
+
+def _referenced_names(module):
+    """The names `module` reads, deletes or updates in place."""
+    return {
+        n.id
+        for n in ast.walk(module) if isinstance(n, ast.Name) and not isinstance(n.ctx, ast.Store)
+    } | {
+        n.target.id
+        for n in ast.walk(module)
+        if isinstance(n, ast.AugAssign) and isinstance(n.target, ast.Name)
+    }
 
 
 class ModuleRewriteMixin:
@@ -533,10 +547,12 @@ class ModuleRewriteMixin:
     def prepare_module(self, node, alias_seed=frozenset(), wrapper_seed=None):
         """Run pre-visit analyses and range-alias/wrapper canonicalization."""
         _rename_shadowed_classes(node)
+        lower_zip_builds(node)
         reject_mixed_function_values(node, self.module_name)
         lower_match_statements(node)
         lower_itertools(node)
         lower_namedtuples(node, self.module_name)
+        lower_user_decorators(node, self.module_name)
         refuse_path_dependent_receivers(node, self.module_name)
         refuse_skipped_base_init(node, self.module_name)
         self.expand_unittest_main(node)
@@ -552,6 +568,7 @@ class ModuleRewriteMixin:
         for n in ast.walk(node):
             if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
                 self.called_names.add(n.func.id)
+        self.referenced_names = _referenced_names(node)
         self._scan_fixed_receivers(node)
         self.variable_names = self._variable_names(node)
         self.scope_binding_counts = self._scope_binding_counts(node)

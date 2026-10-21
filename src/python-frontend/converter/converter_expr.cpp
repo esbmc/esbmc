@@ -659,12 +659,12 @@ find_module_binding(const nlohmann::json &body, const std::string &name)
   return nullptr;
 }
 
-/// Whether \p aug adds to a global of annotated type \p type a constant that
-/// leaves it that type.
-static bool keeps_type(const nlohmann::json &aug, const std::string &type)
+/// Whether \p value is a constant that leaves a global of annotated type
+/// \p type that type when added to it.
+static bool
+constant_keeps_type(const nlohmann::json &value, const std::string &type)
 {
-  const nlohmann::json &value = aug["value"];
-  if (aug["op"].value("_type", "") == "Div" || value["_type"] != "Constant")
+  if (value["_type"] != "Constant")
     return false;
   const nlohmann::json &constant = value["value"];
   return (type == "int" && constant.is_number_integer()) ||
@@ -672,18 +672,38 @@ static bool keeps_type(const nlohmann::json &aug, const std::string &type)
          (type == "str" && constant.is_string());
 }
 
+/// Whether a name has a given annotated type where it is read.
+using name_type_test =
+  std::function<bool(const std::string &, const std::string &)>;
+
+/// Whether \p aug adds to a global of annotated type \p type a constant, or
+/// a name \p has_type gives that type, that leaves it that type.
+static bool keeps_type(
+  const nlohmann::json &aug,
+  const std::string &type,
+  const name_type_test &has_type)
+{
+  const nlohmann::json &value = aug["value"];
+  if (aug["op"].value("_type", "") == "Div")
+    return false;
+  return value["_type"] == "Name"
+           ? has_type(value["id"].get<std::string>(), type)
+           : constant_keeps_type(value, type);
+}
+
 /// The augmented assignments to \p name under \p node that keep it \p type.
 static std::size_t count_type_keeping_aug_assigns(
   const nlohmann::json &node,
   const std::string &name,
-  const std::string &type)
+  const std::string &type,
+  const name_type_test &has_type)
 {
   std::size_t n = node.is_object() && node.value("_type", "") == "AugAssign" &&
                   node["target"].value("id", "") == name &&
-                  keeps_type(node, type);
+                  keeps_type(node, type, has_type);
   for (const auto &child : node)
     if (child.is_structured())
-      n += count_type_keeping_aug_assigns(child, name, type);
+      n += count_type_keeping_aug_assigns(child, name, type, has_type);
   return n;
 }
 
@@ -692,8 +712,10 @@ static std::size_t count_type_keeping_aug_assigns(
 /// one, a local) leaves the name's value at a read depending on which binding
 /// ran. An augmented assignment that keeps the binding's type does not count:
 /// it reads the name first, so it raises unless the binding has already run.
-static const nlohmann::json *
-sole_module_binding(const nlohmann::json &module, const std::string &name)
+static const nlohmann::json *sole_module_binding(
+  const nlohmann::json &module,
+  const std::string &name,
+  const name_type_test &has_type)
 {
   const nlohmann::json *binding = find_module_binding(module["body"], name);
   if (!binding)
@@ -703,10 +725,22 @@ sole_module_binding(const nlohmann::json &module, const std::string &name)
                              : "";
   if (
     json_utils::count_name_bindings(module, name) -
-      count_type_keeping_aug_assigns(module, name, type) !=
+      count_type_keeping_aug_assigns(module, name, type, has_type) !=
     1)
     return nullptr;
   return binding;
+}
+
+/// Whether the module global \p name is already bound with annotated type
+/// \p type.
+bool python_converter::global_has_type(
+  const std::string &name,
+  const std::string &type) const
+{
+  symbol_id sid(current_python_file, "", "");
+  sid.set_object(name);
+  const symbolt *symbol = symbol_table_.find_symbol(sid.to_string());
+  return symbol && symbol->get_type() == type_handler_.get_typet(type);
 }
 
 /// The module global \p sid names for a read in an enclosing scope. Code
@@ -718,8 +752,12 @@ symbolt *python_converter::find_global_symbol(const symbol_id &sid)
 {
   if (symbolt *symbol = find_enclosing_scope_symbol(sid))
     return symbol;
-  const nlohmann::json *binding =
-    sole_module_binding(*ast_json, sid.get_object());
+  const nlohmann::json *binding = sole_module_binding(
+    *ast_json,
+    sid.get_object(),
+    [this](const std::string &name, const std::string &type) {
+      return global_has_type(name, type);
+    });
   if (!binding || binding->value("_type", "") != "AnnAssign")
     return nullptr;
   nlohmann::json annotated = *binding;
@@ -743,12 +781,37 @@ exprt python_converter::module_function_expr(
   const symbolt *symbol = symbol_table_.find_symbol(sid.to_string());
   if (symbol && symbol->get_type().is_code())
     return symbol_expr(*symbol);
-  const nlohmann::json *binding = sole_module_binding(*ast_json, name);
+  const nlohmann::json *binding = sole_module_binding(
+    *ast_json, name, [](const std::string &, const std::string &) {
+      return false;
+    });
   if (!binding || binding->value("_type", "") != "FunctionDef")
     return nil_exprt();
   track_unbound_global(sid.to_string(), element, typet());
   guard_unbound_global(sid.to_string(), name, element);
   return symbol_exprt(sid.to_string(), code_typet());
+}
+
+/// The return type of the module function \p name, read before its `def` as
+/// \p fn, from the annotation its `def` carries: one of int, float, bool or
+/// str, or nil. mark_global_bound refuses a `def` converted to another one.
+typet python_converter::forward_function_return_type(
+  const std::string &name,
+  const exprt &fn)
+{
+  const auto flag = unbound_global_flags_.find(fn.identifier().as_string());
+  const nlohmann::json *def = sole_module_binding(*ast_json, name);
+  if (flag == unbound_global_flags_.end() || !def)
+    return typet();
+  const nlohmann::json &returns = resolve_return_annotation_node(*def);
+  const std::string id = returns.is_object() && returns["_type"] == "Name"
+                           ? returns.value("id", "")
+                           : "";
+  if (id != "int" && id != "float" && id != "bool" && id != "str")
+    return typet();
+  flag->second.second = id == "str" ? gen_pointer_type(char_type())
+                                    : named_return_type(id, returns, *def);
+  return flag->second.second;
 }
 
 void python_converter::track_unbound_global(
@@ -804,9 +867,11 @@ void python_converter::mark_global_bound(
   const auto flag = unbound_global_flags_.find(sid.to_string());
   if (name.empty() || flag == unbound_global_flags_.end())
     return;
+  const typet &bound = symbol_table_.find_symbol(sid.to_string())->get_type();
   if (
-    !is_def && symbol_table_.find_symbol(sid.to_string())->get_type() !=
-                 flag->second.second)
+    is_def ? !flag->second.second.id().empty() &&
+               to_code_type(bound).return_type() != flag->second.second
+           : bound != flag->second.second)
     throw std::runtime_error(
       fmt::format(
         "Variable '{}' is read before its binding at line {} as a different "
@@ -2175,6 +2240,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
                                       exprt base_expr,
                                       const nlohmann::json &base_node,
                                       const std::string &attr_name) -> exprt {
+        // `make().x` reads off a call statement, which a member expression
+        // cannot hold; as a side effect the call is hoisted (#8925).
+        base_expr = to_value_expr(base_expr, ns);
         typet base_type = base_expr.type();
         if (base_type.is_pointer())
           base_type = base_type.subtype();
@@ -2545,15 +2613,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     // reassigned across the numeric<->string boundary, get_var_assign minted a
     // fresh symbol of the new type and recorded it here. Redirect the load to
     // that symbol so it observes the variable's current type and value.
+    symbol = follow_retype_alias(symbol);
     if (!is_class_attr)
     {
-      auto alias = retype_aliases_.find(symbol->id.as_string());
-      if (alias != retype_aliases_.end())
-      {
-        if (symbolt *retyped = symbol_table_.find_symbol(alias->second))
-          symbol = retyped;
-      }
-
       symbol = resolve_numpy_array_storage_alias(symbol);
 
       // Also resolve reads through a permanent tagged-object alias, if a
