@@ -2135,10 +2135,12 @@ std::string python_annotation<Json>::get_function_return_type(
           func_info.return_type_.empty() ||
           func_info.return_type_ == "NoneType")
         {
-          // It might be a class constructor (__init__ returns None)
-          // Return the class name as the type
+          // A class constructor (__init__ returns None) gives the class; a
+          // function of unknown return type is no type at all (#8980).
           functions_in_analysis_.erase(func_name);
-          return func_name;
+          return module->get_class(func_name).name_.empty()
+                   ? func_info.return_type_
+                   : func_name;
         }
 
         functions_in_analysis_.erase(func_name);
