@@ -894,8 +894,8 @@ public:
 
   /// Whether the list stored at index @p i of @p list is the one @p elem holds
   /// now. The type map names a nested element by the symbol it was appended
-  /// from, and a later assignment can rebind that symbol when it is a user
-  /// variable.
+  /// from, and a later assignment can rebind that symbol, or a store through
+  /// the outer list or an alias of it can replace the slot (#8130).
   expr2tc
   stored_element_is(const symbolt &list, std::size_t i, const symbolt &elem);
 

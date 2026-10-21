@@ -26,7 +26,9 @@
 
 #include <functional>
 #include <map>
+#include <optional>
 #include <set>
+#include <vector>
 #include <util/irep/std_expr.h>
 #include <algorithm>
 #include <cctype>
@@ -2660,6 +2662,261 @@ static void reject_complex_array_arithmetic(const exprt &lhs, const exprt &rhs)
       "TypeError: arithmetic on a numpy complex array is not supported");
 }
 
+static exprt cast_to(const exprt &value, const typet &type)
+{
+  return value.type() == type ? value : exprt(typecast_exprt(value, type));
+}
+
+static bool is_numeric_scalar_type(const typet &type)
+{
+  return type.is_signedbv() || type.is_unsignedbv() || type.is_floatbv();
+}
+
+// Characters are 8-bit integers, as in the frontend's string arrays.
+static bool is_char_element(const typet &type)
+{
+  return (type.is_signedbv() && to_signedbv_type(type).get_width() == 8) ||
+         (type.is_unsignedbv() && to_unsignedbv_type(type).get_width() == 8);
+}
+
+// The shape of a NumPy array of numbers with constant extents; nullopt for
+// anything else, a string or bytes among them.
+static std::optional<std::vector<long long>>
+numeric_array_shape(const typet &type)
+{
+  BigInt length;
+  if (
+    !type.is_array() || type_utils::is_bytes_array(type) ||
+    to_integer(to_array_type(type).size(), length) || length < 0)
+    return std::nullopt;
+  const typet &element = type.subtype();
+  std::optional<std::vector<long long>> shape;
+  if (element.is_array())
+    shape = numeric_array_shape(element);
+  else if (is_numeric_scalar_type(element) && !is_char_element(element))
+    shape.emplace();
+  if (shape)
+    shape->insert(shape->begin(), length.to_int64());
+  return shape;
+}
+
+static const typet &leaf_type(const typet &type)
+{
+  return type.is_array() ? leaf_type(type.subtype()) : type;
+}
+
+static typet shaped_type(const typet &leaf, const std::vector<long long> &shape)
+{
+  typet type = leaf;
+  for (auto extent = shape.rbegin(); extent != shape.rend(); ++extent)
+    type = array_typet(type, from_integer(*extent, size_type()));
+  return type;
+}
+
+// NumPy's result dtype: true division and any float operand give float64,
+// otherwise the array's integer type.
+static typet elementwise_result_type(
+  const std::string &op,
+  const typet &array_elem,
+  const typet &lhs_elem,
+  const typet &rhs_elem)
+{
+  if (op == "Div")
+    return double_type();
+  if (lhs_elem.is_floatbv())
+    return lhs_elem;
+  return rhs_elem.is_floatbv() ? rhs_elem : array_elem;
+}
+
+static const std::set<std::string> &bitwise_ops()
+{
+  static const std::set<std::string> ops = {
+    "BitAnd", "BitOr", "BitXor", "LShift", "RShift"};
+  return ops;
+}
+
+static bool is_elementwise_op(const std::string &op)
+{
+  static const std::set<std::string> ops = {
+    "Add", "Sub", "Mult", "Div", "FloorDiv", "Mod", "Pow"};
+  return ops.count(op) != 0 || bitwise_ops().count(op) != 0;
+}
+
+// The shape of an element-wise operation over `lhs` and `rhs`: a numeric
+// array with a number on either side, or two arrays of one shape.
+static std::optional<std::vector<long long>>
+elementwise_shape(const std::string &op, const exprt &lhs, const exprt &rhs)
+{
+  if (!is_elementwise_op(op))
+    return std::nullopt;
+  const auto lhs_shape = numeric_array_shape(lhs.type());
+  const auto rhs_shape = numeric_array_shape(rhs.type());
+  if (
+    lhs_shape && (is_numeric_scalar_type(rhs.type()) || rhs_shape == lhs_shape))
+    return lhs_shape;
+  if (rhs_shape && is_numeric_scalar_type(lhs.type()))
+    return rhs_shape;
+  return std::nullopt;
+}
+
+// The forms the model computes: `%` only as `int array % int`, and an integer
+// power only by a constant non-negative exponent (a negative one is NumPy's
+// ValueError).
+static bool is_modelled_elementwise(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  const typet &result_elem)
+{
+  BigInt exponent;
+  if (op == "Mod")
+    return lhs.type().is_array() && !rhs.type().is_array() &&
+           !result_elem.is_floatbv();
+  if (op == "Pow" && !result_elem.is_floatbv())
+    return rhs.is_constant() && !to_integer(rhs, exponent) && exponent >= 0;
+  return true;
+}
+
+// NumPy's ufunc for a bitwise operator, named in its TypeError.
+static std::string bitwise_ufunc(const std::string &op)
+{
+  static const std::map<std::string, std::string> names = {
+    {"BitAnd", "bitwise_and"},
+    {"BitOr", "bitwise_or"},
+    {"BitXor", "bitwise_xor"},
+    {"LShift", "left_shift"},
+    {"RShift", "right_shift"}};
+  return names.at(op);
+}
+
+// `x op y` for one element pair, both already of `type`. Integer `//` and
+// `%` by zero give 0, as NumPy does (with a warning, not an exception).
+exprt python_converter::numpy_element_op(
+  const std::string &op,
+  const exprt &x,
+  const exprt &y,
+  const typet &type)
+{
+  if (op == "Pow")
+    return cast_to(math_handler_.handle_power(x, y), type);
+  exprt raw(python_frontend::map_operator(op, type), type);
+  raw.copy_to_operands(x, y);
+  if (op == "FloorDiv")
+    raw = math_handler_.handle_floor_division(x, y, raw);
+  else if (op == "Mod")
+    raw = math_handler_.handle_int_modulo(x, y, raw);
+  else
+    return raw;
+  if (type.is_floatbv())
+    return raw;
+  return if_exprt(
+    equality_exprt(y, from_integer(0, type)), from_integer(0, type), raw);
+}
+
+// `lhs op rhs` into an array of `type`, row by row; a number operand is
+// applied to every element.
+exprt python_converter::numpy_elementwise(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  const typet &type)
+{
+  if (!type.is_array())
+    return numpy_element_op(op, cast_to(lhs, type), cast_to(rhs, type), type);
+  BigInt length;
+  to_integer(to_array_type(type).size(), length);
+  const typet index_type = size_type();
+  expr2tc result = gen_zero(migrate_type(type));
+  for (long long i = 0; i < length.to_int64(); ++i)
+  {
+    const auto row = [&](const exprt &operand) -> exprt {
+      if (!operand.type().is_array())
+        return operand;
+      return index_exprt(
+        operand, from_integer(i, index_type), operand.type().subtype());
+    };
+    expr2tc value;
+    migrate_expr(
+      numpy_elementwise(op, row(lhs), row(rhs), type.subtype()), value);
+    result = with2tc(
+      result->type,
+      result,
+      from_integer(BigInt(i), migrate_type(index_type)),
+      value);
+  }
+  return migrate_expr_back(result);
+}
+
+// Element-wise arithmetic, `%`, `**` and bitwise operators between a numeric
+// NumPy array and a number (on either side) or another array of the same
+// shape. Nil for any other operand pair.
+exprt python_converter::numpy_array_arithmetic(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs)
+{
+  const std::optional<std::vector<long long>> shape =
+    elementwise_shape(op, lhs, rhs);
+  if (!shape)
+    return nil_exprt();
+  const typet &lhs_leaf = leaf_type(lhs.type());
+  const typet &rhs_leaf = leaf_type(rhs.type());
+  const typet result_leaf = elementwise_result_type(
+    op, lhs.type().is_array() ? lhs_leaf : rhs_leaf, lhs_leaf, rhs_leaf);
+  if (!is_modelled_elementwise(op, lhs, rhs, result_leaf))
+    return nil_exprt();
+  const typet result_type = shaped_type(result_leaf, *shape);
+  if (bitwise_ops().count(op) && result_leaf.is_floatbv())
+    return raise_in_expression(
+      "TypeError",
+      "ufunc '" + bitwise_ufunc(op) + "' not supported for the input types",
+      result_type);
+  return numpy_elementwise(op, lhs, rhs, result_type);
+}
+
+// Raises `exception` where the expression is evaluated, then yields a zero of
+// `type` that no path after the raise reads.
+exprt python_converter::raise_in_expression(
+  const std::string &exception,
+  const std::string &message,
+  const typet &type)
+{
+  code_blockt block;
+  block.copy_to_operands(code_expressiont(
+    get_exception_handler().gen_exception_raise(exception, message)));
+  block.copy_to_operands(
+    code_expressiont(migrate_expr_back(gen_zero(migrate_type(type)))));
+  side_effect_exprt value("statement_expression", type);
+  value.copy_to_operands(block);
+  return value;
+}
+
+// An element-wise operator over a numeric array that numpy_array_arithmetic
+// does not model (broadcasting across shapes, a float operand of a bitwise
+// operator, ...) is rejected rather than lowered as scalar arithmetic.
+void python_converter::reject_unmodelled_array_arithmetic(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &element)
+{
+  if (
+    !is_elementwise_op(op) ||
+    (!numeric_array_shape(lhs.type()) && !numeric_array_shape(rhs.type())))
+    return;
+  std::ostringstream msg;
+  if (numeric_array_shape(lhs.type()) && numeric_array_shape(rhs.type()))
+    msg << "TypeError: arithmetic on numeric arrays is not supported "
+           "(numpy broadcasting is not modelled)";
+  else
+    msg << "TypeError: numpy element-wise '" << op
+        << "' is not supported for these operands";
+  const locationt loc = get_location_from_decl(element);
+  if (!loc.is_nil())
+    msg << " at " << loc.get_file() << ":" << loc.get_line();
+  throw std::runtime_error(msg.str());
+}
+
 exprt python_converter::handle_array_operations(
   const std::string &op,
   exprt &lhs,
@@ -2729,67 +2986,9 @@ exprt python_converter::handle_array_operations(
     return false;
   };
 
-  auto build_scalar_broadcast =
-    [&](exprt &array_expr, exprt &scalar_expr) -> exprt {
-    const typet &array_type = array_expr.type();
-    if (!array_type.is_array())
-      return nil_exprt();
-
-    const typet &elem_type = array_type.subtype();
-    if (!is_numeric_type(elem_type) || !is_numeric_type(scalar_expr.type()))
-      return nil_exprt();
-
-    // Element-wise modulo is only modelled for integer elements; float-array %
-    // would need fmod-style lowering, so let it fall through to a clean reject.
-    if (op == "Mod" && !(elem_type.is_signedbv() || elem_type.is_unsignedbv()))
-      return nil_exprt();
-
-    const exprt &size_expr = to_array_type(array_type).size();
-    if (!size_expr.is_constant())
-      return nil_exprt();
-
-    const BigInt size_big =
-      binary2integer(to_constant_expr(size_expr).value().c_str(), true);
-    if (size_big < 0)
-      return nil_exprt();
-
-    const long long array_size = size_big.to_int64();
-    if (array_size < 0)
-      return nil_exprt();
-
-    exprt casted_scalar = scalar_expr.type() == elem_type
-                            ? scalar_expr
-                            : typecast_exprt(scalar_expr, elem_type);
-
-    // V.3: build the per-element index in IREP2 and accumulate the array update
-    // with with2tc. The +/* element op stays a legacy node so map_operator +
-    // migrate_expr select the correct integer (add/mul) or IEEE-float
-    // (ieee_add/ieee_mul + rounding mode) form per element type; the array is
-    // back-migrated once at the end.
-    expr2tc ar2;
-    migrate_expr(array_expr, ar2);
-    const type2tc elem_t2 = migrate_type(elem_type);
-    const type2tc index_t2 = migrate_type(size_type());
-
-    expr2tc result2 = ar2;
-    for (long long i = 0; i < array_size; ++i)
-    {
-      expr2tc ix2 = from_integer(BigInt(i), index_t2);
-      exprt array_item = migrate_expr_back(index2tc(elem_t2, ar2, ix2));
-      exprt bin_elem(python_frontend::map_operator(op, elem_type), elem_type);
-      bin_elem.copy_to_operands(array_item, casted_scalar);
-      // Python/NumPy integer % is floored (sign of the divisor), unlike C's
-      // truncated remainder; correct each element the same way the scalar path
-      // does (#5498). bin_elem currently holds the raw C remainder.
-      if (op == "Mod")
-        bin_elem =
-          math_handler_.handle_int_modulo(array_item, casted_scalar, bin_elem);
-      expr2tc bin_elem2;
-      migrate_expr(bin_elem, bin_elem2);
-      result2 = with2tc(result2->type, result2, ix2, bin_elem2);
-    }
-    return migrate_expr_back(result2);
-  };
+  const exprt elementwise = numpy_array_arithmetic(op, lhs, rhs);
+  if (!elementwise.is_nil())
+    return elementwise;
 
   // For direct Python binary operators over arrays, keep behaviour explicit
   // and conservative: broadcasting is not modelled in this path.
@@ -2802,15 +3001,6 @@ exprt python_converter::handle_array_operations(
                                    is_numeric_type(rhs.type().subtype()) &&
                                    !is_char_array(rhs.type());
 
-    // Numeric array +/-/* scalar (including chained forms) is supported here.
-    if (lhs_numeric_array && !rhs.type().is_array())
-    {
-      exprt lowered = build_scalar_broadcast(lhs, rhs);
-      if (!lowered.is_nil())
-        return lowered;
-    }
-    // Keep scalar + array as unsupported for now (matches regression
-    // expectations and avoids inconsistent with_expr construction paths).
     if (op == "Add" && rhs_numeric_array && !lhs.type().is_array())
     {
       std::ostringstream msg;
@@ -2874,13 +3064,6 @@ exprt python_converter::handle_array_operations(
                                    is_numeric_type(rhs.type().subtype()) &&
                                    !is_char_array(rhs.type());
 
-    if (lhs_numeric_array && !rhs.type().is_array())
-    {
-      exprt lowered = build_scalar_broadcast(lhs, rhs);
-      if (!lowered.is_nil())
-        return lowered;
-    }
-
     if (lhs_numeric_array || rhs_numeric_array)
     {
       std::ostringstream msg;
@@ -2891,6 +3074,7 @@ exprt python_converter::handle_array_operations(
       throw std::runtime_error(msg.str());
     }
   }
+  reject_unmodelled_array_arithmetic(op, lhs, rhs, element);
 
   // `str` has no arithmetic beyond `+` (below) or ordering against anything
   // but `str`; `*` is string repetition and is handled elsewhere. Reaching

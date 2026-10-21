@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+slicing a numpy string array is not supported

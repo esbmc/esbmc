@@ -1,0 +1,4 @@
+regression/python/github_8946_dict_local_returned_refused
+regression/python/github_8946_dict_local_returned_fail
+regression/python/github_8946_dict_nested_store_refused
+regression/python/github_8946_dict_call_value_refused

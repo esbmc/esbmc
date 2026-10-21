@@ -1,6 +1,7 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/numpy/ndarray_shape.h>
 #include <python-frontend/numpy/numpy_call_expr.h>
+#include <python-frontend/numpy/numpy_random.h>
 #include <python-frontend/numpy/numpy_reducer_shared.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/math/python_int_overflow.h>
@@ -2493,9 +2494,6 @@ materialize_arange_dtype(const nlohmann::json &args, const std::string &dtype)
 // Defined further down (dtype parsing/casting lives next to get_dtype());
 // forward-declared here so materialize_numpy_constructor_array can apply a
 // dtype= keyword instead of just tolerating its absence.
-static std::string extract_numpy_dtype_name(
-  const nlohmann::json &dtype_node,
-  const nlohmann::json &ast);
 static bool is_numpy_integer_dtype(const std::string &dtype);
 static nlohmann::json cast_numpy_literal_to_dtype(
   const nlohmann::json &node,
@@ -4855,9 +4853,26 @@ static bool is_named_numpy_dtype(const std::string &dtype)
   throw std::runtime_error("TypeError: numpy dtype objects are not supported");
 }
 
+// The dimensions of a zeros()/ones() shape tuple. A dimension known only at
+// run time has no static bound to build the array with.
+static std::vector<int>
+literal_shape_dims(const nlohmann::json &elts, const std::string &function)
+{
+  std::vector<int> dims;
+  for (const auto &e : elts)
+  {
+    if (e.value("_type", "") != "Constant" || !e["value"].is_number_integer())
+      throw std::runtime_error(
+        "TypeError: numpy." + function +
+        "() with a shape tuple of run-time values is not supported");
+    dims.push_back(e["value"].get<int>());
+  }
+  return dims;
+}
+
 // The single normalization of a dtype= argument: a scalar type named by a
 // builtin, a numpy attribute or a string, or a specific rejection.
-static std::string extract_numpy_dtype_name(
+std::string extract_numpy_dtype_name(
   const nlohmann::json &dtype_node,
   const nlohmann::json &ast)
 {
@@ -9446,11 +9461,93 @@ exprt numpy_call_expr::build_result(
   python_converter &converter)
 {
   numpy_call_expr instance(function_id, call, converter);
+  if (std::optional<exprt> hoisted = instance.try_hoist_array_arg())
+    return *hoisted;
   if (
     std::optional<exprt> hoisted =
       instance.try_hoist_call_arg_for_view_method(function_id.get_function()))
     return *hoisted;
   return instance.get();
+}
+
+// A reducer over a numpy scalar (`a[1].sum()` on a 1-D array): the value
+// itself, its position 0, or no spread.
+exprt numpy_call_expr::reduce_scalar(
+  const std::string &function,
+  const exprt &value)
+{
+  if (function == "argmin" || function == "argmax")
+    return gen_zero(long_long_int_type());
+  if (function == "std" || function == "var")
+    return from_double(0.0, double_type());
+  if (function == "any" || function == "all")
+    return typecast_exprt(value, bool_type());
+  if (function == "mean" && !value.type().is_floatbv())
+    return typecast_exprt(value, double_type());
+  return value;
+}
+
+// A random array (`np.sum(np.random.random(3))`) or the subscript a reducer
+// method was called on (`v[1].sum()`): an array the reducers only read once
+// it is bound to a name.
+bool numpy_call_expr::is_hoistable_array_arg(const nlohmann::json &call) const
+{
+  const nlohmann::json &arg = call["args"][0];
+  return numpy_random::output_shape(arg, converter_.ast()) ||
+         (call.value("_numpy_method_form", false) &&
+          arg.value("_type", "") == "Subscript");
+}
+
+std::optional<exprt> numpy_call_expr::try_hoist_array_arg()
+{
+  static const std::set<std::string> reducers = {
+    "sum",
+    "prod",
+    "mean",
+    "min",
+    "max",
+    "argmin",
+    "argmax",
+    "std",
+    "var",
+    "any",
+    "all"};
+  if (
+    !reducers.count(function_id_.get_function()) || call_["args"].empty() ||
+    !converter_.current_block || converter_.converting_lambda_body_ ||
+    converter_.in_contract_clause_ || !is_hoistable_array_arg(call_))
+    return std::nullopt;
+
+  // The temporary is bound where the call is evaluated: ahead of the
+  // statement when it runs once, unconditionally, otherwise inside a
+  // statement expression (an and/or tail, a while test). A type probe of an
+  // assignment's value discards the expression, block included.
+  code_blockt block;
+  code_blockt *const saved_block = converter_.current_block;
+  const bool probing = converter_.in_rhs_type_probe_;
+  converter_.current_block = &block;
+  converter_.in_rhs_type_probe_ = false;
+  nlohmann::json rewritten = call_;
+  rewritten["args"][0] = *hoist_call_argument_into_temp(call_["args"][0]);
+  const exprt held = converter_.get_expr(rewritten["args"][0]);
+  const exprt result = held.type().is_array() || held.type().is_pointer()
+                         ? build_result(function_id_, rewritten, converter_)
+                         : reduce_scalar(function_id_.get_function(), held);
+  converter_.in_rhs_type_probe_ = probing;
+  converter_.current_block = saved_block;
+
+  if (converter_.can_emit_runtime_guard())
+  {
+    for (const auto &statement : block.operands())
+      converter_.add_instruction(statement);
+    return result;
+  }
+  code_expressiont value(result);
+  value.location() = result.location();
+  block.copy_to_operands(value);
+  side_effect_exprt evaluated("statement_expression", result.type());
+  evaluated.copy_to_operands(block);
+  return evaluated;
 }
 
 // Complex arrays are stored, indexed and copied; the reducers read their
@@ -10378,9 +10475,7 @@ exprt numpy_call_expr::get()
           "Found " +
           std::to_string(ndim) + "D array creation in " + function + "().");
 
-      std::vector<int> dims;
-      for (const auto &e : elts)
-        dims.push_back(e["value"].get<int>());
+      const std::vector<int> dims = literal_shape_dims(elts, function);
 
       // Build nested list recursively: create_nd_fill(dims, dim_idx, fill)
       std::function<nlohmann::json(std::size_t)> create_nd_fill =
