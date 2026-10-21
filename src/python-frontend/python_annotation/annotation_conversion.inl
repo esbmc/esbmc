@@ -1152,16 +1152,20 @@ std::string python_annotation<Json>::get_attribute_type(const Json &arg)
       json_utils::find_class(ast_["body"], constructed).empty() ||
       json_utils::count_attr_stores(ast_, attr, true) != 0)
       continue;
+    const auto cls_ancestors = get_class_ancestors(cls);
     std::size_t self_stores = 0;
     for (const Json &node : ast_["body"])
     {
       if (node.value("_type", "") != "ClassDef")
         continue;
-      const auto sub_ancestors =
-        get_class_ancestors(node["name"].template get<std::string>());
-      if (
-        std::find(sub_ancestors.begin(), sub_ancestors.end(), cls) !=
-        sub_ancestors.end())
+      const std::string name = node["name"].template get<std::string>();
+      const auto ancestors = get_class_ancestors(name);
+      const bool is_base =
+        std::find(cls_ancestors.begin(), cls_ancestors.end(), name) !=
+        cls_ancestors.end();
+      const bool is_derived =
+        std::find(ancestors.begin(), ancestors.end(), cls) != ancestors.end();
+      if (is_base || is_derived)
         self_stores += json_utils::count_attr_stores(node, attr, false);
     }
     if (self_stores == 1)
