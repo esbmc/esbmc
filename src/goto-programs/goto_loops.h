@@ -10,12 +10,14 @@
 /// internals, return-value temporaries, k-induction-generated names, etc.
 /// Defined in goto_loops.cpp; declared here so the k-induction pass can
 /// reuse it when filtering value-set objects (issue #5230).
-bool check_var_name(const expr2tc &expr);
+bool check_var_name(const expr2tc &expr, bool dollar_in_name_only = false);
 
 class goto_loopst
 {
 protected:
   irep_idt function_name;
+  // See check_var_name; set by the loop-invariant pass.
+  bool dollar_in_name_only = false;
   goto_functionst &goto_functions;
   goto_functiont &goto_function;
 
@@ -121,8 +123,10 @@ public:
   goto_loopst(
     const irep_idt &_function_name,
     goto_functionst &_goto_functions,
-    goto_functiont &_goto_function)
+    goto_functiont &_goto_function,
+    bool _dollar_in_name_only = false)
     : function_name(_function_name),
+      dollar_in_name_only(_dollar_in_name_only),
       goto_functions(_goto_functions),
       goto_function(_goto_function)
   {

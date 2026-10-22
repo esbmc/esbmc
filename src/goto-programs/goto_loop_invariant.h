@@ -76,7 +76,7 @@ public:
     goto_functiont &_goto_function,
     contextt &_context,
     bool _use_frame_rule)
-    : goto_loopst(_function_name, _goto_functions, _goto_function),
+    : goto_loopst(_function_name, _goto_functions, _goto_function, true),
       context(_context),
       use_frame_rule(_use_frame_rule)
   {

@@ -598,6 +598,10 @@ static void extract_and_remove_side_effects_impl(
   std::vector<goto_programt::targett> to_remove;
   std::set<irep_idt> dep_symbols = inv_symbols;
   std::set<irep_idt> fc_return_syms;
+  // A definition past a jump (walking back) is conditional, as `c ? f(x) : y`
+  // lowers: the side effects cannot be replayed in order, and a constant
+  // left behind (`tmp = 1`) is only one of the values.
+  bool crossed_goto = false, conditional = false;
 
   goto_programt::targett search = loop_inv_it;
   while (search != goto_function.body.instructions.begin())
@@ -614,6 +618,7 @@ static void extract_and_remove_side_effects_impl(
         break;
       if (!is_likely_compiler_temp(lhs_sym))
         break;
+      conditional |= crossed_goto;
       if (is_trivial_rhs(assign.source))
         continue;
       to_remove.push_back(search);
@@ -631,6 +636,7 @@ static void extract_and_remove_side_effects_impl(
         irep_idt sym = to_symbol2t(fc.ret).get_symbol_name();
         if (dep_symbols.count(sym))
         {
+          conditional |= crossed_goto;
           fc_return_syms.insert(sym);
           to_remove.push_back(search);
           continue;
@@ -678,6 +684,7 @@ static void extract_and_remove_side_effects_impl(
 
     if (search->is_goto())
     {
+      crossed_goto = true;
       continue;
     }
 
@@ -692,6 +699,16 @@ static void extract_and_remove_side_effects_impl(
       continue;
 
     break;
+  }
+
+  if (conditional)
+  {
+    log_error(
+      "{}: a loop invariant computes a value under control flow (a ?: or a "
+      "short-circuit around a call); it cannot be re-evaluated after the "
+      "havoc. Rewrite it without one.",
+      loop_head->location.as_string());
+    abort();
   }
 
   if (to_remove.empty())

@@ -1,0 +1,4 @@
+CORE
+main.c
+--loop-invariant-check
+cannot be re-evaluated after the

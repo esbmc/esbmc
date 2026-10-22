@@ -45,7 +45,7 @@ static expr2tc extract_queried_pointer(const expr2tc &expr)
   return expr2tc();
 }
 
-bool check_var_name(const expr2tc &expr)
+bool check_var_name(const expr2tc &expr, bool dollar_in_name_only)
 {
   if (!is_symbol2t(expr))
     return false;
@@ -65,8 +65,12 @@ bool check_var_name(const expr2tc &expr)
   if (found != std::string::npos)
     return false;
 
-  // Don't add variables that we created for k-induction
-  found = identifier.find("$");
+  // Don't add variables that we created for k-induction. With
+  // dollar_in_name_only, only the name itself: a C++ function's USR, which
+  // prefixes its locals, has a '$' for a class-reference parameter
+  // (`f#&$@S@T#@i`), and a loop invariant must havoc those locals.
+  found = identifier.find(
+    '$', dollar_in_name_only ? identifier.rfind('@') + 1 : 0);
   if (found != std::string::npos)
     return false;
 
@@ -321,7 +325,7 @@ void goto_loopst::collect_loop_symbols(
   expr->foreach_operand(
     [this, &out](const expr2tc &e) { collect_loop_symbols(e, out); });
 
-  if (is_symbol2t(expr) && check_var_name(expr))
+  if (is_symbol2t(expr) && check_var_name(expr, dollar_in_name_only))
     out.insert(expr);
 }
 
@@ -355,7 +359,7 @@ void goto_loopst::collect_lhs_symbols(
   expr->foreach_operand(
     [this, &out](const expr2tc &e) { collect_lhs_symbols(e, out); });
 
-  if (is_symbol2t(expr) && check_var_name(expr))
+  if (is_symbol2t(expr) && check_var_name(expr, dollar_in_name_only))
     out.modified.insert(expr);
 }
 
@@ -688,7 +692,7 @@ void goto_loopst::add_loop_var(
     add_loop_var(loop, e, is_modified);
   });
 
-  if (is_symbol2t(expr) && check_var_name(expr))
+  if (is_symbol2t(expr) && check_var_name(expr, dollar_in_name_only))
   {
     if (is_modified)
       loop.add_modified_var_to_loop(expr);
