@@ -3654,6 +3654,8 @@ private:
   unsigned numpy_loop_depth_ = 0;
   // Conditional expressions being converted; their arms run on one path only.
   unsigned conditional_expr_depth_ = 0;
+  // Converting an and/or operand into the block of effects it owns.
+  bool in_operand_effects_block_ = false;
   /// Detach for a constant-shape view: copies what it sees into a dense
   /// snapshot and repoints it there. Returns the snapshot's id.
   std::vector<exprt> read_strided_view_elements(

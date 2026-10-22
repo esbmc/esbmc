@@ -697,10 +697,15 @@ exprt python_converter::get_boolop_operand(
 {
   effects.emplace_back();
   code_blockt *saved_block = current_block;
+  const bool saved_own_block = in_operand_effects_block_;
   if (current_block && effects.size() > 1)
+  {
     current_block = &effects.back();
+    in_operand_effects_block_ = true;
+  }
   exprt operand_expr = get_expr(operand);
   current_block = saved_block;
+  in_operand_effects_block_ = saved_own_block;
 
   if (!operand_expr.is_code() || operand_expr.statement() != "function_call")
     return operand_expr;
@@ -1156,7 +1161,9 @@ exprt python_converter::handle_chained_comparisons_logic(
 
   // Each later comparison runs only if the earlier ones held.
   const bool old_in_lazy_operand = in_lazy_operand_;
+  const bool old_own_block = in_operand_effects_block_;
   in_lazy_operand_ = true;
+  in_operand_effects_block_ = false;
   exprt reuse = nil_exprt();
   for (size_t i = 0; i + 1 < element["comparators"].size(); ++i)
   {
@@ -1209,6 +1216,7 @@ exprt python_converter::handle_chained_comparisons_logic(
     }
   }
   in_lazy_operand_ = old_in_lazy_operand;
+  in_operand_effects_block_ = old_own_block;
 
   expr2tc acc;
   migrate_expr(conjuncts.front(), acc);
@@ -1841,9 +1849,13 @@ exprt python_converter::snapshot_left_operand(
   // that cannot fail is taken out of it.
   const bool safe = lhs.is_symbol() || is_in_bounds_constant_index(lhs) ||
                     conditional_expr_depth_ == 0;
+  // An and/or operand after the first plants its statements in a block of its
+  // own, which runs only where the operand is evaluated.
+  const bool can_emit =
+    can_emit_runtime_guard() || (in_operand_effects_block_ && current_block &&
+                                 safe_to_emit_side_effecting_statement());
   if (
-    !can_emit_runtime_guard() || !scalar || !safe || lhs.is_constant() ||
-    !contains_call(right))
+    !can_emit || !scalar || !safe || lhs.is_constant() || !contains_call(right))
     return lhs;
   exprt value = lhs;
   if (value.is_function_call())
