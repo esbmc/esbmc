@@ -60,7 +60,20 @@ void remove_unreachable(goto_programt &goto_program)
   while (it != goto_program.instructions.end())
   {
     if (reachable.find(it) == reachable.end() && !it->is_end_function())
-      it = goto_program.instructions.erase(it);
+    {
+      // An ASSERT false has no successor above, but symex does not stop at
+      // it. End the path there instead of falling through to the next kept
+      // instruction, which the program cannot reach from the ASSERT.
+      if (
+        it != goto_program.instructions.begin() &&
+        std::prev(it)->is_assert() && is_false(std::prev(it)->guard))
+      {
+        it->make_assumption(gen_false_expr());
+        ++it;
+      }
+      else
+        it = goto_program.instructions.erase(it);
+    }
     else
       ++it;
   }
