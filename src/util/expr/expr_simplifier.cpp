@@ -5488,8 +5488,6 @@ expr2tc overflow2t::do_simplify() const
   return expr2tc();
 }
 
-static expr2tc obj_equals_addr_of(const expr2tc &a, const expr2tc &b);
-
 static expr2tc handle_symmetric_cases(const expr2tc &a, const expr2tc &b)
 {
   // Array element vs base symbol
