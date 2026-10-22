@@ -1512,6 +1512,25 @@ expr2tc with2t::do_simplify() const
     if (thetype.members[no] != update_value->type)
       return expr2tc();
 
+    // A literal of the written member alone would zero the bytes of the old
+    // member that the write leaves untouched, unless it covers all of them.
+    try
+    {
+      if (
+        !c_union.datatype_members.empty() &&
+        type_byte_size_bits(update_value->type) <
+          type_byte_size_bits(c_union.datatype_members[0]->type))
+        return expr2tc();
+    }
+    catch (const array_type2t::array_size_excp &)
+    {
+      return expr2tc();
+    }
+    catch (const type2t::symbolic_type_excp &)
+    {
+      return expr2tc();
+    }
+
     if (
       c_union.init_field == thetype.member_names[no] &&
       !c_union.datatype_members.empty() &&
