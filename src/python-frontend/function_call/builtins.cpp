@@ -448,6 +448,67 @@ static exprt tagged_isinstance_operand(
   return list_item_of_scalar_read(obj, types.get_tagged_object_type());
 }
 
+// The type name an isinstance() classinfo node names.
+static std::string isinstance_type_name(const nlohmann::json &node)
+{
+  const std::string node_type = node["_type"];
+
+  if (node_type == "Name")
+  {
+    // isinstance(v, int)
+    return node["id"];
+  }
+  else if (node_type == "Constant")
+  {
+    // isinstance(v, None)
+    return "NoneType";
+  }
+  else if (node_type == "Attribute")
+  {
+    // isinstance(v, MyClass.InnerClass)
+    return node["attr"];
+  }
+  else if (node_type == "Call")
+  {
+    // isinstance(v, type(None)) or isinstance(v, type(x))
+    const auto &func = node["func"];
+
+    if (func["_type"] != "Name" || func["id"] != "type")
+      throw std::runtime_error(
+        "Only type() calls are supported in isinstance()");
+
+    const auto &call_args = node["args"];
+    if (call_args.size() != 1)
+      throw std::runtime_error("type() expects exactly 1 argument");
+
+    const auto &type_call_arg = call_args[0];
+
+    // Handle type(None)
+    if (type_call_arg["_type"] == "Constant")
+    {
+      if (
+        type_call_arg["value"].is_null() ||
+        (type_call_arg.contains("value") && type_call_arg["value"] == nullptr))
+      {
+        return "NoneType";
+      }
+      throw std::runtime_error(
+        "isinstance() with type(constant) only supports type(None)");
+    }
+    else if (type_call_arg["_type"] == "Name")
+    {
+      throw std::runtime_error(
+        "isinstance() with type(variable) not yet supported - use direct "
+        "type names");
+    }
+    else
+      throw std::runtime_error(
+        "Unsupported argument to type() in isinstance()");
+  }
+  else
+    throw std::runtime_error("Unsupported type format in isinstance()");
+}
+
 exprt function_call_expr::handle_isinstance() const
 {
   const auto &args = call_["args"];
@@ -467,69 +528,42 @@ exprt function_call_expr::handle_isinstance() const
   if (decided.is_not_nil())
     return evaluate_after(binding, decided);
 
-  // Extract type name from various AST node formats
-  auto extract_type_name = [](const nlohmann::json &node) -> std::string {
-    const std::string node_type = node["_type"];
-
-    if (node_type == "Name")
+  // is_none and value both read an Optional operand: evaluate it once.
+  exprt optional_binding = nil_exprt();
+  if (type_utils::is_optional_struct(obj_expr.type()))
+  {
+    exprt reread;
+    const exprt bound =
+      converter_.bind_operand_read_twice(obj_expr, call_, reread);
+    if (bound.is_nil())
+      throw std::runtime_error(
+        "isinstance() on this Optional operand is not supported here");
+    if (bound != reread)
     {
-      // isinstance(v, int)
-      return node["id"];
+      optional_binding = bound;
+      obj_expr = reread;
     }
-    else if (node_type == "Constant")
-    {
-      // isinstance(v, None)
-      return "NoneType";
-    }
-    else if (node_type == "Attribute")
-    {
-      // isinstance(v, MyClass.InnerClass)
-      return node["attr"];
-    }
-    else if (node_type == "Call")
-    {
-      // isinstance(v, type(None)) or isinstance(v, type(x))
-      const auto &func = node["func"];
-
-      if (func["_type"] != "Name" || func["id"] != "type")
-        throw std::runtime_error(
-          "Only type() calls are supported in isinstance()");
-
-      const auto &call_args = node["args"];
-      if (call_args.size() != 1)
-        throw std::runtime_error("type() expects exactly 1 argument");
-
-      const auto &type_call_arg = call_args[0];
-
-      // Handle type(None)
-      if (type_call_arg["_type"] == "Constant")
-      {
-        if (
-          type_call_arg["value"].is_null() ||
-          (type_call_arg.contains("value") &&
-           type_call_arg["value"] == nullptr))
-        {
-          return "NoneType";
-        }
-        throw std::runtime_error(
-          "isinstance() with type(constant) only supports type(None)");
-      }
-      else if (type_call_arg["_type"] == "Name")
-      {
-        throw std::runtime_error(
-          "isinstance() with type(variable) not yet supported - use direct "
-          "type names");
-      }
-      else
-        throw std::runtime_error(
-          "Unsupported argument to type() in isinstance()");
-    }
-    else
-      throw std::runtime_error("Unsupported type format in isinstance()");
-  };
+  }
 
   // Build isinstance check for a given type name
+  std::function<exprt(const exprt &, const std::string &)> build_on;
   auto build_isinstance = [&](const std::string &type_name) -> exprt {
+    return build_on(obj_expr, type_name);
+  };
+  build_on = [&](const exprt &obj_expr, const std::string &type_name) -> exprt {
+    // An Optional[T] struct holds a T only when its is_none flag is clear.
+    if (type_utils::is_optional_struct(obj_expr.type()))
+    {
+      const exprt is_none = member_exprt(obj_expr, "is_none", bool_type());
+      if (type_name == "NoneType")
+        return is_none;
+      const typet &value_type =
+        to_struct_type(obj_expr.type()).get_component("value").type();
+      return and_exprt(
+        not_exprt(is_none),
+        build_on(member_exprt(obj_expr, "value", value_type), type_name));
+    }
+
     // A tagged-scalar operand's real type lives in the runtime `.type_id`
     // field rather than in a single static C type, so it needs its own
     // check instead of the static-type comparisons below.
@@ -627,16 +661,16 @@ exprt function_call_expr::handle_isinstance() const
     throw std::runtime_error("isinstance() tuple cannot be empty");
 
   exprt result =
-    isinstance_operand(types[0], build_isinstance, extract_type_name);
+    isinstance_operand(types[0], build_isinstance, isinstance_type_name);
   for (size_t i = 1; i < types.size(); ++i)
   {
     exprt or_expr("or", typet("bool"));
     or_expr.move_to_operands(result);
     or_expr.copy_to_operands(
-      isinstance_operand(types[i], build_isinstance, extract_type_name));
+      isinstance_operand(types[i], build_isinstance, isinstance_type_name));
     result = or_expr;
   }
-  return evaluate_after(binding, result);
+  return evaluate_after(binding, evaluate_after(optional_binding, result));
 }
 
 std::optional<exprt> function_call_expr::module_hasattr(
