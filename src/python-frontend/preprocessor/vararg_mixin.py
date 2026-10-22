@@ -475,11 +475,14 @@ class VarargMixin:
         parents = {}
         bind_counts = {}
         unsafe = set()
+        calls_to = {}
         for node in ast.walk(module):
             for child in ast.iter_child_nodes(node):
                 parents[child] = node
             for bound in self._bound_names(node):
                 bind_counts[bound] = bind_counts.get(bound, 0) + 1
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                calls_to.setdefault(node.func.id, []).append(node)
         len_bound = "len" in bind_counts
         for node, parent in parents.items():
             if not isinstance(node, ast.Name) or not isinstance(node.ctx, ast.Load):
@@ -494,7 +497,60 @@ class VarargMixin:
             for index, stmt in enumerate(scope.body):
                 self._record_fixed_length_starred(stmt, scope.body[index + 1:], bind_counts, unsafe,
                                                   fixed)
+        for scope in defs:
+            fixed.update(
+                self._fixed_length_starred_params(scope, calls_to.get(scope.name, []), parents,
+                                                  bind_counts, unsafe))
         return fixed
+
+    def _fixed_length_starred_params(self, scope, calls, parents, bind_counts, unsafe):
+        """Map each `g(..., *p)` on a parameter p of `scope` that every one of
+        its `calls` passes the same kind and length of display for (#8959).
+
+        Every read of the def's name must be one of those calls, so it is never
+        called through another name. A list at one call and a tuple at another
+        give p no single type, and `g` must be bound once, since the frontend
+        binds a call by its callee's bare name.
+        """
+        fixed = {}
+        if not self._called_only_by(scope, calls, parents, bind_counts):
+            return fixed
+        for index, param in enumerate(scope.args.posonlyargs + scope.args.args):
+            displays = {self._passed_display(call, index) for call in calls}
+            if len(displays) != 1 or None in displays:
+                continue
+            (_, length), = displays
+            if length is None or param.arg in unsafe or bind_counts.get(param.arg) != 1:
+                continue
+            fixed.update(
+                dict.fromkeys(self._starred_reads(scope, param.arg, parents, bind_counts), length))
+        return fixed
+
+    @staticmethod
+    def _called_only_by(scope, calls, parents, bind_counts):
+        """Whether `scope` is bound once and read only as the callee of `calls`."""
+        loads = sum(
+            isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load) and n.id == scope.name
+            for n in parents)
+        return (not scope.decorator_list and calls and loads == len(calls)
+                and bind_counts.get(scope.name) == 1)
+
+    @staticmethod
+    def _starred_reads(scope, name, parents, bind_counts):
+        """Each `*name` in `scope` passed to a callee bound once."""
+        return [
+            node for node in (n for stmt in scope.body for n in ast.walk(stmt))
+            if isinstance(node, ast.Starred) and isinstance(node.value, ast.Name)
+            and node.value.id == name and isinstance(parents[node].func, ast.Name)
+            and bind_counts.get(parents[node].func.id) == 1
+        ]
+
+    def _passed_display(self, call, index):
+        """The kind and length of the display `call` passes at `index`, or None."""
+        if call.keywords or index >= len(call.args) or any(
+                isinstance(arg, ast.Starred) for arg in call.args):
+            return None
+        return type(call.args[index]), self._sequence_display_length(call.args[index])
 
     def _record_fixed_length_starred(self, stmt, later, bind_counts, unsafe, fixed):
         if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
