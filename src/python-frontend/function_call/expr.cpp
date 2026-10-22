@@ -4394,10 +4394,11 @@ function_call_expr::get_dispatch_table()
      [this]() { return handle_format(); },
      "format() builtin"},
 
-    // round() builtin function
+    // round() builtin function; np.round is the numpy model's.
     {[this]() {
        const std::string &func_name = function_id_.get_function();
-       return func_name == "round" && function_id_.get_prefix() == "py:";
+       return func_name == "round" && function_id_.get_prefix() == "py:" &&
+              call_["func"]["_type"] == "Name";
      },
      [this]() {
        if (call_["args"].empty())

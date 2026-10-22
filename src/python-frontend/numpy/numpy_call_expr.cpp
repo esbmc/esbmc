@@ -4521,6 +4521,31 @@ std::optional<exprt> numpy_call_expr::try_argmin_argmax_axis_result(
   return try_argmin_argmax_along_axis(function, arg);
 }
 
+// Calls answered before the general paths: the scalar functions whose
+// operational model is their whole definition (building them as a binary
+// operation has no operator to use), and any()/all().
+std::optional<exprt>
+numpy_call_expr::try_early_result(const std::string &function)
+{
+  static const std::set<std::string> model_only = {
+    "remainder", "nextafter", "isclose"};
+  if (!model_only.count(function))
+    return try_any_all_result(function);
+  for (const nlohmann::json &arg : call_["args"])
+  {
+    const std::string type = arg.value("_type", "");
+    const bool array =
+      type == "List" || type == "Tuple" ||
+      (type == "Name" &&
+       converter_.numpy_array_symbols_.count(
+         converter_.resolve_name_symbol_id(arg["id"].get<std::string>())));
+    if (array)
+      throw std::runtime_error(
+        "TypeError: numpy." + function + "() over arrays is not supported");
+  }
+  return function_call_expr::get();
+}
+
 std::optional<exprt>
 numpy_call_expr::try_any_all_result(const std::string &function)
 {
@@ -9636,6 +9661,203 @@ bool numpy_call_expr::is_complex_operand(const nlohmann::json &arg) const
   return symbol && type_utils::is_numpy_complex_array(symbol->get_type());
 }
 
+// numpy.round(x, decimals): round half to even, for decimals zero or
+// negative too. The fold must give the same double on every platform, so the
+// scale is built by exact repeated multiplication (std::pow differs between
+// libms) and half-to-even is decided with std::floor (std::nearbyint honours
+// the ambient rounding mode).
+static double numpy_round(double x, double decimals)
+{
+  const long long digits = static_cast<long long>(decimals);
+  double pow10 = 1.0;
+  for (long long i = 0; i < std::llabs(digits); ++i)
+    pow10 *= 10.0;
+  const double scaled = digits >= 0 ? x * pow10 : x / pow10;
+  double r = std::floor(scaled);
+  const double frac = scaled - r;
+  if (frac > 0.5 || (frac == 0.5 && std::fmod(r, 2.0) != 0.0))
+    r += 1.0;
+  return digits >= 0 ? r / pow10 : r * pow10;
+}
+
+// The double a numpy binary function of two numbers folds to on the host;
+// nullopt for one without a fold (a zero divisor keeps NumPy's runtime
+// warning path).
+static std::optional<double>
+fold_double(const std::string &function, double left, double right)
+{
+  static const std::map<std::string, double (*)(double, double)> ops = {
+    {"add", [](double a, double b) { return a + b; }},
+    {"subtract", [](double a, double b) { return a - b; }},
+    {"multiply", [](double a, double b) { return a * b; }},
+    {"power", [](double a, double b) { return std::pow(a, b); }},
+    {"copysign", [](double a, double b) { return std::copysign(a, b); }},
+    {"fmax", [](double a, double b) { return std::fmax(a, b); }},
+    {"fmin", [](double a, double b) { return std::fmin(a, b); }},
+    {"round", numpy_round}};
+  if (function == "divide" && right != 0.0)
+    return left / right;
+  auto op = ops.find(function);
+  if (op == ops.end())
+    return std::nullopt;
+  return op->second(left, right);
+}
+
+// The exact value of an integer numpy add, subtract, multiply or power;
+// nullopt for any other function or a negative power.
+static std::optional<BigInt>
+fold_integer(const std::string &function, int64_t left, int64_t right)
+{
+  const BigInt a(left), b(right);
+  if (function == "add")
+    return a + b;
+  if (function == "subtract")
+    return a - b;
+  if (function == "multiply")
+    return a * b;
+  BigInt power;
+  if (function == "power" && try_exact_integer_power(left, right, power))
+    return power;
+  return std::nullopt;
+}
+
+// `value` wrapped to a `bits`-wide integer, as NumPy stores it.
+static BigInt wrap_integer(BigInt value, std::size_t bits, bool is_unsigned)
+{
+  const BigInt modulus = BigInt::power2(bits);
+  value = value % modulus;
+  if (value < 0)
+    value += modulus;
+  if (!is_unsigned && value >= BigInt::power2(bits - 1))
+    value -= modulus;
+  return value;
+}
+
+void numpy_call_expr::report_integer_overflow()
+{
+  log_warning(
+    "{}:{}: Integer overflow detected in {}() call. Consider using a larger "
+    "integer type.",
+    converter_.current_python_file,
+    call_["end_lineno"].get<int>(),
+    function_id_.get_function());
+  emit_numpy_overflow_assertion(converter_, call_, function_id_);
+}
+
+// The type a scalar call with `dtype=` produces, recorded on the assigned
+// name; empty without a dtype.
+typet numpy_call_expr::scalar_dtype_result()
+{
+  if (!get_dtype_size() || !converter_.current_lhs)
+    return typet();
+  const typet t = get_typet_from_dtype();
+  converter_.current_lhs->type() = t;
+  converter_.update_symbol(*converter_.current_lhs);
+  return t;
+}
+
+// The host fold of a scalar call with a dtype: integers exactly (an overflow
+// of the dtype is reported and the value wrapped), floats in double.
+std::optional<exprt> numpy_call_expr::fold_scalar_binary(
+  const std::string &function,
+  const numeric_value &lhs,
+  const numeric_value &rhs,
+  const typet &t)
+{
+  const std::string dtype = get_dtype();
+  const std::size_t bits = get_dtype_size();
+  const bool is_unsigned = !dtype.empty() && dtype[0] == 'u';
+  if (dtype.find("int") != std::string::npos)
+  {
+    const std::optional<BigInt> exact =
+      lhs.is_int && rhs.is_int
+        ? fold_integer(function, lhs.int_value, rhs.int_value)
+        : std::nullopt;
+    if (!exact)
+      return std::nullopt;
+    const BigInt wrapped = wrap_integer(*exact, bits, is_unsigned);
+    if (wrapped != *exact)
+      report_integer_overflow();
+    exprt folded = from_integer(wrapped, t);
+    folded.cformat(integer2string(wrapped));
+    return folded;
+  }
+  const std::optional<double> value =
+    fold_double(function, to_double(lhs), to_double(rhs));
+  if (!value)
+    return std::nullopt;
+  exprt folded = from_double(*value, t.is_floatbv() ? t : cached_double_type());
+  folded.cformat(std::to_string(*value));
+  return folded;
+}
+
+// The operation over the two literals, computed in 64 bits (or double) and
+// then stored in the dtype: an integer dtype wraps, and is checked to hold
+// the value when overflow checks are on, as the host fold reports it.
+exprt numpy_call_expr::unfolded_scalar_binary(
+  const std::string &function,
+  const numeric_value &lhs,
+  const numeric_value &rhs,
+  const typet &t)
+{
+  nlohmann::json op =
+    lhs.is_int && rhs.is_int
+      ? create_binary_op(function, kConstant, lhs.int_value, rhs.int_value)
+      : create_binary_op(function, kConstant, to_double(lhs), to_double(rhs));
+  exprt wide = converter_.get_expr(op);
+  if (t.id().empty())
+    return wide;
+  if (t.is_floatbv())
+  {
+    for (exprt &operand : wide.operands())
+      operand = typecast_exprt(operand, t);
+    wide.type() = t;
+    return wide;
+  }
+  if (overflow_checks_enabled() && !wide.type().is_floatbv())
+  {
+    const std::size_t bits = get_dtype_size();
+    const bool is_unsigned = t.is_unsignedbv();
+    const BigInt low = is_unsigned ? BigInt(0) : -BigInt::power2(bits - 1);
+    const BigInt high =
+      is_unsigned ? BigInt::power2(bits) - 1 : BigInt::power2(bits - 1) - 1;
+    code_assertt fits(and_exprt(
+      binary_relation_exprt(wide, ">=", from_integer(low, wide.type())),
+      binary_relation_exprt(wide, "<=", from_integer(high, wide.type()))));
+    fits.location() = converter_.get_location_from_decl(call_);
+    fits.location().comment(
+      "Integer overflow detected in " + function_id_.get_function() +
+      "() call");
+    converter_.add_instruction(fits);
+  }
+  return typecast_exprt(wide, t);
+}
+
+// A two-argument call on two number literals: folded on the host when
+// folding is on, otherwise built as the operation over the literals.
+// copysign/fmax/fmin/round have no operator to build, so they always fold.
+exprt numpy_call_expr::scalar_binary_call(
+  const std::string &function,
+  bool allow_numpy_fold)
+{
+  const numeric_value lhs = extract_value(call_["args"][0]);
+  const numeric_value rhs = extract_value(call_["args"][1]);
+  const bool fold_only = function == "copysign" || function == "fmax" ||
+                         function == "fmin" || function == "round";
+  const typet t = scalar_dtype_result();
+  if (allow_numpy_fold && (fold_only || !t.id().empty()))
+    if (
+      std::optional<exprt> folded =
+        fold_scalar_binary(function, lhs, rhs, fold_only ? typet() : t))
+      return *folded;
+  if (fold_only)
+    throw std::runtime_error(
+      "TypeError: numpy." + function +
+      "() is only supported on number "
+      "literals with constant folding");
+  return unfolded_scalar_binary(function, lhs, rhs, t);
+}
+
 exprt numpy_call_expr::get()
 {
   const std::string &function = function_id_.get_function();
@@ -9661,8 +9883,8 @@ exprt numpy_call_expr::get()
           .try_reduce_symbolic_view(function, call_["args"][0]))
       return *runtime_result;
 
-  if (std::optional<exprt> any_all_result = try_any_all_result(function))
-    return *any_all_result;
+  if (std::optional<exprt> early = try_early_result(function))
+    return *early;
 
   static const std::set<std::string> reducer_and_arange_functions = {
     "sum", "prod", "min", "max", "mean", "argmin", "argmax", "arange"};
@@ -11120,236 +11342,7 @@ exprt numpy_call_expr::get()
       !is_complex_annotated_scalar_node(call_["args"][0]) &&
       !is_complex_annotated_scalar_node(call_["args"][1]))
     {
-      auto lhs = extract_value(call_["args"][0]);
-      auto rhs = extract_value(call_["args"][1]);
-
-      auto compute_scalar_result =
-        [&](double left, double right, double &out) -> bool {
-        if (function == "add")
-        {
-          out = left + right;
-          return true;
-        }
-        if (function == "subtract")
-        {
-          out = left - right;
-          return true;
-        }
-        if (function == "multiply")
-        {
-          out = left * right;
-          return true;
-        }
-        if (function == "divide")
-        {
-          if (right == 0.0)
-            return false;
-          out = left / right;
-          return true;
-        }
-        if (function == "power")
-        {
-          out = std::pow(left, right);
-          return true;
-        }
-        if (function == "copysign")
-        {
-          out = std::copysign(left, right);
-          return true;
-        }
-        if (function == "fmax")
-        {
-          out = std::fmax(left, right);
-          return true;
-        }
-        if (function == "fmin")
-        {
-          out = std::fmin(left, right);
-          return true;
-        }
-        if (function == "round")
-        {
-          // numpy.round(x, decimals): round half to even (numpy semantics),
-          // for decimals zero or negative too (e.g. round(12345, -2) == 12300).
-          // This host fold must produce the SAME double on every platform, else
-          // the baked SMT constant diverges and the verdict flips (it did:
-          // passed on arm64, failed on x86-64). Two non-portable pitfalls are
-          // avoided: (1) std::pow(10.0, d) is not guaranteed to be the exact
-          // power of ten (glibc vs Apple libm differ), so build the scale by
-          // exact repeated multiplication; (2) std::nearbyint honours the
-          // ambient FP rounding mode, so decide half-to-even explicitly with
-          // std::floor, which ignores the mode.
-          const long long decimals = static_cast<long long>(right);
-          double pow10 = 1.0;
-          for (long long i = 0; i < std::llabs(decimals); ++i)
-            pow10 *= 10.0;
-          const double scaled = decimals >= 0 ? left * pow10 : left / pow10;
-          double r = std::floor(scaled);
-          const double frac = scaled - r;
-          if (frac > 0.5 || (frac == 0.5 && std::fmod(r, 2.0) != 0.0))
-            r += 1.0;
-          out = decimals >= 0 ? r / pow10 : r * pow10;
-          return true;
-        }
-        return false;
-      };
-
-      // copysign/fmax/fmin/round have no operator_map() entry and no handler,
-      // so the BinOp path below crashes migrate_expr.
-      // Fold the scalar-constant case here.
-      // Symbolic and array operands are unsupported.
-      if (
-        allow_numpy_fold && (function == "copysign" || function == "fmax" ||
-                             function == "fmin" || function == "round"))
-      {
-        double folded = 0.0;
-        if (!compute_scalar_result(to_double(lhs), to_double(rhs), folded))
-          throw std::runtime_error(
-            "compute_scalar_result missing branch for " + function);
-
-        // Mirror the dtype-override branch below:
-        // only restamp current_lhs when the user explicitly requested a dtype.
-        typet t = cached_double_type();
-        if (get_dtype_size() && converter_.current_lhs)
-        {
-          t = get_typet_from_dtype();
-          if (!t.is_floatbv())
-            t = cached_double_type();
-          converter_.current_lhs->type() = t;
-          converter_.update_symbol(*converter_.current_lhs);
-        }
-        exprt folded_expr = from_double(folded, t);
-        folded_expr.cformat(std::to_string(folded));
-        return folded_expr;
-      }
-
-      nlohmann::json result;
-      if (lhs.is_int && rhs.is_int)
-      {
-        result =
-          create_binary_op(function, kConstant, lhs.int_value, rhs.int_value);
-      }
-      else
-      {
-        result =
-          create_binary_op(function, kConstant, to_double(lhs), to_double(rhs));
-      }
-
-      exprt expr = converter_.get_expr(result);
-
-      auto dtype_size = get_dtype_size();
-      if (dtype_size && converter_.current_lhs)
-      {
-        typet t = get_typet_from_dtype();
-        converter_.current_lhs->type() = t;
-        converter_.update_symbol(*converter_.current_lhs);
-
-        expr.type() = converter_.current_lhs->type();
-        for (auto &operand : expr.operands())
-          operand.type() = expr.type();
-
-        if (allow_numpy_fold)
-        {
-          const std::string dtype = get_dtype();
-          const bool is_integer_dtype = dtype.find("int") != std::string::npos;
-          if (
-            function == "power" && lhs.is_int && rhs.is_int && is_integer_dtype)
-          {
-            BigInt exact_power;
-            if (
-              try_exact_integer_power(
-                lhs.int_value, rhs.int_value, exact_power))
-            {
-              const bool is_unsigned = !dtype.empty() && dtype[0] == 'u';
-              const BigInt min_val =
-                is_unsigned ? BigInt(0) : -BigInt::power2(dtype_size - 1);
-              const BigInt max_val = is_unsigned
-                                       ? BigInt::power2(dtype_size) - 1
-                                       : BigInt::power2(dtype_size - 1) - 1;
-              if (exact_power < min_val || exact_power > max_val)
-              {
-                log_warning(
-                  "{}:{}: Integer overflow detected in {}() call. Consider "
-                  "using a larger integer type.",
-                  converter_.current_python_file,
-                  call_["end_lineno"].get<int>(),
-                  function_id_.get_function());
-                emit_numpy_overflow_assertion(converter_, call_, function_id_);
-              }
-
-              BigInt wrapped = exact_power;
-              const BigInt modulus = BigInt::power2(dtype_size);
-              wrapped = wrapped % modulus;
-              if (wrapped < 0)
-                wrapped += modulus;
-              if (!is_unsigned && wrapped >= BigInt::power2(dtype_size - 1))
-                wrapped -= modulus;
-
-              exprt folded = from_integer(wrapped, t);
-              folded.cformat(integer2string(wrapped));
-              return folded;
-            }
-          }
-
-          double left = to_double(lhs);
-          double right = to_double(rhs);
-          double scalar_result = 0.0;
-
-          if (compute_scalar_result(left, right, scalar_result))
-          {
-            if (is_integer_dtype)
-            {
-              const bool is_unsigned = !dtype.empty() && dtype[0] == 'u';
-              const int64_t rounded_value =
-                static_cast<int64_t>(std::llround(scalar_result));
-              const uint64_t mask = dtype_size >= 64
-                                      ? std::numeric_limits<uint64_t>::max()
-                                      : ((uint64_t{1} << dtype_size) - 1);
-              const uint64_t wrapped_bits =
-                static_cast<uint64_t>(rounded_value) & mask;
-
-              int64_t wrapped_signed = static_cast<int64_t>(wrapped_bits);
-              if (
-                !is_unsigned && dtype_size < 64 &&
-                ((wrapped_bits >> (dtype_size - 1)) & 1ULL) != 0)
-              {
-                wrapped_signed -=
-                  static_cast<int64_t>(uint64_t{1} << dtype_size);
-              }
-
-              if (rounded_value != wrapped_signed)
-              {
-                log_warning(
-                  "{}:{}: Integer overflow detected in {}() call. Consider "
-                  "using a larger integer type.",
-                  converter_.current_python_file,
-                  call_["end_lineno"].get<int>(),
-                  function_id_.get_function());
-                emit_numpy_overflow_assertion(converter_, call_, function_id_);
-              }
-
-              if (is_unsigned)
-              {
-                exprt folded = from_integer(BigInt(wrapped_bits), t);
-                folded.cformat(std::to_string(wrapped_bits));
-                return folded;
-              }
-              else
-              {
-                exprt folded = from_integer(BigInt(wrapped_signed), t);
-                folded.cformat(std::to_string(wrapped_signed));
-                return folded;
-              }
-            }
-
-            exprt folded = from_double(scalar_result, t);
-            folded.cformat(std::to_string(scalar_result));
-            return folded;
-          }
-        }
-      }
-
-      return expr;
+      return scalar_binary_call(function, allow_numpy_fold);
     }
     broadcast_check(call_["args"]);
 
