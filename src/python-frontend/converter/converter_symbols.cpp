@@ -1243,33 +1243,37 @@ python_converter::find_nested_function_symbol(const std::string &name) const
   return nullptr;
 }
 
+symbolt *
+python_converter::find_symbol_through_module(const std::string &sym_id) const
+{
+  // Imports bind names in the module being converted only: an id in another
+  // module's file names that module's symbol (#9046).
+  const std::string file = symbol_id::from_string(sym_id).get_filename();
+  const std::size_t at = sym_id.rfind('@');
+  if (!file.empty() && file != current_python_file && at != std::string::npos)
+  {
+    const std::string name = sym_id.substr(at + 1);
+    return find_symbol_in_module(sym_id, file, name, name);
+  }
+
+  // User imports (e.g. "from other import sum") shadow builtin model
+  // functions that are registered in the main file's namespace. Don't let
+  // model-module stubs (e.g. esbmc.py's nondet_list stub) shadow operational
+  // models (e.g. nondet.py's nondet_list).
+  symbolt *imported = find_imported_symbol(sym_id);
+  if (
+    imported &&
+    imported->id.as_string().find("/models/") != std::string::npos &&
+    symbol_table_.find_symbol(sym_id))
+    return nullptr;
+  return imported;
+}
+
 symbolt *python_converter::find_symbol(const std::string &sym_id) const
 {
-  // When not loading models, check imports first so that user imports
-  // (e.g. "from other import sum") shadow builtin model functions that
-  // are registered in the main file's namespace.
-  // Don't let model-module stubs (e.g. esbmc.py's nondet_list
-  // stub) shadow operational models (e.g. nondet.py's nondet_list).
   if (!is_loading_models)
-  {
-    // Imports bind names in the module being converted only: an id in another
-    // module's file names that module's symbol (#9046).
-    const std::string file = symbol_id::from_string(sym_id).get_filename();
-    const std::size_t at = sym_id.rfind('@');
-    if (!file.empty() && file != current_python_file && at != std::string::npos)
-    {
-      const std::string name = sym_id.substr(at + 1);
-      if (symbolt *symbol = find_symbol_in_module(sym_id, file, name, name))
-        return symbol;
-    }
-    else if (symbolt *imported = find_imported_symbol(sym_id))
-    {
-      const std::string &imp_id = imported->id.as_string();
-      bool is_model_stub = imp_id.find("/models/") != std::string::npos;
-      if (!is_model_stub || !symbol_table_.find_symbol(sym_id))
-        return imported;
-    }
-  }
+    if (symbolt *symbol = find_symbol_through_module(sym_id))
+      return symbol;
 
   if (symbolt *symbol = symbol_table_.find_symbol(sym_id))
     return symbol;
