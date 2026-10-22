@@ -285,9 +285,7 @@ TEST_CASE(
   "a struct-typed ternary leaves no temporary behind",
   "[symex][value-set]")
 {
-  // value_sett::assign routes `c ? x : y` through a fresh temporary and then
-  // erases it. A struct temporary is stored per member, so erasing its bare
-  // name alone would keep its ".p" entry in every later state.
+  // No member entry of the ternary's temporary survives the assignment.
   engine e(R"(
 struct S { int *p; };
 int a, b;
