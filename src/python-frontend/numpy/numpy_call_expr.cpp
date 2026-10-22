@@ -5514,8 +5514,7 @@ size_t count_effective_bits(const std::string &binary)
 // return; `exact` itself when nothing rounds.
 exprt numpy_call_expr::lapack_value(double exact, double radius)
 {
-  const exprt value =
-    converter_.get_expr(to_json_constant(scalar_value{false, exact}));
+  const exprt value = from_double(exact, double_type());
   if (radius == 0.0 || !std::isfinite(exact) || !std::isfinite(radius))
     return value;
   symbolt &tmp =
@@ -5528,10 +5527,8 @@ exprt numpy_call_expr::lapack_value(double exact, double radius)
   code_assignt assign(result, side_effect_expr_nondett(value.type()));
   assign.location() = location;
   converter_.add_instruction(assign);
-  const exprt low =
-    converter_.get_expr(to_json_constant(scalar_value{false, exact - radius}));
-  const exprt high =
-    converter_.get_expr(to_json_constant(scalar_value{false, exact + radius}));
+  const exprt low = from_double(exact - radius, double_type());
+  const exprt high = from_double(exact + radius, double_type());
   code_assumet within(and_exprt(
     binary_relation_exprt(result, ">=", low),
     binary_relation_exprt(result, "<=", high)));
@@ -5727,6 +5724,78 @@ exprt numpy_call_expr::singular_values(
   exprt array("array", array_typet(first.type(), from_integer(2, size_type())));
   array.copy_to_operands(first, second);
   return array;
+}
+
+// NumPy evaluates these with its own vectorised code where the CPU has it
+// (SVML on AVX-512 is tested to 4 ulps of the exact value, tanh differs from
+// glibc by 2 ulps even without it): the result is any double within 8 ulps
+// of the C library's, except where every implementation is
+// exact (a correctly rounded square root, an odd function at a signed zero,
+// exp(0), log(1), or log2 of a power of two).
+exprt numpy_call_expr::numpy_math_value(const std::string &function, double x)
+{
+  static const std::set<std::string> odd = {
+    "sin", "tan", "arctan", "arcsin", "sinh", "tanh"};
+  static const std::set<std::string> one_at_zero = {"exp", "cos", "cosh"};
+  static const std::set<std::string> zero_at_one = {
+    "log", "log2", "log10", "arccos"};
+  const double value = apply_numpy_unary_math(function, x);
+  int exponent = 0;
+  const bool power_of_two = x > 0 && std::frexp(x, &exponent) == 0.5;
+  const bool exact =
+    function == "sqrt" || function == "rint" || !std::isfinite(value) ||
+    (x == 0.0 &&
+     (odd.count(function) != 0 || one_at_zero.count(function) != 0)) ||
+    (x == 1.0 && zero_at_one.count(function) != 0) ||
+    (function == "log2" && power_of_two);
+  const double ulp =
+    std::nextafter(std::fabs(value), INFINITY) - std::fabs(value);
+  return lapack_value(value, exact ? 0.0 : 8 * ulp);
+}
+
+// `np.exp(0.3)`, `np.sin(-1.0)`: a numeric literal argument.
+std::optional<exprt> numpy_call_expr::try_numpy_math_constant()
+{
+  const std::string &function = function_id_.get_function();
+  numeric_value value;
+  if (
+    !is_supported_numpy_unary_math(function) || call_["args"].size() != 1 ||
+    !try_extract_numeric_constant(call_["args"][0], value))
+    return std::nullopt;
+  return numpy_math_value(function, to_double(value));
+}
+
+// The function applied to each element of a literal 1-D or 2-D list.
+exprt numpy_call_expr::numpy_math_list(
+  const std::string &function,
+  const nlohmann::json &arg)
+{
+  std::vector<std::vector<numeric_value>> rows;
+  std::vector<numeric_value> row;
+  const bool flat = try_extract_numeric_1d_list(arg, row);
+  if (flat)
+    rows.push_back(row);
+  else if (!try_extract_numeric_2d_list(arg, rows))
+    throw std::runtime_error("Unsupported Numpy call: " + function);
+  std::vector<exprt> results;
+  for (const auto &values : rows)
+  {
+    exprt array(
+      "array",
+      array_typet(double_type(), from_integer(values.size(), size_type())));
+    for (const numeric_value &value : values)
+      array.copy_to_operands(numpy_math_value(function, to_double(value)));
+    results.push_back(array);
+  }
+  if (flat)
+    return results.front();
+  exprt matrix(
+    "array",
+    array_typet(
+      results.front().type(), from_integer(rows.size(), size_type())));
+  for (const exprt &result : results)
+    matrix.copy_to_operands(result);
+  return matrix;
 }
 
 typet numpy_call_expr::get_typet_from_dtype() const
@@ -6928,6 +6997,8 @@ exprt numpy_call_expr::create_expr_from_call()
 
     const auto &arg_type = call_["args"][0]["_type"];
 
+    if (std::optional<exprt> value = try_numpy_math_constant())
+      return *value;
     if (
       arg_type == "Constant" || arg_type == "UnaryOp" ||
       arg_type == "Subscript")
@@ -6994,8 +7065,7 @@ exprt numpy_call_expr::create_expr_from_call()
 
       if (is_supported_numpy_unary_math(operation))
       {
-        exprt folded = fold_numpy_unary_constant_list(
-          converter_, operation, call_["args"][0]);
+        exprt folded = numpy_math_list(operation, call_["args"][0]);
         if (converter_.current_lhs)
         {
           converter_.current_lhs->type() = folded.type();

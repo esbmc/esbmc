@@ -267,6 +267,9 @@ private:
   exprt get_nditer_list(const nlohmann::json &arg);
   exprt scalar_binary_call(const std::string &function, bool allow_numpy_fold);
   exprt lapack_value(double exact, double radius);
+  exprt numpy_math_value(const std::string &function, double x);
+  std::optional<exprt> try_numpy_math_constant();
+  exprt numpy_math_list(const std::string &function, const nlohmann::json &arg);
   std::vector<std::vector<double>>
   linalg_matrix(const std::function<void(nlohmann::json &)> &unwrap);
   exprt nondet_bool();
