@@ -12,7 +12,7 @@ from preprocessor.namedtuple_lowering import lower_namedtuples
 from preprocessor.function_value_types import reject_mixed_function_values
 from preprocessor.receiver_classes import refuse_path_dependent_receivers
 from preprocessor.skipped_base_init import refuse_skipped_base_init
-from preprocessor.zip_lowering import lower_zip_builds
+from preprocessor.zip_lowering import inline_zip_names, lower_zip_builds
 from preprocessor.unbound_locals import guard_unbound_locals
 # pylint: disable=too-many-branches,too-many-boolean-expressions
 
@@ -551,6 +551,7 @@ class ModuleRewriteMixin:
         lower_check_type(node, self.module_name)
         _rename_shadowed_classes(node)
         alias_dotted_imports(node)
+        inline_zip_names(node)
         lower_zip_builds(node)
         reject_mixed_function_values(node, self.module_name)
         lower_match_statements(node)
