@@ -8752,6 +8752,8 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   // A while test re-evaluates after the body, so no pre-loop literal holds.
   const bool is_while = ast_node.value("_type", "") == "While";
   const loop_depth_guard loop_guard(numpy_loop_depth_, is_while);
+  const loop_depth_guard conditional_guard(
+    conditional_expr_depth_, ast_node.value("_type", "") == "IfExp");
   str_value_scope_guard test_guard(
     symbol_table_, str_valued_symbols_, is_while, is_while);
 

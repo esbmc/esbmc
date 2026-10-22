@@ -1772,7 +1772,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     if (cmp == "Is" || cmp == "IsNot" || cmp == "Eq" || cmp == "NotEq")
       type_compared_operands_ = {&left, &right};
   }
-  exprt lhs = get_expr(left);
+  exprt lhs = snapshot_left_operand(get_expr(left), right);
   exprt rhs = get_right_operand_expr(element, right, lhs);
   type_compared_operands_ = saved_compared;
   current_lhs = saved_lhs;
@@ -1797,6 +1797,65 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   const exprt result =
     get_binary_operator_expr(element, left, right, op, lhs, rhs);
   return keep_operand_calls(result, lhs, rhs);
+}
+
+static bool contains_call(const nlohmann::json &node)
+{
+  if (node.is_object() && node.value("_type", "") == "Lambda")
+    return false;
+  if (node.is_object() && node.value("_type", "") == "Call")
+    return true;
+  if (!node.is_object() && !node.is_array())
+    return false;
+  for (const auto &child : node)
+    if (contains_call(child))
+      return true;
+  return false;
+}
+
+// A read of a fixed-size array at a constant index inside its bounds.
+static bool is_in_bounds_constant_index(const exprt &expr)
+{
+  if (!expr.is_index() || !expr.op0().is_symbol() || !expr.op1().is_constant())
+    return false;
+  const typet &array = expr.op0().type();
+  if (!array.is_array() || !to_array_type(array).size().is_constant())
+    return false;
+  const BigInt size = binary2integer(
+    to_constant_expr(to_array_type(array).size()).value().c_str(), false);
+  const BigInt index =
+    binary2integer(to_constant_expr(expr.op1()).value().c_str(), true);
+  return index >= 0 && index < size;
+}
+
+// Python reads the left operand before it runs a call in the right one,
+// which may rebind what the left operand reads (`g + bump()`).
+exprt python_converter::snapshot_left_operand(
+  const exprt &lhs,
+  const nlohmann::json &right)
+{
+  const typet &type = lhs.type();
+  const bool scalar = type.is_signedbv() || type.is_unsignedbv() ||
+                      type.is_floatbv() || type.is_bool();
+  // An arm of a conditional expression runs on one path only, so only a read
+  // that cannot fail is taken out of it.
+  const bool safe = lhs.is_symbol() || is_in_bounds_constant_index(lhs) ||
+                    conditional_expr_depth_ == 0;
+  if (
+    !can_emit_runtime_guard() || !scalar || !safe || lhs.is_constant() ||
+    !contains_call(right))
+    return lhs;
+  exprt value = lhs;
+  if (value.is_function_call())
+    convert_function_call_to_side_effect(value);
+  symbolt &tmp = create_tmp_symbol(right, "$left$", type, exprt());
+  code_declt decl(symbol_expr(tmp));
+  decl.location() = get_location_from_decl(right);
+  current_block->copy_to_operands(decl);
+  code_assignt assign(symbol_expr(tmp), value);
+  assign.location() = decl.location();
+  current_block->copy_to_operands(assign);
+  return symbol_expr(tmp);
 }
 
 /// A comparison decided from its operand types alone still evaluates its

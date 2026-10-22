@@ -1254,6 +1254,7 @@ private:
   // A numpy array parameter decays to a pointer; element-wise arithmetic
   // reads it back through its pre-decay array type.
   exprt numpy_param_as_array(const exprt &operand) const;
+  exprt snapshot_left_operand(const exprt &lhs, const nlohmann::json &right);
   exprt
   materialize_numpy_arithmetic(const nlohmann::json &node, const exprt &value);
   std::optional<std::vector<std::size_t>>
@@ -3645,6 +3646,8 @@ private:
   std::map<std::string, std::set<std::string>> numpy_view_other_sources_;
   std::set<std::string> numpy_view_storage_roots(const std::string &id) const;
   unsigned numpy_loop_depth_ = 0;
+  // Conditional expressions being converted; their arms run on one path only.
+  unsigned conditional_expr_depth_ = 0;
   /// Detach for a constant-shape view: copies what it sees into a dense
   /// snapshot and repoints it there. Returns the snapshot's id.
   std::vector<exprt> read_strided_view_elements(
