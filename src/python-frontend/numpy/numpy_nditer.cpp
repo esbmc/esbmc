@@ -97,7 +97,9 @@ const std::set<std::string> &modelled_flags()
 {
   static const std::set<std::string> flags = {
     "buffered",
+    "c_index",
     "external_loop",
+    "f_index",
     "grow_inner",
     "multi_index",
     "refs_ok",
@@ -671,7 +673,18 @@ std::string numpy_nditer::invalid_setup(
     order_name != "K")
     return "order must be one of 'C', 'F', 'A', or 'K' (got '" + order_name +
            "')";
-  if (has(flag_list, "external_loop") && has(flag_list, "multi_index"))
+  return invalid_tracking(flag_list);
+}
+
+// The message NumPy raises for the index and multi-index flags, or empty.
+std::string
+numpy_nditer::invalid_tracking(const std::vector<std::string> &flag_list) const
+{
+  if (has(flag_list, "c_index") && has(flag_list, "f_index"))
+    return "Iterator flags C_INDEX and F_INDEX cannot both be specified";
+  const bool tracked = has(flag_list, "multi_index") ||
+                       has(flag_list, "c_index") || has(flag_list, "f_index");
+  if (has(flag_list, "external_loop") && tracked)
     return "Iterator flag EXTERNAL_LOOP cannot be used if an index or "
            "multi-index is being tracked";
   return "";
@@ -769,6 +782,9 @@ numpy_nditer::describe(const json &call, const std::string &state)
   it.state = state;
   it.alias = call["func"]["value"]["id"].get<std::string>();
   it.multi_index = has(flag_list, "multi_index");
+  it.index = has(flag_list, "c_index")   ? "C"
+             : has(flag_list, "f_index") ? "F"
+                                         : "";
   it.external_loop = has(flag_list, "external_loop");
   it.buffered = has(flag_list, "buffered");
   for (std::size_t op = 0; op < ops.size(); ++op)
@@ -1528,6 +1544,8 @@ json numpy_nditer::layout_attribute(
     return finished(it);
   if (attr == "itersize")
     return it.runtime ? items(it) : constant(it.size);
+  if (attr == "nop")
+    return constant(static_cast<long long>(it.operands.size()));
   if (attr == "operands")
   {
     std::vector<json> arrays;
@@ -1537,6 +1555,13 @@ json numpy_nditer::layout_attribute(
   }
   if (attr != "shape" && attr != "ndim")
     return json();
+  // NumPy does not coalesce the axes an index needs, and reports them in an
+  // order of its own.
+  if (!it.index.empty() && !it.multi_index)
+    throw std::runtime_error(
+      "TypeError: numpy.nditer() '" + attr +
+      "' of an iterator tracking an index without a multi-index is not "
+      "supported");
   std::vector<json> extents;
   if (it.runtime)
     extents.push_back(items(it));
@@ -1547,15 +1572,38 @@ json numpy_nditer::layout_attribute(
                          : constant(static_cast<long long>(extents.size()));
 }
 
+// The C (or Fortran) order index of a position in the iteration shape.
+json numpy_nditer::flat_index(
+  const numpy_nditer_state &it,
+  const std::vector<json> &axis_index) const
+{
+  json flat = constant(0);
+  long long scale = 1;
+  for (std::size_t i = 0; i < axis_index.size(); ++i)
+  {
+    const std::size_t axis = it.index == "C" ? axis_index.size() - 1 - i : i;
+    flat = binop(flat, "Add", binop(axis_index[axis], "Mult", constant(scale)));
+    scale *= it.shape[axis];
+  }
+  return flat;
+}
+
 // `multi_index`, `iterindex` and `value`: they raise past the end, and
 // `multi_index` without the flag.
 json numpy_nditer::position_attribute(
   const numpy_nditer_state &it,
   const std::string &attr)
 {
-  if (attr != "multi_index" && attr != "iterindex" && attr != "value")
+  if (
+    attr != "multi_index" && attr != "iterindex" && attr != "value" &&
+    attr != "index")
     throw std::runtime_error(
       "TypeError: numpy.nditer attribute '" + attr + "' is not supported");
+  if (attr == "index" && it.index.empty())
+  {
+    raise("ValueError", "Iterator does not have an index");
+    return constant(0);
+  }
   if (attr == "multi_index" && !it.multi_index)
   {
     raise("ValueError", "Iterator is not tracking a multi-index");
@@ -1566,6 +1614,8 @@ json numpy_nditer::position_attribute(
     return tuple(indices(it, position(it)));
   if (attr == "iterindex")
     return binop(position(it), "Mult", constant(it.chunk));
+  if (attr == "index")
+    return flat_index(it, indices(it, position(it)));
   return current_values(it);
 }
 

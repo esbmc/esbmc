@@ -52,6 +52,8 @@ struct numpy_nditer_state
   bool runtime = false;
   bool flip_negative = false;
   bool multi_index = false;
+  /// "C" or "F" for the index `c_index` or `f_index` tracks, empty for none.
+  std::string index;
   bool external_loop = false;
   bool buffered = false;
   /// Elements per item: the chunk an external loop yields, 1 otherwise.
@@ -126,6 +128,10 @@ private:
   std::string invalid_setup(
     const std::vector<std::string> &flag_list,
     const std::string &order_name) const;
+  std::string invalid_tracking(const std::vector<std::string> &flag_list) const;
+  nlohmann::json flat_index(
+    const numpy_nditer_state &it,
+    const std::vector<nlohmann::json> &axis_index) const;
   bool writable_operands_fit(
     const numpy_nditer_state &it,
     const std::vector<std::vector<std::string>> &op_flags);
