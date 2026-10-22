@@ -79,6 +79,21 @@ def _refuse_later_decorators(function, user_functions, defined, module_name):
                     module_name)
 
 
+def _refuse_local_decorators(module, module_name):
+    """Refuse a decorator a function body defines: it would be ignored."""
+    scopes = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+    functions = [
+        n for n in ast.walk(module) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+    ]
+    for func in functions:
+        local = {s.name for s in func.body if isinstance(s, ast.FunctionDef)}
+        for node in ast.walk(func):
+            decorators = node.decorator_list if isinstance(node, scopes) else []
+            for decorator in decorators:
+                if node is not func and _is_user_decorator(decorator, local):
+                    _refuse(decorator, "a decorator a function body defines", module_name)
+
+
 def _refuse_nested_decorators(module, user_functions, module_name):
     """Refuse a decorator this program defines anywhere but on a top-level def."""
     top_level = {id(s) for s in module.body if isinstance(s, ast.FunctionDef)}
@@ -117,3 +132,4 @@ def lower_user_decorators(module, module_name):
         defined[name] = stmt
     module.body = body
     _refuse_nested_decorators(module, user_functions, module_name)
+    _refuse_local_decorators(module, module_name)
