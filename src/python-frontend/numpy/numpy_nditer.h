@@ -27,6 +27,10 @@ struct numpy_nditer_operand
   std::vector<long long> axes;
   /// The dtype reads are cast to (`op_dtypes`); empty for the operand's own.
   typet dtype;
+  /// A writable operand read through a cast is buffered: the hidden list its
+  /// items live in, in visiting order, copied back once the iterator is
+  /// exhausted or closed. Empty when items are the operand's own elements.
+  std::string buffer;
 };
 
 /// The static description of an `np.nditer`: its operands, the iteration
@@ -94,6 +98,10 @@ public:
   /// `x[...] = value` on what the iterator yields; false for other targets.
   bool write(const nlohmann::json &target, const nlohmann::json &value);
 
+  /// Before the array `rebound_id` names is rebound: the iterators over it
+  /// keep the old storage, held by the alias `heir_id` when it has one.
+  void keep_sources(const std::string &rebound_id, const std::string &heir_id);
+
   static std::string key(const std::string &function, const std::string &name);
 
 private:
@@ -104,6 +112,9 @@ private:
 
   std::optional<numpy_nditer_state>
   describe(const nlohmann::json &call, const std::string &state);
+  std::vector<nlohmann::json> evaluate_operands(
+    const std::vector<nlohmann::json> &ops,
+    const std::vector<std::vector<std::string>> &op_flags);
   numpy_nditer_operand operand(const nlohmann::json &node, std::size_t index);
   nlohmann::json named_operand(const nlohmann::json &node, std::size_t index);
   /// `Info` is python_converter's view description, complete only where
@@ -160,6 +171,9 @@ private:
     const std::string &exception,
     const std::string &message);
   void advance(const numpy_nditer_state &it);
+  bool buffer_writes(numpy_nditer_state &it);
+  void fill_buffers(const numpy_nditer_state &it);
+  void flush_buffers(const numpy_nditer_state &it, const nlohmann::json &when);
   void bind_name(
     const nlohmann::json &target,
     const numpy_nditer_state &it,

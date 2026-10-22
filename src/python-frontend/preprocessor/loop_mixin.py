@@ -385,6 +385,10 @@ class LoopMixin:
             ] + binds + node.body,
             orelse=[])
         stmts.append(loop)
+        if not isinstance(node.iter, ast.Name):
+            # The iterator the loop created is freed after it; NumPy drops
+            # what it buffered and not yet wrote back.
+            stmts.append(ast.Expr(value=call("_esbmc_nditer_release")))
         for new in stmts:
             ast.copy_location(new, node)
             ast.fix_missing_locations(new)

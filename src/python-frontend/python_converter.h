@@ -1674,6 +1674,9 @@ private:
   /// returns true once it has converted it.
   bool try_dedicated_assign(const nlohmann::json &ast_node, codet &block);
   bool try_numpy_nditer_assign(const nlohmann::json &ast_node);
+  const nlohmann::json *
+  numpy_slice_copy_source(const nlohmann::json &value) const;
+  bool try_numpy_slice_copy_assign(const nlohmann::json &ast_node);
   std::optional<exprt> get_intercepted_expr(const nlohmann::json &element);
   void reject_bound_method_read(const nlohmann::json &element);
   void reject_method_value(const std::string &class_name, const std::string &m)

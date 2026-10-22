@@ -6940,6 +6940,7 @@ bool python_converter::try_dedicated_assign(
   codet &block)
 {
   return try_numpy_nditer_assign(ast_node) ||
+         try_numpy_slice_copy_assign(ast_node) ||
          rewrite_divergent_conditional_assign(ast_node, block) ||
          try_tagged_var_assign(ast_node, block) ||
          try_bound_method_store(ast_node, block);
@@ -6981,6 +6982,77 @@ exprt python_converter::fit_numpy_integer_store(
 
 // `it = np.nditer(...)`, and the names bound to what an iterator yields; a
 // name rebound to anything else stops reading through an iterator.
+// What `value` copies: the receiver of `x.copy()`, or the argument of
+// `np.copy(x)` or `np.array(x)`; null for anything else.
+static const nlohmann::json *
+copied_node(const nlohmann::json &value, const nlohmann::json &ast)
+{
+  if (value.value("_type", "") != "Call" || !value["args"].is_array())
+    return nullptr;
+  const nlohmann::json &func = value["func"];
+  const nlohmann::json &args = value["args"];
+  const std::string attr = func.value("attr", "");
+  if (func.value("_type", "") != "Attribute")
+    return nullptr;
+  if (attr == "copy" && args.empty())
+    return &func["value"];
+  const bool numpy_call =
+    func["value"].value("_type", "") == "Name" &&
+    is_imported_numpy_module_alias(ast, func["value"].value("id", ""));
+  if (
+    (attr == "copy" || attr == "array") && numpy_call && args.size() == 1 &&
+    value.value("keywords", nlohmann::json::array()).empty())
+    return &args[0];
+  return nullptr;
+}
+
+// The slice of a numpy array or view that `value` copies, as in
+// `a[1:3].copy()`; null for anything else.
+const nlohmann::json *
+python_converter::numpy_slice_copy_source(const nlohmann::json &value) const
+{
+  const nlohmann::json *source = copied_node(value, *ast_json);
+  if (
+    !source || source->value("_type", "") != "Subscript" ||
+    (*source)["value"].value("_type", "") != "Name")
+    return nullptr;
+  const std::string base = (*source)["value"].value("id", "");
+  const bool numpy_base =
+    numpy_array_symbols_.count(resolve_name_symbol_id(base)) != 0 ||
+    find_numpy_pointer_view_info(base) != nullptr;
+  return numpy_base ? source : nullptr;
+}
+
+// `c = a[1:3].copy()`: the slice is bound to a view first, which a copy then
+// reads, as for a named view.
+bool python_converter::try_numpy_slice_copy_assign(
+  const nlohmann::json &ast_node)
+{
+  if (!ast_node.contains("value") || !ast_node["value"].is_object())
+    return false;
+  const nlohmann::json *source = numpy_slice_copy_source(ast_node["value"]);
+  if (!source || !current_block || !safe_to_emit_side_effecting_statement())
+    return false;
+  const std::string temp =
+    "ESBMC_copy_source_" + std::to_string(++nditer_counter_);
+  nlohmann::json name = {
+    {"_type", "Name"}, {"id", temp}, {"ctx", {{"_type", "Store"}}}};
+  copy_location_fields_from_decl(*source, name);
+  nlohmann::json bind = {
+    {"_type", "Assign"},
+    {"targets", nlohmann::json::array({name})},
+    {"value", *source}};
+  copy_location_fields_from_decl(*source, bind);
+  if (!emit_statement_into_current_block(bind))
+    return false;
+  name["ctx"] = {{"_type", "Load"}};
+  nlohmann::json copied = ast_node;
+  copied["value"] =
+    build_numpy_method_rewrite_node(ast_node["value"], "copy", name);
+  copied["value"]["args"] = nlohmann::json::array({name});
+  return emit_statement_into_current_block(copied);
+}
+
 bool python_converter::try_numpy_nditer_assign(const nlohmann::json &ast_node)
 {
   if (!ast_node.contains("value") || !ast_node["value"].is_object())

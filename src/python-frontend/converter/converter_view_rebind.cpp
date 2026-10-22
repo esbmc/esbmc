@@ -1,4 +1,5 @@
 #include <python-frontend/converter/converter_internal.h>
+#include <python-frontend/numpy/numpy_nditer.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_expr_builder.h>
 
@@ -106,6 +107,7 @@ void python_converter::detach_numpy_pointer_views_of(
 {
   const std::string heir =
     hand_numpy_storage_to_alias(rebound_id, location, target_block);
+  numpy_nditer(*this).keep_sources(rebound_id, heir);
   std::map<std::string, std::vector<std::string>> views_by_storage;
   for (const std::string &view_id : numpy_views_of(rebound_id))
   {

@@ -18,6 +18,8 @@ using json = nlohmann::json;
 // NumPy buffers at most this many elements, and the external loop of a
 // buffered iterator yields one buffer at a time.
 constexpr long long buffer_size = 8192;
+// Each write-back copies the whole buffer, so a cast buffer is kept small.
+constexpr long long max_buffered_items = 64;
 
 json constant(long long value)
 {
@@ -698,10 +700,6 @@ bool numpy_nditer::writable_operands_fit(
     if (it.operands[op].shape.empty())
       throw std::runtime_error(
         "TypeError: numpy.nditer() writes only to array operands");
-    if (it.buffered)
-      throw std::runtime_error(
-        "TypeError: numpy.nditer() writes through a buffered iterator are "
-        "not supported");
   }
   return true;
 }
@@ -729,6 +727,22 @@ bool numpy_nditer::check_size(numpy_nditer_state &it, bool zerosize_ok)
   return true;
 }
 
+// Python evaluates every operand, once, before nditer checks its setup.
+std::vector<json> numpy_nditer::evaluate_operands(
+  const std::vector<json> &ops,
+  const std::vector<std::vector<std::string>> &op_flags)
+{
+  std::vector<json> named;
+  for (std::size_t op = 0; op < ops.size(); ++op)
+    named.push_back(named_operand(ops[op], op));
+  for (std::size_t op = 0; op < ops.size(); ++op)
+    if (
+      writable(op_flags[op]) && converter_.is_numpy_readonly_view_arg(ops[op]))
+      throw std::runtime_error(
+        "ValueError: assignment destination is read-only");
+  return named;
+}
+
 std::optional<numpy_nditer_state>
 numpy_nditer::describe(const json &call, const std::string &state)
 {
@@ -738,11 +752,7 @@ numpy_nditer::describe(const json &call, const std::string &state)
   const std::vector<json> ops = operand_nodes(call);
   const std::vector<std::vector<std::string>> op_flags =
     operand_flags(call, ops.size());
-  for (std::size_t op = 0; op < ops.size(); ++op)
-    if (
-      writable(op_flags[op]) && converter_.is_numpy_readonly_view_arg(ops[op]))
-      throw std::runtime_error(
-        "ValueError: assignment destination is read-only");
+  const std::vector<json> named = evaluate_operands(ops, op_flags);
 
   const std::vector<std::string> flag_list = flags(call);
   const std::string order_name = order(call);
@@ -763,7 +773,7 @@ numpy_nditer::describe(const json &call, const std::string &state)
   it.buffered = has(flag_list, "buffered");
   for (std::size_t op = 0; op < ops.size(); ++op)
   {
-    it.operands.push_back(operand(ops[op], op));
+    it.operands.push_back(operand(named[op], op));
     it.operands.back().writable = writable(op_flags[op]);
   }
   if (
@@ -775,9 +785,84 @@ numpy_nditer::describe(const json &call, const std::string &state)
       "TypeError: numpy.nditer() external_loop over a view whose layout is "
       "only known at run time is not supported");
   order_axes(it, order_name);
-  if (!check_size(it, has(flag_list, "zerosize_ok")))
+  if (!check_size(it, has(flag_list, "zerosize_ok")) || !buffer_writes(it))
     return std::nullopt;
   return it;
+}
+
+// A writable operand whose items are cast lives in a buffer; one without a
+// cast is written in place, as NumPy does when no copy is needed.
+bool numpy_nditer::buffer_writes(numpy_nditer_state &it)
+{
+  for (std::size_t op = 0; op < it.operands.size(); ++op)
+  {
+    numpy_nditer_operand &o = it.operands[op];
+    if (!o.writable || o.dtype.id().empty())
+      continue;
+    if (it.runtime || it.size > max_buffered_items)
+      throw std::runtime_error(
+        "TypeError: numpy.nditer() buffered writes through a cast are "
+        "supported for at most " +
+        std::to_string(max_buffered_items) + " elements of a fixed layout");
+    o.buffer = it.state + "$buffer" + std::to_string(op);
+  }
+  return true;
+}
+
+void numpy_nditer::fill_buffers(const numpy_nditer_state &it)
+{
+  for (std::size_t op = 0; op < it.operands.size(); ++op)
+  {
+    const numpy_nditer_operand &o = it.operands[op];
+    if (o.buffer.empty())
+      continue;
+    std::vector<json> items;
+    for (long long k = 0; k < it.size; ++k)
+    {
+      json element = this->element(it, op, constant(k));
+      locate(element, converter_.current_nditer_call_);
+      items.push_back(
+        prebuilt(typecast_exprt(converter_.get_expr(element), o.dtype)));
+    }
+    assign(o.buffer, {{"_type", "List"}, {"elts", items}});
+  }
+  if (std::any_of(it.operands.begin(), it.operands.end(), [](const auto &o) {
+        return !o.buffer.empty();
+      }))
+    assign(it.state + "$flushed", boolean(false));
+}
+
+// Copies each buffer back to its operand, cast to the operand's dtype, the
+// first time `when` holds.
+void numpy_nditer::flush_buffers(const numpy_nditer_state &it, const json &when)
+{
+  const json flushed = name(it.state + "$flushed");
+  const json flush = if_exp(flushed, boolean(false), when);
+  bool any = false;
+  for (std::size_t op = 0; op < it.operands.size(); ++op)
+  {
+    const numpy_nditer_operand &o = it.operands[op];
+    if (o.buffer.empty())
+      continue;
+    any = true;
+    for (long long k = 0; k < it.size; ++k)
+    {
+      json target = element(it, op, constant(k));
+      json source = index_node(name(o.buffer), constant(k));
+      locate(source, converter_.current_nditer_call_);
+      const json cast =
+        prebuilt(typecast_exprt(converter_.get_expr(source), element_type(o)));
+      json statement = {
+        {"_type", "Assign"},
+        {"targets", json::array({target})},
+        {"value", if_exp(flush, cast, target)}};
+      statement["targets"][0]["ctx"] = {{"_type", "Store"}};
+      locate(statement, converter_.current_nditer_call_);
+      converter_.emit_statement_into_current_block(statement);
+    }
+  }
+  if (any)
+    assign(it.state + "$flushed", if_exp(flushed, boolean(true), when));
 }
 
 namespace
@@ -1090,6 +1175,7 @@ void numpy_nditer::create(const std::string &target, const json &call)
     return;
   assign(state + "$k", constant(0));
   assign(state + "$started", boolean(false));
+  fill_buffers(*it);
   converter_.numpy_nditers_[id] = *it;
 }
 
@@ -1218,6 +1304,8 @@ json numpy_nditer::value(
   std::size_t op,
   const json &element_position)
 {
+  if (!it.operands[op].buffer.empty())
+    return index_node(name(it.operands[op].buffer), element_position);
   json node = element(it, op, element_position);
   const typet &type = it.operands[op].dtype;
   if (type.id().empty())
@@ -1296,6 +1384,7 @@ void numpy_nditer::advance(const numpy_nditer_state &it)
     it.state + "$k",
     if_exp(name(it.state + "$started"), binop(k, "Add", constant(1)), k));
   assign(it.state + "$started", boolean(true));
+  flush_buffers(it, finished(it));
 }
 
 void numpy_nditer::bind_name(
@@ -1527,7 +1616,11 @@ std::optional<exprt> numpy_nditer::call(const json &node)
     return std::nullopt;
   json result = call_method(*found, method, node);
   locate(result, node);
-  return converter_.get_expr(result);
+  exprt converted = converter_.get_expr(result);
+  if (method == "_esbmc_nditer_release")
+    converter_.numpy_nditers_.erase(
+      key(converter_.current_func_name_, (*receiver)["id"].get<std::string>()));
+  return converted;
 }
 
 json numpy_nditer::call_method(
@@ -1547,14 +1640,23 @@ json numpy_nditer::call_method(
       it.state + "$k",
       if_exp(compare(k, "Lt", items(it)), binop(k, "Add", constant(1)), k));
     assign(it.state + "$started", boolean(true));
+    flush_buffers(it, finished(it));
     return compare(k, "Lt", items(it));
   }
+  else if (method == "__exit__" || method == "close")
+    flush_buffers(it, boolean(true));
   else if (method == "reset")
   {
+    if (std::any_of(it.operands.begin(), it.operands.end(), [](const auto &o) {
+          return !o.buffer.empty();
+        }))
+      throw std::runtime_error(
+        "TypeError: numpy.nditer() reset of a buffered iterator with "
+        "pending writes is not supported");
     assign(it.state + "$k", constant(0));
     assign(it.state + "$started", boolean(false));
   }
-  else if (method != "__enter__" && method != "__exit__" && method != "close")
+  else if (method != "__enter__" && method != "_esbmc_nditer_release")
     throw std::runtime_error(
       "TypeError: numpy.nditer method '" + method + "' is not supported");
   if (method != "next")
@@ -1675,14 +1777,61 @@ bool numpy_nditer::write(const json &target, const json &value)
     raise("ValueError", "assignment destination is read-only");
   else
   {
-    json store = element(*it, op, at);
+    const numpy_nditer_operand &o = it->operands[op];
+    json store =
+      o.buffer.empty() ? element(*it, op, at) : index_node(name(o.buffer), at);
     store["ctx"] = {{"_type", "Store"}};
+    json stored = value;
+    if (!o.buffer.empty())
+    {
+      locate(stored, target);
+      stored = prebuilt(typecast_exprt(converter_.get_expr(stored), o.dtype));
+    }
     json statement = {
-      {"_type", "Assign"}, {"targets", json::array({store})}, {"value", value}};
+      {"_type", "Assign"},
+      {"targets", json::array({store})},
+      {"value", stored}};
     locate(statement, target);
     converter_.emit_statement_into_current_block(statement);
   }
   return true;
+}
+
+void numpy_nditer::keep_sources(
+  const std::string &rebound_id,
+  const std::string &heir_id)
+{
+  const symbolt *heir =
+    heir_id.empty() ? nullptr : converter_.symbol_table_.find_symbol(heir_id);
+  for (auto &[id, it] : converter_.numpy_nditers_)
+    for (std::size_t op = 0; op < it.operands.size(); ++op)
+    {
+      json &array = it.operands[op].array;
+      if (
+        array.value("_type", "") != "Name" ||
+        converter_.resolve_name_symbol_id(array["id"].get<std::string>()) !=
+          rebound_id)
+        continue;
+      if (
+        converter_.block_nesting_ != converter_.function_body_depth_ + 1 ||
+        converter_.loop_body_depth_ > 0)
+        throw std::runtime_error(
+          "TypeError: rebinding a numpy array inside a branch or loop while a "
+          "numpy.nditer() over it is alive is not supported");
+      json source = array;
+      if (heir)
+        source["id"] = heir->name.as_string();
+      else
+      {
+        const std::string snapshot = it.state + "$source" + std::to_string(op);
+        converter_.current_nditer_call_ = array;
+        assign(snapshot, array);
+        converter_.numpy_array_symbols_.insert(
+          converter_.resolve_name_symbol_id(snapshot));
+        source["id"] = snapshot;
+      }
+      array = source;
+    }
 }
 
 exprt numpy_nditer::as_list(const json &call)
