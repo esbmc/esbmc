@@ -627,6 +627,202 @@ static nlohmann::json vector_to_json(const std::vector<scalar_value> &v)
   return list;
 }
 
+// LAPACK factorises with partial pivoting and NumPy's det sums logarithms,
+// so neither result is the exact one computed here; these bounds are well
+// above the rounding error of either for matrices of order at most 4.
+constexpr double lapack_tolerance = 1e-12;
+
+static std::vector<std::vector<double>>
+real_matrix(const std::vector<std::vector<scalar_value>> &m)
+{
+  std::vector<std::vector<double>> out;
+  for (const auto &row : m)
+  {
+    out.emplace_back();
+    for (const auto &value : row)
+      out.back().push_back(value.value.real());
+  }
+  return out;
+}
+
+static double max_abs(const std::vector<std::vector<double>> &m)
+{
+  double largest = 0.0;
+  for (const auto &row : m)
+    for (double value : row)
+      largest = std::max(largest, std::fabs(value));
+  return largest;
+}
+
+static double infinity_norm(const std::vector<std::vector<double>> &m)
+{
+  double largest = 0.0;
+  for (const auto &row : m)
+  {
+    double sum = 0.0;
+    for (double value : row)
+      sum += std::fabs(value);
+    largest = std::max(largest, sum);
+  }
+  return largest;
+}
+
+// A zero row or column, or two equal rows, make a pivot exactly zero, and
+// NumPy's det is then exactly 0.
+static bool structurally_singular(const std::vector<std::vector<double>> &m)
+{
+  const std::size_t n = m.size();
+  for (std::size_t i = 0; i < n; ++i)
+  {
+    bool zero_row = true, zero_column = true;
+    for (std::size_t j = 0; j < n; ++j)
+    {
+      zero_row = zero_row && m[i][j] == 0.0;
+      zero_column = zero_column && m[j][i] == 0.0;
+    }
+    if (zero_row || zero_column)
+      return true;
+    for (std::size_t k = i + 1; k < n; ++k)
+      if (m[i] == m[k])
+        return true;
+  }
+  return false;
+}
+
+static bool is_power_of_two(double value)
+{
+  int exponent = 0;
+  return value != 0.0 && std::fabs(std::frexp(value, &exponent)) == 0.5;
+}
+
+// a - b * c with no rounding, or nullopt.
+static std::optional<double> exact_update(double a, double b, double c)
+{
+  const double product = b * c;
+  const double result = a - product;
+  if (
+    !std::isfinite(result) || std::fma(b, c, -product) != 0.0 ||
+    (result + product) - a != 0.0 || result - (a - product) != 0.0)
+    return std::nullopt;
+  return result;
+}
+
+// The LU factors with partial pivoting when every step is exact and every
+// pivot a power of two: any LAPACK then computes these same factors, so its
+// result is the one computed from them. nullopt otherwise.
+struct exact_lu_factors
+{
+  std::vector<std::vector<double>> lu;
+  std::vector<std::size_t> rows;
+  double sign = 1.0;
+};
+
+static std::optional<exact_lu_factors>
+exact_lu(const std::vector<std::vector<double>> &m)
+{
+  const std::size_t n = m.size();
+  exact_lu_factors f{m, {}, 1.0};
+  for (std::size_t i = 0; i < n; ++i)
+    f.rows.push_back(i);
+  for (std::size_t k = 0; k < n; ++k)
+  {
+    std::size_t pivot = k;
+    for (std::size_t i = k + 1; i < n; ++i)
+      if (std::fabs(f.lu[i][k]) > std::fabs(f.lu[pivot][k]))
+        pivot = i;
+    if (!is_power_of_two(f.lu[pivot][k]))
+      return std::nullopt;
+    if (pivot != k)
+    {
+      std::swap(f.lu[pivot], f.lu[k]);
+      std::swap(f.rows[pivot], f.rows[k]);
+      f.sign = -f.sign;
+    }
+    for (std::size_t i = k + 1; i < n; ++i)
+    {
+      f.lu[i][k] /= f.lu[k][k];
+      for (std::size_t j = k + 1; j < n; ++j)
+      {
+        const auto updated = exact_update(f.lu[i][j], f.lu[i][k], f.lu[k][j]);
+        if (!updated)
+          return std::nullopt;
+        f.lu[i][j] = *updated;
+      }
+    }
+  }
+  return f;
+}
+
+// NumPy's det: the sign of the factors times exp of their summed logarithms.
+static std::optional<double>
+exact_det(const std::vector<std::vector<double>> &m)
+{
+  const std::optional<exact_lu_factors> f = exact_lu(m);
+  if (!f)
+    return std::nullopt;
+  double sign = f->sign, logarithm = 0.0;
+  for (std::size_t i = 0; i < m.size(); ++i)
+  {
+    sign *= f->lu[i][i] < 0 ? -1.0 : 1.0;
+    logarithm += std::log(std::fabs(f->lu[i][i]));
+  }
+  return sign * std::exp(logarithm);
+}
+
+// The solution of m x = b by exact factors and substitutions, or nullopt.
+static std::optional<std::vector<double>>
+exact_solve(const std::vector<std::vector<double>> &m, std::vector<double> b)
+{
+  const std::optional<exact_lu_factors> f = exact_lu(m);
+  if (!f)
+    return std::nullopt;
+  const std::size_t n = m.size();
+  std::vector<double> x(n);
+  for (std::size_t i = 0; i < n; ++i)
+    x[i] = b[f->rows[i]];
+  for (std::size_t i = 0; i < n; ++i)
+    for (std::size_t k = 0; k < i; ++k)
+    {
+      const auto updated = exact_update(x[i], f->lu[i][k], x[k]);
+      if (!updated)
+        return std::nullopt;
+      x[i] = *updated;
+    }
+  for (std::size_t i = n; i-- > 0;)
+  {
+    for (std::size_t k = i + 1; k < n; ++k)
+    {
+      const auto updated = exact_update(x[i], f->lu[i][k], x[k]);
+      if (!updated)
+        return std::nullopt;
+      x[i] = *updated;
+    }
+    x[i] /= f->lu[i][i];
+  }
+  return x;
+}
+
+static double
+det_radius(const std::vector<std::vector<double>> &m, double determinant)
+{
+  if (structurally_singular(m))
+    return 0.0;
+  const double scale = std::pow(max_abs(m), static_cast<double>(m.size()));
+  const double magnitude = std::fabs(determinant);
+  const double logarithm = magnitude > 0 ? std::fabs(std::log(magnitude)) : 0;
+  return lapack_tolerance * (scale + magnitude * (1.0 + logarithm));
+}
+
+// A solve with A rounds each entry of its result by about
+// cond(A) * eps * the largest entry.
+static double solve_radius(
+  const std::vector<std::vector<double>> &a,
+  const std::vector<std::vector<double>> &inverse,
+  double largest)
+{
+  return lapack_tolerance * infinity_norm(a) * infinity_norm(inverse) * largest;
+}
+
 static bool literal_list_contains_bool(const nlohmann::json &node)
 {
   if (!node.is_object())
@@ -5314,6 +5510,66 @@ size_t count_effective_bits(const std::string &binary)
   return binary.size() - first_one;
 }
 
+// Any double within `radius` of `exact`, the result a LAPACK routine may
+// return; `exact` itself when nothing rounds.
+exprt numpy_call_expr::lapack_value(double exact, double radius)
+{
+  const exprt value =
+    converter_.get_expr(to_json_constant(scalar_value{false, exact}));
+  if (radius == 0.0 || !std::isfinite(exact) || !std::isfinite(radius))
+    return value;
+  symbolt &tmp =
+    converter_.create_tmp_symbol(call_, "$lapack$", value.type(), exprt());
+  const exprt result = symbol_expr(tmp);
+  const locationt location = converter_.get_location_from_decl(call_);
+  code_declt decl(result);
+  decl.location() = location;
+  converter_.add_instruction(decl);
+  code_assignt assign(result, side_effect_expr_nondett(value.type()));
+  assign.location() = location;
+  converter_.add_instruction(assign);
+  const exprt low =
+    converter_.get_expr(to_json_constant(scalar_value{false, exact - radius}));
+  const exprt high =
+    converter_.get_expr(to_json_constant(scalar_value{false, exact + radius}));
+  code_assumet within(and_exprt(
+    binary_relation_exprt(result, ">=", low),
+    binary_relation_exprt(result, "<=", high)));
+  within.location() = location;
+  converter_.add_instruction(within);
+  return result;
+}
+
+exprt numpy_call_expr::lapack_vector(
+  const std::vector<double> &exact,
+  double radius)
+{
+  std::vector<exprt> values;
+  for (double value : exact)
+    values.push_back(lapack_value(value, radius));
+  const typet element = values.front().type();
+  exprt array(
+    "array", array_typet(element, from_integer(values.size(), size_type())));
+  for (const exprt &value : values)
+    array.copy_to_operands(value);
+  return array;
+}
+
+exprt numpy_call_expr::lapack_matrix(
+  const std::vector<std::vector<double>> &exact,
+  double radius)
+{
+  std::vector<exprt> rows;
+  for (const auto &row : exact)
+    rows.push_back(lapack_vector(row, radius));
+  exprt array(
+    "array",
+    array_typet(rows.front().type(), from_integer(rows.size(), size_type())));
+  for (const exprt &row : rows)
+    array.copy_to_operands(row);
+  return array;
+}
+
 typet numpy_call_expr::get_typet_from_dtype() const
 {
   std::string dtype = get_dtype();
@@ -6223,13 +6479,16 @@ exprt numpy_call_expr::create_expr_from_call()
         }
       }
 
-      if (n == 2)
-        return converter_.get_expr(to_json_constant(determinant_2x2(matrix)));
-      if (n == 3)
-        return converter_.get_expr(to_json_constant(determinant_3x3(matrix)));
-
-      throw std::runtime_error(
-        "TypeError: numpy.linalg.det supports only 2x2 and 3x3 matrices");
+      if (n != 2 && n != 3)
+        throw std::runtime_error(
+          "TypeError: numpy.linalg.det supports only 2x2 and 3x3 matrices");
+      const std::vector<std::vector<double>> real = real_matrix(matrix);
+      if (const std::optional<double> computed = exact_det(real))
+        return lapack_value(*computed, 0.0);
+      const double exact =
+        (n == 2 ? determinant_2x2(matrix) : determinant_3x3(matrix))
+          .value.real();
+      return lapack_value(exact, det_radius(real, exact));
     }
 
     auto unwrap_np_array_arg = [&resolve_var](nlohmann::json &arg) {
@@ -6284,7 +6543,23 @@ exprt numpy_call_expr::create_expr_from_call()
       if (!ok)
         throw std::runtime_error("numpy.linalg.LinAlgError: Singular matrix");
 
-      return converter_.get_expr(matrix_to_json(inv));
+      const std::vector<std::vector<double>> real = real_matrix(matrix);
+      std::vector<std::vector<double>> inverse = real_matrix(inv);
+      bool exact = true;
+      for (std::size_t j = 0; j < n && exact; ++j)
+      {
+        std::vector<double> unit(n, 0.0);
+        unit[j] = 1.0;
+        const std::optional<std::vector<double>> column =
+          exact_solve(real, unit);
+        exact = column.has_value();
+        for (std::size_t i = 0; i < n && exact; ++i)
+          inverse[i][j] = (*column)[i];
+      }
+      if (!exact)
+        inverse = real_matrix(inv);
+      return lapack_matrix(
+        inverse, exact ? 0.0 : solve_radius(real, inverse, max_abs(inverse)));
     }
 
     if (function == "norm")
@@ -7123,10 +7398,24 @@ exprt numpy_call_expr::create_expr_from_call()
           "incompatible");
 
       std::vector<scalar_value> x;
-      if (!solve_linear_system(A, b, x))
+      std::vector<std::vector<scalar_value>> inv;
+      if (
+        !solve_linear_system(A, b, x) ||
+        !(n == 2 ? inverse_2x2(A, inv) : inverse_3x3(A, inv)))
         throw std::runtime_error("numpy.linalg.LinAlgError: Singular matrix");
 
-      return converter_.get_expr(vector_to_json(x));
+      std::vector<double> solution, rhs_values;
+      for (const scalar_value &value : x)
+        solution.push_back(value.value.real());
+      for (const scalar_value &value : b)
+        rhs_values.push_back(value.value.real());
+      if (
+        const std::optional<std::vector<double>> computed =
+          exact_solve(real_matrix(A), rhs_values))
+        return lapack_vector(*computed, 0.0);
+      const double radius =
+        solve_radius(real_matrix(A), real_matrix(inv), max_abs({solution}));
+      return lapack_vector(solution, radius);
     }
 
     if (should_fallback_to_numpy_model(function))

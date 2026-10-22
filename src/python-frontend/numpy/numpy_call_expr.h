@@ -265,6 +265,10 @@ private:
   bool is_runtime_layout_view(const nlohmann::json &arg) const;
   exprt get_nditer_list(const nlohmann::json &arg);
   exprt scalar_binary_call(const std::string &function, bool allow_numpy_fold);
+  exprt lapack_value(double exact, double radius);
+  exprt lapack_vector(const std::vector<double> &exact, double radius);
+  exprt
+  lapack_matrix(const std::vector<std::vector<double>> &exact, double radius);
   void report_integer_overflow();
   typet scalar_dtype_result();
   std::optional<exprt> fold_scalar_binary(
