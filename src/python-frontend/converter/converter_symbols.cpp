@@ -1253,13 +1253,16 @@ symbolt *python_converter::find_symbol(const std::string &sym_id) const
   if (!is_loading_models)
   {
     // Imports bind names in the module being converted only: an id in another
-    // module's file already names that module's symbol (#9046).
+    // module's file names that module's symbol (#9046).
     const std::string file = symbol_id::from_string(sym_id).get_filename();
-    if (!file.empty() && file != current_python_file)
-      if (symbolt *symbol = symbol_table_.find_symbol(sym_id))
+    const std::size_t at = sym_id.rfind('@');
+    if (!file.empty() && file != current_python_file && at != std::string::npos)
+    {
+      const std::string name = sym_id.substr(at + 1);
+      if (symbolt *symbol = find_symbol_in_module(sym_id, file, name, name))
         return symbol;
-
-    if (symbolt *imported = find_imported_symbol(sym_id))
+    }
+    else if (symbolt *imported = find_imported_symbol(sym_id))
     {
       const std::string &imp_id = imported->id.as_string();
       bool is_model_stub = imp_id.find("/models/") != std::string::npos;
