@@ -1518,15 +1518,12 @@ expr2tc with2t::do_simplify() const
     {
       if (
         !c_union.datatype_members.empty() &&
-        type_byte_size_bits(update_value->type) <
-          type_byte_size_bits(c_union.datatype_members[0]->type))
+        type_byte_size_bits(update_value->type, migrate_namespace_lookup) <
+          type_byte_size_bits(
+            c_union.datatype_members[0]->type, migrate_namespace_lookup))
         return expr2tc();
     }
     catch (const array_type2t::array_size_excp &)
-    {
-      return expr2tc();
-    }
-    catch (const type2t::symbolic_type_excp &)
     {
       return expr2tc();
     }
