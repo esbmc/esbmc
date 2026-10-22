@@ -184,7 +184,7 @@ int main(void)
 {
   unsigned i = nondet_uint();
   __ESBMC_assume(i < 2048);
-  __ESBMC_assert(table[i].kind < 7, "every kind is below 7");
-  __ESBMC_assert(table[i].len <= 6141, "every len is at most 6141");
+  __ESBMC_assert(table[i].kind == (1 + 5 * i) % 7, "entry i has kind (1 + 5i) mod 7");
+  __ESBMC_assert(table[i].len == 3 * i, "entry i has len 3 * i");
   return 0;
 }
