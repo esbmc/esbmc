@@ -802,6 +802,25 @@ exact_solve(const std::vector<std::vector<double>> &m, std::vector<double> b)
   return x;
 }
 
+// The determinant by cofactor expansion along the first row.
+static double cofactor_det(const std::vector<std::vector<double>> &m)
+{
+  if (m.size() == 1)
+    return m[0][0];
+  double sum = 0.0;
+  for (std::size_t j = 0; j < m.size(); ++j)
+  {
+    std::vector<std::vector<double>> minor;
+    for (std::size_t i = 1; i < m.size(); ++i)
+    {
+      minor.push_back(m[i]);
+      minor.back().erase(minor.back().begin() + j);
+    }
+    sum += (j % 2 ? -1.0 : 1.0) * m[0][j] * cofactor_det(minor);
+  }
+  return sum;
+}
+
 static double
 det_radius(const std::vector<std::vector<double>> &m, double determinant)
 {
@@ -6707,15 +6726,13 @@ exprt numpy_call_expr::create_expr_from_call()
         }
       }
 
-      if (n != 2 && n != 3)
+      if (n > 4)
         throw std::runtime_error(
-          "TypeError: numpy.linalg.det supports only 2x2 and 3x3 matrices");
+          "TypeError: numpy.linalg.det supports only matrices up to 4x4");
       const std::vector<std::vector<double>> real = real_matrix(matrix);
       if (const std::optional<double> computed = exact_det(real))
         return lapack_value(*computed, 0.0);
-      const double exact =
-        (n == 2 ? determinant_2x2(matrix) : determinant_3x3(matrix))
-          .value.real();
+      const double exact = cofactor_det(real);
       return lapack_value(exact, det_radius(real, exact));
     }
 
