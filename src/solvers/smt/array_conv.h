@@ -125,7 +125,7 @@ public:
         std::greater<unsigned int>>>>
     index_map_containert;
 
-  array_convt(smt_solver_baset *_ctx);
+  array_convt(smt_solver_baset *_ctx, bool _implication_select);
   ~array_convt() = default;
 
   // Public api
@@ -452,6 +452,9 @@ public:
   std::vector<std::vector<std::vector<smt_astt>>> array_valuation;
 
   smt_solver_baset *ctx;
+  /** Encode symbolic selects as implications on a free variable rather
+   *  than a nested ite chain (esbmc/esbmc#82). */
+  const bool implication_select;
 };
 
 #endif /* _ESBMC_SOLVERS_SMT_ARRAY_SMT_CONV_H_ */
