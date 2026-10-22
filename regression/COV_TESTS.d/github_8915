@@ -1,0 +1,5 @@
+regression/python/github_8915_unresolved_method
+regression/python/github_8915_unresolved_method_side_effect_fail
+regression/python/github_8915_typed_receiver
+regression/python/github_8915_typed_receiver_fail
+regression/python/github_8915_imported_class_fail
