@@ -69,6 +69,8 @@ public:
   // Entry points exercised by callers outside python_annotation.h.
   void preprocess_constructor_calls(const Json &node);
   void preprocess_method_calls(const Json &node);
+  void preprocess_receiver_method_calls();
+  Json *class_method(const std::string &cls, const Json &method);
   /// Sentinel recorded for a call-site argument this pass cannot type; never
   /// a valid Python type name, so it can only block, never be annotated.
   static const std::string &unresolved_arg_type()
@@ -197,8 +199,10 @@ private:
   // or empty for any other call.
   std::string arg_dependent_call_type(const Json &call);
   std::string list_copy_type(const std::string &func_name, const Json &call);
+  std::string dict_view_list_type(const Json &call);
   std::string get_type_from_binary_expr(const Json &stmt, const Json &body);
   bool is_array_operand(const Json &operand, const Json &body);
+  std::string operand_annotation_type(const Json &decl);
   std::string get_type_from_rhs_variable(const Json &element, const Json &body);
   bool holds_callable_value(const std::string &name) const;
   std::string get_type_from_call(const Json &element);

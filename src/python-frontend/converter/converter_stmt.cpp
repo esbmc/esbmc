@@ -6721,6 +6721,31 @@ bool python_converter::ternary_needs_if_spelling(
   return true;
 }
 
+static bool is_name_or_attribute(const std::string &kind)
+{
+  return kind == "Name" || kind == "Attribute";
+}
+
+/// An attribute assigned instances of two classes on the arms of a
+/// conditional expression is typed Any, and a read through it resolves
+/// against one class on both paths (#8408).
+void python_converter::reject_divergent_attribute_classes(
+  const nlohmann::json &target,
+  const nlohmann::json &ifexp) const
+{
+  if (target.value("_type", "") != "Attribute")
+    return;
+  const std::string then_class = instantiated_class(ifexp["body"]);
+  const std::string else_class = instantiated_class(ifexp["orelse"]);
+  if (then_class.empty() || else_class.empty() || then_class == else_class)
+    return;
+  throw std::runtime_error(
+    "unsupported: attribute '" + target.value("attr", std::string()) +
+    "' is assigned a '" + then_class + "' or a '" + else_class +
+    "' depending on the path; an attribute holding instances of different "
+    "classes is not modelled");
+}
+
 bool python_converter::rewrite_divergent_conditional_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -6736,20 +6761,23 @@ bool python_converter::rewrite_divergent_conditional_assign(
 
   const nlohmann::json &target =
     ast_node.contains("targets") ? ast_node["targets"][0] : ast_node["target"];
-  if (target.value("_type", "") != "Name")
+  const std::string target_kind = target.value("_type", "");
+  if (!is_name_or_attribute(target_kind))
     return false;
 
   if (!ternary_needs_if_spelling(value))
     return false;
 
+  reject_divergent_attribute_classes(target, value);
+
   // Each arm keeps the assignment's own location, so a violation still points
-  // at the line the ternary is written on. A constructor arm is annotated
-  // with its class, which it needs to allocate the instance through a
-  // pointer, as the annotation pass does for the `if` spelling.
+  // at the line the ternary is written on. A constructor arm bound to a name
+  // is annotated with its class, which it needs to allocate the instance
+  // through a pointer, as the annotation pass does for the `if` spelling.
   auto arm = [&](const nlohmann::json &branch) {
     nlohmann::json assign = ast_node;
     const std::string cls = instantiated_class(branch);
-    if (!cls.empty())
+    if (!cls.empty() && target_kind == "Name")
     {
       assign["_type"] = "AnnAssign";
       assign["target"] = target;

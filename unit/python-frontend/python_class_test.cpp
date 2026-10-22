@@ -1,6 +1,7 @@
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
 #include <nlohmann/json.hpp>
+#include <algorithm>
 #include <sstream>
 #include <python-frontend/class/python_class.h>
 
@@ -114,7 +115,7 @@ TEST_CASE("python_class::parse - ClassDef with a simple base (Dog : Animal)")
   REQUIRE(pc.attributes().empty());
 
   // Should collect Animal as the only base
-  REQUIRE(pc.bases().count("Animal") == 1);
+  REQUIRE(std::count(pc.bases().begin(), pc.bases().end(), "Animal") == 1);
 }
 
 //
@@ -158,5 +159,6 @@ TEST_CASE("python_class::parse - Dotted base name (MyClass : pkg.sub.Base)")
   REQUIRE(pc.attributes().empty());
 
   // Should resolve the dotted base as "pkg.sub.Base"
-  REQUIRE(pc.bases().count("pkg.sub.Base") == 1);
+  REQUIRE(
+    std::count(pc.bases().begin(), pc.bases().end(), "pkg.sub.Base") == 1);
 }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <deque>
 #include <functional>
 #include <nlohmann/json.hpp>
@@ -154,6 +155,7 @@ public:
     const std::string &name,
     const nlohmann::json &return_node,
     const nlohmann::json &function_node);
+  typet named_callee_type(const std::string &name);
   std::optional<code_typet> returned_function(const nlohmann::json &callee);
   /// `get()()`: a call through the function pointer that `get()` returns.
   /// `(lambda x: ...)(a)`: a call of the lambda, typed by its arguments.
@@ -572,6 +574,19 @@ public:
     expr2tc &lt,
     expr2tc &eq);
 
+  size_t unordered_tuple_component(
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &element);
+
+  void raise_on_unordered_tie(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    size_t unordered,
+    const expr2tc &prefix_eq,
+    const nlohmann::json &element);
+
   python_typechecking &get_typechecker();
   const python_typechecking &get_typechecker() const;
 
@@ -669,12 +684,15 @@ private:
 
   void get_function_definition(const nlohmann::json &function_node);
 
-  /// Before a call through `callee`, whose function type is unknown, refuses
-  /// the path where it holds a top-level function taking a different number
-  /// of parameters than @p call passes: such a call fills no defaults and
-  /// raises no TypeError.
-  void
-  refuse_mismatched_callees(const exprt &callee, const nlohmann::json &call);
+  /// Returns @p call_expr, a call through `callee` whose function type is
+  /// unknown, made to pass the defaults of a top-level function `callee` may
+  /// hold whose parameters @p call leaves out. Refuses the path where it
+  /// holds one taking a different number of parameters that defaults cannot
+  /// make up: such a call raises no TypeError.
+  exprt dispatch_mismatched_callees(
+    const exprt &callee,
+    const nlohmann::json &call,
+    const side_effect_expr_function_callt &call_expr);
 
   exprt get_function_body_or_unsupported(const nlohmann::json &function_node);
 
@@ -1014,6 +1032,9 @@ private:
   std::string instantiated_class(const nlohmann::json &value) const;
 
   bool ternary_needs_if_spelling(const nlohmann::json &ifexp) const;
+  void reject_divergent_attribute_classes(
+    const nlohmann::json &target,
+    const nlohmann::json &ifexp) const;
 
   bool is_coverage_mode() const;
 
@@ -1634,6 +1655,9 @@ private:
     const;
 
   symbolt *find_imported_symbol(const std::string &symbol_id) const;
+  /// The symbol @p sym_id names in the module whose file it names, or through
+  /// the current module's imports; null when neither binds it.
+  symbolt *find_symbol_through_module(const std::string &sym_id) const;
   symbolt *find_nested_function_symbol(const std::string &name) const;
   symbolt *find_symbol_in_global_scope(const std::string &symbol_id) const;
   symbolt *find_model_symbol(const std::string &sym_id) const;
@@ -1648,6 +1672,11 @@ private:
     const std::string &class_name,
     const std::string &func_name,
     const std::string &obj_symbol_id);
+
+  void refuse_misaligned_self_calls() const;
+  void refuse_misaligned_self_call(
+    const code_function_callt &call,
+    const namespacet &ns) const;
 
   size_t get_type_size(const nlohmann::json &ast_node);
 
@@ -1947,8 +1976,11 @@ private:
     const typet &current_type);
 
   std::string resolve_name_symbol_id(const std::string &name) const;
+  exprt
+  once_bound_exponent(const nlohmann::json &right, const exprt &rhs) const;
   symbolt *find_enclosing_scope_symbol(symbol_id sid) const;
   symbolt *find_global_symbol(const symbol_id &sid);
+  bool global_has_type(const std::string &name, const std::string &type) const;
   exprt
   module_function_expr(const std::string &name, const nlohmann::json &element);
   void track_unbound_global(
@@ -2344,7 +2376,7 @@ private:
     exprt &array,
     const typet &array_type_for_dict,
     bool array_is_dict_pointer,
-    const nlohmann::json &slice);
+    const nlohmann::json &element);
   bool subscript_targets_list_model(
     const typet &array_type,
     const typet &list_type) const;
@@ -2789,6 +2821,10 @@ private:
 
   exprt erased_type_argument(const nlohmann::json &node);
 
+  /// The class object type(x) yields for a pointer whose runtime class is not
+  /// known statically; not an identifier, so it never names a real class.
+  static constexpr const char *unknown_class_name = "<unknown class>";
+
   /// `type(x) is T`, `is not`, `==` or `!=` for a builtin scalar T when x's
   /// static type was erased to `void *`; nil otherwise.
   exprt handle_erased_type_comparison(
@@ -3188,6 +3224,9 @@ private:
   std::size_t get_expr_depth_ = 0;
   code_blockt *current_block;
   exprt *current_lhs;
+  /// The operands of the `is`, `is not`, `==` or `!=` being converted: a
+  /// type() call that is one of them may yield unknown_class_name.
+  std::array<const nlohmann::json *, 2> type_compared_operands_{};
   string_handler string_handler_;
   python_math math_handler_;
   complex_handler complex_handler_;

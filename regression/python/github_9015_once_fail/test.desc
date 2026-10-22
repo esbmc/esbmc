@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^  FAILED .* line 13  assertion r->n == 2$
+^VERIFICATION FAILED$

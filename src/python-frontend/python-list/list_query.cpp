@@ -425,13 +425,11 @@ exprt python_list::compare(
 
       const std::string lhs_list_id = resolve_map_id(lhs_list);
       const std::string rhs_list_id = resolve_map_id(rhs_list);
-      const auto *lhs_recorded = elem_types().find(lhs_list_id);
-      const auto *rhs_recorded = elem_types().find(rhs_list_id);
-      if (!lhs_recorded || !rhs_recorded)
-        return false;
-
-      const std::size_t lhs_size = lhs_recorded->size();
-      const std::size_t rhs_size = rhs_recorded->size();
+      // An empty list records nothing. Reading an unrecorded list as empty is
+      // sound because sizes_ok checks the size at run time, and it keeps an
+      // inner [] off the __ESBMC_list_eq loop, which never converges.
+      const std::size_t lhs_size = elem_types().size(lhs_list_id);
+      const std::size_t rhs_size = elem_types().size(rhs_list_id);
       sizes_ok = and2tc(
         sizes_ok,
         and2tc(size_is(*lhs_list, lhs_size), size_is(*rhs_list, rhs_size)));
@@ -761,21 +759,14 @@ exprt python_list::contains(const exprt &item, const exprt &list)
   // `Class*` by value would make the model dereference it and compare the
   // pointee struct's first word instead, so `obj in [obj]` wrongly returns
   // False (#4805). Pass its address, like the value-type path, so *item
-  // recovers the stored `Class*`.
+  // recovers the stored `Class*`. A void* item (an instance whose class was
+  // erased, e.g. read through an unannotated parameter) carries the hash and
+  // width of that slot, so it takes the address too unless the registry below
+  // recovers it as a string (#4780).
   const typet &item_type = item_info.elem_symbol->get_type();
-  exprt item_arg;
-  if (item_type.is_pointer() && !converter_.is_user_class_pointer(item_type))
-  {
-    // String/None and other non-class pointers: pass the pointer value direct.
-    item_arg = build_symbol(*item_info.elem_symbol);
-  }
-  else
-  {
-    // Value types and user-class references: take the address.
-    item_arg = build_address_of(build_symbol(*item_info.elem_symbol));
-  }
-
-  contains_call.arguments().push_back(item_arg);
+  const bool erased_item = item_type == pointer_typet(empty_typet());
+  bool item_by_value = item_type.is_pointer() && !erased_item &&
+                       !converter_.is_user_class_pointer(item_type);
 
   // For void/char pointers from iteration, use stored type info from list
   exprt type_hash = build_symbol(*item_info.elem_type_sym);
@@ -785,9 +776,7 @@ exprt python_list::contains(const exprt &item, const exprt &list)
   // char-array type_id and runtime length recovered from the registry.
   // The lookup is keyed by symbol name, so non-symbol receivers cannot carry
   // void* elements; skipping them is sound.
-  if (
-    item_info.elem_symbol->get_type() == pointer_typet(empty_typet()) &&
-    list.is_symbol())
+  if (erased_item && list.is_symbol())
   {
     const std::string &list_name = list.identifier().as_string();
     const auto *recorded = elem_types().find(list_name);
@@ -812,6 +801,7 @@ exprt python_list::contains(const exprt &item, const exprt &list)
             std::hash<std::string>{}(stored_type_name),
             config.ansi_c.address_width));
           type_hash = stored_hash;
+          item_by_value = true;
 
           // Use strlen for void* strings from iteration
           const symbolt *strlen_symbol =
@@ -851,6 +841,9 @@ exprt python_list::contains(const exprt &item, const exprt &list)
     }
   }
 
+  const exprt item_sym = build_symbol(*item_info.elem_symbol);
+  contains_call.arguments().push_back(
+    item_by_value ? item_sym : build_address_of(item_sym));
   contains_call.arguments().push_back(type_hash);
   contains_call.arguments().push_back(elem_size);
 

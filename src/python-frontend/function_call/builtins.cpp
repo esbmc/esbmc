@@ -391,6 +391,124 @@ exprt function_call_expr::isinstance_without_type_name(
   return nil_exprt();
 }
 
+/// @p result evaluated after @p binding, or @p result alone if it is nil.
+static exprt evaluate_after(const exprt &binding, const exprt &result)
+{
+  if (binding.is_nil())
+    return result;
+  code_blockt block;
+  block.copy_to_operands(code_expressiont(binding), code_expressiont(result));
+  side_effect_exprt sequence("statement_expression", result.type());
+  sequence.copy_to_operands(block);
+  return sequence;
+}
+
+exprt function_call_expr::bind_isinstance_call(exprt &obj_expr) const
+{
+  if (!obj_expr.is_function_call() || converter_.in_rhs_type_probe_)
+    return nil_exprt();
+  exprt result;
+  const exprt binding = converter_.bind_operand_read_twice(
+    to_value_expr(obj_expr, converter_.ns), call_, result);
+  if (binding.is_nil())
+    throw std::runtime_error(
+      "isinstance() on a call result is not supported here");
+  obj_expr = result;
+  return binding;
+}
+
+/// The list item a read `*(T *)item->value` of a scalar element comes from, or
+/// nil. The cast is the frontend's guess at the element's type; the item's
+/// type_id records the type it was stored with.
+static exprt list_item_of_scalar_read(const exprt &read, const typet &item_type)
+{
+  if (read.id() != "dereference" || read.op0().id() != "typecast")
+    return nil_exprt();
+  const exprt &value = read.op0().op0();
+  if (
+    value.id() != "member" || value.get("component_name") != "value" ||
+    value.op0().type() != item_type)
+    return nil_exprt();
+  return value.op0();
+}
+
+/// The tagged object whose type_id answers isinstance(@p obj, @p type_name):
+/// @p obj itself when it is a tagged scalar, the list item a scalar element
+/// read comes from when @p type_name is a scalar type, else nil.
+static exprt tagged_isinstance_operand(
+  const exprt &obj,
+  const std::string &type_name,
+  const type_handler &types)
+{
+  if (types.is_tagged_scalar_type(obj.type()))
+    return obj;
+  static const std::set<std::string> scalars = {"bool", "int", "float", "str"};
+  if (!scalars.count(type_name))
+    return nil_exprt();
+  return list_item_of_scalar_read(obj, types.get_tagged_object_type());
+}
+
+// The type name an isinstance() classinfo node names.
+static std::string isinstance_type_name(const nlohmann::json &node)
+{
+  const std::string node_type = node["_type"];
+
+  if (node_type == "Name")
+  {
+    // isinstance(v, int)
+    return node["id"];
+  }
+  else if (node_type == "Constant")
+  {
+    // isinstance(v, None)
+    return "NoneType";
+  }
+  else if (node_type == "Attribute")
+  {
+    // isinstance(v, MyClass.InnerClass)
+    return node["attr"];
+  }
+  else if (node_type == "Call")
+  {
+    // isinstance(v, type(None)) or isinstance(v, type(x))
+    const auto &func = node["func"];
+
+    if (func["_type"] != "Name" || func["id"] != "type")
+      throw std::runtime_error(
+        "Only type() calls are supported in isinstance()");
+
+    const auto &call_args = node["args"];
+    if (call_args.size() != 1)
+      throw std::runtime_error("type() expects exactly 1 argument");
+
+    const auto &type_call_arg = call_args[0];
+
+    // Handle type(None)
+    if (type_call_arg["_type"] == "Constant")
+    {
+      if (
+        type_call_arg["value"].is_null() ||
+        (type_call_arg.contains("value") && type_call_arg["value"] == nullptr))
+      {
+        return "NoneType";
+      }
+      throw std::runtime_error(
+        "isinstance() with type(constant) only supports type(None)");
+    }
+    else if (type_call_arg["_type"] == "Name")
+    {
+      throw std::runtime_error(
+        "isinstance() with type(variable) not yet supported - use direct "
+        "type names");
+    }
+    else
+      throw std::runtime_error(
+        "Unsupported argument to type() in isinstance()");
+  }
+  else
+    throw std::runtime_error("Unsupported type format in isinstance()");
+}
+
 exprt function_call_expr::handle_isinstance() const
 {
   const auto &args = call_["args"];
@@ -399,8 +517,8 @@ exprt function_call_expr::handle_isinstance() const
   if (args.size() != 2)
     throw std::runtime_error("isinstance() expects 2 arguments");
 
-  // Convert the first argument (the object being checked) into an expression
-  const exprt &obj_expr = converter_.get_expr(args[0]);
+  exprt obj_expr = converter_.get_expr(args[0]);
+  const exprt binding = bind_isinstance_call(obj_expr);
   const auto &obj_arg = args[0];
   std::vector<nlohmann::json> types;
   collect_classinfo(args[1], types);
@@ -408,77 +526,52 @@ exprt function_call_expr::handle_isinstance() const
 
   const exprt decided = isinstance_without_type_name(obj_arg, obj_expr, types);
   if (decided.is_not_nil())
-    return decided;
+    return evaluate_after(binding, decided);
 
-  // Extract type name from various AST node formats
-  auto extract_type_name = [](const nlohmann::json &node) -> std::string {
-    const std::string node_type = node["_type"];
-
-    if (node_type == "Name")
+  // is_none and value both read an Optional operand: evaluate it once.
+  exprt optional_binding = nil_exprt();
+  if (type_utils::is_optional_struct(obj_expr.type()))
+  {
+    exprt reread;
+    const exprt bound =
+      converter_.bind_operand_read_twice(obj_expr, call_, reread);
+    if (bound.is_nil())
+      throw std::runtime_error(
+        "isinstance() on this Optional operand is not supported here");
+    if (bound != reread)
     {
-      // isinstance(v, int)
-      return node["id"];
+      optional_binding = bound;
+      obj_expr = reread;
     }
-    else if (node_type == "Constant")
-    {
-      // isinstance(v, None)
-      return "NoneType";
-    }
-    else if (node_type == "Attribute")
-    {
-      // isinstance(v, MyClass.InnerClass)
-      return node["attr"];
-    }
-    else if (node_type == "Call")
-    {
-      // isinstance(v, type(None)) or isinstance(v, type(x))
-      const auto &func = node["func"];
-
-      if (func["_type"] != "Name" || func["id"] != "type")
-        throw std::runtime_error(
-          "Only type() calls are supported in isinstance()");
-
-      const auto &call_args = node["args"];
-      if (call_args.size() != 1)
-        throw std::runtime_error("type() expects exactly 1 argument");
-
-      const auto &type_call_arg = call_args[0];
-
-      // Handle type(None)
-      if (type_call_arg["_type"] == "Constant")
-      {
-        if (
-          type_call_arg["value"].is_null() ||
-          (type_call_arg.contains("value") &&
-           type_call_arg["value"] == nullptr))
-        {
-          return "NoneType";
-        }
-        throw std::runtime_error(
-          "isinstance() with type(constant) only supports type(None)");
-      }
-      else if (type_call_arg["_type"] == "Name")
-      {
-        throw std::runtime_error(
-          "isinstance() with type(variable) not yet supported - use direct "
-          "type names");
-      }
-      else
-        throw std::runtime_error(
-          "Unsupported argument to type() in isinstance()");
-    }
-    else
-      throw std::runtime_error("Unsupported type format in isinstance()");
-  };
+  }
 
   // Build isinstance check for a given type name
+  std::function<exprt(const exprt &, const std::string &)> build_on;
   auto build_isinstance = [&](const std::string &type_name) -> exprt {
+    return build_on(obj_expr, type_name);
+  };
+  build_on = [&](const exprt &obj_expr, const std::string &type_name) -> exprt {
+    // An Optional[T] struct holds a T only when its is_none flag is clear.
+    if (type_utils::is_optional_struct(obj_expr.type()))
+    {
+      const exprt is_none = member_exprt(obj_expr, "is_none", bool_type());
+      if (type_name == "NoneType")
+        return is_none;
+      const typet &value_type =
+        to_struct_type(obj_expr.type()).get_component("value").type();
+      return and_exprt(
+        not_exprt(is_none),
+        build_on(member_exprt(obj_expr, "value", value_type), type_name));
+    }
+
     // A tagged-scalar operand's real type lives in the runtime `.type_id`
     // field rather than in a single static C type, so it needs its own
     // check instead of the static-type comparisons below.
-    if (type_handler_.is_tagged_scalar_type(obj_expr.type()))
+    const exprt tagged =
+      tagged_isinstance_operand(obj_expr, type_name, type_handler_);
+    if (tagged.is_not_nil())
       return converter_.dynamic_type_handler_.build_isinstance_check(
-        obj_expr, type_name, json_utils::is_class(type_name, converter_.ast()));
+        tagged, type_name, json_utils::is_class(type_name, converter_.ast()));
 
     // Special case: Check if object is None (null pointer)
     if (type_name == "NoneType")
@@ -568,16 +661,16 @@ exprt function_call_expr::handle_isinstance() const
     throw std::runtime_error("isinstance() tuple cannot be empty");
 
   exprt result =
-    isinstance_operand(types[0], build_isinstance, extract_type_name);
+    isinstance_operand(types[0], build_isinstance, isinstance_type_name);
   for (size_t i = 1; i < types.size(); ++i)
   {
     exprt or_expr("or", typet("bool"));
     or_expr.move_to_operands(result);
     or_expr.copy_to_operands(
-      isinstance_operand(types[i], build_isinstance, extract_type_name));
+      isinstance_operand(types[i], build_isinstance, isinstance_type_name));
     result = or_expr;
   }
-  return result;
+  return evaluate_after(binding, evaluate_after(optional_binding, result));
 }
 
 std::optional<exprt> function_call_expr::module_hasattr(
@@ -640,7 +733,8 @@ exprt function_call_expr::handle_hasattr() const
   if (std::optional<exprt> known = module_hasattr(args[0], attr_name))
     return *known;
 
-  const exprt &obj_expr = converter_.get_expr(args[0]);
+  const exprt obj_expr =
+    to_value_expr(converter_.get_expr(args[0]), converter_.ns);
   typet attr_type = array_typet(
     unsigned_char_type(), from_integer(attr_name.size() + 1, size_type()));
   string_constantt attr_expr(attr_name, attr_type, string_constantt::k_default);
@@ -1107,6 +1201,20 @@ exprt function_call_expr::handle_type_call() const
       : type_handler_.get_python_type_name(arg_expr.type());
   if (type_name.empty())
     type_name = arg_expr.type().id_string();
+
+  // Any other pointer may be None, an instance of a subclass, or of any class
+  // at all when erased to void *, so only a comparison can over-approximate it.
+  if (
+    arg_expr.type().is_pointer() && type_name != "str" &&
+    type_name != "NoneType")
+  {
+    const auto &compared = converter_.type_compared_operands_;
+    if (&call_ != compared[0] && &call_ != compared[1])
+      throw std::runtime_error(
+        "type() of a value whose class is not known statically is only "
+        "supported as an operand of is, is not, == or !=");
+    type_name = python_converter::unknown_class_name;
+  }
 
   return converter_.make_class_object(type_name);
 }

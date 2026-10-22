@@ -2,6 +2,7 @@
 #include <python-frontend/converter/value_kinds.h>
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
+#include <python-frontend/lambda/python_lambda.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python-dict/python_dict_handler.h>
 #include <python-frontend/exception/python_exception_handler.h>
@@ -1708,6 +1709,26 @@ reject_numpy_string_membership(const std::string &op, const exprt &rhs)
       "TypeError: membership in a numpy string array is not supported");
 }
 
+// An exponent named by a variable bound once to a small int constant is that
+// constant, so `2 ** n` is an int as `2 ** 3` is (#8944). A larger one would
+// overflow an int anyway and keeps the pow() path.
+exprt python_converter::once_bound_exponent(
+  const nlohmann::json &right,
+  const exprt &rhs) const
+{
+  const symbolt *exponent =
+    rhs.is_symbol() ? symbol_table_.find_symbol(rhs.identifier()) : nullptr;
+  BigInt value;
+  if (
+    !exponent || !exponent->get_value().is_constant() ||
+    !exponent->get_value().type().is_signedbv() ||
+    to_integer(exponent->get_value(), value) || value > 64 ||
+    right.value("_type", "") != "Name" ||
+    count_bindings(*ast_json, right.value("id", "")) != 1)
+    return rhs;
+  return exponent->get_value();
+}
+
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
   if (std::optional<exprt> bound = try_bound_method_compare(element))
@@ -1730,8 +1751,17 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   // every operand would otherwise alias (#6257).
   exprt *saved_lhs = current_lhs;
   current_lhs = nullptr;
+  const auto saved_compared = type_compared_operands_;
+  type_compared_operands_ = {};
+  if (element.contains("ops") && element["ops"].size() == 1)
+  {
+    const std::string cmp = element["ops"][0]["_type"];
+    if (cmp == "Is" || cmp == "IsNot" || cmp == "Eq" || cmp == "NotEq")
+      type_compared_operands_ = {&left, &right};
+  }
   exprt lhs = get_expr(left);
   exprt rhs = get_right_operand_expr(element, right, lhs);
+  type_compared_operands_ = saved_compared;
   current_lhs = saved_lhs;
 
   // Resolve dictionary subscript types for proper comparison
@@ -2444,7 +2474,7 @@ exprt python_converter::get_binary_operator_expr(
 
   // Handle special mathematical operations
   if (op == "Pow" || op == "power")
-    return math_handler_.handle_power(lhs, rhs);
+    return math_handler_.handle_power(lhs, once_bound_exponent(right, rhs));
 
   if (op == "Mod" && (lhs.type().is_floatbv() || rhs.type().is_floatbv()))
     return math_handler_.handle_modulo(lhs, rhs, element);
@@ -3228,6 +3258,74 @@ bool python_converter::scalar_order(
   return true;
 }
 
+/// The index of the first component pair, within the common prefix of two
+/// tuples, that is neither two numbers, two strs nor two tuples; SIZE_MAX if
+/// there is none. When there is one, the operands are hoisted so that the
+/// TypeError guard and the comparison read them once.
+size_t python_converter::unordered_tuple_component(
+  exprt &lhs,
+  exprt &rhs,
+  const nlohmann::json &element)
+{
+  auto is_num = [](const typet &t) {
+    return t.is_signedbv() || t.is_unsignedbv() || t.is_floatbv() ||
+           t == bool_type();
+  };
+  const struct_typet &sa = to_struct_type(lhs.type());
+  const struct_typet &sb = to_struct_type(rhs.type());
+  const size_t m = std::min(sa.components().size(), sb.components().size());
+  for (size_t k = 0; k < m; ++k)
+  {
+    const typet a = tuple_handler_->get_tuple_element(lhs, sa, k).type();
+    const typet b = tuple_handler_->get_tuple_element(rhs, sb, k).type();
+    const bool ordered =
+      (is_num(a) && is_num(b)) ||
+      (type_utils::is_string_type(a) && type_utils::is_string_type(b)) ||
+      (tuple_handler_->is_tuple_type(a) && tuple_handler_->is_tuple_type(b));
+    if (ordered)
+      continue;
+    if (!can_emit_runtime_guard())
+      throw std::runtime_error(
+        "ordering tuples with a component that has no order is not "
+        "supported here");
+    lhs = hoist_side_effecting_operand(lhs, element, "$tuple_cmp_lhs$");
+    rhs = hoist_side_effecting_operand(rhs, element, "$tuple_cmp_rhs$");
+    return k;
+  }
+  return SIZE_MAX;
+}
+
+/// Raise CPython's TypeError when two tuples tie on every component before
+/// the pair at @p unordered, which has no order.
+void python_converter::raise_on_unordered_tie(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  size_t unordered,
+  const expr2tc &prefix_eq,
+  const nlohmann::json &element)
+{
+  if (unordered == SIZE_MAX)
+    return;
+  const std::string lhs_name = type_handler_.get_python_type_name(
+    tuple_handler_
+      ->get_tuple_element(lhs, to_struct_type(lhs.type()), unordered)
+      .type());
+  const std::string rhs_name = type_handler_.get_python_type_name(
+    tuple_handler_
+      ->get_tuple_element(rhs, to_struct_type(rhs.type()), unordered)
+      .type());
+  std::string lower_op = op;
+  std::transform(lower_op.begin(), lower_op.end(), lower_op.begin(), ::tolower);
+  emit_guarded_raise(
+    migrate_expr_back(prefix_eq),
+    "TypeError",
+    "'" + python_frontend::operator_map().at(lower_op) +
+      "' not supported between instances of '" + lhs_name + "' and '" +
+      rhs_name + "'",
+    get_location_from_decl(element));
+}
+
 exprt python_converter::handle_tuple_operations(
   const std::string &op,
   exprt &lhs,
@@ -3331,26 +3429,31 @@ exprt python_converter::handle_tuple_operations(
   // recursively). Tuples of differing arity compare on the common prefix, with
   // the shorter tuple ordered first if the prefix is equal. Gt/LtE compare the
   // swapped operands; LtE/GtE negate the strict result. A str component
-  // compares by content. Any other component kind (list/object/...) makes the
-  // whole comparison fall through unchanged.
+  // compares by content. A top-level pair with no order (instances, or a str
+  // against an int) is reached only when the prefix before it ties, and then
+  // raises TypeError; a nested one makes the whole comparison fall through.
   if (
     lhs_is_tuple && rhs_is_tuple &&
     (op == "Lt" || op == "LtE" || op == "Gt" || op == "GtE"))
   {
     bool ok = true;
 
-    // Strict lexicographic less-than for two tuple-typed expressions.
-    std::function<exprt(const exprt &, const exprt &)> lex_lt =
-      [&](const exprt &ta, const exprt &tb) -> exprt {
+    // Strict lexicographic less-than over the first `limit` components of two
+    // tuple-typed expressions; `all_eq` receives their pairwise equality.
+    std::function<exprt(const exprt &, const exprt &, size_t, expr2tc &)>
+      lex_lt =
+        [&](const exprt &ta, const exprt &tb, size_t limit, expr2tc &all_eq)
+      -> exprt {
       const struct_typet &sa = to_struct_type(ta.type());
       const struct_typet &sb = to_struct_type(tb.type());
       const size_t na = sa.components().size();
       const size_t nb = sb.components().size();
-      const size_t m = std::min(na, nb);
+      const size_t m = std::min({na, nb, limit});
 
       // Base: a proper prefix is strictly less than the longer tuple.
       // V.3: build the lexicographic compare in IREP2.
       expr2tc result = na < nb ? gen_true_expr() : gen_false_expr();
+      all_eq = gen_true_expr();
       for (size_t k = m; k-- > 0;)
       {
         exprt ai = tuple_handler_->get_tuple_element(ta, sa, k);
@@ -3361,8 +3464,8 @@ exprt python_converter::handle_tuple_operations(
         const bool bi_tuple = tuple_handler_->is_tuple_type(bi.type());
         if (ai_tuple && bi_tuple)
         {
-          expr2tc ai2, bi2;
-          migrate_expr(lex_lt(ai, bi), lt);
+          expr2tc ai2, bi2, nested_eq;
+          migrate_expr(lex_lt(ai, bi, SIZE_MAX, nested_eq), lt);
           migrate_expr(ai, ai2);
           migrate_expr(bi, bi2);
           eq = equality2tc(ai2, bi2); // native struct equality, element-wise
@@ -3375,18 +3478,23 @@ exprt python_converter::handle_tuple_operations(
 
         // result = lt || (eq && result)
         result = or2tc(lt, and2tc(eq, result));
+        all_eq = and2tc(eq, all_eq);
       }
       return migrate_expr_back(result);
     };
 
+    const size_t unordered = unordered_tuple_component(lhs, rhs, element);
     const bool swap = (op == "Gt" || op == "LtE");
     const bool negate = (op == "LtE" || op == "GtE");
     exprt &a = swap ? rhs : lhs;
     exprt &b = swap ? lhs : rhs;
 
-    exprt result = lex_lt(a, b);
+    expr2tc prefix_eq;
+    exprt result = lex_lt(a, b, unordered, prefix_eq);
     if (!ok)
       return nil_exprt(); // a non-orderable component: leave unchanged
+
+    raise_on_unordered_tie(op, lhs, rhs, unordered, prefix_eq, element);
 
     if (negate)
     {
