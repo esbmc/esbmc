@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--contract-operational-models --multi-property
+^  FAILED       \[main\.assertion\.[0-9]+\]\s+line\s+\d+\s+assertion m\.size\(\) == 0$
+^VERIFICATION FAILED$

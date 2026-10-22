@@ -401,6 +401,14 @@ public:
     
     // Erase by key
     size_type erase(const Key& key) {
+        // Under --contract-operational-models: removes at most one entry. The
+        // entries left are not described, which only widens a caller's view.
+        __ESBMC_requires(size_ <= MAX_SIZE);
+        __ESBMC_assigns(this->size_, this->data_);
+        __ESBMC_ensures(
+            (__ESBMC_return_value == 0 && size_ == __ESBMC_old(size_)) ||
+            (__ESBMC_return_value == 1 && __ESBMC_old(size_) >= 1 &&
+             size_ == __ESBMC_old(size_) - 1));
         size_type idx = find_index(key);
         if (idx == MAX_SIZE) {
             return 0; // Not found
