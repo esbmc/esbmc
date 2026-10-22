@@ -1315,6 +1315,46 @@ static bool is_numpy_array_literal_call(const nlohmann::json &node)
          !node["args"].empty() && node["args"][0].value("_type", "") == "List";
 }
 
+// A literal: a constant, a negated one, a tuple of them, or a dtype name.
+static bool is_literal_node(const nlohmann::json &node)
+{
+  const std::string kind = node.value("_type", "");
+  if (kind == "Constant")
+    return true;
+  if (kind == "UnaryOp")
+    return node["operand"].value("_type", "") == "Constant";
+  if (kind == "Tuple")
+    return std::all_of(
+      node["elts"].begin(), node["elts"].end(), [](const auto &e) {
+        return is_literal_node(e);
+      });
+  return kind == "Name" ||
+         (kind == "Attribute" && node["value"].value("id", "") == "np");
+}
+
+// `np.zeros(3)`, `np.full((2, 2), 7)`, `np.arange(4)`...: a constructor other
+// than np.array whose arguments are all literals.
+static bool is_numpy_literal_constructor(const nlohmann::json &node)
+{
+  static const std::set<std::string> constructors = {
+    "zeros", "ones", "full", "empty", "arange", "eye", "identity", "linspace"};
+  if (!node.is_object() || node.value("_type", "") != "Call")
+    return false;
+  const auto &func = node["func"];
+  if (
+    func.value("_type", "") != "Attribute" ||
+    func["value"].value("id", "") != "np" ||
+    constructors.count(func.value("attr", "")) == 0)
+    return false;
+  for (const auto &arg : node.value("args", nlohmann::json::array()))
+    if (!is_literal_node(arg))
+      return false;
+  for (const auto &kw : node.value("keywords", nlohmann::json::array()))
+    if (!is_literal_node(kw["value"]))
+      return false;
+  return true;
+}
+
 // True when any element of `args` is not a literal Constant -- used for
 // `np.arange(...)`, whose output length depends on every numeric argument
 // given (start/stop/step), unlike the other constructors' single shape
@@ -2278,12 +2318,171 @@ bool python_converter::infer_list_elem_type_from_call_sites(
   return found;
 }
 
+static std::optional<double> literal_number(const nlohmann::json &node)
+{
+  if (node.value("_type", "") == "UnaryOp" && node["op"]["_type"] == "USub")
+  {
+    const auto value = literal_number(node["operand"]);
+    return value ? std::optional<double>(-*value) : std::nullopt;
+  }
+  if (
+    node.value("_type", "") != "Constant" || !node["value"].is_number() ||
+    node["value"].is_boolean())
+    return std::nullopt;
+  return node["value"].get<double>();
+}
+
+static std::string literal_kind(const nlohmann::json &node)
+{
+  const nlohmann::json &value = node.value("_type", "") == "UnaryOp"
+                                  ? node["operand"]["value"]
+                                  : node.value("value", nlohmann::json());
+  if (value.is_boolean())
+    return "bool";
+  return value.is_number_integer() ? "int" : "float";
+}
+
+// A literal shape: an int or a tuple of them.
+static std::optional<std::vector<long long>>
+literal_shape(const nlohmann::json &node)
+{
+  std::vector<long long> shape;
+  const nlohmann::json dims = node.value("_type", "") == "Tuple"
+                                ? node["elts"]
+                                : nlohmann::json::array({node});
+  for (const auto &dim : dims)
+  {
+    if (
+      dim.value("_type", "") != "Constant" || !dim["value"].is_number_integer())
+      return std::nullopt;
+    shape.push_back(dim["value"].get<long long>());
+  }
+  return shape;
+}
+
+using numpy_layout = std::pair<std::vector<long long>, std::string>;
+
+// zeros/ones/empty(shape) and full(shape, fill).
+static std::optional<numpy_layout>
+filled_layout(const std::string &ctor, const nlohmann::json &args)
+{
+  const auto shape = args.empty() ? std::nullopt : literal_shape(args[0]);
+  if (!shape || (ctor == "full" && args.size() < 2))
+    return std::nullopt;
+  return numpy_layout(*shape, ctor == "full" ? literal_kind(args[1]) : "float");
+}
+
+// eye(N[, M]) and identity(N).
+static std::optional<numpy_layout>
+square_layout(const std::string &ctor, const nlohmann::json &args)
+{
+  const auto n = args.empty() ? std::nullopt : literal_number(args[0]);
+  const auto m = args.size() > 1 ? literal_number(args[1]) : n;
+  if (!n || !m || (ctor == "identity" && args.size() > 1))
+    return std::nullopt;
+  return numpy_layout({(long long)*n, (long long)*m}, "float");
+}
+
+// arange([start,] stop[, step]).
+static std::optional<numpy_layout> arange_layout(const nlohmann::json &args)
+{
+  std::vector<double> bounds;
+  std::string kind = "int";
+  for (const auto &arg : args)
+  {
+    const auto value = literal_number(arg);
+    if (!value)
+      return std::nullopt;
+    bounds.push_back(*value);
+    if (literal_kind(arg) == "float")
+      kind = "float";
+  }
+  if (bounds.empty() || bounds.size() > 3)
+    return std::nullopt;
+  const double start = bounds.size() > 1 ? bounds[0] : 0.0;
+  const double stop = bounds.size() > 1 ? bounds[1] : bounds[0];
+  const double step = bounds.size() > 2 ? bounds[2] : 1.0;
+  if (step == 0.0)
+    return std::nullopt;
+  const double count = std::ceil((stop - start) / step);
+  return numpy_layout({count > 0 ? (long long)count : 0}, kind);
+}
+
+// The shape and element kind ("bool", "int" or "float") of a constructor
+// with literal arguments, before any dtype= keyword.
+static std::optional<numpy_layout>
+literal_constructor_layout(const nlohmann::json &call)
+{
+  const std::string ctor = call["func"].value("attr", "");
+  const nlohmann::json &args = call["args"];
+  if (ctor == "zeros" || ctor == "ones" || ctor == "empty" || ctor == "full")
+    return filled_layout(ctor, args);
+  if (ctor == "eye" || ctor == "identity")
+    return square_layout(ctor, args);
+  if (ctor != "linspace")
+    return arange_layout(args);
+  const auto num = args.size() > 2 ? literal_number(args[2]) : 50.0;
+  if (!num || args.size() < 2)
+    return std::nullopt;
+  return numpy_layout({(long long)*num}, "float");
+}
+
+static nlohmann::json zero_literal(
+  const std::vector<long long> &shape,
+  std::size_t axis,
+  const std::string &kind)
+{
+  nlohmann::json list = {{"_type", "List"}, {"elts", nlohmann::json::array()}};
+  for (long long i = 0; i < shape[axis]; ++i)
+    list["elts"].push_back(
+      axis + 1 < shape.size() ? zero_literal(shape, axis + 1, kind)
+                              : nlohmann::json{
+                                  {"_type", "Constant"},
+                                  {"value",
+                                   kind == "bool"  ? nlohmann::json(false)
+                                   : kind == "int" ? nlohmann::json(0)
+                                                   : nlohmann::json(0.0)}});
+  return list;
+}
+
+// The array type of a literal np.array call, or of another constructor with
+// literal arguments: the type of a literal of the same shape and dtype.
+std::optional<typet>
+python_converter::literal_numpy_array_type(const nlohmann::json &call) const
+{
+  if (is_numpy_array_literal_call(call))
+    return type_handler_.get_typet(numpy_literal_with_dtype(call, *ast_json));
+  auto layout = literal_constructor_layout(call);
+  if (!layout || layout->first.empty())
+    return std::nullopt;
+  for (long long dim : layout->first)
+    if (dim <= 0)
+      return std::nullopt;
+  for (const auto &kw : call.value("keywords", nlohmann::json::array()))
+  {
+    const std::string dtype =
+      kw.value("arg", "") == "dtype"
+        ? extract_numpy_dtype_name(kw["value"], *ast_json)
+        : "";
+    if (dtype == "bool")
+      layout->second = "bool";
+    else if (dtype.find("int") != std::string::npos)
+      layout->second = "int";
+    else if (dtype.find("float") != std::string::npos)
+      layout->second = "float";
+    else if (!dtype.empty() || kw.value("arg", "") != "dtype")
+      return std::nullopt;
+  }
+  return type_handler_.get_typet(
+    zero_literal(layout->first, 0, layout->second));
+}
+
 std::optional<typet> python_converter::try_infer_numpy_array_arg_type(
   const nlohmann::json &arg,
   const nlohmann::json &module_body) const
 {
   if (is_numpy_array_literal_call(arg))
-    return type_handler_.get_typet(numpy_literal_with_dtype(arg, *ast_json));
+    return literal_numpy_array_type(arg);
 
   if (arg.value("_type", "") != "Call")
     return std::nullopt;
@@ -2544,9 +2743,10 @@ static const nlohmann::json *module_numpy_literal(
     else if (stmt_type == "AnnAssign" && stmt.contains("target"))
       target_name = stmt["target"].value("id", "");
 
+    const nlohmann::json value = stmt.value("value", nlohmann::json());
     if (
-      target_name == arg_name &&
-      is_numpy_array_literal_call(stmt.value("value", nlohmann::json())))
+      target_name == arg_name && (is_numpy_array_literal_call(value) ||
+                                  is_numpy_literal_constructor(value)))
       return &stmt["value"];
   }
   return nullptr;
@@ -2594,9 +2794,11 @@ sole_local_numpy_literal(const nlohmann::json &def, const std::string &name)
       target = &stmt["targets"][0];
     else if (stmt.value("_type", "") == "AnnAssign")
       target = &stmt["target"];
+    const nlohmann::json value = stmt.value("value", nlohmann::json());
     if (
       target != nullptr && is_name_target(*target, name) &&
-      is_numpy_array_literal_call(stmt.value("value", nlohmann::json())))
+      (is_numpy_array_literal_call(value) ||
+       is_numpy_literal_constructor(value)))
       return &stmt["value"];
   }
   return nullptr;
@@ -2663,7 +2865,8 @@ bool python_converter::try_infer_numpy_param_type(
       if (
         const nlohmann::json *literal =
           module_numpy_literal(module_body, arg_name))
-        record(type_handler_.get_typet((*literal)["args"][0]));
+        if (std::optional<typet> type = literal_numpy_array_type(*literal))
+          record(*type);
       continue;
     }
 
@@ -2676,7 +2879,8 @@ bool python_converter::try_infer_numpy_param_type(
       const nlohmann::json *literal =
         sole_local_numpy_literal(*enclosing_def, arg_name))
     {
-      record(type_handler_.get_typet((*literal)["args"][0]));
+      if (std::optional<typet> type = literal_numpy_array_type(*literal))
+        record(*type);
       continue;
     }
 

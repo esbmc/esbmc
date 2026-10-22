@@ -1009,6 +1009,12 @@ private:
     const symbolt *func_symbol);
   std::optional<exprt>
   raise_positional_oversupply(const symbolt &func_symbol) const;
+  void reject_numpy_layout_mismatch(
+    const typet &arg_type,
+    const typet &param_type) const;
+  void reject_list_for_numpy_parameter(
+    const typet &arg_type,
+    const typet &param_type) const;
   exprt finalize_call(
     code_function_callt &call,
     size_t param_offset,

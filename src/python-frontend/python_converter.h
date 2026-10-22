@@ -2205,6 +2205,8 @@ private:
   /// Converts @p node into a discarded block, so only its value is kept and
   /// nothing it would emit reaches the program.
   exprt probe_expr(const nlohmann::json &node);
+  std::optional<typet>
+  literal_numpy_array_type(const nlohmann::json &call) const;
 
   bool contains_tracked_numpy_view_object(const nlohmann::json &node);
 

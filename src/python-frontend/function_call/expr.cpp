@@ -7344,6 +7344,8 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
       continue;
     }
 
+    if (param_idx < params.size() && !arg.type().is_array())
+      reject_list_for_numpy_parameter(arg.type(), params[param_idx].type());
     reject_unmodelled_numpy_array_argument(arg.type());
 
     // All array function arguments (e.g. bytes type) are handled as pointers.
@@ -7398,6 +7400,8 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
         converter_.current_block->copy_to_operands(tmp_assign);
         arg = build_symbol(tmp);
       }
+      if (param_idx < params.size())
+        reject_numpy_layout_mismatch(arg.type(), params[param_idx].type());
       call.arguments().push_back(array_argument_address(arg));
     }
     else
@@ -7406,6 +7410,54 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
     arg_index++;
   }
   return raise_positional_oversupply(*func_symbol);
+}
+
+// A list where a numpy array parameter is expected would be read as the
+// array's elements.
+void function_call_expr::reject_list_for_numpy_parameter(
+  const typet &arg_type,
+  const typet &param_type) const
+{
+  if (!param_type.is_pointer() || !arg_type.is_pointer())
+    return;
+  const typet &target = converter_.ns.follow(param_type.subtype());
+  const typet &source = converter_.ns.follow(arg_type.subtype());
+  typet leaf = target;
+  while (leaf.is_array())
+    leaf = leaf.subtype();
+  const bool numeric_target =
+    leaf.is_floatbv() || leaf.is_bool() ||
+    ((leaf.is_signedbv() || leaf.is_unsignedbv()) && leaf != char_type());
+  if (
+    numeric_target && source.is_struct() &&
+    to_struct_type(source).tag().as_string().find("__ESBMC_PyListObj") !=
+      std::string::npos)
+    throw std::runtime_error(
+      "TypeError: a list passed where a numpy array parameter is expected is "
+      "not supported");
+}
+
+// A numpy array passed where its parameter was typed from another call site
+// would be read through the wrong element type or row length.
+void function_call_expr::reject_numpy_layout_mismatch(
+  const typet &arg_type,
+  const typet &param_type) const
+{
+  if (!param_type.is_pointer())
+    return;
+  typet leaf = arg_type;
+  while (leaf.is_array())
+    leaf = leaf.subtype();
+  const bool numeric = leaf.is_signedbv() || leaf.is_unsignedbv() ||
+                       leaf.is_floatbv() || leaf.is_bool();
+  if (!numeric || leaf == char_type())
+    return;
+  const typet &target = converter_.ns.follow(param_type.subtype());
+  const bool matches = target == arg_type || target == arg_type.subtype();
+  if (!matches && (target.is_array() || target.id() == leaf.id()))
+    throw std::runtime_error(
+      "TypeError: a numpy array whose element type or shape differs from "
+      "the one inferred for its parameter is not supported");
 }
 
 exprt function_call_expr::finalize_call(
