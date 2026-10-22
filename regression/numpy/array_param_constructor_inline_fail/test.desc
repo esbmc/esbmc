@@ -1,4 +1,5 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR: TypeError: a list passed where a numpy array parameter is expected is not supported$
+^VERIFICATION FAILED$
+assertion
