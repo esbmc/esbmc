@@ -7,10 +7,29 @@ exprt python_dict_handler::get_key_expr(const nlohmann::json &slice_node)
   return converter_.get_expr(slice_node);
 }
 
+void python_dict_handler::check_value_type(
+  bool enabled,
+  const exprt &obj,
+  const typet &type,
+  const locationt &location)
+{
+  if (!enabled)
+    return;
+  code_assertt check(equality_exprt(
+    build_member(obj, "type_id", size_type()),
+    type_handler_.tagged_scalar_type_id(type)));
+  check.location() = location;
+  check.location().user_provided(true);
+  check.location().comment(
+    "Unsupported: a dict value whose type differs from the one inferred");
+  converter_.add_instruction(check);
+}
+
 exprt python_dict_handler::handle_dict_subscript(
   const exprt &dict_expr,
   const nlohmann::json &slice_node,
-  const typet &expected_type)
+  const typet &expected_type,
+  bool check_type)
 {
   locationt location = converter_.get_location_from_decl(slice_node);
   typet list_type = type_handler_.get_list_type();
@@ -166,6 +185,8 @@ exprt python_dict_handler::handle_dict_subscript(
   deref_obj.type() = element_type;
   exprt obj_value =
     build_member(deref_obj, "value", pointer_typet(empty_typet()));
+
+  check_value_type(check_type, deref_obj, resolved_type, location);
 
   // A tagged value is already a PyObject header, unlike other values whose
   // item->value points at a nested payload. resolved_type can't be trusted

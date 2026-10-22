@@ -2848,6 +2848,50 @@ class LoopMixin:
                     return suffix
         return None
 
+    def _is_user_nondet_generator(self, node):
+        """Whether `node` names a function the module defines once, at top level."""
+        return isinstance(node, ast.Name) and node.id in self.once_bound_names and any(
+            isinstance(stmt, ast.FunctionDef) and stmt.name == node.id
+            for stmt in self.module_statements.values())
+
+    def _is_nondet_generator(self, node):
+        return self._nondet_generator_type(node) is not None or self._is_user_nondet_generator(node)
+
+    def _nondet_list_builder(self, elem_node, resolve):
+        """The builder for a list of `elem_node`'s elements.
+
+        A user function is its own builder: the rewrite calls it once per
+        element (#8965).
+        """
+        if self._is_user_nondet_generator(elem_node):
+            return elem_node.id
+        return f"_nondet_list_{resolve(elem_node, self._NONDET_LIST_ELEM_TYPES, 'elem_type')}"
+
+    @staticmethod
+    def _nondet_builder_call(builder, max_size_node):
+        """``builder(max_size)``, or ``[builder() for _ in range(_nondet_size(max_size))]``
+        for a user function."""
+        if builder.startswith(("_nondet_list_", "_nondet_dict_")):
+            return ast.Call(func=ast.Name(id=builder, ctx=ast.Load()),
+                            args=[max_size_node],
+                            keywords=[])
+        size = ast.Call(func=ast.Name(id="_nondet_size", ctx=ast.Load()),
+                        args=[max_size_node],
+                        keywords=[])
+        return ast.ListComp(elt=ast.Call(func=ast.Name(id=builder, ctx=ast.Load()),
+                                         args=[],
+                                         keywords=[]),
+                            generators=[
+                                ast.comprehension(target=ast.Name(id="_nondet_list_index",
+                                                                  ctx=ast.Store()),
+                                                  iter=ast.Call(func=ast.Name(id="range",
+                                                                              ctx=ast.Load()),
+                                                                args=[size],
+                                                                keywords=[]),
+                                                  ifs=[],
+                                                  is_async=0)
+                            ])
+
     def _resolve_nondet_type(self, node, allowed, func_name, role):
         expected = ", ".join(f"nondet_{t}()" for t in allowed)
         type_name = self._nondet_generator_type(node)
@@ -2898,8 +2942,7 @@ class LoopMixin:
         # SV-COMP passes the generator first -- nondet_list(nondet_int),
         # nondet_dict(nondet_key, nondet_value) -- so a leading generator is an
         # element type, not a size, and the default bound stands.
-        leading_generator = bool(positional) and \
-            self._nondet_generator_type(positional[0]) is not None
+        leading_generator = bool(positional) and self._is_nondet_generator(positional[0])
 
         max_size_node = None
         if positional and not leading_generator:
@@ -2928,8 +2971,7 @@ class LoopMixin:
                               f"{len(positional)}: {', '.join(ast.unparse(a) for a in positional)}")
 
         if func_name == "nondet_list":
-            elem = resolve(slot(0, "elem_type"), self._NONDET_LIST_ELEM_TYPES, "elem_type")
-            return f"_nondet_list_{elem}", max_size_node
+            return self._nondet_list_builder(slot(0, "elem_type"), resolve), max_size_node
 
         key = resolve(slot(0, "key_type"), self._NONDET_DICT_KEY_TYPES, "key_type")
         val = resolve(slot(1, "value_type"), self._NONDET_DICT_VALUE_TYPES, "value_type")
@@ -2948,11 +2990,7 @@ class LoopMixin:
             return None
         builder, max_size_node = parsed
         self.ensure_all_locations(max_size_node, call)
-        new_call = ast.Call(
-            func=ast.Name(id=builder, ctx=ast.Load()),
-            args=[max_size_node],
-            keywords=[],
-        )
+        new_call = self._nondet_builder_call(builder, max_size_node)
         self.ensure_all_locations(new_call, call)
         ast.fix_missing_locations(new_call)
         return new_call

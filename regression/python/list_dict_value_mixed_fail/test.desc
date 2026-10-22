@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 3
+^VERIFICATION FAILED$
+^\s*assertion !\(\(signed int\)\(x\[0\]\) == 115

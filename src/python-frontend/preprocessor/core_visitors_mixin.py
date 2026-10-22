@@ -1915,6 +1915,7 @@ class CoreVisitorsMixin:
         self._normalize_builtin_keyword_args(node)
         self._normalize_math_gcd_lcm_variadic(node)
 
+        self._resolve_vararg_alias_call(node)
         guard = self._lower_starred_call_argument(node)
         raising = self._bind_call_arguments(node)
         if raising is not None:
@@ -1972,7 +1973,9 @@ class CoreVisitorsMixin:
         on its own (#8472). Returns the guarding IfExp, whose body is `node`,
         or None.
         """
-        if not getattr(node, "esbmc_starred_sequence", False):
+        # _expand_starred_call_args may already have spelled the call out.
+        if not getattr(node, "esbmc_starred_sequence", False) or not isinstance(
+                node.args[-1], ast.Starred):
             return None
         operand = node.args[-1].value
         function_name, expected_args, _ = self._resolve_function_signature(node)
