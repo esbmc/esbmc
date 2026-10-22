@@ -761,6 +761,203 @@ expr2tc dereferencet::make_failed_symbol(const type2tc &out_type)
   return value;
 }
 
+/// The member of \p value at \p bits whose type is \p target, nil when there
+/// is none or it is \p value itself.
+static expr2tc member_subobject(
+  const expr2tc &value,
+  const BigInt &bits,
+  const type2tc &target,
+  const namespacet &ns)
+{
+  if (!is_struct_type(value) || base_type_eq(value->type, target, ns))
+    return expr2tc();
+  const struct_type2t &st = to_struct_type(value->type);
+  try
+  {
+    for (size_t i = 0; i < st.members.size(); i++)
+    {
+      const BigInt off =
+        member_offset_bits(value->type, st.member_names[i], &ns);
+      const BigInt size = type_byte_size_bits(st.members[i], &ns);
+      if (bits < off || bits >= off + size)
+        continue;
+      const expr2tc m = member2tc(st.members[i], value, st.member_names[i]);
+      if (bits == off && base_type_eq(st.members[i], target, ns))
+        return m;
+      return member_subobject(m, bits - off, target, ns);
+    }
+  }
+  catch (const array_type2t::dyn_sized_array_excp &)
+  {
+  }
+  catch (const array_type2t::inf_sized_array_excp &)
+  {
+  }
+  return expr2tc();
+}
+
+/// Split the member path \p path from \p type (as member_paths_of_type
+/// spells it) at its one array of constant size into the members before it,
+/// the array and the members within its element, with their bit offsets
+/// \p base and \p within; false when the path crosses more than one array.
+static bool split_member_path(
+  const std::string &path,
+  type2tc cur,
+  const namespacet &ns,
+  std::vector<std::pair<type2tc, irep_idt>> &outer,
+  type2tc &array,
+  std::vector<std::pair<type2tc, irep_idt>> &inner,
+  BigInt &base,
+  BigInt &within)
+{
+  try
+  {
+    for (size_t i = 0; i < path.size();)
+    {
+      if (path.compare(i, 2, "[]") == 0)
+      {
+        if (
+          !is_nil_type(array) || !is_array_type(cur) ||
+          !is_constant_int2t(to_array_type(cur).array_size))
+          return false;
+        array = cur;
+        cur = to_array_type(cur).subtype;
+        i += 2;
+        continue;
+      }
+      if (!is_struct_type(cur))
+        return false;
+      const size_t end = path.find_first_of(".[", i + 1);
+      const irep_idt name = path.substr(i + 1, end - i - 1);
+      (is_nil_type(array) ? base : within) +=
+        member_offset_bits(cur, name, &ns);
+      const struct_type2t &st = to_struct_type(cur);
+      const auto it =
+        std::find(st.member_names.begin(), st.member_names.end(), name);
+      const type2tc member = st.members[it - st.member_names.begin()];
+      (is_nil_type(array) ? outer : inner).emplace_back(member, name);
+      cur = member;
+      i = end == std::string::npos ? path.size() : end;
+    }
+  }
+  catch (const array_type2t::dyn_sized_array_excp &)
+  {
+    return false;
+  }
+  catch (const array_type2t::inf_sized_array_excp &)
+  {
+    return false;
+  }
+  return true;
+}
+
+/// The subobject of type \p target that the bit offset \p at addresses in
+/// \p value, when all of them lie on one path through at most one array of
+/// constant size and no union; nil otherwise. \p lands receives whether \p at
+/// addresses one.
+static expr2tc typed_subobject(
+  const expr2tc &value,
+  const expr2tc &at,
+  const type2tc &target,
+  const namespacet &ns,
+  expr2tc &lands)
+{
+  if (!is_struct_type(value) || base_type_eq(value->type, target, ns))
+    return expr2tc();
+  const std::vector<std::string> paths =
+    member_paths_of_type(value->type, target, ns);
+  if (paths.size() != 1)
+    return expr2tc();
+  // Members before the array, the array, and members within its element.
+  std::vector<std::pair<type2tc, irep_idt>> outer, inner;
+  type2tc array;
+  BigInt base = 0, within = 0;
+  if (!split_member_path(
+        paths.front(), value->type, ns, outer, array, inner, base, within))
+    return expr2tc();
+
+  const type2tc &t = at->type;
+  expr2tc e = value;
+  for (const auto &[type, name] : outer)
+    e = member2tc(type, e, name);
+  if (is_nil_type(array))
+    lands = equality2tc(at, constant_int2tc(t, base));
+  else
+  {
+    const array_type2t &a = to_array_type(array);
+    const BigInt stride = type_byte_size_bits(a.subtype, &ns);
+    const expr2tc first = constant_int2tc(t, base + within);
+    const expr2tc rel = sub2tc(t, at, first);
+    const expr2tc step = constant_int2tc(t, stride);
+    const expr2tc index = div2tc(t, rel, step);
+    lands = and2tc(
+      greaterthanequal2tc(at, first),
+      and2tc(
+        equality2tc(modulus2tc(t, rel, step), gen_zero(t)),
+        lessthan2tc(
+          index,
+          a.array_size->type == t ? a.array_size
+                                  : typecast2tc(t, a.array_size))));
+    e = index2tc(a.subtype, e, index);
+  }
+  for (const auto &[type, name] : inner)
+    e = member2tc(type, e, name);
+  return e;
+}
+
+void dereferencet::narrow_to_subobject(
+  expr2tc &value,
+  expr2tc &final_offset,
+  const expr2tc &object_offset,
+  const expr2tc &pointer_bits,
+  const expr2tc &deref_expr,
+  const expr2tc &lexical_offset,
+  const guard2tc &guard)
+{
+  if (!is_pointer_type(deref_expr))
+    return;
+  const type2tc &pointee = to_pointer_type(deref_expr->type).subtype;
+  expr2tc sub;
+  // A pointer to a member subobject reached through a member or index path
+  // at a symbolic offset: the path stays inside that subobject, as an index
+  // past one of its arrays leaves the array (C11 6.5.6p8) and is checked
+  // there. Reading from the member spares a selection over every field of
+  // the enclosing object.
+  if (is_constant_int2t(object_offset))
+  {
+    if (is_nil_expr(lexical_offset) || is_constant_int2t(final_offset))
+      return;
+    sub = member_subobject(
+      value, to_constant_int2t(object_offset).value * 8, pointee, ns);
+  }
+  // At an unknown offset, a struct lvalue can only access an object of its
+  // own type (C11 6.5p7). When the object holds those along one path, access
+  // that path at the element the offset selects, and claim the offset
+  // selects one: a pointer of that type anywhere else is a type confusion
+  // the byte-level read would have hidden.
+  else if (is_struct_type(ns.follow(pointee)))
+  {
+    expr2tc lands;
+    sub = typed_subobject(value, pointer_bits, ns.follow(pointee), ns, lands);
+    if (!is_nil_expr(sub))
+    {
+      guard2tc elsewhere(guard);
+      elsewhere.add(not2tc(lands));
+      dereference_failure(
+        "pointer dereference",
+        "struct pointer addresses no object of its type",
+        elsewhere);
+    }
+  }
+  if (is_nil_expr(sub))
+    return;
+  value = sub;
+  final_offset = is_nil_expr(lexical_offset) ? gen_zero(final_offset->type)
+                 : lexical_offset->type == final_offset->type
+                   ? lexical_offset
+                   : typecast2tc(final_offset->type, lexical_offset);
+}
+
 static bool is_vla(const array_type2t &arr)
 {
   return !is_nil_expr(arr.array_size) && !is_constant_int2t(arr.array_size);
@@ -1040,6 +1237,7 @@ expr2tc dereferencet::build_reference_to(
   // Converting final_offset from bytes to bits!
   final_offset =
     mul2tc(final_offset->type, final_offset, gen_long(final_offset->type, 8));
+  const expr2tc pointer_bits = final_offset;
 
   // Add any offset introduced lexically at the dereference site, i.e. member
   // or index exprs, like foo->bar[3]. If bar is of integer type, we translate
@@ -1063,6 +1261,15 @@ expr2tc dereferencet::build_reference_to(
     internal_items.push_back(internal);
     return expr2tc();
   }
+
+  narrow_to_subobject(
+    value,
+    final_offset,
+    o.offset,
+    pointer_bits,
+    deref_expr,
+    lexical_offset,
+    tmp_guard);
 
   if (is_code_type(value) || is_code_type(type))
   {

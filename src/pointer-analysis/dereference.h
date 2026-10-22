@@ -453,6 +453,17 @@ private:
     const expr2tc &lexical_offset,
     expr2tc &pointer_guard);
 
+  /** Narrow \p value and \p final_offset to the subobject of the pointee
+   *  type of \p deref_expr that the access lands in, when one is known. */
+  void narrow_to_subobject(
+    expr2tc &value,
+    expr2tc &final_offset,
+    const expr2tc &object_offset,
+    const expr2tc &pointer_bits,
+    const expr2tc &deref_expr,
+    const expr2tc &lexical_offset,
+    const guard2tc &guard);
+
   void deref_invalid_ptr(
     const expr2tc &deref_expr,
     const guard2tc &guard,
