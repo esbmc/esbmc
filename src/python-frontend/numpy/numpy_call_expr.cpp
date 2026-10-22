@@ -5455,9 +5455,9 @@ bool numpy_call_expr::is_math_function() const
          function == "isclose" || function == "dot" ||
          function == "transpose" || function == "det" || function == "matmul" ||
          function == "inv" || function == "solve" || function == "norm" ||
-         function == "eig" || function == "svd" || function == "real" ||
-         function == "imag" || function == "conj" || function == "conjugate" ||
-         function == "angle" || function == "abs";
+         function == "eig" || function == "eigvals" || function == "svd" ||
+         function == "real" || function == "imag" || function == "conj" ||
+         function == "conjugate" || function == "angle" || function == "abs";
 }
 
 std::string numpy_call_expr::get_dtype() const
@@ -5567,6 +5567,165 @@ exprt numpy_call_expr::lapack_matrix(
     array_typet(rows.front().type(), from_integer(rows.size(), size_type())));
   for (const exprt &row : rows)
     array.copy_to_operands(row);
+  return array;
+}
+
+// The constant real square matrix an eigvals or svd call reads.
+std::vector<std::vector<double>> numpy_call_expr::linalg_matrix(
+  const std::function<void(nlohmann::json &)> &unwrap)
+{
+  const std::string &function = function_id_.get_function();
+  nlohmann::json arg = call_["args"][0];
+  unwrap(arg);
+  std::vector<std::vector<scalar_value>> matrix;
+  if (!try_extract_scalar_2d_list(arg, matrix))
+    throw std::runtime_error(
+      "TypeError: numpy.linalg." + function +
+      " currently supports only constant 2D real numeric matrices");
+  for (const auto &row : matrix)
+    for (const auto &value : row)
+      if (value.is_complex)
+        throw std::runtime_error(
+          "TypeError: numpy.linalg." + function +
+          " does not support complex-valued matrices");
+  return real_matrix(matrix);
+}
+
+static bool is_diagonal(const std::vector<std::vector<double>> &m)
+{
+  for (std::size_t i = 0; i < m.size(); ++i)
+    for (std::size_t j = 0; j < m.size(); ++j)
+      if (i != j && m[i][j] != 0.0)
+        return false;
+  return true;
+}
+
+static double frobenius_norm(const std::vector<std::vector<double>> &m)
+{
+  double sum = 0.0;
+  for (const auto &row : m)
+    for (double value : row)
+      sum += value * value;
+  return std::sqrt(sum);
+}
+
+exprt numpy_call_expr::nondet_bool()
+{
+  symbolt &tmp =
+    converter_.create_tmp_symbol(call_, "$order$", bool_type(), exprt());
+  const exprt flag = symbol_expr(tmp);
+  code_declt decl(flag);
+  decl.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(decl);
+  code_assignt assign(flag, side_effect_expr_nondett(bool_type()));
+  assign.location() = decl.location();
+  converter_.add_instruction(assign);
+  return flag;
+}
+
+// How far LAPACK may round the eigenvalues of a 2x2 matrix that is not
+// diagonal: a triangular one keeps its diagonal exactly, and close
+// eigenvalues of one that is not symmetric are ill-conditioned (the error
+// grows as norm^2 / separation, up to sqrt(eps) * norm).
+static double
+eigenvalue_radius(const std::vector<std::vector<double>> &m, double square)
+{
+  if (m[0][1] == 0.0 || m[1][0] == 0.0)
+    return 0.0;
+  const double norm = frobenius_norm(m);
+  if (m[0][1] == m[1][0])
+    return 1e-12 * norm;
+  const double separation = 2 * std::sqrt(std::fabs(square));
+  if (separation == 0)
+    return 1e-6 * norm;
+  return std::min(1e-12 * norm * (1 + norm / separation), 1e-6 * norm);
+}
+
+// The eigenvalues of a 2x2 matrix that is not diagonal: a real pair in
+// either order, or a complex pair with the positive imaginary part first.
+std::vector<exprt>
+numpy_call_expr::eigenvalue_pair(const std::vector<std::vector<double>> &m)
+{
+  const double a = m[0][0], b = m[0][1], c = m[1][0], d = m[1][1];
+  const bool triangular = b == 0.0 || c == 0.0;
+  const double mid = (a + d) / 2, half = (a - d) / 2;
+  const double square = half * half + b * c;
+  const double radius = eigenvalue_radius(m, square);
+  const double imag_radius = b == c ? 0.0 : radius;
+  std::vector<std::pair<double, double>> pair;
+  if (triangular)
+    pair = {{a, 0.0}, {d, 0.0}};
+  else if (square >= 0)
+    pair = {{mid + std::sqrt(square), 0.0}, {mid - std::sqrt(square), 0.0}};
+  else
+    pair = {{mid, std::sqrt(-square)}, {mid, -std::sqrt(-square)}};
+  std::vector<exprt> both;
+  for (const auto &[re, im] : pair)
+    both.push_back(
+      make_complex(lapack_value(re, radius), lapack_value(im, imag_radius)));
+  if (square < 0 && !triangular)
+    return both;
+  const exprt swap = nondet_bool();
+  return {if_exprt(swap, both[1], both[0]), if_exprt(swap, both[0], both[1])};
+}
+
+// NumPy returns complex eigenvalues, from LAPACK's dgeev: a diagonal matrix
+// keeps its entries, in order.
+exprt numpy_call_expr::eigenvalues(const std::vector<std::vector<double>> &m)
+{
+  const std::size_t n = m.size();
+  for (const auto &row : m)
+    if (row.size() != n)
+      throw std::runtime_error(
+        "TypeError: numpy.linalg.eigvals requires a square 2D matrix");
+  std::vector<exprt> values;
+  if (is_diagonal(m))
+    for (std::size_t i = 0; i < n; ++i)
+      values.push_back(
+        make_complex(lapack_value(m[i][i], 0.0), lapack_value(0.0, 0.0)));
+  else if (n == 2)
+    values = eigenvalue_pair(m);
+  else
+    throw std::runtime_error(
+      "TypeError: numpy.linalg.eigvals supports only 2x2 matrices and "
+      "diagonal 3x3 matrices currently");
+  exprt array(
+    "array",
+    array_typet(get_complex_struct_type(), from_integer(n, size_type())));
+  for (const exprt &value : values)
+    array.copy_to_operands(value);
+  return array;
+}
+
+// svd(compute_uv=False) of a 2x2 matrix: the singular values in descending
+// order, from a formula that keeps the smaller one accurate.
+exprt numpy_call_expr::singular_values(
+  const std::vector<std::vector<double>> &m)
+{
+  bool values_only = false;
+  for (const auto &kw : call_.value("keywords", nlohmann::json::array()))
+    values_only = values_only || (kw.value("arg", "") == "compute_uv" &&
+                                  kw["value"].value("value", true) == false);
+  if (!values_only)
+    throw std::runtime_error(
+      "TypeError: numpy.linalg.svd returns the U and Vh factors, which are "
+      "not supported; pass compute_uv=False");
+  if (m.size() != 2 || m[0].size() != 2 || m[1].size() != 2)
+    throw std::runtime_error(
+      "TypeError: numpy.linalg.svd currently supports only 2x2 matrices");
+  const double a = m[0][0], b = m[0][1], c = m[1][0], d = m[1][1];
+  const double largest =
+    (std::hypot(a + d, c - b) + std::hypot(a - d, b + c)) / 2;
+  const double smallest =
+    largest == 0.0 ? 0.0 : std::fabs(a * d - b * c) / largest;
+  const double radius = 1e-12 * frobenius_norm(m);
+  const exprt first = lapack_value(largest, radius);
+  const exprt second = lapack_value(smallest, radius);
+  code_assumet ordered(binary_relation_exprt(first, ">=", second));
+  ordered.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(ordered);
+  exprt array("array", array_typet(first.type(), from_integer(2, size_type())));
+  array.copy_to_operands(first, second);
   return array;
 }
 
@@ -6664,137 +6823,17 @@ exprt numpy_call_expr::create_expr_from_call()
         "numeric arrays");
     }
 
-    // numpy.linalg.eig — eigenvalues (only) of a square real matrix.
-    // Returns a 1-D list of eigenvalues (2x2: descending; 3x3 diagonal: in
-    // diagonal order).
-    // Only concrete 2x2 and 3x3 real matrices with real eigenvalues are
-    // supported; complex eigenvalues are rejected with an explicit error.
+    // numpy.linalg.eig and svd also return eigenvectors and the U and Vh
+    // factors, which are not modelled; eigvals and svd(compute_uv=False)
+    // return only the values.
     if (function == "eig")
-    {
-      nlohmann::json arg = call_["args"][0];
-      unwrap_np_array_arg(arg);
-
-      std::vector<std::vector<scalar_value>> matrix;
-      if (!try_extract_scalar_2d_list(arg, matrix))
-        throw std::runtime_error(
-          "TypeError: numpy.linalg.eig currently supports only constant "
-          "2D real numeric arrays");
-
-      std::size_t n = 0;
-      if (!is_square_matrix(matrix, n))
-        throw std::runtime_error(
-          "TypeError: numpy.linalg.eig requires a square 2D matrix");
-
-      for (const auto &row : matrix)
-        for (const auto &v : row)
-          if (v.is_complex)
-            throw std::runtime_error(
-              "TypeError: numpy.linalg.eig does not support complex-valued "
-              "matrices");
-
-      if (n == 2)
-      {
-        double a = matrix[0][0].value.real();
-        double b = matrix[0][1].value.real();
-        double c = matrix[1][0].value.real();
-        double d = matrix[1][1].value.real();
-        double trace = a + d;
-        double det = a * d - b * c;
-        double disc = trace * trace - 4.0 * det;
-        if (disc < 0.0)
-          throw std::runtime_error(
-            "TypeError: numpy.linalg.eig: matrix has complex eigenvalues; "
-            "only real eigenvalues are supported");
-
-        double sqrt_disc = std::sqrt(disc);
-        double lam1 = (trace + sqrt_disc) / 2.0;
-        double lam2 = (trace - sqrt_disc) / 2.0;
-        return converter_.get_expr(
-          vector_to_json({make_real_scalar(lam1), make_real_scalar(lam2)}));
-      }
-      else if (n == 3)
-      {
-        // For 3x3, only diagonal matrices and scalar multiples of identity are
-        // supported (eigenvalues are the diagonal entries, already real).
-        bool is_diagonal = true;
-        for (std::size_t i = 0; i < 3 && is_diagonal; ++i)
-          for (std::size_t j = 0; j < 3 && is_diagonal; ++j)
-            if (i != j && std::abs(matrix[i][j].value.real()) > 1e-12)
-              is_diagonal = false;
-
-        if (!is_diagonal)
-          throw std::runtime_error(
-            "TypeError: numpy.linalg.eig supports only 2x2 matrices and "
-            "3x3 diagonal matrices currently");
-
-        std::vector<scalar_value> eigenvalues;
-        for (std::size_t i = 0; i < 3; ++i)
-          eigenvalues.push_back(make_real_scalar(matrix[i][i].value.real()));
-        return converter_.get_expr(vector_to_json(eigenvalues));
-      }
-      else
-      {
-        throw std::runtime_error(
-          "TypeError: numpy.linalg.eig supports only 2x2 and 3x3 matrices");
-      }
-    }
-
-    // numpy.linalg.svd — singular values (only) of a real matrix.
-    // Returns a 1-D list of singular values sorted in descending order.
-    // Only concrete 2x2 real matrices are supported; larger matrices and
-    // complex entries are rejected with explicit errors.
+      throw std::runtime_error(
+        "TypeError: numpy.linalg.eig returns eigenvectors, which are not "
+        "supported; use numpy.linalg.eigvals");
+    if (function == "eigvals")
+      return eigenvalues(linalg_matrix(unwrap_np_array_arg));
     if (function == "svd")
-    {
-      nlohmann::json arg = call_["args"][0];
-      unwrap_np_array_arg(arg);
-
-      std::vector<std::vector<scalar_value>> matrix;
-      if (!try_extract_scalar_2d_list(arg, matrix))
-        throw std::runtime_error(
-          "TypeError: numpy.linalg.svd currently supports only constant "
-          "2D real numeric matrices");
-
-      for (const auto &row : matrix)
-        for (const auto &v : row)
-          if (v.is_complex)
-            throw std::runtime_error(
-              "TypeError: numpy.linalg.svd does not support complex-valued "
-              "matrices");
-
-      const std::size_t nrows = matrix.size();
-      const std::size_t ncols = matrix.empty() ? 0 : matrix[0].size();
-      if (nrows != 2 || ncols != 2)
-        throw std::runtime_error(
-          "TypeError: numpy.linalg.svd currently supports only 2x2 matrices");
-
-      // Compute AᵀA (always symmetric positive semi-definite for real A)
-      double a = matrix[0][0].value.real(), b = matrix[0][1].value.real();
-      double c = matrix[1][0].value.real(), d = matrix[1][1].value.real();
-      double ata00 = a * a + c * c;
-      double ata01 = a * b + c * d;
-      double ata11 = b * b + d * d;
-
-      // Eigenvalues of AᵀA (trace / det of 2x2 symmetric)
-      double trace = ata00 + ata11;
-      double det = ata00 * ata11 - ata01 * ata01;
-      double disc = trace * trace - 4.0 * det;
-      if (disc < 0.0)
-        disc = 0.0; // numerical zero for PSD
-
-      double sqrt_disc = std::sqrt(disc);
-      double eigval1 = (trace + sqrt_disc) / 2.0;
-      double eigval2 = (trace - sqrt_disc) / 2.0;
-      if (eigval1 < 0.0)
-        eigval1 = 0.0;
-      if (eigval2 < 0.0)
-        eigval2 = 0.0;
-
-      double sigma1 = std::sqrt(eigval1);
-      double sigma2 = std::sqrt(eigval2);
-
-      return converter_.get_expr(
-        vector_to_json({make_real_scalar(sigma1), make_real_scalar(sigma2)}));
-    }
+      return singular_values(linalg_matrix(unwrap_np_array_arg));
 
     if (is_complex_function(function))
     {

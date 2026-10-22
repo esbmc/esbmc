@@ -5,6 +5,7 @@
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/python-list/python_list.h>
 #include <nlohmann/json.hpp>
+#include <functional>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -266,6 +267,12 @@ private:
   exprt get_nditer_list(const nlohmann::json &arg);
   exprt scalar_binary_call(const std::string &function, bool allow_numpy_fold);
   exprt lapack_value(double exact, double radius);
+  std::vector<std::vector<double>>
+  linalg_matrix(const std::function<void(nlohmann::json &)> &unwrap);
+  exprt nondet_bool();
+  exprt eigenvalues(const std::vector<std::vector<double>> &m);
+  std::vector<exprt> eigenvalue_pair(const std::vector<std::vector<double>> &m);
+  exprt singular_values(const std::vector<std::vector<double>> &m);
   exprt lapack_vector(const std::vector<double> &exact, double radius);
   exprt
   lapack_matrix(const std::vector<std::vector<double>> &exact, double radius);
