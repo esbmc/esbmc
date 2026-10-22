@@ -131,10 +131,21 @@ size_t python_list::eq_float_type_id(
   if (lhs_float || rhs_float)
     return lhs_float ? lhs_float : rhs_float;
   // A list with no recorded elements, such as a call's result, may hold
-  // floats, so keep the numeric path open (#8924).
-  if (!elem_types().find(lhs_id) || !elem_types().find(rhs_id))
-    return std::hash<std::string>{}(th.type_to_string(double_type()));
-  return 0;
+  // floats (#8924). Keep the numeric path open only when the other operand
+  // may hold an int to match one: the path's int/float branch is otherwise
+  // dead, yet still costs the solver float reasoning per element.
+  const element_type_registry::entries *lhs = elem_types().find(lhs_id);
+  const element_type_registry::entries *rhs = elem_types().find(rhs_id);
+  if (lhs && rhs)
+    return 0;
+  const element_type_registry::entries *known = lhs ? lhs : rhs;
+  const bool may_hold_int =
+    !known || std::any_of(known->begin(), known->end(), [](const auto &e) {
+      return e.second.is_signedbv() || e.second.is_unsignedbv();
+    });
+  return may_hold_int
+           ? std::hash<std::string>{}(th.type_to_string(double_type()))
+           : 0;
 }
 
 exprt python_list::compare(
