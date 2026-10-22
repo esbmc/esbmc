@@ -219,6 +219,7 @@ class LoopMixin:
         """
         self._update_assignment_call_origins([node.target], None)
         self._forget_literals_changed_in_loop(node)
+        node.iter = self._unwrap_nditer_iter(node.iter)
         lowered = self._lower_iterator_protocol_for(node)
         if lowered is not None:
             return lowered
@@ -316,6 +317,14 @@ class LoopMixin:
         if isinstance(expr, ast.Name):
             expr = self._assignment_call_origins.get(expr.id)
         return expr if self._is_nditer_call(expr) else None
+
+    def _unwrap_nditer_iter(self, expr):
+        """`iter(it)` of an nditer is the iterator itself."""
+        if (isinstance(expr, ast.Call) and isinstance(expr.func, ast.Name)
+                and expr.func.id == "iter" and len(expr.args) == 1 and not expr.keywords
+                and self._nditer_source(expr.args[0]) is not None):
+            return expr.args[0]
+        return expr
 
     def _record_nditer_with_targets(self, node):
         """`with np.nditer(...) as it:` binds `it` to the iterator itself."""

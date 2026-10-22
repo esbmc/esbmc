@@ -322,7 +322,10 @@ void numpy_nditer::assign(const std::string &target, const json &value)
        {{{"_type", "Name"}, {"id", target}, {"ctx", {{"_type", "Store"}}}}})},
     {"value", value}};
   locate(statement, converter_.current_nditer_call_);
-  if (!converter_.emit_statement_into_current_block(statement))
+  // The type probe of an assignment's value is discarded and converted again.
+  if (
+    !converter_.emit_statement_into_current_block(statement) &&
+    !converter_.in_rhs_type_probe_)
     throw std::runtime_error(
       "TypeError: numpy.nditer() is only supported in a statement");
 }
@@ -1484,6 +1487,9 @@ std::optional<exprt> numpy_nditer::attribute(const json &node)
     return std::nullopt;
   converter_.current_nditer_call_ = node;
   const std::string attr = node["attr"].get<std::string>();
+  // `shape` describes the remaining iteration, so it raises past the end too.
+  if (attr == "shape")
+    raise_if(finished(*found), "ValueError", "Iterator is past the end");
   json result = layout_attribute(*found, attr);
   if (result.is_null())
     result = position_attribute(*found, attr);
