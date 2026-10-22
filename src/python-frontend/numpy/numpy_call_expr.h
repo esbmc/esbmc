@@ -20,6 +20,10 @@ std::string extract_numpy_dtype_name(
   const nlohmann::json &dtype_node,
   const nlohmann::json &ast);
 
+/// The literal `np.array(literal, dtype=...)` stores, cast to its dtype.
+nlohmann::json
+numpy_literal_with_dtype(const nlohmann::json &call, const nlohmann::json &ast);
+
 class numpy_call_expr : public function_call_expr
 {
 public:

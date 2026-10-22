@@ -1013,11 +1013,12 @@ std::optional<exprt> python_converter::try_get_numpy_param_shape_attr(
     throw std::runtime_error(
       "TypeError: numpy array shape is ambiguous across control-flow branches");
 
-  const auto it = numpy_param_shapes_.find(symbol_id);
-  if (it == numpy_param_shapes_.end())
+  const std::optional<std::vector<std::size_t>> param_shape =
+    numpy_param_shape(symbol_id);
+  if (!param_shape)
     return std::nullopt;
 
-  const std::vector<std::size_t> &shape = it->second;
+  const std::vector<std::size_t> &shape = *param_shape;
 
   if (attr_name == "shape")
   {
@@ -1134,12 +1135,36 @@ python_converter::tracked_numpy_shape_from_name(const std::string &name) const
                ? std::vector<std::size_t>{view->second.length}
                : view->second.shape;
     }
-    if (
-      auto param = numpy_param_shapes_.find(id);
-      param != numpy_param_shapes_.end())
-      return param->second;
+    if (std::optional<std::vector<std::size_t>> param = numpy_param_shape(id))
+      return param;
   }
   return std::nullopt;
+}
+
+std::optional<std::vector<std::size_t>>
+python_converter::numpy_param_shape(const std::string &symbol_id) const
+{
+  if (
+    auto it = numpy_param_shapes_.find(symbol_id);
+    it != numpy_param_shapes_.end())
+    return it->second;
+  auto array = numpy_param_array_types_.find(symbol_id);
+  if (array == numpy_param_array_types_.end())
+    return std::nullopt;
+  const std::vector<int> dims =
+    type_handler_.get_array_type_shape(array->second);
+  return std::vector<std::size_t>(dims.begin(), dims.end());
+}
+
+exprt python_converter::numpy_param_as_array(const exprt &operand) const
+{
+  if (!operand.is_symbol() || !operand.type().is_pointer())
+    return operand;
+  auto array = numpy_param_array_types_.find(operand.identifier().as_string());
+  if (array == numpy_param_array_types_.end())
+    return operand;
+  const pointer_typet pointer(array->second);
+  return dereference_exprt(typecast_exprt(operand, pointer), pointer);
 }
 
 std::optional<std::vector<std::size_t>>
@@ -1405,6 +1430,20 @@ std::optional<exprt> python_converter::try_get_numpy_bool_mask_rows_shape_attr(
     count_as_int, from_integer(num_cols, int_type()), int_type());
 }
 
+// `x.T[0]`: `.T` of a numpy array is lowered as `np.transpose(x)`, as it is
+// on the right of an assignment.
+nlohmann::json
+python_converter::numpy_transpose_base(const nlohmann::json &node) const
+{
+  if (
+    node.value("_type", "") != "Attribute" || node.value("attr", "") != "T" ||
+    node["value"].value("_type", "") != "Name" ||
+    numpy_array_symbols_.count(
+      resolve_name_symbol_id(node["value"].value("id", ""))) == 0)
+    return node;
+  return rewrite_assign_rhs_node({{"value", node}})["value"];
+}
+
 std::optional<exprt> python_converter::resolve_subscript_base(
   const nlohmann::json &element,
   exprt &array)
@@ -1420,7 +1459,7 @@ std::optional<exprt> python_converter::resolve_subscript_base(
   // (converter_binop.cpp, list_construction.cpp).
   exprt *saved_lhs_for_base = current_lhs;
   current_lhs = nullptr;
-  array = get_expr(element["value"]);
+  array = get_expr(numpy_transpose_base(element["value"]));
   current_lhs = saved_lhs_for_base;
 
   // If evaluating the base raised (e.g. bin()/hex()/oct() on a non-constant
@@ -1946,6 +1985,27 @@ void python_converter::reject_scalar_subscript(
   throw std::runtime_error(msg.str());
 }
 
+// `(a * 2)[1]` over a parameter: symex cannot index the element-wise value
+// in place, so it is bound to a temporary first.
+exprt python_converter::materialize_numpy_arithmetic(
+  const nlohmann::json &node,
+  const exprt &value)
+{
+  if (
+    node.value("_type", "") != "BinOp" || value.is_symbol() ||
+    !value.type().is_array() || !current_block)
+    return value;
+  symbolt &tmp =
+    create_tmp_symbol(node, "$elementwise$", value.type(), exprt());
+  code_declt decl(symbol_expr(tmp));
+  decl.location() = get_location_from_decl(node);
+  current_block->copy_to_operands(decl);
+  code_assignt assign(symbol_expr(tmp), value);
+  assign.location() = decl.location();
+  current_block->copy_to_operands(assign);
+  return symbol_expr(tmp);
+}
+
 exprt python_converter::handle_subscript_expr(const nlohmann::json &element)
 {
   // a.flat[i] (read): see try_build_flat_index_read's own comment for why
@@ -1968,6 +2028,7 @@ exprt python_converter::handle_subscript_expr(const nlohmann::json &element)
   exprt array;
   if (std::optional<exprt> early = resolve_subscript_base(element, array))
     return *early;
+  array = materialize_numpy_arithmetic(element["value"], array);
 
   if (
     std::optional<exprt> folded =

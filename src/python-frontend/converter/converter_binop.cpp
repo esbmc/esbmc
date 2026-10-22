@@ -1776,6 +1776,11 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   exprt rhs = get_right_operand_expr(element, right, lhs);
   type_compared_operands_ = saved_compared;
   current_lhs = saved_lhs;
+  if (element.value("_type", "") == "BinOp")
+  {
+    lhs = numpy_param_as_array(lhs);
+    rhs = numpy_param_as_array(rhs);
+  }
 
   // Resolve dictionary subscript types for proper comparison
   dict_handler_->resolve_dict_subscript_types(left, right, lhs, rhs);

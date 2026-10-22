@@ -2283,7 +2283,7 @@ std::optional<typet> python_converter::try_infer_numpy_array_arg_type(
   const nlohmann::json &module_body) const
 {
   if (is_numpy_array_literal_call(arg))
-    return type_handler_.get_typet(arg["args"][0]);
+    return type_handler_.get_typet(numpy_literal_with_dtype(arg, *ast_json));
 
   if (arg.value("_type", "") != "Call")
     return std::nullopt;
@@ -2301,7 +2301,8 @@ std::optional<typet> python_converter::try_infer_numpy_array_arg_type(
     !numpy_array_literal_return(*callee_def, literal_call, type_handler_))
     return std::nullopt;
 
-  return type_handler_.get_typet(literal_call["args"][0]);
+  return type_handler_.get_typet(
+    numpy_literal_with_dtype(literal_call, *ast_json));
 }
 
 // True when `node` (or, recursively, any of its descendants) reads one of
@@ -3889,10 +3890,13 @@ static bool parameter_defaults_to_any(const nlohmann::json &element)
 void python_converter::track_numpy_param(
   const std::string &arg_id,
   const std::optional<std::vector<std::size_t>> &numpy_param_full_shape,
-  bool numpy_array_param)
+  bool numpy_array_param,
+  const typet &array_type)
 {
   if (numpy_param_full_shape)
     numpy_param_shapes_[arg_id] = *numpy_param_full_shape;
+  if (numpy_array_param && array_type.is_array())
+    numpy_param_array_types_[arg_id] = array_type;
 
   // classify_numpy_method_call()'s dispatch_rewrite_methods (sort/transpose/
   // sum/.../.T, .../) only rewrites `a.<method>(...)` into the free-function
@@ -4580,6 +4584,7 @@ size_t python_converter::register_function_argument(
   // mistaken for numpy mask indexing.
   std::optional<std::vector<std::size_t>> numpy_param_full_shape =
     numpy_param_full_shape_of(numpy_array_param, arg_type, type_handler_);
+  const typet pre_decay_type = arg_type;
 
   // A `bytes` parameter with a resolved length stays array-by-value: it is
   // immutable, sized from the call site, and concatenation/hash() inside the
@@ -4627,7 +4632,8 @@ size_t python_converter::register_function_argument(
   arg.identifier(arg_id);
   arg.location() = get_location_from_decl(element);
 
-  track_numpy_param(arg_id, numpy_param_full_shape, numpy_array_param);
+  track_numpy_param(
+    arg_id, numpy_param_full_shape, numpy_array_param, pre_decay_type);
 
   type.arguments().push_back(arg);
   size_t inserted_index = type.arguments().size() - 1;
@@ -5236,6 +5242,7 @@ const nlohmann::json &python_converter::resolve_return_annotation_node(
   if (
     is_synthesized &&
     (local_var_numpy_array_return(function_node) ||
+     numpy_arithmetic_return(function_node) ||
      dynamic_type_handler_.detect_dynamic_return_type(function_node)))
     return null_return_annotation;
   return returns;
@@ -5266,6 +5273,79 @@ static bool any_return(
           return true;
   }
   return false;
+}
+
+bool python_converter::is_numpy_param_operand(
+  const nlohmann::json &node,
+  const nlohmann::json &func_def) const
+{
+  if (!node.is_object() || node.value("_type", "") != "Name")
+    return false;
+  const nlohmann::json &params = func_def["args"]["args"];
+  for (std::size_t i = 0; i < params.size(); ++i)
+  {
+    if (params[i].value("arg", "") != node.value("id", ""))
+      continue;
+    typet array_type;
+    std::set<std::string> visiting;
+    return try_infer_numpy_param_type(
+      func_def.value("name", ""), i, array_type, visiting);
+  }
+  return false;
+}
+
+bool python_converter::is_numpy_arithmetic_node(
+  const nlohmann::json &node,
+  const nlohmann::json &func_def) const
+{
+  if (!node.is_object() || node.value("_type", "") != "BinOp")
+    return false;
+  for (const char *side : {"left", "right"})
+    if (
+      is_numpy_array_constructor_expr(node[side]) ||
+      is_numpy_param_operand(node[side], func_def) ||
+      is_numpy_arithmetic_node(node[side], func_def))
+      return true;
+  return false;
+}
+
+// `(a * 2)[1]` is an element of it, which the annotator types from `2`.
+bool python_converter::is_numpy_arithmetic_value(
+  const nlohmann::json &node,
+  const nlohmann::json &func_def) const
+{
+  return is_numpy_arithmetic_node(node, func_def) ||
+         (node.is_object() && node.value("_type", "") == "Subscript" &&
+          is_numpy_arithmetic_node(node["value"], func_def));
+}
+
+// `b = a * 2; return b`: the last binding of the returned name.
+bool python_converter::is_numpy_arithmetic_binding(
+  const nlohmann::json &node,
+  const nlohmann::json &func_def) const
+{
+  if (!node.is_object() || node.value("_type", "") != "Name")
+    return false;
+  const std::string name = node.value("id", "");
+  const nlohmann::json &body = func_def["body"];
+  for (std::size_t i = body.size(); i-- > 0;)
+  {
+    const nlohmann::json &stmt = body[i];
+    const bool annotated = stmt.value("_type", "") == "AnnAssign" &&
+                           stmt["target"].value("id", "") == name;
+    if (annotated || is_simple_name_assign_to(stmt, name))
+      return is_numpy_arithmetic_value(stmt["value"], func_def);
+  }
+  return false;
+}
+
+bool python_converter::numpy_arithmetic_return(
+  const nlohmann::json &func_def) const
+{
+  return any_return(func_def["body"], [&](const nlohmann::json &node) {
+    return is_numpy_arithmetic_value(node, func_def) ||
+           is_numpy_arithmetic_binding(node, func_def);
+  });
 }
 
 /// Whether a return in \p body yields None: a bare `return`, `return None`, or

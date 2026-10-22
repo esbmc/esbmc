@@ -3260,6 +3260,51 @@ static nlohmann::json resolve_func_node_with_params(
   return func_node;
 }
 
+static bool
+is_parameter_name(const nlohmann::json &node, const nlohmann::json &params)
+{
+  if (node.value("_type", "") != "Name" || !node.contains("id"))
+    return false;
+  const std::string name = node["id"].get<std::string>();
+  for (const auto &param : params)
+    if (param.value("arg", "") == name)
+      return true;
+  return false;
+}
+
+// `return a * 2`: element-wise arithmetic over parameters and literals.
+static bool is_parameter_arithmetic(
+  const nlohmann::json &node,
+  const nlohmann::json &params)
+{
+  if (node.value("_type", "") != "BinOp")
+    return false;
+  bool reads_param = false;
+  for (const char *side : {"left", "right"})
+  {
+    const nlohmann::json &operand = node[side];
+    const bool param = is_parameter_name(operand, params) ||
+                       is_parameter_arithmetic(operand, params);
+    if (!param && operand.value("_type", "") != "Constant")
+      return false;
+    reads_param = reads_param || param;
+  }
+  return reads_param;
+}
+
+bool python_converter::call_passes_numpy_array(
+  const nlohmann::json &call_node) const
+{
+  for (const auto &arg : call_node.value("args", nlohmann::json::array()))
+    if (
+      is_numpy_array_constructor_expr(arg) ||
+      (arg.value("_type", "") == "Name" &&
+       numpy_array_symbols_.count(
+         resolve_name_symbol_id(arg.value("id", ""))) != 0))
+      return true;
+  return false;
+}
+
 bool python_converter::return_value_uses_call_argument(
   const nlohmann::json &return_value,
   const nlohmann::json &call_node) const
@@ -3269,17 +3314,15 @@ bool python_converter::return_value_uses_call_argument(
   if (func_node.empty())
     return false;
 
+  const nlohmann::json &params = func_node["args"]["args"];
   auto is_param_name = [&](const nlohmann::json &node) {
-    if (node.value("_type", "") != "Name" || !node.contains("id"))
-      return false;
-    const std::string name = node["id"].get<std::string>();
-    for (const auto &param : func_node["args"]["args"])
-      if (param.value("arg", "") == name)
-        return true;
-    return false;
+    return is_parameter_name(node, params);
   };
 
-  if (is_param_name(return_value))
+  if (
+    is_param_name(return_value) ||
+    (is_parameter_arithmetic(return_value, params) &&
+     call_passes_numpy_array(call_node)))
     return true;
 
   if (
@@ -4626,6 +4669,28 @@ const code_typet *python_converter::lambda_call_callee(
        .empty()))
     return nullptr;
   return &to_code_type(var.get_type().subtype());
+}
+
+typet python_converter::resolve_numpy_arithmetic_type(
+  const nlohmann::json &ast_node,
+  const exprt &rhs,
+  const typet &current_type) const
+{
+  const nlohmann::json &value = ast_node["value"];
+  if (!ast_node.value("_inferred_annotation", false) || !value.is_object())
+    return current_type;
+  if (is_numpy_arithmetic_result(value, rhs))
+    return rhs.type();
+  // `(a * 2)[1]`: the annotator types an element of it as Any.
+  const typet &type = rhs.type();
+  const bool numeric =
+    type.is_signedbv() || type.is_unsignedbv() || type.is_floatbv();
+  if (
+    current_type == any_type() && numeric &&
+    value.value("_type", "") == "Subscript" &&
+    value["value"].value("_type", "") == "BinOp")
+    return type;
+  return current_type;
 }
 
 typet python_converter::resolve_lambda_call_result_type(
@@ -7334,6 +7399,8 @@ void python_converter::get_var_assign(
       resolve_numpy_reducer_call_array_type(ast_node, current_element_type);
     current_element_type =
       resolve_lambda_call_result_type(ast_node, current_element_type);
+    current_element_type =
+      resolve_numpy_arithmetic_type(ast_node, rhs, current_element_type);
 
     // Location and symbol lookup
     location_begin = get_location_from_decl(target);
@@ -8091,7 +8158,13 @@ symbolt *python_converter::resolve_subscript_base_symbol(
 {
   if (found || target.value("_type", "") != "Subscript")
     return found;
-  return find_symbol_in_enclosing_scopes(name);
+  if (symbolt *enclosing = find_symbol_in_enclosing_scopes(name))
+    return enclosing;
+  // Storing into an element never binds the name, so it reads the global.
+  symbol_id global = create_symbol_id();
+  global.set_function("");
+  global.set_object(name);
+  return symbol_table_.find_symbol(global.to_string());
 }
 
 symbolt *

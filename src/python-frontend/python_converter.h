@@ -1248,7 +1248,16 @@ private:
   void track_numpy_param(
     const std::string &arg_id,
     const std::optional<std::vector<std::size_t>> &numpy_param_full_shape,
-    bool numpy_array_param);
+    bool numpy_array_param,
+    const typet &array_type);
+
+  // A numpy array parameter decays to a pointer; element-wise arithmetic
+  // reads it back through its pre-decay array type.
+  exprt numpy_param_as_array(const exprt &operand) const;
+  exprt
+  materialize_numpy_arithmetic(const nlohmann::json &node, const exprt &value);
+  std::optional<std::vector<std::size_t>>
+  numpy_param_shape(const std::string &symbol_id) const;
 
   size_t register_function_argument(
     const nlohmann::json &element,
@@ -1999,6 +2008,11 @@ private:
   typet resolve_lambda_call_result_type(
     const nlohmann::json &ast_node,
     const typet &current_type);
+  // The array type of element-wise arithmetic the annotator typed as a list.
+  typet resolve_numpy_arithmetic_type(
+    const nlohmann::json &ast_node,
+    const exprt &rhs,
+    const typet &current_type) const;
 
   std::string resolve_name_symbol_id(const std::string &name) const;
   exprt
@@ -2083,6 +2097,22 @@ private:
   // caller skip the annotation-driven dispatch entirely) reaches that same
   // already-correct fallback instead of duplicating it.
   bool local_var_numpy_array_return(const nlohmann::json &func_def) const;
+  // `return np.array(...) * 2`: the annotator types element-wise arithmetic
+  // over a constructor as a list, so it takes the same fallback.
+  bool numpy_arithmetic_return(const nlohmann::json &func_def) const;
+  bool is_numpy_param_operand(
+    const nlohmann::json &node,
+    const nlohmann::json &func_def) const;
+  bool is_numpy_arithmetic_node(
+    const nlohmann::json &node,
+    const nlohmann::json &func_def) const;
+  bool is_numpy_arithmetic_value(
+    const nlohmann::json &node,
+    const nlohmann::json &func_def) const;
+  bool is_numpy_arithmetic_binding(
+    const nlohmann::json &node,
+    const nlohmann::json &func_def) const;
+  bool call_passes_numpy_array(const nlohmann::json &call_node) const;
 
   // The `returns` node get_function_definition's own dispatch should use:
   // null when local_var_numpy_array_return applies, function_node["returns"]
@@ -2629,6 +2659,7 @@ private:
   // method-call RHS. Split out to keep get_var_assign's own decision count
   // from growing as more special-cased RHS rewrites land there.
   nlohmann::json rewrite_assign_rhs_node(const nlohmann::json &ast_node) const;
+  nlohmann::json numpy_transpose_base(const nlohmann::json &node) const;
 
   // Classifies a Call node as a numpy method call: (is_a_method_call,
   // method_name, method_base, is_a_supported_copy_method,
@@ -3679,6 +3710,7 @@ private:
   // and the array-consuming numpy calls (transpose, sort/argsort/
   // searchsorted, reducers) read the pre-decay shape from here instead.
   std::unordered_map<std::string, std::vector<std::size_t>> numpy_param_shapes_;
+  std::unordered_map<std::string, typet> numpy_param_array_types_;
   std::unordered_set<std::string> numpy_ambiguous_shape_symbols_;
   // List parameters mixing strings and numbers whose call sites agree on
   // each position's type, so a constant index reads that type (#8670).

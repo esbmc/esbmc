@@ -5108,6 +5108,16 @@ static nlohmann::json cast_numpy_literal_to_dtype(
     "TypeError: np.array(..., dtype=...) requires literal numeric elements");
 }
 
+nlohmann::json
+numpy_literal_with_dtype(const nlohmann::json &call, const nlohmann::json &ast)
+{
+  for (const auto &kw : call.value("keywords", nlohmann::json::array()))
+    if (kw.value("arg", "") == "dtype")
+      return cast_numpy_literal_to_dtype(
+        call["args"][0], extract_numpy_dtype_name(kw["value"], ast));
+  return call["args"][0];
+}
+
 static nlohmann::json cast_numpy_linspace_literal_to_dtype(
   const nlohmann::json &node,
   const std::string &dtype)
