@@ -1655,6 +1655,9 @@ private:
     const;
 
   symbolt *find_imported_symbol(const std::string &symbol_id) const;
+  /// The symbol @p sym_id names in the module whose file it names, or through
+  /// the current module's imports; null when neither binds it.
+  symbolt *find_symbol_through_module(const std::string &sym_id) const;
   symbolt *find_nested_function_symbol(const std::string &name) const;
   symbolt *find_symbol_in_global_scope(const std::string &symbol_id) const;
   symbolt *find_model_symbol(const std::string &sym_id) const;

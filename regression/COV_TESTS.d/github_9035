@@ -1,0 +1,4 @@
+regression/python/github_9035_inherited
+regression/python/github_9035_fail
+regression/python/github_9035_deep
+regression/python/github_9035_own_override
