@@ -386,6 +386,51 @@ class ClassContextMixin:
                     self._rebind_cls_calls(method, heir.name)
                     heir.body.append(method)
 
+    def _self_called_methods(self, member):
+        """The names `member` calls on its receiver, when a copy of `member` is
+        exact: it is undecorated, never rebinds its receiver, does not use
+        `super` or `__class__`, and has constant defaults."""
+        receiver = self._receiver(member)
+        if receiver is None or member.name.startswith("__"):
+            return set()
+        defaults = [*member.args.defaults, *filter(None, member.args.kw_defaults)]
+        if (not all(isinstance(d, ast.Constant) for d in defaults) or any(
+                isinstance(n, ast.Name) and n.id in ("super", "__class__")
+                for n in ast.walk(member))):
+            return set()
+        return {
+            n.func.attr
+            for n in ast.walk(member)
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+            and isinstance(n.func.value, ast.Name) and n.func.value.id == receiver
+        }
+
+    def _bind_overridden_method_calls(self, module):
+        """Give a subclass its own copy of an inherited method that calls
+        `self.m()` where the subclass resolves `m` to another definition than
+        the method's class does, so the copy types `self` as the subclass and
+        the call reaches the override (#9035).
+
+        Only in the entry module, with single inheritance and no metaclass."""
+        classes = self._top_level_classes(module)
+        if not self.is_entry_module or classes is None:
+            return
+        unsafe = self._unbindable_classes(classes)
+        copies = []
+        for owner in classes.values():
+            if owner.name in unsafe:
+                continue
+            for member in owner.body:
+                called = self._self_called_methods(member)
+                if not called:
+                    continue
+                copies += [(heir, member)
+                           for heir in self._classmethod_heirs(classes, owner, member.name) if any(
+                               self._method_owner(classes, heir, name) is not self._method_owner(
+                                   classes, owner, name) for name in called)]
+        for heir, member in copies:
+            heir.body.append(copy.deepcopy(member))
+
     @staticmethod
     def _names_mentioned(module):
         """Every identifier or string `module` mentions other than by loading an attribute."""

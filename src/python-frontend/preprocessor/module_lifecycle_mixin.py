@@ -53,6 +53,7 @@ class ModuleLifecycleMixin:
     def finalize_module(self, node):
         """Run generic_visit and inject helper nodes requested during traversal."""
         self._bind_classmethod_constructors(node)
+        self._bind_overridden_method_calls(node)
         self._bind_class_alias_calls(node)
         self._bind_type_values(node)
         self._bind_nested_classes_via_self(node)
