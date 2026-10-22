@@ -1131,8 +1131,10 @@ void goto_convertt::inline_calls_in_quantifier_body(exprt &expr, unsigned depth)
   {
     const symbolt *fsym = ns.lookup(expr.op0().identifier());
     exprt inlined;
+    // A logic function stays an application, which OLD/NEW-style callers
+    // share by congruence; see instantiate_logic_foralls.
     if (
-      !fsym || depth == 0 ||
+      !fsym || depth == 0 || fsym->get_type().get_bool("#logic_function") ||
       (!try_inline_pure_call(*fsym, expr, inlined) &&
        !summarize_pure_call(*fsym, expr, inlined)))
       return;
@@ -1226,6 +1228,159 @@ void goto_convertt::skolemize_asserted_foralls(exprt &expr, goto_programt &dest)
     body.make_typecast(expr.type());
   expr.swap(body);
   skolemize_asserted_foralls(expr, dest);
+}
+
+static bool calls_logic_on(
+  const exprt &e,
+  const std::set<irep_idt> &bound,
+  const namespacet &ns)
+{
+  if (
+    e.id() == "sideeffect" && e.statement() == "function_call" &&
+    e.operands().size() >= 2 && e.op0().is_symbol())
+  {
+    const symbolt *f = ns.lookup(e.op0().identifier());
+    if (
+      f && f->get_type().get_bool("#logic_function") &&
+      mentions_symbol(e.op1(), bound))
+      return true;
+  }
+  forall_operands (it, e)
+    if (calls_logic_on(*it, bound, ns))
+      return true;
+  return false;
+}
+
+static bool has_quantifier(const exprt &e, const namespacet &ns)
+{
+  if (quantifier_intrinsic_call(e, ns))
+    return true;
+  forall_operands (it, e)
+    if (has_quantifier(*it, ns))
+      return true;
+  return false;
+}
+
+bool goto_convertt::program_has_logic()
+{
+  if (!has_logic)
+  {
+    has_logic = false;
+    context.foreach_operand([this](const symbolt &s) {
+      if (s.get_type().get_bool("#logic_function"))
+        has_logic = true;
+    });
+  }
+  return *has_logic;
+}
+
+/// A logic function's applications are made at ground arguments only, so one
+/// called on a quantified variable cannot stay under the binder. A forall in
+/// a positive position of a clause is replaced by its body at a global
+/// instance variable, one per nesting depth. Assumed, that is an instance of
+/// the forall, which is weaker. Asserted, the variable is free but for other
+/// instances, which the forall implies, so any counterexample can be chosen
+/// for it. Sharing the variables makes the instances an assertion needs the
+/// ones assumed before it. With @p every, a positive forall in an assertion
+/// is replaced whatever its body calls, so it meets those instances too.
+void goto_convertt::instantiate_logic_foralls(
+  exprt &expr,
+  unsigned depth,
+  bool every,
+  goto_programt &dest)
+{
+  if (expr.id() == "typecast" && expr.operands().size() == 1)
+  {
+    instantiate_logic_foralls(expr.op0(), depth, every, dest);
+    return;
+  }
+  // A forall in each of two disjuncts would share one variable, which an
+  // assertion cannot: its counterexamples may differ.
+  if (
+    expr.is_and() ||
+    (expr.is_or() &&
+     std::count_if(
+       expr.operands().begin(), expr.operands().end(), [this](const exprt &op) {
+         return has_quantifier(op, ns);
+       }) <= 1))
+  {
+    Forall_operands (it, expr)
+      instantiate_logic_foralls(*it, depth, every, dest);
+    return;
+  }
+
+  const symbolt *fsym = quantifier_intrinsic_call(expr, ns);
+  if (!fsym || fsym->name != "__ESBMC_forall")
+    return;
+  exprt::operandst &args = expr.op1().operands();
+  const exprt *bvar = args.size() == 2 ? quantifier_bound_var(args[0]) : nullptr;
+  if (!bvar)
+    return;
+  const typet &type = bvar->type();
+  instantiate_logic_foralls(args[1], depth + 1, every, dest);
+  if (
+    (type.id() != "signedbv" && type.id() != "unsignedbv") ||
+    atoi(type.width().c_str()) > 64 ||
+    (!every && !calls_logic_on(args[1], {bvar->identifier()}, ns)))
+    return;
+
+  const irep_idt id = "c:@__ESBMC_forall_instance$" + std::to_string(depth);
+  if (!context.find_symbol(id))
+  {
+    // An uninitialised static is nondet in symex.
+    symbolt s;
+    s.id = id;
+    s.name = id2string(id).substr(3);
+    s.set_type(signedbv_typet(64));
+    s.static_lifetime = true;
+    s.lvalue = true;
+    context.add(s);
+  }
+  exprt instance = symbol_exprt(id, signedbv_typet(64));
+  instance.make_typecast(type);
+  exprt body;
+  body.swap(args[1]);
+  replace_symbols_in_expr(body, {{bvar->identifier(), instance}});
+  hoist_logic_calls(body, dest);
+  if (body.type() != expr.type())
+    body.make_typecast(expr.type());
+  expr.swap(body);
+}
+
+static bool reads_memory(const exprt &e)
+{
+  if (
+    e.id() == "dereference" || e.id() == "index" || e.id() == "member" ||
+    e.id() == "sideeffect")
+    return true;
+  forall_operands (it, e)
+    if (reads_memory(*it))
+      return true;
+  return false;
+}
+
+/// A logic application or an old() snapshot has no effect and no safety
+/// claim, so one whose arguments read no memory is evaluated whatever guards
+/// it: a loop invariant cannot re-evaluate a call under control flow.
+void goto_convertt::hoist_logic_calls(exprt &expr, goto_programt &dest)
+{
+  if (
+    expr.id() == "sideeffect" && expr.statement() == "function_call" &&
+    expr.operands().size() >= 2 && expr.op0().is_symbol())
+  {
+    const symbolt *f = ns.lookup(expr.op0().identifier());
+    if (
+      f &&
+      (f->get_type().get_bool("#logic_function") ||
+       f->name == "__ESBMC_old_raw") &&
+      !reads_memory(expr.op1()))
+      remove_sideeffects(expr, dest, true);
+    return;
+  }
+  if (quantifier_intrinsic_call(expr, ns))
+    return;
+  Forall_operands (it, expr)
+    hoist_logic_calls(*it, dest);
 }
 
 void goto_convertt::convert_quantifier_calls(exprt &expr)
@@ -1617,6 +1772,24 @@ void goto_convertt::remove_sideeffects(
   // on expr.location(), enabling column-accurate branching waypoint matching.
   if (!has_sideeffect(expr) && expr.id() != "if")
     return;
+
+  if (
+    expr.id() == "sideeffect" && expr.statement() == "function_call" &&
+    expr.operands().size() >= 2 && expr.op0().is_symbol() &&
+    !expr.op1().operands().empty())
+    if (const symbolt *fsym = ns.lookup(expr.op0().identifier()))
+    {
+      const std::string &f = id2string(fsym->name);
+      const bool asserted = f == "__ESBMC_assert" || f == "assert";
+      if (
+        asserted || f == "__ESBMC_assume" || f == "__ESBMC_loop_invariant" ||
+        f == "__ESBMC_requires" || f == "__ESBMC_ensures")
+        instantiate_logic_foralls(
+          expr.op1().operands().front(),
+          0,
+          asserted && program_has_logic(),
+          dest);
+    }
 
   // Turn quantifier intrinsic calls into forall/exists expressions before the
   // &&/|| and generic side-effect lowering below, so a nested quantifier's body

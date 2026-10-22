@@ -1,0 +1,4 @@
+CORE
+main.c
+--loop-invariant-check --force-malloc-success --no-bounds-check --no-pointer-check --no-align-check
+^VERIFICATION SUCCESSFUL$
