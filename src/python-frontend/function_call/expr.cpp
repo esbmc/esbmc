@@ -7017,7 +7017,8 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
     // A dict literal argument stores its values as the parameter's dict does.
     typet &value_hint = converter_.get_dict_handler()->literal_value_type_hint;
     value_hint = dict_param_value_type(func_symbol, param_idx);
-    exprt arg = converter_.get_expr(arg_node);
+    exprt arg =
+      converter_.get_expr(converter_.bind_numpy_constructor_argument(arg_node));
     value_hint = typet();
     converter_.current_lhs = saved_lhs;
 
@@ -7344,7 +7345,10 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
       continue;
     }
 
-    if (param_idx < params.size() && !arg.type().is_array())
+    // The type probe of an assignment's value is discarded.
+    if (
+      param_idx < params.size() && !arg.type().is_array() &&
+      !converter_.in_rhs_type_probe_)
       reject_list_for_numpy_parameter(arg.type(), params[param_idx].type());
     reject_unmodelled_numpy_array_argument(arg.type());
 

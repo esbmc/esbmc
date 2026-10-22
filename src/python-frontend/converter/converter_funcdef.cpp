@@ -2477,11 +2477,37 @@ python_converter::literal_numpy_array_type(const nlohmann::json &call) const
     zero_literal(layout->first, 0, layout->second));
 }
 
+// `f(np.eye(2))`: a constructor written as an argument is bound to a name
+// first, so it is an array rather than the list it converts to on its own.
+nlohmann::json
+python_converter::bind_numpy_constructor_argument(const nlohmann::json &arg)
+{
+  if (!is_numpy_literal_constructor(arg) || in_rhs_type_probe_)
+    return arg;
+  if (!can_emit_runtime_guard())
+    throw std::runtime_error(
+      "TypeError: a numpy constructor called as an argument inside a lambda, "
+      "a short-circuit operand or a contract is not supported");
+  nlohmann::json name = {
+    {"_type", "Name"},
+    {"id", "ESBMC_constructor_arg_" + std::to_string(++nditer_counter_)},
+    {"ctx", {{"_type", "Store"}}}};
+  copy_location_fields_from_decl(arg, name);
+  nlohmann::json bind = {
+    {"_type", "Assign"},
+    {"targets", nlohmann::json::array({name})},
+    {"value", arg}};
+  copy_location_fields_from_decl(arg, bind);
+  emit_statement_into_current_block(bind);
+  name["ctx"] = {{"_type", "Load"}};
+  return name;
+}
+
 std::optional<typet> python_converter::try_infer_numpy_array_arg_type(
   const nlohmann::json &arg,
   const nlohmann::json &module_body) const
 {
-  if (is_numpy_array_literal_call(arg))
+  if (is_numpy_array_literal_call(arg) || is_numpy_literal_constructor(arg))
     return literal_numpy_array_type(arg);
 
   if (arg.value("_type", "") != "Call")
