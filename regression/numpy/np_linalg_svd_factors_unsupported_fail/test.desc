@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: numpy.linalg.svd returns the U and Vh factors, which are not supported; pass compute_uv=False$
