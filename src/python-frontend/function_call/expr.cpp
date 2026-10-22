@@ -2900,6 +2900,42 @@ bool function_call_expr::receiver_class_defines_method(
          json_utils::class_defines_method(ast["body"], cls, method_name);
 }
 
+/// Refuse a call whose receiver class is not known when some module of the
+/// program defines a class with a method named @p method_name. Such a method
+/// may write to its receiver, so the null fallback would drop those writes and
+/// prove what Python fails (#8915). A literal display is never such an
+/// instance.
+void function_call_expr::reject_unresolved_user_method(
+  const std::string &method_name) const
+{
+  static const std::unordered_set<std::string> literal_kinds = {
+    "Constant",
+    "List",
+    "Tuple",
+    "Set",
+    "Dict",
+    "JoinedStr",
+    "ListComp",
+    "SetComp",
+    "DictComp"};
+  if (literal_kinds.count(call_["func"]["value"].value("_type", "")))
+    return;
+
+  const auto defines = [&](const nlohmann::json &module) {
+    return json_utils::any_class_defines_method(module, method_name);
+  };
+  bool user_method = false;
+  for (const nlohmann::json *body : converter_.reachable_module_bodies())
+    user_method = user_method || defines(*body);
+  if (converter_.extra_asts_)
+    for (const nlohmann::json &module : *converter_.extra_asts_)
+      user_method = user_method || defines(module);
+  if (user_method)
+    throw std::runtime_error(
+      "unsupported: calling method '" + method_name +
+      "' on a value whose class is not known");
+}
+
 bool function_call_expr::is_list_method_call() const
 {
   if (call_["func"]["_type"] != "Attribute")
@@ -5977,7 +6013,10 @@ std::optional<exprt> function_call_expr::try_indirect_member_call()
 
   const struct_typet &st = to_struct_type(class_sym->get_type());
   if (!st.has_component(attr))
+  {
+    refuse_unheld_attribute(class_name, attr);
     return std::nullopt;
+  }
 
   // Only a member that actually holds a function pointer routes here; a
   // regular method is not a component of the struct at all, so ordinary
@@ -6004,6 +6043,25 @@ std::optional<exprt> function_call_expr::try_indirect_member_call()
   exprt member =
     migrate_expr_back(member2tc(migrate_type(field_type), recv2, attr));
   return call_field(held, recv, member);
+}
+
+void function_call_expr::refuse_unheld_attribute(
+  const std::string &class_name,
+  const std::string &attr) const
+{
+  const python_converter::attribute_functions *held =
+    converter_.function_attribute(attr);
+  const auto mro = converter_.class_mro(class_name);
+  if (
+    !held || !held->bound || !mro ||
+    std::any_of(mro->begin(), mro->end(), [&](const auto &cls) {
+      return converter_.class_binds_name(cls, attr);
+    }))
+    return;
+  throw std::runtime_error(
+    "calling attribute '" + attr + "' on a '" + class_name +
+    "' receiver, which may be a subclass instance holding it, is not "
+    "supported");
 }
 
 const python_converter::attribute_functions *function_call_expr::held_functions(
@@ -6329,6 +6387,7 @@ std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
           // receiver never resolves to a class (`{1}.isdisjoint({2})`).
           if (inferred_classes_from_fallback)
           {
+            reject_unresolved_user_method(method_name);
             locationt location = converter_.get_location_from_decl(call_);
             exprt zero_fallback =
               migrate_expr_back(gen_zero(migrate_type(any_type())));

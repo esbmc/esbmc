@@ -1032,6 +1032,9 @@ private:
   std::string instantiated_class(const nlohmann::json &value) const;
 
   bool ternary_needs_if_spelling(const nlohmann::json &ifexp) const;
+  void reject_divergent_attribute_classes(
+    const nlohmann::json &target,
+    const nlohmann::json &ifexp) const;
 
   bool is_coverage_mode() const;
 
@@ -2370,7 +2373,7 @@ private:
     exprt &array,
     const typet &array_type_for_dict,
     bool array_is_dict_pointer,
-    const nlohmann::json &slice);
+    const nlohmann::json &element);
   bool subscript_targets_list_model(
     const typet &array_type,
     const typet &list_type) const;

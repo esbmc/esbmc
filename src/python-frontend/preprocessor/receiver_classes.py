@@ -116,23 +116,79 @@ def _scope_nodes(body):
                 stack.append(child)
 
 
-def _receiver_classes(body, classes, returns):
-    """Per name bound in this scope to instances of more than one class of
-    this module, the set of those classes."""
-    bound = {}
+def _name_bindings(body):
+    """The (target name, value) of each assignment in this scope to names."""
     for node in _scope_nodes(body):
-        if isinstance(node, ast.Assign) and len(node.targets) == 1:
-            target, value = node.targets[0], node.value
+        if isinstance(node, ast.Assign):
+            targets = node.targets
         elif isinstance(node, ast.AnnAssign) and node.value is not None:
-            target, value = node.target, node.value
+            targets = [node.target]
         else:
             continue
-        if not isinstance(target, ast.Name):
-            continue
+        for target in targets:
+            if isinstance(target, ast.Name):
+                yield target.id, node.value
+
+
+def _receiver_classes(body, classes, returns):
+    """Per name bound in this scope to instances of more than one class of
+    this module, directly or through a copy of another name, the set of those
+    classes."""
+    bindings = list(_name_bindings(body))
+    bound = {}
+    for name, value in bindings:
         constructed = _constructed_classes(value, classes, returns)
         if constructed is not None:
-            bound.setdefault(target.id, set()).update(constructed)
+            bound.setdefault(name, set()).update(constructed)
+    changed = True
+    while changed:
+        changed = False
+        for name, value in bindings:
+            if isinstance(value, ast.Name) and value.id in bound:
+                found = bound.setdefault(name, set())
+                changed |= not bound[value.id] <= found
+                found |= bound[value.id]
     return {name: found for name, found in bound.items() if len(found) > 1}
+
+
+def _binds_names_or_attributes(node):
+    if isinstance(node, ast.Assign):
+        targets = node.targets
+    elif isinstance(node, ast.AnnAssign):
+        targets = [node.target]
+    else:
+        return False
+    return all(isinstance(t, (ast.Name, ast.Attribute)) for t in targets)
+
+
+def _is_tracked_read(node, parent):
+    """Whether a read of a receiver as `node` under `parent` is one this pass
+    tracks or leaves to the converter: an attribute read on it, an isinstance,
+    type or identity test, a return, a store to an attribute, or a copy to a
+    name, which makes that name a receiver too."""
+    if isinstance(parent, (ast.Attribute, ast.Return)):
+        return True
+    if isinstance(parent, ast.Call):
+        is_type = isinstance(parent.func, ast.Name) and parent.func.id == "type"
+        return is_type or _isinstance_receiver(parent, {node.id}) is not None
+    if isinstance(parent, ast.Compare):
+        return all(isinstance(op, (ast.Is, ast.IsNot)) for op in parent.ops)
+    return _binds_names_or_attributes(parent)
+
+
+def _check_escapes(body, receivers, module_name):
+    """Refuse a receiver stored or passed anywhere else: the container or
+    parameter takes the C type of one class."""
+    for parent in _scope_nodes(body):
+        for node in ast.iter_child_nodes(parent):
+            if (isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load)
+                    and node.id in receivers and not _is_tracked_read(node, parent)):
+                exc = NotImplementedError(
+                    f"storing or passing '{node.id}', which holds an instance of "
+                    f"{' or '.join(sorted(receivers[node.id]))} depending on the path, "
+                    f"is not supported")
+                attach_location(exc, node, module_name)
+                raise exc
 
 
 def _isinstance_answer(cls, classinfo, classes):
@@ -275,6 +331,7 @@ def _check_scope(body, classes, returns, module_name, params=frozenset()):
     receivers = _receiver_classes(body, classes, returns)
     if not receivers:
         return
+    _check_escapes(body, receivers, module_name)
     context = _isinstance_context(body, receivers, classes, returns, params)
     called = set()
     for node in _scope_nodes(body):
@@ -297,6 +354,25 @@ def _check_scope(body, classes, returns, module_name, params=frozenset()):
         raise exc
 
 
+def _check_inline_constructions(module, classes, returns, module_name):
+    """Refuse a conditional construction of different classes anywhere but as
+    the value of an assignment, where the receiver checks see it."""
+    for parent in ast.walk(module):
+        if isinstance(parent, ast.IfExp) or _binds_names_or_attributes(parent):
+            continue
+        for node in ast.iter_child_nodes(parent):
+            if not isinstance(node, ast.IfExp):
+                continue
+            found = _constructed_classes(node, classes, returns)
+            if found is not None and len(found) > 1:
+                exc = NotImplementedError(
+                    f"a conditional expression that constructs an instance of "
+                    f"{' or '.join(sorted(found))} is supported only as the value of an "
+                    f"assignment")
+                attach_location(exc, node, module_name)
+                raise exc
+
+
 def refuse_path_dependent_receivers(module, module_name):
     classes = {s.name: s for s in module.body if isinstance(s, ast.ClassDef)}
     if len(classes) < 2:
@@ -306,6 +382,7 @@ def refuse_path_dependent_receivers(module, module_name):
         for s in module.body if isinstance(s, ast.FunctionDef) and isinstance(s.returns, ast.Name)
         and s.returns.id in classes
     }
+    _check_inline_constructions(module, classes, returns, module_name)
     _check_scope(module.body, classes, returns, module_name)
     for node in ast.walk(module):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):

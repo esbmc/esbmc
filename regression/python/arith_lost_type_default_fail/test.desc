@@ -1,5 +1,4 @@
 CORE
 main.py
 
-^VERIFICATION FAILED$
-Unsupported: arithmetic on a value whose type was lost
+^ERROR: .*main\.py:10:11: unsupported: this call may be 'text' or 'one', which return different types \(str and int\)$
