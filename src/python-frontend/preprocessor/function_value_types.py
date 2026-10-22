@@ -54,9 +54,11 @@ class _Scope:
         args = getattr(node, "args", None)
         if args is not None:
             self.params = [a.arg for a in args.posonlyargs + args.args]
-            self.names.update(self.params)
+            self.keywords = self.params[len(args.posonlyargs):] + [a.arg for a in args.kwonlyargs]
+            self.names.update(self.params, self.keywords)
         else:
             self.params = []
+            self.keywords = []
         declared = set()
         for sub in _own_nodes(node):
             if isinstance(sub, (ast.Global, ast.Nonlocal)):
@@ -75,7 +77,12 @@ def _own_nodes(node):
     while stack:
         current = stack.pop()
         yield current
-        if isinstance(current, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)):
+        if isinstance(current, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            # Defaults are evaluated in the enclosing scope.
+            stack.extend(current.args.defaults)
+            stack.extend(d for d in current.args.kw_defaults if d is not None)
+            continue
+        if isinstance(current, ast.ClassDef):
             continue
         stack.extend(ast.iter_child_nodes(current))
 
@@ -171,6 +178,12 @@ class _Analysis:
             return None
         return ("name", id(fn), scope.params[index])
 
+    def keyword_key(self, fn, name):
+        """The key of `fn`'s parameter that a keyword argument `name` binds, or None."""
+        if name not in self.scopes[id(fn)].keywords:
+            return None
+        return ("name", id(fn), name)
+
     # values
     def value(self, expr, scope):
         """The key of the group `expr`'s value belongs to, or None."""
@@ -238,14 +251,16 @@ class _Analysis:
                 return self.result_key(callees[0])
         callee = self.value(expr.func, scope)
         args = [self.value(arg, scope) for arg in expr.args]
+        keywords = {kw.arg: self.value(kw.value, scope) for kw in expr.keywords if kw.arg}
         if isinstance(expr.func, ast.Name) and expr.func.id in self.from_imports:
             # The imported function may call what it is given, out of sight.
-            self.calls.extend((expr, arg, [], None) for arg in args if arg is not None)
+            self.calls.extend((expr, arg, [], {}, None) for arg in args + list(keywords.values())
+                              if arg is not None)
             return None
         if callee is None:
             return None
         result = ("call", id(expr))
-        self.calls.append((expr, callee, args, result))
+        self.calls.append((expr, callee, args, keywords, result))
         return result
 
     def _rebound(self, name, scope):
@@ -258,8 +273,18 @@ class _Analysis:
         return self.rebound[key]
 
     def link_call(self, fn, call, scope):
-        for i, arg in enumerate(call.args):
-            self.union(self.param_key(fn, i), self.value(arg, scope))
+        args = [self.value(arg, scope) for arg in call.args]
+        keywords = {kw.arg: self.value(kw.value, scope) for kw in call.keywords if kw.arg}
+        self.link_args(fn, args, keywords)
+
+    def link_args(self, fn, args, keywords):
+        """Merge argument groups into `fn`'s parameters; whether any group changed."""
+        changed = False
+        for i, arg in enumerate(args):
+            changed |= self.union(self.param_key(fn, i), arg)
+        for name, arg in keywords.items():
+            changed |= self.union(self.keyword_key(fn, name), arg)
+        return changed
 
     def _statement(self, node, scope):
         if isinstance(node, ast.Assign):
@@ -274,6 +299,17 @@ class _Analysis:
             self.union(self.result_key(scope.node), self.value(node.value, scope))
         elif isinstance(node, ast.Call) and id(node) not in self.seen_calls:
             self.value(node, scope)
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            self._link_defaults(node, scope)
+
+    def _link_defaults(self, fn, scope):
+        """Merge each default, evaluated in the enclosing scope, into its parameter."""
+        first = len(self.scopes[id(fn)].params) - len(fn.args.defaults)
+        for i, default in enumerate(fn.args.defaults):
+            self.union(self.param_key(fn, first + i), self.value(default, scope))
+        for arg, default in zip(fn.args.kwonlyargs, fn.args.kw_defaults):
+            if default is not None:
+                self.union(self.keyword_key(fn, arg.arg), self.value(default, scope))
 
     def _bind(self, target, value, value_node, scope):
         if isinstance(target, ast.Name):
@@ -387,18 +423,17 @@ class _Analysis:
         changed = True
         while changed:
             changed = False
-            for _, callee, args, result in self.calls:
+            for _, callee, args, keywords, result in self.calls:
                 if result is None:
                     continue
                 for node, _, _ in list(self.members.get(self.find(callee), {}).values()):
                     changed |= self.union(result, self.result_key(node))
                     if id(node) in self.scopes:
-                        for i, arg in enumerate(args):
-                            changed |= self.union(self.param_key(node, i), arg)
+                        changed |= self.link_args(node, args, keywords)
 
     def mixed_call(self):
         """A call through a value whose functions return different types, with two of them."""
-        for call, callee, _, result in self.calls:
+        for call, callee, _, _, result in self.calls:
             seen = []
             members = self.members.get(self.find(callee), {}).values()
             for _, name, kind in sorted(members, key=lambda m: m[0].lineno):
