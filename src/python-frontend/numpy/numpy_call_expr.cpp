@@ -599,34 +599,6 @@ static bool solve_linear_system(
   return true;
 }
 
-static nlohmann::json
-matrix_to_json(const std::vector<std::vector<scalar_value>> &m)
-{
-  nlohmann::json outer;
-  outer["_type"] = "List";
-  outer["elts"] = nlohmann::json::array();
-  for (const auto &row : m)
-  {
-    nlohmann::json row_json;
-    row_json["_type"] = "List";
-    row_json["elts"] = nlohmann::json::array();
-    for (const auto &val : row)
-      row_json["elts"].push_back(to_json_constant(val));
-    outer["elts"].push_back(row_json);
-  }
-  return outer;
-}
-
-static nlohmann::json vector_to_json(const std::vector<scalar_value> &v)
-{
-  nlohmann::json list;
-  list["_type"] = "List";
-  list["elts"] = nlohmann::json::array();
-  for (const auto &val : v)
-    list["elts"].push_back(to_json_constant(val));
-  return list;
-}
-
 // LAPACK factorises with partial pivoting and NumPy's det sums logarithms,
 // so neither result is the exact one computed here; these bounds are well
 // above the rounding error of either for matrices of order at most 4.
