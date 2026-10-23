@@ -432,7 +432,8 @@ private:
 
   /*
    * Raises OverflowError (infinity) or ValueError (NaN) before int() truncates
-   * a float @p operand given without a @p base; returns the operand to convert.
+   * a float @p operand given without a @p base, and TypeError when a pointer
+   * @p operand is None; returns the operand to convert.
    */
   exprt guard_nonfinite_float_to_int(exprt operand, const exprt &base) const;
 
