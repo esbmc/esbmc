@@ -1791,13 +1791,18 @@ exprt python_list::build_tuple_copy_call(
 {
   // Marked in place, so the copy keeps its symbol and recorded element types
   const exprt copy = build_shallow_copy_call(src_list, element);
+  build_mark_tuple_call(copy);
+  return copy;
+}
+
+void python_list::build_mark_tuple_call(const exprt &list)
+{
   code_function_callt mark;
   mark.function() =
     build_symbol(list_model_function(converter_, "__ESBMC_list_mark_tuple"));
-  mark.arguments().push_back(copy);
-  mark.location() = converter_.get_location_from_decl(element);
+  mark.arguments().push_back(list);
+  mark.location() = converter_.get_location_from_decl(list_value_);
   converter_.add_instruction(mark);
-  return copy;
 }
 
 exprt python_list::build_is_tuple_call(const exprt &list)

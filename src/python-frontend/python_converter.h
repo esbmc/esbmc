@@ -423,6 +423,19 @@ public:
     const std::string &message,
     const locationt &location);
 
+  exprt handle_tuple_add(
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &element);
+
+  // `tuple + list` or `list + tuple`: raises TypeError unless the list was
+  // built by tuple(x) (#8777), in which case the result is that tuple
+  // concatenated with the other one.
+  exprt concat_tuple_with_list(
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &element);
+
   // Raises OverflowError (infinity) or ValueError (NaN) before a float
   // @p operand is converted to int, and with @p reject_none TypeError for a
   // pointer @p operand that is None; returns the operand to convert.
