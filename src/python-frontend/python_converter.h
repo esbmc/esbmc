@@ -2993,6 +2993,12 @@ private:
   /// nil_exprt if either side's length is not a compile-time constant.
   exprt build_bytes_concat(const exprt &lhs, const exprt &rhs);
 
+  // A right operand of list + that is never a list: a scalar, a str, or a
+  // tuple outside `+=` (which extends the list).
+  bool is_definite_non_list_addend(
+    const typet &type,
+    const nlohmann::json &element) const;
+
   /**
    * @brief Handles list-related binary operations.
    *

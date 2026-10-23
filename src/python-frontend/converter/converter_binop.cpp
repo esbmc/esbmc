@@ -3689,6 +3689,18 @@ exprt python_converter::handle_tuple_operations(
   return nil_exprt();
 }
 
+bool python_converter::is_definite_non_list_addend(
+  const typet &type,
+  const nlohmann::json &element) const
+{
+  if (
+    type.is_signedbv() || type.is_unsignedbv() || type.is_floatbv() ||
+    type_utils::is_string_type(type))
+    return true;
+  return get_tuple_handler().is_tuple_type(ns.follow(type)) &&
+         element.value("_type", "") != "AugAssign";
+}
+
 exprt python_converter::handle_list_operations(
   const std::string &op,
   exprt &lhs,
@@ -3774,14 +3786,13 @@ exprt python_converter::handle_list_operations(
   // list ... to list") — only list + list concatenates. The concat case above
   // already consumed list and any-typed (void*) right operands, so raise a
   // catchable TypeError (uncaught -> VERIFICATION FAILED) for a definite
-  // scalar/string right operand. Unknown/other types are left untouched to
-  // avoid misfiring on imprecise frontend typing (#6265).
+  // scalar/string right operand, or a tuple outside `+=` (which extends).
+  // Unknown/other types are left untouched to avoid misfiring on imprecise
+  // frontend typing (#6265).
   if (lhs.type() == list_type && op == "Add")
   {
     const typet &rt = rhs.type();
-    if (
-      rt.is_signedbv() || rt.is_unsignedbv() || rt.is_floatbv() ||
-      type_utils::is_string_type(rt))
+    if (is_definite_non_list_addend(rt, element))
       return get_exception_handler().gen_exception_raise(
         "TypeError",
         "can only concatenate list (not \"" +
