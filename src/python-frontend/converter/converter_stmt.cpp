@@ -87,6 +87,19 @@ codet raise_statement(const exprt &raise, const locationt &location)
   return code;
 }
 
+// `lhs = value`, or the raise that evaluating @p value always ends in.
+codet assign_or_raise(
+  const exprt &lhs,
+  const exprt &value,
+  const locationt &location)
+{
+  if (const exprt *raise = raised_condition(value))
+    return raise_statement(*raise, location);
+  code_assignt assign(lhs, value);
+  assign.location() = location;
+  return assign;
+}
+
 // True when reassigning a value of type rhs to a variable currently typed lhs
 // crosses the numeric<->string boundary, which a single GOTO symbol cannot
 // represent in place.
@@ -8568,6 +8581,14 @@ codet build_conditional_code(
   const exprt &else_expr,
   const locationt &location)
 {
+  // A test that raises leaves neither branch nor loop to run (#9092).
+  if (const exprt *raise = raised_condition(cond))
+  {
+    code_blockt raised = cond_prelude;
+    raised.copy_to_operands(raise_statement(*raise, location));
+    return raised;
+  }
+
   if (!cond_prelude.operands().empty())
     return lower_while_with_condition_prelude(
       cond_prelude, cond, then, else_expr, location);
@@ -8721,13 +8742,6 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     current_lhs = saved_lhs;
     current_block = saved_block;
 
-    if (const exprt *raise = raised_condition(func_call))
-    {
-      loop_body.copy_to_operands(raise_statement(*raise, call_location));
-      current_element_type = t;
-      return loop_body;
-    }
-
     if (func_call.is_function_call())
     {
       if (!func_call.type().is_empty())
@@ -8735,11 +8749,8 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       loop_body.copy_to_operands(func_call);
     }
     else
-    {
-      code_assignt cond_assign(cond_tmp, func_call);
-      cond_assign.location() = call_location;
-      loop_body.copy_to_operands(cond_assign);
-    }
+      loop_body.copy_to_operands(
+        assign_or_raise(cond_tmp, func_call, call_location));
 
     exprt overall_cond = cond_tmp;
     if (is_wrapped_in_unary)
@@ -9243,15 +9254,6 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     exprt if_expr("if", result_type);
     if_expr.copy_to_operands(cond, then, else_expr);
     return if_expr;
-  }
-
-  // A test that raises leaves neither branch nor loop to run (#9092).
-  if (const exprt *raise = raised_condition(cond))
-  {
-    code_blockt raised = cond_prelude;
-    raised.copy_to_operands(
-      raise_statement(*raise, get_location_from_decl(ast_node["test"])));
-    return raised;
   }
 
   return build_conditional_code(
