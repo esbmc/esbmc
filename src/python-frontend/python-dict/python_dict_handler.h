@@ -405,7 +405,10 @@ public:
   /// Whether a read of @p dict_expr yields the stored item as a tagged scalar.
   bool reads_value_as_tagged(
     const exprt &dict_expr,
+    const nlohmann::json &slice_node,
     const element_type_registry::entries &entries);
+
+  char annotated_value_kind(const exprt &dict_expr);
 
   /// The scalar or str value type shared by every dict literal recorded as an
   /// element of list @p list_id; empty when an element is not one, the types

@@ -661,7 +661,7 @@ exprt python_dict_handler::create_dict_from_literal(
       // (github_3719_4).
       converter_.get_element_type_registry().record(
         values_list.id.as_string(),
-        std::string(),
+        dict_key_id(keys[i]),
         value_expr.type(),
         type_slot::dict_value_types);
 

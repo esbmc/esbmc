@@ -25,13 +25,44 @@ void python_dict_handler::check_value_type(
   converter_.add_instruction(check);
 }
 
-/// Whether a read of @p dict_expr, whose recorded values are @p entries,
-/// yields the stored item as a tagged scalar: every value is tagged, or one
-/// is a string where the written `dict[K, V]` annotation has a number V, or
-/// the reverse. The latter is read like an element of a list mixing strings
-/// and numbers (#4797): its type_id, not V, then answers isinstance.
+static char scalar_kind(const typet &t)
+{
+  if (type_utils::is_string_type(t))
+    return 's';
+  return t.is_signedbv() || t.is_unsignedbv() || t.is_floatbv() || t.is_bool()
+           ? 'n'
+           : '\0';
+}
+
+/// 's' or 'n' when @p dict_expr is written `dict[K, V]` with a str or number
+/// V, else '\0'. The preprocessor's guess from a literal's first value is no
+/// annotation.
+char python_dict_handler::annotated_value_kind(const exprt &dict_expr)
+{
+  const symbolt *sym = symbol_table_.find_symbol(dict_expr.identifier());
+  assert(sym && "a dict with recorded values has a symbol");
+  const nlohmann::json var_decl = json_utils::find_var_decl(
+    sym->name.as_string(),
+    converter_.get_current_func_name(),
+    converter_.get_ast_json());
+  if (
+    var_decl.empty() || var_decl.value("_inferred_annotation", false) ||
+    !var_decl.contains("annotation") ||
+    !var_decl["annotation"].contains("slice"))
+    return '\0';
+  return scalar_kind(
+    get_dict_value_type_from_annotation(var_decl["annotation"]));
+}
+
+/// Whether a read of @p dict_expr at @p slice_node, whose recorded values are
+/// @p entries, yields the stored item as a tagged scalar: every value is
+/// tagged, or a value that key may hold is a string where the written
+/// `dict[K, V]` annotation has a number V, or the reverse. The latter is read
+/// like an element of a list mixing strings and numbers (#4797): its type_id,
+/// not V, then answers isinstance.
 bool python_dict_handler::reads_value_as_tagged(
   const exprt &dict_expr,
+  const nlohmann::json &slice_node,
   const element_type_registry::entries &entries)
 {
   if (
@@ -42,34 +73,17 @@ bool python_dict_handler::reads_value_as_tagged(
         return type_handler_.is_tagged_scalar_type(e.second);
       }))
     return true;
-  const symbolt *sym = symbol_table_.find_symbol(dict_expr.identifier());
-  assert(sym && "a dict with recorded values has a symbol");
-  const nlohmann::json var_decl = json_utils::find_var_decl(
-    sym->name.as_string(),
-    converter_.get_current_func_name(),
-    converter_.get_ast_json());
-  // The preprocessor's guess from a literal's first value is no annotation.
-  if (
-    var_decl.empty() || var_decl.value("_inferred_annotation", false) ||
-    !var_decl.contains("annotation") ||
-    !var_decl["annotation"].contains("slice"))
-    return false;
-  auto kind = [](const typet &t) {
-    if (type_utils::is_string_type(t))
-      return 's';
-    return t.is_signedbv() || t.is_unsignedbv() || t.is_floatbv() || t.is_bool()
-             ? 'n'
-             : '\0';
-  };
-  const char annotated =
-    kind(get_dict_value_type_from_annotation(var_decl["annotation"]));
-  return annotated && std::any_of(
-                        entries.begin(),
-                        entries.end(),
-                        [&](const element_type_registry::entry &e) {
-                          const char stored = kind(e.second);
-                          return stored && stored != annotated;
-                        });
+  const char annotated = annotated_value_kind(dict_expr);
+  const std::string key = dict_key_id(slice_node);
+  return annotated &&
+         std::any_of(
+           entries.begin(),
+           entries.end(),
+           [&](const element_type_registry::entry &e) {
+             const char stored = scalar_kind(e.second);
+             return stored && stored != annotated &&
+                    (key.empty() || e.first.empty() || e.first == key);
+           });
 }
 
 exprt python_dict_handler::handle_dict_subscript(
@@ -251,7 +265,7 @@ exprt python_dict_handler::handle_dict_subscript(
           vals_id, type_slot::dict_value_types);
       if (
         entries && !entries->empty() &&
-        reads_value_as_tagged(dict_expr, *entries))
+        reads_value_as_tagged(dict_expr, slice_node, *entries))
         // element_type was resolved to the struct above; is_tagged_scalar_type
         // matches on the symbol_typet identity instead.
         return build_dereference(
@@ -530,7 +544,7 @@ void python_dict_handler::handle_dict_subscript_assign(
       get_internal_list_id(dict_expr.identifier().as_string(), false);
     if (!vals_id.empty())
       converter_.get_element_type_registry().record(
-        vals_id, std::string(), value.type(), type_slot::dict_value_types);
+        vals_id, dict_key_id(node), value.type(), type_slot::dict_value_types);
   }
 
   symbolt &index_var = converter_.create_tmp_symbol(

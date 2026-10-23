@@ -2,3 +2,5 @@ regression/python/dict_annotated_value_other_kind
 regression/python/dict_annotated_value_other_kind_fail
 regression/python/dict_annotated_str_value_number
 regression/python/dict_annotated_str_value_number_fail
+regression/python/dict_annotated_value_other_key
+regression/python/dict_annotated_value_other_key_fail
