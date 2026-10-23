@@ -6358,8 +6358,9 @@ symbolt *python_converter::retype_store_symbol(
   return stored ? stored : lhs_symbol;
 }
 
-/// The Name a single-target Assign/AnnAssign binds, or a null json.
-static nlohmann::json assign_name_target(const nlohmann::json &ast_node)
+/// The name a single-target Assign/AnnAssign binds, as assigned_name spells
+/// it, or "".
+static std::string assign_target_name(const nlohmann::json &ast_node)
 {
   const std::string stmt_type = ast_node.value("_type", "");
   nlohmann::json target;
@@ -6370,45 +6371,44 @@ static nlohmann::json assign_name_target(const nlohmann::json &ast_node)
   else if (stmt_type == "AnnAssign" && ast_node.contains("target"))
     target = ast_node["target"];
 
-  if (target.is_object() && target.value("_type", "") == "Name")
-    return target;
-  return nlohmann::json();
+  return target.is_object() ? dynamic_type_detail::assigned_name(target) : "";
+}
+
+// A binop between two already-tagged names may produce a result whose
+// type isn't known until conversion, so an untagged target may need to
+// become tagged too. Checked by name to avoid converting the operands
+// twice on the common path where this doesn't apply.
+static bool
+may_tag_binop(const nlohmann::json &value, const dynamic_type_handler &handler)
+{
+  auto is_tagged_name = [&](const nlohmann::json &operand) {
+    return operand.is_object() && operand.value("_type", "") == "Name" &&
+           handler.is_tagged(operand["id"].get<std::string>());
+  };
+  return value.is_object() && value.value("_type", "") == "BinOp" &&
+         value.contains("op") &&
+         handler.tagged_binop_result_may_be_tagged(
+           value["op"].value("_type", "")) &&
+         value.contains("left") && value.contains("right") &&
+         is_tagged_name(value["left"]) && is_tagged_name(value["right"]);
 }
 
 bool python_converter::try_tagged_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
 {
-  const nlohmann::json tag_target = assign_name_target(ast_node);
-  if (tag_target.is_null())
+  const std::string name = assign_target_name(ast_node);
+  if (name.empty())
     return false;
 
-  const std::string name = tag_target["id"].get<std::string>();
-  symbol_id tag_sid = create_symbol_id();
-  tag_sid.set_object(name);
+  const bool is_attribute = name.find('.') != std::string::npos;
+  symbol_id tag_sid = dynamic_type_handler_.bound_symbol_id(name);
   const std::string tag_key = tag_sid.to_string();
   bool is_tagged_already = dynamic_type_handler_.is_tagged(name);
 
-  // A binop between two already-tagged names may produce a result whose
-  // type isn't known until conversion, so an untagged target may need to
-  // become tagged too. Checked by name to avoid converting the operands
-  // twice on the common path where this doesn't apply.
-  auto is_tagged_name = [&](const nlohmann::json &operand) {
-    return operand.is_object() && operand.value("_type", "") == "Name" &&
-           dynamic_type_handler_.is_tagged(operand["id"].get<std::string>());
-  };
-  bool value_may_tag = false;
-  if (!is_tagged_already && ast_node.contains("value"))
-  {
-    const auto &value = ast_node["value"];
-    value_may_tag = value.is_object() && value.value("_type", "") == "BinOp" &&
-                    value.contains("op") &&
-                    dynamic_type_handler_.tagged_binop_result_may_be_tagged(
-                      value["op"].value("_type", "")) &&
-                    value.contains("left") && value.contains("right") &&
-                    is_tagged_name(value["left"]) &&
-                    is_tagged_name(value["right"]);
-  }
+  const bool value_may_tag =
+    !is_tagged_already && !is_attribute && ast_node.contains("value") &&
+    may_tag_binop(ast_node["value"], dynamic_type_handler_);
 
   // A rebind that already retyped the name away from its tagged slot wins: the
   // live value is in the retype target, so this is an ordinary assignment to
@@ -6432,9 +6432,15 @@ bool python_converter::try_tagged_var_assign(
     }
     assert(
       !value_may_tag && "tagged 'x + y' always converts to a tagged result");
+    const bool on_spine = !is_attribute && current_class_name_.empty() &&
+                          loop_body_depth_ == 0 &&
+                          block_nesting_ == function_body_depth_ + 1;
+    // A tagged slot compares only against an int, bool or str, so a float
+    // rebound on the spine takes its own slot below.
     if (
-      type_handler_.is_numeric_scalar_type(rhs.type()) ||
-      type_handler_.is_string_type(rhs.type()))
+      (type_handler_.is_numeric_scalar_type(rhs.type()) ||
+       type_handler_.is_string_type(rhs.type())) &&
+      !(on_spine && rhs.type().is_floatbv()))
     {
       dynamic_type_handler_.assign(rhs, location, name, target_block);
       return true;
@@ -6450,9 +6456,7 @@ bool python_converter::try_tagged_var_assign(
     symbolt *tag_symbol =
       symbol_table_.find_symbol(dynamic_type_handler_.tagged_symbol_id(name));
     if (
-      tag_symbol && current_class_name_.empty() && loop_body_depth_ == 0 &&
-      block_nesting_ == function_body_depth_ + 1 && !rhs.type().is_empty() &&
-      !rhs.type().is_code())
+      tag_symbol && on_spine && !rhs.type().is_empty() && !rhs.type().is_code())
     {
       symbolt *fresh = mint_retyped_symbol(
         *tag_symbol, tag_key, rhs.type(), location, tag_sid, target_block);

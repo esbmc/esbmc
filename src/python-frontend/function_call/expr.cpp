@@ -1391,6 +1391,9 @@ exprt function_call_expr::build_constant_from_arg() const
   {
     // Try __str__ dispatch for custom objects with __str__ defined.
     exprt value_expr = converter_.get_expr(arg);
+    // convert_to_string folds a call statement it cannot type to a constant,
+    // dropping the call (#9084).
+    converter_.convert_function_call_to_side_effect(value_expr);
     if (!value_expr.is_nil() && value_expr.statement() != "cpp-throw")
     {
       exprt dunder_result = converter_.dispatch_unary_dunder_operator(

@@ -555,6 +555,8 @@ public:
     const exprt &list_expr,
     const nlohmann::json &slice_node);
 
+  size_t
+  eq_float_type_id(const std::string &lhs_id, const std::string &rhs_id) const;
   exprt compare(const exprt &l1, const exprt &l2, const std::string &op);
 
   exprt contains(const exprt &item, const exprt &list);
@@ -808,6 +810,9 @@ public:
   /// tuple(x) of a list: a shallow copy marked as a tuple (#8777).
   exprt
   build_tuple_copy_call(const exprt &src_list, const nlohmann::json &element);
+
+  /// Mark `list` as built by tuple(x) (#8777).
+  void build_mark_tuple_call(const exprt &list);
 
   /// Whether `list` was built by tuple(x) (#8777).
   exprt build_is_tuple_call(const exprt &list);
