@@ -797,8 +797,6 @@ static double cofactor_det(const std::vector<std::vector<double>> &m)
 static double
 det_radius(const std::vector<std::vector<double>> &m, double determinant)
 {
-  if (structurally_singular(m))
-    return 0.0;
   const double scale = std::pow(max_abs(m), static_cast<double>(m.size()));
   const double magnitude = std::fabs(determinant);
   const double logarithm = magnitude > 0 ? std::fabs(std::log(magnitude)) : 0;
@@ -6696,6 +6694,8 @@ exprt numpy_call_expr::create_expr_from_call()
       const std::vector<std::vector<double>> real = real_matrix(matrix);
       if (const std::optional<double> computed = exact_det(real))
         return lapack_value(*computed, 0.0);
+      if (structurally_singular(real))
+        return lapack_value(0.0, 0.0);
       const double exact = cofactor_det(real);
       return lapack_value(exact, det_radius(real, exact));
     }
