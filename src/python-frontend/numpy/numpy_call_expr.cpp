@@ -5492,11 +5492,12 @@ size_t count_effective_bits(const std::string &binary)
 }
 
 // Any double within `radius` of `exact`, the result a LAPACK routine may
-// return; `exact` itself when nothing rounds.
+// return; `exact` itself when nothing rounds, and any double at all when the
+// radius is not finite.
 exprt numpy_call_expr::lapack_value(double exact, double radius)
 {
   const exprt value = from_double(exact, double_type());
-  if (radius == 0.0 || !std::isfinite(exact) || !std::isfinite(radius))
+  if (radius == 0.0 || (std::isfinite(radius) && !std::isfinite(exact)))
     return value;
   symbolt &tmp =
     converter_.create_tmp_symbol(call_, "$lapack$", value.type(), exprt());
@@ -5508,6 +5509,8 @@ exprt numpy_call_expr::lapack_value(double exact, double radius)
   code_assignt assign(result, side_effect_expr_nondett(value.type()));
   assign.location() = location;
   converter_.add_instruction(assign);
+  if (!std::isfinite(radius))
+    return result;
   const exprt low = from_double(exact - radius, double_type());
   const exprt high = from_double(exact + radius, double_type());
   code_assumet within(and_exprt(
