@@ -1254,7 +1254,15 @@ private:
   // A numpy array parameter decays to a pointer; element-wise arithmetic
   // reads it back through its pre-decay array type.
   exprt numpy_param_as_array(const exprt &operand) const;
-  exprt snapshot_left_operand(const exprt &lhs, const nlohmann::json &right);
+  exprt snapshot_left_operand(
+    const nlohmann::json &left,
+    const exprt &lhs,
+    const nlohmann::json &right);
+  bool may_rebind_left(
+    const nlohmann::json &left,
+    const exprt &lhs,
+    const nlohmann::json &right) const;
+  bool calls_user_code(const nlohmann::json &node) const;
   exprt
   materialize_numpy_arithmetic(const nlohmann::json &node, const exprt &value);
   std::optional<std::vector<std::size_t>>

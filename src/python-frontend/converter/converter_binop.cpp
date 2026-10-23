@@ -1780,7 +1780,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     if (cmp == "Is" || cmp == "IsNot" || cmp == "Eq" || cmp == "NotEq")
       type_compared_operands_ = {&left, &right};
   }
-  exprt lhs = snapshot_left_operand(get_expr(left), right);
+  exprt lhs = snapshot_left_operand(left, get_expr(left), right);
   exprt rhs = get_right_operand_expr(element, right, lhs);
   type_compared_operands_ = saved_compared;
   current_lhs = saved_lhs;
@@ -1845,9 +1845,47 @@ static bool is_read_ahead_type(const typet &type)
          type_utils::is_string_type(type);
 }
 
+// A call that may run user code: anything but a builtin called by name.
+bool python_converter::calls_user_code(const nlohmann::json &node) const
+{
+  if (node.is_object() && node.value("_type", "") == "Lambda")
+    return false;
+  if (node.is_object() && node.value("_type", "") == "Call")
+  {
+    const nlohmann::json &func = node["func"];
+    const std::string name =
+      func.value("_type", "") == "Name" ? func.value("id", "") : "";
+    if (
+      name.empty() || !names_python_builtin(name) ||
+      json_utils::is_class(name, *ast_json))
+      return true;
+  }
+  if (!node.is_object() && !node.is_array())
+    return false;
+  for (const auto &child : node)
+    if (calls_user_code(child))
+      return true;
+  return false;
+}
+
+// Only a variable can be rebound, and a str or reference one only by user
+// code; copying any other operand hides the object from the comparisons that
+// dispatch on its type.
+bool python_converter::may_rebind_left(
+  const nlohmann::json &left,
+  const exprt &lhs,
+  const nlohmann::json &right) const
+{
+  const typet &type = lhs.type();
+  if (!type.is_pointer() && !type_utils::is_string_type(type))
+    return contains_call(right);
+  return left.value("_type", "") == "Name" && calls_user_code(right);
+}
+
 // Python reads the left operand before it runs a call in the right one,
 // which may rebind what the left operand reads (`g + bump()`).
 exprt python_converter::snapshot_left_operand(
+  const nlohmann::json &left,
   const exprt &lhs,
   const nlohmann::json &right)
 {
@@ -1863,7 +1901,7 @@ exprt python_converter::snapshot_left_operand(
                                  safe_to_emit_side_effecting_statement());
   if (
     !can_emit || !is_read_ahead_type(type) || !safe || lhs.is_constant() ||
-    !contains_call(right))
+    !may_rebind_left(left, lhs, right))
     return lhs;
   exprt value = lhs;
   if (value.is_function_call())
