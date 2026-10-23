@@ -1,4 +1,5 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR: operands could not be broadcast together with shapes \(2,2\) \(3,\)
+^VERIFICATION FAILED$
+^  uncaught exception: ValueError$
