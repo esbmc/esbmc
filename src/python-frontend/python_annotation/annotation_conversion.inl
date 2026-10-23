@@ -1630,6 +1630,14 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
     // A number on the left of an array (`2 * a`) gives an array.
     if (!is_array_operand(lhs, body) && is_array_operand(rhs, body))
       return "list";
+    // Only a list concatenates or repeats with a list (`a + [x]`, `n * [x]`);
+    // a list literal on the left keeps its element type below.
+    const Json &value = stmt.contains("value") ? stmt["value"] : stmt;
+    const std::string op = value["op"].value("_type", "");
+    if (
+      (op == "Add" || op == "Mult") && lhs["_type"] != "List" &&
+      (rhs["_type"] == "List" || rhs["_type"] == "ListComp"))
+      return "list";
   }
 
   if (lhs["_type"] == "BinOp")
@@ -1666,25 +1674,11 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
           find_annotated_assign(lhs["id"], (*current_func)["args"]["args"]);
       }
 
-      if (
-        !left_op.empty() && left_op.contains("annotation") &&
-        left_op["annotation"].contains("id") &&
-        left_op["annotation"]["id"].is_string())
-      {
-        type = left_op["annotation"]["id"];
-      }
+      type = operand_annotation_type(left_op);
       // As a fallback, check global scope for prior annotation
       if (type.empty())
-      {
-        Json global_op = find_annotated_assign(lhs["id"], ast_["body"]);
-        if (
-          !global_op.empty() && global_op.contains("annotation") &&
-          global_op["annotation"].contains("id") &&
-          global_op["annotation"]["id"].is_string())
-        {
-          type = global_op["annotation"]["id"];
-        }
-      }
+        type = operand_annotation_type(
+          find_annotated_assign(lhs["id"], ast_["body"]));
     }
     else if (lhs["_type"] == "UnaryOp")
     {
@@ -1759,15 +1753,8 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
     if (rhs["_type"] == "Constant")
       type = get_type_from_constant(rhs);
     else if (rhs["_type"] == "Name")
-    {
-      Json right_op = find_annotated_assign(
-        rhs["id"], body.contains("body") ? body["body"] : ast_["body"]);
-      if (
-        right_op.contains("annotation") &&
-        right_op["annotation"].contains("id") &&
-        right_op["annotation"]["id"].is_string())
-        type = right_op["annotation"]["id"];
-    }
+      type = operand_annotation_type(find_annotated_assign(
+        rhs["id"], body.contains("body") ? body["body"] : ast_["body"]));
 
     if (
       type.empty() && stmt.contains("value") && stmt["value"].contains("op") &&
@@ -1778,6 +1765,22 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
   }
 
   return promote_to_float_operand(stmt, type);
+}
+
+/// The type a declaration's annotation names, or empty. A `list[T]` or
+/// `tuple[...]` gives its base: the result of `+` or `*` on one keeps the
+/// container but not its element types.
+template <class Json>
+std::string python_annotation<Json>::operand_annotation_type(const Json &decl)
+{
+  if (decl.empty() || !decl.contains("annotation"))
+    return "";
+  const Json &annotation = decl["annotation"];
+  if (annotation.contains("id") && annotation["id"].is_string())
+    return annotation["id"];
+  const std::string base = json_utils::get_annotation_type_name(annotation);
+  const std::string base_name = base.substr(0, base.find('['));
+  return base_name == "list" || base_name == "tuple" ? base_name : "";
 }
 
 /// Whether `operand` is a NumPy array: a constructor or sized random call, or
@@ -2135,10 +2138,12 @@ std::string python_annotation<Json>::get_function_return_type(
           func_info.return_type_.empty() ||
           func_info.return_type_ == "NoneType")
         {
-          // It might be a class constructor (__init__ returns None)
-          // Return the class name as the type
+          // A class constructor (__init__ returns None) gives the class; a
+          // function of unknown return type is no type at all (#8980).
           functions_in_analysis_.erase(func_name);
-          return func_name;
+          return module->get_class(func_name).name_.empty()
+                   ? func_info.return_type_
+                   : func_name;
         }
 
         functions_in_analysis_.erase(func_name);
@@ -5409,6 +5414,77 @@ void python_annotation<Json>::preprocess_method_calls(const Json &node)
   }
 }
 
+/// The FunctionDef of @p method in module-level class @p cls, or null.
+template <class Json>
+Json *
+python_annotation<Json>::class_method(const std::string &cls, const Json &method)
+{
+  for (Json &class_node : ast_["body"])
+    if (class_node["_type"] == "ClassDef" && class_node["name"] == cls)
+      for (Json &member : class_node["body"])
+        if (member["_type"] == "FunctionDef" && member["name"] == method)
+          return &member;
+  return nullptr;
+}
+
+/// Types the unannotated parameters of a method from its `obj.m(args)` calls
+/// at module level, where `obj` is a name bound once to an instance of a
+/// module class, when every such call passes one type (#8923). Calls inside a
+/// def are skipped: this pass has no scope to resolve their receiver in.
+template <class Json>
+void python_annotation<Json>::preprocess_receiver_method_calls()
+{
+  std::map<std::pair<Json *, size_t>, std::set<std::string>> seen;
+  std::function<void(const Json &)> walk = [&](const Json &node) {
+    if (node.is_array())
+    {
+      for (const Json &item : node)
+        walk(item);
+      return;
+    }
+    if (!node.is_object())
+      return;
+    const std::string kind = node.value("_type", "");
+    if (kind == "FunctionDef" || kind == "ClassDef" || kind == "Lambda")
+      return;
+    const Json &func = node.value("func", Json());
+    if (
+      kind == "Call" && func.value("_type", "") == "Attribute" &&
+      func["value"].value("_type", "") == "Name" &&
+      !is_rebound_in_scope(func["value"]["id"].template get<std::string>()))
+    {
+      for (const std::string &cls :
+           get_class_ancestors(get_argument_type(func["value"])))
+        if (Json *method = class_method(cls, func["attr"]))
+        {
+          // A static or class method has no `self` to skip.
+          if (!(*method)["decorator_list"].empty())
+            break;
+          const Json &params = (*method)["args"]["args"];
+          for (size_t i = 1; i < params.size(); ++i)
+            seen[{method, i}].insert(
+              i - 1 < node["args"].size()
+                ? get_argument_type(node["args"][i - 1])
+                : std::string());
+          break;
+        }
+    }
+    for (const auto &kv : node.items())
+      if (kv.value().is_structured())
+        walk(kv.value());
+  };
+  walk(ast_["body"]);
+
+  for (const auto &[key, types] : seen)
+  {
+    Json &param = (*key.first)["args"]["args"][key.second];
+    if (
+      types.size() == 1 && !types.begin()->empty() &&
+      param.value("annotation", Json()).is_null())
+      add_parameter_annotation(param, *types.begin());
+  }
+}
+
 /// Infer unannotated parameter types of top-level functions from the
 /// argument types at every plain `f(arg1, arg2)` call site (i.e.
 /// `Call.func._type == "Name"`). Method calls on instances and class
@@ -5619,6 +5695,7 @@ void python_annotation<Json>::add_type_annotation()
   inherited_init_args_.clear();
   // Also preprocess method calls on temporary instances: A().method(args)
   preprocess_method_calls(ast_);
+  preprocess_receiver_method_calls();
   // Preprocess top-level function calls f(arg) so unannotated parameters of
   // top-level functions inherit a type from their callers. Runs after the
   // constructor pass so `f(SharedResource())` resolves through the

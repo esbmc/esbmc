@@ -1,6 +1,7 @@
 #pragma once
 
 #include <unordered_set>
+#include <vector>
 #include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
@@ -27,7 +28,9 @@ public:
     return attrs_;
   }
 
-  const std::unordered_set<std::string> &bases() const
+  /// In declaration order: the first base's fields must lead the derived
+  /// struct, since a base method receives the derived instance as its self.
+  const std::vector<std::string> &bases() const
   {
     return bases_;
   }
@@ -36,5 +39,5 @@ private:
   std::string name_;
   std::unordered_set<std::string> methods_;
   std::unordered_set<std::string> attrs_;
-  std::unordered_set<std::string> bases_;
+  std::vector<std::string> bases_;
 };

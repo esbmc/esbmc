@@ -101,8 +101,11 @@ bool python_class_builder::get_bases(struct_typet &st)
     ids.emplace_back(bsym->id);
 
     const auto &bty = static_cast<const struct_typet &>(bsym->get_type());
+    // Bases sharing an ancestor (a diamond) each carry its attributes, which
+    // name one slot of the instance.
     for (const auto &c : bty.components())
-      st.components().push_back(c);
+      if (!st.has_component(c.get_name()))
+        st.components().push_back(c);
   }
   return has_ud;
 }

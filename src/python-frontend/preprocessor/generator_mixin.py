@@ -1878,7 +1878,19 @@ class GeneratorMixin:
                 and node.func.id in ("abs", "len") and len(node.args) == 1 and not node.keywords):
             return self._apply_builtin(node.func.id,
                                        self._eval_key_body(node.args[0], param, element))
-        return None
+        return self._const_dict_entry(node, param, element)
+
+    def _const_dict_entry(self, node, param, element):
+        """Constant value of ``param["k"]`` over a dict literal of constants, else None."""
+        if not (isinstance(element, ast.Dict) and isinstance(node, ast.Subscript)
+                and isinstance(node.value, ast.Name) and node.value.id == param
+                and isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, str)):
+            return None
+        keys = [None if k is None else self._const_scalar_value(k) for k in element.keys]
+        values = [self._const_element_value(v) for v in element.values]
+        if None in keys or None in values or node.slice.value not in keys:
+            return None
+        return dict(zip(keys, values))[node.slice.value]
 
     @staticmethod
     def _param_subscript_index(node, param):

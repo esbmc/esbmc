@@ -42,11 +42,41 @@ list_elem_info python_list::get_tagged_element_info(
   return tagged_info;
 }
 
+// The pointer p in `(*p).type_id == ...`, the condition of the read that
+// extract_pyobject_value builds for a list element of erased (any) type; nil
+// when \p key has no such condition.
+static exprt any_element_object(const exprt &key)
+{
+  if (key.type() != any_type() || key.id() != "if" || key.op0().id() != "=")
+    return nil_exprt();
+  const exprt &type_id = key.op0().op0();
+  if (
+    type_id.id() != "member" || type_id.component_name() != "type_id" ||
+    type_id.op0().id() != "dereference")
+    return nil_exprt();
+  return type_id.op0().op0();
+}
+
 list_elem_info
 python_list::get_lookup_key_info(const nlohmann::json &op, const exprt &key)
 {
   if (converter_.get_type_handler().is_tagged_scalar_type(key.type()))
     return get_tagged_element_info(op, key);
+  return get_erased_key_info(op, key);
+}
+
+list_elem_info
+python_list::get_erased_key_info(const nlohmann::json &op, const exprt &key)
+{
+  // Hashing the erased void* type would match no stored key (#8913); the
+  // element carries its own type_id, value and size, as a stored key does.
+  // The exact rebuild keeps a user conditional with a similar shape out.
+  const exprt obj = any_element_object(key);
+  if (
+    obj.is_not_nil() &&
+    key == extract_pyobject_value(obj, any_type(), false, /*string_safe=*/true))
+    return get_tagged_element_info(
+      op, build_dereference(obj, obj.type().subtype()));
   return get_list_element_info(op, key);
 }
 

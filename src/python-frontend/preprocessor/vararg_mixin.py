@@ -25,6 +25,64 @@ class VarargMixin:
             if isinstance(stmt, ast.FunctionDef) and bind_counts.get(stmt.name) == 1
         }
 
+    def _scan_vararg_alias_calls(self, module):
+        """Map each call through a module-level alias of a variadic def to the def.
+
+        `f = my_sum` qualifies when it is a statement of the module body below
+        the def and both names are bound once in the whole module, so a call of
+        `f` below it calls `my_sum` (#8959). A star import can rebind either
+        name unseen, and another module can import the alias, so only the entry
+        module without star imports qualifies.
+        """
+        self._vararg_alias_stmts = []
+        if not self.is_entry_module or self._has_star_import(module):
+            return {}
+        variadic = set()
+        calls = {}
+        for index, stmt in enumerate(module.body):
+            if isinstance(stmt, ast.FunctionDef) and stmt.args.vararg:
+                if stmt.name in self._vararg_once_bound:
+                    variadic.add(stmt.name)
+                continue
+            alias = self._vararg_alias_name(stmt, variadic)
+            if alias is None:
+                continue
+            self._vararg_alias_stmts.append(stmt)
+            for node in (n for s in module.body[index + 1:] for n in ast.walk(s)):
+                if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                        and node.func.id == alias):
+                    calls[node] = stmt.value.id
+        return calls
+
+    @staticmethod
+    def _has_star_import(module):
+        return any(
+            isinstance(node, ast.ImportFrom) and any(a.name == "*" for a in node.names)
+            for node in ast.walk(module))
+
+    def _vararg_alias_name(self, stmt, variadic):
+        """The name `stmt` binds once to one of the `variadic` defs, or None."""
+        if not (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1):
+            return None
+        alias, value = stmt.targets[0], stmt.value
+        if (isinstance(alias, ast.Name) and isinstance(value, ast.Name) and value.id in variadic
+                and alias.id in self._vararg_once_bound):
+            return alias.id
+        return None
+
+    def _resolve_vararg_alias_call(self, node):
+        name = self._vararg_alias_calls.get(node)
+        if name is not None:
+            node.func = ast.copy_location(ast.Name(id=name, ctx=ast.Load()), node.func)
+
+    def _drop_unused_vararg_aliases(self, module):
+        """Drop an alias no call reads any more, so it keeps no variadic def alive."""
+        module.body = [
+            stmt for stmt in module.body
+            if not any(stmt is alias for alias in self._vararg_alias_stmts) or self._name_is_used(
+                [other for other in module.body if other is not stmt], stmt.targets[0].id)
+        ]
+
     def _enter_vararg_scope(self, node):
         """Open the scope of `node`, returning the def table to restore on exit.
 
@@ -417,11 +475,14 @@ class VarargMixin:
         parents = {}
         bind_counts = {}
         unsafe = set()
+        calls_to = {}
         for node in ast.walk(module):
             for child in ast.iter_child_nodes(node):
                 parents[child] = node
             for bound in self._bound_names(node):
                 bind_counts[bound] = bind_counts.get(bound, 0) + 1
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                calls_to.setdefault(node.func.id, []).append(node)
         len_bound = "len" in bind_counts
         for node, parent in parents.items():
             if not isinstance(node, ast.Name) or not isinstance(node.ctx, ast.Load):
@@ -436,7 +497,60 @@ class VarargMixin:
             for index, stmt in enumerate(scope.body):
                 self._record_fixed_length_starred(stmt, scope.body[index + 1:], bind_counts, unsafe,
                                                   fixed)
+        for scope in defs:
+            fixed.update(
+                self._fixed_length_starred_params(scope, calls_to.get(scope.name, []), parents,
+                                                  bind_counts, unsafe))
         return fixed
+
+    def _fixed_length_starred_params(self, scope, calls, parents, bind_counts, unsafe):
+        """Map each `g(..., *p)` on a parameter p of `scope` that every one of
+        its `calls` passes the same kind and length of display for (#8959).
+
+        Every read of the def's name must be one of those calls, so it is never
+        called through another name. A list at one call and a tuple at another
+        give p no single type, and `g` must be bound once, since the frontend
+        binds a call by its callee's bare name.
+        """
+        fixed = {}
+        if not self._called_only_by(scope, calls, parents, bind_counts):
+            return fixed
+        for index, param in enumerate(scope.args.posonlyargs + scope.args.args):
+            displays = {self._passed_display(call, index) for call in calls}
+            if len(displays) != 1 or None in displays:
+                continue
+            (_, length), = displays
+            if length is None or param.arg in unsafe or bind_counts.get(param.arg) != 1:
+                continue
+            fixed.update(
+                dict.fromkeys(self._starred_reads(scope, param.arg, parents, bind_counts), length))
+        return fixed
+
+    @staticmethod
+    def _called_only_by(scope, calls, parents, bind_counts):
+        """Whether `scope` is bound once and read only as the callee of `calls`."""
+        loads = sum(
+            isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load) and n.id == scope.name
+            for n in parents)
+        return (not scope.decorator_list and calls and loads == len(calls)
+                and bind_counts.get(scope.name) == 1)
+
+    @staticmethod
+    def _starred_reads(scope, name, parents, bind_counts):
+        """Each `*name` in `scope` passed to a callee bound once."""
+        return [
+            node for node in (n for stmt in scope.body for n in ast.walk(stmt))
+            if isinstance(node, ast.Starred) and isinstance(node.value, ast.Name)
+            and node.value.id == name and isinstance(parents[node].func, ast.Name)
+            and bind_counts.get(parents[node].func.id) == 1
+        ]
+
+    def _passed_display(self, call, index):
+        """The kind and length of the display `call` passes at `index`, or None."""
+        if call.keywords or index >= len(call.args) or any(
+                isinstance(arg, ast.Starred) for arg in call.args):
+            return None
+        return type(call.args[index]), self._sequence_display_length(call.args[index])
 
     def _record_fixed_length_starred(self, stmt, later, bind_counts, unsafe, fixed):
         if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:

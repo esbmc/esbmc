@@ -223,11 +223,22 @@ public:
    *
    * @note For nested dicts, the expected_type must be the complete dict type.
    *       This enables type-safe retrieval with proper hash validation.
+   *
+   * @param check_type Assert that the stored value has expected_type, for an
+   *        expected_type inferred from records a later store may not update.
    */
   exprt handle_dict_subscript(
     const exprt &dict_expr,
     const nlohmann::json &slice_node,
-    const typet &expected_type = typet());
+    const typet &expected_type = typet(),
+    bool check_type = false);
+
+  /// When @p enabled, assert that the PyObject @p obj holds a value of @p type.
+  void check_value_type(
+    bool enabled,
+    const exprt &obj,
+    const typet &type,
+    const locationt &location);
 
   /**
    * @brief Handles dictionary subscript assignment (e.g., `dict['key'] =
@@ -389,6 +400,11 @@ public:
    * @param dict_expr The dictionary expression (must be a symbol)
    */
   typet recorded_tuple_value_type(const exprt &dict_expr) const;
+
+  /// The scalar or str value type shared by every dict literal recorded as an
+  /// element of list @p list_id; empty when an element is not one, the types
+  /// differ, or the type is an aggregate.
+  typet uniform_list_dict_value_type(const std::string &list_id) const;
 
   /**
    * @brief Check and handle dictionary subscript assignment

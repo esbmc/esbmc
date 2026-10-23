@@ -553,6 +553,33 @@ typet python_dict_handler::recorded_tuple_value_type(
            : static_cast<typet>(empty_typet());
 }
 
+typet python_dict_handler::uniform_list_dict_value_type(
+  const std::string &list_id) const
+{
+  const element_type_registry &registry =
+    converter_.get_element_type_registry();
+  const element_type_registry::entries *dicts = registry.find(list_id);
+  if (!dicts)
+    return empty_typet();
+
+  typet value_type;
+  for (const auto &dict : *dicts)
+  {
+    const std::string &vals_id = get_internal_list_id(dict.first, false);
+    const typet uniform =
+      vals_id.empty()
+        ? typet()
+        : registry.uniform_element_type(vals_id, type_slot::dict_value_types);
+    if (uniform == typet() || (value_type != typet() && uniform != value_type))
+      return empty_typet();
+    value_type = uniform;
+  }
+  // Aggregates share the empty type name, so their type_id cannot be checked.
+  return type_handler_.type_to_string(value_type).empty()
+           ? static_cast<typet>(empty_typet())
+           : value_type;
+}
+
 typet python_dict_handler::get_dict_key_type_from_annotation(
   const nlohmann::json &annotation_node)
 {

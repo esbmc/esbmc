@@ -367,11 +367,61 @@ def _is_submodule_import(package_name: str, name: str) -> bool:
     return spec is not None and _module_filename(spec.origin) is not None
 
 
+def _reexport_origin(module_name: str, name: str) -> tuple[str, str] | None:
+    """The (module, name) that `module_name` binds `name` to with a top-level `from` import.
+
+    Only the last such import counts, and only when `name` still holds what
+    it imported once the module has run.
+    """
+    if _is_imported_model(_base_module_name(module_name)):
+        return None
+    try:
+        module = importlib.import_module(module_name)
+        filename = _module_filename(module)
+        if filename is None:
+            return None
+        with open(filename, "r", encoding="utf-8") as f:
+            body = ast.parse(f.read()).body
+        node, alias = next((stmt, a) for stmt in reversed(body) if isinstance(stmt, ast.ImportFrom)
+                           for a in stmt.names if (a.asname or a.name) == name)
+        origin = importlib.util.resolve_name("." * node.level + (node.module or ""),
+                                             module.__package__)
+        value = getattr(module, name)
+        if (origin == module_name or isinstance(value, ModuleType)
+                or getattr(importlib.import_module(origin), alias.name) is not value):
+            return None
+        return origin, alias.name
+    except Exception:  # pylint: disable=broad-except
+        # Not importable, no such import, or not what `name` holds at run time.
+        return None
+
+
+def _reexport_imports(node: ast.ImportFrom) -> dict[ast.alias, ast.stmt]:
+    """Map each name `node` takes from a module that re-exports it to an import from its origin."""
+    imports: dict[ast.alias, ast.stmt] = {}
+    for alias in node.names:
+        origin = (node.module, alias.name)
+        seen = {origin}
+        while (step := _reexport_origin(*origin)) and step not in seen:
+            seen.add(step)
+            origin = step
+        module, name = origin
+        if module != node.module:
+            asname = alias.asname or (None if name == alias.name else alias.name)
+            imports[alias] = ast.copy_location(
+                ast.ImportFrom(
+                    module=module,
+                    names=[ast.copy_location(ast.alias(name=name, asname=asname), alias)],
+                    level=0), node)
+    return imports
+
+
 class _SubmoduleImportSplitter(ast.NodeTransformer):
     """Rewrite `from pkg import mod` to `import pkg.mod as mod` for a submodule `mod`.
 
     The converter binds a module only through an `import` alias, so the
-    `from` form leaves `mod` undefined (#8375).
+    `from` form leaves `mod` undefined (#8375). A name `pkg` re-exports is
+    likewise imported from the module that defines it (#8962).
     """
 
     def visit_ImportFrom(  # pylint: disable=invalid-name,missing-function-docstring
@@ -381,8 +431,6 @@ class _SubmoduleImportSplitter(ast.NodeTransformer):
         submodules = [
             a for a in node.names if a.name != '*' and _is_submodule_import(node.module, a.name)
         ]
-        if not submodules:
-            return node
         imports: list[ast.stmt] = [
             ast.copy_location(
                 ast.Import(names=[
@@ -390,8 +438,9 @@ class _SubmoduleImportSplitter(ast.NodeTransformer):
                         ast.alias(name=f"{node.module}.{a.name}", asname=a.asname or a.name), a)
                 ]), node) for a in submodules
         ]
-        node.names = [a for a in node.names if a not in submodules]
-        return ([node] if node.names else []) + imports
+        reexports = _reexport_imports(node)
+        node.names = [a for a in node.names if a not in submodules and a not in reexports]
+        return ([node] if node.names else []) + list(reexports.values()) + imports
 
 
 def split_submodule_imports(tree: ast.AST) -> None:
