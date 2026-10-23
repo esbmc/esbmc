@@ -7402,7 +7402,7 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
         converter_.current_block->copy_to_operands(tmp_assign);
         arg = build_symbol(tmp);
       }
-      reject_numpy_layout_mismatch(arg.type(), params, param_idx);
+      reject_numpy_layout_mismatch(arg.type(), *func_symbol, param_idx);
       call.arguments().push_back(array_argument_address(arg));
     }
     else
@@ -7446,13 +7446,18 @@ void function_call_expr::reject_list_for_numpy_parameter(
 }
 
 // A numpy array passed where its parameter was typed from another call site
-// would be read through the wrong element type or row length.
+// would be read through the wrong element type or row length. C models take
+// flat element pointers by design.
 void function_call_expr::reject_numpy_layout_mismatch(
   const typet &arg_type,
-  const code_typet::argumentst &params,
+  const symbolt &callee,
   size_t param_idx) const
 {
-  if (param_idx >= params.size() || !params[param_idx].type().is_pointer())
+  const code_typet::argumentst &params =
+    to_code_type(callee.get_type()).arguments();
+  if (
+    callee.mode != "Python" || param_idx >= params.size() ||
+    !params[param_idx].type().is_pointer())
     return;
   const typet &param_type = params[param_idx].type();
   typet leaf = arg_type;

@@ -1012,7 +1012,7 @@ private:
   raise_positional_oversupply(const symbolt &func_symbol) const;
   void reject_numpy_layout_mismatch(
     const typet &arg_type,
-    const code_typet::argumentst &params,
+    const symbolt &callee,
     size_t param_idx) const;
   void reject_list_for_numpy_parameter(
     const typet &arg_type,
