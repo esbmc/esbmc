@@ -67,7 +67,7 @@ public:
   }
 
   // Entry points exercised by callers outside python_annotation.h.
-  void preprocess_constructor_calls(const Json &node);
+  bool preprocess_constructor_calls(Json &node);
   void preprocess_method_calls(const Json &node);
   void preprocess_receiver_method_calls();
   Json *class_method(const std::string &cls, const Json &method);
