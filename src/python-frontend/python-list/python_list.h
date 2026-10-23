@@ -809,6 +809,9 @@ public:
   exprt
   build_tuple_copy_call(const exprt &src_list, const nlohmann::json &element);
 
+  /// Mark `list` as built by tuple(x) (#8777).
+  void build_mark_tuple_call(const exprt &list);
+
   /// Whether `list` was built by tuple(x) (#8777).
   exprt build_is_tuple_call(const exprt &list);
 
