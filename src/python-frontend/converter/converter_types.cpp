@@ -433,6 +433,11 @@ typet python_converter::get_optional_type(const nlohmann::json &slice)
   return optional_container_type(slice);
 }
 
+static bool names_list_annotation(const std::string &name)
+{
+  return name == "list" || name == "List" || name == "Sequence";
+}
+
 typet python_converter::get_type_from_annotation(
   const nlohmann::json &annotation_node,
   const nlohmann::json &element)
@@ -503,7 +508,7 @@ typet python_converter::get_type_from_annotation(
 
     std::string value_id = get_value_id();
 
-    if (value_id == "list" || value_id == "List" || value_id == "Sequence")
+    if (names_list_annotation(value_id))
       return type_handler_.get_list_type();
 
     if (value_id == "dict" || value_id == "Dict")
