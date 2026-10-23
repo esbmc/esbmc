@@ -3027,6 +3027,8 @@ private:
     const exprt &lhs,
     const exprt &rhs,
     const nlohmann::json &element);
+  exprt
+  numpy_float_remainder(const exprt &x, const exprt &y, const typet &type);
   exprt numpy_element_op(
     const std::string &op,
     const exprt &x,

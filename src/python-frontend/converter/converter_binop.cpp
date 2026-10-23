@@ -2934,6 +2934,28 @@ static std::string bitwise_ufunc(const std::string &op)
   return names.at(op);
 }
 
+// NumPy's npy_divmod remainder: fmod moved to the divisor's sign, a zero of
+// the divisor's sign when it is exact; a zero divisor keeps fmod's NaN.
+exprt python_converter::numpy_float_remainder(
+  const exprt &x,
+  const exprt &y,
+  const typet &type)
+{
+  const nlohmann::json no_node;
+  const exprt mod = cast_to(math_handler_.handle_fmod(x, y, no_node), type);
+  const exprt zero = gen_zero(type);
+  const exprt other_sign = python_expr::build_xor(
+    python_expr::build_less_than(y, zero),
+    python_expr::build_less_than(mod, zero));
+  const exprt signed_zero =
+    cast_to(math_handler_.handle_copysign(zero, y, no_node), type);
+  return python_expr::build_if(
+    python_expr::build_equal(mod, zero),
+    signed_zero,
+    python_expr::build_if(
+      other_sign, python_expr::build_add(mod, y, type), mod));
+}
+
 // `x op y` for one element pair, both already of `type`. Integer `//` and
 // `%` by zero give 0, as NumPy does (with a warning, not an exception).
 exprt python_converter::numpy_element_op(
@@ -2945,16 +2967,7 @@ exprt python_converter::numpy_element_op(
   if (op == "Pow")
     return cast_to(math_handler_.handle_power(x, y), type);
   if (op == "Mod" && type.is_floatbv())
-  {
-    // The remainder takes the divisor's sign: x - floor(x / y) * y; a zero
-    // divisor gives NaN through the infinite quotient.
-    exprt quotient(python_frontend::map_operator("Div", type), type);
-    quotient.copy_to_operands(x, y);
-    const exprt floored =
-      cast_to(math_handler_.handle_floor_division(x, y, quotient), type);
-    return python_expr::build_sub(
-      x, python_expr::build_mul(floored, y, type), type);
-  }
+    return numpy_float_remainder(x, y, type);
   exprt raw(python_frontend::map_operator(op, type), type);
   raw.copy_to_operands(x, y);
   if (op == "FloorDiv")
