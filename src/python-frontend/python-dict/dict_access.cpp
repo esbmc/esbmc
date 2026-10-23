@@ -25,6 +25,54 @@ void python_dict_handler::check_value_type(
   converter_.add_instruction(check);
 }
 
+/// Whether a read of @p dict_expr, whose recorded values are @p entries,
+/// yields the stored item as a tagged scalar: every value is tagged, or one
+/// is a string where the written `dict[K, V]` annotation has a number V, or
+/// the reverse. The latter is read like an element of a list mixing strings
+/// and numbers (#4797): its type_id, not V, then answers isinstance.
+bool python_dict_handler::reads_value_as_tagged(
+  const exprt &dict_expr,
+  const element_type_registry::entries &entries)
+{
+  if (
+    std::all_of(
+      entries.begin(),
+      entries.end(),
+      [this](const element_type_registry::entry &e) {
+        return type_handler_.is_tagged_scalar_type(e.second);
+      }))
+    return true;
+  const symbolt *sym = symbol_table_.find_symbol(dict_expr.identifier());
+  if (!sym)
+    return false;
+  const nlohmann::json var_decl = json_utils::find_var_decl(
+    sym->name.as_string(),
+    converter_.get_current_func_name(),
+    converter_.get_ast_json());
+  // The preprocessor's guess from a literal's first value is no annotation.
+  if (
+    var_decl.empty() || var_decl.value("_inferred_annotation", false) ||
+    !var_decl.contains("annotation") ||
+    !var_decl["annotation"].contains("slice"))
+    return false;
+  auto kind = [](const typet &t) {
+    if (type_utils::is_string_type(t))
+      return 's';
+    return t.is_signedbv() || t.is_unsignedbv() || t.is_floatbv() || t.is_bool()
+             ? 'n'
+             : '\0';
+  };
+  const char annotated =
+    kind(get_dict_value_type_from_annotation(var_decl["annotation"]));
+  return annotated && std::any_of(
+                        entries.begin(),
+                        entries.end(),
+                        [&](const element_type_registry::entry &e) {
+                          const char stored = kind(e.second);
+                          return stored && stored != annotated;
+                        });
+}
+
 exprt python_dict_handler::handle_dict_subscript(
   const exprt &dict_expr,
   const nlohmann::json &slice_node,
@@ -204,12 +252,7 @@ exprt python_dict_handler::handle_dict_subscript(
           vals_id, type_slot::dict_value_types);
       if (
         entries && !entries->empty() &&
-        std::all_of(
-          entries->begin(),
-          entries->end(),
-          [this](const element_type_registry::entry &e) {
-            return type_handler_.is_tagged_scalar_type(e.second);
-          }))
+        reads_value_as_tagged(dict_expr, *entries))
         // element_type was resolved to the struct above; is_tagged_scalar_type
         // matches on the symbol_typet identity instead.
         return build_dereference(
