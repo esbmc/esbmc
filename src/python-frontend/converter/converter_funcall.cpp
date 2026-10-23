@@ -1859,7 +1859,10 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
           arg_node["_type"] == "UnaryOp" && arg_node["op"]["_type"] == "USub" &&
           arg_node["operand"]["_type"] == "Constant" &&
           arg_node["operand"].contains("_bigint");
-        if (arg_is_bigint || usub_operand_is_bigint)
+        // The callee would see a bytes literal as a str (see
+        // contains_bytes_literal in python_consteval.cpp).
+        const bool arg_is_bytes = arg_node.contains("encoded_bytes");
+        if (arg_is_bigint || usub_operand_is_bigint || arg_is_bytes)
         {
           all_const = false;
           break;

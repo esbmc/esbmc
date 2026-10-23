@@ -870,14 +870,17 @@ std::optional<size_t> get_list_arg0_size(const nlohmann::json &call)
   return arg0["elts"].size();
 }
 
-// A statically-known byte length for a single return expression:
-// nondet_bytes(N) or bytes(N) with a constant N, or a bytes([...]) literal
-// (sized by element count). Anything else (a variable, a slice, string
+// A statically-known byte length for a single return expression: a b"..."
+// literal, nondet_bytes(N) or bytes(N) with a constant N, or a bytes([...])
+// literal (sized by element count). Anything else (a variable, a slice, string
 // decoding, ...) returns nullopt -- the fixed-size array representation for
 // bytes needs a concrete size, and there is no general way to derive one from
 // an arbitrary expression.
 std::optional<size_t> try_get_constant_bytes_length(const nlohmann::json &val)
 {
+  if (val.is_object() && val.contains("encoded_bytes"))
+    return base64_decode(val["encoded_bytes"].get<std::string>()).size();
+
   if (!val.is_object() || val.value("_type", std::string()) != "Call")
     return std::nullopt;
 
@@ -900,7 +903,8 @@ std::optional<size_t> try_get_constant_bytes_length(const nlohmann::json &val)
 }
 
 // Updates `result`/`ambiguous` from a single statement, if it is a `Return`
-// whose value has a statically-known bytes length.
+// with a value. A value of unknown length makes the size ambiguous: sizing the
+// return type from the other returns would truncate it.
 static void record_bytes_return_length(
   const nlohmann::json &stmt,
   std::optional<size_t> &result,
@@ -912,10 +916,7 @@ static void record_bytes_return_length(
     return;
 
   auto len = try_get_constant_bytes_length(stmt["value"]);
-  if (!len)
-    return;
-
-  if (result && *result != *len)
+  if (!len || (result && *result != *len))
     ambiguous = true;
   else
     result = len;
@@ -937,7 +938,7 @@ static void for_each_nested_block(
 }
 
 // The concrete bytes length for a `-> bytes` function, inferred from every
-// return statement in 'body'. nullopt when no return yields a statically known
+// return statement in 'body'. nullopt when a return has no statically known
 // length, or when two returns disagree on it -- a fixed-size array cannot
 // encode a length that varies at runtime, so the caller rejects the function
 // cleanly rather than guessing a size.

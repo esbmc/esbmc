@@ -203,12 +203,27 @@ static bool body_has_control_flow(const nlohmann::json &body)
   return body_has_stmt_kind(body, {"If", "For", "While"});
 }
 
+// PyConstValue has no bytes kind: a bytes literal evaluates to the str of its
+// text, so b"ab"[0] would fold to "a" instead of 97. Expression-level folds
+// of bytes methods rely on that, but a user function returning or receiving
+// bytes must not be folded to a str.
+static bool contains_bytes_literal(const nlohmann::json &node)
+{
+  if (node.is_object() && node.contains("encoded_bytes"))
+    return true;
+  if (node.is_object() || node.is_array())
+    for (const auto &child : node)
+      if (contains_bytes_literal(child))
+        return true;
+  return false;
+}
+
 std::optional<PyConstValue> python_consteval::try_eval_call(
   const std::string &func_name,
   const std::vector<PyConstValue> &args)
 {
   const nlohmann::json *func_node = find_function(func_name);
-  if (!func_node)
+  if (!func_node || contains_bytes_literal(*func_node))
     return std::nullopt;
 
   // Don't fold functions whose bodies carry independently-verifiable
@@ -1926,6 +1941,8 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
     }
 
     // User-defined function call — recurse
+    if (contains_bytes_literal(node["args"]))
+      return std::nullopt;
     std::vector<PyConstValue> args;
     for (const auto &arg_node : node["args"])
     {
