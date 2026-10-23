@@ -1,0 +1,4 @@
+regression/python/github_9036_dict_literal_int
+regression/python/github_9036_dict_literal_int_fail
+regression/python/github_9036_dict_literal_direct
+regression/python/github_9036_dict_literal_mixed
