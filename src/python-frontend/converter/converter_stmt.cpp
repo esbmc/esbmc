@@ -1265,9 +1265,6 @@ void python_converter::handle_assignment_type_adjustments(
 
   rhs = wrap_stored_if_optional(rhs, lhs.type());
 
-  if (store_optional_str(lhs_symbol, lhs, rhs))
-    return;
-
   // Assigning to a struct member (self.attr = value): an unannotated parameter
   // is typed as the any-type carrier (void*, i.e. a pointer whose subtype is
   // empty) but holds an integer value round-tripped as (int*)n. Writing that
@@ -1536,7 +1533,7 @@ bool python_converter::settle_target_type(
     throw std::runtime_error(
       "Unsupported: a variable holding a class rebound to a value that is not "
       "one");
-  return false;
+  return store_optional_str(lhs_symbol, lhs, rhs);
 }
 
 // Whether `value` names classes only: a class, or a conditional between
