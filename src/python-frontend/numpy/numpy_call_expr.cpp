@@ -29,6 +29,7 @@
 #include <limits>
 #include <numeric>
 #include <ostream>
+#include <unordered_set>
 
 const char *kConstant = "Constant";
 const char *kName = "Name";
@@ -5429,26 +5430,17 @@ nlohmann::json numpy_call_expr::linspace_literal(
 
 bool numpy_call_expr::is_math_function() const
 {
-  const std::string &function = function_id_.get_function();
-  return function == "add" || function == "subtract" ||
-         function == "multiply" ||
-         (function == "divide" || function == "power" || function == "ceil" ||
-          function == "floor" || function == "fabs" || function == "sin" ||
-          function == "cos" || function == "exp" || function == "fmod" ||
-          function == "sqrt" || function == "fmin") ||
-         function == "fmax" || function == "trunc" || function == "round" ||
-         function == "arccos" || function == "arcsin" ||
-         function == "copysign" || function == "arctan" || function == "tan" ||
-         function == "log" || function == "log2" || function == "log10" ||
-         function == "sinh" || function == "cosh" || function == "tanh" ||
-         function == "rint" || function == "remainder" ||
-         function == "nextafter" || function == "modf" || function == "frexp" ||
-         function == "isclose" || function == "dot" ||
-         function == "transpose" || function == "det" || function == "matmul" ||
-         function == "inv" || function == "solve" || function == "norm" ||
-         function == "eig" || function == "eigvals" || function == "svd" ||
-         function == "real" || function == "imag" || function == "conj" ||
-         function == "conjugate" || function == "angle" || function == "abs";
+  static const std::unordered_set<std::string> functions = {
+    "add",       "subtract", "multiply", "divide",  "power", "ceil",
+    "floor",     "fabs",     "sin",      "cos",     "exp",   "fmod",
+    "sqrt",      "fmin",     "fmax",     "trunc",   "round", "arccos",
+    "arcsin",    "copysign", "arctan",   "tan",     "log",   "log2",
+    "log10",     "sinh",     "cosh",     "tanh",    "rint",  "remainder",
+    "nextafter", "modf",     "frexp",    "isclose", "dot",   "transpose",
+    "det",       "matmul",   "inv",      "solve",   "norm",  "eig",
+    "eigvals",   "svd",      "real",     "imag",    "conj",  "conjugate",
+    "angle",     "abs"};
+  return functions.count(function_id_.get_function()) != 0;
 }
 
 std::string numpy_call_expr::get_dtype() const

@@ -2830,6 +2830,20 @@ sole_local_numpy_literal(const nlohmann::json &def, const std::string &name)
   return nullptr;
 }
 
+static void record_param_type(
+  std::optional<typet> &resolved,
+  const typet &candidate,
+  const std::string &func_name,
+  size_t param_index)
+{
+  if (resolved && *resolved != candidate)
+    throw std::runtime_error(
+      "TypeError: conflicting array shapes inferred for parameter " +
+      std::to_string(param_index) + " of " + func_name +
+      "() across call sites");
+  resolved = candidate;
+}
+
 bool python_converter::try_infer_numpy_param_type(
   const std::string &func_name,
   size_t param_index,
@@ -2849,16 +2863,9 @@ bool python_converter::try_infer_numpy_param_type(
   // agree: silently keeping only the first-found shape would let a later,
   // differently-shaped call site pass its full array through a parameter
   // typed for a smaller one -- unnoticed, not just truncated.
-  bool found = false;
-  typet resolved_type;
+  std::optional<typet> resolved_type;
   auto record = [&](const typet &candidate) {
-    if (found && resolved_type != candidate)
-      throw std::runtime_error(
-        "TypeError: conflicting array shapes inferred for parameter " +
-        std::to_string(param_index) + " of " + func_name +
-        "() across call sites");
-    resolved_type = candidate;
-    found = true;
+    record_param_type(resolved_type, candidate, func_name, param_index);
   };
 
   for (const numpy_param_call_site &site : call_sites)
@@ -2928,9 +2935,9 @@ bool python_converter::try_infer_numpy_param_type(
     }
   }
 
-  if (found)
+  if (resolved_type)
   {
-    out = resolved_type;
+    out = *resolved_type;
     return true;
   }
   return false;
