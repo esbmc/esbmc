@@ -1377,17 +1377,20 @@ static bool container_is_name(const nlohmann::json &element)
   return type == "Name" || type == "Attribute";
 }
 
-/// A list, or an Optional[dict] pointer, is NULL for None: membership on it
-/// raises CPython's TypeError, and otherwise tests the container itself.
+/// A list, a str, or an Optional[dict] pointer, is NULL for None: membership
+/// on it raises CPython's TypeError, and otherwise tests the container itself.
 void python_converter::guard_none_container(
   exprt &rhs,
   typet &rhs_type,
   const nlohmann::json &element)
 {
   const typet dict_type = nullable_dict_pointee(rhs_type);
-  const bool nullable_list =
-    rhs.type() == type_handler_.get_list_type() && container_is_name(element);
-  if (dict_type.id().empty() && !nullable_list)
+  const typet &t = rhs.type();
+  const bool nullable_name =
+    (t == type_handler_.get_list_type() || t == none_type() ||
+     (t.is_pointer() && type_utils::is_string_type(t))) &&
+    container_is_name(element);
+  if (dict_type.id().empty() && !nullable_name)
     return;
 
   if (can_emit_runtime_guard())
@@ -1403,6 +1406,19 @@ void python_converter::guard_none_container(
     return;
   rhs = python_expr::build_dereference(rhs, dict_type);
   rhs_type = dict_type;
+}
+
+/// A None-typed container is folded before membership is lowered, so its
+/// TypeError guard is planted here.
+void python_converter::guard_none_typed_container(
+  const std::string &op,
+  exprt &rhs,
+  const nlohmann::json &element)
+{
+  if ((op != "In" && op != "NotIn") || rhs.type() != none_type())
+    return;
+  typet rhs_type = rhs.type();
+  guard_none_container(rhs, rhs_type, element);
 }
 
 exprt python_converter::handle_membership_operator(
@@ -1920,6 +1936,8 @@ exprt python_converter::get_binary_operator_expr(
       op, lhs, rhs, element, handle_none_check_setup(op, lhs, rhs));
     optional_result.is_not_nil())
     return optional_result;
+
+  guard_none_typed_container(op, rhs, element);
 
   if (lhs.type() == none_type() || rhs.type() == none_type())
   {
