@@ -941,10 +941,10 @@ static void collect_dict_stores(
                                      ? node["targets"]
                                      : nlohmann::json::array({node["target"]});
     for (const auto &t : targets)
-      if (
-        is_name(t, name) ||
-        (t.value("_type", "") == "Subscript" && is_name(t["value"], name)))
+      if (is_name(t, name))
         push_dict_values(node["value"], out);
+      else if (t.value("_type", "") == "Subscript" && is_name(t["value"], name))
+        out.push_back(node["value"]);
     return;
   }
   if (

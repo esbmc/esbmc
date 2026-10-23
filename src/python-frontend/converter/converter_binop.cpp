@@ -663,10 +663,13 @@ exprt python_converter::guard_operand(
 
 exprt python_converter::guard_nonfinite_float_to_int(
   exprt operand,
-  const nlohmann::json &element)
+  const nlohmann::json &element,
+  bool reject_none)
 {
+  const bool is_float = operand.type().is_floatbv();
+  const bool may_be_none = reject_none && operand.type().is_pointer();
   if (
-    !operand.type().is_floatbv() || !current_block ||
+    (!is_float && !may_be_none) || !current_block ||
     !safe_to_emit_side_effecting_statement())
     return operand;
 
@@ -674,7 +677,17 @@ exprt python_converter::guard_nonfinite_float_to_int(
     std::move(operand),
     element,
     "int_arg",
-    [this](const expr2tc &value, const locationt &loc) {
+    [this, is_float](const expr2tc &value, const locationt &loc) {
+      if (!is_float)
+      {
+        emit_guarded_raise(
+          migrate_expr_back(equality2tc(value, gen_zero(value->type))),
+          "TypeError",
+          "int() argument must be a string, a bytes-like object or a real "
+          "number, not 'NoneType'",
+          loc);
+        return;
+      }
       emit_guarded_raise(
         migrate_expr_back(isinf2tc(value)),
         "OverflowError",

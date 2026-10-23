@@ -2637,13 +2637,11 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     // that symbol so it observes the variable's current type and value.
     symbol = follow_retype_alias(symbol);
     if (!is_class_attr)
-    {
       symbol = resolve_numpy_array_storage_alias(symbol);
 
-      // Also resolve reads through a permanent tagged-object alias, if a
-      // branch join flagged this variable.
-      dynamic_type_handler_.resolve_read(symbol);
-    }
+    // Also resolve reads through a permanent tagged-object alias, if a branch
+    // join flagged this variable or class attribute.
+    dynamic_type_handler_.resolve_read(symbol);
 
     expr = symbol_expr(*symbol);
     reject_inexact_number_join(element, expr);

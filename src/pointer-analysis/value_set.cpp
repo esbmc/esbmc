@@ -1571,7 +1571,24 @@ void value_sett::assign(
     assign(xchg_sym, ifref.false_value, true);
     assign(lhs, xchg_sym, add_to_sets);
 
-    erase(to_symbol2t(xchg_sym).get_symbol_name());
+    // An aggregate temporary is stored per member, keyed by its identifier
+    // plus a suffix such as ".next" or "[]", so erasing the bare name would
+    // leave those entries behind. Each temporary has a fresh number, so they
+    // would pile up in every later state.
+    const std::string xchg_id = to_symbol2t(xchg_sym).get_symbol_name();
+    if (
+      is_struct_type(lhs->type) || is_union_type(lhs->type) ||
+      is_array_type(lhs->type))
+    {
+      std::vector<irep_idt> keys;
+      for (const auto &[key, entry] : values)
+        if (entry.identifier == xchg_id)
+          keys.push_back(key);
+      for (const irep_idt &key : keys)
+        values.erase(key);
+    }
+    else
+      erase(xchg_id);
     return;
   }
 

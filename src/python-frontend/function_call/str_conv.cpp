@@ -566,19 +566,8 @@ exprt function_call_expr::guard_nonfinite_float_to_int(
 {
   if (!base.is_nil())
     return operand;
-  return converter_.guard_nonfinite_float_to_int(std::move(operand), call_);
-}
-
-exprt function_call_expr::guard_none_to_int(exprt operand, const exprt &base)
-  const
-{
-  if (!base.is_nil())
-    return operand;
-  return converter_.guard_none_conversion(
-    std::move(operand),
-    "int() argument must be a string, a bytes-like object or a real number, "
-    "not 'NoneType'",
-    call_);
+  return converter_.guard_nonfinite_float_to_int(
+    std::move(operand), call_, true);
 }
 
 exprt function_call_expr::guard_none_to_float(exprt operand) const
