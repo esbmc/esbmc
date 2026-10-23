@@ -56,10 +56,11 @@ char python_dict_handler::annotated_value_kind(const exprt &dict_expr)
 
 /// Whether a read of @p dict_expr at @p slice_node, whose recorded values are
 /// @p entries, yields the stored item as a tagged scalar: every value is
-/// tagged, or a value that key may hold is a string where the written
+/// tagged, or the read's constant key was written a string where the written
 /// `dict[K, V]` annotation has a number V, or the reverse. The latter is read
 /// like an element of a list mixing strings and numbers (#4797): its type_id,
-/// not V, then answers isinstance.
+/// not V, then answers isinstance. A key not known statically, at the read or
+/// the write, leaves the read typed V.
 bool python_dict_handler::reads_value_as_tagged(
   const exprt &dict_expr,
   const nlohmann::json &slice_node,
@@ -75,15 +76,14 @@ bool python_dict_handler::reads_value_as_tagged(
     return true;
   const char annotated = annotated_value_kind(dict_expr);
   const std::string key = dict_key_id(slice_node);
-  return annotated &&
-         std::any_of(
-           entries.begin(),
-           entries.end(),
-           [&](const element_type_registry::entry &e) {
-             const char stored = scalar_kind(e.second);
-             return stored && stored != annotated &&
-                    (key.empty() || e.first.empty() || e.first == key);
-           });
+  return annotated && std::any_of(
+                        entries.begin(),
+                        entries.end(),
+                        [&](const element_type_registry::entry &e) {
+                          const char stored = scalar_kind(e.second);
+                          return stored && stored != annotated &&
+                                 !key.empty() && e.first == key;
+                        });
 }
 
 exprt python_dict_handler::handle_dict_subscript(
