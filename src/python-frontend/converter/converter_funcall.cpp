@@ -638,6 +638,26 @@ bool python_converter::may_be_callable(const typet &type)
          is_user_class_pointer(type) || is_user_class_struct_type(type);
 }
 
+// An argument that must not reach python_consteval as a plain constant.
+static bool blocks_constant_call_fold(const nlohmann::json &arg_node)
+{
+  // Bignum literal (issue #4642): the constant carries `_bigint` and a
+  // null `value`. Refuse to fold so the call falls back through to the
+  // normal builder, whose recursion into get_literal raises the
+  // overflow diagnostic. Without this guard the null `value` is taken
+  // as Python None below and the bignum is silently consumed.
+  const bool arg_is_bigint =
+    arg_node["_type"] == "Constant" && arg_node.contains("_bigint");
+  const bool usub_operand_is_bigint =
+    arg_node["_type"] == "UnaryOp" && arg_node["op"]["_type"] == "USub" &&
+    arg_node["operand"]["_type"] == "Constant" &&
+    arg_node["operand"].contains("_bigint");
+  // The callee would see a bytes literal as a str (see
+  // contains_bytes_literal in python_consteval.cpp).
+  const bool arg_is_bytes = arg_node.contains("encoded_bytes");
+  return arg_is_bigint || usub_operand_is_bigint || arg_is_bytes;
+}
+
 /// A call converted as a statement, as a side-effect expression: goto-convert
 /// hoists it in evaluation order (short-circuit, loop guards).
 static exprt call_as_value(const exprt &call)
@@ -1848,21 +1868,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       std::vector<PyConstValue> const_args;
       for (const auto &arg_node : element["args"])
       {
-        // Bignum literal (issue #4642): the constant carries `_bigint` and a
-        // null `value`. Refuse to fold so the call falls back through to the
-        // normal builder, whose recursion into get_literal raises the
-        // overflow diagnostic. Without this guard the null `value` is taken
-        // as Python None below and the bignum is silently consumed.
-        const bool arg_is_bigint =
-          arg_node["_type"] == "Constant" && arg_node.contains("_bigint");
-        const bool usub_operand_is_bigint =
-          arg_node["_type"] == "UnaryOp" && arg_node["op"]["_type"] == "USub" &&
-          arg_node["operand"]["_type"] == "Constant" &&
-          arg_node["operand"].contains("_bigint");
-        // The callee would see a bytes literal as a str (see
-        // contains_bytes_literal in python_consteval.cpp).
-        const bool arg_is_bytes = arg_node.contains("encoded_bytes");
-        if (arg_is_bigint || usub_operand_is_bigint || arg_is_bytes)
+        if (blocks_constant_call_fold(arg_node))
         {
           all_const = false;
           break;

@@ -187,22 +187,6 @@ static bool body_has_stmt_kind(
   return false;
 }
 
-/// Bodies carrying properties that must be verified independently: an Assert
-/// (must reach the solver) or a nested FunctionDef (closures are unmodeled).
-/// Always blocks folding, regardless of control-flow permission.
-static bool body_has_unfoldable_stmts(const nlohmann::json &body)
-{
-  return body_has_stmt_kind(body, {"Assert", "FunctionDef"});
-}
-
-/// Control flow whose branches matter for coverage/branch analysis. Blocks
-/// folding only on the conservative call-site pre-scan path (see
-/// python_consteval::allow_control_flow_).
-static bool body_has_control_flow(const nlohmann::json &body)
-{
-  return body_has_stmt_kind(body, {"If", "For", "While"});
-}
-
 // PyConstValue has no bytes kind: a bytes literal evaluates to the str of its
 // text, so b"ab"[0] would fold to "a" instead of 97. Expression-level folds
 // of bytes methods rely on that, but a user function returning or receiving
@@ -218,12 +202,46 @@ static bool contains_bytes_literal(const nlohmann::json &node)
   return false;
 }
 
+/// Bodies carrying properties that must be verified independently: an Assert
+/// (must reach the solver) or a nested FunctionDef (closures are unmodeled),
+/// and bodies handling bytes literals. Always blocks folding, regardless of
+/// control-flow permission.
+static bool body_has_unfoldable_stmts(const nlohmann::json &body)
+{
+  return body_has_stmt_kind(body, {"Assert", "FunctionDef"}) ||
+         contains_bytes_literal(body);
+}
+
+/// Control flow whose branches matter for coverage/branch analysis. Blocks
+/// folding only on the conservative call-site pre-scan path (see
+/// python_consteval::allow_control_flow_).
+static bool body_has_control_flow(const nlohmann::json &body)
+{
+  return body_has_stmt_kind(body, {"If", "For", "While"});
+}
+
+std::optional<std::vector<PyConstValue>>
+python_consteval::eval_call_args(const nlohmann::json &args, const Env &env)
+{
+  if (contains_bytes_literal(args))
+    return std::nullopt;
+  std::vector<PyConstValue> values;
+  for (const auto &arg_node : args)
+  {
+    auto arg = eval_expr(arg_node, env);
+    if (!arg)
+      return std::nullopt;
+    values.push_back(*arg);
+  }
+  return values;
+}
+
 std::optional<PyConstValue> python_consteval::try_eval_call(
   const std::string &func_name,
   const std::vector<PyConstValue> &args)
 {
   const nlohmann::json *func_node = find_function(func_name);
-  if (!func_node || contains_bytes_literal(*func_node))
+  if (!func_node)
     return std::nullopt;
 
   // Don't fold functions whose bodies carry independently-verifiable
@@ -1941,18 +1959,10 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
     }
 
     // User-defined function call — recurse
-    if (contains_bytes_literal(node["args"]))
+    auto args = eval_call_args(node["args"], env);
+    if (!args)
       return std::nullopt;
-    std::vector<PyConstValue> args;
-    for (const auto &arg_node : node["args"])
-    {
-      auto arg = eval_expr(arg_node, env);
-      if (!arg)
-        return std::nullopt;
-      args.push_back(*arg);
-    }
-
-    return try_eval_call(func_name, args);
+    return try_eval_call(func_name, *args);
   }
 
   // IfExp (ternary): x if cond else y
