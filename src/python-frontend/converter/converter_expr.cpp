@@ -1969,6 +1969,10 @@ exprt python_converter::handle_subscript_expr(const nlohmann::json &element)
   if (std::optional<exprt> early = resolve_subscript_base(element, array))
     return *early;
 
+  // Indexing char(*)[0] would select a whole array per step.
+  if (type_utils::is_optional_str_pointer(array.type()))
+    array = typecast_exprt(array, gen_pointer_type(char_type()));
+
   if (
     std::optional<exprt> folded =
       try_fold_constant_string_slice(element, array))
