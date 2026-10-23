@@ -5295,8 +5295,9 @@ Json *python_annotation<Json>::class_init(
 }
 
 template <class Json>
-void python_annotation<Json>::preprocess_constructor_calls(const Json &node)
+bool python_annotation<Json>::preprocess_constructor_calls(Json &node)
 {
+  bool annotated = false;
   if (node.is_object())
   {
     // Check if this is a constructor call
@@ -5327,20 +5328,54 @@ void python_annotation<Json>::preprocess_constructor_calls(const Json &node)
           if (inherited)
             inherited_init_args_[&param].insert(arg_type);
           else if (!arg_type.empty())
+          {
             add_parameter_annotation(param, arg_type);
+            annotated = true;
+          }
         }
       }
     }
+    // A method's parameters are what its constructor calls' arguments name.
+    const bool is_function_def =
+      node.contains("_type") && node["_type"] == "FunctionDef" &&
+      node.contains("name") && node["name"].is_string();
+    const bool is_class_def =
+      node.contains("_type") && node["_type"] == "ClassDef" &&
+      node.contains("name") && node["name"].is_string();
+    Json *saved_current = current_func;
+    Json *saved_parent = parent_func;
+    const std::string saved_ctx = current_func_name_context_;
+    const std::string saved_class = current_class_name_;
+    if (is_class_def)
+      current_class_name_ = node["name"].template get<std::string>();
+    if (is_function_def)
+    {
+      const std::string name = node["name"].template get<std::string>();
+      current_func_name_context_ =
+        !saved_ctx.empty()             ? saved_ctx + "@F@" + name
+        : !current_class_name_.empty() ? current_class_name_ + "@C@" + name
+                                       : name;
+      parent_func = saved_current;
+      current_func = &node;
+    }
     // Recursively search all object fields
     for (auto &kv : node.items())
-      preprocess_constructor_calls(kv.value());
+      annotated |= preprocess_constructor_calls(kv.value());
+    current_class_name_ = saved_class;
+    if (is_function_def)
+    {
+      current_func_name_context_ = saved_ctx;
+      current_func = saved_current;
+      parent_func = saved_parent;
+    }
   }
   else if (node.is_array())
   {
     // Search in arrays (such as list literals)
-    for (const auto &element : node)
-      preprocess_constructor_calls(element);
+    for (auto &element : node)
+      annotated |= preprocess_constructor_calls(element);
   }
+  return annotated;
 }
 
 template <class Json>
@@ -5685,8 +5720,10 @@ void python_annotation<Json>::collect_function_call_arg_types(
 template <class Json>
 void python_annotation<Json>::add_type_annotation()
 {
-  // First pass: preprocess all constructor calls to infer parameter types
-  preprocess_constructor_calls(ast_);
+  // Iterated so a constructor called with its caller's parameter sees the
+  // type that parameter gets from a later call (GitHub #8963).
+  while (preprocess_constructor_calls(ast_))
+    ;
   for (const auto &[param, types] : inherited_init_args_)
     if (
       types.size() == 1 && !types.begin()->empty() &&

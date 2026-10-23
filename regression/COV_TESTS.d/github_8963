@@ -1,0 +1,6 @@
+regression/python/github_8963
+regression/python/github_8963_fail
+regression/python/github_8963_attr
+regression/python/github_8963_attr_fail
+regression/python/github_8963_attr_str
+regression/python/github_8963_attr_bool_fail
