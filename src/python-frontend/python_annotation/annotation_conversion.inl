@@ -1210,6 +1210,33 @@ std::string python_annotation<Json>::class_attribute_type(
     const Json annotation = json_utils::find_attr_annotation(class_node, attr);
     if (!annotation.empty())
       return json_utils::render_annotation_type(annotation);
+    // An unannotated `self.attr = C()` types it as C only when nothing else
+    // in the program stores to `.attr` on an instance that could be this one.
+    const std::string constructed =
+      json_utils::constructed_attr_class(class_node, attr);
+    if (
+      constructed.empty() ||
+      json_utils::find_class(ast_["body"], constructed).empty() ||
+      json_utils::count_attr_stores(ast_, attr, true) != 0)
+      continue;
+    const auto cls_ancestors = get_class_ancestors(cls);
+    std::size_t self_stores = 0;
+    for (const Json &node : ast_["body"])
+    {
+      if (node.value("_type", "") != "ClassDef")
+        continue;
+      const std::string name = node["name"].template get<std::string>();
+      const auto ancestors = get_class_ancestors(name);
+      const bool is_base =
+        std::find(cls_ancestors.begin(), cls_ancestors.end(), name) !=
+        cls_ancestors.end();
+      const bool is_derived =
+        std::find(ancestors.begin(), ancestors.end(), cls) != ancestors.end();
+      if (is_base || is_derived)
+        self_stores += json_utils::count_attr_stores(node, attr, false);
+    }
+    if (self_stores == 1)
+      return constructed;
   }
   return "";
 }
