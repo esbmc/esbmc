@@ -72,13 +72,6 @@ void python_exception_handler::get_try_statement(
   const bool has_finally =
     element.contains("finalbody") && !element["finalbody"].empty();
 
-  // The `else` clause runs only when the try body completes without an
-  // exception; it is appended to the try body below so it runs on the normal
-  // path and is skipped when the body raises. This composes with the finally
-  // lowering below (else in the try body runs before the appended finally on
-  // the normal path, and is skipped along with the rest of the try body on the
-  // exception path), so try/except/else/finally is handled too.
-
   // Python's `finally` runs on every exit path: normal completion, a caught
   // exception, an *uncaught* exception (run finally, then re-raise), and a
   // return/break/continue that leaves the try. The first three are modelled by
@@ -117,17 +110,27 @@ void python_exception_handler::get_try_statement(
   exprt try_block = converter_.get_block(try_body);
   --converter_.try_body_depth_;
 
-  // The `else` clause runs after the try body completes without an exception.
-  // Append it to the try body: on the normal path it runs right after the body,
-  // and if the body raises, control transfers to a handler before reaching it,
-  // so it is correctly skipped. (An exception raised inside the else itself is
-  // caught by this try's handlers here rather than propagating, a minor
-  // deviation from CPython that is out of scope.)
+  // The `else` clause runs only when the try body completes without an
+  // exception, and outside this try's handlers: an exception it raises
+  // propagates (after the finally). A flag set at the end of the try body
+  // guards it after the cpp-catch.
+  const locationt location = converter_.get_location_from_decl(element);
+  exprt else_block;
+  exprt no_raise;
   if (!else_body.empty())
   {
-    exprt else_block = converter_.get_block(else_body);
-    for (const auto &op : else_block.operands())
-      try_block.copy_to_operands(op);
+    else_block = converter_.get_block(else_body);
+    no_raise = symbol_expr(converter_.create_tmp_symbol(
+      element, "$try_no_raise$", bool_type(), false_exprt()));
+    code_declt decl(no_raise);
+    decl.location() = location;
+    block.move_to_operands(decl);
+    code_assignt init(no_raise, false_exprt());
+    init.location() = location;
+    block.move_to_operands(init);
+    code_assignt set(no_raise, true_exprt());
+    set.location() = location;
+    try_block.move_to_operands(set);
   }
 
   exprt handler = converter_.get_block(handlers);
@@ -146,10 +149,7 @@ void python_exception_handler::get_try_statement(
   // Build a catch-all handler `{ finally; re-raise; }` so the finally runs on
   // the exception-propagation path. Appended after any specific handlers, it
   // only fires for exceptions none of them caught.
-  std::vector<exprt> handler_ops(
-    handler.operands().begin(), handler.operands().end());
-  if (has_finally && !has_catch_all)
-  {
+  auto make_finally_handler = [&]() {
     exprt finally_handler = converter_.get_block(element["finalbody"]);
     finally_handler.type().set("ellipsis", true); // catch-all
     // Same flip-blocker-2 pre-set as emit_catch_block: this handler is built
@@ -159,12 +159,17 @@ void python_exception_handler::get_try_statement(
     // the type above) no longer runs.
     finally_handler.set("exception_id", "ellipsis");
     side_effect_exprt rethrow("cpp-throw", empty_typet());
-    rethrow.location() = converter_.get_location_from_decl(element);
+    rethrow.location() = location;
     codet rethrow_code("expression");
     rethrow_code.operands().push_back(rethrow);
     finally_handler.copy_to_operands(rethrow_code);
-    handler_ops.push_back(finally_handler);
-  }
+    return finally_handler;
+  };
+
+  std::vector<exprt> handler_ops(
+    handler.operands().begin(), handler.operands().end());
+  if (has_finally && !has_catch_all)
+    handler_ops.push_back(make_finally_handler());
 
   // A valid Python `try` always has at least one handler or a finally, so
   // handler_ops is non-empty and the cpp-catch has the >= 2 operands it needs
@@ -174,6 +179,22 @@ void python_exception_handler::get_try_statement(
   for (const auto &op : handler_ops)
     new_expr.copy_to_operands(op);
   block.move_to_operands(new_expr);
+
+  if (!else_body.empty())
+  {
+    if (has_finally)
+    {
+      codet else_catch("cpp-catch");
+      else_catch.move_to_operands(else_block);
+      else_catch.copy_to_operands(make_finally_handler());
+      else_block = else_catch;
+    }
+    code_ifthenelset run_else;
+    run_else.cond() = no_raise;
+    run_else.then_case() = to_code(else_block);
+    run_else.location() = location;
+    block.move_to_operands(run_else);
+  }
 
   // finally on the normal-completion path (and after a caught exception).
   if (has_finally)
