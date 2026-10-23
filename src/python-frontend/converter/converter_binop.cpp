@@ -630,10 +630,13 @@ void python_converter::emit_guarded_raise(
 
 exprt python_converter::guard_nonfinite_float_to_int(
   exprt operand,
-  const nlohmann::json &element)
+  const nlohmann::json &element,
+  bool reject_none)
 {
+  const bool is_float = operand.type().is_floatbv();
+  const bool may_be_none = reject_none && operand.type().is_pointer();
   if (
-    !operand.type().is_floatbv() || !current_block ||
+    (!is_float && !may_be_none) || !current_block ||
     !safe_to_emit_side_effecting_statement())
     return operand;
 
@@ -648,19 +651,29 @@ exprt python_converter::guard_nonfinite_float_to_int(
   const locationt loc = get_location_from_decl(element);
   operand = store_call_result(operand, loc, "int_arg");
   operand = hoist_side_effecting_operand(operand, element, "$int_arg$");
-  expr2tc value;
-  migrate_expr(operand, value);
+  if (is_float)
+  {
+    expr2tc value;
+    migrate_expr(operand, value);
 
-  emit_guarded_raise(
-    migrate_expr_back(isinf2tc(value)),
-    "OverflowError",
-    "cannot convert float infinity to integer",
-    loc);
-  emit_guarded_raise(
-    migrate_expr_back(isnan2tc(value)),
-    "ValueError",
-    "cannot convert float NaN to integer",
-    loc);
+    emit_guarded_raise(
+      migrate_expr_back(isinf2tc(value)),
+      "OverflowError",
+      "cannot convert float infinity to integer",
+      loc);
+    emit_guarded_raise(
+      migrate_expr_back(isnan2tc(value)),
+      "ValueError",
+      "cannot convert float NaN to integer",
+      loc);
+  }
+  else
+    emit_guarded_raise(
+      python_expr::build_equal(operand, gen_zero(operand.type())),
+      "TypeError",
+      "int() argument must be a string, a bytes-like object or a real "
+      "number, not 'NoneType'",
+      loc);
   current_block = saved_block;
   if (!lazy)
     return operand;

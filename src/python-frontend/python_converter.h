@@ -424,9 +424,12 @@ public:
     const locationt &location);
 
   // Raises OverflowError (infinity) or ValueError (NaN) before a float
-  // @p operand is converted to int; returns the operand to convert.
-  exprt
-  guard_nonfinite_float_to_int(exprt operand, const nlohmann::json &element);
+  // @p operand is converted to int, and with @p reject_none TypeError for a
+  // pointer @p operand that is None; returns the operand to convert.
+  exprt guard_nonfinite_float_to_int(
+    exprt operand,
+    const nlohmann::json &element,
+    bool reject_none = false);
 
   exprt fit_numpy_integer_store(
     const exprt &lhs,

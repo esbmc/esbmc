@@ -2627,13 +2627,10 @@ exprt string_handler::handle_int_conversion(
     return handle_string_to_int_base10(arg, location);
   }
 
-  // If argument is a pointer to char (string pointer)
-  if (arg.type().is_pointer() && arg.type().subtype() == char_type())
-  {
-    // Create a wrapper to ensure null-termination handling
-    exprt string_copy = arg;
-    return handle_string_to_int(string_copy, nil_exprt(), location);
-  }
+  // A str pointer: char*, or the char(*)[N] of an Optional[str]
+  if (arg.type().is_pointer() && type_utils::is_string_type(arg.type()))
+    return handle_string_to_int(
+      build_typecast(arg, pointer_typet(char_type())), nil_exprt(), location);
 
   // For other types, attempt a typecast
   return build_typecast(arg, int_type());
