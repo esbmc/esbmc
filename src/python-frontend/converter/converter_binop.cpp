@@ -2897,10 +2897,10 @@ broadcast_shapes(std::vector<long long> a, std::vector<long long> b)
   return a;
 }
 
-// The shape of an element-wise operation over two numeric operands, at least
-// one an array; shapes that do not broadcast are rejected as NumPy raises.
-static std::optional<std::vector<long long>>
-elementwise_shape(const std::string &op, const exprt &lhs, const exprt &rhs)
+// The shapes of the operands of an element-wise operation over two numeric
+// operands, at least one an array.
+static std::optional<std::pair<std::vector<long long>, std::vector<long long>>>
+elementwise_shapes(const std::string &op, const exprt &lhs, const exprt &rhs)
 {
   const auto lhs_shape = operand_shape(lhs.type());
   const auto rhs_shape = operand_shape(rhs.type());
@@ -2908,13 +2908,7 @@ elementwise_shape(const std::string &op, const exprt &lhs, const exprt &rhs)
     !is_elementwise_op(op) || !lhs_shape || !rhs_shape ||
     (lhs_shape->empty() && rhs_shape->empty()))
     return std::nullopt;
-  std::optional<std::vector<long long>> shape =
-    broadcast_shapes(*lhs_shape, *rhs_shape);
-  if (!shape)
-    throw std::runtime_error(
-      "operands could not be broadcast together with shapes " +
-      shape_text(*lhs_shape) + " " + shape_text(*rhs_shape) + " ");
-  return shape;
+  return std::make_pair(*lhs_shape, *rhs_shape);
 }
 
 static std::size_t array_rank(const typet &type)
@@ -3067,10 +3061,17 @@ exprt python_converter::numpy_array_arithmetic(
   const exprt &rhs,
   const locationt &location)
 {
-  const std::optional<std::vector<long long>> shape =
-    elementwise_shape(op, lhs, rhs);
-  if (!shape)
+  const auto shapes = elementwise_shapes(op, lhs, rhs);
+  if (!shapes)
     return nil_exprt();
+  const std::optional<std::vector<long long>> shape =
+    broadcast_shapes(shapes->first, shapes->second);
+  if (!shape)
+    return raise_in_expression(
+      "ValueError",
+      "operands could not be broadcast together with shapes " +
+        shape_text(shapes->first) + " " + shape_text(shapes->second) + " ",
+      lhs.type().is_array() ? lhs.type() : rhs.type());
   const typet &lhs_leaf = leaf_type(lhs.type());
   const typet &rhs_leaf = leaf_type(rhs.type());
   const typet result_leaf = elementwise_result_type(
