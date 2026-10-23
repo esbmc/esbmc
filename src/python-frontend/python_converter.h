@@ -1831,6 +1831,7 @@ private:
 
   void set_assigned_value(symbolt &symbol, const exprt &rhs);
   void retype_resized_str(symbolt &symbol, exprt &lhs, exprt &rhs);
+  bool store_optional_str(symbolt *lhs_symbol, const exprt &lhs, exprt &rhs);
 
   /// True when an assignment's annotation is only a guess that the rhs type
   /// should replace.
