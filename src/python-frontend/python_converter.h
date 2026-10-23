@@ -423,10 +423,26 @@ public:
     const std::string &message,
     const locationt &location);
 
+  exprt handle_tuple_add(
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &element);
+
+  // `tuple + list` or `list + tuple`: raises TypeError unless the list was
+  // built by tuple(x) (#8777), in which case the result is that tuple
+  // concatenated with the other one.
+  exprt concat_tuple_with_list(
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &element);
+
   // Raises OverflowError (infinity) or ValueError (NaN) before a float
-  // @p operand is converted to int; returns the operand to convert.
-  exprt
-  guard_nonfinite_float_to_int(exprt operand, const nlohmann::json &element);
+  // @p operand is converted to int, and with @p reject_none TypeError for a
+  // pointer @p operand that is None; returns the operand to convert.
+  exprt guard_nonfinite_float_to_int(
+    exprt operand,
+    const nlohmann::json &element,
+    bool reject_none = false);
 
   exprt fit_numpy_integer_store(
     const exprt &lhs,
@@ -443,6 +459,11 @@ public:
   /// import binds, as `mk` after `from helper import mk` and `helper.mk`
   /// after `import helper`.
   nlohmann::json callable_function_stubs() const;
+  /// Whether a straight-line retype moved @p id's value to another symbol.
+  bool is_retyped(const irep_idt &id) const
+  {
+    return retype_aliases_.count(id.as_string()) > 0;
+  }
   /// How one scope binds a name: by an import, by anything else, or by a
   /// `global`/`nonlocal` declaration handing it to an outer scope.
   struct scope_bindings
@@ -2975,6 +2996,12 @@ private:
   /// size `len(lhs) + len(rhs)`, indexing each source in turn. Returns
   /// nil_exprt if either side's length is not a compile-time constant.
   exprt build_bytes_concat(const exprt &lhs, const exprt &rhs);
+
+  // A right operand of list + that is never a list: a scalar, a str, or a
+  // tuple outside `+=` (which extends the list).
+  bool is_definite_non_list_addend(
+    const typet &type,
+    const nlohmann::json &element) const;
 
   /**
    * @brief Handles list-related binary operations.

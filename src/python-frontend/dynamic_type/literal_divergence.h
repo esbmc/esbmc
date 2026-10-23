@@ -118,6 +118,18 @@ inline std::string classify_name_kind(
   return kind;
 }
 
+// `x` for a Name target, `C.v` for an attribute of a name, else "".
+inline std::string assigned_name(const nlohmann::json &target)
+{
+  if (target.value("_type", "") == "Name")
+    return target.value("id", "");
+  if (
+    target.value("_type", "") == "Attribute" && target.contains("value") &&
+    target["value"].value("_type", "") == "Name")
+    return target["value"].value("id", "") + "." + target.value("attr", "");
+  return "";
+}
+
 // Classifies a branch's top-level assignments by literal type; a Name
 // value (e.g. `x = n`) is resolved via scope_body.
 inline std::unordered_map<std::string, std::string>
@@ -152,9 +164,9 @@ classify_branch_literal_assigns(
     else
       continue;
 
-    if (target.value("_type", "") != "Name" || !target.contains("id"))
+    const std::string name = assigned_name(target);
+    if (name.empty())
       continue;
-    const std::string &name = target["id"].get<std::string>();
 
     // A later reassignment invalidates an earlier recorded kind for `name`.
     if (!stmt.contains("value") || stmt["value"].is_null())

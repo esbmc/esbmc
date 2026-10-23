@@ -566,7 +566,8 @@ exprt function_call_expr::guard_nonfinite_float_to_int(
 {
   if (!base.is_nil())
     return operand;
-  return converter_.guard_nonfinite_float_to_int(std::move(operand), call_);
+  return converter_.guard_nonfinite_float_to_int(
+    std::move(operand), call_, true);
 }
 
 void function_call_expr::handle_int_to_float(nlohmann::json &arg) const

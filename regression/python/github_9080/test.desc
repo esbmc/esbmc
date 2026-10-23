@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 5 --multi-property --no-pointer-check --no-align-check
+^\s+PASSED\s+\[.*\]\s+line\s+38\s+uncaught exception: ValueError$
+^VERIFICATION SUCCESSFUL$

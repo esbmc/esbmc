@@ -117,6 +117,37 @@ expr2tc python_list::stored_element_is(
       pointer_offset2tc(offset_type, current)));
 }
 
+/// The float element type_id that lets list_eq compare mixed int and float
+/// elements numerically (Python's 1 == 1.0), merged from both operands.
+size_t python_list::eq_float_type_id(
+  const std::string &lhs_id,
+  const std::string &rhs_id) const
+{
+  int type_flag = 0;
+  size_t lhs_float = 0, rhs_float = 0;
+  const type_handler &th = converter_.get_type_handler();
+  elem_types().type_flags(lhs_id, th, type_flag, lhs_float);
+  elem_types().type_flags(rhs_id, th, type_flag, rhs_float);
+  if (lhs_float || rhs_float)
+    return lhs_float ? lhs_float : rhs_float;
+  // A list with no recorded elements, such as a call's result, may hold
+  // floats (#8924). Keep the numeric path open only when the other operand
+  // may hold an int to match one: the path's int/float branch is otherwise
+  // dead, yet still costs the solver float reasoning per element.
+  const element_type_registry::entries *lhs = elem_types().find(lhs_id);
+  const element_type_registry::entries *rhs = elem_types().find(rhs_id);
+  if (lhs && rhs)
+    return 0;
+  const element_type_registry::entries *known = lhs ? lhs : rhs;
+  const bool may_hold_int =
+    !known || std::any_of(known->begin(), known->end(), [](const auto &e) {
+      return e.second.is_signedbv() || e.second.is_unsignedbv();
+    });
+  return may_hold_int
+           ? std::hash<std::string>{}(th.type_to_string(double_type()))
+           : 0;
+}
+
 exprt python_list::compare(
   const exprt &l1,
   const exprt &l2,
@@ -246,23 +277,8 @@ exprt python_list::compare(
     max_depth_expr.set_value(
       integer2binary(max_depth, config.ansi_c.address_width));
 
-    // Merge the float element type_id from both operands so that mixed
-    // int/float elements compare numerically (Python's 1 == 1.0), as list_lt
-    // already does.
-    int type_flag_lhs = 0, type_flag_rhs = 0;
-    size_t float_type_id_lhs = 0, float_type_id_rhs = 0;
-    elem_types().type_flags(
-      lhs_symbol->id.as_string(),
-      converter_.get_type_handler(),
-      type_flag_lhs,
-      float_type_id_lhs);
-    elem_types().type_flags(
-      rhs_symbol->id.as_string(),
-      converter_.get_type_handler(),
-      type_flag_rhs,
-      float_type_id_rhs);
     const size_t float_type_id =
-      float_type_id_lhs ? float_type_id_lhs : float_type_id_rhs;
+      eq_float_type_id(lhs_symbol->id.as_string(), rhs_symbol->id.as_string());
 
     const list_eq_target eq_target = select_list_eq(
       converted_l1,

@@ -1210,6 +1210,33 @@ std::string python_annotation<Json>::class_attribute_type(
     const Json annotation = json_utils::find_attr_annotation(class_node, attr);
     if (!annotation.empty())
       return json_utils::render_annotation_type(annotation);
+    // An unannotated `self.attr = C()` types it as C only when nothing else
+    // in the program stores to `.attr` on an instance that could be this one.
+    const std::string constructed =
+      json_utils::constructed_attr_class(class_node, attr);
+    if (
+      constructed.empty() ||
+      json_utils::find_class(ast_["body"], constructed).empty() ||
+      json_utils::count_attr_stores(ast_, attr, true) != 0)
+      continue;
+    const auto cls_ancestors = get_class_ancestors(cls);
+    std::size_t self_stores = 0;
+    for (const Json &node : ast_["body"])
+    {
+      if (node.value("_type", "") != "ClassDef")
+        continue;
+      const std::string name = node["name"].template get<std::string>();
+      const auto ancestors = get_class_ancestors(name);
+      const bool is_base =
+        std::find(cls_ancestors.begin(), cls_ancestors.end(), name) !=
+        cls_ancestors.end();
+      const bool is_derived =
+        std::find(ancestors.begin(), ancestors.end(), cls) != ancestors.end();
+      if (is_base || is_derived)
+        self_stores += json_utils::count_attr_stores(node, attr, false);
+    }
+    if (self_stores == 1)
+      return constructed;
   }
   return "";
 }
@@ -5295,8 +5322,9 @@ Json *python_annotation<Json>::class_init(
 }
 
 template <class Json>
-void python_annotation<Json>::preprocess_constructor_calls(const Json &node)
+bool python_annotation<Json>::preprocess_constructor_calls(Json &node)
 {
+  bool annotated = false;
   if (node.is_object())
   {
     // Check if this is a constructor call
@@ -5327,20 +5355,54 @@ void python_annotation<Json>::preprocess_constructor_calls(const Json &node)
           if (inherited)
             inherited_init_args_[&param].insert(arg_type);
           else if (!arg_type.empty())
+          {
             add_parameter_annotation(param, arg_type);
+            annotated = true;
+          }
         }
       }
     }
+    // A method's parameters are what its constructor calls' arguments name.
+    const bool is_function_def =
+      node.contains("_type") && node["_type"] == "FunctionDef" &&
+      node.contains("name") && node["name"].is_string();
+    const bool is_class_def =
+      node.contains("_type") && node["_type"] == "ClassDef" &&
+      node.contains("name") && node["name"].is_string();
+    Json *saved_current = current_func;
+    Json *saved_parent = parent_func;
+    const std::string saved_ctx = current_func_name_context_;
+    const std::string saved_class = current_class_name_;
+    if (is_class_def)
+      current_class_name_ = node["name"].template get<std::string>();
+    if (is_function_def)
+    {
+      const std::string name = node["name"].template get<std::string>();
+      current_func_name_context_ =
+        !saved_ctx.empty()             ? saved_ctx + "@F@" + name
+        : !current_class_name_.empty() ? current_class_name_ + "@C@" + name
+                                       : name;
+      parent_func = saved_current;
+      current_func = &node;
+    }
     // Recursively search all object fields
     for (auto &kv : node.items())
-      preprocess_constructor_calls(kv.value());
+      annotated |= preprocess_constructor_calls(kv.value());
+    current_class_name_ = saved_class;
+    if (is_function_def)
+    {
+      current_func_name_context_ = saved_ctx;
+      current_func = saved_current;
+      parent_func = saved_parent;
+    }
   }
   else if (node.is_array())
   {
     // Search in arrays (such as list literals)
-    for (const auto &element : node)
-      preprocess_constructor_calls(element);
+    for (auto &element : node)
+      annotated |= preprocess_constructor_calls(element);
   }
+  return annotated;
 }
 
 template <class Json>
@@ -5427,6 +5489,18 @@ python_annotation<Json>::class_method(const std::string &cls, const Json &method
   return nullptr;
 }
 
+/// Whether @p func names neither a module class nor a module function, so a
+/// call through it can only reach an instance's `__call__`.
+template <class Json>
+bool python_annotation<Json>::is_instance_call(const Json &func) const
+{
+  if (func.value("_type", "") != "Name")
+    return false;
+  const std::string &name = func["id"].template get<std::string>();
+  return !json_utils::is_class<Json>(name, ast_) &&
+         json_utils::try_find_function(ast_["body"], name).is_null();
+}
+
 /// Types the unannotated parameters of a method from its `obj.m(args)` calls
 /// at module level, where `obj` is a name bound once to an instance of a
 /// module class, when every such call passes one type (#8923). Calls inside a
@@ -5448,14 +5522,22 @@ void python_annotation<Json>::preprocess_receiver_method_calls()
     if (kind == "FunctionDef" || kind == "ClassDef" || kind == "Lambda")
       return;
     const Json &func = node.value("func", Json());
+    // `obj(args)` on a callable instance calls `obj.__call__(args)` (#9070).
+    const bool instance_call = kind == "Call" && is_instance_call(func);
+    const bool method_call =
+      kind == "Call" && func.value("_type", "") == "Attribute";
+    const Json receiver =
+      instance_call ? func : method_call ? func["value"] : Json();
     if (
-      kind == "Call" && func.value("_type", "") == "Attribute" &&
-      func["value"].value("_type", "") == "Name" &&
-      !is_rebound_in_scope(func["value"]["id"].template get<std::string>()))
+      (instance_call || method_call) &&
+      receiver.value("_type", "") == "Name" &&
+      !is_rebound_in_scope(receiver["id"].template get<std::string>()))
     {
+      const std::string attr =
+        instance_call ? "__call__" : func["attr"].template get<std::string>();
       for (const std::string &cls :
-           get_class_ancestors(get_argument_type(func["value"])))
-        if (Json *method = class_method(cls, func["attr"]))
+           get_class_ancestors(get_argument_type(receiver)))
+        if (Json *method = class_method(cls, attr))
         {
           // A static or class method has no `self` to skip.
           if (!(*method)["decorator_list"].empty())
@@ -5685,8 +5767,10 @@ void python_annotation<Json>::collect_function_call_arg_types(
 template <class Json>
 void python_annotation<Json>::add_type_annotation()
 {
-  // First pass: preprocess all constructor calls to infer parameter types
-  preprocess_constructor_calls(ast_);
+  // Iterated so a constructor called with its caller's parameter sees the
+  // type that parameter gets from a later call (GitHub #8963).
+  while (preprocess_constructor_calls(ast_))
+    ;
   for (const auto &[param, types] : inherited_init_args_)
     if (
       types.size() == 1 && !types.begin()->empty() &&
@@ -5707,7 +5791,7 @@ void python_annotation<Json>::add_type_annotation()
   // parameters this pass types stays Any after a single round (GitHub #7254).
   // Terminates because a round returns true only after annotating a parameter
   // that had none, and annotated parameters are never revisited.
-  while (preprocess_function_calls(ast_))
+  while (preprocess_function_calls(ast_) | preprocess_constructor_calls(ast_))
     ;
 
   // Second pass: add type annotations to global scope variables

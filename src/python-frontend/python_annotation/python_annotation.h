@@ -67,9 +67,10 @@ public:
   }
 
   // Entry points exercised by callers outside python_annotation.h.
-  void preprocess_constructor_calls(const Json &node);
+  bool preprocess_constructor_calls(Json &node);
   void preprocess_method_calls(const Json &node);
   void preprocess_receiver_method_calls();
+  bool is_instance_call(const Json &func) const;
   Json *class_method(const std::string &cls, const Json &method);
   /// Sentinel recorded for a call-site argument this pass cannot type; never
   /// a valid Python type name, so it can only block, never be annotated.
