@@ -5791,7 +5791,7 @@ void python_annotation<Json>::add_type_annotation()
   // parameters this pass types stays Any after a single round (GitHub #7254).
   // Terminates because a round returns true only after annotating a parameter
   // that had none, and annotated parameters are never revisited.
-  while (preprocess_function_calls(ast_))
+  while (preprocess_function_calls(ast_) | preprocess_constructor_calls(ast_))
     ;
 
   // Second pass: add type annotations to global scope variables
