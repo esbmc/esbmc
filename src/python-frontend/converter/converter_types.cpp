@@ -503,7 +503,7 @@ typet python_converter::get_type_from_annotation(
 
     std::string value_id = get_value_id();
 
-    if (value_id == "list" || value_id == "List")
+    if (value_id == "list" || value_id == "List" || value_id == "Sequence")
       return type_handler_.get_list_type();
 
     if (value_id == "dict" || value_id == "Dict")
