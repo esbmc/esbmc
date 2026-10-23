@@ -1836,6 +1836,15 @@ static bool is_in_bounds_constant_index(const exprt &expr)
   return index >= 0 && index < size;
 }
 
+// A str is immutable, so its value is what the operand read; any other
+// object is read through its reference.
+static bool is_read_ahead_type(const typet &type)
+{
+  return type.is_signedbv() || type.is_unsignedbv() || type.is_floatbv() ||
+         type.is_bool() || type.is_pointer() ||
+         type_utils::is_string_type(type);
+}
+
 // Python reads the left operand before it runs a call in the right one,
 // which may rebind what the left operand reads (`g + bump()`).
 exprt python_converter::snapshot_left_operand(
@@ -1843,8 +1852,6 @@ exprt python_converter::snapshot_left_operand(
   const nlohmann::json &right)
 {
   const typet &type = lhs.type();
-  const bool scalar = type.is_signedbv() || type.is_unsignedbv() ||
-                      type.is_floatbv() || type.is_bool();
   // An arm of a conditional expression runs on one path only, so only a read
   // that cannot fail is taken out of it.
   const bool safe = lhs.is_symbol() || is_in_bounds_constant_index(lhs) ||
@@ -1855,7 +1862,8 @@ exprt python_converter::snapshot_left_operand(
     can_emit_runtime_guard() || (in_operand_effects_block_ && current_block &&
                                  safe_to_emit_side_effecting_statement());
   if (
-    !can_emit || !scalar || !safe || lhs.is_constant() || !contains_call(right))
+    !can_emit || !is_read_ahead_type(type) || !safe || lhs.is_constant() ||
+    !contains_call(right))
     return lhs;
   exprt value = lhs;
   if (value.is_function_call())
