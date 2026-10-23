@@ -423,7 +423,7 @@ public:
     const std::string &message,
     const locationt &location);
 
-  exprt add_tuple_and_non_tuple(
+  exprt handle_tuple_add(
     const exprt &lhs,
     const exprt &rhs,
     const nlohmann::json &element);

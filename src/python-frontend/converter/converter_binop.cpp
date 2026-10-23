@@ -3326,25 +3326,66 @@ void python_converter::raise_on_unordered_tie(
     get_location_from_decl(element));
 }
 
-/// `a + b` where exactly one operand is a tuple struct. Nil when the other
-/// operand's type is not one Python is known to reject or concatenate.
-exprt python_converter::add_tuple_and_non_tuple(
+/// `a + b` where an operand is a tuple struct. Nil when neither is one, or the
+/// other operand's type is not one Python is known to reject or concatenate.
+exprt python_converter::handle_tuple_add(
   const exprt &lhs,
   const exprt &rhs,
   const nlohmann::json &element)
 {
   const bool lhs_is_tuple = tuple_handler_->is_tuple_type(lhs.type());
-  const typet &other = lhs_is_tuple ? rhs.type() : lhs.type();
-  if (other == type_handler_.get_list_type())
-    return concat_tuple_with_list(lhs, rhs, element);
-  if (
-    lhs_is_tuple &&
-    (other.is_signedbv() || other.is_unsignedbv() || other.is_floatbv()))
-    return get_exception_handler().gen_exception_raise(
-      "TypeError",
-      "can only concatenate tuple (not \"" +
-        type_handler_.get_python_type_name(other) + "\") to tuple");
-  return nil_exprt();
+  const bool rhs_is_tuple = tuple_handler_->is_tuple_type(rhs.type());
+  if (!lhs_is_tuple && !rhs_is_tuple)
+    return nil_exprt();
+
+  if (lhs_is_tuple != rhs_is_tuple)
+  {
+    const typet &other = lhs_is_tuple ? rhs.type() : lhs.type();
+    if (other == type_handler_.get_list_type())
+      return concat_tuple_with_list(lhs, rhs, element);
+    if (
+      lhs_is_tuple &&
+      (other.is_signedbv() || other.is_unsignedbv() || other.is_floatbv()))
+      return get_exception_handler().gen_exception_raise(
+        "TypeError",
+        "can only concatenate tuple (not \"" +
+          type_handler_.get_python_type_name(other) + "\") to tuple");
+    return nil_exprt();
+  }
+
+  // Concatenation: (a, b) + (c, d) == (a, b, c, d).
+  const auto &lhs_components = to_struct_type(lhs.type()).components();
+  const auto &rhs_components = to_struct_type(rhs.type()).components();
+
+  std::vector<typet> element_types;
+  element_types.reserve(lhs_components.size() + rhs_components.size());
+  for (const auto &c : lhs_components)
+    element_types.push_back(c.type());
+  for (const auto &c : rhs_components)
+    element_types.push_back(c.type());
+
+  struct_typet new_type =
+    tuple_handler_->create_tuple_struct_type(element_types);
+
+  // V.3: build the concatenated tuple value in IREP2. Each component is the
+  // exact round-trip of a member_exprt over the migrated operand; the struct
+  // literal is assembled via constant_struct2tc and back-migrated once.
+  expr2tc lhs2, rhs2;
+  migrate_expr(lhs, lhs2);
+  migrate_expr(rhs, rhs2);
+  std::vector<expr2tc> members;
+  members.reserve(lhs_components.size() + rhs_components.size());
+  for (const auto &c : lhs_components)
+    members.push_back(member2tc(migrate_type(c.type()), lhs2, c.get_name()));
+  for (const auto &c : rhs_components)
+    members.push_back(member2tc(migrate_type(c.type()), rhs2, c.get_name()));
+
+  exprt result =
+    migrate_expr_back(constant_struct2tc(migrate_type(new_type), members));
+
+  if (element.contains("lineno"))
+    result.location() = get_location_from_decl(element);
+  return result;
 }
 
 exprt python_converter::concat_tuple_with_list(
@@ -3409,45 +3450,8 @@ exprt python_converter::handle_tuple_operations(
   const bool lhs_is_tuple = tuple_handler_->is_tuple_type(lhs.type());
   const bool rhs_is_tuple = tuple_handler_->is_tuple_type(rhs.type());
 
-  if (op == "Add" && lhs_is_tuple != rhs_is_tuple)
-    return add_tuple_and_non_tuple(lhs, rhs, element);
-
-  // Concatenation: (a, b) + (c, d) == (a, b, c, d).
-  if (op == "Add" && lhs_is_tuple && rhs_is_tuple)
-  {
-    const auto &lhs_components = to_struct_type(lhs.type()).components();
-    const auto &rhs_components = to_struct_type(rhs.type()).components();
-
-    std::vector<typet> element_types;
-    element_types.reserve(lhs_components.size() + rhs_components.size());
-    for (const auto &c : lhs_components)
-      element_types.push_back(c.type());
-    for (const auto &c : rhs_components)
-      element_types.push_back(c.type());
-
-    struct_typet new_type =
-      tuple_handler_->create_tuple_struct_type(element_types);
-
-    // V.3: build the concatenated tuple value in IREP2. Each component is the
-    // exact round-trip of a member_exprt over the migrated operand; the struct
-    // literal is assembled via constant_struct2tc and back-migrated once.
-    expr2tc lhs2, rhs2;
-    migrate_expr(lhs, lhs2);
-    migrate_expr(rhs, rhs2);
-    std::vector<expr2tc> members;
-    members.reserve(lhs_components.size() + rhs_components.size());
-    for (const auto &c : lhs_components)
-      members.push_back(member2tc(migrate_type(c.type()), lhs2, c.get_name()));
-    for (const auto &c : rhs_components)
-      members.push_back(member2tc(migrate_type(c.type()), rhs2, c.get_name()));
-
-    exprt result =
-      migrate_expr_back(constant_struct2tc(migrate_type(new_type), members));
-
-    if (element.contains("lineno"))
-      result.location() = get_location_from_decl(element);
-    return result;
-  }
+  if (op == "Add")
+    return handle_tuple_add(lhs, rhs, element);
 
   // Repetition: (a, b) * 3 == (a, b, a, b, a, b). Requires a constant
   // non-negative repeat count, since the result type must be known.
