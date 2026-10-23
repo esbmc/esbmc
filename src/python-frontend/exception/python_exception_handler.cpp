@@ -149,27 +149,10 @@ void python_exception_handler::get_try_statement(
   // Build a catch-all handler `{ finally; re-raise; }` so the finally runs on
   // the exception-propagation path. Appended after any specific handlers, it
   // only fires for exceptions none of them caught.
-  auto make_finally_handler = [&]() {
-    exprt finally_handler = converter_.get_block(element["finalbody"]);
-    finally_handler.type().set("ellipsis", true); // catch-all
-    // Same flip-blocker-2 pre-set as emit_catch_block: this handler is built
-    // outside that path, and migration reads the attribute per handler — an
-    // unset id migrates empty and fails remove_exceptions' handler-shape
-    // check once the legacy adjust_catch (which would derive "ellipsis" from
-    // the type above) no longer runs.
-    finally_handler.set("exception_id", "ellipsis");
-    side_effect_exprt rethrow("cpp-throw", empty_typet());
-    rethrow.location() = location;
-    codet rethrow_code("expression");
-    rethrow_code.operands().push_back(rethrow);
-    finally_handler.copy_to_operands(rethrow_code);
-    return finally_handler;
-  };
-
   std::vector<exprt> handler_ops(
     handler.operands().begin(), handler.operands().end());
   if (has_finally && !has_catch_all)
-    handler_ops.push_back(make_finally_handler());
+    handler_ops.push_back(make_finally_rethrow_handler(element));
 
   // A valid Python `try` always has at least one handler or a finally, so
   // handler_ops is non-empty and the cpp-catch has the >= 2 operands it needs
@@ -181,20 +164,7 @@ void python_exception_handler::get_try_statement(
   block.move_to_operands(new_expr);
 
   if (!else_body.empty())
-  {
-    if (has_finally)
-    {
-      codet else_catch("cpp-catch");
-      else_catch.move_to_operands(else_block);
-      else_catch.copy_to_operands(make_finally_handler());
-      else_block = else_catch;
-    }
-    code_ifthenelset run_else;
-    run_else.cond() = no_raise;
-    run_else.then_case() = to_code(else_block);
-    run_else.location() = location;
-    block.move_to_operands(run_else);
-  }
+    emit_else_clause(element, else_block, no_raise, block);
 
   // finally on the normal-completion path (and after a caught exception).
   if (has_finally)
@@ -203,6 +173,49 @@ void python_exception_handler::get_try_statement(
     for (const auto &op : final_block.operands())
       block.copy_to_operands(op);
   }
+}
+
+/// A catch-all handler `{ finally; re-raise; }` for @p element's finally.
+exprt python_exception_handler::make_finally_rethrow_handler(
+  const nlohmann::json &element)
+{
+  exprt finally_handler = converter_.get_block(element["finalbody"]);
+  finally_handler.type().set("ellipsis", true); // catch-all
+  // Same flip-blocker-2 pre-set as emit_catch_block: this handler is built
+  // outside that path, and migration reads the attribute per handler — an
+  // unset id migrates empty and fails remove_exceptions' handler-shape
+  // check once the legacy adjust_catch (which would derive "ellipsis" from
+  // the type above) no longer runs.
+  finally_handler.set("exception_id", "ellipsis");
+  side_effect_exprt rethrow("cpp-throw", empty_typet());
+  rethrow.location() = converter_.get_location_from_decl(element);
+  codet rethrow_code("expression");
+  rethrow_code.operands().push_back(rethrow);
+  finally_handler.copy_to_operands(rethrow_code);
+  return finally_handler;
+}
+
+/// Run a try's else clause after its cpp-catch, only when @p no_raise was set
+/// by the try body; with a finally, an exception it raises still runs the
+/// finally before propagating.
+void python_exception_handler::emit_else_clause(
+  const nlohmann::json &element,
+  exprt else_block,
+  const exprt &no_raise,
+  codet &block)
+{
+  if (element.contains("finalbody") && !element["finalbody"].empty())
+  {
+    codet else_catch("cpp-catch");
+    else_catch.move_to_operands(else_block);
+    else_catch.copy_to_operands(make_finally_rethrow_handler(element));
+    else_block = else_catch;
+  }
+  code_ifthenelset run_else;
+  run_else.cond() = no_raise;
+  run_else.then_case() = to_code(else_block);
+  run_else.location() = converter_.get_location_from_decl(element);
+  block.move_to_operands(run_else);
 }
 
 namespace
