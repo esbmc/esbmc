@@ -1246,6 +1246,20 @@ void python_converter::handle_assignment_type_adjustments(
 
   rhs = wrap_stored_if_optional(rhs, lhs.type());
 
+  // Retyping a str that may be None to char* would lose the NULL that stands
+  // for None, so the str is stored at the declared type instead (#9090).
+  if (
+    lhs_symbol && lhs.is_symbol() &&
+    type_utils::is_optional_str_pointer(lhs.type()) &&
+    type_utils::is_string_type(rhs.type()) && rhs.type() != lhs.type())
+  {
+    if (rhs.type().is_array())
+      rhs = string_handler_.get_array_base_address(rhs);
+    rhs = typecast_exprt(rhs, lhs.type());
+    set_assigned_value(*lhs_symbol, rhs);
+    return;
+  }
+
   // Assigning to a struct member (self.attr = value): an unannotated parameter
   // is typed as the any-type carrier (void*, i.e. a pointer whose subtype is
   // empty) but holds an integer value round-tripped as (int*)n. Writing that
