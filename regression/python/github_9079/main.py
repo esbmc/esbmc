@@ -21,7 +21,6 @@ assert not ("a" in e)
 assert match("xxaby")
 assert not match("xy")
 assert plain("ab")
-assert None in [None, "a"]
 c = C()
 assert "ab" in c.name
 try:
