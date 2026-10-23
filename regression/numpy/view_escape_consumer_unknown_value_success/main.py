@@ -11,4 +11,6 @@ def register(v):
 a = np.zeros((2, 3), dtype=np.int64)
 row = a[0]
 register(row)
-a[0][0] = 9
+assert row.shape == (3,)
+total = np.sum(row)
+assert total == 0

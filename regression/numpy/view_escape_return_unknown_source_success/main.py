@@ -8,8 +8,13 @@ def register(v):
     calls = calls + 1
 
 
+def same(v):
+    return v
+
+
 a = np.zeros((2, 3), dtype=np.int64)
 row = a[0]
 register(row)
-assert row.shape == (3,)
-total = np.sum(row)
+r = same(row)
+a[0][1] = 5
+assert r[1] == 5
