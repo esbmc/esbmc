@@ -5667,8 +5667,8 @@ exprt numpy_call_expr::eigenvalues(const std::vector<std::vector<double>> &m)
     values = eigenvalue_pair(m);
   else
     throw std::runtime_error(
-      "TypeError: numpy.linalg.eigvals supports only 2x2 matrices and "
-      "diagonal 3x3 matrices currently");
+      "TypeError: numpy.linalg.eigvals supports only 2x2 and diagonal "
+      "matrices currently");
   exprt array(
     "array",
     array_typet(get_complex_struct_type(), from_integer(n, size_type())));
