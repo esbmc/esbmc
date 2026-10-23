@@ -337,6 +337,60 @@ std::unordered_set<std::string> dynamic_type_handler::detect_dynamic_type_names(
   return dynamic_type_names;
 }
 
+std::unordered_set<std::string>
+dynamic_type_handler::detect_dynamic_type_attributes(
+  const std::string &class_name) const
+{
+  std::unordered_set<std::string> result;
+  const nlohmann::json &module_body = converter_.ast()["body"];
+
+  const nlohmann::json *class_node = nullptr;
+  for (const auto &stmt : module_body)
+  {
+    if (
+      stmt.is_object() && stmt.value("_type", "") == "ClassDef" &&
+      stmt.value("name", "") == class_name)
+    {
+      class_node = &stmt;
+      break;
+    }
+  }
+  if (!class_node || !class_node->contains("body"))
+    return result;
+
+  // Attribute names this class assigns via self.<attr>.
+  std::unordered_set<std::string> self_attrs;
+  for (const auto &member : (*class_node)["body"])
+  {
+    if (member.value("_type", "") != "FunctionDef" || !member.contains("body"))
+      continue;
+    for (const auto &stmt : member["body"])
+    {
+      auto [target, value] = dynamic_type_detail::assign_target_value(stmt);
+      (void)value;
+      if (
+        target && target->value("_type", "") == "Attribute" &&
+        target->contains("value") && (*target)["value"].is_object() &&
+        (*target)["value"].value("_type", "") == "Name" &&
+        (*target)["value"].value("id", "") == "self")
+        self_attrs.insert(target->value("attr", ""));
+    }
+  }
+
+  for (const auto &attr : self_attrs)
+  {
+    if (
+      dynamic_type_detail::classes_declaring_attribute(module_body, attr)
+        .size() > 1)
+      continue;
+    if (
+      dynamic_type_detail::collect_attribute_literal_kinds(module_body, attr)
+        .size() >= 2)
+      result.insert(attr);
+  }
+  return result;
+}
+
 void dynamic_type_handler::declare_dynamic_type_names(
   const std::unordered_set<std::string> &dynamic_type_names,
   const nlohmann::json &ast_node)
@@ -393,7 +447,7 @@ void dynamic_type_handler::declare_dynamic_type_names(
       // alias before a branch's assign() runs.
       exprt existing_value = build_symbol(*existing_symbol);
       for (const codet &instr : build_tag_field_assigns(
-             *alias_symbol_ptr, existing_value, alias_location))
+             build_symbol(*alias_symbol_ptr), existing_value, alias_location))
         converter_.add_instruction(instr);
       continue;
     }
@@ -456,7 +510,7 @@ bool dynamic_type_handler::tagged_binop_result_may_be_tagged(
 }
 
 std::vector<codet> dynamic_type_handler::build_tag_field_assigns(
-  symbolt &tag_symbol,
+  const exprt &tag_expr,
   const exprt &rhs,
   const locationt &location)
 {
@@ -519,8 +573,6 @@ std::vector<codet> dynamic_type_handler::build_tag_field_assigns(
     type_id_source = pointer_typet(char_type());
   exprt type_id_value = type_handler_.tagged_scalar_type_id(type_id_source);
 
-  exprt tag_expr = build_symbol(tag_symbol);
-
   code_assignt value_assign(
     build_member(tag_expr, "value", pointer_typet(empty_typet())), tag_value);
   value_assign.location() = location;
@@ -564,7 +616,19 @@ void dynamic_type_handler::assign(
 {
   symbolt *tag_symbol = find_tag_symbol(name);
 
-  for (const codet &instr : build_tag_field_assigns(*tag_symbol, rhs, location))
+  for (const codet &instr :
+       build_tag_field_assigns(build_symbol(*tag_symbol), rhs, location))
+    target_block.copy_to_operands(instr);
+}
+
+void dynamic_type_handler::assign_to_lvalue(
+  const exprt &rhs,
+  const locationt &location,
+  const exprt &tagged_lvalue,
+  codet &target_block)
+{
+  for (const codet &instr :
+       build_tag_field_assigns(tagged_lvalue, rhs, location))
     target_block.copy_to_operands(instr);
 }
 
@@ -1138,7 +1202,7 @@ exprt dynamic_type_handler::build_tagged_value(
   target_block.copy_to_operands(tag_decl);
 
   for (const codet &instr :
-       build_tag_field_assigns(tag_symbol, value, location))
+       build_tag_field_assigns(build_symbol(tag_symbol), value, location))
     target_block.copy_to_operands(instr);
 
   return build_symbol(tag_symbol);

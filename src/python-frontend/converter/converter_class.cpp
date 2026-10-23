@@ -1116,6 +1116,17 @@ void python_converter::get_attributes_from_self(
   const nlohmann::json &method_body =
     func_node.contains("body") ? func_node.at("body") : func_node;
 
+  // Attributes assigned incompatible literal kinds get the tagged-object type.
+  const std::unordered_set<std::string> dynamic_type_attrs =
+    dynamic_type_handler_.detect_dynamic_type_attributes(current_class_name_);
+  auto push_attr_component = [&](const std::string &attr_name, typet type) {
+    if (dynamic_type_attrs.count(attr_name))
+      type = type_handler_.get_tagged_object_type();
+    struct_typet::componentt comp =
+      python_frontend::build_component(current_class_name_, attr_name, type);
+    clazz.components().push_back(comp);
+  };
+
   // Build a map of parameter name -> annotation from the function signature.
   // Used to recover the declared type when the body annotation is uninformative
   // (e.g., "NoneType" inferred from a None literal at a call site).
@@ -1198,11 +1209,7 @@ void python_converter::get_attributes_from_self(
           continue;
         }
         if (!clazz.has_component(attr_name))
-        {
-          struct_typet::componentt comp = python_frontend::build_component(
-            current_class_name_, attr_name, type);
-          clazz.components().push_back(comp);
-        }
+          push_attr_component(attr_name, type);
         continue;
       }
       else
@@ -1348,11 +1355,7 @@ void python_converter::get_attributes_from_self(
       }
 
       if (!clazz.has_component(attr_name))
-      {
-        struct_typet::componentt comp = python_frontend::build_component(
-          current_class_name_, attr_name, type);
-        clazz.components().push_back(comp);
-      }
+        push_attr_component(attr_name, type);
     }
     else if (
       stmt.contains("_type") && stmt["_type"] == "Assign" &&
@@ -1370,11 +1373,7 @@ void python_converter::get_attributes_from_self(
       const std::string &attr_name = stmt["targets"][0]["attr"];
 
       if (!clazz.has_component(attr_name))
-      {
-        struct_typet::componentt comp = python_frontend::build_component(
-          current_class_name_, attr_name, type);
-        clazz.components().push_back(comp);
-      }
+        push_attr_component(attr_name, type);
     }
   }
 }
