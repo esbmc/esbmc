@@ -569,6 +569,26 @@ exprt function_call_expr::guard_nonfinite_float_to_int(
   return converter_.guard_nonfinite_float_to_int(std::move(operand), call_);
 }
 
+exprt function_call_expr::guard_none_to_int(exprt operand, const exprt &base)
+  const
+{
+  if (!base.is_nil())
+    return operand;
+  return converter_.guard_none_conversion(
+    std::move(operand),
+    "int() argument must be a string, a bytes-like object or a real number, "
+    "not 'NoneType'",
+    call_);
+}
+
+exprt function_call_expr::guard_none_to_float(exprt operand) const
+{
+  return converter_.guard_none_conversion(
+    std::move(operand),
+    "float() argument must be a string or a real number, not 'NoneType'",
+    call_);
+}
+
 void function_call_expr::handle_int_to_float(nlohmann::json &arg) const
 {
   arg["value"] = arg["value"].get<double>();

@@ -428,6 +428,13 @@ public:
   exprt
   guard_nonfinite_float_to_int(exprt operand, const nlohmann::json &element);
 
+  // Raises TypeError with @p message before a None-typed @p operand of int()
+  // or float() is converted, when it holds None.
+  exprt guard_none_conversion(
+    exprt operand,
+    const std::string &message,
+    const nlohmann::json &element);
+
   exprt fit_numpy_integer_store(
     const exprt &lhs,
     const exprt &rhs,
@@ -619,6 +626,14 @@ public:
   }
 
 private:
+  // Hoists @p operand once and plants @p emit_guards over its value where the
+  // operand is evaluated, also inside an and/or tail or a while test.
+  exprt guard_operand(
+    exprt operand,
+    const nlohmann::json &element,
+    const std::string &prefix,
+    const std::function<void(const expr2tc &, const locationt &)> &emit_guards);
+
   friend class complex_handler;
   friend class function_call_expr;
   friend class numpy_call_expr;

@@ -436,6 +436,14 @@ private:
    */
   exprt guard_nonfinite_float_to_int(exprt operand, const exprt &base) const;
 
+  /// Raises TypeError before int() without a @p base converts a None-typed
+  /// @p operand that holds None; returns the operand to convert.
+  exprt guard_none_to_int(exprt operand, const exprt &base) const;
+
+  /// Raises TypeError before float() converts a None-typed @p operand that
+  /// holds None; returns the operand to convert.
+  exprt guard_none_to_float(exprt operand) const;
+
   /*
    * Handles int-to-float conversions (e.g., float(3)) by generating
    * the appropriate cast expression.

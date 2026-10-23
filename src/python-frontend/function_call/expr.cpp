@@ -1113,6 +1113,7 @@ exprt function_call_expr::build_constant_from_arg() const
     // int(d.copy_abs())) are not lowered twice by the branches below.
     exprt operand_expr = converter_.get_expr(first_arg);
     operand_expr = guard_nonfinite_float_to_int(operand_expr, base_expr);
+    operand_expr = guard_none_to_int(operand_expr, base_expr);
 
     // Dispatch int() to the operand's __int__ when the operand is a class
     // instance (e.g. Decimal). Under the object-model migration (#3067/#4773)
@@ -1314,7 +1315,7 @@ exprt function_call_expr::build_constant_from_arg() const
       if (const auto folded = handle_str_symbol_to_float(sym))
         return *folded;
     // Try to get the expression type directly, even if symbol lookup failed
-    exprt expr = converter_.get_expr(arg);
+    exprt expr = guard_none_to_float(converter_.get_expr(arg));
     if (type_utils::is_string_type(expr.type()))
     {
       // Runtime string -> float. float("10") must succeed, but float() of an
@@ -1457,7 +1458,7 @@ exprt function_call_expr::build_constant_from_arg() const
   // the type tag says float but the operation is bitvector arithmetic,
   // causing sort mismatches in the SMT encoder.
   if (func_name == "float" && !expr.type().is_floatbv())
-    return build_typecast(expr, t);
+    return build_typecast(guard_none_to_float(expr), t);
 
   if (func_name != "str")
     expr = retype_or_typecast(expr, t);
