@@ -443,6 +443,11 @@ public:
   /// import binds, as `mk` after `from helper import mk` and `helper.mk`
   /// after `import helper`.
   nlohmann::json callable_function_stubs() const;
+  /// Whether a straight-line retype moved @p id's value to another symbol.
+  bool is_retyped(const irep_idt &id) const
+  {
+    return retype_aliases_.count(id.as_string()) > 0;
+  }
   /// How one scope binds a name: by an import, by anything else, or by a
   /// `global`/`nonlocal` declaration handing it to an outer scope.
   struct scope_bindings
