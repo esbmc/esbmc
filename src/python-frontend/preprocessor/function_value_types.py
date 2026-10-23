@@ -92,6 +92,7 @@ class _Analysis:
 
     def __init__(self, module, path):
         self.dir = os.path.dirname(os.path.abspath(path)) if path else ""
+        self.path = path
         self.parent = {}
         self.members = {}
         self.calls = []
@@ -101,11 +102,19 @@ class _Analysis:
         self.imports = {}
         self.kind_stack = set()
         self.seen_calls = set()
-        self.from_imports = set()
+        self.from_imports = {}
         self.loaded = {}
+        self.module_paths = {}
+        self.imported_calls = set()
         self.rebound = {}
         self._collect_scopes(module, None)
-        for scope in list(self.scopes.values()):
+        self._walk_scopes(set())
+
+    def _walk_scopes(self, skip):
+        """Record the statements of every scope whose node id is not in `skip`."""
+        for key, scope in list(self.scopes.items()):
+            if key in skip:
+                continue
             for node in _own_nodes(scope.node):
                 self._statement(node, scope)
             if isinstance(scope.node, ast.Lambda):
@@ -133,7 +142,7 @@ class _Analysis:
         self.members.setdefault(self.find(key), {})[id(node)] = (node, name, kind)
 
     # scopes and keys
-    def _collect_scopes(self, node, parent):
+    def _collect_scopes(self, node, parent, imports=True):
         scope = _Scope(node, parent)
         self.scopes[id(node)] = scope
         for sub in _own_nodes(node):
@@ -142,9 +151,12 @@ class _Analysis:
                 self._collect_scopes(sub, scope)
             elif isinstance(sub, ast.Lambda):
                 self._collect_scopes(sub, scope)
+            elif not imports:
+                continue
             elif isinstance(sub, ast.ImportFrom) and sub.level == 0 and self._local_module(
                     sub.module or ""):
-                self.from_imports.update(alias.asname or alias.name for alias in sub.names)
+                self.from_imports.update(
+                    (alias.asname or alias.name, (sub.module, alias.name)) for alias in sub.names)
             elif isinstance(sub, ast.Import):
                 for alias in sub.names:
                     root = alias.name.split(".")[0]
@@ -158,6 +170,37 @@ class _Analysis:
             if self.dir and os.path.isfile(path):
                 return path
         return None
+
+    def _load(self, path):
+        """The parsed module at `path`, with the values in its functions recorded."""
+        if path not in self.loaded:
+            with open(path, encoding="utf-8") as src:
+                tree = ast.parse(src.read())
+            self.loaded[path] = tree
+            self.module_paths[id(tree)] = path
+            known = set(self.scopes)
+            self._collect_scopes(tree, None, imports=False)
+            self._walk_scopes(known)
+        return self.loaded[path]
+
+    def _module_def(self, path, name):
+        """The function `name` defined at the top of the module at `path`, or None."""
+        for stmt in self._load(path).body:
+            if isinstance(stmt, ast.FunctionDef) and stmt.name == name:
+                return stmt
+        return None
+
+    def from_imported_def(self, name, scope):
+        """The function a `from module import` in the program binds to `name`, or None."""
+        if name not in self.from_imports or self._path_of(scope) != self.path:
+            return None
+        module, original = self.from_imports[name]
+        return self._module_def(self._local_module(module), original)
+
+    def _path_of(self, scope):
+        while scope.parent is not None:
+            scope = scope.parent
+        return self.module_paths.get(id(scope.node), self.path)
 
     @staticmethod
     def _binding_scope(name, scope):
@@ -189,7 +232,11 @@ class _Analysis:
         """The key of the group `expr`'s value belongs to, or None."""
         if isinstance(expr, ast.Name):
             key = self.name_key(expr.id, scope)
-            for fn in self.defs.get(key[1:], []):
+            fns = self.defs.get(key[1:], [])
+            imported = None if fns else self.from_imported_def(expr.id, scope)
+            if imported is not None:
+                fns = [imported]
+            for fn in fns:
                 self.add_member(key, fn, fn.name, self.def_kind(fn))
             return key
         if isinstance(expr, ast.Lambda):
@@ -228,20 +275,18 @@ class _Analysis:
                                            list(reversed(dotted[1:]))))
         if path is None:
             return None
-        if path not in self.loaded:
-            with open(path, encoding="utf-8") as src:
-                self.loaded[path] = ast.parse(src.read())
-        for stmt in self.loaded[path].body:
-            if isinstance(stmt, ast.FunctionDef) and stmt.name == expr.attr:
-                key = ("imported", path, stmt.name)
-                self.add_member(key, stmt, f"{self.imports[node.id]}.{stmt.name}",
-                                self.def_kind(stmt))
-                return key
-        return None
+        stmt = self._module_def(path, expr.attr)
+        if stmt is None:
+            return None
+        key = ("imported", path, stmt.name)
+        self.add_member(key, stmt, f"{self.imports[node.id]}.{stmt.name}", self.def_kind(stmt))
+        return key
 
     def call(self, expr, scope):
         """Record a call, linking a direct call's arguments to the callee's parameters."""
         self.seen_calls.add(id(expr))
+        if self._path_of(scope) != self.path:
+            self.imported_calls.add(id(expr))
         if isinstance(expr.func, ast.Name):
             callees = self.defs.get(self.name_key(expr.func.id, scope)[1:], [])
             if callees and not self._rebound(expr.func.id, scope):
@@ -256,7 +301,11 @@ class _Analysis:
             # The imported function may call what it is given, out of sight.
             self.calls.extend((expr, arg, [], {}, None) for arg in args + list(keywords.values())
                               if arg is not None)
-            return None
+            fn = self.from_imported_def(expr.func.id, scope)
+            if fn is None:
+                return None
+            self.link_args(fn, args, keywords)
+            return self.result_key(fn)
         if callee is None:
             return None
         result = ("call", id(expr))
@@ -432,8 +481,13 @@ class _Analysis:
                         changed |= self.link_args(node, args, keywords)
 
     def mixed_call(self):
-        """A call through a value whose functions return different types, with two of them."""
+        """A call in the program through a value whose functions return different types,
+        with two of them. Calls in an imported module only carry values; that module is
+        checked on its own.
+        """
         for call, callee, _, _, result in self.calls:
+            if id(call) in self.imported_calls:
+                continue
             seen = []
             members = self.members.get(self.find(callee), {}).values()
             for _, name, kind in sorted(members, key=lambda m: m[0].lineno):

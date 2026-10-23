@@ -98,7 +98,11 @@ symbolt *python_converter::find_class_attribute_symbol(
     sid.set_function("");
     sid.set_class(cls);
     sid.set_object(attr_name);
-    return follow_retype_alias(symbol_table_.find_symbol(sid.to_string()));
+    symbolt *symbol =
+      follow_retype_alias(symbol_table_.find_symbol(sid.to_string()));
+    if (symbol)
+      dynamic_type_handler_.resolve_read(symbol);
+    return symbol;
   };
 
   if (symbolt *found = lookup(class_name))

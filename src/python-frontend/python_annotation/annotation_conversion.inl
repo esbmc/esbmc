@@ -1210,6 +1210,33 @@ std::string python_annotation<Json>::class_attribute_type(
     const Json annotation = json_utils::find_attr_annotation(class_node, attr);
     if (!annotation.empty())
       return json_utils::render_annotation_type(annotation);
+    // An unannotated `self.attr = C()` types it as C only when nothing else
+    // in the program stores to `.attr` on an instance that could be this one.
+    const std::string constructed =
+      json_utils::constructed_attr_class(class_node, attr);
+    if (
+      constructed.empty() ||
+      json_utils::find_class(ast_["body"], constructed).empty() ||
+      json_utils::count_attr_stores(ast_, attr, true) != 0)
+      continue;
+    const auto cls_ancestors = get_class_ancestors(cls);
+    std::size_t self_stores = 0;
+    for (const Json &node : ast_["body"])
+    {
+      if (node.value("_type", "") != "ClassDef")
+        continue;
+      const std::string name = node["name"].template get<std::string>();
+      const auto ancestors = get_class_ancestors(name);
+      const bool is_base =
+        std::find(cls_ancestors.begin(), cls_ancestors.end(), name) !=
+        cls_ancestors.end();
+      const bool is_derived =
+        std::find(ancestors.begin(), ancestors.end(), cls) != ancestors.end();
+      if (is_base || is_derived)
+        self_stores += json_utils::count_attr_stores(node, attr, false);
+    }
+    if (self_stores == 1)
+      return constructed;
   }
   return "";
 }
@@ -5462,6 +5489,18 @@ python_annotation<Json>::class_method(const std::string &cls, const Json &method
   return nullptr;
 }
 
+/// Whether @p func names neither a module class nor a module function, so a
+/// call through it can only reach an instance's `__call__`.
+template <class Json>
+bool python_annotation<Json>::is_instance_call(const Json &func) const
+{
+  if (func.value("_type", "") != "Name")
+    return false;
+  const std::string &name = func["id"].template get<std::string>();
+  return !json_utils::is_class<Json>(name, ast_) &&
+         json_utils::try_find_function(ast_["body"], name).is_null();
+}
+
 /// Types the unannotated parameters of a method from its `obj.m(args)` calls
 /// at module level, where `obj` is a name bound once to an instance of a
 /// module class, when every such call passes one type (#8923). Calls inside a
@@ -5483,14 +5522,22 @@ void python_annotation<Json>::preprocess_receiver_method_calls()
     if (kind == "FunctionDef" || kind == "ClassDef" || kind == "Lambda")
       return;
     const Json &func = node.value("func", Json());
+    // `obj(args)` on a callable instance calls `obj.__call__(args)` (#9070).
+    const bool instance_call = kind == "Call" && is_instance_call(func);
+    const bool method_call =
+      kind == "Call" && func.value("_type", "") == "Attribute";
+    const Json receiver =
+      instance_call ? func : method_call ? func["value"] : Json();
     if (
-      kind == "Call" && func.value("_type", "") == "Attribute" &&
-      func["value"].value("_type", "") == "Name" &&
-      !is_rebound_in_scope(func["value"]["id"].template get<std::string>()))
+      (instance_call || method_call) &&
+      receiver.value("_type", "") == "Name" &&
+      !is_rebound_in_scope(receiver["id"].template get<std::string>()))
     {
+      const std::string attr =
+        instance_call ? "__call__" : func["attr"].template get<std::string>();
       for (const std::string &cls :
-           get_class_ancestors(get_argument_type(func["value"])))
-        if (Json *method = class_method(cls, func["attr"]))
+           get_class_ancestors(get_argument_type(receiver)))
+        if (Json *method = class_method(cls, attr))
         {
           // A static or class method has no `self` to skip.
           if (!(*method)["decorator_list"].empty())
@@ -5744,7 +5791,7 @@ void python_annotation<Json>::add_type_annotation()
   // parameters this pass types stays Any after a single round (GitHub #7254).
   // Terminates because a round returns true only after annotating a parameter
   // that had none, and annotated parameters are never revisited.
-  while (preprocess_function_calls(ast_))
+  while (preprocess_function_calls(ast_) | preprocess_constructor_calls(ast_))
     ;
 
   // Second pass: add type annotations to global scope variables

@@ -18,7 +18,7 @@ using namespace python_expr;
 
 namespace
 {
-using dynamic_type_detail::collect_if_node_literal_kinds;
+using dynamic_type_detail::collect_branch_literal_kinds;
 
 using param_kinds_t = std::unordered_map<std::string, std::string>;
 
@@ -278,6 +278,14 @@ bool returns_dynamic_value(
   }
   return false;
 }
+// The literal kind a value of `type` has, as classify_literal_value_kind
+// names it: "num" for an int or bool, "str" for a str, else "".
+std::string scalar_kind(const typet &type)
+{
+  if (type_utils::is_integer_type(type) || type.is_bool())
+    return "num";
+  return type_utils::is_string_type(type) ? "str" : "";
+}
 } // namespace
 
 dynamic_type_handler::dynamic_type_handler(
@@ -308,33 +316,53 @@ std::unordered_set<std::string> dynamic_type_handler::detect_dynamic_type_names(
       scope_body = &func_def["body"];
   }
 
-  if (!collect_if_node_literal_kinds(
-        if_node,
-        kinds,
-        leaf_count,
-        leaf_total,
-        *scope_body,
-        converter_.callable_function_stubs()))
+  const nlohmann::json callables = converter_.callable_function_stubs();
+  auto collect = [&](const nlohmann::json &block) {
+    return collect_branch_literal_kinds(
+      block, kinds, leaf_count, leaf_total, *scope_body, callables);
+  };
+  const bool keeps_value =
+    !if_node.contains("orelse") || if_node["orelse"].empty();
+  if (
+    !if_node.contains("body") || !collect(if_node["body"]) ||
+    (!keeps_value && !collect(if_node["orelse"])))
     return dynamic_type_names;
 
-  for (const auto &[name, kind_set] : kinds)
-  {
-    if (leaf_count[name] != leaf_total || kind_set.size() < 2)
-      continue;
-
-    symbol_id sid = converter_.create_symbol_id();
-    sid.set_object(name);
-    const symbolt *existing =
-      converter_.symbol_table().find_symbol(sid.to_string());
+  for (auto &[name, kind_set] : kinds)
     if (
-      existing && !type_handler_.is_numeric_scalar_type(existing->get_type()) &&
-      !type_handler_.is_string_type(existing->get_type()))
-      continue;
-
-    dynamic_type_names.insert(name);
-  }
+      leaf_count[name] == leaf_total &&
+      joins_divergent_kinds(name, kind_set, keeps_value))
+      dynamic_type_names.insert(name);
 
   return dynamic_type_names;
+}
+
+bool dynamic_type_handler::joins_divergent_kinds(
+  const std::string &name,
+  std::unordered_set<std::string> &kinds,
+  bool keeps_value) const
+{
+  const symbolt *existing =
+    converter_.symbol_table().find_symbol(bound_symbol_id(name).to_string());
+  if (
+    existing && !type_handler_.is_numeric_scalar_type(existing->get_type()) &&
+    !type_handler_.is_string_type(existing->get_type()))
+    return false;
+  // `C.v` is tagged only at module level, where its store is a global one.
+  if (
+    name.find('.') != std::string::npos &&
+    (!existing || !converter_.current_function_name().empty()))
+    return false;
+
+  // The value bound before the `if` is the one a path that skips every
+  // assignment keeps. An already tagged name keeps its slot, and a retyped
+  // one holds its value in a symbol other than `existing`.
+  if (existing && !is_tagged(name) && !converter_.is_retyped(existing->id))
+    kinds.insert(scalar_kind(existing->get_type()));
+  else if (keeps_value)
+    return false;
+  kinds.erase("");
+  return kinds.size() >= 2;
 }
 
 void dynamic_type_handler::declare_dynamic_type_names(
@@ -343,8 +371,7 @@ void dynamic_type_handler::declare_dynamic_type_names(
 {
   for (const auto &name : dynamic_type_names)
   {
-    symbol_id tag_sid = converter_.create_symbol_id();
-    tag_sid.set_object(name);
+    const symbol_id tag_sid = bound_symbol_id(name);
 
     // A pre-existing variable already has GOTO instructions carrying its old
     // (non-struct) type; retyping that symbol in place would leave those
@@ -424,14 +451,27 @@ void dynamic_type_handler::declare_dynamic_type_names(
   }
 }
 
+symbol_id dynamic_type_handler::bound_symbol_id(const std::string &name) const
+{
+  symbol_id sid = converter_.create_symbol_id();
+  const std::size_t dot = name.find('.');
+  if (dot == std::string::npos)
+  {
+    sid.set_object(name);
+    return sid;
+  }
+  sid.set_function("");
+  sid.set_class(name.substr(0, dot));
+  sid.set_object(name.substr(dot + 1));
+  return sid;
+}
+
 bool dynamic_type_handler::is_tagged(const std::string &name) const
 {
   if (tagged_names_.count(name) > 0)
     return true;
 
-  symbol_id sid = converter_.create_symbol_id();
-  sid.set_object(name);
-  const std::string tag_id = sid.to_string();
+  const std::string tag_id = bound_symbol_id(name).to_string();
   if (aliases_.count(tag_id) > 0)
     return true;
 
@@ -442,9 +482,7 @@ bool dynamic_type_handler::is_tagged(const std::string &name) const
 std::string
 dynamic_type_handler::tagged_symbol_id(const std::string &name) const
 {
-  symbol_id sid = converter_.create_symbol_id();
-  sid.set_object(name);
-  const std::string tag_id = sid.to_string();
+  const std::string tag_id = bound_symbol_id(name).to_string();
   auto alias = aliases_.find(tag_id);
   return alias != aliases_.end() ? alias->second : tag_id;
 }
