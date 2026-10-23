@@ -5,6 +5,8 @@ def outer(row):
     k = inner(row)
     return k
 
+_gap = 0
+
 def inner(row: int):
     return 1
 
