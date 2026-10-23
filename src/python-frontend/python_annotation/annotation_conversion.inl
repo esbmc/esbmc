@@ -5427,6 +5427,18 @@ python_annotation<Json>::class_method(const std::string &cls, const Json &method
   return nullptr;
 }
 
+/// Whether @p func names neither a module class nor a module function, so a
+/// call through it can only reach an instance's `__call__`.
+template <class Json>
+bool python_annotation<Json>::is_instance_call(const Json &func) const
+{
+  if (func.value("_type", "") != "Name")
+    return false;
+  const std::string &name = func["id"].template get<std::string>();
+  return !json_utils::is_class<Json>(name, ast_) &&
+         json_utils::try_find_function(ast_["body"], name).is_null();
+}
+
 /// Types the unannotated parameters of a method from its `obj.m(args)` calls
 /// at module level, where `obj` is a name bound once to an instance of a
 /// module class, when every such call passes one type (#8923). Calls inside a
@@ -5448,14 +5460,22 @@ void python_annotation<Json>::preprocess_receiver_method_calls()
     if (kind == "FunctionDef" || kind == "ClassDef" || kind == "Lambda")
       return;
     const Json &func = node.value("func", Json());
+    // `obj(args)` on a callable instance calls `obj.__call__(args)` (#9070).
+    const bool instance_call = kind == "Call" && is_instance_call(func);
+    const bool method_call =
+      kind == "Call" && func.value("_type", "") == "Attribute";
+    const Json receiver =
+      instance_call ? func : method_call ? func["value"] : Json();
     if (
-      kind == "Call" && func.value("_type", "") == "Attribute" &&
-      func["value"].value("_type", "") == "Name" &&
-      !is_rebound_in_scope(func["value"]["id"].template get<std::string>()))
+      (instance_call || method_call) &&
+      receiver.value("_type", "") == "Name" &&
+      !is_rebound_in_scope(receiver["id"].template get<std::string>()))
     {
+      const std::string attr =
+        instance_call ? "__call__" : func["attr"].template get<std::string>();
       for (const std::string &cls :
-           get_class_ancestors(get_argument_type(func["value"])))
-        if (Json *method = class_method(cls, func["attr"]))
+           get_class_ancestors(get_argument_type(receiver)))
+        if (Json *method = class_method(cls, attr))
         {
           // A static or class method has no `self` to skip.
           if (!(*method)["decorator_list"].empty())
