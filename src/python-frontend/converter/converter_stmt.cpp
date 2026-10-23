@@ -9616,30 +9616,7 @@ void python_converter::get_return_statements(
       // For constant array literals (string literals), convert to
       // string_constantt
       if (return_value.is_constant())
-      {
-        // Extract the string content from the constant array
-        std::string str_content;
-        for (const auto &operand : return_value.operands())
-        {
-          if (operand.is_constant())
-          {
-            BigInt char_val = binary2integer(
-              operand.value().as_string(), operand.type().is_signedbv());
-            if (char_val == 0)
-              break; // Stop at null terminator
-            str_content += static_cast<char>(char_val.to_int64());
-          }
-        }
-
-        // Create a string_constantt with proper type
-        typet string_type = return_value.type();
-        return_value = string_constantt(
-          str_content, string_type, string_constantt::k_default);
-
-        // Get its address (converts array to pointer)
-        // V.3: build the address-of in IREP2 (operand is a string constant).
-        return_value = python_expr::build_address_of(return_value);
-      }
+        return_value = string_literal_address(return_value);
       else if (to_array_type(return_value.type()).size().is_constant())
       {
         // For non-constant arrays (variables), convert to pointer. The
@@ -9688,6 +9665,27 @@ void python_converter::get_return_statements(
     return_code.location() = location;
     target_block.copy_to_operands(return_code);
   }
+}
+
+exprt python_converter::string_literal_address(const exprt &array)
+{
+  // Extract the string content from the constant array
+  std::string str_content;
+  for (const auto &operand : array.operands())
+  {
+    if (operand.is_constant())
+    {
+      BigInt char_val = binary2integer(
+        operand.value().as_string(), operand.type().is_signedbv());
+      if (char_val == 0)
+        break; // Stop at null terminator
+      str_content += static_cast<char>(char_val.to_int64());
+    }
+  }
+
+  // V.3: build the address-of in IREP2 (operand is a string constant).
+  return python_expr::build_address_of(
+    string_constantt(str_content, array.type(), string_constantt::k_default));
 }
 
 /// \p value as the current function returns it (#8016): wrapped when the

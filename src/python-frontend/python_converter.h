@@ -3124,6 +3124,10 @@ private:
     const nlohmann::json &ast_node,
     const exprt &value,
     codet &target_block);
+  /// The address of \p array, a constant char array holding a string literal.
+  static exprt string_literal_address(const exprt &array);
+  void
+  decay_string_literal_returns(exprt &node, const typet &return_type) const;
   exprt coerce_optional_return(
     const exprt &value,
     const locationt &location,
