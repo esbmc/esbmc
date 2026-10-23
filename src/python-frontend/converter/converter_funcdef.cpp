@@ -4909,8 +4909,8 @@ void python_converter::decay_string_literal_returns(
               : typecast_exprt(address, return_type);
     return;
   }
-  for (auto &op : node.operands())
-    decay_string_literal_returns(op, return_type);
+  Forall_operands (it, node)
+    decay_string_literal_returns(*it, return_type);
 }
 
 typet python_converter::infer_return_type_from_body(const nlohmann::json &body)
