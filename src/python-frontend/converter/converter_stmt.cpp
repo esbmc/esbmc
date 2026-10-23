@@ -65,6 +65,28 @@ bool contains_cpp_throw(const exprt &expr)
   return false;
 }
 
+// The raise a condition always ends in: a cpp-throw, possibly under `not` or a
+// bool cast. Null when evaluating @p cond does not always raise.
+const exprt *raised_condition(const exprt &cond)
+{
+  if (cond.statement() == "cpp-throw")
+    return &cond;
+  if (
+    (cond.id() == "not" || cond.id() == "typecast") &&
+    cond.operands().size() == 1)
+    return raised_condition(cond.op0());
+  return nullptr;
+}
+
+codet raise_statement(const exprt &raise, const locationt &location)
+{
+  codet code("expression");
+  code.copy_to_operands(raise);
+  code.location() = location;
+  code.op0().location() = location;
+  return code;
+}
+
 // True when reassigning a value of type rhs to a variable currently typed lhs
 // crosses the numeric<->string boundary, which a single GOTO symbol cannot
 // represent in place.
@@ -8699,6 +8721,13 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     current_lhs = saved_lhs;
     current_block = saved_block;
 
+    if (const exprt *raise = raised_condition(func_call))
+    {
+      loop_body.copy_to_operands(raise_statement(*raise, call_location));
+      current_element_type = t;
+      return loop_body;
+    }
+
     if (func_call.is_function_call())
     {
       if (!func_call.type().is_empty())
@@ -9214,6 +9243,15 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     exprt if_expr("if", result_type);
     if_expr.copy_to_operands(cond, then, else_expr);
     return if_expr;
+  }
+
+  // A test that raises leaves neither branch nor loop to run (#9092).
+  if (const exprt *raise = raised_condition(cond))
+  {
+    code_blockt raised = cond_prelude;
+    raised.copy_to_operands(
+      raise_statement(*raise, get_location_from_decl(ast_node["test"])));
+    return raised;
   }
 
   return build_conditional_code(
