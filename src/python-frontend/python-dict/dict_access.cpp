@@ -43,8 +43,7 @@ bool python_dict_handler::reads_value_as_tagged(
       }))
     return true;
   const symbolt *sym = symbol_table_.find_symbol(dict_expr.identifier());
-  if (!sym)
-    return false;
+  assert(sym && "a dict with recorded values has a symbol");
   const nlohmann::json var_decl = json_utils::find_var_decl(
     sym->name.as_string(),
     converter_.get_current_func_name(),
