@@ -1522,33 +1522,28 @@ static bool name_only_indexed(const Json &node, const std::string &name)
   return true;
 }
 
-/// Element type of `var_name[...]` when @p var_node binds it, once, to a list
-/// literal whose elements share one type and the list is only ever indexed,
-/// or "Any".
+/// Element type of `var_name[...]` when @p var_node binds it to a list literal
+/// of one immutable scalar type, or "Any". The name must be bound once in the
+/// whole module (a `global` or a shadowing local counts) and only ever be
+/// indexed, so no store, method call or alias can change the elements.
 template <class Json>
 std::string python_annotation<Json>::homogeneous_literal_subscript_type(
   const Json &var_node,
   const std::string &var_name,
   bool is_slice)
 {
+  static const std::set<std::string> scalars = {"bool", "int", "float", "str"};
   const Json value = var_node.value("value", Json());
-  if (!value.is_object() || value.value("_type", "") != "List")
-    return "Any";
-  const Json func =
-    json_utils::try_find_function(ast_["body"], get_current_func_name());
-  const Json &scope =
-    !func.empty() && json_utils::count_name_bindings(func, var_name) != 0
-      ? func
-      : ast_;
   if (
-    json_utils::count_name_bindings(scope, var_name) != 1 ||
-    !name_only_indexed(scope, var_name))
+    !value.is_object() || value.value("_type", "") != "List" ||
+    json_utils::count_name_bindings(ast_, var_name) != 1 ||
+    !name_only_indexed(ast_, var_name))
     return "Any";
   std::string elem;
   for (const Json &e : value["elts"])
   {
     const std::string t = get_argument_type(e);
-    if (t.empty() || (!elem.empty() && t != elem))
+    if (scalars.count(t) == 0 || (!elem.empty() && t != elem))
       return "Any";
     elem = t;
   }
