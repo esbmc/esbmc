@@ -112,9 +112,13 @@ exprt python_converter::wrap_stored_if_optional(
   // one drops the None flag on the other path (#8248).
   if (value.type() == none_type())
     return wrap_in_optional(value, type);
+  const typet &value_type = to_struct_type(type).get_component("value").type();
+  // A dict or tuple stored into an Optional[dict[...]] or Optional[tuple[...]]
+  // name keeps the name's Optional type, so a later None check sees it (#9081).
+  if (value.type() == value_type && value_type.is_struct())
+    return wrap_in_optional(value, type);
   if (!type_utils::is_optional_scalar(value.type()))
     return value;
-  const typet &value_type = to_struct_type(type).get_component("value").type();
   return wrap_in_optional(
     value.type() == value_type ? value : typecast_exprt(value, value_type),
     type);
