@@ -4449,7 +4449,18 @@ std::optional<exprt> numpy_call_expr::try_materialize_descriptor_array_call(
   if (function_id_.get_function() != "array")
     return std::nullopt;
 
-  return converter_.build_numpy_descriptor_materialized_array(array_arg);
+  if (
+    std::optional<exprt> copied =
+      converter_.build_numpy_descriptor_materialized_array(array_arg))
+    return copied;
+
+  // The literal-only fallback in get() would type anything else, such as a
+  // name bound to a Python list, as a nondet value of unknown shape.
+  if (!array_arg.contains("elts"))
+    throw std::runtime_error(
+      "TypeError: numpy.array() of a value that is not a numpy array or a "
+      "list or tuple literal is not supported");
+  return std::nullopt;
 }
 
 // An "axis" keyword can only still be present here with value None: any
