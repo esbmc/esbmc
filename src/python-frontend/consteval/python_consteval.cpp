@@ -187,12 +187,29 @@ static bool body_has_stmt_kind(
   return false;
 }
 
+// PyConstValue has no bytes kind: a bytes literal evaluates to the str of its
+// text, so b"ab"[0] would fold to "a" instead of 97. Expression-level folds
+// of bytes methods rely on that, but a user function returning or receiving
+// bytes must not be folded to a str.
+static bool contains_bytes_literal(const nlohmann::json &node)
+{
+  if (node.is_object() && node.contains("encoded_bytes"))
+    return true;
+  if (node.is_object() || node.is_array())
+    for (const auto &child : node)
+      if (contains_bytes_literal(child))
+        return true;
+  return false;
+}
+
 /// Bodies carrying properties that must be verified independently: an Assert
-/// (must reach the solver) or a nested FunctionDef (closures are unmodeled).
-/// Always blocks folding, regardless of control-flow permission.
+/// (must reach the solver) or a nested FunctionDef (closures are unmodeled),
+/// and bodies handling bytes literals. Always blocks folding, regardless of
+/// control-flow permission.
 static bool body_has_unfoldable_stmts(const nlohmann::json &body)
 {
-  return body_has_stmt_kind(body, {"Assert", "FunctionDef"});
+  return body_has_stmt_kind(body, {"Assert", "FunctionDef"}) ||
+         contains_bytes_literal(body);
 }
 
 /// Control flow whose branches matter for coverage/branch analysis. Blocks
@@ -201,6 +218,22 @@ static bool body_has_unfoldable_stmts(const nlohmann::json &body)
 static bool body_has_control_flow(const nlohmann::json &body)
 {
   return body_has_stmt_kind(body, {"If", "For", "While"});
+}
+
+std::optional<std::vector<PyConstValue>>
+python_consteval::eval_call_args(const nlohmann::json &args, const Env &env)
+{
+  if (contains_bytes_literal(args))
+    return std::nullopt;
+  std::vector<PyConstValue> values;
+  for (const auto &arg_node : args)
+  {
+    auto arg = eval_expr(arg_node, env);
+    if (!arg)
+      return std::nullopt;
+    values.push_back(*arg);
+  }
+  return values;
 }
 
 std::optional<PyConstValue> python_consteval::try_eval_call(
@@ -1723,7 +1756,8 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
             return std::nullopt;
           const std::string &needle = sub->string_val;
 
-          // Optional start/end search window (Python str.find(sub, start, end)).
+          // Optional start/end search window (Python str.find(sub, start,
+          // end)).
           long long start = 0;
           long long end = 0;
           if (!resolve_str_window(
@@ -1856,8 +1890,9 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
         if (arg->kind == PyConstValue::INT)
           return PyConstValue::make_int(arg->int_val);
         if (arg->kind == PyConstValue::FLOAT)
-          return PyConstValue::make_int(static_cast<long long>(
-            round_ties_to_even_consteval(arg->float_val)));
+          return PyConstValue::make_int(
+            static_cast<long long>(
+              round_ties_to_even_consteval(arg->float_val)));
         return std::nullopt;
       }
 
@@ -1924,16 +1959,10 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
     }
 
     // User-defined function call — recurse
-    std::vector<PyConstValue> args;
-    for (const auto &arg_node : node["args"])
-    {
-      auto arg = eval_expr(arg_node, env);
-      if (!arg)
-        return std::nullopt;
-      args.push_back(*arg);
-    }
-
-    return try_eval_call(func_name, args);
+    auto args = eval_call_args(node["args"], env);
+    if (!args)
+      return std::nullopt;
+    return try_eval_call(func_name, *args);
   }
 
   // IfExp (ternary): x if cond else y

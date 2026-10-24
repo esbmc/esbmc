@@ -67,12 +67,14 @@ class engine
 public:
   explicit engine(std::string src)
     : source(std::move(src)),
-      prog(goto_factory::get_goto_functions(
-        source,
-        goto_factory::Architecture::BIT_64)),
+      prog(
+        goto_factory::get_goto_functions(
+          source,
+          goto_factory::Architecture::BIT_64)),
       ns(prog.context),
-      opts(goto_factory::get_default_options(
-        goto_factory::get_default_cmdline("test.c"))),
+      opts(
+        goto_factory::get_default_options(
+          goto_factory::get_default_cmdline("test.c"))),
       rt(
         prog.functions,
         ns,
@@ -89,7 +91,8 @@ public:
     return *this;
   }
 
-  /** The id `--unwindset` keys on, read from the program rather than assumed. */
+  /** The id `--unwindset` keys on, read from the program rather than assumed.
+   */
   unsigned main_loop_number() const
   {
     for (const auto &[name, func] : prog.functions.function_map)
@@ -132,7 +135,8 @@ size_t assignments_to(const symex_target_equationt &eq, const char *var)
   return found;
 }
 
-/** Body executions: `x` is written exactly once per iteration, plus its init. */
+/** Body executions: `x` is written exactly once per iteration, plus its init.
+ */
 size_t iterations(const symex_target_equationt &eq)
 {
   const size_t writes = assignments_to(eq, "@main@x");

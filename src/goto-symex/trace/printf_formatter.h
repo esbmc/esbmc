@@ -3,6 +3,11 @@
 
 #include <irep2/irep2_expr.h>
 
+/** The type a %d or %i (`is_signed`) or %u conversion converts its argument
+ *  to under the length modifier `mod`: one of "", "hh", "h", "l", "ll", "j",
+ *  "z" or "t". Nil for any other modifier. */
+type2tc printf_int_type(bool is_signed, const std::string &mod);
+
 class printf_formattert
 {
 public:
@@ -24,6 +29,11 @@ public:
    *  value as unbounded (unconstrained nondet). Always true after a run over
    *  a format whose conversions are all constant-bounded. */
   bool bounded = true;
+
+  /** False when a '#' flag outside %o, %x and %X or a conversion (%p, an
+   *  unknown one) the formatter does not model appeared, so the text it
+   *  produced may differ from the real output. */
+  bool exact = true;
 
   /** True when `operands` are the call's actual arguments, so a non-literal
    *  %s operand may be used to derive a sound object-size length bound. For

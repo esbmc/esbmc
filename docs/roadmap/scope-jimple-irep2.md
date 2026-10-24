@@ -13,6 +13,39 @@ round-trip"*. That was self-imposed and wrong: the frontend is gated only by a
 `cmake -DENABLE_JIMPLE_FRONTEND=On .` plus a rebuild gives **17 tests passing in
 3.5 s**. Every gate below is local.
 
+## Status at 2026-10-01 (`791ed8d1b8`)
+
+**Phase 5 is done.** The expression and statement migration is complete (§31),
+and B-2 is met: `scripts/irep2/bars.py` reports B-2* 0 and B-1 at 82 lines.
+This document is kept because source comments cite §32.1, §38.1, §44, §46, §47
+and K.1–K.4, and the parent's §1 bar definitions rely on §32.3 and §35.2.
+
+The sections are not in chronological order: §38 and §39, last in the file,
+are older than §40–§48. Where they disagree, the later-dated section wins, and
+the following are out of date in both:
+
+- §39.3, §39.4 and §47 give B-1 as 97 and list `jimple_static_member` and
+  `jimple_assertion` legacy arms as remaining. Both arms are gone.
+- §48's three "legacy by design" writes (`jimple_file.cpp` width,
+  `jimple-language.cpp` two sites) are IREP2 now.
+- §4/§5's "nothing can be gated on this machine" was withdrawn by the build
+  note above; the "No code has moved" statuses in §6, §9, §11 and §13 are
+  intermediate.
+
+What is left is frontend defects, not migration:
+
+- `jimple_identity` looks up a bare local name and crashes
+  (`github_4715_identity_crash_01`, KNOWNBUG).
+- `jimple_static_member::to_expr2t` falls back to the base default for a
+  non-intrinsic member access, and the base `to_exprt` returns a placeholder.
+  §43.1 calls that deletion safe; it is the over-deletion shape §44.2 describes.
+  Not measured.
+- `newarray` multiplies a bit width into `malloc`'s byte count (§33.2), and
+  `lengthof` returns bytes (§33.3).
+- `to_typet` remains at three class and method builder sites; `get_temp_symbol`
+  appends an integer to a string (`jimple_ast.h`); the `BOOLEAN` arm in
+  `jimple_type.cpp` is unreachable; `jimple_throw` is unimplemented.
+
 ## 1. Census
 
 | measure | value |

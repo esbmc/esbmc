@@ -1,0 +1,5 @@
+regression/python/github_8956
+regression/python/github_8956_fail
+regression/python/github_8956_grandchild
+regression/python/github_8956_base_instance_unsupported
+regression/python/github_8956_super_unsupported

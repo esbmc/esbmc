@@ -16,6 +16,11 @@ if(ENABLE_Z3)
   target_include_directories(z3_bigint_test
     PRIVATE ${Z3_INCLUDE_DIRS} ${CMAKE_SOURCE_DIR}/src/solvers/z3)
 
+  new_unit_test(z3_diagnostics_test "z3_diagnostics.test.cpp"
+                "solverz3;smt;smttuple;smtfp;prop;util_esbmc;bigint")
+  target_include_directories(z3_diagnostics_test
+    PRIVATE ${Z3_INCLUDE_DIRS} ${CMAKE_SOURCE_DIR}/src/solvers/z3)
+
   # Drives array_convt's bounded select/store directly: the boundary they guard
   # is unreachable from C input, so only a unit test can pin it. Z3 serves
   # merely as a concrete backend for the flattener to sit on.
@@ -40,6 +45,9 @@ if(ENABLE_BITWUZLA)
                 "solvers;util_esbmc;filesystem;bigint")
   target_include_directories(bitwuzla_sort_cache_test
     PRIVATE ${CMAKE_SOURCE_DIR}/src/solvers/bitwuzla)
+
+  new_unit_test(solver_assumptions_test "solver_assumptions.test.cpp"
+                "solvers;util_esbmc;filesystem;bigint")
 endif()
 
 if(ENABLE_SMTLIB)

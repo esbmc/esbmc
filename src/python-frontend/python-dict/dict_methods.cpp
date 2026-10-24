@@ -99,7 +99,7 @@ exprt python_dict_handler::handle_dict_get(
   // Get element info for the key
   python_list list_handler(converter_, call_node);
   list_elem_info key_info =
-    list_handler.get_list_element_info(call_node, key_expr);
+    list_handler.get_erased_key_info(call_node, key_expr);
 
   // Call try_find_index (returns SIZE_MAX if not found)
   code_function_callt try_find_call;
@@ -232,7 +232,8 @@ exprt python_dict_handler::handle_dict_get(
 
   if (use_optional)
   {
-    // No default given: return Optional(is_none=true) so `result is None` holds.
+    // No default given: return Optional(is_none=true) so `result is None`
+    // holds.
     constant_exprt none_expr(none_type());
     none_expr.set_value("NULL");
     exprt optional_none =
@@ -312,7 +313,8 @@ exprt python_dict_handler::handle_dict_setdefault(
       result_type = long_int_type();
   }
 
-  // Strings are stored as char arrays; list_at returns a void* to the first character.
+  // Strings are stored as char arrays; list_at returns a void* to the first
+  // character.
   bool is_string_result =
     (result_type.is_pointer() && result_type.subtype() == char_type()) ||
     (result_type.is_array() && result_type.subtype() == char_type());
@@ -321,6 +323,8 @@ exprt python_dict_handler::handle_dict_setdefault(
 
   if (is_dict_type(result_type))
     throw std::runtime_error("setdefault(): dict value type is not supported");
+
+  default_value = converter_.wrap_if_optional(default_value, result_type);
 
   // List values are stored by pointer so that
   // `a.setdefault(k, []).append(x)` mutates the stored list.
@@ -506,10 +510,9 @@ exprt python_dict_handler::handle_dict_setdefault(
     push_key_call.arguments().push_back(build_symbol(*key_info.elem_type_sym));
     push_key_call.arguments().push_back(key_info.elem_size);
     push_key_call.arguments().push_back(from_integer(BigInt(0), size_type()));
-    push_key_call.arguments().push_back(from_integer(
-      BigInt(converter_.get_type_handler().is_pointer_free(
-        key_info.elem_symbol->get_type())),
-      int_type()));
+    push_key_call.arguments().push_back(
+      converter_.get_type_handler().ptr_free_arg(
+        key_arg, key_info.elem_symbol->get_type()));
     push_key_call.type() = bool_type();
     push_key_call.location() = location;
     else_block.copy_to_operands(push_key_call);
@@ -558,10 +561,9 @@ exprt python_dict_handler::handle_dict_setdefault(
       push_value_call.arguments().push_back(value_info.elem_size);
       push_value_call.arguments().push_back(
         from_integer(BigInt(0), size_type()));
-      push_value_call.arguments().push_back(from_integer(
-        BigInt(converter_.get_type_handler().is_pointer_free(
-          value_info.elem_symbol->get_type())),
-        int_type()));
+      push_value_call.arguments().push_back(
+        converter_.get_type_handler().ptr_free_arg(
+          value_arg, value_info.elem_symbol->get_type()));
       push_value_call.type() = bool_type();
       push_value_call.location() = location;
       else_block.copy_to_operands(push_value_call);
@@ -1432,14 +1434,45 @@ exprt python_dict_handler::handle_dict_update(
     return nil_exprt();
   }
 
-  // For update(other_dict), iterate over the source keys/values lists and
-  // reinsert each pair into the destination dict.
   exprt other_dict = converter_.get_expr(arg);
   if (!is_dict_type(other_dict.type()))
     throw std::runtime_error("update() argument must be a dict in ESBMC model");
 
-  // Read entries from the source dict through its internal keys/values lists.
+  copy_dict_entries(dict_expr, other_dict, call_node);
+  apply_keyword_args();
+  return nil_exprt();
+}
+
+/// A call returning a dict is a statement; binds its result so its members
+/// can be read. Any other expression is returned as is.
+exprt python_dict_handler::bind_dict_source(
+  const exprt &source,
+  const nlohmann::json &node)
+{
+  if (!source.is_function_call())
+    return source;
+
+  symbolt &result =
+    converter_.create_tmp_symbol(node, "$dict_source$", source.type(), exprt());
+  code_declt result_decl(build_symbol(result));
+  result_decl.location() = converter_.get_location_from_decl(node);
+  converter_.add_instruction(result_decl);
+
+  code_function_callt call = to_code_function_call(to_code(source));
+  call.lhs() = build_symbol(result);
+  converter_.add_instruction(call);
+  return build_symbol(result);
+}
+
+void python_dict_handler::copy_dict_entries(
+  const exprt &dict_expr,
+  const exprt &source,
+  const nlohmann::json &call_node)
+{
   locationt location = converter_.get_location_from_decl(call_node);
+  const exprt other_dict = bind_dict_source(source, call_node);
+
+  // Read entries from the source dict through its internal keys/values lists.
   typet list_type = type_handler_.get_list_type();
   exprt keys_member = build_member(other_dict, "keys", list_type);
   exprt values_member = build_member(other_dict, "values", list_type);
@@ -1487,8 +1520,11 @@ exprt python_dict_handler::handle_dict_update(
   exprt loop_cond =
     build_less_than(build_symbol(index_var), build_symbol(size_var));
 
-  // Rebuild the current key/value pair from the source lists.
+  // Rebuild the current key/value pair from the source lists. Its temporaries
+  // and the contains check must be emitted into loop_body, not before it.
   code_blockt loop_body;
+  code_blockt *saved_block = converter_.current_block;
+  converter_.current_block = &loop_body;
   exprt key_obj = list_handler.build_list_at_call(
     keys_member, build_symbol(index_var), call_node);
   exprt key_expr = list_handler.extract_pyobject_value(key_obj, key_type);
@@ -1500,6 +1536,7 @@ exprt python_dict_handler::handle_dict_update(
   code_blockt pair_block;
   handle_dict_subscript_assign(
     dict_expr, key_expr, value_expr, location, call_node, pair_block);
+  converter_.current_block = saved_block;
   loop_body.copy_to_operands(pair_block);
 
   // Advance to the next source entry (V.3: build index + 1 in IREP2).
@@ -1514,7 +1551,27 @@ exprt python_dict_handler::handle_dict_update(
   while_loop.copy_to_operands(loop_cond, loop_body);
   while_loop.location() = location;
   converter_.add_instruction(while_loop);
+}
 
-  apply_keyword_args();
-  return nil_exprt();
+exprt python_dict_handler::handle_dict_union(
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &element)
+{
+  locationt location = converter_.get_location_from_decl(element);
+  std::string dict_name = generate_unique_dict_name(element, location);
+
+  symbolt &dict_sym = converter_.create_tmp_symbol(
+    element, dict_name + "_union", get_dict_struct_type(), exprt());
+  code_declt dict_decl(build_symbol(dict_sym));
+  dict_decl.location() = location;
+  converter_.add_instruction(dict_decl);
+
+  // Both operands are evaluated before either is copied, as in CPython.
+  const exprt lhs_dict = bind_dict_source(lhs, element);
+  const exprt rhs_dict = bind_dict_source(rhs, element);
+  create_empty_dict(element, build_symbol(dict_sym));
+  copy_dict_entries(build_symbol(dict_sym), lhs_dict, element);
+  copy_dict_entries(build_symbol(dict_sym), rhs_dict, element);
+  return build_symbol(dict_sym);
 }

@@ -28,9 +28,9 @@ array_convt::array_convt(smt_solver_baset *_ctx)
 void array_convt::convert_array_assign(const array_ast *src, smt_astt sym)
 {
   // Implement array assignments by simply making the destination AST track the
-  // same array. No new variables need to be introduced, saving lots of searching
-  // hopefully. This works because we're working with an SSA program where the
-  // source array will never be modified.
+  // same array. No new variables need to be introduced, saving lots of
+  // searching hopefully. This works because we're working with an SSA program
+  // where the source array will never be modified.
 
   // Get a mutable reference to the destination
   array_ast *destination = const_cast<array_ast *>(array_downcast(sym));
@@ -46,6 +46,11 @@ void array_convt::convert_array_assign(const array_ast *src, smt_astt sym)
   destination->array_fields = source->array_fields;
   destination->base_array_id = source->base_array_id;
   destination->array_update_num = source->array_update_num;
+}
+
+void array_convt::set_initial_reader(smt_astt array, initial_readert reader)
+{
+  initial_readers[array_downcast(array)->base_array_id] = std::move(reader);
 }
 
 unsigned int array_convt::new_array_id()
@@ -617,6 +622,8 @@ void array_convt::pop_array_ctx()
   array_equalities.erase(target_ctx); // Erase everything with that idx
   auto &ctx_idx = array_of_vals.get<1>();
   ctx_idx.erase(target_ctx); // Similar
+  initial_readers.erase(
+    initial_readers.lower_bound(num_arrays), initial_readers.end());
 
   // Now go through each storage Thing erasing any operations, indexes, or
   // whatever that were added in the old context level.
@@ -874,10 +881,23 @@ void array_convt::add_new_indexes()
       array_of_vals.get<0>();
     auto it = array_num_idx.find(arrid);
 
+    auto reader = initial_readers.find(arrid);
+
     if (it != array_num_idx.end())
     {
       collate_array_values(
         array_values[0], arrid, 0, subtype, start_pos[arrid], it->value);
+    }
+    else if (reader != initial_readers.end())
+    {
+      collate_array_values(
+        array_values[0],
+        arrid,
+        0,
+        subtype,
+        start_pos[arrid],
+        nullptr,
+        &reader->second);
     }
     else
     {
@@ -885,9 +905,11 @@ void array_convt::add_new_indexes()
         array_values[0], arrid, 0, subtype, start_pos[arrid]);
     }
 
-    // Apply inital ackerman constraints
-    add_initial_ackerman_constraints(
-      array_values[0], expr_index_map[arrid], start_pos[arrid]);
+    // Apply inital ackerman constraints. A reader is a function of the index,
+    // so equal indexes already get equal values from it.
+    if (reader == initial_readers.end())
+      add_initial_ackerman_constraints(
+        array_values[0], expr_index_map[arrid], start_pos[arrid]);
 
     // And finally, re-execute the relevant array transitions
     for (unsigned int i = 0; i < array_updates[arrid].size() - 1; i++)
@@ -1265,7 +1287,8 @@ void array_convt::collate_array_values(
   unsigned int array_update_num,
   smt_sortt subtype,
   unsigned int start_point,
-  smt_astt init_val)
+  smt_astt init_val,
+  const initial_readert *reader)
 {
   // IIRC, this translates the history of an array + any selects applied to it,
   // into a vector mapping a particular index to the variable representing the
@@ -1298,7 +1321,22 @@ void array_convt::collate_array_values(
   }
 
   // Initialize everything else to either a free variable or the initial value.
-  if (init_val == nullptr)
+  if (reader != nullptr)
+  {
+    // As for an initial value, but read at each index.
+    for (auto const &it : idx_map)
+    {
+      if (it.vec_idx < start_point)
+        continue;
+
+      smt_astt init = (*reader)(it.idx);
+      if (vals[it.vec_idx] == nullptr)
+        vals[it.vec_idx] = init;
+      else
+        ctx->assert_ast(vals[it.vec_idx]->eq(ctx, init));
+    }
+  }
+  else if (init_val == nullptr)
   {
     // Free variables, except where free variables tied to selects have occurred
     for (auto &val : vals)

@@ -1,0 +1,4 @@
+CORE
+t.ld
+--ld-props props.yaml
+^ERROR: .*ET port is narrower than PT

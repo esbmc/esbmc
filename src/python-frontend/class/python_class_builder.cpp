@@ -101,19 +101,37 @@ bool python_class_builder::get_bases(struct_typet &st)
     ids.emplace_back(bsym->id);
 
     const auto &bty = static_cast<const struct_typet &>(bsym->get_type());
+    // Bases sharing an ancestor (a diamond) each carry its attributes, which
+    // name one slot of the instance.
     for (const auto &c : bty.components())
-      st.components().push_back(c);
+      if (!st.has_component(c.get_name()))
+        st.components().push_back(c);
   }
   return has_ud;
 }
 
 /* Converts methods and annotated class-level attributes (AnnAssign)
  * into ESBMC symbols. Recursively processes referenced classes. */
+/// Converting a method adds a component to the class symbol for each
+/// `self.attr` store that add_self_attrs' straight-line scan misses, such as
+/// one inside an `if`. Take them over so finalising the class with \p st does
+/// not drop them and allocate an instance too small for its stores (#8503).
+static void adopt_symbol_components(const symbolt &sym, struct_typet &st)
+{
+  const typet sym_type = sym.get_type();
+  if (!sym_type.is_struct())
+    return;
+  for (const auto &c : to_struct_type(sym_type).components())
+    if (!st.has_component(c.get_name()))
+      st.components().push_back(c);
+}
+
 void python_class_builder::get_members(
   struct_typet &st,
   codet &out,
   bool has_ud_base)
 {
+  symbolt *const class_sym = ensure_sym(pc_.name());
   std::string saved_class_name = conv_.current_class_name_;
   if (conv_.current_class_name_.empty())
   {
@@ -139,6 +157,7 @@ void python_class_builder::get_members(
       conv_.current_func_name_ = "";
 
       conv_.get_function_definition(n);
+      adopt_symbol_components(*class_sym, st);
 
       std::string saved_func_for_lookup = conv_.current_func_name_;
       conv_.current_func_name_ = mname;
@@ -157,7 +176,8 @@ void python_class_builder::get_members(
     {
       // class-level annotated attribute
       // Check if annotation is a simple Name node with an "id" field
-      // Complex types like Dict[str, Any] are Subscript nodes without direct "id"
+      // Complex types like Dict[str, Any] are Subscript nodes without direct
+      // "id"
       if (
         n.contains("annotation") && n["annotation"].contains("id") &&
         n["annotation"]["id"].is_string())
@@ -409,13 +429,14 @@ void python_class_builder::build(codet &out)
   add_self_attrs(st);
 
   // Partial commit allows nested lookups while building members
-  sym->set_type(st);
+  sym->set_type(migrate_type(st));
 
   // Add methods, class attributes, and default constructor
   get_members(st, out, has_ud_base);
   gen_ctor(has_ud_base, st);
 
-  // Finalize type and clear context
-  sym->set_type(st);
+  // Finalize type and clear context. The seam drops the methods list and the
+  // components' access, which no Python reader needs.
+  sym->set_type(migrate_type(st));
   conv_.current_class_name_.clear();
 }

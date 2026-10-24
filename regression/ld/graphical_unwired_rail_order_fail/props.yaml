@@ -1,0 +1,8 @@
+properties:
+  # Twin of graphical_unwired_rail_order_safe. The reset coil is drawn last, so
+  # it wins when a and b are both on and q is off. An order taken from localId
+  # or from hashing runs the set last and makes this hold (#7352).
+  - id: P1
+    kind: invariant
+    expression: "!(a && b) || q"
+    description: "Deliberately false: the set path wins when both are energised"

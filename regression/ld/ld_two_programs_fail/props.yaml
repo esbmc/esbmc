@@ -1,0 +1,5 @@
+properties:
+  - id: P1
+    kind: invariant
+    expression: "!q"
+    description: "Deliberately false: the program's mode starts TRUE, so q is on in scan 1"

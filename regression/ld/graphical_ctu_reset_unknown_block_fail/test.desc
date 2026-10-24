@@ -1,0 +1,4 @@
+CORE
+ctu.ld
+--ld-props props.yaml --k-induction --unlimited-k-steps
+^ERROR: UnsupportedConstruct\(CTU0 pin R driven by LTON, tier=2\)$

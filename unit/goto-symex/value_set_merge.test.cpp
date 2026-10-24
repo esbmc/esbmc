@@ -54,12 +54,14 @@ class engine
 public:
   explicit engine(std::string src)
     : source(std::move(src)),
-      prog(goto_factory::get_goto_functions(
-        source,
-        goto_factory::Architecture::BIT_64)),
+      prog(
+        goto_factory::get_goto_functions(
+          source,
+          goto_factory::Architecture::BIT_64)),
       ns(prog.context),
-      opts(goto_factory::get_default_options(
-        goto_factory::get_default_cmdline("test.c"))),
+      opts(
+        goto_factory::get_default_options(
+          goto_factory::get_default_cmdline("test.c"))),
       rt(
         prog.functions,
         ns,
@@ -277,4 +279,33 @@ TEST_CASE(
   keep.values.clear();
   keep.make_union(produced.values, true);
   REQUIRE(has_id(keep, "c:@p"));
+}
+
+TEST_CASE(
+  "a struct-typed ternary leaves no temporary behind",
+  "[symex][value-set]")
+{
+  // No member entry of the ternary's temporary survives the assignment.
+  engine e(R"(
+struct S { int *p; };
+int a, b;
+struct S s, x, y;
+int nondet_int(void);
+int main(void)
+{
+  x.p = &a;
+  y.p = &b;
+  s = nondet_int() ? x : y;
+  return *s.p;
+}
+)");
+  e.run();
+
+  const std::set<std::string> targets = targets_of(e.value_set(), "c:@s");
+  REQUIRE(points_to(targets, "@a"));
+  REQUIRE(points_to(targets, "@b"));
+
+  for (const auto &entry : e.value_set().values)
+    REQUIRE(
+      entry.second.identifier.find("__ESBMC_xchg_ptr") == std::string::npos);
 }

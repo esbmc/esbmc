@@ -88,6 +88,11 @@ static configt::ansi_ct::endianesst arch_endianness(const std::string &arch)
   abort();
 }
 
+bool configt::ansi_ct::endianess_overrides_target() const
+{
+  return endianess != arch_endianness(target.arch);
+}
+
 bool configt::triple::is_windows_abi() const
 {
   return std::regex_match(os, WINDOWS_ABI);
@@ -178,6 +183,7 @@ bool configt::set(const cmdlinet &cmdline)
   }
 
   ansi_c.use_fixed_for_float = cmdline.isset("fixedbv");
+  ansi_c.reserve_first_page = cmdline.isset("reserve-first-page");
 
   ansi_c.cheri = ansi_ct::CHERI_OFF;
   if (cmdline.isset("cheri"))
@@ -246,7 +252,8 @@ bool configt::set(const cmdlinet &cmdline)
     req_target++;
   }
 
-  /* CHERI-TODO: remove, either determine through sysroot or leave to user to specify */
+  /* CHERI-TODO: remove, either determine through sysroot or leave to user to
+   * specify */
   if (ansi_c.cheri)
   {
 #ifdef ESBMC_CHERI_CLANG_MORELLO

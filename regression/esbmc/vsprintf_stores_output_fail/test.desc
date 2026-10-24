@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^VERIFICATION FAILED$
+^\s*FAILED\s+\[put\.array-bounds-violated\.1\]\s+line 8\s+dereference failure: array bounds violated$

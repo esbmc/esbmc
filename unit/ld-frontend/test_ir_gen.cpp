@@ -185,3 +185,28 @@ TEST_CASE(
   REQUIRE(sym_a->name == "__ctr_prev_CTU_A");
   REQUIRE(sym_b->name == "__ctr_prev_CTU_B");
 }
+
+TEST_CASE(
+  "an arithmetic step over a non-arithmetic kind is refused",
+  "[ir_gen]")
+{
+  LdIR ir = make_empty_ir();
+  add_int_var(ir, "A");
+  add_int_var(ir, "B");
+  add_int_var(ir, "C");
+
+  LdIRNode n;
+  n.kind = LdIRNodeKind::ArithStep;
+  n.arith_kind = FBKind::TON;
+  n.arith_IN1 = "A";
+  n.arith_IN2 = "B";
+  n.arith_OUT = "C";
+  LdIRRung rung;
+  rung.id = "1";
+  rung.nodes.push_back(n);
+  ir.rungs.push_back(rung);
+
+  contextt ctx;
+  ld_converter conv(ctx, ir);
+  REQUIRE_THROWS_WITH(conv.convert(), "ld_converter: not an arithmetic block");
+}

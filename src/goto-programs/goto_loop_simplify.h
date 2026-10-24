@@ -8,7 +8,8 @@
 ///
 /// A loop is removable when:
 ///   - The body modifies only non-pointer local symbols.
-///   - The body contains no FUNCTION_CALL / ASSERT / ASSUME / non-back-edge GOTO.
+///   - The body contains no FUNCTION_CALL / ASSERT / ASSUME / non-back-edge
+///   GOTO.
 ///   - All modified symbols are dead immediately after the loop (recognised
 ///     via DEAD instructions emitted by the C frontend), so the loop has no
 ///     observable effect on post-loop state.

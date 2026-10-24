@@ -142,7 +142,7 @@ void solidity_convertert::convert_unboundcall_nondet(
     static Base instance;
     void test()
     {
-      instance.doSomething(); // 
+      instance.doSomething(); //
     }
     void doSomething()
     {
@@ -351,7 +351,8 @@ bool solidity_convertert::get_unbound_function(
 // Normally, we would expect expr to be a code_declt expression
 void solidity_convertert::move_to_initializer(const exprt &expr)
 {
-  // the initializer will clear its elements, so we populate the copy instead of origins
+  // the initializer will clear its elements, so we populate the copy instead of
+  // origins
   if (!ctor_frontBlockDecl.operands().empty())
   {
     // reverse order
@@ -622,7 +623,7 @@ bool solidity_convertert::move_inheritance_to_ctor(
           constructor() Base1() Base2() {}
         }
 
-      E.g. 
+      E.g.
         contract DD is BB(3)
       Result ctor symbol table:
         Symbol......: c:@S@DD@F@DD#
@@ -630,12 +631,12 @@ bool solidity_convertert::move_inheritance_to_ctor(
         Base name...: DD
         Mode........: C++
         Type........: constructor  (struct DD *)
-        Value.......: 
+        Value.......:
         {
           BB((struct BB *)this, 3);
         }
       However, since the c++ frontend is broken(esbmc/issues/1866),
-      we convert it as 
+      we convert it as
         function ctor()
         {
           // create temporary object
@@ -717,14 +718,15 @@ bool solidity_convertert::move_inheritance_to_ctor(
 
               if (is_sol_builin_symbol(c_name, c_comp.name().as_string()))
                 // skip builtin symbol.
-                //e.g. this->$address = _ESBMC_ctor_A_tmp.$address;
+                // e.g. this->$address = _ESBMC_ctor_A_tmp.$address;
                 continue;
 
               lhs = member_exprt(this_expr, comp.name(), comp.type());
               rhs = member_exprt(
                 symbol_expr(added_ctor_symbol), c_comp.name(), c_comp.type());
               if (get_sol_type(comp.type()) == SolidityGrammar::SolType::STRING)
-                // it have been initialized so should have no dereference failure
+                // it have been initialized so should have no dereference
+                // failure
                 get_string_assignment(lhs, rhs, _assign);
               else
               {
@@ -894,7 +896,7 @@ solidity_convertert::find_constructor_ref(const std::string &contract_name)
 /**
  * @param decl_ref: the declaration of the ctor. Can be empty for implicit ctor.
  * @caller: the caller node that might contain the arguments
-*/
+ */
 bool solidity_convertert::get_ctor_call(
   const nlohmann::json &decl_ref,
   const nlohmann::json &caller,
@@ -947,8 +949,8 @@ bool solidity_convertert::get_new_object_ctor_call(
   log_debug("solidity", "generating new contract object");
   // 1. get the ctor call expr
   nlohmann::json callee_expr_json;
-  // if the caller's nextnode is a NewExpression, we can use it's expression directly
-  // else, we need to use the expression's expression
+  // if the caller's nextnode is a NewExpression, we can use it's expression
+  // directly else, we need to use the expression's expression
   if (caller["expression"]["nodeType"] == "NewExpression")
     callee_expr_json = caller["expression"];
   else

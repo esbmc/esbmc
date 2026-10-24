@@ -1,0 +1,6 @@
+format_version: "0.1"
+properties:
+  - id: P1
+    kind: invariant
+    expression: "NonZero && !NonZero"
+    justification: "#8213: a BOOL operand still encodes; this one never holds."

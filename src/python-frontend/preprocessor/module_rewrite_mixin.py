@@ -1,11 +1,95 @@
 import ast
 import copy
+from collections import Counter
+
+from preprocessor.bound_method_dispatch import dispatch_rebound_methods
+from preprocessor.check_type_lowering import lower_check_type
+from preprocessor.dotted_imports import alias_dotted_imports
+from preprocessor.decorator_lowering import lower_user_decorators
+from preprocessor.itertools_lowering import lower_itertools
+from preprocessor.coroutine_lowering import lower_coroutines
+from preprocessor.match_lowering import lower_match_statements
+from preprocessor.namedtuple_lowering import lower_namedtuples
+from preprocessor.function_value_dispatch import dispatch_mixed_function_values
+from preprocessor.function_value_types import reject_mixed_function_values
+from preprocessor.iter_next_lowering import lower_iter_next
+from preprocessor.receiver_classes import refuse_path_dependent_receivers
+from preprocessor.sibling_defs import define_read_siblings_first
+from preprocessor.skipped_base_init import refuse_skipped_base_init
+from preprocessor.zip_lowering import inline_zip_names, lower_zip_builds
+from preprocessor.unbound_locals import guard_unbound_locals
 # pylint: disable=too-many-branches,too-many-boolean-expressions
+
+
+def _reads_now(stmt, name):
+    """Whether running `stmt` reads `name`: function and lambda bodies run
+    later, so only their decorators and defaults count."""
+    stack = [stmt]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, ast.Name) and node.id == name and isinstance(node.ctx, ast.Load):
+            return True
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            stack.extend(node.decorator_list + node.args.defaults +
+                         [d for d in node.args.kw_defaults if d])
+        elif isinstance(node, ast.Lambda):
+            stack.extend(node.args.defaults + [d for d in node.args.kw_defaults if d])
+        else:
+            stack.extend(ast.iter_child_nodes(node))
+    return False
+
+
+def _binds(stmt, name):
+    """Whether the module-level statement `stmt` always rebinds `name`."""
+    if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        return stmt.name == name
+    if isinstance(stmt, ast.Assign):
+        return any(isinstance(t, ast.Name) and t.id == name for t in stmt.targets)
+    if isinstance(stmt, ast.AnnAssign):
+        return stmt.value is not None and isinstance(stmt.target,
+                                                     ast.Name) and stmt.target.id == name
+    if isinstance(stmt, (ast.Import, ast.ImportFrom)):
+        return any((a.asname or a.name.split(".")[0]) == name for a in stmt.names)
+    return False
+
+
+def _rename_shadowed_classes(module):
+    """Rename a module-level class that a later module-level statement rebinds
+    before anything reads it, as in `class C: ...` then `C = f`. Every read of
+    `C` then means the new binding, which the converter would otherwise take
+    for the class (#8343)."""
+    taken = {n.id for n in ast.walk(module) if isinstance(n, ast.Name)}
+    for i, stmt in enumerate(module.body):
+        if not isinstance(stmt, ast.ClassDef):
+            continue
+        for later in module.body[i + 1:]:
+            if _reads_now(later, stmt.name):
+                break
+            if _binds(later, stmt.name):
+                renamed = f"{stmt.name}__esbmc_shadowed"
+                while renamed in taken:
+                    renamed += "_"
+                taken.add(renamed)
+                stmt.name = renamed
+                break
+
+
+def _referenced_names(module):
+    """The names `module` reads, deletes or updates in place."""
+    return {
+        n.id
+        for n in ast.walk(module) if isinstance(n, ast.Name) and not isinstance(n.ctx, ast.Store)
+    } | {
+        n.target.id
+        for n in ast.walk(module)
+        if isinstance(n, ast.AugAssign) and isinstance(n.target, ast.Name)
+    }
 
 
 class ModuleRewriteMixin:
     called_names: set
     shadowed_nondet_collections: set
+    imported_module_names: set
     variable_annotations: dict
     module_dunder_all: list | None
     exported_range_aliases: set
@@ -416,15 +500,102 @@ class ModuleRewriteMixin:
             return names
         return None
 
-    def prepare_module(self, node, alias_seed=frozenset(), wrapper_seed=None):
-        """Run pre-visit analyses and range-alias/wrapper canonicalization."""
+    @staticmethod
+    def _binding_sites(module_node):
+        """How many places anywhere in *module_node* bind or declare each name."""
+        sites = Counter()
+        for n in ast.walk(module_node):
+            if isinstance(n, ast.Name) and not isinstance(n.ctx, ast.Load):
+                sites[n.id] += 1
+            elif isinstance(n, ast.alias):
+                sites[n.asname or n.name.split(".")[0]] += 1
+            elif isinstance(n, ast.arg):
+                sites[n.arg] += 1
+            elif isinstance(n, (ast.Global, ast.Nonlocal)):
+                sites.update(n.names)
+            elif isinstance(getattr(n, "name", None), str):
+                sites[n.name] += 1
+            elif isinstance(n, ast.MatchMapping) and n.rest:
+                sites[n.rest] += 1
+        return sites
+
+    @staticmethod
+    def _appears_before(module_node, name, stmt):
+        """Whether a Name *name* occurs in *module_node* before *stmt*."""
+        positions = ((getattr(n, "lineno", 0), getattr(n, "col_offset", 0))
+                     for n in ast.walk(module_node) if isinstance(n, ast.Name) and n.id == name)
+        return any(p < (stmt.lineno, stmt.col_offset) for p in positions)
+
+    def _rewrite_module_aliases(self, module_node):
+        """Rewrite a top-level `alias = mod` into `import <module> as alias`.
+
+        Only when `mod` is bound solely by an earlier top-level import, `alias`
+        solely by this statement, and nothing reads `alias` before it: then
+        both forms bind the same module at the same point, and the converter
+        resolves calls through the import form only (#8366)."""
+        sites = self._binding_sites(module_node)
+        modules = {}
+        for i, stmt in enumerate(module_node.body):
+            if isinstance(stmt, ast.Import):
+                for a in stmt.names:
+                    root = a.name.split(".")[0]
+                    modules[a.asname or root] = a.name if a.asname else root
+            if not (isinstance(stmt, ast.Assign) and len(stmt.targets) == 1
+                    and isinstance(stmt.targets[0], ast.Name) and isinstance(stmt.value, ast.Name)):
+                continue
+            alias, name = stmt.targets[0].id, stmt.value.id
+            if (name not in modules or sites[name] != 1 or sites[alias] != 1
+                    or self._appears_before(module_node, alias, stmt)):
+                continue
+            imp = ast.Import(names=[ast.alias(name=modules[name], asname=alias)])
+            module_node.body[i] = ast.fix_missing_locations(ast.copy_location(imp, stmt))
+
+    def prepare_module(self, node, alias_seed=frozenset(), wrapper_seed=None, entry=False):
+        """Run pre-visit analyses and range-alias/wrapper canonicalization.
+
+        `entry` marks the program itself, whose module-level names no other
+        module imports."""
+        lower_coroutines(node, self.module_name)
+        lower_check_type(node, self.module_name)
+        _rename_shadowed_classes(node)
+        alias_dotted_imports(node)
+        inline_zip_names(node)
+        lower_iter_next(node)
+        lower_zip_builds(node)
+        if entry:
+            dispatch_mixed_function_values(node, self.module_name)
+        reject_mixed_function_values(node, self.module_name)
+        lower_match_statements(node)
+        lower_itertools(node)
+        lower_namedtuples(node, self.module_name)
+        lower_user_decorators(node, self.module_name)
+        define_read_siblings_first(node)
+        refuse_path_dependent_receivers(node, self.module_name)
+        refuse_skipped_base_init(node, self.module_name)
         self.expand_unittest_main(node)
+        self._rewrite_module_aliases(node)
+        self._rewrite_map_values(node)
+        guard_unbound_locals(node)
+        self.in_order_bindings.update(
+            dispatch_rebound_methods(node, self._names_bound_by, self._variable_names(node),
+                                     self._next_unpack_tmp_id, self.module_name))
+        self.hoist_nested_classes(node)
+        self.copy_aliased_methods(node)
 
         for n in ast.walk(node):
             if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
                 self.called_names.add(n.func.id)
+        self.referenced_names = _referenced_names(node)
+        self._scan_fixed_receivers(node)
+        self.variable_names = self._variable_names(node)
+        self.scope_binding_counts = self._scope_binding_counts(node)
 
         self._scan_shadowed_nondet_collections(node)
+        self._scan_imported_module_names(node)
+        self._scan_functools_reduce_names(node)
+
+        self.iterator_classes = self._scan_iterator_classes(node)
+        self.iterator_params = self._scan_iterator_params(node)
 
         for stmt in node.body:
             if isinstance(stmt, ast.Assign):
@@ -443,10 +614,76 @@ class ModuleRewriteMixin:
         self.list_var_element_classes = self._scan_list_var_element_classes(node)
         self.module_dunder_all = self._capture_dunder_all(node)
         self._scan_sequence_iterators(node)
+        self._scan_starred_calls(node)
+        self._scan_generator_consumers(node)
         self._scan_module_vararg_defs(node)
         self._single_return_funcs = self._collect_single_return_funcs(node)
         self._param_subscripting_funcs = self._collect_param_subscripting_funcs(node)
         self.apply_range_rewrites(node, alias_seed=alias_seed, wrapper_seed=wrapper_seed)
+
+    def _scan_iterator_classes(self, node):
+        """Classes whose instances a for loop iterates through `__iter__`, for visit_For.
+
+        A class qualifies when it defines `__iter__` or inherits it from a
+        module class that does. A class without `__iter__` is not iterable,
+        and CPython's TypeError for it is already reported. The class name
+        must be bound only by its class statement, so a call of it constructs
+        the class."""
+        bind_counts = {}
+        for n in ast.walk(node):
+            for name in self._bound_names(n):
+                bind_counts[name] = bind_counts.get(name, 0) + 1
+        classes = [n for n in ast.walk(node) if isinstance(n, ast.ClassDef)]
+        iterable = set()
+        grew = True
+        while grew:
+            grew = False
+            for c in classes:
+                if c.name not in iterable and self._has_iter(c, iterable):
+                    iterable.add(c.name)
+                    grew = True
+        return {name for name in iterable if bind_counts.get(name) == 1}
+
+    def _scan_iterator_params(self, node):
+        """`(id(def), param)` for each parameter of a module function that
+        every reference to the function passes a `Cls(...)` of an iterator
+        class, so a for loop over the parameter can use `__iter__` (#8628).
+
+        The function name must be bound once and only ever called directly,
+        so no call goes unseen."""
+        counts = Counter(name for n in ast.walk(node) for name in self._names_bound_by(n))
+        loads = Counter(n.id for n in ast.walk(node)
+                        if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load))
+        calls = {}
+        for n in ast.walk(node):
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
+                calls.setdefault(n.func.id, []).append(n)
+        return {(id(func), param)
+                for func in node.body if isinstance(func, ast.FunctionDef)
+                and counts[func.name] == 1 and loads[func.name] == len(calls.get(func.name, ())) > 0
+                for param in self._iterator_params_of(func, calls[func.name])}
+
+    def _iterator_params_of(self, func, calls):
+        """The plain positional parameters of `func` that each of `calls`
+        passes positionally as a `Cls(...)` of an iterator class."""
+        if func.args.vararg or func.args.kwarg or func.decorator_list or any(
+                c.keywords or any(isinstance(a, ast.Starred) for a in c.args) for c in calls):
+            return []
+        params = func.args.posonlyargs + func.args.args
+        return [
+            p.arg for i, p in enumerate(params)
+            if all(i < len(c.args) and self._is_iterator_construction(c.args[i]) for c in calls)
+        ]
+
+    def _is_iterator_construction(self, expr):
+        return (isinstance(expr, ast.Call) and isinstance(expr.func, ast.Name)
+                and expr.func.id in self.iterator_classes)
+
+    @staticmethod
+    def _has_iter(cls, iterable):
+        return any(isinstance(m, ast.FunctionDef) and m.name == "__iter__"
+                   for m in cls.body) or any(
+                       isinstance(b, ast.Name) and b.id in iterable for b in cls.bases)
 
     def _scan_dict_literal_bindings_and_calls(self, node):
         """Collect evidence for parameter-dict element recovery (#5444).
@@ -467,6 +704,39 @@ class ModuleRewriteMixin:
             if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 local_binds, local_names = self._collect_scope_dict_binds(n.body)
                 self._record_scope_calls(n.body, local_binds, local_names, module_binds)
+
+    def _scan_imported_module_names(self, node):
+        """Record names bound by a module-level `import` and by nothing else.
+
+        Only such a name denotes the module wherever it is read, so only its
+        attributes may stand for the module's nondet functions.
+        """
+        imports, others = [], set()
+        for n in ast.walk(node):
+            if isinstance(n, ast.Import):
+                bound = [a.asname or a.name.split(".")[0] for a in n.names]
+                if n in node.body:
+                    imports += bound
+                else:
+                    others.update(bound)
+            else:
+                others |= self._names_bound_without_import(n)
+        self.imported_module_names = {m for m in imports if imports.count(m) == 1} - others
+
+    @staticmethod
+    def _names_bound_without_import(n):
+        """Names `n` binds in its scope, for any node but an `import`."""
+        if isinstance(n, ast.Name) and not isinstance(n.ctx, ast.Load):
+            return {n.id}
+        if isinstance(n, ast.arg):
+            return {n.arg}
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            return {n.name}
+        if isinstance(n, ast.ImportFrom):
+            return {a.asname or a.name for a in n.names}
+        if isinstance(n, ast.ExceptHandler) and n.name:
+            return {n.name}
+        return set()
 
     def _scan_shadowed_nondet_collections(self, node):
         """Record `nondet_list`/`nondet_dict` names this module defines itself.

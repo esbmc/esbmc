@@ -183,9 +183,10 @@ exprt python_dict_handler::get_dict_comprehension(const nlohmann::json &element)
   {
     // numeric_element_type() is non-throwing: it returns the common numeric
     // element type (double for an int/float mix), or an empty typet() when the
-    // list is unknown, empty, or contains any non-numeric / mixed-width element.
-    // Restricting specialisation to all-numeric lists keeps the read sound and
-    // leaves every other case on the previous any_type() path (no regression).
+    // list is unknown, empty, or contains any non-numeric / mixed-width
+    // element. Restricting specialisation to all-numeric lists keeps the read
+    // sound and leaves every other case on the previous any_type() path (no
+    // regression).
     const std::string list_id = iterable_expr.identifier().as_string();
     typet num =
       converter_.get_element_type_registry().numeric_element_type(list_id);
@@ -497,10 +498,26 @@ std::string python_dict_handler::materialize_tuple_key(
   return key_tmp.id.as_string();
 }
 
+/// The Optional<T> value type a literal assigned to \p target stores, from the
+/// target's annotation or, for an argument, the parameter's (#8016).
+typet python_dict_handler::literal_value_type(const exprt &target)
+{
+  const typet declared = resolve_expected_type_for_dict_subscript(target);
+  return type_utils::is_optional_struct(declared) ? declared
+                                                  : literal_value_type_hint;
+}
+
 exprt python_dict_handler::create_dict_from_literal(
   const nlohmann::json &element,
   const exprt &target_symbol)
 {
+  // A `**` unpack serialises the unpacked source with a null key.
+  const auto &entry_keys = element["keys"];
+  if (std::any_of(entry_keys.begin(), entry_keys.end(), [](const auto &key) {
+        return key.is_null();
+      }))
+    return create_dict_with_unpacking(element, target_symbol);
+
   locationt location = converter_.get_location_from_decl(element);
 
   // Generate unique name based on location
@@ -552,14 +569,6 @@ exprt python_dict_handler::create_dict_from_literal(
   const auto &keys = element["keys"];
   const auto &values = element["values"];
 
-  // A `**` unpack inside a dict literal (e.g. {**a, "b": 2}) serialises the
-  // unpacked source with a null key. Dict unpacking is not modelled, so reject
-  // it with a clean diagnostic rather than crashing on get_expr(null) below
-  // (mirrors the dict-union '|' guard in converter_binop.cpp).
-  for (const auto &key_node : keys)
-    if (key_node.is_null())
-      throw std::runtime_error("dict unpacking ({**d}) is not supported");
-
   python_list list_handler(converter_, element);
 
   // Enable the float storage path only when *every* value is statically float
@@ -600,6 +609,9 @@ exprt python_dict_handler::create_dict_from_literal(
     }
   }
 
+  // An Optional[T] value type stores each value wrapped, as a read expects.
+  const typet expected_value = literal_value_type(target_symbol);
+
   for (size_t i = 0; i < keys.size(); ++i)
   {
     exprt key_expr = converter_.get_expr(keys[i]);
@@ -616,6 +628,7 @@ exprt python_dict_handler::create_dict_from_literal(
       keys_list.id.as_string(), key_elem_id, key_expr.type());
 
     exprt value_expr = converter_.get_expr(values[i]);
+    value_expr = converter_.wrap_if_optional(value_expr, expected_value);
 
     // Convert lambda/function symbol to function pointer for dict storage
     if (value_expr.type().is_code() && value_expr.is_symbol())
@@ -648,7 +661,7 @@ exprt python_dict_handler::create_dict_from_literal(
       // (github_3719_4).
       converter_.get_element_type_registry().record(
         values_list.id.as_string(),
-        std::string(),
+        dict_key_id(keys[i], converter_.get_ast_json()),
         value_expr.type(),
         type_slot::dict_value_types);
 
@@ -693,4 +706,50 @@ exprt python_dict_handler::create_dict_from_literal(
   }
 
   return target_symbol;
+}
+
+exprt python_dict_handler::create_dict_with_unpacking(
+  const nlohmann::json &element,
+  const exprt &target_symbol)
+{
+  create_empty_dict(element, target_symbol);
+
+  const auto &keys = element["keys"];
+  const auto &values = element["values"];
+  for (size_t i = 0; i < keys.size(); ++i)
+  {
+    if (keys[i].is_null())
+    {
+      exprt source = converter_.get_expr(values[i]);
+      if (!is_dict_type(source.type()))
+        throw std::runtime_error(
+          "dict unpacking ({**d}) is only supported for a dict");
+      copy_dict_entries(target_symbol, source, values[i]);
+      continue;
+    }
+
+    const exprt key_expr = get_key_expr(keys[i]);
+    const exprt value_expr = converter_.get_expr(values[i]);
+    code_blockt pair_block;
+    handle_dict_subscript_assign(
+      target_symbol,
+      key_expr,
+      value_expr,
+      converter_.get_location_from_decl(keys[i]),
+      keys[i],
+      pair_block);
+    converter_.add_instruction(pair_block);
+  }
+  return target_symbol;
+}
+
+void python_dict_handler::create_empty_dict(
+  const nlohmann::json &element,
+  const exprt &target_symbol)
+{
+  nlohmann::json empty_dict = element;
+  empty_dict["_type"] = "Dict";
+  empty_dict["keys"] = nlohmann::json::array();
+  empty_dict["values"] = nlohmann::json::array();
+  create_dict_from_literal(empty_dict, target_symbol);
 }

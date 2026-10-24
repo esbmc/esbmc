@@ -129,8 +129,8 @@ TEST_CASE("crc is deterministic across construction (H-B2)", "[core][irep2]")
   REQUIRE(a->crc() == b->crc());
 
   // Deterministic spot-check (not the probabilistic a!=b=>distinct-crc law that
-  // the sweep above only WARNs on): these two fixed structures must not collide,
-  // confirming the chain length is actually mixed into the hash.
+  // the sweep above only WARNs on): these two fixed structures must not
+  // collide, confirming the chain length is actually mixed into the hash.
   expr2tc shorter = deep_add_chain(1999);
   REQUIRE(a != shorter);
   REQUIRE(a->crc() != shorter->crc());

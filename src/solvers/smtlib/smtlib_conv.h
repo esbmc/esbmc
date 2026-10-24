@@ -138,9 +138,9 @@ static_assert(std::is_nothrow_move_assignable_v<sexpr>);
 class smtlib_smt_sort : public smt_sort
 {
 public:
-  explicit smtlib_smt_sort(smt_sort_kind k, unsigned int w) : smt_sort(k, w){};
+  explicit smtlib_smt_sort(smt_sort_kind k, unsigned int w) : smt_sort(k, w) {};
   explicit smtlib_smt_sort(smt_sort_kind k, unsigned int w1, unsigned int w2)
-    : smt_sort(k, w1, w2){};
+    : smt_sort(k, w1, w2) {};
   explicit smtlib_smt_sort(smt_sort_kind k) : smt_sort(k)
   {
   }

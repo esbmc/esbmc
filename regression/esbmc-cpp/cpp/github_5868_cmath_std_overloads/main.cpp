@@ -22,8 +22,8 @@ int main()
   assert(std::llrint(-2.0) == -2LL);
   assert(std::isnan(std::nan("")));
 
-  // ilogb, logb and nexttoward have no model in ESBMC's libc, so only their
-  // overload sets are exercised; their values are nondet.
+  // nexttoward has no model, and the long double ilogb and logb inherit
+  // frexpl's wrong exponent, so only these overload sets are exercised.
   int e = std::ilogb(8.0) + std::ilogb(8.0f) + std::ilogb(8.0L);
   long double b = std::logb(8.0) + std::logb(8.0f) + std::logb(8.0L);
   long double t = std::nexttoward(1.0, 2.0L) + std::nexttoward(1.0f, 2.0L);

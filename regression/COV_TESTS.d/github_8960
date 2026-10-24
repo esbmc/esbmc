@@ -1,0 +1,4 @@
+regression/python/github_8960
+regression/python/github_8960_fail
+regression/python/github_8960_call_between_fail
+regression/python/github_8960_decorator

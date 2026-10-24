@@ -1,0 +1,7 @@
+properties:
+  # mode is reset at the end of every scan and q copies it at the start of
+  # the next, so only a write from outside the program can set q.
+  - id: P1
+    kind: invariant
+    expression: "!q"
+    description: "Unprovable: something outside the program may set mode"

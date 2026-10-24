@@ -1,5 +1,15 @@
 #include <ld-frontend/property/yaml_property_parser.h>
+#include <set>
 #include <yaml-cpp/yaml.h>
+
+static void require_unique_id(
+  std::set<std::string> &ids,
+  const std::string &id,
+  const std::string &path)
+{
+  if (!ids.insert(id).second)
+    throw LdPropertyParseError(path + ": duplicate property id '" + id + "'");
+}
 
 PropertyKind YamlPropertyParser::kind_from_string(const std::string &s)
 {
@@ -32,6 +42,8 @@ std::vector<LdProperty> YamlPropertyParser::parse(const std::string &path)
     throw LdPropertyParseError(path + ": missing 'properties' key");
 
   std::vector<LdProperty> props;
+  // A response monitor's counter is named after its property's id.
+  std::set<std::string> ids;
 
   for (const auto &node : root["properties"])
   {
@@ -40,6 +52,7 @@ std::vector<LdProperty> YamlPropertyParser::parse(const std::string &path)
     if (!node["id"])
       throw LdPropertyParseError(path + ": property missing 'id' field");
     p.id = node["id"].as<std::string>();
+    require_unique_id(ids, p.id, path);
 
     if (!node["kind"])
       throw LdPropertyParseError(

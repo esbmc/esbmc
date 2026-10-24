@@ -29,13 +29,14 @@ void solidity_convertert::get_location_from_node(
 {
   location.set_line(get_line_number(ast_node));
   location.set_file(
-    absolute_path); // assume absolute_path is the name of the contrace file, since we ran solc in the same directory
+    absolute_path); // assume absolute_path is the name of the contrace file,
+                    // since we ran solc in the same directory
 
   // To annotate local declaration within a function
   if (current_functionDecl)
   {
-    location.set_function(
-      current_functionName); // set the function where this local variable belongs to
+    location.set_function(current_functionName); // set the function where this
+                                                 // local variable belongs to
   }
 }
 
@@ -51,7 +52,8 @@ void solidity_convertert::get_start_location_from_stmt(
   // The line number is derived from the Solidity AST JSON source range.
   location.set_line(get_line_number(ast_node));
   location.set_file(
-    absolute_path); // assume absolute_path is the name of the contrace file, since we ran solc in the same directory
+    absolute_path); // assume absolute_path is the name of the contrace file,
+                    // since we ran solc in the same directory
 
   if (!function_name.empty())
     location.set_function(function_name);
@@ -69,7 +71,8 @@ void solidity_convertert::get_final_location_from_stmt(
   // The line number is derived from the Solidity AST JSON source range.
   location.set_line(get_line_number(ast_node, true));
   location.set_file(
-    absolute_path); // assume absolute_path is the name of the contrace file, since we ran solc in the same directory
+    absolute_path); // assume absolute_path is the name of the contrace file,
+                    // since we ran solc in the same directory
 
   if (!function_name.empty())
     location.set_function(function_name);
@@ -79,7 +82,8 @@ unsigned int solidity_convertert::get_line_number(
   const nlohmann::json &ast_node,
   bool final_position)
 {
-  // Solidity src means "start:length:index", where "start" represents the position of the first char byte of the identifier.
+  // Solidity src means "start:length:index", where "start" represents the
+  // position of the first char byte of the identifier.
   std::string src = ast_node.contains("src")
                       ? ast_node["src"].get<std::string>()
                       : get_src_from_json(ast_node);
@@ -100,7 +104,8 @@ unsigned int solidity_convertert::get_line_number(
   // past the last one instead.
   byte_position = std::min(byte_position, contract_contents.size());
 
-  // the line number can be calculated by counting the number of line breaks prior to the identifier.
+  // the line number can be calculated by counting the number of line breaks
+  // prior to the identifier.
   unsigned int loc = std::count(
                        contract_contents.begin(),
                        (contract_contents.begin() + byte_position),
@@ -162,7 +167,8 @@ std::string solidity_convertert::get_filename_from_path(std::string path)
   if (path.find_last_of('/') != std::string::npos)
     return path.substr(path.find_last_of('/') + 1);
 
-  return path; // for _x, it just returns "overflow_2.c" because the test program is in the same dir as esbmc binary
+  return path; // for _x, it just returns "overflow_2.c" because the test
+               // program is in the same dir as esbmc binary
 }
 
 bool solidity_convertert::get_constant_value(
@@ -240,7 +246,8 @@ nlohmann::json solidity_convertert::make_implicit_cast_expr(
 {
   log_debug("solidity", "\t@@@ make_implicit_cast_expr");
   // Since Solidity AST does not have type cast information about return values,
-  // we need to manually make a JSON object and wrap the return expression in it.
+  // we need to manually make a JSON object and wrap the return expression in
+  // it.
   std::map<std::string, std::string> m = {
     {"nodeType", "ImplicitCastExprClass"},
     {"castType", cast_type},
@@ -254,8 +261,9 @@ nlohmann::json solidity_convertert::make_implicit_cast_expr(
 nlohmann::json
 solidity_convertert::make_pointee_type(const nlohmann::json &sub_expr)
 {
-  // Since Solidity function call node does not have enough information, we need to make a JSON object
-  // manually create a JSON object to complete the conversions of function to pointer decay
+  // Since Solidity function call node does not have enough information, we need
+  // to make a JSON object manually create a JSON object to complete the
+  // conversions of function to pointer decay
 
   // make a mapping for JSON object creation latter
   // based on the usage of get_func_decl_ref_t() in get_func_decl_ref_type()
@@ -274,10 +282,12 @@ solidity_convertert::make_pointee_type(const nlohmann::json &sub_expr)
       sub_expr["typeIdentifier"].get<std::string>().find(
         "t_function_internal_pure$") != std::string::npos)
     {
-      // e.g. FunctionNoProto: "typeString": "function () returns (uint8)" with () empty after keyword 'function'
-      // "function ()" contains the function args in the parentheses.
-      // make a type to behave like SolidityGrammar::FunctionDeclRefT::FunctionNoProto
-      // Note that when calling "assert(.)", it's like "typeIdentifier": "t_function_assert_pure$......",
+      // e.g. FunctionNoProto: "typeString": "function () returns (uint8)" with
+      // () empty after keyword 'function' "function ()" contains the function
+      // args in the parentheses. make a type to behave like
+      // SolidityGrammar::FunctionDeclRefT::FunctionNoProto Note that when
+      // calling "assert(.)", it's like "typeIdentifier":
+      // "t_function_assert_pure$......",
       //  it's also treated as "FunctionNoProto".
       auto j2 = R"(
             {
@@ -384,9 +394,11 @@ nlohmann::json solidity_convertert::make_array_elementary_type(
   const nlohmann::json &type_descrpt)
 {
   // Function used to extract the type of the array and its elements
-  // In order to keep the consistency and maximum the reuse of get_type_description function,
-  // we used ["typeDescriptions"] instead of ["typeName"], despite the fact that the latter contains more information.
-  // Although ["typeDescriptions"] also contains all the information needed, we have to do some pre-processing
+  // In order to keep the consistency and maximum the reuse of
+  // get_type_description function, we used ["typeDescriptions"] instead of
+  // ["typeName"], despite the fact that the latter contains more information.
+  // Although ["typeDescriptions"] also contains all the information needed, we
+  // have to do some pre-processing
 
   // e.g.
   //   "typeDescriptions": {
@@ -432,7 +444,8 @@ nlohmann::json solidity_convertert::make_array_to_pointer_type(
   const nlohmann::json &type_descrpt)
 {
   // Function to replace the content of ["typeIdentifier"] with "ArrayToPtr"
-  // All the information in ["typeIdentifier"] should also be available in ["typeString"]
+  // All the information in ["typeIdentifier"] should also be available in
+  // ["typeString"]
   std::string type_identifier = "ArrayToPtr";
   std::string type_string = type_descrpt["typeString"].get<std::string>();
 
@@ -518,7 +531,7 @@ bool solidity_convertert::is_func_sig_cover(
         // cannot be called via abi
         continue;
 
-      //TODO: skip interface, abstract contract
+      // TODO: skip interface, abstract contract
 
       bool foundMatch = false;
 
@@ -576,7 +589,8 @@ bool solidity_convertert::is_func_sig_cover(
   return covers(derived, base);
 }
 
-// check if the target contract contains any public var with matched name and type, which can be accessed via abi
+// check if the target contract contains any public var with matched name and
+// type, which can be accessed via abi
 bool solidity_convertert::is_var_getter_matched(
   const std::string &cname,
   const std::string &tname,
@@ -825,8 +839,9 @@ exprt solidity_convertert::make_aux_var(exprt &val, const locationt &location)
 }
 
 // Find the last parent json node
-// It will not reliably find the correct parent if the same target appears under multiple different parent nodes.
-// To enusre correctness, the input is expected to contain key "id" and, if possible, "is_inherit"
+// It will not reliably find the correct parent if the same target appears under
+// multiple different parent nodes. To enusre correctness, the input is expected
+// to contain key "id" and, if possible, "is_inherit"
 const nlohmann::json &solidity_convertert::find_last_parent(
   const nlohmann::json &root,
   const nlohmann::json &target)

@@ -1,0 +1,15 @@
+Kani `verify-rust-std` harness `core::ptr::verify::check_align_offset_u32`,
+a CBMC v6 goto-binary. It performs a whole-array value load (`[u8; N] = *ptr`)
+which reaches ESBMC as an array-typed dereference target. (The `_u8` width of
+this harness happens to avoid the array-typed target and so does not exercise
+the fix; `_u32` does.)
+
+Before construct_array_ref (see src/pointer-analysis/dereference.cpp) this
+aborted with "Can't construct rvalue reference to array type during
+dereference". It now reaches VERIFICATION FAILED, matching CBMC 6.10.0 on the
+same binary (the failing property is a Kani reachability_check coverage marker,
+not a real assertion violation).
+
+The array-rvalue shape is produced only by Kani's Rust->goto compiler; neither
+C/C++ nor goto-cc persists it, so this is validated against the committed Kani
+binary rather than a regenerable C source.

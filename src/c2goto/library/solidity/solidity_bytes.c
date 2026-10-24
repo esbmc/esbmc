@@ -69,7 +69,6 @@ __ESBMC_HIDE:;
     len = 32;
   size_t copy_len = strnlen(str, len);
   memcpy(b.data, str, copy_len);
-  memset(b.data + copy_len, 0, len - copy_len);
   b.length = len;
   return b;
 }
@@ -143,7 +142,7 @@ __ESBMC_HIDE:;
   return b;
 }
 
-BytesStatic bytes_static_shl(const BytesStatic *src, unsigned shift_bits)
+BytesStatic bytes_static_shl(const BytesStatic *src, uint256_t shift_bits)
 {
 __ESBMC_HIDE:;
   uint256_t val = bytes_static_to_uint(src);
@@ -151,7 +150,7 @@ __ESBMC_HIDE:;
   return bytes_static_from_uint(val, src->length);
 }
 
-BytesStatic bytes_static_shr(const BytesStatic *src, unsigned shift_bits)
+BytesStatic bytes_static_shr(const BytesStatic *src, uint256_t shift_bits)
 {
 __ESBMC_HIDE:;
   uint256_t val = bytes_static_to_uint(src);

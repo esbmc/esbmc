@@ -1,0 +1,7 @@
+properties:
+  # Until Stop pulses, CTU1__Q is off and CTU0 counts to its preset, so Done can
+  # be on. CTU1 must count with its R pin unwired for its Q to ever rise.
+  - id: P1
+    kind: invariant
+    expression: "!Done"
+    description: "Deliberately false: CTU0 counts while CTU1 has not fired"

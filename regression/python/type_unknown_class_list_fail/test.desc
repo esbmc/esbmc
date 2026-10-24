@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^VERIFICATION FAILED$
+FAILED .*line +2  assertion

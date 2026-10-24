@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 5 --multi-property --no-pointer-check --no-align-check
+^\s+FAILED\s+\[global\.assertion\.\d+\]\s+line 7\s+uncaught exception: TypeError$
+^VERIFICATION FAILED$

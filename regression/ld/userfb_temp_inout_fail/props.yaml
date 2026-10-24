@@ -1,0 +1,7 @@
+properties:
+  # Twin of userfb_temp_inout_safe: OUT is on when A, B and IO all are. A body
+  # dropped for mistyped T or IO would keep OUT at FALSE and make this hold.
+  - id: P1
+    kind: invariant
+    expression: "!g0__OUT"
+    description: "Deliberately false: OUT turns on"

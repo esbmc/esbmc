@@ -217,4 +217,4 @@ public:
 // parse the JSON file. Avoid using them directly.
 void from_json(const json &j, jimple_ast &p);
 void to_json(json &, const jimple_ast &);
-#endif //ESBMC_JIMPLE_AST_H
+#endif // ESBMC_JIMPLE_AST_H

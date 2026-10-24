@@ -1,0 +1,5 @@
+CORE
+main.c
+--overflow-check --z3
+^  FAILED .*line 6  arithmetic overflow on sub$
+^VERIFICATION FAILED$

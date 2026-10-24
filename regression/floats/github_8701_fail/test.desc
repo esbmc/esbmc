@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^  FAILED .*assertion fegetround\(\) == FE_TONEAREST
+^VERIFICATION FAILED$

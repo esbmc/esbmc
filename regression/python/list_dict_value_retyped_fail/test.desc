@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 3
+^VERIFICATION FAILED$
+^\s*Unsupported: a dict value whose type differs from the one inferred$

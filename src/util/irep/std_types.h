@@ -56,7 +56,7 @@ public:
  * \return Object of type \ref symbol_typet
  *
  * \ingroup gr_std_types
-*/
+ */
 extern inline const symbol_typet &to_symbol_type(const typet &type)
 {
   assert(type.id() == "symbol");
@@ -65,7 +65,7 @@ extern inline const symbol_typet &to_symbol_type(const typet &type)
 
 /*! \copydoc to_symbol_type(const typet &)
  * \ingroup gr_std_types
-*/
+ */
 extern inline symbol_typet &to_symbol_type(typet &type)
 {
   assert(type.id() == "symbol");
@@ -535,7 +535,7 @@ public:
  * \return Object of type \ref unsignedbv_typet
  *
  * \ingroup gr_std_types
-*/
+ */
 inline const unsignedbv_typet &to_unsignedbv_type(const typet &type)
 {
   assert(type.id() == "unsignedbv");
@@ -544,7 +544,7 @@ inline const unsignedbv_typet &to_unsignedbv_type(const typet &type)
 
 /*! \copydoc to_unsignedbv_type(const typet &)
  * \ingroup gr_std_types
-*/
+ */
 inline unsignedbv_typet &to_unsignedbv_type(typet &type)
 {
   assert(type.id() == "unsignedbv");
@@ -581,7 +581,7 @@ public:
  * \return Object of type \ref signedbv_typet
  *
  * \ingroup gr_std_types
-*/
+ */
 inline const signedbv_typet &to_signedbv_type(const typet &type)
 {
   assert(type.id() == "signedbv");
@@ -590,7 +590,7 @@ inline const signedbv_typet &to_signedbv_type(const typet &type)
 
 /*! \copydoc to_signedbv_type(const typet &)
  * \ingroup gr_std_types
-*/
+ */
 inline signedbv_typet &to_signedbv_type(typet &type)
 {
   assert(type.id() == "signedbv");

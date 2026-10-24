@@ -22,8 +22,8 @@ public:
   void dump() const override;
 };
 
-/* Be sure to not make smt_solver_baset a *virtual* base class: our dtor ~z3_convt()
- * erases all smt_asts early. */
+/* Be sure to not make smt_solver_baset a *virtual* base class: our dtor
+ * ~z3_convt() erases all smt_asts early. */
 class z3_convt : public smt_solver_baset,
                  public tuple_iface,
                  public array_iface,
@@ -37,6 +37,11 @@ public:
   void push_ctx() override;
   void pop_ctx() override;
   smt_resultt dec_solve() override;
+  smt_resultt dec_solve_assuming(const ast_vec &assumptions) override;
+  bool supports_assumptions() const override
+  {
+    return true;
+  }
 
   tvt get_bool(smt_astt a) override;
   BigInt get_bv(smt_astt a, bool is_signed) override;

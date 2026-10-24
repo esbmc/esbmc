@@ -1,0 +1,5 @@
+CORE
+flag.ld
+--ld-props props.yaml --k-induction --unlimited-k-steps
+^ERROR: UnsupportedConstruct\(outVariable flag driven by AND output OUT, tier=2\)$
+^ERROR: PARSING ERROR$

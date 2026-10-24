@@ -1,0 +1,10 @@
+properties:
+  # Twin of graphical_cross_rung_read_safe. The second rung reads the m the first
+  # rung wrote in the same scan, so q can be on in the very first scan. Reading
+  # m's value from the start of the scan would keep q off until the second scan
+  # (#7352). One scan only: every later state is reachable under both readings.
+  - id: P1
+    kind: reachability
+    expression: "q"
+    description: "q is reachable in the first scan"
+    justification: "Only a same-scan read of m can drive q in the first scan"

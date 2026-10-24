@@ -1,0 +1,6 @@
+format_version: "0.1"
+properties:
+  - id: P1
+    kind: invariant
+    expression: "Safe"
+    justification: "ST integers of different widths meet at 32 bits and an untyped FB variable is DINT."

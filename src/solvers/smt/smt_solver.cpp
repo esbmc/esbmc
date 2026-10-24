@@ -363,6 +363,28 @@ smt_astt smt_solver_baset::convert_concat_int_mode(
   return result;
 }
 
+void smt_solver_baset::define(const expr2tc &expr)
+{
+  const equality2t &eq = to_equality2t(expr);
+  const type2tc &t = eq.side_1->type;
+  const bool scalar = is_bool_type(t) || is_bv_type(t) || is_floatbv_type(t);
+  bool converted;
+  {
+    std::lock_guard lock(smt_cache_mutex);
+    converted = smt_cache.find(eq.side_1) != smt_cache.end();
+  }
+  // Aggregates need the flatteners' assign; a symbol already in use would
+  // otherwise stay free.
+  if (!scalar || converted)
+  {
+    convert_assign(expr);
+    return;
+  }
+  smt_astt value = convert_ast(eq.side_2);
+  std::lock_guard lock(smt_cache_mutex);
+  smt_cache.insert({eq.side_1, value, ctx_level});
+}
+
 smt_astt smt_solver_baset::convert_assign(const expr2tc &expr)
 {
   const equality2t &eq = to_equality2t(expr);
@@ -398,6 +420,22 @@ smt_astt smt_solver_baset::convert_assign(const expr2tc &expr)
   ir_ieee_api->propagate_neg_zero_pred(side1, side2);
 
   return side2;
+}
+
+// Brings a shift count to the width of the shifted value, as SMT requires. A
+// wider count is saturated rather than truncated, so x << 2^32 does not become
+// x << 0: shifting by the width already gives the result of any larger count.
+static expr2tc shift_count(const expr2tc &value, const expr2tc &count)
+{
+  const type2tc &type = value->type;
+  if (count->type->get_width() < type->get_width())
+    return typecast2tc(type, count);
+  const BigInt width(type->get_width());
+  return if2tc(
+    type,
+    greaterthanequal2tc(count, constant_int2tc(count->type, width)),
+    constant_int2tc(type, width),
+    typecast2tc(type, count));
 }
 
 // Returns true when convert_ast_node() would recurse into expr's operands
@@ -699,11 +737,12 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
       assert(src_expr->type->type_id == ut.members[c]->type_id);
     }
 #endif
+    const unsigned bits = type_byte_size_bits(expr->type).to_uint64();
+    const unsigned mem_bits = type_byte_size_bits(src_expr->type).to_uint64();
     a = convert_ast(typecast2tc(
-      get_uint_type(type_byte_size_bits(expr->type).to_uint64()),
-      bitcast2tc(
-        get_uint_type(type_byte_size_bits(src_expr->type).to_uint64()),
-        src_expr)));
+      get_uint_type(bits),
+      union_bits_of_member(
+        bitcast2tc(get_uint_type(mem_bits), src_expr), bits)));
     break;
   }
   case expr2t::constant_vector_id:
@@ -836,7 +875,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     }
     else if (int_encoding)
     {
-      a = mk_div(args[0], args[1]);
+      a = mk_truncated_div(d.type, args[0], args[1]);
     }
     else if (is_unsignedbv_type(d.side_1) && is_unsignedbv_type(d.side_2))
     {
@@ -1055,16 +1094,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
         expr2tc upd = bitcast2tc(
           get_uint_type(mem_bits),
           typecast2tc(tu.members[c], with.update_value));
-        if (mem_bits < bits)
-          upd = concat2tc(
-            get_uint_type(bits),
-            extract2tc(
-              get_uint_type(bits - mem_bits),
-              with.source_value,
-              bits - 1,
-              mem_bits),
-            upd);
-        a = convert_ast(upd);
+        a = convert_ast(union_bits_with_member(with.source_value, upd, bits));
       }
     }
     else
@@ -1365,12 +1395,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   {
     const shl2t &shl = to_shl2t(expr);
     if (shl.side_1->type->get_width() != shl.side_2->type->get_width())
-    {
-      // frontend doesn't cast the second operand up to the width of
-      // the first, which SMT does not enjoy.
-      expr2tc cast = typecast2tc(shl.side_1->type, shl.side_2);
-      args[1] = convert_ast(cast);
-    }
+      args[1] = convert_ast(shift_count(shl.side_1, shl.side_2));
 
     if (int_encoding)
     {
@@ -1390,12 +1415,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   {
     const ashr2t &ashr = to_ashr2t(expr);
     if (ashr.side_1->type->get_width() != ashr.side_2->type->get_width())
-    {
-      // frontend doesn't cast the second operand up to the width of
-      // the first, which SMT does not enjoy.
-      expr2tc cast = typecast2tc(ashr.side_1->type, ashr.side_2);
-      args[1] = convert_ast(cast);
-    }
+      args[1] = convert_ast(shift_count(ashr.side_1, ashr.side_2));
 
     if (int_encoding)
     {
@@ -1415,12 +1435,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   {
     const lshr2t &lshr = to_lshr2t(expr);
     if (lshr.side_1->type->get_width() != lshr.side_2->type->get_width())
-    {
-      // frontend doesn't cast the second operand up to the width of
-      // the first, which SMT does not enjoy.
-      expr2tc cast = typecast2tc(lshr.side_1->type, lshr.side_2);
-      args[1] = convert_ast(cast);
-    }
+      args[1] = convert_ast(shift_count(lshr.side_1, lshr.side_2));
 
     if (int_encoding)
     {
@@ -1777,8 +1792,9 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     // We only want expressions of typecast(address_of(symbol)) or
     // address_of(symbol).
     {
-      if (const typecast2t *tc = try_to_typecast2t(symbol);
-          tc && is_address_of2t(tc->from))
+      if (
+        const typecast2t *tc = try_to_typecast2t(symbol);
+        tc && is_address_of2t(tc->from))
         symbol = to_address_of2t(tc->from).ptr_obj;
 
       else if (is_address_of2t(symbol))
@@ -1844,7 +1860,7 @@ smt_astt
 smt_solver_baset::convert_modulus(const modulus2t &m, smt_astt a, smt_astt b)
 {
   if (int_encoding)
-    return mk_mod(a, b);
+    return mk_truncated_rem(m.type, a, b);
   if (is_fixedbv_type(m.side_1) && is_fixedbv_type(m.side_2))
     return mk_bvsmod(a, b);
 
@@ -1857,6 +1873,39 @@ smt_solver_baset::convert_modulus(const modulus2t &m, smt_astt a, smt_astt b)
     return mk_bvsub(a, mk_bvmul(quot, b));
   }
   return both_unsigned ? mk_bvumod(a, b) : mk_bvsmod(a, b);
+}
+
+/// SMT-LIB integer div/mod are Euclidean (0 <= mod < |b|); C11 6.5.5p6
+/// truncates toward zero. The two agree on a non-negative dividend whatever
+/// b's sign, so apply them to |a| and give the result a's sign: one div or
+/// mod per operation, as before (#8662). Unsigned operations stay Euclidean:
+/// integer-mode byte extraction (smt_byteops.cpp) relies on that.
+static smt_astt
+with_dividend_sign(smt_solver_baset &s, smt_astt a, smt_astt of_abs_a)
+{
+  smt_astt a_neg = s.mk_lt(a, s.mk_smt_int(BigInt(0)));
+  return s.mk_ite(a_neg, s.mk_neg(of_abs_a), of_abs_a);
+}
+
+static smt_astt abs_int(smt_solver_baset &s, smt_astt a)
+{
+  return s.mk_ite(s.mk_lt(a, s.mk_smt_int(BigInt(0))), s.mk_neg(a), a);
+}
+
+smt_astt
+smt_solver_baset::mk_truncated_div(const type2tc &type, smt_astt a, smt_astt b)
+{
+  if (!is_signedbv_type(type) || a->sort->id != SMT_SORT_INT)
+    return mk_div(a, b);
+  return with_dividend_sign(*this, a, mk_div(abs_int(*this, a), b));
+}
+
+smt_astt
+smt_solver_baset::mk_truncated_rem(const type2tc &type, smt_astt a, smt_astt b)
+{
+  if (!is_signedbv_type(type) || a->sort->id != SMT_SORT_INT)
+    return mk_mod(a, b);
+  return with_dividend_sign(*this, a, mk_mod(abs_int(*this, a), b));
 }
 
 void smt_solver_baset::note_division_operands(const expr2tc &expr)
@@ -2185,9 +2234,6 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
     if (sym.thename == "c:@__ESBMC_alloc")
       current_valid_objects_sym = expr;
 
-    if (sym.thename == "c:@__ESBMC_is_dynamic")
-      cur_dynamic = expr;
-
     // Special case for tuple symbols
     if (is_tuple_ast_type(expr))
       return tuple_api->mk_tuple_symbol(
@@ -2409,9 +2455,7 @@ smt_astt smt_solver_baset::convert_member(const expr2tc &expr)
     }
 
     return convert_ast(bitcast2tc(
-      type,
-      typecast2tc(
-        get_uint_type(type_byte_size_bits(type).to_uint64()), to_bv)));
+      type, union_member_bits(to_bv, type_byte_size_bits(type).to_uint64())));
   }
 
   assert(
@@ -3044,6 +3088,23 @@ bool smt_solver_baset::decompose_stores(
   return expand_row_stores(w.update_value, origin, stores);
 }
 
+/* A whole row of a flattened multi-dimensional array read as a value (`s =
+ * a[k]` with `s` itself an array) has no term of its own: the flat select
+ * yields an element. Build the row from its elements instead, each a read the
+ * flattener encodes. Nil when the row's length is not a constant. */
+static expr2tc materialize_flattened_row(const expr2tc &row)
+{
+  const array_type2t &type = to_array_type(row->type);
+  if (is_nil_expr(type.array_size) || !is_constant_int2t(type.array_size))
+    return expr2tc();
+  const uint64_t size = to_constant_int2t(type.array_size).value.to_uint64();
+  std::vector<expr2tc> elements;
+  for (uint64_t i = 0; i < size; ++i)
+    elements.push_back(
+      index2tc(type.subtype, row, constant_int2tc(index_type2(), BigInt(i))));
+  return constant_array2tc(row->type, elements);
+}
+
 // A subscript of a subscript selects another flattened dimension, except
 // through an infinite array or a vector (get_flattened_array_subtype).
 static bool selects_flattened_dimension(const index2t &index)
@@ -3062,6 +3123,13 @@ smt_astt smt_solver_baset::convert_array_index(const expr2tc &expr)
   expr2tc lowered = lower_flattened_row_select(index);
   if (!is_nil_expr(lowered))
     return convert_ast(lowered);
+
+  if (is_flattened_row(expr))
+  {
+    expr2tc row = materialize_flattened_row(expr);
+    if (!is_nil_expr(row))
+      return convert_ast(row);
+  }
 
   expr2tc src_value = index.source_value;
 
@@ -3292,6 +3360,12 @@ type2tc smt_solver_baset::get_flattened_array_subtype(const type2tc &type)
 
   // type_rec is now the base type.
   return type_rec;
+}
+
+smt_resultt smt_solver_baset::dec_solve_assuming(const ast_vec &)
+{
+  log_error("{} does not support solving under assumptions", solver_text());
+  abort();
 }
 
 void smt_solver_baset::pre_solve()
@@ -3664,9 +3738,8 @@ expr2tc smt_solver_baset::get_by_ast_uncached(const type2tc &type, smt_astt a)
     {
       expr2tc cast = bitcast2tc(
         member_type,
-        typecast2tc(
-          get_uint_type(type_byte_size_bits(member_type).to_uint64()),
-          uint_rep));
+        union_member_bits(
+          uint_rep, type_byte_size_bits(member_type).to_uint64()));
       simplify(cast);
       members.push_back(cast);
     }

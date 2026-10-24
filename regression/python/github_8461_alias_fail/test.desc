@@ -1,0 +1,4 @@
+CORE
+main.py
+--unwind 5 --multi-property
+^ERROR: unsupported: attribute 'y' holds a 'B' and is assigned a 'A'

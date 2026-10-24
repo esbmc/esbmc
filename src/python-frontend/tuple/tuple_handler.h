@@ -12,7 +12,7 @@ class type_handler;
 
 /**
  * @brief Handler for Python tuple operations
- * 
+ *
  * This class manages tuple creation, subscripting, unpacking, and type handling
  * for Python tuples in the ESBMC converter.
  */
@@ -152,6 +152,35 @@ private:
    * @return exprt The element as a char[tuple_str_member_size] value
    */
   exprt pad_string_element(const exprt &elem) const;
+
+  /// Index of the Starred node in @p targets, or targets.size() if none.
+  size_t starred_target_index(const nlohmann::json &targets) const;
+
+  /// The symbol a Name unpacking target denotes, created with @p type if new.
+  symbolt &
+  unpack_target_symbol(const nlohmann::json &name_node, const typet &type);
+
+  typet unpack_target_type(const exprt &rhs, const typet &member_type) const;
+
+  /// Store the tuple element @p member_access in the unpacking @p target.
+  void assign_unpacked_element(
+    const exprt &target,
+    const exprt &member_access,
+    const locationt &loc,
+    codet &target_block);
+
+  /// Bind a starred target to a list of elements [first, first + count) of
+  /// the tuple @p rhs, as CPython always makes a list.
+  void assign_starred_elements(
+    const nlohmann::json &ast_node,
+    const nlohmann::json &star_value,
+    const exprt &rhs,
+    size_t first,
+    size_t count,
+    codet &target_block);
+
+  /// The member type a tuple[...] annotation element @p node denotes.
+  typet tuple_member_type_from_annotation(const nlohmann::json &node);
 
   python_converter &converter_;
   type_handler &type_handler_;

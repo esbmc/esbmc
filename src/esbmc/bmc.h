@@ -17,7 +17,7 @@
 #include <solvers/smt/smt_result.h>
 #include <solvers/solve.h>
 #include <util/config/options.h>
-#include <util/ssa/algorithms.h>
+#include <goto-symex/equation/ssa_step_algorithm.h>
 #include <util/config/cmdline.h>
 #include <atomic>
 
@@ -32,10 +32,10 @@ public:
   // the driver before verification; surfaced in SARIF as note-level results
   // on both the success and failure paths.
   std::vector<dead_store_advisoryt> dead_store_advisories;
-  // True once a SARIF document carrying the advisories has been written — from a
-  // trace path, or from the --dead-code-check advisory that folds them into its
-  // own document — so start_bmc() does not write a second one. There is a single
-  // SARIF output path, so a second write would truncate the first.
+  // True once a SARIF document carrying the advisories has been written — from
+  // a trace path, or from the --dead-code-check advisory that folds them into
+  // its own document — so start_bmc() does not write a second one. There is a
+  // single SARIF output path, so a second write would truncate the first.
   bool dead_store_sarif_written = false;
   enum ltl_res
   {
@@ -67,9 +67,14 @@ public:
   virtual smt_resultt run(std::shared_ptr<symex_target_equationt> &eq);
   virtual ~bmct();
 
+  /// Whether every violation found refutes only the --loop-invariant-check
+  /// abstraction, so the run neither refutes nor proves the program (#7480).
+  bool violates_only_the_abstraction() const;
+
 protected:
   const contextt &context;
   namespacet ns;
+  const goto_functionst &program;
 
   std::unique_ptr<smt_convt> runtime_solver;
   std::unique_ptr<reachability_treet> symex;
@@ -221,6 +226,8 @@ private:
   /// the report covers the whole program rather than only those properties
   /// some phase happened to reach a verdict on (discussion #7023).
   void seed_property_verdicts(const symex_target_equationt &eq) const;
+  /// Records each assertion of the program that no step of \p eq raised.
+  void seed_unreached_claims(const symex_target_equationt &eq) const;
 
   /// Record the verdict a satisfiable answer earns for one claim: Failed, or
   /// Unknown when the model witnesses only the invariant abstraction rather

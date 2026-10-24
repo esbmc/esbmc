@@ -1,0 +1,6 @@
+CORE
+main.cpp
+--std c++20 --multi-property
+^VERIFICATION FAILED$
+FAILED.*line 25 .*assertion dtors == 1
+FAILED.*line 29 .*assertion dtors == 1

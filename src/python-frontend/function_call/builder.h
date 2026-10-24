@@ -5,6 +5,7 @@
 
 class python_converter;
 class symbol_id;
+class symbolt;
 
 class function_call_builder
 {
@@ -21,7 +22,8 @@ public:
   symbol_id build_function_id() const;
 
   /*
-   * Checks if assume (__ESBMC_assume or __VERIFIER_assume) function is being invoked.
+   * Checks if assume (__ESBMC_assume or __VERIFIER_assume) function is being
+   * invoked.
    */
   bool is_assume_call(const symbol_id &function_id) const;
 
@@ -58,10 +60,39 @@ public:
 
 private:
   /*
-   * Validates a call to __ESBMC_requires / __ESBMC_ensures; a no-op for any
-   * other callee.
+   * Validates a call to __ESBMC_requires / __ESBMC_ensures / __ESBMC_assigns;
+   * a no-op for any other callee.
    */
   void check_contract_call(const symbol_id &function_id) const;
+
+  /// Whether the receiver of `name.method(...)` is a name bound only once, to
+  /// None.
+  bool receiver_is_bound_to_none() const;
+  bool nested_function_exists(const symbol_id &sid) const;
+  void use_imported_class_file(
+    symbol_id &function_id,
+    const symbolt &receiver,
+    const std::string &class_name) const;
+
+  /// Raises AttributeError ahead of `name.method(...)` when `name` is a str or
+  /// class-instance reference holding None (a null pointer).
+  void raise_if_none_receiver() const;
+
+  /// The class an instance expression holds, read from the symbol table so
+  /// that no instruction is emitted; empty when it is not statically known.
+  std::string instance_class_name(const nlohmann::json &node) const;
+
+  /// Whether the receiver of `recv.method(...)` is an instance of a class that
+  /// defines `method`, which then wins over a str method of the same name.
+  bool receiver_class_defines_method() const;
+
+  /// For `recv.method(...)`: the AttributeError of a None receiver or the
+  /// str-method lowering, or nil when neither applies.
+  exprt build_method_call_on_receiver() const;
+
+  /// AttributeError for a str-only method called on an int, float or bool,
+  /// which would otherwise lower as a 1-char str (#8379); nil otherwise.
+  exprt str_method_on_number_error() const;
 
   /*
    * Rejects a contract clause that does not lower to a pure expression.
@@ -74,6 +105,13 @@ private:
    */
   void check_clause_name(const nlohmann::json &node, const std::string &clause)
     const;
+
+  const symbolt *clause_name_symbol(const std::string &name) const;
+
+  bool is_pure_list_query(const nlohmann::json &node) const;
+
+  void
+  check_clause_planted_nothing(const std::string &clause, size_t planted) const;
 
   void check_contract_clause(
     const nlohmann::json &node,
@@ -93,6 +131,12 @@ private:
    */
   exprt build_old_snapshot() const;
 
+  /// Rejects an __ESBMC_assigns target the caller cannot observe.
+  void check_assigns_targets() const;
+
+  /// __ESBMC_assigns(t, ...) as the call goto_convert reads a frame from.
+  exprt build_assigns_call() const;
+
   /*
    * Whether the name is a parameter of the function being converted, or a
    * module-level global. Only those have a value from before the body ran.
@@ -105,6 +149,15 @@ private:
    * no enclosing function.
    */
   typet enclosing_return_type() const;
+
+  /*
+   * The class of a method call's receiver that is not a plain name. For an
+   * item of a list of class instances (`xs[i].m()`) it is their class, so
+   * the call dispatches as `x = xs[i]; x.m()` does; otherwise "str". Throws
+   * when the list's items are not known to share one class, since no single
+   * method can then be chosen statically.
+   */
+  std::string subscript_receiver_class(const nlohmann::json &receiver) const;
 
   python_converter &converter_;
   const nlohmann::json &call_;

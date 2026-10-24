@@ -1,0 +1,4 @@
+CORE
+relay.ld
+--ld-props props.yaml --unwind 3 --no-unwinding-assertions
+^ERROR: .*wired ENO on block RELAY \(relay0\)

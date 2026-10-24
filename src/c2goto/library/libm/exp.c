@@ -68,9 +68,11 @@ double expm1(double x) /* exp(x) - 1 */
   xm *= 0x1p-3;
   xe += 3;                         // |xm| in [2^-4,2^-3)
   double r = expm1_taylor(xm) + 1; // r = exp(xm)
-  /* xe is > 0 and xe < 1025+3, square xe times to account for 2^xe */
+  /* xe is > 0 and xe < 1025+3, square xe times to account for 2^xe. As
+   * |xm| >= 2^-4, 14 squarings already take r to infinity or zero, where it
+   * stays; the cap at 16 bounds the loop when xe is symbolic. */
   int i = 0;
-  while (i < xe)
+  while (i < xe && i < 16)
   {
     r *= r;
     ++i;

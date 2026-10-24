@@ -76,11 +76,16 @@ void lift_call_expressions(contextt &context, goto_functionst &goto_functions)
         substitute(it->code, nested, tmp_expr);
         substitute(it->guard, nested, tmp_expr);
 
-        goto_programt::targett call_inst = fn.body.insert(it);
-        call_inst->type = FUNCTION_CALL;
-        call_inst->location = it->location;
-        call_inst->code =
+        goto_programt::instructiont call_inst;
+        call_inst.type = FUNCTION_CALL;
+        call_inst.location = it->location;
+        call_inst.function = it->function;
+        call_inst.code =
           code_function_call2tc(tmp_expr, call.operand, call.arguments);
+        // Jumps into the instruction must run the call first: it takes the
+        // instruction's place, and `it` moves on to the instruction itself.
+        fn.body.insert_swap(it, call_inst);
+        ++it;
         lifted = true;
 
         // The callee is an ESBMC intrinsic that symex answers by name, so it

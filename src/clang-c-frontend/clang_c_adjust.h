@@ -10,9 +10,12 @@
 /**
  * clang C adjuster class for:
  *  - symbol adjustment, dealing with ESBMC-IR `symbolt`
- *  - type adjustment, dealing with ESBMC-IR `typet` or other IRs derived from typet
- *  - expression adjustment, dealing with ESBMC-IR `exprt` or other IRs derived from exprt
- *  - code adjustment, dealing with ESBMC-IR `codet` or other IRs derived from codet
+ *  - type adjustment, dealing with ESBMC-IR `typet` or other IRs derived from
+ * typet
+ *  - expression adjustment, dealing with ESBMC-IR `exprt` or other IRs derived
+ * from exprt
+ *  - code adjustment, dealing with ESBMC-IR `codet` or other IRs derived from
+ * codet
  */
 class clang_c_adjust
 {
@@ -123,7 +126,8 @@ protected:
   virtual void adjust_switch(codet &code);
   void adjust_assign(codet &code);
   void adjust_decl(codet &code);
-  // For class instantiation in C++, we need to adjust the side-effect of constructor
+  // For class instantiation in C++, we need to adjust the side-effect of
+  // constructor
   virtual void adjust_decl_block(codet &code);
 
   static exprt is_gcc_polymorphic_builtin(

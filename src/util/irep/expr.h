@@ -93,7 +93,7 @@ public:
   exprt &op2()
 #ifdef USE_LIST
   {
-    return *(++++operands().begin());
+    return *(++ ++operands().begin());
   }
 #else
   {
@@ -104,7 +104,7 @@ public:
   exprt &op3()
 #ifdef USE_LIST
   {
-    return *(++++++operands().begin());
+    return *(++ ++ ++operands().begin());
   }
 #else
   {
@@ -131,7 +131,7 @@ public:
   const exprt &op2() const
 #ifdef USE_LIST
   {
-    return *(++++operands().begin());
+    return *(++ ++operands().begin());
   }
 #else
   {
@@ -142,7 +142,7 @@ public:
   const exprt &op3() const
 #ifdef USE_LIST
   {
-    return *(++++++operands().begin());
+    return *(++ ++ ++operands().begin());
   }
 #else
   {

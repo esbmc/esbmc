@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import importlib
+import importlib.util
 import os
 import sys
 from dataclasses import dataclass
@@ -27,6 +28,7 @@ __all__ = [
     "reset_state",
     "resolve_module_file",
     "rewrite_relative_import",
+    "split_submodule_imports",
 ]
 
 
@@ -146,6 +148,7 @@ def _is_imported_model(module_name: str) -> bool:
         "collections",
         "dataclasses",
         "heapq",
+        "io",
         "typing",
         "time",
         "threading",
@@ -340,6 +343,112 @@ def process_imports(node: ast.Import | ast.ImportFrom, output_dir: str) -> None:
         _mark_import_resolution(node, ok=True, full_path=filename)
 
 
+def _is_submodule_import(package_name: str, name: str) -> bool:
+    """Whether `from package_name import name` binds the submodule `package_name.name`."""
+    if _is_imported_model(_base_module_name(package_name)):
+        return False
+    try:
+        package = importlib.import_module(package_name)
+    except Exception:  # pylint: disable=broad-except
+        # process_imports reports an unimportable module.
+        return False
+    if not hasattr(package, "__path__"):
+        return False
+    qualname = f"{package_name}.{name}"
+    # CPython reads the package attribute first; only a missing one, or the
+    # submodule itself, falls through to importing `package_name.name`.
+    attr = getattr(package, name, None)
+    if attr is not None and getattr(attr, "__name__", None) != qualname:
+        return False
+    try:
+        spec = importlib.util.find_spec(qualname)
+    except (ImportError, ValueError):
+        return False
+    return spec is not None and _module_filename(spec.origin) is not None
+
+
+def _reexport_origin(module_name: str, name: str) -> tuple[str, str] | None:
+    """The (module, name) that `module_name` binds `name` to with a top-level `from` import.
+
+    Only the last such import counts, and only when `name` still holds what
+    it imported once the module has run.
+    """
+    if _is_imported_model(_base_module_name(module_name)):
+        return None
+    try:
+        module = importlib.import_module(module_name)
+        filename = _module_filename(module)
+        if filename is None:
+            return None
+        with open(filename, "r", encoding="utf-8") as f:
+            body = ast.parse(f.read()).body
+        node, alias = next((stmt, a) for stmt in reversed(body) if isinstance(stmt, ast.ImportFrom)
+                           for a in stmt.names if (a.asname or a.name) == name)
+        origin = importlib.util.resolve_name("." * node.level + (node.module or ""),
+                                             module.__package__)
+        value = getattr(module, name)
+        if (origin == module_name or isinstance(value, ModuleType)
+                or getattr(importlib.import_module(origin), alias.name) is not value):
+            return None
+        return origin, alias.name
+    except Exception:  # pylint: disable=broad-except
+        # Not importable, no such import, or not what `name` holds at run time.
+        return None
+
+
+def _reexport_imports(node: ast.ImportFrom) -> dict[ast.alias, ast.stmt]:
+    """Map each name `node` takes from a module that re-exports it to an import from its origin."""
+    imports: dict[ast.alias, ast.stmt] = {}
+    for alias in node.names:
+        origin = (node.module, alias.name)
+        seen = {origin}
+        while (step := _reexport_origin(*origin)) and step not in seen:
+            seen.add(step)
+            origin = step
+        module, name = origin
+        if module != node.module:
+            asname = alias.asname or (None if name == alias.name else alias.name)
+            imports[alias] = ast.copy_location(
+                ast.ImportFrom(
+                    module=module,
+                    names=[ast.copy_location(ast.alias(name=name, asname=asname), alias)],
+                    level=0), node)
+    return imports
+
+
+class _SubmoduleImportSplitter(ast.NodeTransformer):
+    """Rewrite `from pkg import mod` to `import pkg.mod as mod` for a submodule `mod`.
+
+    The converter binds a module only through an `import` alias, so the
+    `from` form leaves `mod` undefined (#8375). A name `pkg` re-exports is
+    likewise imported from the module that defines it (#8962).
+    """
+
+    def visit_ImportFrom(  # pylint: disable=invalid-name,missing-function-docstring
+            self, node: ast.ImportFrom) -> ast.stmt | list[ast.stmt]:
+        if node.level or not node.module:
+            return node
+        submodules = [
+            a for a in node.names if a.name != '*' and _is_submodule_import(node.module, a.name)
+        ]
+        imports: list[ast.stmt] = [
+            ast.copy_location(
+                ast.Import(names=[
+                    ast.copy_location(
+                        ast.alias(name=f"{node.module}.{a.name}", asname=a.asname or a.name), a)
+                ]), node) for a in submodules
+        ]
+        reexports = _reexport_imports(node)
+        node.names = [a for a in node.names if a not in submodules and a not in reexports]
+        return ([node] if node.names else []) + list(reexports.values()) + imports
+
+
+def split_submodule_imports(tree: ast.AST) -> None:
+    """Bind each submodule named by a `from pkg import ...` through `import pkg.mod as mod`."""
+    _SubmoduleImportSplitter().visit(tree)
+    ast.fix_missing_locations(tree)
+
+
 def resolve_module_file(module_qualname: str, output_dir: str) -> str | None:
     """Resolve a fully-qualified module name into an emit-able source file."""
     try:
@@ -527,11 +636,69 @@ def process_collected_imports(output_dir: str,
     _emit_collected_import_json(parsed_trees, output_dir, callbacks)
 
 
+def _request_vararg_specializations(entry_tree: ast.Module, parsed_trees: ParsedTreeState) -> None:
+    """Hand each imported module the arities the entry module calls its names with.
+
+    A module builds the fixed-arity copies of a variadic def only for calls it
+    sees, and it is finalized before the entry module.
+    """
+    sources = {}
+    for node in ast.walk(entry_tree):
+        if (isinstance(node, ast.ImportFrom) and node.module in parsed_trees
+                and not is_imported_model(node.module)):
+            preprocessor = parsed_trees[node.module][2]
+            sources.update(
+                (alias.name, preprocessor) for alias in node.names if alias.asname is None)
+    for node in ast.walk(entry_tree):
+        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                and node.func.id in sources and not node.keywords
+                and not any(isinstance(arg, ast.Starred) for arg in node.args)):
+            arities = sources[node.func.id].external_vararg_arities
+            arities.setdefault(node.func.id, set()).add(len(node.args))
+
+
 def _finalize_parsed_trees(parsed_trees: ParsedTreeState, entry_tree: ast.Module | None) -> None:
-    for tree, _filename, preprocessor in parsed_trees.values():
-        preprocessor.finalize_module(tree)
+    if entry_tree is not None:
+        _request_vararg_specializations(entry_tree, parsed_trees)
+    started: set[str] = set()
+    done: set[str] = set()
+    for module_name in parsed_trees:
+        _finalize_after_imports(module_name, parsed_trees, started, done)
+    for module_name, (_tree, _filename, preprocessor) in parsed_trees.items():
+        module_imports[module_name]['specific_names'].update(
+            preprocessor.exported_vararg_specs.values())
     if entry_tree is not None:
         _separate_colliding_classes(entry_tree, parsed_trees)
+
+
+def _finalize_after_imports(module_name: str, parsed_trees: ParsedTreeState, started: set[str],
+                            done: set[str]) -> None:
+    """Finalize a module after the modules it imports names from.
+
+    It then adopts their signatures, as the entry module does, so a call it
+    makes into them is bound too: defaults filled, extra arguments a TypeError.
+    A module in an import cycle adopts only from those already finalized.
+    """
+    if module_name in started:
+        return
+    started.add(module_name)
+    tree, _filename, preprocessor = parsed_trees[module_name]
+    imports = [
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.module in parsed_trees
+    ]
+    for node in imports:
+        _finalize_after_imports(node.module, parsed_trees, started, done)
+    # The operational models are written against the converter, not checked
+    # against one another's signatures.
+    if not is_imported_model(module_name):
+        for node in (node for node in imports if node.module in done):
+            preprocessor.adopt_module_signatures(parsed_trees[node.module][2],
+                                                 {alias.name
+                                                  for alias in node.names},
+                                                 not is_imported_model(node.module))
+    preprocessor.finalize_module(tree)
+    done.add(module_name)
 
 
 def _separate_colliding_classes(entry_tree: ast.Module, parsed_trees: ParsedTreeState) -> None:

@@ -88,4 +88,4 @@ protected:
     return std::to_string(parameters.size() + add);
   }
 };
-#endif //ESBMC_JIMPLE_CLASS_MEMBER_H
+#endif // ESBMC_JIMPLE_CLASS_MEMBER_H

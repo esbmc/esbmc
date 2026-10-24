@@ -26,6 +26,9 @@ class TypeInferenceMixin:
         if isinstance(candidate, ast.Name):
             return candidate.id
         if isinstance(candidate, ast.Subscript) and isinstance(candidate.value, ast.Name):
+            # Optional[T] keeps its T: a None-able scalar is not a bare Optional.
+            if candidate.value.id == "Optional":
+                return ast.unparse(candidate)
             return candidate.value.id
         return None
 

@@ -47,6 +47,16 @@
  *  takes a variable and returns the set of things it might point at.
  */
 
+/* Index of, and bytes spanned by, the leading component of a value-set suffix
+ * `rest` (with its '.' already dropped) among the member @p names. Member
+ * names are not identifiers -- clang spells an anonymous member
+ * "S::(anonymous at f.c:4:9)", which contains '.' -- so the component is the
+ * longest declared name `rest` continues on a component boundary, never
+ * whatever precedes the next '.' or '['. */
+std::optional<std::pair<size_t, size_t>> match_leading_component(
+  const std::vector<irep_idt> &names,
+  const std::string &rest);
+
 typedef hash_numbering<expr2tc, irep2_hash> object_numberingt;
 typedef hash_numbering<unsigned, std::hash<unsigned>> object_number_numberingt;
 

@@ -1,6 +1,7 @@
 #include "goto-programs/goto_binary_reader.h"
 #include <util/base/stack_budget.h>
 #include "irep2/irep2_expr.h"
+#include <util/lang/c_builtins.h>
 #include <util/lang/c_sizeof.h>
 #include <util/lang/c_typecast.h>
 #include <util/lang/c_types.h>
@@ -221,6 +222,14 @@ static bool migrates_to_empty(const typet &type)
          type.id() == "destructor" || type.id() == "constructor";
 }
 
+static std::vector<irep_idt> struct_bases(const typet &type)
+{
+  std::vector<irep_idt> bases;
+  for (const irept &b : type.find("bases").get_sub())
+    bases.push_back(b.id());
+  return bases;
+}
+
 static irep_idt ctor_dtor_marker(const typet &ret)
 {
   return ret.id() == "constructor" || ret.id() == "destructor" ? ret.id()
@@ -384,7 +393,9 @@ static type2tc migrate_type0(const typet &type)
       packed,
       base_names,
       explicit_alignment(type),
-      python_aggregate_kind(type));
+      python_aggregate_kind(type),
+      type.find("bases").is_not_nil(),
+      struct_bases(type));
   }
 
   if (type.id() == typet::t_union)
@@ -855,8 +866,11 @@ expr2tc sym_name_to_symbol(const irep_idt &init, const type2tc &type)
   size_t exm_pos = thestr.rfind("!");
   size_t end_of_name_pos = at_pos;
 
+  // A renaming suffix follows the base name, which for a C++ symbol (a clang
+  // USR) can itself contain '#' and '&', so search for its marks after the '?'.
+  const size_t suffix_pos = at_pos == std::string::npos ? 0 : at_pos;
   size_t and_pos, hash_pos;
-  if (thestr.find("#") == std::string::npos)
+  if (thestr.find('#', suffix_pos) == std::string::npos)
   {
     // We're level 1.
     target_level = symbol_renaming_level::level1;
@@ -867,8 +881,8 @@ expr2tc sym_name_to_symbol(const irep_idt &init, const type2tc &type)
   {
     // Level 2
     target_level = symbol_renaming_level::level2;
-    and_pos = thestr.find("&");
-    hash_pos = thestr.find("#");
+    and_pos = thestr.find('&', suffix_pos);
+    hash_pos = thestr.find('#', suffix_pos);
 
     if (at_pos == std::string::npos)
     {
@@ -1140,8 +1154,8 @@ static expr2tc migrate_pointer_ok(const exprt &expr)
   // call out of this predicate once the binary is loaded.
   const typet size_t_type = expr.op1().type();
   constant_exprt kind(size_t_type);
-  kind.set_value(
-    integer2binary(0, atoi(size_t_type.width().as_string().c_str())));
+  kind.set_value(integer2binary(
+    esbmc_object_size_whole, atoi(size_t_type.width().as_string().c_str())));
   expr2tc extent = invoke_intrinsic(
     "c:@F@__ESBMC_builtin_object_size", size_t_type, {expr.op0(), kind});
 
@@ -1259,6 +1273,240 @@ static bool migrate_right_shift(const exprt &expr, expr2tc &new_expr_ref)
   new_expr_ref = logical ? expr2tc(lshr2tc(type, side1, side2))
                          : expr2tc(ashr2tc(type, side1, side2));
   return true;
+}
+
+// The parts of a cpp_delete side effect that sideeffect2t has no field for.
+static void migrate_cpp_delete(const exprt &expr, std::vector<expr2tc> &args)
+{
+  const exprt &destructor = static_cast<const exprt &>(expr.find("destructor"));
+  if (destructor.is_not_nil())
+  {
+    expr2tc d;
+    migrate_expr(destructor, d);
+    args.push_back(d);
+  }
+
+  // A replaced operator delete rides in arguments[1], mirroring the
+  // allocation side (github #6494).
+  const exprt &dealloc_function =
+    static_cast<const exprt &>(expr.find("dealloc_function"));
+  if (dealloc_function.is_not_nil())
+  {
+    if (args.empty())
+      args.emplace_back();
+    expr2tc fn;
+    migrate_expr(dealloc_function, fn);
+    args.push_back(fn);
+  }
+
+  // An aligned operator delete's alignment rides in arguments[2].
+  const exprt &dealloc_alignment =
+    static_cast<const exprt &>(expr.find("dealloc_alignment"));
+  if (dealloc_alignment.is_not_nil())
+  {
+    expr2tc align;
+    migrate_expr(dealloc_alignment, align);
+    args.push_back(align);
+  }
+}
+
+// The parts of a cpp_new side effect that sideeffect2t has no field for.
+static void
+migrate_cpp_new(const exprt &expr, expr2tc &thesize, std::vector<expr2tc> &args)
+{
+  if (const exprt &sz = cpp_new_size(expr); sz.is_not_nil())
+    migrate_expr(sz, thesize);
+
+  // The new-expression's initializer lives in the "initializer" sub, not
+  // in the operands. Carry it through `arguments` so the round-trip back
+  // to side_effect_exprt re-attaches it; otherwise the object is left
+  // default-initialised (e.g. `new int(7)` becomes `new int` → 0).
+  if (expr.initializer().is_not_nil())
+  {
+    expr2tc init;
+    migrate_expr(static_cast<const exprt &>(expr.initializer()), init);
+    args.push_back(init);
+  }
+
+  // A replaced operator new (github #6494) rides in arguments[1], for the
+  // same reason the initializer rides in arguments[0]: sideeffect2t has
+  // fixed fields, so a named sub on the side_effect_exprt does not survive
+  // the round trip. Keep slot 0 occupied so slot 1 stays meaningful.
+  const exprt &alloc_function =
+    static_cast<const exprt &>(expr.find("alloc_function"));
+  if (alloc_function.is_not_nil())
+  {
+    if (args.empty())
+      args.emplace_back();
+    expr2tc fn;
+    migrate_expr(alloc_function, fn);
+    args.push_back(fn);
+  }
+
+  // Value-initialisation of the elements (github #6588) rides in
+  // arguments[2], for the same reason as the two slots above.
+  if (expr.get_bool("zero_initialized"))
+  {
+    args.resize(2);
+    args.push_back(gen_true_expr());
+  }
+
+  // The braced list's filler, for elements past the list, rides in
+  // arguments[3].
+  const exprt &filler = static_cast<const exprt &>(expr.find("array_filler"));
+  if (filler.is_not_nil())
+  {
+    args.resize(3);
+    expr2tc f;
+    migrate_expr(filler, f);
+    args.push_back(f);
+  }
+
+  // An array placement new's address rides in arguments[4].
+  const exprt &placement = static_cast<const exprt &>(expr.find("placement"));
+  if (placement.is_not_nil())
+  {
+    args.resize(4);
+    expr2tc place;
+    migrate_expr(placement, place);
+    args.push_back(place);
+  }
+
+  // A user-placement operator new's placement arguments ride in
+  // arguments[5] onwards.
+  const exprt &alloc_args =
+    static_cast<const exprt &>(expr.find("alloc_arguments"));
+  if (alloc_args.is_not_nil())
+  {
+    args.resize(5);
+    for (const exprt &a : alloc_args.operands())
+    {
+      expr2tc arg;
+      migrate_expr(a, arg);
+      args.push_back(arg);
+    }
+  }
+}
+
+// Kani pads a union variant into `{ v: T, v_padding: <N-byte bv> }` but
+// initialises the union with the bare T: wrap it, padding left free.
+static void wrap_padded_union_member(
+  const type2tc &type,
+  const irep_idt &component,
+  std::vector<expr2tc> &members)
+{
+  if (!is_union_type(type) || members.size() != 1)
+    return;
+  const auto n = struct_union_get_component_number(type, component);
+  if (!n || !is_struct_type(to_union_type(type).members[*n]))
+    return;
+  const struct_type2t &padded = to_struct_type(to_union_type(type).members[*n]);
+  if (padded.members.empty() || padded.members[0] != members[0]->type)
+    return;
+
+  std::vector<expr2tc> fields{members[0]};
+  for (size_t i = 1; i < padded.members.size(); ++i)
+    fields.push_back(gen_nondet(padded.members[i]));
+  members[0] = constant_struct2tc(to_union_type(type).members[*n], fields);
+}
+
+static bool is_all_zero_bytes(const expr2tc &e)
+{
+  if (is_constant_int2t(e))
+    return to_constant_int2t(e).value.is_zero();
+  if (is_constant_floatbv2t(e))
+  {
+    const ieee_floatt &f = to_constant_floatbv2t(e).value;
+    return f.is_zero() && !f.get_sign();
+  }
+  if (
+    !is_constant_struct2t(e) && !is_constant_union2t(e) &&
+    !is_constant_array2t(e) && !is_constant_vector2t(e))
+    return false;
+  bool zero = true;
+  e->foreach_operand(
+    [&zero](const expr2tc &op) { zero = zero && is_all_zero_bytes(op); });
+  return zero;
+}
+
+// CBMC initialises a union through a member other than its first as a
+// byte_update of the zero union at offset 0; a union constant of that member
+// keeps the value whole, which a pointer member needs for its value set.
+static expr2tc union_member_update(
+  const type2tc &type,
+  const expr2tc &source,
+  const expr2tc &offs,
+  const expr2tc &update)
+{
+  if (
+    !is_union_type(type) || !is_all_zero_bytes(source) ||
+    !is_constant_int2t(offs) || !to_constant_int2t(offs).value.is_zero())
+    return expr2tc();
+
+  const union_type2t &u = to_union_type(type);
+  for (size_t i = 0; i < u.members.size(); ++i)
+    if (u.members[i] == update->type)
+      return constant_union2tc(
+        type, u.member_names[i], std::vector<expr2tc>{update});
+  return expr2tc();
+}
+
+// ESBMC's byte_update2t writes one byte; a CBMC byte_update writes all of
+// update's bytes from offs on, so it is lowered to one byte_update2t per byte.
+static expr2tc byte_update_bytes(
+  const type2tc &type,
+  expr2tc result,
+  const expr2tc &offs,
+  const expr2tc &update,
+  bool big_endian)
+{
+  if (is_array_type(update))
+  {
+    const array_type2t &arr = to_array_type(update->type);
+    const BigInt elem_size = type_byte_size(arr.subtype);
+    const BigInt n = to_constant_int2t(arr.array_size).value;
+    for (BigInt i = 0; i < n; ++i)
+      result = byte_update_bytes(
+        type,
+        result,
+        add2tc(offs->type, offs, constant_int2tc(offs->type, i * elem_size)),
+        index2tc(arr.subtype, update, gen_ulong(i.to_uint64())),
+        big_endian);
+    return result;
+  }
+
+  const unsigned width = update->type->get_width();
+  if (width == 8 && is_bv_type(update))
+    return byte_update2tc(type, result, offs, update, big_endian);
+  if (width % 8 != 0)
+    throw std::string(
+      "byte_update of a value that is not a whole number of bytes");
+
+  for (unsigned i = 0; i < width / 8; ++i)
+  {
+    const expr2tc offs_i =
+      add2tc(offs->type, offs, constant_int2tc(offs->type, BigInt(i)));
+    const expr2tc byte = byte_extract2tc(
+      get_uint8_type(),
+      update,
+      constant_int2tc(offs->type, BigInt(i)),
+      big_endian);
+    result = byte_update2tc(type, result, offs_i, byte, big_endian);
+  }
+  return result;
+}
+
+static expr2tc migrate_byte_update(
+  const type2tc &type,
+  const expr2tc &source,
+  const expr2tc &offs,
+  const expr2tc &update,
+  bool big_endian)
+{
+  const expr2tc whole = union_member_update(type, source, offs, update);
+  return is_nil_expr(whole)
+           ? byte_update_bytes(type, source, offs, update, big_endian)
+           : whole;
 }
 
 void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
@@ -1445,6 +1693,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
       members.push_back(new_ref);
     }
+
+    wrap_padded_union_member(type, expr.component_name(), members);
 
     new_expr_ref = constant_union2tc(type, expr.component_name(), members);
     return;
@@ -1959,7 +2209,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     bool big_endian = (expr.id() == "byte_update_big_endian") ? true : false;
 
-    new_expr_ref = byte_update2tc(type, sourceval, offs, update, big_endian);
+    new_expr_ref =
+      migrate_byte_update(type, sourceval, offs, update, big_endian);
     return;
   }
 
@@ -2321,44 +2572,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       migrate_expr(expr.op0(), operand);
 
     if (expr.statement() == "cpp_new" || expr.statement() == "cpp_new[]")
-    {
-      if (const exprt &sz = cpp_new_size(expr); sz.is_not_nil())
-        migrate_expr(sz, thesize);
-
-      // The new-expression's initializer lives in the "initializer" sub, not
-      // in the operands. Carry it through `arguments` so the round-trip back
-      // to side_effect_exprt re-attaches it; otherwise the object is left
-      // default-initialised (e.g. `new int(7)` becomes `new int` → 0).
-      if (expr.initializer().is_not_nil())
-      {
-        expr2tc init;
-        migrate_expr(static_cast<const exprt &>(expr.initializer()), init);
-        args.push_back(init);
-      }
-
-      // A replaced operator new (github #6494) rides in arguments[1], for the
-      // same reason the initializer rides in arguments[0]: sideeffect2t has
-      // fixed fields, so a named sub on the side_effect_exprt does not survive
-      // the round trip. Keep slot 0 occupied so slot 1 stays meaningful.
-      const exprt &alloc_function =
-        static_cast<const exprt &>(expr.find("alloc_function"));
-      if (alloc_function.is_not_nil())
-      {
-        if (args.empty())
-          args.emplace_back();
-        expr2tc fn;
-        migrate_expr(alloc_function, fn);
-        args.push_back(fn);
-      }
-
-      // Value-initialisation of the elements (github #6588) rides in
-      // arguments[2], for the same reason as the two slots above.
-      if (expr.get_bool("zero_initialized"))
-      {
-        args.resize(2);
-        args.push_back(gen_true_expr());
-      }
-    }
+      migrate_cpp_new(expr, thesize, args);
     else if (
       expr.statement() == "malloc" || expr.statement() == "realloc" ||
       expr.statement() == "alloca" || expr.statement() == "va_arg")
@@ -2481,27 +2695,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       t = expr.statement() == "cpp_delete"
             ? sideeffect2t::allockind::cpp_delete
             : sideeffect2t::allockind::cpp_delete_array;
-      const exprt &destructor =
-        static_cast<const exprt &>(expr.find("destructor"));
-      if (destructor.is_not_nil())
-      {
-        expr2tc d;
-        migrate_expr(destructor, d);
-        args.push_back(d);
-      }
-
-      // A replaced operator delete rides in arguments[1], mirroring the
-      // allocation side (github #6494).
-      const exprt &dealloc_function =
-        static_cast<const exprt &>(expr.find("dealloc_function"));
-      if (dealloc_function.is_not_nil())
-      {
-        if (args.empty())
-          args.emplace_back();
-        expr2tc fn;
-        migrate_expr(dealloc_function, fn);
-        args.push_back(fn);
-      }
+      migrate_cpp_delete(expr, args);
     }
     else if (expr.statement() == "temporary_object")
     {
@@ -2884,8 +3078,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     // no such scope, so flatten the single-decl labeled decl-block to the bare
     // decl: it round-trips as label(decl) and convert_decl defers the DEAD to
     // the enclosing scope, matching the legacy path. A label labels exactly one
-    // statement, so the only multi-decl shape is `lbl: int x, y;`; that case has
-    // no flat label(decl) form and is left on the standalone decl-block arm
+    // statement, so the only multi-decl shape is `lbl: int x, y;`; that case
+    // has no flat label(decl) form and is left on the standalone decl-block arm
     // below -- it is not exercised by the operational models this fix targets.
     const exprt &body = expr.op0();
     const exprt &labelled =
@@ -2923,12 +3117,13 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   if (expr.id() == "code" && expr.statement() == "switch_case")
   {
     const auto &sc = to_code_switch_case(to_code(expr));
-    expr2tc case_op, body;
+    expr2tc case_op, case_op_hi, body;
     if (!sc.is_default())
       migrate_expr(sc.case_op(), case_op);
+    migrate_expr(sc.case_range_hi(), case_op_hi);
     migrate_expr(sc.code(), body);
-    new_expr_ref =
-      code_switch_case2tc(sc.is_default(), case_op, body, expr.location());
+    new_expr_ref = code_switch_case2tc(
+      sc.is_default(), case_op, body, expr.location(), case_op_hi);
     return;
   }
 
@@ -2937,7 +3132,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     // A cpp-catch node is one of two things:
     //  - the source-level try/catch statement, whose operands[0] is the try
     //    block and operands[1..N] the catch-handler blocks (each carrying its
-    //    catchable-type id in the "exception_id" attribute set by adjust_catch);
+    //    catchable-type id in the "exception_id" attribute set by
+    //    adjust_catch);
     //  - the post-goto-convert CATCH-push/pop marker, built directly by
     //    convert_catch with only a catchable-type list and no operands.
     // Carry the operands and per-handler ids so the source form survives the
@@ -3022,7 +3218,10 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc theval;
     migrate_expr(expr.op0(), theval);
 
-    new_expr_ref = popcount2tc(theval);
+    // popcount2t is always int; a CBMC binary types the count itself (Kani
+    // emits u32), so keep that type for whatever the count is assigned to.
+    new_expr_ref =
+      coerce_to_type(popcount2tc(theval), migrate_type(expr.type()));
     return;
   }
 
@@ -3089,8 +3288,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     // array's element count, so it agreed only for char.
     const std::string function = "c:@F@__ESBMC_builtin_object_size";
     constant_exprt kind(expr.type());
-    kind.set_value(
-      integer2binary(0, atoi(expr.type().width().as_string().c_str())));
+    kind.set_value(integer2binary(
+      esbmc_object_size_whole, atoi(expr.type().width().as_string().c_str())));
     const std::vector<exprt> args = {expr.op0(), kind};
 
     // The result is a *call*: object_size resolves its object by dereference,
@@ -3136,7 +3335,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
   if (expr.id() == "overflow_result-shr")
   {
-    // Overflow_result : {result = op0 >> op1, overflowed = overflow(op0 >> op1)}
+    // Overflow_result : {result = op0 >> op1, overflowed = overflow(op0 >>
+    // op1)}
     type = migrate_type(expr.type());
     assert(expr.operands().size() == 2);
     expr2tc op0, op1;
@@ -3210,6 +3410,15 @@ static constexpr size_t back_cache_capacity = 4096;
 void migrate_type_back_cache_clear()
 {
   back_cache.clear();
+}
+
+static void migrate_struct_bases_back(const struct_type2t &ref, typet &type)
+{
+  if (!ref.has_bases)
+    return;
+  irept::subt &bases = type.add("bases").get_sub();
+  for (const irep_idt &b : ref.bases)
+    bases.emplace_back(b);
 }
 
 static void
@@ -3310,6 +3519,7 @@ static typet migrate_type_back_uncached(const type2tc &ref)
       thetype.set("alignment", constant_exprt(ref2.alignment, size_type()));
     if (!ref2.python_aggregate.empty())
       set_python_aggregate_kind(thetype, ref2.python_aggregate);
+    migrate_struct_bases_back(ref2, thetype);
     return thetype;
   }
   case type2t::union_id:
@@ -3559,27 +3769,43 @@ static const char *back_sideeffect_statement(sideeffect2t::allockind kind)
 static void back_sideeffect_cpp_delete(const sideeffect2t &ref2, exprt &theexpr)
 {
   // op0 = pointer (in `operand`); arguments[0] = destructor call, if any,
-  // arguments[1] = replaced operator delete, if any. remove_cpp_delete
-  // asserts exactly one operand and reads both named subs back out.
+  // arguments[1] = replaced operator delete, if any, arguments[2] = its
+  // alignment, if aligned. remove_cpp_delete asserts exactly one operand and
+  // reads the named subs back out.
   theexpr.copy_to_operands(migrate_expr_back(ref2.operand));
   if (!ref2.arguments.empty() && !is_nil_expr(ref2.arguments[0]))
     theexpr.set("destructor", migrate_expr_back(ref2.arguments[0]));
   if (ref2.arguments.size() > 1 && !is_nil_expr(ref2.arguments[1]))
     theexpr.add("dealloc_function") = migrate_expr_back(ref2.arguments[1]);
+  if (ref2.arguments.size() > 2)
+    theexpr.add("dealloc_alignment") = migrate_expr_back(ref2.arguments[2]);
 }
 
 static void back_sideeffect_cpp_new(const sideeffect2t &ref2, exprt &theexpr)
 {
   // cpp_new has no operands in source form (size lives in the size field,
   // handled below; the initializer, if any, is carried in arguments[0], a
-  // replaced operator new in arguments[1], and the value-initialisation
-  // marker in arguments[2]).
+  // replaced operator new in arguments[1], the value-initialisation marker in
+  // arguments[2], the braced list's filler in arguments[3], an array
+  // placement new's address in arguments[4], and a user-placement operator
+  // new's placement arguments from arguments[5]).
   if (!ref2.arguments.empty() && !is_nil_expr(ref2.arguments[0]))
     theexpr.initializer(migrate_expr_back(ref2.arguments[0]));
   if (ref2.arguments.size() > 1 && !is_nil_expr(ref2.arguments[1]))
     theexpr.add("alloc_function") = migrate_expr_back(ref2.arguments[1]);
   if (ref2.arguments.size() > 2 && !is_nil_expr(ref2.arguments[2]))
     theexpr.set("zero_initialized", true);
+  if (ref2.arguments.size() > 3)
+    theexpr.add("array_filler") = migrate_expr_back(ref2.arguments[3]);
+  if (ref2.arguments.size() > 4)
+    theexpr.add("placement") = migrate_expr_back(ref2.arguments[4]);
+  if (ref2.arguments.size() > 5)
+  {
+    exprt alloc_args("arguments");
+    for (std::size_t i = 5; i < ref2.arguments.size(); ++i)
+      alloc_args.copy_to_operands(migrate_expr_back(ref2.arguments[i]));
+    theexpr.add("alloc_arguments") = alloc_args;
+  }
 }
 
 static void back_sideeffect_operands(const sideeffect2t &ref2, exprt &theexpr)
@@ -3761,6 +3987,8 @@ static exprt migrate_expr_back_rest6(const expr2tc &ref)
       sc.set_default(true);
     else
       sc.op0() = migrate_expr_back(ref2.case_op);
+    if (!is_nil_expr(ref2.case_op_hi))
+      sc.case_range_hi() = migrate_expr_back(ref2.case_op_hi);
     sc.op1() = migrate_expr_back(ref2.code);
     if (ref2.location.is_not_nil())
       sc.location() = ref2.location;

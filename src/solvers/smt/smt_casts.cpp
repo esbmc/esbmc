@@ -436,7 +436,7 @@ smt_astt smt_solver_baset::convert_typecast_to_ptr(const typecast2t &cast)
   std::vector<smt_astt> obj_ids(addr_space_data.back().size());
   std::vector<smt_astt> obj_starts(addr_space_data.back().size());
 
-  std::map<unsigned, unsigned>::const_iterator it;
+  std::map<unsigned, bool>::const_iterator it;
   unsigned int i;
   for (it = addr_space_data.back().begin(), i = 0;
        it != addr_space_data.back().end();
@@ -708,9 +708,10 @@ smt_astt smt_solver_baset::convert_typecast(const expr2tc &expr)
 {
   const typecast2t &cast = to_typecast2t(expr);
 
-  // Under integer encoding (--ir/--ir-ieee), fp values are represented as reals.
-  // The following three cases handle fp<->int casts explicitly because the
-  // generic bitvector-based path is incorrect when operands are real-encoded.
+  // Under integer encoding (--ir/--ir-ieee), fp values are represented as
+  // reals. The following three cases handle fp<->int casts explicitly because
+  // the generic bitvector-based path is incorrect when operands are
+  // real-encoded.
 
   // fp -> fp: reals are exact, no conversion needed
   if (

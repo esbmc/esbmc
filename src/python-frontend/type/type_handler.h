@@ -7,11 +7,13 @@
 #include <util/irep/migrate.h>
 #include <irep2/irep2_utils.h>
 #include <nlohmann/json.hpp>
+#include <optional>
 
 class python_converter;
 
-// P26: Cached double type — avoids constructing a new floatbv_typet on every call.
-// Initialized once on first use; thread-safe (C++11 static local semantics).
+// P26: Cached double type — avoids constructing a new floatbv_typet on every
+// call. Initialized once on first use; thread-safe (C++11 static local
+// semantics).
 inline const typet &cached_double_type()
 {
   static const typet instance = double_type();
@@ -91,8 +93,9 @@ inline exprt complex_to_bool_expr(const exprt &complex_expr)
   // V.3: build `z.real != 0.0 || z.imag != 0.0` in IREP2, back-migrating once.
   // member2t over a complex source is exactly the node migrate_expr builds for
   // the legacy member access at goto-convert (util/migrate.cpp:1580), and the
-  // not(equal) shape mirrors the legacy or_exprt(not_exprt(equality_exprt(...)))
-  // verbatim, so the back-migrated tree is byte-identical to the old one.
+  // not(equal) shape mirrors the legacy
+  // or_exprt(not_exprt(equality_exprt(...))) verbatim, so the back-migrated
+  // tree is byte-identical to the old one.
   const type2tc dt2 = migrate_type(dt);
   expr2tc complex2;
   migrate_expr(complex_expr, complex2);
@@ -115,7 +118,7 @@ public:
    * Checks if the AST node represents a constructor call.
    * @param json AST node in JSON format corresponding to a function call.
    * @return true if the node is a constructor call, false otherwise.
-  */
+   */
   bool is_constructor_call(const nlohmann::json &json) const;
 
   /*
@@ -126,6 +129,15 @@ public:
    * ESBMC's byte-encoding.
    */
   bool is_pointer_free(const typet &t) const;
+
+  /*
+   * The `ptr_free` argument of a list-model store whose payload argument is
+   * `payload` and whose element has type `elem_type`. 2 when the payload is
+   * the address of a pointer -- a nested list or an object reference -- so
+   * the model copies it as a pointer and the stored element still names its
+   * object; otherwise is_pointer_free(elem_type) as 1 or 0.
+   */
+  exprt ptr_free_arg(const exprt &payload, const typet &elem_type) const;
 
   /*
    * Converts a typet to its string representation.
@@ -162,10 +174,17 @@ public:
   /*
    * Creates a typet based on a Python type.
    * @param ast_type The name of the Python type (e.g., "int", "str").
-   * @param type_size The size used for container types like arrays and lists (default is 0).
+   * @param type_size The size used for container types like arrays and lists
+   * (default is 0).
    * @return The corresponding typet.
    */
   typet get_typet(const std::string &ast_type, size_t type_size = 0) const;
+
+  /// A class used as a value that is not known statically, as a variable
+  /// bound to one of several classes is: a struct holding the class's id, so
+  /// two such values compare by id (#8390).
+  static typet class_value_type();
+  static bool is_class_value_type(const typet &type);
 
   /**
    * Lowering for Python `int` — arbitrarily large in the language spec.
@@ -188,6 +207,11 @@ public:
    */
   typet get_typet(const nlohmann::json &elem) const;
 
+  // The element type of `a[i]` when `a` names an array of non-char scalars or
+  // a pointer to one (a NumPy view).
+  std::optional<typet>
+  scalar_array_element_type(const nlohmann::json &elem) const;
+
   /*
    * Checks if a container contains elements of different types.
    * @param container The JSON node representing the container.
@@ -196,7 +220,8 @@ public:
   bool has_multiple_types(const nlohmann::json &container) const;
 
   /*
-   * Builds an array_typet from a list of JSON elements by detecting the elements' subtypes and size.
+   * Builds an array_typet from a list of JSON elements by detecting the
+   * elements' subtypes and size.
    * @param list_value The list of elements of an array.
    * @return The array_typet capable of holding the list's values.
    */
@@ -270,7 +295,11 @@ public:
    */
   size_t get_type_width(const typet &type) const;
 
-  typet build_optional_type(const typet &base_type);
+  typet get_generic_typet(
+    const std::string &ast_type,
+    size_t bracket_pos,
+    size_t type_size) const;
+  typet build_optional_type(const typet &base_type) const;
 
   /*
    * Returns true if `class_name` is the same as, or derives (directly or

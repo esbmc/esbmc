@@ -1,0 +1,9 @@
+import numpy as np
+
+a = np.array([[[1, 2], [3, 4]], [[5, 6], [7, 8]]])
+row = a[1]
+row[0][1] = 99
+
+assert a[1][0][1] == 99
+assert row[0][1] == 99
+assert a[0][0][1] == 2

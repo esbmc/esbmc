@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 5 --multi-property --no-pointer-check --no-align-check
+FAILED.*assertion c
+^VERIFICATION FAILED$

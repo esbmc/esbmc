@@ -36,12 +36,14 @@ class engine
 {
 public:
   engine()
-    : prog(goto_factory::get_goto_functions(
-        source,
-        goto_factory::Architecture::BIT_64)),
+    : prog(
+        goto_factory::get_goto_functions(
+          source,
+          goto_factory::Architecture::BIT_64)),
       ns(prog.context),
-      opts(goto_factory::get_default_options(
-        goto_factory::get_default_cmdline("test.c"))),
+      opts(
+        goto_factory::get_default_options(
+          goto_factory::get_default_cmdline("test.c"))),
       rt(
         prog.functions,
         ns,

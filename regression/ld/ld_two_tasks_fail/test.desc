@@ -1,0 +1,5 @@
+CORE
+mode.ld
+--ld-props props.yaml --k-induction --max-k-step 10
+^ERROR: UnsupportedConstruct\(more than one task, tier=2\)$
+^ERROR: PARSING ERROR$

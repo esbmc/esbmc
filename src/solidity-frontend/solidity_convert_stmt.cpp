@@ -46,10 +46,10 @@ bool solidity_convertert::get_function_params(
   // 2b. handle Omitted Names in Function Definitions
   if (name == "")
   {
-    // Items with omitted names will still be present on the stack, but they are inaccessible by name.
-    // e.g. ~omitted1, ~omitted2. which is a invalid name for solidity.
-    // Therefore it won't conflict with other arg names.
-    //log_error("Omitted params are not supported");
+    // Items with omitted names will still be present on the stack, but they are
+    // inaccessible by name. e.g. ~omitted1, ~omitted2. which is a invalid name
+    // for solidity. Therefore it won't conflict with other arg names.
+    // log_error("Omitted params are not supported");
     // return true;
     ;
   }
@@ -221,8 +221,9 @@ bool solidity_convertert::get_statement(
   }
   case SolidityGrammar::StatementT::ExpressionStatement:
   {
-    if (get_expr(
-          stmt["expression"], stmt["expression"]["typeDescriptions"], new_expr))
+    if (
+      get_expr(
+        stmt["expression"], stmt["expression"]["typeDescriptions"], new_expr))
       return true;
     break;
   }
@@ -319,9 +320,11 @@ bool solidity_convertert::get_statement(
     // 1. get return type
     // TODO: Fix me! Assumptions:
     //  a). It's "return <expr>;" not "return;"
-    //  b). <expr> is pointing to a DeclRefExpr, we need to wrap it in an ImplicitCastExpr as a subexpr
-    //  c). For multiple return type, the return statement represented as a tuple expression using a components field.
-    //      Besides, tuple can only be declared literally. https://docs.soliditylang.org/en/latest/control-structures.html#assignment
+    //  b). <expr> is pointing to a DeclRefExpr, we need to wrap it in an
+    //  ImplicitCastExpr as a subexpr c). For multiple return type, the return
+    //  statement represented as a tuple expression using a components field.
+    //      Besides, tuple can only be declared literally.
+    //      https://docs.soliditylang.org/en/latest/control-structures.html#assignment
     //      e.g. return (false, 123)
     if (!stmt.contains("expression"))
     {
@@ -334,8 +337,9 @@ bool solidity_convertert::get_statement(
 
     // get_type_description
     typet return_exrp_type;
-    if (get_type_description(
-          stmt["expression"]["typeDescriptions"], return_exrp_type))
+    if (
+      get_type_description(
+        stmt["expression"]["typeDescriptions"], return_exrp_type))
       return true;
 
     if (
@@ -393,10 +397,11 @@ bool solidity_convertert::get_statement(
         {
           // lop: struct member call (e.g. tuple.men0)
           exprt lop;
-          if (get_tuple_member_call(
-                lhs.identifier(),
-                to_struct_type(lhs.type()).components().at(i),
-                lop))
+          if (
+            get_tuple_member_call(
+              lhs.identifier(),
+              to_struct_type(lhs.type()).components().at(i),
+              lop))
             return true;
 
           // rop: constant/symbol
@@ -418,10 +423,11 @@ bool solidity_convertert::get_statement(
 
         // add function call
         exprt func_call;
-        if (get_expr(
-              stmt["expression"],
-              stmt["expression"]["typeDescriptions"],
-              func_call))
+        if (
+          get_expr(
+            stmt["expression"],
+            stmt["expression"]["typeDescriptions"],
+            func_call))
           return true;
         get_tuple_function_call(func_call);
 
@@ -437,18 +443,20 @@ bool solidity_convertert::get_statement(
         {
           // lop: struct member call (e.g. tupleA.men0)
           exprt lop;
-          if (get_tuple_member_call(
-                lhs.identifier(),
-                to_struct_type(lhs.type()).components().at(i),
-                lop))
+          if (
+            get_tuple_member_call(
+              lhs.identifier(),
+              to_struct_type(lhs.type()).components().at(i),
+              lop))
             return true;
 
           // rop: struct member call (e.g. tupleB.men0)
           exprt rop;
-          if (get_tuple_member_call(
-                rhs.identifier(),
-                to_struct_type(rhs.type()).components().at(i),
-                rop))
+          if (
+            get_tuple_member_call(
+              rhs.identifier(),
+              to_struct_type(rhs.type()).components().at(i),
+              rop))
             return true;
 
           // do assignment
@@ -542,8 +550,8 @@ bool solidity_convertert::get_statement(
     current_forStmt = &stmt;
 
     // 1. annotate init
-    codet init =
-      code_skipt(); // code_skipt() means no init in for-stmt, e.g. for (; i< 10; ++i)
+    codet init = code_skipt(); // code_skipt() means no init in for-stmt, e.g.
+                               // for (; i< 10; ++i)
     if (stmt.contains("initializationExpression"))
       if (get_statement(stmt["initializationExpression"], init))
         return true;
@@ -600,7 +608,8 @@ bool solidity_convertert::get_statement(
     codet if_expr("ifthenelse");
     if_expr.copy_to_operands(cond, then);
 
-    // 3. Else: make a exprt for "falseBody" if the if-statement node contains an "else" block
+    // 3. Else: make a exprt for "falseBody" if the if-statement node contains
+    // an "else" block
     if (stmt.contains("falseBody"))
     {
       exprt else_expr;
