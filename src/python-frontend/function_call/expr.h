@@ -1024,7 +1024,7 @@ private:
     const typet &arg_type,
     const symbolt &callee,
     size_t param_idx,
-    bool arg_is_bytes_literal) const;
+    bool is_bytes_literal) const;
   void reject_list_for_numpy_parameter(
     const typet &arg_type,
     const code_typet::argumentst &params,

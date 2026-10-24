@@ -741,6 +741,28 @@ private:
     const locationt &location);
 
   /**
+   * @brief Store the dict v of `d[k] = v` by pointer to a heap copy, as
+   * store_nested_dict_value stores a nested dict literal by pointer
+   * @param node AST node of the assignment
+   * @param value The dict being stored
+   * @param values_member The dict's values list
+   * @param index Index of the existing key, used by set_call
+   * @param location Source location
+   * @param target_block Block receiving the copy, ahead of both calls
+   * @param set_call Replaced by the store at an existing key
+   * @param push_call Replaced by the store at a new key
+   */
+  void store_dict_value_by_pointer(
+    const nlohmann::json &node,
+    const exprt &value,
+    const exprt &values_member,
+    const exprt &index,
+    const locationt &location,
+    codet &target_block,
+    code_function_callt &set_call,
+    code_function_callt &push_call);
+
+  /**
    * @brief Retrieve a nested dictionary from the values list
    * @param slice_node AST node for the slice operation
    * @param obj_value The stored pointer value
