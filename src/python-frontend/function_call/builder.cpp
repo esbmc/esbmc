@@ -1762,20 +1762,8 @@ static std::string constant_number_type_name(const nlohmann::json &value)
 
 exprt function_call_builder::str_method_on_number_error() const
 {
-  // set(dir(str)) - set(dir(int)) - set(dir(float)), public names only.
-  static const std::set<std::string> str_only_methods = {
-    "capitalize",   "casefold",     "center",    "count",     "encode",
-    "endswith",     "expandtabs",   "find",      "format",    "format_map",
-    "index",        "isalnum",      "isalpha",   "isascii",   "isdecimal",
-    "isdigit",      "isidentifier", "islower",   "isnumeric", "isprintable",
-    "isspace",      "istitle",      "isupper",   "join",      "ljust",
-    "lower",        "lstrip",       "maketrans", "partition", "removeprefix",
-    "removesuffix", "replace",      "rfind",     "rindex",    "rjust",
-    "rpartition",   "rsplit",       "rstrip",    "split",     "splitlines",
-    "startswith",   "strip",        "swapcase",  "title",     "translate",
-    "upper",        "zfill"};
   const std::string method = call_["func"]["attr"].get<std::string>();
-  if (!str_only_methods.count(method))
+  if (!type_utils::is_str_only_method(method))
     return nil_exprt();
 
   const nlohmann::json &recv = call_["func"]["value"];
