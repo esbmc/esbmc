@@ -11,7 +11,10 @@ value is left:
 - `h is f` becomes `h == 0` and `callable(h)` becomes `True`
 - a statement calling `h()` becomes `if h == 0: ... elif ...: ... else: ...`,
   and each arm holds that statement and the rest of the module, with `h()`
-  replaced by a direct call to that arm's function.
+  replaced by a direct call to that arm's function
+- a module-level function that only returns the call `h()` of its parameter,
+  as in `def call(h): return h()`, returns a direct call in each arm of such a
+  chain instead, so nothing is copied.
 
 Each arm then sees the precise type of its call's result. A name bound in an
 arm is renamed per arm, so that it does not join values of different types.
@@ -34,6 +37,7 @@ _CODE = "esbmc_fv_code"
 _IDENTITY = "esbmc_fv_identity"
 _CALLABLE = "esbmc_fv_callable"
 _CHOSEN = "esbmc_fv_chosen"
+_RETURN = "esbmc_fv_return"
 # Builtins and attributes that reach module names other than by name.
 _REFLECTIVE = {"globals", "locals", "vars", "eval", "exec", "__import__"}
 _REFLECTIVE_ATTRS = {"modules", "__dict__", "__globals__"}
@@ -170,7 +174,9 @@ class _Plan:
         self.functions = {}
         self.groups = []
         self.holders = {}
+        self.param_holders = {}
         defs = {stmt.name: stmt for stmt in module.body if isinstance(stmt, ast.FunctionDef)}
+        self.defs = defs
         for root in roots:
             group = len(self.groups)
             fns = sorted((m[0] for m in analysis.members[root].values()), key=lambda f: f.lineno)
@@ -179,22 +185,34 @@ class _Plan:
             self.groups.append(fns)
             for code, fn in enumerate(fns):
                 self.functions[fn.name] = (group, code)
-            self._add_holders(analysis, root, group)
+            self._add_holders(analysis, root, group, defs)
+        self.callable_names = set(self.functions) | set(self.param_holders)
         self.kinds = {}
         self.values = {}
         self._collect_bindings()
         for name in self.holders:
             self._kind(name, set())
 
-    def _add_holders(self, analysis, root, group):
-        """Record the module names in `root`'s group; refuse any other kind of value in it."""
+    def _add_holders(self, analysis, root, group, defs):
+        """Record the module names and parameters in `root`'s group; refuse any other value."""
+        by_id = {id(fn): fn for fn in defs.values()}
         for key in [k for k in analysis.parent if analysis.find(k) == root]:
             if key[0] == "elements":
+                continue
+            if key[0] == "name" and key[1] in by_id:
+                self._add_param_holder(analysis, by_id[key[1]], key[2], group)
                 continue
             if key[0] != "name" or key[1] != id(self.module):
                 raise _Refused
             if key[2] not in self.functions:
                 self.holders[key[2]] = group
+
+    def _add_param_holder(self, analysis, fn, param, group):
+        """Record a positional parameter of a module-level def, which the def may dispatch on."""
+        if param not in analysis.scopes[id(fn)].params or not _sole_def(
+                fn, self.defs, self.module, analysis):
+            raise _Refused
+        self.param_holders.setdefault(fn.name, {})[param] = group
 
     # bindings of holders
     def _collect_bindings(self):
@@ -258,7 +276,7 @@ class _Plan:
 
     # uses
     def check_uses(self):
-        names = set(self.functions) | set(self.holders)
+        names = set(self.functions) | set(self.holders) | set(self.param_holders)
         bound = _bound_names([self.module])
         if bound & _REFLECTIVE or any(n.startswith(_PREFIX) for n in bound):
             raise _Refused
@@ -284,9 +302,9 @@ class _Plan:
 
     def _check_use(self, node):
         parent = self.parents[id(node)]
-        if _is_callee(parent, node) and node.id in self.functions:
+        if _is_callee(parent, node) and node.id in self.callable_names:
             return
-        if self._nested(node):
+        if self._nested(node) or node.id in self.param_holders:
             raise _Refused
         if isinstance(node.ctx, ast.Store):
             self._check_store(node)
@@ -299,6 +317,29 @@ class _Plan:
             self._check_function_holder(node, parent)
         else:
             self._check_list_holder(node, parent)
+
+    def check_param_holders(self):
+        """Each def with a dispatched parameter uses it only in `return p(...)`."""
+        names = set(self.functions) | set(self.holders)
+        for name, params in self.param_holders.items():
+            body = ast.Module(self.defs[name].body, [])
+            nodes = list(ast.walk(body))
+            if set(params) & names or any(isinstance(n, _NESTED) for n in nodes):
+                raise _Refused
+            for param, group in params.items():
+                if _rebinds(body, param):
+                    raise _Refused
+                for use in (n for n in nodes if isinstance(n, ast.Name) and n.id == param):
+                    self._check_returned_call(use, group)
+
+    def _check_returned_call(self, use, group):
+        """`use` is the callee of a call that is a whole `return`; mark that return."""
+        call = self.parents[id(use)]
+        ret = self.parents[id(call)]
+        if not (_is_callee(call, use) and isinstance(ret, ast.Return) and ret.value is call):
+            raise _Refused
+        self._check_arguments(call, group)
+        setattr(ret, _RETURN, group)
 
     def _check_store(self, node):
         if node.id in self.functions or not self._assign_target(node):
@@ -354,7 +395,7 @@ class _Plan:
             self._check_value(parent)
         elif isinstance(parent, (ast.List, ast.Tuple)):
             self._check_value_list(parent)
-        elif self._is_plain_value(parent, expr):
+        elif self._is_plain_value(parent, expr) or self._is_dispatched_argument(parent, expr):
             pass
         elif isinstance(parent, ast.Compare):
             self._check_identity(parent)
@@ -362,6 +403,17 @@ class _Plan:
             setattr(parent, _CALLABLE, True)
         else:
             raise _Refused
+
+    def _is_dispatched_argument(self, parent, expr):
+        """Whether `expr` is passed positionally to a parameter that the callee dispatches on."""
+        if not (isinstance(parent, ast.Call) and isinstance(parent.func, ast.Name)
+                and parent.func.id in self.param_holders and expr in parent.args
+                and not any(isinstance(a, ast.Starred) for a in parent.args)):
+            return False
+        fn = self.defs[parent.func.id]
+        params = fn.args.posonlyargs + fn.args.args
+        index = parent.args.index(expr)
+        return index < len(params) and params[index].arg in self.param_holders[fn.name]
 
     def _is_plain_value(self, parent, expr):
         """Whether `expr` is the whole value of an assignment to names."""
@@ -388,13 +440,17 @@ class _Plan:
 
     def _check_site(self, call):
         """A call through a holder: every function of its group must take its arguments."""
-        if call.keywords or any(isinstance(a, ast.Starred) for a in call.args):
-            raise _Refused
         group = self.holders[self._site_holder(call)]
-        if not all(_takes_positional(fn, len(call.args)) for fn in self.groups[group]):
-            raise _Refused
+        self._check_arguments(call, group)
         self._check_always_evaluated(call)
         setattr(call, _SITE, group)
+
+    def _check_arguments(self, call, group):
+        """Every function of `group` takes exactly the positional arguments of `call`."""
+        if call.keywords or any(isinstance(a, ast.Starred) for a in call.args):
+            raise _Refused
+        if not all(_takes_positional(fn, len(call.args)) for fn in self.groups[group]):
+            raise _Refused
 
     def _site_holder(self, call):
         """The holder `call` goes through, refusing an index another scope may rebind."""
@@ -442,6 +498,22 @@ class _Codes(ast.NodeTransformer):
             return ast.copy_location(ast.Constant(True), node)
         self.generic_visit(node)
         return node
+
+
+class _Returns(ast.NodeTransformer):
+    """Replace `return h(args)` by one `return f(args)` per function of h's group."""
+
+    def __init__(self, groups):
+        self.groups = groups
+
+    def visit_Return(self, node):
+        group = getattr(node, _RETURN, None)
+        if group is None:
+            return node
+        call = node.value
+        arms = [[ast.Return(ast.Call(ast.Name(fn.name, ast.Load()), copy.deepcopy(call.args), []))]
+                for fn in self.groups[group]]
+        return _chain(arms, call.func, node)
 
 
 class _Dispatch:
@@ -518,7 +590,9 @@ def dispatch_mixed_function_values(module, path):
     try:
         plan = _Plan(candidate, analysis, _mixed_groups(analysis))
         plan.check_uses()
+        plan.check_param_holders()
         _Codes().visit(candidate)
+        _Returns(plan.groups).visit(candidate)
         candidate.body, _ = _Dispatch(plan.groups, plan.holders).statements(candidate.body)
     except _Refused:
         return

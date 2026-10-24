@@ -1,0 +1,8 @@
+regression/python/github_8404_parameter_dispatched
+regression/python/github_8970_returned_defaults_refused
+regression/python/github_8970_returned_imported_refused
+regression/python/github_8970_returned_method
+regression/python/github_8970_returned_param
+regression/python/github_8970_returned_param_fail
+regression/python/github_8970_returned_result_refused
+regression/python/github_8970_returned_same_kind
