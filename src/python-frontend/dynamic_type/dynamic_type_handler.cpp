@@ -238,51 +238,155 @@ const nlohmann::json *find_callee_def(
   return nullptr;
 }
 
-// `name` is used as a value in `node`, that is, anywhere but as the callee.
-bool used_as_value(const nlohmann::json &node, const std::string &name)
+struct argument_kinds
 {
-  if (!node.is_structured())
+  size_t tagged = 0;
+  size_t other = 0;
+};
+
+bool field_is(
+  const nlohmann::json &node,
+  const char *field,
+  const std::string &name)
+{
+  return node.contains(field) && node[field].is_string() &&
+         node[field].get<std::string>() == name;
+}
+
+std::string context_of(const nlohmann::json &node)
+{
+  if (!node.contains("ctx") || !node["ctx"].is_object())
+    return "";
+  return node["ctx"].value("_type", "");
+}
+
+bool lists_name(const nlohmann::json &node, const std::string &name)
+{
+  if (!node.contains("names") || !node["names"].is_array())
     return false;
-  if (node.is_object())
-  {
-    const std::string type = node.value("_type", "");
-    if (type == "Name")
-      return node.value("id", "") == name;
-    if (type == "Call" && node["func"].value("_type", "") == "Name")
-    {
-      for (const char *field : {"args", "keywords"})
-        if (used_as_value(node[field], name))
-          return true;
-      return false;
-    }
-  }
-  for (const auto &child : node)
-    if (used_as_value(child, name))
+  for (const auto &listed : node["names"])
+    if (listed.is_string() && listed.get<std::string>() == name)
       return true;
   return false;
 }
 
-// How many of the module's defs taking `nargs` positional parameters are
-// passed around as values, and how many of those return a dynamic value.
-std::pair<size_t, size_t> count_function_values(
+// `node` binds `name` by assignment, parameter, def, class, import, pattern,
+// `global`, `nonlocal`, `except`, `del` or any other target.
+bool binds_name(const nlohmann::json &node, const std::string &name)
+{
+  const std::string type = node.value("_type", "");
+  if (type == "Name")
+    return field_is(node, "id", name) && context_of(node) != "Load";
+  if (type == "arg")
+    return field_is(node, "arg", name);
+  return field_is(node, "name", name) || field_is(node, "asname", name) ||
+         field_is(node, "rest", name) || lists_name(node, name);
+}
+
+size_t count_bindings(const nlohmann::json &node, const std::string &name)
+{
+  if (!node.is_structured())
+    return 0;
+  size_t count = node.is_object() && binds_name(node, name);
+  for (const auto &child : node)
+    count += count_bindings(child, name);
+  return count;
+}
+
+// The value a module-level `name = value` binds, when that is the only
+// binding of `name` anywhere in the module.
+const nlohmann::json *single_assigned_value(
   const nlohmann::json &module_body,
-  const nlohmann::json *skip,
-  size_t nargs,
+  const std::string &name)
+{
+  if (count_bindings(module_body, name) != 1)
+    return nullptr;
+  for (const auto &stmt : module_body)
+    if (
+      stmt.value("_type", "") == "Assign" && stmt["targets"].size() == 1 &&
+      stmt["targets"][0].value("id", "") == name)
+      return &stmt["value"];
+  return nullptr;
+}
+
+// Counts the leaves of `arg` that name a def returning a dynamic value and
+// those that are anything else.
+void classify_argument(
+  const nlohmann::json &arg,
+  const nlohmann::json &module_body,
+  unsigned depth,
+  argument_kinds &kinds)
+{
+  if (arg.value("_type", "") == "IfExp")
+  {
+    classify_argument(arg["body"], module_body, depth, kinds);
+    classify_argument(arg["orelse"], module_body, depth, kinds);
+    return;
+  }
+  const nlohmann::json *def =
+    arg.value("_type", "") == "Name"
+      ? find_callee_def(nlohmann::json::array(), module_body, arg["id"])
+      : nullptr;
+  if (
+    const nlohmann::json *bound =
+      !def && depth < 8 && arg.value("_type", "") == "Name"
+        ? single_assigned_value(module_body, arg["id"])
+        : nullptr)
+    classify_argument(*bound, module_body, depth + 1, kinds);
+  else if (
+    def && count_bindings(module_body, arg["id"]) == 1 &&
+    returns_dynamic_value(*def, module_body, depth + 1))
+    ++kinds.tagged;
+  else
+    ++kinds.other;
+}
+
+// Classifies what every call of `function_node` passes for parameter `index`.
+void collect_argument_kinds(
+  const nlohmann::json &node,
+  const nlohmann::json &function_node,
+  size_t index,
+  const nlohmann::json &module_body,
+  unsigned depth,
+  argument_kinds &kinds)
+{
+  if (!node.is_structured())
+    return;
+  if (
+    node.is_object() && node.value("_type", "") == "Call" &&
+    node["func"].value("_type", "") == "Name" &&
+    node["func"].value("id", "") == function_node.value("name", ""))
+  {
+    const std::string param =
+      function_node["args"]["args"][index].value("arg", "");
+    bool by_keyword = false;
+    for (const auto &kw : node["keywords"])
+      by_keyword = by_keyword || kw.value("arg", "") == param;
+    if (by_keyword || node["args"].size() <= index)
+      ++kinds.other;
+    else
+      classify_argument(node["args"][index], module_body, depth, kinds);
+  }
+  for (const auto &child : node)
+    collect_argument_kinds(
+      child, function_node, index, module_body, depth, kinds);
+}
+
+// What `function_node`'s callers pass for the parameter `call` calls through.
+argument_kinds parameter_argument_kinds(
+  const nlohmann::json &call,
+  const nlohmann::json &function_node,
+  const nlohmann::json &module_body,
   unsigned depth)
 {
-  std::pair<size_t, size_t> counts{0, 0};
-  for (const auto &stmt : module_body)
-  {
-    if (
-      stmt.value("_type", "") != "FunctionDef" || &stmt == skip ||
-      stmt["args"]["args"].size() != nargs ||
-      !used_as_value(module_body, stmt.value("name", "")))
-      continue;
-    ++counts.second;
-    if (returns_dynamic_value(stmt, module_body, depth + 1))
-      ++counts.first;
-  }
-  return counts;
+  argument_kinds kinds;
+  const std::string name = call["func"].value("id", "");
+  const auto &params = function_node["args"]["args"];
+  for (size_t i = 0; i < params.size(); ++i)
+    if (params[i].value("arg", "") == name)
+      collect_argument_kinds(
+        module_body, function_node, i, module_body, depth, kinds);
+  return kinds;
 }
 
 // A call through a parameter of `function_node` may reach a def that returns
@@ -293,10 +397,8 @@ bool calls_dynamic_parameter(
   const nlohmann::json &module_body,
   unsigned depth)
 {
-  return is_param(function_node, call["func"].value("id", "")) &&
-         count_function_values(
-           module_body, &function_node, call["args"].size(), depth)
-             .first > 0;
+  return parameter_argument_kinds(call, function_node, module_body, depth)
+           .tagged > 0;
 }
 
 // `value` is a call to a function that itself returns a dynamic value.
@@ -1225,12 +1327,17 @@ exprt dynamic_type_handler::build_isinstance_check(
     "dynamically-typed variable");
 }
 
-bool dynamic_type_handler::function_values_return_dynamic(
+bool dynamic_type_handler::parameter_call_returns_tagged(
   const nlohmann::json &call) const
 {
-  const auto [dynamic, total] = count_function_values(
-    converter_.ast()["body"], nullptr, call["args"].size(), 0);
-  return total > 0 && dynamic == total;
+  const nlohmann::json &module_body = converter_.ast()["body"];
+  const nlohmann::json function_node = json_utils::try_find_function(
+    module_body, converter_.current_function_name());
+  if (function_node.empty() || !function_node.contains("args"))
+    return false;
+  const argument_kinds kinds =
+    parameter_argument_kinds(call, function_node, module_body, 0);
+  return kinds.tagged > 0 && kinds.other == 0;
 }
 
 bool dynamic_type_handler::detect_dynamic_return_type(

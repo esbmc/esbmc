@@ -1,0 +1,6 @@
+regression/python/github_9135_builtin_str
+regression/python/github_9135_two_callers
+regression/python/github_9135_unrelated_cb
+regression/python/github_9135_unrelated_cb_fail
+regression/python/github_9135_variable
+regression/python/github_9135_rebound
