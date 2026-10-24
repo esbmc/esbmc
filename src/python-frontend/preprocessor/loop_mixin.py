@@ -1217,6 +1217,7 @@ class LoopMixin:
             value=subscript,
             simple=1,
         )
+        user_value_assign.esbmc_synthesized = True
         self.ensure_all_locations(user_value_assign, node)
         # Propagate type so downstream visitors (e.g. _lower_tuple_sorted_pair_call)
         # can infer the scalar type of variables derived from this loop variable.
@@ -2032,6 +2033,7 @@ class LoopMixin:
                                annotation=ann,
                                value=current,
                                simple=1)
+        assign.esbmc_synthesized = True
         self.ensure_all_locations(assign, node)
         out = [assign]
         if isinstance(target, (ast.Tuple, ast.List)):
@@ -2553,6 +2555,7 @@ class LoopMixin:
             value=current_item,
             simple=1,
         )
+        target_assign.esbmc_synthesized = True
         self.ensure_all_locations(target_assign, node)
 
         # Create: index += 1
