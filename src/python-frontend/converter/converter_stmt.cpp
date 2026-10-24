@@ -5461,6 +5461,26 @@ void python_converter::handle_function_call_rhs(
   else if (!rhs.type().is_pointer() && !rhs.type().is_empty() && !is_ctor_call)
     rhs.op0() = lhs;
 
+  // A scalar result stored to an Optional target must be wrapped, so the
+  // call writes a temporary first (#9055).
+  if (
+    !is_ctor_call && type_utils::is_optional_struct(lhs.type()) &&
+    type_utils::is_optional_scalar(rhs.type()))
+  {
+    symbolt &result =
+      create_tmp_symbol(ast_node, "$call_result$", rhs.type(), exprt());
+    code_declt result_decl(symbol_expr(result));
+    result_decl.location() = location;
+    target_block.copy_to_operands(result_decl);
+    rhs.op0() = symbol_expr(result);
+    target_block.copy_to_operands(rhs);
+
+    code_assignt store(
+      lhs, wrap_stored_if_optional(symbol_expr(result), lhs.type()));
+    store.location() = location;
+    rhs = store;
+  }
+
   // Special handling for list return type
   if (rhs.type() == type_handler_.get_list_type())
   {
