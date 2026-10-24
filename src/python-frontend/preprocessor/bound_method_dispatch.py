@@ -9,8 +9,9 @@ arm raises NameError, or UnboundLocalError in a function, as calling an unbound
 
 A call is rewritten only as the whole value of an expression statement, an
 assignment or a return, so each arm evaluates the arguments once, in order.
-Any other read of the name, a binding of another form, or a binding from
-another scope is refused.
+Any other read of the name fails an assertion just before the statement that
+holds it, so a read in code that never runs does not stop verification (#9160).
+A binding of another form, or a binding from another scope, is refused.
 
 A name whose bindings are all simple statements of its scope's body is left
 to the per-binding receiver capture instead: there each call is reached only
@@ -131,6 +132,31 @@ def _return_types(module, methods):
     }
 
 
+def _own_expressions(stmt):
+    """The expressions of `stmt` outside the statements it holds."""
+    stack = [c for c in ast.iter_child_nodes(stmt) if not isinstance(c, ast.stmt)]
+    while stack:
+        node = stack.pop()
+        yield node
+        stack.extend(c for c in ast.iter_child_nodes(node) if not isinstance(c, ast.stmt))
+
+
+def _refuse_when_run(module, reads, method, message, replacements):
+    """Make each statement holding one of `reads` fail an assertion first, so
+    only a read that may run makes the program fail, and read `method` there
+    so the statement still has a type."""
+    reads = {id(n) for n in reads}
+    for stmt in (n for n in ast.walk(module) if isinstance(n, ast.stmt)):
+        own = [n for n in _own_expressions(stmt) if id(n) in reads]
+        if not own:
+            continue
+        replacements.update((id(n), copy.deepcopy(method)) for n in own)
+        args = [ast.Constant(value=False), ast.Constant(value=message)]
+        check = ast.Expr(value=ast.Call(
+            func=ast.Name(id="__ESBMC_assert", ctx=ast.Load()), args=args, keywords=[]))
+        replacements[id(stmt)] = _located([check], stmt) + replacements.get(id(stmt), [stmt])
+
+
 class _Replace(ast.NodeTransformer):
 
     def __init__(self, replacements):
@@ -173,11 +199,15 @@ class _Rebound:
                 if self._in_order(scope, name, nodes):
                     in_order.add((None if scope is self.module else id(scope), name))
                     continue
-                assigns, calls = self.dispatched_statements(scope, name, nodes)
+                assigns, calls = self.dispatched_statements(name, nodes)
                 dispatch = _Dispatch(scope, name, next_id)
                 for assign in assigns:
                     replacements[id(assign)] = dispatch.bind(assign, variables)
                 replacements.update((id(call), dispatch.call(call)) for call in calls)
+                _refuse_when_run(
+                    self.module, self._other_reads(scope, name, calls), assigns[-1].value,
+                    f"'{name}' is bound to methods at several sites and used other than as "
+                    "a whole call statement", replacements)
                 dispatches.append(dispatch)
         _Replace(replacements).visit(self.module)
         for dispatch in dispatches:
@@ -200,8 +230,8 @@ class _Rebound:
         """The names `node` binds; `global` and `nonlocal` only say where."""
         return [] if isinstance(node, (ast.Global, ast.Nonlocal)) else self.names_bound_by(node)
 
-    def dispatched_statements(self, scope, name, nodes):
-        """The bindings and calls of `name` in `scope`, after refusing what the
+    def dispatched_statements(self, name, nodes):
+        """The bindings and calls of `name` among `nodes`, after refusing what the
         rewrite cannot make exact."""
         assigns = {id(n.targets[0]): n for n in nodes if _method_binding(n)}
         bindings = sorted((n for n in nodes if name in self._binds(n)),
@@ -213,19 +243,30 @@ class _Rebound:
         return_types = _return_types(self.module, {assigns[id(b)].value.attr for b in bindings})
         for call in calls:
             self._check_call(call, name, bindings[-1], return_types)
-        reached = {id(call.value.func) for call in calls}
+        return [assigns[id(b)] for b in bindings], calls
+
+    def _other_reads(self, scope, name, calls):
+        """The reads of `name` other than by `calls`, after refusing a binding
+        of it from another scope."""
+        expected = {id(call.value.func) for call in calls}
+        reads = []
         for n in ast.walk(self.module):
-            if self._other_use(n, name, reached, scope):
+            if isinstance(n, (ast.Global, ast.Nonlocal)) and name in n.names:
                 self._refuse(
                     n, f"'{name}' is bound to methods at several sites and used other than as "
                     "a whole call statement")
-        return [assigns[id(b)] for b in bindings], calls
+            if self._other_read(n, name, expected, scope):
+                reads.append(n)
+        return reads
 
     def _other_use(self, node, name, expected, scope):
         """Whether `node` reads `name` and is not among the `expected` reads, or
         makes another scope bind it."""
         if isinstance(node, (ast.Global, ast.Nonlocal)):
             return name in node.names
+        return self._other_read(node, name, expected, scope)
+
+    def _other_read(self, node, name, expected, scope):
         return (_reads(node, name) and id(node) not in expected
                 and not self._bound_around(node, scope, name))
 
