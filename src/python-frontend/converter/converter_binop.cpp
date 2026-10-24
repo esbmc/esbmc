@@ -1424,7 +1424,8 @@ typet python_converter::nullable_dict_pointee(const typet &t) const
 
 bool python_converter::keeps_pointer_type_on_none(const typet &t)
 {
-  return is_user_class_pointer(t) || !nullable_dict_pointee(t).id().empty();
+  return is_user_class_pointer(t) || !nullable_dict_pointee(t).id().empty() ||
+         type_utils::is_optional_str_pointer(t);
 }
 
 /// True when the container of membership test @p element is a variable or

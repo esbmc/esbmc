@@ -1,0 +1,4 @@
+CORE
+main.py
+--sv-comp --k-induction --max-inductive-step 3 --k-step 2 --unlimited-k-steps --python-check-exceptions TypeError,AttributeError
+^VERIFICATION SUCCESSFUL$

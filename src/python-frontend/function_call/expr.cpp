@@ -2253,7 +2253,7 @@ exprt function_call_expr::handle_tuple_method() const
   if (method_name == "count")
   {
     // sum(t.element_i == elem ? 1 : 0), built in IREP2 (V.3).
-    const type2tc result_type = migrate_type(int_type());
+    const type2tc result_type = migrate_type(long_long_int_type());
     expr2tc elem2;
     migrate_expr(elem, elem2);
     expr2tc total = gen_zero(result_type);
@@ -2278,7 +2278,7 @@ exprt function_call_expr::handle_tuple_method() const
     throw std::runtime_error("tuple.index() on empty tuple");
 
   // Build "any matched" guard so we can assert the element is present (V.3).
-  const type2tc result_type = migrate_type(int_type());
+  const type2tc result_type = migrate_type(long_long_int_type());
   expr2tc elem2;
   migrate_expr(elem, elem2);
   expr2tc any_match = gen_false_expr();
@@ -3096,9 +3096,11 @@ exprt function_call_expr::handle_list_method() const
   if (method_name == "reverse")
     return handle_list_reverse();
   if (method_name == "count")
-    return handle_list_count();
+    return build_typecast(
+      handle_list_count(), type_handler_.get_typet("int", 0));
   if (method_name == "index")
-    return handle_list_index();
+    return build_typecast(
+      handle_list_index(), type_handler_.get_typet("int", 0));
   // Add other methods as needed
 
   throw std::runtime_error("Unsupported list method: " + method_name);
@@ -7435,7 +7437,8 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
         converter_.current_block->copy_to_operands(tmp_assign);
         arg = build_symbol(tmp);
       }
-      reject_numpy_layout_mismatch(arg.type(), *func_symbol, param_idx);
+      reject_numpy_layout_mismatch(
+        arg.type(), *func_symbol, param_idx, arg_is_bytes_literal);
       call.arguments().push_back(array_argument_address(arg));
     }
     else
@@ -7484,12 +7487,14 @@ void function_call_expr::reject_list_for_numpy_parameter(
 void function_call_expr::reject_numpy_layout_mismatch(
   const typet &arg_type,
   const symbolt &callee,
-  size_t param_idx) const
+  size_t param_idx,
+  bool is_bytes_literal) const
 {
   const code_typet::argumentst &params =
     to_code_type(callee.get_type()).arguments();
+  // A bytes literal is not a numpy array.
   if (
-    callee.mode != "Python" || param_idx >= params.size() ||
+    is_bytes_literal || callee.mode != "Python" || param_idx >= params.size() ||
     !params[param_idx].type().is_pointer())
     return;
   const typet &param_type = params[param_idx].type();
