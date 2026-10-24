@@ -475,6 +475,15 @@ void get_symbols(
   const expr2tc &expr,
   std::unordered_set<expr2tc, irep2_hash> &symbols);
 
+/** Collect the root symbol of every object whose address is taken in @p expr,
+ *  recording it in @p out. The root is obtained by walking through member,
+ *  index and typecast selectors (`&s.f` -> s, `&a[k]` -> a, `&(T)x` -> x); a
+ *  dereference under address-of (`&*p`) yields no new escapee because it just
+ *  re-forms an existing pointer. */
+void collect_address_taken(
+  const expr2tc &expr,
+  std::unordered_set<irep_idt, irep_id_hash> &out);
+
 /** Insert a zero operand at each reserved padding-member position so a struct
  *  literal's operand list matches its type's component list, exactly as
  *  clang_c_adjust::adjust_struct's insertion loop does. IREP2 carries no

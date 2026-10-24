@@ -1663,6 +1663,16 @@ protected:
    */
   persistent_map<expr2tc, conjunct_indext, irep2_hash> guard_prefix_index;
 
+  /**
+   *  Locals whose address the program takes anywhere. symex_decl reuses the
+   *  dead L1 instance of a re-declared scalar local not in this set instead
+   *  of minting a fresh one: no pointer can tell the two apart, and a fresh
+   *  instance per loop iteration makes every later merge diff the stale ones
+   *  (#9150). Fixed once the program is converted, so forks share it.
+   */
+  std::shared_ptr<const std::unordered_set<irep_idt, irep_id_hash>>
+    address_taken;
+
   struct deferred_assumptiont
   {
     expr2tc guard;

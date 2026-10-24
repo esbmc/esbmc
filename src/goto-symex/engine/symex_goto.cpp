@@ -702,8 +702,9 @@ void goto_symext::merge_value_sets(const statet::merge_statet &src)
 using phi_recordst = std::vector<
   std::pair<renaming::level2t::name_record, renaming::level2t::name_record>>;
 
-/// A DECL re-run on a back-edge moves the frame to a fresh L1 instance, while
-/// a path parked before it still holds its value in the older one (#7903).
+/// A DECL re-run on a back-edge moves the frame to a fresh L1 instance (unless
+/// symex_decl reuses a dead one), while a path parked before it still holds
+/// its value in the older one (#7903).
 /// Only instances still live on the parked path are carried over.
 static void collect_l1_phis(
   const renaming::level1t &level1,

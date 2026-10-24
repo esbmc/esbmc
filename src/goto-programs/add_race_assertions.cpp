@@ -7,6 +7,7 @@
 #include <util/expr/expr_util.h>
 #include <util/irep/migrate.h>
 #include <irep2/irep2_guard.h>
+#include <irep2/irep2_utils.h>
 #include <util/base/prefix.h>
 #include <util/irep/std_expr.h>
 #include <util/symtab/symbol_generator.h>
@@ -69,37 +70,6 @@ void w_guardst::add_initialization(goto_programt &goto_program)
     goto_program.insert(goto_program.instructions.begin());
   t->type = ASSIGN;
   t->code = code_assign2tc(flag_symbol, all_false);
-}
-
-// Collect the root symbol of every object whose address is taken in `expr`,
-// recording it in `out`. The root is obtained by walking through member, index
-// and typecast selectors (`&s.f` -> s, `&a[k]` -> a, `&(T)x` -> x); a
-// dereference under address-of (`&*p`) yields no new escapee because it just
-// re-forms an existing pointer.
-static void
-collect_address_taken(const expr2tc &expr, rw_sett::shared_localst &out)
-{
-  if (is_nil_expr(expr))
-    return;
-
-  if (is_address_of2t(expr))
-  {
-    expr2tc obj = to_address_of2t(expr).ptr_obj;
-    while (is_member2t(obj) || is_index2t(obj) || is_typecast2t(obj))
-    {
-      if (is_member2t(obj))
-        obj = to_member2t(obj).source_value;
-      else if (is_index2t(obj))
-        obj = to_index2t(obj).source_value;
-      else
-        obj = to_typecast2t(obj).from;
-    }
-    if (is_symbol2t(obj))
-      out.insert(to_symbol2t(obj).thename);
-  }
-
-  expr->foreach_operand(
-    [&out](const expr2tc &op) { collect_address_taken(op, out); });
 }
 
 // Root symbol an lvalue denotes, looking through the selectors that do not

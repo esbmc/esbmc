@@ -2,6 +2,7 @@
 #include <goto-symex/engine/goto_symex.h>
 #include <util/expr/expr_util.h>
 #include <irep2/irep2.h>
+#include <irep2/irep2_utils.h>
 #include <util/symtab/pretty.h>
 
 void goto_symext::symex_other(const expr2tc &code)
@@ -62,21 +63,25 @@ void goto_symext::symex_decl(const expr2tc &code)
 
   const code_decl2t &decl_code = to_code_decl2t(code2);
 
-  // allocate a fresh level-1 instance of the declared variable to preserve
-  // locality
   const irep_idt &identifier = decl_code.value;
 
   // Generate dummy symbol as a vehicle for renaming.
   expr2tc l1_sym = symbol2tc(get_empty_type(), identifier);
 
-  // Keep the instance the frame gave this local on entry, unless the frame
-  // has declared it already
+  // Keep the instance the frame gave this local on entry; a re-declaration
+  // gets a fresh level-1 instance to preserve locality, unless it is a dead
+  // scalar whose address is never taken (see address_taken).
   statet::framet &frame = cur_state->top();
   frame.level1.get_ident_name(l1_sym);
+  const renaming::level2t::name_record rec(to_symbol2t(l1_sym));
+  const bool redeclared = frame.declaration_history.count(rec) != 0;
+  const bool reused =
+    redeclared && !frame.local_variables.count(rec) &&
+    !address_taken->count(identifier) &&
+    (is_number_type(decl_code.type) || is_pointer_type(decl_code.type));
   if (
     to_symbol2t(l1_sym).rlevel != symbol_renaming_level::level1 ||
-    frame.declaration_history.count(
-      renaming::level2t::name_record(to_symbol2t(l1_sym))))
+    (redeclared && !reused))
   {
     unsigned &index = cur_state->variable_instance_nums[identifier];
     frame.level1.rename(l1_sym, ++index);
@@ -89,8 +94,9 @@ void goto_symext::symex_decl(const expr2tc &code)
   frame.local_variables.insert(l);
 
   // seen it before?
-  // it should get a fresh value
-  if (cur_state->level2.current_number(l1_sym) != 0)
+  // it should get a fresh value, even a reused instance its previous
+  // lifetime never assigned (a call's result whose call was cut off)
+  if (reused || cur_state->level2.current_number(l1_sym) != 0)
   {
     // Dummy assignment - blank constant value isn't considered for const
     // propagation, variable number will be bumped to result in a new free

@@ -285,13 +285,15 @@ public:
   }
 
   /// Retire a name whose storage has gone out of scope. L1 names are never
-  /// reused (symex_decl draws from a monotone per-identifier counter), so a
-  /// popped frame's local can still be named -- through a dangling pointer --
-  /// after teardown. Erasing the record restarts the counter, letting such a
-  /// write re-issue an index the declaration already defined and so define one
-  /// SSA name twice (I10). Advancing past the last live index instead leaves
-  /// the current name undefined, which keeps a read of the expired storage
-  /// unconstrained exactly as erasure did.
+  /// reused across activations (symex_decl draws from a monotone
+  /// per-identifier counter, and reuses an instance only within a frame, for
+  /// a local no pointer can reach), so a popped frame's local can still be
+  /// named -- through a dangling pointer -- after teardown. Erasing the record
+  /// restarts the counter, letting such a write re-issue an index the
+  /// declaration already defined and so define one SSA name twice (I10).
+  /// Advancing past the last live index instead leaves the current name
+  /// undefined, which keeps a read of the expired storage unconstrained exactly
+  /// as erasure did.
   void retire(const name_record &rec)
   {
     current_names.update(rec, [](valuet entry) {

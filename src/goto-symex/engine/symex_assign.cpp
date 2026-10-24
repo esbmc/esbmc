@@ -10,6 +10,7 @@
 #include <util/message/message.h>
 #include <util/base/usr_utils.h>
 #include <irep2/irep2.h>
+#include <irep2/irep2_utils.h>
 #include <util/irep/migrate.h>
 #include <util/irep/std_expr.h>
 
@@ -125,11 +126,14 @@ goto_symext::goto_symext(
 
   // Build mapping: global_loop_id -> (function_name, per-function loop index)
   // Also populate unwind_set from #pragma unroll annotations
+  auto taken = std::make_shared<std::unordered_set<irep_idt, irep_id_hash>>();
   for (const auto &func_pair : _goto_functions.function_map)
   {
     unsigned loop_index = 0;
     for (const auto &instruction : func_pair.second.body.instructions)
     {
+      collect_address_taken(instruction.code, *taken);
+      collect_address_taken(instruction.guard, *taken);
       if (instruction.is_backwards_goto())
       {
         loop_id_to_func_index[instruction.loop_number] = std::make_pair(
@@ -160,6 +164,7 @@ goto_symext::goto_symext(
     }
   }
 
+  address_taken = std::move(taken);
   art1 = nullptr;
 
   // Guard pruning is on by default (disable with --no-interval-symex-guard);
@@ -208,6 +213,7 @@ goto_symext &goto_symext::operator=(const goto_symext &sym)
   copy_definitions = sym.copy_definitions;
   conjunct_rewrites = sym.conjunct_rewrites;
   guard_prefix_index = sym.guard_prefix_index;
+  address_taken = sym.address_taken;
   deferred_assumptions = sym.deferred_assumptions;
   depth_limit = sym.depth_limit;
   break_insn = sym.break_insn;
