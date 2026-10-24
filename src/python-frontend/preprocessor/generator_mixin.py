@@ -192,14 +192,18 @@ class GeneratorMixin:
             new = f"ESBMC_compvar_{self.listcomp_counter}_{old}"
             self.listcomp_counter += 1
             index = node.generators.index(generator)
-            scopes = [node.elt] + list(generator.ifs)
+            scopes = list(generator.ifs)
+            shadowed = False
             for later in node.generators[index + 1:]:
                 scopes.append(later.iter)
+                if old in self._bound_target_names(later.target):
+                    shadowed = True
+                    break
                 scopes.extend(later.ifs)
+            if not shadowed:
+                scopes.append(node.elt)
             for scope in scopes:
-                for name in ast.walk(scope):
-                    if isinstance(name, ast.Name) and name.id == old:
-                        name.id = new
+                self._rename_free_name(scope, old, new)
             generator.target.id = new
         return node
 
