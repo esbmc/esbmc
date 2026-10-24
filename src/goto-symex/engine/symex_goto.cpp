@@ -151,7 +151,7 @@ tvt::tv_enumt goto_symext::path_guard_decides(
   bool already_false,
   bool already_true)
 {
-  if (already_false || already_true)
+  if (already_false || already_true || cur_state->guard.is_true())
     return tvt::TV_UNKNOWN;
 
   expr2tc cmp_guard = new_guard;
@@ -160,22 +160,62 @@ tvt::tv_enumt goto_symext::path_guard_decides(
   expr2tc neg_guard = not2tc(cmp_guard);
   do_simplify(neg_guard);
 
-  for (const expr2tc &raw : cur_state->guard.guard_list)
+  // The first conjunct that matches either side decides.
+  const conjunct_indext index = prefix_index(cur_state->guard);
+  const size_t *pos = index.find(cmp_guard);
+  const size_t *neg = index.find(neg_guard);
+  if (pos && (!neg || *pos <= *neg))
+    return tvt::TV_TRUE;
+  return neg ? tvt::TV_FALSE : tvt::TV_UNKNOWN;
+}
+
+goto_symext::conjunct_indext goto_symext::prefix_index(const guard2tc &guard)
+{
+  // Descend the and-chain to the longest indexed prefix. A conjunct is
+  // never an and2t (guard2tc::add unfolds them), so the left spine
+  // determines the conjuncts.
+  assert(!is_nil_expr(guard));
+  std::vector<const expr2tc *> unindexed;
+  conjunct_indext index;
+  size_t covered = guard.guard_list.size();
+  for (const expr2tc *node = &guard; covered > 0;)
   {
-    const expr2tc conjunct = rewrite_conjunct(raw);
-    if (conjunct == cmp_guard)
-      return tvt::TV_TRUE;
-    if (conjunct == neg_guard)
-      return tvt::TV_FALSE;
+    auto it = guard_prefix_index.find(*node);
+    if (it != guard_prefix_index.end())
+    {
+      index = it->second;
+      // A chain operator|= or operator-= rebuilt matches only structurally,
+      // walking its whole spine; key the new node so that walk happens once.
+      if (
+        !same_pointer(it->first, *node) &&
+        guard_prefix_index.size() < subsumption_map_capacity)
+        guard_prefix_index.emplace(*node, index);
+      break;
+    }
+    unindexed.push_back(node);
+    if (--covered > 0)
+      node = &to_and2t(*node).side_1;
   }
-  return tvt::TV_UNKNOWN;
+
+  for (auto node = unindexed.rbegin(); node != unindexed.rend(); ++node)
+  {
+    const expr2tc &n = **node;
+    const expr2tc conjunct =
+      rewrite_conjunct(covered == 0 ? n : to_and2t(n).side_2);
+    if (!index.find(conjunct))
+      index.set(conjunct, covered);
+    ++covered;
+    if (guard_prefix_index.size() < subsumption_map_capacity)
+      guard_prefix_index.emplace(n, index);
+  }
+  return index;
 }
 
 expr2tc goto_symext::rewrite_conjunct(const expr2tc &raw)
 {
-  auto memo = conjunct_rewrites.find(raw.get());
+  auto memo = conjunct_rewrites.find(raw);
   if (memo != conjunct_rewrites.end())
-    return memo->second.second;
+    return memo->second;
 
   bool negated = false;
   expr2tc conjunct = raw;
@@ -206,7 +246,7 @@ expr2tc goto_symext::rewrite_conjunct(const expr2tc &raw)
     do_simplify(conjunct);
 
   if (conjunct_rewrites.size() < subsumption_map_capacity)
-    conjunct_rewrites.emplace(raw.get(), std::make_pair(raw, conjunct));
+    conjunct_rewrites.emplace(raw, conjunct);
   return conjunct;
 }
 
