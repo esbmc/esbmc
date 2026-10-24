@@ -2224,7 +2224,7 @@ exprt function_call_expr::handle_tuple_method() const
   if (method_name == "count")
   {
     // sum(t.element_i == elem ? 1 : 0), built in IREP2 (V.3).
-    const type2tc result_type = migrate_type(int_type());
+    const type2tc result_type = migrate_type(long_long_int_type());
     expr2tc elem2;
     migrate_expr(elem, elem2);
     expr2tc total = gen_zero(result_type);
@@ -2249,7 +2249,7 @@ exprt function_call_expr::handle_tuple_method() const
     throw std::runtime_error("tuple.index() on empty tuple");
 
   // Build "any matched" guard so we can assert the element is present (V.3).
-  const type2tc result_type = migrate_type(int_type());
+  const type2tc result_type = migrate_type(long_long_int_type());
   expr2tc elem2;
   migrate_expr(elem, elem2);
   expr2tc any_match = gen_false_expr();
@@ -3067,9 +3067,11 @@ exprt function_call_expr::handle_list_method() const
   if (method_name == "reverse")
     return handle_list_reverse();
   if (method_name == "count")
-    return handle_list_count();
+    return build_typecast(
+      handle_list_count(), type_handler_.get_typet("int", 0));
   if (method_name == "index")
-    return handle_list_index();
+    return build_typecast(
+      handle_list_index(), type_handler_.get_typet("int", 0));
   // Add other methods as needed
 
   throw std::runtime_error("Unsupported list method: " + method_name);
