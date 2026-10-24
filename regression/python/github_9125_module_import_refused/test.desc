@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: .*main\.py:4:4: unsupported: this call may be 'mod2.f' or 'mod2.g', which return different types \(str and int\)$

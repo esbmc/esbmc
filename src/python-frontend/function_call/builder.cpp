@@ -1806,6 +1806,17 @@ exprt function_call_builder::str_method_on_number_error() const
   return raise;
 }
 
+// np.round keeps the numpy model: C's round rounds halves away from zero and
+// has no decimals. The models' own `round(x)` is a Name call.
+static bool
+reuses_c_model(const nlohmann::json &call, const symbol_id &function_id)
+{
+  const std::string &function = function_id.get_function();
+  return type_utils::is_c_model_func(function) &&
+         !(function == "round" &&
+           call["func"].value("_type", "") == "Attribute");
+}
+
 exprt function_call_builder::build() const
 {
   if (call_["func"]["_type"] == "Attribute")
@@ -2185,7 +2196,7 @@ exprt function_call_builder::build() const
   if (is_numpy_call(function_id))
   {
     // Adjust the function ID when reusing functions from the C models
-    if (type_utils::is_c_model_func(function_id.get_function()))
+    if (reuses_c_model(call_, function_id))
     {
       function_id.set_prefix("c:");
       function_id.set_filename("");

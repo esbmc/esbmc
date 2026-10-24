@@ -406,6 +406,26 @@ bool __ESBMC_list_push_dict_ptr(PyListObject *l, void *dict_ptr, size_t type_id)
   return true;
 }
 
+bool __ESBMC_list_set_dict_ptr(
+  PyListObject *l,
+  size_t index,
+  void *dict_ptr,
+  size_t type_id)
+{
+  __ESBMC_assert(l != NULL, "list_set_dict_ptr: list is null");
+  __ESBMC_assert(index < l->size, "list_set_dict_ptr: index out of bounds");
+
+  if (l->items[index].type_id != type_id)
+    __ESBMC_list_retyped = true;
+
+  PyObject *item = &l->items[index];
+  item->value = dict_ptr;
+  item->float_idx = 0;
+  item->type_id = type_id;
+  item->size = 0;
+  return true;
+}
+
 /* The length to compare one element over: the width the frontend recorded for
  * every element of both lists when it had one, else the element's own size.
  * A read of o->size is symbolic under a loop-carried index, which leaves

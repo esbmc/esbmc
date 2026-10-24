@@ -569,6 +569,9 @@ std::optional<exprt> python_converter::try_get_numpy_named_pointer_view_len(
 
 exprt python_converter::get_call_expr(const nlohmann::json &element)
 {
+  if (!numpy_nditers_.empty())
+    if (std::optional<exprt> call = numpy_nditer(*this).call(element))
+      return *call;
   reject_numpy_view_callee(element);
   reject_inline_runtime_numpy_slice(element);
   if (std::optional<nlohmann::json> folded = fold_numpy_view_call(element))
@@ -636,6 +639,26 @@ bool python_converter::may_be_callable(const typet &type)
   return type.is_nil() || type.id().empty() || type.is_code() ||
          (type.is_pointer() && type.subtype().is_code()) ||
          is_user_class_pointer(type) || is_user_class_struct_type(type);
+}
+
+// An argument that must not reach python_consteval as a plain constant.
+static bool blocks_constant_call_fold(const nlohmann::json &arg_node)
+{
+  // Bignum literal (issue #4642): the constant carries `_bigint` and a
+  // null `value`. Refuse to fold so the call falls back through to the
+  // normal builder, whose recursion into get_literal raises the
+  // overflow diagnostic. Without this guard the null `value` is taken
+  // as Python None below and the bignum is silently consumed.
+  const bool arg_is_bigint =
+    arg_node["_type"] == "Constant" && arg_node.contains("_bigint");
+  const bool usub_operand_is_bigint =
+    arg_node["_type"] == "UnaryOp" && arg_node["op"]["_type"] == "USub" &&
+    arg_node["operand"]["_type"] == "Constant" &&
+    arg_node["operand"].contains("_bigint");
+  // The callee would see a bytes literal as a str (see
+  // contains_bytes_literal in python_consteval.cpp).
+  const bool arg_is_bytes = arg_node.contains("encoded_bytes");
+  return arg_is_bigint || usub_operand_is_bigint || arg_is_bytes;
 }
 
 /// A call converted as a statement, as a side-effect expression: goto-convert
@@ -1848,18 +1871,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       std::vector<PyConstValue> const_args;
       for (const auto &arg_node : element["args"])
       {
-        // Bignum literal (issue #4642): the constant carries `_bigint` and a
-        // null `value`. Refuse to fold so the call falls back through to the
-        // normal builder, whose recursion into get_literal raises the
-        // overflow diagnostic. Without this guard the null `value` is taken
-        // as Python None below and the bignum is silently consumed.
-        const bool arg_is_bigint =
-          arg_node["_type"] == "Constant" && arg_node.contains("_bigint");
-        const bool usub_operand_is_bigint =
-          arg_node["_type"] == "UnaryOp" && arg_node["op"]["_type"] == "USub" &&
-          arg_node["operand"]["_type"] == "Constant" &&
-          arg_node["operand"].contains("_bigint");
-        if (arg_is_bigint || usub_operand_is_bigint)
+        if (blocks_constant_call_fold(arg_node))
         {
           all_const = false;
           break;
@@ -2379,7 +2391,12 @@ exprt python_converter::dispatch_mismatched_callees(
   const nlohmann::json &call,
   const side_effect_expr_function_callt &call_expr)
 {
-  exprt result = call_expr;
+  side_effect_expr_function_callt typed = call_expr;
+  if (
+    type_handler_.is_tagged_scalar_type(current_func_return_type_) &&
+    dynamic_type_handler_.function_values_return_dynamic(call))
+    typed.type() = current_func_return_type_;
+  exprt result = typed;
   if (!current_block)
     return result;
   const std::size_t passed = call["args"].size() + call["keywords"].size();
@@ -2405,7 +2422,7 @@ exprt python_converter::dispatch_mismatched_callees(
         python_expr::build_address_of(python_expr::build_symbol(*function)),
         callee.type()));
 
-    side_effect_expr_function_callt filled = call_expr;
+    side_effect_expr_function_callt filled = typed;
     if (
       call["keywords"].empty() && passed < params &&
       function->get_type().is_code() &&
