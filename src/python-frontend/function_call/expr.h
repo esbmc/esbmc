@@ -1017,7 +1017,8 @@ private:
   void reject_numpy_layout_mismatch(
     const typet &arg_type,
     const symbolt &callee,
-    size_t param_idx) const;
+    size_t param_idx,
+    bool is_bytes_literal) const;
   void reject_list_for_numpy_parameter(
     const typet &arg_type,
     const code_typet::argumentst &params,
