@@ -176,6 +176,12 @@ public:
   void record_guard_definition(const expr2tc &guard_expr, const expr2tc &rhs);
 
   /**
+   *  A path-guard conjunct rewritten onto the canonical basis
+   *  path_guard_decides compares on, memoised in conjunct_rewrites.
+   */
+  expr2tc rewrite_conjunct(const expr2tc &conjunct);
+
+  /**
    *  Record a copy chain for chase_copies after an unconditional
    *  assignment, when the rhs is a stable value: a (possibly
    *  typecast) L2 symbol, or a pure bitvector computation over such
@@ -1584,7 +1590,8 @@ protected:
    */
   irep_idt guard_identifier_s;
   /**
-   *  Cap on guard_definitions and copy_definitions. Both grow linearly
+   *  Cap on guard_definitions, copy_definitions and conjunct_rewrites.
+   *  The first two grow linearly
    *  with symex length (one entry per branching goto, one per bare
    *  copy: measured ~10k/~21k entries at 10k branch gotos) and are
    *  copied whenever an execution state forks, so an interleaving-heavy
@@ -1629,6 +1636,16 @@ protected:
    *  away the originals' assignments and degrades counterexamples.
    */
   std::unordered_map<irep_idt, expr2tc> copy_definitions;
+  /**
+   *  rewrite_conjunct's result per conjunct node, which the entry keeps
+   *  alive so its address is not reused. Conjuncts are L2, which
+   *  renaming leaves alone, and the two maps above bind each generation
+   *  once, so a rewrite never goes stale. Without the memo every goto
+   *  rewrites every conjunct of the path guard again, quadratic in the
+   *  unwind bound (#9150).
+   */
+  std::unordered_map<const expr2t *, std::pair<expr2tc, expr2tc>>
+    conjunct_rewrites;
 
   struct deferred_assumptiont
   {

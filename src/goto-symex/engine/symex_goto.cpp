@@ -162,40 +162,52 @@ tvt::tv_enumt goto_symext::path_guard_decides(
 
   for (const expr2tc &raw : cur_state->guard.guard_list)
   {
-    bool negated = false;
-    expr2tc conjunct = raw;
-    if (is_not2t(conjunct))
-    {
-      negated = true;
-      conjunct = to_not2t(conjunct).value;
-    }
-    auto def = is_symbol2t(conjunct)
-                 ? guard_definitions.find(
-                     irep_idt(to_symbol2t(conjunct).get_symbol_name()))
-                 : guard_definitions.end();
-    if (def != guard_definitions.end())
-    {
-      conjunct = def->second;
-      if (negated)
-      {
-        conjunct = not2tc(conjunct);
-        do_simplify(conjunct);
-      }
-    }
-    else
-    {
-      conjunct = raw;
-      cur_state->rename(conjunct);
-      do_simplify(conjunct);
-    }
-    if (chase_copies(conjunct))
-      do_simplify(conjunct);
+    const expr2tc conjunct = rewrite_conjunct(raw);
     if (conjunct == cmp_guard)
       return tvt::TV_TRUE;
     if (conjunct == neg_guard)
       return tvt::TV_FALSE;
   }
   return tvt::TV_UNKNOWN;
+}
+
+expr2tc goto_symext::rewrite_conjunct(const expr2tc &raw)
+{
+  auto memo = conjunct_rewrites.find(raw.get());
+  if (memo != conjunct_rewrites.end())
+    return memo->second.second;
+
+  bool negated = false;
+  expr2tc conjunct = raw;
+  if (is_not2t(conjunct))
+  {
+    negated = true;
+    conjunct = to_not2t(conjunct).value;
+  }
+  auto def = is_symbol2t(conjunct) ? guard_definitions.find(irep_idt(
+                                       to_symbol2t(conjunct).get_symbol_name()))
+                                   : guard_definitions.end();
+  if (def != guard_definitions.end())
+  {
+    conjunct = def->second;
+    if (negated)
+    {
+      conjunct = not2tc(conjunct);
+      do_simplify(conjunct);
+    }
+  }
+  else
+  {
+    conjunct = raw;
+    cur_state->rename(conjunct);
+    do_simplify(conjunct);
+  }
+  if (chase_copies(conjunct))
+    do_simplify(conjunct);
+
+  if (conjunct_rewrites.size() < subsumption_map_capacity)
+    conjunct_rewrites.emplace(raw.get(), std::make_pair(raw, conjunct));
+  return conjunct;
 }
 
 void goto_symext::symex_goto(const expr2tc &old_guard)
