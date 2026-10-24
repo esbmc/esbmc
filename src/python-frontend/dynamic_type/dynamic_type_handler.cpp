@@ -77,15 +77,7 @@ std::string classify_return_literal_kind(
                             value, module_body)
                         : kind;
   }
-  if (value.value("_type", "") != "Constant" || !value.contains("value"))
-    return "";
-
-  const auto &lit = value["value"];
-  if (lit.is_string())
-    return "str";
-  if (lit.is_number_integer() || lit.is_boolean())
-    return "num";
-  return "";
+  return dynamic_type_detail::classify_literal_value_kind(value);
 }
 
 // Collects every literal return kind reachable from the tail of `block`,
@@ -151,7 +143,7 @@ bool has_divergent_literal_returns(
         kinds.insert(next_kind);
     }
 
-    if (kinds.size() > 1)
+    if (dynamic_type_detail::kinds_diverge(kinds))
       return true;
   }
 
@@ -364,6 +356,8 @@ std::string scalar_kind(const typet &type)
 {
   if (type_utils::is_integer_type(type) || type.is_bool())
     return "num";
+  if (type.is_floatbv())
+    return "float";
   return type_utils::is_string_type(type) ? "str" : "";
 }
 } // namespace
@@ -442,7 +436,7 @@ bool dynamic_type_handler::joins_divergent_kinds(
   else if (keeps_value)
     return false;
   kinds.erase("");
-  return kinds.size() >= 2;
+  return dynamic_type_detail::kinds_diverge(kinds);
 }
 
 void dynamic_type_handler::declare_dynamic_type_names(
@@ -757,6 +751,7 @@ exprt dynamic_type_handler::handle_comparison(
   const bool lhs_tagged = type_handler_.is_tagged_scalar_type(lhs.type());
   const bool rhs_tagged = type_handler_.is_tagged_scalar_type(rhs.type());
   const bool ordered = type_utils::is_ordered_comparison(op);
+  refuse_float_tag_operation(lhs, rhs);
 
   if (lhs_tagged && rhs_tagged)
   {
@@ -974,6 +969,7 @@ exprt dynamic_type_handler::handle_arithmetic(
 {
   const bool lhs_tagged = type_handler_.is_tagged_scalar_type(lhs.type());
   const bool rhs_tagged = type_handler_.is_tagged_scalar_type(rhs.type());
+  refuse_float_tag_operation(lhs, rhs);
 
   // Equality can settle a type_id mismatch without knowing either type;
   // arithmetic cannot, since it needs the concrete type to pick an operation.
@@ -1005,6 +1001,7 @@ exprt dynamic_type_handler::build_neg_tagged(
   const locationt &location)
 {
   exprt zero = from_integer(0, signedbv_typet(config.ansi_c.int_width));
+  refuse_float_tag_operation(zero, tagged);
   guard_type_error("Sub", zero, tagged, location);
   return build_sub_literal(tagged, zero, /*tagged_is_left=*/false);
 }
@@ -1268,6 +1265,20 @@ exprt dynamic_type_handler::build_tagged_value(
     target_block.copy_to_operands(instr);
 
   return build_symbol(tag_symbol);
+}
+
+void dynamic_type_handler::refuse_float_tag_operation(
+  const exprt &lhs,
+  const exprt &rhs) const
+{
+  if (
+    !dynamic_type_detail::float_tags_possible() ||
+    type_handler_.is_string_type(lhs.type()) ||
+    type_handler_.is_string_type(rhs.type()))
+    return;
+  throw std::runtime_error(
+    "arithmetic or comparison on a dynamically-typed variable that may hold "
+    "a float is not yet supported");
 }
 
 void dynamic_type_handler::refuse_tagged_argument() const
