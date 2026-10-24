@@ -1,4 +1,5 @@
 #include "python_dict_internal.h"
+#include <util/lang/c_sizeof.h>
 
 using namespace python_expr;
 
@@ -107,6 +108,70 @@ void python_dict_handler::store_nested_dict_value(
   push_call.location() = location;
 
   converter_.add_instruction(push_call);
+}
+
+void python_dict_handler::store_dict_value_by_pointer(
+  const nlohmann::json &node,
+  const exprt &value,
+  const exprt &values_member,
+  const exprt &index,
+  const locationt &location,
+  codet &target_block,
+  code_function_callt &set_call,
+  code_function_callt &push_call)
+{
+  const symbolt *set_func =
+    symbol_table_.find_symbol("c:@F@__ESBMC_list_set_dict_ptr");
+  const symbolt *push_func =
+    symbol_table_.find_symbol("c:@F@__ESBMC_list_push_dict_ptr");
+  const symbolt *alloca_func = symbol_table_.find_symbol("c:@F@__ESBMC_alloca");
+  if (!set_func || !push_func || !alloca_func)
+    throw std::runtime_error("dict value store model functions not found");
+
+  // The scalar byte copy would move the dict's list pointers through
+  // uint64_t, losing their provenance, and the address of `value` dies with
+  // its scope, so store a pointer to a heap copy.
+  const typet &dict_type = value.type();
+  pointer_typet ptr_type(dict_type);
+  symbolt &ptr_var =
+    converter_.create_tmp_symbol(node, "$dict_value_ptr$", ptr_type, exprt());
+  code_declt ptr_decl(build_symbol(ptr_var));
+  ptr_decl.location() = location;
+  target_block.copy_to_operands(ptr_decl);
+
+  // sizeof(T) lets goto_convert type the allocated object as the dict.
+  exprt size("sizeof", size_type());
+  size.copy_to_operands(
+    type_exprt(dict_type), c_sizeof(dict_type, converter_.name_space()));
+  code_function_callt alloc_call;
+  alloc_call.function() = build_symbol(*alloca_func);
+  alloc_call.lhs() = build_symbol(ptr_var);
+  alloc_call.arguments().push_back(size);
+  alloc_call.type() = ptr_type;
+  alloc_call.location() = location;
+  target_block.copy_to_operands(alloc_call);
+
+  code_assignt copy_assign(
+    build_dereference(build_symbol(ptr_var), dict_type), value);
+  copy_assign.location() = location;
+  target_block.copy_to_operands(copy_assign);
+
+  constant_exprt type_hash(size_type());
+  type_hash.set_value(integer2binary(
+    generate_nested_dict_type_hash(dict_type), config.ansi_c.address_width));
+
+  set_call = code_function_callt();
+  set_call.function() = build_symbol(*set_func);
+  set_call.arguments() = {
+    values_member, index, build_symbol(ptr_var), type_hash};
+  set_call.type() = bool_type();
+  set_call.location() = location;
+
+  push_call = code_function_callt();
+  push_call.function() = build_symbol(*push_func);
+  push_call.arguments() = {values_member, build_symbol(ptr_var), type_hash};
+  push_call.type() = bool_type();
+  push_call.location() = location;
 }
 
 exprt python_dict_handler::retrieve_nested_dict_value(

@@ -1263,6 +1263,25 @@ void python_converter::retype_resized_str(
   }
 }
 
+// Retyping a str that may be None to char* would lose the NULL that stands
+// for None, so the str is stored at the declared type instead (#9090).
+bool python_converter::store_optional_str(
+  symbolt *lhs_symbol,
+  const exprt &lhs,
+  exprt &rhs)
+{
+  if (
+    !lhs_symbol || !lhs.is_symbol() ||
+    !type_utils::is_optional_str_pointer(lhs.type()) ||
+    !type_utils::is_string_type(rhs.type()) || rhs.type() == lhs.type())
+    return false;
+  if (rhs.type().is_array())
+    rhs = string_handler_.get_array_base_address(rhs);
+  rhs = typecast_exprt(rhs, lhs.type());
+  set_assigned_value(*lhs_symbol, rhs);
+  return true;
+}
+
 void python_converter::handle_assignment_type_adjustments(
   symbolt *lhs_symbol,
   exprt &lhs,
@@ -1549,7 +1568,7 @@ bool python_converter::settle_target_type(
     throw std::runtime_error(
       "Unsupported: a variable holding a class rebound to a value that is not "
       "one");
-  return false;
+  return store_optional_str(lhs_symbol, lhs, rhs);
 }
 
 // Whether `value` names classes only: a class, or a conditional between
