@@ -4886,6 +4886,33 @@ void python_converter::validate_return_paths(
   function_body.copy_to_operands(missing_return_assert);
 }
 
+/// Gives each RETURN of a string literal in \p node the pointer
+/// \p return_type. A return converted before the function's return type was
+/// known keeps the literal's array type, which a pointer return cannot hold.
+void python_converter::decay_string_literal_returns(
+  exprt &node,
+  const typet &return_type) const
+{
+  if (!return_type.is_pointer())
+    return;
+  if (node.is_code() && to_code(node).get_statement() == "return")
+  {
+    code_returnt &ret = to_code_return(to_code(node));
+    exprt &value = ret.return_value();
+    if (
+      !ret.has_return_value() || !value.type().is_array() ||
+      !value.is_constant())
+      return;
+    const exprt address = string_literal_address(value);
+    value = address.type() == return_type
+              ? address
+              : typecast_exprt(address, return_type);
+    return;
+  }
+  Forall_operands (it, node)
+    decay_string_literal_returns(*it, return_type);
+}
+
 typet python_converter::infer_return_type_from_body(const nlohmann::json &body)
 {
   auto infer_constant_type = [](const nlohmann::json &constant_value) -> typet {
@@ -5924,6 +5951,7 @@ void python_converter::get_function_definition(
     {
       type.return_type() = *ret_type;
       python_expr::set_function_type(*added_symbol, type);
+      decay_string_literal_returns(function_body, *ret_type);
     }
   }
 
