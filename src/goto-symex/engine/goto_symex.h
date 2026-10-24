@@ -171,7 +171,7 @@ public:
 
   /**
    *  Remember a guard generation's defining condition for
-   *  path_guard_decides, up to subsumption_map_capacity.
+   *  path_guard_decides.
    */
   void record_guard_definition(const expr2tc &guard_expr, const expr2tc &rhs);
 
@@ -1599,19 +1599,6 @@ protected:
    */
   irep_idt guard_identifier_s;
   /**
-   *  Cap on guard_definitions and copy_definitions. Both grow linearly
-   *  with symex length (one entry per branching goto, one per bare
-   *  copy: measured ~10k/~21k entries at 10k branch gotos) and are
-   *  copied whenever an execution state forks, so an interleaving-heavy
-   *  run would otherwise pay an unbounded per-fork cost. Past the cap,
-   *  recording stops and the per-fork copy stays bounded. Subsumption
-   *  then matches only against the recorded definitions and never
-   *  decides wrongly, it merely stops improving.
-   *  Single-threaded runs never fork an execution state and only pay
-   *  the recording itself.
-   */
-  static constexpr size_t subsumption_map_capacity = 1 << 16;
-  /**
    *  Cap on one recorded copy definition's flattened node count:
    *  canonicalization doubles nested arithmetic chains per link, and
    *  an oversized definition costs more to match than it prunes.
@@ -1627,8 +1614,11 @@ protected:
    *  symbols that are already level2. Keyed by the L2-qualified symbol
    *  name (an interned irep_idt with a cached hash) rather than the
    *  expression, so a lookup never deep-compares expression trees.
+   *  It grows with symex length and every forked execution state copies
+   *  it, so it is persistent: a copy is O(1) and needs no cap, past which
+   *  subsumption would stop deciding.
    */
-  std::unordered_map<irep_idt, expr2tc> guard_definitions;
+  persistent_map<irep_idt, expr2tc, irep_id_hash> guard_definitions;
   /**
    *  Copy chains between L2 symbol generations: lhs generation -> the
    *  stable value it was unconditionally assigned — a (possibly
@@ -1642,8 +1632,9 @@ protected:
    *  condition never matches. Deliberately NOT
    *  fed into constant propagation: substituting copies globally slices
    *  away the originals' assignments and degrades counterexamples.
+   *  Persistent for the same reason as guard_definitions.
    */
-  std::unordered_map<irep_idt, expr2tc> copy_definitions;
+  persistent_map<irep_idt, expr2tc, irep_id_hash> copy_definitions;
   /**
    *  rewrite_conjunct's result per conjunct. Conjuncts are L2, which
    *  renaming leaves alone, and the two maps above bind each generation

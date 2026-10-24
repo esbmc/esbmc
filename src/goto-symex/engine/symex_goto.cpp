@@ -74,11 +74,11 @@ bool goto_symext::chase_copies(expr2tc &expr) const
 
   if (is_symbol2t(expr))
   {
-    auto it =
+    const expr2tc *value =
       copy_definitions.find(irep_idt(to_symbol2t(expr).get_symbol_name()));
-    if (it == copy_definitions.end())
+    if (!value)
       return false;
-    expr = it->second;
+    expr = *value;
     return true;
   }
 
@@ -109,8 +109,6 @@ void goto_symext::record_copy_definition(
   // already inlined by constant propagation and need no chase.
   if (!is_stable_value(rhs) || is_constant_expr(rhs))
     return;
-  if (copy_definitions.size() >= subsumption_map_capacity)
-    return;
 
   // Canonicalize so chains resolve in one substitution pass; drop
   // oversized canonical forms (see max_copy_definition_nodes).
@@ -120,19 +118,16 @@ void goto_symext::record_copy_definition(
     count_nodes_up_to(value, max_copy_definition_nodes) >
     max_copy_definition_nodes)
     return;
-  copy_definitions[irep_idt(to_symbol2t(renamed_lhs).get_symbol_name())] =
-    value;
+  copy_definitions.set(
+    irep_idt(to_symbol2t(renamed_lhs).get_symbol_name()), value);
 }
 
-/// Remember a guard generation's defining condition, up to the
-/// documented capacity.
 void goto_symext::record_guard_definition(
   const expr2tc &guard_expr,
   const expr2tc &new_rhs)
 {
-  if (guard_definitions.size() < subsumption_map_capacity)
-    guard_definitions[irep_idt(to_symbol2t(guard_expr).get_symbol_name())] =
-      new_rhs;
+  guard_definitions.set(
+    irep_idt(to_symbol2t(guard_expr).get_symbol_name()), new_rhs);
 }
 
 /// Whether the accumulated path guard already decides @p new_guard:
@@ -215,12 +210,13 @@ expr2tc goto_symext::rewrite_conjunct(const expr2tc &raw)
     negated = true;
     conjunct = to_not2t(conjunct).value;
   }
-  auto def = is_symbol2t(conjunct) ? guard_definitions.find(irep_idt(
-                                       to_symbol2t(conjunct).get_symbol_name()))
-                                   : guard_definitions.end();
-  if (def != guard_definitions.end())
+  const expr2tc *def = is_symbol2t(conjunct)
+                         ? guard_definitions.find(
+                             irep_idt(to_symbol2t(conjunct).get_symbol_name()))
+                         : nullptr;
+  if (def)
   {
-    conjunct = def->second;
+    conjunct = *def;
     if (negated)
     {
       conjunct = not2tc(conjunct);
