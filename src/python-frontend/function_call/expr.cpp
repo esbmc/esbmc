@@ -1143,14 +1143,6 @@ exprt function_call_expr::build_constant_from_arg() const
     exprt operand_expr = converter_.get_expr(first_arg);
     operand_expr = guard_nonfinite_float_to_int(operand_expr, base_expr);
 
-    if (
-      base_expr.is_nil() &&
-      type_handler_.is_tagged_scalar_type(operand_expr.type()))
-      return converter_.dynamic_type_handler_.build_numeric_conversion(
-        to_value_expr(operand_expr, converter_.ns),
-        long_long_int_type(),
-        converter_.get_location_from_decl(call_));
-
     // Dispatch int() to the operand's __int__ when the operand is a class
     // instance (e.g. Decimal). Under the object-model migration (#3067/#4773)
     // an instance is a `Class*` pointer, so resolve through it to the pointee
@@ -1379,13 +1371,9 @@ exprt function_call_expr::build_constant_from_arg() const
 
       return sh.handle_string_to_float(expr, loc);
     }
-    typet float_t = type_handler_.get_typet("float", 0);
-    if (type_handler_.is_tagged_scalar_type(expr.type()))
-      return converter_.dynamic_type_handler_.build_numeric_conversion(
-        expr, float_t, converter_.get_location_from_decl(call_));
     // Numeric variable: emit a proper typecast to avoid mislabeled IR
     if (!expr.type().is_floatbv())
-      return build_typecast(expr, float_t);
+      return build_float_conversion(expr, type_handler_.get_typet("float", 0));
     return expr;
   }
 
@@ -1495,18 +1483,12 @@ exprt function_call_expr::build_constant_from_arg() const
     return from_integer(*folded, t);
   }
 
-  if (func_name == "float" && type_handler_.is_tagged_scalar_type(expr.type()))
-    return converter_.dynamic_type_handler_.build_numeric_conversion(
-      to_value_expr(expr, converter_.ns),
-      t,
-      converter_.get_location_from_decl(call_));
-
   // For float(), emit a proper typecast instead of relabeling the type.
   // Simply changing expr.type() on an integer expression creates IR where
   // the type tag says float but the operation is bitvector arithmetic,
   // causing sort mismatches in the SMT encoder.
   if (func_name == "float" && !expr.type().is_floatbv())
-    return build_typecast(guard_none_to_float(expr), t);
+    return build_float_conversion(guard_none_to_float(expr), t);
 
   if (func_name != "str")
     expr = retype_or_typecast(expr, t);

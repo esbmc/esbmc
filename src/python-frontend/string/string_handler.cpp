@@ -2632,6 +2632,10 @@ exprt string_handler::handle_int_conversion(
     return handle_string_to_int(
       build_typecast(arg, pointer_typet(char_type())), nil_exprt(), location);
 
+  if (type_handler_.is_tagged_scalar_type(arg.type()))
+    return converter_.dynamic_type_handler_.build_numeric_conversion(
+      arg, long_long_int_type(), location);
+
   // For other types, attempt a typecast
   return build_typecast(arg, int_type());
 }
