@@ -184,7 +184,7 @@ static inline void *__ESBMC_copy_value(
   // KNOWNBUG on the symbolic-list scalability wall, #5121).
   if (size == 8)
     *(uint64_t *)copied = *(const uint64_t *)value;
-  else if (size == 16)
+  else if (ptr_free && size == 16)
   {
     ((uint64_t *)copied)[0] = ((const uint64_t *)value)[0];
     ((uint64_t *)copied)[1] = ((const uint64_t *)value)[1];

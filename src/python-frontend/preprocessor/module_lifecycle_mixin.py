@@ -1,4 +1,5 @@
 import ast
+import pytype_infer
 
 from preprocessor.path_dependent_attributes import lower_path_dependent_attributes
 
