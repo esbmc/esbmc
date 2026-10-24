@@ -628,6 +628,39 @@ void python_converter::emit_guarded_raise(
   add_instruction(guard);
 }
 
+exprt python_converter::guard_operand(
+  exprt operand,
+  const nlohmann::json &element,
+  const std::string &prefix,
+  const std::function<void(const expr2tc &, const locationt &)> &emit_guards)
+{
+  // In an and/or tail or a while test the guard must run where the operand is
+  // evaluated, not once ahead of the statement.
+  const bool lazy = in_lazy_operand_;
+  code_blockt lazy_block;
+  code_blockt *const saved_block = current_block;
+  if (lazy)
+    current_block = &lazy_block;
+
+  const locationt loc = get_location_from_decl(element);
+  operand = store_call_result(operand, loc, prefix);
+  operand = hoist_side_effecting_operand(operand, element, "$" + prefix + "$");
+  expr2tc value;
+  migrate_expr(operand, value);
+  emit_guards(value, loc);
+  current_block = saved_block;
+  if (!lazy)
+    return operand;
+
+  code_expressiont result(operand);
+  result.location() = loc;
+  lazy_block.copy_to_operands(result);
+  side_effect_exprt guarded("statement_expression", operand.type());
+  guarded.copy_to_operands(lazy_block);
+  guarded.location() = loc;
+  return guarded;
+}
+
 exprt python_converter::guard_nonfinite_float_to_int(
   exprt operand,
   const nlohmann::json &element,
@@ -640,51 +673,55 @@ exprt python_converter::guard_nonfinite_float_to_int(
     !safe_to_emit_side_effecting_statement())
     return operand;
 
-  // In an and/or tail or a while test the guard must run where the operand is
-  // evaluated, not once ahead of the statement.
-  const bool lazy = in_lazy_operand_;
-  code_blockt lazy_block;
-  code_blockt *const saved_block = current_block;
-  if (lazy)
-    current_block = &lazy_block;
+  return guard_operand(
+    std::move(operand),
+    element,
+    "int_arg",
+    [this, is_float](const expr2tc &value, const locationt &loc) {
+      if (!is_float)
+      {
+        emit_guarded_raise(
+          migrate_expr_back(equality2tc(value, gen_zero(value->type))),
+          "TypeError",
+          "int() argument must be a string, a bytes-like object or a real "
+          "number, not 'NoneType'",
+          loc);
+        return;
+      }
+      emit_guarded_raise(
+        migrate_expr_back(isinf2tc(value)),
+        "OverflowError",
+        "cannot convert float infinity to integer",
+        loc);
+      emit_guarded_raise(
+        migrate_expr_back(isnan2tc(value)),
+        "ValueError",
+        "cannot convert float NaN to integer",
+        loc);
+    });
+}
 
-  const locationt loc = get_location_from_decl(element);
-  operand = store_call_result(operand, loc, "int_arg");
-  operand = hoist_side_effecting_operand(operand, element, "$int_arg$");
-  if (is_float)
-  {
-    expr2tc value;
-    migrate_expr(operand, value);
-
-    emit_guarded_raise(
-      migrate_expr_back(isinf2tc(value)),
-      "OverflowError",
-      "cannot convert float infinity to integer",
-      loc);
-    emit_guarded_raise(
-      migrate_expr_back(isnan2tc(value)),
-      "ValueError",
-      "cannot convert float NaN to integer",
-      loc);
-  }
-  else
-    emit_guarded_raise(
-      python_expr::build_equal(operand, gen_zero(operand.type())),
-      "TypeError",
-      "int() argument must be a string, a bytes-like object or a real "
-      "number, not 'NoneType'",
-      loc);
-  current_block = saved_block;
-  if (!lazy)
+exprt python_converter::guard_none_conversion(
+  exprt operand,
+  const std::string &message,
+  const nlohmann::json &element)
+{
+  if (
+    operand.type() != none_type() || !current_block ||
+    !safe_to_emit_side_effecting_statement())
     return operand;
 
-  code_expressiont result(operand);
-  result.location() = loc;
-  lazy_block.copy_to_operands(result);
-  side_effect_exprt guarded("statement_expression", operand.type());
-  guarded.copy_to_operands(lazy_block);
-  guarded.location() = loc;
-  return guarded;
+  return guard_operand(
+    std::move(operand),
+    element,
+    "conv_arg",
+    [this, &message](const expr2tc &value, const locationt &loc) {
+      emit_guarded_raise(
+        migrate_expr_back(equality2tc(value, gen_zero(value->type))),
+        "TypeError",
+        message,
+        loc);
+    });
 }
 
 /// Converts one and/or operand. An operand after the first runs only when the
