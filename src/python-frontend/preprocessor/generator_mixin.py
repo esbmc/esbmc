@@ -172,18 +172,21 @@ class GeneratorMixin:
         return best_idx
 
     def _rename_shadowing_targets(self, node):
-        """Rename a comprehension target that shadows a known outer variable.
+        """Rename a comprehension target that shadows a known outer variable
+        or the target of an earlier comprehension.
 
         Python 3 scopes a comprehension's target to the comprehension, so the
         rename is semantically free. Without it the outer and inner bindings
         share one symbol, and an outer object rebound to elements aborts the
-        converter in member2t.
+        converter in member2t; two comprehensions over elements of different
+        types give that symbol two types and crash the solver (#9126).
         """
         for generator in node.generators:
             if not isinstance(generator.target, ast.Name):
                 continue
             old = generator.target.id
-            if old not in self.known_variable_types:
+            if old not in self.known_variable_types and old not in self.comprehension_targets:
+                self.comprehension_targets.add(old)
                 continue
 
             new = f"ESBMC_compvar_{self.listcomp_counter}_{old}"
