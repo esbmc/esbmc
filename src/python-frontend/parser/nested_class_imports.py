@@ -35,6 +35,16 @@ def _binders(tree: ast.AST, name: str) -> list[ast.AST]:
     return found
 
 
+def _imports_module(binder: ast.AST, imports: set[int], root: str, module_name: str) -> bool:
+    """Whether ``binder`` is an ``import`` binding ``root`` to ``module_name``
+    or to the package it is in."""
+    if id(binder) not in imports:
+        return False
+    if binder.asname is not None:
+        return binder.asname == root and binder.name == module_name
+    return binder.name.split(".")[0] == root == module_name.split(".")[0]
+
+
 def _module_paths(tree: ast.Module, module_name: str) -> set[str]:
     """The dotted names through which ``tree`` reaches ``module_name`` by
     ``import``, when nothing else in ``tree`` binds their first part."""
@@ -51,11 +61,7 @@ def _module_paths(tree: ast.Module, module_name: str) -> set[str]:
                 continue
             path = alias.asname or alias.name
             root = path.split(".")[0]
-            if all(
-                    id(b) in imports and (
-                        b.asname == root and b.name == module_name or b.asname is None
-                        and b.name.split(".")[0] == root and module_name.split(".")[0] == root)
-                    for b in _binders(tree, root)):
+            if all(_imports_module(b, imports, root, module_name) for b in _binders(tree, root)):
                 paths.add(path)
     return paths
 
@@ -122,19 +128,27 @@ def _identifiers(tree: ast.AST) -> set[str]:
     return names
 
 
+def _stored_attributes(importers: list[tuple[str | None, ast.Module]]) -> set[str] | None:
+    """The attribute names the modules store to or delete, or None when one
+    may name an attribute only at run time, through setattr or delattr."""
+    nodes = [node for _name, tree in importers for node in ast.walk(tree)]
+    if any(isinstance(node, ast.Name) and node.id in ("setattr", "delattr") for node in nodes):
+        return None
+    return {
+        node.attr
+        for node in nodes if isinstance(node, ast.Attribute) and not isinstance(node.ctx, ast.Load)
+    }
+
+
 def _safe_renames(hoisted: dict[str, dict], importers: list[tuple[str | None,
                                                                   ast.Module]]) -> dict[str, dict]:
     """The renames in ``hoisted`` whose classes no module stores to through
     an attribute, and whose hoisted name no other module mentions: that name
     could resolve to the other module's binding, since ESBMC keys a class by
     its name alone."""
-    nodes = [node for _name, tree in importers for node in ast.walk(tree)]
-    if any(isinstance(node, ast.Name) and node.id in ("setattr", "delattr") for node in nodes):
+    stored = _stored_attributes(importers)
+    if stored is None:
         return {}
-    stored = {
-        node.attr
-        for node in nodes if isinstance(node, ast.Attribute) and not isinstance(node.ctx, ast.Load)
-    }
     names = {name: _identifiers(tree) for name, tree in importers}
     return {
         module_name: {
