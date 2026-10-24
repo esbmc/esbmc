@@ -1492,10 +1492,67 @@ std::string python_annotation<Json>::bare_list_subscript_type(
   bool is_slice)
 {
   if (!is_empty_list_literal(var_node))
-    return "Any";
+    return homogeneous_literal_subscript_type(var_node, var_name, is_slice);
   const std::string elem =
     subscript_result_type(recover_list_type_from_appends(var_name), is_slice);
   return elem.empty() ? "Any" : elem;
+}
+
+/// Whether every read of @p name under @p node indexes it (`name[i]`), so no
+/// store, method call or alias can change the elements it holds.
+template <class Json>
+static bool name_only_indexed(const Json &node, const std::string &name)
+{
+  auto is_load = [](const Json &n) {
+    return n.contains("ctx") && n["ctx"].value("_type", "") == "Load";
+  };
+  if (node.is_object())
+  {
+    const std::string kind = node.value("_type", "");
+    if (kind == "Name" && node.value("id", "") == name)
+      return !is_load(node);
+    if (
+      kind == "Subscript" && node["value"].value("_type", "") == "Name" &&
+      node["value"].value("id", "") == name)
+      return is_load(node) && name_only_indexed(node["slice"], name);
+  }
+  for (const Json &child : node)
+    if (child.is_structured() && !name_only_indexed(child, name))
+      return false;
+  return true;
+}
+
+/// Element type of `var_name[...]` when @p var_node binds it, once, to a list
+/// literal whose elements share one type and the list is only ever indexed,
+/// or "Any".
+template <class Json>
+std::string python_annotation<Json>::homogeneous_literal_subscript_type(
+  const Json &var_node,
+  const std::string &var_name,
+  bool is_slice)
+{
+  const Json value = var_node.value("value", Json());
+  if (!value.is_object() || value.value("_type", "") != "List")
+    return "Any";
+  const Json func =
+    json_utils::try_find_function(ast_["body"], get_current_func_name());
+  const Json &scope =
+    !func.empty() && json_utils::count_name_bindings(func, var_name) != 0
+      ? func
+      : ast_;
+  if (
+    json_utils::count_name_bindings(scope, var_name) != 1 ||
+    !name_only_indexed(scope, var_name))
+    return "Any";
+  std::string elem;
+  for (const Json &e : value["elts"])
+  {
+    const std::string t = get_argument_type(e);
+    if (t.empty() || (!elem.empty() && t != elem))
+      return "Any";
+    elem = t;
+  }
+  return is_slice ? "list[" + elem + "]" : elem;
 }
 
 /// The comprehension and loop lowering annotate an element whose type it

@@ -156,6 +156,10 @@ private:
     const Json &var_node,
     const std::string &var_name,
     bool is_slice);
+  std::string homogeneous_literal_subscript_type(
+    const Json &var_node,
+    const std::string &var_name,
+    bool is_slice);
   std::string
   refine_any_from_value(const std::string &annotated, const Json &var_node);
   std::string get_object_name(const Json &call, const std::string &prefix);
