@@ -1,0 +1,5 @@
+properties:
+  - id: P1
+    kind: invariant
+    expression: "NOT (Motor_A AND Motor_B)"
+    justification: "IEC-style NOT must produce a clear unsupported-operator diagnostic."
