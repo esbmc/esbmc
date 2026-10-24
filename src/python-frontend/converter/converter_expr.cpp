@@ -2352,6 +2352,43 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     else if (element["_type"] == "Attribute")
     {
       reject_bound_method_read(element);
+      if (!is_converting_lhs && element["attr"] == "__class__")
+      {
+        nlohmann::json call = element;
+        call.erase("attr");
+        call.erase("value");
+        call.erase("ctx");
+        call["_type"] = "Call";
+        call["func"] = {
+          {"_type", "Name"}, {"id", "type"}, {"ctx", {{"_type", "Load"}}}};
+        call["args"] = nlohmann::json::array({element["value"]});
+        call["keywords"] = nlohmann::json::array();
+        const auto saved_compared = type_compared_operands_;
+        for (const nlohmann::json *&operand : type_compared_operands_)
+          if (operand == &element)
+            operand = &call;
+        expr = get_expr(call);
+        type_compared_operands_ = saved_compared;
+        break;
+      }
+      if (!is_converting_lhs && element["attr"] == "__name__")
+      {
+        const nlohmann::json &value = element["value"];
+        const bool names_class =
+          (value["_type"] == "Attribute" && value["attr"] == "__class__") ||
+          (value["_type"] == "Call" && value["func"]["_type"] == "Name" &&
+           value["func"]["id"] == "type");
+        if (names_class)
+        {
+          const exprt cls = get_expr(value);
+          const std::string name = cls.get_string("value");
+          if (!is_class_object(cls) || name == unknown_class_name)
+            throw std::runtime_error(
+              "__name__ of a class not known statically is not supported");
+          expr = string_builder_->build_string_literal(name);
+          break;
+        }
+      }
       // Resolve `<base>.<attr>` after unwrapping Optional[T] /
       // pointer-to-struct / complex types. Returns nil if the attribute cannot
       // be resolved.

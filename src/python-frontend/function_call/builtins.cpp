@@ -1153,6 +1153,91 @@ static bool body_constructs(
   });
 }
 
+// Whether @p name is the receiver of @p function, an undecorated method
+// defined directly in the body of @p cls that never rebinds it.
+static bool is_method_self(
+  const nlohmann::json &ast,
+  const std::vector<std::string> &function,
+  const std::string &name,
+  const std::string &cls)
+{
+  if (function.size() != 1)
+    return false;
+  const nlohmann::json class_def = find_class(ast["body"], cls);
+  if (class_def.is_null())
+    return false;
+  for (const auto &method : class_def["body"])
+    if (
+      method.value("_type", "") == "FunctionDef" &&
+      method["name"] == function[0])
+    {
+      const nlohmann::json &params = method["args"]["args"];
+      return method["decorator_list"].empty() && !params.empty() &&
+             params[0]["arg"] == name &&
+             count_bindings(method["body"], name) == 0;
+    }
+  return false;
+}
+
+// Whether @p node reads class @p cls other than to construct or annotate
+// with it: `Cls.m(other)` passes any object as the receiver of `m`.
+static bool
+reads_class_as_value(const nlohmann::json &node, const std::string &cls)
+{
+  if (node.is_array())
+    return std::any_of(node.begin(), node.end(), [&](const auto &child) {
+      return reads_class_as_value(child, cls);
+    });
+  if (!node.is_object())
+    return false;
+  const std::string type = node.value("_type", "");
+  if (type == "Name")
+    return node["id"] == cls;
+  const bool constructs = type == "Call" &&
+                          node["func"].value("_type", "") == "Name" &&
+                          node["func"]["id"] == cls;
+  for (const auto &[key, child] : node.items())
+    if (
+      key != "annotation" && key != "returns" &&
+      !(constructs && key == "func") && reads_class_as_value(child, cls))
+      return true;
+  return false;
+}
+
+static bool yields_class_object(const nlohmann::json &node)
+{
+  const std::string type = node.value("_type", "");
+  return (type == "Attribute" && node["attr"] == "__class__") ||
+         (type == "Call" && node["func"].value("_type", "") == "Name" &&
+          node["func"]["id"] == "type");
+}
+
+// Whether a class object read through `__class__` or type() is used other
+// than for its `__name__` or as an is/== operand, or `__class__` is stored:
+// either can run a method of one class on an instance of another.
+static bool class_object_escapes(const nlohmann::json &node, bool used = false)
+{
+  if (node.is_array())
+    return std::any_of(node.begin(), node.end(), [&](const auto &child) {
+      return class_object_escapes(child, used);
+    });
+  if (!node.is_object())
+    return false;
+  if (!used && yields_class_object(node))
+    return true;
+  const std::string type = node.value("_type", "");
+  for (const auto &[key, child] : node.items())
+  {
+    const bool consumed =
+      (type == "Attribute" && key == "value" && node["attr"] == "__name__" &&
+       node["ctx"].value("_type", "") == "Load") ||
+      (type == "Compare" && (key == "left" || key == "comparators"));
+    if (child.is_structured() && class_object_escapes(child, consumed))
+      return true;
+  }
+  return false;
+}
+
 // The class of the instance named by @p arg, or "" when its runtime class
 // can differ from the class @p expr is statically typed as. A variable bound
 // once, by its scope's own statement calling a class bound only by its
@@ -1177,8 +1262,16 @@ std::string function_call_expr::exact_instance_class(
   const bool constructed =
     body_constructs(ast["body"], name, cls) ||
     (scope.contains("body") && body_constructs(scope["body"], name, cls));
-  return constructed && count_bindings(ast, name) == 1 &&
-             count_bindings(ast, cls) == 1
+  if (
+    constructed && count_bindings(ast, name) == 1 &&
+    count_bindings(ast, cls) == 1)
+    return cls;
+  return converter_.current_classname() == cls &&
+             is_method_self(ast, split_function_path(function), name, cls) &&
+             count_bindings(ast, cls) == 1 && !has_subclass(cls, ast) &&
+             !imports_other_modules(ast) &&
+             !reads_class_as_value(ast["body"], cls) &&
+             !class_object_escapes(ast)
            ? cls
            : "";
 }
@@ -1190,6 +1283,8 @@ exprt function_call_expr::handle_type_call() const
     throw std::runtime_error("type() requires exactly 1 argument");
 
   exprt arg_expr = converter_.get_expr(args[0]);
+  if (python_converter::is_class_object(arg_expr))
+    return converter_.make_class_object("type");
   const std::string instance_class = exact_instance_class(args[0], arg_expr);
   if (!instance_class.empty())
     return converter_.make_class_object(instance_class);
