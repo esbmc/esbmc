@@ -46,6 +46,7 @@ class PreprocessorStateMixin:
         self._used_imported_vararg_specs = {}
         self._vararg_once_bound = set()
         self.listcomp_counter = 0
+        self.comprehension_targets = set()
         self.functools_reduce_names = set()
         self.functools_module_names = set()
         self.minmax_key_counter = 0
