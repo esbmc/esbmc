@@ -1627,8 +1627,23 @@ class CoreVisitorsMixin:
             return lowered_listcomp
 
         if len(node.targets) == 1:
-            return self._handle_single_target_assign(node)
+            lowered = self._handle_single_target_assign(node)
+            return self._lower_defaultdict_reads_in_target(node, lowered)
         return self._handle_multi_target_assign(node)
+
+    def _lower_defaultdict_reads_in_target(self, node, lowered):
+        """Insert the missing-key checks for defaultdict reads in the
+        container of a subscript target (`d[k1][k2] = v`), after those of the
+        value, which CPython evaluates first."""
+        target = node.targets[0]
+        if not isinstance(target, ast.Subscript):
+            return lowered
+        if lowered is node:
+            lowered = [node]
+        if not (isinstance(lowered, list) and lowered and lowered[-1] is node):
+            return lowered
+        inits, target.value = self._lower_defaultdict_reads_in_expr(target.value, node)
+        return lowered[:-1] + inits + [node]
 
     def _neutralize_sorted_items_view(self, node):
         """Neutralise `x = sorted(...d.items()...)` to `x = []` and return x.

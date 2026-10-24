@@ -611,7 +611,6 @@ void python_dict_handler::handle_dict_subscript_assign(
       value_arg, value_info.elem_symbol->get_type()));
   set_value_call.type() = bool_type();
   set_value_call.location() = location;
-  update_block.copy_to_operands(set_value_call);
 
   // Create the "key doesn't exist" branch: push new key-value pair
   code_blockt insert_block;
@@ -650,6 +649,19 @@ void python_dict_handler::handle_dict_subscript_assign(
       value_arg, value_info.elem_symbol->get_type()));
   push_value_call.type() = bool_type();
   push_value_call.location() = location;
+
+  if (is_dict_type(converter_.name_space().follow(value.type())))
+    store_dict_value_by_pointer(
+      node,
+      value,
+      values_member,
+      build_symbol(index_var),
+      location,
+      target_block,
+      set_value_call,
+      push_value_call);
+
+  update_block.copy_to_operands(set_value_call);
   insert_block.copy_to_operands(push_value_call);
 
   // Create if-then-else: if (key_exists) { update } else { insert }
