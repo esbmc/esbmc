@@ -241,6 +241,14 @@ public:
            to_struct_type(t).tag().as_string().starts_with("tag-Optional_");
   }
 
+  // Optional[str]: a pointer to an unsized char array, NULL for None.
+  static bool is_optional_str_pointer(const typet &t)
+  {
+    return t.is_pointer() && t.subtype().is_array() &&
+           t.subtype().subtype() == char_type() &&
+           to_array_type(t.subtype()).size().is_zero();
+  }
+
   static bool is_char_type(const typet &t)
   {
     return (t.is_signedbv() || t.is_unsignedbv()) && get_cpp_type(t) == "char";
