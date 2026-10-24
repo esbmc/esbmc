@@ -2382,7 +2382,18 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         {
           const exprt cls = get_expr(value);
           const std::string name = cls.get_string("value");
-          if (!is_class_object(cls) || name == unknown_class_name)
+          const nlohmann::json &body = (*ast_json)["body"];
+          // A class nested in Outer is hoisted as Outer__Inner, which is not
+          // its __name__.
+          const size_t outer_end = name.rfind("__");
+          const bool hoisted =
+            outer_end != std::string::npos && outer_end > 0 &&
+            !json_utils::find_class(body, name.substr(0, outer_end)).is_null();
+          const bool spelled_as_written =
+            (!hoisted && !json_utils::find_class(body, name).is_null()) ||
+            type_utils::is_type_identifier(name) ||
+            type_utils::is_python_exceptions(name) || name == "NoneType";
+          if (!is_class_object(cls) || !spelled_as_written)
             throw std::runtime_error(
               "__name__ of a class not known statically is not supported");
           expr = string_builder_->build_string_literal(name);
