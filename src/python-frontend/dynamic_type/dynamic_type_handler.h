@@ -156,6 +156,16 @@ public:
     const locationt &location,
     codet &target_block);
 
+  /**
+   * @brief int(@p tagged) or float(@p tagged), as @p result_type says: a str
+   * is parsed at runtime and raises ValueError when it does not parse, a
+   * number converts by value
+   */
+  exprt build_numeric_conversion(
+    const exprt &tagged,
+    const typet &result_type,
+    const locationt &location);
+
   /// Throws the shared "tagged argument, no known parameter type" refusal.
   [[noreturn]] void refuse_tagged_argument() const;
 
