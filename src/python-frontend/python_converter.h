@@ -1726,6 +1726,10 @@ private:
     exprt &rhs,
     typet &rhs_type,
     const nlohmann::json &element);
+  void guard_none_typed_container(
+    const std::string &op,
+    exprt &rhs,
+    const nlohmann::json &element);
   exprt handle_membership_operator(
     exprt &lhs,
     exprt &rhs,
