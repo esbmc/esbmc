@@ -936,6 +936,9 @@ exprt function_call_expr::build_fresh_object() const
     converter_.symbol_table().find_symbol("c:@F@__ESBMC_new_object");
   assert(new_obj_sym && "__ESBMC_new_object model required");
 
+  if (!call_["args"].empty() || !call_["keywords"].empty())
+    throw std::runtime_error("TypeError: object() takes no arguments");
+
   // __ESBMC_new_object sizes the allocation by the result's pointee, which
   // void has none of: allocate one char and hand it back as an object.
   symbolt &tmp = converter_.create_tmp_symbol(
@@ -962,13 +965,6 @@ exprt function_call_expr::build_constant_from_arg() const
 
   if (func_name == "complex")
     return handle_complex();
-
-  if (func_name == "object")
-  {
-    if (!call_["args"].empty() || !call_["keywords"].empty())
-      throw std::runtime_error("TypeError: object() takes no arguments");
-    return build_fresh_object();
-  }
 
   // Check if there are no arguments
   if (call_["args"].empty())
@@ -4496,6 +4492,10 @@ function_call_expr::get_dispatch_table()
      },
      [this]() { return handle_float_fromhex(); },
      "float.fromhex()"},
+
+    {[this]() { return function_id_.get_function() == "object"; },
+     [this]() { return build_fresh_object(); },
+     "object()"},
 
     // Built-in type constructors (int, float, str, bool, etc.)
     {[this]() {
