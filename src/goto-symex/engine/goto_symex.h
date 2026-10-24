@@ -1599,17 +1599,14 @@ protected:
    */
   irep_idt guard_identifier_s;
   /**
-   *  Cap on guard_definitions, copy_definitions, conjunct_rewrites and
-   *  guard_prefix_index.
-   *  The first two grow linearly
+   *  Cap on guard_definitions and copy_definitions. Both grow linearly
    *  with symex length (one entry per branching goto, one per bare
    *  copy: measured ~10k/~21k entries at 10k branch gotos) and are
    *  copied whenever an execution state forks, so an interleaving-heavy
    *  run would otherwise pay an unbounded per-fork cost. Past the cap,
    *  recording stops and the per-fork copy stays bounded. Subsumption
    *  then matches only against the recorded definitions and never
-   *  decides wrongly; for the two memos the decisions stay the same
-   *  and only the cost grows again, quadratic in the unwind bound.
+   *  decides wrongly, it merely stops improving.
    *  Single-threaded runs never fork an execution state and only pay
    *  the recording itself.
    */
@@ -1652,17 +1649,19 @@ protected:
    *  renaming leaves alone, and the two maps above bind each generation
    *  once, so a rewrite never goes stale. guard_prefix_index rewrites
    *  each conjunct once per chain node; the memo spares the rewrite when
-   *  a chain is rebuilt or shared with another path.
+   *  a chain is rebuilt or shared with another path. Persistent, so a fork
+   *  copies it in O(1) and it needs no cap: one would make symex quadratic
+   *  again past it.
    */
-  std::unordered_map<expr2tc, expr2tc, irep2_hash> conjunct_rewrites;
+  persistent_map<expr2tc, expr2tc, irep2_hash> conjunct_rewrites;
   /**
    *  prefix_index's result per and-chain node of a path guard. A node is
    *  the cached base of one guard prefix, and a guard grows by appending
    *  to that base, so a goto extends the index of its guard's longest
    *  indexed prefix instead of rescanning every conjunct (#9150). Never
-   *  stale, for the same reason as conjunct_rewrites.
+   *  stale and uncapped, for the same reasons as conjunct_rewrites.
    */
-  std::unordered_map<expr2tc, conjunct_indext, irep2_hash> guard_prefix_index;
+  persistent_map<expr2tc, conjunct_indext, irep2_hash> guard_prefix_index;
 
   struct deferred_assumptiont
   {

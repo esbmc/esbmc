@@ -180,16 +180,9 @@ goto_symext::conjunct_indext goto_symext::prefix_index(const guard2tc &guard)
   size_t covered = guard.guard_list.size();
   for (const expr2tc *node = &guard; covered > 0;)
   {
-    auto it = guard_prefix_index.find(*node);
-    if (it != guard_prefix_index.end())
+    if (const conjunct_indext *hit = guard_prefix_index.find(*node))
     {
-      index = it->second;
-      // A chain operator|= or operator-= rebuilt matches only structurally,
-      // walking its whole spine; key the new node so that walk happens once.
-      if (
-        !same_pointer(it->first, *node) &&
-        guard_prefix_index.size() < subsumption_map_capacity)
-        guard_prefix_index.emplace(*node, index);
+      index = *hit;
       break;
     }
     unindexed.push_back(node);
@@ -205,17 +198,15 @@ goto_symext::conjunct_indext goto_symext::prefix_index(const guard2tc &guard)
     if (!index.find(conjunct))
       index.set(conjunct, covered);
     ++covered;
-    if (guard_prefix_index.size() < subsumption_map_capacity)
-      guard_prefix_index.emplace(n, index);
+    guard_prefix_index.set(n, index);
   }
   return index;
 }
 
 expr2tc goto_symext::rewrite_conjunct(const expr2tc &raw)
 {
-  auto memo = conjunct_rewrites.find(raw);
-  if (memo != conjunct_rewrites.end())
-    return memo->second;
+  if (const expr2tc *memo = conjunct_rewrites.find(raw))
+    return *memo;
 
   bool negated = false;
   expr2tc conjunct = raw;
@@ -245,8 +236,7 @@ expr2tc goto_symext::rewrite_conjunct(const expr2tc &raw)
   if (chase_copies(conjunct))
     do_simplify(conjunct);
 
-  if (conjunct_rewrites.size() < subsumption_map_capacity)
-    conjunct_rewrites.emplace(raw, conjunct);
+  conjunct_rewrites.set(raw, conjunct);
   return conjunct;
 }
 
