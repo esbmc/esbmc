@@ -2382,7 +2382,7 @@ exprt python_converter::dispatch_mismatched_callees(
   side_effect_expr_function_callt typed = call_expr;
   if (
     type_handler_.is_tagged_scalar_type(current_func_return_type_) &&
-    dynamic_type_handler_.function_values_return_dynamic(call))
+    dynamic_type_handler_.parameter_call_returns_tagged(call))
     typed.type() = current_func_return_type_;
   exprt result = typed;
   if (!current_block)
