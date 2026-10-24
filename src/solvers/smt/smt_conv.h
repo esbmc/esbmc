@@ -3,6 +3,7 @@
 
 #include <memory>
 #include <string>
+#include <unordered_set>
 #include <irep2/irep2.h>
 #include <util/base/threeval.h>
 #include <solvers/smt/smt_result.h>
@@ -76,8 +77,12 @@ public:
   void assert_expr(const expr2tc &e);
   /** Record divisions in @p expr so the modulus conversion can lower a
    *  remainder compositionally exactly when its operands are also
-   *  divided somewhere in the formula. */
-  void note_division_operands(const expr2tc &expr);
+   *  divided somewhere in the formula. Nodes in @p seen are skipped and
+   *  visited ones added, so a set shared across calls walks each node
+   *  once; its pointers must outlive it. */
+  void note_division_operands(
+    const expr2tc &expr,
+    std::unordered_set<const expr2t *> &seen);
   /** Bracket the conversion of one SSA step by its guard and condition, and
    *  name the assignment it makes, if any. Every step must be bracketed; a
    *  bitcast converted outside one is read by no rebuild. */
