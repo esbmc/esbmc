@@ -6461,7 +6461,9 @@ std::string python_annotation<Json>::returned_optional_scalar(
     const std::string kind = stmt.value("_type", "");
     if (kind == "FunctionDef" || kind == "ClassDef")
       continue;
-    if (kind == "Return" && stmt["value"].value("_type", "") == "Name")
+    if (
+      kind == "Return" && stmt["value"].is_object() &&
+      stmt["value"].value("_type", "") == "Name")
     {
       std::string optional = optional_scalar_of(
         stmt["value"]["id"].template get<std::string>(), function);
