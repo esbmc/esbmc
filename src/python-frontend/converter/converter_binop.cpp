@@ -596,10 +596,13 @@ exprt python_converter::hoist_side_effecting_operand(
 void python_converter::guard_attribute_on_none(
   const exprt &base,
   const std::string &attr_name,
-  const nlohmann::json &element)
+  const nlohmann::json &element,
+  bool is_self)
 {
   const typet &type = base.type();
-  if (!type.is_pointer() || has_side_effect(base) || !can_emit_runtime_guard())
+  if (
+    is_self || !type.is_pointer() || has_side_effect(base) ||
+    !can_emit_runtime_guard())
     return;
 
   exprt is_none("=", bool_type());

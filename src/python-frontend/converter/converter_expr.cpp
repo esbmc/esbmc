@@ -2970,8 +2970,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       typet class_symbol_type = class_symbol->get_type();
       struct_typet &class_type = static_cast<struct_typet &>(class_symbol_type);
       auto build_member_expr_from_class = [&](const typet &attr_type) -> exprt {
-        if (var_name != "self")
-          guard_attribute_on_none(symbol_expr(*symbol), attr_name, element);
+        guard_attribute_on_none(
+          symbol_expr(*symbol), attr_name, element, var_name == "self");
         typet clean_type = clean_attribute_type(attr_type);
         exprt base = symbol_expr(*symbol);
         typet base_type = base.type();
