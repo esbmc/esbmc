@@ -1852,9 +1852,7 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
 
   // before B is converted, which pushes its own temporaries
   v->make_goto(z);
-  goto_programt cond_dead, tmp_z0;
-  kill_condition_temporaries(
-    stack_size, code.location(), z, tmp_v, cond_dead, tmp_z0);
+  kill_condition_temporaries(stack_size, code.location(), tmp_v, tmp_z);
 
   // do the x label
   goto_programt tmp_x;
@@ -1877,7 +1875,6 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
   targets.set_break(z);
   targets.set_continue(tmp_x.instructions.begin());
 
-  // v: if(!c) goto z0;
   expr2tc tmp_cond;
   migrate_expr(cond, tmp_cond);
   tmp_cond = not2tc(tmp_cond);
@@ -1901,11 +1898,9 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
 
   dest.destructive_append(sideeffects);
   dest.destructive_append(tmp_v);
-  dest.destructive_append(cond_dead);
   dest.destructive_append(tmp_w);
   dest.destructive_append(tmp_x);
   dest.destructive_append(tmp_y);
-  dest.destructive_append(tmp_z0);
   dest.destructive_append(tmp_z);
 
   // restore break/continue
@@ -1946,9 +1941,7 @@ void goto_convertt::convert_while(const codet &code, goto_programt &dest)
   const std::size_t stack_size = targets.destructor_stack.size();
   generate_conditional_branch(gen_not(*cond), z, location, tmp_branch);
 
-  goto_programt cond_dead, tmp_z0;
-  kill_condition_temporaries(
-    stack_size, location, z, tmp_branch, cond_dead, tmp_z0);
+  kill_condition_temporaries(stack_size, location, tmp_branch, tmp_z);
 
   // do the v label
   goto_programt::targett v = tmp_branch.instructions.begin();
@@ -1976,10 +1969,8 @@ void goto_convertt::convert_while(const codet &code, goto_programt &dest)
     y->pragma_unroll_count = std::stoul(code.get("#pragma_unroll").as_string());
 
   dest.destructive_append(tmp_branch);
-  dest.destructive_append(cond_dead);
   dest.destructive_append(tmp_x);
   dest.destructive_append(tmp_y);
-  dest.destructive_append(tmp_z0);
   dest.destructive_append(tmp_z);
 
   // restore break/continue
@@ -2803,23 +2794,26 @@ bool goto_convertt::destroy_full_expression_temporaries(
 void goto_convertt::kill_condition_temporaries(
   std::size_t stack_size,
   const locationt &location,
-  goto_programt::targett z,
   goto_programt &branch,
-  goto_programt &body,
   goto_programt &exit)
 {
   destructor_stackt &stack = targets.destructor_stack;
   if (std::any_of(stack.begin() + stack_size, stack.end(), is_destructor_entry))
     return;
 
-  unwind_destructor_stack(location, stack_size, body);
-  unwind_destructor_stack(location, stack_size, exit);
+  goto_programt body_dead, exit_dead;
+  unwind_destructor_stack(location, stack_size, body_dead);
+  unwind_destructor_stack(location, stack_size, exit_dead);
   stack.resize(stack_size);
-  if (exit.instructions.empty())
+  if (exit_dead.instructions.empty())
     return;
+
+  const goto_programt::targett z = exit.instructions.begin();
   for (auto &i : branch.instructions)
     if (i.is_goto() && i.targets.front() == z)
-      i.targets.front() = exit.instructions.begin();
+      i.targets.front() = exit_dead.instructions.begin();
+  branch.destructive_append(body_dead);
+  exit.destructive_insert(z, exit_dead);
 }
 
 void goto_convertt::unwind_destructor_stack(

@@ -1,5 +1,6 @@
 #include <cassert>
 #include <goto-symex/engine/goto_symex.h>
+#include <goto-symex/scheduler/reachability_tree.h>
 #include <util/expr/expr_util.h>
 #include <irep2/irep2.h>
 #include <irep2/irep2_utils.h>
@@ -70,15 +71,16 @@ void goto_symext::symex_decl(const expr2tc &code)
 
   // Keep the instance the frame gave this local on entry; a re-declaration
   // gets a fresh level-1 instance to preserve locality, unless it is a dead
-  // scalar whose address is never taken (see address_taken).
+  // scalar whose address is never taken. No pointer can tell two instances
+  // of that apart, and one per loop iteration makes every later merge diff
+  // the dead ones (#9150).
   statet::framet &frame = cur_state->top();
   frame.level1.get_ident_name(l1_sym);
   const renaming::level2t::name_record rec(to_symbol2t(l1_sym));
   const bool redeclared = frame.declaration_history.count(rec) != 0;
-  const bool reused =
-    redeclared && !frame.local_variables.count(rec) &&
-    !address_taken->count(identifier) &&
-    (is_number_type(decl_code.type) || is_pointer_type(decl_code.type));
+  const bool reused = redeclared && is_scalar_type(decl_code.type) &&
+                      !art1->is_address_taken_local(identifier) &&
+                      !frame.local_variables.count(rec);
   if (
     to_symbol2t(l1_sym).rlevel != symbol_renaming_level::level1 ||
     (redeclared && !reused))

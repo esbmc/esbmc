@@ -1614,9 +1614,8 @@ protected:
    *  symbols that are already level2. Keyed by the L2-qualified symbol
    *  name (an interned irep_idt with a cached hash) rather than the
    *  expression, so a lookup never deep-compares expression trees.
-   *  It grows with symex length and every forked execution state copies
-   *  it, so it is persistent: a copy is O(1) and needs no cap, past which
-   *  subsumption would stop deciding.
+   *  Persistent, like the maps below: a forked execution state copies it in
+   *  O(1).
    */
   persistent_map<irep_idt, expr2tc, irep_id_hash> guard_definitions;
   /**
@@ -1632,17 +1631,12 @@ protected:
    *  condition never matches. Deliberately NOT
    *  fed into constant propagation: substituting copies globally slices
    *  away the originals' assignments and degrades counterexamples.
-   *  Persistent for the same reason as guard_definitions.
    */
   persistent_map<irep_idt, expr2tc, irep_id_hash> copy_definitions;
   /**
    *  rewrite_conjunct's result per conjunct. Conjuncts are L2, which
    *  renaming leaves alone, and the two maps above bind each generation
-   *  once, so a rewrite never goes stale. guard_prefix_index rewrites
-   *  each conjunct once per chain node; the memo spares the rewrite when
-   *  a chain is rebuilt or shared with another path. Persistent, so a fork
-   *  copies it in O(1) and it needs no cap: one would make symex quadratic
-   *  again past it.
+   *  once, so a rewrite never goes stale.
    */
   persistent_map<expr2tc, expr2tc, irep2_hash> conjunct_rewrites;
   /**
@@ -1650,19 +1644,9 @@ protected:
    *  the cached base of one guard prefix, and a guard grows by appending
    *  to that base, so a goto extends the index of its guard's longest
    *  indexed prefix instead of rescanning every conjunct (#9150). Never
-   *  stale and uncapped, for the same reasons as conjunct_rewrites.
+   *  stale, for the same reason as conjunct_rewrites.
    */
   persistent_map<expr2tc, conjunct_indext, irep2_hash> guard_prefix_index;
-
-  /**
-   *  Locals whose address the program takes anywhere. symex_decl reuses the
-   *  dead L1 instance of a re-declared scalar local not in this set instead
-   *  of minting a fresh one: no pointer can tell the two apart, and a fresh
-   *  instance per loop iteration makes every later merge diff the stale ones
-   *  (#9150). Fixed once the program is converted, so forks share it.
-   */
-  std::shared_ptr<const std::unordered_set<irep_idt, irep_id_hash>>
-    address_taken;
 
   struct deferred_assumptiont
   {

@@ -167,8 +167,8 @@ tvt::tv_enumt goto_symext::path_guard_decides(
 goto_symext::conjunct_indext goto_symext::prefix_index(const guard2tc &guard)
 {
   // Descend the and-chain to the longest indexed prefix. A conjunct is
-  // never an and2t (guard2tc::add unfolds them), so the left spine
-  // determines the conjuncts.
+  // never an and2t (guard2tc::add unfolds them), so a chain node determines
+  // its prefix.
   assert(!is_nil_expr(guard));
   std::vector<const expr2tc *> unindexed;
   conjunct_indext index;
@@ -185,15 +185,13 @@ goto_symext::conjunct_indext goto_symext::prefix_index(const guard2tc &guard)
       node = &to_and2t(*node).side_1;
   }
 
-  for (auto node = unindexed.rbegin(); node != unindexed.rend(); ++node)
+  for (auto node = unindexed.rbegin(); node != unindexed.rend();
+       ++node, ++covered)
   {
-    const expr2tc &n = **node;
-    const expr2tc conjunct =
-      rewrite_conjunct(covered == 0 ? n : to_and2t(n).side_2);
+    const expr2tc conjunct = rewrite_conjunct(guard.guard_list[covered]);
     if (!index.find(conjunct))
       index.set(conjunct, covered);
-    ++covered;
-    guard_prefix_index.set(n, index);
+    guard_prefix_index.set(**node, index);
   }
   return index;
 }

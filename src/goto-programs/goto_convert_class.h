@@ -341,16 +341,14 @@ protected:
   /// guard_arm_destructors; the other entries are DEADs.
   static bool is_destructor_entry(const codet &entry);
   /// End a loop condition's temporaries, pushed since @p stack_size, on
-  /// both edges of its branch, so each iteration's instance dies in that
-  /// iteration (#9150): their DEADs go to @p body and @p exit, and the jumps
-  /// in @p branch to the break target @p z go through @p exit instead.
-  /// Leaves everything alone if one of them has a destructor.
+  /// both edges of its @p branch, so each iteration's instance dies in that
+  /// iteration (#9150): after @p branch, and ahead of the break target that
+  /// starts @p exit, where the branch's jumps to it now land. Leaves
+  /// everything alone if one of them has a destructor.
   void kill_condition_temporaries(
     std::size_t stack_size,
     const locationt &location,
-    goto_programt::targett z,
     goto_programt &branch,
-    goto_programt &body,
     goto_programt &exit);
   void guard_arm_destructors(
     exprt &cond,

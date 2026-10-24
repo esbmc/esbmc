@@ -1114,7 +1114,7 @@ bool goto_convert_functionst::convert_native_rec(
     z->make_skip();
     z->location = location;
 
-    goto_programt tmp_branch, cond_dead, tmp_z0;
+    goto_programt tmp_branch;
     if (has_sideeffect(w.cond))
     {
       // convert_while (goto_convert.cpp) builds this branch via the
@@ -1146,8 +1146,7 @@ bool goto_convert_functionst::convert_native_rec(
       const std::size_t stack_size = targets.destructor_stack.size();
       generate_conditional_branch(
         gen_not(cond_legacy), z, location, tmp_branch);
-      kill_condition_temporaries(
-        stack_size, location, z, tmp_branch, cond_dead, tmp_z0);
+      kill_condition_temporaries(stack_size, location, tmp_branch, tmp_z);
     }
     else
     {
@@ -1198,10 +1197,8 @@ bool goto_convert_functionst::convert_native_rec(
     y->pragma_unroll_count = w.pragma_unroll_count;
 
     dest.destructive_append(tmp_branch);
-    dest.destructive_append(cond_dead);
     dest.destructive_append(tmp_x);
     dest.destructive_append(tmp_y);
-    dest.destructive_append(tmp_z0);
     dest.destructive_append(tmp_z);
     return true;
   }
@@ -1359,9 +1356,7 @@ bool goto_convert_functionst::convert_native_rec(
 
     // before B is converted, which pushes its own temporaries
     v->make_goto(z);
-    goto_programt cond_dead, tmp_z0;
-    kill_condition_temporaries(
-      stack_size, f.location, z, tmp_v, cond_dead, tmp_z0);
+    kill_condition_temporaries(stack_size, f.location, tmp_v, tmp_z);
 
     // convert_for converts the iteration statement *before* the body and
     // before installing the loop targets. Keep that order: both may allocate
@@ -1431,11 +1426,9 @@ bool goto_convert_functionst::convert_native_rec(
 
     dest.destructive_append(sideeffects);
     dest.destructive_append(tmp_v);
-    dest.destructive_append(cond_dead);
     dest.destructive_append(tmp_w);
     dest.destructive_append(tmp_x);
     dest.destructive_append(tmp_y);
-    dest.destructive_append(tmp_z0);
     dest.destructive_append(tmp_z);
     return true;
   }

@@ -79,7 +79,7 @@ public:
    *  remainder compositionally exactly when its operands are also
    *  divided somewhere in the formula. Nodes in @p seen are skipped and
    *  visited ones added, so a set shared across calls walks each node
-   *  once; its pointers must outlive it. */
+   *  once; the expressions must outlive @p seen. */
   void note_division_operands(
     const expr2tc &expr,
     std::unordered_set<const expr2t *> &seen);

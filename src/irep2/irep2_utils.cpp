@@ -783,30 +783,3 @@ irep_idt quantifier_direct_bound_name(const expr2tc &binder)
   const expr2tc sym = strip_typecasts(binder);
   return is_address_of2t(sym) ? quantifier_bound_name(sym) : irep_idt();
 }
-
-void collect_address_taken(
-  const expr2tc &expr,
-  std::unordered_set<irep_idt, irep_id_hash> &out)
-{
-  if (is_nil_expr(expr))
-    return;
-
-  if (is_address_of2t(expr))
-  {
-    expr2tc obj = to_address_of2t(expr).ptr_obj;
-    while (is_member2t(obj) || is_index2t(obj) || is_typecast2t(obj))
-    {
-      if (is_member2t(obj))
-        obj = to_member2t(obj).source_value;
-      else if (is_index2t(obj))
-        obj = to_index2t(obj).source_value;
-      else
-        obj = to_typecast2t(obj).from;
-    }
-    if (is_symbol2t(obj))
-      out.insert(to_symbol2t(obj).thename);
-  }
-
-  expr->foreach_operand(
-    [&out](const expr2tc &op) { collect_address_taken(op, out); });
-}
