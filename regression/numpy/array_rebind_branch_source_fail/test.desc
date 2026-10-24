@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: TypeError: rebinding a numpy array inside a branch or loop while another name aliases it is not supported$

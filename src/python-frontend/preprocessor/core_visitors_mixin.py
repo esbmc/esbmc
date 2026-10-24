@@ -91,9 +91,12 @@ class CoreVisitorsMixin:
             invalidate(target)
 
         # Drop tracked origins that reference a rebound free variable —
-        # otherwise the cascade rewrites against the new binding.
+        # otherwise the cascade rewrites against the new binding. An nditer
+        # already holds its operands, so it stays the same iterator.
         if rebound:
             for tracked, origin in list(self._assignment_call_origins.items()):
+                if self._is_nditer_call(origin):
+                    continue
                 for n in ast.walk(origin):
                     if (isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)
                             and n.id in rebound):

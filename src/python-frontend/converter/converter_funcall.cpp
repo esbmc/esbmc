@@ -569,6 +569,9 @@ std::optional<exprt> python_converter::try_get_numpy_named_pointer_view_len(
 
 exprt python_converter::get_call_expr(const nlohmann::json &element)
 {
+  if (!numpy_nditers_.empty())
+    if (std::optional<exprt> call = numpy_nditer(*this).call(element))
+      return *call;
   reject_numpy_view_callee(element);
   reject_inline_runtime_numpy_slice(element);
   if (std::optional<nlohmann::json> folded = fold_numpy_view_call(element))
