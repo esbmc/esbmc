@@ -1,0 +1,4 @@
+CORE
+main.py
+--unwind 5 --multi-property --no-pointer-check --no-align-check
+^ERROR: TypeError: numpy\.array\(\) of a value that is not a numpy array or a list or tuple literal is not supported$
