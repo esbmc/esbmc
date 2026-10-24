@@ -1,5 +1,4 @@
-# The call's result is returned from call, so it leaves the statements that
-# could be copied per function.
+# The call's result is returned from call, so call dispatches on its argument.
 def f():
     return "a"
 
