@@ -1478,6 +1478,13 @@ protected:
   /** Assume a printf-family call's return value equals the length of its
    *  output, when both are known. */
   void assume_printf_length(const expr2tc &retval, const expr2tc &len);
+  /** Assume a printf-family call's return value lies in [lo, hi], or is -1
+   *  when `may_fail`. */
+  void assume_printf_range(
+    const expr2tc &retval,
+    const BigInt &lo,
+    const BigInt &hi,
+    bool may_fail);
   /** Point an asprintf/vasprintf call's `strp` at a fresh heap buffer of
    *  `retval` + 1 bytes, allocated only when `retval` is non-negative. When
    *  the result is discarded (`retval` nil) the buffer is 1 byte. */

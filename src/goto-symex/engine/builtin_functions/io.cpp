@@ -548,6 +548,22 @@ void goto_symext::assume_printf_length(
     assume(equality2tc(retval, len));
 }
 
+void goto_symext::assume_printf_range(
+  const expr2tc &retval,
+  const BigInt &lo,
+  const BigInt &hi,
+  bool may_fail)
+{
+  expr2tc in_range = and2tc(
+    greaterthanequal2tc(retval, constant_int2tc(retval->type, lo)),
+    lessthanequal2tc(retval, constant_int2tc(retval->type, hi)));
+  // asprintf still returns -1 when its allocation fails.
+  if (may_fail)
+    in_range =
+      or2tc(in_range, equality2tc(retval, constant_int2tc(retval->type, -1)));
+  assume(in_range);
+}
+
 void goto_symext::symex_asprintf_buffer(
   const expr2tc &strp,
   const expr2tc &retval)
@@ -937,27 +953,14 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
       replace_nondet(nondet);
       retval = nondet;
       if (sound_bound)
-      {
-        expr2tc lo =
-          constant_int2tc(int_type2(), BigInt(printf_formatter.min_outlen));
-        expr2tc hi =
-          constant_int2tc(int_type2(), BigInt(printf_formatter.max_outlen));
-        expr2tc in_range =
-          and2tc(greaterthanequal2tc(nondet, lo), lessthanequal2tc(nondet, hi));
-        // asprintf still returns -1 when its allocation fails.
-        if (is_allocating)
-          in_range = or2tc(
-            in_range, equality2tc(nondet, constant_int2tc(int_type2(), -1)));
-        assume(in_range);
-      }
+        assume_printf_range(
+          nondet,
+          printf_formatter.min_outlen,
+          printf_formatter.max_outlen,
+          is_allocating);
       else if (is_allocating)
-      {
         // -1 on allocation failure; cap success side at INT_MAX/2.
-        expr2tc lo = constant_int2tc(int_type2(), BigInt(-1));
-        expr2tc hi = constant_int2tc(int_type2(), BigInt(INT_MAX / 2));
-        assume(and2tc(
-          greaterthanequal2tc(nondet, lo), lessthanequal2tc(nondet, hi)));
-      }
+        assume_printf_range(nondet, -1, INT_MAX / 2, false);
       else
         assume(
           greaterthanequal2tc(nondet, constant_int2tc(int_type2(), BigInt(0))));
