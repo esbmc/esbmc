@@ -418,6 +418,13 @@ bool expr2t::cmp(const expr2t &o) const
 {
   if (expr_id != o.expr_id)
     return false;
+  // Differing cached hashes settle it without walking the operands. A hashed
+  // lookup compares every entry that shares its bucket, and two long guard
+  // and-chains would otherwise recurse their whole spine (#9150).
+  const size_t h = crc_val.load(std::memory_order_acquire);
+  const size_t oh = o.crc_val.load(std::memory_order_acquire);
+  if (h != 0 && oh != 0 && h != oh)
+    return false;
   switch (expr_id)
   {
 #define IREP2_EXPR(kind, _)                                                    \
