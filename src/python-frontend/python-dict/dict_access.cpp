@@ -75,7 +75,7 @@ bool python_dict_handler::reads_value_as_tagged(
       }))
     return true;
   const char annotated = annotated_value_kind(dict_expr);
-  const std::string key = dict_key_id(slice_node);
+  const std::string key = dict_key_id(slice_node, converter_.get_ast_json());
   return annotated && std::any_of(
                         entries.begin(),
                         entries.end(),
@@ -566,7 +566,7 @@ void python_dict_handler::handle_dict_subscript_assign(
     if (!vals_id.empty())
       converter_.get_element_type_registry().record(
         vals_id,
-        dict_key_id(node),
+        dict_key_id(node, converter_.get_ast_json()),
         assigned_value.type(),
         type_slot::dict_value_types);
   }

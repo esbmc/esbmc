@@ -870,14 +870,17 @@ std::optional<size_t> get_list_arg0_size(const nlohmann::json &call)
   return arg0["elts"].size();
 }
 
-// A statically-known byte length for a single return expression:
-// nondet_bytes(N) or bytes(N) with a constant N, or a bytes([...]) literal
-// (sized by element count). Anything else (a variable, a slice, string
+// A statically-known byte length for a single return expression: a b"..."
+// literal, nondet_bytes(N) or bytes(N) with a constant N, or a bytes([...])
+// literal (sized by element count). Anything else (a variable, a slice, string
 // decoding, ...) returns nullopt -- the fixed-size array representation for
 // bytes needs a concrete size, and there is no general way to derive one from
 // an arbitrary expression.
 std::optional<size_t> try_get_constant_bytes_length(const nlohmann::json &val)
 {
+  if (val.is_object() && val.contains("encoded_bytes"))
+    return base64_decode(val["encoded_bytes"].get<std::string>()).size();
+
   if (!val.is_object() || val.value("_type", std::string()) != "Call")
     return std::nullopt;
 
@@ -900,7 +903,8 @@ std::optional<size_t> try_get_constant_bytes_length(const nlohmann::json &val)
 }
 
 // Updates `result`/`ambiguous` from a single statement, if it is a `Return`
-// whose value has a statically-known bytes length.
+// with a value. A value of unknown length makes the size ambiguous: sizing the
+// return type from the other returns would truncate it.
 static void record_bytes_return_length(
   const nlohmann::json &stmt,
   std::optional<size_t> &result,
@@ -912,10 +916,7 @@ static void record_bytes_return_length(
     return;
 
   auto len = try_get_constant_bytes_length(stmt["value"]);
-  if (!len)
-    return;
-
-  if (result && *result != *len)
+  if (!len || (result && *result != *len))
     ambiguous = true;
   else
     result = len;
@@ -937,7 +938,7 @@ static void for_each_nested_block(
 }
 
 // The concrete bytes length for a `-> bytes` function, inferred from every
-// return statement in 'body'. nullopt when no return yields a statically known
+// return statement in 'body'. nullopt when a return has no statically known
 // length, or when two returns disagree on it -- a fixed-size array cannot
 // encode a length that varies at runtime, so the caller rejects the function
 // cleanly rather than guessing a size.
@@ -1313,6 +1314,46 @@ static bool is_numpy_array_literal_call(const nlohmann::json &node)
 
   return node.contains("args") && node["args"].is_array() &&
          !node["args"].empty() && node["args"][0].value("_type", "") == "List";
+}
+
+// A literal: a constant, a negated one, a tuple of them, or a dtype name.
+static bool is_literal_node(const nlohmann::json &node)
+{
+  const std::string kind = node.value("_type", "");
+  if (kind == "Constant")
+    return true;
+  if (kind == "UnaryOp")
+    return node["operand"].value("_type", "") == "Constant";
+  if (kind == "Tuple")
+    return std::all_of(
+      node["elts"].begin(), node["elts"].end(), [](const auto &e) {
+        return is_literal_node(e);
+      });
+  return kind == "Name" ||
+         (kind == "Attribute" && node["value"].value("id", "") == "np");
+}
+
+// `np.zeros(3)`, `np.full((2, 2), 7)`, `np.arange(4)`...: a constructor other
+// than np.array whose arguments are all literals.
+static bool is_numpy_literal_constructor(const nlohmann::json &node)
+{
+  static const std::set<std::string> constructors = {
+    "zeros", "ones", "full", "empty", "arange", "eye", "identity", "linspace"};
+  if (!node.is_object() || node.value("_type", "") != "Call")
+    return false;
+  const auto &func = node["func"];
+  if (
+    func.value("_type", "") != "Attribute" ||
+    func["value"].value("id", "") != "np" ||
+    constructors.count(func.value("attr", "")) == 0)
+    return false;
+  for (const auto &arg : node.value("args", nlohmann::json::array()))
+    if (!is_literal_node(arg))
+      return false;
+  for (const auto &kw : node.value("keywords", nlohmann::json::array()))
+    if (!is_literal_node(kw["value"]))
+      return false;
+  return true;
 }
 
 // True when any element of `args` is not a literal Constant -- used for
@@ -2278,12 +2319,197 @@ bool python_converter::infer_list_elem_type_from_call_sites(
   return found;
 }
 
+static std::optional<double> literal_number(const nlohmann::json &node)
+{
+  if (node.value("_type", "") == "UnaryOp" && node["op"]["_type"] == "USub")
+  {
+    const auto value = literal_number(node["operand"]);
+    return value ? std::optional<double>(-*value) : std::nullopt;
+  }
+  if (
+    node.value("_type", "") != "Constant" || !node["value"].is_number() ||
+    node["value"].is_boolean())
+    return std::nullopt;
+  return node["value"].get<double>();
+}
+
+static std::string literal_kind(const nlohmann::json &node)
+{
+  const nlohmann::json &value = node.value("_type", "") == "UnaryOp"
+                                  ? node["operand"]["value"]
+                                  : node.value("value", nlohmann::json());
+  if (value.is_boolean())
+    return "bool";
+  return value.is_number_integer() ? "int" : "float";
+}
+
+// A literal shape: an int or a tuple of them.
+static std::optional<std::vector<long long>>
+literal_shape(const nlohmann::json &node)
+{
+  std::vector<long long> shape;
+  const nlohmann::json dims = node.value("_type", "") == "Tuple"
+                                ? node["elts"]
+                                : nlohmann::json::array({node});
+  for (const auto &dim : dims)
+  {
+    if (
+      dim.value("_type", "") != "Constant" || !dim["value"].is_number_integer())
+      return std::nullopt;
+    shape.push_back(dim["value"].get<long long>());
+  }
+  return shape;
+}
+
+using numpy_layout = std::pair<std::vector<long long>, std::string>;
+
+// zeros/ones/empty(shape) and full(shape, fill).
+static std::optional<numpy_layout>
+filled_layout(const std::string &ctor, const nlohmann::json &args)
+{
+  const auto shape = args.empty() ? std::nullopt : literal_shape(args[0]);
+  if (!shape || (ctor == "full" && args.size() < 2))
+    return std::nullopt;
+  return numpy_layout(*shape, ctor == "full" ? literal_kind(args[1]) : "float");
+}
+
+// eye(N[, M]) and identity(N).
+static std::optional<numpy_layout>
+square_layout(const std::string &ctor, const nlohmann::json &args)
+{
+  const auto n = args.empty() ? std::nullopt : literal_number(args[0]);
+  const auto m = args.size() > 1 ? literal_number(args[1]) : n;
+  if (!n || !m || (ctor == "identity" && args.size() > 1))
+    return std::nullopt;
+  return numpy_layout({(long long)*n, (long long)*m}, "float");
+}
+
+// arange([start,] stop[, step]).
+static std::optional<numpy_layout> arange_layout(const nlohmann::json &args)
+{
+  std::vector<double> bounds;
+  std::string kind = "int";
+  for (const auto &arg : args)
+  {
+    const auto value = literal_number(arg);
+    if (!value)
+      return std::nullopt;
+    bounds.push_back(*value);
+    if (literal_kind(arg) == "float")
+      kind = "float";
+  }
+  if (bounds.empty() || bounds.size() > 3)
+    return std::nullopt;
+  const double start = bounds.size() > 1 ? bounds[0] : 0.0;
+  const double stop = bounds.size() > 1 ? bounds[1] : bounds[0];
+  const double step = bounds.size() > 2 ? bounds[2] : 1.0;
+  if (step == 0.0)
+    return std::nullopt;
+  const double count = std::ceil((stop - start) / step);
+  return numpy_layout({count > 0 ? (long long)count : 0}, kind);
+}
+
+// The shape and element kind ("bool", "int" or "float") of a constructor
+// with literal arguments, before any dtype= keyword.
+static std::optional<numpy_layout>
+literal_constructor_layout(const nlohmann::json &call)
+{
+  const std::string ctor = call["func"].value("attr", "");
+  const nlohmann::json &args = call["args"];
+  if (ctor == "zeros" || ctor == "ones" || ctor == "empty" || ctor == "full")
+    return filled_layout(ctor, args);
+  if (ctor == "eye" || ctor == "identity")
+    return square_layout(ctor, args);
+  if (ctor != "linspace")
+    return arange_layout(args);
+  const auto num = args.size() > 2 ? literal_number(args[2]) : 50.0;
+  if (!num || args.size() < 2)
+    return std::nullopt;
+  return numpy_layout({(long long)*num}, "float");
+}
+
+static nlohmann::json zero_literal(
+  const std::vector<long long> &shape,
+  std::size_t axis,
+  const std::string &kind)
+{
+  nlohmann::json list = {{"_type", "List"}, {"elts", nlohmann::json::array()}};
+  for (long long i = 0; i < shape[axis]; ++i)
+    list["elts"].push_back(
+      axis + 1 < shape.size() ? zero_literal(shape, axis + 1, kind)
+                              : nlohmann::json{
+                                  {"_type", "Constant"},
+                                  {"value",
+                                   kind == "bool"  ? nlohmann::json(false)
+                                   : kind == "int" ? nlohmann::json(0)
+                                                   : nlohmann::json(0.0)}});
+  return list;
+}
+
+// The array type of a literal np.array call, or of another constructor with
+// literal arguments: the type of a literal of the same shape and dtype.
+std::optional<typet>
+python_converter::literal_numpy_array_type(const nlohmann::json &call) const
+{
+  if (is_numpy_array_literal_call(call))
+    return type_handler_.get_typet(numpy_literal_with_dtype(call, *ast_json));
+  auto layout = literal_constructor_layout(call);
+  if (!layout || layout->first.empty())
+    return std::nullopt;
+  for (long long dim : layout->first)
+    if (dim <= 0)
+      return std::nullopt;
+  for (const auto &kw : call.value("keywords", nlohmann::json::array()))
+  {
+    const std::string dtype =
+      kw.value("arg", "") == "dtype"
+        ? extract_numpy_dtype_name(kw["value"], *ast_json)
+        : "";
+    if (dtype == "bool")
+      layout->second = "bool";
+    else if (dtype.find("int") != std::string::npos)
+      layout->second = "int";
+    else if (dtype.find("float") != std::string::npos)
+      layout->second = "float";
+    else if (!dtype.empty() || kw.value("arg", "") != "dtype")
+      return std::nullopt;
+  }
+  return type_handler_.get_typet(
+    zero_literal(layout->first, 0, layout->second));
+}
+
+// `f(np.eye(2))`: a constructor written as an argument is bound to a name
+// first, so it is an array rather than the list it converts to on its own.
+nlohmann::json
+python_converter::bind_numpy_constructor_argument(const nlohmann::json &arg)
+{
+  if (!is_numpy_literal_constructor(arg) || in_rhs_type_probe_)
+    return arg;
+  if (!can_emit_runtime_guard())
+    throw std::runtime_error(
+      "TypeError: a numpy constructor called as an argument inside a lambda, "
+      "a short-circuit operand or a contract is not supported");
+  nlohmann::json name = {
+    {"_type", "Name"},
+    {"id", "ESBMC_constructor_arg_" + std::to_string(++nditer_counter_)},
+    {"ctx", {{"_type", "Store"}}}};
+  copy_location_fields_from_decl(arg, name);
+  nlohmann::json bind = {
+    {"_type", "Assign"},
+    {"targets", nlohmann::json::array({name})},
+    {"value", arg}};
+  copy_location_fields_from_decl(arg, bind);
+  emit_statement_into_current_block(bind);
+  name["ctx"] = {{"_type", "Load"}};
+  return name;
+}
+
 std::optional<typet> python_converter::try_infer_numpy_array_arg_type(
   const nlohmann::json &arg,
   const nlohmann::json &module_body) const
 {
-  if (is_numpy_array_literal_call(arg))
-    return type_handler_.get_typet(arg["args"][0]);
+  if (is_numpy_array_literal_call(arg) || is_numpy_literal_constructor(arg))
+    return literal_numpy_array_type(arg);
 
   if (arg.value("_type", "") != "Call")
     return std::nullopt;
@@ -2301,7 +2527,8 @@ std::optional<typet> python_converter::try_infer_numpy_array_arg_type(
     !numpy_array_literal_return(*callee_def, literal_call, type_handler_))
     return std::nullopt;
 
-  return type_handler_.get_typet(literal_call["args"][0]);
+  return type_handler_.get_typet(
+    numpy_literal_with_dtype(literal_call, *ast_json));
 }
 
 // True when `node` (or, recursively, any of its descendants) reads one of
@@ -2543,9 +2770,10 @@ static const nlohmann::json *module_numpy_literal(
     else if (stmt_type == "AnnAssign" && stmt.contains("target"))
       target_name = stmt["target"].value("id", "");
 
+    const nlohmann::json value = stmt.value("value", nlohmann::json());
     if (
-      target_name == arg_name &&
-      is_numpy_array_literal_call(stmt.value("value", nlohmann::json())))
+      target_name == arg_name && (is_numpy_array_literal_call(value) ||
+                                  is_numpy_literal_constructor(value)))
       return &stmt["value"];
   }
   return nullptr;
@@ -2593,12 +2821,28 @@ sole_local_numpy_literal(const nlohmann::json &def, const std::string &name)
       target = &stmt["targets"][0];
     else if (stmt.value("_type", "") == "AnnAssign")
       target = &stmt["target"];
+    const nlohmann::json value = stmt.value("value", nlohmann::json());
     if (
       target != nullptr && is_name_target(*target, name) &&
-      is_numpy_array_literal_call(stmt.value("value", nlohmann::json())))
+      (is_numpy_array_literal_call(value) ||
+       is_numpy_literal_constructor(value)))
       return &stmt["value"];
   }
   return nullptr;
+}
+
+static void record_param_type(
+  std::optional<typet> &resolved,
+  const typet &candidate,
+  const std::string &func_name,
+  size_t param_index)
+{
+  if (resolved && *resolved != candidate)
+    throw std::runtime_error(
+      "TypeError: conflicting array shapes inferred for parameter " +
+      std::to_string(param_index) + " of " + func_name +
+      "() across call sites");
+  resolved = candidate;
 }
 
 bool python_converter::try_infer_numpy_param_type(
@@ -2620,16 +2864,9 @@ bool python_converter::try_infer_numpy_param_type(
   // agree: silently keeping only the first-found shape would let a later,
   // differently-shaped call site pass its full array through a parameter
   // typed for a smaller one -- unnoticed, not just truncated.
-  bool found = false;
-  typet resolved_type;
+  std::optional<typet> resolved_type;
   auto record = [&](const typet &candidate) {
-    if (found && resolved_type != candidate)
-      throw std::runtime_error(
-        "TypeError: conflicting array shapes inferred for parameter " +
-        std::to_string(param_index) + " of " + func_name +
-        "() across call sites");
-    resolved_type = candidate;
-    found = true;
+    record_param_type(resolved_type, candidate, func_name, param_index);
   };
 
   for (const numpy_param_call_site &site : call_sites)
@@ -2662,7 +2899,8 @@ bool python_converter::try_infer_numpy_param_type(
       if (
         const nlohmann::json *literal =
           module_numpy_literal(module_body, arg_name))
-        record(type_handler_.get_typet((*literal)["args"][0]));
+        if (std::optional<typet> type = literal_numpy_array_type(*literal))
+          record(*type);
       continue;
     }
 
@@ -2675,7 +2913,8 @@ bool python_converter::try_infer_numpy_param_type(
       const nlohmann::json *literal =
         sole_local_numpy_literal(*enclosing_def, arg_name))
     {
-      record(type_handler_.get_typet((*literal)["args"][0]));
+      if (std::optional<typet> type = literal_numpy_array_type(*literal))
+        record(*type);
       continue;
     }
 
@@ -2697,9 +2936,9 @@ bool python_converter::try_infer_numpy_param_type(
     }
   }
 
-  if (found)
+  if (resolved_type)
   {
-    out = resolved_type;
+    out = *resolved_type;
     return true;
   }
   return false;
@@ -3889,10 +4128,13 @@ static bool parameter_defaults_to_any(const nlohmann::json &element)
 void python_converter::track_numpy_param(
   const std::string &arg_id,
   const std::optional<std::vector<std::size_t>> &numpy_param_full_shape,
-  bool numpy_array_param)
+  bool numpy_array_param,
+  const typet &array_type)
 {
   if (numpy_param_full_shape)
     numpy_param_shapes_[arg_id] = *numpy_param_full_shape;
+  if (numpy_array_param && array_type.is_array())
+    numpy_param_array_types_[arg_id] = array_type;
 
   // classify_numpy_method_call()'s dispatch_rewrite_methods (sort/transpose/
   // sum/.../.T, .../) only rewrites `a.<method>(...)` into the free-function
@@ -4580,6 +4822,7 @@ size_t python_converter::register_function_argument(
   // mistaken for numpy mask indexing.
   std::optional<std::vector<std::size_t>> numpy_param_full_shape =
     numpy_param_full_shape_of(numpy_array_param, arg_type, type_handler_);
+  const typet pre_decay_type = arg_type;
 
   // A `bytes` parameter with a resolved length stays array-by-value: it is
   // immutable, sized from the call site, and concatenation/hash() inside the
@@ -4627,7 +4870,8 @@ size_t python_converter::register_function_argument(
   arg.identifier(arg_id);
   arg.location() = get_location_from_decl(element);
 
-  track_numpy_param(arg_id, numpy_param_full_shape, numpy_array_param);
+  track_numpy_param(
+    arg_id, numpy_param_full_shape, numpy_array_param, pre_decay_type);
 
   type.arguments().push_back(arg);
   size_t inserted_index = type.arguments().size() - 1;
@@ -4884,6 +5128,33 @@ void python_converter::validate_return_paths(
     "'");
 
   function_body.copy_to_operands(missing_return_assert);
+}
+
+/// Gives each RETURN of a string literal in \p node the pointer
+/// \p return_type. A return converted before the function's return type was
+/// known keeps the literal's array type, which a pointer return cannot hold.
+void python_converter::decay_string_literal_returns(
+  exprt &node,
+  const typet &return_type) const
+{
+  if (!return_type.is_pointer())
+    return;
+  if (node.is_code() && to_code(node).get_statement() == "return")
+  {
+    code_returnt &ret = to_code_return(to_code(node));
+    exprt &value = ret.return_value();
+    if (
+      !ret.has_return_value() || !value.type().is_array() ||
+      !value.is_constant())
+      return;
+    const exprt address = string_literal_address(value);
+    value = address.type() == return_type
+              ? address
+              : typecast_exprt(address, return_type);
+    return;
+  }
+  Forall_operands (it, node)
+    decay_string_literal_returns(*it, return_type);
 }
 
 typet python_converter::infer_return_type_from_body(const nlohmann::json &body)
@@ -5236,6 +5507,7 @@ const nlohmann::json &python_converter::resolve_return_annotation_node(
   if (
     is_synthesized &&
     (local_var_numpy_array_return(function_node) ||
+     numpy_arithmetic_return(function_node) ||
      dynamic_type_handler_.detect_dynamic_return_type(function_node)))
     return null_return_annotation;
   return returns;
@@ -5266,6 +5538,79 @@ static bool any_return(
           return true;
   }
   return false;
+}
+
+bool python_converter::is_numpy_param_operand(
+  const nlohmann::json &node,
+  const nlohmann::json &func_def) const
+{
+  if (!node.is_object() || node.value("_type", "") != "Name")
+    return false;
+  const nlohmann::json &params = func_def["args"]["args"];
+  for (std::size_t i = 0; i < params.size(); ++i)
+  {
+    if (params[i].value("arg", "") != node.value("id", ""))
+      continue;
+    typet array_type;
+    std::set<std::string> visiting;
+    return try_infer_numpy_param_type(
+      func_def.value("name", ""), i, array_type, visiting);
+  }
+  return false;
+}
+
+bool python_converter::is_numpy_arithmetic_node(
+  const nlohmann::json &node,
+  const nlohmann::json &func_def) const
+{
+  if (!node.is_object() || node.value("_type", "") != "BinOp")
+    return false;
+  for (const char *side : {"left", "right"})
+    if (
+      is_numpy_array_constructor_expr(node[side]) ||
+      is_numpy_param_operand(node[side], func_def) ||
+      is_numpy_arithmetic_node(node[side], func_def))
+      return true;
+  return false;
+}
+
+// `(a * 2)[1]` is an element of it, which the annotator types from `2`.
+bool python_converter::is_numpy_arithmetic_value(
+  const nlohmann::json &node,
+  const nlohmann::json &func_def) const
+{
+  return is_numpy_arithmetic_node(node, func_def) ||
+         (node.is_object() && node.value("_type", "") == "Subscript" &&
+          is_numpy_arithmetic_node(node["value"], func_def));
+}
+
+// `b = a * 2; return b`: the last binding of the returned name.
+bool python_converter::is_numpy_arithmetic_binding(
+  const nlohmann::json &node,
+  const nlohmann::json &func_def) const
+{
+  if (!node.is_object() || node.value("_type", "") != "Name")
+    return false;
+  const std::string name = node.value("id", "");
+  const nlohmann::json &body = func_def["body"];
+  for (std::size_t i = body.size(); i-- > 0;)
+  {
+    const nlohmann::json &stmt = body[i];
+    const bool annotated = stmt.value("_type", "") == "AnnAssign" &&
+                           stmt["target"].value("id", "") == name;
+    if (annotated || is_simple_name_assign_to(stmt, name))
+      return is_numpy_arithmetic_value(stmt["value"], func_def);
+  }
+  return false;
+}
+
+bool python_converter::numpy_arithmetic_return(
+  const nlohmann::json &func_def) const
+{
+  return any_return(func_def["body"], [&](const nlohmann::json &node) {
+    return is_numpy_arithmetic_value(node, func_def) ||
+           is_numpy_arithmetic_binding(node, func_def);
+  });
 }
 
 /// Whether a return in \p body yields None: a bare `return`, `return None`, or
@@ -5924,6 +6269,7 @@ void python_converter::get_function_definition(
     {
       type.return_type() = *ret_type;
       python_expr::set_function_type(*added_symbol, type);
+      decay_string_literal_returns(function_body, *ret_type);
     }
   }
 

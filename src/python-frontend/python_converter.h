@@ -11,6 +11,7 @@
 #include <python-frontend/dynamic_type/dynamic_type_handler.h>
 #include <python-frontend/dynamic_type/literal_divergence.h>
 #include <python-frontend/math/python_math.h>
+#include <python-frontend/numpy/numpy_nditer.h>
 #include <python-frontend/string/string_handler.h>
 #include <python-frontend/type/element_type_registry.h>
 #include <python-frontend/type/type_handler.h>
@@ -403,15 +404,16 @@ public:
     const nlohmann::json &element,
     const std::string &prefix);
 
-  /// Before an access to `var_name.attr_name` through a class pointer that
-  /// may be None, raises AttributeError when it is, as CPython does. Planted
-  /// only where the read runs exactly when the statement does, so never in an
-  /// and/or tail or a while test, whose reads are left as before.
+  /// Before an access to `base.attr_name` through a class pointer that may be
+  /// None, raises AttributeError when it is, as CPython does. Planted only
+  /// where the read runs exactly when the statement does, so never in an
+  /// and/or tail or a while test, whose reads are left as before. `self` is
+  /// never None, so `is_self` skips the guard.
   void guard_attribute_on_none(
-    const symbolt &symbol,
-    const std::string &var_name,
+    const exprt &base,
     const std::string &attr_name,
-    const nlohmann::json &element);
+    const nlohmann::json &element,
+    bool is_self = false);
 
   codet get_compound_store(
     const exprt &lhs,
@@ -659,6 +661,7 @@ private:
   friend class function_call_expr;
   friend class numpy_call_expr;
   friend class numpy_random;
+  friend class numpy_nditer;
   friend class function_call_builder;
   friend class type_handler;
   friend class python_list;
@@ -1261,7 +1264,25 @@ private:
   void track_numpy_param(
     const std::string &arg_id,
     const std::optional<std::vector<std::size_t>> &numpy_param_full_shape,
-    bool numpy_array_param);
+    bool numpy_array_param,
+    const typet &array_type);
+
+  // A numpy array parameter decays to a pointer; element-wise arithmetic
+  // reads it back through its pre-decay array type.
+  exprt numpy_param_as_array(const exprt &operand) const;
+  exprt snapshot_left_operand(
+    const nlohmann::json &left,
+    const exprt &lhs,
+    const nlohmann::json &right);
+  bool may_rebind_left(
+    const nlohmann::json &left,
+    const exprt &lhs,
+    const nlohmann::json &right) const;
+  bool calls_user_code(const nlohmann::json &node) const;
+  exprt
+  materialize_numpy_arithmetic(const nlohmann::json &node, const exprt &value);
+  std::optional<std::vector<std::size_t>>
+  numpy_param_shape(const std::string &symbol_id) const;
 
   size_t register_function_argument(
     const nlohmann::json &element,
@@ -1676,6 +1697,11 @@ private:
   /// An assignment get_var_assign leaves to a dedicated lowering, which
   /// returns true once it has converted it.
   bool try_dedicated_assign(const nlohmann::json &ast_node, codet &block);
+  bool try_numpy_nditer_assign(const nlohmann::json &ast_node);
+  const nlohmann::json *
+  numpy_slice_copy_source(const nlohmann::json &value) const;
+  bool try_numpy_slice_copy_assign(const nlohmann::json &ast_node);
+  std::optional<exprt> get_intercepted_expr(const nlohmann::json &element);
   void reject_bound_method_read(const nlohmann::json &element);
   void reject_method_value(const std::string &class_name, const std::string &m)
     const;
@@ -1725,6 +1751,10 @@ private:
   void guard_none_container(
     exprt &rhs,
     typet &rhs_type,
+    const nlohmann::json &element);
+  void guard_none_typed_container(
+    const std::string &op,
+    exprt &rhs,
     const nlohmann::json &element);
   exprt handle_membership_operator(
     exprt &lhs,
@@ -2010,6 +2040,11 @@ private:
   typet resolve_lambda_call_result_type(
     const nlohmann::json &ast_node,
     const typet &current_type);
+  // The array type of element-wise arithmetic the annotator typed as a list.
+  typet resolve_numpy_arithmetic_type(
+    const nlohmann::json &ast_node,
+    const exprt &rhs,
+    const typet &current_type) const;
 
   std::string resolve_name_symbol_id(const std::string &name) const;
   exprt
@@ -2094,6 +2129,22 @@ private:
   // caller skip the annotation-driven dispatch entirely) reaches that same
   // already-correct fallback instead of duplicating it.
   bool local_var_numpy_array_return(const nlohmann::json &func_def) const;
+  // `return np.array(...) * 2`: the annotator types element-wise arithmetic
+  // over a constructor as a list, so it takes the same fallback.
+  bool numpy_arithmetic_return(const nlohmann::json &func_def) const;
+  bool is_numpy_param_operand(
+    const nlohmann::json &node,
+    const nlohmann::json &func_def) const;
+  bool is_numpy_arithmetic_node(
+    const nlohmann::json &node,
+    const nlohmann::json &func_def) const;
+  bool is_numpy_arithmetic_value(
+    const nlohmann::json &node,
+    const nlohmann::json &func_def) const;
+  bool is_numpy_arithmetic_binding(
+    const nlohmann::json &node,
+    const nlohmann::json &func_def) const;
+  bool call_passes_numpy_array(const nlohmann::json &call_node) const;
 
   // The `returns` node get_function_definition's own dispatch should use:
   // null when local_var_numpy_array_return applies, function_node["returns"]
@@ -2182,6 +2233,9 @@ private:
   /// Converts @p node into a discarded block, so only its value is kept and
   /// nothing it would emit reaches the program.
   exprt probe_expr(const nlohmann::json &node);
+  std::optional<typet>
+  literal_numpy_array_type(const nlohmann::json &call) const;
+  nlohmann::json bind_numpy_constructor_argument(const nlohmann::json &arg);
 
   bool contains_tracked_numpy_view_object(const nlohmann::json &node);
 
@@ -2613,6 +2667,13 @@ private:
     const std::string &storage_id,
     const std::vector<std::string> &view_ids,
     const locationt &location,
+    codet &target_block,
+    const std::string &heir_id = "");
+  std::vector<std::string>
+  numpy_storage_aliases_of(const std::string &rebound_id) const;
+  std::string hand_numpy_storage_to_alias(
+    const std::string &rebound_id,
+    const locationt &location,
     codet &target_block);
 
   bool should_rebuild_cached_numpy_row_subscript_rhs(
@@ -2633,6 +2694,7 @@ private:
   // method-call RHS. Split out to keep get_var_assign's own decision count
   // from growing as more special-cased RHS rewrites land there.
   nlohmann::json rewrite_assign_rhs_node(const nlohmann::json &ast_node) const;
+  nlohmann::json numpy_transpose_base(const nlohmann::json &node) const;
 
   // Classifies a Call node as a numpy method call: (is_a_method_call,
   // method_name, method_base, is_a_supported_copy_method,
@@ -2975,7 +3037,10 @@ private:
   exprt numpy_array_arithmetic(
     const std::string &op,
     const exprt &lhs,
-    const exprt &rhs);
+    const exprt &rhs,
+    const locationt &location);
+  void
+  guard_negative_exponents(const exprt &exponents, const locationt &location);
   exprt numpy_elementwise(
     const std::string &op,
     const exprt &lhs,
@@ -2990,6 +3055,8 @@ private:
     const exprt &lhs,
     const exprt &rhs,
     const nlohmann::json &element);
+  exprt
+  numpy_float_remainder(const exprt &x, const exprt &y, const typet &type);
   exprt numpy_element_op(
     const std::string &op,
     const exprt &x,
@@ -3166,6 +3233,10 @@ private:
     const nlohmann::json &ast_node,
     const exprt &value,
     codet &target_block);
+  /// The address of \p array, a constant char array holding a string literal.
+  static exprt string_literal_address(const exprt &array);
+  void
+  decay_string_literal_returns(exprt &node, const typet &return_type) const;
   exprt coerce_optional_return(
     const exprt &value,
     const locationt &location,
@@ -3388,6 +3459,14 @@ private:
   };
   std::unordered_map<std::string, numpy_scalar_pointer_view_infot>
     numpy_pointer_view_info_;
+  /// `np.nditer` objects and the names bound to what they yield, keyed by
+  /// numpy_nditer::key.
+  std::map<std::string, numpy_nditer_state> numpy_nditers_;
+  std::map<std::string, numpy_nditer_item> numpy_nditer_items_;
+  nlohmann::json current_nditer_call_;
+  std::string current_nditer_state_;
+  unsigned nditer_counter_ = 0;
+  std::vector<exprt> prebuilt_exprs_;
   const numpy_scalar_pointer_view_infot *
   find_numpy_pointer_view_info(const std::string &name) const;
   // Scans call sites of `func_name` for subscript view arguments at
@@ -3607,6 +3686,10 @@ private:
   std::map<std::string, std::set<std::string>> numpy_view_other_sources_;
   std::set<std::string> numpy_view_storage_roots(const std::string &id) const;
   unsigned numpy_loop_depth_ = 0;
+  // Conditional expressions being converted; their arms run on one path only.
+  unsigned conditional_expr_depth_ = 0;
+  // Converting an and/or operand into the block of effects it owns.
+  bool in_operand_effects_block_ = false;
   /// Detach for a constant-shape view: copies what it sees into a dense
   /// snapshot and repoints it there. Returns the snapshot's id.
   std::vector<exprt> read_strided_view_elements(
@@ -3672,6 +3755,7 @@ private:
   // and the array-consuming numpy calls (transpose, sort/argsort/
   // searchsorted, reducers) read the pre-decay shape from here instead.
   std::unordered_map<std::string, std::vector<std::size_t>> numpy_param_shapes_;
+  std::unordered_map<std::string, typet> numpy_param_array_types_;
   std::unordered_set<std::string> numpy_ambiguous_shape_symbols_;
   // List parameters mixing strings and numbers whose call sites agree on
   // each position's type, so a constant index reads that type (#8670).
