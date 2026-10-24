@@ -708,9 +708,12 @@ exprt python_converter::guard_none_conversion(
   const std::string &message,
   const nlohmann::json &element)
 {
+  // An Optional[str] keeps its str pointer type and holds None as null.
+  const bool may_be_none =
+    operand.type() == none_type() ||
+    (operand.type().is_pointer() && type_utils::is_string_type(operand.type()));
   if (
-    operand.type() != none_type() || !current_block ||
-    !safe_to_emit_side_effecting_statement())
+    !may_be_none || !current_block || !safe_to_emit_side_effecting_statement())
     return operand;
 
   return guard_operand(
