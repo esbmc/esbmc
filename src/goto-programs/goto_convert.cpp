@@ -1815,10 +1815,12 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
   //-----------------------------
   //    A;
   // u: sideeffects in c
-  // v: if(!c) goto z;
+  // v: if(!c) goto z0;
+  //    DEADs of c's temporaries
   // w: P;
   // x: B;               <-- continue target
   // y: goto u;
+  // z0: DEADs of c's temporaries
   // z: ;                <-- break target
 
   // A;
@@ -1830,6 +1832,7 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
   exprt cond = tmp;
   goto_programt sideeffects;
 
+  const std::size_t stack_size = targets.destructor_stack.size();
   remove_condition_sideeffects(cond, sideeffects);
 
   // save break/continue targets
@@ -1846,6 +1849,12 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
   goto_programt tmp_z;
   goto_programt::targett z = tmp_z.add_instruction(SKIP);
   z->location = code.location();
+
+  // before B is converted, which pushes its own temporaries
+  v->make_goto(z);
+  goto_programt cond_dead, tmp_z0;
+  kill_condition_temporaries(
+    stack_size, code.location(), z, tmp_v, cond_dead, tmp_z0);
 
   // do the x label
   goto_programt tmp_x;
@@ -1868,8 +1877,7 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
   targets.set_break(z);
   targets.set_continue(tmp_x.instructions.begin());
 
-  // v: if(!c) goto z;
-  v->make_goto(z);
+  // v: if(!c) goto z0;
   expr2tc tmp_cond;
   migrate_expr(cond, tmp_cond);
   tmp_cond = not2tc(tmp_cond);
@@ -1893,9 +1901,11 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
 
   dest.destructive_append(sideeffects);
   dest.destructive_append(tmp_v);
+  dest.destructive_append(cond_dead);
   dest.destructive_append(tmp_w);
   dest.destructive_append(tmp_x);
   dest.destructive_append(tmp_y);
+  dest.destructive_append(tmp_z0);
   dest.destructive_append(tmp_z);
 
   // restore break/continue
@@ -1916,9 +1926,11 @@ void goto_convertt::convert_while(const codet &code, goto_programt &dest)
 
   //    while(c) P;
   //--------------------
-  // v: if(!c) goto z;
+  // v: if(!c) goto z0;
+  //    DEADs of c's temporaries
   // x: P;
   // y: goto v;          <-- continue target
+  // z0: DEADs of c's temporaries
   // z: ;                <-- break target
 
   // save break/continue targets
@@ -1931,7 +1943,12 @@ void goto_convertt::convert_while(const codet &code, goto_programt &dest)
   z->location = code.location();
 
   goto_programt tmp_branch;
+  const std::size_t stack_size = targets.destructor_stack.size();
   generate_conditional_branch(gen_not(*cond), z, location, tmp_branch);
+
+  goto_programt cond_dead, tmp_z0;
+  kill_condition_temporaries(
+    stack_size, location, z, tmp_branch, cond_dead, tmp_z0);
 
   // do the v label
   goto_programt::targett v = tmp_branch.instructions.begin();
@@ -1959,8 +1976,10 @@ void goto_convertt::convert_while(const codet &code, goto_programt &dest)
     y->pragma_unroll_count = std::stoul(code.get("#pragma_unroll").as_string());
 
   dest.destructive_append(tmp_branch);
+  dest.destructive_append(cond_dead);
   dest.destructive_append(tmp_x);
   dest.destructive_append(tmp_y);
+  dest.destructive_append(tmp_z0);
   dest.destructive_append(tmp_z);
 
   // restore break/continue
@@ -2779,6 +2798,28 @@ bool goto_convertt::destroy_full_expression_temporaries(
   unwind_destructor_stack(location, stack_size, dest);
   targets.destructor_stack.resize(stack_size);
   return true;
+}
+
+void goto_convertt::kill_condition_temporaries(
+  std::size_t stack_size,
+  const locationt &location,
+  goto_programt::targett z,
+  goto_programt &branch,
+  goto_programt &body,
+  goto_programt &exit)
+{
+  destructor_stackt &stack = targets.destructor_stack;
+  if (std::any_of(stack.begin() + stack_size, stack.end(), is_destructor_entry))
+    return;
+
+  unwind_destructor_stack(location, stack_size, body);
+  unwind_destructor_stack(location, stack_size, exit);
+  stack.resize(stack_size);
+  if (exit.instructions.empty())
+    return;
+  for (auto &i : branch.instructions)
+    if (i.is_goto() && i.targets.front() == z)
+      i.targets.front() = exit.instructions.begin();
 }
 
 void goto_convertt::unwind_destructor_stack(

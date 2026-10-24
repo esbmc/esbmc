@@ -1103,16 +1103,18 @@ bool goto_convert_functionst::convert_native_rec(
 
     //    while(c) P;
     //--------------------
-    // v: if(!c) goto z;
+    // v: if(!c) goto z0;
+    //    DEADs of c's temporaries
     // x: P;
     // y: goto v;          <-- continue target
+    // z0: DEADs of c's temporaries
     // z: ;                <-- break target
     goto_programt tmp_z;
     goto_programt::targett z = tmp_z.add_instruction();
     z->make_skip();
     z->location = location;
 
-    goto_programt tmp_branch;
+    goto_programt tmp_branch, cond_dead, tmp_z0;
     if (has_sideeffect(w.cond))
     {
       // convert_while (goto_convert.cpp) builds this branch via the
@@ -1141,8 +1143,11 @@ bool goto_convert_functionst::convert_native_rec(
       const locationt &stamp = effective_location(w.location, inherited);
       if (!stamp.get_file().empty())
         stamp_value_locations(cond_legacy, stamp);
+      const std::size_t stack_size = targets.destructor_stack.size();
       generate_conditional_branch(
         gen_not(cond_legacy), z, location, tmp_branch);
+      kill_condition_temporaries(
+        stack_size, location, z, tmp_branch, cond_dead, tmp_z0);
     }
     else
     {
@@ -1193,8 +1198,10 @@ bool goto_convert_functionst::convert_native_rec(
     y->pragma_unroll_count = w.pragma_unroll_count;
 
     dest.destructive_append(tmp_branch);
+    dest.destructive_append(cond_dead);
     dest.destructive_append(tmp_x);
     dest.destructive_append(tmp_y);
+    dest.destructive_append(tmp_z0);
     dest.destructive_append(tmp_z);
     return true;
   }
@@ -1308,10 +1315,12 @@ bool goto_convert_functionst::convert_native_rec(
     //--------------------
     //    A;
     // u: sideeffects in c  <-- back-edge target, collapsing onto v when empty
-    // v: if(!c) goto z;
+    // v: if(!c) goto z0;
+    //    DEADs of c's temporaries
     // w: P;
     // x: B;                <-- continue target
     // y: goto u;
+    // z0: DEADs of c's temporaries
     // z: ;                 <-- break target
 
     // convert_for emits the init straight into dest, before it saves the
@@ -1329,6 +1338,7 @@ bool goto_convert_functionst::convert_native_rec(
     // observable, so the order is kept.
     goto_programt sideeffects;
     expr2tc guard = normalise_native_code(f.cond, here, ns);
+    const std::size_t stack_size = targets.destructor_stack.size();
     if (has_sideeffect(f.cond) || is_ternary(f.cond))
     {
       exprt cond = migrate_expr_back(f.cond);
@@ -1346,6 +1356,12 @@ bool goto_convert_functionst::convert_native_rec(
     goto_programt tmp_z;
     goto_programt::targett z = tmp_z.add_instruction(SKIP);
     z->location = f.location;
+
+    // before B is converted, which pushes its own temporaries
+    v->make_goto(z);
+    goto_programt cond_dead, tmp_z0;
+    kill_condition_temporaries(
+      stack_size, f.location, z, tmp_v, cond_dead, tmp_z0);
 
     // convert_for converts the iteration statement *before* the body and
     // before installing the loop targets. Keep that order: both may allocate
@@ -1385,7 +1401,6 @@ bool goto_convert_functionst::convert_native_rec(
     targets.set_break(z);
     targets.set_continue(tmp_x.instructions.begin());
 
-    v->make_goto(z);
     v->guard = not2tc(guard);
     v->location = f.location;
 
@@ -1416,9 +1431,11 @@ bool goto_convert_functionst::convert_native_rec(
 
     dest.destructive_append(sideeffects);
     dest.destructive_append(tmp_v);
+    dest.destructive_append(cond_dead);
     dest.destructive_append(tmp_w);
     dest.destructive_append(tmp_x);
     dest.destructive_append(tmp_y);
+    dest.destructive_append(tmp_z0);
     dest.destructive_append(tmp_z);
     return true;
   }
