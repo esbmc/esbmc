@@ -963,15 +963,19 @@ exprt function_call_expr::build_constant_from_arg() const
   if (func_name == "complex")
     return handle_complex();
 
+  if (func_name == "object")
+  {
+    if (!call_["args"].empty() || !call_["keywords"].empty())
+      throw std::runtime_error("TypeError: object() takes no arguments");
+    return build_fresh_object();
+  }
+
   // Check if there are no arguments
   if (call_["args"].empty())
   {
     // Special handling for str() with no arguments: return empty string
     if (func_name == "str")
       return converter_.get_string_builder().build_string_literal("");
-
-    if (func_name == "object")
-      return build_fresh_object();
 
     typet t = type_handler_.get_typet(func_name, 0);
     return exprt("constant", t);
