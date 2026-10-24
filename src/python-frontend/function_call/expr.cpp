@@ -7402,7 +7402,8 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
         converter_.current_block->copy_to_operands(tmp_assign);
         arg = build_symbol(tmp);
       }
-      reject_numpy_layout_mismatch(arg.type(), *func_symbol, param_idx);
+      if (!arg_is_bytes_literal)
+        reject_numpy_layout_mismatch(arg.type(), *func_symbol, param_idx);
       call.arguments().push_back(array_argument_address(arg));
     }
     else
