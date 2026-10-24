@@ -7437,7 +7437,8 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
         converter_.current_block->copy_to_operands(tmp_assign);
         arg = build_symbol(tmp);
       }
-      reject_numpy_layout_mismatch(arg.type(), *func_symbol, param_idx);
+      reject_numpy_layout_mismatch(
+        arg.type(), *func_symbol, param_idx, arg_is_bytes_literal);
       call.arguments().push_back(array_argument_address(arg));
     }
     else
@@ -7486,12 +7487,14 @@ void function_call_expr::reject_list_for_numpy_parameter(
 void function_call_expr::reject_numpy_layout_mismatch(
   const typet &arg_type,
   const symbolt &callee,
-  size_t param_idx) const
+  size_t param_idx,
+  bool is_bytes_literal) const
 {
   const code_typet::argumentst &params =
     to_code_type(callee.get_type()).arguments();
+  // A bytes literal is not a numpy array.
   if (
-    callee.mode != "Python" || param_idx >= params.size() ||
+    is_bytes_literal || callee.mode != "Python" || param_idx >= params.size() ||
     !params[param_idx].type().is_pointer())
     return;
   const typet &param_type = params[param_idx].type();
