@@ -228,16 +228,11 @@ void value_sett::retire_objectless_operand(
   }
 }
 
-/* Index of, and bytes spanned by, the leading component `rest` names. Member
- * names are not identifiers -- clang spells an anonymous member
- * "S::(anonymous at f.c:4:9)", which contains '.' -- so the component is the
- * longest declared name `rest` continues on a component boundary, never
- * whatever precedes the next '.' or '['. Longest-match is unambiguous because
- * two distinct names can only both boundary-match when one is the other
- * followed by '.' or '[', which no name clang emits can be. A tie is therefore
- * a duplicate name, and resolves to nullopt as the lookup in
- * struct_union_get_component_number does. */
-static std::optional<std::pair<size_t, size_t>> match_leading_component(
+/* Longest-match is unambiguous because two distinct names can only both
+ * boundary-match when one is the other followed by '.' or '[', which no name
+ * clang emits can be. A tie is therefore a duplicate name, and resolves to
+ * nullopt as the lookup in struct_union_get_component_number does. */
+std::optional<std::pair<size_t, size_t>> match_leading_component(
   const std::vector<irep_idt> &names,
   const std::string &rest)
 {
@@ -1576,7 +1571,24 @@ void value_sett::assign(
     assign(xchg_sym, ifref.false_value, true);
     assign(lhs, xchg_sym, add_to_sets);
 
-    erase(to_symbol2t(xchg_sym).get_symbol_name());
+    // An aggregate temporary is stored per member, keyed by its identifier
+    // plus a suffix such as ".next" or "[]", so erasing the bare name would
+    // leave those entries behind. Each temporary has a fresh number, so they
+    // would pile up in every later state.
+    const std::string xchg_id = to_symbol2t(xchg_sym).get_symbol_name();
+    if (
+      is_struct_type(lhs->type) || is_union_type(lhs->type) ||
+      is_array_type(lhs->type))
+    {
+      std::vector<irep_idt> keys;
+      for (const auto &[key, entry] : values)
+        if (entry.identifier == xchg_id)
+          keys.push_back(key);
+      for (const irep_idt &key : keys)
+        values.erase(key);
+    }
+    else
+      erase(xchg_id);
     return;
   }
 

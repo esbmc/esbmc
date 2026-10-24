@@ -386,6 +386,51 @@ class ClassContextMixin:
                     self._rebind_cls_calls(method, heir.name)
                     heir.body.append(method)
 
+    def _self_called_methods(self, member):
+        """The names `member` calls on its receiver, when a copy of `member` is
+        exact: it is undecorated, never rebinds its receiver, does not use
+        `super` or `__class__`, and has constant defaults."""
+        receiver = self._receiver(member)
+        if receiver is None or member.name.startswith("__"):
+            return set()
+        defaults = [*member.args.defaults, *filter(None, member.args.kw_defaults)]
+        if (not all(isinstance(d, ast.Constant) for d in defaults) or any(
+                isinstance(n, ast.Name) and n.id in ("super", "__class__")
+                for n in ast.walk(member))):
+            return set()
+        return {
+            n.func.attr
+            for n in ast.walk(member)
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+            and isinstance(n.func.value, ast.Name) and n.func.value.id == receiver
+        }
+
+    def _bind_overridden_method_calls(self, module):
+        """Give a subclass its own copy of an inherited method that calls
+        `self.m()` where the subclass resolves `m` to another definition than
+        the method's class does, so the copy types `self` as the subclass and
+        the call reaches the override (#9035).
+
+        Only in the entry module, with single inheritance and no metaclass."""
+        classes = self._top_level_classes(module)
+        if not self.is_entry_module or classes is None:
+            return
+        unsafe = self._unbindable_classes(classes)
+        copies = []
+        for owner in classes.values():
+            if owner.name in unsafe:
+                continue
+            for member in owner.body:
+                called = self._self_called_methods(member)
+                if not called:
+                    continue
+                copies += [(heir, member)
+                           for heir in self._classmethod_heirs(classes, owner, member.name) if any(
+                               self._method_owner(classes, heir, name) is not self._method_owner(
+                                   classes, owner, name) for name in called)]
+        for heir, member in copies:
+            heir.body.append(copy.deepcopy(member))
+
     @staticmethod
     def _names_mentioned(module):
         """Every identifier or string `module` mentions other than by loading an attribute."""
@@ -491,6 +536,66 @@ class ClassContextMixin:
                     for stmt in method.body:
                         _QualifyNestedClasses(renames).visit(stmt)
 
+    def _calls_unresolved_attribute(self, classes, cls, method):
+        """Whether `method` of `cls` calls `self.x(...)` with an `x` that no
+        class in the ancestry of `cls` defines, so only an attribute an
+        instance gets elsewhere can supply it."""
+        receiver = self._receiver(method)
+        return receiver is not None and any(
+            isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+            and isinstance(n.func.value, ast.Name) and n.func.value.id == receiver
+            and self._method_owner(classes, cls, n.func.attr) is None for n in ast.walk(method))
+
+    def _heirs_needing_copy(self, classes, owner, member):
+        """The subclasses of `owner` to give their own copy of `member`, or
+        none when one overrides it or it uses `super()`, which would bind
+        another class."""
+        if (not self._calls_unresolved_attribute(classes, owner, member)
+                or {"super", "__class__"} & self._names_mentioned(member)):
+            return []
+        family = [c for c in classes.values() if owner in self._class_ancestry(classes, c)]
+        heirs = [c for c in family if self._method_owner(classes, c, member.name) is owner]
+        if len(heirs) != len(family) or not self._can_bind(member, heirs):
+            return []
+        return [c for c in heirs if c is not owner]
+
+    def _runs_only_on_subclasses(self, module, classes, owner, member):
+        """Whether `member` of `owner`, which every subclass copies, runs on
+        no object: `owner` is never constructed, nothing in `owner` names the
+        method, and no class deriving from it names `super`, which could
+        reach the original."""
+        family = [c for c in classes.values() if owner in self._class_ancestry(classes, c)]
+        constructed = any(
+            isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == owner.name
+            for n in ast.walk(module))
+        named = any(isinstance(n, ast.Attribute) and n.attr == member.name for n in ast.walk(owner))
+        return not (constructed or named or any("super" in self._names_mentioned(c)
+                                                for c in family))
+
+    def _copy_methods_into_heirs(self, module):
+        """Give each subclass inheriting a method that calls `self.x(...)`,
+        with `x` defined by no ancestor, its own copy (#8956).
+
+        The copy types its receiver as the subclass, which may give `x`. Only
+        in the entry module, for a class that no other class's object reaches
+        (see _bind_nested_classes_via_self). The original is dropped when it
+        can run on no object; otherwise the converter refuses its call."""
+        classes = self._top_level_classes(module)
+        if not self.is_entry_module or classes is None:
+            return
+        escaped = self._escaped_classes(module, classes) | self._unbindable_classes(classes)
+        for owner in classes.values():
+            if self._inherits_from(classes, owner, escaped):
+                continue
+            for member in list(owner.body):
+                heirs = self._heirs_needing_copy(classes, owner, member)
+                for heir in heirs:
+                    heir.body.append(copy.deepcopy(member))
+                if heirs and self._runs_only_on_subclasses(module, classes, owner, member):
+                    owner.body.remove(member)
+            if not owner.body:
+                owner.body.append(ast.Pass())
+
     @staticmethod
     def _is_name_copy(node):
         """Whether `node` is a plain `x = y` assignment."""
@@ -548,6 +653,8 @@ class ClassContextMixin:
             counts = Counter(name for n in ast.walk(module) for name in self._names_bound_by(n))
             if counts["*"]:
                 return
+            if self.is_entry_module and self._hoist_lambda_arguments(module, counts):
+                continue
             known = self._known_classes(module, counts)
             self._bind_local_type_values(module, known)
             if not self.is_entry_module:
@@ -693,6 +800,52 @@ class ClassContextMixin:
             for n in ast.walk(func) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
         }
         return {i for i, p in enumerate(func.args.posonlyargs + func.args.args) if p.arg in called}
+
+    @staticmethod
+    def _module_level_calls(node):
+        """The calls in `node` that run at module level, outside any def,
+        lambda or comprehension whose names a lambda could capture."""
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda,
+                             ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)):
+            return
+        if isinstance(node, ast.Call):
+            yield node
+        for child in ast.iter_child_nodes(node):
+            yield from ClassContextMixin._module_level_calls(child)
+
+    def _hoist_lambda_arguments(self, module, counts):
+        """Turn a lambda passed at module level to a top-level function that
+        calls that parameter into a def named for it, so that the function is
+        specialised on it as on any def (#8979); whether any was. At module
+        level a lambda's free names are globals either way."""
+        defs = {s.name: s for s in module.body if self._is_plain_function(s)}
+        hoisted = 0
+        for i, stmt in reversed(list(enumerate(module.body))):
+            new = []
+            for call in self._module_level_calls(stmt):
+                callee = defs.get(call.func.id) if isinstance(call.func, ast.Name) else None
+                if callee is None:
+                    continue
+                for index in self._called_parameters(callee):
+                    if index < len(call.args) and isinstance(call.args[index], ast.Lambda):
+                        name = f"ESBMC_lambda_arg_{hoisted}"
+                        while counts[name]:
+                            hoisted += 1
+                            name = f"ESBMC_lambda_arg_{hoisted}"
+                        hoisted += 1
+                        lam = call.args[index]
+                        new.append(
+                            ast.fix_missing_locations(
+                                ast.copy_location(
+                                    ast.FunctionDef(name=name,
+                                                    args=lam.args,
+                                                    body=[ast.Return(value=lam.body)],
+                                                    decorator_list=[],
+                                                    returns=None,
+                                                    type_params=[]), lam)))
+                        call.args[index] = ast.copy_location(ast.Name(id=name, ctx=ast.Load()), lam)
+            module.body[i:i] = new
+        return hoisted > 0
 
     def _lower_called_lambdas(self, module, known, counts):
         """Rewrite a top-level `f = lambda ...` that calls one of its

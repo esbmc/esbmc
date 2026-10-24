@@ -315,6 +315,12 @@ private:
     const nlohmann::json &obj_arg,
     const std::vector<nlohmann::json> &types) const;
   exprt handle_isinstance() const;
+
+  /// Binds a call operand of isinstance to a temporary, so it runs exactly
+  /// once even when the check reads it per type or folds without reading it.
+  /// Returns the binding to evaluate first and retargets @p obj_expr to the
+  /// temporary; nil when @p obj_expr is not a call.
+  exprt bind_isinstance_call(exprt &obj_expr) const;
   std::optional<exprt>
   list_isinstance(const exprt &obj, const std::string &type_name) const;
 
@@ -426,9 +432,14 @@ private:
 
   /*
    * Raises OverflowError (infinity) or ValueError (NaN) before int() truncates
-   * a float @p operand given without a @p base; returns the operand to convert.
+   * a float @p operand given without a @p base, and TypeError when a pointer
+   * @p operand is None; returns the operand to convert.
    */
   exprt guard_nonfinite_float_to_int(exprt operand, const exprt &base) const;
+
+  /// Raises TypeError before float() converts a None-typed @p operand that
+  /// holds None; returns the operand to convert.
+  exprt guard_none_to_float(exprt operand) const;
 
   /*
    * Handles int-to-float conversions (e.g., float(3)) by generating
@@ -558,6 +569,7 @@ private:
   bool receiver_is_tracked_numpy_view(const std::string &recv_type) const;
   bool receiver_is_binop_or_list_symbol() const;
   bool receiver_class_defines_method(const std::string &method_name) const;
+  void reject_unresolved_user_method(const std::string &method_name) const;
   bool is_list_method_call() const;
   exprt handle_list_method() const;
   exprt handle_list_append() const;
@@ -926,6 +938,13 @@ private:
 
   /// Indirect call through a function pointer held in an instance field.
   std::optional<exprt> try_indirect_member_call();
+  /// Refuse `x.attr(...)` on a @p class_name receiver when every store of
+  /// @p attr puts a method on `self` and no class in the MRO binds it: only
+  /// a subclass instance holds it, and the receiver's runtime class is not
+  /// tracked (#8956).
+  void refuse_unheld_attribute(
+    const std::string &class_name,
+    const std::string &attr) const;
   /// The functions field @p attr of @p class_name holds, when it is untyped
   /// and no class in its MRO binds @p attr too.
   const python_converter::attribute_functions *held_functions(

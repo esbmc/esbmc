@@ -42,11 +42,41 @@ list_elem_info python_list::get_tagged_element_info(
   return tagged_info;
 }
 
+// The pointer p in `(*p).type_id == ...`, the condition of the read that
+// extract_pyobject_value builds for a list element of erased (any) type; nil
+// when \p key has no such condition.
+static exprt any_element_object(const exprt &key)
+{
+  if (key.type() != any_type() || key.id() != "if" || key.op0().id() != "=")
+    return nil_exprt();
+  const exprt &type_id = key.op0().op0();
+  if (
+    type_id.id() != "member" || type_id.component_name() != "type_id" ||
+    type_id.op0().id() != "dereference")
+    return nil_exprt();
+  return type_id.op0().op0();
+}
+
 list_elem_info
 python_list::get_lookup_key_info(const nlohmann::json &op, const exprt &key)
 {
   if (converter_.get_type_handler().is_tagged_scalar_type(key.type()))
     return get_tagged_element_info(op, key);
+  return get_erased_key_info(op, key);
+}
+
+list_elem_info
+python_list::get_erased_key_info(const nlohmann::json &op, const exprt &key)
+{
+  // Hashing the erased void* type would match no stored key (#8913); the
+  // element carries its own type_id, value and size, as a stored key does.
+  // The exact rebuild keeps a user conditional with a similar shape out.
+  const exprt obj = any_element_object(key);
+  if (
+    obj.is_not_nil() &&
+    key == extract_pyobject_value(obj, any_type(), false, /*string_safe=*/true))
+    return get_tagged_element_info(
+      op, build_dereference(obj, obj.type().subtype()));
   return get_list_element_info(op, key);
 }
 
@@ -1761,13 +1791,18 @@ exprt python_list::build_tuple_copy_call(
 {
   // Marked in place, so the copy keeps its symbol and recorded element types
   const exprt copy = build_shallow_copy_call(src_list, element);
+  build_mark_tuple_call(copy);
+  return copy;
+}
+
+void python_list::build_mark_tuple_call(const exprt &list)
+{
   code_function_callt mark;
   mark.function() =
     build_symbol(list_model_function(converter_, "__ESBMC_list_mark_tuple"));
-  mark.arguments().push_back(copy);
-  mark.location() = converter_.get_location_from_decl(element);
+  mark.arguments().push_back(list);
+  mark.location() = converter_.get_location_from_decl(list_value_);
   converter_.add_instruction(mark);
-  return copy;
 }
 
 exprt python_list::build_is_tuple_call(const exprt &list)

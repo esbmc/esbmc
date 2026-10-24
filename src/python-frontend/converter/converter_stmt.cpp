@@ -65,6 +65,41 @@ bool contains_cpp_throw(const exprt &expr)
   return false;
 }
 
+// The raise a condition always ends in: a cpp-throw, possibly under `not` or a
+// bool cast. Null when evaluating @p cond does not always raise.
+const exprt *raised_condition(const exprt &cond)
+{
+  if (cond.statement() == "cpp-throw")
+    return &cond;
+  if (
+    (cond.id() == "not" || cond.id() == "typecast") &&
+    cond.operands().size() == 1)
+    return raised_condition(cond.op0());
+  return nullptr;
+}
+
+codet raise_statement(const exprt &raise, const locationt &location)
+{
+  codet code("expression");
+  code.copy_to_operands(raise);
+  code.location() = location;
+  code.op0().location() = location;
+  return code;
+}
+
+// `lhs = value`, or the raise that evaluating @p value always ends in.
+codet assign_or_raise(
+  const exprt &lhs,
+  const exprt &value,
+  const locationt &location)
+{
+  if (const exprt *raise = raised_condition(value))
+    return raise_statement(*raise, location);
+  code_assignt assign(lhs, value);
+  assign.location() = location;
+  return assign;
+}
+
 // True when reassigning a value of type rhs to a variable currently typed lhs
 // crosses the numeric<->string boundary, which a single GOTO symbol cannot
 // represent in place.
@@ -6358,8 +6393,9 @@ symbolt *python_converter::retype_store_symbol(
   return stored ? stored : lhs_symbol;
 }
 
-/// The Name a single-target Assign/AnnAssign binds, or a null json.
-static nlohmann::json assign_name_target(const nlohmann::json &ast_node)
+/// The name a single-target Assign/AnnAssign binds, as assigned_name spells
+/// it, or "".
+static std::string assign_target_name(const nlohmann::json &ast_node)
 {
   const std::string stmt_type = ast_node.value("_type", "");
   nlohmann::json target;
@@ -6370,45 +6406,44 @@ static nlohmann::json assign_name_target(const nlohmann::json &ast_node)
   else if (stmt_type == "AnnAssign" && ast_node.contains("target"))
     target = ast_node["target"];
 
-  if (target.is_object() && target.value("_type", "") == "Name")
-    return target;
-  return nlohmann::json();
+  return target.is_object() ? dynamic_type_detail::assigned_name(target) : "";
+}
+
+// A binop between two already-tagged names may produce a result whose
+// type isn't known until conversion, so an untagged target may need to
+// become tagged too. Checked by name to avoid converting the operands
+// twice on the common path where this doesn't apply.
+static bool
+may_tag_binop(const nlohmann::json &value, const dynamic_type_handler &handler)
+{
+  auto is_tagged_name = [&](const nlohmann::json &operand) {
+    return operand.is_object() && operand.value("_type", "") == "Name" &&
+           handler.is_tagged(operand["id"].get<std::string>());
+  };
+  return value.is_object() && value.value("_type", "") == "BinOp" &&
+         value.contains("op") &&
+         handler.tagged_binop_result_may_be_tagged(
+           value["op"].value("_type", "")) &&
+         value.contains("left") && value.contains("right") &&
+         is_tagged_name(value["left"]) && is_tagged_name(value["right"]);
 }
 
 bool python_converter::try_tagged_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
 {
-  const nlohmann::json tag_target = assign_name_target(ast_node);
-  if (tag_target.is_null())
+  const std::string name = assign_target_name(ast_node);
+  if (name.empty())
     return false;
 
-  const std::string name = tag_target["id"].get<std::string>();
-  symbol_id tag_sid = create_symbol_id();
-  tag_sid.set_object(name);
+  const bool is_attribute = name.find('.') != std::string::npos;
+  symbol_id tag_sid = dynamic_type_handler_.bound_symbol_id(name);
   const std::string tag_key = tag_sid.to_string();
   bool is_tagged_already = dynamic_type_handler_.is_tagged(name);
 
-  // A binop between two already-tagged names may produce a result whose
-  // type isn't known until conversion, so an untagged target may need to
-  // become tagged too. Checked by name to avoid converting the operands
-  // twice on the common path where this doesn't apply.
-  auto is_tagged_name = [&](const nlohmann::json &operand) {
-    return operand.is_object() && operand.value("_type", "") == "Name" &&
-           dynamic_type_handler_.is_tagged(operand["id"].get<std::string>());
-  };
-  bool value_may_tag = false;
-  if (!is_tagged_already && ast_node.contains("value"))
-  {
-    const auto &value = ast_node["value"];
-    value_may_tag = value.is_object() && value.value("_type", "") == "BinOp" &&
-                    value.contains("op") &&
-                    dynamic_type_handler_.tagged_binop_result_may_be_tagged(
-                      value["op"].value("_type", "")) &&
-                    value.contains("left") && value.contains("right") &&
-                    is_tagged_name(value["left"]) &&
-                    is_tagged_name(value["right"]);
-  }
+  const bool value_may_tag =
+    !is_tagged_already && !is_attribute && ast_node.contains("value") &&
+    may_tag_binop(ast_node["value"], dynamic_type_handler_);
 
   // A rebind that already retyped the name away from its tagged slot wins: the
   // live value is in the retype target, so this is an ordinary assignment to
@@ -6432,9 +6467,15 @@ bool python_converter::try_tagged_var_assign(
     }
     assert(
       !value_may_tag && "tagged 'x + y' always converts to a tagged result");
+    const bool on_spine = !is_attribute && current_class_name_.empty() &&
+                          loop_body_depth_ == 0 &&
+                          block_nesting_ == function_body_depth_ + 1;
+    // A tagged slot compares only against an int, bool or str, so a float
+    // rebound on the spine takes its own slot below.
     if (
-      type_handler_.is_numeric_scalar_type(rhs.type()) ||
-      type_handler_.is_string_type(rhs.type()))
+      (type_handler_.is_numeric_scalar_type(rhs.type()) ||
+       type_handler_.is_string_type(rhs.type())) &&
+      !(on_spine && rhs.type().is_floatbv()))
     {
       dynamic_type_handler_.assign(rhs, location, name, target_block);
       return true;
@@ -6450,9 +6491,7 @@ bool python_converter::try_tagged_var_assign(
     symbolt *tag_symbol =
       symbol_table_.find_symbol(dynamic_type_handler_.tagged_symbol_id(name));
     if (
-      tag_symbol && current_class_name_.empty() && loop_body_depth_ == 0 &&
-      block_nesting_ == function_body_depth_ + 1 && !rhs.type().is_empty() &&
-      !rhs.type().is_code())
+      tag_symbol && on_spine && !rhs.type().is_empty() && !rhs.type().is_code())
     {
       symbolt *fresh = mint_retyped_symbol(
         *tag_symbol, tag_key, rhs.type(), location, tag_sid, target_block);
@@ -6721,6 +6760,31 @@ bool python_converter::ternary_needs_if_spelling(
   return true;
 }
 
+static bool is_name_or_attribute(const std::string &kind)
+{
+  return kind == "Name" || kind == "Attribute";
+}
+
+/// An attribute assigned instances of two classes on the arms of a
+/// conditional expression is typed Any, and a read through it resolves
+/// against one class on both paths (#8408).
+void python_converter::reject_divergent_attribute_classes(
+  const nlohmann::json &target,
+  const nlohmann::json &ifexp) const
+{
+  if (target.value("_type", "") != "Attribute")
+    return;
+  const std::string then_class = instantiated_class(ifexp["body"]);
+  const std::string else_class = instantiated_class(ifexp["orelse"]);
+  if (then_class.empty() || else_class.empty() || then_class == else_class)
+    return;
+  throw std::runtime_error(
+    "unsupported: attribute '" + target.value("attr", std::string()) +
+    "' is assigned a '" + then_class + "' or a '" + else_class +
+    "' depending on the path; an attribute holding instances of different "
+    "classes is not modelled");
+}
+
 bool python_converter::rewrite_divergent_conditional_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -6736,20 +6800,23 @@ bool python_converter::rewrite_divergent_conditional_assign(
 
   const nlohmann::json &target =
     ast_node.contains("targets") ? ast_node["targets"][0] : ast_node["target"];
-  if (target.value("_type", "") != "Name")
+  const std::string target_kind = target.value("_type", "");
+  if (!is_name_or_attribute(target_kind))
     return false;
 
   if (!ternary_needs_if_spelling(value))
     return false;
 
+  reject_divergent_attribute_classes(target, value);
+
   // Each arm keeps the assignment's own location, so a violation still points
-  // at the line the ternary is written on. A constructor arm is annotated
-  // with its class, which it needs to allocate the instance through a
-  // pointer, as the annotation pass does for the `if` spelling.
+  // at the line the ternary is written on. A constructor arm bound to a name
+  // is annotated with its class, which it needs to allocate the instance
+  // through a pointer, as the annotation pass does for the `if` spelling.
   auto arm = [&](const nlohmann::json &branch) {
     nlohmann::json assign = ast_node;
     const std::string cls = instantiated_class(branch);
-    if (!cls.empty())
+    if (!cls.empty() && target_kind == "Name")
     {
       assign["_type"] = "AnnAssign";
       assign["target"] = target;
@@ -8518,6 +8585,14 @@ codet build_conditional_code(
   const exprt &else_expr,
   const locationt &location)
 {
+  // A test that raises leaves neither branch nor loop to run (#9092).
+  if (const exprt *raise = raised_condition(cond))
+  {
+    code_blockt raised = cond_prelude;
+    raised.copy_to_operands(raise_statement(*raise, location));
+    return raised;
+  }
+
   if (!cond_prelude.operands().empty())
     return lower_while_with_condition_prelude(
       cond_prelude, cond, then, else_expr, location);
@@ -8678,11 +8753,8 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       loop_body.copy_to_operands(func_call);
     }
     else
-    {
-      code_assignt cond_assign(cond_tmp, func_call);
-      cond_assign.location() = call_location;
-      loop_body.copy_to_operands(cond_assign);
-    }
+      loop_body.copy_to_operands(
+        assign_or_raise(cond_tmp, func_call, call_location));
 
     exprt overall_cond = cond_tmp;
     if (is_wrapped_in_unary)

@@ -628,15 +628,12 @@ void python_converter::emit_guarded_raise(
   add_instruction(guard);
 }
 
-exprt python_converter::guard_nonfinite_float_to_int(
+exprt python_converter::guard_operand(
   exprt operand,
-  const nlohmann::json &element)
+  const nlohmann::json &element,
+  const std::string &prefix,
+  const std::function<void(const expr2tc &, const locationt &)> &emit_guards)
 {
-  if (
-    !operand.type().is_floatbv() || !current_block ||
-    !safe_to_emit_side_effecting_statement())
-    return operand;
-
   // In an and/or tail or a while test the guard must run where the operand is
   // evaluated, not once ahead of the statement.
   const bool lazy = in_lazy_operand_;
@@ -646,21 +643,11 @@ exprt python_converter::guard_nonfinite_float_to_int(
     current_block = &lazy_block;
 
   const locationt loc = get_location_from_decl(element);
-  operand = store_call_result(operand, loc, "int_arg");
-  operand = hoist_side_effecting_operand(operand, element, "$int_arg$");
+  operand = store_call_result(operand, loc, prefix);
+  operand = hoist_side_effecting_operand(operand, element, "$" + prefix + "$");
   expr2tc value;
   migrate_expr(operand, value);
-
-  emit_guarded_raise(
-    migrate_expr_back(isinf2tc(value)),
-    "OverflowError",
-    "cannot convert float infinity to integer",
-    loc);
-  emit_guarded_raise(
-    migrate_expr_back(isnan2tc(value)),
-    "ValueError",
-    "cannot convert float NaN to integer",
-    loc);
+  emit_guards(value, loc);
   current_block = saved_block;
   if (!lazy)
     return operand;
@@ -672,6 +659,69 @@ exprt python_converter::guard_nonfinite_float_to_int(
   guarded.copy_to_operands(lazy_block);
   guarded.location() = loc;
   return guarded;
+}
+
+exprt python_converter::guard_nonfinite_float_to_int(
+  exprt operand,
+  const nlohmann::json &element,
+  bool reject_none)
+{
+  const bool is_float = operand.type().is_floatbv();
+  const bool may_be_none = reject_none && operand.type().is_pointer();
+  if (
+    (!is_float && !may_be_none) || !current_block ||
+    !safe_to_emit_side_effecting_statement())
+    return operand;
+
+  return guard_operand(
+    std::move(operand),
+    element,
+    "int_arg",
+    [this, is_float](const expr2tc &value, const locationt &loc) {
+      if (!is_float)
+      {
+        emit_guarded_raise(
+          migrate_expr_back(equality2tc(value, gen_zero(value->type))),
+          "TypeError",
+          "int() argument must be a string, a bytes-like object or a real "
+          "number, not 'NoneType'",
+          loc);
+        return;
+      }
+      emit_guarded_raise(
+        migrate_expr_back(isinf2tc(value)),
+        "OverflowError",
+        "cannot convert float infinity to integer",
+        loc);
+      emit_guarded_raise(
+        migrate_expr_back(isnan2tc(value)),
+        "ValueError",
+        "cannot convert float NaN to integer",
+        loc);
+    });
+}
+
+exprt python_converter::guard_none_conversion(
+  exprt operand,
+  const std::string &message,
+  const nlohmann::json &element)
+{
+  if (
+    operand.type() != none_type() || !current_block ||
+    !safe_to_emit_side_effecting_statement())
+    return operand;
+
+  return guard_operand(
+    std::move(operand),
+    element,
+    "conv_arg",
+    [this, &message](const expr2tc &value, const locationt &loc) {
+      emit_guarded_raise(
+        migrate_expr_back(equality2tc(value, gen_zero(value->type))),
+        "TypeError",
+        message,
+        loc);
+    });
 }
 
 /// Converts one and/or operand. An operand after the first runs only when the
@@ -3258,6 +3308,189 @@ bool python_converter::scalar_order(
   return true;
 }
 
+/// The index of the first component pair, within the common prefix of two
+/// tuples, that is neither two numbers, two strs nor two tuples; SIZE_MAX if
+/// there is none. When there is one, the operands are hoisted so that the
+/// TypeError guard and the comparison read them once.
+size_t python_converter::unordered_tuple_component(
+  exprt &lhs,
+  exprt &rhs,
+  const nlohmann::json &element)
+{
+  auto is_num = [](const typet &t) {
+    return t.is_signedbv() || t.is_unsignedbv() || t.is_floatbv() ||
+           t == bool_type();
+  };
+  const struct_typet &sa = to_struct_type(lhs.type());
+  const struct_typet &sb = to_struct_type(rhs.type());
+  const size_t m = std::min(sa.components().size(), sb.components().size());
+  for (size_t k = 0; k < m; ++k)
+  {
+    const typet a = tuple_handler_->get_tuple_element(lhs, sa, k).type();
+    const typet b = tuple_handler_->get_tuple_element(rhs, sb, k).type();
+    const bool ordered =
+      (is_num(a) && is_num(b)) ||
+      (type_utils::is_string_type(a) && type_utils::is_string_type(b)) ||
+      (tuple_handler_->is_tuple_type(a) && tuple_handler_->is_tuple_type(b));
+    if (ordered)
+      continue;
+    if (!can_emit_runtime_guard())
+      throw std::runtime_error(
+        "ordering tuples with a component that has no order is not "
+        "supported here");
+    lhs = hoist_side_effecting_operand(lhs, element, "$tuple_cmp_lhs$");
+    rhs = hoist_side_effecting_operand(rhs, element, "$tuple_cmp_rhs$");
+    return k;
+  }
+  return SIZE_MAX;
+}
+
+/// Raise CPython's TypeError when two tuples tie on every component before
+/// the pair at @p unordered, which has no order.
+void python_converter::raise_on_unordered_tie(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  size_t unordered,
+  const expr2tc &prefix_eq,
+  const nlohmann::json &element)
+{
+  if (unordered == SIZE_MAX)
+    return;
+  const std::string lhs_name = type_handler_.get_python_type_name(
+    tuple_handler_
+      ->get_tuple_element(lhs, to_struct_type(lhs.type()), unordered)
+      .type());
+  const std::string rhs_name = type_handler_.get_python_type_name(
+    tuple_handler_
+      ->get_tuple_element(rhs, to_struct_type(rhs.type()), unordered)
+      .type());
+  std::string lower_op = op;
+  std::transform(lower_op.begin(), lower_op.end(), lower_op.begin(), ::tolower);
+  emit_guarded_raise(
+    migrate_expr_back(prefix_eq),
+    "TypeError",
+    "'" + python_frontend::operator_map().at(lower_op) +
+      "' not supported between instances of '" + lhs_name + "' and '" +
+      rhs_name + "'",
+    get_location_from_decl(element));
+}
+
+/// `a + b` where an operand is a tuple struct. Nil when neither is one, or the
+/// other operand's type is not one Python is known to reject or concatenate.
+exprt python_converter::handle_tuple_add(
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &element)
+{
+  const bool lhs_is_tuple = tuple_handler_->is_tuple_type(lhs.type());
+  const bool rhs_is_tuple = tuple_handler_->is_tuple_type(rhs.type());
+  if (!lhs_is_tuple && !rhs_is_tuple)
+    return nil_exprt();
+
+  if (lhs_is_tuple != rhs_is_tuple)
+  {
+    const typet &other = lhs_is_tuple ? rhs.type() : lhs.type();
+    if (other == type_handler_.get_list_type())
+      return concat_tuple_with_list(lhs, rhs, element);
+    if (
+      lhs_is_tuple &&
+      (other.is_signedbv() || other.is_unsignedbv() || other.is_floatbv()))
+      return get_exception_handler().gen_exception_raise(
+        "TypeError",
+        "can only concatenate tuple (not \"" +
+          type_handler_.get_python_type_name(other) + "\") to tuple");
+    return nil_exprt();
+  }
+
+  // Concatenation: (a, b) + (c, d) == (a, b, c, d).
+  const auto &lhs_components = to_struct_type(lhs.type()).components();
+  const auto &rhs_components = to_struct_type(rhs.type()).components();
+
+  std::vector<typet> element_types;
+  element_types.reserve(lhs_components.size() + rhs_components.size());
+  for (const auto &c : lhs_components)
+    element_types.push_back(c.type());
+  for (const auto &c : rhs_components)
+    element_types.push_back(c.type());
+
+  struct_typet new_type =
+    tuple_handler_->create_tuple_struct_type(element_types);
+
+  // V.3: build the concatenated tuple value in IREP2. Each component is the
+  // exact round-trip of a member_exprt over the migrated operand; the struct
+  // literal is assembled via constant_struct2tc and back-migrated once.
+  expr2tc lhs2, rhs2;
+  migrate_expr(lhs, lhs2);
+  migrate_expr(rhs, rhs2);
+  std::vector<expr2tc> members;
+  members.reserve(lhs_components.size() + rhs_components.size());
+  for (const auto &c : lhs_components)
+    members.push_back(member2tc(migrate_type(c.type()), lhs2, c.get_name()));
+  for (const auto &c : rhs_components)
+    members.push_back(member2tc(migrate_type(c.type()), rhs2, c.get_name()));
+
+  exprt result =
+    migrate_expr_back(constant_struct2tc(migrate_type(new_type), members));
+
+  if (element.contains("lineno"))
+    result.location() = get_location_from_decl(element);
+  return result;
+}
+
+exprt python_converter::concat_tuple_with_list(
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &element)
+{
+  // The result is a list either way, which is all the type probe needs.
+  if (in_rhs_type_probe_)
+    return gen_zero(type_handler_.get_list_type());
+  if (!current_block || !safe_to_emit_side_effecting_statement())
+    throw std::runtime_error(
+      "concatenating a tuple and a list is not supported here");
+
+  // In an and/or tail or a while test the guard must run where the operand is
+  // evaluated, not once ahead of the statement.
+  const bool lazy = in_lazy_operand_;
+  code_blockt lazy_block;
+  code_blockt *const saved_block = current_block;
+  if (lazy)
+    current_block = &lazy_block;
+
+  const bool list_on_left = !tuple_handler_->is_tuple_type(lhs.type());
+  const exprt left = hoist_side_effecting_operand(lhs, element, "$cat$");
+  const exprt right = hoist_side_effecting_operand(rhs, element, "$cat$");
+  const exprt &list = list_on_left ? left : right;
+  const exprt &tuple = list_on_left ? right : left;
+
+  python_list helper(*this, element);
+  emit_guarded_raise(
+    not_exprt(helper.build_is_tuple_call(list)),
+    "TypeError",
+    list_on_left ? "can only concatenate list (not \"tuple\") to list"
+                 : "can only concatenate tuple (not \"list\") to tuple",
+    get_location_from_decl(element));
+
+  const exprt tuple_list =
+    python_list::build_list_from_tuple(*this, tuple, element);
+  const exprt result =
+    list_on_left ? helper.build_concat_list_call(list, tuple_list, element)
+                 : helper.build_concat_list_call(tuple_list, list, element);
+  helper.build_mark_tuple_call(result);
+  current_block = saved_block;
+  if (!lazy)
+    return result;
+
+  code_expressiont value(result);
+  value.location() = get_location_from_decl(element);
+  lazy_block.copy_to_operands(value);
+  side_effect_exprt guarded("statement_expression", result.type());
+  guarded.copy_to_operands(lazy_block);
+  guarded.location() = value.location();
+  return guarded;
+}
+
 exprt python_converter::handle_tuple_operations(
   const std::string &op,
   exprt &lhs,
@@ -3267,42 +3500,8 @@ exprt python_converter::handle_tuple_operations(
   const bool lhs_is_tuple = tuple_handler_->is_tuple_type(lhs.type());
   const bool rhs_is_tuple = tuple_handler_->is_tuple_type(rhs.type());
 
-  // Concatenation: (a, b) + (c, d) == (a, b, c, d).
-  if (op == "Add" && lhs_is_tuple && rhs_is_tuple)
-  {
-    const auto &lhs_components = to_struct_type(lhs.type()).components();
-    const auto &rhs_components = to_struct_type(rhs.type()).components();
-
-    std::vector<typet> element_types;
-    element_types.reserve(lhs_components.size() + rhs_components.size());
-    for (const auto &c : lhs_components)
-      element_types.push_back(c.type());
-    for (const auto &c : rhs_components)
-      element_types.push_back(c.type());
-
-    struct_typet new_type =
-      tuple_handler_->create_tuple_struct_type(element_types);
-
-    // V.3: build the concatenated tuple value in IREP2. Each component is the
-    // exact round-trip of a member_exprt over the migrated operand; the struct
-    // literal is assembled via constant_struct2tc and back-migrated once.
-    expr2tc lhs2, rhs2;
-    migrate_expr(lhs, lhs2);
-    migrate_expr(rhs, rhs2);
-    std::vector<expr2tc> members;
-    members.reserve(lhs_components.size() + rhs_components.size());
-    for (const auto &c : lhs_components)
-      members.push_back(member2tc(migrate_type(c.type()), lhs2, c.get_name()));
-    for (const auto &c : rhs_components)
-      members.push_back(member2tc(migrate_type(c.type()), rhs2, c.get_name()));
-
-    exprt result =
-      migrate_expr_back(constant_struct2tc(migrate_type(new_type), members));
-
-    if (element.contains("lineno"))
-      result.location() = get_location_from_decl(element);
-    return result;
-  }
+  if (op == "Add")
+    return handle_tuple_add(lhs, rhs, element);
 
   // Repetition: (a, b) * 3 == (a, b, a, b, a, b). Requires a constant
   // non-negative repeat count, since the result type must be known.
@@ -3361,26 +3560,31 @@ exprt python_converter::handle_tuple_operations(
   // recursively). Tuples of differing arity compare on the common prefix, with
   // the shorter tuple ordered first if the prefix is equal. Gt/LtE compare the
   // swapped operands; LtE/GtE negate the strict result. A str component
-  // compares by content. Any other component kind (list/object/...) makes the
-  // whole comparison fall through unchanged.
+  // compares by content. A top-level pair with no order (instances, or a str
+  // against an int) is reached only when the prefix before it ties, and then
+  // raises TypeError; a nested one makes the whole comparison fall through.
   if (
     lhs_is_tuple && rhs_is_tuple &&
     (op == "Lt" || op == "LtE" || op == "Gt" || op == "GtE"))
   {
     bool ok = true;
 
-    // Strict lexicographic less-than for two tuple-typed expressions.
-    std::function<exprt(const exprt &, const exprt &)> lex_lt =
-      [&](const exprt &ta, const exprt &tb) -> exprt {
+    // Strict lexicographic less-than over the first `limit` components of two
+    // tuple-typed expressions; `all_eq` receives their pairwise equality.
+    std::function<exprt(const exprt &, const exprt &, size_t, expr2tc &)>
+      lex_lt =
+        [&](const exprt &ta, const exprt &tb, size_t limit, expr2tc &all_eq)
+      -> exprt {
       const struct_typet &sa = to_struct_type(ta.type());
       const struct_typet &sb = to_struct_type(tb.type());
       const size_t na = sa.components().size();
       const size_t nb = sb.components().size();
-      const size_t m = std::min(na, nb);
+      const size_t m = std::min({na, nb, limit});
 
       // Base: a proper prefix is strictly less than the longer tuple.
       // V.3: build the lexicographic compare in IREP2.
       expr2tc result = na < nb ? gen_true_expr() : gen_false_expr();
+      all_eq = gen_true_expr();
       for (size_t k = m; k-- > 0;)
       {
         exprt ai = tuple_handler_->get_tuple_element(ta, sa, k);
@@ -3391,8 +3595,8 @@ exprt python_converter::handle_tuple_operations(
         const bool bi_tuple = tuple_handler_->is_tuple_type(bi.type());
         if (ai_tuple && bi_tuple)
         {
-          expr2tc ai2, bi2;
-          migrate_expr(lex_lt(ai, bi), lt);
+          expr2tc ai2, bi2, nested_eq;
+          migrate_expr(lex_lt(ai, bi, SIZE_MAX, nested_eq), lt);
           migrate_expr(ai, ai2);
           migrate_expr(bi, bi2);
           eq = equality2tc(ai2, bi2); // native struct equality, element-wise
@@ -3405,18 +3609,23 @@ exprt python_converter::handle_tuple_operations(
 
         // result = lt || (eq && result)
         result = or2tc(lt, and2tc(eq, result));
+        all_eq = and2tc(eq, all_eq);
       }
       return migrate_expr_back(result);
     };
 
+    const size_t unordered = unordered_tuple_component(lhs, rhs, element);
     const bool swap = (op == "Gt" || op == "LtE");
     const bool negate = (op == "LtE" || op == "GtE");
     exprt &a = swap ? rhs : lhs;
     exprt &b = swap ? lhs : rhs;
 
-    exprt result = lex_lt(a, b);
+    expr2tc prefix_eq;
+    exprt result = lex_lt(a, b, unordered, prefix_eq);
     if (!ok)
       return nil_exprt(); // a non-orderable component: leave unchanged
+
+    raise_on_unordered_tie(op, lhs, rhs, unordered, prefix_eq, element);
 
     if (negate)
     {
@@ -3517,6 +3726,18 @@ exprt python_converter::handle_tuple_operations(
   return nil_exprt();
 }
 
+bool python_converter::is_definite_non_list_addend(
+  const typet &type,
+  const nlohmann::json &element) const
+{
+  if (
+    type.is_signedbv() || type.is_unsignedbv() || type.is_floatbv() ||
+    type_utils::is_string_type(type))
+    return true;
+  return get_tuple_handler().is_tuple_type(ns.follow(type)) &&
+         element.value("_type", "") != "AugAssign";
+}
+
 exprt python_converter::handle_list_operations(
   const std::string &op,
   exprt &lhs,
@@ -3602,14 +3823,13 @@ exprt python_converter::handle_list_operations(
   // list ... to list") — only list + list concatenates. The concat case above
   // already consumed list and any-typed (void*) right operands, so raise a
   // catchable TypeError (uncaught -> VERIFICATION FAILED) for a definite
-  // scalar/string right operand. Unknown/other types are left untouched to
-  // avoid misfiring on imprecise frontend typing (#6265).
+  // scalar/string right operand, or a tuple outside `+=` (which extends).
+  // Unknown/other types are left untouched to avoid misfiring on imprecise
+  // frontend typing (#6265).
   if (lhs.type() == list_type && op == "Add")
   {
     const typet &rt = rhs.type();
-    if (
-      rt.is_signedbv() || rt.is_unsignedbv() || rt.is_floatbv() ||
-      type_utils::is_string_type(rt))
+    if (is_definite_non_list_addend(rt, element))
       return get_exception_handler().gen_exception_raise(
         "TypeError",
         "can only concatenate list (not \"" +

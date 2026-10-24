@@ -24,3 +24,13 @@
 #include <algorithm>
 #include <functional>
 #include <sstream>
+
+/// The source literal of a constant dict key, e.g. `1` or `"a"`, or empty for
+/// any other key. A value's recorded type is filed under it, so a read at a
+/// constant key consults only the values written there.
+inline std::string dict_key_id(const nlohmann::json &key)
+{
+  return key.is_object() && key.value("_type", "") == "Constant"
+           ? key["value"].dump()
+           : std::string();
+}

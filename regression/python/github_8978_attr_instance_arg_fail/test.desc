@@ -1,0 +1,6 @@
+CORE
+main.py
+--incremental-bmc
+^VERIFICATION FAILED$
+^  file .*main\.py line 24 column 0$
+^  assertion .* == 2$

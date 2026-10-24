@@ -1839,6 +1839,10 @@ regression/esbmc/github_7855-two-slots
 regression/esbmc/github_7855-two-slots_fail
 regression/esbmc/github_7855-tie-hides-deref
 regression/esbmc/github_7855-tie-hides-deref_pass
+regression/esbmc/github_7855-bytewise-store
+regression/esbmc/github_7855-bytewise-store_fail
+regression/esbmc/github_7855-many-sources
+regression/esbmc/github_7855-many-sources_fail
 regression/esbmc/github_7965
 regression/esbmc/github_7965_fail
 regression/esbmc/pointer_repr_cache_reuse

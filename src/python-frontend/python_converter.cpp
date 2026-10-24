@@ -1313,4 +1313,6 @@ void python_converter::convert()
     throw std::runtime_error(
       "The main function is already defined in another module");
   }
+
+  refuse_misaligned_self_calls();
 }

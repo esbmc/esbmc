@@ -3,14 +3,19 @@ import copy
 from collections import Counter
 
 from preprocessor.bound_method_dispatch import dispatch_rebound_methods
+from preprocessor.check_type_lowering import lower_check_type
+from preprocessor.dotted_imports import alias_dotted_imports
 from preprocessor.decorator_lowering import lower_user_decorators
 from preprocessor.itertools_lowering import lower_itertools
+from preprocessor.coroutine_lowering import lower_coroutines
 from preprocessor.match_lowering import lower_match_statements
 from preprocessor.namedtuple_lowering import lower_namedtuples
 from preprocessor.function_value_types import reject_mixed_function_values
+from preprocessor.iter_next_lowering import lower_iter_next
 from preprocessor.receiver_classes import refuse_path_dependent_receivers
+from preprocessor.sibling_defs import define_read_siblings_first
 from preprocessor.skipped_base_init import refuse_skipped_base_init
-from preprocessor.zip_lowering import lower_zip_builds
+from preprocessor.zip_lowering import inline_zip_names, lower_zip_builds
 from preprocessor.unbound_locals import guard_unbound_locals
 # pylint: disable=too-many-branches,too-many-boolean-expressions
 
@@ -546,13 +551,19 @@ class ModuleRewriteMixin:
 
     def prepare_module(self, node, alias_seed=frozenset(), wrapper_seed=None):
         """Run pre-visit analyses and range-alias/wrapper canonicalization."""
+        lower_coroutines(node, self.module_name)
+        lower_check_type(node, self.module_name)
         _rename_shadowed_classes(node)
+        alias_dotted_imports(node)
+        inline_zip_names(node)
+        lower_iter_next(node)
         lower_zip_builds(node)
         reject_mixed_function_values(node, self.module_name)
         lower_match_statements(node)
         lower_itertools(node)
         lower_namedtuples(node, self.module_name)
         lower_user_decorators(node, self.module_name)
+        define_read_siblings_first(node)
         refuse_path_dependent_receivers(node, self.module_name)
         refuse_skipped_base_init(node, self.module_name)
         self.expand_unittest_main(node)

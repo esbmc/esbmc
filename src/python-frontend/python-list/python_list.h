@@ -555,6 +555,8 @@ public:
     const exprt &list_expr,
     const nlohmann::json &slice_node);
 
+  size_t
+  eq_float_type_id(const std::string &lhs_id, const std::string &rhs_id) const;
   exprt compare(const exprt &l1, const exprt &l2, const std::string &op);
 
   exprt contains(const exprt &item, const exprt &list);
@@ -809,6 +811,9 @@ public:
   exprt
   build_tuple_copy_call(const exprt &src_list, const nlohmann::json &element);
 
+  /// Mark `list` as built by tuple(x) (#8777).
+  void build_mark_tuple_call(const exprt &list);
+
   /// Whether `list` was built by tuple(x) (#8777).
   exprt build_is_tuple_call(const exprt &list);
 
@@ -1060,6 +1065,11 @@ private:
   /// forwards its runtime value/type_id/size.
   list_elem_info
   get_lookup_key_info(const nlohmann::json &op, const exprt &key);
+
+  /// As get_lookup_key_info for a key that is not tagged: a list element read
+  /// at an erased (any) type forwards the element's own value/type_id/size.
+  list_elem_info
+  get_erased_key_info(const nlohmann::json &op, const exprt &key);
 
   // The type_id a tagged scalar carries when it holds a float, or 0 when the
   // caller opts out of the float path (dict values compare via void*).

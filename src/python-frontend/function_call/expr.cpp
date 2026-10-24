@@ -1314,7 +1314,7 @@ exprt function_call_expr::build_constant_from_arg() const
       if (const auto folded = handle_str_symbol_to_float(sym))
         return *folded;
     // Try to get the expression type directly, even if symbol lookup failed
-    exprt expr = converter_.get_expr(arg);
+    exprt expr = guard_none_to_float(converter_.get_expr(arg));
     if (type_utils::is_string_type(expr.type()))
     {
       // Runtime string -> float. float("10") must succeed, but float() of an
@@ -1391,6 +1391,9 @@ exprt function_call_expr::build_constant_from_arg() const
   {
     // Try __str__ dispatch for custom objects with __str__ defined.
     exprt value_expr = converter_.get_expr(arg);
+    // convert_to_string folds a call statement it cannot type to a constant,
+    // dropping the call (#9084).
+    converter_.convert_function_call_to_side_effect(value_expr);
     if (!value_expr.is_nil() && value_expr.statement() != "cpp-throw")
     {
       exprt dunder_result = converter_.dispatch_unary_dunder_operator(
@@ -1457,7 +1460,7 @@ exprt function_call_expr::build_constant_from_arg() const
   // the type tag says float but the operation is bitvector arithmetic,
   // causing sort mismatches in the SMT encoder.
   if (func_name == "float" && !expr.type().is_floatbv())
-    return build_typecast(expr, t);
+    return build_typecast(guard_none_to_float(expr), t);
 
   if (func_name != "str")
     expr = retype_or_typecast(expr, t);
@@ -2898,6 +2901,42 @@ bool function_call_expr::receiver_class_defines_method(
   const auto &ast = converter_.ast();
   return is_class(cls, ast) &&
          json_utils::class_defines_method(ast["body"], cls, method_name);
+}
+
+/// Refuse a call whose receiver class is not known when some module of the
+/// program defines a class with a method named @p method_name. Such a method
+/// may write to its receiver, so the null fallback would drop those writes and
+/// prove what Python fails (#8915). A literal display is never such an
+/// instance.
+void function_call_expr::reject_unresolved_user_method(
+  const std::string &method_name) const
+{
+  static const std::unordered_set<std::string> literal_kinds = {
+    "Constant",
+    "List",
+    "Tuple",
+    "Set",
+    "Dict",
+    "JoinedStr",
+    "ListComp",
+    "SetComp",
+    "DictComp"};
+  if (literal_kinds.count(call_["func"]["value"].value("_type", "")))
+    return;
+
+  const auto defines = [&](const nlohmann::json &module) {
+    return json_utils::any_class_defines_method(module, method_name);
+  };
+  bool user_method = false;
+  for (const nlohmann::json *body : converter_.reachable_module_bodies())
+    user_method = user_method || defines(*body);
+  if (converter_.extra_asts_)
+    for (const nlohmann::json &module : *converter_.extra_asts_)
+      user_method = user_method || defines(module);
+  if (user_method)
+    throw std::runtime_error(
+      "unsupported: calling method '" + method_name +
+      "' on a value whose class is not known");
 }
 
 bool function_call_expr::is_list_method_call() const
@@ -5977,7 +6016,10 @@ std::optional<exprt> function_call_expr::try_indirect_member_call()
 
   const struct_typet &st = to_struct_type(class_sym->get_type());
   if (!st.has_component(attr))
+  {
+    refuse_unheld_attribute(class_name, attr);
     return std::nullopt;
+  }
 
   // Only a member that actually holds a function pointer routes here; a
   // regular method is not a component of the struct at all, so ordinary
@@ -6004,6 +6046,25 @@ std::optional<exprt> function_call_expr::try_indirect_member_call()
   exprt member =
     migrate_expr_back(member2tc(migrate_type(field_type), recv2, attr));
   return call_field(held, recv, member);
+}
+
+void function_call_expr::refuse_unheld_attribute(
+  const std::string &class_name,
+  const std::string &attr) const
+{
+  const python_converter::attribute_functions *held =
+    converter_.function_attribute(attr);
+  const auto mro = converter_.class_mro(class_name);
+  if (
+    !held || !held->bound || !mro ||
+    std::any_of(mro->begin(), mro->end(), [&](const auto &cls) {
+      return converter_.class_binds_name(cls, attr);
+    }))
+    return;
+  throw std::runtime_error(
+    "calling attribute '" + attr + "' on a '" + class_name +
+    "' receiver, which may be a subclass instance holding it, is not "
+    "supported");
 }
 
 const python_converter::attribute_functions *function_call_expr::held_functions(
@@ -6329,6 +6390,7 @@ std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
           // receiver never resolves to a class (`{1}.isdisjoint({2})`).
           if (inferred_classes_from_fallback)
           {
+            reject_unresolved_user_method(method_name);
             locationt location = converter_.get_location_from_decl(call_);
             exprt zero_fallback =
               migrate_expr_back(gen_zero(migrate_type(any_type())));

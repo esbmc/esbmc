@@ -99,7 +99,7 @@ exprt python_dict_handler::handle_dict_get(
   // Get element info for the key
   python_list list_handler(converter_, call_node);
   list_elem_info key_info =
-    list_handler.get_list_element_info(call_node, key_expr);
+    list_handler.get_erased_key_info(call_node, key_expr);
 
   // Call try_find_index (returns SIZE_MAX if not found)
   code_function_callt try_find_call;

@@ -155,6 +155,7 @@ public:
     const std::string &name,
     const nlohmann::json &return_node,
     const nlohmann::json &function_node);
+  typet named_callee_type(const std::string &name);
   std::optional<code_typet> returned_function(const nlohmann::json &callee);
   /// `get()()`: a call through the function pointer that `get()` returns.
   /// `(lambda x: ...)(a)`: a call of the lambda, typed by its arguments.
@@ -422,10 +423,33 @@ public:
     const std::string &message,
     const locationt &location);
 
+  exprt handle_tuple_add(
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &element);
+
+  // `tuple + list` or `list + tuple`: raises TypeError unless the list was
+  // built by tuple(x) (#8777), in which case the result is that tuple
+  // concatenated with the other one.
+  exprt concat_tuple_with_list(
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &element);
+
   // Raises OverflowError (infinity) or ValueError (NaN) before a float
-  // @p operand is converted to int; returns the operand to convert.
-  exprt
-  guard_nonfinite_float_to_int(exprt operand, const nlohmann::json &element);
+  // @p operand is converted to int, and with @p reject_none TypeError for a
+  // pointer @p operand that is None; returns the operand to convert.
+  exprt guard_nonfinite_float_to_int(
+    exprt operand,
+    const nlohmann::json &element,
+    bool reject_none = false);
+
+  // Raises TypeError with @p message before a None-typed @p operand of
+  // float() is converted, when it holds None.
+  exprt guard_none_conversion(
+    exprt operand,
+    const std::string &message,
+    const nlohmann::json &element);
 
   exprt fit_numpy_integer_store(
     const exprt &lhs,
@@ -442,6 +466,11 @@ public:
   /// import binds, as `mk` after `from helper import mk` and `helper.mk`
   /// after `import helper`.
   nlohmann::json callable_function_stubs() const;
+  /// Whether a straight-line retype moved @p id's value to another symbol.
+  bool is_retyped(const irep_idt &id) const
+  {
+    return retype_aliases_.count(id.as_string()) > 0;
+  }
   /// How one scope binds a name: by an import, by anything else, or by a
   /// `global`/`nonlocal` declaration handing it to an outer scope.
   struct scope_bindings
@@ -573,6 +602,19 @@ public:
     expr2tc &lt,
     expr2tc &eq);
 
+  size_t unordered_tuple_component(
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &element);
+
+  void raise_on_unordered_tie(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    size_t unordered,
+    const expr2tc &prefix_eq,
+    const nlohmann::json &element);
+
   python_typechecking &get_typechecker();
   const python_typechecking &get_typechecker() const;
 
@@ -605,6 +647,14 @@ public:
   }
 
 private:
+  // Hoists @p operand once and plants @p emit_guards over its value where the
+  // operand is evaluated, also inside an and/or tail or a while test.
+  exprt guard_operand(
+    exprt operand,
+    const nlohmann::json &element,
+    const std::string &prefix,
+    const std::function<void(const expr2tc &, const locationt &)> &emit_guards);
+
   friend class complex_handler;
   friend class function_call_expr;
   friend class numpy_call_expr;
@@ -1018,6 +1068,9 @@ private:
   std::string instantiated_class(const nlohmann::json &value) const;
 
   bool ternary_needs_if_spelling(const nlohmann::json &ifexp) const;
+  void reject_divergent_attribute_classes(
+    const nlohmann::json &target,
+    const nlohmann::json &ifexp) const;
 
   bool is_coverage_mode() const;
 
@@ -1638,6 +1691,9 @@ private:
     const;
 
   symbolt *find_imported_symbol(const std::string &symbol_id) const;
+  /// The symbol @p sym_id names in the module whose file it names, or through
+  /// the current module's imports; null when neither binds it.
+  symbolt *find_symbol_through_module(const std::string &sym_id) const;
   symbolt *find_nested_function_symbol(const std::string &name) const;
   symbolt *find_symbol_in_global_scope(const std::string &symbol_id) const;
   symbolt *find_model_symbol(const std::string &sym_id) const;
@@ -1652,6 +1708,11 @@ private:
     const std::string &class_name,
     const std::string &func_name,
     const std::string &obj_symbol_id);
+
+  void refuse_misaligned_self_calls() const;
+  void refuse_misaligned_self_call(
+    const code_function_callt &call,
+    const namespacet &ns) const;
 
   size_t get_type_size(const nlohmann::json &ast_node);
 
@@ -2351,7 +2412,7 @@ private:
     exprt &array,
     const typet &array_type_for_dict,
     bool array_is_dict_pointer,
-    const nlohmann::json &slice);
+    const nlohmann::json &element);
   bool subscript_targets_list_model(
     const typet &array_type,
     const typet &list_type) const;
@@ -2946,6 +3007,12 @@ private:
   /// size `len(lhs) + len(rhs)`, indexing each source in turn. Returns
   /// nil_exprt if either side's length is not a compile-time constant.
   exprt build_bytes_concat(const exprt &lhs, const exprt &rhs);
+
+  // A right operand of list + that is never a list: a scalar, a str, or a
+  // tuple outside `+=` (which extends the list).
+  bool is_definite_non_list_addend(
+    const typet &type,
+    const nlohmann::json &element) const;
 
   /**
    * @brief Handles list-related binary operations.
