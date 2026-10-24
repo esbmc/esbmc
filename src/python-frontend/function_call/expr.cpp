@@ -1041,6 +1041,20 @@ static std::string class_object_str(
   return "";
 }
 
+exprt function_call_expr::str_of_object(exprt &value, const nlohmann::json &arg)
+  const
+{
+  const locationt location = converter_.get_location_from_decl(call_);
+  if (!python_converter::is_class_object(value))
+    return converter_.dispatch_unary_dunder_operator("str", value, location);
+  const std::string text =
+    class_object_str(value.get_string("value"), arg, converter_);
+  if (text.empty())
+    return converter_.get_string_handler().build_nondet_string_fallback(
+      location);
+  return converter_.get_string_builder().build_string_literal(text);
+}
+
 exprt function_call_expr::build_constant_from_arg() const
 {
   const std::string &func_name = function_id_.get_function();
@@ -1505,20 +1519,9 @@ exprt function_call_expr::build_constant_from_arg() const
     // convert_to_string folds a call statement it cannot type to a constant,
     // dropping the call (#9084).
     converter_.convert_function_call_to_side_effect(value_expr);
-    if (python_converter::is_class_object(value_expr))
-    {
-      const std::string text =
-        class_object_str(value_expr.get_string("value"), arg, converter_);
-      if (text.empty())
-        return converter_.get_string_handler().build_nondet_string_fallback(
-          converter_.get_location_from_decl(call_));
-      return converter_.get_string_builder().build_string_literal(text);
-    }
-
     if (!value_expr.is_nil() && value_expr.statement() != "cpp-throw")
     {
-      exprt dunder_result = converter_.dispatch_unary_dunder_operator(
-        "str", value_expr, converter_.get_location_from_decl(call_));
+      exprt dunder_result = str_of_object(value_expr, arg);
       if (!dunder_result.is_nil())
         return dunder_result;
 

@@ -193,6 +193,10 @@ private:
    */
   exprt build_constant_from_arg() const;
 
+  /// str() of @p value, converted from @p arg, when it is a class object or
+  /// has a __str__; nil otherwise.
+  exprt str_of_object(exprt &value, const nlohmann::json &arg) const;
+
   /*
    * object(): a pointer to a fresh heap object, so each call has its own
    * identity and is never None.
