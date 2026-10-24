@@ -193,6 +193,12 @@ private:
    */
   exprt build_constant_from_arg() const;
 
+  /*
+   * object(): a pointer to a fresh heap object, so each call has its own
+   * identity and is never None.
+   */
+  exprt build_fresh_object() const;
+
   std::optional<BigInt>
   try_fold_constant_arith_json(const nlohmann::json &node) const;
 

@@ -3414,6 +3414,14 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
       obj_type == "bytes" && call["func"].contains("attr") &&
       call["func"]["attr"] == "decode")
       return "str";
+    // These return an index or a count, never the receiver's type (#9054).
+    if (
+      (obj_type == "str" || obj_type == "list" || obj_type == "bytes") &&
+      call["func"].contains("attr") &&
+      (call["func"]["attr"] == "index" || call["func"]["attr"] == "rindex" ||
+       call["func"]["attr"] == "count" || call["func"]["attr"] == "find" ||
+       call["func"]["attr"] == "rfind"))
+      return "int";
     // list.pop() returns an element, never the list (#4797).
     if (
       obj_type == "list" && call["func"].contains("attr") &&
