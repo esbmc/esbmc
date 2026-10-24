@@ -390,6 +390,14 @@ public:
    */
   typet resolve_expected_type_for_dict_subscript(const exprt &dict_expr);
 
+  /**
+   * @brief Read a struct value of type @p type from a dict item's value
+   * pointer @p obj_value. A class instance is stored by reference, as a list
+   * stores it (#7685); any other struct is stored by value.
+   * @return The value, or nil when @p type is not a struct
+   */
+  exprt read_struct_value(const exprt &obj_value, const typet &type);
+
   /// The value type a dict literal not bound to an annotated name takes, such
   /// as one passed straight to an annotated parameter (#8016).
   typet literal_value_type_hint;
