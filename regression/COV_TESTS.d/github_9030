@@ -1,0 +1,5 @@
+regression/python/github_9030_call_param
+regression/python/github_9030_call_param_fail
+regression/python/github_9030_call_param_same_kind
+regression/python/github_9030_call_param_direct_only
+regression/python/github_9030_call_param_mixed

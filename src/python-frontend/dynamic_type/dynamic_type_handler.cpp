@@ -238,6 +238,67 @@ const nlohmann::json *find_callee_def(
   return nullptr;
 }
 
+// `name` is used as a value in `node`, that is, anywhere but as the callee.
+bool used_as_value(const nlohmann::json &node, const std::string &name)
+{
+  if (!node.is_structured())
+    return false;
+  if (node.is_object())
+  {
+    const std::string type = node.value("_type", "");
+    if (type == "Name")
+      return node.value("id", "") == name;
+    if (type == "Call" && node["func"].value("_type", "") == "Name")
+    {
+      for (const char *field : {"args", "keywords"})
+        if (used_as_value(node[field], name))
+          return true;
+      return false;
+    }
+  }
+  for (const auto &child : node)
+    if (used_as_value(child, name))
+      return true;
+  return false;
+}
+
+// How many of the module's defs taking `nargs` positional parameters are
+// passed around as values, and how many of those return a dynamic value.
+std::pair<size_t, size_t> count_function_values(
+  const nlohmann::json &module_body,
+  const nlohmann::json *skip,
+  size_t nargs,
+  unsigned depth)
+{
+  std::pair<size_t, size_t> counts{0, 0};
+  for (const auto &stmt : module_body)
+  {
+    if (
+      stmt.value("_type", "") != "FunctionDef" || &stmt == skip ||
+      stmt["args"]["args"].size() != nargs ||
+      !used_as_value(module_body, stmt.value("name", "")))
+      continue;
+    ++counts.second;
+    if (returns_dynamic_value(stmt, module_body, depth + 1))
+      ++counts.first;
+  }
+  return counts;
+}
+
+// A call through a parameter of `function_node` may reach a def that returns
+// a dynamic value (#9030).
+bool calls_dynamic_parameter(
+  const nlohmann::json &call,
+  const nlohmann::json &function_node,
+  const nlohmann::json &module_body,
+  unsigned depth)
+{
+  return is_param(function_node, call["func"].value("id", "")) &&
+         count_function_values(
+           module_body, &function_node, call["args"].size(), depth)
+             .first > 0;
+}
+
 // `value` is a call to a function that itself returns a dynamic value.
 bool calls_dynamic_function(
   const nlohmann::json &value,
@@ -251,7 +312,9 @@ bool calls_dynamic_function(
     return false;
   const nlohmann::json *callee = find_callee_def(
     function_node["body"], module_body, value["func"].value("id", ""));
-  return callee && callee != &function_node &&
+  if (!callee)
+    return calls_dynamic_parameter(value, function_node, module_body, depth);
+  return callee != &function_node &&
          returns_dynamic_value(*callee, module_body, depth + 1);
 }
 
@@ -1160,6 +1223,14 @@ exprt dynamic_type_handler::build_isinstance_check(
   throw std::runtime_error(
     "isinstance() against this type is not yet supported for a "
     "dynamically-typed variable");
+}
+
+bool dynamic_type_handler::function_values_return_dynamic(
+  const nlohmann::json &call) const
+{
+  const auto [dynamic, total] = count_function_values(
+    converter_.ast()["body"], nullptr, call["args"].size(), 0);
+  return total > 0 && dynamic == total;
 }
 
 bool dynamic_type_handler::detect_dynamic_return_type(

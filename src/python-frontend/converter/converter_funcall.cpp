@@ -2379,7 +2379,12 @@ exprt python_converter::dispatch_mismatched_callees(
   const nlohmann::json &call,
   const side_effect_expr_function_callt &call_expr)
 {
-  exprt result = call_expr;
+  side_effect_expr_function_callt typed = call_expr;
+  if (
+    type_handler_.is_tagged_scalar_type(current_func_return_type_) &&
+    dynamic_type_handler_.function_values_return_dynamic(call))
+    typed.type() = current_func_return_type_;
+  exprt result = typed;
   if (!current_block)
     return result;
   const std::size_t passed = call["args"].size() + call["keywords"].size();
@@ -2405,7 +2410,7 @@ exprt python_converter::dispatch_mismatched_callees(
         python_expr::build_address_of(python_expr::build_symbol(*function)),
         callee.type()));
 
-    side_effect_expr_function_callt filled = call_expr;
+    side_effect_expr_function_callt filled = typed;
     if (
       call["keywords"].empty() && passed < params &&
       function->get_type().is_code() &&
