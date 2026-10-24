@@ -403,15 +403,16 @@ public:
     const nlohmann::json &element,
     const std::string &prefix);
 
-  /// Before an access to `var_name.attr_name` through a class pointer that
-  /// may be None, raises AttributeError when it is, as CPython does. Planted
-  /// only where the read runs exactly when the statement does, so never in an
-  /// and/or tail or a while test, whose reads are left as before.
+  /// Before an access to `base.attr_name` through a class pointer that may be
+  /// None, raises AttributeError when it is, as CPython does. Planted only
+  /// where the read runs exactly when the statement does, so never in an
+  /// and/or tail or a while test, whose reads are left as before. `self` is
+  /// never None, so `is_self` skips the guard.
   void guard_attribute_on_none(
-    const symbolt &symbol,
-    const std::string &var_name,
+    const exprt &base,
     const std::string &attr_name,
-    const nlohmann::json &element);
+    const nlohmann::json &element,
+    bool is_self = false);
 
   codet get_compound_store(
     const exprt &lhs,
