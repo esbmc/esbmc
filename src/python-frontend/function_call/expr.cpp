@@ -930,6 +930,32 @@ exprt function_call_expr::handle_bool_call(
   return retype_or_typecast(value_expr, bool_t);
 }
 
+exprt function_call_expr::build_fresh_object() const
+{
+  const symbolt *new_obj_sym =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_new_object");
+  assert(new_obj_sym && "__ESBMC_new_object model required");
+
+  // __ESBMC_new_object sizes the allocation by the result's pointee, which
+  // void has none of: allocate one char and hand it back as an object.
+  symbolt &tmp = converter_.create_tmp_symbol(
+    call_, "$object$", gen_pointer_type(char_type()), exprt());
+  const exprt obj = symbol_expr(tmp);
+  const locationt location = converter_.get_location_from_decl(call_);
+
+  code_declt decl(obj);
+  decl.location() = location;
+  converter_.add_instruction(decl);
+
+  code_function_callt alloc_call;
+  alloc_call.lhs() = obj;
+  alloc_call.function() = symbol_expr(*new_obj_sym);
+  alloc_call.location() = location;
+  converter_.add_instruction(alloc_call);
+
+  return typecast_exprt(obj, any_type());
+}
+
 exprt function_call_expr::build_constant_from_arg() const
 {
   const std::string &func_name = function_id_.get_function();
@@ -943,6 +969,9 @@ exprt function_call_expr::build_constant_from_arg() const
     // Special handling for str() with no arguments: return empty string
     if (func_name == "str")
       return converter_.get_string_builder().build_string_literal("");
+
+    if (func_name == "object")
+      return build_fresh_object();
 
     typet t = type_handler_.get_typet(func_name, 0);
     return exprt("constant", t);
