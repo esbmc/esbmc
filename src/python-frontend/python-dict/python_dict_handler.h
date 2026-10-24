@@ -313,6 +313,11 @@ public:
    */
   bool is_dict_type(const typet &type) const;
 
+  /// True when a dict value of \p type holds a dict's list pointers, which a
+  /// byte copy into the values list does not preserve: a dict or an
+  /// Optional<dict> (#9081).
+  bool holds_dict_lists(const typet &type) const;
+
   /**
    * @brief Gets or creates the dictionary struct type.
    *
