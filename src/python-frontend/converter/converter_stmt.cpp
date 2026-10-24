@@ -5461,11 +5461,12 @@ void python_converter::handle_function_call_rhs(
   else if (!rhs.type().is_pointer() && !rhs.type().is_empty() && !is_ctor_call)
     rhs.op0() = lhs;
 
-  // A scalar result stored to an Optional target must be wrapped, so the
-  // call writes a temporary first (#9055).
+  // A result stored to an Optional of its own type must be wrapped, so the
+  // call writes a temporary first (#9055). Another type would need a
+  // conversion that loses the result's type.
   if (
     !is_ctor_call && type_utils::is_optional_struct(lhs.type()) &&
-    type_utils::is_optional_scalar(rhs.type()))
+    to_struct_type(lhs.type()).get_component("value").type() == rhs.type())
   {
     symbolt &result =
       create_tmp_symbol(ast_node, "$call_result$", rhs.type(), exprt());
@@ -5475,8 +5476,7 @@ void python_converter::handle_function_call_rhs(
     rhs.op0() = symbol_expr(result);
     target_block.copy_to_operands(rhs);
 
-    code_assignt store(
-      lhs, wrap_stored_if_optional(symbol_expr(result), lhs.type()));
+    code_assignt store(lhs, wrap_in_optional(symbol_expr(result), lhs.type()));
     store.location() = location;
     rhs = store;
   }
