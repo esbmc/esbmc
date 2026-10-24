@@ -1,0 +1,6 @@
+regression/python/github_8970_dispatch_conditional
+regression/python/github_8970_dispatch_conditional_fail
+regression/python/github_8970_dispatch_list
+regression/python/github_8970_dispatch_loop_unsupported
+regression/python/github_8970_dispatch_rebound_unsupported
+regression/python/github_8970_dispatch_returned_unsupported

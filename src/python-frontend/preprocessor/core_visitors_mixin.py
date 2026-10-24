@@ -91,9 +91,12 @@ class CoreVisitorsMixin:
             invalidate(target)
 
         # Drop tracked origins that reference a rebound free variable —
-        # otherwise the cascade rewrites against the new binding.
+        # otherwise the cascade rewrites against the new binding. An nditer
+        # already holds its operands, so it stays the same iterator.
         if rebound:
             for tracked, origin in list(self._assignment_call_origins.items()):
+                if self._is_nditer_call(origin):
+                    continue
                 for n in ast.walk(origin):
                     if (isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)
                             and n.id in rebound):
@@ -409,6 +412,26 @@ class CoreVisitorsMixin:
         for part in ([node.key, node.value] if isinstance(node, ast.DictComp) else [node.elt]):
             self._rename_free_name(part, old, new)
 
+    def _dictcomp_needs_loop(self, gen):
+        """True when the converter's dict-comprehension handler cannot iterate
+        @p gen, the comprehension's first generator, but a for-loop can."""
+        outer = gen.iter
+        is_items_call = (isinstance(outer, ast.Call) and isinstance(outer.func, ast.Attribute)
+                         and outer.func.attr == "items")
+        # Iterating a known dict directly (``for k in d``) or via ``d.keys()``
+        # yields its keys; the C++ dict-comp handler cannot consume the dict
+        # struct, so route these through the for-loop key-iteration path too.
+        is_dict_iter = (isinstance(outer, ast.Name) and self._is_known_dict_name(outer.id))
+        is_keys_call = (isinstance(outer, ast.Call) and isinstance(outer.func, ast.Attribute)
+                        and outer.func.attr == "keys" and isinstance(outer.func.value, ast.Name)
+                        and self._is_known_dict_name(outer.func.value.id))
+        # The converter finds a tuple target's element type only for a named
+        # local list, so a list parameter is refused; a for-loop unpacks it.
+        is_tuple_target = isinstance(gen.target, ast.Tuple) and (
+            isinstance(outer, ast.Name) or isinstance(outer, ast.Call)
+            and isinstance(outer.func, ast.Name) and outer.func.id in ("enumerate", "zip"))
+        return is_items_call or is_dict_iter or is_keys_call or is_tuple_target
+
     def _maybe_lower_dictcomp_over_items(self, node):
         """Lower a dict comprehension whose iterable is a dict view into ``x = {}``
         followed by a population loop, e.g.
@@ -421,9 +444,8 @@ class CoreVisitorsMixin:
         placeholder (so the (k, v) tuple target cannot be unpacked), and a bare
         dict / ``d.keys()`` iterable is a struct it rejects outright. Reusing the
         for-loop lowering (visit_For -> _transform_items_for / dict-key
-        iteration) gives the comprehension the bindings it needs. Scoped to dict
-        iterables so list-of-tuples dict comprehensions keep their existing
-        converter path.
+        iteration) gives the comprehension the bindings it needs. A tuple target
+        over a name or an enumerate/zip call takes the same lowering.
         """
         if len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name):
             return None
@@ -432,17 +454,7 @@ class CoreVisitorsMixin:
             return None
         if not comp.generators or any(gen.is_async for gen in comp.generators):
             return None
-        outer = comp.generators[0].iter
-        is_items_call = (isinstance(outer, ast.Call) and isinstance(outer.func, ast.Attribute)
-                         and outer.func.attr == "items")
-        # Iterating a known dict directly (``for k in d``) or via ``d.keys()``
-        # yields its keys; the C++ dict-comp handler cannot consume the dict
-        # struct, so route these through the for-loop key-iteration path too.
-        is_dict_iter = (isinstance(outer, ast.Name) and self._is_known_dict_name(outer.id))
-        is_keys_call = (isinstance(outer, ast.Call) and isinstance(outer.func, ast.Attribute)
-                        and outer.func.attr == "keys" and isinstance(outer.func.value, ast.Name)
-                        and self._is_known_dict_name(outer.func.value.id))
-        if not (is_items_call or is_dict_iter or is_keys_call):
+        if not self._dictcomp_needs_loop(comp.generators[0]):
             return None
 
         target_id = node.targets[0].id
@@ -1627,8 +1639,23 @@ class CoreVisitorsMixin:
             return lowered_listcomp
 
         if len(node.targets) == 1:
-            return self._handle_single_target_assign(node)
+            lowered = self._handle_single_target_assign(node)
+            return self._lower_defaultdict_reads_in_target(node, lowered)
         return self._handle_multi_target_assign(node)
+
+    def _lower_defaultdict_reads_in_target(self, node, lowered):
+        """Insert the missing-key checks for defaultdict reads in the
+        container of a subscript target (`d[k1][k2] = v`), after those of the
+        value, which CPython evaluates first."""
+        target = node.targets[0]
+        if not isinstance(target, ast.Subscript):
+            return lowered
+        if lowered is node:
+            lowered = [node]
+        if not (isinstance(lowered, list) and lowered and lowered[-1] is node):
+            return lowered
+        inits, target.value = self._lower_defaultdict_reads_in_expr(target.value, node)
+        return lowered[:-1] + inits + [node]
 
     def _neutralize_sorted_items_view(self, node):
         """Neutralise `x = sorted(...d.items()...)` to `x = []` and return x.

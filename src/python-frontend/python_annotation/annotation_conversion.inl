@@ -3370,6 +3370,14 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
       obj_type == "bytes" && call["func"].contains("attr") &&
       call["func"]["attr"] == "decode")
       return "str";
+    // These return an index or a count, never the receiver's type (#9054).
+    if (
+      (obj_type == "str" || obj_type == "list" || obj_type == "bytes") &&
+      call["func"].contains("attr") &&
+      (call["func"]["attr"] == "index" || call["func"]["attr"] == "rindex" ||
+       call["func"]["attr"] == "count" || call["func"]["attr"] == "find" ||
+       call["func"]["attr"] == "rfind"))
+      return "int";
     // list.pop() returns an element, never the list (#4797).
     if (
       obj_type == "list" && call["func"].contains("attr") &&
@@ -4013,6 +4021,20 @@ bool python_annotation<Json>::arithmetic_reads_attribute(const Json &node)
   return type == "UnaryOp" && arithmetic_reads_attribute(node["operand"]);
 }
 
+/// Marks a `return <name>` whose type is unknown. Not a valid type name.
+static const char *const untyped_name_return = "?";
+
+/// Whether @p types is non-empty and holds only types whose values an
+/// untyped (pointer-sized) return slot can carry; a float cannot.
+static bool all_pointer_sized_scalars(const std::set<std::string> &types)
+{
+  static const std::set<std::string> scalars = {"bool", "int", "str"};
+  return !types.empty() &&
+         std::all_of(types.begin(), types.end(), [](const std::string &t) {
+           return scalars.count(t) != 0;
+         });
+}
+
 template <class Json>
 void python_annotation<Json>::collect_return_types(
   const Json &body,
@@ -4111,6 +4133,8 @@ void python_annotation<Json>::collect_return_types(
       // unknown here. The converter types the result from the class's member
       // types, whereas an "Any" return would make it a double (#8942).
       std::string inferred_type = get_argument_type(return_val);
+      if (inferred_type.empty() && return_val["_type"] == "Name")
+        types.insert(untyped_name_return);
       if (
         !inferred_type.empty() &&
         (inferred_type != "Any" || !arithmetic_reads_attribute(return_val)))
@@ -4134,6 +4158,7 @@ std::string python_annotation<Json>::infer_from_return_statements(
 {
   std::set<std::string> types;
   collect_return_types(body, func_name, types);
+  const bool returns_untyped_name = types.erase(untyped_name_return) != 0;
 
   // Drop non-informative markers when concrete return types are also present.
   //   - NoneType: a `return None` alongside value returns marks the function as
@@ -4150,6 +4175,15 @@ std::string python_annotation<Json>::infer_from_return_statements(
   {
     types.erase("NoneType");
     types.erase("Any");
+  }
+
+  // A name of unknown type, e.g. an unannotated parameter no call site types
+  // (#9069), may hold any value, so a sibling scalar return does not type it.
+  if (returns_untyped_name && all_pointer_sized_scalars(types))
+  {
+    if (divergent)
+      *divergent = true;
+    return "";
   }
 
   // Exactly one inferred return type: narrow the function to it.

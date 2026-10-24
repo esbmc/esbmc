@@ -1263,6 +1263,25 @@ void python_converter::retype_resized_str(
   }
 }
 
+// Retyping a str that may be None to char* would lose the NULL that stands
+// for None, so the str is stored at the declared type instead (#9090).
+bool python_converter::store_optional_str(
+  symbolt *lhs_symbol,
+  const exprt &lhs,
+  exprt &rhs)
+{
+  if (
+    !lhs_symbol || !lhs.is_symbol() ||
+    !type_utils::is_optional_str_pointer(lhs.type()) ||
+    !type_utils::is_string_type(rhs.type()) || rhs.type() == lhs.type())
+    return false;
+  if (rhs.type().is_array())
+    rhs = string_handler_.get_array_base_address(rhs);
+  rhs = typecast_exprt(rhs, lhs.type());
+  set_assigned_value(*lhs_symbol, rhs);
+  return true;
+}
+
 void python_converter::handle_assignment_type_adjustments(
   symbolt *lhs_symbol,
   exprt &lhs,
@@ -1549,7 +1568,7 @@ bool python_converter::settle_target_type(
     throw std::runtime_error(
       "Unsupported: a variable holding a class rebound to a value that is not "
       "one");
-  return false;
+  return store_optional_str(lhs_symbol, lhs, rhs);
 }
 
 // Whether `value` names classes only: a class, or a conditional between
@@ -3295,6 +3314,51 @@ static nlohmann::json resolve_func_node_with_params(
   return func_node;
 }
 
+static bool
+is_parameter_name(const nlohmann::json &node, const nlohmann::json &params)
+{
+  if (node.value("_type", "") != "Name" || !node.contains("id"))
+    return false;
+  const std::string name = node["id"].get<std::string>();
+  for (const auto &param : params)
+    if (param.value("arg", "") == name)
+      return true;
+  return false;
+}
+
+// `return a * 2`: element-wise arithmetic over parameters and literals.
+static bool is_parameter_arithmetic(
+  const nlohmann::json &node,
+  const nlohmann::json &params)
+{
+  if (node.value("_type", "") != "BinOp")
+    return false;
+  bool reads_param = false;
+  for (const char *side : {"left", "right"})
+  {
+    const nlohmann::json &operand = node[side];
+    const bool param = is_parameter_name(operand, params) ||
+                       is_parameter_arithmetic(operand, params);
+    if (!param && operand.value("_type", "") != "Constant")
+      return false;
+    reads_param = reads_param || param;
+  }
+  return reads_param;
+}
+
+bool python_converter::call_passes_numpy_array(
+  const nlohmann::json &call_node) const
+{
+  for (const auto &arg : call_node.value("args", nlohmann::json::array()))
+    if (
+      is_numpy_array_constructor_expr(arg) ||
+      (arg.value("_type", "") == "Name" &&
+       numpy_array_symbols_.count(
+         resolve_name_symbol_id(arg.value("id", ""))) != 0))
+      return true;
+  return false;
+}
+
 bool python_converter::return_value_uses_call_argument(
   const nlohmann::json &return_value,
   const nlohmann::json &call_node) const
@@ -3304,17 +3368,15 @@ bool python_converter::return_value_uses_call_argument(
   if (func_node.empty())
     return false;
 
+  const nlohmann::json &params = func_node["args"]["args"];
   auto is_param_name = [&](const nlohmann::json &node) {
-    if (node.value("_type", "") != "Name" || !node.contains("id"))
-      return false;
-    const std::string name = node["id"].get<std::string>();
-    for (const auto &param : func_node["args"]["args"])
-      if (param.value("arg", "") == name)
-        return true;
-    return false;
+    return is_parameter_name(node, params);
   };
 
-  if (is_param_name(return_value))
+  if (
+    is_param_name(return_value) ||
+    (is_parameter_arithmetic(return_value, params) &&
+     call_passes_numpy_array(call_node)))
     return true;
 
   if (
@@ -3673,6 +3735,22 @@ python_converter::numpy_views_of(const std::string &rebound_id) const
   std::sort(view_ids.begin(), view_ids.end());
   view_ids.erase(std::unique(view_ids.begin(), view_ids.end()), view_ids.end());
   return view_ids;
+}
+
+// The names that read `rebound_id`'s storage through `b = a`, in this
+// function.
+std::vector<std::string>
+python_converter::numpy_storage_aliases_of(const std::string &rebound_id) const
+{
+  std::vector<std::string> aliases;
+  for (const auto &[alias, storage] : numpy_array_storage_aliases_)
+    if (
+      alias != rebound_id &&
+      resolve_numpy_array_storage_alias_id(alias) == rebound_id &&
+      !is_local_to_other_function(alias, current_func_name_))
+      aliases.push_back(alias);
+  std::sort(aliases.begin(), aliases.end());
+  return aliases;
 }
 
 void python_converter::detach_numpy_pointer_view(
@@ -4223,12 +4301,13 @@ bool python_converter::is_numpy_arithmetic_result(
   const exprt &lhs) const
 {
   const typet &lhs_type = ns.follow(lhs.type());
+  typet leaf = lhs_type;
+  while (leaf.is_array())
+    leaf = ns.follow(leaf.subtype());
   return rhs_node.value("_type", "") == "BinOp" && lhs_type.is_array() &&
          !type_handler_.is_string_type(lhs_type) &&
          !type_utils::is_bytes_array(lhs_type) &&
-         (lhs_type.subtype().is_signedbv() ||
-          lhs_type.subtype().is_unsignedbv() ||
-          lhs_type.subtype().is_floatbv());
+         (leaf.is_signedbv() || leaf.is_unsignedbv() || leaf.is_floatbv());
 }
 
 bool python_converter::is_array_returning_call_expr(
@@ -4644,6 +4723,28 @@ const code_typet *python_converter::lambda_call_callee(
        .empty()))
     return nullptr;
   return &to_code_type(var.get_type().subtype());
+}
+
+typet python_converter::resolve_numpy_arithmetic_type(
+  const nlohmann::json &ast_node,
+  const exprt &rhs,
+  const typet &current_type) const
+{
+  const nlohmann::json &value = ast_node["value"];
+  if (!ast_node.value("_inferred_annotation", false) || !value.is_object())
+    return current_type;
+  if (is_numpy_arithmetic_result(value, rhs))
+    return rhs.type();
+  // `(a * 2)[1]`: the annotator types an element of it as Any.
+  const typet &type = rhs.type();
+  const bool numeric =
+    type.is_signedbv() || type.is_unsignedbv() || type.is_floatbv();
+  if (
+    current_type == any_type() && numeric &&
+    value.value("_type", "") == "Subscript" &&
+    value["value"].value("_type", "") == "BinOp")
+    return type;
+  return current_type;
 }
 
 typet python_converter::resolve_lambda_call_result_type(
@@ -6923,7 +7024,9 @@ bool python_converter::try_dedicated_assign(
   const nlohmann::json &ast_node,
   codet &block)
 {
-  return rewrite_divergent_conditional_assign(ast_node, block) ||
+  return try_numpy_nditer_assign(ast_node) ||
+         try_numpy_slice_copy_assign(ast_node) ||
+         rewrite_divergent_conditional_assign(ast_node, block) ||
          try_tagged_var_assign(ast_node, block) ||
          try_bound_method_store(ast_node, block);
 }
@@ -6960,6 +7063,102 @@ exprt python_converter::fit_numpy_integer_store(
     lhs.type() != long_long_int_type() || !rhs.type().is_floatbv())
     return rhs;
   return typecast_exprt(guard_nonfinite_float_to_int(rhs, value), lhs.type());
+}
+
+// `it = np.nditer(...)`, and the names bound to what an iterator yields; a
+// name rebound to anything else stops reading through an iterator.
+// What `value` copies: the receiver of `x.copy()`, or the argument of
+// `np.copy(x)` or `np.array(x)`; null for anything else.
+static const nlohmann::json *
+copied_node(const nlohmann::json &value, const nlohmann::json &ast)
+{
+  if (value.value("_type", "") != "Call" || !value["args"].is_array())
+    return nullptr;
+  const nlohmann::json &func = value["func"];
+  const nlohmann::json &args = value["args"];
+  const std::string attr = func.value("attr", "");
+  if (func.value("_type", "") != "Attribute")
+    return nullptr;
+  if (attr == "copy" && args.empty())
+    return &func["value"];
+  const bool numpy_call =
+    func["value"].value("_type", "") == "Name" &&
+    is_imported_numpy_module_alias(ast, func["value"].value("id", ""));
+  if (
+    (attr == "copy" || attr == "array") && numpy_call && args.size() == 1 &&
+    value.value("keywords", nlohmann::json::array()).empty())
+    return &args[0];
+  return nullptr;
+}
+
+// The slice of a numpy array or view that `value` copies, as in
+// `a[1:3].copy()`; null for anything else.
+const nlohmann::json *
+python_converter::numpy_slice_copy_source(const nlohmann::json &value) const
+{
+  const nlohmann::json *source = copied_node(value, *ast_json);
+  if (
+    !source || source->value("_type", "") != "Subscript" ||
+    (*source)["value"].value("_type", "") != "Name")
+    return nullptr;
+  const std::string base = (*source)["value"].value("id", "");
+  const bool numpy_base =
+    numpy_array_symbols_.count(resolve_name_symbol_id(base)) != 0 ||
+    find_numpy_pointer_view_info(base) != nullptr;
+  return numpy_base ? source : nullptr;
+}
+
+// `c = a[1:3].copy()`: the slice is bound to a view first, which a copy then
+// reads, as for a named view.
+bool python_converter::try_numpy_slice_copy_assign(
+  const nlohmann::json &ast_node)
+{
+  if (!ast_node.contains("value") || !ast_node["value"].is_object())
+    return false;
+  const nlohmann::json *source = numpy_slice_copy_source(ast_node["value"]);
+  if (!source || !current_block || !safe_to_emit_side_effecting_statement())
+    return false;
+  const std::string temp =
+    "ESBMC_copy_source_" + std::to_string(++nditer_counter_);
+  nlohmann::json name = {
+    {"_type", "Name"}, {"id", temp}, {"ctx", {{"_type", "Store"}}}};
+  copy_location_fields_from_decl(*source, name);
+  nlohmann::json bind = {
+    {"_type", "Assign"},
+    {"targets", nlohmann::json::array({name})},
+    {"value", *source}};
+  copy_location_fields_from_decl(*source, bind);
+  if (!emit_statement_into_current_block(bind))
+    return false;
+  name["ctx"] = {{"_type", "Load"}};
+  nlohmann::json copied = ast_node;
+  copied["value"] =
+    build_numpy_method_rewrite_node(ast_node["value"], "copy", name);
+  copied["value"]["args"] = nlohmann::json::array({name});
+  return emit_statement_into_current_block(copied);
+}
+
+bool python_converter::try_numpy_nditer_assign(const nlohmann::json &ast_node)
+{
+  if (!ast_node.contains("value") || !ast_node["value"].is_object())
+    return false;
+  const nlohmann::json &target =
+    ast_node.contains("targets") ? ast_node["targets"][0] : ast_node["target"];
+  const nlohmann::json &value = ast_node["value"];
+  numpy_nditer nditer(*this);
+  if (
+    target.value("_type", "") == "Name" &&
+    numpy_nditer::is_nditer_call(value, *ast_json))
+  {
+    nditer.create(target["id"].get<std::string>(), value);
+    return true;
+  }
+  if (nditer.bind(target, value) || nditer.write(target, value))
+    return true;
+  if (target.value("_type", "") == "Name")
+    numpy_nditer_items_.erase(
+      numpy_nditer::key(current_func_name_, target["id"].get<std::string>()));
+  return false;
 }
 
 void python_converter::get_var_assign(
@@ -7357,6 +7556,8 @@ void python_converter::get_var_assign(
       resolve_numpy_reducer_call_array_type(ast_node, current_element_type);
     current_element_type =
       resolve_lambda_call_result_type(ast_node, current_element_type);
+    current_element_type =
+      resolve_numpy_arithmetic_type(ast_node, rhs, current_element_type);
 
     // Location and symbol lookup
     location_begin = get_location_from_decl(target);
@@ -8114,7 +8315,13 @@ symbolt *python_converter::resolve_subscript_base_symbol(
 {
   if (found || target.value("_type", "") != "Subscript")
     return found;
-  return find_symbol_in_enclosing_scopes(name);
+  if (symbolt *enclosing = find_symbol_in_enclosing_scopes(name))
+    return enclosing;
+  // Storing into an element never binds the name, so it reads the global.
+  symbol_id global = create_symbol_id();
+  global.set_function("");
+  global.set_object(name);
+  return symbol_table_.find_symbol(global.to_string());
 }
 
 symbolt *
@@ -8710,6 +8917,8 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   // A while test re-evaluates after the body, so no pre-loop literal holds.
   const bool is_while = ast_node.value("_type", "") == "While";
   const loop_depth_guard loop_guard(numpy_loop_depth_, is_while);
+  const loop_depth_guard conditional_guard(
+    conditional_expr_depth_, ast_node.value("_type", "") == "IfExp");
   str_value_scope_guard test_guard(
     symbol_table_, str_valued_symbols_, is_while, is_while);
 
@@ -9691,30 +9900,7 @@ void python_converter::get_return_statements(
       // For constant array literals (string literals), convert to
       // string_constantt
       if (return_value.is_constant())
-      {
-        // Extract the string content from the constant array
-        std::string str_content;
-        for (const auto &operand : return_value.operands())
-        {
-          if (operand.is_constant())
-          {
-            BigInt char_val = binary2integer(
-              operand.value().as_string(), operand.type().is_signedbv());
-            if (char_val == 0)
-              break; // Stop at null terminator
-            str_content += static_cast<char>(char_val.to_int64());
-          }
-        }
-
-        // Create a string_constantt with proper type
-        typet string_type = return_value.type();
-        return_value = string_constantt(
-          str_content, string_type, string_constantt::k_default);
-
-        // Get its address (converts array to pointer)
-        // V.3: build the address-of in IREP2 (operand is a string constant).
-        return_value = python_expr::build_address_of(return_value);
-      }
+        return_value = string_literal_address(return_value);
       else if (to_array_type(return_value.type()).size().is_constant())
       {
         // For non-constant arrays (variables), convert to pointer. The
@@ -9763,6 +9949,27 @@ void python_converter::get_return_statements(
     return_code.location() = location;
     target_block.copy_to_operands(return_code);
   }
+}
+
+exprt python_converter::string_literal_address(const exprt &array)
+{
+  // Extract the string content from the constant array
+  std::string str_content;
+  for (const auto &operand : array.operands())
+  {
+    if (operand.is_constant())
+    {
+      BigInt char_val = binary2integer(
+        operand.value().as_string(), operand.type().is_signedbv());
+      if (char_val == 0)
+        break; // Stop at null terminator
+      str_content += static_cast<char>(char_val.to_int64());
+    }
+  }
+
+  // V.3: build the address-of in IREP2 (operand is a string constant).
+  return python_expr::build_address_of(
+    string_constantt(str_content, array.type(), string_constantt::k_default));
 }
 
 /// \p value as the current function returns it (#8016): wrapped when the

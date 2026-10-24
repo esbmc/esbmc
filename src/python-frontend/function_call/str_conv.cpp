@@ -32,8 +32,6 @@ constexpr unsigned int UTF8_1_BYTE_MAX = 0x7F;
 constexpr unsigned int UTF8_2_BYTE_MAX = 0x7FF;
 constexpr unsigned int UTF8_3_BYTE_MAX = 0xFFFF;
 constexpr unsigned int UTF8_4_BYTE_MAX = 0x10FFFF;
-constexpr unsigned int SURROGATE_START = 0xD800;
-constexpr unsigned int SURROGATE_END = 0xDFFF;
 
 static std::string utf8_encode(unsigned int int_value)
 {
@@ -41,15 +39,6 @@ static std::string utf8_encode(unsigned int int_value)
    * Convert an integer value into its UTF-8 character equivalent
    * similar to the python chr() function
    */
-
-  // Check for surrogate pairs (invalid in UTF-8)
-  if (int_value >= SURROGATE_START && int_value <= SURROGATE_END)
-  {
-    std::ostringstream oss;
-    oss << "Code point 0x" << std::hex << std::uppercase << int_value
-        << " is a surrogate pair, invalid in UTF-8";
-    throw std::invalid_argument(oss.str());
-  }
 
   // Manual UTF-8 encoding
   std::string char_out;

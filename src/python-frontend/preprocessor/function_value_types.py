@@ -107,7 +107,7 @@ class _Analysis:
         self.module_paths = {}
         self.imported_calls = set()
         self.rebound = {}
-        self._collect_scopes(module, None)
+        self._collect_scopes(module, None, path)
         self._walk_scopes(set())
 
     def _walk_scopes(self, skip):
@@ -142,25 +142,27 @@ class _Analysis:
         self.members.setdefault(self.find(key), {})[id(node)] = (node, name, kind)
 
     # scopes and keys
-    def _collect_scopes(self, node, parent, imports=True):
+    def _collect_scopes(self, node, parent, path=None):
+        """Record the scopes under `node`, and the imports of the module at `path`."""
         scope = _Scope(node, parent)
         self.scopes[id(node)] = scope
         for sub in _own_nodes(node):
             if isinstance(sub, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 self.defs.setdefault(self._binding_scope(sub.name, scope), []).append(sub)
-                self._collect_scopes(sub, scope)
+                self._collect_scopes(sub, scope, path)
             elif isinstance(sub, ast.Lambda):
-                self._collect_scopes(sub, scope)
-            elif not imports:
+                self._collect_scopes(sub, scope, path)
+            elif path is None:
                 continue
             elif isinstance(sub, ast.ImportFrom) and sub.level == 0 and self._local_module(
                     sub.module or ""):
-                self.from_imports.update(
+                self.from_imports.setdefault(path, {}).update(
                     (alias.asname or alias.name, (sub.module, alias.name)) for alias in sub.names)
             elif isinstance(sub, ast.Import):
+                imports = self.imports.setdefault(path, {})
                 for alias in sub.names:
                     root = alias.name.split(".")[0]
-                    self.imports[alias.asname or root] = alias.name if alias.asname else root
+                    imports[alias.asname or root] = alias.name if alias.asname else root
         return scope
 
     def _local_module(self, dotted):
@@ -179,7 +181,7 @@ class _Analysis:
             self.loaded[path] = tree
             self.module_paths[id(tree)] = path
             known = set(self.scopes)
-            self._collect_scopes(tree, None, imports=False)
+            self._collect_scopes(tree, None, path)
             self._walk_scopes(known)
         return self.loaded[path]
 
@@ -191,10 +193,11 @@ class _Analysis:
         return None
 
     def from_imported_def(self, name, scope):
-        """The function a `from module import` in the program binds to `name`, or None."""
-        if name not in self.from_imports or self._path_of(scope) != self.path:
+        """The function a `from module import` in `scope`'s module binds to `name`, or None."""
+        from_imports = self.from_imports.get(self._path_of(scope), {})
+        if name not in from_imports:
             return None
-        module, original = self.from_imports[name]
+        module, original = from_imports[name]
         return self._module_def(self._local_module(module), original)
 
     def _path_of(self, scope):
@@ -257,21 +260,22 @@ class _Analysis:
         if isinstance(expr, ast.Subscript):
             return self.value(expr.value, scope)
         if isinstance(expr, ast.Attribute):
-            return self.imported_value(expr)
+            return self.imported_value(expr, scope)
         if isinstance(expr, ast.Call):
             return self.call(expr, scope)
         return None
 
-    def imported_value(self, expr):
+    def imported_value(self, expr, scope):
         """The key of `module.function`, for a module imported by its path."""
         dotted = []
         node = expr
         while isinstance(node, ast.Attribute):
             dotted.append(node.attr)
             node = node.value
-        if not isinstance(node, ast.Name) or node.id not in self.imports or not self.dir:
+        imports = self.imports.get(self._path_of(scope), {})
+        if not isinstance(node, ast.Name) or node.id not in imports or not self.dir:
             return None
-        path = self._local_module(".".join(self.imports[node.id].split(".") +
+        path = self._local_module(".".join(imports[node.id].split(".") +
                                            list(reversed(dotted[1:]))))
         if path is None:
             return None
@@ -279,7 +283,7 @@ class _Analysis:
         if stmt is None:
             return None
         key = ("imported", path, stmt.name)
-        self.add_member(key, stmt, f"{self.imports[node.id]}.{stmt.name}", self.def_kind(stmt))
+        self.add_member(key, stmt, f"{imports[node.id]}.{stmt.name}", self.def_kind(stmt))
         return key
 
     def call(self, expr, scope):
@@ -297,7 +301,8 @@ class _Analysis:
         callee = self.value(expr.func, scope)
         args = [self.value(arg, scope) for arg in expr.args]
         keywords = {kw.arg: self.value(kw.value, scope) for kw in expr.keywords if kw.arg}
-        if isinstance(expr.func, ast.Name) and expr.func.id in self.from_imports:
+        if isinstance(expr.func, ast.Name) and expr.func.id in self.from_imports.get(
+                self._path_of(scope), {}):
             # The imported function may call what it is given, out of sight.
             self.calls.extend((expr, arg, [], {}, None) for arg in args + list(keywords.values())
                               if arg is not None)

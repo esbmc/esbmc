@@ -75,7 +75,7 @@ bool python_dict_handler::reads_value_as_tagged(
       }))
     return true;
   const char annotated = annotated_value_kind(dict_expr);
-  const std::string key = dict_key_id(slice_node);
+  const std::string key = dict_key_id(slice_node, converter_.get_ast_json());
   return annotated && std::any_of(
                         entries.begin(),
                         entries.end(),
@@ -544,7 +544,10 @@ void python_dict_handler::handle_dict_subscript_assign(
       get_internal_list_id(dict_expr.identifier().as_string(), false);
     if (!vals_id.empty())
       converter_.get_element_type_registry().record(
-        vals_id, dict_key_id(node), value.type(), type_slot::dict_value_types);
+        vals_id,
+        dict_key_id(node, converter_.get_ast_json()),
+        value.type(),
+        type_slot::dict_value_types);
   }
 
   symbolt &index_var = converter_.create_tmp_symbol(
@@ -611,7 +614,6 @@ void python_dict_handler::handle_dict_subscript_assign(
       value_arg, value_info.elem_symbol->get_type()));
   set_value_call.type() = bool_type();
   set_value_call.location() = location;
-  update_block.copy_to_operands(set_value_call);
 
   // Create the "key doesn't exist" branch: push new key-value pair
   code_blockt insert_block;
@@ -650,6 +652,19 @@ void python_dict_handler::handle_dict_subscript_assign(
       value_arg, value_info.elem_symbol->get_type()));
   push_value_call.type() = bool_type();
   push_value_call.location() = location;
+
+  if (is_dict_type(converter_.name_space().follow(value.type())))
+    store_dict_value_by_pointer(
+      node,
+      value,
+      values_member,
+      build_symbol(index_var),
+      location,
+      target_block,
+      set_value_call,
+      push_value_call);
+
+  update_block.copy_to_operands(set_value_call);
   insert_block.copy_to_operands(push_value_call);
 
   // Create if-then-else: if (key_exists) { update } else { insert }

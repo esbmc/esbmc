@@ -1,0 +1,6 @@
+CORE
+main.py
+--unwind 5
+main\.py line 10 column 21 function main$
+^  uncaught exception: IndexError$
+^VERIFICATION FAILED$
