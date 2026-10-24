@@ -4587,6 +4587,23 @@ static const expr2tc &peel_pointer_offsets(const expr2tc &e)
 
 static expr2tc obj_equals_addr_of(const expr2tc &a, const expr2tc &b);
 
+// `&a + j == &b + k` with a and b provably distinct objects, or nil.
+static expr2tc
+fold_distinct_objects_cmp(const expr2tc &s1, const expr2tc &s2, bool eq)
+{
+  const expr2tc &p1 = peel_pointer_offsets(s1);
+  const expr2tc &p2 = peel_pointer_offsets(s2);
+  if (!is_address_of2t(p1) || !is_address_of2t(p2))
+    return expr2tc();
+  expr2tc same = obj_equals_addr_of(
+    to_address_of2t(p1).ptr_obj, to_address_of2t(p2).ptr_obj);
+  if (
+    !is_nil_expr(same) && is_constant_bool2t(same) &&
+    !to_constant_bool2t(same).value)
+    return eq ? gen_false_expr() : gen_true_expr();
+  return expr2tc();
+}
+
 // Returns a Boolean constant when a pointer comparison is decidable,
 // nil otherwise. `eq` selects the polarity. A pointer value is an
 // (object, offset) pair. No object lives at address zero, so
@@ -4608,17 +4625,7 @@ simplify_pointer_cmp(const expr2tc &s1, const expr2tc &s2, bool eq)
       return eq ? gen_false_expr() : gen_true_expr();
     return expr2tc();
   }
-  const expr2tc &p1 = peel_pointer_offsets(s1);
-  const expr2tc &p2 = peel_pointer_offsets(s2);
-  if (!is_address_of2t(p1) || !is_address_of2t(p2))
-    return expr2tc();
-  expr2tc same = obj_equals_addr_of(
-    to_address_of2t(p1).ptr_obj, to_address_of2t(p2).ptr_obj);
-  if (
-    !is_nil_expr(same) && is_constant_bool2t(same) &&
-    !to_constant_bool2t(same).value)
-    return eq ? gen_false_expr() : gen_true_expr();
-  return expr2tc();
+  return fold_distinct_objects_cmp(s1, s2, eq);
 }
 
 /// (x * c) == 0 -> x == 0 when c is odd, or nothing. Restricted to odd
