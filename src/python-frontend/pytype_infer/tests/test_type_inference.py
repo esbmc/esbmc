@@ -8,9 +8,7 @@ def test_negative_integer_inference():
 
     print(ast.dump(expr, indent=2))
 
-    context = InferenceContext(
-        known_classes={}
-    )
+    context = InferenceContext(known_classes={})
 
     result = infer_type_from_expr(
         expr,

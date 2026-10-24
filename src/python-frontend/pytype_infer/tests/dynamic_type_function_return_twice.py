@@ -4,6 +4,7 @@ def f(cond):
     else:
         return "a"
 
+
 a = f(nondet_bool())
 b = f(nondet_bool())
 assert a == 1 or a == "a"

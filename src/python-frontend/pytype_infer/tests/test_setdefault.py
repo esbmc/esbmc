@@ -12,26 +12,28 @@ from pytype_infer.lattice import (
 
 def test1():
     d = {}
-    d.setdefault("x",1)
+    d.setdefault("x", 1)
     return d
+
 
 def test2():
     d = {}
     x = d.setdefault("x", 1)
     return x
 
+
 def test3():
-  d ={"x": 1}
-  x = d.setdefault("x", 2.0)
-  return x
+    d = {"x": 1}
+    x = d.setdefault("x", 2.0)
+    return x
+
 
 def test4():
-   d = {}
-   x = d.setdefault("x")
-   return x
+    d = {}
+    x = d.setdefault("x")
+    return x
+
 
 assert ast.unparse(type_to_ast_annotation(ListType(IntType()))) == "list[int]"
 
-assert ast.unparse(
-    type_to_ast_annotation(UnionType([IntType(), StrType()]))
-) == "int | str"
+assert ast.unparse(type_to_ast_annotation(UnionType([IntType(), StrType()]))) == "int | str"
