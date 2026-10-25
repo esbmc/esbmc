@@ -501,9 +501,8 @@ exprt python_list::allocate_constructed_object(const exprt &lhs)
 /// `[Car(120)][0].speed` read the speed field back as a pointer (#7685). Box it
 /// onto a non-expiring object and store that, the same model `return
 /// ClassName(...)` already uses -- the address of the caller's stack temp would
-/// dangle as soon as the literal sits inside a function. Boxing in the
-/// constructor path instead also reaches dict literals, which do expect the
-/// value.
+/// dangle as soon as the literal sits inside a function. Dict values share
+/// this layout.
 exprt python_list::as_object_reference(
   const nlohmann::json &op,
   const exprt &elem)

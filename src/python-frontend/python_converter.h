@@ -2876,6 +2876,13 @@ private:
     bool is_ctor_call,
     codet &target_block);
 
+  void wrap_call_result_in_optional(
+    const nlohmann::json &ast_node,
+    const exprt &lhs,
+    exprt &rhs,
+    const locationt &location,
+    codet &target_block);
+
   /**
    * @brief Handles string literal assignment to str-typed variable.
    *
