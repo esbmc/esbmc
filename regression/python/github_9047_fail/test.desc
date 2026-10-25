@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 5
+^  assertion x.v == 4$
+^VERIFICATION FAILED$
