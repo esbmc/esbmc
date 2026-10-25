@@ -1352,87 +1352,78 @@ static void assign_stack_used(
   t->location.comment(comment);
 }
 
-/// Remove the requires/ensures ASSUMEs goto_convert emitted into \p body.
-static void remove_clause_assumes(goto_programt &body)
+static bool is_clause_assume(const goto_programt::instructiont &i)
 {
-  // Collect all contract requires/ensures instructions to remove
-  std::set<goto_programt::targett> instructions_to_remove;
-  for (auto it = body.instructions.begin(); it != body.instructions.end(); ++it)
+  if (!i.is_assume())
+    return false;
+  const irep_idt &comment = i.location.comment();
+  return comment == "contract::ensures" || comment == "contract::requires";
+}
+
+/// The GOTO pointer/arithmetic-safety pass emits auto-generated ASSERTs (e.g.
+/// SAME-OBJECT for a pointer comparison) from a clause expression, immediately
+/// preceding its ASSUME; for an ensures clause they reference
+/// __ESBMC_return_value, which is unbound in the original body, yielding a
+/// spurious violation (#5043). goto_check gives each of them the clause's own
+/// location. A user assertion can share it when it comes from the same macro
+/// expansion, so it is told apart by its property.
+static bool is_clause_check(
+  const goto_programt::instructiont &i,
+  const goto_programt::instructiont &clause)
+{
+  const irep_idt &property = i.location.property();
+  return i.is_assert() && property != "assertion" &&
+         property != "error label" &&
+         i.location.get_file() == clause.location.get_file() &&
+         i.location.get_line() == clause.location.get_line() &&
+         i.location.get_column() == clause.location.get_column();
+}
+
+/// Erase \p doomed from \p body, retargeting jumps to the next survivor.
+static void erase_instructions(
+  goto_programt &body,
+  const std::set<goto_programt::targett> &doomed)
+{
+  std::map<goto_programt::targett, goto_programt::targett> retarget;
+  for (auto it : doomed)
   {
-    if (it->is_assume())
-    {
-      std::string comment = id2string(it->location.comment());
-      if (comment == "contract::ensures" || comment == "contract::requires")
-      {
-        instructions_to_remove.insert(it);
-
-        // The GOTO pointer/arithmetic-safety pass emits auto-generated
-        // ASSERTs (e.g. SAME-OBJECT for a pointer comparison) from the
-        // clause expression, immediately preceding this ASSUME. They are
-        // ASSERTs, not ASSUMEs, so the comment scan misses them; for an
-        // ensures clause they reference __ESBMC_return_value, which is
-        // unbound in the original body, yielding a spurious violation
-        // (#5043). The wrapper re-checks the clause with return_value
-        // properly bound, so drop the contiguous run of safety asserts
-        // belonging to this clause. goto_check gives each of them the
-        // clause's own location; a user assertion can share it when it comes
-        // from the same macro expansion, so it ends the run by its property.
-        for (auto p = it; p != body.instructions.begin();)
-        {
-          --p;
-          const irep_idt &property = p->location.property();
-          if (
-            !p->is_assert() || property == "assertion" ||
-            property == "error label" ||
-            p->location.get_file() != it->location.get_file() ||
-            p->location.get_line() != it->location.get_line() ||
-            p->location.get_column() != it->location.get_column())
-            break;
-          instructions_to_remove.insert(p);
-        }
-      }
-    }
-  }
-
-  // Build a map of instructions to remove -> their replacement target
-  // The replacement target must NOT be an instruction that will also be
-  // removed
-  typedef std::map<goto_programt::targett, goto_programt::targett> targets_mapt;
-  targets_mapt targets_to_update;
-
-  for (auto it : instructions_to_remove)
-  {
-    // Find the next instruction that will NOT be removed
     auto next_it = std::next(it);
-    while (next_it != body.instructions.end() &&
-           instructions_to_remove.count(next_it) > 0)
-    {
+    while (next_it != body.instructions.end() && doomed.count(next_it) > 0)
       next_it = std::next(next_it);
-    }
-    targets_to_update[it] = next_it;
+    retarget[it] = next_it;
   }
 
-  // Update all GOTO targets that point to removed instructions
   for (auto &inst : body.instructions)
   {
-    if (inst.is_goto() || inst.is_catch())
+    if (!inst.is_goto() && !inst.is_catch())
+      continue;
+    for (auto &target : inst.targets)
     {
-      for (auto &target : inst.targets)
-      {
-        auto map_it = targets_to_update.find(target);
-        if (map_it != targets_to_update.end())
-        {
-          target = map_it->second;
-        }
-      }
+      auto map_it = retarget.find(target);
+      if (map_it != retarget.end())
+        target = map_it->second;
     }
   }
 
-  // Remove the instructions
-  for (auto it : instructions_to_remove)
-  {
+  for (auto it : doomed)
     body.instructions.erase(it);
+}
+
+/// Remove the requires/ensures ASSUMEs goto_convert emitted into \p body,
+/// with the safety assertions generated from each.
+static void remove_clause_assumes(goto_programt &body)
+{
+  std::set<goto_programt::targett> doomed;
+  for (auto it = body.instructions.begin(); it != body.instructions.end(); ++it)
+  {
+    if (!is_clause_assume(*it))
+      continue;
+    doomed.insert(it);
+    for (auto p = it;
+         p != body.instructions.begin() && is_clause_check(*std::prev(p), *it);)
+      doomed.insert(--p);
   }
+  erase_instructions(body, doomed);
 }
 
 std::set<std::string> code_contractst::enforce_contracts(
