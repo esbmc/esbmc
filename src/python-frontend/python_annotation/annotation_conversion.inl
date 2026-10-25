@@ -2125,7 +2125,15 @@ std::string python_annotation<Json>::get_function_return_type(
     bool divergent = false;
     std::string inferred_type =
       infer_from_return_statements(func_elem["body"], func_name, &divergent);
+    const std::string optional_return =
+      returned_optional_scalar(func_elem, func_elem["body"]);
     current_func_name_context_ = saved_return_ctx;
+
+    if (optional_return == "Optional[" + inferred_type + "]")
+    {
+      functions_in_analysis_.erase(func_name);
+      return optional_return;
+    }
 
     if (!inferred_type.empty() && inferred_type != "NoneType")
     {
@@ -6525,6 +6533,37 @@ std::string python_annotation<Json>::optional_scalar_of(
   return scalar == "int" || scalar == "float" || scalar == "bool"
            ? "Optional[" + scalar + "]"
            : "";
+}
+
+/// The Optional[T] of a name `function` returns that is stored None and a
+/// scalar T (#9055); "" when it returns no such name.
+template <class Json>
+std::string python_annotation<Json>::returned_optional_scalar(
+  const Json &function,
+  const Json &body)
+{
+  for (const Json &stmt : body)
+  {
+    const std::string kind = stmt.value("_type", "");
+    if (kind == "FunctionDef" || kind == "ClassDef")
+      continue;
+    if (
+      kind == "Return" && stmt["value"].is_object() &&
+      stmt["value"].value("_type", "") == "Name")
+    {
+      std::string optional = optional_scalar_of(
+        stmt["value"]["id"].template get<std::string>(), function);
+      if (!optional.empty())
+        return optional;
+    }
+    for (const char *key : {"body", "orelse", "finalbody", "handlers", "cases"})
+      if (stmt.contains(key) && stmt[key].is_array())
+        if (
+          std::string optional = returned_optional_scalar(function, stmt[key]);
+          !optional.empty())
+          return optional;
+  }
+  return "";
 }
 
 /// The plain `name = value` statements in `body` and its nested blocks,
