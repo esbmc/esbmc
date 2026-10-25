@@ -346,9 +346,27 @@ bool binds_name(const nlohmann::json &node, const std::string &name)
   return false;
 }
 
+// `function_node` sits directly in the module body or in the body of a
+// module-level class, so a name it never binds is the module-level one.
+bool is_module_level_def(
+  const nlohmann::json &function_node,
+  const nlohmann::json &module_body)
+{
+  for (const auto &stmt : module_body)
+  {
+    if (&stmt == &function_node)
+      return true;
+    if (stmt.value("_type", "") == "ClassDef")
+      for (const auto &member : stmt["body"])
+        if (&member == &function_node)
+          return true;
+  }
+  return false;
+}
+
 // `name`, returned by `function_node`, is bound to divergent kinds by the
-// function itself or, when the function is top-level and never binds it, by
-// the module body (#9156).
+// function itself or, when the function is module-level and never binds it,
+// by the module body (#9156).
 bool returns_divergent_name(
   const std::string &name,
   const nlohmann::json &function_node,
@@ -358,11 +376,12 @@ bool returns_divergent_name(
     dynamic_type_detail::scope_assigns_divergent_literal_types(
       name, function_node["body"], module_body))
     return true;
-  return !name.empty() && !binds_name(function_node["args"], name) &&
-         !binds_name(function_node["body"], name) &&
-         !enclosing_def(module_body, function_node) &&
+  return !name.empty() &&
          dynamic_type_detail::scope_assigns_divergent_literal_types(
-           name, module_body, module_body);
+           name, module_body, module_body) &&
+         is_module_level_def(function_node, module_body) &&
+         !binds_name(function_node["args"], name) &&
+         !binds_name(function_node["body"], name);
 }
 
 // True when `function_node` returns divergent literal kinds, or forwards the
