@@ -1748,10 +1748,6 @@ private:
 
   typet nullable_dict_pointee(const typet &t) const;
   bool keeps_pointer_type_on_none(const typet &t);
-  void guard_none_optional_container(
-    const std::string &op,
-    exprt &rhs,
-    const nlohmann::json &element);
   void guard_none_container(
     exprt &rhs,
     typet &rhs_type,

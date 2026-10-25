@@ -1441,34 +1441,6 @@ static bool container_is_name(const nlohmann::json &element)
   return type == "Name" || type == "Attribute";
 }
 
-/// An Optional[dict[...]] or Optional[tuple[...]] is an Optional<T> struct:
-/// membership on it raises TypeError when it holds None, and otherwise tests
-/// the container it wraps (#9081).
-void python_converter::guard_none_optional_container(
-  const std::string &op,
-  exprt &rhs,
-  const nlohmann::json &element)
-{
-  if (
-    (op != "In" && op != "NotIn") ||
-    !type_utils::is_optional_struct(rhs.type()))
-    return;
-  const typet value_type =
-    to_struct_type(rhs.type()).get_component("value").type();
-  if (!value_type.is_struct())
-    return;
-
-  rhs = hoist_side_effecting_operand(
-    materialize_optional(rhs, element), element, "$in_rhs$");
-  if (can_emit_runtime_guard())
-    emit_guarded_raise(
-      member_exprt(rhs, "is_none", bool_type()),
-      "TypeError",
-      "argument of type 'NoneType' is not iterable",
-      get_location_from_decl(element));
-  rhs = member_exprt(rhs, "value", value_type);
-}
-
 /// A list, a str, or an Optional[dict] pointer, is NULL for None: membership
 /// on it raises CPython's TypeError, and otherwise tests the container itself.
 void python_converter::guard_none_container(
@@ -2820,7 +2792,6 @@ exprt python_converter::resolve_optional_operands(
 {
   if (is_none_check || is_literal_percent_format(element, lhs))
     return nil_exprt();
-  guard_none_optional_container(op, rhs, element);
   auto none_flag = [&](exprt &operand) -> exprt {
     if (!type_utils::is_optional_struct(operand.type()))
       return false_exprt();
