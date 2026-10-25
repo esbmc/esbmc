@@ -161,6 +161,13 @@ private:
   /// The TypeError CPython raises on instantiating an abstract class.
   exprt abstract_instantiation_error(const nlohmann::json &ctor_call) const;
 
+  bool is_unmodelled_base_instantiation() const;
+
+  /// Refuse creating \p class_name, which derives from a class that has no
+  /// model: its instances lack whatever that base provides.
+  [[noreturn]] void
+  refuse_unmodelled_base_instance(const std::string &class_name) const;
+
   static void collect_method_abstractness(
     const python_converter &converter,
     const std::string &class_name,
