@@ -269,13 +269,14 @@ unpacked_name_element_type(const std::string &type, size_t index)
 template <class Json>
 std::string python_annotation<Json>::resolve_subscript_type(
   const Json &subscript_node,
-  const Json &body)
+  const Json &body,
+  bool nested)
 {
   const Json &base = subscript_node["value"];
 
   // Recursively resolve nested subscripts
   if (base["_type"] == "Subscript")
-    return resolve_subscript_type(base, body);
+    return resolve_subscript_type(base, body, true);
 
   if (base["_type"] == "List")
     return subscript_type_from_list_literal(subscript_node);
@@ -366,8 +367,12 @@ std::string python_annotation<Json>::resolve_subscript_type(
   if (base_type == "str")
     return "str";
 
-  // tuple[A, B, ...] at a constant index yields that member's type (#8928)
-  const Json &slice = subscript_node["slice"];
+  // tuple[A, B, ...] at a constant index yields that member's type (#8928).
+  // This pass returns the inner subscript's type for a whole chain, so a
+  // nested read such as t[0][1] is left untyped.
+  if (base_type == "tuple" && nested)
+    return "Any";
+  const Json &slice = subscript_node.value("slice", Json());
   if (
     base_type == "tuple" && slice.value("_type", "") == "Constant" &&
     slice["value"].is_number_unsigned())
@@ -6187,7 +6192,9 @@ void python_annotation<Json>::annotate_class(Json &class_element)
 }
 
 template <class Json>
-void python_annotation<Json>::infer_loop_variable_types(Json &while_stmt)
+void python_annotation<Json>::infer_loop_variable_types(
+  Json &while_stmt,
+  bool synthesized_only)
 {
   if (!while_stmt.contains("body"))
     return;
@@ -6203,7 +6210,9 @@ void python_annotation<Json>::infer_loop_variable_types(Json &while_stmt)
       stmt["_type"] == "AnnAssign" && stmt.contains("value") &&
       !stmt["value"].is_null() && stmt["value"]["_type"] == "Subscript")
     {
-      if (!stmt["value"]["value"].contains("id"))
+      if (
+        !stmt["value"]["value"].contains("id") ||
+        (synthesized_only && !stmt.value("esbmc_synthesized", false)))
         continue;
 
       std::string iter_var =
@@ -6388,13 +6397,13 @@ void python_annotation<Json>::add_annotation(Json &body)
       // Type the loop variable first so the unpacking reads in the body see
       // its element type (#8928).
       if (stmt_type == "While")
-        infer_loop_variable_types(element);
+        infer_loop_variable_types(element, true);
 
       add_annotation(element);
 
       // Infer loop variable types for preprocessor-transformed for loops
       if (stmt_type == "While")
-        infer_loop_variable_types(element);
+        infer_loop_variable_types(element, false);
 
       if (stmt_type != "While")
         annotate_branch_blocks(element);
