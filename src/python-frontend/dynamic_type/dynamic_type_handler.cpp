@@ -653,8 +653,9 @@ std::vector<codet> dynamic_type_handler::build_tag_field_assigns(
   }
 
   // Normalise to the canonical str type before hashing, so type_id
-  // doesn't vary with length or array-vs-pointer shape.
-  typet type_id_source = value_to_store.type();
+  // doesn't vary with length or array-vs-pointer shape. A bool keeps its
+  // own tag although its payload was widened to an int above.
+  typet type_id_source = rhs.type();
   if (type_handler_.is_string_type(type_id_source))
     type_id_source = pointer_typet(char_type());
   exprt type_id_value = type_handler_.tagged_scalar_type_id(type_id_source);
