@@ -410,14 +410,20 @@ def _mark_unmodelled_class_bases(tree: ast.Module) -> None:
         bases = [resolve(base, objects) for base in stmt.bases]
         if not bases or not all(isinstance(base, type) for base in bases):
             continue
-        # Creating the class is what can still fail: an MRO conflict, a base
-        # that cannot be subclassed, a raising __init_subclass__.
-        try:
-            new_class(stmt.name, tuple(bases))
-        except Exception:  # pylint: disable=broad-except
-            continue
-        for base in stmt.bases:
-            base.unmodelled_class = True
+        if _can_create_class(stmt.name, bases):
+            for base in stmt.bases:
+                base.unmodelled_class = True
+
+
+def _can_create_class(name: str, bases: list) -> bool:
+    """Whether CPython can create class `name` over `bases`."""
+    # What can still fail: an MRO conflict, a base that cannot be subclassed,
+    # a raising __init_subclass__.
+    try:
+        new_class(name, tuple(bases))
+    except Exception:  # pylint: disable=broad-except
+        return False
+    return True
 
 
 def _is_submodule_import(package_name: str, name: str) -> bool:
