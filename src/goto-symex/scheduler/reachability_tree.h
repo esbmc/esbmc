@@ -500,6 +500,11 @@ public:
     return s.static_lifetime || s.get_type().is_dynamic_set();
   }
 
+  bool is_address_taken_local(const irep_idt &name) const
+  {
+    return address_taken_locals.count(name) != 0;
+  }
+
   /** Static or heap storage, or a local whose address may reach a thread. */
   bool is_shared_storage(const symbolt &s) const
   {

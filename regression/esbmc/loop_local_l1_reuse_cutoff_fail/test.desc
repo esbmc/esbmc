@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwind 1 --unwindsetname g:0:3 --multi-property
+FAILED +\[g\.assertion\.2\]
+^VERIFICATION FAILED$
