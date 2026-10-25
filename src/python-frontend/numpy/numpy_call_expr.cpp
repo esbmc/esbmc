@@ -5718,7 +5718,25 @@ static bool only_noop_ufunc_keywords(const nlohmann::json &call)
   return true;
 }
 
-// `np.exp(x)` of a number known only at run time.
+static bool is_number_type(const typet &t)
+{
+  return t.is_floatbv() || t.is_signedbv() || t.is_unsignedbv() || t.is_bool();
+}
+
+static const typet &array_leaf_type(const typet &t)
+{
+  return t.is_array() ? array_leaf_type(t.subtype()) : t;
+}
+
+// The shape of @p t with double elements.
+static typet double_shaped(const typet &t)
+{
+  if (!t.is_array())
+    return double_type();
+  return array_typet(double_shaped(t.subtype()), to_array_type(t).size());
+}
+
+// `np.exp(x)` of a number or a numeric array known only at run time.
 std::optional<exprt>
 numpy_call_expr::try_runtime_math(const std::string &function)
 {
@@ -5734,17 +5752,67 @@ numpy_call_expr::try_runtime_math(const std::string &function)
     try_extract_numeric_constant(arg, constant))
     return std::nullopt;
   const exprt x = converter_.get_expr(arg);
-  const typet &t = x.type();
-  if (!t.is_floatbv() && !t.is_signedbv() && !t.is_unsignedbv() && !t.is_bool())
+  if (is_number_type(array_leaf_type(x.type())))
   {
-    if (json_utils::ast_contains_call(arg))
-      throw std::runtime_error(
-        "TypeError: numpy." + function +
-        " of a call that does not return a number is not supported");
-    return std::nullopt;
+    const exprt result = runtime_math_array(function, bind_array_once(x));
+    if (result.type().is_array() && converter_.current_lhs)
+    {
+      converter_.current_lhs->type() = result.type();
+      converter_.update_symbol(*converter_.current_lhs);
+    }
+    return result;
   }
-  return bounded_math(converter_, call_)
-    .runtime(function, x, math_module::numpy);
+  if (json_utils::ast_contains_call(arg))
+    throw std::runtime_error(
+      "TypeError: numpy." + function +
+      " of a call that does not return a number is not supported");
+  return std::nullopt;
+}
+
+exprt numpy_call_expr::bind_array_once(const exprt &array)
+{
+  if (!array.type().is_array() || array.is_symbol())
+    return array;
+  symbolt &tmp =
+    converter_.create_tmp_symbol(call_, "$math_array$", array.type(), exprt());
+  const exprt symbol = symbol_expr(tmp);
+  code_declt decl(symbol);
+  decl.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(decl);
+  if (array.id() == "code" && array.get("statement") == "function_call")
+  {
+    code_function_callt call = to_code_function_call(to_code(array));
+    call.lhs() = symbol;
+    converter_.add_instruction(call);
+  }
+  else
+  {
+    code_assignt assign(symbol, array);
+    assign.location() = decl.location();
+    converter_.add_instruction(assign);
+  }
+  return symbol;
+}
+
+// The function of each element of a number or of a numeric array of
+// concrete shape, read as a number known only at run time.
+exprt numpy_call_expr::runtime_math_array(
+  const std::string &function,
+  const exprt &value)
+{
+  const typet &type = value.type();
+  if (!type.is_array())
+    return bounded_math(converter_, call_)
+      .runtime(function, value, math_module::numpy);
+  const int size = type_handler_.get_array_type_shape(type).front();
+  exprt result(
+    "array",
+    array_typet(
+      double_shaped(type.subtype()), from_integer(size, size_type())));
+  for (int i = 0; i < size; ++i)
+    result.copy_to_operands(runtime_math_array(
+      function, np_index(value, from_integer(i, size_type()), type.subtype())));
+  return result;
 }
 
 // `np.exp(0.3)`, `np.sin(-1.0)`: a numeric literal argument.
@@ -7018,8 +7086,7 @@ exprt numpy_call_expr::create_expr_from_call()
       {
         try
         {
-          exprt folded = fold_numpy_unary_constant_list(
-            converter_, operation, call_["args"][0]);
+          exprt folded = numpy_math_list(operation, call_["args"][0]);
           if (converter_.current_lhs)
           {
             converter_.current_lhs->type() = folded.type();
@@ -7241,8 +7308,7 @@ exprt numpy_call_expr::create_expr_from_call()
           {
             if (allow_numpy_fold)
             {
-              exprt folded =
-                fold_numpy_unary_constant_list(converter_, function, list_arg);
+              exprt folded = numpy_math_list(function, list_arg);
               if (converter_.current_lhs)
               {
                 converter_.current_lhs->type() = folded.type();
@@ -7348,8 +7414,7 @@ exprt numpy_call_expr::create_expr_from_call()
         {
           if (allow_numpy_fold)
           {
-            exprt folded =
-              fold_numpy_unary_constant_list(converter_, function, list_arg);
+            exprt folded = numpy_math_list(function, list_arg);
             if (converter_.current_lhs)
             {
               converter_.current_lhs->type() = folded.type();

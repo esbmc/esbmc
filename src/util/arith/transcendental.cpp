@@ -84,7 +84,8 @@ double ulps(double value)
 }
 
 // The results around x: at x itself, or near it, where only a zero keeps
-// its sign under a relative error.
+// its sign under a relative error. A nonzero result may underflow to zero
+// but keeps its sign, which 8 ulps of a subnormal would cross.
 interval around(const std::string &function, double x, bool at_x)
 {
   const double value = host_value(function, x);
@@ -92,9 +93,11 @@ interval around(const std::string &function, double x, bool at_x)
   if (exact && (at_x || value == 0.0 || !std::isfinite(value)))
     return {value, value};
   const math_spec &spec = spec_of(function);
+  const double low = value > 0 ? std::max(spec.range_low, 0.0) : spec.range_low;
+  const double high =
+    value < 0 ? std::min(spec.range_high, 0.0) : spec.range_high;
   return {
-    std::max(value - ulps(value), spec.range_low),
-    std::min(value + ulps(value), spec.range_high)};
+    std::max(value - ulps(value), low), std::min(value + ulps(value), high)};
 }
 
 // tan grows towards its pole, so the pole lies past the nearest double on
