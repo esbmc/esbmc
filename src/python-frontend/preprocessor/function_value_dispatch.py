@@ -175,6 +175,7 @@ class _Plan:
         self.groups = []
         self.holders = {}
         self.param_holders = {}
+        self.local_fns = set()
         defs = {stmt.name: stmt for stmt in module.body if isinstance(stmt, ast.FunctionDef)}
         self.defs = defs
         for root in roots:
@@ -208,10 +209,12 @@ class _Plan:
                 self.holders[key[2]] = group
 
     def _add_param_holder(self, analysis, fn, param, group):
-        """Record a positional parameter of a module-level def, which the def may dispatch on."""
-        if param not in analysis.scopes[id(fn)].params or not _sole_def(
-                fn, self.defs, self.module, analysis):
+        """Record a parameter or local of a module-level def, which the def may dispatch on."""
+        scope = analysis.scopes[id(fn)]
+        if param not in scope.names or not _sole_def(fn, self.defs, self.module, analysis):
             raise _Refused
+        if param not in scope.params:
+            self.local_fns.add(id(fn))
         self.param_holders.setdefault(fn.name, {})[param] = group
 
     # bindings of holders
@@ -295,7 +298,7 @@ class _Plan:
     def _nested(self, node):
         parent = self.parents.get(id(node))
         while parent is not None:
-            if isinstance(parent, _NESTED):
+            if isinstance(parent, _NESTED) and id(parent) not in self.local_fns:
                 return True
             parent = self.parents.get(id(parent))
         return False
@@ -319,21 +322,38 @@ class _Plan:
             self._check_list_holder(node, parent)
 
     def check_param_holders(self):
-        """Each def with a dispatched parameter uses it only in `return p(...)`."""
+        """Each def with a dispatched parameter or local uses it only where it can be a code."""
         names = set(self.functions) | set(self.holders)
-        for name, params in self.param_holders.items():
-            body = ast.Module(self.defs[name].body, [])
-            nodes = list(ast.walk(body))
-            if set(params) & names or any(isinstance(n, _NESTED) for n in nodes):
+        for name, variables in self.param_holders.items():
+            fn = self.defs[name]
+            nodes = list(ast.walk(ast.Module(fn.body, [])))
+            if set(variables) & names or any(isinstance(n, _NESTED) for n in nodes):
                 raise _Refused
-            for param, group in params.items():
-                if _rebinds(body, param):
-                    raise _Refused
-                for use in (n for n in nodes if isinstance(n, ast.Name) and n.id == param):
-                    self._check_returned_call(use, group)
+            params = {a.arg for a in fn.args.posonlyargs + fn.args.args}
+            for var, group in variables.items():
+                self._check_variable(var, var in params, group, nodes)
         for call in ast.walk(self.module):
             if isinstance(call, ast.Call) and getattr(call.func, "id", None) in self.param_holders:
                 self._check_dispatched_arguments(call)
+
+    def _check_variable(self, var, is_param, group, nodes):
+        for node in nodes:
+            if isinstance(node, (ast.Global, ast.Nonlocal)) and var in node.names:
+                raise _Refused
+            if var in (getattr(node, "name", None), getattr(node, "asname", None)):
+                raise _Refused
+            if isinstance(node, ast.Name) and node.id == var:
+                self._check_variable_use(node, group, is_param)
+
+    def _check_variable_use(self, use, group, is_param):
+        """A load is a returned call or an argument to dispatch on; a store assigns a function."""
+        parent = self.parents[id(use)]
+        if isinstance(use.ctx, ast.Load):
+            if not self._is_dispatched_argument(parent, use):
+                self._check_returned_call(use, group)
+        elif is_param or not (isinstance(parent, ast.Assign) and use in parent.targets
+                              and self._is_function_value(parent.value, parent)):
+            raise _Refused
 
     def _check_dispatched_arguments(self, call):
         """Every parameter of the callee that is dispatched on gets a function positionally."""
@@ -344,13 +364,26 @@ class _Plan:
             raise _Refused
         for i, param in enumerate(a.arg for a in fn.args.posonlyargs + fn.args.args):
             if param in holders and not (i < len(call.args)
-                                         and self._is_function_value(call.args[i])):
+                                         and self._is_function_value(call.args[i], call)):
                 raise _Refused
 
-    def _is_function_value(self, expr):
+    def _is_function_value(self, expr, site):
+        """Whether `expr`, evaluated at `site`, is a function or a dispatched variable of its def."""
         if isinstance(expr, ast.IfExp):
-            return self._is_function_value(expr.body) and self._is_function_value(expr.orelse)
-        return self._is_code(expr)
+            return self._is_function_value(expr.body, site) and self._is_function_value(
+                expr.orelse, site)
+        return self._is_code(expr) or (isinstance(expr, ast.Name)
+                                       and expr.id in self._variables_at(site))
+
+    def _variables_at(self, node):
+        """The dispatched variables of the module-level def that contains `node`."""
+        parent = self.parents.get(id(node))
+        while parent is not None:
+            if isinstance(parent, ast.FunctionDef):
+                return self.param_holders.get(parent.name, {}) if self.defs.get(
+                    parent.name) is parent else {}
+            parent = self.parents.get(id(parent))
+        return {}
 
     def _check_returned_call(self, use, group):
         """`use` is the callee of a call that is a whole `return`; mark that return."""
