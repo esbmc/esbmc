@@ -39,16 +39,25 @@ void goto_convertt::finish_gotos(goto_programt &dest)
 
       auto goto_stack = it.second;
       const auto &label_stack = l_it->second.second;
-      auto unwind_to_size = label_stack.size();
-      if (unwind_to_size < goto_stack.size())
-      {
-        goto_programt destructor_code;
-        unwind_destructor_stack(
-          i.location, unwind_to_size, destructor_code, goto_stack);
-        dest.destructive_insert(it.first, destructor_code);
-        // This should leave iterators intact, as long as
-        // goto_programt::instructionst is std::list.
-      }
+      std::size_t common = 0;
+      while (common < goto_stack.size() && common < label_stack.size() &&
+             goto_stack[common] == label_stack[common])
+        ++common;
+
+      goto_programt edge_code;
+      unwind_destructor_stack(i.location, common, edge_code, goto_stack);
+      // A jump into a block starts the lifetime of the locals whose
+      // declarations it skips, with indeterminate values (C11 6.2.4p6), so
+      // none may keep a previous lifetime's value.
+      for (std::size_t k = common; k < label_stack.size(); ++k)
+        if (label_stack[k].get_statement() == "dead")
+        {
+          code_declt decl(label_stack[k].op0());
+          decl.location() = i.location;
+          copy(decl, DECL, edge_code);
+        }
+      // A jump to a label on the goto itself must run the edge code too
+      dest.insert_swap(it.first, edge_code);
     }
     else
     {
