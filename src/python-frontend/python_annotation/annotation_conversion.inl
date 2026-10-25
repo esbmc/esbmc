@@ -2862,6 +2862,13 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
     return obj_type;
   }
 
+  // An f-string receiver is a str, e.g. f"{x}".upper().
+  if (
+    call["func"].contains("value") &&
+    call["func"]["value"]["_type"] == "JoinedStr" &&
+    call["func"].contains("attr"))
+    return get_string_method_return_type(call["func"]["attr"]);
+
   // Handle method calls on binary expressions like (s + ",end").split(",", 1)
   if (
     call["func"].contains("value") && call["func"]["value"]["_type"] == "BinOp")
