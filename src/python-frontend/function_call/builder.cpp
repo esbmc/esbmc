@@ -3,6 +3,7 @@
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/numpy/numpy_call_expr.h>
+#include <python-frontend/python-dict/python_dict_handler.h>
 #include <python-frontend/python-list/python_list.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/symbol_id.h>
@@ -886,6 +887,46 @@ std::string function_call_builder::subscript_receiver_class(
   return cls;
 }
 
+std::string function_call_builder::call_receiver_class(
+  const nlohmann::json &inner_call) const
+{
+  const auto inferred = [&]() {
+    return converter_.get_type_handler().get_operand_type(inner_call);
+  };
+  const nlohmann::json &func = inner_call["func"];
+  if (
+    func.value("_type", "") != "Attribute" || func.value("attr", "") != "pop" ||
+    inner_call["args"].size() != 1 || !inner_call["keywords"].empty() ||
+    func["value"].value("_type", "") != "Name")
+    return inferred();
+
+  const std::string name = func["value"].value("id", "");
+  symbol_id sid(
+    converter_.python_file(),
+    converter_.current_classname(),
+    converter_.current_function_name());
+  sid.set_object(name);
+  const symbolt *sym = converter_.find_symbol(sid.to_string());
+  if (!sym)
+    sym = converter_.find_symbol("py:" + converter_.python_file() + "@" + name);
+  python_dict_handler *dict_handler = converter_.get_dict_handler();
+  if (!sym || !dict_handler->is_dict_type(sym->get_type()))
+    return inferred();
+
+  typet value_type =
+    dict_handler->resolve_expected_type_for_dict_subscript(build_symbol(*sym));
+  if (value_type.is_pointer())
+    value_type = value_type.subtype();
+  value_type = converter_.ns.follow(value_type);
+  if (!value_type.is_struct())
+    return inferred();
+
+  std::string tag = to_struct_type(value_type).tag().as_string();
+  if (tag.rfind("tag-", 0) == 0)
+    tag = tag.substr(4);
+  return json_utils::is_class(tag, converter_.ast()) ? tag : inferred();
+}
+
 // The class whose bases super() searches: the class its first argument
 // names, as in super(C, self), or the enclosing class for a bare super().
 static std::string super_start_class(
@@ -1131,7 +1172,7 @@ symbol_id function_call_builder::build_function_id() const
         // Nested calls (e.g., u.encode(...).decode(...)) do not always have
         // func.id. Use inferred call result type instead of indexing JSON
         // fields that may be null.
-        obj_name = th.get_operand_type(inner_call);
+        obj_name = call_receiver_class(inner_call);
       }
 
       if (obj_name.empty())
@@ -1806,6 +1847,17 @@ exprt function_call_builder::str_method_on_number_error() const
   return raise;
 }
 
+// np.round keeps the numpy model: C's round rounds halves away from zero and
+// has no decimals. The models' own `round(x)` is a Name call.
+static bool
+reuses_c_model(const nlohmann::json &call, const symbol_id &function_id)
+{
+  const std::string &function = function_id.get_function();
+  return type_utils::is_c_model_func(function) &&
+         !(function == "round" &&
+           call["func"].value("_type", "") == "Attribute");
+}
+
 exprt function_call_builder::build() const
 {
   if (call_["func"]["_type"] == "Attribute")
@@ -2185,7 +2237,7 @@ exprt function_call_builder::build() const
   if (is_numpy_call(function_id))
   {
     // Adjust the function ID when reusing functions from the C models
-    if (type_utils::is_c_model_func(function_id.get_function()))
+    if (reuses_c_model(call_, function_id))
     {
       function_id.set_prefix("c:");
       function_id.set_filename("");

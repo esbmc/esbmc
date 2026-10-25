@@ -101,7 +101,9 @@ static expr2tc isinstance_subject(expr2tc value, const expr2tc &operand)
   while (is_typecast2t(value))
     value = to_typecast2t(value).from;
   return is_python_number_type(operand->type) &&
-             is_python_number_type(value->type)
+             (is_python_number_type(value->type) ||
+              (is_unsignedbv_type(value->type) &&
+               value->type->get_width() == 64))
            ? operand
            : value;
 }

@@ -1,0 +1,4 @@
+CORE
+main.py
+--k-induction --max-inductive-step 3 --k-step 2 --unlimited-k-steps --python-check-exceptions TypeError,AttributeError
+^ERROR: .*main\.py:6:4: unsupported: this call may be 'f' or 'g', which return different types \(str and int\)$

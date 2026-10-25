@@ -10,6 +10,7 @@ from preprocessor.itertools_lowering import lower_itertools
 from preprocessor.coroutine_lowering import lower_coroutines
 from preprocessor.match_lowering import lower_match_statements
 from preprocessor.namedtuple_lowering import lower_namedtuples
+from preprocessor.function_value_dispatch import dispatch_mixed_function_values
 from preprocessor.function_value_types import reject_mixed_function_values
 from preprocessor.iter_next_lowering import lower_iter_next
 from preprocessor.receiver_classes import refuse_path_dependent_receivers
@@ -549,8 +550,11 @@ class ModuleRewriteMixin:
             imp = ast.Import(names=[ast.alias(name=modules[name], asname=alias)])
             module_node.body[i] = ast.fix_missing_locations(ast.copy_location(imp, stmt))
 
-    def prepare_module(self, node, alias_seed=frozenset(), wrapper_seed=None):
-        """Run pre-visit analyses and range-alias/wrapper canonicalization."""
+    def prepare_module(self, node, alias_seed=frozenset(), wrapper_seed=None, entry=False):
+        """Run pre-visit analyses and range-alias/wrapper canonicalization.
+
+        `entry` marks the program itself, whose module-level names no other
+        module imports."""
         lower_coroutines(node, self.module_name)
         lower_check_type(node, self.module_name)
         _rename_shadowed_classes(node)
@@ -558,6 +562,8 @@ class ModuleRewriteMixin:
         inline_zip_names(node)
         lower_iter_next(node)
         lower_zip_builds(node)
+        if entry:
+            dispatch_mixed_function_values(node, self.module_name)
         reject_mixed_function_values(node, self.module_name)
         lower_match_statements(node)
         lower_itertools(node)

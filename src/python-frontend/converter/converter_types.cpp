@@ -112,12 +112,13 @@ exprt python_converter::wrap_stored_if_optional(
   // one drops the None flag on the other path (#8248).
   if (value.type() == none_type())
     return wrap_in_optional(value, type);
+  const typet &value_type = to_struct_type(type).get_component("value").type();
+  // A dict stored into its Optional<dict> is wrapped as a scalar is (#9081).
+  if (ns.follow(value.type()) == ns.follow(value_type))
+    return wrap_in_optional(value, type);
   if (!type_utils::is_optional_scalar(value.type()))
     return value;
-  const typet &value_type = to_struct_type(type).get_component("value").type();
-  return wrap_in_optional(
-    value.type() == value_type ? value : typecast_exprt(value, value_type),
-    type);
+  return wrap_in_optional(typecast_exprt(value, value_type), type);
 }
 
 // Extract non-None type from union

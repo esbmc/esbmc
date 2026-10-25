@@ -1,0 +1,6 @@
+CORE
+main.py
+
+^  file .*main\.py line 23 column 4$
+^  assertion c == 1$
+^VERIFICATION FAILED$

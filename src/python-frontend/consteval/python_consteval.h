@@ -141,6 +141,9 @@ private:
     long long &end);
   std::optional<PyConstValue>
   eval_expr(const nlohmann::json &node, const Env &env);
+  // The values of a user call's arguments; nullopt when one is not foldable.
+  std::optional<std::vector<PyConstValue>>
+  eval_call_args(const nlohmann::json &args, const Env &env);
 
   // String slice with full Python semantics
   static std::string slice_string(

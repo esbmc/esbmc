@@ -930,6 +930,35 @@ exprt function_call_expr::handle_bool_call(
   return retype_or_typecast(value_expr, bool_t);
 }
 
+exprt function_call_expr::build_fresh_object() const
+{
+  const symbolt *new_obj_sym =
+    converter_.symbol_table().find_symbol("c:@F@__ESBMC_new_object");
+  assert(new_obj_sym && "__ESBMC_new_object model required");
+
+  if (!call_["args"].empty() || !call_["keywords"].empty())
+    throw std::runtime_error("TypeError: object() takes no arguments");
+
+  // __ESBMC_new_object sizes the allocation by the result's pointee, which
+  // void has none of: allocate one char and hand it back as an object.
+  symbolt &tmp = converter_.create_tmp_symbol(
+    call_, "$object$", gen_pointer_type(char_type()), exprt());
+  const exprt obj = symbol_expr(tmp);
+  const locationt location = converter_.get_location_from_decl(call_);
+
+  code_declt decl(obj);
+  decl.location() = location;
+  converter_.add_instruction(decl);
+
+  code_function_callt alloc_call;
+  alloc_call.lhs() = obj;
+  alloc_call.function() = symbol_expr(*new_obj_sym);
+  alloc_call.location() = location;
+  converter_.add_instruction(alloc_call);
+
+  return typecast_exprt(obj, any_type());
+}
+
 exprt function_call_expr::build_constant_from_arg() const
 {
   const std::string &func_name = function_id_.get_function();
@@ -2224,7 +2253,7 @@ exprt function_call_expr::handle_tuple_method() const
   if (method_name == "count")
   {
     // sum(t.element_i == elem ? 1 : 0), built in IREP2 (V.3).
-    const type2tc result_type = migrate_type(int_type());
+    const type2tc result_type = migrate_type(long_long_int_type());
     expr2tc elem2;
     migrate_expr(elem, elem2);
     expr2tc total = gen_zero(result_type);
@@ -2249,7 +2278,7 @@ exprt function_call_expr::handle_tuple_method() const
     throw std::runtime_error("tuple.index() on empty tuple");
 
   // Build "any matched" guard so we can assert the element is present (V.3).
-  const type2tc result_type = migrate_type(int_type());
+  const type2tc result_type = migrate_type(long_long_int_type());
   expr2tc elem2;
   migrate_expr(elem, elem2);
   expr2tc any_match = gen_false_expr();
@@ -3067,9 +3096,11 @@ exprt function_call_expr::handle_list_method() const
   if (method_name == "reverse")
     return handle_list_reverse();
   if (method_name == "count")
-    return handle_list_count();
+    return build_typecast(
+      handle_list_count(), type_handler_.get_typet("int", 0));
   if (method_name == "index")
-    return handle_list_index();
+    return build_typecast(
+      handle_list_index(), type_handler_.get_typet("int", 0));
   // Add other methods as needed
 
   throw std::runtime_error("Unsupported list method: " + method_name);
@@ -3533,6 +3564,12 @@ bool function_call_expr::is_float_hex_literal_call() const
                                      obj["op"].value("_type", "") == "UAdd")) ||
           (obj["op"].is_string() &&
            (obj["op"] == "USub" || obj["op"] == "UAdd")));
+}
+
+bool function_call_expr::is_builtin_name_call(const std::string &name) const
+{
+  return function_id_.get_function() == name &&
+         function_id_.get_prefix() == "py:" && call_["func"]["_type"] == "Name";
 }
 
 bool function_call_expr::is_iter_on_builtin_call() const
@@ -4394,11 +4431,8 @@ function_call_expr::get_dispatch_table()
      [this]() { return handle_format(); },
      "format() builtin"},
 
-    // round() builtin function
-    {[this]() {
-       const std::string &func_name = function_id_.get_function();
-       return func_name == "round" && function_id_.get_prefix() == "py:";
-     },
+    // round() builtin function; np.round is the numpy model's.
+    {[this]() { return is_builtin_name_call("round"); },
      [this]() {
        if (call_["args"].empty())
          return converter_.get_exception_handler().gen_exception_raise(
@@ -4463,6 +4497,10 @@ function_call_expr::get_dispatch_table()
      },
      [this]() { return handle_float_fromhex(); },
      "float.fromhex()"},
+
+    {[this]() { return function_id_.get_function() == "object"; },
+     [this]() { return build_fresh_object(); },
+     "object()"},
 
     // Built-in type constructors (int, float, str, bool, etc.)
     {[this]() {
@@ -7016,7 +7054,8 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
     // A dict literal argument stores its values as the parameter's dict does.
     typet &value_hint = converter_.get_dict_handler()->literal_value_type_hint;
     value_hint = dict_param_value_type(func_symbol, param_idx);
-    exprt arg = converter_.get_expr(arg_node);
+    exprt arg =
+      converter_.get_expr(converter_.bind_numpy_constructor_argument(arg_node));
     value_hint = typet();
     converter_.current_lhs = saved_lhs;
 
@@ -7343,6 +7382,7 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
       continue;
     }
 
+    reject_list_for_numpy_parameter(arg.type(), params, param_idx);
     reject_unmodelled_numpy_array_argument(arg.type());
 
     // All array function arguments (e.g. bytes type) are handled as pointers.
@@ -7397,6 +7437,8 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
         converter_.current_block->copy_to_operands(tmp_assign);
         arg = build_symbol(tmp);
       }
+      reject_numpy_layout_mismatch(
+        arg.type(), *func_symbol, param_idx, arg_is_bytes_literal);
       call.arguments().push_back(array_argument_address(arg));
     }
     else
@@ -7405,6 +7447,70 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
     arg_index++;
   }
   return raise_positional_oversupply(*func_symbol);
+}
+
+// A list where a numpy array parameter is expected would be read as the
+// array's elements.
+void function_call_expr::reject_list_for_numpy_parameter(
+  const typet &arg_type,
+  const code_typet::argumentst &params,
+  size_t param_idx) const
+{
+  // The type probe of an assignment's value is discarded.
+  if (
+    param_idx >= params.size() || converter_.in_rhs_type_probe_ ||
+    !arg_type.is_pointer())
+    return;
+  const typet &param_type = params[param_idx].type();
+  if (!param_type.is_pointer())
+    return;
+  const typet &target = converter_.ns.follow(param_type.subtype());
+  const typet &source = converter_.ns.follow(arg_type.subtype());
+  typet leaf = target;
+  while (leaf.is_array())
+    leaf = leaf.subtype();
+  const bool numeric_target =
+    leaf.is_floatbv() || leaf.is_bool() ||
+    ((leaf.is_signedbv() || leaf.is_unsignedbv()) && leaf != char_type());
+  if (
+    numeric_target && source.is_struct() &&
+    to_struct_type(source).tag().as_string().find("__ESBMC_PyListObj") !=
+      std::string::npos)
+    throw std::runtime_error(
+      "TypeError: a list passed where a numpy array parameter is expected is "
+      "not supported");
+}
+
+// A numpy array passed where its parameter was typed from another call site
+// would be read through the wrong element type or row length. C models take
+// flat element pointers by design.
+void function_call_expr::reject_numpy_layout_mismatch(
+  const typet &arg_type,
+  const symbolt &callee,
+  size_t param_idx,
+  bool is_bytes_literal) const
+{
+  const code_typet::argumentst &params =
+    to_code_type(callee.get_type()).arguments();
+  // A bytes literal is not a numpy array.
+  if (
+    is_bytes_literal || callee.mode != "Python" || param_idx >= params.size() ||
+    !params[param_idx].type().is_pointer())
+    return;
+  const typet &param_type = params[param_idx].type();
+  typet leaf = arg_type;
+  while (leaf.is_array())
+    leaf = leaf.subtype();
+  const bool numeric = leaf.is_signedbv() || leaf.is_unsignedbv() ||
+                       leaf.is_floatbv() || leaf.is_bool();
+  if (!numeric || leaf == char_type())
+    return;
+  const typet &target = converter_.ns.follow(param_type.subtype());
+  const bool matches = target == arg_type || target == arg_type.subtype();
+  if (!matches && (target.is_array() || target.id() == leaf.id()))
+    throw std::runtime_error(
+      "TypeError: a numpy array whose element type or shape differs from "
+      "the one inferred for its parameter is not supported");
 }
 
 exprt function_call_expr::finalize_call(

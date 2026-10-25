@@ -1,6 +1,7 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/numpy/ndarray_shape.h>
 #include <python-frontend/numpy/numpy_call_expr.h>
+#include <python-frontend/numpy/numpy_nditer.h>
 #include <python-frontend/numpy/numpy_random.h>
 #include <python-frontend/numpy/numpy_reducer_shared.h>
 #include <python-frontend/python_converter.h>
@@ -28,6 +29,7 @@
 #include <limits>
 #include <numeric>
 #include <ostream>
+#include <unordered_set>
 
 const char *kConstant = "Constant";
 const char *kName = "Name";
@@ -598,32 +600,217 @@ static bool solve_linear_system(
   return true;
 }
 
-static nlohmann::json
-matrix_to_json(const std::vector<std::vector<scalar_value>> &m)
+// LAPACK factorises with partial pivoting and NumPy's det sums logarithms,
+// so neither result is the exact one computed here; these bounds are well
+// above the rounding error of either for matrices of order at most 4.
+constexpr double lapack_tolerance = 1e-12;
+
+static std::vector<std::vector<double>>
+real_matrix(const std::vector<std::vector<scalar_value>> &m)
 {
-  nlohmann::json outer;
-  outer["_type"] = "List";
-  outer["elts"] = nlohmann::json::array();
+  std::vector<std::vector<double>> out;
   for (const auto &row : m)
   {
-    nlohmann::json row_json;
-    row_json["_type"] = "List";
-    row_json["elts"] = nlohmann::json::array();
-    for (const auto &val : row)
-      row_json["elts"].push_back(to_json_constant(val));
-    outer["elts"].push_back(row_json);
+    out.emplace_back();
+    for (const auto &value : row)
+      out.back().push_back(value.value.real());
   }
-  return outer;
+  return out;
 }
 
-static nlohmann::json vector_to_json(const std::vector<scalar_value> &v)
+static double max_abs(const std::vector<std::vector<double>> &m)
 {
-  nlohmann::json list;
-  list["_type"] = "List";
-  list["elts"] = nlohmann::json::array();
-  for (const auto &val : v)
-    list["elts"].push_back(to_json_constant(val));
-  return list;
+  double largest = 0.0;
+  for (const auto &row : m)
+    for (double value : row)
+      largest = std::max(largest, std::fabs(value));
+  return largest;
+}
+
+static double infinity_norm(const std::vector<std::vector<double>> &m)
+{
+  double largest = 0.0;
+  for (const auto &row : m)
+  {
+    double sum = 0.0;
+    for (double value : row)
+      sum += std::fabs(value);
+    largest = std::max(largest, sum);
+  }
+  return largest;
+}
+
+// A zero row or column, or two equal rows, make a pivot exactly zero, and
+// NumPy's det is then exactly 0.
+static bool structurally_singular(const std::vector<std::vector<double>> &m)
+{
+  const std::size_t n = m.size();
+  for (std::size_t i = 0; i < n; ++i)
+  {
+    bool zero_row = true, zero_column = true;
+    for (std::size_t j = 0; j < n; ++j)
+    {
+      zero_row = zero_row && m[i][j] == 0.0;
+      zero_column = zero_column && m[j][i] == 0.0;
+    }
+    if (zero_row || zero_column)
+      return true;
+    for (std::size_t k = i + 1; k < n; ++k)
+      if (m[i] == m[k])
+        return true;
+  }
+  return false;
+}
+
+static bool is_power_of_two(double value)
+{
+  int exponent = 0;
+  return value != 0.0 && std::fabs(std::frexp(value, &exponent)) == 0.5;
+}
+
+// a - b * c with no rounding, or nullopt.
+static std::optional<double> exact_update(double a, double b, double c)
+{
+  const double product = b * c;
+  const double result = a - product;
+  if (
+    !std::isfinite(result) || std::fma(b, c, -product) != 0.0 ||
+    (result + product) - a != 0.0 || result - (a - product) != 0.0)
+    return std::nullopt;
+  return result;
+}
+
+// The LU factors with partial pivoting when every step is exact and every
+// pivot a power of two: any LAPACK then computes these same factors, so its
+// result is the one computed from them. nullopt otherwise.
+struct exact_lu_factors
+{
+  std::vector<std::vector<double>> lu;
+  std::vector<std::size_t> rows;
+  double sign = 1.0;
+};
+
+static std::optional<exact_lu_factors>
+exact_lu(const std::vector<std::vector<double>> &m)
+{
+  const std::size_t n = m.size();
+  exact_lu_factors f{m, {}, 1.0};
+  for (std::size_t i = 0; i < n; ++i)
+    f.rows.push_back(i);
+  for (std::size_t k = 0; k < n; ++k)
+  {
+    std::size_t pivot = k;
+    for (std::size_t i = k + 1; i < n; ++i)
+      if (std::fabs(f.lu[i][k]) > std::fabs(f.lu[pivot][k]))
+        pivot = i;
+    if (!is_power_of_two(f.lu[pivot][k]))
+      return std::nullopt;
+    if (pivot != k)
+    {
+      std::swap(f.lu[pivot], f.lu[k]);
+      std::swap(f.rows[pivot], f.rows[k]);
+      f.sign = -f.sign;
+    }
+    for (std::size_t i = k + 1; i < n; ++i)
+    {
+      f.lu[i][k] /= f.lu[k][k];
+      for (std::size_t j = k + 1; j < n; ++j)
+      {
+        const auto updated = exact_update(f.lu[i][j], f.lu[i][k], f.lu[k][j]);
+        if (!updated)
+          return std::nullopt;
+        f.lu[i][j] = *updated;
+      }
+    }
+  }
+  return f;
+}
+
+// NumPy's det: the sign of the factors times exp of their summed logarithms.
+static std::optional<double>
+exact_det(const std::vector<std::vector<double>> &m)
+{
+  const std::optional<exact_lu_factors> f = exact_lu(m);
+  if (!f)
+    return std::nullopt;
+  double sign = f->sign, logarithm = 0.0;
+  for (std::size_t i = 0; i < m.size(); ++i)
+  {
+    sign *= f->lu[i][i] < 0 ? -1.0 : 1.0;
+    logarithm += std::log(std::fabs(f->lu[i][i]));
+  }
+  return sign * std::exp(logarithm);
+}
+
+// The solution of m x = b by exact factors and substitutions, or nullopt.
+static std::optional<std::vector<double>>
+exact_solve(const std::vector<std::vector<double>> &m, std::vector<double> b)
+{
+  const std::optional<exact_lu_factors> f = exact_lu(m);
+  if (!f)
+    return std::nullopt;
+  const std::size_t n = m.size();
+  std::vector<double> x(n);
+  for (std::size_t i = 0; i < n; ++i)
+    x[i] = b[f->rows[i]];
+  for (std::size_t i = 0; i < n; ++i)
+    for (std::size_t k = 0; k < i; ++k)
+    {
+      const auto updated = exact_update(x[i], f->lu[i][k], x[k]);
+      if (!updated)
+        return std::nullopt;
+      x[i] = *updated;
+    }
+  for (std::size_t i = n; i-- > 0;)
+  {
+    for (std::size_t k = i + 1; k < n; ++k)
+    {
+      const auto updated = exact_update(x[i], f->lu[i][k], x[k]);
+      if (!updated)
+        return std::nullopt;
+      x[i] = *updated;
+    }
+    x[i] /= f->lu[i][i];
+  }
+  return x;
+}
+
+// The determinant by cofactor expansion along the first row.
+static double cofactor_det(const std::vector<std::vector<double>> &m)
+{
+  if (m.size() == 1)
+    return m[0][0];
+  double sum = 0.0;
+  for (std::size_t j = 0; j < m.size(); ++j)
+  {
+    std::vector<std::vector<double>> minor;
+    for (std::size_t i = 1; i < m.size(); ++i)
+    {
+      minor.push_back(m[i]);
+      minor.back().erase(minor.back().begin() + j);
+    }
+    sum += (j % 2 ? -1.0 : 1.0) * m[0][j] * cofactor_det(minor);
+  }
+  return sum;
+}
+
+static double
+det_radius(const std::vector<std::vector<double>> &m, double determinant)
+{
+  const double scale = std::pow(max_abs(m), static_cast<double>(m.size()));
+  const double magnitude = std::fabs(determinant);
+  const double logarithm = magnitude > 0 ? std::fabs(std::log(magnitude)) : 0;
+  return lapack_tolerance * (scale + magnitude * (1.0 + logarithm));
+}
+
+// A solve with A rounds each entry of its result by about
+// cond(A) * eps * the largest entry.
+static double solve_radius(
+  const std::vector<std::vector<double>> &a,
+  const std::vector<std::vector<double>> &inverse,
+  double largest)
+{
+  return lapack_tolerance * infinity_norm(a) * infinity_norm(inverse) * largest;
 }
 
 static bool literal_list_contains_bool(const nlohmann::json &node)
@@ -3596,6 +3783,31 @@ exprt numpy_call_expr::handle_broadcast_to_call()
   return converter_.get_expr(result);
 }
 
+// The elements a bare np.nditer(...) yields. A view whose layout is only
+// known at run time keeps the descriptor list it is iterated through.
+exprt numpy_call_expr::get_nditer_list(const nlohmann::json &arg)
+{
+  if (!is_runtime_layout_view(arg))
+    return numpy_nditer(converter_).as_list(call_);
+  reject_unsupported_nditer_keywords(arg);
+  if (
+    std::optional<exprt> descriptor_list =
+      try_build_nditer_descriptor_list(arg))
+    return *descriptor_list;
+  throw std::runtime_error(
+    "TypeError: numpy.nditer() over this view is not supported");
+}
+
+// A named view whose extent or stride is only known at run time.
+bool numpy_call_expr::is_runtime_layout_view(const nlohmann::json &arg) const
+{
+  if (arg.value("_type", "") != "Name")
+    return false;
+  const auto *info =
+    converter_.find_numpy_pointer_view_info(arg["id"].get<std::string>());
+  return info && info->is_symbolic();
+}
+
 std::optional<exprt>
 numpy_call_expr::try_build_nditer_descriptor_list(const nlohmann::json &arg)
 {
@@ -4237,7 +4449,18 @@ std::optional<exprt> numpy_call_expr::try_materialize_descriptor_array_call(
   if (function_id_.get_function() != "array")
     return std::nullopt;
 
-  return converter_.build_numpy_descriptor_materialized_array(array_arg);
+  if (
+    std::optional<exprt> copied =
+      converter_.build_numpy_descriptor_materialized_array(array_arg))
+    return copied;
+
+  // The literal-only fallback in get() would type anything else, such as a
+  // name bound to a Python list, as a nondet value of unknown shape.
+  if (!array_arg.contains("elts"))
+    throw std::runtime_error(
+      "TypeError: numpy.array() of a value that is not a numpy array or a "
+      "list or tuple literal is not supported");
+  return std::nullopt;
 }
 
 // An "axis" keyword can only still be present here with value None: any
@@ -4493,6 +4716,31 @@ std::optional<exprt> numpy_call_expr::try_argmin_argmax_axis_result(
   if (function != "argmin" && function != "argmax")
     return std::nullopt;
   return try_argmin_argmax_along_axis(function, arg);
+}
+
+// Calls answered before the general paths: the scalar functions whose
+// operational model is their whole definition (building them as a binary
+// operation has no operator to use), and any()/all().
+std::optional<exprt>
+numpy_call_expr::try_early_result(const std::string &function)
+{
+  static const std::set<std::string> model_only = {
+    "remainder", "nextafter", "isclose"};
+  if (!model_only.count(function))
+    return try_any_all_result(function);
+  for (const nlohmann::json &arg : call_["args"])
+  {
+    const std::string type = arg.value("_type", "");
+    const bool array =
+      type == "List" || type == "Tuple" ||
+      (type == "Name" &&
+       converter_.numpy_array_symbols_.count(
+         converter_.resolve_name_symbol_id(arg["id"].get<std::string>())));
+    if (array)
+      throw std::runtime_error(
+        "TypeError: numpy." + function + "() over arrays is not supported");
+  }
+  return function_call_expr::get();
 }
 
 std::optional<exprt>
@@ -5057,6 +5305,16 @@ static nlohmann::json cast_numpy_literal_to_dtype(
     "TypeError: np.array(..., dtype=...) requires literal numeric elements");
 }
 
+nlohmann::json
+numpy_literal_with_dtype(const nlohmann::json &call, const nlohmann::json &ast)
+{
+  for (const auto &kw : call.value("keywords", nlohmann::json::array()))
+    if (kw.value("arg", "") == "dtype")
+      return cast_numpy_literal_to_dtype(
+        call["args"][0], extract_numpy_dtype_name(kw["value"], ast));
+  return call["args"][0];
+}
+
 static nlohmann::json cast_numpy_linspace_literal_to_dtype(
   const nlohmann::json &node,
   const std::string &dtype)
@@ -5181,26 +5439,17 @@ nlohmann::json numpy_call_expr::linspace_literal(
 
 bool numpy_call_expr::is_math_function() const
 {
-  const std::string &function = function_id_.get_function();
-  return function == "add" || function == "subtract" ||
-         function == "multiply" ||
-         (function == "divide" || function == "power" || function == "ceil" ||
-          function == "floor" || function == "fabs" || function == "sin" ||
-          function == "cos" || function == "exp" || function == "fmod" ||
-          function == "sqrt" || function == "fmin") ||
-         function == "fmax" || function == "trunc" || function == "round" ||
-         function == "arccos" || function == "arcsin" ||
-         function == "copysign" || function == "arctan" || function == "tan" ||
-         function == "log" || function == "log2" || function == "log10" ||
-         function == "sinh" || function == "cosh" || function == "tanh" ||
-         function == "rint" || function == "remainder" ||
-         function == "nextafter" || function == "modf" || function == "frexp" ||
-         function == "isclose" || function == "dot" ||
-         function == "transpose" || function == "det" || function == "matmul" ||
-         function == "inv" || function == "solve" || function == "norm" ||
-         function == "eig" || function == "svd" || function == "real" ||
-         function == "imag" || function == "conj" || function == "conjugate" ||
-         function == "angle" || function == "abs";
+  static const std::unordered_set<std::string> functions = {
+    "add",       "subtract", "multiply", "divide",  "power", "ceil",
+    "floor",     "fabs",     "sin",      "cos",     "exp",   "fmod",
+    "sqrt",      "fmin",     "fmax",     "trunc",   "round", "arccos",
+    "arcsin",    "copysign", "arctan",   "tan",     "log",   "log2",
+    "log10",     "sinh",     "cosh",     "tanh",    "rint",  "remainder",
+    "nextafter", "modf",     "frexp",    "isclose", "dot",   "transpose",
+    "det",       "matmul",   "inv",      "solve",   "norm",  "eig",
+    "eigvals",   "svd",      "real",     "imag",    "conj",  "conjugate",
+    "angle",     "abs"};
+  return functions.count(function_id_.get_function()) != 0;
 }
 
 std::string numpy_call_expr::get_dtype() const
@@ -5251,6 +5500,297 @@ size_t count_effective_bits(const std::string &binary)
   if (first_one == std::string::npos)
     return 1;
   return binary.size() - first_one;
+}
+
+// Any double within `radius` of `exact`, the result a LAPACK routine may
+// return; `exact` itself when nothing rounds, and any double at all when the
+// radius is not finite.
+exprt numpy_call_expr::lapack_value(double exact, double radius)
+{
+  const exprt value = from_double(exact, double_type());
+  if (radius == 0.0 || (std::isfinite(radius) && !std::isfinite(exact)))
+    return value;
+  symbolt &tmp =
+    converter_.create_tmp_symbol(call_, "$lapack$", value.type(), exprt());
+  const exprt result = symbol_expr(tmp);
+  const locationt location = converter_.get_location_from_decl(call_);
+  code_declt decl(result);
+  decl.location() = location;
+  converter_.add_instruction(decl);
+  code_assignt assign(result, side_effect_expr_nondett(value.type()));
+  assign.location() = location;
+  converter_.add_instruction(assign);
+  if (!std::isfinite(radius))
+    return result;
+  const exprt low = from_double(exact - radius, double_type());
+  const exprt high = from_double(exact + radius, double_type());
+  code_assumet within(and_exprt(
+    binary_relation_exprt(result, ">=", low),
+    binary_relation_exprt(result, "<=", high)));
+  within.location() = location;
+  converter_.add_instruction(within);
+  return result;
+}
+
+exprt numpy_call_expr::lapack_vector(
+  const std::vector<double> &exact,
+  double radius)
+{
+  std::vector<exprt> values;
+  for (double value : exact)
+    values.push_back(lapack_value(value, radius));
+  const typet element = values.front().type();
+  exprt array(
+    "array", array_typet(element, from_integer(values.size(), size_type())));
+  for (const exprt &value : values)
+    array.copy_to_operands(value);
+  return array;
+}
+
+exprt numpy_call_expr::lapack_matrix(
+  const std::vector<std::vector<double>> &exact,
+  double radius)
+{
+  std::vector<exprt> rows;
+  for (const auto &row : exact)
+    rows.push_back(lapack_vector(row, radius));
+  exprt array(
+    "array",
+    array_typet(rows.front().type(), from_integer(rows.size(), size_type())));
+  for (const exprt &row : rows)
+    array.copy_to_operands(row);
+  return array;
+}
+
+// The constant real square matrix an eigvals or svd call reads.
+std::vector<std::vector<double>> numpy_call_expr::linalg_matrix(
+  const std::function<void(nlohmann::json &)> &unwrap)
+{
+  const std::string &function = function_id_.get_function();
+  nlohmann::json arg = call_["args"][0];
+  unwrap(arg);
+  std::vector<std::vector<scalar_value>> matrix;
+  if (!try_extract_scalar_2d_list(arg, matrix))
+    throw std::runtime_error(
+      "TypeError: numpy.linalg." + function +
+      " currently supports only constant 2D real numeric matrices");
+  for (const auto &row : matrix)
+    for (const auto &value : row)
+      if (value.is_complex)
+        throw std::runtime_error(
+          "TypeError: numpy.linalg." + function +
+          " does not support complex-valued matrices");
+  return real_matrix(matrix);
+}
+
+static bool is_diagonal(const std::vector<std::vector<double>> &m)
+{
+  for (std::size_t i = 0; i < m.size(); ++i)
+    for (std::size_t j = 0; j < m.size(); ++j)
+      if (i != j && m[i][j] != 0.0)
+        return false;
+  return true;
+}
+
+static double frobenius_norm(const std::vector<std::vector<double>> &m)
+{
+  double sum = 0.0;
+  for (const auto &row : m)
+    for (double value : row)
+      sum += value * value;
+  return std::sqrt(sum);
+}
+
+exprt numpy_call_expr::nondet_bool()
+{
+  symbolt &tmp =
+    converter_.create_tmp_symbol(call_, "$order$", bool_type(), exprt());
+  const exprt flag = symbol_expr(tmp);
+  code_declt decl(flag);
+  decl.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(decl);
+  code_assignt assign(flag, side_effect_expr_nondett(bool_type()));
+  assign.location() = decl.location();
+  converter_.add_instruction(assign);
+  return flag;
+}
+
+// How far LAPACK may round the eigenvalues of a 2x2 matrix that is not
+// diagonal: a triangular one keeps its diagonal exactly, and close
+// eigenvalues of one that is not symmetric are ill-conditioned (the error
+// grows as norm^2 / separation, up to sqrt(eps) * norm).
+static double
+eigenvalue_radius(const std::vector<std::vector<double>> &m, double square)
+{
+  if (m[0][1] == 0.0 || m[1][0] == 0.0)
+    return 0.0;
+  const double norm = frobenius_norm(m);
+  if (m[0][1] == m[1][0])
+    return 1e-12 * norm;
+  const double separation = 2 * std::sqrt(std::fabs(square));
+  if (separation == 0)
+    return 1e-6 * norm;
+  return std::min(1e-12 * norm * (1 + norm / separation), 1e-6 * norm);
+}
+
+// The eigenvalues of a 2x2 matrix that is not diagonal: a real pair in
+// either order, or a complex pair with the positive imaginary part first.
+std::vector<exprt>
+numpy_call_expr::eigenvalue_pair(const std::vector<std::vector<double>> &m)
+{
+  const double a = m[0][0], b = m[0][1], c = m[1][0], d = m[1][1];
+  const bool triangular = b == 0.0 || c == 0.0;
+  const double mid = (a + d) / 2, half = (a - d) / 2;
+  const double square = half * half + b * c;
+  const double radius = eigenvalue_radius(m, square);
+  const double imag_radius = b == c ? 0.0 : radius;
+  std::vector<std::pair<double, double>> pair;
+  if (triangular)
+    pair = {{a, 0.0}, {d, 0.0}};
+  else if (square >= 0)
+    pair = {{mid + std::sqrt(square), 0.0}, {mid - std::sqrt(square), 0.0}};
+  else
+    pair = {{mid, std::sqrt(-square)}, {mid, -std::sqrt(-square)}};
+  std::vector<exprt> both;
+  for (const auto &[re, im] : pair)
+    both.push_back(
+      make_complex(lapack_value(re, radius), lapack_value(im, imag_radius)));
+  if (square < 0 && !triangular)
+    return both;
+  const exprt swap = nondet_bool();
+  return {if_exprt(swap, both[1], both[0]), if_exprt(swap, both[0], both[1])};
+}
+
+// NumPy returns complex eigenvalues, from LAPACK's dgeev: a diagonal matrix
+// keeps its entries, in order.
+exprt numpy_call_expr::eigenvalues(const std::vector<std::vector<double>> &m)
+{
+  const std::size_t n = m.size();
+  for (const auto &row : m)
+    if (row.size() != n)
+      throw std::runtime_error(
+        "TypeError: numpy.linalg.eigvals requires a square 2D matrix");
+  std::vector<exprt> values;
+  if (is_diagonal(m))
+    for (std::size_t i = 0; i < n; ++i)
+      values.push_back(
+        make_complex(lapack_value(m[i][i], 0.0), lapack_value(0.0, 0.0)));
+  else if (n == 2)
+    values = eigenvalue_pair(m);
+  else
+    throw std::runtime_error(
+      "TypeError: numpy.linalg.eigvals supports only 2x2 and diagonal "
+      "matrices currently");
+  exprt array(
+    "array",
+    array_typet(get_complex_struct_type(), from_integer(n, size_type())));
+  for (const exprt &value : values)
+    array.copy_to_operands(value);
+  return array;
+}
+
+// svd(compute_uv=False) of a 2x2 matrix: the singular values in descending
+// order, from a formula that keeps the smaller one accurate.
+exprt numpy_call_expr::singular_values(
+  const std::vector<std::vector<double>> &m)
+{
+  bool values_only = false;
+  for (const auto &kw : call_.value("keywords", nlohmann::json::array()))
+    values_only = values_only || (kw.value("arg", "") == "compute_uv" &&
+                                  kw["value"].value("value", true) == false);
+  if (!values_only)
+    throw std::runtime_error(
+      "TypeError: numpy.linalg.svd returns the U and Vh factors, which are "
+      "not supported; pass compute_uv=False");
+  if (m.size() != 2 || m[0].size() != 2 || m[1].size() != 2)
+    throw std::runtime_error(
+      "TypeError: numpy.linalg.svd currently supports only 2x2 matrices");
+  const double a = m[0][0], b = m[0][1], c = m[1][0], d = m[1][1];
+  const double largest =
+    (std::hypot(a + d, c - b) + std::hypot(a - d, b + c)) / 2;
+  const double smallest =
+    largest == 0.0 ? 0.0 : std::fabs(a * d - b * c) / largest;
+  const double radius = 1e-12 * frobenius_norm(m);
+  const exprt first = lapack_value(largest, radius);
+  const exprt second = lapack_value(smallest, radius);
+  code_assumet ordered(binary_relation_exprt(first, ">=", second));
+  ordered.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(ordered);
+  exprt array("array", array_typet(first.type(), from_integer(2, size_type())));
+  array.copy_to_operands(first, second);
+  return array;
+}
+
+// NumPy evaluates these with its own vectorised code where the CPU has it
+// (SVML on AVX-512 is tested to 4 ulps of the exact value, tanh differs from
+// glibc by 2 ulps even without it): the result is any double within 8 ulps
+// of the C library's, except where every implementation is
+// exact (a correctly rounded square root, an odd function at a signed zero,
+// exp(0), log(1), or log2 of a power of two).
+exprt numpy_call_expr::numpy_math_value(const std::string &function, double x)
+{
+  static const std::set<std::string> odd = {
+    "sin", "tan", "arctan", "arcsin", "sinh", "tanh"};
+  static const std::set<std::string> one_at_zero = {"exp", "cos", "cosh"};
+  static const std::set<std::string> zero_at_one = {
+    "log", "log2", "log10", "arccos"};
+  const double value = apply_numpy_unary_math(function, x);
+  int exponent = 0;
+  const bool power_of_two = x > 0 && std::frexp(x, &exponent) == 0.5;
+  const bool exact =
+    function == "sqrt" || function == "rint" || !std::isfinite(value) ||
+    (x == 0.0 &&
+     (odd.count(function) != 0 || one_at_zero.count(function) != 0)) ||
+    (x == 1.0 && zero_at_one.count(function) != 0) ||
+    (function == "log2" && power_of_two);
+  const double ulp =
+    std::nextafter(std::fabs(value), INFINITY) - std::fabs(value);
+  return lapack_value(value, exact ? 0.0 : 8 * ulp);
+}
+
+// `np.exp(0.3)`, `np.sin(-1.0)`: a numeric literal argument.
+std::optional<exprt> numpy_call_expr::try_numpy_math_constant()
+{
+  const std::string &function = function_id_.get_function();
+  numeric_value value;
+  if (
+    !is_supported_numpy_unary_math(function) || call_["args"].size() != 1 ||
+    !try_extract_numeric_constant(call_["args"][0], value))
+    return std::nullopt;
+  return numpy_math_value(function, to_double(value));
+}
+
+// The function applied to each element of a literal 1-D or 2-D list.
+exprt numpy_call_expr::numpy_math_list(
+  const std::string &function,
+  const nlohmann::json &arg)
+{
+  std::vector<std::vector<numeric_value>> rows;
+  std::vector<numeric_value> row;
+  const bool flat = try_extract_numeric_1d_list(arg, row);
+  if (flat)
+    rows.push_back(row);
+  else if (!try_extract_numeric_2d_list(arg, rows))
+    throw std::runtime_error("Unsupported Numpy call: " + function);
+  std::vector<exprt> results;
+  for (const auto &values : rows)
+  {
+    exprt array(
+      "array",
+      array_typet(double_type(), from_integer(values.size(), size_type())));
+    for (const numeric_value &value : values)
+      array.copy_to_operands(numpy_math_value(function, to_double(value)));
+    results.push_back(array);
+  }
+  if (flat)
+    return results.front();
+  exprt matrix(
+    "array",
+    array_typet(
+      results.front().type(), from_integer(rows.size(), size_type())));
+  for (const exprt &result : results)
+    matrix.copy_to_operands(result);
+  return matrix;
 }
 
 typet numpy_call_expr::get_typet_from_dtype() const
@@ -6162,13 +6702,16 @@ exprt numpy_call_expr::create_expr_from_call()
         }
       }
 
-      if (n == 2)
-        return converter_.get_expr(to_json_constant(determinant_2x2(matrix)));
-      if (n == 3)
-        return converter_.get_expr(to_json_constant(determinant_3x3(matrix)));
-
-      throw std::runtime_error(
-        "TypeError: numpy.linalg.det supports only 2x2 and 3x3 matrices");
+      if (n > 4)
+        throw std::runtime_error(
+          "TypeError: numpy.linalg.det supports only matrices up to 4x4");
+      const std::vector<std::vector<double>> real = real_matrix(matrix);
+      if (const std::optional<double> computed = exact_det(real))
+        return lapack_value(*computed, 0.0);
+      if (structurally_singular(real))
+        return lapack_value(0.0, 0.0);
+      const double exact = cofactor_det(real);
+      return lapack_value(exact, det_radius(real, exact));
     }
 
     auto unwrap_np_array_arg = [&resolve_var](nlohmann::json &arg) {
@@ -6223,7 +6766,23 @@ exprt numpy_call_expr::create_expr_from_call()
       if (!ok)
         throw std::runtime_error("numpy.linalg.LinAlgError: Singular matrix");
 
-      return converter_.get_expr(matrix_to_json(inv));
+      const std::vector<std::vector<double>> real = real_matrix(matrix);
+      std::vector<std::vector<double>> inverse = real_matrix(inv);
+      bool exact = true;
+      for (std::size_t j = 0; j < n && exact; ++j)
+      {
+        std::vector<double> unit(n, 0.0);
+        unit[j] = 1.0;
+        const std::optional<std::vector<double>> column =
+          exact_solve(real, unit);
+        exact = column.has_value();
+        for (std::size_t i = 0; i < n && exact; ++i)
+          inverse[i][j] = (*column)[i];
+      }
+      if (!exact)
+        inverse = real_matrix(inv);
+      return lapack_matrix(
+        inverse, exact ? 0.0 : solve_radius(real, inverse, max_abs(inverse)));
     }
 
     if (function == "norm")
@@ -6328,137 +6887,17 @@ exprt numpy_call_expr::create_expr_from_call()
         "numeric arrays");
     }
 
-    // numpy.linalg.eig — eigenvalues (only) of a square real matrix.
-    // Returns a 1-D list of eigenvalues (2x2: descending; 3x3 diagonal: in
-    // diagonal order).
-    // Only concrete 2x2 and 3x3 real matrices with real eigenvalues are
-    // supported; complex eigenvalues are rejected with an explicit error.
+    // numpy.linalg.eig and svd also return eigenvectors and the U and Vh
+    // factors, which are not modelled; eigvals and svd(compute_uv=False)
+    // return only the values.
     if (function == "eig")
-    {
-      nlohmann::json arg = call_["args"][0];
-      unwrap_np_array_arg(arg);
-
-      std::vector<std::vector<scalar_value>> matrix;
-      if (!try_extract_scalar_2d_list(arg, matrix))
-        throw std::runtime_error(
-          "TypeError: numpy.linalg.eig currently supports only constant "
-          "2D real numeric arrays");
-
-      std::size_t n = 0;
-      if (!is_square_matrix(matrix, n))
-        throw std::runtime_error(
-          "TypeError: numpy.linalg.eig requires a square 2D matrix");
-
-      for (const auto &row : matrix)
-        for (const auto &v : row)
-          if (v.is_complex)
-            throw std::runtime_error(
-              "TypeError: numpy.linalg.eig does not support complex-valued "
-              "matrices");
-
-      if (n == 2)
-      {
-        double a = matrix[0][0].value.real();
-        double b = matrix[0][1].value.real();
-        double c = matrix[1][0].value.real();
-        double d = matrix[1][1].value.real();
-        double trace = a + d;
-        double det = a * d - b * c;
-        double disc = trace * trace - 4.0 * det;
-        if (disc < 0.0)
-          throw std::runtime_error(
-            "TypeError: numpy.linalg.eig: matrix has complex eigenvalues; "
-            "only real eigenvalues are supported");
-
-        double sqrt_disc = std::sqrt(disc);
-        double lam1 = (trace + sqrt_disc) / 2.0;
-        double lam2 = (trace - sqrt_disc) / 2.0;
-        return converter_.get_expr(
-          vector_to_json({make_real_scalar(lam1), make_real_scalar(lam2)}));
-      }
-      else if (n == 3)
-      {
-        // For 3x3, only diagonal matrices and scalar multiples of identity are
-        // supported (eigenvalues are the diagonal entries, already real).
-        bool is_diagonal = true;
-        for (std::size_t i = 0; i < 3 && is_diagonal; ++i)
-          for (std::size_t j = 0; j < 3 && is_diagonal; ++j)
-            if (i != j && std::abs(matrix[i][j].value.real()) > 1e-12)
-              is_diagonal = false;
-
-        if (!is_diagonal)
-          throw std::runtime_error(
-            "TypeError: numpy.linalg.eig supports only 2x2 matrices and "
-            "3x3 diagonal matrices currently");
-
-        std::vector<scalar_value> eigenvalues;
-        for (std::size_t i = 0; i < 3; ++i)
-          eigenvalues.push_back(make_real_scalar(matrix[i][i].value.real()));
-        return converter_.get_expr(vector_to_json(eigenvalues));
-      }
-      else
-      {
-        throw std::runtime_error(
-          "TypeError: numpy.linalg.eig supports only 2x2 and 3x3 matrices");
-      }
-    }
-
-    // numpy.linalg.svd — singular values (only) of a real matrix.
-    // Returns a 1-D list of singular values sorted in descending order.
-    // Only concrete 2x2 real matrices are supported; larger matrices and
-    // complex entries are rejected with explicit errors.
+      throw std::runtime_error(
+        "TypeError: numpy.linalg.eig returns eigenvectors, which are not "
+        "supported; use numpy.linalg.eigvals");
+    if (function == "eigvals")
+      return eigenvalues(linalg_matrix(unwrap_np_array_arg));
     if (function == "svd")
-    {
-      nlohmann::json arg = call_["args"][0];
-      unwrap_np_array_arg(arg);
-
-      std::vector<std::vector<scalar_value>> matrix;
-      if (!try_extract_scalar_2d_list(arg, matrix))
-        throw std::runtime_error(
-          "TypeError: numpy.linalg.svd currently supports only constant "
-          "2D real numeric matrices");
-
-      for (const auto &row : matrix)
-        for (const auto &v : row)
-          if (v.is_complex)
-            throw std::runtime_error(
-              "TypeError: numpy.linalg.svd does not support complex-valued "
-              "matrices");
-
-      const std::size_t nrows = matrix.size();
-      const std::size_t ncols = matrix.empty() ? 0 : matrix[0].size();
-      if (nrows != 2 || ncols != 2)
-        throw std::runtime_error(
-          "TypeError: numpy.linalg.svd currently supports only 2x2 matrices");
-
-      // Compute AᵀA (always symmetric positive semi-definite for real A)
-      double a = matrix[0][0].value.real(), b = matrix[0][1].value.real();
-      double c = matrix[1][0].value.real(), d = matrix[1][1].value.real();
-      double ata00 = a * a + c * c;
-      double ata01 = a * b + c * d;
-      double ata11 = b * b + d * d;
-
-      // Eigenvalues of AᵀA (trace / det of 2x2 symmetric)
-      double trace = ata00 + ata11;
-      double det = ata00 * ata11 - ata01 * ata01;
-      double disc = trace * trace - 4.0 * det;
-      if (disc < 0.0)
-        disc = 0.0; // numerical zero for PSD
-
-      double sqrt_disc = std::sqrt(disc);
-      double eigval1 = (trace + sqrt_disc) / 2.0;
-      double eigval2 = (trace - sqrt_disc) / 2.0;
-      if (eigval1 < 0.0)
-        eigval1 = 0.0;
-      if (eigval2 < 0.0)
-        eigval2 = 0.0;
-
-      double sigma1 = std::sqrt(eigval1);
-      double sigma2 = std::sqrt(eigval2);
-
-      return converter_.get_expr(
-        vector_to_json({make_real_scalar(sigma1), make_real_scalar(sigma2)}));
-    }
+      return singular_values(linalg_matrix(unwrap_np_array_arg));
 
     if (is_complex_function(function))
     {
@@ -6553,6 +6992,8 @@ exprt numpy_call_expr::create_expr_from_call()
 
     const auto &arg_type = call_["args"][0]["_type"];
 
+    if (std::optional<exprt> value = try_numpy_math_constant())
+      return *value;
     if (
       arg_type == "Constant" || arg_type == "UnaryOp" ||
       arg_type == "Subscript")
@@ -6619,8 +7060,7 @@ exprt numpy_call_expr::create_expr_from_call()
 
       if (is_supported_numpy_unary_math(operation))
       {
-        exprt folded = fold_numpy_unary_constant_list(
-          converter_, operation, call_["args"][0]);
+        exprt folded = numpy_math_list(operation, call_["args"][0]);
         if (converter_.current_lhs)
         {
           converter_.current_lhs->type() = folded.type();
@@ -7062,10 +7502,24 @@ exprt numpy_call_expr::create_expr_from_call()
           "incompatible");
 
       std::vector<scalar_value> x;
-      if (!solve_linear_system(A, b, x))
+      std::vector<std::vector<scalar_value>> inv;
+      if (
+        !solve_linear_system(A, b, x) ||
+        !(n == 2 ? inverse_2x2(A, inv) : inverse_3x3(A, inv)))
         throw std::runtime_error("numpy.linalg.LinAlgError: Singular matrix");
 
-      return converter_.get_expr(vector_to_json(x));
+      std::vector<double> solution, rhs_values;
+      for (const scalar_value &value : x)
+        solution.push_back(value.value.real());
+      for (const scalar_value &value : b)
+        rhs_values.push_back(value.value.real());
+      if (
+        const std::optional<std::vector<double>> computed =
+          exact_solve(real_matrix(A), rhs_values))
+        return lapack_vector(*computed, 0.0);
+      const double radius =
+        solve_radius(real_matrix(A), real_matrix(inv), max_abs({solution}));
+      return lapack_vector(solution, radius);
     }
 
     if (should_fallback_to_numpy_model(function))
@@ -9610,6 +10064,203 @@ bool numpy_call_expr::is_complex_operand(const nlohmann::json &arg) const
   return symbol && type_utils::is_numpy_complex_array(symbol->get_type());
 }
 
+// numpy.round(x, decimals): round half to even, for decimals zero or
+// negative too. The fold must give the same double on every platform, so the
+// scale is built by exact repeated multiplication (std::pow differs between
+// libms) and half-to-even is decided with std::floor (std::nearbyint honours
+// the ambient rounding mode).
+static double numpy_round(double x, double decimals)
+{
+  const long long digits = static_cast<long long>(decimals);
+  double pow10 = 1.0;
+  for (long long i = 0; i < std::llabs(digits); ++i)
+    pow10 *= 10.0;
+  const double scaled = digits >= 0 ? x * pow10 : x / pow10;
+  double r = std::floor(scaled);
+  const double frac = scaled - r;
+  if (frac > 0.5 || (frac == 0.5 && std::fmod(r, 2.0) != 0.0))
+    r += 1.0;
+  return digits >= 0 ? r / pow10 : r * pow10;
+}
+
+// The double a numpy binary function of two numbers folds to on the host;
+// nullopt for one without a fold (a zero divisor keeps NumPy's runtime
+// warning path).
+static std::optional<double>
+fold_double(const std::string &function, double left, double right)
+{
+  static const std::map<std::string, double (*)(double, double)> ops = {
+    {"add", [](double a, double b) { return a + b; }},
+    {"subtract", [](double a, double b) { return a - b; }},
+    {"multiply", [](double a, double b) { return a * b; }},
+    {"power", [](double a, double b) { return std::pow(a, b); }},
+    {"copysign", [](double a, double b) { return std::copysign(a, b); }},
+    {"fmax", [](double a, double b) { return std::fmax(a, b); }},
+    {"fmin", [](double a, double b) { return std::fmin(a, b); }},
+    {"round", numpy_round}};
+  if (function == "divide" && right != 0.0)
+    return left / right;
+  auto op = ops.find(function);
+  if (op == ops.end())
+    return std::nullopt;
+  return op->second(left, right);
+}
+
+// The exact value of an integer numpy add, subtract, multiply or power;
+// nullopt for any other function or a negative power.
+static std::optional<BigInt>
+fold_integer(const std::string &function, int64_t left, int64_t right)
+{
+  const BigInt a(left), b(right);
+  if (function == "add")
+    return a + b;
+  if (function == "subtract")
+    return a - b;
+  if (function == "multiply")
+    return a * b;
+  BigInt power;
+  if (function == "power" && try_exact_integer_power(left, right, power))
+    return power;
+  return std::nullopt;
+}
+
+// `value` wrapped to a `bits`-wide integer, as NumPy stores it.
+static BigInt wrap_integer(BigInt value, std::size_t bits, bool is_unsigned)
+{
+  const BigInt modulus = BigInt::power2(bits);
+  value = value % modulus;
+  if (value < 0)
+    value += modulus;
+  if (!is_unsigned && value >= BigInt::power2(bits - 1))
+    value -= modulus;
+  return value;
+}
+
+void numpy_call_expr::report_integer_overflow()
+{
+  log_warning(
+    "{}:{}: Integer overflow detected in {}() call. Consider using a larger "
+    "integer type.",
+    converter_.current_python_file,
+    call_["end_lineno"].get<int>(),
+    function_id_.get_function());
+  emit_numpy_overflow_assertion(converter_, call_, function_id_);
+}
+
+// The type a scalar call with `dtype=` produces, recorded on the assigned
+// name; empty without a dtype.
+typet numpy_call_expr::scalar_dtype_result()
+{
+  if (!get_dtype_size() || !converter_.current_lhs)
+    return typet();
+  const typet t = get_typet_from_dtype();
+  converter_.current_lhs->type() = t;
+  converter_.update_symbol(*converter_.current_lhs);
+  return t;
+}
+
+// The host fold of a scalar call with a dtype: integers exactly (an overflow
+// of the dtype is reported and the value wrapped), floats in double.
+std::optional<exprt> numpy_call_expr::fold_scalar_binary(
+  const std::string &function,
+  const numeric_value &lhs,
+  const numeric_value &rhs,
+  const typet &t)
+{
+  const std::string dtype = get_dtype();
+  const std::size_t bits = get_dtype_size();
+  const bool is_unsigned = !dtype.empty() && dtype[0] == 'u';
+  if (dtype.find("int") != std::string::npos)
+  {
+    const std::optional<BigInt> exact =
+      lhs.is_int && rhs.is_int
+        ? fold_integer(function, lhs.int_value, rhs.int_value)
+        : std::nullopt;
+    if (!exact)
+      return std::nullopt;
+    const BigInt wrapped = wrap_integer(*exact, bits, is_unsigned);
+    if (wrapped != *exact)
+      report_integer_overflow();
+    exprt folded = from_integer(wrapped, t);
+    folded.cformat(integer2string(wrapped));
+    return folded;
+  }
+  const std::optional<double> value =
+    fold_double(function, to_double(lhs), to_double(rhs));
+  if (!value)
+    return std::nullopt;
+  exprt folded = from_double(*value, t.is_floatbv() ? t : cached_double_type());
+  folded.cformat(std::to_string(*value));
+  return folded;
+}
+
+// The operation over the two literals, computed in 64 bits (or double) and
+// then stored in the dtype: an integer dtype wraps, and is checked to hold
+// the value when overflow checks are on, as the host fold reports it.
+exprt numpy_call_expr::unfolded_scalar_binary(
+  const std::string &function,
+  const numeric_value &lhs,
+  const numeric_value &rhs,
+  const typet &t)
+{
+  nlohmann::json op =
+    lhs.is_int && rhs.is_int
+      ? create_binary_op(function, kConstant, lhs.int_value, rhs.int_value)
+      : create_binary_op(function, kConstant, to_double(lhs), to_double(rhs));
+  exprt wide = converter_.get_expr(op);
+  if (t.id().empty())
+    return wide;
+  if (t.is_floatbv())
+  {
+    for (exprt &operand : wide.operands())
+      operand = typecast_exprt(operand, t);
+    wide.type() = t;
+    return wide;
+  }
+  if (overflow_checks_enabled() && !wide.type().is_floatbv())
+  {
+    const std::size_t bits = get_dtype_size();
+    const bool is_unsigned = t.is_unsignedbv();
+    const BigInt low = is_unsigned ? BigInt(0) : -BigInt::power2(bits - 1);
+    const BigInt high =
+      is_unsigned ? BigInt::power2(bits) - 1 : BigInt::power2(bits - 1) - 1;
+    code_assertt fits(and_exprt(
+      binary_relation_exprt(wide, ">=", from_integer(low, wide.type())),
+      binary_relation_exprt(wide, "<=", from_integer(high, wide.type()))));
+    fits.location() = converter_.get_location_from_decl(call_);
+    fits.location().comment(
+      "Integer overflow detected in " + function_id_.get_function() +
+      "() call");
+    converter_.add_instruction(fits);
+  }
+  return typecast_exprt(wide, t);
+}
+
+// A two-argument call on two number literals: folded on the host when
+// folding is on, otherwise built as the operation over the literals.
+// copysign/fmax/fmin/round have no operator to build, so they always fold.
+exprt numpy_call_expr::scalar_binary_call(
+  const std::string &function,
+  bool allow_numpy_fold)
+{
+  const numeric_value lhs = extract_value(call_["args"][0]);
+  const numeric_value rhs = extract_value(call_["args"][1]);
+  const bool fold_only = function == "copysign" || function == "fmax" ||
+                         function == "fmin" || function == "round";
+  const typet t = scalar_dtype_result();
+  if (allow_numpy_fold && (fold_only || !t.id().empty()))
+    if (
+      std::optional<exprt> folded =
+        fold_scalar_binary(function, lhs, rhs, fold_only ? typet() : t))
+      return *folded;
+  if (fold_only)
+    throw std::runtime_error(
+      "TypeError: numpy." + function +
+      "() is only supported on number "
+      "literals with constant folding");
+  return unfolded_scalar_binary(function, lhs, rhs, t);
+}
+
 exprt numpy_call_expr::get()
 {
   const std::string &function = function_id_.get_function();
@@ -9635,8 +10286,8 @@ exprt numpy_call_expr::get()
           .try_reduce_symbolic_view(function, call_["args"][0]))
       return *runtime_result;
 
-  if (std::optional<exprt> any_all_result = try_any_all_result(function))
-    return *any_all_result;
+  if (std::optional<exprt> early = try_early_result(function))
+    return *early;
 
   static const std::set<std::string> reducer_and_arange_functions = {
     "sum", "prod", "min", "max", "mean", "argmin", "argmax", "arange"};
@@ -10784,27 +11435,9 @@ exprt numpy_call_expr::get()
         "TypeError: numpy." + function + "() requires an array argument");
 
     nlohmann::json arr_arg = call_["args"][0];
-    if (
-      function == "nditer" && arr_arg.is_object() &&
-      arr_arg.value("_type", "") == "List")
-      throw std::runtime_error(
-        "TypeError: numpy.nditer() currently supports a single operand");
 
     if (function == "nditer")
-    {
-      reject_unsupported_nditer_keywords(arr_arg);
-
-      if (
-        std::optional<exprt> descriptor_list =
-          try_build_nditer_descriptor_list(arr_arg))
-        return *descriptor_list;
-
-      auto literal_arg = get_literal_numpy_array_arg(arr_arg);
-      if (literal_arg.has_value())
-        arr_arg = std::move(*literal_arg);
-      else
-        resolve_numpy_var(arr_arg);
-    }
+      return get_nditer_list(arr_arg);
     else
     {
       resolve_numpy_var(arr_arg);
@@ -11112,236 +11745,7 @@ exprt numpy_call_expr::get()
       !is_complex_annotated_scalar_node(call_["args"][0]) &&
       !is_complex_annotated_scalar_node(call_["args"][1]))
     {
-      auto lhs = extract_value(call_["args"][0]);
-      auto rhs = extract_value(call_["args"][1]);
-
-      auto compute_scalar_result =
-        [&](double left, double right, double &out) -> bool {
-        if (function == "add")
-        {
-          out = left + right;
-          return true;
-        }
-        if (function == "subtract")
-        {
-          out = left - right;
-          return true;
-        }
-        if (function == "multiply")
-        {
-          out = left * right;
-          return true;
-        }
-        if (function == "divide")
-        {
-          if (right == 0.0)
-            return false;
-          out = left / right;
-          return true;
-        }
-        if (function == "power")
-        {
-          out = std::pow(left, right);
-          return true;
-        }
-        if (function == "copysign")
-        {
-          out = std::copysign(left, right);
-          return true;
-        }
-        if (function == "fmax")
-        {
-          out = std::fmax(left, right);
-          return true;
-        }
-        if (function == "fmin")
-        {
-          out = std::fmin(left, right);
-          return true;
-        }
-        if (function == "round")
-        {
-          // numpy.round(x, decimals): round half to even (numpy semantics),
-          // for decimals zero or negative too (e.g. round(12345, -2) == 12300).
-          // This host fold must produce the SAME double on every platform, else
-          // the baked SMT constant diverges and the verdict flips (it did:
-          // passed on arm64, failed on x86-64). Two non-portable pitfalls are
-          // avoided: (1) std::pow(10.0, d) is not guaranteed to be the exact
-          // power of ten (glibc vs Apple libm differ), so build the scale by
-          // exact repeated multiplication; (2) std::nearbyint honours the
-          // ambient FP rounding mode, so decide half-to-even explicitly with
-          // std::floor, which ignores the mode.
-          const long long decimals = static_cast<long long>(right);
-          double pow10 = 1.0;
-          for (long long i = 0; i < std::llabs(decimals); ++i)
-            pow10 *= 10.0;
-          const double scaled = decimals >= 0 ? left * pow10 : left / pow10;
-          double r = std::floor(scaled);
-          const double frac = scaled - r;
-          if (frac > 0.5 || (frac == 0.5 && std::fmod(r, 2.0) != 0.0))
-            r += 1.0;
-          out = decimals >= 0 ? r / pow10 : r * pow10;
-          return true;
-        }
-        return false;
-      };
-
-      // copysign/fmax/fmin/round have no operator_map() entry and no handler,
-      // so the BinOp path below crashes migrate_expr.
-      // Fold the scalar-constant case here.
-      // Symbolic and array operands are unsupported.
-      if (
-        allow_numpy_fold && (function == "copysign" || function == "fmax" ||
-                             function == "fmin" || function == "round"))
-      {
-        double folded = 0.0;
-        if (!compute_scalar_result(to_double(lhs), to_double(rhs), folded))
-          throw std::runtime_error(
-            "compute_scalar_result missing branch for " + function);
-
-        // Mirror the dtype-override branch below:
-        // only restamp current_lhs when the user explicitly requested a dtype.
-        typet t = cached_double_type();
-        if (get_dtype_size() && converter_.current_lhs)
-        {
-          t = get_typet_from_dtype();
-          if (!t.is_floatbv())
-            t = cached_double_type();
-          converter_.current_lhs->type() = t;
-          converter_.update_symbol(*converter_.current_lhs);
-        }
-        exprt folded_expr = from_double(folded, t);
-        folded_expr.cformat(std::to_string(folded));
-        return folded_expr;
-      }
-
-      nlohmann::json result;
-      if (lhs.is_int && rhs.is_int)
-      {
-        result =
-          create_binary_op(function, kConstant, lhs.int_value, rhs.int_value);
-      }
-      else
-      {
-        result =
-          create_binary_op(function, kConstant, to_double(lhs), to_double(rhs));
-      }
-
-      exprt expr = converter_.get_expr(result);
-
-      auto dtype_size = get_dtype_size();
-      if (dtype_size && converter_.current_lhs)
-      {
-        typet t = get_typet_from_dtype();
-        converter_.current_lhs->type() = t;
-        converter_.update_symbol(*converter_.current_lhs);
-
-        expr.type() = converter_.current_lhs->type();
-        for (auto &operand : expr.operands())
-          operand.type() = expr.type();
-
-        if (allow_numpy_fold)
-        {
-          const std::string dtype = get_dtype();
-          const bool is_integer_dtype = dtype.find("int") != std::string::npos;
-          if (
-            function == "power" && lhs.is_int && rhs.is_int && is_integer_dtype)
-          {
-            BigInt exact_power;
-            if (
-              try_exact_integer_power(
-                lhs.int_value, rhs.int_value, exact_power))
-            {
-              const bool is_unsigned = !dtype.empty() && dtype[0] == 'u';
-              const BigInt min_val =
-                is_unsigned ? BigInt(0) : -BigInt::power2(dtype_size - 1);
-              const BigInt max_val = is_unsigned
-                                       ? BigInt::power2(dtype_size) - 1
-                                       : BigInt::power2(dtype_size - 1) - 1;
-              if (exact_power < min_val || exact_power > max_val)
-              {
-                log_warning(
-                  "{}:{}: Integer overflow detected in {}() call. Consider "
-                  "using a larger integer type.",
-                  converter_.current_python_file,
-                  call_["end_lineno"].get<int>(),
-                  function_id_.get_function());
-                emit_numpy_overflow_assertion(converter_, call_, function_id_);
-              }
-
-              BigInt wrapped = exact_power;
-              const BigInt modulus = BigInt::power2(dtype_size);
-              wrapped = wrapped % modulus;
-              if (wrapped < 0)
-                wrapped += modulus;
-              if (!is_unsigned && wrapped >= BigInt::power2(dtype_size - 1))
-                wrapped -= modulus;
-
-              exprt folded = from_integer(wrapped, t);
-              folded.cformat(integer2string(wrapped));
-              return folded;
-            }
-          }
-
-          double left = to_double(lhs);
-          double right = to_double(rhs);
-          double scalar_result = 0.0;
-
-          if (compute_scalar_result(left, right, scalar_result))
-          {
-            if (is_integer_dtype)
-            {
-              const bool is_unsigned = !dtype.empty() && dtype[0] == 'u';
-              const int64_t rounded_value =
-                static_cast<int64_t>(std::llround(scalar_result));
-              const uint64_t mask = dtype_size >= 64
-                                      ? std::numeric_limits<uint64_t>::max()
-                                      : ((uint64_t{1} << dtype_size) - 1);
-              const uint64_t wrapped_bits =
-                static_cast<uint64_t>(rounded_value) & mask;
-
-              int64_t wrapped_signed = static_cast<int64_t>(wrapped_bits);
-              if (
-                !is_unsigned && dtype_size < 64 &&
-                ((wrapped_bits >> (dtype_size - 1)) & 1ULL) != 0)
-              {
-                wrapped_signed -=
-                  static_cast<int64_t>(uint64_t{1} << dtype_size);
-              }
-
-              if (rounded_value != wrapped_signed)
-              {
-                log_warning(
-                  "{}:{}: Integer overflow detected in {}() call. Consider "
-                  "using a larger integer type.",
-                  converter_.current_python_file,
-                  call_["end_lineno"].get<int>(),
-                  function_id_.get_function());
-                emit_numpy_overflow_assertion(converter_, call_, function_id_);
-              }
-
-              if (is_unsigned)
-              {
-                exprt folded = from_integer(BigInt(wrapped_bits), t);
-                folded.cformat(std::to_string(wrapped_bits));
-                return folded;
-              }
-              else
-              {
-                exprt folded = from_integer(BigInt(wrapped_signed), t);
-                folded.cformat(std::to_string(wrapped_signed));
-                return folded;
-              }
-            }
-
-            exprt folded = from_double(scalar_result, t);
-            folded.cformat(std::to_string(scalar_result));
-            return folded;
-          }
-        }
-      }
-
-      return expr;
+      return scalar_binary_call(function, allow_numpy_fold);
     }
     broadcast_check(call_["args"]);
 
