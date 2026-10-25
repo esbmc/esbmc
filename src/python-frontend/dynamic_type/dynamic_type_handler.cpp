@@ -1321,9 +1321,6 @@ exprt dynamic_type_handler::build_numeric_conversion(
 
   exprt type_id = build_member(object, "type_id", size_type());
   exprt value = build_member(object, "value", pointer_typet(empty_typet()));
-  auto read_as = [&value](const typet &t) {
-    return build_dereference(build_typecast(value, pointer_typet(t)), t);
-  };
 
   // The parse runs only on the str path: the models read a NUL-terminated
   // string, which the bytes of an int or a float are not.
@@ -1339,37 +1336,72 @@ exprt dynamic_type_handler::build_numeric_conversion(
   if (!to_float)
     parse_args.push_back(from_integer(10, int_type()));
 
-  code_ifthenelset invalid;
-  invalid.cond() =
-    build_not(build_call_expr(*is_valid, bool_type(), parse_args));
-  invalid.then_case() =
-    code_expressiont(converter_.get_exception_handler().gen_exception_raise(
-      "ValueError",
-      to_float ? "could not convert string to float"
-               : "invalid literal for int()"));
-  invalid.location() = location;
-  invalid.location().property("skipped");
+  auto raise_if = [&](
+                    code_blockt &target,
+                    const exprt &cond,
+                    const std::string &exception,
+                    const std::string &message) {
+    code_ifthenelset guard;
+    guard.cond() = cond;
+    guard.then_case() =
+      code_expressiont(converter_.get_exception_handler().gen_exception_raise(
+        exception, message));
+    guard.location() = location;
+    guard.location().property("skipped");
+    target.copy_to_operands(guard);
+  };
 
   code_blockt from_str;
-  from_str.copy_to_operands(invalid);
+  raise_if(
+    from_str,
+    build_not(build_call_expr(*is_valid, bool_type(), parse_args)),
+    "ValueError",
+    to_float ? "could not convert string to float"
+             : "invalid literal for int()");
   from_str.copy_to_operands(
     assign(result, build_call_expr(*parse, result_type, parse_args)));
 
   // A bool is stored as an int (build_tag_field_assigns).
   exprt is_float =
     build_equal(type_id, type_handler_.tagged_scalar_type_id(double_type()));
-  exprt as_float = read_as(double_type());
-  exprt as_int = read_as(int_t);
-  exprt from_number =
-    to_float
-      ? build_if(is_float, as_float, build_typecast(as_int, result_type))
-      : build_if(is_float, build_typecast(as_float, result_type), as_int);
+  // A float payload is read through its bits: a double-typed read of a
+  // pointer that may also target a str payload's bytes trips the solvers.
+  exprt as_int =
+    build_dereference(build_typecast(value, pointer_typet(int_t)), int_t);
+  expr2tc int2;
+  migrate_expr(as_int, int2);
+  exprt as_float =
+    migrate_expr_back(bitcast2tc(migrate_type(double_type()), int2));
+
+  code_blockt from_number;
+  if (to_float)
+    from_number.copy_to_operands(assign(
+      result,
+      build_if(is_float, as_float, build_typecast(as_int, result_type))));
+  else
+  {
+    expr2tc float2;
+    migrate_expr(as_float, float2);
+    raise_if(
+      from_number,
+      build_and(is_float, migrate_expr_back(isinf2tc(float2))),
+      "OverflowError",
+      "cannot convert float infinity to integer");
+    raise_if(
+      from_number,
+      build_and(is_float, migrate_expr_back(isnan2tc(float2))),
+      "ValueError",
+      "cannot convert float NaN to integer");
+    from_number.copy_to_operands(assign(
+      result,
+      build_if(is_float, build_typecast(as_float, result_type), as_int)));
+  }
 
   code_ifthenelset dispatch;
   dispatch.cond() = build_equal(
     type_id, type_handler_.tagged_scalar_type_id(pointer_typet(char_type())));
   dispatch.then_case() = from_str;
-  dispatch.else_case() = assign(result, from_number);
+  dispatch.else_case() = from_number;
   dispatch.location() = location;
   block.copy_to_operands(dispatch);
 
