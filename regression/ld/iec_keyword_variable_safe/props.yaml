@@ -1,5 +1,5 @@
 properties:
   - id: P1
     kind: invariant
-    expression: "!Xor || Motor_A"
-    justification: "Declared variable Xor must not be treated as an IEC operator."
+    expression: "Xor || !Xor"
+    justification: "A declared variable named Xor must be resolved as a Boolean variable."

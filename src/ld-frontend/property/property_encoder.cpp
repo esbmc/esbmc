@@ -68,7 +68,7 @@ symbol_exprt
 property_encoder::var_expr(const std::string &name, const LdProperty &p) const
 {
   const symbolt *sym = context_.find_symbol(ld_name(name));
-  
+
   if (!sym)
     throw std::runtime_error(undeclared_message(name, p));
 
