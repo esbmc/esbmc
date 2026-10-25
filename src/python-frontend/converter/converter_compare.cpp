@@ -694,9 +694,18 @@ void python_converter::raise_on_optional_none(
   const exprt &rhs,
   const nlohmann::json &element)
 {
+  const locationt location = get_location_from_decl(element);
+  if ((op == "In" || op == "NotIn") && !rhs_none.is_false())
+  {
+    emit_guarded_raise(
+      rhs_none,
+      "TypeError",
+      "argument of type 'NoneType' is not iterable",
+      location);
+    return;
+  }
   if (!raises_on_none_operand(op))
     return;
-  const locationt location = get_location_from_decl(element);
   auto raise = [&](
                  const exprt &flag,
                  const std::string &lhs_name,
