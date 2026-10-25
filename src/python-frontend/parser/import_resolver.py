@@ -404,9 +404,7 @@ def _mark_unmodelled_class_bases(tree: ast.Module) -> None:
     # a base read before its import has run, and a star import may rebind it.
     for index, stmt in enumerate(tree.body):
         before = tree.body[:index]
-        if not isinstance(stmt, ast.ClassDef) or stmt.keywords or any(
-                isinstance(s, ast.ImportFrom) and any(a.name == "*" for a in s.names)
-                for s in before):
+        if not isinstance(stmt, ast.ClassDef) or stmt.keywords or _has_star_import(before):
             continue
         objects = _unmodelled_import_bindings(before)
         bases = [resolve(base, objects) for base in stmt.bases]
@@ -415,6 +413,10 @@ def _mark_unmodelled_class_bases(tree: ast.Module) -> None:
         if _can_create_class(stmt.name, bases):
             for base in stmt.bases:
                 base.unmodelled_class = True
+
+
+def _has_star_import(stmts: list[ast.stmt]) -> bool:
+    return any(isinstance(s, ast.ImportFrom) and any(a.name == "*" for a in s.names) for s in stmts)
 
 
 def _can_create_class(name: str, bases: list) -> bool:

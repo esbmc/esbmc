@@ -5746,23 +5746,8 @@ static bool is_dotted_name(const nlohmann::json &node)
          (type == "Attribute" && is_dotted_name(node["value"]));
 }
 
-// Code that runs for a statement of a class body: none for a docstring, nor
-// for a method without decorators or annotations, which CPython evaluates
-// with the def, whose defaults are constants.
-static bool is_inert_class_statement(const nlohmann::json &stmt)
+static bool has_inert_arguments(const nlohmann::json &args)
 {
-  const std::string type = stmt.value("_type", "");
-  if (type == "Pass")
-    return true;
-  if (type == "Expr")
-    return stmt["value"].value("_type", "") == "Constant";
-  if (type != "FunctionDef" && type != "AsyncFunctionDef")
-    return false;
-  if (
-    !stmt.value("decorator_list", nlohmann::json::array()).empty() ||
-    (stmt.contains("returns") && !stmt["returns"].is_null()))
-    return false;
-  const nlohmann::json &args = stmt["args"];
   for (const char *key : {"posonlyargs", "args", "kwonlyargs"})
     for (const auto &arg : args.value(key, nlohmann::json::array()))
       if (has_annotation(arg))
@@ -5775,6 +5760,23 @@ static bool is_inert_class_statement(const nlohmann::json &stmt)
       if (!d.is_null() && d.value("_type", "") != "Constant")
         return false;
   return true;
+}
+
+// Code that runs for a statement of a class body: none for a docstring, nor
+// for a method without decorators or annotations, which CPython evaluates
+// with the def, whose defaults are constants.
+static bool is_inert_class_statement(const nlohmann::json &stmt)
+{
+  const std::string type = stmt.value("_type", "");
+  if (type == "Pass")
+    return true;
+  if (type == "Expr")
+    return stmt["value"].value("_type", "") == "Constant";
+  if (type != "FunctionDef" && type != "AsyncFunctionDef")
+    return false;
+  return stmt.value("decorator_list", nlohmann::json::array()).empty() &&
+         (!stmt.contains("returns") || stmt["returns"].is_null()) &&
+         has_inert_arguments(stmt["args"]);
 }
 
 bool python_converter::class_definition_is_unobservable(
