@@ -1,5 +1,4 @@
 import math
-import numpy as np
 
 calls = 0
 
@@ -10,7 +9,7 @@ def bump() -> float:
     return 0.5
 
 
-y = np.exp(bump())
-z = math.exp(bump())
+y = math.exp(bump())
+z = math.sin(bump())
 assert calls == 2
-assert y > 1.1 and z > 1.1
+assert y > 1.1 and z > 0.47
