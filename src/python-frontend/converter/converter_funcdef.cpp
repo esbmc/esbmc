@@ -5722,6 +5722,11 @@ bool python_converter::function_may_be_called(
      name.compare(name.size() - 2, 2, "__") == 0) ||
     !function_node.value("decorator_list", nlohmann::json::array()).empty())
     return true;
+  return name_may_be_referenced(name);
+}
+
+bool python_converter::name_may_be_referenced(const std::string &name) const
+{
   std::vector<const nlohmann::json *> programs = {entry_ast_, ast_json};
   if (extra_asts_)
     for (const nlohmann::json &extra : *extra_asts_)
@@ -5732,6 +5737,58 @@ bool python_converter::function_may_be_called(
     programs.begin(), programs.end(), [&](const nlohmann::json *ast) {
       return ast && json_mentions(*ast, name);
     });
+}
+
+static bool is_dotted_name(const nlohmann::json &node)
+{
+  const std::string type = node.value("_type", "");
+  return type == "Name" ||
+         (type == "Attribute" && is_dotted_name(node["value"]));
+}
+
+// Code that runs for a statement of a class body: none for a docstring, nor
+// for a method without decorators or annotations, which CPython evaluates
+// with the def, whose defaults are constants.
+static bool is_inert_class_statement(const nlohmann::json &stmt)
+{
+  const std::string type = stmt.value("_type", "");
+  if (type == "Pass")
+    return true;
+  if (type == "Expr")
+    return stmt["value"].value("_type", "") == "Constant";
+  if (type != "FunctionDef" && type != "AsyncFunctionDef")
+    return false;
+  if (
+    !stmt.value("decorator_list", nlohmann::json::array()).empty() ||
+    (stmt.contains("returns") && !stmt["returns"].is_null()))
+    return false;
+  const nlohmann::json &args = stmt["args"];
+  for (const char *key : {"posonlyargs", "args", "kwonlyargs"})
+    for (const auto &arg : args.value(key, nlohmann::json::array()))
+      if (has_annotation(arg))
+        return false;
+  for (const char *key : {"vararg", "kwarg"})
+    if (args.contains(key) && has_annotation(args[key]))
+      return false;
+  for (const char *key : {"defaults", "kw_defaults"})
+    for (const auto &d : args.value(key, nlohmann::json::array()))
+      if (!d.is_null() && d.value("_type", "") != "Constant")
+        return false;
+  return true;
+}
+
+bool python_converter::class_definition_is_unobservable(
+  const nlohmann::json &class_node) const
+{
+  const nlohmann::json none = nlohmann::json::array();
+  const auto &bases = class_node.value("bases", none);
+  const auto &body = class_node.value("body", none);
+  return !options_name_functions() &&
+         class_node.value("decorator_list", none).empty() &&
+         class_node.value("keywords", none).empty() &&
+         std::all_of(bases.begin(), bases.end(), is_dotted_name) &&
+         std::all_of(body.begin(), body.end(), is_inert_class_statement) &&
+         !name_may_be_referenced(class_node["name"].get<std::string>());
 }
 
 // A Python local belongs to its whole function, but a declaration emitted

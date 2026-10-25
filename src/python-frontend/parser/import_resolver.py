@@ -7,8 +7,9 @@ import importlib
 import importlib.util
 import os
 import sys
+from collections import Counter
 from dataclasses import dataclass
-from types import ModuleType
+from types import ModuleType, new_class
 from typing import Callable, TypeAlias, TypedDict
 
 try:
@@ -51,6 +52,7 @@ module_exports: dict[str, tuple[set[str], dict[str, str], set[str] | None]] = {}
 _reported_cycles: set[tuple[str, ...]] = set()
 _reported_resolution_failures: set[tuple[str, str, str]] = set()
 _reported_unmodelled: set[str] = set()
+_unmodelled_modules: dict[str, ModuleType] = {}
 
 
 @dataclass(frozen=True)
@@ -71,6 +73,7 @@ def reset_state() -> None:
     _reported_cycles.clear()
     _reported_resolution_failures.clear()
     _reported_unmodelled.clear()
+    _unmodelled_modules.clear()
     imported_signature_sources.clear()
     default_helper_exports.clear()
 
@@ -337,10 +340,84 @@ def process_imports(node: ast.Import | ast.ImportFrom, output_dir: str) -> None:
             # that flag statically selects an `except ImportError` branch.
             if not _has_model_file(module_name, output_dir):
                 _warn_unmodelled_module(module_name)
+                _unmodelled_modules[module_name] = module
                 if module_name == converter_target:
                     node.module_unmodelled = True
             continue
         _mark_import_resolution(node, ok=True, full_path=filename)
+
+
+def _bound_names(node: ast.AST) -> list[str]:
+    if isinstance(node, ast.Name):
+        names = [] if isinstance(node.ctx, ast.Load) else [node.id]
+    elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        names = [node.name]
+    elif isinstance(node, ast.arg):
+        names = [node.arg]
+    elif isinstance(node, ast.alias):
+        names = [(node.asname or node.name).split(".")[0]]
+    elif isinstance(node, (ast.ExceptHandler, ast.MatchAs, ast.MatchStar)):
+        names = [node.name]
+    elif isinstance(node, ast.MatchMapping):
+        names = [node.rest]
+    elif isinstance(node, (ast.Global, ast.Nonlocal)):
+        names = node.names
+    else:
+        names = []
+    return [name for name in names if name]
+
+
+def _unmodelled_import_bindings(stmts: list[ast.stmt]) -> dict[str, object]:
+    """The object each import in `stmts` of a module with no model binds."""
+    objects: dict[str, object] = {}
+    for stmt in stmts:
+        if isinstance(stmt, ast.Import):
+            for alias in stmt.names:
+                if alias.name in _unmodelled_modules and (alias.asname or "." not in alias.name):
+                    objects[alias.asname or alias.name] = _unmodelled_modules[alias.name]
+        elif isinstance(stmt, ast.ImportFrom) and stmt.module in _unmodelled_modules:
+            module = _unmodelled_modules[stmt.module]
+            for alias in stmt.names:
+                if hasattr(module, alias.name):
+                    objects[alias.asname or alias.name] = getattr(module, alias.name)
+    return objects
+
+
+def _mark_unmodelled_class_bases(tree: ast.Module) -> None:
+    """Mark each class base that CPython resolves to a class of a module with
+    no model. The converter has no such class to derive from, and may leave
+    out a class nothing refers to (#9161) only once the base is known to
+    exist, since CPython evaluates it when the definition runs."""
+    bound = Counter(name for node in ast.walk(tree) for name in _bound_names(node))
+
+    def resolve(node: ast.expr, objects: dict[str, object]) -> object:
+        if isinstance(node, ast.Name):
+            return objects.get(node.id) if bound[node.id] == 1 else None
+        if isinstance(node, ast.Attribute):
+            owner = resolve(node.value, objects)
+            return None if owner is None else getattr(owner, node.attr, None)
+        return None
+
+    # A top-level class only, after the imports: CPython raises NameError for
+    # a base read before its import has run, and a star import may rebind it.
+    for index, stmt in enumerate(tree.body):
+        before = tree.body[:index]
+        if not isinstance(stmt, ast.ClassDef) or stmt.keywords or any(
+                isinstance(s, ast.ImportFrom) and any(a.name == "*" for a in s.names)
+                for s in before):
+            continue
+        objects = _unmodelled_import_bindings(before)
+        bases = [resolve(base, objects) for base in stmt.bases]
+        if not bases or not all(isinstance(base, type) for base in bases):
+            continue
+        # Creating the class is what can still fail: an MRO conflict, a base
+        # that cannot be subclassed, a raising __init_subclass__.
+        try:
+            new_class(stmt.name, tuple(bases))
+        except Exception:  # pylint: disable=broad-except
+            continue
+        for base in stmt.bases:
+            base.unmodelled_class = True
 
 
 def _is_submodule_import(package_name: str, name: str) -> bool:
@@ -660,6 +737,7 @@ def _request_vararg_specializations(entry_tree: ast.Module, parsed_trees: Parsed
 def _finalize_parsed_trees(parsed_trees: ParsedTreeState, entry_tree: ast.Module | None) -> None:
     if entry_tree is not None:
         _request_vararg_specializations(entry_tree, parsed_trees)
+        _mark_unmodelled_class_bases(entry_tree)
     started: set[str] = set()
     done: set[str] = set()
     for module_name in parsed_trees:

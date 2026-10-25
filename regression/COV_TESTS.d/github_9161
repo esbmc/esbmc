@@ -1,0 +1,12 @@
+regression/python/github_9161
+regression/python/github_9161_annotation_unsupported
+regression/python/github_9161_body_unsupported
+regression/python/github_9161_decorated_unsupported
+regression/python/github_9161_default_fail
+regression/python/github_9161_fail
+regression/python/github_9161_import_after_fail
+regression/python/github_9161_missing_base_fail
+regression/python/github_9161_mro_fail
+regression/python/github_9161_returns_unsupported
+regression/python/github_9161_star_import_fail
+regression/python/github_9161_used_unsupported

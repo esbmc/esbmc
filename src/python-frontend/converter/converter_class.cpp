@@ -1481,5 +1481,18 @@ void python_converter::get_class_definition(
     }
   }
 
-  python_class_builder(*this, class_node).build(target_block);
+  python_class_builder builder(*this, class_node);
+  // A class derived from a module with no model cannot be converted; one
+  // nothing observes is left out rather than refusing the program (#9161).
+  if (
+    !is_loading_models && builder.misses_only_unmodelled_bases() &&
+    class_definition_is_unobservable(class_node))
+  {
+    log_warning(
+      "class '{}' derives from a class with no model and is never referred "
+      "to; it is not converted",
+      class_name);
+    return;
+  }
+  builder.build(target_block);
 }

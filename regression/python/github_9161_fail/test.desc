@@ -1,0 +1,6 @@
+CORE
+main.py
+
+^WARNING: class .V. derives from a class with no model and is never referred to; it is not converted$
+^  file .*main\.py line 9 column 4 function f$
+^VERIFICATION FAILED$

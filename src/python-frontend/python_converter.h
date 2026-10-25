@@ -741,6 +741,14 @@ private:
 
   bool function_may_be_called(const nlohmann::json &function_node) const;
 
+  /// Whether any module of the program may refer to @p name, by a syntactic
+  /// and conservative scan.
+  bool name_may_be_referenced(const std::string &name) const;
+
+  /// Whether nothing can observe the definition of @p class_node: no use of
+  /// its name, and no code that runs when it is defined.
+  bool class_definition_is_unobservable(const nlohmann::json &class_node) const;
+
   void
   get_class_definition(const nlohmann::json &class_node, codet &target_block);
 

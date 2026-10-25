@@ -77,6 +77,35 @@ bool python_class_builder::register_method(
   return true;
 }
 
+/// The class \p bfull names, or "" for a builtin base, which has no symbol.
+std::string python_class_builder::user_base(const std::string &bfull) const
+{
+  // Resolve any import alias before further processing
+  // e.g. "from enum import Enum as E" → leaf("E") → get_object_alias → "Enum"
+  std::string base =
+    leaf(json_utils::get_object_alias(conv_.ast(), leaf(bfull)));
+  if (
+    type_utils::is_builtin_type(base) || type_utils::is_consensus_type(base) ||
+    type_utils::is_typeddict(base))
+    return "";
+  return base;
+}
+
+bool python_class_builder::misses_only_unmodelled_bases() const
+{
+  bool missing = false;
+  for (const auto &b : cls_["bases"])
+  {
+    const std::string base = user_base(json_utils::dotted_name(b));
+    if (base.empty() || conv_.symbol_table_.find_symbol("tag-" + base))
+      continue;
+    if (!b.value("unmodelled_class", false))
+      return false;
+    missing = true;
+  }
+  return missing;
+}
+
 bool python_class_builder::get_bases(struct_typet &st)
 {
   bool has_ud = false;
@@ -84,13 +113,8 @@ bool python_class_builder::get_bases(struct_typet &st)
 
   for (const auto &bfull : pc_.bases())
   {
-    // Resolve any import alias before further processing
-    // e.g. "from enum import Enum as E" → leaf("E") → get_object_alias → "Enum"
-    std::string base =
-      leaf(json_utils::get_object_alias(conv_.ast(), leaf(bfull)));
-    if (
-      type_utils::is_builtin_type(base) ||
-      type_utils::is_consensus_type(base) || type_utils::is_typeddict(base))
+    const std::string base = user_base(bfull);
+    if (base.empty())
       continue;
 
     has_ud = true;

@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^WARNING: class .V. derives from a class with no model and is never referred to; it is not converted$
+^VERIFICATION SUCCESSFUL$
