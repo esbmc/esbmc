@@ -653,7 +653,7 @@ void python_dict_handler::handle_dict_subscript_assign(
   push_value_call.type() = bool_type();
   push_value_call.location() = location;
 
-  if (is_dict_type(converter_.name_space().follow(value.type())))
+  if (holds_dict_lists(value.type()))
     store_dict_value_by_pointer(
       node,
       value,
