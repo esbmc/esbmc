@@ -1815,10 +1815,12 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
   //-----------------------------
   //    A;
   // u: sideeffects in c
-  // v: if(!c) goto z;
+  // v: if(!c) goto z0;
+  //    DEADs of c's temporaries
   // w: P;
   // x: B;               <-- continue target
   // y: goto u;
+  // z0: DEADs of c's temporaries
   // z: ;                <-- break target
 
   // A;
@@ -1830,6 +1832,7 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
   exprt cond = tmp;
   goto_programt sideeffects;
 
+  const std::size_t stack_size = targets.destructor_stack.size();
   remove_condition_sideeffects(cond, sideeffects);
 
   // save break/continue targets
@@ -1846,6 +1849,10 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
   goto_programt tmp_z;
   goto_programt::targett z = tmp_z.add_instruction(SKIP);
   z->location = code.location();
+
+  // before B is converted, which pushes its own temporaries
+  v->make_goto(z);
+  kill_condition_temporaries(stack_size, code.location(), tmp_v, tmp_z);
 
   // do the x label
   goto_programt tmp_x;
@@ -1868,8 +1875,6 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
   targets.set_break(z);
   targets.set_continue(tmp_x.instructions.begin());
 
-  // v: if(!c) goto z;
-  v->make_goto(z);
   expr2tc tmp_cond;
   migrate_expr(cond, tmp_cond);
   tmp_cond = not2tc(tmp_cond);
@@ -1916,9 +1921,11 @@ void goto_convertt::convert_while(const codet &code, goto_programt &dest)
 
   //    while(c) P;
   //--------------------
-  // v: if(!c) goto z;
+  // v: if(!c) goto z0;
+  //    DEADs of c's temporaries
   // x: P;
   // y: goto v;          <-- continue target
+  // z0: DEADs of c's temporaries
   // z: ;                <-- break target
 
   // save break/continue targets
@@ -1931,7 +1938,10 @@ void goto_convertt::convert_while(const codet &code, goto_programt &dest)
   z->location = code.location();
 
   goto_programt tmp_branch;
+  const std::size_t stack_size = targets.destructor_stack.size();
   generate_conditional_branch(gen_not(*cond), z, location, tmp_branch);
+
+  kill_condition_temporaries(stack_size, location, tmp_branch, tmp_z);
 
   // do the v label
   goto_programt::targett v = tmp_branch.instructions.begin();
@@ -2584,19 +2594,12 @@ void goto_convertt::convert_ifthenelse(const codet &c, goto_programt &dest)
     return convert_ifthenelse(to_code(new_if0), dest);
   }
 
-  // convert 'then'-branch
-  goto_programt tmp_op1;
-  convert_controlled(to_code(code.op1()), tmp_op1);
-
-  goto_programt tmp_op2;
-
-  if (has_else)
-    convert_controlled(to_code(code.op2()), tmp_op2);
-
   exprt tmp_guard = code.op0();
 
   // for condition coverage
   // to keep the guard format
+  // The condition's temporaries go on the destructor stack before the
+  // branches convert, so a break or continue out of a branch ends them.
   if (
     !(options.get_bool_option("condition-coverage") ||
       options.get_bool_option("condition-coverage-claims") ||
@@ -2609,6 +2612,15 @@ void goto_convertt::convert_ifthenelse(const codet &c, goto_programt &dest)
     remove_condition_sideeffects(tmp_guard, dest);
     in_short_circuit = outer_short_circuit;
   }
+
+  // convert 'then'-branch
+  goto_programt tmp_op1;
+  convert_controlled(to_code(code.op1()), tmp_op1);
+
+  goto_programt tmp_op2;
+
+  if (has_else)
+    convert_controlled(to_code(code.op2()), tmp_op2);
 
   generate_ifthenelse(tmp_guard, tmp_op1, tmp_op2, location, dest);
 }
@@ -2779,6 +2791,33 @@ bool goto_convertt::destroy_full_expression_temporaries(
   unwind_destructor_stack(location, stack_size, dest);
   targets.destructor_stack.resize(stack_size);
   return true;
+}
+
+void goto_convertt::kill_condition_temporaries(
+  std::size_t stack_size,
+  const locationt &location,
+  goto_programt &branch,
+  goto_programt &exit)
+{
+  destructor_stackt &stack = targets.destructor_stack;
+  if (
+    stack.size() == stack_size ||
+    std::any_of(stack.begin() + stack_size, stack.end(), is_destructor_entry))
+    return;
+
+  goto_programt body_dead, exit_dead;
+  unwind_destructor_stack(location, stack_size, body_dead);
+  unwind_destructor_stack(location, stack_size, exit_dead);
+  stack.resize(stack_size);
+
+  // A user goto in the condition (a GNU statement expression) has no target
+  // until finish_gotos, and z lives in another list: compare instructions.
+  const goto_programt::instructiont *z = &exit.instructions.front();
+  for (auto &i : branch.instructions)
+    if (i.is_goto() && i.has_target() && &*i.targets.front() == z)
+      i.targets.front() = exit_dead.instructions.begin();
+  branch.destructive_append(body_dead);
+  exit.destructive_insert(exit.instructions.begin(), exit_dead);
 }
 
 void goto_convertt::unwind_destructor_stack(

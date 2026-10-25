@@ -5,6 +5,7 @@ import importlib.util
 import os
 import tempfile
 import unittest
+from unittest import mock
 
 _spec = importlib.util.spec_from_file_location(
     "esbmc_wrapper", os.path.join(os.path.dirname(__file__), "esbmc-wrapper.py"))
@@ -303,6 +304,95 @@ class PythonPropertyTest(unittest.TestCase):
             self.verdict("** 0 of 7 properties failed, 7 passed\n"
                          "VERIFICATION SUCCESSFUL\n",
                          wrapper.Property.py_arithmetic), "TRUE")
+
+
+class IntegerEncodingConfirmationTest(unittest.TestCase):
+    """A Python violation stays FALSE only if a --ir re-run repeats it in place."""
+
+    PASSED = "** 0 of 1 properties failed, 1 passed\n\nVERIFICATION SUCCESSFUL\n"
+    TIMED_OUT = b"Timed out"
+    NO_LINE = PY_ASSERTION.replace(" line 5 column 4", "")
+
+    def verify(self, prop, first, rerun, benchmark="main.py", elapsed=0):
+        outputs = iter([first, rerun])
+        calls = []
+
+        def fake_run(cmd_line, timeout=None):
+            calls.append((cmd_line, timeout))
+            out = next(outputs)
+            return out if isinstance(out, bytes) else out.encode()
+
+        with mock.patch.object(wrapper, "run", fake_run), \
+                mock.patch.object(wrapper.time, "monotonic", side_effect=[0, elapsed]):
+            result = wrapper.verify("kinduction", prop, 64, benchmark, False, "", False, None, None)
+        return wrapper.get_result_string(result), calls
+
+    def test_rerun_at_the_same_line_keeps_false(self):
+        verdict, calls = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, PY_ASSERTION)
+        self.assertEqual(verdict, "FALSE")
+        self.assertTrue(calls[1][0].endswith("--ir --z3 "))
+        self.assertEqual(calls[1][1], wrapper.IR_RERUN_TIMEOUT)
+        self.assertIsNone(calls[0][1])
+
+    def test_a_first_run_leaving_the_full_budget_is_rerun(self):
+        verdict, calls = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, self.PASSED, elapsed=700)
+        self.assertEqual(verdict, "Unknown")
+        self.assertEqual(calls[1][1], wrapper.IR_RERUN_TIMEOUT)
+
+    def test_a_first_run_past_the_threshold_keeps_false_without_a_rerun(self):
+        elapsed = wrapper.TOTAL_BUDGET - wrapper.MIN_RERUN_BUDGET + 1
+        verdict, calls = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, self.PASSED, elapsed=elapsed)
+        self.assertEqual(verdict, "FALSE")
+        self.assertEqual(len(calls), 1)
+
+    def test_a_first_run_at_the_threshold_is_still_rerun(self):
+        elapsed = wrapper.TOTAL_BUDGET - wrapper.MIN_RERUN_BUDGET
+        verdict, calls = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, self.PASSED, elapsed=elapsed)
+        self.assertEqual(verdict, "Unknown")
+        self.assertEqual(calls[1][1], wrapper.MIN_RERUN_BUDGET)
+
+    def test_rerun_that_passes_is_unknown(self):
+        verdict, _ = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, self.PASSED)
+        self.assertEqual(verdict, "Unknown")
+
+    def test_rerun_failing_at_another_line_is_unknown(self):
+        other = PY_ASSERTION.replace("line 5 column 4", "line 9 column 4")
+        verdict, _ = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, other)
+        self.assertEqual(verdict, "Unknown")
+
+    def test_rerun_timeout_is_unknown(self):
+        verdict, _ = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, self.TIMED_OUT)
+        self.assertEqual(verdict, "Unknown")
+
+    def test_rerun_failing_another_property_is_unknown(self):
+        same_site_valueerror = PY_VALUEERROR.replace("p_raise_value.py", "p_assert2.py").replace("line 6 column 8", "line 5 column 4")
+        verdict, _ = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, same_site_valueerror)
+        self.assertEqual(verdict, "Unknown")
+
+    def test_no_line_on_either_side_matches_on_the_file(self):
+        verdict, _ = self.verify(wrapper.Property.py_assertion, self.NO_LINE, self.NO_LINE)
+        self.assertEqual(verdict, "FALSE")
+
+    def test_a_line_on_one_side_only_is_unknown(self):
+        verdict, _ = self.verify(wrapper.Property.py_assertion, self.NO_LINE, PY_ASSERTION)
+        self.assertEqual(verdict, "Unknown")
+
+    def test_a_violation_without_a_site_is_unknown(self):
+        table_only = PY_ASSERTION.split("** Results:")[1]
+        table_only = "** Results:" + table_only
+        verdict, _ = self.verify(wrapper.Property.py_assertion, table_only, table_only)
+        self.assertEqual(verdict, "Unknown")
+
+    def test_a_true_python_verdict_is_not_rerun(self):
+        verdict, calls = self.verify(wrapper.Property.py_assertion, self.PASSED, PY_ASSERTION)
+        self.assertEqual(verdict, "TRUE")
+        self.assertEqual(len(calls), 1)
+
+    def test_a_c_violation_is_never_rerun(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".c") as c_file:
+            verdict, calls = self.verify(wrapper.Property.reach, REACH_WITH_UNCHECKED_UNWINDING, self.PASSED, c_file.name)
+        self.assertEqual(verdict, "FALSE_REACH")
+        self.assertEqual(len(calls), 1)
 
 
 class PythonCommandLineTest(unittest.TestCase):
