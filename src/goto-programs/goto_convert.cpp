@@ -46,16 +46,7 @@ void goto_convertt::finish_gotos(goto_programt &dest)
 
       goto_programt edge_code;
       unwind_destructor_stack(i.location, common, edge_code, goto_stack);
-      // A jump into a block starts the lifetime of the locals whose
-      // declarations it skips, with indeterminate values (C11 6.2.4p6), so
-      // none may keep a previous lifetime's value.
-      for (std::size_t k = common; k < label_stack.size(); ++k)
-        if (label_stack[k].get_statement() == "dead")
-        {
-          code_declt decl(label_stack[k].op0());
-          decl.location() = i.location;
-          copy(decl, DECL, edge_code);
-        }
+      declare_skipped_locals(label_stack, common, i.location, edge_code);
       // A jump to a label on the goto itself must run the edge code too
       dest.insert_swap(it.first, edge_code);
     }
@@ -67,6 +58,46 @@ void goto_convertt::finish_gotos(goto_programt &dest)
   }
 
   targets.gotos.clear();
+}
+
+void goto_convertt::declare_skipped_locals(
+  const destructor_stackt &stack,
+  std::size_t from,
+  const locationt &location,
+  goto_programt &dest)
+{
+  // A jump into a block starts the lifetime of the locals whose declarations
+  // it skips, with indeterminate values (C11 6.2.4p6), so none may keep a
+  // previous lifetime's value.
+  for (std::size_t k = from; k < stack.size(); ++k)
+    if (stack[k].get_statement() == "dead")
+    {
+      code_declt decl(stack[k].op0());
+      decl.location() = location;
+      copy(decl, DECL, dest);
+    }
+}
+
+goto_programt::targett goto_convertt::case_entry(
+  goto_programt::targett target,
+  std::size_t switch_stack_size,
+  const locationt &location,
+  goto_programt &stubs)
+{
+  const auto it = targets.case_stacks.find(target);
+  if (it == targets.case_stacks.end() || it->second.size() <= switch_stack_size)
+    return target;
+
+  goto_programt stub;
+  declare_skipped_locals(it->second, switch_stack_size, location, stub);
+  if (stub.instructions.empty())
+    return target;
+  goto_programt::targett jump = stub.add_instruction();
+  jump->make_goto(target);
+  jump->location = location;
+  const goto_programt::targett entry = stub.instructions.begin();
+  stubs.destructive_append(stub);
+  return entry;
 }
 
 /// Rewrite "if(x) goto z; goto y; z:" into "if(!x) goto y;"
@@ -189,6 +220,7 @@ void goto_convertt::convert_switch_case(
     abort();
   }
 
+  const destructor_stackt stack = targets.destructor_stack;
   goto_programt tmp;
   convert(code.code(), tmp);
 
@@ -196,6 +228,7 @@ void goto_convertt::convert_switch_case(
   target->make_skip();
   target->location = code.code().location();
   dest.destructive_append(tmp);
+  targets.case_stacks[target] = stack;
 
   // default?
 
@@ -2146,11 +2179,13 @@ void goto_convertt::convert_switch(const codet &code, goto_programt &dest)
   targets.set_break(z);
   targets.set_default(z);
   targets.cases.clear();
+  targets.case_stacks.clear();
 
+  const std::size_t stack_size = targets.destructor_stack.size();
   goto_programt tmp;
   convert(to_code_switch(code).body(), tmp);
 
-  goto_programt tmp_cases;
+  goto_programt tmp_cases, stubs;
 
   for (auto &it : targets.cases)
   {
@@ -2162,7 +2197,7 @@ void goto_convertt::convert_switch(const codet &code, goto_programt &dest)
     case_guard(argument, case_ops, guard_expr);
 
     goto_programt::targett x = tmp_cases.add_instruction();
-    x->make_goto(it.first);
+    x->make_goto(case_entry(it.first, stack_size, code.location(), stubs));
     migrate_expr(guard_expr, x->guard);
     x->location = code.location();
     if (
@@ -2178,12 +2213,14 @@ void goto_convertt::convert_switch(const codet &code, goto_programt &dest)
 
   {
     goto_programt::targett d_jump = tmp_cases.add_instruction();
-    d_jump->make_goto(targets.default_target);
+    d_jump->make_goto(
+      case_entry(targets.default_target, stack_size, code.location(), stubs));
     d_jump->location = targets.default_target->location;
   }
 
   dest.destructive_append(sideeffects);
   dest.destructive_append(tmp_cases);
+  dest.destructive_append(stubs);
   dest.destructive_append(tmp);
   dest.destructive_append(tmp_z);
 
