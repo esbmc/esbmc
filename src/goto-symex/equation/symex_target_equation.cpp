@@ -341,12 +341,19 @@ void symex_target_equationt::convert(smt_convt &smt_conv, assertion_modet mode)
 
   // Show the solver every division's operand pair up front: the
   // modulus conversion lowers a remainder compositionally only when
-  // the same operands are divided somewhere in the formula.
-  for (const auto &SSA_step : SSA_steps)
+  // the same operands are divided somewhere in the formula. One visited set
+  // for all steps, as they share subterms and extend each other's guards
+  // (#9150).
   {
-    smt_conv.note_division_operands(SSA_step.guard);
-    smt_conv.note_division_operands(SSA_step.rhs);
-    smt_conv.note_division_operands(SSA_step.cond);
+    std::unordered_set<const expr2t *> division_seen;
+    for (const auto &SSA_step : SSA_steps)
+    {
+      if (SSA_step.ignore)
+        continue;
+      smt_conv.note_division_operands(SSA_step.guard, division_seen);
+      smt_conv.note_division_operands(SSA_step.rhs, division_seen);
+      smt_conv.note_division_operands(SSA_step.cond, division_seen);
+    }
   }
 
   equation_conversion_statet state;

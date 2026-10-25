@@ -109,6 +109,7 @@ public:
     variable_name_sett local_variables;
     // interval_domaint::interval_map; see snapshot_interval_domain
     std::shared_ptr<void> interval_snapshot;
+    BigInt stack_frame_total;
 
     explicit merge_statet(const goto_symex_statet &s)
       : num_instructions(s.num_instructions),
@@ -118,7 +119,8 @@ public:
         guard(s.guard),
         thread_id(s.source.thread_nr),
         level1_names(s.top().level1.current_names),
-        local_variables(s.top().local_variables)
+        local_variables(s.top().local_variables),
+        stack_frame_total(s.top().stack_frame_total)
     {
     }
 
@@ -131,7 +133,8 @@ public:
         thread_id(s.thread_id),
         level1_names(s.level1_names),
         local_variables(s.local_variables),
-        interval_snapshot(s.interval_snapshot)
+        interval_snapshot(s.interval_snapshot),
+        stack_frame_total(s.stack_frame_total)
     {
     }
 
@@ -208,8 +211,9 @@ public:
 
     /** Set of variables names that have been declared. Used to detect when we
      *  are in some kind of block that is entered then exited repeatedly -
-     *  whenever that happens, a new l1 name is required. This caches the
-     *  already seen names in a function for making that decision. */
+     *  whenever that happens, a new l1 name is required unless symex_decl
+     *  can reuse the dead one. This caches the already seen names in a
+     *  function for making that decision. */
     variable_name_sett declaration_history;
     /** Set of local variable l1 names. */
     variable_name_sett local_variables;

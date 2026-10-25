@@ -39,3 +39,14 @@ def rmdir(path: str) -> None:
     is_empty: bool = nondet_bool()
     if not is_empty:
         raise OSError("Directory not empty")
+
+
+def walk(top: str) -> list[tuple[str, list[str], list[str]]]:
+    # Yields nothing (top missing or not a directory) or top itself as an
+    # empty directory; nondet entry names make the str copies unbounded.
+    entries: list[tuple[str, list[str], list[str]]] = []
+    if nondet_bool():
+        dirnames: list[str] = []
+        filenames: list[str] = []
+        entries.append((top, dirnames, filenames))
+    return entries

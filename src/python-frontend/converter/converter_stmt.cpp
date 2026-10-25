@@ -5463,6 +5463,34 @@ void python_converter::widen_int_target_for_float_call(
   update_symbol(lhs);
 }
 
+// A result stored to an Optional of its own type must be wrapped, so the call
+// writes a temporary first (#9055). Another type would need a conversion that
+// loses the result's type.
+void python_converter::wrap_call_result_in_optional(
+  const nlohmann::json &ast_node,
+  const exprt &lhs,
+  exprt &rhs,
+  const locationt &location,
+  codet &target_block)
+{
+  if (
+    !type_utils::is_optional_struct(lhs.type()) ||
+    to_struct_type(lhs.type()).get_component("value").type() != rhs.type())
+    return;
+
+  symbolt &result =
+    create_tmp_symbol(ast_node, "$call_result$", rhs.type(), exprt());
+  code_declt result_decl(symbol_expr(result));
+  result_decl.location() = location;
+  target_block.copy_to_operands(result_decl);
+  rhs.op0() = symbol_expr(result);
+  target_block.copy_to_operands(rhs);
+
+  code_assignt store(lhs, wrap_in_optional(symbol_expr(result), lhs.type()));
+  store.location() = location;
+  rhs = store;
+}
+
 void python_converter::handle_function_call_rhs(
   const nlohmann::json &ast_node,
   symbolt *lhs_symbol,
@@ -5560,7 +5588,10 @@ void python_converter::handle_function_call_rhs(
     rhs.op0() = lhs;
   }
   else if (!rhs.type().is_pointer() && !rhs.type().is_empty() && !is_ctor_call)
+  {
     rhs.op0() = lhs;
+    wrap_call_result_in_optional(ast_node, lhs, rhs, location, target_block);
+  }
 
   // Special handling for list return type
   if (rhs.type() == type_handler_.get_list_type())
@@ -6846,11 +6877,15 @@ bool python_converter::ternary_needs_if_spelling(
   const std::string else_class = instantiated_class(ifexp["orelse"]);
   if (then_class.empty() && else_class.empty())
   {
+    const nlohmann::json callables = callable_function_stubs();
     const std::string then_kind =
-      dynamic_type_detail::classify_literal_value_kind(ifexp["body"]);
+      dynamic_type_detail::classify_literal_value_kind(
+        ifexp["body"], callables);
     const std::string else_kind =
-      dynamic_type_detail::classify_literal_value_kind(ifexp["orelse"]);
-    return !then_kind.empty() && !else_kind.empty() && then_kind != else_kind;
+      dynamic_type_detail::classify_literal_value_kind(
+        ifexp["orelse"], callables);
+    return !then_kind.empty() && !else_kind.empty() &&
+           dynamic_type_detail::kinds_diverge({then_kind, else_kind});
   }
   // Arms constructing different classes are spelled as `if` too, where the
   // preprocessor refuses what would resolve against one class only (#8408).
@@ -7984,6 +8019,8 @@ void python_converter::get_var_assign(
     // Handle type adjustments
     handle_assignment_type_adjustments(
       lhs_symbol, lhs, rhs, lhs_type, ast_node, is_ctor_call);
+    rhs = tuple_handler_->coerce_to_tuple_type(
+      rhs, lhs.type(), get_location_from_decl(ast_node), target_block);
     set_none_flag(lhs, ast_node, target_block);
 
     // Propagate $input_str$ → $input_len$ companion mapping so that len()
@@ -9907,6 +9944,8 @@ void python_converter::get_return_statements(
       is_user_class_struct_type(return_value.type()))
       return_value = box_value_on_heap(return_value, location, target_block);
 
+    return_value = tuple_handler_->coerce_to_tuple_type(
+      return_value, current_func_return_type_, location, target_block);
     return_value = coerce_optional_return(return_value, location, target_block);
 
     coerce_to_tagged_return(return_value);

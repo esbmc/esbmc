@@ -4622,27 +4622,13 @@ static expr2tc cancel_common_unary_operand(
   return expr2tc();
 }
 
-// Returns a Boolean constant when a pointer comparison against NULL is
-// decidable, nil otherwise. `eq` selects the polarity. A pointer value
-// is an (object, offset) pair and no object lives at address zero, so
-// the non-null side peels casts and constant ± offsets down to its
-// root before the address_of root check: `(T *)(&sym + k) == NULL`
-// folds exactly like `&sym == NULL`.
-static expr2tc
-simplify_pointer_null_cmp(const expr2tc &s1, const expr2tc &s2, bool eq)
+// Peels pointer casts and constant ± offsets, which keep the object a
+// pointer refers to. Only pointer-typed links preserve nullness: a cast
+// through an integer type may truncate, and integer arithmetic can wrap
+// to zero, so the peel stops at the first non-pointer node.
+static const expr2tc &peel_pointer_offsets(const expr2tc &e)
 {
-  if (!is_pointer_type(s1) && !is_pointer_type(s2))
-    return expr2tc();
-  bool n1 = is_null_pointer_value(s1);
-  bool n2 = is_null_pointer_value(s2);
-  if (n1 && n2)
-    return eq ? gen_true_expr() : gen_false_expr();
-  if (n1 == n2)
-    return expr2tc();
-  // Only pointer-typed links preserve nullness: a cast through an
-  // integer type may truncate, and integer arithmetic can wrap to
-  // zero, so the peel stops at the first non-pointer node.
-  const expr2tc *p = n1 ? &s2 : &s1;
+  const expr2tc *p = &e;
   while (is_pointer_type((*p)->type))
   {
     if (is_typecast2t(*p) && is_pointer_type(to_typecast2t(*p).from->type))
@@ -4656,9 +4642,50 @@ simplify_pointer_null_cmp(const expr2tc &s1, const expr2tc &s2, bool eq)
     else
       break;
   }
-  if (address_of_is_provably_non_null(*p))
+  return *p;
+}
+
+static expr2tc obj_equals_addr_of(const expr2tc &a, const expr2tc &b);
+
+// `&a + j == &b + k` with a and b provably distinct objects, or nil.
+static expr2tc
+fold_distinct_objects_cmp(const expr2tc &s1, const expr2tc &s2, bool eq)
+{
+  const expr2tc &p1 = peel_pointer_offsets(s1);
+  const expr2tc &p2 = peel_pointer_offsets(s2);
+  if (!is_address_of2t(p1) || !is_address_of2t(p2))
+    return expr2tc();
+  expr2tc same = obj_equals_addr_of(
+    to_address_of2t(p1).ptr_obj, to_address_of2t(p2).ptr_obj);
+  if (
+    !is_nil_expr(same) && is_constant_bool2t(same) &&
+    !to_constant_bool2t(same).value)
     return eq ? gen_false_expr() : gen_true_expr();
   return expr2tc();
+}
+
+// Returns a Boolean constant when a pointer comparison is decidable,
+// nil otherwise. `eq` selects the polarity. A pointer value is an
+// (object, offset) pair. No object lives at address zero, so
+// `(T *)(&sym + k) == NULL` folds exactly like `&sym == NULL`. Two
+// addresses rooted in different objects differ in the object, so
+// `&a + j == &b + k` folds false whatever the offsets.
+static expr2tc
+simplify_pointer_cmp(const expr2tc &s1, const expr2tc &s2, bool eq)
+{
+  if (!is_pointer_type(s1) && !is_pointer_type(s2))
+    return expr2tc();
+  bool n1 = is_null_pointer_value(s1);
+  bool n2 = is_null_pointer_value(s2);
+  if (n1 && n2)
+    return eq ? gen_true_expr() : gen_false_expr();
+  if (n1 != n2)
+  {
+    if (address_of_is_provably_non_null(peel_pointer_offsets(n1 ? s2 : s1)))
+      return eq ? gen_false_expr() : gen_true_expr();
+    return expr2tc();
+  }
+  return fold_distinct_objects_cmp(s1, s2, eq);
 }
 
 /// (x * c) == 0 -> x == 0 when c is odd, or nothing. Restricted to odd
@@ -4696,7 +4723,7 @@ expr2tc equality2t::do_simplify() const
   if (side_1 == side_2 && !is_floatbv_type(side_1) && !is_floatbv_type(side_2))
     return gen_true_expr();
 
-  if (expr2tc r = simplify_pointer_null_cmp(side_1, side_2, true))
+  if (expr2tc r = simplify_pointer_cmp(side_1, side_2, true))
     return r;
 
   // If we're dealing with floatbvs, call IEEE_equalitytor instead
@@ -4791,7 +4818,7 @@ expr2tc notequal2t::do_simplify() const
   if (side_1 == side_2 && !is_floatbv_type(side_1) && !is_floatbv_type(side_2))
     return gen_false_expr();
 
-  if (expr2tc r = simplify_pointer_null_cmp(side_1, side_2, false))
+  if (expr2tc r = simplify_pointer_cmp(side_1, side_2, false))
     return r;
 
   // If we're dealing with floatbvs, call IEEE_notequalitytor instead
@@ -5543,8 +5570,6 @@ expr2tc overflow2t::do_simplify() const
 
   return expr2tc();
 }
-
-static expr2tc obj_equals_addr_of(const expr2tc &a, const expr2tc &b);
 
 static expr2tc handle_symmetric_cases(const expr2tc &a, const expr2tc &b)
 {

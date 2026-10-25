@@ -2995,6 +2995,25 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
           ops.push_back(o);
         }
       }
+      else if (
+        op.id() == irept::id_code && op.statement() == "label" &&
+        op.op0().id() == irept::id_code &&
+        op.op0().statement() == "decl-block" && op.op0().operands().size() > 1)
+      {
+        // `lbl: int x, y;` -- the label marks the first declaration and the
+        // rest follow it here, so the declarations gain no scope of their own
+        // (see the label arm below).
+        const exprt &decls = op.op0();
+        expr2tc first;
+        migrate_expr(decls.op0(), first);
+        ops.push_back(code_label2tc(op.get("label"), first, op.location()));
+        for (std::size_t i = 1; i < decls.operands().size(); ++i)
+        {
+          expr2tc o;
+          migrate_expr(decls.operands()[i], o);
+          ops.push_back(o);
+        }
+      }
       else
       {
         expr2tc o;
@@ -3109,9 +3128,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     // no such scope, so flatten the single-decl labeled decl-block to the bare
     // decl: it round-trips as label(decl) and convert_decl defers the DEAD to
     // the enclosing scope, matching the legacy path. A label labels exactly one
-    // statement, so the only multi-decl shape is `lbl: int x, y;`; that case
-    // has no flat label(decl) form and is left on the standalone decl-block arm
-    // below -- it is not exercised by the operational models this fix targets.
+    // statement, so the only multi-decl shape is `lbl: int x, y;`, which the
+    // block arm above splits into label(x) followed by y.
     const exprt &body = expr.op0();
     const exprt &labelled =
       (body.id() == "code" && body.statement() == "decl-block" &&

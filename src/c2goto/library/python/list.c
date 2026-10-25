@@ -126,6 +126,7 @@ size_t __ESBMC_list_size(const PyListObject *l)
 // pointer (a nested list or an object reference), copied as a pointer so the
 // element still names its object; an 8-byte integer copy would rebuild it
 // from bytes and every later read through it would range over all objects.
+// ptr_free=3: a struct whose every field is a pointer, copied pointer-wise.
 // The storage of a pointer payload. A struct, not a bare `void *`, so the cell
 // is an object of its own kind and a SAME-OBJECT test between two cells folds.
 struct __ESBMC_pointer_cell
@@ -201,6 +202,16 @@ static inline void *__ESBMC_copy_value(
     ((uint64_t *)copied)[1] = ((const uint64_t *)value)[1];
     ((uint64_t *)copied)[2] = ((const uint64_t *)value)[2];
     ((uint64_t *)copied)[3] = ((const uint64_t *)value)[3];
+  }
+  else if (ptr_free == 3 && (size == 24 || size == 32))
+  {
+    // Copied as pointers so each one still names its object; memcpy's byte
+    // copy cannot rebuild them (os.walk's tuple[str, list, list], #9162).
+    ((void **)copied)[0] = ((void *const *)value)[0];
+    ((void **)copied)[1] = ((void *const *)value)[1];
+    ((void **)copied)[2] = ((void *const *)value)[2];
+    if (size == 32)
+      ((void **)copied)[3] = ((void *const *)value)[3];
   }
   else
     memcpy(copied, value, size);

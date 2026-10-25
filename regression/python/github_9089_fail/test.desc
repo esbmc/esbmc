@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 10 --multi-property --no-pointer-check --no-align-check
+uncaught exception: ValueError
+^VERIFICATION FAILED$
