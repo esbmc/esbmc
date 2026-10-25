@@ -270,6 +270,7 @@ private:
   exprt numpy_math_value(const std::string &function, double x);
   std::optional<exprt> try_numpy_math_constant();
   std::optional<exprt> try_runtime_math(const std::string &function);
+  const std::string &canonical_function();
   std::optional<exprt>
   copy_of_view(const std::string &function, const exprt &operand);
   void

@@ -5798,15 +5798,14 @@ void numpy_call_expr::reject_non_numeric_elements(
   const std::string &function,
   const typet &type)
 {
-  if (!type.is_array())
-    return;
   const typet &leaf = array_leaf_type(type);
-  if (leaf == char_type())
+  if (type.is_array() && leaf == char_type())
     throw std::runtime_error(
       "TypeError: numpy." + function + " of a string array is not supported");
   if (is_complex_type(leaf))
     throw std::runtime_error(
-      "TypeError: numpy." + function + " of a complex array is not supported");
+      "TypeError: numpy." + function + " of a complex " +
+      (type.is_array() ? "array" : "number") + " is not supported");
 }
 
 exprt numpy_call_expr::bind_array_once(const exprt &array)
@@ -10365,9 +10364,20 @@ exprt numpy_call_expr::scalar_binary_call(
   return unfolded_scalar_binary(function, lhs, rhs, t);
 }
 
+// NumPy 2's names for arcsin, arccos and arctan.
+const std::string &numpy_call_expr::canonical_function()
+{
+  static const std::map<std::string, std::string> aliases = {
+    {"asin", "arcsin"}, {"acos", "arccos"}, {"atan", "arctan"}};
+  auto alias = aliases.find(function_id_.get_function());
+  if (alias != aliases.end())
+    function_id_.set_function(alias->second);
+  return function_id_.get_function();
+}
+
 exprt numpy_call_expr::get()
 {
-  const std::string &function = function_id_.get_function();
+  const std::string &function = canonical_function();
   reject_complex_array_operands(function);
 
   if (std::optional<exprt> permuted = try_build_axis_permutation_view())
