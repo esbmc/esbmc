@@ -1240,6 +1240,20 @@ static bool class_object_escapes(const nlohmann::json &node, bool used = false)
   return false;
 }
 
+// Whether @p name is the receiver of a method of @p cls that only ever runs
+// on an instance of exactly @p cls.
+static bool is_exact_self(
+  const nlohmann::json &ast,
+  const std::vector<std::string> &function,
+  const std::string &name,
+  const std::string &cls)
+{
+  return is_method_self(ast, function, name, cls) &&
+         count_bindings(ast, cls) == 1 && !has_subclass(cls, ast) &&
+         !imports_other_modules(ast) &&
+         !reads_class_as_value(ast["body"], cls) && !class_object_escapes(ast);
+}
+
 // The class of the instance named by @p arg, or "" when its runtime class
 // can differ from the class @p expr is statically typed as. A variable bound
 // once, by its scope's own statement calling a class bound only by its
@@ -1269,11 +1283,7 @@ std::string function_call_expr::exact_instance_class(
     count_bindings(ast, cls) == 1)
     return cls;
   return converter_.current_classname() == cls &&
-             is_method_self(ast, split_function_path(function), name, cls) &&
-             count_bindings(ast, cls) == 1 && !has_subclass(cls, ast) &&
-             !imports_other_modules(ast) &&
-             !reads_class_as_value(ast["body"], cls) &&
-             !class_object_escapes(ast)
+             is_exact_self(ast, split_function_path(function), name, cls)
            ? cls
            : "";
 }

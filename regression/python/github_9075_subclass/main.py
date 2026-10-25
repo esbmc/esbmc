@@ -1,4 +1,5 @@
 class Base:
+
     def name(self) -> str:
         return self.__class__.__name__
 
