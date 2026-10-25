@@ -1,4 +1,5 @@
 #include <cassert>
+#include <cctype>
 #include <climits>
 #include <goto-symex/engine/goto_symex.h>
 #include <goto-symex/trace/printf_formatter.h>
@@ -250,10 +251,10 @@ bool goto_symext::format_printf_output(
 // The most output characters a sprintf call stores one by one.
 static const size_t max_stored_output = 1024;
 
-// The characters a %d, %i or %u conversion prints for `v`, already converted
-// to the conversion's type: C11 7.21.6.1p8 gives no leading zeros and a '-'
-// only for a negative value.
-static expr2tc decimal_length(expr2tc v, size_t &max_len)
+// The characters an integer conversion prints in `base` for `v`, already
+// converted to the conversion's type: C11 7.21.6.1p8 gives no leading zeros
+// and a '-' only for a negative value.
+static expr2tc digits_length(expr2tc v, unsigned base, size_t &max_len)
 {
   if (v->type->get_width() < int_type2()->get_width())
     v = typecast2tc(int_type2(), v);
@@ -271,7 +272,7 @@ static expr2tc decimal_length(expr2tc v, size_t &max_len)
       len_type,
       len,
       if2tc(len_type, lessthan2tc(v, gen_zero(v->type)), one, zero));
-  for (BigInt p = 10; p <= top; p *= 10)
+  for (BigInt p = base; p <= top; p *= base)
   {
     expr2tc wide = greaterthanequal2tc(v, constant_int2tc(v->type, p));
     if (is_signed)
@@ -282,23 +283,56 @@ static expr2tc decimal_length(expr2tc v, size_t &max_len)
   return len;
 }
 
-// The characters the %d, %i or %u conversion `conv` with length modifier `mod`
-// prints for the renamed argument `v`, nil when it cannot be measured. The
-// formatter prints `v` converted to the conversion's type, whatever type was
-// passed (C11 7.21.6.1p9), so that is the value measured.
+// The characters the %d, %i, %u, %o, %x or %X conversion `conv` with length
+// modifier `mod` prints for the renamed argument `v`, nil when it cannot be
+// measured. The formatter prints `v` converted to the conversion's type,
+// whatever type was passed (C11 7.21.6.1p9), so that is the value measured.
 static expr2tc integer_length(
   const expr2tc &v,
   char conv,
   const std::string &mod,
   size_t &max_len)
 {
-  const bool is_signed = conv != 'u';
+  const bool is_signed = conv == 'd' || conv == 'i';
+  const unsigned base = conv == 'o'                    ? 8
+                        : (conv == 'x' || conv == 'X') ? 16
+                                                       : 10;
   const type2tc target = printf_int_type(is_signed, mod);
   if (
     is_nil_type(target) || is_signedbv_type(target) != is_signed ||
     !is_bv_type(v))
     return expr2tc();
-  return decimal_length(typecast2tc(target, v), max_len);
+  return digits_length(typecast2tc(target, v), base, max_len);
+}
+
+// Skip the '-' and '0' flags and read the field width of the conversion at
+// `i`, false when the width is past what a sprintf call stores. The flags
+// only choose the padding (C11 7.21.6.1p4).
+static bool parse_field_width(const std::string &f, size_t &i, size_t &width)
+{
+  while (i < f.size() && (f[i] == '-' || f[i] == '0'))
+    i++;
+  width = 0;
+  while (i < f.size() && std::isdigit((unsigned char)f[i]))
+    if ((width = width * 10 + (f[i++] - '0')) > max_stored_output)
+      return false;
+  return true;
+}
+
+// A field width is the least number of characters a conversion prints
+// (C11 7.21.6.1p4); `max_before` is the bound before the conversion was
+// measured into `max_len`.
+static expr2tc pad_to_width(
+  const expr2tc &len,
+  size_t width,
+  size_t max_before,
+  size_t &max_len)
+{
+  if (width == 0)
+    return len;
+  max_len = std::max(max_len, max_before + width);
+  const expr2tc min_len = constant_int2tc(len->type, BigInt(width));
+  return if2tc(len->type, lessthan2tc(len, min_len), min_len, len);
 }
 
 expr2tc goto_symext::string_length(const expr2tc &ptr, size_t &max_len)
@@ -366,6 +400,10 @@ expr2tc goto_symext::printf_output_length(
       text++;
       continue;
     }
+    const size_t spec = i;
+    size_t width;
+    if (!parse_field_width(f, i, width))
+      return expr2tc();
     const size_t conv = i;
     while (i < f.size() && std::string("jlzt").find(f[i]) != std::string::npos)
       i++;
@@ -373,17 +411,19 @@ expr2tc goto_symext::printf_output_length(
       return expr2tc();
     expr2tc v = call.operands[arg++];
     expr2tc conv_len;
+    const size_t max_before = max_len;
     // A length modifier on %s makes it a wide string.
-    if (f[i] == 's' && i == conv)
+    if (f[i] == 's' && i == spec)
       conv_len = string_length(v, max_len);
-    else if (std::string("diu").find(f[i]) != std::string::npos)
+    else if (std::string("diuoxX").find(f[i]) != std::string::npos)
     {
       cur_state->rename(v);
       conv_len = integer_length(v, f[i], f.substr(conv, i - conv), max_len);
     }
     if (is_nil_expr(conv_len))
       return expr2tc();
-    len = add2tc(len->type, len, conv_len);
+    len = add2tc(
+      len->type, len, pad_to_width(conv_len, width, max_before, max_len));
   }
   max_len += text;
   len = add2tc(len->type, len, constant_int2tc(len->type, BigInt(text)));

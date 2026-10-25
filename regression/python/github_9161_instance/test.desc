@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: unsupported: creating an instance of class W, which derives from ast\.NodeTransformer of a module that is not modelled$
