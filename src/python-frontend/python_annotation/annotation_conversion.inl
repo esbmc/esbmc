@@ -250,6 +250,22 @@ std::string python_annotation<Json>::subscript_type_from_list_literal(
   return elem.empty() ? "Any" : elem;
 }
 
+/// The type of element @p index of a value typed @p type: the matching
+/// parameter of `tuple[...]`, the element of `list[T]`, else "Any".
+inline std::string
+unpacked_name_element_type(const std::string &type, size_t index)
+{
+  if (type.empty() || type.back() != ']')
+    return "Any";
+  if (type.rfind("list[", 0) == 0)
+    return type.substr(5, type.size() - 6);
+  if (type.rfind("tuple[", 0) != 0)
+    return "Any";
+  const auto elems =
+    json_utils::split_top_level_params(type.substr(6, type.size() - 7));
+  return index < elems.size() ? elems[index] : "Any";
+}
+
 template <class Json>
 std::string python_annotation<Json>::resolve_subscript_type(
   const Json &subscript_node,
@@ -349,6 +365,19 @@ std::string python_annotation<Json>::resolve_subscript_type(
   // String subscript: str[index] returns str
   if (base_type == "str")
     return "str";
+
+  // tuple[A, B, ...] at a constant index yields that member's type (#8928)
+  const Json &slice = subscript_node["slice"];
+  if (
+    base_type == "tuple" && slice.value("_type", "") == "Constant" &&
+    slice["value"].is_number_unsigned())
+  {
+    const std::string elem = unpacked_name_element_type(
+      json_utils::render_annotation_type(var_node["annotation"]),
+      slice["value"].template get<size_t>());
+    if (elem != "Any")
+      return elem;
+  }
 
   // For other types, return the base type
   return base_type;
@@ -610,22 +639,6 @@ python_annotation<Json>::resolve_object_class_name(const std::string &obj)
     return var["value"]["func"]["id"].template get<std::string>();
 
   return "";
-}
-
-/// The type of element @p index of a value typed @p type: the matching
-/// parameter of `tuple[...]`, the element of `list[T]`, else "Any".
-inline std::string
-unpacked_name_element_type(const std::string &type, size_t index)
-{
-  if (type.empty() || type.back() != ']')
-    return "Any";
-  if (type.rfind("list[", 0) == 0)
-    return type.substr(5, type.size() - 6);
-  if (type.rfind("tuple[", 0) != 0)
-    return "Any";
-  const auto elems =
-    json_utils::split_top_level_params(type.substr(6, type.size() - 7));
-  return index < elems.size() ? elems[index] : "Any";
 }
 
 template <class Json>
@@ -6372,6 +6385,11 @@ void python_annotation<Json>::add_annotation(Json &body)
 
     if (stmt_type == "If" || stmt_type == "While" || stmt_type == "Try")
     {
+      // Type the loop variable first so the unpacking reads in the body see
+      // its element type (#8928).
+      if (stmt_type == "While")
+        infer_loop_variable_types(element);
+
       add_annotation(element);
 
       // Infer loop variable types for preprocessor-transformed for loops
