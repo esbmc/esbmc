@@ -327,6 +327,73 @@ bool calls_dynamic_function(
          returns_dynamic_value(*callee, module_body, depth + 1);
 }
 
+// `node` binds `name`: as a parameter, a def, class, import or except alias,
+// or a Name stored or deleted.
+bool binds_name(const nlohmann::json &node, const std::string &name)
+{
+  if (!node.is_structured())
+    return false;
+  if (node.is_object())
+  {
+    const std::string type = node.value("_type", "");
+    if (type == "Name")
+      return node.value("id", "") == name &&
+             node.value("ctx", nlohmann::json::object()).value("_type", "") !=
+               "Load";
+    const char *key =
+      type == "arg" ? "arg"
+      : type == "alias" && node.value("asname", nlohmann::json()).is_string()
+        ? "asname"
+        : "name";
+    const nlohmann::json bound = node.value(key, nlohmann::json());
+    if (bound.is_string() && bound == name)
+      return true;
+  }
+  for (const auto &child : node)
+    if (binds_name(child, name))
+      return true;
+  return false;
+}
+
+// `function_node` sits directly in the module body or in the body of a
+// module-level class, so a name it never binds is the module-level one.
+bool is_module_level_def(
+  const nlohmann::json &function_node,
+  const nlohmann::json &module_body)
+{
+  for (const auto &stmt : module_body)
+  {
+    if (&stmt == &function_node)
+      return true;
+    if (stmt.value("_type", "") == "ClassDef")
+      for (const auto &member : stmt["body"])
+        if (&member == &function_node)
+          return true;
+  }
+  return false;
+}
+
+// `name`, returned by `function_node`, is bound to divergent kinds by the
+// function itself (`scope_body`, its body behind its parameters) or, when the
+// function is module-level and never binds it, by the module body (#9156).
+bool returns_divergent_name(
+  const std::string &name,
+  const nlohmann::json &function_node,
+  const nlohmann::json &scope_body,
+  const nlohmann::json &module_body)
+{
+  if (
+    dynamic_type_detail::scope_assigns_divergent_literal_types(
+      name, scope_body, module_body))
+    return true;
+  return !name.empty() &&
+         dynamic_type_detail::scope_assigns_divergent_literal_types(
+           name, module_body, module_body) &&
+         is_module_level_def(function_node, module_body) &&
+         !binds_name(function_node["args"], name) &&
+         !binds_name(function_node["body"], name);
+}
+
 // True when `function_node` returns divergent literal kinds, or forwards the
 // result of a function that does, directly or through a local (#8890).
 bool returns_dynamic_value(
@@ -352,10 +419,9 @@ bool returns_dynamic_value(
     const nlohmann::json &value = stmt["value"];
     const std::string returned = value.is_object() ? value.value("id", "") : "";
     if (
-      type == "Return" &&
-      (forwarded.count(returned) ||
-       dynamic_type_detail::scope_assigns_divergent_literal_types(
-         returned, scope_body, module_body)))
+      type == "Return" && (forwarded.count(returned) ||
+                           returns_divergent_name(
+                             returned, function_node, scope_body, module_body)))
       return true;
     if (!calls_dynamic_function(value, function_node, module_body, depth))
       continue;
