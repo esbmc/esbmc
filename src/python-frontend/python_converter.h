@@ -267,6 +267,10 @@ public:
     return call_escaped_lists_.find(id) != call_escaped_lists_.end();
   }
 
+  /// Makes @p id, a local of a nested body that has been closed, outlive that
+  /// body, so that a later read does not follow its DEAD (#9185).
+  void outlive_scope(const std::string &id);
+
   /// Runs @p check once every statement has been converted.
   void defer_check(std::function<void()> check)
   {
@@ -1703,6 +1707,11 @@ private:
   bool try_numpy_slice_copy_assign(const nlohmann::json &ast_node);
   std::optional<exprt> get_intercepted_expr(const nlohmann::json &element);
   void reject_bound_method_read(const nlohmann::json &element);
+  exprt get_class_dunder_attribute(const nlohmann::json &element);
+  exprt get_class_attribute(const nlohmann::json &element);
+  exprt get_class_name(const nlohmann::json &value);
+  exprt
+  get_module_member(const std::string &var_name, const nlohmann::json &element);
   void reject_method_value(const std::string &class_name, const std::string &m)
     const;
   /// Per module, what each attribute holds; nullopt when the module reaches
@@ -3831,10 +3840,19 @@ private:
   /// mapped to the flag its binding sets and the type the reads took (#8369).
   std::unordered_map<std::string, std::pair<std::string, typet>>
     unbound_global_flags_;
+  /// Classes deriving, directly or through another class, from a base in a
+  /// module that has no model, mapped to that base as spelled. Such a class
+  /// is converted without the base's members, so creating one is refused.
+  std::unordered_map<std::string, std::string> unmodelled_base_classes_;
   /// Symbols whose stored value is a str literal; see str_value_scope_guard.
   std::unordered_set<std::string> str_valued_symbols_;
   /// Symbols ever assigned a str literal; see retype_resized_str.
   std::unordered_set<std::string> str_assigned_symbols_;
+  /// Locals declared directly in a nested body that has been closed.
+  std::unordered_set<std::string> out_of_scope_locals_;
+  /// Records the locals @p block declares, which goto_convert marks DEAD where
+  /// the block ends.
+  void end_block_scope(const code_blockt &block);
 
   /// Flow-sensitive class tracking (#4771/#4772). Maps a straight-line lvalue
   /// access path -- "v" for a Name `v`, "v.attr" for an `obj.attr` lvalue -- to

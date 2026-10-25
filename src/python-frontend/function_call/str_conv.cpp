@@ -1,5 +1,6 @@
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
+#include <python-frontend/python_expr_builder.h>
 #include <irep2/irep2_utils.h>
 #include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/string/string_builder.h>
@@ -565,6 +566,18 @@ exprt function_call_expr::guard_none_to_float(exprt operand) const
     std::move(operand),
     "float() argument must be a string or a real number, not 'NoneType'",
     call_);
+}
+
+exprt function_call_expr::build_float_conversion(
+  const exprt &operand,
+  const typet &float_type) const
+{
+  if (!type_handler_.is_tagged_scalar_type(operand.type()))
+    return python_expr::build_typecast(operand, float_type);
+  return converter_.dynamic_type_handler_.build_numeric_conversion(
+    to_value_expr(operand, converter_.ns),
+    float_type,
+    converter_.get_location_from_decl(call_));
 }
 
 void function_call_expr::handle_int_to_float(nlohmann::json &arg) const

@@ -458,6 +458,15 @@ public:
     return values.erase(name);
   }
 
+  /** Remove the value sets of an object of @p type named @p id: its own and
+   *  those of its members and elements, keyed by @p id plus a `.member` or
+   *  `[]` suffix. Linear in the type, where scanning the map for @p id would
+   *  be linear in every tracked variable. */
+  void erase_object(
+    const std::string &id,
+    const type2tc &type,
+    const std::string &suffix = "");
+
   /** Get the set of things that an expression might point at. Interprets the
    *  given expression, making note of all the pointer variables used by it,
    *  and create a value set of what this expression points at. For example,

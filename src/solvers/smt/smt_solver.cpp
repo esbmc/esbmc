@@ -1908,16 +1908,6 @@ smt_solver_baset::mk_truncated_rem(const type2tc &type, smt_astt a, smt_astt b)
   return with_dividend_sign(*this, a, mk_mod(abs_int(*this, a), b));
 }
 
-void smt_solver_baset::note_division_operands(const expr2tc &expr)
-{
-  // A propagated `with` chain over a nested array references itself once per
-  // store, so an SSA step is a DAG and an unmemoised walk costs a number of
-  // paths exponential in the store count -- the same reason
-  // pre_register_addresses and get_value_set_rec memoise.
-  std::unordered_set<const expr2t *> seen;
-  note_division_operands(expr, seen);
-}
-
 void smt_solver_baset::note_division_operands(
   const expr2tc &expr,
   std::unordered_set<const expr2t *> &seen)

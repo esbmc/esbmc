@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^VERIFICATION FAILED$
+'f' is bound to methods at several sites and used other than as a whole call statement$
