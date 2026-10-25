@@ -1,0 +1,4 @@
+KNOWNBUG
+main.c
+--multi-property
+^VERIFICATION SUCCESSFUL$

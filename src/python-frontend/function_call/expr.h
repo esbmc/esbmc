@@ -193,6 +193,12 @@ private:
    */
   exprt build_constant_from_arg() const;
 
+  /*
+   * object(): a pointer to a fresh heap object, so each call has its own
+   * identity and is never None.
+   */
+  exprt build_fresh_object() const;
+
   std::optional<BigInt>
   try_fold_constant_arith_json(const nlohmann::json &node) const;
 
@@ -432,9 +438,14 @@ private:
 
   /*
    * Raises OverflowError (infinity) or ValueError (NaN) before int() truncates
-   * a float @p operand given without a @p base; returns the operand to convert.
+   * a float @p operand given without a @p base, and TypeError when a pointer
+   * @p operand is None; returns the operand to convert.
    */
   exprt guard_nonfinite_float_to_int(exprt operand, const exprt &base) const;
+
+  /// Raises TypeError before float() converts a None-typed @p operand that
+  /// holds None; returns the operand to convert.
+  exprt guard_none_to_float(exprt operand) const;
 
   /*
    * Handles int-to-float conversions (e.g., float(3)) by generating
@@ -704,6 +715,7 @@ private:
   // float.hex() on a constant float-literal receiver.
   bool is_float_hex_literal_call() const;
   // __iter__ on a builtin iterable (range/list/tuple/str/set/...).
+  bool is_builtin_name_call(const std::string &name) const;
   bool is_iter_on_builtin_call() const;
   // x.__str__() with no args on a builtin scalar (int/float/bool/str).
   bool is_str_on_builtin_scalar_call() const;
@@ -1008,6 +1020,14 @@ private:
     const symbolt *func_symbol);
   std::optional<exprt>
   raise_positional_oversupply(const symbolt &func_symbol) const;
+  void reject_numpy_layout_mismatch(
+    const typet &arg_type,
+    const symbolt &callee,
+    size_t param_idx) const;
+  void reject_list_for_numpy_parameter(
+    const typet &arg_type,
+    const code_typet::argumentst &params,
+    size_t param_idx) const;
   exprt finalize_call(
     code_function_callt &call,
     size_t param_offset,

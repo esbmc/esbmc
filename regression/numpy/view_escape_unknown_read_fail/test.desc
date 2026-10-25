@@ -1,4 +1,5 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR: TypeError: reading a numpy view after it escaped to an unknown call is not supported
+^VERIFICATION FAILED$
+^  assertion row\[.*\] == 1$

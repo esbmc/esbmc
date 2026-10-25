@@ -1055,7 +1055,7 @@ exprt python_converter::handle_string_type_mismatch(
 }
 
 /// The argument of @p node when it is `type(x)` on a name whose static type
-/// was erased to `void *`; nil otherwise.
+/// was erased to `void *` or whose runtime type is tagged; nil otherwise.
 exprt python_converter::erased_type_argument(const nlohmann::json &node)
 {
   if (
@@ -1065,7 +1065,9 @@ exprt python_converter::erased_type_argument(const nlohmann::json &node)
     return nil_exprt();
 
   exprt value = get_expr(node["args"][0]);
-  if (!value.type().is_pointer() || value.type().subtype().id() != "empty")
+  const bool erased =
+    value.type().is_pointer() && value.type().subtype().id() == "empty";
+  if (!erased && !type_handler_.is_tagged_scalar_type(value.type()))
     return nil_exprt();
   return value;
 }
@@ -1096,6 +1098,9 @@ exprt python_converter::handle_erased_type_comparison(
   // for isinstance(), refusing when it cannot. bool is int's only builtin
   // subclass.
   auto isinstance_of = [&](const std::string &type_name) {
+    if (type_handler_.is_tagged_scalar_type(value.type()))
+      return dynamic_type_handler_.build_isinstance_check(
+        value, type_name, false);
     expr2tc value2, type2;
     migrate_expr(value, value2);
     migrate_expr(gen_zero(type_handler_.get_typet(type_name, 0)), type2);

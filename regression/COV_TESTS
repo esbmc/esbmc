@@ -387,7 +387,6 @@ regression/numpy/arange_variable_arg_success
 regression/numpy/arange_zero_step_fail
 regression/numpy/argsort_reassigned_array_fail
 regression/numpy/array_dtype_nonliteral_fail
-regression/numpy/array_param_3d_fail
 regression/numpy/array_param_row_read_success
 regression/numpy/astype_unsupported_dtype_fail
 regression/numpy/bool_mask_param_conflict_fail
@@ -417,7 +416,7 @@ regression/numpy/empty_zero_size_edge
 regression/numpy/fancy_index_var_reassigned_fail
 regression/numpy/flatten_constructor_unsupported_fail
 regression/numpy/fmod_broadcast
-regression/numpy/github_5498_scalar_array_fail
+regression/numpy/github_5498_scalar_array_success
 regression/numpy/like_creation_empty_base_edge
 regression/numpy/like_creation_empty_like_fail
 regression/numpy/like_creation_full_kwarg_success
@@ -429,7 +428,6 @@ regression/numpy/mixed-types-comp
 regression/numpy/mixed_tuple_slice_unbounded_fail
 regression/numpy/ndarray_descriptor_negative_shape_fail
 regression/numpy/nditer_readonly_success
-regression/numpy/nditer_write_fail
 regression/numpy/norm_axis_fail
 regression/numpy/norm_vector_inf_success
 regression/numpy/norm_vector_l1_success
@@ -1789,7 +1787,6 @@ regression/quixbugs/is_valid_parenthesization
 regression/python/github_3825_1
 regression/python/mixed_list_dynamic_index
 regression/numpy/view_mutation_inplace_sort_fail
-regression/numpy/det_4x4_unsupported_fail
 regression/numpy/numpy_var_2d_fail_empty
 regression/python/github_3825_6
 regression/humaneval/humaneval_20

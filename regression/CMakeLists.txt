@@ -847,6 +847,9 @@ set(_bitwuzla_bv_regression_tests
     # ~461s for master on Bitwuzla; both outgrew the 3x tier in CI.
     "regression/esbmc/github_1352"
     "regression/esbmc/github_1352-32bit"
+    # Pinned --boolector before camada; ~219s on Bitwuzla locally, against
+    # ~58s for master's per-member encoding (#9026) on the same solver.
+    "regression/esbmc/tuple_const_array_struct_member"
 )
 foreach(_t IN LISTS _bitwuzla_bv_regression_tests)
     if(TEST ${_t})

@@ -1,5 +1,5 @@
-# The functions a variable may hold return different types, so the result
-# of calling it has no single type and the call is refused (#8351, #8404).
+# The functions a variable may hold return different types. The call is
+# dispatched per function, so each path sees its own result type (#8970).
 def f1() -> int:
     return 1
 

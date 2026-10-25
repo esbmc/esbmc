@@ -101,7 +101,9 @@ static expr2tc isinstance_subject(expr2tc value, const expr2tc &operand)
   while (is_typecast2t(value))
     value = to_typecast2t(value).from;
   return is_python_number_type(operand->type) &&
-             is_python_number_type(value->type)
+             (is_python_number_type(value->type) ||
+              (is_unsignedbv_type(value->type) &&
+               value->type->get_width() == 64))
            ? operand
            : value;
 }
@@ -118,6 +120,26 @@ void goto_symext::reject_untyped_isinstance(const expr2tc &value)
     return;
   claim(gen_false_expr(), "isinstance() on a value whose type was lost");
   assume(gen_false_expr());
+}
+
+/// Whether @p value is an element of a tuple, whose static type is exact.
+static bool is_tuple_element(const expr2tc &value)
+{
+  return is_member2t(value) &&
+         is_struct_type(to_member2t(value).source_value) &&
+         to_struct_type(to_member2t(value).source_value->type)
+           .name.as_string()
+           .starts_with("tag-tuple");
+}
+
+/// The object a value set names for @p value, or @p current when @p value is
+/// a tuple element and the object is its NULL-object, which says nothing.
+static expr2tc points_to_object(
+  const expr2tc &value,
+  const expr2tc &object,
+  const expr2tc &current)
+{
+  return is_tuple_element(value) && is_null_object2t(object) ? current : object;
 }
 
 void goto_symext::simplify_python_builtins(expr2tc &expr)
@@ -170,7 +192,7 @@ void goto_symext::simplify_python_builtins(expr2tc &expr)
       if (is_object_descriptor2t(obj))
       {
         const object_descriptor2t &o = to_object_descriptor2t(obj);
-        value = o.object;
+        value = points_to_object(l1_value, o.object, value);
       }
     }
 

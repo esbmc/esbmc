@@ -594,17 +594,19 @@ exprt python_converter::hoist_side_effecting_operand(
 }
 
 void python_converter::guard_attribute_on_none(
-  const symbolt &symbol,
-  const std::string &var_name,
+  const exprt &base,
   const std::string &attr_name,
-  const nlohmann::json &element)
+  const nlohmann::json &element,
+  bool is_self)
 {
-  const typet &type = symbol.get_type();
-  if (var_name == "self" || !type.is_pointer() || !can_emit_runtime_guard())
+  const typet &type = base.type();
+  if (
+    is_self || !type.is_pointer() || has_side_effect(base) ||
+    !can_emit_runtime_guard())
     return;
 
   exprt is_none("=", bool_type());
-  is_none.copy_to_operands(symbol_expr(symbol), gen_zero(type));
+  is_none.copy_to_operands(base, gen_zero(type));
   emit_guarded_raise(
     is_none,
     "AttributeError",
@@ -628,15 +630,12 @@ void python_converter::emit_guarded_raise(
   add_instruction(guard);
 }
 
-exprt python_converter::guard_nonfinite_float_to_int(
+exprt python_converter::guard_operand(
   exprt operand,
-  const nlohmann::json &element)
+  const nlohmann::json &element,
+  const std::string &prefix,
+  const std::function<void(const expr2tc &, const locationt &)> &emit_guards)
 {
-  if (
-    !operand.type().is_floatbv() || !current_block ||
-    !safe_to_emit_side_effecting_statement())
-    return operand;
-
   // In an and/or tail or a while test the guard must run where the operand is
   // evaluated, not once ahead of the statement.
   const bool lazy = in_lazy_operand_;
@@ -646,21 +645,11 @@ exprt python_converter::guard_nonfinite_float_to_int(
     current_block = &lazy_block;
 
   const locationt loc = get_location_from_decl(element);
-  operand = store_call_result(operand, loc, "int_arg");
-  operand = hoist_side_effecting_operand(operand, element, "$int_arg$");
+  operand = store_call_result(operand, loc, prefix);
+  operand = hoist_side_effecting_operand(operand, element, "$" + prefix + "$");
   expr2tc value;
   migrate_expr(operand, value);
-
-  emit_guarded_raise(
-    migrate_expr_back(isinf2tc(value)),
-    "OverflowError",
-    "cannot convert float infinity to integer",
-    loc);
-  emit_guarded_raise(
-    migrate_expr_back(isnan2tc(value)),
-    "ValueError",
-    "cannot convert float NaN to integer",
-    loc);
+  emit_guards(value, loc);
   current_block = saved_block;
   if (!lazy)
     return operand;
@@ -674,6 +663,69 @@ exprt python_converter::guard_nonfinite_float_to_int(
   return guarded;
 }
 
+exprt python_converter::guard_nonfinite_float_to_int(
+  exprt operand,
+  const nlohmann::json &element,
+  bool reject_none)
+{
+  const bool is_float = operand.type().is_floatbv();
+  const bool may_be_none = reject_none && operand.type().is_pointer();
+  if (
+    (!is_float && !may_be_none) || !current_block ||
+    !safe_to_emit_side_effecting_statement())
+    return operand;
+
+  return guard_operand(
+    std::move(operand),
+    element,
+    "int_arg",
+    [this, is_float](const expr2tc &value, const locationt &loc) {
+      if (!is_float)
+      {
+        emit_guarded_raise(
+          migrate_expr_back(equality2tc(value, gen_zero(value->type))),
+          "TypeError",
+          "int() argument must be a string, a bytes-like object or a real "
+          "number, not 'NoneType'",
+          loc);
+        return;
+      }
+      emit_guarded_raise(
+        migrate_expr_back(isinf2tc(value)),
+        "OverflowError",
+        "cannot convert float infinity to integer",
+        loc);
+      emit_guarded_raise(
+        migrate_expr_back(isnan2tc(value)),
+        "ValueError",
+        "cannot convert float NaN to integer",
+        loc);
+    });
+}
+
+exprt python_converter::guard_none_conversion(
+  exprt operand,
+  const std::string &message,
+  const nlohmann::json &element)
+{
+  if (
+    operand.type() != none_type() || !current_block ||
+    !safe_to_emit_side_effecting_statement())
+    return operand;
+
+  return guard_operand(
+    std::move(operand),
+    element,
+    "conv_arg",
+    [this, &message](const expr2tc &value, const locationt &loc) {
+      emit_guarded_raise(
+        migrate_expr_back(equality2tc(value, gen_zero(value->type))),
+        "TypeError",
+        message,
+        loc);
+    });
+}
+
 /// Converts one and/or operand. An operand after the first runs only when the
 /// earlier ones did not decide the result, so the statements its conversion
 /// plants (an exception guard, a hoisted temporary) go into its own block in
@@ -684,10 +736,15 @@ exprt python_converter::get_boolop_operand(
 {
   effects.emplace_back();
   code_blockt *saved_block = current_block;
+  const bool saved_own_block = in_operand_effects_block_;
   if (current_block && effects.size() > 1)
+  {
     current_block = &effects.back();
+    in_operand_effects_block_ = true;
+  }
   exprt operand_expr = get_expr(operand);
   current_block = saved_block;
+  in_operand_effects_block_ = saved_own_block;
 
   if (!operand_expr.is_code() || operand_expr.statement() != "function_call")
     return operand_expr;
@@ -1143,7 +1200,9 @@ exprt python_converter::handle_chained_comparisons_logic(
 
   // Each later comparison runs only if the earlier ones held.
   const bool old_in_lazy_operand = in_lazy_operand_;
+  const bool old_own_block = in_operand_effects_block_;
   in_lazy_operand_ = true;
+  in_operand_effects_block_ = false;
   exprt reuse = nil_exprt();
   for (size_t i = 0; i + 1 < element["comparators"].size(); ++i)
   {
@@ -1196,6 +1255,7 @@ exprt python_converter::handle_chained_comparisons_logic(
     }
   }
   in_lazy_operand_ = old_in_lazy_operand;
+  in_operand_effects_block_ = old_own_block;
 
   expr2tc acc;
   migrate_expr(conjuncts.front(), acc);
@@ -1364,7 +1424,8 @@ typet python_converter::nullable_dict_pointee(const typet &t) const
 
 bool python_converter::keeps_pointer_type_on_none(const typet &t)
 {
-  return is_user_class_pointer(t) || !nullable_dict_pointee(t).id().empty();
+  return is_user_class_pointer(t) || !nullable_dict_pointee(t).id().empty() ||
+         type_utils::is_optional_str_pointer(t);
 }
 
 /// True when the container of membership test @p element is a variable or
@@ -1377,17 +1438,20 @@ static bool container_is_name(const nlohmann::json &element)
   return type == "Name" || type == "Attribute";
 }
 
-/// A list, or an Optional[dict] pointer, is NULL for None: membership on it
-/// raises CPython's TypeError, and otherwise tests the container itself.
+/// A list, a str, or an Optional[dict] pointer, is NULL for None: membership
+/// on it raises CPython's TypeError, and otherwise tests the container itself.
 void python_converter::guard_none_container(
   exprt &rhs,
   typet &rhs_type,
   const nlohmann::json &element)
 {
   const typet dict_type = nullable_dict_pointee(rhs_type);
-  const bool nullable_list =
-    rhs.type() == type_handler_.get_list_type() && container_is_name(element);
-  if (dict_type.id().empty() && !nullable_list)
+  const typet &t = rhs.type();
+  const bool nullable_name =
+    (t == type_handler_.get_list_type() || t == none_type() ||
+     (t.is_pointer() && type_utils::is_string_type(t))) &&
+    container_is_name(element);
+  if (dict_type.id().empty() && !nullable_name)
     return;
 
   if (can_emit_runtime_guard())
@@ -1403,6 +1467,19 @@ void python_converter::guard_none_container(
     return;
   rhs = python_expr::build_dereference(rhs, dict_type);
   rhs_type = dict_type;
+}
+
+/// A None-typed container is folded before membership is lowered, so its
+/// TypeError guard is planted here.
+void python_converter::guard_none_typed_container(
+  const std::string &op,
+  exprt &rhs,
+  const nlohmann::json &element)
+{
+  if ((op != "In" && op != "NotIn") || rhs.type() != none_type())
+    return;
+  typet rhs_type = rhs.type();
+  guard_none_container(rhs, rhs_type, element);
 }
 
 exprt python_converter::handle_membership_operator(
@@ -1759,10 +1836,15 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     if (cmp == "Is" || cmp == "IsNot" || cmp == "Eq" || cmp == "NotEq")
       type_compared_operands_ = {&left, &right};
   }
-  exprt lhs = get_expr(left);
+  exprt lhs = snapshot_left_operand(left, get_expr(left), right);
   exprt rhs = get_right_operand_expr(element, right, lhs);
   type_compared_operands_ = saved_compared;
   current_lhs = saved_lhs;
+  if (element.value("_type", "") == "BinOp")
+  {
+    lhs = numpy_param_as_array(lhs);
+    rhs = numpy_param_as_array(rhs);
+  }
 
   // Resolve dictionary subscript types for proper comparison
   dict_handler_->resolve_dict_subscript_types(left, right, lhs, rhs);
@@ -1779,6 +1861,115 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   const exprt result =
     get_binary_operator_expr(element, left, right, op, lhs, rhs);
   return keep_operand_calls(result, lhs, rhs);
+}
+
+static bool contains_call(const nlohmann::json &node)
+{
+  if (node.is_object() && node.value("_type", "") == "Lambda")
+    return false;
+  if (node.is_object() && node.value("_type", "") == "Call")
+    return true;
+  if (!node.is_object() && !node.is_array())
+    return false;
+  for (const auto &child : node)
+    if (contains_call(child))
+      return true;
+  return false;
+}
+
+// A read of a fixed-size array at a constant index inside its bounds.
+static bool is_in_bounds_constant_index(const exprt &expr)
+{
+  if (!expr.is_index() || !expr.op0().is_symbol() || !expr.op1().is_constant())
+    return false;
+  const typet &array = expr.op0().type();
+  if (!array.is_array() || !to_array_type(array).size().is_constant())
+    return false;
+  const BigInt size = binary2integer(
+    to_constant_expr(to_array_type(array).size()).value().c_str(), false);
+  const BigInt index =
+    binary2integer(to_constant_expr(expr.op1()).value().c_str(), true);
+  return index >= 0 && index < size;
+}
+
+// A str is immutable, so its value is what the operand read; any other
+// object is read through its reference.
+static bool is_read_ahead_type(const typet &type)
+{
+  return type.is_signedbv() || type.is_unsignedbv() || type.is_floatbv() ||
+         type.is_bool() || type.is_pointer() ||
+         type_utils::is_string_type(type);
+}
+
+// A call that may run user code: anything but a builtin called by name.
+bool python_converter::calls_user_code(const nlohmann::json &node) const
+{
+  if (node.is_object() && node.value("_type", "") == "Lambda")
+    return false;
+  if (node.is_object() && node.value("_type", "") == "Call")
+  {
+    const nlohmann::json &func = node["func"];
+    const std::string name =
+      func.value("_type", "") == "Name" ? func.value("id", "") : "";
+    if (
+      name.empty() || !names_python_builtin(name) ||
+      json_utils::is_class(name, *ast_json))
+      return true;
+  }
+  if (!node.is_object() && !node.is_array())
+    return false;
+  for (const auto &child : node)
+    if (calls_user_code(child))
+      return true;
+  return false;
+}
+
+// Only a variable can be rebound, and a str or reference one only by user
+// code; copying any other operand hides the object from the comparisons that
+// dispatch on its type.
+bool python_converter::may_rebind_left(
+  const nlohmann::json &left,
+  const exprt &lhs,
+  const nlohmann::json &right) const
+{
+  const typet &type = lhs.type();
+  if (!type.is_pointer() && !type_utils::is_string_type(type))
+    return contains_call(right);
+  return left.value("_type", "") == "Name" && calls_user_code(right);
+}
+
+// Python reads the left operand before it runs a call in the right one,
+// which may rebind what the left operand reads (`g + bump()`).
+exprt python_converter::snapshot_left_operand(
+  const nlohmann::json &left,
+  const exprt &lhs,
+  const nlohmann::json &right)
+{
+  const typet &type = lhs.type();
+  // An arm of a conditional expression runs on one path only, so only a read
+  // that cannot fail is taken out of it.
+  const bool safe = lhs.is_symbol() || is_in_bounds_constant_index(lhs) ||
+                    conditional_expr_depth_ == 0;
+  // An and/or operand after the first plants its statements in a block of its
+  // own, which runs only where the operand is evaluated.
+  const bool can_emit =
+    can_emit_runtime_guard() || (in_operand_effects_block_ && current_block &&
+                                 safe_to_emit_side_effecting_statement());
+  if (
+    !can_emit || !is_read_ahead_type(type) || !safe || lhs.is_constant() ||
+    !may_rebind_left(left, lhs, right))
+    return lhs;
+  exprt value = lhs;
+  if (value.is_function_call())
+    convert_function_call_to_side_effect(value);
+  symbolt &tmp = create_tmp_symbol(right, "$left$", type, exprt());
+  code_declt decl(symbol_expr(tmp));
+  decl.location() = get_location_from_decl(right);
+  current_block->copy_to_operands(decl);
+  code_assignt assign(symbol_expr(tmp), value);
+  assign.location() = decl.location();
+  current_block->copy_to_operands(assign);
+  return symbol_expr(tmp);
 }
 
 /// A comparison decided from its operand types alone still evaluates its
@@ -1920,6 +2111,8 @@ exprt python_converter::get_binary_operator_expr(
       op, lhs, rhs, element, handle_none_check_setup(op, lhs, rhs));
     optional_result.is_not_nil())
     return optional_result;
+
+  guard_none_typed_container(op, rhs, element);
 
   if (lhs.type() == none_type() || rhs.type() == none_type())
   {
@@ -2772,39 +2965,59 @@ static bool is_elementwise_op(const std::string &op)
   return ops.count(op) != 0 || bitwise_ops().count(op) != 0;
 }
 
-// The shape of an element-wise operation over `lhs` and `rhs`: a numeric
-// array with a number on either side, or two arrays of one shape.
-static std::optional<std::vector<long long>>
-elementwise_shape(const std::string &op, const exprt &lhs, const exprt &rhs)
+// The shape of a numeric operand: its array shape, or no axes for a number;
+// nullopt for anything else.
+static std::optional<std::vector<long long>> operand_shape(const typet &type)
 {
-  if (!is_elementwise_op(op))
-    return std::nullopt;
-  const auto lhs_shape = numeric_array_shape(lhs.type());
-  const auto rhs_shape = numeric_array_shape(rhs.type());
-  if (
-    lhs_shape && (is_numeric_scalar_type(rhs.type()) || rhs_shape == lhs_shape))
-    return lhs_shape;
-  if (rhs_shape && is_numeric_scalar_type(lhs.type()))
-    return rhs_shape;
-  return std::nullopt;
+  if (is_numeric_scalar_type(type))
+    return std::vector<long long>();
+  return numeric_array_shape(type);
 }
 
-// The forms the model computes: `%` only as `int array % int`, and an integer
-// power only by a constant non-negative exponent (a negative one is NumPy's
-// ValueError).
-static bool is_modelled_elementwise(
-  const std::string &op,
-  const exprt &lhs,
-  const exprt &rhs,
-  const typet &result_elem)
+// A shape as NumPy spells it in a message: `(3,)`, `(2,2)`.
+static std::string shape_text(const std::vector<long long> &shape)
 {
-  BigInt exponent;
-  if (op == "Mod")
-    return lhs.type().is_array() && !rhs.type().is_array() &&
-           !result_elem.is_floatbv();
-  if (op == "Pow" && !result_elem.is_floatbv())
-    return rhs.is_constant() && !to_integer(rhs, exponent) && exponent >= 0;
-  return true;
+  std::string text = "(";
+  for (std::size_t i = 0; i < shape.size(); ++i)
+    text += std::to_string(shape[i]) +
+            (shape.size() == 1 || i + 1 < shape.size() ? "," : "");
+  return text + ")";
+}
+
+// NumPy broadcasting: the shapes aligned on their last axes, each axis equal
+// or 1 in one of them.
+static std::optional<std::vector<long long>>
+broadcast_shapes(std::vector<long long> a, std::vector<long long> b)
+{
+  if (a.size() < b.size())
+    std::swap(a, b);
+  b.insert(b.begin(), a.size() - b.size(), 1);
+  for (std::size_t i = 0; i < a.size(); ++i)
+  {
+    if (a[i] != b[i] && a[i] != 1 && b[i] != 1)
+      return std::nullopt;
+    a[i] = a[i] == 1 ? b[i] : a[i];
+  }
+  return a;
+}
+
+// The shapes of the operands of an element-wise operation over two numeric
+// operands, at least one an array.
+static std::optional<std::pair<std::vector<long long>, std::vector<long long>>>
+elementwise_shapes(const std::string &op, const exprt &lhs, const exprt &rhs)
+{
+  const auto lhs_shape = operand_shape(lhs.type());
+  const auto rhs_shape = operand_shape(rhs.type());
+  if (
+    !is_elementwise_op(op) || !lhs_shape || !rhs_shape ||
+    (lhs_shape->empty() && rhs_shape->empty()))
+    return std::nullopt;
+  return std::make_pair(*lhs_shape, *rhs_shape);
+}
+
+static std::size_t array_rank(const typet &type)
+{
+  return type.is_array() ? 1 + array_rank(type.subtype()) : 0;
 }
 
 // NumPy's ufunc for a bitwise operator, named in its TypeError.
@@ -2819,6 +3032,28 @@ static std::string bitwise_ufunc(const std::string &op)
   return names.at(op);
 }
 
+// NumPy's npy_divmod remainder: fmod moved to the divisor's sign, a zero of
+// the divisor's sign when it is exact; a zero divisor keeps fmod's NaN.
+exprt python_converter::numpy_float_remainder(
+  const exprt &x,
+  const exprt &y,
+  const typet &type)
+{
+  const nlohmann::json no_node;
+  const exprt mod = cast_to(math_handler_.handle_fmod(x, y, no_node), type);
+  const exprt zero = gen_zero(type);
+  const exprt other_sign = python_expr::build_xor(
+    python_expr::build_less_than(y, zero),
+    python_expr::build_less_than(mod, zero));
+  const exprt signed_zero =
+    cast_to(math_handler_.handle_copysign(zero, y, no_node), type);
+  return python_expr::build_if(
+    python_expr::build_equal(mod, zero),
+    signed_zero,
+    python_expr::build_if(
+      other_sign, python_expr::build_add(mod, y, type), mod));
+}
+
 // `x op y` for one element pair, both already of `type`. Integer `//` and
 // `%` by zero give 0, as NumPy does (with a warning, not an exception).
 exprt python_converter::numpy_element_op(
@@ -2829,6 +3064,8 @@ exprt python_converter::numpy_element_op(
 {
   if (op == "Pow")
     return cast_to(math_handler_.handle_power(x, y), type);
+  if (op == "Mod" && type.is_floatbv())
+    return numpy_float_remainder(x, y, type);
   exprt raw(python_frontend::map_operator(op, type), type);
   raw.copy_to_operands(x, y);
   if (op == "FloorDiv")
@@ -2856,14 +3093,20 @@ exprt python_converter::numpy_elementwise(
   BigInt length;
   to_integer(to_array_type(type).size(), length);
   const typet index_type = size_type();
+  const std::size_t rank = array_rank(type);
   expr2tc result = gen_zero(migrate_type(type));
   for (long long i = 0; i < length.to_int64(); ++i)
   {
+    // An operand with fewer axes, or extent 1 on this one, is broadcast.
     const auto row = [&](const exprt &operand) -> exprt {
-      if (!operand.type().is_array())
+      if (array_rank(operand.type()) < rank)
         return operand;
+      BigInt extent;
+      to_integer(to_array_type(operand.type()).size(), extent);
       return index_exprt(
-        operand, from_integer(i, index_type), operand.type().subtype());
+        operand,
+        from_integer(extent == 1 ? 0 : i, index_type),
+        operand.type().subtype());
     };
     expr2tc value;
     migrate_expr(
@@ -2877,25 +3120,69 @@ exprt python_converter::numpy_elementwise(
   return migrate_expr_back(result);
 }
 
-// Element-wise arithmetic, `%`, `**` and bitwise operators between a numeric
-// NumPy array and a number (on either side) or another array of the same
-// shape. Nil for any other operand pair.
+// The elements of a numeric operand, a number being its own one element.
+static std::vector<exprt> flat_elements(const exprt &operand)
+{
+  if (!operand.type().is_array())
+    return {operand};
+  std::vector<exprt> elements;
+  BigInt length;
+  to_integer(to_array_type(operand.type()).size(), length);
+  for (long long i = 0; i < length.to_int64(); ++i)
+    for (const exprt &e : flat_elements(index_exprt(
+           operand, from_integer(i, size_type()), operand.type().subtype())))
+      elements.push_back(e);
+  return elements;
+}
+
+// An integer raised to a negative integer power is NumPy's ValueError, raised
+// when the operation runs.
+void python_converter::guard_negative_exponents(
+  const exprt &exponents,
+  const locationt &location)
+{
+  exprt negative = false_exprt();
+  for (const exprt &e : flat_elements(exponents))
+    negative =
+      or_exprt(negative, binary_relation_exprt(e, "<", gen_zero(e.type())));
+  if (!can_emit_runtime_guard())
+    throw std::runtime_error(
+      "TypeError: an integer numpy power is only supported where its "
+      "exponent check can run");
+  emit_guarded_raise(
+    negative,
+    "ValueError",
+    "Integers to negative integer powers are not allowed.",
+    location);
+}
+
+// Element-wise arithmetic, `%`, `**` and bitwise operators between numeric
+// NumPy arrays and numbers, broadcast as NumPy does. Nil for any other
+// operand pair.
 exprt python_converter::numpy_array_arithmetic(
   const std::string &op,
   const exprt &lhs,
-  const exprt &rhs)
+  const exprt &rhs,
+  const locationt &location)
 {
-  const std::optional<std::vector<long long>> shape =
-    elementwise_shape(op, lhs, rhs);
-  if (!shape)
+  const auto shapes = elementwise_shapes(op, lhs, rhs);
+  if (!shapes)
     return nil_exprt();
+  const std::optional<std::vector<long long>> shape =
+    broadcast_shapes(shapes->first, shapes->second);
+  if (!shape)
+    return raise_in_expression(
+      "ValueError",
+      "operands could not be broadcast together with shapes " +
+        shape_text(shapes->first) + " " + shape_text(shapes->second) + " ",
+      lhs.type().is_array() ? lhs.type() : rhs.type());
   const typet &lhs_leaf = leaf_type(lhs.type());
   const typet &rhs_leaf = leaf_type(rhs.type());
   const typet result_leaf = elementwise_result_type(
     op, lhs.type().is_array() ? lhs_leaf : rhs_leaf, lhs_leaf, rhs_leaf);
-  if (!is_modelled_elementwise(op, lhs, rhs, result_leaf))
-    return nil_exprt();
   const typet result_type = shaped_type(result_leaf, *shape);
+  if (op == "Pow" && !result_leaf.is_floatbv())
+    guard_negative_exponents(rhs, location);
   if (bitwise_ops().count(op) && result_leaf.is_floatbv())
     return raise_in_expression(
       "TypeError",
@@ -2921,9 +3208,9 @@ exprt python_converter::raise_in_expression(
   return value;
 }
 
-// An element-wise operator over a numeric array that numpy_array_arithmetic
-// does not model (broadcasting across shapes, a float operand of a bitwise
-// operator, ...) is rejected rather than lowered as scalar arithmetic.
+// An element-wise operator between a numeric array and an operand
+// numpy_array_arithmetic does not model is rejected rather than lowered as
+// scalar arithmetic.
 void python_converter::reject_unmodelled_array_arithmetic(
   const std::string &op,
   const exprt &lhs,
@@ -2935,12 +3222,8 @@ void python_converter::reject_unmodelled_array_arithmetic(
     (!numeric_array_shape(lhs.type()) && !numeric_array_shape(rhs.type())))
     return;
   std::ostringstream msg;
-  if (numeric_array_shape(lhs.type()) && numeric_array_shape(rhs.type()))
-    msg << "TypeError: arithmetic on numeric arrays is not supported "
-           "(numpy broadcasting is not modelled)";
-  else
-    msg << "TypeError: numpy element-wise '" << op
-        << "' is not supported for these operands";
+  msg << "TypeError: numpy element-wise '" << op
+      << "' is not supported for these operands";
   const locationt loc = get_location_from_decl(element);
   if (!loc.is_nil())
     msg << " at " << loc.get_file() << ":" << loc.get_line();
@@ -3016,7 +3299,8 @@ exprt python_converter::handle_array_operations(
     return false;
   };
 
-  const exprt elementwise = numpy_array_arithmetic(op, lhs, rhs);
+  const exprt elementwise =
+    numpy_array_arithmetic(op, lhs, rhs, get_location_from_decl(element));
   if (!elementwise.is_nil())
     return elementwise;
 
@@ -3326,6 +3610,121 @@ void python_converter::raise_on_unordered_tie(
     get_location_from_decl(element));
 }
 
+/// `a + b` where an operand is a tuple struct. Nil when neither is one, or the
+/// other operand's type is not one Python is known to reject or concatenate.
+exprt python_converter::handle_tuple_add(
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &element)
+{
+  const bool lhs_is_tuple = tuple_handler_->is_tuple_type(lhs.type());
+  const bool rhs_is_tuple = tuple_handler_->is_tuple_type(rhs.type());
+  if (!lhs_is_tuple && !rhs_is_tuple)
+    return nil_exprt();
+
+  if (lhs_is_tuple != rhs_is_tuple)
+  {
+    const typet &other = lhs_is_tuple ? rhs.type() : lhs.type();
+    if (other == type_handler_.get_list_type())
+      return concat_tuple_with_list(lhs, rhs, element);
+    if (
+      lhs_is_tuple &&
+      (other.is_signedbv() || other.is_unsignedbv() || other.is_floatbv()))
+      return get_exception_handler().gen_exception_raise(
+        "TypeError",
+        "can only concatenate tuple (not \"" +
+          type_handler_.get_python_type_name(other) + "\") to tuple");
+    return nil_exprt();
+  }
+
+  // Concatenation: (a, b) + (c, d) == (a, b, c, d).
+  const auto &lhs_components = to_struct_type(lhs.type()).components();
+  const auto &rhs_components = to_struct_type(rhs.type()).components();
+
+  std::vector<typet> element_types;
+  element_types.reserve(lhs_components.size() + rhs_components.size());
+  for (const auto &c : lhs_components)
+    element_types.push_back(c.type());
+  for (const auto &c : rhs_components)
+    element_types.push_back(c.type());
+
+  struct_typet new_type =
+    tuple_handler_->create_tuple_struct_type(element_types);
+
+  // V.3: build the concatenated tuple value in IREP2. Each component is the
+  // exact round-trip of a member_exprt over the migrated operand; the struct
+  // literal is assembled via constant_struct2tc and back-migrated once.
+  expr2tc lhs2, rhs2;
+  migrate_expr(lhs, lhs2);
+  migrate_expr(rhs, rhs2);
+  std::vector<expr2tc> members;
+  members.reserve(lhs_components.size() + rhs_components.size());
+  for (const auto &c : lhs_components)
+    members.push_back(member2tc(migrate_type(c.type()), lhs2, c.get_name()));
+  for (const auto &c : rhs_components)
+    members.push_back(member2tc(migrate_type(c.type()), rhs2, c.get_name()));
+
+  exprt result =
+    migrate_expr_back(constant_struct2tc(migrate_type(new_type), members));
+
+  if (element.contains("lineno"))
+    result.location() = get_location_from_decl(element);
+  return result;
+}
+
+exprt python_converter::concat_tuple_with_list(
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &element)
+{
+  // The result is a list either way, which is all the type probe needs.
+  if (in_rhs_type_probe_)
+    return gen_zero(type_handler_.get_list_type());
+  if (!current_block || !safe_to_emit_side_effecting_statement())
+    throw std::runtime_error(
+      "concatenating a tuple and a list is not supported here");
+
+  // In an and/or tail or a while test the guard must run where the operand is
+  // evaluated, not once ahead of the statement.
+  const bool lazy = in_lazy_operand_;
+  code_blockt lazy_block;
+  code_blockt *const saved_block = current_block;
+  if (lazy)
+    current_block = &lazy_block;
+
+  const bool list_on_left = !tuple_handler_->is_tuple_type(lhs.type());
+  const exprt left = hoist_side_effecting_operand(lhs, element, "$cat$");
+  const exprt right = hoist_side_effecting_operand(rhs, element, "$cat$");
+  const exprt &list = list_on_left ? left : right;
+  const exprt &tuple = list_on_left ? right : left;
+
+  python_list helper(*this, element);
+  emit_guarded_raise(
+    not_exprt(helper.build_is_tuple_call(list)),
+    "TypeError",
+    list_on_left ? "can only concatenate list (not \"tuple\") to list"
+                 : "can only concatenate tuple (not \"list\") to tuple",
+    get_location_from_decl(element));
+
+  const exprt tuple_list =
+    python_list::build_list_from_tuple(*this, tuple, element);
+  const exprt result =
+    list_on_left ? helper.build_concat_list_call(list, tuple_list, element)
+                 : helper.build_concat_list_call(tuple_list, list, element);
+  helper.build_mark_tuple_call(result);
+  current_block = saved_block;
+  if (!lazy)
+    return result;
+
+  code_expressiont value(result);
+  value.location() = get_location_from_decl(element);
+  lazy_block.copy_to_operands(value);
+  side_effect_exprt guarded("statement_expression", result.type());
+  guarded.copy_to_operands(lazy_block);
+  guarded.location() = value.location();
+  return guarded;
+}
+
 exprt python_converter::handle_tuple_operations(
   const std::string &op,
   exprt &lhs,
@@ -3335,42 +3734,8 @@ exprt python_converter::handle_tuple_operations(
   const bool lhs_is_tuple = tuple_handler_->is_tuple_type(lhs.type());
   const bool rhs_is_tuple = tuple_handler_->is_tuple_type(rhs.type());
 
-  // Concatenation: (a, b) + (c, d) == (a, b, c, d).
-  if (op == "Add" && lhs_is_tuple && rhs_is_tuple)
-  {
-    const auto &lhs_components = to_struct_type(lhs.type()).components();
-    const auto &rhs_components = to_struct_type(rhs.type()).components();
-
-    std::vector<typet> element_types;
-    element_types.reserve(lhs_components.size() + rhs_components.size());
-    for (const auto &c : lhs_components)
-      element_types.push_back(c.type());
-    for (const auto &c : rhs_components)
-      element_types.push_back(c.type());
-
-    struct_typet new_type =
-      tuple_handler_->create_tuple_struct_type(element_types);
-
-    // V.3: build the concatenated tuple value in IREP2. Each component is the
-    // exact round-trip of a member_exprt over the migrated operand; the struct
-    // literal is assembled via constant_struct2tc and back-migrated once.
-    expr2tc lhs2, rhs2;
-    migrate_expr(lhs, lhs2);
-    migrate_expr(rhs, rhs2);
-    std::vector<expr2tc> members;
-    members.reserve(lhs_components.size() + rhs_components.size());
-    for (const auto &c : lhs_components)
-      members.push_back(member2tc(migrate_type(c.type()), lhs2, c.get_name()));
-    for (const auto &c : rhs_components)
-      members.push_back(member2tc(migrate_type(c.type()), rhs2, c.get_name()));
-
-    exprt result =
-      migrate_expr_back(constant_struct2tc(migrate_type(new_type), members));
-
-    if (element.contains("lineno"))
-      result.location() = get_location_from_decl(element);
-    return result;
-  }
+  if (op == "Add")
+    return handle_tuple_add(lhs, rhs, element);
 
   // Repetition: (a, b) * 3 == (a, b, a, b, a, b). Requires a constant
   // non-negative repeat count, since the result type must be known.
@@ -3595,6 +3960,18 @@ exprt python_converter::handle_tuple_operations(
   return nil_exprt();
 }
 
+bool python_converter::is_definite_non_list_addend(
+  const typet &type,
+  const nlohmann::json &element) const
+{
+  if (
+    type.is_signedbv() || type.is_unsignedbv() || type.is_floatbv() ||
+    type_utils::is_string_type(type))
+    return true;
+  return get_tuple_handler().is_tuple_type(ns.follow(type)) &&
+         element.value("_type", "") != "AugAssign";
+}
+
 exprt python_converter::handle_list_operations(
   const std::string &op,
   exprt &lhs,
@@ -3680,14 +4057,13 @@ exprt python_converter::handle_list_operations(
   // list ... to list") — only list + list concatenates. The concat case above
   // already consumed list and any-typed (void*) right operands, so raise a
   // catchable TypeError (uncaught -> VERIFICATION FAILED) for a definite
-  // scalar/string right operand. Unknown/other types are left untouched to
-  // avoid misfiring on imprecise frontend typing (#6265).
+  // scalar/string right operand, or a tuple outside `+=` (which extends).
+  // Unknown/other types are left untouched to avoid misfiring on imprecise
+  // frontend typing (#6265).
   if (lhs.type() == list_type && op == "Add")
   {
     const typet &rt = rhs.type();
-    if (
-      rt.is_signedbv() || rt.is_unsignedbv() || rt.is_floatbv() ||
-      type_utils::is_string_type(rt))
+    if (is_definite_non_list_addend(rt, element))
       return get_exception_handler().gen_exception_raise(
         "TypeError",
         "can only concatenate list (not \"" +

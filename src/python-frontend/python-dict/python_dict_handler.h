@@ -75,6 +75,7 @@
 #define PYTHON_DICT_HANDLER_H
 
 #include <python-frontend/symbol_id.h>
+#include <python-frontend/type/element_type_registry.h>
 
 #include <util/irep/std_types.h>
 #include <util/irep/std_code.h>
@@ -400,6 +401,14 @@ public:
    * @param dict_expr The dictionary expression (must be a symbol)
    */
   typet recorded_tuple_value_type(const exprt &dict_expr) const;
+
+  /// Whether a read of @p dict_expr yields the stored item as a tagged scalar.
+  bool reads_value_as_tagged(
+    const exprt &dict_expr,
+    const nlohmann::json &slice_node,
+    const element_type_registry::entries &entries);
+
+  char annotated_value_kind(const exprt &dict_expr);
 
   /// The scalar or str value type shared by every dict literal recorded as an
   /// element of list @p list_id; empty when an element is not one, the types
@@ -730,6 +739,28 @@ private:
     const symbolt &values_list,
     const exprt &value_expr,
     const locationt &location);
+
+  /**
+   * @brief Store the dict v of `d[k] = v` by pointer to a heap copy, as
+   * store_nested_dict_value stores a nested dict literal by pointer
+   * @param node AST node of the assignment
+   * @param value The dict being stored
+   * @param values_member The dict's values list
+   * @param index Index of the existing key, used by set_call
+   * @param location Source location
+   * @param target_block Block receiving the copy, ahead of both calls
+   * @param set_call Replaced by the store at an existing key
+   * @param push_call Replaced by the store at a new key
+   */
+  void store_dict_value_by_pointer(
+    const nlohmann::json &node,
+    const exprt &value,
+    const exprt &values_member,
+    const exprt &index,
+    const locationt &location,
+    codet &target_block,
+    code_function_callt &set_call,
+    code_function_callt &push_call);
 
   /**
    * @brief Retrieve a nested dictionary from the values list

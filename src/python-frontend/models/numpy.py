@@ -198,6 +198,9 @@ def rint(x: float) -> float:
 
 
 def remainder(x: float, y: float) -> float:
+    # NumPy's remainder by zero is NaN (with a warning), not an exception.
+    if y == 0.0:
+        return math.nan
     return x - (math.floor(x / y) * y)
 
 
@@ -236,10 +239,24 @@ def frexp(x: float) -> tuple[float, int]:
 def isclose(
     a: float,
     b: float,
-    rel_tol: float = 1e-09,
-    abs_tol: float = 0.0,
+    rtol: float = 1e-05,
+    atol: float = 1e-08,
+    equal_nan: bool = False,
 ) -> bool:
-    return math.isclose(a, b, rel_tol=rel_tol, abs_tol=abs_tol)
+    # NumPy's test is asymmetric in b, unlike math.isclose.
+    if a == b:
+        return True
+    if math.isnan(a) or math.isnan(b):
+        return equal_nan and math.isnan(a) and math.isnan(b)
+    if math.isinf(a) or math.isinf(b):
+        return False
+    diff: float = a - b
+    if diff < 0.0:
+        diff = -diff
+    scale: float = b
+    if scale < 0.0:
+        scale = -scale
+    return diff <= atol + rtol * scale
 
 
 def copysign(x: float, y: float) -> float:

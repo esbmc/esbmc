@@ -333,7 +333,7 @@ bool esbmc_parseoptionst::process_goto_program(
       !(cmdline.isset("no-remove-unreachable") || checks_past_violation) ||
       cmdline.isset("condition-coverage-rm") ||
       cmdline.isset("condition-coverage-claims-rm"))
-      remove_unreachable(goto_functions);
+      remove_unreachable(goto_functions, checks_past_violation);
 
     // Apply all the initialized algorithms
     for (auto &algorithm : goto_preprocess_algorithms)
@@ -582,7 +582,7 @@ bool esbmc_parseoptionst::process_goto_program(
 
     if (!(cmdline.isset("no-remove-unreachable") || checks_past_violation ||
           skip_cleanup_for_termination))
-      remove_unreachable(goto_functions);
+      remove_unreachable(goto_functions, false);
 
     goto_functions.update();
 

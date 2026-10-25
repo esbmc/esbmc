@@ -1,4 +1,4 @@
-"""Define a nested function before the adjacent sibling defs that read it (#8960).
+"""Define a function before the adjacent sibling defs that read it (#8960, #9034).
 
 Running an undecorated def whose defaults and annotations call nothing only
 binds its name, so the order of adjacent such defs cannot be observed. The
@@ -19,11 +19,18 @@ def _reads(stmt):
     return {n.id for n in ast.walk(stmt) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)}
 
 
+def _read_at_def_time(stmt):
+    return _reads(stmt.args) | (_reads(stmt.returns) if stmt.returns else set())
+
+
 def _ordered(run):
     """`run` with each def after the defs of `run` it reads, or `run` as it is
-    when two defs share a name or read each other."""
+    when two defs share a name, read each other, or one reads at def time a
+    name a def at or after it binds."""
     names = {d.name for d in run}
     if len(names) != len(run):
+        return run
+    if any(_read_at_def_time(d) & {later.name for later in run[i:]} for i, d in enumerate(run)):
         return run
     ordered = []
     pending = list(run)
@@ -50,5 +57,5 @@ def _reordered(body):
 
 def define_read_siblings_first(module):
     for node in ast.walk(module):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        if isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef)):
             node.body = _reordered(node.body)

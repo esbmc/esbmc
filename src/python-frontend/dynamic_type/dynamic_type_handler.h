@@ -5,6 +5,7 @@
 #include <util/irep/std_code.h>
 #include <util/irep/location.h>
 #include <util/symtab/symbol.h>
+#include <python-frontend/symbol_id.h>
 #include <nlohmann/json.hpp>
 #include <string>
 #include <unordered_map>
@@ -22,7 +23,9 @@ public:
   /**
    * @brief Names assigned genuinely incompatible literal types across
    * every branch of `if_node`, following nested if/else (including elif)
-   * on either side; a name must be assigned in every branch to qualify
+   * on either side; a name must be assigned in every branch to qualify. The
+   * value a name holds before the `if` counts as one more branch, and a
+   * name `C.v` stands for class C's own attribute v
    */
   std::unordered_set<std::string>
   detect_dynamic_type_names(const nlohmann::json &if_node) const;
@@ -48,6 +51,12 @@ public:
    * following the alias created for a pre-existing variable
    */
   std::string tagged_symbol_id(const std::string &name) const;
+
+  /**
+   * @brief The id of the symbol `name` binds in the scope being converted:
+   * a variable, or class C's own attribute v for a name `C.v`
+   */
+  symbol_id bound_symbol_id(const std::string &name) const;
 
   /**
    * @brief True if `op` on two tagged operands can produce either scalar
@@ -124,6 +133,10 @@ public:
    */
   bool detect_dynamic_return_type(const nlohmann::json &function_node) const;
 
+  /// Every def that `call` may reach as a function value returns a dynamic
+  /// value (#9030).
+  bool function_values_return_dynamic(const nlohmann::json &call) const;
+
   /**
    * @brief True if some top-level `If` in `scope_body` (a function body or
    * the module body) assigns `name` genuinely incompatible literal kinds
@@ -193,6 +206,16 @@ private:
    * assign_tagged_object(); asserts if the symbol isn't declared yet
    */
   symbolt *find_tag_symbol(const std::string &name) const;
+
+  /**
+   * @brief Whether `name`, assigned `kinds` on every branch of an `if`,
+   * holds a num on one path and a str on another after it; `keeps_value`
+   * says the `if` has no else
+   */
+  bool joins_divergent_kinds(
+    const std::string &name,
+    std::unordered_set<std::string> &kinds,
+    bool keeps_value) const;
 
   /**
    * @brief Calls the num/str helper matching `literal`'s type (dispatch and
