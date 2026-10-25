@@ -25,6 +25,18 @@ Json *find_function(Json &body, const std::string &name)
   return nullptr;
 }
 
+/// The `__init__` a call to the undecorated class @p name reaches, or null.
+template <typename Json>
+Json *find_init(Json &body, const std::string &name)
+{
+  for (auto &elem : body)
+    if (
+      is_node(elem, "ClassDef") && elem["name"] == name &&
+      elem["decorator_list"].empty())
+      return find_function(elem["body"], "__init__");
+  return nullptr;
+}
+
 /// True for `list` and `list[T]` (and their typing.List spellings).
 bool is_list_annotation(const nlohmann::json &annotation)
 {
@@ -266,9 +278,23 @@ protected:
       collect_shadowing_names(node["body"], false);
   }
 
+  /// Whether a name that is a class, not only a function, resolves to its
+  /// module.
+  bool resolves_classes_ = false;
+
   bool defines(size_t module, const std::string &func) const
   {
-    return find_function(modules_[module].read->at("body"), func) != nullptr;
+    const nlohmann::json &body = modules_[module].read->at("body");
+    return find_function(body, func) != nullptr ||
+           (resolves_classes_ && class_defined(body, func));
+  }
+
+  static bool class_defined(const nlohmann::json &body, const std::string &name)
+  {
+    for (const auto &elem : body)
+      if (is_node(elem, "ClassDef") && elem["name"] == name)
+        return true;
+    return false;
   }
 
   /// The module defining @p func, or none when it is unknown or ambiguous.
@@ -706,6 +732,9 @@ public:
     const std::vector<python_param_annotations::module_ast> &modules)
     : call_resolver(modules)
   {
+    resolves_classes_ = true;
+    for (const auto &module : modules_)
+      collect_base_names(module.read->at("body"));
   }
 
   void run()
@@ -716,6 +745,35 @@ public:
   }
 
 private:
+  /// Names some class derives from. A call to the subclass can reach the
+  /// base's `__init__` without being a call to the base.
+  std::set<std::string> base_names_;
+
+  void collect_base_names(const nlohmann::json &node)
+  {
+    if (node.is_array())
+    {
+      for (const auto &elem : node)
+        collect_base_names(elem);
+      return;
+    }
+    if (!node.is_object())
+      return;
+    if (is_node(node, "ClassDef"))
+      for (const auto &base : node["bases"])
+        base_names_.insert(callee_name(base));
+    for (const auto &child : node)
+      collect_base_names(child);
+  }
+
+  /// The function a call to @p name reaches, or for a class its `__init__`.
+  template <typename Json>
+  static Json *callee_def(Json &body, const std::string &name)
+  {
+    Json *def = find_function(body, name);
+    return def ? def : find_init(body, name);
+  }
+
   struct binding
   {
     std::optional<std::string> type;
@@ -787,33 +845,39 @@ private:
     if (modules_[*callee].write == nullptr)
       return;
 
-    const nlohmann::json &def =
-      *find_function(modules_[*callee].read->at("body"), name);
-    if (!binds_by_position_only(call, def))
+    const nlohmann::json &callee_body = modules_[*callee].read->at("body");
+    const nlohmann::json *def = callee_def(callee_body, name);
+    if (!def)
+      return;
+    // A constructor call does not pass `self`.
+    const size_t skipped = find_function(callee_body, name) ? 0 : 1;
+    if (
+      !binds_by_position_only(call, *def) ||
+      (skipped && base_names_.count(name)))
     {
       poisoned_.insert(name);
       return;
     }
 
-    const nlohmann::json &params = def["args"]["args"];
-    const size_t required = params.size() - def["args"]["defaults"].size();
-    if (call["args"].size() < required)
+    const nlohmann::json &params = (*def)["args"]["args"];
+    const size_t required = params.size() - (*def)["args"]["defaults"].size();
+    if (call["args"].size() + skipped < required)
     {
       poisoned_.insert(name);
       return;
     }
     // A parameter the call leaves out takes its default, typed in the
     // callee's module (#8968).
-    for (size_t i = 0; i < params.size(); ++i)
+    for (size_t i = skipped; i < params.size(); ++i)
     {
       if (
         params[i].contains("annotation") && !params[i]["annotation"].is_null())
         continue;
-      const bool passed = i < call["args"].size();
+      const bool passed = i - skipped < call["args"].size();
       bind(
         param_key{*callee, name, i},
-        passed ? arg_type(call["args"][i], caller)
-               : arg_type(def["args"]["defaults"][i - required], *callee),
+        passed ? arg_type(call["args"][i - skipped], caller)
+               : arg_type((*def)["args"]["defaults"][i - required], *callee),
         *callee != caller);
     }
   }
@@ -833,19 +897,23 @@ private:
 
   /// Walk every node, class and function bodies included. A Name or Attribute
   /// outside callee position may carry the function anywhere, so its name is
-  /// poisoned.
-  void visit(const nlohmann::json &node, size_t module, bool is_callee)
+  /// poisoned, unless it only names a type in an annotation.
+  void visit(
+    const nlohmann::json &node,
+    size_t module,
+    bool is_callee,
+    bool in_annotation = false)
   {
     if (node.is_array())
     {
       for (const auto &elem : node)
-        visit(elem, module, false);
+        visit(elem, module, false, in_annotation);
       return;
     }
     if (!node.is_object())
       return;
 
-    if (!is_callee)
+    if (!is_callee && !in_annotation)
       poisoned_.insert(escaped_name(node));
 
     const bool is_call = is_node(node, "Call");
@@ -853,7 +921,11 @@ private:
       visit_call(node, module);
 
     for (auto it = node.begin(); it != node.end(); ++it)
-      visit(it.value(), module, is_call && it.key() == "func");
+      visit(
+        it.value(),
+        module,
+        is_call && it.key() == "func",
+        in_annotation || it.key() == "annotation" || it.key() == "returns");
   }
 
   void apply() const
@@ -868,7 +940,7 @@ private:
         json_utils::count_name_bindings(*modules_[module].read, func) != 1)
         continue;
 
-      nlohmann::json &arg = (*find_function(
+      nlohmann::json &arg = (*callee_def(
         modules_[module].write->at("body"), func))["args"]["args"][param];
       nlohmann::json annotation{{"_type", "Name"}, {"id", *entry.type}};
       for (const char *field :

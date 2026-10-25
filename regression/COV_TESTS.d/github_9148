@@ -1,0 +1,4 @@
+regression/python/github_9148
+regression/python/github_9148_fail
+regression/python/github_9148_attribute_fail
+regression/python/github_9148_lazy_unsupported

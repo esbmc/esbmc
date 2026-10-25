@@ -1290,6 +1290,131 @@ exprt dynamic_type_handler::build_tagged_value(
   return build_symbol(tag_symbol);
 }
 
+exprt dynamic_type_handler::build_numeric_conversion(
+  const exprt &tagged,
+  const typet &result_type,
+  const locationt &location)
+{
+  const bool to_float = result_type.is_floatbv();
+  const typet int_t = signedbv_typet(config.ansi_c.long_long_int_width);
+
+  // Built as a statement expression, so the operand, the ValueError and the
+  // parse run where Python evaluates the call: once, and only when reached
+  // (an and/or tail, a while test, a lambda body).
+  code_blockt block;
+  auto declare = [&](const std::string &name, const typet &type) {
+    symbolt &sym = converter_.create_tmp_symbol(location, name, type, exprt());
+    code_declt decl(build_symbol(sym));
+    decl.location() = location;
+    block.copy_to_operands(decl);
+    return build_symbol(sym);
+  };
+  auto assign = [&](const exprt &lhs, const exprt &rhs) {
+    code_assignt code(lhs, rhs);
+    code.location() = location;
+    return code;
+  };
+
+  exprt object = declare("$numeric_operand$", tagged.type());
+  block.copy_to_operands(assign(object, tagged));
+  exprt result = declare("$numeric_conversion$", result_type);
+
+  exprt type_id = build_member(object, "type_id", size_type());
+  exprt value = build_member(object, "value", pointer_typet(empty_typet()));
+
+  // The parse runs only on the str path: the models read a NUL-terminated
+  // string, which the bytes of an int or a float are not.
+  const symbolt *is_valid = converter_.symbol_table().find_symbol(
+    to_float ? "c:@F@__python_str_is_float" : "c:@F@__python_str_is_int");
+  const symbolt *parse = converter_.symbol_table().find_symbol(
+    to_float ? "c:@F@__python_str_to_float" : "c:@F@__python_int");
+  if (!is_valid || !parse)
+    throw std::runtime_error("str conversion models not in symbol table");
+
+  std::vector<exprt> parse_args{
+    build_typecast(value, pointer_typet(char_type()))};
+  if (!to_float)
+    parse_args.push_back(from_integer(10, int_type()));
+
+  auto raise_if = [&](
+                    code_blockt &target,
+                    const exprt &cond,
+                    const std::string &exception,
+                    const std::string &message) {
+    code_ifthenelset guard;
+    guard.cond() = cond;
+    guard.then_case() =
+      code_expressiont(converter_.get_exception_handler().gen_exception_raise(
+        exception, message));
+    guard.location() = location;
+    guard.location().property("skipped");
+    target.copy_to_operands(guard);
+  };
+
+  code_blockt from_str;
+  raise_if(
+    from_str,
+    build_not(build_call_expr(*is_valid, bool_type(), parse_args)),
+    "ValueError",
+    to_float ? "could not convert string to float"
+             : "invalid literal for int()");
+  from_str.copy_to_operands(
+    assign(result, build_call_expr(*parse, result_type, parse_args)));
+
+  // A bool is stored as an int (build_tag_field_assigns).
+  exprt is_float =
+    build_equal(type_id, type_handler_.tagged_scalar_type_id(double_type()));
+  // A float payload is read through its bits: a double-typed read of a
+  // pointer that may also target a str payload's bytes trips the solvers.
+  exprt as_int =
+    build_dereference(build_typecast(value, pointer_typet(int_t)), int_t);
+  expr2tc int2;
+  migrate_expr(as_int, int2);
+  exprt as_float =
+    migrate_expr_back(bitcast2tc(migrate_type(double_type()), int2));
+
+  code_blockt from_number;
+  if (to_float)
+    from_number.copy_to_operands(assign(
+      result,
+      build_if(is_float, as_float, build_typecast(as_int, result_type))));
+  else
+  {
+    expr2tc float2;
+    migrate_expr(as_float, float2);
+    raise_if(
+      from_number,
+      build_and(is_float, migrate_expr_back(isinf2tc(float2))),
+      "OverflowError",
+      "cannot convert float infinity to integer");
+    raise_if(
+      from_number,
+      build_and(is_float, migrate_expr_back(isnan2tc(float2))),
+      "ValueError",
+      "cannot convert float NaN to integer");
+    from_number.copy_to_operands(assign(
+      result,
+      build_if(is_float, build_typecast(as_float, result_type), as_int)));
+  }
+
+  code_ifthenelset dispatch;
+  dispatch.cond() = build_equal(
+    type_id, type_handler_.tagged_scalar_type_id(pointer_typet(char_type())));
+  dispatch.then_case() = from_str;
+  dispatch.else_case() = from_number;
+  dispatch.location() = location;
+  block.copy_to_operands(dispatch);
+
+  code_expressiont value_of(result);
+  value_of.location() = location;
+  block.copy_to_operands(value_of);
+
+  side_effect_exprt conversion("statement_expression", result_type);
+  conversion.copy_to_operands(block);
+  conversion.location() = location;
+  return conversion;
+}
+
 void dynamic_type_handler::refuse_float_tag_operation(
   const exprt &lhs,
   const exprt &rhs) const

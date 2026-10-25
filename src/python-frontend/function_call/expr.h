@@ -461,6 +461,11 @@ private:
   /// holds None; returns the operand to convert.
   exprt guard_none_to_float(exprt operand) const;
 
+  /// float(@p operand) for a non-float operand; a tagged str-or-number
+  /// converts by its runtime tag.
+  exprt
+  build_float_conversion(const exprt &operand, const typet &float_type) const;
+
   /*
    * Handles int-to-float conversions (e.g., float(3)) by generating
    * the appropriate cast expression.
@@ -1025,6 +1030,11 @@ private:
     exprt arg,
     const typet &param_type,
     const locationt &location) const;
+
+  void refuse_float_to_int_argument(
+    const exprt &arg,
+    const typet &param_type,
+    const symbolt &callee) const;
 
   typet dict_param_value_type(const symbolt *func, size_t idx) const;
   std::optional<exprt> build_positional_arguments(

@@ -1297,16 +1297,16 @@ exprt function_call_expr::build_constant_from_arg() const
       if (resolved.is_struct())
       {
         // Materialise an rvalue call result into a typed temp (emitted once)
-        // so its address can feed the dunder self argument.
-        exprt int_object = operand_expr;
+        // so its address can feed the dunder self argument, and the
+        // conversions below read the temp instead of calling again.
         if (operand_is_call)
         {
-          int_object.type() = value_type;
-          int_object = converter_.store_call_result(
-            int_object, converter_.get_location_from_decl(call_), "int_obj");
+          operand_expr.type() = value_type;
+          operand_expr = converter_.store_call_result(
+            operand_expr, converter_.get_location_from_decl(call_), "int_obj");
         }
         exprt dunder = converter_.dispatch_unary_dunder_operator(
-          "int", int_object, converter_.get_location_from_decl(call_));
+          "int", operand_expr, converter_.get_location_from_decl(call_));
         if (!dunder.is_nil())
           return dunder;
       }
@@ -1486,9 +1486,8 @@ exprt function_call_expr::build_constant_from_arg() const
       return sh.handle_string_to_float(expr, loc);
     }
     // Numeric variable: emit a proper typecast to avoid mislabeled IR
-    typet float_t = type_handler_.get_typet("float", 0);
     if (!expr.type().is_floatbv())
-      return build_typecast(expr, float_t);
+      return build_float_conversion(expr, type_handler_.get_typet("float", 0));
     return expr;
   }
 
@@ -1602,7 +1601,7 @@ exprt function_call_expr::build_constant_from_arg() const
   // the type tag says float but the operation is bitvector arithmetic,
   // causing sort mismatches in the SMT encoder.
   if (func_name == "float" && !expr.type().is_floatbv())
-    return build_typecast(guard_none_to_float(expr), t);
+    return build_float_conversion(guard_none_to_float(expr), t);
 
   if (func_name != "str")
     expr = retype_or_typecast(expr, t);
@@ -7085,6 +7084,22 @@ exprt function_call_expr::coerce_tagged_argument(
     "yet supported");
 }
 
+// CPython does not enforce the annotation and the callee sees the float, so
+// the C conversion to the int parameter would truncate it (#8222). An
+// operational model may declare int where it converts the float itself.
+void function_call_expr::refuse_float_to_int_argument(
+  const exprt &arg,
+  const typet &param_type,
+  const symbolt &callee) const
+{
+  if (
+    arg.type().is_floatbv() && param_type.is_signedbv() &&
+    converter_.is_program_file(
+      symbol_id::from_string(callee.id.as_string()).get_filename()))
+    throw std::runtime_error(
+      "passing a float to an int parameter is not supported");
+}
+
 static std::optional<std::string> string_literal(const nlohmann::json &node)
 {
   if (node.value("_type", "") == "Constant" && node["value"].is_string())
@@ -7192,7 +7207,10 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
     // Check if the corresponding parameter is Optional / tagged.
 
     if (param_idx < params.size())
+    {
+      refuse_float_to_int_argument(arg, params[param_idx].type(), *func_symbol);
       arg = coerce_tagged_argument(arg, params[param_idx].type(), location);
+    }
     else if (type_handler_.is_tagged_scalar_type(arg.type()))
       converter_.dynamic_type_handler_.refuse_tagged_argument();
 
@@ -7670,6 +7688,7 @@ exprt function_call_expr::finalize_call(
         if (params[i].get_base_name().as_string() == kw_name)
         {
           exprt kw_val = converter_.get_expr(kw["value"]);
+          refuse_float_to_int_argument(kw_val, params[i].type(), *func_symbol);
           kw_val = coerce_tagged_argument(kw_val, params[i].type(), location);
           if (call.arguments().size() <= i)
             call.arguments().resize(i + 1);
