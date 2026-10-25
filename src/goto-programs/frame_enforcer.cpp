@@ -109,9 +109,11 @@ frame_enforcert::classified_assignst frame_enforcert::classify_assigns_targets(
       result.array_elem_targets[to_symbol2t(idx.source_value).thename]
         .push_back(idx.index);
     }
-    else if (is_pointer_type(target))
+    else if (is_pointer_type(target) && !is_member2t(target))
     {
-      // Pointer-typed symbol: Clang simplified &(*ptr) to ptr
+      // A bare pointer covers its pointee, so a decayed array parameter
+      // names the array. A pointer field `c->p` names the field itself, as
+      // `*c->p` reaches here as a dereference (#9000).
       result.pointer_targets.push_back(target);
     }
     else if (is_dereference2t(target))

@@ -161,6 +161,13 @@ private:
   /// The TypeError CPython raises on instantiating an abstract class.
   exprt abstract_instantiation_error(const nlohmann::json &ctor_call) const;
 
+  bool is_unmodelled_base_instantiation() const;
+
+  /// Refuse creating \p class_name, which derives from a class that has no
+  /// model: its instances lack whatever that base provides.
+  [[noreturn]] void
+  refuse_unmodelled_base_instance(const std::string &class_name) const;
+
   static void collect_method_abstractness(
     const python_converter &converter,
     const std::string &class_name,
@@ -192,6 +199,10 @@ private:
    * Creates a constant expression from function argument.
    */
   exprt build_constant_from_arg() const;
+
+  /// str() of @p value, converted from @p arg, when it is a class object or
+  /// has a __str__; nil otherwise.
+  exprt str_of_object(exprt &value, const nlohmann::json &arg) const;
 
   /*
    * object(): a pointer to a fresh heap object, so each call has its own
@@ -449,6 +460,11 @@ private:
   /// Raises TypeError before float() converts a None-typed @p operand that
   /// holds None; returns the operand to convert.
   exprt guard_none_to_float(exprt operand) const;
+
+  /// float(@p operand) for a non-float operand; a tagged str-or-number
+  /// converts by its runtime tag.
+  exprt
+  build_float_conversion(const exprt &operand, const typet &float_type) const;
 
   /*
    * Handles int-to-float conversions (e.g., float(3)) by generating
@@ -1014,6 +1030,11 @@ private:
     exprt arg,
     const typet &param_type,
     const locationt &location) const;
+
+  void refuse_float_to_int_argument(
+    const exprt &arg,
+    const typet &param_type,
+    const symbolt &callee) const;
 
   typet dict_param_value_type(const symbolt *func, size_t idx) const;
   std::optional<exprt> build_positional_arguments(

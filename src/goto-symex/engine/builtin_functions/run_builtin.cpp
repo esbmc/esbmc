@@ -173,6 +173,12 @@ static expr2tc build_bit_builtin(
   return expr2tc();
 }
 
+// A void operand, such as a call to a void function, arrives as nil.
+static bool is_constant_operand(const expr2tc &op)
+{
+  return !is_nil_expr(op) && is_constant_int2t(op);
+}
+
 bool goto_symext::run_builtin(
   const code_function_call2t &func_call,
   const std::string &symname)
@@ -236,7 +242,8 @@ bool goto_symext::run_builtin(
     if (!is_nil_expr(func_call.ret))
       symex_assign(code_assign2tc(
         func_call.ret,
-        is_constant_int2t(op1) ? gen_one(int_type2()) : gen_zero(int_type2())));
+        is_constant_operand(op1) ? gen_one(int_type2())
+                                 : gen_zero(int_type2())));
     return true;
   }
 
