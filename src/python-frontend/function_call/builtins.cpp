@@ -14,6 +14,8 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/lambda/python_lambda.h>
 #include <python-frontend/exception/python_exception_handler.h>
+#include <python-frontend/string/string_builder.h>
+#include <python-frontend/string/string_handler.h>
 #include <python-frontend/string/string_handler_utils.h>
 #include <python-frontend/tuple/tuple_handler.h>
 #include <python-frontend/type/type_handler.h>
@@ -1276,6 +1278,42 @@ std::string function_call_expr::exact_instance_class(
            : "";
 }
 
+/// The class of a tagged scalar, chosen at run time from its type_id.
+exprt function_call_expr::tagged_scalar_class(const exprt &tagged) const
+{
+  exprt cls = converter_.class_value("str");
+  for (const char *name : {"float", "int", "bool"})
+    cls = if_exprt(
+      converter_.dynamic_type_handler_.build_isinstance_check(
+        tagged, name, false),
+      converter_.class_value(name),
+      cls);
+  return cls;
+}
+
+bool function_call_expr::is_str_of_type_call() const
+{
+  const auto &args = call_["args"];
+  return call_["func"]["_type"] == "Name" &&
+         function_id_.get_function() == "str" && args.size() == 1 &&
+         args[0]["_type"] == "Call" && args[0]["func"]["_type"] == "Name" &&
+         args[0]["func"]["id"] == "type";
+}
+
+exprt function_call_expr::handle_str_of_type_call() const
+{
+  const exprt cls = converter_.get_expr(call_["args"][0]);
+  if (type_handler::is_class_value_type(cls.type()))
+    throw std::runtime_error(
+      "Unsupported: str() of a class that is only known at run time");
+  if (
+    python_converter::is_class_object(cls) &&
+    type_utils::is_type_identifier(cls.get_string("value")))
+    return converter_.get_string_builder().build_string_literal(
+      "<class '" + cls.get_string("value") + "'>");
+  return converter_.get_string_handler().convert_to_string(cls);
+}
+
 exprt function_call_expr::handle_type_call() const
 {
   const auto &args = call_["args"];
@@ -1288,6 +1326,9 @@ exprt function_call_expr::handle_type_call() const
   const std::string instance_class = exact_instance_class(args[0], arg_expr);
   if (!instance_class.empty())
     return converter_.make_class_object(instance_class);
+
+  if (type_handler_.is_tagged_scalar_type(arg_expr.type()))
+    return tagged_scalar_class(arg_expr);
 
   // None's C type would otherwise name it "pointer" (#8764).
   std::string type_name =

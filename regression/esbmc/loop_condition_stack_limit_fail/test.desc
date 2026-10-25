@@ -1,0 +1,5 @@
+CORE
+main.c
+--unwind 2 --no-unwinding-assertions --stack-limit 90
+Stack limit property was violated when declaring big
+^VERIFICATION FAILED$
