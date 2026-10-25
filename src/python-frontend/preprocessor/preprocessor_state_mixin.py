@@ -45,6 +45,12 @@ class PreprocessorStateMixin:
         self._imported_vararg_specs = {}
         self._used_imported_vararg_specs = {}
         self._vararg_once_bound = set()
+        # Calls the entry module makes into a def of this module, by def name,
+        # and the names that module binds; see _specialise_requested_function.
+        self.external_type_calls = {}
+        self.blocked_type_functions = set()
+        self.external_bound_names = set()
+        self.exported_type_specs = {}
         self.listcomp_counter = 0
         self.comprehension_targets = set()
         self.functools_reduce_names = set()

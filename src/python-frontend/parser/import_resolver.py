@@ -7,6 +7,7 @@ import importlib
 import importlib.util
 import os
 import sys
+from collections import Counter
 from dataclasses import dataclass
 from types import ModuleType
 from typing import Callable, TypeAlias, TypedDict
@@ -657,9 +658,106 @@ def _request_vararg_specializations(entry_tree: ast.Module, parsed_trees: Parsed
             arities.setdefault(node.func.id, set()).add(len(node.args))
 
 
+def _imports_of(tree: ast.AST, module_name: str) -> tuple[set, set, set]:
+    """The names `tree` binds the module to, the names it imports from the
+    module, and those it imports in a way that hides their uses ("*" for a
+    star import)."""
+    module_names, from_names, hidden = set(), set(), set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            module_names.update(a.asname or a.name for a in node.names if a.name == module_name)
+        elif isinstance(node, ast.ImportFrom) and node.module == module_name:
+            for alias in node.names:
+                if alias.name == "*" or alias.asname:
+                    hidden.add(alias.name)
+                else:
+                    from_names.add(alias.name)
+    return module_names, from_names, hidden
+
+
+def _called_name(node: ast.AST, module_names: set, from_names: set) -> str | None:
+    """The name of the module a call, or a bare reference, reaches."""
+    if isinstance(node, ast.Name) and node.id in from_names:
+        return node.id
+    if (isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name)
+            and node.value.id in module_names):
+        return node.attr
+    return None
+
+
+def _references_into(tree: ast.AST, module_name: str) -> tuple[dict, set]:
+    """The calls `tree` makes to each name of `module_name`, and the names
+    whose other uses it could not see: a name read other than to call it, an
+    aliased or star import, or the module itself used as a value ("*")."""
+    module_names, from_names, blocked = _imports_of(tree, module_name)
+    refs: Counter = Counter()
+    calls: dict = {}
+    module_loads = 0
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and node.id in module_names:
+            module_loads += 1
+        name = _called_name(node, module_names, from_names)
+        if name is not None:
+            refs[name] += 1
+        if isinstance(node, ast.Call):
+            callee = _called_name(node.func, module_names, from_names)
+            if callee is not None:
+                calls.setdefault(callee, []).append(node)
+    attribute_loads = sum(_called_name(n, module_names, set()) is not None for n in ast.walk(tree))
+    if module_loads != attribute_loads:
+        blocked.add("*")
+    blocked.update(name for name, count in refs.items() if count != len(calls.get(name, ())))
+    return calls, blocked
+
+
+def _request_type_specializations(entry_tree: ast.Module, parsed_trees: ParsedTreeState) -> None:
+    """Hand each imported module the calls the entry module makes into it.
+
+    A parameter that only ever receives builtin classes is read as those
+    classes (#9049), which needs every call in view; the module is finalized
+    before the entry module, so it is told here. Another module's reference
+    to a name, or any use of it that cannot be seen, leaves that name alone.
+    """
+    if not parsed_trees:
+        return
+    entry_bound = next(iter(parsed_trees.values()))[2].names_bound_in(entry_tree)
+    for module_name, parsed in parsed_trees.items():
+        preprocessor = parsed[2]
+        if "." in module_name or is_imported_model(module_name):
+            continue
+        preprocessor.external_bound_names = entry_bound
+        calls, blocked = _references_into(entry_tree, module_name)
+        preprocessor.external_type_calls = {
+            name: nodes
+            for name, nodes in calls.items() if name not in blocked
+        }
+        preprocessor.blocked_type_functions |= blocked
+        for other_name, other in parsed_trees.items():
+            if other_name != module_name:
+                other_calls, other_blocked = _references_into(other[0], module_name)
+                preprocessor.blocked_type_functions |= other_blocked | set(other_calls)
+
+
+def _adopt_type_specializations(entry_tree: ast.Module, parsed_trees: ParsedTreeState) -> None:
+    """Import the copies an imported module made in place of a def the entry
+    module called, now that the calls name them."""
+    for module_name, (_tree, _filename, preprocessor) in parsed_trees.items():
+        specs = preprocessor.exported_type_specs
+        if not specs:
+            continue
+        for node in ast.walk(entry_tree):
+            if isinstance(node, ast.ImportFrom) and node.module == module_name:
+                node.names = [
+                    new for alias in node.names
+                    for new in ([ast.alias(name=c, asname=None)
+                                 for c in specs[alias.name]] if alias.name in specs else [alias])
+                ]
+
+
 def _finalize_parsed_trees(parsed_trees: ParsedTreeState, entry_tree: ast.Module | None) -> None:
     if entry_tree is not None:
         _request_vararg_specializations(entry_tree, parsed_trees)
+        _request_type_specializations(entry_tree, parsed_trees)
     started: set[str] = set()
     done: set[str] = set()
     for module_name in parsed_trees:
@@ -668,6 +766,7 @@ def _finalize_parsed_trees(parsed_trees: ParsedTreeState, entry_tree: ast.Module
         module_imports[module_name]['specific_names'].update(
             preprocessor.exported_vararg_specs.values())
     if entry_tree is not None:
+        _adopt_type_specializations(entry_tree, parsed_trees)
         _separate_colliding_classes(entry_tree, parsed_trees)
 
 

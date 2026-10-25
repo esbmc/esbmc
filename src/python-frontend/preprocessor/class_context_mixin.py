@@ -658,6 +658,8 @@ class ClassContextMixin:
             known = self._known_classes(module, counts)
             self._bind_local_type_values(module, known)
             if not self.is_entry_module:
+                if self._specialise_requested_function(module, known, counts):
+                    continue
                 self._unroll_class_tuples(module, known, counts)
                 return
             self._lower_called_lambdas(module, known, counts)
@@ -882,6 +884,27 @@ class ClassContextMixin:
             for f in module.body if isinstance(f, ast.FunctionDef) and not f.decorator_list
             and counts[f.name] == 1 and loads[f.name] == len(calls[f.name]))
 
+    def names_bound_in(self, tree):
+        """Every name `tree` binds."""
+        return {name for node in ast.walk(tree) for name in self._names_bound_by(node)}
+
+    def _specialise_requested_function(self, module, known, counts):
+        """Specialise the first top-level function the entry module calls with
+        builtin classes (#9049) and nothing else references; whether one was.
+        The entry module's calls are renamed to the copies."""
+        if "*" in self.blocked_type_functions:
+            return False
+        builtin = {n for n in known if isinstance(getattr(builtins, n, None), type)}
+        builtin -= self.external_bound_names
+        loads = Counter(n.id for n in ast.walk(module) if isinstance(n, ast.Name))
+        taken = counts.keys() | loads.keys()
+        return any(
+            self._specialise_type_parameters(module, f, builtin, self.external_type_calls[f.name],
+                                             taken) for f in module.body
+            if isinstance(f, ast.FunctionDef) and not f.decorator_list
+            and f.name in self.external_type_calls and f.name not in self.blocked_type_functions
+            and counts[f.name] == 1 and not loads[f.name])
+
     @staticmethod
     def _replace_reads(nodes, name, value):
         """Reads of `name` in `nodes` become `value`: a class name, or the
@@ -986,7 +1009,10 @@ class ClassContextMixin:
         if not calls or not indexes or not taken.isdisjoint(names.values()):
             return False
         for call, key in zip(calls, keys):
-            call.func.id = names[key]
+            if isinstance(call.func, ast.Attribute):
+                call.func.attr = names[key]
+            else:
+                call.func.id = names[key]
             self._drop_tuple_arguments(call, func, indexes, key)
         params = [p.arg for p in func.args.posonlyargs + func.args.args]
         at = module.body.index(func)
@@ -994,6 +1020,8 @@ class ClassContextMixin:
             self._type_copy(func, name, [(params[i], cls) for i, cls in zip(indexes, key)])
             for key, name in names.items()
         ]
+        if not self.is_entry_module:
+            self.exported_type_specs[func.name] = list(names.values())
         return True
 
     @staticmethod
