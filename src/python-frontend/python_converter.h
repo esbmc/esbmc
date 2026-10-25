@@ -267,6 +267,10 @@ public:
     return call_escaped_lists_.find(id) != call_escaped_lists_.end();
   }
 
+  /// Makes @p id, a local of a nested body that has been closed, outlive that
+  /// body, so that a later read does not follow its DEAD (#9185).
+  void outlive_scope(const std::string &id);
+
   /// Runs @p check once every statement has been converted.
   void defer_check(std::function<void()> check)
   {
@@ -3844,6 +3848,11 @@ private:
   std::unordered_set<std::string> str_valued_symbols_;
   /// Symbols ever assigned a str literal; see retype_resized_str.
   std::unordered_set<std::string> str_assigned_symbols_;
+  /// Locals declared directly in a nested body that has been closed.
+  std::unordered_set<std::string> out_of_scope_locals_;
+  /// Records the locals @p block declares, which goto_convert marks DEAD where
+  /// the block ends.
+  void end_block_scope(const code_blockt &block);
 
   /// Flow-sensitive class tracking (#4771/#4772). Maps a straight-line lvalue
   /// access path -- "v" for a Name `v`, "v.attr" for an `obj.attr` lvalue -- to
