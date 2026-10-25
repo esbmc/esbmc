@@ -27,14 +27,14 @@ nlohmann::json find_function_recursive(
   const std::string &func_name,
   const nlohmann::json &body)
 {
+  // A definition at this level wins over a method of the same name in a
+  // class body that the descent below would reach first (#9055).
+  for (const nlohmann::json &elem : body)
+    if (elem["_type"] == "FunctionDef" && elem["name"] == func_name)
+      return elem;
+
   for (const nlohmann::json &elem : body)
   {
-    // Found the function at this level
-    if (elem["_type"] == "FunctionDef" && elem["name"] == func_name)
-    {
-      return elem;
-    }
-
     // Recursively search in nested function bodies
     if (elem["_type"] == "FunctionDef" && elem.contains("body"))
     {
