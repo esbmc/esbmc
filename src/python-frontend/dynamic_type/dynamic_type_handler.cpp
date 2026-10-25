@@ -41,6 +41,23 @@ param_kinds_t collect_param_kinds(const nlohmann::json &function_node)
   return kinds;
 }
 
+// The body of `function_node` behind one assignment per parameter of a known
+// kind, so that a name bound to the parameter classifies like it.
+nlohmann::json body_with_param_kinds(const nlohmann::json &function_node)
+{
+  nlohmann::json body = nlohmann::json::array();
+  for (const auto &[name, kind] : collect_param_kinds(function_node))
+    body.push_back(
+      {{"_type", "Assign"},
+       {"targets", {{{"_type", "Name"}, {"id", name}}}},
+       {"value",
+        {{"_type", "Constant"},
+         {"value", kind == "str" ? nlohmann::json("") : nlohmann::json(0)}}}});
+  for (const auto &stmt : function_node["body"])
+    body.push_back(stmt);
+  return body;
+}
+
 // "str" for `nondet_str()`, "num" for `nondet_int()` or `nondet_bool()`.
 std::string nondet_call_kind(const nlohmann::json &call)
 {
@@ -334,6 +351,7 @@ bool returns_dynamic_value(
   if (depth > 8)
     return false;
   std::unordered_set<std::string> forwarded;
+  const nlohmann::json scope_body = body_with_param_kinds(function_node);
   for (const auto &stmt : function_node["body"])
   {
     const std::string type = stmt.value("_type", "");
@@ -345,7 +363,7 @@ bool returns_dynamic_value(
       type == "Return" &&
       (forwarded.count(returned) ||
        dynamic_type_detail::scope_assigns_divergent_literal_types(
-         returned, function_node["body"], module_body)))
+         returned, scope_body, module_body)))
       return true;
     if (!calls_dynamic_function(value, function_node, module_body, depth))
       continue;
@@ -387,13 +405,17 @@ std::unordered_set<std::string> dynamic_type_handler::detect_dynamic_type_names(
   // Module scope by default, or the current function's body.
   const nlohmann::json &module_body = converter_.ast()["body"];
   nlohmann::json func_def;
+  nlohmann::json scoped_body;
   const nlohmann::json *scope_body = &module_body;
   if (!converter_.current_function_name().empty())
   {
     func_def = json_utils::try_find_function(
       module_body, converter_.current_function_name());
     if (!func_def.empty() && func_def.contains("body"))
-      scope_body = &func_def["body"];
+    {
+      scoped_body = body_with_param_kinds(func_def);
+      scope_body = &scoped_body;
+    }
   }
 
   const nlohmann::json callables = converter_.callable_function_stubs();
@@ -631,8 +653,9 @@ std::vector<codet> dynamic_type_handler::build_tag_field_assigns(
   }
 
   // Normalise to the canonical str type before hashing, so type_id
-  // doesn't vary with length or array-vs-pointer shape.
-  typet type_id_source = value_to_store.type();
+  // doesn't vary with length or array-vs-pointer shape. A bool keeps its
+  // own tag although its payload was widened to an int above.
+  typet type_id_source = rhs.type();
   if (type_handler_.is_string_type(type_id_source))
     type_id_source = pointer_typet(char_type());
   exprt type_id_value = type_handler_.tagged_scalar_type_id(type_id_source);
