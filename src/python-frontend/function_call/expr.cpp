@@ -4441,6 +4441,11 @@ function_call_expr::get_dispatch_table()
      },
      "round() builtin"},
 
+    // str(type(x))
+    {[this]() { return is_str_of_type_call(); },
+     [this]() { return handle_str_of_type_call(); },
+     "str(type())"},
+
     // type() built-in
     {[this]() { return function_id_.get_function() == "type"; },
      [this]() { return handle_type_call(); },

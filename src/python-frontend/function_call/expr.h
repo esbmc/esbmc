@@ -386,6 +386,9 @@ private:
   exprt handle_callable() const;
 
   exprt handle_type_call() const;
+  exprt tagged_scalar_class(const exprt &tagged) const;
+  bool is_str_of_type_call() const;
+  exprt handle_str_of_type_call() const;
   std::string
   exact_instance_class(const nlohmann::json &arg, const exprt &expr) const;
 
