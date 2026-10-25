@@ -1,4 +1,5 @@
 #include <util/arith/transcendental.h>
+#include <util/config/config.h>
 
 #include <algorithm>
 #include <cfloat>
@@ -78,14 +79,30 @@ bool exact_everywhere(const std::string &function, double x, double value)
          (function == "log2" && power_of_two);
 }
 
+// How many ulps a result may lie from the C library's value
+// (--python-math-ulps): 8 by default, as NumPy's vectorised code differs
+// from libm (SVML on AVX-512 is tested to 4 ulps of the exact value), and 0
+// for a correctly rounded library.
+double max_ulps()
+{
+  const std::string option = config.options.get_option("python-math-ulps");
+  if (option.empty())
+    return 8;
+  const int ulps = std::stoi(option);
+  if (ulps < 0)
+    throw std::runtime_error("--python-math-ulps must not be negative");
+  return ulps;
+}
+
 double ulps(double value)
 {
-  return 8 * (std::nextafter(std::fabs(value), inf) - std::fabs(value));
+  return max_ulps() *
+         (std::nextafter(std::fabs(value), inf) - std::fabs(value));
 }
 
 // The results around x: at x itself, or near it, where only a zero keeps
 // its sign under a relative error. A nonzero result may underflow to zero
-// but keeps its sign, which 8 ulps of a subnormal would cross.
+// but keeps its sign, which a few ulps of a subnormal would cross.
 interval around(const std::string &function, double x, bool at_x)
 {
   const double value = host_value(function, x);

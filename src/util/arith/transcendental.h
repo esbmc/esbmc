@@ -4,8 +4,9 @@
 #include <vector>
 
 /// Bounds on the transcendental functions numpy.* and math.* share (NumPy
-/// spelling): any double within 8 ulps of the C library's value and inside
-/// the function's range, exact where every implementation is (ADR-NP-005).
+/// spelling): any double within --python-math-ulps (8) of the C library's value
+/// and inside the function's range, exact where every implementation is
+/// (ADR-NP-005).
 namespace transcendental
 {
 struct interval
