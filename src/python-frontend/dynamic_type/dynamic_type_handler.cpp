@@ -318,6 +318,53 @@ bool calls_dynamic_function(
          returns_dynamic_value(*callee, module_body, depth + 1);
 }
 
+// `node` binds `name`: as a parameter, a def, class, import or except alias,
+// or a Name stored or deleted.
+bool binds_name(const nlohmann::json &node, const std::string &name)
+{
+  if (!node.is_structured())
+    return false;
+  if (node.is_object())
+  {
+    const std::string type = node.value("_type", "");
+    if (type == "Name")
+      return node.value("id", "") == name &&
+             node.value("ctx", nlohmann::json::object()).value("_type", "") !=
+               "Load";
+    const char *key =
+      type == "arg" ? "arg"
+      : type == "alias" && node.value("asname", nlohmann::json()).is_string()
+        ? "asname"
+        : "name";
+    const nlohmann::json bound = node.value(key, nlohmann::json());
+    if (bound.is_string() && bound == name)
+      return true;
+  }
+  for (const auto &child : node)
+    if (binds_name(child, name))
+      return true;
+  return false;
+}
+
+// `name`, returned by `function_node`, is bound to divergent kinds by the
+// function itself or, when the function is top-level and never binds it, by
+// the module body (#9156).
+bool returns_divergent_name(
+  const std::string &name,
+  const nlohmann::json &function_node,
+  const nlohmann::json &module_body)
+{
+  if (
+    dynamic_type_detail::scope_assigns_divergent_literal_types(
+      name, function_node["body"], module_body))
+    return true;
+  return !name.empty() && !binds_name(function_node["args"], name) &&
+         !binds_name(function_node["body"], name) &&
+         !enclosing_def(module_body, function_node) &&
+         dynamic_type_detail::scope_assigns_divergent_literal_types(
+           name, module_body, module_body);
+}
+
 // True when `function_node` returns divergent literal kinds, or forwards the
 // result of a function that does, directly or through a local (#8890).
 bool returns_dynamic_value(
@@ -344,8 +391,7 @@ bool returns_dynamic_value(
     if (
       type == "Return" &&
       (forwarded.count(returned) ||
-       dynamic_type_detail::scope_assigns_divergent_literal_types(
-         returned, function_node["body"], module_body)))
+       returns_divergent_name(returned, function_node, module_body)))
       return true;
     if (!calls_dynamic_function(value, function_node, module_body, depth))
       continue;
