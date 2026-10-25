@@ -713,10 +713,11 @@ enum class store_kind
   floating,
   string,
   tuple,
-  function
+  function,
+  list
 };
 
-store_kind kind_of(const typet &type, const python_converter &converter)
+store_kind kind_of(const typet &type, python_converter &converter)
 {
   if (type.is_signedbv() || type.is_unsignedbv() || type.is_bool())
     return store_kind::integer;
@@ -728,6 +729,8 @@ store_kind kind_of(const typet &type, const python_converter &converter)
     return store_kind::tuple;
   if (type.is_code() || (type.is_pointer() && type.subtype().is_code()))
     return store_kind::function;
+  if (type == converter.get_type_handler().get_list_type())
+    return store_kind::list;
   return store_kind::other;
 }
 
