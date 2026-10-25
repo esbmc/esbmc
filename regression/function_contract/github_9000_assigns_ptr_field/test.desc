@@ -1,0 +1,4 @@
+CORE
+main.c
+--enforce-contract f --force-malloc-success
+^VERIFICATION SUCCESSFUL$
