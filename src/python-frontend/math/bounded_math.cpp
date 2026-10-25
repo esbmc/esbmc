@@ -1,6 +1,8 @@
 #include <python-frontend/math/bounded_math.h>
 #include <python-frontend/python_converter.h>
+#include <irep2/irep2_utils.h>
 #include <util/arith/arith_tools.h>
+#include <util/irep/migrate.h>
 #include <util/lang/c_types.h>
 #include <util/irep/std_code.h>
 #include <util/irep/std_expr.h>
@@ -15,27 +17,30 @@
 
 namespace
 {
-// Where a function is bounded piecewise between breakpoints, its range, and
-// the nearest doubles to where it turns. Outside [from, to] a periodic
-// function only keeps its range for a finite argument.
+const double inf = INFINITY;
+
+// Where a function is bounded piecewise between breakpoints, its range, the
+// nearest doubles to where it turns or jumps, and the domain outside which
+// the result is NaN. Outside [from, to] a periodic function only keeps its
+// range for a finite argument.
 struct math_spec
 {
   double from, to;
   double range_low, range_high;
   std::vector<double> turning;
   bool periodic;
+  std::vector<double> poles = {};
+  double domain_low = -inf, domain_high = inf;
 };
-
-const double inf = INFINITY;
 
 const std::map<std::string, math_spec> &specs()
 {
   static const double pi = M_PI, half_pi = M_PI_2;
   static const std::map<std::string, math_spec> table = {
     {"exp", {-inf, inf, 0.0, inf, {}, false}},
-    {"log", {DBL_TRUE_MIN, inf, -inf, inf, {}, false}},
-    {"log2", {DBL_TRUE_MIN, inf, -inf, inf, {}, false}},
-    {"log10", {DBL_TRUE_MIN, inf, -inf, inf, {}, false}},
+    {"log", {DBL_TRUE_MIN, inf, -inf, inf, {}, false, {}, 0.0}},
+    {"log2", {DBL_TRUE_MIN, inf, -inf, inf, {}, false, {}, 0.0}},
+    {"log10", {DBL_TRUE_MIN, inf, -inf, inf, {}, false, {}, 0.0}},
     {"sin",
      {-8.0,
       8.0,
@@ -44,9 +49,9 @@ const std::map<std::string, math_spec> &specs()
       {-5 * half_pi, -3 * half_pi, -half_pi, half_pi, 3 * half_pi, 5 * half_pi},
       true}},
     {"cos", {-8.0, 8.0, -1.0, 1.0, {-2 * pi, -pi, 0.0, pi, 2 * pi}, true}},
-    {"tan", {-half_pi, half_pi, -DBL_MAX, DBL_MAX, {}, true}},
-    {"arcsin", {-1.0, 1.0, -half_pi, half_pi, {}, false}},
-    {"arccos", {-1.0, 1.0, 0.0, pi, {}, false}},
+    {"tan", {-4.5, 4.5, -DBL_MAX, DBL_MAX, {}, true, {-half_pi, half_pi}}},
+    {"arcsin", {-1.0, 1.0, -half_pi, half_pi, {}, false, {}, -1.0, 1.0}},
+    {"arccos", {-1.0, 1.0, 0.0, pi, {}, false, {}, -1.0, 1.0}},
     {"arctan", {-inf, inf, -half_pi, half_pi, {}, false}},
     {"sinh", {-inf, inf, -inf, inf, {}, false}},
     {"cosh", {-inf, inf, 1.0, inf, {0.0}, false}},
@@ -62,21 +67,26 @@ const math_spec &spec_of(const std::string &function)
   return it->second;
 }
 
-// Exact for every implementation: a correctly rounded square root, an odd
-// function at a signed zero, exp(0), log(1), log2 of a power of two, and
-// any result that is not finite.
-bool exact_everywhere(const std::string &function, double x, double value)
+bool is_odd(const std::string &function)
 {
   static const std::set<std::string> odd = {
     "sin", "tan", "arctan", "arcsin", "sinh", "tanh"};
+  return odd.count(function) != 0;
+}
+
+// Exact for every implementation: a correctly rounded square root, an odd
+// function at a signed zero, exp(0), log(1), log2 of a power of two, a limit
+// at infinity, and any result that is not finite.
+bool exact_everywhere(const std::string &function, double x, double value)
+{
   static const std::set<std::string> one_at_zero = {"exp", "cos", "cosh"};
   static const std::set<std::string> zero_at_one = {
     "log", "log2", "log10", "arccos"};
   int exponent = 0;
   const bool power_of_two = x > 0 && std::frexp(x, &exponent) == 0.5;
   return function == "sqrt" || function == "rint" || !std::isfinite(value) ||
-         (x == 0.0 &&
-          (odd.count(function) != 0 || one_at_zero.count(function) != 0)) ||
+         !std::isfinite(x) ||
+         (x == 0.0 && (is_odd(function) || one_at_zero.count(function) != 0)) ||
          (x == 1.0 && zero_at_one.count(function) != 0) ||
          (function == "log2" && power_of_two);
 }
@@ -105,6 +115,23 @@ interval around(const std::string &function, double x, bool at_x)
     std::min(value + ulps(value), spec.range_high)};
 }
 
+// tan grows towards its pole, so the pole lies past the nearest double on
+// the side where tan has that double's sign.
+double pole_partner(double pole)
+{
+  return std::nextafter(pole, std::tan(pole) > 0 ? inf : -inf);
+}
+
+bool spans_pole(const math_spec &spec, double a, double b)
+{
+  for (double pole : spec.poles)
+    if (
+      std::min(pole, pole_partner(pole)) == a &&
+      std::max(pole, pole_partner(pole)) == b)
+      return true;
+  return false;
+}
+
 std::vector<double> breakpoints(const math_spec &spec)
 {
   static const std::vector<double> grid = {
@@ -131,6 +158,8 @@ std::vector<double> breakpoints(const math_spec &spec)
       if (point > spec.from && point < spec.to)
         points.insert(point);
   points.insert(spec.turning.begin(), spec.turning.end());
+  for (double pole : spec.poles)
+    points.insert({pole, pole_partner(pole)});
   return {points.begin(), points.end()};
 }
 
@@ -148,6 +177,8 @@ std::vector<piece> pieces(const std::string &function)
   for (std::size_t i = 0; i + 1 < points.size(); ++i)
   {
     const double a = points[i], b = points[i + 1];
+    if (spans_pole(spec, a, b))
+      continue;
     const interval left = around(function, a, false);
     const interval right = around(function, b, false);
     interval result = {
@@ -181,11 +212,28 @@ exprt between(const exprt &value, double low, double high)
 exprt at_zero(const std::string &function, const exprt &x)
 {
   static const std::set<std::string> one = {"exp", "cos", "cosh"};
+  static const std::set<std::string> pole = {"log", "log2", "log10"};
   if (one.count(function) != 0)
     return from_double(1.0, double_type());
-  if (exact_everywhere(function, 0.0, 0.0))
+  if (pole.count(function) != 0)
+    return from_double(-inf, double_type());
+  if (is_odd(function))
     return x;
   return nil_exprt();
+}
+
+exprt is_nan(const exprt &x)
+{
+  expr2tc x2;
+  migrate_expr(x, x2);
+  return migrate_expr_back(isnan2tc(x2));
+}
+
+exprt is_infinite(const exprt &x)
+{
+  expr2tc x2;
+  migrate_expr(x, x2);
+  return migrate_expr_back(isinf2tc(x2));
 }
 } // namespace
 
@@ -199,6 +247,11 @@ bounded_math::bounded_math(
 bool bounded_math::is_bounded(const std::string &function)
 {
   return specs().count(function) != 0;
+}
+
+bool bounded_math::has_runtime_model(const std::string &function)
+{
+  return is_bounded(function) || function == "sqrt";
 }
 
 double bounded_math::host_value(const std::string &function, double x)
@@ -236,6 +289,8 @@ exprt bounded_math::literal(const std::string &function, double x)
 
 exprt bounded_math::runtime(const std::string &function, const exprt &x)
 {
+  if (function == "sqrt")
+    return converter_.get_math_handler().handle_sqrt(x, call_);
   const exprt argument =
     x.is_symbol() || x.is_constant() ? x : fresh_double("$math_arg$", x);
   const exprt result = fresh_double("$math$", nil_exprt());
@@ -245,11 +300,32 @@ exprt bounded_math::runtime(const std::string &function, const exprt &x)
       not_exprt(between(argument, p.from, p.to)),
       between(result, p.result.low, p.result.high)));
   assume(and_exprt(bounds));
-  const exprt zero = at_zero(function, argument);
-  if (zero.is_nil())
-    return result;
-  return if_exprt(
-    equality_exprt(argument, from_double(0.0, double_type())), zero, result);
+  return special_cases(function, argument, result);
+}
+
+// NaN propagates, an argument outside the domain gives NaN, and a signed
+// zero or an infinity has an exact result.
+exprt bounded_math::special_cases(
+  const std::string &function,
+  const exprt &x,
+  exprt result)
+{
+  const math_spec &spec = spec_of(function);
+  const exprt zero = at_zero(function, x);
+  if (!zero.is_nil())
+    result = if_exprt(
+      equality_exprt(x, from_double(0.0, double_type())), zero, result);
+  const exprt positive =
+    binary_relation_exprt(x, ">", from_double(0.0, double_type()));
+  result = if_exprt(
+    is_infinite(x),
+    if_exprt(positive, literal(function, inf), literal(function, -inf)),
+    result);
+  result = if_exprt(
+    not_exprt(between(x, spec.domain_low, spec.domain_high)),
+    from_double(NAN, double_type()),
+    result);
+  return if_exprt(is_nan(x), x, result);
 }
 
 exprt bounded_math::fresh_double(const std::string &name, const exprt &value)

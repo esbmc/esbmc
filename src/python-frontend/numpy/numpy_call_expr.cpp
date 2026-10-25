@@ -5706,7 +5706,7 @@ std::optional<exprt>
 numpy_call_expr::try_runtime_math(const std::string &function)
 {
   if (
-    !bounded_math::is_bounded(function) || call_["args"].size() != 1 ||
+    !bounded_math::has_runtime_model(function) || call_["args"].size() != 1 ||
     !call_.value("keywords", nlohmann::json::array()).empty())
     return std::nullopt;
   const nlohmann::json &arg = call_["args"][0];

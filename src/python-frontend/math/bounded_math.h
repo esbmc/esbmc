@@ -17,6 +17,8 @@ public:
 
   /// Functions whose result of a run-time argument is bounded.
   static bool is_bounded(const std::string &function);
+  /// is_bounded() or exact (sqrt).
+  static bool has_runtime_model(const std::string &function);
   static double host_value(const std::string &function, double x);
 
   /// The result for a literal argument.
@@ -28,6 +30,8 @@ private:
   python_converter &converter_;
   const nlohmann::json &call_;
 
+  exprt
+  special_cases(const std::string &function, const exprt &x, exprt result);
   exprt fresh_double(const std::string &name, const exprt &value);
   exprt within(double low, double high);
   void assume(const exprt &condition);
