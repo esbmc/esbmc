@@ -1,4 +1,4 @@
 THOROUGH
 main.py
 --branch-coverage
-^COVERAGE ANALYSIS COMPLETE$
+^ERROR: passing a float to an int parameter is not supported$

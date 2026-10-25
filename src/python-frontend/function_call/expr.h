@@ -1012,6 +1012,11 @@ private:
     const typet &param_type,
     const locationt &location) const;
 
+  void refuse_float_to_int_argument(
+    const exprt &arg,
+    const typet &param_type,
+    const symbolt &callee) const;
+
   typet dict_param_value_type(const symbolt *func, size_t idx) const;
   std::optional<exprt> build_positional_arguments(
     code_function_callt &call,
