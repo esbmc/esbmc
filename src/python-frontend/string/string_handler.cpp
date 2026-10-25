@@ -2316,11 +2316,13 @@ static bool resolve_join_iterable(
          seq.contains("elts");
 }
 
-static bool is_name_or_split_call(const nlohmann::json &arg)
+static bool is_runtime_list_operand(const nlohmann::json &arg)
 {
   const std::string type = arg.value("_type", "");
   if (type == "Name")
     return true;
+  if (type == "BinOp")
+    return arg.contains("op") && arg["op"].value("_type", "") == "Add";
   if (type != "Call" || !arg.contains("func"))
     return false;
   const auto &func = arg["func"];
@@ -3766,10 +3768,11 @@ exprt string_handler::join_unfoldable_iterable(
   const exprt &separator,
   const nlohmann::json &call_json)
 {
-  // A list built at run time, such as s.split(" ") on a symbolic s, is read
-  // by the runtime join model rather than left nondet.
+  // A list built at run time, such as s.split(" ") on a symbolic s or b + c
+  // over list parameters, is read by the runtime join model rather than left
+  // nondet.
   const nlohmann::json &list_arg = call_json["args"][0];
-  if (is_name_or_split_call(list_arg))
+  if (is_runtime_list_operand(list_arg))
   {
     exprt list_expr = converter_.get_expr(list_arg);
     if (list_expr.type() == type_handler_.get_list_type())
