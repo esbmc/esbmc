@@ -5701,13 +5701,30 @@ exprt numpy_call_expr::numpy_math_value(const std::string &function, double x)
   return bounded_math(converter_, call_).literal(function, x);
 }
 
+// `out=None` and `dtype=float` leave a scalar ufunc's result unchanged.
+static bool only_noop_ufunc_keywords(const nlohmann::json &call)
+{
+  for (const auto &kw : call.value("keywords", nlohmann::json::array()))
+  {
+    const std::string arg = kw.value("arg", "");
+    const nlohmann::json &value = kw["value"];
+    const bool none = value.value("_type", "") == "Constant" &&
+                      value.contains("value") && value["value"].is_null();
+    const bool float64 =
+      value.value("id", "") == "float" || value.value("attr", "") == "float64";
+    if (!(arg == "out" && none) && !(arg == "dtype" && float64))
+      return false;
+  }
+  return true;
+}
+
 // `np.exp(x)` of a number known only at run time.
 std::optional<exprt>
 numpy_call_expr::try_runtime_math(const std::string &function)
 {
   if (
     !bounded_math::has_runtime_model(function) || call_["args"].size() != 1 ||
-    !call_.value("keywords", nlohmann::json::array()).empty())
+    !only_noop_ufunc_keywords(call_))
     return std::nullopt;
   const nlohmann::json &arg = call_["args"][0];
   const std::string type = arg.value("_type", "");
@@ -5716,7 +5733,7 @@ numpy_call_expr::try_runtime_math(const std::string &function)
     type == "List" || type == "Tuple" ||
     try_extract_numeric_constant(arg, constant))
     return std::nullopt;
-  exprt x = converter_.get_expr(arg);
+  const exprt x = converter_.get_expr(arg);
   const typet &t = x.type();
   if (!t.is_floatbv() && !t.is_signedbv() && !t.is_unsignedbv() && !t.is_bool())
   {
@@ -5726,9 +5743,8 @@ numpy_call_expr::try_runtime_math(const std::string &function)
         " of a call that does not return a number is not supported");
     return std::nullopt;
   }
-  if (t != double_type())
-    x = typecast_exprt(x, double_type());
-  return bounded_math(converter_, call_).runtime(function, x);
+  return bounded_math(converter_, call_)
+    .runtime(function, x, math_module::numpy);
 }
 
 // `np.exp(0.3)`, `np.sin(-1.0)`: a numeric literal argument.

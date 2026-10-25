@@ -7,9 +7,17 @@
 
 class python_converter;
 
+/// numpy.* returns NaN or an infinity where math.* raises, and a literal
+/// numpy.* argument gets the bounded result where math.* gets the C
+/// library's exact value.
+enum class math_module
+{
+  numpy,
+  math
+};
+
 /// The transcendental functions shared by numpy.* and math.* (NumPy
-/// spelling): any double within 8 ulps of the C library's value and inside
-/// the function's range, exact where every implementation is (ADR-NP-005).
+/// spelling), bounded as util/arith/transcendental.h describes.
 class bounded_math
 {
 public:
@@ -21,18 +29,30 @@ public:
   static bool has_runtime_model(const std::string &function);
   static double host_value(const std::string &function, double x);
 
-  /// The result for a literal argument.
+  /// The numpy.* result for a literal argument.
   exprt literal(const std::string &function, double x);
-  /// The result for a double known only at run time, which is read once.
-  exprt runtime(const std::string &function, const exprt &x);
+  /// The result for a number known only at run time, which is read once.
+  exprt
+  runtime(const std::string &function, const exprt &x, math_module module);
 
 private:
   python_converter &converter_;
   const nlohmann::json &call_;
 
   exprt
+  bounded_call(const std::string &function, const exprt &x, math_module module);
+  exprt
   special_cases(const std::string &function, const exprt &x, exprt result);
-  exprt fresh_double(const std::string &name, const exprt &value);
+  void raise_math_errors(
+    const std::string &function,
+    const exprt &x,
+    const exprt &value);
+  exprt fresh(const std::string &name, const exprt &value);
+  exprt read_once(const exprt &x);
   exprt within(double low, double high);
+  void raise_if(
+    const exprt &condition,
+    const std::string &exception,
+    const std::string &message);
   void assume(const exprt &condition);
 };
