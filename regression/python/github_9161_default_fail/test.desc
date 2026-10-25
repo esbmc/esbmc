@@ -1,4 +1,4 @@
 CORE
 main.py
 
-^ERROR: Base class not found: NodeTransformer$
+^VERIFICATION FAILED$

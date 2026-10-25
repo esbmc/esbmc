@@ -388,9 +388,9 @@ def _unmodelled_import_bindings(stmts: list[ast.stmt]) -> dict[str, object]:
 
 def _mark_unmodelled_class_bases(tree: ast.Module) -> None:
     """Mark each class base that CPython resolves to a class of a module with
-    no model. The converter has no such class to derive from, and may leave
-    out a class nothing refers to (#9161) only once the base is known to
-    exist, since CPython evaluates it when the definition runs."""
+    no model. The converter has no such class to derive from and treats a
+    marked base as opaque (#9161); an unmarked one may not exist, or may fail
+    when the definition runs, so it is refused."""
     bound = Counter(name for node in ast.walk(tree) for name in _bound_names(node))
 
     def resolve(node: ast.expr, objects: dict[str, object]) -> object:

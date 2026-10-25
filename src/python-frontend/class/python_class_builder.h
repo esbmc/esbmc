@@ -21,10 +21,6 @@ public:
 
   void build(codet &out);
 
-  /// Whether some base has no class symbol, and each such base is a class of
-  /// a module with no model, as the parser confirmed under CPython.
-  bool misses_only_unmodelled_bases() const;
-
 private:
   python_converter &conv_;
   const nlohmann::json &cls_;
@@ -36,6 +32,7 @@ private:
   symbolt *ensure_sym(const std::string &name);
 
   std::string user_base(const std::string &bfull) const;
+  bool is_unmodelled_base(const std::string &bfull) const;
 
   bool get_bases(struct_typet &st);
 
