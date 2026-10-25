@@ -1,0 +1,6 @@
+CORE
+main.py
+--multi-property
+PASSED +\[global\.assertion\.1\] +line 15 +assertion x\.v == 3$
+FAILED +\[global\.assertion\.2\] +line 16 +assertion x\.v == 4$
+^VERIFICATION FAILED$

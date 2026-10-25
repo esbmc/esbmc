@@ -451,13 +451,11 @@ void goto_convertt::convert_throw(const exprt &expr_in, goto_programt &dest)
   }
 
   // The exception object is initialised from the operand before any local is
-  // destroyed ([except.throw]p3), so `throw t.v` must not read t after ~T.
+  // destroyed ([except.throw]p3), so `throw t.v` must not read t after ~T or
+  // after its DEAD, which drops t's value set (#9185).
   if (
     detached.empty() && !expr.operands().empty() &&
-    std::any_of(
-      stack.begin() + targets.throw_stack_size,
-      stack.end(),
-      is_destructor_entry))
+    stack.size() > targets.throw_stack_size)
   {
     const exprt operand = expr.op0();
     symbol_exprt value(new_tmp_symbol(operand.type()).id, operand.type());

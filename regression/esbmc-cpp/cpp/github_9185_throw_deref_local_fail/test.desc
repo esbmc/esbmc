@@ -1,0 +1,6 @@
+CORE
+main.cpp
+--multi-property
+PASSED +\[main\.assertion\.2\] +line 20 +assertion v == 7$
+FAILED +\[main\.assertion\.3\] +line 21 +assertion v == 8$
+^VERIFICATION FAILED$
