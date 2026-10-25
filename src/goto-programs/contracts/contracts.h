@@ -119,6 +119,11 @@ public:
   /// \param to_replace Set of function names to replace with contracts
   void replace_calls(const std::set<std::string> &to_replace);
 
+  /// \brief Drop the requires/ensures ASSUMEs of every function the passes
+  /// above left in place: a clause of a function that is neither enforced nor
+  /// replaced states nothing, as outside contract mode.
+  void remove_inactive_clauses();
+
   /// \brief Quick check if function has any contracts
   /// \param function_body Function goto program
   /// \return True if function has any contract clauses

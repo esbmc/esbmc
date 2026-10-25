@@ -109,7 +109,7 @@ class ClassContextMixin:
                 body.extend(self._hoist_from_class(stmt, taken, renames))
             else:
                 body.append(stmt)
-        self._hoisted_classes = renames
+        self.hoisted_classes = renames
         if renames:
             module.body = body
             _QualifyNestedClasses(renames).visit(module)
@@ -458,7 +458,7 @@ class ClassContextMixin:
         ancestry = {a.name for a in self._class_ancestry(classes, cls)}
         return {
             attr: name
-            for (outer, attr), name in self._hoisted_classes.items()
+            for (outer, attr), name in self.hoisted_classes.items()
             if outer in ancestry and attr not in excluded
         }
 
@@ -522,7 +522,7 @@ class ClassContextMixin:
         mentioned = self._names_mentioned(module)
         if "__getattribute__" in mentioned:
             return
-        owners = Counter(attr for _, attr in self._hoisted_classes)
+        owners = Counter(attr for _, attr in self.hoisted_classes)
         mentioned.update(attr for attr, count in owners.items() if count > 1)
         escaped = self._escaped_classes(module, classes) | self._unbindable_classes(classes)
         for cls in classes.values():

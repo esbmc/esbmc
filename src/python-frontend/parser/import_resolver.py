@@ -15,8 +15,10 @@ from typing import Callable, TypeAlias, TypedDict
 try:
     # pylint: disable=deprecated-module  # `parser` also names a removed stdlib module
     from .class_collision import separate_colliding_classes
+    from .nested_class_imports import qualify_imported_nested_classes
 except ImportError:
     from class_collision import separate_colliding_classes
+    from nested_class_imports import qualify_imported_nested_classes
 
 __all__ = [
     "ResolverCallbacks",
@@ -157,6 +159,7 @@ def _is_imported_model(module_name: str) -> bool:
         "torch",
         "unittest",
         "sys",
+        "subprocess",
     }
     return module_name in models
 
@@ -755,6 +758,7 @@ def _adopt_type_specializations(entry_tree: ast.Module, parsed_trees: ParsedTree
 
 
 def _finalize_parsed_trees(parsed_trees: ParsedTreeState, entry_tree: ast.Module | None) -> None:
+    _qualify_imported_nested_classes(parsed_trees, entry_tree)
     if entry_tree is not None:
         _request_vararg_specializations(entry_tree, parsed_trees)
         _request_type_specializations(entry_tree, parsed_trees)
@@ -798,6 +802,19 @@ def _finalize_after_imports(module_name: str, parsed_trees: ParsedTreeState, sta
                                                  not is_imported_model(node.module))
     preprocessor.finalize_module(tree)
     done.add(module_name)
+
+
+def _qualify_imported_nested_classes(parsed_trees: ParsedTreeState,
+                                     entry_tree: ast.Module | None) -> None:
+    hoisted = {
+        name: pp.hoisted_classes
+        for name, (_tree, _filename, pp) in parsed_trees.items() if not is_imported_model(name)
+    }
+    importers = [(None, entry_tree)] if entry_tree is not None else []
+    importers += [(name, tree) for name, (tree, _filename, _pp) in parsed_trees.items()
+                  if not is_imported_model(name)]
+    for module_name, names in qualify_imported_nested_classes(hoisted, importers).items():
+        module_imports[module_name]['specific_names'].update(names)
 
 
 def _separate_colliding_classes(entry_tree: ast.Module, parsed_trees: ParsedTreeState) -> None:

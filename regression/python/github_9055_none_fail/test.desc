@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^  FAILED\s+\[\S+\]\s+line\s+16\s+uncaught exception: TypeError$
+^VERIFICATION FAILED$
