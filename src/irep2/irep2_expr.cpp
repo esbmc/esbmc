@@ -52,13 +52,10 @@ expr2t::expr2t(const type2tc &_type, expr_ids id)
 }
 
 expr2t::expr2t(const expr2t &ref)
-  : irep2t(), expr_id(ref.expr_id), type(ref.type)
+  : irep2t(), expr_id(ref.expr_id), type(ref.type), crc_val(0)
 {
-  // Snapshot the cached CRC. Relaxed is enough: callers must already
-  // honour the single-writer contract documented in irep2.h, and the
-  // copy is itself a new value not yet visible to anyone else.
-  crc_val.store(
-    ref.crc_val.load(std::memory_order_relaxed), std::memory_order_relaxed);
+  // Not the source's CRC: a copy is usually edited in place before use, and
+  // cmp trusts a cached CRC to reject.
 }
 
 bool expr2t::operator==(const expr2t &ref) const
