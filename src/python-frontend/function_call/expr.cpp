@@ -3968,7 +3968,8 @@ math_import_of(const nlohmann::json &ast, const std::string &name)
     const std::string type = node.value("_type", "");
     if (type == "FunctionDef" && node.value("name", "") == name)
       return std::nullopt;
-    if (type != "ImportFrom" || node.value("module", "") != "math")
+    // `from . import x` has a null module.
+    if (type != "ImportFrom" || node["module"] != "math")
       continue;
     for (const auto &alias : node["names"])
     {
