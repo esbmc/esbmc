@@ -31,6 +31,8 @@ private:
 
   symbolt *ensure_sym(const std::string &name);
 
+  bool is_unmodelled_base(const std::string &base) const;
+
   bool get_bases(struct_typet &st);
 
   /// Add the converted method \p sid to \p st's method table, reporting
