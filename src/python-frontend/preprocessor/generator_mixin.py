@@ -101,6 +101,51 @@ class _GeneratorConsumerScan:
 
 class GeneratorMixin:
 
+    class _YieldFromToFor(ast.NodeTransformer):
+        """Rewrite a statement `yield from it` into `for v in it: yield v`.
+
+        The two differ only in forwarding send()/throw() and in the value of
+        the `yield from` expression; neither is modelled, and an expression
+        `yield from` is left to the existing refusal.
+        """
+
+        def __init__(self, preprocessor):
+            self.preprocessor = preprocessor
+            self.depth = 0
+
+        def _visit_scope(self, node):
+            if self.depth > 0:
+                return node
+            self.depth += 1
+            self.generic_visit(node)
+            self.depth -= 1
+            return node
+
+        visit_FunctionDef = _visit_scope
+        visit_AsyncFunctionDef = _visit_scope
+
+        def visit_Lambda(self, node):
+            return node
+
+        def visit_ClassDef(self, node):
+            return node
+
+        def visit_Expr(self, node):
+            if not isinstance(node.value, ast.YieldFrom):
+                return node
+            var = f"ESBMC_yieldfrom_{self.preprocessor.listcomp_counter}"
+            self.preprocessor.listcomp_counter += 1
+            loop = ast.For(
+                target=ast.Name(id=var, ctx=ast.Store()),
+                iter=node.value.value,
+                body=[ast.Expr(value=ast.Yield(value=ast.Name(id=var, ctx=ast.Load())))],
+                orelse=[],
+            )
+            ast.copy_location(loop, node)
+            self.preprocessor.ensure_all_locations(loop, node)
+            ast.fix_missing_locations(loop)
+            return loop
+
     class _YieldToAppend(ast.NodeTransformer):
 
         def __init__(self, result_var, source_node):
