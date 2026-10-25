@@ -3041,8 +3041,14 @@ bool function_call_expr::receiver_class_defines_method(
   if (cls.rfind("tag-", 0) == 0)
     cls = cls.substr(4);
   const auto &ast = converter_.ast();
-  return is_class(cls, ast) &&
-         json_utils::class_defines_method(ast["body"], cls, method_name);
+  if (!is_class(cls, ast))
+    return false;
+  if (!json_utils::find_class(ast["body"], cls).is_null())
+    return json_utils::class_defines_method(ast["body"], cls, method_name);
+  const nlohmann::json *module =
+    converter_.find_imported_class_module(cls).first;
+  return module &&
+         json_utils::class_defines_method((*module)["body"], cls, method_name);
 }
 
 /// Refuse a call whose receiver class is not known when some module of the
