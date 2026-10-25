@@ -467,19 +467,26 @@ protected:
       continue_set = targets.continue_set;
       break_target = targets.break_target;
       continue_target = targets.continue_target;
+      break_stack_size = targets.break_stack_size;
+      continue_stack_size = targets.continue_stack_size;
     }
 
+    // An outer break or continue after this construct must unwind to the
+    // outer depth, not to this one's.
     void restore(targetst &targets)
     {
       targets.break_set = break_set;
       targets.continue_set = continue_set;
       targets.break_target = break_target;
       targets.continue_target = continue_target;
+      targets.break_stack_size = break_stack_size;
+      targets.continue_stack_size = continue_stack_size;
     }
 
     goto_programt::targett break_target;
     goto_programt::targett continue_target;
     bool break_set, continue_set;
+    std::size_t break_stack_size, continue_stack_size;
   };
 
   struct break_switch_targetst
@@ -492,7 +499,7 @@ protected:
       default_set = targets.default_set;
       break_target = targets.break_target;
       default_target = targets.default_target;
-      break_stack_size = targets.destructor_stack.size();
+      break_stack_size = targets.break_stack_size;
       cases = targets.cases;
       cases_map = targets.cases_map;
     }
@@ -503,6 +510,7 @@ protected:
       targets.default_set = default_set;
       targets.break_target = break_target;
       targets.default_target = default_target;
+      targets.break_stack_size = break_stack_size;
       targets.cases = cases;
       targets.cases_map = cases_map;
     }

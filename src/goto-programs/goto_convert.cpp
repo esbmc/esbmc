@@ -2594,19 +2594,12 @@ void goto_convertt::convert_ifthenelse(const codet &c, goto_programt &dest)
     return convert_ifthenelse(to_code(new_if0), dest);
   }
 
-  // convert 'then'-branch
-  goto_programt tmp_op1;
-  convert_controlled(to_code(code.op1()), tmp_op1);
-
-  goto_programt tmp_op2;
-
-  if (has_else)
-    convert_controlled(to_code(code.op2()), tmp_op2);
-
   exprt tmp_guard = code.op0();
 
   // for condition coverage
   // to keep the guard format
+  // The condition's temporaries go on the destructor stack before the
+  // branches convert, so a break or continue out of a branch ends them.
   if (
     !(options.get_bool_option("condition-coverage") ||
       options.get_bool_option("condition-coverage-claims") ||
@@ -2619,6 +2612,15 @@ void goto_convertt::convert_ifthenelse(const codet &c, goto_programt &dest)
     remove_condition_sideeffects(tmp_guard, dest);
     in_short_circuit = outer_short_circuit;
   }
+
+  // convert 'then'-branch
+  goto_programt tmp_op1;
+  convert_controlled(to_code(code.op1()), tmp_op1);
+
+  goto_programt tmp_op2;
+
+  if (has_else)
+    convert_controlled(to_code(code.op2()), tmp_op2);
 
   generate_ifthenelse(tmp_guard, tmp_op1, tmp_op2, location, dest);
 }
@@ -2798,22 +2800,24 @@ void goto_convertt::kill_condition_temporaries(
   goto_programt &exit)
 {
   destructor_stackt &stack = targets.destructor_stack;
-  if (std::any_of(stack.begin() + stack_size, stack.end(), is_destructor_entry))
+  if (
+    stack.size() == stack_size ||
+    std::any_of(stack.begin() + stack_size, stack.end(), is_destructor_entry))
     return;
 
   goto_programt body_dead, exit_dead;
   unwind_destructor_stack(location, stack_size, body_dead);
   unwind_destructor_stack(location, stack_size, exit_dead);
   stack.resize(stack_size);
-  if (exit_dead.instructions.empty())
-    return;
 
-  const goto_programt::targett z = exit.instructions.begin();
+  // A user goto in the condition (a GNU statement expression) has no target
+  // until finish_gotos, and z lives in another list: compare instructions.
+  const goto_programt::instructiont *z = &exit.instructions.front();
   for (auto &i : branch.instructions)
-    if (i.is_goto() && i.targets.front() == z)
+    if (i.is_goto() && i.has_target() && &*i.targets.front() == z)
       i.targets.front() = exit_dead.instructions.begin();
   branch.destructive_append(body_dead);
-  exit.destructive_insert(z, exit_dead);
+  exit.destructive_insert(exit.instructions.begin(), exit_dead);
 }
 
 void goto_convertt::unwind_destructor_stack(
