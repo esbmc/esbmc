@@ -270,6 +270,10 @@ private:
   exprt numpy_math_value(const std::string &function, double x);
   std::optional<exprt> try_numpy_math_constant();
   std::optional<exprt> try_runtime_math(const std::string &function);
+  std::optional<exprt>
+  copy_of_view(const std::string &function, const exprt &operand);
+  void
+  reject_non_numeric_elements(const std::string &function, const typet &type);
   exprt bind_array_once(const exprt &array);
   exprt runtime_math_array(const std::string &function, const exprt &value);
   exprt numpy_math_list(const std::string &function, const nlohmann::json &arg);

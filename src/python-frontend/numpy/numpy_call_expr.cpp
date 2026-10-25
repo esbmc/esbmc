@@ -5751,7 +5751,13 @@ numpy_call_expr::try_runtime_math(const std::string &function)
     type == "List" || type == "Tuple" ||
     try_extract_numeric_constant(arg, constant))
     return std::nullopt;
-  const exprt x = converter_.get_expr(arg);
+  // Converting a view operand with current_lhs set would retype the target.
+  exprt *lhs = converter_.current_lhs;
+  converter_.current_lhs = nullptr;
+  const exprt operand = converter_.get_expr(arg);
+  converter_.current_lhs = lhs;
+  const exprt x = copy_of_view(function, operand).value_or(operand);
+  reject_non_numeric_elements(function, x.type());
   if (is_number_type(array_leaf_type(x.type())))
   {
     const exprt result = runtime_math_array(function, bind_array_once(x));
@@ -5767,6 +5773,40 @@ numpy_call_expr::try_runtime_math(const std::string &function)
       "TypeError: numpy." + function +
       " of a call that does not return a number is not supported");
   return std::nullopt;
+}
+
+// The elements of a view with constant axes, in row-major order.
+std::optional<exprt>
+numpy_call_expr::copy_of_view(const std::string &function, const exprt &operand)
+{
+  if (!operand.type().is_pointer())
+    return std::nullopt;
+  python_list list(converter_, call_);
+  const std::optional<python_list::strided_view_desc> view =
+    list.describe_strided_view(operand);
+  if (!view)
+    return std::nullopt;
+  if (axes_are_symbolic(view->axes))
+    throw std::runtime_error(
+      "TypeError: numpy." + function +
+      " of a view whose shape is known only at run time is not supported");
+  return list.copy_strided_view(
+    *view, from_integer(0, size_type()), view->axes);
+}
+
+void numpy_call_expr::reject_non_numeric_elements(
+  const std::string &function,
+  const typet &type)
+{
+  if (!type.is_array())
+    return;
+  const typet &leaf = array_leaf_type(type);
+  if (leaf == char_type())
+    throw std::runtime_error(
+      "TypeError: numpy." + function + " of a string array is not supported");
+  if (is_complex_type(leaf))
+    throw std::runtime_error(
+      "TypeError: numpy." + function + " of a complex array is not supported");
 }
 
 exprt numpy_call_expr::bind_array_once(const exprt &array)
