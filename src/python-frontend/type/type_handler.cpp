@@ -8,6 +8,7 @@
 #include <python-frontend/type/python_typechecking.h>
 #include <python-frontend/python_annotation/annotation_intrinsics.h>
 #include <python-frontend/symbol_id.h>
+#include <algorithm>
 #include <util/arith/arith_tools.h>
 #include <util/arith/bitvector.h>
 #include <util/config/config.h>
@@ -102,6 +103,19 @@ bool type_handler::is_pointer_free(const typet &t) const
   return true; // primitives
 }
 
+bool type_handler::is_pointer_record(const typet &t) const
+{
+  namespacet ns(converter_.symbol_table());
+  const typet &ty = ns.follow(t);
+  if (!ty.is_struct())
+    return false;
+  const auto &components = to_struct_type(ty).components();
+  return !components.empty() &&
+         std::all_of(components.begin(), components.end(), [](const auto &c) {
+           return c.type().is_pointer();
+         });
+}
+
 exprt type_handler::ptr_free_arg(const exprt &payload, const typet &elem_type)
   const
 {
@@ -110,7 +124,10 @@ exprt type_handler::ptr_free_arg(const exprt &payload, const typet &elem_type)
     payload.id() == "address_of" &&
     ns.follow(payload.op0().type()).is_pointer();
   return from_integer(
-    payload_is_a_pointer ? 2 : (is_pointer_free(elem_type) ? 1 : 0),
+    payload_is_a_pointer           ? 2
+    : is_pointer_free(elem_type)   ? 1
+    : is_pointer_record(elem_type) ? 3
+                                   : 0,
     int_type());
 }
 

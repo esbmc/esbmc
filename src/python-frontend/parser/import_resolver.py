@@ -161,6 +161,7 @@ def _is_imported_model(module_name: str) -> bool:
         "torch",
         "unittest",
         "sys",
+        "subprocess",
     }
     return module_name in models
 

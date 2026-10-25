@@ -6877,11 +6877,15 @@ bool python_converter::ternary_needs_if_spelling(
   const std::string else_class = instantiated_class(ifexp["orelse"]);
   if (then_class.empty() && else_class.empty())
   {
+    const nlohmann::json callables = callable_function_stubs();
     const std::string then_kind =
-      dynamic_type_detail::classify_literal_value_kind(ifexp["body"]);
+      dynamic_type_detail::classify_literal_value_kind(
+        ifexp["body"], callables);
     const std::string else_kind =
-      dynamic_type_detail::classify_literal_value_kind(ifexp["orelse"]);
-    return !then_kind.empty() && !else_kind.empty() && then_kind != else_kind;
+      dynamic_type_detail::classify_literal_value_kind(
+        ifexp["orelse"], callables);
+    return !then_kind.empty() && !else_kind.empty() &&
+           dynamic_type_detail::kinds_diverge({then_kind, else_kind});
   }
   // Arms constructing different classes are spelled as `if` too, where the
   // preprocessor refuses what would resolve against one class only (#8408).
@@ -8015,6 +8019,8 @@ void python_converter::get_var_assign(
     // Handle type adjustments
     handle_assignment_type_adjustments(
       lhs_symbol, lhs, rhs, lhs_type, ast_node, is_ctor_call);
+    rhs = tuple_handler_->coerce_to_tuple_type(
+      rhs, lhs.type(), get_location_from_decl(ast_node), target_block);
     set_none_flag(lhs, ast_node, target_block);
 
     // Propagate $input_str$ → $input_len$ companion mapping so that len()
@@ -9938,6 +9944,8 @@ void python_converter::get_return_statements(
       is_user_class_struct_type(return_value.type()))
       return_value = box_value_on_heap(return_value, location, target_block);
 
+    return_value = tuple_handler_->coerce_to_tuple_type(
+      return_value, current_func_return_type_, location, target_block);
     return_value = coerce_optional_return(return_value, location, target_block);
 
     coerce_to_tagged_return(return_value);

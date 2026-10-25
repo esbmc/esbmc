@@ -1,11 +1,15 @@
-from ast import NodeTransformer as NT
+import ast
+from ast import NodeVisitor as Visitor
 
 
-class V(NT):
-    """Never instantiated, so its unmodelled base is never needed."""
+class V(ast.NodeTransformer):
+    pass
 
-    def visit_Name(self, node, flag=False):
-        return node
+
+class W(Visitor):
+
+    def count(self) -> int:
+        return 1
 
 
 def f(x: int) -> int:
@@ -13,4 +17,4 @@ def f(x: int) -> int:
     return x
 
 
-f(4)
+f(2)

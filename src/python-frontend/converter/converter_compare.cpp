@@ -800,15 +800,67 @@ exprt python_converter::handle_none_comparison(
   return isnone_expr;
 }
 
+static bool is_constant_index(const nlohmann::json &slice)
+{
+  const nlohmann::json &index =
+    slice.value("_type", "") == "UnaryOp" ? slice["operand"] : slice;
+  return index.value("_type", "") == "Constant" &&
+         index["value"].is_number_integer();
+}
+
+/// True when every read of `name` in `node` indexes it by a constant, so no
+/// statement can replace one of its elements.
+static bool
+only_read_by_constant_index(const nlohmann::json &node, const std::string &name)
+{
+  if (node.is_object())
+  {
+    const std::string kind = node.value("_type", "");
+    if (
+      kind == "Subscript" && node["value"].value("_type", "") == "Name" &&
+      node["value"]["id"] == name)
+      return node["ctx"].value("_type", "") == "Load" &&
+             is_constant_index(node["slice"]);
+    if (kind == "Name" && node["id"] == name)
+      return node["ctx"].value("_type", "") == "Store";
+  }
+  for (const auto &child : node)
+    if (child.is_structured() && !only_read_by_constant_index(child, name))
+      return false;
+  return true;
+}
+
+/// The element `node` reads when the preprocessor folded `list[i]` to a copy
+/// of that element, or "" unless the list is one module-level literal whose
+/// elements are never replaced.
+static std::string
+folded_list_element(const nlohmann::json &module, const nlohmann::json &node)
+{
+  const std::string element = node.value("esbmc_list_element", "");
+  if (element.empty())
+    return "";
+  const std::string list = element.substr(0, element.find('['));
+  const nlohmann::json *value = json_utils::top_level_value(module, list);
+  if (
+    !value || value->value("_type", "") != "List" ||
+    json_utils::count_name_bindings(module, list) != 1 ||
+    !only_read_by_constant_index(module, list))
+    return "";
+  return element;
+}
+
 /// The module-level name that owns the object `node` denotes, or "" when that
 /// is not provable from the AST. Each name on the way must be bound exactly
 /// once in the whole module, by a top-level statement, and every name but the
 /// owner by `name = other_name`. Such a name holds one object for the whole
 /// run, so two names with one owner are the same object, whatever the value
-/// is modelled as: a str is copied on assignment (#8412).
+/// is modelled as: a str is copied on assignment (#8412). A folded list
+/// element, or a name bound to one, is owned by that element.
 static std::string
 sole_object_owner(const nlohmann::json &module, const nlohmann::json &node)
 {
+  if (std::string element = folded_list_element(module, node); !element.empty())
+    return element;
   std::set<std::string> seen;
   for (const nlohmann::json *name = &node; name->value("_type", "") == "Name";)
   {
@@ -819,7 +871,10 @@ sole_object_owner(const nlohmann::json &module, const nlohmann::json &node)
       !seen.insert(id).second)
       return "";
     if (value->value("_type", "") != "Name")
-      return id;
+    {
+      const std::string element = folded_list_element(module, *value);
+      return element.empty() ? id : element;
+    }
     name = value;
   }
   return "";

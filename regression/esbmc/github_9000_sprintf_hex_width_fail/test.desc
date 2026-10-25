@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^  assertion r < 4$
+^VERIFICATION FAILED$

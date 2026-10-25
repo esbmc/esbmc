@@ -106,6 +106,28 @@ bool python_class_builder::misses_only_unmodelled_bases() const
   return missing;
 }
 
+/// Whether \p base, as spelled in a class's bases, names an attribute of a
+/// module that imports with no AST and no model (`module_unmodelled`).
+static bool
+names_unmodelled_module_attr(const nlohmann::json &ast, const std::string &base)
+{
+  for (const auto &node : ast["body"])
+  {
+    if (!node.value("module_unmodelled", false))
+      continue;
+    const bool is_from = node["_type"] == "ImportFrom";
+    for (const auto &alias : node["names"])
+    {
+      const std::string bound = alias["asname"].is_string()
+                                  ? alias["asname"].get<std::string>()
+                                  : alias["name"].get<std::string>();
+      if (is_from ? base == bound : base.starts_with(bound + "."))
+        return true;
+    }
+  }
+  return false;
+}
+
 bool python_class_builder::get_bases(struct_typet &st)
 {
   bool has_ud = false;
@@ -119,8 +141,17 @@ bool python_class_builder::get_bases(struct_typet &st)
 
     has_ud = true;
     auto *bsym = conv_.symbol_table_.find_symbol("tag-" + base);
+    if (!bsym && names_unmodelled_module_attr(conv_.ast(), bfull))
+    {
+      conv_.unmodelled_base_classes_.emplace(pc_.name(), bfull);
+      continue;
+    }
     if (!bsym)
       throw std::runtime_error("Base class not found: " + base);
+
+    const auto opaque = conv_.unmodelled_base_classes_.find(base);
+    if (opaque != conv_.unmodelled_base_classes_.end())
+      conv_.unmodelled_base_classes_.emplace(pc_.name(), opaque->second);
 
     ids.emplace_back(bsym->id);
 

@@ -195,5 +195,6 @@ bool esbmc_parseoptionst::process_function_contracts(
   if (has_replace_all)
     contracts.replace_calls(annotated);
 
+  contracts.remove_inactive_clauses();
   return false;
 }

@@ -9,4 +9,6 @@ regression/python/github_9161_missing_base_fail
 regression/python/github_9161_mro_fail
 regression/python/github_9161_returns_unsupported
 regression/python/github_9161_star_import_fail
+regression/python/github_9161_unused
+regression/python/github_9161_unused_fail
 regression/python/github_9161_used_unsupported

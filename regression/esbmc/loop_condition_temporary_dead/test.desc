@@ -1,0 +1,7 @@
+CORE
+main.c
+--goto-functions-only
+\$_more\$1 THEN GOTO \d+\n(\s+//[^\n]*\n)?\s+DEAD c:@F@main::\$tmp::return_value\$_more\$1\n
+\$_more\$1 THEN GOTO (\d+)\n[\s\S]*?\n\s+\1: DEAD c:@F@main::\$tmp::return_value\$_more\$1\n
+\$_more\$2 THEN GOTO \d+\n(\s+//[^\n]*\n)?\s+DEAD c:@F@main::\$tmp::return_value\$_more\$2\n
+\$_more\$2 THEN GOTO (\d+)\n[\s\S]*?\n\s+\1: DEAD c:@F@main::\$tmp::return_value\$_more\$2\n
