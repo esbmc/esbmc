@@ -628,6 +628,9 @@ for {i} in range(0, len({seq})):
                             elt.op, (ast.UAdd, ast.USub)) and isinstance(elt.operand, ast.Constant))
                     if is_pure_literal:
                         folded = copy.deepcopy(elt)
+                        # Each fold is a fresh copy, so record which element it
+                        # reads for `is` to compare by identity (#8412).
+                        folded.esbmc_list_element = f"{node.value.id}[{idx}]"
                         self.ensure_all_locations(folded, node)
                         ast.fix_missing_locations(folded)
                         return folded

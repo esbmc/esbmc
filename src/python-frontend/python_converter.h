@@ -3835,6 +3835,10 @@ private:
   /// mapped to the flag its binding sets and the type the reads took (#8369).
   std::unordered_map<std::string, std::pair<std::string, typet>>
     unbound_global_flags_;
+  /// Classes deriving, directly or through another class, from a base in a
+  /// module that has no model, mapped to that base as spelled. Such a class
+  /// is converted without the base's members, so creating one is refused.
+  std::unordered_map<std::string, std::string> unmodelled_base_classes_;
   /// Symbols whose stored value is a str literal; see str_value_scope_guard.
   std::unordered_set<std::string> str_valued_symbols_;
   /// Symbols ever assigned a str literal; see retype_resized_str.

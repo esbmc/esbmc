@@ -290,6 +290,16 @@ public:
   exprt handle_string_attribute_call(const nlohmann::json &call_json);
 
   /**
+   * @brief The str a tagged receiver of str-only method `method` holds,
+   * after raising AttributeError on the paths where it holds another type.
+   * Any other receiver is returned unchanged.
+   */
+  exprt read_tagged_str_receiver(
+    const exprt &receiver,
+    const std::string &method,
+    const nlohmann::json &call_json);
+
+  /**
    * @brief Try fast-path folding for len() when argument is string-like.
    *
    * Returns non-nil when a compile-time or cheap symbolic shortcut is

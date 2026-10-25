@@ -161,6 +161,13 @@ private:
   /// The TypeError CPython raises on instantiating an abstract class.
   exprt abstract_instantiation_error(const nlohmann::json &ctor_call) const;
 
+  bool is_unmodelled_base_instantiation() const;
+
+  /// Refuse creating \p class_name, which derives from a class that has no
+  /// model: its instances lack whatever that base provides.
+  [[noreturn]] void
+  refuse_unmodelled_base_instance(const std::string &class_name) const;
+
   static void collect_method_abstractness(
     const python_converter &converter,
     const std::string &class_name,
@@ -192,6 +199,10 @@ private:
    * Creates a constant expression from function argument.
    */
   exprt build_constant_from_arg() const;
+
+  /// str() of @p value, converted from @p arg, when it is a class object or
+  /// has a __str__; nil otherwise.
+  exprt str_of_object(exprt &value, const nlohmann::json &arg) const;
 
   /*
    * object(): a pointer to a fresh heap object, so each call has its own
@@ -386,6 +397,9 @@ private:
   exprt handle_callable() const;
 
   exprt handle_type_call() const;
+  exprt tagged_scalar_class(const exprt &tagged) const;
+  bool is_str_of_type_call() const;
+  exprt handle_str_of_type_call() const;
   std::string
   exact_instance_class(const nlohmann::json &arg, const exprt &expr) const;
 
@@ -1011,6 +1025,11 @@ private:
     exprt arg,
     const typet &param_type,
     const locationt &location) const;
+
+  void refuse_float_to_int_argument(
+    const exprt &arg,
+    const typet &param_type,
+    const symbolt &callee) const;
 
   typet dict_param_value_type(const symbolt *func, size_t idx) const;
   std::optional<exprt> build_positional_arguments(
