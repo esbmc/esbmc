@@ -1492,10 +1492,62 @@ std::string python_annotation<Json>::bare_list_subscript_type(
   bool is_slice)
 {
   if (!is_empty_list_literal(var_node))
-    return "Any";
+    return homogeneous_literal_subscript_type(var_node, var_name, is_slice);
   const std::string elem =
     subscript_result_type(recover_list_type_from_appends(var_name), is_slice);
   return elem.empty() ? "Any" : elem;
+}
+
+/// Whether every read of @p name under @p node indexes it (`name[i]`), so no
+/// store, method call or alias can change the elements it holds.
+template <class Json>
+static bool name_only_indexed(const Json &node, const std::string &name)
+{
+  auto is_load = [](const Json &n) {
+    return n.contains("ctx") && n["ctx"].value("_type", "") == "Load";
+  };
+  if (node.is_object())
+  {
+    const std::string kind = node.value("_type", "");
+    if (kind == "Name" && node.value("id", "") == name)
+      return !is_load(node);
+    if (
+      kind == "Subscript" && node["value"].value("_type", "") == "Name" &&
+      node["value"].value("id", "") == name)
+      return is_load(node) && name_only_indexed(node["slice"], name);
+  }
+  for (const Json &child : node)
+    if (child.is_structured() && !name_only_indexed(child, name))
+      return false;
+  return true;
+}
+
+/// Element type of `var_name[...]` when @p var_node binds it to a list literal
+/// of one immutable scalar type, or "Any". The name must be bound once in the
+/// whole module (a `global` or a shadowing local counts) and only ever be
+/// indexed, so no store, method call or alias can change the elements.
+template <class Json>
+std::string python_annotation<Json>::homogeneous_literal_subscript_type(
+  const Json &var_node,
+  const std::string &var_name,
+  bool is_slice)
+{
+  static const std::set<std::string> scalars = {"bool", "int", "float", "str"};
+  const Json value = var_node.value("value", Json());
+  if (
+    !value.is_object() || value.value("_type", "") != "List" ||
+    json_utils::count_name_bindings(ast_, var_name) != 1 ||
+    !name_only_indexed(ast_, var_name))
+    return "Any";
+  std::string elem;
+  for (const Json &e : value["elts"])
+  {
+    const std::string t = get_argument_type(e);
+    if (scalars.count(t) == 0 || (!elem.empty() && t != elem))
+      return "Any";
+    elem = t;
+  }
+  return is_slice ? "list[" + elem + "]" : elem;
 }
 
 /// The comprehension and loop lowering annotate an element whose type it
@@ -2073,7 +2125,15 @@ std::string python_annotation<Json>::get_function_return_type(
     bool divergent = false;
     std::string inferred_type =
       infer_from_return_statements(func_elem["body"], func_name, &divergent);
+    const std::string optional_return =
+      returned_optional_scalar(func_elem, func_elem["body"]);
     current_func_name_context_ = saved_return_ctx;
+
+    if (optional_return == "Optional[" + inferred_type + "]")
+    {
+      functions_in_analysis_.erase(func_name);
+      return optional_return;
+    }
 
     if (!inferred_type.empty() && inferred_type != "NoneType")
     {
@@ -3362,6 +3422,14 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
       obj_type == "bytes" && call["func"].contains("attr") &&
       call["func"]["attr"] == "decode")
       return "str";
+    // These return an index or a count, never the receiver's type (#9054).
+    if (
+      (obj_type == "str" || obj_type == "list" || obj_type == "bytes") &&
+      call["func"].contains("attr") &&
+      (call["func"]["attr"] == "index" || call["func"]["attr"] == "rindex" ||
+       call["func"]["attr"] == "count" || call["func"]["attr"] == "find" ||
+       call["func"]["attr"] == "rfind"))
+      return "int";
     // list.pop() returns an element, never the list (#4797).
     if (
       obj_type == "list" && call["func"].contains("attr") &&
@@ -6465,6 +6533,37 @@ std::string python_annotation<Json>::optional_scalar_of(
   return scalar == "int" || scalar == "float" || scalar == "bool"
            ? "Optional[" + scalar + "]"
            : "";
+}
+
+/// The Optional[T] of a name `function` returns that is stored None and a
+/// scalar T (#9055); "" when it returns no such name.
+template <class Json>
+std::string python_annotation<Json>::returned_optional_scalar(
+  const Json &function,
+  const Json &body)
+{
+  for (const Json &stmt : body)
+  {
+    const std::string kind = stmt.value("_type", "");
+    if (kind == "FunctionDef" || kind == "ClassDef")
+      continue;
+    if (
+      kind == "Return" && stmt["value"].is_object() &&
+      stmt["value"].value("_type", "") == "Name")
+    {
+      std::string optional = optional_scalar_of(
+        stmt["value"]["id"].template get<std::string>(), function);
+      if (!optional.empty())
+        return optional;
+    }
+    for (const char *key : {"body", "orelse", "finalbody", "handlers", "cases"})
+      if (stmt.contains(key) && stmt[key].is_array())
+        if (
+          std::string optional = returned_optional_scalar(function, stmt[key]);
+          !optional.empty())
+          return optional;
+  }
+  return "";
 }
 
 /// The plain `name = value` statements in `body` and its nested blocks,

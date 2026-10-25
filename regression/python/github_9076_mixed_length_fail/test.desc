@@ -1,0 +1,4 @@
+CORE
+main.py
+--unwind 5 --multi-property --no-pointer-check --no-align-check
+^ERROR: cannot determine the length of a `-> bytes` return value for 'f'$

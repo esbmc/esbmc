@@ -156,6 +156,10 @@ public:
     const locationt &location,
     codet &target_block);
 
+  /// Throws when a tag may hold a float and `lhs op rhs` is not a str
+  /// operation.
+  void refuse_float_tag_operation(const exprt &lhs, const exprt &rhs) const;
+
   /// Throws the shared "tagged argument, no known parameter type" refusal.
   [[noreturn]] void refuse_tagged_argument() const;
 

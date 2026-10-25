@@ -1,8 +1,11 @@
 #pragma once
 
+#include <python-frontend/numpy/numpy_reducer_shared.h>
+
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/python-list/python_list.h>
 #include <nlohmann/json.hpp>
+#include <functional>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -17,6 +20,10 @@ class python_converter;
 std::string extract_numpy_dtype_name(
   const nlohmann::json &dtype_node,
   const nlohmann::json &ast);
+
+/// The literal `np.array(literal, dtype=...)` stores, cast to its dtype.
+nlohmann::json
+numpy_literal_with_dtype(const nlohmann::json &call, const nlohmann::json &ast);
 
 class numpy_call_expr : public function_call_expr
 {
@@ -256,6 +263,34 @@ private:
     const std::pair<std::vector<std::size_t>, std::vector<exprt>>
       &materialized);
   void reject_unsupported_nditer_keywords(const nlohmann::json &arg) const;
+  bool is_runtime_layout_view(const nlohmann::json &arg) const;
+  exprt get_nditer_list(const nlohmann::json &arg);
+  exprt scalar_binary_call(const std::string &function, bool allow_numpy_fold);
+  exprt lapack_value(double exact, double radius);
+  exprt numpy_math_value(const std::string &function, double x);
+  std::optional<exprt> try_numpy_math_constant();
+  exprt numpy_math_list(const std::string &function, const nlohmann::json &arg);
+  std::vector<std::vector<double>>
+  linalg_matrix(const std::function<void(nlohmann::json &)> &unwrap);
+  exprt nondet_bool();
+  exprt eigenvalues(const std::vector<std::vector<double>> &m);
+  std::vector<exprt> eigenvalue_pair(const std::vector<std::vector<double>> &m);
+  exprt singular_values(const std::vector<std::vector<double>> &m);
+  exprt lapack_vector(const std::vector<double> &exact, double radius);
+  exprt
+  lapack_matrix(const std::vector<std::vector<double>> &exact, double radius);
+  void report_integer_overflow();
+  typet scalar_dtype_result();
+  std::optional<exprt> fold_scalar_binary(
+    const std::string &function,
+    const numeric_value &lhs,
+    const numeric_value &rhs,
+    const typet &t);
+  exprt unfolded_scalar_binary(
+    const std::string &function,
+    const numeric_value &lhs,
+    const numeric_value &rhs,
+    const typet &t);
   void reject_unsupported_transpose_axes_rank(const std::string &function);
 
   // sum/prod/min/max/mean/argmin/argmax's flattened fallback path (a
@@ -294,6 +329,7 @@ private:
   // dispatch guard for the same reason as get_arange_expr()/
   // try_get_pointer_view_call_result().
   std::optional<exprt> try_any_all_result(const std::string &function);
+  std::optional<exprt> try_early_result(const std::string &function);
 
   // Resolves median/percentile/argsort/searchsorted's array argument to a
   // literal List node: a List stays as-is; a Name is followed to its own

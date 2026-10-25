@@ -21,7 +21,7 @@ class PreprocessorStateMixin:
         self.functionKwonlyParams = {}
         self.static_methods = set()
         self.is_entry_module = False
-        self._hoisted_classes = {}
+        self.hoisted_classes = {}
         self._builtin_shadow_names = None
         self._unobservable_builtin_keys = frozenset()
         self._closed_lambda_bindings = {}
@@ -46,6 +46,7 @@ class PreprocessorStateMixin:
         self._used_imported_vararg_specs = {}
         self._vararg_once_bound = set()
         self.listcomp_counter = 0
+        self.comprehension_targets = set()
         self.functools_reduce_names = set()
         self.functools_module_names = set()
         self.minmax_key_counter = 0

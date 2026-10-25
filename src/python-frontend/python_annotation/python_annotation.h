@@ -156,6 +156,10 @@ private:
     const Json &var_node,
     const std::string &var_name,
     bool is_slice);
+  std::string homogeneous_literal_subscript_type(
+    const Json &var_node,
+    const std::string &var_name,
+    bool is_slice);
   std::string
   refine_any_from_value(const std::string &annotated, const Json &var_node);
   std::string get_object_name(const Json &call, const std::string &prefix);
@@ -406,6 +410,7 @@ private:
     const Json &element,
     const std::string &inferred_type);
   std::string optional_scalar_of(const std::string &name, const Json &scope);
+  std::string returned_optional_scalar(const Json &function, const Json &body);
   void collect_name_stores(
     const std::string &name,
     const Json &body,

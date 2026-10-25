@@ -75,7 +75,7 @@ bool python_dict_handler::reads_value_as_tagged(
       }))
     return true;
   const char annotated = annotated_value_kind(dict_expr);
-  const std::string key = dict_key_id(slice_node);
+  const std::string key = dict_key_id(slice_node, converter_.get_ast_json());
   return annotated && std::any_of(
                         entries.begin(),
                         entries.end(),
@@ -475,20 +475,11 @@ exprt python_dict_handler::handle_dict_subscript(
     return result;
   }
 
-  // Class-struct value: cast stored void* to the struct type and dereference.
+  if (!is_dict_type(converter_.name_space().follow(resolved_type)))
   {
-    namespacet ns(symbol_table_);
-    typet underlying = resolved_type;
-    if (underlying.id() == "symbol")
-      underlying = ns.follow(underlying);
-    if (underlying.is_struct() && !is_dict_type(underlying))
-    {
-      exprt value_as_struct_ptr =
-        build_typecast(obj_value, pointer_typet(underlying));
-      exprt result = build_dereference(value_as_struct_ptr, underlying);
-      result.type() = underlying;
-      return result;
-    }
+    exprt struct_value = read_struct_value(obj_value, resolved_type);
+    if (!struct_value.is_nil())
+      return struct_value;
   }
 
   // Default: cast void* to char* for string values
@@ -497,15 +488,45 @@ exprt python_dict_handler::handle_dict_subscript(
   return value_as_string;
 }
 
+exprt python_dict_handler::read_struct_value(
+  const exprt &obj_value,
+  const typet &type)
+{
+  const typet underlying = converter_.name_space().follow(type);
+  if (!underlying.is_struct())
+    return nil_exprt();
+
+  const pointer_typet ref_type(underlying);
+  exprt object =
+    converter_.is_heap_migrated_class_type(underlying)
+      ? build_dereference(
+          build_typecast(obj_value, gen_pointer_type(ref_type)), ref_type)
+      : build_typecast(obj_value, ref_type);
+  exprt result = build_dereference(object, underlying);
+  result.type() = underlying;
+  return result;
+}
+
 void python_dict_handler::handle_dict_subscript_assign(
   const exprt &dict_expr,
   const exprt &key_expr,
-  const exprt &value,
+  const exprt &assigned_value,
   const locationt &location,
   const nlohmann::json &node,
   codet &target_block)
 {
   typet list_type = type_handler_.get_list_type();
+
+  // A constructed instance arrives as a value struct; store a reference to a
+  // heap copy, as a dict literal and a list do, so reads see one layout.
+  const exprt value =
+    converter_.is_heap_migrated_class_type(assigned_value.type())
+      ? converter_.box_value_on_heap(
+          assigned_value,
+          location,
+          *converter_.current_block,
+          gen_pointer_type(assigned_value.type()))
+      : assigned_value;
 
   exprt keys_member = build_member(dict_expr, "keys", list_type);
   exprt values_member = build_member(dict_expr, "values", list_type);
@@ -544,7 +565,10 @@ void python_dict_handler::handle_dict_subscript_assign(
       get_internal_list_id(dict_expr.identifier().as_string(), false);
     if (!vals_id.empty())
       converter_.get_element_type_registry().record(
-        vals_id, dict_key_id(node), value.type(), type_slot::dict_value_types);
+        vals_id,
+        dict_key_id(node, converter_.get_ast_json()),
+        assigned_value.type(),
+        type_slot::dict_value_types);
   }
 
   symbolt &index_var = converter_.create_tmp_symbol(
@@ -611,7 +635,6 @@ void python_dict_handler::handle_dict_subscript_assign(
       value_arg, value_info.elem_symbol->get_type()));
   set_value_call.type() = bool_type();
   set_value_call.location() = location;
-  update_block.copy_to_operands(set_value_call);
 
   // Create the "key doesn't exist" branch: push new key-value pair
   code_blockt insert_block;
@@ -650,6 +673,19 @@ void python_dict_handler::handle_dict_subscript_assign(
       value_arg, value_info.elem_symbol->get_type()));
   push_value_call.type() = bool_type();
   push_value_call.location() = location;
+
+  if (holds_dict_lists(value.type()))
+    store_dict_value_by_pointer(
+      node,
+      value,
+      values_member,
+      build_symbol(index_var),
+      location,
+      target_block,
+      set_value_call,
+      push_value_call);
+
+  update_block.copy_to_operands(set_value_call);
   insert_block.copy_to_operands(push_value_call);
 
   // Create if-then-else: if (key_exists) { update } else { insert }

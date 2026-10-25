@@ -899,7 +899,6 @@ public:
    *  convert_modulus lowers a remainder compositionally only when its
    *  operands appear here; unconditional lowering costs 3-5x on
    *  rem-heavy proofs. */
-  void note_division_operands(const expr2tc &expr);
   void note_division_operands(
     const expr2tc &expr,
     std::unordered_set<const expr2t *> &seen);

@@ -11,6 +11,7 @@
 
 #include <cctype>
 #include <map>
+#include <set>
 #include <string>
 
 enum class StatementType
@@ -92,6 +93,24 @@ public:
       name == "bytearray" || name == "range" || name == "complex" ||
       name == "type" || name == "object" || name == "abs" || name == "None" ||
       name == "divmod" || name == "slice");
+  }
+
+  /// A method of str that int and float lack: set(dir(str)) - set(dir(int))
+  /// - set(dir(float)), public names only.
+  static bool is_str_only_method(const std::string &name)
+  {
+    static const std::set<std::string> str_only_methods = {
+      "capitalize",   "casefold",     "center",    "count",     "encode",
+      "endswith",     "expandtabs",   "find",      "format",    "format_map",
+      "index",        "isalnum",      "isalpha",   "isascii",   "isdecimal",
+      "isdigit",      "isidentifier", "islower",   "isnumeric", "isprintable",
+      "isspace",      "istitle",      "isupper",   "join",      "ljust",
+      "lower",        "lstrip",       "maketrans", "partition", "removeprefix",
+      "removesuffix", "replace",      "rfind",     "rindex",    "rjust",
+      "rpartition",   "rsplit",       "rstrip",    "split",     "splitlines",
+      "startswith",   "strip",        "swapcase",  "title",     "translate",
+      "upper",        "zfill"};
+    return str_only_methods.count(name) > 0;
   }
 
   static bool is_consensus_type(const std::string &name)
@@ -239,6 +258,14 @@ public:
   {
     return t.is_struct() &&
            to_struct_type(t).tag().as_string().starts_with("tag-Optional_");
+  }
+
+  // Optional[str]: a pointer to an unsized char array, NULL for None.
+  static bool is_optional_str_pointer(const typet &t)
+  {
+    return t.is_pointer() && t.subtype().is_array() &&
+           t.subtype().subtype() == char_type() &&
+           to_array_type(t.subtype()).size().is_zero();
   }
 
   static bool is_char_type(const typet &t)
