@@ -121,8 +121,8 @@ class GeneratorMixin:
             self.depth -= 1
             return node
 
-        visit_FunctionDef = _visit_scope
-        visit_AsyncFunctionDef = _visit_scope
+        visit_FunctionDef = _visit_scope  # noqa: N815
+        visit_AsyncFunctionDef = _visit_scope  # noqa: N815
 
         def visit_Lambda(self, node):
             return node
