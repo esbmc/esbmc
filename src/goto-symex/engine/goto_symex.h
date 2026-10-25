@@ -177,7 +177,7 @@ public:
 
   /**
    *  A path-guard conjunct rewritten onto the canonical basis
-   *  path_guard_decides compares on, memoised in conjunct_rewrites.
+   *  path_guard_decides compares on.
    */
   expr2tc rewrite_conjunct(const expr2tc &conjunct);
 
@@ -359,6 +359,14 @@ public:
   /// opposed to a check symex raises while evaluating its guard.
   static std::string
   assertion_message(const namespacet &ns, const goto_programt::instructiont &i);
+
+  /// Free what only symex reads, once a formula is built: the guard prefix
+  /// index grows with every branching goto and would otherwise live through
+  /// solving.
+  void release_symex_caches()
+  {
+    guard_prefix_index.clear();
+  }
 
 protected:
   /**
@@ -1634,17 +1642,12 @@ protected:
    */
   persistent_map<irep_idt, expr2tc, irep_id_hash> copy_definitions;
   /**
-   *  rewrite_conjunct's result per conjunct. Conjuncts are L2, which
-   *  renaming leaves alone, and the two maps above bind each generation
-   *  once, so a rewrite never goes stale.
-   */
-  persistent_map<expr2tc, expr2tc, irep2_hash> conjunct_rewrites;
-  /**
    *  prefix_index's result per and-chain node of a path guard. A node is
    *  the cached base of one guard prefix, and a guard grows by appending
    *  to that base, so a goto extends the index of its guard's longest
    *  indexed prefix instead of rescanning every conjunct (#9150). Never
-   *  stale, for the same reason as conjunct_rewrites.
+   *  stale: conjuncts are L2, which renaming leaves alone, and the two maps
+   *  above bind each generation once.
    */
   persistent_map<expr2tc, conjunct_indext, irep2_hash> guard_prefix_index;
 
@@ -1739,7 +1742,8 @@ protected:
    *  the l1 renaming so the same object is recognised across frames (a
    *  va_list reached through a pointer dereferences to the owning
    *  activation's l1 name) and across recursion or loop re-declaration (each
-   *  DECL bumps the l1 number, so a fresh activation needs a fresh va_start).
+   *  DECL of a va_list bumps the l1 number, as va_start takes its address, so
+   *  a fresh activation needs a fresh va_start).
    *  Insertion ignores the path guard, over-approximating towards "started",
    *  so a conditional va_start can never yield a false positive. */
   std::unordered_map<

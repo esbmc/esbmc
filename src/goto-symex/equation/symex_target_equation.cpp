@@ -348,6 +348,8 @@ void symex_target_equationt::convert(smt_convt &smt_conv, assertion_modet mode)
     std::unordered_set<const expr2t *> division_seen;
     for (const auto &SSA_step : SSA_steps)
     {
+      if (SSA_step.ignore)
+        continue;
       smt_conv.note_division_operands(SSA_step.guard, division_seen);
       smt_conv.note_division_operands(SSA_step.rhs, division_seen);
       smt_conv.note_division_operands(SSA_step.cond, division_seen);

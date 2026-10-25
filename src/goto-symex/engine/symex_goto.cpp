@@ -188,6 +188,9 @@ goto_symext::conjunct_indext goto_symext::prefix_index(const guard2tc &guard)
   for (auto node = unindexed.rbegin(); node != unindexed.rend();
        ++node, ++covered)
   {
+    assert(same_pointer(
+      covered == 0 ? **node : to_and2t(**node).side_2,
+      guard.guard_list[covered]));
     const expr2tc conjunct = rewrite_conjunct(guard.guard_list[covered]);
     if (!index.find(conjunct))
       index.set(conjunct, covered);
@@ -198,9 +201,6 @@ goto_symext::conjunct_indext goto_symext::prefix_index(const guard2tc &guard)
 
 expr2tc goto_symext::rewrite_conjunct(const expr2tc &raw)
 {
-  if (const expr2tc *memo = conjunct_rewrites.find(raw))
-    return *memo;
-
   bool negated = false;
   expr2tc conjunct = raw;
   if (is_not2t(conjunct))
@@ -230,7 +230,6 @@ expr2tc goto_symext::rewrite_conjunct(const expr2tc &raw)
   if (chase_copies(conjunct))
     do_simplify(conjunct);
 
-  conjunct_rewrites.set(raw, conjunct);
   return conjunct;
 }
 
@@ -600,6 +599,12 @@ void goto_symext::merge_gotos()
       merge_value_sets(merge_state);
 
       merge_interval_domain(merge_state);
+
+      // One count stands for every merged path: the larger is the sound one.
+      BigInt &stack_total = cur_state->top().stack_frame_total;
+      stack_total = cur_state->guard.is_false()
+                      ? merge_state.stack_frame_total
+                      : std::max(stack_total, merge_state.stack_frame_total);
 
       // adjust depth
       cur_state->num_instructions =

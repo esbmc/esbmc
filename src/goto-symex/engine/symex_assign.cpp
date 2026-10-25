@@ -206,7 +206,6 @@ goto_symext &goto_symext::operator=(const goto_symext &sym)
   // must start from the snapshot's bindings, not empty or stale ones.
   guard_definitions = sym.guard_definitions;
   copy_definitions = sym.copy_definitions;
-  conjunct_rewrites = sym.conjunct_rewrites;
   guard_prefix_index = sym.guard_prefix_index;
   deferred_assumptions = sym.deferred_assumptions;
   depth_limit = sym.depth_limit;
