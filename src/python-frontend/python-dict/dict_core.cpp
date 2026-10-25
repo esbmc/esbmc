@@ -75,6 +75,16 @@ bool python_dict_handler::is_dict_type(const typet &type) const
   return tag == "__python_dict__";
 }
 
+bool python_dict_handler::holds_dict_lists(const typet &type) const
+{
+  const namespacet &ns = converter_.name_space();
+  const typet t = ns.follow(type);
+  return is_dict_type(t) ||
+         (type_utils::is_optional_struct(t) &&
+          is_dict_type(
+            ns.follow(to_struct_type(t).get_component("value").type())));
+}
+
 struct_typet python_dict_handler::get_dict_struct_type()
 {
   const std::string dict_type_name = "tag-__python_dict__";
