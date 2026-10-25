@@ -897,13 +897,6 @@ public:
    */
   BigInt uniform_elem_size(const exprt &list) const;
 
-  /// Whether the list stored at index @p i of @p list is the one @p elem holds
-  /// now. The type map names a nested element by the symbol it was appended
-  /// from, and a later assignment can rebind that symbol, or a store through
-  /// the outer list or an alias of it can replace the slot (#8130).
-  expr2tc
-  stored_element_is(const symbolt &list, std::size_t i, const symbolt &elem);
-
   /// The element type a subscript's base declares when the type map has no
   /// record of the list: a name's annotation, or a called function's return
   /// annotation. Empty when neither gives one.
