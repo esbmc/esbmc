@@ -1358,15 +1358,23 @@ private:
     const nlohmann::json &module_body) const;
 
   /**
-   * @brief True if some call site of @c func_name (positional at
-   * @c param_index, or keyword matching @c param_name) passes a bare `Name`
+   * @brief True if some call site of @c callee (a function, or `C.m` for a
+   * method or `C.__init__`) passes at @c param_index a bare `Name`
    * that its enclosing scope assigns genuinely incompatible literal kinds
    * across an if/else
    */
   bool try_infer_dynamic_param_type(
-    const std::string &func_name,
+    const std::string &callee,
     const std::string &param_name,
     size_t param_index) const;
+
+  typet ctor_param_attr_type(
+    const std::vector<const nlohmann::json *> &module_bodies,
+    const std::string &class_name,
+    const std::string &param_name,
+    int param_idx) const;
+
+  void reject_one_sided_tagged_store(const exprt &lhs, const exprt &rhs) const;
 
   /// A bare `bytes` annotation carries no length, so its parameter type
   /// defaults to a zero-size array (register_function_argument). Recovers a

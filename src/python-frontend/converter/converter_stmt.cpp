@@ -1111,6 +1111,20 @@ exprt python_converter::create_lhs_expression(
   return lhs;
 }
 
+/// A tagged value and an untagged attribute slot differ in size, so storing
+/// one into the other would overrun or misread the object.
+void python_converter::reject_one_sided_tagged_store(
+  const exprt &lhs,
+  const exprt &rhs) const
+{
+  if (
+    lhs.is_member() && type_handler_.is_tagged_scalar_type(lhs.type()) !=
+                         type_handler_.is_tagged_scalar_type(rhs.type()))
+    throw std::runtime_error(
+      "storing into an attribute that is dynamically typed only on one side "
+      "is not yet supported");
+}
+
 /// A list element that may be a string or a number is read as a tagged
 /// scalar; the variable it is stored in becomes one too, whatever type an
 /// annotation (or the loop lowering's inferred one) gave it (#4797).
@@ -8014,6 +8028,7 @@ void python_converter::get_var_assign(
       return;
     }
 
+    reject_one_sided_tagged_store(lhs, rhs);
     adopt_tagged_element(lhs_symbol, lhs, rhs);
 
     // Handle type adjustments
