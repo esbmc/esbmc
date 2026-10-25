@@ -483,6 +483,10 @@ exprt python_list::compare(
             const std::string rhs_nested_id = resolve_map_id(rhs_elem_sym);
             const symbolt *lhs_nested = converter_.find_symbol(lhs_nested_id);
             const symbolt *rhs_nested = converter_.find_symbol(rhs_nested_id);
+            // stored_element_is reads the inner list's own symbol, which may
+            // be a temporary of a loop or branch body that has ended.
+            converter_.outlive_scope(lhs_nested_id);
+            converter_.outlive_scope(rhs_nested_id);
             if (!build_nested_equality(
                   lhs_nested, rhs_nested, depth + 1, elem_equal, sizes_ok))
               return false;
