@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^  x = \{ \.a=1, \.b=2 \}$
+^VERIFICATION FAILED$

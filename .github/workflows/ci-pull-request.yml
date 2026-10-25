@@ -560,7 +560,7 @@ jobs:
           sudo apt-get update && sudo apt-get install -y \
             build-essential cmake ninja-build git wget curl \
             gcc-14 g++-14 g++-multilib libc6-dev-i386 \
-            libboost-all-dev libgmp-dev libssl-dev \
+            libboost-all-dev libgmp-dev libmpfr-dev libssl-dev \
             bison flex python3
 
       - name: Configure CMake (LD front-end with tests)
@@ -638,7 +638,7 @@ jobs:
           sudo apt-get update && sudo apt-get install -y \
             build-essential cmake ninja-build git wget curl \
             gcc-14 g++-14 g++-multilib libc6-dev-i386 \
-            libboost-all-dev libgmp-dev libssl-dev \
+            libboost-all-dev libgmp-dev libmpfr-dev libssl-dev \
             bison flex python3
 
       - name: Configure CMake (minimal PLC+ build)
@@ -665,18 +665,12 @@ jobs:
       - name: Build ESBMC
         run: cmake --build build --target esbmc -j$(nproc)
 
-      - name: Fix RPATH and bundle Z3 library
-        run: |
-          sudo apt-get install -y patchelf
-          Z3_LIB=$(find build/Z3 -name "libz3.so" | head -1)
-          echo "Found Z3 lib: $Z3_LIB"
-          cp "$Z3_LIB" libz3.so
-          patchelf --set-rpath /usr/local/lib build/src/esbmc/esbmc
-          cp build/src/esbmc/esbmc esbmc-linux-amd64
+      # Camada's release links Z3 statically, so there is no libz3.so to ship.
+      - name: Stage binary
+        run: cp build/src/esbmc/esbmc esbmc-linux-amd64
 
       - name: Verify binary supports --ld-props
         run: |
-          export LD_LIBRARY_PATH="$(pwd):$LD_LIBRARY_PATH"
           ./esbmc-linux-amd64 --version
           ./esbmc-linux-amd64 --help 2>&1 | grep -q "ld-props" && \
             echo "OK: --ld-props supported" || \
@@ -686,7 +680,5 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: esbmc-linux-amd64
-          path: |
-            esbmc-linux-amd64
-            libz3.so
+          path: esbmc-linux-amd64
           retention-days: 30

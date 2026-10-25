@@ -1,5 +1,8 @@
 /* A constant table of bit-vector structs, larger than the 1024 entries the
  * array flattener encodes as a vector, read at a nondet index. */
+/* KNOWNBUG on the camada branch: the test pinned --boolector, which camada
+ * does not carry, and Bitwuzla does not finish it (over 400s, also for master's
+ * per-member encoding from #9026). */
 struct entry
 {
   unsigned char kind;

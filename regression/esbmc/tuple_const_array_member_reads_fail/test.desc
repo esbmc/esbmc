@@ -1,6 +1,6 @@
 CORE
 main.c
---boolector --multi-property
+--multi-property
 ^\s*FAILED\s+\[main\.assertion\.1\]
 ^\s*FAILED\s+\[main\.assertion\.2\]
 ^VERIFICATION FAILED$

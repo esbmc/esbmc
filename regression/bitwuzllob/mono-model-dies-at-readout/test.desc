@@ -1,0 +1,4 @@
+CORE
+main.c
+--smtlib --smtlib-oneshot-prog always-sat-mallob.sh --smtlib-oneshot-model-prog readout-death-model.sh
+^ERROR: SMT solver process failed

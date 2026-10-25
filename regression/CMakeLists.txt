@@ -213,32 +213,19 @@ endfunction()
 if(ENABLE_BITWUZLA)
     set(REGRESSIONS_BITWUZLA bitwuzla)
 endif()
-if(ENABLE_BITWUZLLOB AND ENABLE_SMTLIB AND NOT WIN32)
-    # The backend is only built when smtlib is (see its CMakeLists.txt). The
-    # suite drives it through a z3-based sh stand-in for Mallob's mono mode
-    # (Mallob itself is Linux/MPI-only), so it needs a z3 binary and a POSIX
-    # shell. Also look next to a --DZ3_DIR passed for linking, so a build that
-    # bundled z3 but has no system z3 still runs the suite.
-    find_program(ESBMC_BITWUZLLOB_TEST_Z3 z3 HINTS "${Z3_DIR}/bin" "${Z3_DIR}")
-    if(ESBMC_BITWUZLLOB_TEST_Z3)
+if(ENABLE_SMTLIB AND NOT WIN32)
+    # Both suites drive --smtlib-oneshot-prog through z3-based sh stand-ins for
+    # solvers that cannot be linked in (Mallob is Linux/MPI-only, NeuroSym
+    # needs a Python + PyTorch checkout), so they need a z3 binary and a POSIX
+    # shell. Also look next to a -DZ3_DIR passed for linking, so a build that
+    # bundled z3 but has no system z3 still runs them.
+    find_program(ESBMC_ONESHOT_TEST_Z3 z3 HINTS "${Z3_DIR}/bin" "${Z3_DIR}")
+    if(ESBMC_ONESHOT_TEST_Z3)
         set(REGRESSIONS_BITWUZLLOB bitwuzllob)
-    else()
-        message(WARNING "bitwuzllob regression suite disabled: no z3 binary found on PATH or in Z3_DIR")
-    endif()
-endif()
-if(ENABLE_NEUROSYM AND ENABLE_SMTLIB AND NOT WIN32)
-    # Like bitwuzllob: the suite drives the backend through a z3-based sh
-    # stand-in for NeuroSym's batch mode (NeuroSym itself needs a Python +
-    # PyTorch checkout), so it needs a z3 binary and a POSIX shell.
-    find_program(ESBMC_NEUROSYM_TEST_Z3 z3 HINTS "${Z3_DIR}/bin" "${Z3_DIR}")
-    if(ESBMC_NEUROSYM_TEST_Z3)
         set(REGRESSIONS_NEUROSYM neurosym)
     else()
-        message(WARNING "neurosym regression suite disabled: no z3 binary found on PATH or in Z3_DIR")
+        message(WARNING "bitwuzllob and neurosym regression suites disabled: no z3 binary found on PATH or in Z3_DIR")
     endif()
-endif()
-if(ENABLE_CVC4)
-    set(REGRESSIONS_CVC cvc)
 endif()
 if(ENABLE_CVC5)
     set(REGRESSIONS_CVC cvc)
@@ -360,6 +347,7 @@ if(APPLE)
                     llvm
                     floats
                     floats-regression
+                    fixedbv
                     ${REGRESSIONS_JIMPLE}
                     k-induction
                     k-induction-parallel
@@ -431,6 +419,7 @@ else()
                     llvm
                     floats
                     floats-regression
+                    fixedbv
                     k-induction
                     termination
                     multi-property-matrix
@@ -752,12 +741,6 @@ set(_slow_regression_tests
     # against the 120s cap and timed out on the DebugOpt Linux runner in
     # #7073 CI -- a comment-only change that cannot reach its code path.
     "regression/esbmc/github_4634"
-    # nn-tanh_5_unsafe is a single --boolector float query: 16.7s on x86_64 but
-    # over the 120s cap on aarch64, where the whole floats-regression suite runs
-    # ~3x slower while the rest of the suite matches x86 to within 5%. The
-    # Boolector aarch64 FP slowdown is tracked in #7308; the 2x budget keeps the
-    # armv8 leg green meanwhile.
-    "regression/floats-regression/nn-tanh_5_unsafe"
     "regression/consensus/get_subtree_index"
     "regression/consensus/compute_shuffled_index"
 )
@@ -797,6 +780,16 @@ set(_very_slow_regression_tests
     # but on the DebugOpt Linux runner it is still mid-symex when the 120s cap
     # fires, so 2x has no guaranteed headroom; give it the 3x budget.
     "regression/python/list-slice-step-reverse"
+    # Z3 5.x is far slower on this query: master's own formula takes 9s under
+    # Z3 4.14.1, 31s under 4.15.0 and 130s under 5.1.0, and camada ships 5.3.1
+    # for its fp.rem/fma fixes. Camada's formula takes ~1.4x more on top; it
+    # took 118s of the 120s budget in CI before running out.
+    "regression/z3/github_6100_library"
+    # Bitwuzla solves this formula 2-3x slower than master's equivalent one:
+    # camada folds the bit reinterpretation of a float constant (frexp of 2.0
+    # and 1.0) to a literal, where master asserts a fresh variable equal to it.
+    # Folding master's two constants by hand moves it from 61s to ~175s.
+    "regression/python/int_subclass_ctor_symbolic_pow_mod_fail"
     # problem1_fail was FUTURE for scalability (#4932); it converges now, at
     # ~90s under the harness on a local RelWithDebInfo build. humaneval_62
     # above is ~70s locally against ~248s with assertions on, and that ratio
@@ -829,6 +822,40 @@ foreach(_t IN LISTS _very_slow_regression_tests)
         set_tests_properties(${_t} PROPERTIES
           TIMEOUT ${ESBMC_REGRESS_CTEST_TIMEOUT_VERY_SLOW}
           ENVIRONMENT "ESBMC_REGRESS_TIMEOUT=${ESBMC_REGRESS_TIMEOUT_VERY_SLOW};ESBMC_REGRESS_MEMORY_LIMIT=${ESBMC_REGRESS_MEMORY_LIMIT}"
+        )
+    endif()
+endforeach()
+
+# Bitwuzla is far slower than boolector on a bit-vector query of this shape.
+# Handing the same 3MB QF_BV file straight to each solver binary -- no ESBMC,
+# no floating-point theory -- boolector answers sat in 9s and bitwuzla in
+# 269s. The tests below pinned --boolector, which camada does not carry, so
+# they now take minutes on a query that used to take seconds, and neither the
+# 2x nor the 3x tier fits: both timed out exactly at their cap in CI (240.18s
+# and 360.28s). --fp2bv does not help; it is slower still, because the cost is
+# in the bit-vector search rather than the encoding.
+math(EXPR ESBMC_REGRESS_TIMEOUT_BITWUZLA_BV "${ESBMC_REGRESS_TIMEOUT} * 6")
+math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_BITWUZLA_BV
+     "${ESBMC_REGRESS_TIMEOUT_BITWUZLA_BV} + 30")
+set(_bitwuzla_bv_regression_tests
+    # ~190s locally; the floats-regression suite runs ~3x slower on aarch64
+    # while the rest matches x86 to within 5% (#7308), so size for ~600s.
+    "regression/floats-regression/nn-tanh_5_unsafe"
+    # ~525s locally, against 511s for the same query on master.
+    "regression/esbmc/github_1352-fail-32bit"
+    # Its siblings, the same query: ~427s and ~541s locally against ~414s and
+    # ~461s for master on Bitwuzla; both outgrew the 3x tier in CI.
+    "regression/esbmc/github_1352"
+    "regression/esbmc/github_1352-32bit"
+    # Pinned --boolector before camada; ~219s on Bitwuzla locally, against
+    # ~58s for master's per-member encoding (#9026) on the same solver.
+    "regression/esbmc/tuple_const_array_struct_member"
+)
+foreach(_t IN LISTS _bitwuzla_bv_regression_tests)
+    if(TEST ${_t})
+        set_tests_properties(${_t} PROPERTIES
+          TIMEOUT ${ESBMC_REGRESS_CTEST_TIMEOUT_BITWUZLA_BV}
+          ENVIRONMENT "ESBMC_REGRESS_TIMEOUT=${ESBMC_REGRESS_TIMEOUT_BITWUZLA_BV};ESBMC_REGRESS_MEMORY_LIMIT=${ESBMC_REGRESS_MEMORY_LIMIT}"
         )
     endif()
 endforeach()

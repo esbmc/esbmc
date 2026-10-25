@@ -11,6 +11,8 @@ class fixedbv_spect
 {
 public:
   unsigned integer_bits, width;
+  bool is_signed = true;
+  bool is_saturating = false;
 
   fixedbv_spect() : integer_bits(0), width(0)
   {

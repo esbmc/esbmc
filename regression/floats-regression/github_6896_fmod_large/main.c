@@ -9,6 +9,7 @@ double nondet_double(void);
  * The old model computed x - y * (int)(x / y); here x / y is about 3.3e17,
  * so the (int) conversion was undefined and the result unrelated to the
  * remainder. fmod now rides the solver's exact fp.rem (esbmc/esbmc#6896).
+ *
  * The values are read through nondet_double so the frontend cannot fold the
  * call; written as literals, clang evaluates fmod at compile time and the
  * model is never exercised. */

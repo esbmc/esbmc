@@ -59,6 +59,8 @@ protected:
   /// True when the single argument is arithmetic, as the `abs` node requires.
   bool has_single_arithmetic_argument(
     const side_effect_expr_function_callt &expr) const;
+  bool
+  has_single_float_argument(const side_effect_expr_function_callt &expr) const;
 
   /// True when a name-matched builtin lowering would discard a definition the
   /// program supplies, in which case the definition wins. See #6904.

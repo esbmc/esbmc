@@ -1,7 +1,7 @@
 #pragma once
 
 #include <transition-system/transition_system.h>
-#include <solvers/smt/smt_conv.h>
+#include <solvers/smt_conv.h>
 
 #include <cstdint>
 #include <memory>

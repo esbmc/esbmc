@@ -1,4 +1,4 @@
 CORE
 main.c
---boolector --multi-property
+--multi-property
 ^VERIFICATION SUCCESSFUL$

@@ -1,7 +1,7 @@
-/* ESBMC models `long double` as 12 bytes under --32, and 12 is not an alignment
- * any object can carry -- the offset predicate's mask is nonsense there. The
- * base check is confined to power-of-two widths for that reason: without the
- * guard this reports misaligned against a requirement no address satisfies. */
+/* A long double read through a pointer to a packed struct's member is checked
+ * against its full width. Under --32 that width used to be 12 bytes, which is
+ * not a power of two, so the base check was skipped; it is 16 bytes now
+ * (#8097), the same as under --64, so the misaligned read is reported. */
 
 struct __attribute__((packed)) S
 {

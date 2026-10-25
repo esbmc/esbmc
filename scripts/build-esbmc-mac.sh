@@ -13,9 +13,6 @@ fi
 read -p "Do you want to build the Python frontend? [Y/n]: " use_python
 use_python=${use_python:-Y}  # Default to Y if user just hits enter
 
-read -p "Do you want to install the recommended Boolector solver? [Y/n]: " use_boolector
-use_boolector=${use_boolector:-Y}  # Default to Y if user just hits enter
-
 read -p "Do you want to install the Bitwuzla solver? [Y/n]: " use_bitwuzla
 use_bitwuzla=${use_bitwuzla:-Y}  # Default to Y if user just hits enter
 
@@ -33,7 +30,6 @@ cd build
 echo "Installing ESBMC dependencies..."
 brew install boost
 brew install z3 
-brew install bison 
 brew install clang 
 brew install llvm@18
 
@@ -52,21 +48,6 @@ CPU_COUNT=$(($(sysctl -n hw.ncpu) + 1))
 # Get paths
 PATH_LLVM=$(brew --prefix llvm)
 PATH_Z3=$(brew --prefix z3)
-
-# Function to install Boolector
-install_boolector() {
-    echo "Installing Boolector..."
-    cd ..
-    git clone --depth=1 --branch=3.2.3 https://github.com/boolector/boolector
-    cd boolector
-    ./contrib/setup-lingeling.sh
-    ./contrib/setup-btor2tools.sh
-    ./configure.sh --prefix $PWD/../boolector-release
-    cd build
-    make -j${CPU_COUNT}
-    make install
-    cd ../../build
-}
 
 # Function to install Bitwuzla
 install_bitwuzla() {
@@ -95,16 +76,6 @@ if [[ $use_python =~ ^[Yy]$ ]]; then
     CMAKE_ARGS+=(-DENABLE_PYTHON_FRONTEND=On)
 fi
 
-# Add Boolector if requested
-if [[ $use_boolector =~ ^[Yy]$ ]]; then
-    install_boolector
-    echo "Enabling Boolector support..."
-    CMAKE_ARGS+=(
-        -DENABLE_BOOLECTOR=1
-        -DBoolector_DIR="$PWD/../boolector-release"
-    )
-fi
-
 # Add Bitwuzla if requested
 if [[ $use_bitwuzla =~ ^[Yy]$ ]]; then
     install_bitwuzla
@@ -116,7 +87,7 @@ if [[ $use_bitwuzla =~ ^[Yy]$ ]]; then
 fi
 
 # Build status message
-if [[ $use_boolector =~ ^[Yy]$ ]] || [[ $use_bitwuzla =~ ^[Yy]$ ]]; then
+if [[ $use_bitwuzla =~ ^[Yy]$ ]]; then
     echo "Building ESBMC with Z3 and additional solvers..."
 else
     echo "Building ESBMC with Z3 only..."

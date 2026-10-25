@@ -1,0 +1,5 @@
+CORE
+main.c
+--cvc5 --unwind 2 --no-unwinding-assertions
+^WARNING: CVC5 v[0-9.]+ returned unknown: incomplete$
+^ERROR: SMT solver failed$
