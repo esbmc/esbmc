@@ -1,4 +1,5 @@
 #include <python-frontend/json_utils.h>
+#include <python-frontend/math/bounded_math.h>
 #include <python-frontend/numpy/ndarray_shape.h>
 #include <python-frontend/numpy/numpy_call_expr.h>
 #include <python-frontend/numpy/numpy_nditer.h>
@@ -2135,44 +2136,13 @@ static bool is_supported_numpy_unary_math(const std::string &function)
 
 static double apply_numpy_unary_math(const std::string &function, double value)
 {
-  if (function == "sin")
-    return std::sin(value);
-  if (function == "cos")
-    return std::cos(value);
-  if (function == "exp")
-    return std::exp(value);
-  if (function == "sqrt")
-    return std::sqrt(value);
-  if (function == "arctan")
-    return std::atan(value);
   if (function == "floor")
     return std::floor(value);
   if (function == "fabs")
     return std::fabs(value);
   if (function == "trunc")
     return std::trunc(value);
-  if (function == "arccos")
-    return std::acos(value);
-  if (function == "arcsin")
-    return std::asin(value);
-  if (function == "tan")
-    return std::tan(value);
-  if (function == "log")
-    return std::log(value);
-  if (function == "log2")
-    return std::log2(value);
-  if (function == "log10")
-    return std::log10(value);
-  if (function == "sinh")
-    return std::sinh(value);
-  if (function == "cosh")
-    return std::cosh(value);
-  if (function == "tanh")
-    return std::tanh(value);
-  if (function == "rint")
-    return std::rint(value);
-
-  throw std::runtime_error("Unsupported Numpy unary function: " + function);
+  return bounded_math::host_value(function, value);
 }
 
 static bool should_fallback_to_numpy_model(const std::string &function)
@@ -4726,6 +4696,8 @@ numpy_call_expr::try_early_result(const std::string &function)
 {
   static const std::set<std::string> model_only = {
     "remainder", "nextafter", "isclose"};
+  if (std::optional<exprt> math = try_runtime_math(function))
+    return math;
   if (!model_only.count(function))
     return try_any_all_result(function);
   for (const nlohmann::json &arg : call_["args"])
@@ -5723,29 +5695,40 @@ exprt numpy_call_expr::singular_values(
 
 // NumPy evaluates these with its own vectorised code where the CPU has it
 // (SVML on AVX-512 is tested to 4 ulps of the exact value, tanh differs from
-// glibc by 2 ulps even without it): the result is any double within 8 ulps
-// of the C library's, except where every implementation is
-// exact (a correctly rounded square root, an odd function at a signed zero,
-// exp(0), log(1), or log2 of a power of two).
+// glibc by 2 ulps even without it), so the bound is wider than libm's.
 exprt numpy_call_expr::numpy_math_value(const std::string &function, double x)
 {
-  static const std::set<std::string> odd = {
-    "sin", "tan", "arctan", "arcsin", "sinh", "tanh"};
-  static const std::set<std::string> one_at_zero = {"exp", "cos", "cosh"};
-  static const std::set<std::string> zero_at_one = {
-    "log", "log2", "log10", "arccos"};
-  const double value = apply_numpy_unary_math(function, x);
-  int exponent = 0;
-  const bool power_of_two = x > 0 && std::frexp(x, &exponent) == 0.5;
-  const bool exact =
-    function == "sqrt" || function == "rint" || !std::isfinite(value) ||
-    (x == 0.0 &&
-     (odd.count(function) != 0 || one_at_zero.count(function) != 0)) ||
-    (x == 1.0 && zero_at_one.count(function) != 0) ||
-    (function == "log2" && power_of_two);
-  const double ulp =
-    std::nextafter(std::fabs(value), INFINITY) - std::fabs(value);
-  return lapack_value(value, exact ? 0.0 : 8 * ulp);
+  return bounded_math(converter_, call_).literal(function, x);
+}
+
+// `np.exp(x)` of a number known only at run time.
+std::optional<exprt>
+numpy_call_expr::try_runtime_math(const std::string &function)
+{
+  if (
+    !bounded_math::is_bounded(function) || call_["args"].size() != 1 ||
+    !call_.value("keywords", nlohmann::json::array()).empty())
+    return std::nullopt;
+  const nlohmann::json &arg = call_["args"][0];
+  const std::string type = arg.value("_type", "");
+  numeric_value constant;
+  if (
+    type == "List" || type == "Tuple" ||
+    try_extract_numeric_constant(arg, constant))
+    return std::nullopt;
+  exprt x = converter_.get_expr(arg);
+  const typet &t = x.type();
+  if (!t.is_floatbv() && !t.is_signedbv() && !t.is_unsignedbv() && !t.is_bool())
+  {
+    if (json_utils::ast_contains_call(arg))
+      throw std::runtime_error(
+        "TypeError: numpy." + function +
+        " of a call that does not return a number is not supported");
+    return std::nullopt;
+  }
+  if (t != double_type())
+    x = typecast_exprt(x, double_type());
+  return bounded_math(converter_, call_).runtime(function, x);
 }
 
 // `np.exp(0.3)`, `np.sin(-1.0)`: a numeric literal argument.
