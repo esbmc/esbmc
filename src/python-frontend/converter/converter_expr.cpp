@@ -2241,6 +2241,107 @@ python_converter::get_intercepted_expr(const nlohmann::json &element)
   return nditer.read_item(element);
 }
 
+// `x.__class__` reads as type(x); `<class object>.__name__` folds to the
+// class's name. Nil for any other attribute.
+exprt python_converter::get_class_dunder_attribute(
+  const nlohmann::json &element)
+{
+  if (is_converting_lhs)
+    return nil_exprt();
+  if (element["attr"] == "__class__")
+    return get_class_attribute(element);
+  if (element["attr"] == "__name__")
+    return get_class_name(element["value"]);
+  return nil_exprt();
+}
+
+exprt python_converter::get_class_attribute(const nlohmann::json &element)
+{
+  nlohmann::json call = element;
+  call.erase("attr");
+  call.erase("value");
+  call.erase("ctx");
+  call["_type"] = "Call";
+  call["func"] = {
+    {"_type", "Name"}, {"id", "type"}, {"ctx", {{"_type", "Load"}}}};
+  call["args"] = nlohmann::json::array({element["value"]});
+  call["keywords"] = nlohmann::json::array();
+  const auto saved_compared = type_compared_operands_;
+  for (const nlohmann::json *&operand : type_compared_operands_)
+    if (operand == &element)
+      operand = &call;
+  exprt result = get_expr(call);
+  type_compared_operands_ = saved_compared;
+  return result;
+}
+
+// Nil unless @p value is `x.__class__` or type(x).
+exprt python_converter::get_class_name(const nlohmann::json &value)
+{
+  const bool names_class =
+    (value["_type"] == "Attribute" && value["attr"] == "__class__") ||
+    (value["_type"] == "Call" && value["func"]["_type"] == "Name" &&
+     value["func"]["id"] == "type");
+  if (!names_class)
+    return nil_exprt();
+  const exprt cls = get_expr(value);
+  const std::string name = cls.get_string("value");
+  const nlohmann::json &body = (*ast_json)["body"];
+  // A class nested in Outer is hoisted as Outer__Inner, which is not its
+  // __name__.
+  const size_t outer_end = name.rfind("__");
+  const bool hoisted =
+    outer_end != std::string::npos && outer_end > 0 &&
+    !json_utils::find_class(body, name.substr(0, outer_end)).is_null();
+  const bool spelled_as_written =
+    (!hoisted && !json_utils::find_class(body, name).is_null()) ||
+    type_utils::is_type_identifier(name) ||
+    type_utils::is_python_exceptions(name) || name == "NoneType";
+  if (!is_class_object(cls) || !spelled_as_written)
+    throw std::runtime_error(
+      "__name__ of a class not known statically is not supported");
+  return string_builder_->build_string_literal(name);
+}
+
+// `module.member` for an imported module, unless a local binding shadows the
+// module name (e.g. a parameter named `node` when `from node import Node` is
+// in scope): Python's scoping rules give the local precedence. Nil otherwise.
+exprt python_converter::get_module_member(
+  const std::string &var_name,
+  const nlohmann::json &element)
+{
+  if (!is_imported_module(var_name))
+    return nil_exprt();
+
+  symbol_id sid = create_symbol_id();
+  sid.set_object(var_name);
+  if (find_symbol(sid.to_string()))
+    return nil_exprt();
+  // Function/method bodies can access module-level names via fallback.
+  sid.set_function("");
+  if (find_symbol(sid.to_string()))
+    return nil_exprt();
+  // Also probe the root-global form used by some frontend-generated IDs.
+  if (find_symbol(sid.global_to_string()))
+    return nil_exprt();
+
+  std::string attr_name = element["attr"].get<std::string>();
+  std::string module_path = imported_modules[var_name];
+
+  // Construct symbol ID for module member: py:module_path@member_name
+  symbol_id module_sid(module_path, "", "");
+  module_sid.set_object(attr_name);
+
+  symbolt *symbol = find_symbol(module_sid.to_string());
+  if (!symbol)
+  {
+    throw std::runtime_error(
+      fmt::format(
+        "Module member '{}' not found in module '{}'", attr_name, var_name));
+  }
+  return symbol_expr(*symbol);
+}
+
 exprt python_converter::get_expr(const nlohmann::json &element)
 {
   get_expr_depth_guard depth_guard(*this);
@@ -2352,6 +2453,11 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     else if (element["_type"] == "Attribute")
     {
       reject_bound_method_read(element);
+      if (exprt cls = get_class_dunder_attribute(element); cls.is_not_nil())
+      {
+        expr = cls;
+        break;
+      }
       // Resolve `<base>.<attr>` after unwrapping Optional[T] /
       // pointer-to-struct / complex types. Returns nil if the attribute cannot
       // be resolved.
@@ -2602,48 +2708,11 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             element["value"]["_type"].get<std::string>()));
       }
 
-      // Handle module attribute access (e.g., math.inf) — unless the module
-      // name is shadowed by a local binding in the current scope (e.g. a
-      // parameter named `node` when `from node import Node` is in scope).
-      // Python's scoping rules give precedence to the local binding.
-      auto name_resolves_to_symbol = [&](const std::string &name) {
-        symbol_id sid = create_symbol_id();
-        sid.set_object(name);
-        if (find_symbol(sid.to_string()))
-          return true;
-
-        // Function/method bodies can access module-level names via fallback.
-        sid.set_function("");
-        if (find_symbol(sid.to_string()))
-          return true;
-
-        // Also probe the root-global form used by some frontend-generated IDs.
-        if (find_symbol(sid.global_to_string()))
-          return true;
-
-        return false;
-      };
-
-      if (is_imported_module(var_name) && !name_resolves_to_symbol(var_name))
+      if (
+        exprt member = get_module_member(var_name, element);
+        member.is_not_nil())
       {
-        std::string attr_name = element["attr"].get<std::string>();
-        std::string module_path = imported_modules[var_name];
-
-        // Construct symbol ID for module member: py:module_path@member_name
-        symbol_id module_sid(module_path, "", "");
-        module_sid.set_object(attr_name);
-
-        symbolt *symbol = find_symbol(module_sid.to_string());
-        if (!symbol)
-        {
-          throw std::runtime_error(
-            fmt::format(
-              "Module member '{}' not found in module '{}'",
-              attr_name,
-              var_name));
-        }
-
-        expr = symbol_expr(*symbol);
+        expr = member;
         break;
       }
 

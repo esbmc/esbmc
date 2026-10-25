@@ -1703,6 +1703,11 @@ private:
   bool try_numpy_slice_copy_assign(const nlohmann::json &ast_node);
   std::optional<exprt> get_intercepted_expr(const nlohmann::json &element);
   void reject_bound_method_read(const nlohmann::json &element);
+  exprt get_class_dunder_attribute(const nlohmann::json &element);
+  exprt get_class_attribute(const nlohmann::json &element);
+  exprt get_class_name(const nlohmann::json &value);
+  exprt
+  get_module_member(const std::string &var_name, const nlohmann::json &element);
   void reject_method_value(const std::string &class_name, const std::string &m)
     const;
   /// Per module, what each attribute holds; nullopt when the module reaches
