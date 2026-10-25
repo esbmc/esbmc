@@ -485,17 +485,69 @@ class _Analysis:
                     if id(node) in self.scopes:
                         changed |= self.link_args(node, args, keywords)
 
+    def flow_kinds(self):
+        """The return type of each function whose source does not tell it, reading a
+        call through a value as the type all of that value's functions return (#9037).
+        """
+        callees = {
+            id(call): callee
+            for call, callee, _, _, result in self.calls if result is not None
+        }
+        unknown = {
+            id(node): node
+            for group in self.members.values()
+            for node, _, kind in group.values() if kind is None and id(node) in self.scopes
+        }
+        resolved = {}
+        changed = True
+        while changed:
+            changed = False
+            for key, node in unknown.items():
+                if key in resolved:
+                    continue
+                kind = self._returned_kind(node, callees, resolved)
+                if kind is not None:
+                    resolved[key] = kind
+                    changed = True
+        return resolved
+
+    def _returned_kind(self, node, callees, resolved):
+        scope = self.scopes[id(node)]
+        if isinstance(node, ast.Lambda):
+            values = [node.body]
+        else:
+            values = [n.value for n in _own_nodes(node) if isinstance(n, ast.Return)]
+        kinds = set()
+        for value in values:
+            kind = "None" if value is None else self.expr_kind(value, scope)
+            if kind is None and id(value) in callees:
+                kind = self._group_kind(callees[id(value)], resolved)
+            kinds.add(kind)
+        return kinds.pop() if len(kinds) == 1 else None
+
+    def _group_kind(self, key, resolved):
+        """The one type every function in `key`'s group returns, or None."""
+        kinds = set()
+        for node, _, kind in self.members.get(self.find(key), {}).values():
+            kind = kind if kind is not None else resolved.get(id(node))
+            if kind is None:
+                return None
+            kinds.add(kind)
+        return kinds.pop() if len(kinds) == 1 else None
+
     def mixed_call(self):
         """A call in the program through a value whose functions return different types,
         with two of them. Calls in an imported module only carry values; that module is
         checked on its own.
         """
+        resolved = self.flow_kinds()
         for call, callee, _, _, result in self.calls:
             if id(call) in self.imported_calls:
                 continue
             seen = []
             members = self.members.get(self.find(callee), {}).values()
-            for _, name, kind in sorted(members, key=lambda m: m[0].lineno):
+            for node, name, kind in sorted(members, key=lambda m: m[0].lineno):
+                kind = kind if kind is not None else resolved.get(id(node))
                 if kind is None:
                     continue
                 for other_name, other_kind in seen:
