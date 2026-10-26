@@ -267,6 +267,10 @@ public:
     return call_escaped_lists_.find(id) != call_escaped_lists_.end();
   }
 
+  /// Makes @p id, a local of a nested body that has been closed, outlive that
+  /// body, so that a later read does not follow its DEAD (#9185).
+  void outlive_scope(const std::string &id);
+
   /// Runs @p check once every statement has been converted.
   void defer_check(std::function<void()> check)
   {
@@ -1358,15 +1362,23 @@ private:
     const nlohmann::json &module_body) const;
 
   /**
-   * @brief True if some call site of @c func_name (positional at
-   * @c param_index, or keyword matching @c param_name) passes a bare `Name`
+   * @brief True if some call site of @c callee (a function, or `C.m` for a
+   * method or `C.__init__`) passes at @c param_index a bare `Name`
    * that its enclosing scope assigns genuinely incompatible literal kinds
    * across an if/else
    */
   bool try_infer_dynamic_param_type(
-    const std::string &func_name,
+    const std::string &callee,
     const std::string &param_name,
     size_t param_index) const;
+
+  typet ctor_param_attr_type(
+    const std::vector<const nlohmann::json *> &module_bodies,
+    const std::string &class_name,
+    const std::string &param_name,
+    int param_idx) const;
+
+  void reject_one_sided_tagged_store(const exprt &lhs, const exprt &rhs) const;
 
   /// A bare `bytes` annotation carries no length, so its parameter type
   /// defaults to a zero-size array (register_function_argument). Recovers a
@@ -3844,6 +3856,11 @@ private:
   std::unordered_set<std::string> str_valued_symbols_;
   /// Symbols ever assigned a str literal; see retype_resized_str.
   std::unordered_set<std::string> str_assigned_symbols_;
+  /// Locals declared directly in a nested body that has been closed.
+  std::unordered_set<std::string> out_of_scope_locals_;
+  /// Records the locals @p block declares, which goto_convert marks DEAD where
+  /// the block ends.
+  void end_block_scope(const code_blockt &block);
 
   /// Flow-sensitive class tracking (#4771/#4772). Maps a straight-line lvalue
   /// access path -- "v" for a Name `v`, "v.attr" for an `obj.attr` lvalue -- to
