@@ -4576,58 +4576,8 @@ std::optional<exprt> python_list::resolve_nested_list_element(
         
         if (!elem_id.empty())
         {
-          const symbolt *recorded_sym =
-            converter_.symbol_table().find_symbol(elem_id);
-
-          std::cerr
-            << "[NESTED MAP DEBUG]"
-            << " elem_id=" << elem_id
-            << " elem_type="
-            << converter_.get_type_handler().type_to_string(elem_type)
-            << '\n';
-
-          const symbolt *sym =
-            converter_.symbol_table().find_symbol(elem_id);
-
-          if (sym)
-          {
-            std::cerr
-              << "[NESTED SYMBOL DEBUG]"
-              << " id=" << sym->id.as_string()
-              << " type="
-              << converter_.get_type_handler().type_to_string(sym->get_type())
-              << '\n';
-          }
-
-          if (
-            recorded_sym &&
-            recorded_sym->get_type() ==
-              converter_.get_type_handler().get_list_type())
-          {
-            std::cerr
-              << "[NESTED DIRECT DEBUG] using recorded list symbol: "
-              << elem_id
-              << '\n';
-
-            return build_symbol(*recorded_sym);
-          }  
-
           exprt list_at_call = build_list_at_call(array, pos_expr, list_value_);
           exprt inner_ptr = extract_pyobject_value(list_at_call, elem_type);
-
-          std::cerr
-            << "[NESTED DEBUG] "
-            << "elem_list="
-            << (
-                elem_type ==
-                converter_.get_type_handler().get_list_type()
-              )
-            << " inner_list="
-            << (
-                inner_ptr.type() ==
-                converter_.get_type_handler().get_list_type()
-              )
-            << '\n';
 
           // As a store target the subscript must stay an lvalue into the
           // slot: binding it to the temporary below sends `xs[0] = xs[1]`
@@ -4641,14 +4591,6 @@ std::optional<exprt> python_list::resolve_nested_list_element(
 
           symbolt &inner_sym = converter_.create_tmp_symbol(
             list_value_, "$nested_list$", elem_type, exprt());
-
-          std::cerr
-              << "[NESTED DEBUG] sym_list="
-              << (
-                  inner_sym.get_type() ==
-                  converter_.get_type_handler().get_list_type()
-                )
-              << '\n';  
 
           code_declt inner_decl(build_symbol(inner_sym));
           inner_decl.location() = loc;

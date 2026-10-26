@@ -23,6 +23,11 @@ class LoopContext:
     break_target: int
     continue_target: int
 
+@dataclass
+class FinallyContext:
+    body:list[ast.stmt]
+    outer: "FinallyContext | None " = None    
+
 
 class UnsupportedCFGError(RuntimeError):
     pass
@@ -46,7 +51,7 @@ def build_cfg_for_function(func_node: ast.FunctionDef | ast.AsyncFunctionDef) ->
     entry_idx = new_block(cfg)
     exit_idx = new_block(cfg)
 
-    tail = build_statements(func_node.body, cfg, entry_idx, None)
+    tail = build_statements(func_node.body, cfg, entry_idx, None, exit_idx, None,)
 
     if tail is not None:
         add_edge(cfg, tail, exit_idx)
@@ -159,14 +164,14 @@ def build_for(cfg: CFG, stmt: ast.For, current_idx: int, outer_loop: LoopContext
     return exit_idx
 
 
-def build_statements(statements, cfg, current_idx: int, loop_ctx: LoopContext | None = None):
+def build_statements(statements, cfg, current_idx: int, loop_ctx: LoopContext | None = None, function_exit_idx: int | None = None, finally_ctx = None):
     current = current_idx
 
     for stmt in statements:
         if current is None:
             break
         if isinstance(stmt, ast.If):
-            current = build_if(stmt, cfg, current, loop_ctx)
+            current = build_if(stmt, cfg, current, loop_ctx, function_exit_idx, finally_ctx)
         elif isinstance(stmt, ast.While):
             current = build_while(cfg, stmt, current, loop_ctx)
         elif isinstance(stmt, ast.For):
@@ -174,32 +179,114 @@ def build_statements(statements, cfg, current_idx: int, loop_ctx: LoopContext | 
         elif isinstance(stmt, ast.Break):
             if loop_ctx is None:
                 raise RuntimeError("break outside loop")
-            add_edge(cfg, current, loop_ctx.break_target)
-            #return None
+            #add_edge(cfg, current, loop_ctx.break_target)
+            route_control_transfer(cfg, current, loop_ctx.break_target, loop_ctx, function_exit_idx, finally_ctx)
             current = None
             continue
         elif isinstance(stmt, ast.Continue):
             if loop_ctx is None:
                 raise RuntimeError("continue outside loop")
-            add_edge(cfg, current, loop_ctx.continue_target)
+            
+            route_control_transfer(cfg, current, loop_ctx.continue_target, loop_ctx, function_exit_idx, finally_ctx)
+            #add_edge(cfg, current, loop_ctx.continue_target)
             current = None
             continue
             #return None
-        elif isinstance(stmt, ast.With):
-            current = build_with(cfg, stmt, current, loop_ctx)
-        elif isinstance(stmt, ast.Try):
-            current = build_try_statement(stmt, cfg, current, loop_ctx)
-        else:
+        elif isinstance(stmt, ast.Return):
+            if function_exit_idx is None:
+                raise UnsupportedCFGError(
+                    "return without function exit"
+                )
+
+            # Keep Return in the block so the solver
+            # can still infer its return type.
             cfg.blocks[current].stmts.append(stmt)
 
-        if is_terminal_statement(stmt):
-            current = None
-            #continue
+            route_control_transfer(
+                cfg,
+                current,
+                function_exit_idx,
+                loop_ctx,
+                function_exit_idx,
+                finally_ctx,
+            )
+
+            current = None       
+
+        elif isinstance(stmt, ast.Raise):
+            cfg.blocks[current].stmts.append(stmt)
+            current = None    
+
+        elif isinstance(stmt, ast.With):
+            current = build_with(cfg, stmt, current, loop_ctx, function_exit_idx, finally_ctx)
+        elif isinstance(stmt, ast.Try):
+            current = build_try_statement(stmt, cfg, current, loop_ctx, function_exit_idx, finally_ctx)
+        #else:
+         #   cfg.blocks[current].stmts.append(stmt)
+        elif isinstance(stmt, ast.AsyncFor):
+            current = build_async_for(cfg, stmt, current, loop_ctx, function_exit_idx, finally_ctx,)
+
+        elif isinstance(
+            stmt,
+            (
+                ast.Assign,
+                ast.AnnAssign,
+                ast.AugAssign,
+                ast.Expr,
+                ast.Assert,
+                ast.Pass,
+            ),
+        ):
+            cfg.blocks[current].stmts.append(stmt)
+
+        else:
+            raise UnsupportedCFGError(
+                "unsupported statement in CFG: "
+                f"{type(stmt).__name__}"
+            )
 
     return current
 
+def route_control_transfer(cfg, current_idx, target_idx, loop_ctx, function_exit_idx,
+    finally_ctx,
+):
+    if finally_ctx is None:
+        add_edge(
+            cfg,
+            current_idx,
+            target_idx,
+        )
+        return
 
-def build_try_statement(stmt, cfg, current_idx, outer_loop):
+    finally_entry = new_block(cfg)
+
+    add_edge(
+        cfg,
+        current_idx,
+        finally_entry,
+    )
+
+    final_tail = build_statements(
+        finally_ctx.body,
+        cfg,
+        finally_entry,
+        loop_ctx,
+        function_exit_idx,
+        finally_ctx.outer,
+    )
+
+    if final_tail is not None:
+        route_control_transfer(
+            cfg,
+            final_tail,
+            target_idx,
+            loop_ctx,
+            function_exit_idx,
+            finally_ctx.outer,
+        )
+
+
+def build_try_statement(stmt, cfg, current_idx, outer_loop, function_exit_idx=None, outer_finally=None):
     """
     Build the CFG for:
 
@@ -220,7 +307,12 @@ def build_try_statement(stmt, cfg, current_idx, outer_loop):
 
     add_edge(cfg, current_idx, try_entry)
 
-    try_tail = build_statements(stmt.body, cfg, try_entry, outer_loop)
+    active_finally = outer_finally
+
+    if stmt.finalbody:
+        active_finally = FinallyContext(stmt.finalbody, outer_finally,)
+
+    try_tail = build_statements(stmt.body, cfg, try_entry, outer_loop, function_exit_idx, active_finally)
 
     # Normal completion of try -> try_end.
     #cfg.blocks[try_tail_idx].succ.append(try_end_idx)
@@ -231,10 +323,12 @@ def build_try_statement(stmt, cfg, current_idx, outer_loop):
     for handler in stmt.handlers:
         handler_idx = new_block(cfg)
         handler_entries.append(handler_idx)
+        #add_edge(cfg, try_entry, handler_idx)
+
         handler_block = cfg.blocks[handler_idx]
         # `except X as e:`
         if handler.name is not None:
-            handler_block.stmts.append(
+            cfg.blocks[handler_idx].stmts.append(
                 ast.Assign(
                     targets=[ast.Name(
                         id=handler.name,
@@ -252,6 +346,8 @@ def build_try_statement(stmt, cfg, current_idx, outer_loop):
             cfg,
             handler_idx,
             outer_loop,
+            function_exit_idx,
+            active_finally,
         )
         if handler_tail is not None:
             handler_tails.append(handler_tail)
@@ -260,11 +356,56 @@ def build_try_statement(stmt, cfg, current_idx, outer_loop):
     for handler_idx in handler_entries:
         add_edge(cfg, try_entry, handler_idx)
 
-    if try_tail is not None:
-        add_edge(cfg, try_tail, after_try)
+    normal_tail = try_tail
 
-    for handler_tail in handler_tails:
-        add_edge(cfg, handler_tail, after_try)
+    if try_tail is not None and stmt.orelse:
+        else_entry = new_block(cfg)
+        add_edge(cfg, try_tail, else_entry)
+
+        normal_tail = build_statements(stmt.orelse, cfg, else_entry, outer_loop, function_exit_idx, active_finally)
+
+        if stmt.finalbody:
+            finally_entry = new_block(cfg)
+
+            if normal_tail is not None:
+                add_edge(cfg, normal_tail, finally_entry)
+
+            for handler_tail in handler_tails:
+                 add_edge(cfg, handler_tail, finally_entry)
+
+            final_tail = build_statements(
+                stmt.finalbody,
+                cfg,
+                finally_entry,
+                outer_loop,
+                function_exit_idx,
+                outer_finally,
+            )
+
+            if final_tail is not None:
+                add_edge(
+                    cfg,
+                    final_tail,
+                    after_try,
+                )
+
+        else:
+            if normal_tail is not None:
+                add_edge(
+                    cfg,
+                    normal_tail,
+                    after_try,
+                )
+
+            for handler_tail in handler_tails:
+                add_edge(
+                    cfg,
+                    handler_tail,
+                    after_try,
+                )
+
+        if not cfg.blocks[after_try].pred:
+            return None     
 
     return after_try
 
@@ -273,30 +414,58 @@ def is_terminal_statement(stmt):
     return isinstance(stmt, (ast.Return, ast.Raise))
 
 
-def build_if(stmt: ast.If, cfg: CFG, current_idx: int, loop_ctx: LoopContext | None = None) -> int:
-    cfg.blocks[current_idx].stmts.append(("cond", stmt.test))
+def build_if(stmt: ast.If, cfg: CFG, current_idx: int, loop_ctx: LoopContext | None = None,
+    function_exit_idx: int | None = None,
+    finally_ctx=None,
+) -> int | None:
+
+    condition_idx = current_idx
+
+    # The solver expects ("cond", ...) to be the first item
+    # in a condition block.
+    if cfg.blocks[current_idx].stmts:
+        condition_idx = new_block(cfg)
+        add_edge(cfg, current_idx, condition_idx)
+
+    cfg.blocks[condition_idx].stmts.append(
+        ("cond", stmt.test)
+    )
 
     then_idx = new_block(cfg)
-
     else_idx = new_block(cfg)
 
-    join_idx = new_block(cfg)
-
-    add_edge(cfg, current_idx, then_idx)
-    add_edge(cfg, current_idx, else_idx)
+    add_edge(cfg, condition_idx, then_idx)
+    add_edge(cfg, condition_idx, else_idx)
 
     then_tail = build_statements(
         stmt.body,
         cfg,
         then_idx,
         loop_ctx,
+        function_exit_idx,
+        finally_ctx,
     )
 
-    else_tail = build_statements(stmt.orelse, cfg, else_idx, loop_ctx)
+    else_tail = build_statements(
+        stmt.orelse,
+        cfg,
+        else_idx,
+        loop_ctx,
+        function_exit_idx,
+        finally_ctx,
+    )
 
-    add_edge(cfg, then_tail, join_idx)
+    # Both branches terminate.
+    if then_tail is None and else_tail is None:
+        return None
 
-    add_edge(cfg, else_tail, join_idx)
+    join_idx = new_block(cfg)
+
+    if then_tail is not None:
+        add_edge(cfg, then_tail, join_idx)
+
+    if else_tail is not None:
+        add_edge(cfg, else_tail, join_idx)
 
     return join_idx
 
@@ -306,17 +475,121 @@ def build_with(
     stmt: ast.With,
     current_idx: int,
     loop_ctx: LoopContext | None = None,
-) -> int:
+    function_exit_idx: int | None = None,
+    finally_ctx = None,
+) -> int | None:
 
+    header_idx = new_block(cfg)
     body_idx = new_block(cfg)
     exit_idx = new_block(cfg)
 
     add_edge(cfg, current_idx, body_idx)
 
-    cfg.blocks[body_idx].stmts.append(stmt)
+    cfg.blocks[header_idx].stmts.append("with", stmt.items)
 
-    body_tail = build_statements(stmt.body, cfg, body_idx, loop_ctx)
+    add_edge(cfg, header_idx, body_idx)
 
-    add_edge(cfg, body_tail, exit_idx)
+    body_tail = build_statements(stmt.body, cfg, body_idx, loop_ctx, function_exit_idx, finally_ctx)
+
+    if body_tail is not None:
+        add_edge(cfg, body_tail, exit_idx)
+
+    if not cfg.blocks[exit_idx].pred:
+        return None
 
     return exit_idx
+
+def build_async_for(
+    cfg: CFG,
+    stmt: ast.AsyncFor,
+    current_idx: int,
+    outer_loop: LoopContext | None = None,
+    function_exit_idx: int | None = None,
+    finally_ctx=None,
+) -> int | None:
+
+    header_idx = new_block(cfg)
+    body_idx = new_block(cfg)
+    exit_idx = new_block(cfg)
+
+    add_edge(
+        cfg,
+        current_idx,
+        header_idx,
+    )
+
+    cfg.blocks[header_idx].stmts.append(
+        (
+            "async_for",
+            stmt.target,
+            stmt.iter,
+        )
+    )
+
+    add_edge(
+        cfg,
+        header_idx,
+        body_idx,
+    )
+
+    if stmt.orelse:
+        else_idx = new_block(cfg)
+
+        add_edge(
+            cfg,
+            header_idx,
+            else_idx,
+        )
+    else:
+        else_idx = None
+
+        add_edge(
+            cfg,
+            header_idx,
+            exit_idx,
+        )
+
+    loop_ctx = LoopContext(
+        header=header_idx,
+        break_target=exit_idx,
+        continue_target=header_idx,
+    )
+
+    body_tail = build_statements(
+        stmt.body,
+        cfg,
+        body_idx,
+        loop_ctx,
+        function_exit_idx,
+        finally_ctx,
+    )
+
+    if body_tail is not None:
+        add_edge(
+            cfg,
+            body_tail,
+            header_idx,
+        )
+
+    if else_idx is not None:
+        else_tail = build_statements(
+            stmt.orelse,
+            cfg,
+            else_idx,
+            outer_loop,
+            function_exit_idx,
+            finally_ctx,
+        )
+
+        if else_tail is not None:
+            add_edge(
+                cfg,
+                else_tail,
+                exit_idx,
+            )
+
+    if not cfg.blocks[exit_idx].pred:
+        return None
+
+    return exit_idx
+
