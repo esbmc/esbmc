@@ -281,7 +281,7 @@ bool lists_name(const nlohmann::json &node, const std::string &name)
 
 // `node` binds `name` by assignment, parameter, def, class, import, pattern,
 // `global`, `nonlocal`, `except`, `del` or any other target.
-bool binds_name(const nlohmann::json &node, const std::string &name)
+bool binds_name_at(const nlohmann::json &node, const std::string &name)
 {
   const std::string type = node.value("_type", "");
   if (type == "Name")
@@ -296,7 +296,7 @@ size_t count_bindings(const nlohmann::json &node, const std::string &name)
 {
   if (!node.is_structured())
     return 0;
-  size_t count = node.is_object() && binds_name(node, name);
+  size_t count = node.is_object() && binds_name_at(node, name);
   for (const auto &child : node)
     count += count_bindings(child, name);
   return count;
