@@ -11,7 +11,8 @@ value is left:
 - `h is f` becomes `h == 0` and `callable(h)` becomes `True`
 - a statement calling `h()` becomes `if h == 0: ... elif ...: ... else: ...`,
   and each arm holds that statement and the rest of the module, with `h()`
-  replaced by a direct call to that arm's function
+  replaced by a direct call to that arm's function. A call in the body of an
+  `if` first copies the rest of the module into both branches of that `if`.
 - a module-level function that only returns the call `h()` of its parameter,
   as in `def call(h): return h()`, returns a direct call in each arm of such a
   chain instead, so nothing is copied.
@@ -697,24 +698,44 @@ class _Dispatch:
         self.holders = set(holders)
         self.arms = 0
 
-    def statements(self, stmts):
-        """`stmts` with each dispatched call split, and how many copies of the end it holds."""
+    def statements(self, stmts, before=frozenset()):
+        """`stmts` with each dispatched call split, and how many copies of the end it holds.
+
+        `before` holds the names that the enclosing code binds before `stmts`.
+        """
         for i, stmt in enumerate(stmts):
             sites = [n for n in ast.walk(stmt) if getattr(n, _SITE, None) is not None]
             if not sites:
                 continue
-            header = [stmt.test] if isinstance(stmt, ast.If) else [stmt]
             if isinstance(stmt, _UNCOPYABLE + _COMPOUND):
                 raise _Refused
-            if len([n for h in header for n in ast.walk(h)
-                    if getattr(n, _SITE, None) is not None]) != len(sites):
+            header = [stmt.test] if isinstance(stmt, ast.If) else [stmt]
+            in_header = [
+                n for h in header for n in ast.walk(h) if getattr(n, _SITE, None) is not None
+            ]
+            if isinstance(stmt, ast.If) and not in_header:
+                return self._branch(stmts, i, before)
+            if len(in_header) != len(sites):
                 raise _Refused
-            return self._split(stmts, i, min(sites, key=lambda n: (n.lineno, n.col_offset)))
+            return self._split(stmts, i, min(sites, key=lambda n: (n.lineno, n.col_offset)), before)
         return stmts, 1
 
-    def _split(self, stmts, i, site):
+    def _branch(self, stmts, i, before):
+        """Copy the end of `stmts` into each branch of the `if` at `i`, so a call can split."""
+        stmt = stmts[i]
+        before = before | _bound_names(stmts[:i] + [stmt.test])
+        branches, total = [], 0
+        for branch in (stmt.body, stmt.orelse):
+            body, leaves = self.statements(branch + copy.deepcopy(stmts[i + 1:]), before)
+            branches.append(body)
+            total += leaves
+        if total > _CAP:
+            raise _Refused
+        return stmts[:i] + [ast.copy_location(ast.If(stmt.test, *branches), stmt)], total
+
+    def _split(self, stmts, i, site, before):
         rest = stmts[i:]
-        stored = self._renamed(stmts, i)
+        stored = self._renamed(stmts, i, before)
         group = getattr(site, _SITE)
         callee = site.func
         setattr(site, _CHOSEN, True)
@@ -731,7 +752,7 @@ class _Dispatch:
         delattr(site, _CHOSEN)
         return stmts[:i] + _chain(arms, callee, stmts[i]), total
 
-    def _renamed(self, stmts, i):
+    def _renamed(self, stmts, i, before):
         """The names that `stmts[i:]` bind, which each arm renames; refuse when it cannot."""
         rest = stmts[i:]
         if any(isinstance(n, _UNCOPYABLE) for s in rest for n in ast.walk(s)):
@@ -741,7 +762,7 @@ class _Dispatch:
             for s in rest
             for n in ast.walk(s) if isinstance(n, ast.Name) and not isinstance(n.ctx, ast.Load)
         } - self.holders
-        if stored & _bound_names(stmts[:i]):
+        if stored & (before | _bound_names(stmts[:i])):
             raise _Refused
         return stored
 
