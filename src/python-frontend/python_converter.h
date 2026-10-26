@@ -2348,6 +2348,16 @@ private:
     const exprt &lhs,
     const exprt &rhs,
     const std::string &lhs_id) const;
+  std::string pointee_class(const typet &type) const;
+  void retype_for_class_rebind(
+    const nlohmann::json &target,
+    const nlohmann::json &ast_node,
+    bool is_ctor_call,
+    const symbol_id &sid,
+    const locationt &location,
+    symbolt *&lhs_symbol,
+    exprt &lhs,
+    codet &target_block);
   void
   reject_numpy_array_retype(const symbolt &symbol, const typet &type) const;
   bool needs_fresh_numpy_array_slot(

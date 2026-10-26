@@ -6454,6 +6454,62 @@ bool python_converter::is_numpy_array_to_view_rebind(
          rhs.type().is_pointer() && numpy_array_symbols_.count(lhs_id) != 0;
 }
 
+// The class of this module @p type points to, or "".
+std::string python_converter::pointee_class(const typet &type) const
+{
+  if (!type.is_pointer() || !type.subtype().is_symbol())
+    return "";
+  const std::string tag =
+    to_symbol_type(type.subtype()).get_identifier().as_string();
+  const std::string cls = tag.compare(0, 4, "tag-") == 0 ? tag.substr(4) : "";
+  return json_utils::is_class(cls, *ast_json) ? cls : "";
+}
+
+// A constructor call allocates its object into current_lhs while the call is
+// converted, so the slot it stores to must be settled first: the live slot of
+// an instance already rebound to another class, or a fresh one for a rebind
+// to another class on the unconditional spine (`a = A(); a = C()`), as the
+// name's symbol points to one class.
+void python_converter::retype_for_class_rebind(
+  const nlohmann::json &target,
+  const nlohmann::json &ast_node,
+  bool is_ctor_call,
+  const symbol_id &sid,
+  const locationt &location,
+  symbolt *&lhs_symbol,
+  exprt &lhs,
+  codet &target_block)
+{
+  if (
+    !is_ctor_call || !lhs_symbol || !current_class_name_.empty() ||
+    loop_body_depth_ != 0 || !lhs.is_symbol() ||
+    target.value("_type", "") != "Name")
+    return;
+  symbolt *const orig = lhs_symbol;
+  symbolt *const live = follow_retype_alias(orig);
+  const std::string from = pointee_class(live->get_type());
+  if (from.empty())
+    return;
+  lhs_symbol = live;
+  lhs = symbol_expr(*live);
+  const std::string cls = ast_node["value"]["func"].value("id", "");
+  if (
+    block_nesting_ != function_body_depth_ + 1 || cls == from ||
+    !json_utils::is_class(cls, *ast_json) ||
+    (!current_func_name_.empty() && is_global_variable(sid)) ||
+    is_read_in_other_scope(
+      *ast_json, orig->name.as_string(), current_func_name_, false))
+    return;
+  lhs_symbol = mint_retyped_symbol(
+    *orig,
+    orig->id.as_string(),
+    gen_pointer_type(symbol_typet("tag-" + cls)),
+    location,
+    sid,
+    target_block);
+  lhs = symbol_expr(*lhs_symbol);
+}
+
 bool python_converter::is_attribute_store_of_numpy_view(
   const nlohmann::json &target,
   const nlohmann::json &value)
@@ -7775,6 +7831,15 @@ void python_converter::get_var_assign(
   const bool has_value = has_non_null_value(ast_node);
   bool is_ctor_call =
     has_value && type_handler_.is_constructor_call(ast_node["value"]);
+  retype_for_class_rebind(
+    target,
+    ast_node,
+    is_ctor_call,
+    sid,
+    location_begin,
+    lhs_symbol,
+    lhs,
+    target_block);
   current_lhs = &lhs;
   is_converting_lhs = false;
 
