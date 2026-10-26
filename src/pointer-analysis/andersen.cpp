@@ -1121,6 +1121,27 @@ void andersent::get_values(locationt l, const expr2tc &expr, valuest &dest)
     return;
   }
 
+  // A load `*q` has no node of its own: it holds what the objects q points to
+  // hold, as the LOAD rule in solve() gives it.
+  if (const expr2tc base = base_object(e); is_dereference2t(base))
+  {
+    valuest objects;
+    get_values(l, to_dereference2t(base).value, objects);
+    for (const expr2tc &v : objects)
+    {
+      const expr2tc object = is_object_descriptor2t(v)
+                               ? to_object_descriptor2t(v).object
+                               : expr2tc();
+      if (is_nil_expr(object))
+        dest.push_back(unknown2tc(pointer_type2()));
+      else if (is_nondet_object(object))
+        dest.push_back(v);
+      else
+        get_values(l, object, dest);
+    }
+    return;
+  }
+
   const node_id *n = find_node(base_object(e));
   if (n == nullptr)
   {

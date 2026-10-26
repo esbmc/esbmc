@@ -162,6 +162,43 @@ TEST_CASE("andersen frontend lowers load and store", "[andersen][goto]")
     std::set<std::string>{"a", "b"});
 }
 
+TEST_CASE("andersen query answers what a load holds", "[andersen][goto]")
+{
+  // *t is a load with no node of its own: it holds what tbl's elements point
+  // to, not tbl itself.
+  std::string src = R"(
+    int a, b;
+    int *tbl[2] = {&a, &b};
+    int main(void)
+    {
+      int **t = tbl;
+      return 0;
+    }
+  )";
+
+  goto_functionst functions = compile(src);
+  andersent andersen;
+  andersen(functions);
+
+  const expr2tc t = find_symbol(functions, "main", "t");
+  REQUIRE(!is_nil_expr(t));
+  const expr2tc i = symbol2tc(get_uint32_type(), "i");
+  const expr2tc load =
+    dereference2tc(to_pointer_type(t->type).subtype, add2tc(t->type, t, i));
+
+  value_setst::valuest values;
+  andersen.get_values(goto_programt::const_targett(), load, values);
+  std::set<std::string> names;
+  for (const expr2tc &v : values)
+  {
+    REQUIRE(is_object_descriptor2t(v));
+    const std::string id =
+      to_symbol2t(to_object_descriptor2t(v).object).get_symbol_name();
+    names.insert(id.substr(id.rfind('@') + 1));
+  }
+  REQUIRE(names == std::set<std::string>{"a", "b"});
+}
+
 TEST_CASE(
   "andersen frontend interns one node per allocation site",
   "[andersen][goto]")
