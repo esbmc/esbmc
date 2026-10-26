@@ -309,8 +309,41 @@ inline bool collect_if_node_literal_kinds(
            module_body);
 }
 
-// True if some top-level `If` in `scope_body` assigns `name` genuinely
-// incompatible literal kinds across every branch.
+// Whether `stmt` assigns to `name`.
+inline bool assigns_name(const nlohmann::json &stmt, const std::string &name)
+{
+  const std::string kind = stmt.value("_type", "");
+  const nlohmann::json *target = nullptr;
+  if (kind == "AnnAssign")
+    target = &stmt["target"];
+  else if (kind == "Assign" && stmt["targets"].size() == 1)
+    target = &stmt["targets"][0];
+  return target && target->is_object() &&
+         target->value("_type", "") == "Name" &&
+         target->value("id", "") == name;
+}
+
+// Whether `value` is a conditional expression whose arms have incompatible
+// literal kinds.
+inline bool ifexp_arms_diverge(
+  const nlohmann::json &value,
+  const nlohmann::json &module_body)
+{
+  if (
+    !value.is_object() || value.value("_type", "") != "IfExp" ||
+    !value.contains("body") || !value.contains("orelse"))
+    return false;
+  const std::string then_kind =
+    classify_literal_value_kind(value["body"], module_body);
+  const std::string else_kind =
+    classify_literal_value_kind(value["orelse"], module_body);
+  return !then_kind.empty() && !else_kind.empty() &&
+         kinds_diverge({then_kind, else_kind});
+}
+
+// True if some top-level `If` in `scope_body`, or a conditional expression
+// bound to `name`, assigns `name` genuinely incompatible literal kinds across
+// every branch.
 inline bool scope_assigns_divergent_literal_types(
   const std::string &name,
   const nlohmann::json &scope_body,
@@ -321,7 +354,13 @@ inline bool scope_assigns_divergent_literal_types(
 
   for (const auto &stmt : scope_body)
   {
-    if (!stmt.is_object() || stmt.value("_type", "") != "If")
+    if (!stmt.is_object())
+      continue;
+    if (
+      assigns_name(stmt, name) && stmt.contains("value") &&
+      ifexp_arms_diverge(stmt["value"], module_body))
+      return true;
+    if (stmt.value("_type", "") != "If")
       continue;
 
     std::unordered_map<std::string, std::unordered_set<std::string>> kinds;
@@ -348,20 +387,6 @@ struct numeric_bindingt
   nlohmann::json value;
   bool in_block;
 };
-
-// Whether `stmt` assigns to `name`.
-inline bool assigns_name(const nlohmann::json &stmt, const std::string &name)
-{
-  const std::string kind = stmt.value("_type", "");
-  const nlohmann::json *target = nullptr;
-  if (kind == "AnnAssign")
-    target = &stmt["target"];
-  else if (kind == "Assign" && stmt["targets"].size() == 1)
-    target = &stmt["targets"][0];
-  return target && target->is_object() &&
-         target->value("_type", "") == "Name" &&
-         target->value("id", "") == name;
-}
 
 // The kind of number a binding of `name` stores: "int" (bool included),
 // "float", or "" for anything else or another name.
