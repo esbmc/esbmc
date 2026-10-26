@@ -7,14 +7,6 @@
 
 smt_astt smt_solver_baset::convert_typecast_to_bool(const typecast2t &cast)
 {
-  if (is_pointer_type(cast.from))
-  {
-    // Convert to two casts.
-    expr2tc to_int = typecast2tc(machine_ptr, cast.from);
-    expr2tc as_bool = equality2tc(gen_zero(machine_ptr), to_int);
-    return convert_ast(as_bool);
-  }
-
   expr2tc neq = notequal2tc(cast.from, gen_zero(cast.from->type));
   return convert_ast(neq);
 }
