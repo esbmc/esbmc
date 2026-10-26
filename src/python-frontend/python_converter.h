@@ -874,6 +874,8 @@ private:
     const nlohmann::json &element,
     codet &target_block);
 
+  std::optional<typet> call_dict_value_type(const nlohmann::json &call);
+
   symbolt create_return_temp_variable(
     const typet &return_type,
     const locationt &location,

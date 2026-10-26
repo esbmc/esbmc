@@ -7124,6 +7124,34 @@ constant_byteorder(const nlohmann::json &node, const nlohmann::json &module)
 }
 
 // Keyed on the resolved callee so an aliased call folds too (#7945).
+bool function_call_expr::is_size_builtin() const
+{
+  return function_id_.get_function() == "__ESBMC_get_object_size" ||
+         function_id_.get_function() == "strlen";
+}
+
+bool function_call_expr::is_list_typed(const typet &type) const
+{
+  const typet &list_type = type_handler_.get_list_type();
+  return type == list_type ||
+         (type.is_pointer() && type.subtype() == list_type && type.is_symbol());
+}
+
+exprt function_call_expr::build_dict_size_call(const exprt &dict)
+{
+  const exprt bound = converter_.materialize_list_function_call(
+    dict, call_, *converter_.current_block);
+  const symbolt *list_size_func_sym =
+    converter_.find_symbol("c:@F@__ESBMC_list_size");
+  assert(list_size_func_sym);
+  code_function_callt list_size_func_call;
+  list_size_func_call.function() = build_symbol(*list_size_func_sym);
+  list_size_func_call.arguments().push_back(
+    build_member(bound, "keys", type_handler_.get_list_type()));
+  list_size_func_call.type() = signedbv_typet(64);
+  return list_size_func_call;
+}
+
 exprt function_call_expr::fold_from_bytes_byteorder(
   exprt arg,
   const nlohmann::json &node,
@@ -7379,13 +7407,7 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
     arg = fold_from_bytes_byteorder(
       arg, arg_node, *func_symbol, params, param_idx, converter_.ast());
 
-    if (
-      (function_id_.get_function() == "__ESBMC_get_object_size" ||
-       function_id_.get_function() == "strlen") &&
-      (arg.type() == type_handler_.get_list_type() ||
-       (arg.type().is_pointer() &&
-        arg.type().subtype() == type_handler_.get_list_type() &&
-        arg.type().is_symbol())))
+    if (is_size_builtin() && is_list_typed(arg.type()))
     {
       symbolt *list_symbol = nullptr;
 
@@ -7443,6 +7465,13 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
 
       return list_size_func_call;
     }
+
+    // len(f()) where f returns a dict: a named dict takes __ESBMC_len_dict,
+    // but an inline call reaches here and strlen would read the struct bytes.
+    if (
+      is_size_builtin() && converter_.get_dict_handler()->is_dict_type(
+                             converter_.ns.follow(arg.type())))
+      return build_dict_size_call(arg);
 
     // Handle function calls used as arguments
     if (arg.is_code() && arg.is_function_call())

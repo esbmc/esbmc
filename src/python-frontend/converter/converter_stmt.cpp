@@ -1932,7 +1932,9 @@ exprt python_converter::get_rhs_with_dict_resolution(
   const nlohmann::json &ast_node,
   const typet &target_type)
 {
-  if (!type_utils::is_dict_subscript(ast_node["value"]))
+  if (
+    !type_utils::is_dict_subscript(ast_node["value"]) ||
+    call_dict_value_type(ast_node["value"]["value"]))
     return get_expr(ast_node["value"]);
 
   // Check if we need special dict subscript handling for typed variables
