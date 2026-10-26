@@ -493,10 +493,6 @@ typet python_converter::get_type_from_annotation(
     return empty_typet();
   }
 
-  // A class of a module with no model, resolved by the parser (#9204).
-  if (annotation_node.value("unmodelled_class", false))
-    return any_type();
-
   if (annotation_node["_type"] == "Subscript")
   {
     // Helper to safely get id from value node
