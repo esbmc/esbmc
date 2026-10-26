@@ -351,8 +351,8 @@ class TupleType(Type):
 
             return UnionType([self, other])
         if isinstance(other, UnionType):
-            return other.widen(self)
-        return other
+            return other.join(self)
+        return UnionType([self, other,])
 
     def widen(self, other: 'Type') -> 'Type':
         if isinstance(other, Unknown):
