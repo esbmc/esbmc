@@ -766,11 +766,19 @@ bool python_list::store_replaces_element(
     return type == converter_.get_type_handler().get_list_type() ||
            converter_.is_user_class_pointer(type);
   };
-  if (is_shared_reference(old_type) && is_shared_reference(new_type))
+  const bool old_is_reference = is_shared_reference(old_type);
+  const bool new_is_reference = is_shared_reference(new_type);
+  if (old_is_reference && new_is_reference)
     return true;
 
   const store_kind old_kind = kind_of(old_type, converter_);
   const store_kind new_kind = kind_of(new_type, converter_);
+  // A scalar written through a reference slot, or a reference through a
+  // scalar slot, would be reinterpreted as the other type (#9214).
+  if (
+    (old_is_reference && new_kind != store_kind::other) ||
+    (new_is_reference && old_kind != store_kind::other))
+    return true;
   // retype_element_store() replaces a tuple over an int or another tuple, and
   // an int over a tuple (#8133).
   const auto int_or_tuple = [](store_kind kind) {

@@ -197,8 +197,10 @@ private:
   std::string get_dict_literal_type(const Json &dict_value);
   std::string get_call_type(const Json &arg);
   std::string get_attribute_type(const Json &arg);
-  std::string
-  class_attribute_type(const std::string &cls, const std::string &attr);
+  std::string class_attribute_type(
+    const std::string &cls,
+    const std::string &attr,
+    bool constructed_only = false);
   std::string self_attribute_type(const Json &node);
   std::string get_operand_type(const Json &node);
   std::string get_builtin_call_type(const Json &call);
@@ -213,6 +215,7 @@ private:
   std::string get_type_from_rhs_variable(const Json &element, const Json &body);
   bool holds_callable_value(const std::string &name) const;
   std::string get_type_from_call(const Json &element);
+  std::optional<std::string> get_type_from_literal_method(const Json &call);
   std::string get_type_from_method(const Json &call);
   std::string get_type_from_call_or_random(const Json &element);
   InferResult infer_type_from_ifexp(
