@@ -5,6 +5,7 @@
 #include <util/irep/std_code.h>
 #include <util/irep/location.h>
 #include <util/symtab/symbol.h>
+#include <python-frontend/symbol_id.h>
 #include <nlohmann/json.hpp>
 #include <string>
 #include <unordered_map>
@@ -22,7 +23,9 @@ public:
   /**
    * @brief Names assigned genuinely incompatible literal types across
    * every branch of `if_node`, following nested if/else (including elif)
-   * on either side; a name must be assigned in every branch to qualify
+   * on either side; a name must be assigned in every branch to qualify. The
+   * value a name holds before the `if` counts as one more branch, and a
+   * name `C.v` stands for class C's own attribute v
    */
   std::unordered_set<std::string>
   detect_dynamic_type_names(const nlohmann::json &if_node) const;
@@ -48,6 +51,12 @@ public:
    * following the alias created for a pre-existing variable
    */
   std::string tagged_symbol_id(const std::string &name) const;
+
+  /**
+   * @brief The id of the symbol `name` binds in the scope being converted:
+   * a variable, or class C's own attribute v for a name `C.v`
+   */
+  symbol_id bound_symbol_id(const std::string &name) const;
 
   /**
    * @brief True if `op` on two tagged operands can produce either scalar
@@ -124,6 +133,10 @@ public:
    */
   bool detect_dynamic_return_type(const nlohmann::json &function_node) const;
 
+  /// `call` goes through a parameter of the current function, and every call
+  /// of that function passes a def returning a dynamic value (#9030).
+  bool parameter_call_returns_tagged(const nlohmann::json &call) const;
+
   /**
    * @brief True if some top-level `If` in `scope_body` (a function body or
    * the module body) assigns `name` genuinely incompatible literal kinds
@@ -142,6 +155,20 @@ public:
     const exprt &value,
     const locationt &location,
     codet &target_block);
+
+  /**
+   * @brief int(@p tagged) or float(@p tagged), as @p result_type says: a str
+   * is parsed at runtime and raises ValueError when it does not parse, a
+   * number converts by value
+   */
+  exprt build_numeric_conversion(
+    const exprt &tagged,
+    const typet &result_type,
+    const locationt &location);
+
+  /// Throws when a tag may hold a float and `lhs op rhs` is not a str
+  /// operation.
+  void refuse_float_tag_operation(const exprt &lhs, const exprt &rhs) const;
 
   /// Throws the shared "tagged argument, no known parameter type" refusal.
   [[noreturn]] void refuse_tagged_argument() const;
@@ -193,6 +220,16 @@ private:
    * assign_tagged_object(); asserts if the symbol isn't declared yet
    */
   symbolt *find_tag_symbol(const std::string &name) const;
+
+  /**
+   * @brief Whether `name`, assigned `kinds` on every branch of an `if`,
+   * holds a num on one path and a str on another after it; `keeps_value`
+   * says the `if` has no else
+   */
+  bool joins_divergent_kinds(
+    const std::string &name,
+    std::unordered_set<std::string> &kinds,
+    bool keeps_value) const;
 
   /**
    * @brief Calls the num/str helper matching `literal`'s type (dispatch and

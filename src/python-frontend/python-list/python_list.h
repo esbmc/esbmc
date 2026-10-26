@@ -555,6 +555,8 @@ public:
     const exprt &list_expr,
     const nlohmann::json &slice_node);
 
+  size_t
+  eq_float_type_id(const std::string &lhs_id, const std::string &rhs_id) const;
   exprt compare(const exprt &l1, const exprt &l2, const std::string &op);
 
   exprt contains(const exprt &item, const exprt &list);
@@ -805,6 +807,16 @@ public:
   exprt
   build_shallow_copy_call(const exprt &src_list, const nlohmann::json &element);
 
+  /// tuple(x) of a list: a shallow copy marked as a tuple (#8777).
+  exprt
+  build_tuple_copy_call(const exprt &src_list, const nlohmann::json &element);
+
+  /// Mark `list` as built by tuple(x) (#8777).
+  void build_mark_tuple_call(const exprt &list);
+
+  /// Whether `list` was built by tuple(x) (#8777).
+  exprt build_is_tuple_call(const exprt &list);
+
   /**
    * @brief Build a list remove operation (removes first matching element).
    * Raises ValueError (via assertion) if element is not found.
@@ -887,8 +899,8 @@ public:
 
   /// Whether the list stored at index @p i of @p list is the one @p elem holds
   /// now. The type map names a nested element by the symbol it was appended
-  /// from, and a later assignment can rebind that symbol when it is a user
-  /// variable.
+  /// from, and a later assignment can rebind that symbol, or a store through
+  /// the outer list or an alias of it can replace the slot (#8130).
   expr2tc
   stored_element_is(const symbolt &list, std::size_t i, const symbolt &elem);
 
@@ -896,6 +908,18 @@ public:
   /// record of the list: a name's annotation, or a called function's return
   /// annotation. Empty when neither gives one.
   typet unrecorded_base_elem_type();
+
+  /// The element type that a program class in the object's MRO annotates the
+  /// instance-attribute list @p array with; empty when unannotated or nested.
+  typet attribute_elem_type(const exprt &array) const;
+
+  /// The type map's record of @p array, or nullptr when it has none or is an
+  /// annotated instance attribute.
+  const element_type_registry::entries *
+  recorded_elem_types(const exprt &array) const;
+
+  /// The element type of @p array's attribute annotation, or Any without one.
+  typet attribute_elem_type_or_any(const exprt &array) const;
 
   // True when the list's recorded element types include a tagged scalar, whose
   // payload width is per-element and symbolic (#7716).
@@ -1042,6 +1066,11 @@ private:
   list_elem_info
   get_lookup_key_info(const nlohmann::json &op, const exprt &key);
 
+  /// As get_lookup_key_info for a key that is not tagged: a list element read
+  /// at an erased (any) type forwards the element's own value/type_id/size.
+  list_elem_info
+  get_erased_key_info(const nlohmann::json &op, const exprt &key);
+
   // The type_id a tagged scalar carries when it holds a float, or 0 when the
   // caller opts out of the float path (dict values compare via void*).
   exprt tagged_float_type_id(bool enable_float_path) const;
@@ -1055,6 +1084,9 @@ private:
   // keep handle_range_slice's own decision count from growing further.
   void
   copy_dict_view_elem_types(const exprt &array, const std::string &sliced_id);
+  void copy_list_of_dict_view_elem_types(
+    const exprt &array,
+    const std::string &sliced_id);
 
   // Shared core of every ADR-NP-003 scalar pointer view producer; see
   // list_access.cpp for the full rationale, including when this declines.
@@ -1169,6 +1201,7 @@ private:
 
   exprt
   handle_index_access(const exprt &array, const nlohmann::json &slice_node);
+  exprt index_value(const exprt &index, const nlohmann::json &slice_node);
 
   // True when `array` is a 2-D+ numpy array parameter's decayed pointer
   // symbol (register_function_argument's row-pointer decay), i.e. one whose

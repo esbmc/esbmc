@@ -1,0 +1,5 @@
+CORE
+main.c
+
+FAILED +\[main\.expired-pointer-dereference\.1\]
+^VERIFICATION FAILED$

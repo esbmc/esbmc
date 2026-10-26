@@ -1410,6 +1410,105 @@ static void wrap_padded_union_member(
   members[0] = constant_struct2tc(to_union_type(type).members[*n], fields);
 }
 
+static bool is_all_zero_bytes(const expr2tc &e)
+{
+  if (is_constant_int2t(e))
+    return to_constant_int2t(e).value.is_zero();
+  if (is_constant_floatbv2t(e))
+  {
+    const ieee_floatt &f = to_constant_floatbv2t(e).value;
+    return f.is_zero() && !f.get_sign();
+  }
+  if (
+    !is_constant_struct2t(e) && !is_constant_union2t(e) &&
+    !is_constant_array2t(e) && !is_constant_vector2t(e))
+    return false;
+  bool zero = true;
+  e->foreach_operand(
+    [&zero](const expr2tc &op) { zero = zero && is_all_zero_bytes(op); });
+  return zero;
+}
+
+// CBMC initialises a union through a member other than its first as a
+// byte_update of the zero union at offset 0; a union constant of that member
+// keeps the value whole, which a pointer member needs for its value set.
+static expr2tc union_member_update(
+  const type2tc &type,
+  const expr2tc &source,
+  const expr2tc &offs,
+  const expr2tc &update)
+{
+  if (
+    !is_union_type(type) || !is_all_zero_bytes(source) ||
+    !is_constant_int2t(offs) || !to_constant_int2t(offs).value.is_zero())
+    return expr2tc();
+
+  const union_type2t &u = to_union_type(type);
+  for (size_t i = 0; i < u.members.size(); ++i)
+    if (u.members[i] == update->type)
+      return constant_union2tc(
+        type, u.member_names[i], std::vector<expr2tc>{update});
+  return expr2tc();
+}
+
+// ESBMC's byte_update2t writes one byte; a CBMC byte_update writes all of
+// update's bytes from offs on, so it is lowered to one byte_update2t per byte.
+static expr2tc byte_update_bytes(
+  const type2tc &type,
+  expr2tc result,
+  const expr2tc &offs,
+  const expr2tc &update,
+  bool big_endian)
+{
+  if (is_array_type(update))
+  {
+    const array_type2t &arr = to_array_type(update->type);
+    const BigInt elem_size = type_byte_size(arr.subtype);
+    const BigInt n = to_constant_int2t(arr.array_size).value;
+    for (BigInt i = 0; i < n; ++i)
+      result = byte_update_bytes(
+        type,
+        result,
+        add2tc(offs->type, offs, constant_int2tc(offs->type, i * elem_size)),
+        index2tc(arr.subtype, update, gen_ulong(i.to_uint64())),
+        big_endian);
+    return result;
+  }
+
+  const unsigned width = update->type->get_width();
+  if (width == 8 && is_bv_type(update))
+    return byte_update2tc(type, result, offs, update, big_endian);
+  if (width % 8 != 0)
+    throw std::string(
+      "byte_update of a value that is not a whole number of bytes");
+
+  for (unsigned i = 0; i < width / 8; ++i)
+  {
+    const expr2tc offs_i =
+      add2tc(offs->type, offs, constant_int2tc(offs->type, BigInt(i)));
+    const expr2tc byte = byte_extract2tc(
+      get_uint8_type(),
+      update,
+      constant_int2tc(offs->type, BigInt(i)),
+      big_endian);
+    result = byte_update2tc(type, result, offs_i, byte, big_endian);
+  }
+  return result;
+}
+
+static expr2tc migrate_byte_update(
+  const type2tc &type,
+  const expr2tc &source,
+  const expr2tc &offs,
+  const expr2tc &update,
+  bool big_endian)
+{
+  const expr2tc whole = union_member_update(type, source, offs, update);
+  return is_nil_expr(whole)
+           ? byte_update_bytes(type, source, offs, update, big_endian)
+           : whole;
+}
+
 void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 {
   const migrate_stack_guardt stack_guard;
@@ -2110,7 +2209,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     bool big_endian = (expr.id() == "byte_update_big_endian") ? true : false;
 
-    new_expr_ref = byte_update2tc(type, sourceval, offs, update, big_endian);
+    new_expr_ref =
+      migrate_byte_update(type, sourceval, offs, update, big_endian);
     return;
   }
 
@@ -2864,6 +2964,25 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
           ops.push_back(o);
         }
       }
+      else if (
+        op.id() == irept::id_code && op.statement() == "label" &&
+        op.op0().id() == irept::id_code &&
+        op.op0().statement() == "decl-block" && op.op0().operands().size() > 1)
+      {
+        // `lbl: int x, y;` -- the label marks the first declaration and the
+        // rest follow it here, so the declarations gain no scope of their own
+        // (see the label arm below).
+        const exprt &decls = op.op0();
+        expr2tc first;
+        migrate_expr(decls.op0(), first);
+        ops.push_back(code_label2tc(op.get("label"), first, op.location()));
+        for (std::size_t i = 1; i < decls.operands().size(); ++i)
+        {
+          expr2tc o;
+          migrate_expr(decls.operands()[i], o);
+          ops.push_back(o);
+        }
+      }
       else
       {
         expr2tc o;
@@ -2978,9 +3097,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     // no such scope, so flatten the single-decl labeled decl-block to the bare
     // decl: it round-trips as label(decl) and convert_decl defers the DEAD to
     // the enclosing scope, matching the legacy path. A label labels exactly one
-    // statement, so the only multi-decl shape is `lbl: int x, y;`; that case
-    // has no flat label(decl) form and is left on the standalone decl-block arm
-    // below -- it is not exercised by the operational models this fix targets.
+    // statement, so the only multi-decl shape is `lbl: int x, y;`, which the
+    // block arm above splits into label(x) followed by y.
     const exprt &body = expr.op0();
     const exprt &labelled =
       (body.id() == "code" && body.statement() == "decl-block" &&

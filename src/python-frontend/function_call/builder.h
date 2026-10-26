@@ -90,6 +90,10 @@ private:
   /// str-method lowering, or nil when neither applies.
   exprt build_method_call_on_receiver() const;
 
+  /// AttributeError for a str-only method called on an int, float or bool,
+  /// which would otherwise lower as a 1-char str (#8379); nil otherwise.
+  exprt str_method_on_number_error() const;
+
   /*
    * Rejects a contract clause that does not lower to a pure expression.
    * Throws with a diagnostic naming the offending construct.
@@ -154,6 +158,15 @@ private:
    * method can then be chosen statically.
    */
   std::string subscript_receiver_class(const nlohmann::json &receiver) const;
+
+  /**
+   * The type of a method call's receiver that is the call @p inner_call. For
+   * `d.pop(k)` on a dict name whose values are class instances it is their
+   * class: pop without a default returns a stored value or raises KeyError,
+   * while a default or get() may yield None or another type. Otherwise it is
+   * the type get_operand_type infers.
+   */
+  std::string call_receiver_class(const nlohmann::json &inner_call) const;
 
   python_converter &converter_;
   const nlohmann::json &call_;

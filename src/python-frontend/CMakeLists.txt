@@ -75,6 +75,8 @@ add_library(pythonfrontend STATIC
             function_call/expr.cpp
             function_call/str_conv.cpp
             numpy/numpy_call_expr.cpp
+            numpy/numpy_random.cpp
+            numpy/numpy_nditer.cpp
             numpy/ndarray_shape.cpp
             function_call/builder.cpp
             string/string_builder.cpp

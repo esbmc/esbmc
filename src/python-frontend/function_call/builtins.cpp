@@ -10,9 +10,12 @@
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/math/complex_handler.h>
 #include <python-frontend/math/complex_handler_utils.h>
+#include <python-frontend/python-list/python_list.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/lambda/python_lambda.h>
 #include <python-frontend/exception/python_exception_handler.h>
+#include <python-frontend/string/string_builder.h>
+#include <python-frontend/string/string_handler.h>
 #include <python-frontend/string/string_handler_utils.h>
 #include <python-frontend/tuple/tuple_handler.h>
 #include <python-frontend/type/type_handler.h>
@@ -316,6 +319,198 @@ void function_call_expr::refuse_isinstance_on_path_dependent_number(
       "supported");
 }
 
+/// isinstance(obj, list) or isinstance(obj, tuple) when either answer comes
+/// from the list model: a list that tuple(x) built is marked as a tuple
+/// (#8777), and None is neither. Empty for any other check.
+std::optional<exprt> function_call_expr::list_isinstance(
+  const exprt &obj,
+  const std::string &type_name) const
+{
+  const bool list_typed = obj.type() == type_handler_.get_list_type();
+  if (!list_typed)
+    return type_name == "list" ? std::optional<exprt>(false_exprt())
+                               : std::nullopt;
+  if (type_name != "list" && type_name != "tuple")
+    return std::nullopt;
+  const exprt is_tuple =
+    python_list(converter_, call_).build_is_tuple_call(obj);
+  if (type_name == "tuple")
+    return is_tuple;
+  expr2tc obj2, tuple2;
+  migrate_expr(obj, obj2);
+  migrate_expr(is_tuple, tuple2);
+  return migrate_expr_back(
+    and2tc(notequal2tc(obj2, gen_zero(obj2->type)), not2tc(tuple2)));
+}
+
+exprt function_call_expr::isinstance_operand(
+  const nlohmann::json &node,
+  const std::function<exprt(const std::string &)> &build,
+  const std::function<std::string(const nlohmann::json &)> &type_name) const
+{
+  const symbolt *symbol = nullptr;
+  if (node["_type"] == "Name")
+  {
+    symbol_id sid = converter_.create_symbol_id();
+    sid.set_object(node["id"].get<std::string>());
+    symbol = converter_.find_symbol(sid.to_string());
+    sid.set_function("");
+    symbol = symbol ? symbol : converter_.find_symbol(sid.to_string());
+  }
+  if (!symbol || !type_handler::is_class_value_type(symbol->get_type()))
+    return build(type_name(node));
+
+  // A runtime class value (#8390): it is one of the classes given an id, so
+  // test each against the object under the guard that it is that class.
+  const exprt cls = converter_.get_expr(node);
+  const std::map<std::string, int> ids = converter_.class_ids_;
+  exprt result = false_exprt();
+  for (const auto &[name, id] : ids)
+  {
+    exprt same("=", bool_type());
+    same.copy_to_operands(
+      member_exprt(cls, "id", int_type()), from_integer(id, int_type()));
+    result = or_exprt(result, and_exprt(same, build(name)));
+  }
+  return result;
+}
+
+exprt function_call_expr::isinstance_without_type_name(
+  const nlohmann::json &obj_arg,
+  const exprt &obj_expr,
+  const std::vector<nlohmann::json> &types) const
+{
+  if (is_class_object_operand(obj_arg, obj_expr))
+    return gen_boolean(admits_class_object(types));
+
+  const auto is_any = [&](const nlohmann::json &t) {
+    return t["_type"] == "Name" && t["id"] == "Any" &&
+           json_utils::is_imported_from(converter_.ast(), "typing", "Any");
+  };
+  if (std::any_of(types.begin(), types.end(), is_any))
+    return converter_.get_exception_handler().gen_exception_raise(
+      "TypeError", "typing.Any cannot be used with isinstance()");
+  return nil_exprt();
+}
+
+/// @p result evaluated after @p binding, or @p result alone if it is nil.
+static exprt evaluate_after(const exprt &binding, const exprt &result)
+{
+  if (binding.is_nil())
+    return result;
+  code_blockt block;
+  block.copy_to_operands(code_expressiont(binding), code_expressiont(result));
+  side_effect_exprt sequence("statement_expression", result.type());
+  sequence.copy_to_operands(block);
+  return sequence;
+}
+
+exprt function_call_expr::bind_isinstance_call(exprt &obj_expr) const
+{
+  if (!obj_expr.is_function_call() || converter_.in_rhs_type_probe_)
+    return nil_exprt();
+  exprt result;
+  const exprt binding = converter_.bind_operand_read_twice(
+    to_value_expr(obj_expr, converter_.ns), call_, result);
+  if (binding.is_nil())
+    throw std::runtime_error(
+      "isinstance() on a call result is not supported here");
+  obj_expr = result;
+  return binding;
+}
+
+/// The list item a read `*(T *)item->value` of a scalar element comes from, or
+/// nil. The cast is the frontend's guess at the element's type; the item's
+/// type_id records the type it was stored with.
+static exprt list_item_of_scalar_read(const exprt &read, const typet &item_type)
+{
+  if (read.id() != "dereference" || read.op0().id() != "typecast")
+    return nil_exprt();
+  const exprt &value = read.op0().op0();
+  if (
+    value.id() != "member" || value.get("component_name") != "value" ||
+    value.op0().type() != item_type)
+    return nil_exprt();
+  return value.op0();
+}
+
+/// The tagged object whose type_id answers isinstance(@p obj, @p type_name):
+/// @p obj itself when it is a tagged scalar, the list item a scalar element
+/// read comes from when @p type_name is a scalar type, else nil.
+static exprt tagged_isinstance_operand(
+  const exprt &obj,
+  const std::string &type_name,
+  const type_handler &types)
+{
+  if (types.is_tagged_scalar_type(obj.type()))
+    return obj;
+  static const std::set<std::string> scalars = {"bool", "int", "float", "str"};
+  if (!scalars.count(type_name))
+    return nil_exprt();
+  return list_item_of_scalar_read(obj, types.get_tagged_object_type());
+}
+
+// The type name an isinstance() classinfo node names.
+static std::string isinstance_type_name(const nlohmann::json &node)
+{
+  const std::string node_type = node["_type"];
+
+  if (node_type == "Name")
+  {
+    // isinstance(v, int)
+    return node["id"];
+  }
+  else if (node_type == "Constant")
+  {
+    // isinstance(v, None)
+    return "NoneType";
+  }
+  else if (node_type == "Attribute")
+  {
+    // isinstance(v, MyClass.InnerClass)
+    return node["attr"];
+  }
+  else if (node_type == "Call")
+  {
+    // isinstance(v, type(None)) or isinstance(v, type(x))
+    const auto &func = node["func"];
+
+    if (func["_type"] != "Name" || func["id"] != "type")
+      throw std::runtime_error(
+        "Only type() calls are supported in isinstance()");
+
+    const auto &call_args = node["args"];
+    if (call_args.size() != 1)
+      throw std::runtime_error("type() expects exactly 1 argument");
+
+    const auto &type_call_arg = call_args[0];
+
+    // Handle type(None)
+    if (type_call_arg["_type"] == "Constant")
+    {
+      if (
+        type_call_arg["value"].is_null() ||
+        (type_call_arg.contains("value") && type_call_arg["value"] == nullptr))
+      {
+        return "NoneType";
+      }
+      throw std::runtime_error(
+        "isinstance() with type(constant) only supports type(None)");
+    }
+    else if (type_call_arg["_type"] == "Name")
+    {
+      throw std::runtime_error(
+        "isinstance() with type(variable) not yet supported - use direct "
+        "type names");
+    }
+    else
+      throw std::runtime_error(
+        "Unsupported argument to type() in isinstance()");
+  }
+  else
+    throw std::runtime_error("Unsupported type format in isinstance()");
+}
+
 exprt function_call_expr::handle_isinstance() const
 {
   const auto &args = call_["args"];
@@ -324,85 +519,61 @@ exprt function_call_expr::handle_isinstance() const
   if (args.size() != 2)
     throw std::runtime_error("isinstance() expects 2 arguments");
 
-  // Convert the first argument (the object being checked) into an expression
-  const exprt &obj_expr = converter_.get_expr(args[0]);
+  exprt obj_expr = converter_.get_expr(args[0]);
+  const exprt binding = bind_isinstance_call(obj_expr);
   const auto &obj_arg = args[0];
   std::vector<nlohmann::json> types;
   collect_classinfo(args[1], types);
   refuse_isinstance_on_path_dependent_number(obj_arg, types);
 
-  if (is_class_object_operand(obj_arg, obj_expr))
-    return gen_boolean(admits_class_object(types));
+  const exprt decided = isinstance_without_type_name(obj_arg, obj_expr, types);
+  if (decided.is_not_nil())
+    return evaluate_after(binding, decided);
 
-  // Extract type name from various AST node formats
-  auto extract_type_name = [](const nlohmann::json &node) -> std::string {
-    const std::string node_type = node["_type"];
-
-    if (node_type == "Name")
+  // is_none and value both read an Optional operand: evaluate it once.
+  exprt optional_binding = nil_exprt();
+  if (type_utils::is_optional_struct(obj_expr.type()))
+  {
+    exprt reread;
+    const exprt bound =
+      converter_.bind_operand_read_twice(obj_expr, call_, reread);
+    if (bound.is_nil())
+      throw std::runtime_error(
+        "isinstance() on this Optional operand is not supported here");
+    if (bound != reread)
     {
-      // isinstance(v, int)
-      return node["id"];
+      optional_binding = bound;
+      obj_expr = reread;
     }
-    else if (node_type == "Constant")
-    {
-      // isinstance(v, None)
-      return "NoneType";
-    }
-    else if (node_type == "Attribute")
-    {
-      // isinstance(v, MyClass.InnerClass)
-      return node["attr"];
-    }
-    else if (node_type == "Call")
-    {
-      // isinstance(v, type(None)) or isinstance(v, type(x))
-      const auto &func = node["func"];
-
-      if (func["_type"] != "Name" || func["id"] != "type")
-        throw std::runtime_error(
-          "Only type() calls are supported in isinstance()");
-
-      const auto &call_args = node["args"];
-      if (call_args.size() != 1)
-        throw std::runtime_error("type() expects exactly 1 argument");
-
-      const auto &type_call_arg = call_args[0];
-
-      // Handle type(None)
-      if (type_call_arg["_type"] == "Constant")
-      {
-        if (
-          type_call_arg["value"].is_null() ||
-          (type_call_arg.contains("value") &&
-           type_call_arg["value"] == nullptr))
-        {
-          return "NoneType";
-        }
-        throw std::runtime_error(
-          "isinstance() with type(constant) only supports type(None)");
-      }
-      else if (type_call_arg["_type"] == "Name")
-      {
-        throw std::runtime_error(
-          "isinstance() with type(variable) not yet supported - use direct "
-          "type names");
-      }
-      else
-        throw std::runtime_error(
-          "Unsupported argument to type() in isinstance()");
-    }
-    else
-      throw std::runtime_error("Unsupported type format in isinstance()");
-  };
+  }
 
   // Build isinstance check for a given type name
+  std::function<exprt(const exprt &, const std::string &)> build_on;
   auto build_isinstance = [&](const std::string &type_name) -> exprt {
+    return build_on(obj_expr, type_name);
+  };
+  build_on = [&](const exprt &obj_expr, const std::string &type_name) -> exprt {
+    // An Optional[T] struct holds a T only when its is_none flag is clear.
+    if (type_utils::is_optional_struct(obj_expr.type()))
+    {
+      const exprt is_none = member_exprt(obj_expr, "is_none", bool_type());
+      if (type_name == "NoneType")
+        return is_none;
+      const typet &value_type =
+        to_struct_type(obj_expr.type()).get_component("value").type();
+      return and_exprt(
+        not_exprt(is_none),
+        build_on(member_exprt(obj_expr, "value", value_type), type_name));
+    }
+
     // A tagged-scalar operand's real type lives in the runtime `.type_id`
     // field rather than in a single static C type, so it needs its own
     // check instead of the static-type comparisons below.
-    if (type_handler_.is_tagged_scalar_type(obj_expr.type()))
+    const exprt tagged =
+      tagged_isinstance_operand(obj_expr, type_name, type_handler_);
+    if (tagged.is_not_nil())
       return converter_.dynamic_type_handler_.build_isinstance_check(
-        obj_expr, type_name, json_utils::is_class(type_name, converter_.ast()));
+        tagged, type_name, json_utils::is_class(type_name, converter_.ast()));
 
     // Special case: Check if object is None (null pointer)
     if (type_name == "NoneType")
@@ -430,16 +601,8 @@ exprt function_call_expr::handle_isinstance() const
     // are incompatible. When the static type is a list pointer, emit a
     // runtime null check so that Optional[list] parameters (None at runtime)
     // correctly return False.
-    if (type_name == "list")
-    {
-      if (obj_expr.type() == type_handler_.get_list_type())
-      {
-        expr2tc obj2;
-        migrate_expr(obj_expr, obj2);
-        return migrate_expr_back(notequal2tc(obj2, gen_zero(obj2->type)));
-      }
-      return false_exprt();
-    }
+    if (std::optional<exprt> listed = list_isinstance(obj_expr, type_name))
+      return *listed;
 
     // String special case: get_typet("str") returns char[0], which the
     // generic encoding lowers to gen_zero(char[0]) — an empty array
@@ -499,15 +662,17 @@ exprt function_call_expr::handle_isinstance() const
   if (types.empty())
     throw std::runtime_error("isinstance() tuple cannot be empty");
 
-  exprt result = build_isinstance(extract_type_name(types[0]));
+  exprt result =
+    isinstance_operand(types[0], build_isinstance, isinstance_type_name);
   for (size_t i = 1; i < types.size(); ++i)
   {
     exprt or_expr("or", typet("bool"));
     or_expr.move_to_operands(result);
-    or_expr.copy_to_operands(build_isinstance(extract_type_name(types[i])));
+    or_expr.copy_to_operands(
+      isinstance_operand(types[i], build_isinstance, isinstance_type_name));
     result = or_expr;
   }
-  return result;
+  return evaluate_after(binding, evaluate_after(optional_binding, result));
 }
 
 std::optional<exprt> function_call_expr::module_hasattr(
@@ -570,7 +735,8 @@ exprt function_call_expr::handle_hasattr() const
   if (std::optional<exprt> known = module_hasattr(args[0], attr_name))
     return *known;
 
-  const exprt &obj_expr = converter_.get_expr(args[0]);
+  const exprt obj_expr =
+    to_value_expr(converter_.get_expr(args[0]), converter_.ns);
   typet attr_type = array_typet(
     unsigned_char_type(), from_integer(attr_name.size() + 1, size_type()));
   string_constantt attr_expr(attr_name, attr_type, string_constantt::k_default);
@@ -989,6 +1155,105 @@ static bool body_constructs(
   });
 }
 
+// Whether @p name is the receiver of @p function, an undecorated method
+// defined directly in the body of @p cls that never rebinds it.
+static bool is_method_self(
+  const nlohmann::json &ast,
+  const std::vector<std::string> &function,
+  const std::string &name,
+  const std::string &cls)
+{
+  if (function.size() != 1)
+    return false;
+  const nlohmann::json class_def = find_class(ast["body"], cls);
+  if (class_def.is_null())
+    return false;
+  for (const auto &method : class_def["body"])
+    if (
+      method.value("_type", "") == "FunctionDef" &&
+      method["name"] == function[0])
+    {
+      const nlohmann::json &params = method["args"]["args"];
+      return method["decorator_list"].empty() && !params.empty() &&
+             params[0]["arg"] == name &&
+             count_bindings(method["body"], name) == 0;
+    }
+  return false;
+}
+
+// Whether @p node reads class @p cls other than to construct or annotate
+// with it: `Cls.m(other)` passes any object as the receiver of `m`.
+static bool
+reads_class_as_value(const nlohmann::json &node, const std::string &cls)
+{
+  if (node.is_array())
+    return std::any_of(node.begin(), node.end(), [&](const auto &child) {
+      return reads_class_as_value(child, cls);
+    });
+  if (!node.is_object())
+    return false;
+  const std::string type = node.value("_type", "");
+  if (type == "Name")
+    return node["id"] == cls;
+  const bool constructs = type == "Call" &&
+                          node["func"].value("_type", "") == "Name" &&
+                          node["func"]["id"] == cls;
+  for (const auto &[key, child] : node.items())
+    if (
+      key != "annotation" && key != "returns" &&
+      !(constructs && key == "func") && reads_class_as_value(child, cls))
+      return true;
+  return false;
+}
+
+static bool yields_class_object(const nlohmann::json &node)
+{
+  const std::string type = node.value("_type", "");
+  return (type == "Attribute" && node["attr"] == "__class__") ||
+         (type == "Call" && node["func"].value("_type", "") == "Name" &&
+          node["func"]["id"] == "type");
+}
+
+// Whether a class object read through `__class__` or type() is used other
+// than for its `__name__` or as an is/== operand, or `__class__` is stored:
+// either can run a method of one class on an instance of another.
+static bool class_object_escapes(const nlohmann::json &node, bool used = false)
+{
+  if (node.is_array())
+    return std::any_of(node.begin(), node.end(), [&](const auto &child) {
+      return class_object_escapes(child, used);
+    });
+  if (!node.is_object())
+    return false;
+  if (!used && yields_class_object(node))
+    return true;
+  const std::string type = node.value("_type", "");
+  for (const auto &[key, child] : node.items())
+  {
+    const bool consumed =
+      (type == "Attribute" && key == "value" && node["attr"] == "__name__" &&
+       node["ctx"].value("_type", "") == "Load") ||
+      (type == "Compare" && (key == "left" || key == "comparators"));
+    if (child.is_structured() && class_object_escapes(child, consumed))
+      return true;
+  }
+  return false;
+}
+
+// Whether @p name is the receiver of a method of @p cls that only ever runs
+// on an instance of exactly @p cls.
+static bool is_exact_self(
+  const nlohmann::json &ast,
+  const std::vector<std::string> &function,
+  const std::string &name,
+  const std::string &cls)
+{
+  return is_method_self(ast, function, name, cls) &&
+         count_bindings(ast, cls) == 1 && !has_subclass(cls, ast) &&
+         !imports_other_modules(ast) &&
+         !reads_class_as_value(ast["body"], cls) && !class_object_escapes(ast);
+}
+
 // The class of the instance named by @p arg, or "" when its runtime class
 // can differ from the class @p expr is statically typed as. A variable bound
 // once, by its scope's own statement calling a class bound only by its
@@ -1013,10 +1278,52 @@ std::string function_call_expr::exact_instance_class(
   const bool constructed =
     body_constructs(ast["body"], name, cls) ||
     (scope.contains("body") && body_constructs(scope["body"], name, cls));
-  return constructed && count_bindings(ast, name) == 1 &&
-             count_bindings(ast, cls) == 1
+  if (
+    constructed && count_bindings(ast, name) == 1 &&
+    count_bindings(ast, cls) == 1)
+    return cls;
+  return converter_.current_classname() == cls &&
+             is_exact_self(ast, split_function_path(function), name, cls)
            ? cls
            : "";
+}
+
+/// The class of a tagged scalar, chosen at run time from its type_id.
+exprt function_call_expr::tagged_scalar_class(const exprt &tagged) const
+{
+  exprt cls = converter_.class_value("str");
+  for (const char *name : {"float", "int", "bool"})
+    cls = if_exprt(
+      converter_.dynamic_type_handler_.build_isinstance_check(
+        tagged, name, false),
+      converter_.class_value(name),
+      cls);
+  return cls;
+}
+
+bool function_call_expr::is_str_of_type_call() const
+{
+  const auto &args = call_["args"];
+  return call_["func"]["_type"] == "Name" &&
+         function_id_.get_function() == "str" && args.size() == 1 &&
+         args[0]["_type"] == "Call" && args[0]["func"]["_type"] == "Name" &&
+         args[0]["func"]["id"] == "type";
+}
+
+exprt function_call_expr::handle_str_of_type_call() const
+{
+  exprt cls = converter_.get_expr(call_["args"][0]);
+  if (type_handler::is_class_value_type(cls.type()))
+    throw std::runtime_error(
+      "Unsupported: str() of a class that is only known at run time");
+  if (
+    python_converter::is_class_object(cls) &&
+    type_utils::is_type_identifier(cls.get_string("value")))
+    return converter_.get_string_builder().build_string_literal(
+      "<class '" + cls.get_string("value") + "'>");
+  if (python_converter::is_class_object(cls))
+    return str_of_object(cls, call_["args"][0]);
+  return converter_.get_string_handler().convert_to_string(cls);
 }
 
 exprt function_call_expr::handle_type_call() const
@@ -1026,9 +1333,14 @@ exprt function_call_expr::handle_type_call() const
     throw std::runtime_error("type() requires exactly 1 argument");
 
   exprt arg_expr = converter_.get_expr(args[0]);
+  if (python_converter::is_class_object(arg_expr))
+    return converter_.make_class_object("type");
   const std::string instance_class = exact_instance_class(args[0], arg_expr);
   if (!instance_class.empty())
     return converter_.make_class_object(instance_class);
+
+  if (type_handler_.is_tagged_scalar_type(arg_expr.type()))
+    return tagged_scalar_class(arg_expr);
 
   // None's C type would otherwise name it "pointer" (#8764).
   std::string type_name =
@@ -1037,6 +1349,20 @@ exprt function_call_expr::handle_type_call() const
       : type_handler_.get_python_type_name(arg_expr.type());
   if (type_name.empty())
     type_name = arg_expr.type().id_string();
+
+  // Any other pointer may be None, an instance of a subclass, or of any class
+  // at all when erased to void *, so only a comparison can over-approximate it.
+  if (
+    arg_expr.type().is_pointer() && type_name != "str" &&
+    type_name != "NoneType")
+  {
+    const auto &compared = converter_.type_compared_operands_;
+    if (&call_ != compared[0] && &call_ != compared[1])
+      throw std::runtime_error(
+        "type() of a value whose class is not known statically is only "
+        "supported as an operand of is, is not, == or !=");
+    type_name = python_converter::unknown_class_name;
+  }
 
   return converter_.make_class_object(type_name);
 }

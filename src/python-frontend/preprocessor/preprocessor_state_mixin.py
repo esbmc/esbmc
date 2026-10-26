@@ -21,11 +21,14 @@ class PreprocessorStateMixin:
         self.functionKwonlyParams = {}
         self.static_methods = set()
         self.is_entry_module = False
-        self._hoisted_classes = {}
+        self.hoisted_classes = {}
         self._builtin_shadow_names = None
         self._unobservable_builtin_keys = frozenset()
         self._closed_lambda_bindings = {}
         self._fixed_length_starred = {}
+        self._vararg_alias_calls = {}
+        self._vararg_alias_stmts = []
+        self._redefined_names = set()
         self.functionVarargs = set()
         self._vararg_func_defs = {}
         self._vararg_module_defs = set()
@@ -35,7 +38,21 @@ class PreprocessorStateMixin:
         self._vararg_scope_stack = []
         self._vararg_def_owners = {}
         self._vararg_owner_specs = {}
+        # (name, arity) -> copy of a variadic def an importer calls; see
+        # _specialize_external_varargs and _call_imported_vararg_spec.
+        self.external_vararg_arities = {}
+        self.exported_vararg_specs = {}
+        self._imported_vararg_specs = {}
+        self._used_imported_vararg_specs = {}
+        self._vararg_once_bound = set()
+        # Calls the entry module makes into a def of this module, by def name,
+        # and the names that module binds; see _specialise_requested_function.
+        self.external_type_calls = {}
+        self.blocked_type_functions = set()
+        self.external_bound_names = set()
+        self.exported_type_specs = {}
         self.listcomp_counter = 0
+        self.comprehension_targets = set()
         self.functools_reduce_names = set()
         self.functools_module_names = set()
         self.minmax_key_counter = 0
@@ -98,6 +115,7 @@ class PreprocessorStateMixin:
         self.scope_binding_counts = {}
         self.in_order_bindings = set()
         self.called_names = set()
+        self.referenced_names = set()
         # nondet_list/nondet_dict the module defines itself, so the
         # rewrite to a typed builder must leave those calls alone.
         self.shadowed_nondet_collections = set()

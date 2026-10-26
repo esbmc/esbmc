@@ -167,6 +167,91 @@ JsonType find_class(const JsonType &ast_json, const std::string &class_name)
   return (it != ast_json.end()) ? *it : JsonType();
 }
 
+/// The annotation of `self.<attr>` in the `__init__` of @p class_node, or of
+/// `<attr>` in its body, or an empty Json.
+template <class Json>
+Json find_attr_annotation(const Json &class_node, const std::string &attr)
+{
+  auto annotation_of = [&](const Json &stmt, bool on_self) -> Json {
+    if (stmt.value("_type", "") != "AnnAssign" || !stmt.contains("target"))
+      return Json();
+    const Json &target = stmt["target"];
+    const bool matches =
+      on_self
+        ? target.value("_type", "") == "Attribute" &&
+            target.value("attr", "") == attr && target.contains("value") &&
+            target["value"].value("id", "") == "self"
+        : target.value("_type", "") == "Name" && target.value("id", "") == attr;
+    return matches ? stmt["annotation"] : Json();
+  };
+
+  for (const Json &member : class_node["body"])
+  {
+    Json annotation = annotation_of(member, false);
+    if (!annotation.empty())
+      return annotation;
+    if (
+      member.value("_type", "") != "FunctionDef" ||
+      member["name"] != "__init__")
+      continue;
+    for (const Json &stmt : member["body"])
+    {
+      annotation = annotation_of(stmt, true);
+      if (!annotation.empty())
+        return annotation;
+    }
+  }
+  return Json();
+}
+
+/// Counts the stores and deletions of `<obj>.<attr>` under @p node; with
+/// @p non_self_only, only those whose receiver is not `self`.
+template <class Json>
+std::size_t
+count_attr_stores(const Json &node, const std::string &attr, bool non_self_only)
+{
+  std::size_t n = 0;
+  if (
+    node.is_object() && node.value("_type", "") == "Attribute" &&
+    node.value("attr", "") == attr && node.contains("ctx") &&
+    node["ctx"].value("_type", "") != "Load")
+    n += !non_self_only || node["value"].value("id", "") != "self";
+  for (const auto &child : node)
+    if (child.is_structured())
+      n += count_attr_stores(child, attr, non_self_only);
+  return n;
+}
+
+/// `C` when the `__init__` of @p class_node holds `self.<attr> = C(...)` as a
+/// top-level statement, or empty.
+template <class Json>
+std::string
+constructed_attr_class(const Json &class_node, const std::string &attr)
+{
+  for (const Json &member : class_node["body"])
+  {
+    if (
+      member.value("_type", "") != "FunctionDef" ||
+      member["name"] != "__init__")
+      continue;
+    for (const Json &stmt : member["body"])
+    {
+      if (stmt.value("_type", "") != "Assign" || stmt["targets"].size() != 1)
+        continue;
+      const Json &target = stmt["targets"][0];
+      const Json &value = stmt["value"];
+      if (
+        target.value("_type", "") == "Attribute" &&
+        target.value("attr", "") == attr &&
+        target["value"].value("id", "") == "self" &&
+        value.value("_type", "") == "Call" &&
+        value["func"].value("_type", "") == "Name")
+        return value["func"]["id"].template get<std::string>();
+    }
+  }
+  return "";
+}
+
 template <typename JsonType>
 bool is_property_def(const JsonType &function_def)
 {
@@ -191,6 +276,25 @@ bool any_class_has_property(const JsonType &ast_body, const std::string &name)
           stmt.value("_type", std::string()) == "FunctionDef" &&
           stmt.value("name", std::string()) == name && is_property_def(stmt))
           return true;
+  return false;
+}
+
+/// True when a class anywhere under @p node defines a method named @p name.
+template <typename JsonType>
+bool any_class_defines_method(const JsonType &node, const std::string &name)
+{
+  if (
+    node.is_object() && node.value("_type", "") == "ClassDef" &&
+    node.contains("body"))
+    for (const auto &stmt : node["body"])
+      if (
+        stmt.value("_type", "") == "FunctionDef" &&
+        stmt.value("name", "") == name)
+        return true;
+  if (node.is_object() || node.is_array())
+    for (const auto &child : node)
+      if (any_class_defines_method(child, name))
+        return true;
   return false;
 }
 

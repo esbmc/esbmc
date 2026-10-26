@@ -2316,10 +2316,10 @@ static bool resolve_join_iterable(
          seq.contains("elts");
 }
 
-static bool is_name_or_split_call(const nlohmann::json &arg)
+static bool is_name_binop_or_split_call(const nlohmann::json &arg)
 {
   const std::string type = arg.value("_type", "");
-  if (type == "Name")
+  if (type == "Name" || type == "BinOp")
     return true;
   if (type != "Call" || !arg.contains("func"))
     return false;
@@ -2627,13 +2627,14 @@ exprt string_handler::handle_int_conversion(
     return handle_string_to_int_base10(arg, location);
   }
 
-  // If argument is a pointer to char (string pointer)
-  if (arg.type().is_pointer() && arg.type().subtype() == char_type())
-  {
-    // Create a wrapper to ensure null-termination handling
-    exprt string_copy = arg;
-    return handle_string_to_int(string_copy, nil_exprt(), location);
-  }
+  // A str pointer: char*, or the char(*)[N] of an Optional[str]
+  if (arg.type().is_pointer() && type_utils::is_string_type(arg.type()))
+    return handle_string_to_int(
+      build_typecast(arg, pointer_typet(char_type())), nil_exprt(), location);
+
+  if (type_handler_.is_tagged_scalar_type(arg.type()))
+    return converter_.dynamic_type_handler_.build_numeric_conversion(
+      arg, long_long_int_type(), location);
 
   // For other types, attempt a typecast
   return build_typecast(arg, int_type());
@@ -3057,6 +3058,36 @@ static bool names_imported_module(
          !converter.name_shadows_module(receiver, use);
 }
 
+exprt string_handler::read_tagged_str_receiver(
+  const exprt &receiver,
+  const std::string &method,
+  const nlohmann::json &call_json)
+{
+  if (!converter_.get_type_handler().is_tagged_scalar_type(receiver.type()))
+    return receiver;
+
+  // The receiver is read twice, so only a symbol qualifies, and the guard
+  // must run exactly where the call is evaluated.
+  if (
+    !receiver.is_symbol() || !type_utils::is_str_only_method(method) ||
+    !converter_.can_emit_runtime_guard())
+    throw std::runtime_error(
+      "calling '" + method +
+      "' on a dynamically-typed variable is not yet supported");
+
+  const exprt is_str = converter_.dynamic_type_handler_.build_isinstance_check(
+    receiver, "str", false);
+  converter_.emit_guarded_raise(
+    build_not(is_str),
+    "AttributeError",
+    "object has no attribute '" + method + "'",
+    converter_.get_location_from_decl(call_json));
+
+  return build_typecast(
+    build_member(receiver, "value", pointer_typet(empty_typet())),
+    pointer_typet(char_type()));
+}
+
 exprt string_handler::handle_string_attribute_call(
   const nlohmann::json &call_json)
 {
@@ -3096,8 +3127,10 @@ exprt string_handler::handle_string_attribute_call(
   std::optional<exprt> cached_receiver_expr;
   auto get_receiver_expr = [&]() -> exprt {
     if (!cached_receiver_expr.has_value())
-      cached_receiver_expr =
-        to_value_expr(converter_.get_expr(receiver_json), converter_.ns);
+      cached_receiver_expr = to_value_expr(
+        read_tagged_str_receiver(
+          converter_.get_expr(receiver_json), method_name, call_json),
+        converter_.ns);
     return *cached_receiver_expr;
   };
 
@@ -3736,7 +3769,7 @@ exprt string_handler::join_unfoldable_iterable(
   // A list built at run time, such as s.split(" ") on a symbolic s, is read
   // by the runtime join model rather than left nondet.
   const nlohmann::json &list_arg = call_json["args"][0];
-  if (is_name_or_split_call(list_arg))
+  if (is_name_binop_or_split_call(list_arg))
   {
     exprt list_expr = converter_.get_expr(list_arg);
     if (list_expr.type() == type_handler_.get_list_type())

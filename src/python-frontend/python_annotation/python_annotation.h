@@ -5,6 +5,7 @@
 #include <python-frontend/module/global_scope.h>
 #include <python-frontend/module/module_manager.h>
 #include <python-frontend/module/module.h>
+#include <python-frontend/numpy/numpy_random.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/type/type_utils.h>
 #include <python-frontend/python_annotation/annotation_intrinsics.h>
@@ -66,8 +67,11 @@ public:
   }
 
   // Entry points exercised by callers outside python_annotation.h.
-  void preprocess_constructor_calls(const Json &node);
+  bool preprocess_constructor_calls(Json &node);
   void preprocess_method_calls(const Json &node);
+  void preprocess_receiver_method_calls();
+  bool is_instance_call(const Json &func) const;
+  Json *class_method(const std::string &cls, const Json &method);
   /// Sentinel recorded for a call-site argument this pass cannot type; never
   /// a valid Python type name, so it can only block, never be annotated.
   static const std::string &unresolved_arg_type()
@@ -102,6 +106,10 @@ public:
   void add_extra_subscript_inference_source(const Json &ast);
 
 private:
+  Json *
+  class_init(const std::string &class_name, unsigned depth, bool &inherited);
+  /// Argument types each inherited __init__ parameter receives, by parameter.
+  std::map<Json *, std::set<std::string>> inherited_init_args_;
   // Implementations live in annotation_conversion.inl unless noted.
 
   // ----- AST lookup and walk helpers -----
@@ -148,6 +156,10 @@ private:
     const Json &var_node,
     const std::string &var_name,
     bool is_slice);
+  std::string homogeneous_literal_subscript_type(
+    const Json &var_node,
+    const std::string &var_name,
+    bool is_slice);
   std::string
   refine_any_from_value(const std::string &annotated, const Json &var_node);
   std::string get_object_name(const Json &call, const std::string &prefix);
@@ -157,8 +169,10 @@ private:
     std::string &base_type,
     std::string &element_type);
   std::string infer_dict_value_type(const Json &var_node);
-  std::string
-  resolve_subscript_type(const Json &subscript_node, const Json &body);
+  std::string resolve_subscript_type(
+    const Json &subscript_node,
+    const Json &body,
+    bool nested = false);
 
   // The type of `f(...)[i]` read from f's `list[T]` return annotation, or "Any"
   // when the subscript's base is not such a call.
@@ -183,15 +197,27 @@ private:
   std::string get_dict_literal_type(const Json &dict_value);
   std::string get_call_type(const Json &arg);
   std::string get_attribute_type(const Json &arg);
+  std::string class_attribute_type(
+    const std::string &cls,
+    const std::string &attr,
+    bool constructed_only = false);
+  std::string self_attribute_type(const Json &node);
+  std::string get_operand_type(const Json &node);
   std::string get_builtin_call_type(const Json &call);
   // Type of a builtin call whose result depends on its argument (abs, hash),
   // or empty for any other call.
   std::string arg_dependent_call_type(const Json &call);
   std::string list_copy_type(const std::string &func_name, const Json &call);
+  std::string dict_view_list_type(const Json &call);
   std::string get_type_from_binary_expr(const Json &stmt, const Json &body);
+  bool is_array_operand(const Json &operand, const Json &body);
+  std::string operand_annotation_type(const Json &decl);
   std::string get_type_from_rhs_variable(const Json &element, const Json &body);
+  bool holds_callable_value(const std::string &name) const;
   std::string get_type_from_call(const Json &element);
+  std::optional<std::string> get_type_from_literal_method(const Json &call);
   std::string get_type_from_method(const Json &call);
+  std::string get_type_from_call_or_random(const Json &element);
   InferResult infer_type_from_ifexp(
     const Json &ifexp_node,
     const Json &body,
@@ -219,8 +245,11 @@ private:
   std::string
   get_function_return_type(const std::string &func_name, const Json &ast);
   std::string infer_lambda_return_type(const Json &lambda_elem) const;
-  std::string
-  infer_from_return_statements(const Json &body, const std::string &func_name);
+  // Sets *divergent when branches return incompatible types.
+  std::string infer_from_return_statements(
+    const Json &body,
+    const std::string &func_name,
+    bool *divergent = nullptr);
   // The type a parameter's default value implies, or empty.
   std::string infer_type_from_parameter_default(
     const Json &function_element,
@@ -244,6 +273,9 @@ private:
   // inference so they don't re-enter the analysis (stack overflow).
   static bool
   expr_calls_function(const Json &node, const std::string &func_name);
+  // True if the arithmetic expression @p node has an attribute read among its
+  // operands, at any depth.
+  static bool arithmetic_reads_attribute(const Json &node);
 
   // ----- annotation-node constructors (annotation_expr.inl) -----
   Json create_name_annotation(
@@ -374,7 +406,7 @@ private:
   void annotate_global_scope();
   void annotate_function(Json &function_element);
   void annotate_class(Json &class_element);
-  void infer_loop_variable_types(Json &while_stmt);
+  void infer_loop_variable_types(Json &while_stmt, bool synthesized_only);
   Json list_element_annotation(const Json &iter_node);
   Json self_attr_list_element(const std::string &attr);
   void annotate_branch_blocks(Json &element);
@@ -383,6 +415,7 @@ private:
     const Json &element,
     const std::string &inferred_type);
   std::string optional_scalar_of(const std::string &name, const Json &scope);
+  std::string returned_optional_scalar(const Json &function, const Json &body);
   void collect_name_stores(
     const std::string &name,
     const Json &body,

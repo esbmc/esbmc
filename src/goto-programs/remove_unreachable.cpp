@@ -6,23 +6,29 @@
 // This method iterates through all GOTO functions in the program
 // and removes all unreachable instructions from each of them.
 // (Note that we do not attempt to detect and remove unused functions yet.)
-void remove_unreachable(goto_functionst &goto_functions)
+void remove_unreachable(
+  goto_functionst &goto_functions,
+  bool continue_past_failed_assertions)
 {
   for (auto &fun_it : goto_functions.function_map)
-    remove_unreachable(fun_it.second);
+    remove_unreachable(fun_it.second, continue_past_failed_assertions);
 }
 
 // This removes all unreachable instructions from the body
 // (i.e., GOTO program) of the given GOTO function.
-void remove_unreachable(goto_functiont &goto_function)
+void remove_unreachable(
+  goto_functiont &goto_function,
+  bool continue_past_failed_assertions)
 {
-  remove_unreachable(goto_function.body);
+  remove_unreachable(goto_function.body, continue_past_failed_assertions);
 }
 
 // This removes all unreachable instructions in the given GOTO
 // program. An instruction is deemed to be reachable if it is
 // a successor of another instruction.
-void remove_unreachable(goto_programt &goto_program)
+void remove_unreachable(
+  goto_programt &goto_program,
+  bool continue_past_failed_assertions)
 {
   std::set<goto_programt::const_targett> reachable;
   std::stack<goto_programt::const_targett> working;
@@ -60,7 +66,18 @@ void remove_unreachable(goto_programt &goto_program)
   while (it != goto_program.instructions.end())
   {
     if (reachable.find(it) == reachable.end() && !it->is_end_function())
-      it = goto_program.instructions.erase(it);
+    {
+      if (
+        !continue_past_failed_assertions &&
+        it != goto_program.instructions.begin() && std::prev(it)->is_assert() &&
+        is_false(std::prev(it)->guard))
+      {
+        it->make_assumption(gen_false_expr());
+        ++it;
+      }
+      else
+        it = goto_program.instructions.erase(it);
+    }
     else
       ++it;
   }

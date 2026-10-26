@@ -101,6 +101,51 @@ class _GeneratorConsumerScan:
 
 class GeneratorMixin:
 
+    class _YieldFromToFor(ast.NodeTransformer):
+        """Rewrite a statement `yield from it` into `for v in it: yield v`.
+
+        The two differ only in forwarding send()/throw() and in the value of
+        the `yield from` expression; neither is modelled, and an expression
+        `yield from` is left to the existing refusal.
+        """
+
+        def __init__(self, preprocessor):
+            self.preprocessor = preprocessor
+            self.depth = 0
+
+        def _visit_scope(self, node):
+            if self.depth > 0:
+                return node
+            self.depth += 1
+            self.generic_visit(node)
+            self.depth -= 1
+            return node
+
+        visit_FunctionDef = _visit_scope  # noqa: N815
+        visit_AsyncFunctionDef = _visit_scope  # noqa: N815
+
+        def visit_Lambda(self, node):
+            return node
+
+        def visit_ClassDef(self, node):
+            return node
+
+        def visit_Expr(self, node):
+            if not isinstance(node.value, ast.YieldFrom):
+                return node
+            var = f"ESBMC_yieldfrom_{self.preprocessor.listcomp_counter}"
+            self.preprocessor.listcomp_counter += 1
+            loop = ast.For(
+                target=ast.Name(id=var, ctx=ast.Store()),
+                iter=node.value.value,
+                body=[ast.Expr(value=ast.Yield(value=ast.Name(id=var, ctx=ast.Load())))],
+                orelse=[],
+            )
+            ast.copy_location(loop, node)
+            self.preprocessor.ensure_all_locations(loop, node)
+            ast.fix_missing_locations(loop)
+            return loop
+
     class _YieldToAppend(ast.NodeTransformer):
 
         def __init__(self, result_var, source_node):
@@ -172,31 +217,38 @@ class GeneratorMixin:
         return best_idx
 
     def _rename_shadowing_targets(self, node):
-        """Rename a comprehension target that shadows a known outer variable.
+        """Rename a comprehension target that shadows a known outer variable
+        or the target of an earlier comprehension.
 
         Python 3 scopes a comprehension's target to the comprehension, so the
         rename is semantically free. Without it the outer and inner bindings
         share one symbol, and an outer object rebound to elements aborts the
-        converter in member2t.
+        converter in member2t; two comprehensions over elements of different
+        types give that symbol two types and crash the solver (#9126).
         """
         for generator in node.generators:
             if not isinstance(generator.target, ast.Name):
                 continue
             old = generator.target.id
-            if old not in self.known_variable_types:
+            if old not in self.known_variable_types and old not in self.comprehension_targets:
+                self.comprehension_targets.add(old)
                 continue
 
             new = f"ESBMC_compvar_{self.listcomp_counter}_{old}"
             self.listcomp_counter += 1
             index = node.generators.index(generator)
-            scopes = [node.elt] + list(generator.ifs)
+            scopes = list(generator.ifs)
+            shadowed = False
             for later in node.generators[index + 1:]:
                 scopes.append(later.iter)
+                if old in self._bound_target_names(later.target):
+                    shadowed = True
+                    break
                 scopes.extend(later.ifs)
+            if not shadowed:
+                scopes.append(node.elt)
             for scope in scopes:
-                for name in ast.walk(scope):
-                    if isinstance(name, ast.Name) and name.id == old:
-                        name.id = new
+                self._rename_free_name(scope, old, new)
             generator.target.id = new
         return node
 
@@ -1151,7 +1203,7 @@ class GeneratorMixin:
             # clause naming a temporary the contract wrapper never declares.
             # Leave it as written; the frontend's clause check rejects by name.
             return [], expr, "Any"
-        lowerer = self._ListCompExpressionLowerer(self)
+        lowerer = self._ListCompExpressionLowerer(self, expr)
         new_expr = lowerer.visit(expr)
         result_type = self._infer_type_from_value(new_expr)
         return lowerer.statements, new_expr, result_type
@@ -1415,20 +1467,6 @@ class GeneratorMixin:
             return key_kw
         return ast.keyword(arg=key_kw.arg,
                            value=ast.copy_location(copy.deepcopy(lam), key_kw.value))
-
-    @staticmethod
-    def _names_bound_by(node):
-        """The names @p node itself binds: a def or class, a Store/Del name, a
-        parameter, or a ``global`` declaration."""
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            return (node.name, )
-        if isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Load):
-            return (node.id, )
-        if isinstance(node, ast.arg):
-            return (node.arg, )
-        if isinstance(node, ast.Global):
-            return tuple(node.names)
-        return ()
 
     @staticmethod
     def _binds_key(key_value):
@@ -1892,7 +1930,19 @@ class GeneratorMixin:
                 and node.func.id in ("abs", "len") and len(node.args) == 1 and not node.keywords):
             return self._apply_builtin(node.func.id,
                                        self._eval_key_body(node.args[0], param, element))
-        return None
+        return self._const_dict_entry(node, param, element)
+
+    def _const_dict_entry(self, node, param, element):
+        """Constant value of ``param["k"]`` over a dict literal of constants, else None."""
+        if not (isinstance(element, ast.Dict) and isinstance(node, ast.Subscript)
+                and isinstance(node.value, ast.Name) and node.value.id == param
+                and isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, str)):
+            return None
+        keys = [None if k is None else self._const_scalar_value(k) for k in element.keys]
+        values = [self._const_element_value(v) for v in element.values]
+        if None in keys or None in values or node.slice.value not in keys:
+            return None
+        return dict(zip(keys, values))[node.slice.value]
 
     @staticmethod
     def _param_subscript_index(node, param):

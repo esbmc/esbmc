@@ -24,7 +24,7 @@ enum class ContactKind
 
 // IEC 61131-3 §2.5.1.1 transition-sensing contacts. An edge contact conducts
 // for exactly one scan: the scan in which the operand takes the sensed
-// transition, measured against its value at the previous scan.
+// transition, measured against its value at the contact's previous evaluation.
 enum class ContactEdge
 {
   None,
@@ -174,7 +174,8 @@ enum class VarKind
   INT,
   DINT,
   TIME, // used for timer PT/ET fields
-  REAL, // IEEE floating point (analog process variables)
+  REAL, // IEC 60559 binary32 (analog process variables)
+  LREAL, // IEC 60559 binary64
 };
 
 struct VarDecl

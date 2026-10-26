@@ -1,0 +1,4 @@
+CORE
+main.c
+--enforce-contract unpack --unwind 2
+^VERIFICATION SUCCESSFUL$

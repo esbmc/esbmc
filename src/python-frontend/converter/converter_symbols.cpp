@@ -945,6 +945,19 @@ symbolt *python_converter::find_function_in_base_classes(
   const std::size_t span =
     std::string("@C@" + class_name + "@F@" + current_func_name).length();
 
+  // Under multiple inheritance the bases are searched in C3 order, which a
+  // depth-first walk breaks: `class D(B, C)` with `B(A)`, `C(A)` must find
+  // C's method before A's.
+  if (const auto mro = class_mro(class_name))
+    for (auto cls = std::next(mro->begin()); cls != mro->end(); ++cls)
+    {
+      std::string sym_id = symbol_id;
+      sym_id.replace(
+        pos, span, "@C@" + *cls + "@F@" + (is_ctor ? *cls : method_name));
+      if (symbolt *func = symbol_table_.find_symbol(sym_id.c_str()))
+        return func;
+    }
+
   // Search the method in every base class, transitively (walk the MRO).
   // Python enforces acyclic inheritance, so this recursion terminates.
   for (const auto &base_class_node : class_node["bases"])
@@ -1191,10 +1204,15 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
     return find_symbol_in_import(obj, symbol_id, lookup_name);
   };
 
+  // A `from m import name` binds the name itself, so it takes precedence over
+  // a plain `import m`, which reaches it only through the module (#9046).
   std::deque<nlohmann::json> submodules;
-  for (const nlohmann::json *import : import_nodes(submodules))
-    if (symbolt *func_symbol = find_in_import(*import))
-      return func_symbol;
+  const std::vector<const nlohmann::json *> imports = import_nodes(submodules);
+  for (const bool from_import : {true, false})
+    for (const nlohmann::json *import : imports)
+      if (((*import)["_type"] == "ImportFrom") == from_import)
+        if (symbolt *func_symbol = find_in_import(*import))
+          return func_symbol;
 
   return nullptr;
 }
@@ -1225,23 +1243,37 @@ python_converter::find_nested_function_symbol(const std::string &name) const
   return nullptr;
 }
 
+symbolt *
+python_converter::find_symbol_through_module(const std::string &sym_id) const
+{
+  // Imports bind names in the module being converted only: an id in another
+  // module's file names that module's symbol (#9046).
+  const std::string file = symbol_id::from_string(sym_id).get_filename();
+  const std::size_t at = sym_id.rfind('@');
+  if (!file.empty() && file != current_python_file && at != std::string::npos)
+  {
+    const std::string name = sym_id.substr(at + 1);
+    return find_symbol_in_module(sym_id, file, name, name);
+  }
+
+  // User imports (e.g. "from other import sum") shadow builtin model
+  // functions that are registered in the main file's namespace. Don't let
+  // model-module stubs (e.g. esbmc.py's nondet_list stub) shadow operational
+  // models (e.g. nondet.py's nondet_list).
+  symbolt *imported = find_imported_symbol(sym_id);
+  if (
+    imported &&
+    imported->id.as_string().find("/models/") != std::string::npos &&
+    symbol_table_.find_symbol(sym_id))
+    return nullptr;
+  return imported;
+}
+
 symbolt *python_converter::find_symbol(const std::string &sym_id) const
 {
-  // When not loading models, check imports first so that user imports
-  // (e.g. "from other import sum") shadow builtin model functions that
-  // are registered in the main file's namespace.
-  // Don't let model-module stubs (e.g. esbmc.py's nondet_list
-  // stub) shadow operational models (e.g. nondet.py's nondet_list).
   if (!is_loading_models)
-  {
-    if (symbolt *imported = find_imported_symbol(sym_id))
-    {
-      const std::string &imp_id = imported->id.as_string();
-      bool is_model_stub = imp_id.find("/models/") != std::string::npos;
-      if (!is_model_stub || !symbol_table_.find_symbol(sym_id))
-        return imported;
-    }
-  }
+    if (symbolt *symbol = find_symbol_through_module(sym_id))
+      return symbol;
 
   if (symbolt *symbol = symbol_table_.find_symbol(sym_id))
     return symbol;

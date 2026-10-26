@@ -1112,6 +1112,7 @@ __ESBMC_HIDE:;
   }
 
   list->type = NULL;
+  list->is_tuple = false;
   list->items = items;
   list->size = count;
   return list;
@@ -1420,12 +1421,6 @@ __ESBMC_HIDE:;
     return (char *)0;
   }
 
-  if (codepoint >= 0xD800 && codepoint <= 0xDFFF)
-  {
-    __ESBMC_assert(0, "chr() arg is a surrogate code point");
-    return (char *)0;
-  }
-
   char *buffer = __ESBMC_alloca(5);
 
   if (codepoint <= 0x7F)
@@ -1443,6 +1438,8 @@ __ESBMC_HIDE:;
     return buffer;
   }
 
+  // CPython's chr() accepts a surrogate (U+D800..U+DFFF); it takes the
+  // 3-byte form like any other BMP code point, which ord() decodes back.
   if (codepoint <= 0xFFFF)
   {
     buffer[0] = (char)(0xE0 | (codepoint >> 12));

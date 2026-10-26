@@ -97,6 +97,7 @@ PyListObject *__ESBMC_list_create()
   l->type = &__ESBMC_list_type;
   l->items = __ESBMC_create_inf_obj();
   l->size = 0;
+  l->is_tuple = false;
   return l;
 }
 
@@ -125,6 +126,7 @@ size_t __ESBMC_list_size(const PyListObject *l)
 // pointer (a nested list or an object reference), copied as a pointer so the
 // element still names its object; an 8-byte integer copy would rebuild it
 // from bytes and every later read through it would range over all objects.
+// ptr_free=3: a struct whose every field is a pointer, copied pointer-wise.
 // The storage of a pointer payload. A struct, not a bare `void *`, so the cell
 // is an object of its own kind and a SAME-OBJECT test between two cells folds.
 struct __ESBMC_pointer_cell
@@ -200,6 +202,16 @@ static inline void *__ESBMC_copy_value(
     ((uint64_t *)copied)[1] = ((const uint64_t *)value)[1];
     ((uint64_t *)copied)[2] = ((const uint64_t *)value)[2];
     ((uint64_t *)copied)[3] = ((const uint64_t *)value)[3];
+  }
+  else if (ptr_free == 3 && (size == 24 || size == 32))
+  {
+    // Copied as pointers so each one still names its object; memcpy's byte
+    // copy cannot rebuild them (os.walk's tuple[str, list, list], #9162).
+    ((void **)copied)[0] = ((void *const *)value)[0];
+    ((void **)copied)[1] = ((void *const *)value)[1];
+    ((void **)copied)[2] = ((void *const *)value)[2];
+    if (size == 32)
+      ((void **)copied)[3] = ((void *const *)value)[3];
   }
   else
     memcpy(copied, value, size);
@@ -402,6 +414,26 @@ bool __ESBMC_list_push_dict_ptr(PyListObject *l, void *dict_ptr, size_t type_id)
   item->type_id = type_id;
   item->size = 0;
   l->size++;
+  return true;
+}
+
+bool __ESBMC_list_set_dict_ptr(
+  PyListObject *l,
+  size_t index,
+  void *dict_ptr,
+  size_t type_id)
+{
+  __ESBMC_assert(l != NULL, "list_set_dict_ptr: list is null");
+  __ESBMC_assert(index < l->size, "list_set_dict_ptr: index out of bounds");
+
+  if (l->items[index].type_id != type_id)
+    __ESBMC_list_retyped = true;
+
+  PyObject *item = &l->items[index];
+  item->value = dict_ptr;
+  item->float_idx = 0;
+  item->type_id = type_id;
+  item->size = 0;
   return true;
 }
 
@@ -1277,6 +1309,20 @@ PyListObject *__ESBMC_list_copy_shallow_sz(
 PyListObject *__ESBMC_list_copy_shallow(PyListObject *l, size_t list_type_id)
 {
   return __ESBMC_list_copy_shallow_sz(l, list_type_id, 0, 0);
+}
+
+// tuple(x) of a list is modelled as a list copy marked as a tuple, so that
+// isinstance can tell the two apart (#8777)
+void __ESBMC_list_mark_tuple(PyListObject *l)
+{
+__ESBMC_HIDE:;
+  l->is_tuple = true;
+}
+
+bool __ESBMC_list_is_tuple(const PyListObject *l)
+{
+__ESBMC_HIDE:;
+  return l != NULL && l->is_tuple;
 }
 
 // Store `o` into an existing slot, with __ESBMC_list_push_shallow's sharing

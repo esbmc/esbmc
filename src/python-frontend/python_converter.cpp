@@ -275,6 +275,48 @@ void python_converter::register_import_alias(
   imported_modules.emplace(first["asname"].get<std::string>(), module_file);
 }
 
+static void add_function_stub(
+  nlohmann::json &stubs,
+  const nlohmann::json &def,
+  const std::string &name)
+{
+  if (def.value("_type", "") == "FunctionDef" && def.contains("returns"))
+    stubs.push_back(
+      {{"_type", "FunctionDef"}, {"name", name}, {"returns", def["returns"]}});
+}
+
+nlohmann::json python_converter::callable_function_stubs() const
+{
+  nlohmann::json stubs = nlohmann::json::array();
+  for (const auto &stmt : (*ast_json)["body"])
+  {
+    const std::string type = stmt.value("_type", "");
+    if (type == "FunctionDef")
+      add_function_stub(stubs, stmt, stmt.value("name", ""));
+    if (type != "Import" && type != "ImportFrom")
+      continue;
+    const auto pooled = module_ast_pool_.find(import_module_name(stmt));
+    if (pooled == module_ast_pool_.end())
+      continue;
+    // An Import resolves to its first name only, as in import_module_name.
+    const nlohmann::json &names = stmt["names"];
+    for (const auto &alias :
+         type == "Import" ? nlohmann::json::array({names[0]}) : names)
+    {
+      const std::string bound =
+        alias.value("asname", nlohmann::json()).is_string()
+          ? alias["asname"].get<std::string>()
+          : alias.value("name", "");
+      for (const auto &def : pooled->second["body"])
+        if (type == "Import")
+          add_function_stub(stubs, def, bound + "." + def.value("name", ""));
+        else if (def.value("name", "") == alias.value("name", ""))
+          add_function_stub(stubs, def, bound);
+    }
+  }
+  return stubs;
+}
+
 /// The source file of the AST emitted for @p module, or "" when there is none.
 std::string python_converter::module_source_file(
   const std::string &module,
@@ -1271,4 +1313,6 @@ void python_converter::convert()
     throw std::runtime_error(
       "The main function is already defined in another module");
   }
+
+  refuse_misaligned_self_calls();
 }

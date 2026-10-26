@@ -15,9 +15,10 @@
  *  Mutators maintain the expr2tc base incrementally as the and-chain
  *  of the current conjuncts (matching the historic
  *  guardt::g_expr/build_guard_expr split), so as_expr() and implicit
- *  conversions are pure reads. A default-constructed guard has an
- *  empty list and a nil base; as_expr() then short-circuits to
- *  `gen_true_expr()` without touching the base.
+ *  conversions are pure reads. goto_symext::prefix_index keys a cache on
+ *  this chain's nodes and relies on it being left-leaning. A
+ * default-constructed guard has an empty list and a nil base; as_expr() then
+ * short-circuits to `gen_true_expr()` without touching the base.
  *
  *  Invariant: `guard_list` is treated as a set of conjuncts — no
  *  duplicates are expected since `x && x ≡ x`. operator-= and

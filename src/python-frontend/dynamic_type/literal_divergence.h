@@ -4,15 +4,57 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 // Pure-AST literal-kind divergence detection, shared by dynamic_type_handler
 // and the annotation pre-pass (which has no symbol table to check against).
 namespace dynamic_type_detail
 {
-// Classifies a literal constant, a nondet_<type> builtin call, or a call to
-// a module-level function with a scalar return annotation (e.g. `mk()`
-// where `def mk() -> str`); "" otherwise. `module_body` may be left empty
+// The name a call's `func` spells, `m.f` for an attribute of a name, and
+// its last component; both "" for any other shape.
+inline std::pair<std::string, std::string>
+callee_names(const nlohmann::json &func)
+{
+  if (
+    func.value("_type", "") != "Attribute" || !func.contains("value") ||
+    func["value"].value("_type", "") != "Name")
+    return {func.value("id", ""), func.value("id", "")};
+  const std::string attr = func.value("attr", "");
+  return {func["value"].value("id", "") + "." + attr, attr};
+}
+
+// The kind of a scalar type named `type`, "" for any other name.
+inline std::string scalar_name_kind(const std::string &type)
+{
+  if (type == "str")
+    return "str";
+  if (type == "int" || type == "bool")
+    return "num";
+  return type == "float" ? "float" : "";
+}
+
+// The kind a nondet_<type> function named `leaf` returns, "" for any other.
+inline std::string nondet_leaf_kind(const std::string &leaf)
+{
+  return leaf.rfind("nondet_", 0) == 0 ? scalar_name_kind(leaf.substr(7)) : "";
+}
+
+// The kind of a literal constant's value.
+inline std::string constant_kind(const nlohmann::json &lit)
+{
+  if (lit.is_string())
+    return "str";
+  if (lit.is_number_integer() || lit.is_boolean())
+    return "num";
+  return lit.is_number_float() ? "float" : "";
+}
+
+// Classifies a literal constant, a nondet_<type> call, plain or qualified
+// by a module as in `_sv_verifier.nondet_str()`, or a call to a function
+// with a scalar return annotation (e.g. `mk()` where `def mk() -> str`);
+// "" otherwise. `module_body` holds the FunctionDefs a call may name, a
+// qualified call `m.mk()` naming one called `m.mk`. It may be left empty
 // where a caller has no access to the full module (the annotation
 // pre-pass).
 inline std::string classify_literal_value_kind(
@@ -21,44 +63,57 @@ inline std::string classify_literal_value_kind(
 {
   if (value.value("_type", "") == "Constant" && value.contains("value"))
   {
-    const auto &lit = value["value"];
-    if (lit.is_string())
-      return "str";
-    if (lit.is_number_integer() || lit.is_boolean())
-      return "num";
-    return "";
+    return constant_kind(value["value"]);
   }
 
-  if (
-    value.value("_type", "") == "Call" && value.contains("func") &&
-    value["func"].value("_type", "") == "Name")
+  if (value.value("_type", "") != "Call" || !value.contains("func"))
+    return "";
+
+  const auto [callee, leaf] = callee_names(value["func"]);
+  const std::string nondet_kind = nondet_leaf_kind(leaf);
+  if (!nondet_kind.empty())
+    return nondet_kind;
+
+  if (module_body.is_array())
   {
-    const std::string &callee = value["func"].value("id", "");
-    if (callee == "nondet_int" || callee == "nondet_bool")
-      return "num";
-    if (callee == "nondet_str")
-      return "str";
-
-    if (module_body.is_array())
+    for (const auto &stmt : module_body)
     {
-      for (const auto &stmt : module_body)
-      {
-        if (
-          !stmt.is_object() || stmt.value("_type", "") != "FunctionDef" ||
-          stmt.value("name", "") != callee || !stmt.contains("returns") ||
-          stmt["returns"].is_null())
-          continue;
+      if (
+        !stmt.is_object() || stmt.value("_type", "") != "FunctionDef" ||
+        stmt.value("name", "") != callee || !stmt.contains("returns") ||
+        stmt["returns"].is_null())
+        continue;
 
-        const std::string ret_name = stmt["returns"].value("id", "");
-        if (ret_name == "str")
-          return "str";
-        if (ret_name == "int" || ret_name == "bool")
-          return "num";
-      }
+      const std::string ret_kind =
+        scalar_name_kind(stmt["returns"].value("id", ""));
+      if (!ret_kind.empty())
+        return ret_kind;
     }
   }
 
   return "";
+}
+
+// Whether a name joining these literal kinds has a type that depends on the
+// path. An int and a float alone are a number of path dependent type, which
+// is refused where it is read (#8973).
+// Whether any name was found to join a float with another kind, so that a
+// tag may hold a float, which the tagged arithmetic and comparison helpers
+// do not model.
+inline bool &float_tags_possible()
+{
+  static bool possible = false;
+  return possible;
+}
+
+inline bool kinds_diverge(const std::unordered_set<std::string> &kinds)
+{
+  const bool int_float_only =
+    kinds.size() == 2 && kinds.count("num") && kinds.count("float");
+  const bool diverge = kinds.size() >= 2 && !int_float_only;
+  if (diverge && kinds.count("float"))
+    float_tags_possible() = true;
+  return diverge;
 }
 
 // Resolves `x = n` via name's own assignment in scope_body.
@@ -104,6 +159,18 @@ inline std::string classify_name_kind(
   return kind;
 }
 
+// `x` for a Name target, `C.v` for an attribute of a name, else "".
+inline std::string assigned_name(const nlohmann::json &target)
+{
+  if (target.value("_type", "") == "Name")
+    return target.value("id", "");
+  if (
+    target.value("_type", "") == "Attribute" && target.contains("value") &&
+    target["value"].value("_type", "") == "Name")
+    return target["value"].value("id", "") + "." + target.value("attr", "");
+  return "";
+}
+
 // Classifies a branch's top-level assignments by literal type; a Name
 // value (e.g. `x = n`) is resolved via scope_body.
 inline std::unordered_map<std::string, std::string>
@@ -138,9 +205,9 @@ classify_branch_literal_assigns(
     else
       continue;
 
-    if (target.value("_type", "") != "Name" || !target.contains("id"))
+    const std::string name = assigned_name(target);
+    if (name.empty())
       continue;
-    const std::string &name = target["id"].get<std::string>();
 
     // A later reassignment invalidates an earlier recorded kind for `name`.
     if (!stmt.contains("value") || stmt["value"].is_null())
@@ -267,7 +334,7 @@ inline bool scope_assigns_divergent_literal_types(
     auto it = kinds.find(name);
     if (
       it != kinds.end() && leaf_count[name] == leaf_total &&
-      it->second.size() >= 2)
+      kinds_diverge(it->second))
       return true;
   }
   return false;
