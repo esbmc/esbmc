@@ -1,5 +1,5 @@
 CORE
 main.py
 
-^  file main.py line 15 column 0$
+^  file .*main\.py line 15 column 0$
 ^VERIFICATION FAILED$

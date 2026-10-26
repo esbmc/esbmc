@@ -1126,14 +1126,15 @@ bool python_converter::dict_values(
         !returned_dict_values(*ast_json, v, out))
         out.push_back(v);
     }
-    // A parameter holds what its callers pass (#9211).
+    // A parameter holds what its callers pass (#9211). Only a dict literal
+    // is taken: a named dict may be changed through an alias.
     function_values values(*ast_json, {});
     if (const auto args = values.parameter_arguments(container))
       for (const nlohmann::json *arg : *args)
       {
-        const std::string kind = arg->value("_type", "");
-        if ((kind != "Dict" && kind != "Name") || !dict_values(*arg, out))
+        if (arg->value("_type", "") != "Dict")
           return false;
+        push_dict_values(*arg, out);
       }
   }
   else if (type == "Subscript")

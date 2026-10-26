@@ -12,6 +12,5 @@ def run(table):
     return table["a"]()
 
 
-d = {"a": g, "b": f}
 assert run({"a": f, "b": g}) == "a"
-assert run(d) == "b"
+assert run({"a": g}) == "b"
