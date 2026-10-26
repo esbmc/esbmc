@@ -2840,6 +2840,49 @@ std::string python_annotation<Json>::infer_method_return_type(
 }
 
 template <class Json>
+std::optional<std::string>
+python_annotation<Json>::get_type_from_literal_method(const Json &call)
+{
+  if (!call["func"].contains("value"))
+    return std::nullopt;
+  const Json &receiver = call["func"]["value"];
+  // An f-string has no symbol name either; its methods are str methods.
+  if (receiver["_type"] == "JoinedStr" && call["func"].contains("attr"))
+    return get_string_method_return_type(call["func"]["attr"]);
+  if (receiver["_type"] != "Constant")
+    return std::nullopt;
+
+  std::string obj_type = get_type_from_constant(receiver);
+
+  // For string constants, determine return type based on method name
+  if (obj_type == "str" && call["func"].contains("attr"))
+  {
+    const std::string &method = call["func"]["attr"];
+    return get_string_method_return_type(method);
+  }
+
+  // bytes.hex() returns a str (hex digits), not bytes.
+  if (
+    obj_type == "bytes" && call["func"].contains("attr") &&
+    call["func"]["attr"] == "hex")
+    return "str";
+
+  // (258).to_bytes(...) on an int literal returns bytes.
+  if (
+    obj_type == "int" && call["func"].contains("attr") &&
+    call["func"]["attr"] == "to_bytes")
+    return "bytes";
+
+  // bytes.decode() returns a str.
+  if (
+    obj_type == "bytes" && call["func"].contains("attr") &&
+    call["func"]["attr"] == "decode")
+    return "str";
+
+  return obj_type;
+}
+
+template <class Json>
 std::string python_annotation<Json>::get_type_from_method(const Json &call)
 {
   std::string type("");
@@ -2861,43 +2904,10 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
       return "list";
   }
 
-  // Handle method calls on constant literals
-  // When Python code has " ".join(l), the func["value"] is a Constant node
-  // We need to map string method names to their return types directly
-  // without looking up the object in the AST (which would fail)
-  if (
-    call["func"].contains("value") &&
-    call["func"]["value"]["_type"] == "Constant")
-  {
-    std::string obj_type = get_type_from_constant(call["func"]["value"]);
-
-    // For string constants, determine return type based on method name
-    if (obj_type == "str" && call["func"].contains("attr"))
-    {
-      const std::string &method = call["func"]["attr"];
-      return get_string_method_return_type(method);
-    }
-
-    // bytes.hex() returns a str (hex digits), not bytes.
-    if (
-      obj_type == "bytes" && call["func"].contains("attr") &&
-      call["func"]["attr"] == "hex")
-      return "str";
-
-    // (258).to_bytes(...) on an int literal returns bytes.
-    if (
-      obj_type == "int" && call["func"].contains("attr") &&
-      call["func"]["attr"] == "to_bytes")
-      return "bytes";
-
-    // bytes.decode() returns a str.
-    if (
-      obj_type == "bytes" && call["func"].contains("attr") &&
-      call["func"]["attr"] == "decode")
-      return "str";
-
-    return obj_type;
-  }
+  // Handle method calls on literals: for " ".join(l) or f"{x}".upper() the
+  // receiver has no symbol name, so looking it up in the AST would fail.
+  if (const auto literal_type = get_type_from_literal_method(call))
+    return *literal_type;
 
   // An f-string receiver is always a str: f"{x}".upper().
   if (
