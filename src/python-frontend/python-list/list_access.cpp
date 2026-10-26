@@ -4337,8 +4337,7 @@ void python_list::handle_subscript_assign_none(
 
   const locationt location = converter_.get_location_from_decl(slice_node);
 
-  exprt idx_expr = converter_.get_expr(slice_node);
-  idx_expr = converter_.unwrap_optional_if_needed(idx_expr);
+  exprt idx_expr = index_value(converter_.get_expr(slice_node), slice_node);
   if (idx_expr.type() != size_type())
   {
     const symbolt *size_func =
@@ -4818,6 +4817,23 @@ void python_list::normalize_index_access_position(
   }
 }
 
+/// The value of an Optional \p index, raising TypeError when it holds None:
+/// a list or str index must be an int.
+exprt python_list::index_value(
+  const exprt &index,
+  const nlohmann::json &slice_node)
+{
+  if (!type_utils::is_optional_struct(index.type()))
+    return index;
+  const exprt optional = converter_.materialize_optional(index, slice_node);
+  converter_.emit_guarded_raise(
+    member_exprt(optional, "is_none", bool_type()),
+    "TypeError",
+    "indices must be integers, not NoneType",
+    converter_.get_location_from_decl(slice_node));
+  return converter_.unwrap_optional_if_needed(optional);
+}
+
 exprt python_list::handle_index_access(
   const exprt &array,
   const nlohmann::json &slice_node)
@@ -4837,8 +4853,7 @@ exprt python_list::handle_index_access(
       converter_.ast());
   }
 
-  exprt pos_expr = converter_.get_expr(slice_node);
-  pos_expr = converter_.unwrap_optional_if_needed(pos_expr);
+  exprt pos_expr = index_value(converter_.get_expr(slice_node), slice_node);
   size_t index = 0;
 
   // Validate index type
