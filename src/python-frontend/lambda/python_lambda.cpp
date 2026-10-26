@@ -70,7 +70,8 @@ static bool is_param_used_as_string(
 
   std::string body_type = body_node["_type"].get<std::string>();
 
-  // Check if param is in string concatenation: param + "string" or "string" + param
+  // Check if param is in string concatenation: param + "string" or "string" +
+  // param
   if (
     body_type == "BinOp" && body_node.contains("op") &&
     body_node["op"].contains("_type") && body_node["op"]["_type"] == "Add")
@@ -276,6 +277,8 @@ bool same_position(const nlohmann::json &a, const nlohmann::json &b)
          a.value("col_offset", -1) == b.value("col_offset", -2);
 }
 
+} // namespace
+
 /// The one name target a plain `x = v` or `x: T = v` statement binds, or null.
 const nlohmann::json *binding_target(const nlohmann::json &stmt)
 {
@@ -290,6 +293,8 @@ const nlohmann::json *binding_target(const nlohmann::json &stmt)
   return target != nullptr && target->is_object() ? target : nullptr;
 }
 
+namespace
+{
 // A lambda is lowered eagerly at its assignment, so the statement list holding
 // that assignment is the only place a later call through the bound name is
 // still visible (#7328).
@@ -614,6 +619,8 @@ bool binds_by_field(const nlohmann::json &node, const std::string &name)
            : field == name;
 }
 
+} // namespace
+
 /// Every construct under @p node that binds @p name, in any nested scope too.
 size_t count_bindings(const nlohmann::json &node, const std::string &name)
 {
@@ -629,6 +636,8 @@ size_t count_bindings(const nlohmann::json &node, const std::string &name)
   return n;
 }
 
+namespace
+{
 /// The function, lambda, class or module whose names the code at @p lambda
 /// resolves: Python scoping follows these, not the statement list (an `if`
 /// body, say) the lambda happens to be bound in.
@@ -772,9 +781,76 @@ std::optional<typet> subscript_element_type(
 }
 } // namespace
 
-std::vector<std::optional<typet>>
-python_lambda::call_site_argument_types(const nlohmann::json &element) const
+namespace
 {
+/// Argument @p index of every call through a module-level name bound to a
+/// call of the function that returns @p lambda, as in `f = make()` then
+/// `f(3)`. False when such a name is bound some other way too, or called
+/// from a nested scope.
+bool arguments_through_return(
+  const nlohmann::json &ast,
+  const nlohmann::json &lambda,
+  size_t index,
+  std::vector<const nlohmann::json *> &out)
+{
+  for (const auto &def : ast["body"])
+  {
+    bool returns_lambda = false;
+    if (def.value("_type", "") == "FunctionDef")
+      for (const auto &stmt : def["body"])
+        returns_lambda |= stmt.value("_type", "") == "Return" &&
+                          stmt["value"].is_object() &&
+                          same_position(stmt["value"], lambda);
+    for (const auto &stmt : ast["body"])
+    {
+      const nlohmann::json *target = binding_target(stmt);
+      if (
+        !returns_lambda || target == nullptr || !stmt["value"].is_object() ||
+        stmt["value"].value("_type", "") != "Call" ||
+        stmt["value"]["func"].value("id", "") != def.value("name", ""))
+        continue;
+      const std::string name = target->value("id", "");
+      call_argument_scan scan;
+      collect_call_arguments(ast["body"], name, index, false, scan);
+      if (count_bindings(ast, name) != 1 || scan.foreign_scope_call)
+        return false;
+      out.insert(out.end(), scan.args.begin(), scan.args.end());
+    }
+  }
+  return true;
+}
+
+/// The scalar type every call through a name bound to a returned @p lambda
+/// passes for each of its parameters (#8403).
+std::vector<std::optional<typet>> returned_lambda_argument_types(
+  const nlohmann::json &ast,
+  const nlohmann::json &lambda,
+  type_handler &types)
+{
+  std::vector<std::optional<typet>> result;
+  for (size_t i = 0; i < lambda["args"]["args"].size(); ++i)
+  {
+    std::vector<const nlohmann::json *> args;
+    std::optional<typet> agreed;
+    bool known = arguments_through_return(ast, lambda, i, args);
+    for (const nlohmann::json *arg : args)
+    {
+      const std::optional<typet> one = scalar_argument_type(*arg, ast, types);
+      known &= one.has_value() && (!agreed || *agreed == *one);
+      agreed = one;
+    }
+    result.push_back(known ? agreed : std::nullopt);
+  }
+  return result;
+}
+} // namespace
+
+std::vector<std::optional<typet>> python_lambda::call_site_argument_types(
+  const nlohmann::json &element,
+  const std::vector<std::optional<typet>> &argument_types) const
+{
+  if (!argument_types.empty())
+    return argument_types;
   std::vector<std::optional<typet>> types;
   if (
     !element.contains("args") || !element["args"].contains("args") ||
@@ -785,7 +861,8 @@ python_lambda::call_site_argument_types(const nlohmann::json &element) const
   const nlohmann::json *scope =
     find_binding_scope(converter_.ast(), element, bound_name);
   if (scope == nullptr || bound_name.empty())
-    return types;
+    return returned_lambda_argument_types(
+      converter_.ast(), element, type_handler_);
 
   const nlohmann::json *name_scope =
     enclosing_scope(converter_.ast(), element, &converter_.ast());
@@ -831,6 +908,28 @@ python_lambda::call_site_argument_types(const nlohmann::json &element) const
     types.push_back(resolved);
   }
   return types;
+}
+
+std::vector<std::optional<typet>> python_lambda::narrowed_parameter_types(
+  const nlohmann::json &call,
+  const nlohmann::json &scope,
+  const code_typet &signature) const
+{
+  const auto &params = signature.arguments();
+  if (call["args"].size() != params.size())
+    return {};
+  std::vector<std::optional<typet>> types;
+  bool narrowed = false;
+  for (size_t i = 0; i < params.size(); ++i)
+  {
+    const std::optional<typet> arg =
+      scalar_argument_type(call["args"][i], scope, type_handler_);
+    const bool narrows =
+      arg && arg->is_signedbv() && params[i].type().is_floatbv();
+    narrowed |= narrows;
+    types.push_back(narrows ? *arg : params[i].type());
+  }
+  return narrowed ? types : std::vector<std::optional<typet>>();
 }
 
 // The `double` default rejects any body that indexes its parameter (#7328), so
@@ -998,7 +1097,9 @@ exprt python_lambda::process_lambda_body(
   return lambda_block;
 }
 
-exprt python_lambda::get_lambda_expr(const nlohmann::json &element)
+exprt python_lambda::get_lambda_expr(
+  const nlohmann::json &element,
+  const std::vector<std::optional<typet>> &argument_types)
 {
   // Generate unique lambda name
   std::string lambda_name = generate_unique_lambda_name();
@@ -1012,12 +1113,20 @@ exprt python_lambda::get_lambda_expr(const nlohmann::json &element)
   // Resolve call-site argument types while the enclosing scope is still
   // current: the names they mention are invisible from the lambda's own scope.
   const std::vector<std::optional<typet>> call_site_types =
-    call_site_argument_types(element);
+    call_site_argument_types(element, argument_types);
 
   // Determine if we're in a lambda (function name starts with "lam")
   bool in_lambda = (old_func.find("lam") == 0);
 
-  // Determine the scope for parameters: use first lambda's scope for all nested lambdas
+  // Lambda function symbol is always top-level: py:module@F@lambda_name
+  std::string lambda_id = "py:" + module_name + "@F@" + lambda_name;
+
+  // The cells must exist before the body is converted, so a free variable
+  // resolves to the cell rather than to the enclosing frame's local.
+  converter_.capture_lambda_free_variables(element, lambda_id, location);
+
+  // Determine the scope for parameters: use first lambda's scope for all nested
+  // lambdas
   std::string param_scope;
   if (in_lambda)
   {
@@ -1042,9 +1151,6 @@ exprt python_lambda::get_lambda_expr(const nlohmann::json &element)
   }
 
   lambda_type.return_type() = return_type;
-
-  // Lambda function symbol is always top-level: py:module@F@lambda_name
-  std::string lambda_id = "py:" + module_name + "@F@" + lambda_name;
 
   // Parameters are created in param_scope (shared for nested lambdas)
   std::string param_scope_id = "py:" + module_name + "@F@" + param_scope;

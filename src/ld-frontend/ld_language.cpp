@@ -8,6 +8,7 @@
 #include <util/lang/c_expr2string.h>
 #include <util/config/config.h>
 #include <util/message/message.h>
+#include <algorithm>
 #include <iostream>
 
 languaget *new_ld_language()
@@ -89,17 +90,21 @@ bool ld_languaget::typecheck(contextt &context, const std::string & /*module*/)
       symbolt *scan_sym = context.find_symbol("ld::scan_loop");
       if (scan_sym && !prop_code.operands().empty())
       {
-        // scan_loop body is a code_blockt whose only operand is the while loop.
+        // The while loop may follow set-up statements (--ld-closed-world
+        // havocs shared variables before it); skipping the properties when it
+        // was not first made every verdict vacuous.
         exprt scan_val = scan_sym->get_value();
-        if (
-          !scan_val.operands().empty() &&
-          to_code(scan_val.operands().front()).get_statement() == "while")
-        {
-          codet &loop = static_cast<codet &>(scan_val.operands().front());
-          code_whilet &whl = static_cast<code_whilet &>(loop);
-          for (const auto &op : prop_code.operands())
-            whl.body().copy_to_operands(op);
-        }
+        auto loop = std::find_if(
+          scan_val.operands().begin(),
+          scan_val.operands().end(),
+          [](const exprt &op) {
+            return to_code(op).get_statement() == "while";
+          });
+        assert(loop != scan_val.operands().end());
+        code_whilet &whl =
+          static_cast<code_whilet &>(static_cast<codet &>(*loop));
+        for (const auto &op : prop_code.operands())
+          whl.body().copy_to_operands(op);
         scan_sym->set_value(scan_val);
       }
     }

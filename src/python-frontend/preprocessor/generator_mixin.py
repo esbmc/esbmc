@@ -19,7 +19,132 @@ def _is_contract_clause_call(expr):
             and expr.func.id in CONTRACT_CLAUSES)
 
 
+def _is_next_of_name(expr):
+    """True for `next(g)` on a bare name g."""
+    return (isinstance(expr, ast.Call) and isinstance(expr.func, ast.Name)
+            and expr.func.id == "next" and len(expr.args) == 1
+            and isinstance(expr.args[0], ast.Name))
+
+
+_LOOPS = (ast.For, ast.AsyncFor, ast.While)
+
+
+class _GeneratorConsumerScan:
+    """Per scope, the names used and stored, each `g = genfunc(...)` binding
+    and each `next(g)` call, with the context it runs in: "linear", "loop",
+    "try" or "branch"."""
+
+    def __init__(self, gen_defs, whole_value, new_scope, branching):
+        self.gen_defs = gen_defs
+        self.whole_value = whole_value
+        self.new_scope = new_scope
+        self.branching = branching
+        self.scopes = [{"all": set(), "stored": set(), "function": False}]
+        self.func_scope, self.bindings, self.calls, self.stores = {}, {}, {}, {}
+
+    def visit(self, n, scope, ctx):
+        self._record(n, scope, ctx)
+        if isinstance(n, self.new_scope):
+            self._visit_scope(n)
+            return
+        for field, value in ast.iter_fields(n):
+            child_ctx = self._child_ctx(n, field, ctx)
+            for child in value if isinstance(value, list) else [value]:
+                if isinstance(child, ast.AST):
+                    self.visit(child, scope, child_ctx)
+
+    def _record(self, n, scope, ctx):
+        if isinstance(n, ast.Name):
+            self.scopes[scope]["all"].add(n.id)
+            if isinstance(n.ctx, ast.Store):
+                self.scopes[scope]["stored"].add(n.id)
+                self.stores[n.id] = self.stores.get(n.id, 0) + 1
+        elif self._is_generator_binding(n):
+            self.bindings.setdefault(n.targets[0].id, []).append((scope, ctx, n.value.func.id))
+        elif _is_next_of_name(n):
+            self.calls.setdefault(n.args[0].id, []).append(
+                (scope, ctx, self.whole_value.get(id(n))))
+
+    def _is_generator_binding(self, n):
+        return (isinstance(n, ast.Assign) and len(n.targets) == 1
+                and isinstance(n.targets[0], ast.Name) and isinstance(n.value, ast.Call)
+                and isinstance(n.value.func, ast.Name) and n.value.func.id in self.gen_defs)
+
+    def _visit_scope(self, n):
+        is_function = isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda))
+        params = {a.arg for a in self._params(n)} if is_function else set()
+        self.scopes.append({"all": set(params), "stored": params, "function": is_function})
+        child_scope = len(self.scopes) - 1
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            self.func_scope[n.name] = child_scope
+        child_ctx = "linear" if is_function else "branch"
+        for child in ast.iter_child_nodes(n):
+            self.visit(child, child_scope, child_ctx)
+
+    @staticmethod
+    def _params(fn):
+        args = fn.args
+        return [
+            a for a in args.posonlyargs + args.args + args.kwonlyargs + [args.vararg, args.kwarg]
+            if a is not None
+        ]
+
+    def _child_ctx(self, n, field, ctx):
+        if field == "body" and isinstance(n, _LOOPS + (ast.Try, )):
+            if ctx != "linear":
+                return "branch"
+            return "try" if isinstance(n, ast.Try) else "loop"
+        if isinstance(n, _LOOPS + (ast.Try, ) + self.branching):
+            return "branch"
+        return ctx
+
+
 class GeneratorMixin:
+
+    class _YieldFromToFor(ast.NodeTransformer):
+        """Rewrite a statement `yield from it` into `for v in it: yield v`.
+
+        The two differ only in forwarding send()/throw() and in the value of
+        the `yield from` expression; neither is modelled, and an expression
+        `yield from` is left to the existing refusal.
+        """
+
+        def __init__(self, preprocessor):
+            self.preprocessor = preprocessor
+            self.depth = 0
+
+        def _visit_scope(self, node):
+            if self.depth > 0:
+                return node
+            self.depth += 1
+            self.generic_visit(node)
+            self.depth -= 1
+            return node
+
+        visit_FunctionDef = _visit_scope  # noqa: N815
+        visit_AsyncFunctionDef = _visit_scope  # noqa: N815
+
+        def visit_Lambda(self, node):
+            return node
+
+        def visit_ClassDef(self, node):
+            return node
+
+        def visit_Expr(self, node):
+            if not isinstance(node.value, ast.YieldFrom):
+                return node
+            var = f"ESBMC_yieldfrom_{self.preprocessor.listcomp_counter}"
+            self.preprocessor.listcomp_counter += 1
+            loop = ast.For(
+                target=ast.Name(id=var, ctx=ast.Store()),
+                iter=node.value.value,
+                body=[ast.Expr(value=ast.Yield(value=ast.Name(id=var, ctx=ast.Load())))],
+                orelse=[],
+            )
+            ast.copy_location(loop, node)
+            self.preprocessor.ensure_all_locations(loop, node)
+            ast.fix_missing_locations(loop)
+            return loop
 
     class _YieldToAppend(ast.NodeTransformer):
 
@@ -92,31 +217,38 @@ class GeneratorMixin:
         return best_idx
 
     def _rename_shadowing_targets(self, node):
-        """Rename a comprehension target that shadows a known outer variable.
+        """Rename a comprehension target that shadows a known outer variable
+        or the target of an earlier comprehension.
 
         Python 3 scopes a comprehension's target to the comprehension, so the
         rename is semantically free. Without it the outer and inner bindings
         share one symbol, and an outer object rebound to elements aborts the
-        converter in member2t.
+        converter in member2t; two comprehensions over elements of different
+        types give that symbol two types and crash the solver (#9126).
         """
         for generator in node.generators:
             if not isinstance(generator.target, ast.Name):
                 continue
             old = generator.target.id
-            if old not in self.known_variable_types:
+            if old not in self.known_variable_types and old not in self.comprehension_targets:
+                self.comprehension_targets.add(old)
                 continue
 
             new = f"ESBMC_compvar_{self.listcomp_counter}_{old}"
             self.listcomp_counter += 1
             index = node.generators.index(generator)
-            scopes = [node.elt] + list(generator.ifs)
+            scopes = list(generator.ifs)
+            shadowed = False
             for later in node.generators[index + 1:]:
                 scopes.append(later.iter)
+                if old in self._bound_target_names(later.target):
+                    shadowed = True
+                    break
                 scopes.extend(later.ifs)
+            if not shadowed:
+                scopes.append(node.elt)
             for scope in scopes:
-                for name in ast.walk(scope):
-                    if isinstance(name, ast.Name) and name.id == old:
-                        name.id = new
+                self._rename_free_name(scope, old, new)
             generator.target.id = new
         return node
 
@@ -506,6 +638,29 @@ class GeneratorMixin:
             return None
         return result
 
+    @staticmethod
+    def _unguard_starred_call(call):
+        """The one argument of `call`, with a statement raising the arity
+        TypeError when it is the guard _lower_starred_call_argument spells
+        `f(a, *xs)` as: then `f(xs[0], ..., xs[k-1])` and the statement.
+        list(gen(*xs)) is inlined as statements, so the guard moves ahead of
+        them (#8670)."""
+        if len(call.args) != 1:
+            return None, []
+        node = call.args[0]
+        raising = node.orelse if isinstance(node, ast.IfExp) else None
+        if not (isinstance(raising, ast.Subscript) and isinstance(raising.value, ast.Tuple)
+                and len(raising.value.elts) == 2 and isinstance(raising.value.elts[0], ast.Call)
+                and isinstance(raising.value.elts[0].func, ast.Name)
+                and raising.value.elts[0].func.id == "_starred_arity_error"):
+            return node, []
+        check = ast.If(test=ast.UnaryOp(op=ast.Not(), operand=node.test),
+                       body=[ast.Expr(value=raising.value.elts[0])],
+                       orelse=[])
+        ast.copy_location(check, node)
+        ast.fix_missing_locations(check)
+        return node.body, [check]
+
     def _lower_list_gen_call(self, gen_call_node, parent_node):
         """Lower list(gen_func(args...)) to an inline list construction.
 
@@ -786,14 +941,72 @@ class GeneratorMixin:
     def _find_generator_next_call(self, node):
         """Return (gen_var, func_name) if node contains next(g) for a tracked generator, else None."""
         for child in ast.walk(node):
-            if (isinstance(child, ast.Call) and isinstance(child.func, ast.Name)
-                    and child.func.id == "next" and len(child.args) == 1
-                    and isinstance(child.args[0], ast.Name)):
+            if _is_next_of_name(child):
                 gen_var = child.args[0].id
                 func_name = self.generator_vars.get(gen_var)
-                if func_name is not None:
+                if func_name is not None and gen_var not in self._gen_next_blacklist:
                     return (gen_var, func_name)
         return None
+
+    def _scan_generator_consumers(self, node):
+        """Blacklist generator variables whose next() calls cannot be inlined.
+
+        _inline_next_call picks each next(g)'s yield by its place in the
+        source, emits the generator's setup at the first next(g), and pastes
+        the generator's statements into the caller. That matches execution
+        only when:
+
+          * g is bound once, in straight-line code, and consumed in that scope;
+          * every next(g) is the whole value of an assignment or a statement;
+          * each next(g) runs in source order: straight-line code, or the last
+            one inside a try body. A generator whose only yield sits in a loop
+            gives the same value at every call, so after the first call any
+            position works, and the first may be an assignment directly in a
+            straight-line loop, whose setup _hoist_generator_inits emits;
+          * no name the generator binds is used by the caller, nor (in a
+            function) any name it reads bound by the caller.
+
+        A blacklisted next(g) is left alone, so it stays unsupported."""
+        gen_defs = {
+            n.name: n
+            for n in ast.walk(node) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and self._has_yield(n) and not self._is_recursive_call(n.name, n.body)
+            and not self._has_early_return_before_yield(n.body)
+        }
+        whole_value = {
+            id(stmt.value): type(stmt)
+            for stmt in ast.walk(node) if isinstance(stmt, (ast.Assign, ast.Expr))
+        }
+        scan = _GeneratorConsumerScan(
+            gen_defs, whole_value,
+            self._ast_types("FunctionDef", "AsyncFunctionDef", "Lambda", "ClassDef", "ListComp",
+                            "SetComp", "DictComp", "GeneratorExp"),
+            self._ast_types("If", "IfExp", "BoolOp", "With", "AsyncWith", "Match", "TryStar"))
+        scan.visit(node, 0, "linear")
+        self._gen_next_blacklist = {
+            var
+            for var in scan.bindings if not self._consumers_in_order(var, scan, gen_defs)
+        }
+
+    def _consumers_in_order(self, var, scan, gen_defs):
+        binds = scan.bindings[var]
+        scope, ctx, func_name = binds[0]
+        uses = scan.calls.get(var, [])
+        _, yields = self._collect_yields(gen_defs[func_name].body)
+        only_loop = len(yields) == 1 and yields[0][3]
+        gen_scope = scan.scopes[scan.func_scope[func_name]]
+        caller = scan.scopes[scope]
+        return (len(binds) == 1 and scan.stores.get(var) == 1 and ctx == "linear"
+                and all(s == scope and kind is not None for s, _, kind in uses) and all(
+                    self._use_in_order(i == 0, i == len(uses) - 1, c, kind, only_loop)
+                    for i, (_, c, kind) in enumerate(uses))
+                and not gen_scope["stored"] & caller["all"]
+                and not (caller["function"] and gen_scope["all"] & caller["stored"]))
+
+    @staticmethod
+    def _use_in_order(first, last, ctx, kind, only_loop):
+        return (ctx == "linear" or (ctx == "try" and last)
+                or (only_loop and (not first or (ctx == "loop" and kind is ast.Assign))))
 
     def _collect_loop_yields(self, stmt, yields):
         """Process a ``While``/``For`` body. Append yields and return ``True`` if any."""
@@ -990,7 +1203,7 @@ class GeneratorMixin:
             # clause naming a temporary the contract wrapper never declares.
             # Leave it as written; the frontend's clause check rejects by name.
             return [], expr, "Any"
-        lowerer = self._ListCompExpressionLowerer(self)
+        lowerer = self._ListCompExpressionLowerer(self, expr)
         new_expr = lowerer.visit(expr)
         result_type = self._infer_type_from_value(new_expr)
         return lowerer.statements, new_expr, result_type
@@ -1012,13 +1225,9 @@ class GeneratorMixin:
                 and call_node.func.id == "sorted" and len(call_node.args) == 1):
             return None
 
-        key_kw = None
-        for kw in call_node.keywords:
-            if kw.arg == "key" and key_kw is None:
-                key_kw = kw
-            else:
-                return None
-        if key_kw is None:
+        key_kw = self._single_key_keyword(call_node, ("reverse", ))
+        reverse = self._sorted_reverse(call_node)
+        if key_kw is None or not self._is_bool_constant(reverse):
             return None
 
         folded = self._fold_dict_getitem_key(call_node.args[0], key_kw.value)
@@ -1033,7 +1242,7 @@ class GeneratorMixin:
         elts, key_values = folded
 
         try:
-            order = sorted(range(len(elts)), key=lambda i: key_values[i])
+            order = sorted(range(len(elts)), key=lambda i: key_values[i], reverse=reverse.value)
         except TypeError:
             # Mutually incomparable key values (e.g. mixed str/int) — CPython
             # raises at runtime; bail to the existing key-drop fallback rather
@@ -1076,6 +1285,25 @@ class GeneratorMixin:
             members = [self._const_scalar_value(e) for e in node.elts]
             return None if None in members else tuple(members)
         return self._const_scalar_value(node)
+
+    @staticmethod
+    def _pack_min_max_key_args(call_node):
+        """``min``/``max(a, b, ..., key=f)`` as ``min``/``max([a, b, ...], key=f)``,
+        which CPython defines to be the same, so the key lowerings see their
+        one-iterable form. A call argument is left alone: the element type of
+        a list literal holding it cannot be inferred when the callee has no
+        return annotation."""
+        is_min_max = isinstance(call_node.func, ast.Name) and call_node.func.id in ("min", "max")
+        unpackable = any(isinstance(arg, (ast.Starred, ast.Call)) for arg in call_node.args)
+        only_key = [kw.arg for kw in call_node.keywords] == ["key"]
+        if not is_min_max or len(call_node.args) < 2 or unpackable or not only_key:
+            return call_node
+        packed = ast.List(elts=call_node.args, ctx=ast.Load())
+        ast.copy_location(packed, call_node.args[0])
+        call = ast.Call(func=call_node.func, args=[packed], keywords=call_node.keywords)
+        ast.copy_location(call, call_node)
+        ast.fix_missing_locations(call)
+        return call
 
     def _lower_min_max_with_key_call(self, call_node):  # pylint: disable=too-many-return-statements,too-many-locals,too-many-branches
         """Lower min/max(iterable, key=...) for literal-list iterables with a
@@ -1211,19 +1439,34 @@ class GeneratorMixin:
         return frozenset(name for name, dunder in cls._BUILTIN_KEY_DUNDERS.items()
                          if name not in bound and dunder not in dunders)
 
-    @staticmethod
-    def _names_bound_by(node):
-        """The names @p node itself binds: a def or class, a Store/Del name, a
-        parameter, or a ``global`` declaration."""
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            return (node.name, )
-        if isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Load):
-            return (node.id, )
-        if isinstance(node, ast.arg):
-            return (node.arg, )
-        if isinstance(node, ast.Global):
-            return tuple(node.names)
-        return ()
+    @classmethod
+    def _scan_closed_lambda_bindings(cls, module_node):
+        """Names the module binds exactly once, to a one-parameter lambda whose
+        body reads nothing but that parameter: inlining such a body wherever the
+        name is used cannot capture a different variable."""
+        counts, lambdas = {}, {}
+        for n in ast.walk(module_node):
+            for name in cls._names_bound_by(n):
+                counts[name] = counts.get(name, 0) + 1
+            if (isinstance(n, ast.Assign) and len(n.targets) == 1
+                    and isinstance(n.targets[0], ast.Name) and isinstance(n.value, ast.Lambda)
+                    and cls._inlinable_key_lambda(n.value)):
+                param = n.value.args.args[0].arg
+                if all(m.id == param for m in ast.walk(n.value.body) if isinstance(m, ast.Name)):
+                    lambdas[n.targets[0].id] = n.value
+        return {name: lam for name, lam in lambdas.items() if counts.get(name) == 1}
+
+    def _resolve_lambda_key_name(self, key_kw):
+        """``key=k`` for a name _scan_closed_lambda_bindings recorded, as the
+        lambda itself: called through the name, the scan's call resolves ``k``
+        as a function symbol and aborts conversion."""
+        if not isinstance(key_kw.value, ast.Name):
+            return key_kw
+        lam = self._closed_lambda_bindings.get(key_kw.value.id)
+        if lam is None:
+            return key_kw
+        return ast.keyword(arg=key_kw.arg,
+                           value=ast.copy_location(copy.deepcopy(lam), key_kw.value))
 
     @staticmethod
     def _binds_key(key_value):
@@ -1246,14 +1489,32 @@ class GeneratorMixin:
         return _Substitute().visit(copy.deepcopy(key_value.body))
 
     @staticmethod
-    def _single_key_keyword(call_node):
+    def _single_key_keyword(call_node, allowed=()):
+        """The call's one ``key=`` keyword, None when it has none or a keyword
+        outside ``key`` and ``allowed``."""
         key_kw = None
         for kw in call_node.keywords:
             if kw.arg == "key" and key_kw is None:
                 key_kw = kw
-            else:
+            elif kw.arg not in allowed:
                 return None
         return key_kw
+
+    @staticmethod
+    def _keyword_value(call_node, name):
+        return next((kw.value for kw in call_node.keywords if kw.arg == name), None)
+
+    @staticmethod
+    def _sorted_reverse(call_node):
+        """The ``reverse=`` value of a ``sorted`` call, ``False`` when absent."""
+        for kw in call_node.keywords:
+            if kw.arg == "reverse":
+                return kw.value
+        return ast.Constant(value=False)
+
+    @staticmethod
+    def _is_bool_constant(node):
+        return isinstance(node, ast.Constant) and isinstance(node.value, bool)
 
     @staticmethod
     def _literal_contains_tuple(literal):
@@ -1285,9 +1546,11 @@ class GeneratorMixin:
                 and call_node.func.id in func_names and len(call_node.args) == 1):
             return None
 
-        key_kw = self._single_key_keyword(call_node)
+        key_kw = self._single_key_keyword(call_node, ("reverse", ) if "sorted" in func_names else
+                                          ("default", ))
         if key_kw is None:
             return None
+        key_kw = self._resolve_lambda_key_name(key_kw)
 
         if not self._is_scannable_key(key_kw.value):
             return None
@@ -1296,7 +1559,10 @@ class GeneratorMixin:
         if call_node.func.id == "sorted" and not self._sorted_scan_key_supported(
                 key_kw.value, literal):
             return None
-        if literal is not None and self._const_scalar_list_literal(literal):
+        # The constant fold owns a non-empty constant literal unless reverse=
+        # is only known at run time.
+        if (literal is not None and literal.elts and self._const_scalar_list_literal(literal)
+                and self._is_bool_constant(self._sorted_reverse(call_node))):
             return None
         return key_kw
 
@@ -1371,6 +1637,7 @@ class GeneratorMixin:
         cur = f"ESBMC_srtc_{n}"
         cur_key = f"ESBMC_srtck_{n}"
         keys = f"ESBMC_srtk_{n}"
+        rev = f"ESBMC_srtr_{n}"
 
         def store(name, value):
             return ast.Assign(targets=[ast.Name(id=name, ctx=ast.Store())], value=value)
@@ -1422,13 +1689,24 @@ class GeneratorMixin:
             orelse=[],
         )
 
+        # reverse=True sorts as if each comparison were reversed, so equal
+        # keys keep their order there too.
+        reverse = self._sorted_reverse(call_node)
+
+        def out_of_order(op):
+            return ast.Compare(left=key_at(load(j)), ops=[op], comparators=[load(cur_key)])
+
+        if self._is_bool_constant(reverse):
+            shifts = out_of_order(ast.Lt() if reverse.value else ast.Gt())
+        else:
+            shifts = ast.IfExp(test=load(rev),
+                               body=out_of_order(ast.Lt()),
+                               orelse=out_of_order(ast.Gt()))
         shift = ast.While(
             test=ast.BoolOp(op=ast.And(),
                             values=[
                                 ast.Compare(left=load(j), ops=[ast.GtE()], comparators=[num(0)]),
-                                ast.Compare(left=key_at(load(j)),
-                                            ops=[ast.Gt()],
-                                            comparators=[load(cur_key)]),
+                                shifts,
                             ]),
             body=[
                 move(add(load(j), num(1)), at(load(j)), out),
@@ -1467,6 +1745,10 @@ class GeneratorMixin:
         if bind_key:
             prefix.append(store(key_fn, copy.deepcopy(key_kw.value)))
         prefix.append(store(out, whole_slice))
+        if not self._is_bool_constant(reverse):
+            # Evaluated once, before the key runs, as CPython evaluates the
+            # call's arguments.
+            prefix.append(store(rev, copy.deepcopy(reverse)))
         if once:
             prefix += [store(keys, ast.List(elts=[], ctx=ast.Load())), store(i, num(0)), fill_keys]
         prefix += [store(i, num(1)), outer]
@@ -1506,6 +1788,7 @@ class GeneratorMixin:
         idx = f"ESBMC_mmi_{n}"
         cur = f"ESBMC_mmcur_{n}"
         cur_key = f"ESBMC_mmcurk_{n}"
+        default_name = f"ESBMC_mmdef_{n}"
 
         def store(name, value):
             return ast.Assign(targets=[ast.Name(id=name, ctx=ast.Store())], value=value)
@@ -1540,7 +1823,11 @@ class GeneratorMixin:
         prefix = [store(seq, copy.deepcopy(call_node.args[0]))]
         if bind_key:
             prefix.append(store(key_fn, copy.deepcopy(key_kw.value)))
-        prefix += [
+        default = self._keyword_value(call_node, "default")
+        if default is not None:
+            # Evaluated with the other arguments, before the key runs.
+            prefix.append(store(default_name, copy.deepcopy(default)))
+        scan = [
             store(best, at(ast.Constant(value=0))),
             store(best_key, call_key(best)),
             store(idx, ast.Constant(value=1)),
@@ -1558,6 +1845,15 @@ class GeneratorMixin:
                 orelse=[],
             ),
         ]
+        if default is None:
+            prefix += scan
+        else:
+            empty = ast.Compare(left=ast.Call(func=ast.Name(id="len", ctx=ast.Load()),
+                                              args=[load(seq)],
+                                              keywords=[]),
+                                ops=[ast.Eq()],
+                                comparators=[ast.Constant(value=0)])
+            prefix.append(ast.If(test=empty, body=[store(best, load(default_name))], orelse=scan))
 
         result = load(best)
         for node in prefix + [result]:
@@ -1634,7 +1930,19 @@ class GeneratorMixin:
                 and node.func.id in ("abs", "len") and len(node.args) == 1 and not node.keywords):
             return self._apply_builtin(node.func.id,
                                        self._eval_key_body(node.args[0], param, element))
-        return None
+        return self._const_dict_entry(node, param, element)
+
+    def _const_dict_entry(self, node, param, element):
+        """Constant value of ``param["k"]`` over a dict literal of constants, else None."""
+        if not (isinstance(element, ast.Dict) and isinstance(node, ast.Subscript)
+                and isinstance(node.value, ast.Name) and node.value.id == param
+                and isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, str)):
+            return None
+        keys = [None if k is None else self._const_scalar_value(k) for k in element.keys]
+        values = [self._const_element_value(v) for v in element.values]
+        if None in keys or None in values or node.slice.value not in keys:
+            return None
+        return dict(zip(keys, values))[node.slice.value]
 
     @staticmethod
     def _param_subscript_index(node, param):

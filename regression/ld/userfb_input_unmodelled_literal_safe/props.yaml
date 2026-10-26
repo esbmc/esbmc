@@ -1,0 +1,7 @@
+properties:
+  # R is wired to the integer literal 2, converted to REAL, so OK (R > 4.0) and
+  # Y stay off. The blank A wire carries nothing and A is sampled instead.
+  - id: P1
+    kind: invariant
+    expression: "!Y"
+    description: "An integer literal on a REAL input is bound"

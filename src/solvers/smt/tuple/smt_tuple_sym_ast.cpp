@@ -94,9 +94,9 @@ smt_astt tuple_sym_smt_ast::ite(
 
 smt_astt tuple_sym_smt_ast::eq(smt_solver_baset *ctx, smt_astt other) const
 {
-  // We have two tuple_sym_smt_asts and need to create a boolean ast representing
-  // their equality: iterate over all their members, compute an equality for
-  // each of them, and then combine that into a final ast.
+  // We have two tuple_sym_smt_asts and need to create a boolean ast
+  // representing their equality: iterate over all their members, compute an
+  // equality for each of them, and then combine that into a final ast.
   tuple_sym_smt_astt ta = this;
   tuple_sym_smt_astt tb = to_tuple_sym_ast(other);
 

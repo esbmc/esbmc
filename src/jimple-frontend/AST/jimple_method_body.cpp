@@ -45,15 +45,15 @@ expr2tc jimple_full_method_body::to_code2t(
 void jimple_full_method_body::from_json(const json &stmts)
 {
   /* In Jimple, locations are set through attributes and it
-     * applied to every instruction after it:
-     *
-     *  \* 2  \*  <--- Comment
-     *  a = 3;
-     *  b = 4;
-     *
-     * This means that both statements came from line 2.
-     * To solve this, we threat the location as a Statement.
-     */
+   * applied to every instruction after it:
+   *
+   *  \* 2  \*  <--- Comment
+   *  a = 3;
+   *  b = 4;
+   *
+   * This means that both statements came from line 2.
+   * To solve this, we threat the location as a Statement.
+   */
   int inner_location = -1;
   for (const json &stmt : stmts)
   {
@@ -80,10 +80,10 @@ void jimple_full_method_body::from_json(const json &stmts)
     case statement::Location:
     {
       /*
-         * After parsing the Jimple, the JSON will parse
-         * the location as a string and set it to the
-         * inner location (see comment above about inner_location)
-         */
+       * After parsing the Jimple, the JSON will parse
+       * the location as a string and set it to the
+       * inner location (see comment above about inner_location)
+       */
       std::string location_str;
       stmt.at("line").get_to(location_str);
       inner_location = std::stoi(location_str);

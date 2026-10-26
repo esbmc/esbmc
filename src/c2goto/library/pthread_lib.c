@@ -40,14 +40,14 @@ void __ESBMC_set_thread_internal_data(
 #define __ESBMC_spin_waiters(a) ((a)->__waiters)
 
 /* Global tracking data. Should all initialize to 0 / false */
-__attribute__((annotate("__ESBMC_inf_size")))
-_Bool __ESBMC_pthread_thread_running[1];
+__attribute__((
+  annotate("__ESBMC_inf_size"))) _Bool __ESBMC_pthread_thread_running[1];
 
-__attribute__((annotate("__ESBMC_inf_size")))
-_Bool __ESBMC_pthread_thread_ended[1];
+__attribute__((
+  annotate("__ESBMC_inf_size"))) _Bool __ESBMC_pthread_thread_ended[1];
 
-__attribute__((annotate("__ESBMC_inf_size")))
-_Bool __ESBMC_pthread_thread_detach[1];
+__attribute__((
+  annotate("__ESBMC_inf_size"))) _Bool __ESBMC_pthread_thread_detach[1];
 
 /* Threads currently blocked in pthread_join waiting for thread[i] to end. */
 __attribute__((
@@ -83,8 +83,8 @@ __ESBMC_HIDE:;
  *   cancel_requested = false
  *   cancelstate      = PTHREAD_CANCEL_ENABLE  (0)
  *   canceltype       = PTHREAD_CANCEL_DEFERRED (0) */
-__attribute__((annotate("__ESBMC_inf_size")))
-_Bool __ESBMC_pthread_cancel_requested[1];
+__attribute__((
+  annotate("__ESBMC_inf_size"))) _Bool __ESBMC_pthread_cancel_requested[1];
 
 __attribute__((
   annotate("__ESBMC_inf_size"))) int __ESBMC_pthread_cancelstate[1];
@@ -120,7 +120,8 @@ void __esbmc_set_cleanup_level(int level)
   __esbmc_cleanup_level[tid] = level;
 }
 
-/************************** Infinite Array Implementation **************************/
+/************************** Infinite Array Implementation
+ * **************************/
 
 /* These internal functions insert_key_value(), search_key() and delete_key()
  * need to be called in an atomic context. */
@@ -1145,18 +1146,18 @@ __ESBMC_HIDE:;
   _Bool signalled = __ESBMC_cond_lock_field(*cond) == 0;
 
   /**
-  * NOTE:
-  *
-  * When using condition variables there is always a boolean predicate
-  * involving shared variables associated with each condition wait that
-  * is true if the thread should proceed.
-  *
-  * Spurious wakeups from the pthread_cond_wait() or pthread_cond_timedwait()
-  * functions may occur. Since the return from pthread_cond_wait() or pthread_cond_timedwait()
-  * does not imply anything about the value of this predicate, the predicate should be re-evaluated
-  * upon such return.
-  *
-  */
+   * NOTE:
+   *
+   * When using condition variables there is always a boolean predicate
+   * involving shared variables associated with each condition wait that
+   * is true if the thread should proceed.
+   *
+   * Spurious wakeups from the pthread_cond_wait() or pthread_cond_timedwait()
+   * functions may occur. Since the return from pthread_cond_wait() or
+   * pthread_cond_timedwait() does not imply anything about the value of this
+   * predicate, the predicate should be re-evaluated upon such return.
+   *
+   */
   _Bool spurious_wakeup = nondet_bool();
   signalled |= spurious_wakeup;
 
@@ -1267,6 +1268,35 @@ __ESBMC_HIDE:;
   return res;
 }
 
+/************************ once routine ***********************/
+
+#define __ESBMC_ONCE_RUNNING 1
+#define __ESBMC_ONCE_DONE 2
+
+// Exactly one caller runs init_routine; every other caller returns only after
+// it has completed (POSIX pthread_once).
+int pthread_once(pthread_once_t *once_control, void (*init_routine)(void))
+{
+__ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+  _Bool run = *once_control == PTHREAD_ONCE_INIT;
+  if (run)
+    *once_control = __ESBMC_ONCE_RUNNING;
+  __ESBMC_atomic_end();
+
+  if (run)
+  {
+    init_routine();
+    __ESBMC_atomic_begin();
+    *once_control = __ESBMC_ONCE_DONE;
+    __ESBMC_atomic_end();
+  }
+  else
+    __ESBMC_assume(*once_control == __ESBMC_ONCE_DONE);
+
+  return 0;
+}
+
 /************************ detach routine ***********************/
 
 // The pthread_detach() function marks the thread identified by thread
@@ -1301,8 +1331,9 @@ __ESBMC_HIDE:;
  * to be called later if pthread_cleanup_pop is invoked with execute != 0.
  *
  * The cleanup handlers are stored in a large symbolic array divided into
- * chunks of size CLEANUP_STACK_CHUNK_SIZE per thread to avoid overlap between threads.
- * 
+ * chunks of size CLEANUP_STACK_CHUNK_SIZE per thread to avoid overlap between
+ * threads.
+ *
  * @param function Pointer to the cleanup function to be called.
  * @param arg      Argument to pass to the cleanup function.
  */
@@ -1318,8 +1349,9 @@ void pthread_cleanup_push(void (*function)(void *), void *arg)
   size_t cleanup_level = __esbmc_get_cleanup_level();
 
   // Calculate the index for the cleanup entry in the symbolic infinite array.
-  // Each thread gets a separate chunk of CLEANUP_STACK_CHUNK_SIZE slots to avoid interference.
-  // Within the chunk, cleanup_level indexes the next free slot.
+  // Each thread gets a separate chunk of CLEANUP_STACK_CHUNK_SIZE slots to
+  // avoid interference. Within the chunk, cleanup_level indexes the next free
+  // slot.
   size_t index = tid * CLEANUP_STACK_CHUNK_SIZE + cleanup_level;
 
   // Store the cleanup function pointer and its argument at the calculated index
@@ -1331,10 +1363,12 @@ void pthread_cleanup_push(void (*function)(void *), void *arg)
 }
 
 /**
- * Pop a cleanup handler from the current thread's cleanup stack and optionally execute it.
+ * Pop a cleanup handler from the current thread's cleanup stack and optionally
+ * execute it.
  *
  * This function removes the most recently pushed cleanup handler.
- * If execute is non-zero, it calls the cleanup function with the stored argument.
+ * If execute is non-zero, it calls the cleanup function with the stored
+ * argument.
  *
  * @param execute If non-zero, execute the popped cleanup handler.
  */
@@ -1360,7 +1394,8 @@ void pthread_cleanup_pop(int execute)
 
   if (execute)
   {
-    // Calculate the index in the infinite symbolic cleanup stack for this thread and level
+    // Calculate the index in the infinite symbolic cleanup stack for this
+    // thread and level
     size_t index = tid * CLEANUP_STACK_CHUNK_SIZE + cleanup_level;
 
     // Retrieve the stored cleanup function and argument

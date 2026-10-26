@@ -1,13 +1,15 @@
 #include <python-frontend/module/module_manager.h>
 #include <python-frontend/module/module.h>
 #include <python-frontend/json_utils.h>
-#include <python-frontend/math/round_to_nearest_guard.h>
+#include <util/base/host_rounding_mode.h>
 #include <util/message/message.h>
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <map>
 
 namespace fs = std::filesystem;
 
@@ -77,17 +79,38 @@ static std::string annotated_return_type(const nlohmann::json &returns)
   return "None";
 }
 
-static void add_function_def(module &md, const nlohmann::json &node)
+/// Module-level `X = T` aliases, which an importer cannot resolve on its own.
+static std::map<std::string, std::string>
+module_aliases(const nlohmann::json &body)
+{
+  std::map<std::string, std::string> aliases;
+  for (const auto &node : body)
+    if (json_utils::is_name_alias(node))
+      aliases[node["targets"][0]["id"]] = node["value"]["id"];
+  return aliases;
+}
+
+static void add_function_def(
+  module &md,
+  const nlohmann::json &node,
+  const std::map<std::string, std::string> &aliases)
 {
   function f;
   f.name_ = get_string_safe(node, "name");
-  if (f.name_.empty() || node["returns"].is_null())
+  if (f.name_.empty())
     return;
 
-  f.return_type_ = annotated_return_type(node["returns"]);
+  // An unannotated function is recorded with an empty return type, so that a
+  // `from m import *` can still tell that m defines it (#8366).
+  if (!node["returns"].is_null())
+  {
+    f.return_type_ = annotated_return_type(node["returns"]);
+    if (auto alias = aliases.find(f.return_type_); alias != aliases.end())
+      f.return_type_ = alias->second;
 
-  if (json_utils::has_overload_decorator(node))
-    md.add_overload(node);
+    if (json_utils::has_overload_decorator(node))
+      md.add_overload(node);
+  }
 
   md.add_function(f);
 }
@@ -120,6 +143,18 @@ static void add_class_def(module &md, const nlohmann::json &node)
   md.add_class(c);
 }
 
+static bool mentions_name(const nlohmann::json &node, const std::string &name)
+{
+  if (
+    node.is_object() && node.value("_type", "") == "Name" &&
+    node.value("id", "") == name)
+    return true;
+  return node.is_structured() &&
+         std::any_of(node.begin(), node.end(), [&](const nlohmann::json &c) {
+           return mentions_name(c, name);
+         });
+}
+
 /// Read \p json_path into \p md, reporting whether it could. Only functions,
 /// classes and overloads may be added here -- see module::add_source for why.
 /// Diagnostics keep the create_module tag the messages have always carried.
@@ -138,7 +173,7 @@ static bool populate_module(module &md, const fs::path &json_path)
     nlohmann::json ast;
     // Pin FE_TONEAREST while nlohmann's strtod converts float literals (see
     // python_language.cpp): a leftover rounding mode skews them by one ulp.
-    const round_to_nearest_guard rounding_guard;
+    const host_rounding_mode rounding_guard(FE_TONEAREST);
     json_file >> ast;
     json_file.close();
 
@@ -151,6 +186,9 @@ static bool populate_module(module &md, const fs::path &json_path)
       return false;
     }
 
+    if (mentions_name(ast["body"], "__all__"))
+      md.set_mentions_dunder_all();
+    const auto aliases = module_aliases(ast["body"]);
     for (const auto &node : ast["body"])
     {
       std::string node_type =
@@ -167,7 +205,7 @@ static bool populate_module(module &md, const fs::path &json_path)
       }
 
       if (node_type == "FunctionDef")
-        add_function_def(md, node);
+        add_function_def(md, node, aliases);
       else if (node_type == "ClassDef")
         add_class_def(md, node);
     }
@@ -194,6 +232,10 @@ static bool populate_module(module &md, const fs::path &json_path)
   return false;
 }
 
+ModulePtr get_module_recursive(
+  const std::vector<std::string> &parts,
+  const ModulesList &current_modules);
+
 void module_manager::load_directory(
   const fs::path &current_path,
   ModulePtr parent_module)
@@ -210,12 +252,12 @@ void module_manager::load_directory(
       if (!parent_module && main_module_ == name)
         continue;
 
-      // find_module is a top-level lookup, so two files sharing a stem merge
-      // into one node even when one of them is a submodule: `import pkg.math`
-      // attaches pkg/math.json to the stdlib `math` model and leaves pkg.math
-      // unresolvable. Pre-existing (the old code merged their functions and
-      // classes the same way); preserved here rather than fixed.
-      auto current_module = find_module(name);
+      // A file inside a package is that package's submodule, even when its
+      // stem names a top-level module: p/p.json is p.p, not p (#8496).
+      auto current_module =
+        parent_module
+          ? get_module_recursive({name}, parent_module->submodules())
+          : find_module(name);
       if (!current_module)
       {
         current_module = std::make_shared<module>(name);

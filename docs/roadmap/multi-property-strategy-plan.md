@@ -1,16 +1,22 @@
 # Plan — `--multi-property` under the k-step strategies
 
-**Status:** In progress. W1, W2, W2b, W2c, W3a (#7923), W3b, W3c and W4 landed; W5 re-triage and W6 done; §7 question 2 resolved.
+**Status (2026-10-01):** every code workstream has landed: W1 (#7913), W2
+(#7916), W2b (#7917), W2c (#7918), W3a (#7923), W3b (#7941), W3c and W4
+(#7963), W6 (#7973); W5's re-triage is done and §7 question 2 is resolved
+(#7978). Still open: **W0**, the reply to discussion #7900 (§8 is drafted and
+not posted; the discussion has no comments); **D9**, which has no issue;
+W3a's `__ESBMC_assert(c, "")` residual; W3c's residuals; and the open issues
+#7503 and #7968. D6 is fixed (#8067 closed #7971 on 2026-10-01).
 **Origin:** Discussion
 [#7900](https://github.com/esbmc/esbmc/discussions/7900), *"Current state of
 --multi-property support"*: is `--multi-property` orthogonal to the analysis
-mode, and which modes can its results be trusted under? Related open issues:
-[#1361](https://github.com/esbmc/esbmc/issues/1361),
-[#1902](https://github.com/esbmc/esbmc/issues/1902),
+mode, and which modes can its results be trusted under? Related issues:
+[#1361](https://github.com/esbmc/esbmc/issues/1361) and
+[#1902](https://github.com/esbmc/esbmc/issues/1902), both closed by this work;
 [#1599](https://github.com/esbmc/esbmc/issues/1599),
-[#2075](https://github.com/esbmc/esbmc/issues/2075),
-[#7503](https://github.com/esbmc/esbmc/issues/7503).
-**Last updated:** 2026-09-24.
+[#2075](https://github.com/esbmc/esbmc/issues/2075) and
+[#7503](https://github.com/esbmc/esbmc/issues/7503), open.
+**Last updated:** 2026-10-01.
 
 **Measurement environment.** aarch64 macOS, ESBMC 8.5.0 built from master
 `25b71af213`, default solver (Bitwuzla 0.9.1). Every result below is a verdict
@@ -27,24 +33,25 @@ their own handling of it, and every one of them differs:
 
 | Strategy with `--multi-property` | Behaviour | Trust |
 |---|---|---|
-| `--unwind N` (± `--interval-analysis`, `--parallel-solving`, `--smt-during-symex`) | Every violated claim reported, one table, verdict matches — except that claims sharing a comment and a location share a row (D5) | Yes, per row |
-| `--k-induction`, `--incremental-bmc` (± `--interval-analysis`) | Every violated claim reported, one table at the end with stable ids, verdict matches — except D5 | Yes, per row (W1, W2, W3b) |
+| `--unwind N` (± `--interval-analysis`, `--parallel-solving`, `--smt-during-symex`) | Every violated claim reported, one table, verdict matches — except that two claims symex raises at one instruction share a row (D9) | Yes, per row |
+| `--k-induction`, `--incremental-bmc` (± `--interval-analysis`) | Every violated claim reported, one table at the end with stable ids, verdict matches — except D9 | Yes, per row (W1, W2, W3b) |
 | `--falsification` | Escalates past a violation and reports every violation it reaches by `--max-k-step`, one table at the end; a claim it never settles is UNKNOWN, not PASSED (W3b, W4). It proves nothing, so it runs to `--max-k-step` | Failed rows only |
 | `--k-induction-parallel` | Rejects the combination with an error (W4) | n/a |
 | `--falsify-context-bound` | Rejects the combination with an error (`bmc_strategy.cpp:608-622`) | n/a |
 
 `--loop-invariant` runs the same k-step loop (`driver.cpp:297-300`), so W1, W2
 and W3b reach it too. `--loop-invariant-check` is not routed there (measured: no
-`Checking base case` line), so it runs once and only D5 applies.
+`Checking base case` line), so it runs once and only D9 applies.
 
 D1 was the one wrong *program* verdict — an `--incremental-bmc` run that had
 printed violations could still end `VERIFICATION UNKNOWN`, exit 0 — and W1
 closed it. Everywhere else the verdict is right and it was the per-property
-rows that were wrong, which is the whole point of the flag. D5 is what W3a
-leaves; the rest of this table is history the defect sections still record.
+rows that were wrong, which is the whole point of the flag. W3a fixed D5; what
+it leaves is D9 and the `__ESBMC_assert(c, "")` case recorded under W3a. The
+rest of this table is history the defect sections still record.
 
-§8 is the reply to the discussion once the fixes land; until then this table is
-the reply.
+§8 is the reply to the discussion. The fixes have landed and it has not been
+posted (W0).
 
 ---
 
@@ -299,7 +306,8 @@ file goto_k_induction.cpp, line 181.
 ```
 
 Reproduces without `--multi-property`, so it is out of this plan's scope; filed
-as [#7971](https://github.com/esbmc/esbmc/issues/7971). It is listed so that a
+as [#7971](https://github.com/esbmc/esbmc/issues/7971) and fixed by #8067
+(2026-10-01). It is listed so that a
 matrix run in W6 does not attribute it to the flag. The
 comment at `driver.cpp:196` records the same assert for
 `--loop-invariant-check` + `--termination`. With interval analysis, a
@@ -717,7 +725,7 @@ Re-ran the reproducers of #1599, #1902, #2075 and #7503 on the W4 build
 KNOWNBUG: `loop-invariants/6-invariant_in_wrong_place` and
 `7-not_conjunct_invariant` still pass as KNOWNBUG and give the same verdict
 without `--multi-property`. `goto-coverage/github_1720_6` is a coverage count.
-D6 still aborts; filed as #7971. Its assert predates #7587.
+D6 was filed as #7971 and fixed by #8067. Its assert predated #7587.
 
 ### W6 — documentation and strategy matrix — done
 
@@ -738,8 +746,8 @@ D6 still aborts; filed as #7971. Its assert predates #7587.
   `--k-induction-parallel` rejection. The other eight pass there too: the five
   `--unwind` cells, the two proofs of `vac2_safe.c` and the
   `--falsify-context-bound` rejection. W1-W4 changed none of them.
-- `d5.c` is not in the matrix: its one row is the D5 residual, and a CORE cell
-  would pin the wrong answer.
+- `d5.c` is not in the matrix. It was left out while its one row was the D5
+  defect; W3a's own tests pin it now.
 
 ---
 
@@ -747,7 +755,7 @@ D6 still aborts; filed as #7971. Its assert predates #7587.
 
 Two surfaces, and the workstreams do not share one.
 
-**W1, W2 and W4 change `do_bmc_strategy`.** 20 tests combine `--multi-property`
+**W1, W2 and W4 change `do_bmc_strategy`.** 20 tests (77 on 2026-10-01) combine `--multi-property`
 with a strategy routed there (`driver.cpp:297-300`): `--k-induction` 8,
 `--incremental-bmc` 5, `--loop-invariant` 7; `--falsification` and
 `--termination` have none, so W4's `--falsification` change is pinned only by
@@ -765,7 +773,7 @@ standalone havoc schema and is *not* k-stepped, and pulls in 45 further tests
 (mostly `regression/loop-invariants`) that these workstreams cannot reach.
 
 **W3 changes what every `--multi-property` run prints.** Its surface is all 254
-test.desc that set the flag:
+test.desc that set the flag (332 on 2026-10-01):
 
 ```sh
 grep -rl --include=test.desc -e '--multi-property' regression

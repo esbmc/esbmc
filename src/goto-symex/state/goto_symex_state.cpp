@@ -125,16 +125,23 @@ static std::optional<BigInt> array_element_count(const type2tc &t)
   return n * *sub;
 }
 
+/* Longest chain of writes an infinite array may carry as a propagated value:
+ * 16 and 64 leave 30- and 100-element Python string lists unbounded in
+ * __ESBMC_list_eq, 256 folds both (#8090). */
+static constexpr unsigned inf_array_write_bound = 256;
+
 /* Whether an array value is cheap and well-formed enough to carry as a
  * propagated constant. */
 static bool array_may_propagate(const expr2tc &e)
 {
   const array_type2t &arr = to_array_type(e->type);
 
-  // Infinite-size arrays are special modelling arrays needing their own
-  // handling at SMT or some other level, so optimising them is a Bad Plan (TM).
+  // An infinite array has no literal value, only its initial symbol and the
+  // writes to it; constant_propagation bounds that chain. Only the Python list
+  // model's element storage is let through, whose element type_id and size
+  // must fold for __ESBMC_list_eq to terminate (#8090).
   if (arr.size_is_infinite)
-    return false;
+    return config.language.lid == language_idt::PYTHON;
 
   if (!is_array_type(arr.subtype))
     return true;
@@ -174,9 +181,9 @@ static bool is_const_foldable_arith(const expr2tc &e)
 /// The types a read may be carried at. Scalars, and fixed-size struct, union or
 /// array aggregates: a read of a whole member denotes it exactly and folds a
 /// sibling the same way, which is what a write into an array member needs
-/// (#7597). The aggregate gates are the ones constant_propagation applies to an
-/// aggregate value -- infinite-size modelling arrays and oversized nests stay
-/// out, because a read at a symbolic index inlines the whole constant. A union
+/// (#7597). Infinite-size arrays stay out through type_has_constant_size, and
+/// oversized nests through array_may_propagate, because a read at a symbolic
+/// index inlines the whole constant. A union
 /// is admitted as a read only, for the reason given at the return below. A
 /// pointer stays out because carrying one resolves a later dereference against
 /// the wrong object, a false "Incorrect alignment when accessing data object"
@@ -336,6 +343,32 @@ static bool aggregate_literal_may_propagate(
   return noconst;
 }
 
+/* Whether every update in an array's `with` chain may be carried. An infinite
+ * array has no literal value, so its chain must be a bounded run of
+ * constant-index writes over its initial symbol (#8090). */
+static bool array_with_chain_may_propagate(
+  const goto_symex_statet &state,
+  const expr2tc &expr)
+{
+  const bool infinite = to_array_type(expr->type).size_is_infinite;
+  unsigned symbolic_updates = 0;
+  unsigned writes = 0;
+  expr2tc current = expr;
+
+  while (is_with2t(current))
+  {
+    const with2t &w = to_with2t(current);
+    if (
+      !update_may_propagate(state, w.update_value, symbolic_updates) ||
+      (infinite && (!is_constant_int2t(w.update_field) ||
+                    ++writes > inf_array_write_bound)))
+      return false;
+    current = w.source_value;
+  }
+
+  return !infinite || is_symbol2t(current);
+}
+
 /// Whether an incremental strategy is driving the unwind. Both re-bound it
 /// themselves rather than reading a folded guard, so carrying a `with` costs
 /// without paying (#7597, and constant_propagation's own opt-out).
@@ -475,28 +508,9 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
     }
 
     // Handle WITH chains for arrays where all updates are constants
-    if (is_array_type(expr->type))
-    {
-      // Check if this is a chain of WITHs with all constant updates
-      bool all_constant_updates = true;
-      unsigned symbolic_updates = 0;
-      expr2tc current = expr;
-
-      while (is_with2t(current))
-      {
-        const with2t &w = to_with2t(current);
-        if (!update_may_propagate(*this, w.update_value, symbolic_updates))
-        {
-          all_constant_updates = false;
-          break;
-        }
-        current = w.source_value;
-      }
-
-      // If all updates in the chain were constants, propagate
-      if (all_constant_updates)
-        return true;
-    }
+    if (
+      is_array_type(expr->type) && array_with_chain_may_propagate(*this, expr))
+      return true;
 
     // Handle WITH chains for unions where all updates are constants
     if (is_union_type(expr->type))
@@ -507,11 +521,16 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
       // #7446: an update may also be an immutable symbol, not just a literal --
       // a cross-member read folds through fold_union_member_read only at equal
       // width, and correctly, because the carried value cannot change.
+      // A struct-typed update (`u.a.p = 4` writes `u.a WITH [p := 4]`) is
+      // gated as the struct arm gates its updates.
+      unsigned symbolic_updates = 0;
       for (const expr2tc *current = &expr; is_with2t(*current);
            current = &to_with2t(*current).source_value)
       {
         const expr2tc &update = to_with2t(*current).update_value;
-        if (!is_constant_expr(update) && !is_immutable_value(update))
+        if (
+          !is_constant_expr(update) &&
+          !update_may_propagate(*this, update, symbolic_updates))
           return false;
       }
 
@@ -911,11 +930,51 @@ void goto_symex_statet::assignment(expr2tc &lhs, const expr2tc &rhs)
   if (use_value_set)
   {
     // update value sets
-    expr2tc l1_rhs = rhs; // rhs is const; Rename into new container.
+    expr2tc l1_rhs = shallow_array_update(rhs, l1_lhs);
     level2.get_original_name(l1_rhs);
 
     value_set.assign(l1_lhs, l1_rhs);
   }
+}
+
+static bool has_symbolic_array_size(const type2tc &type)
+{
+  if (is_pointer_type(type))
+    return has_symbolic_array_size(to_pointer_type(type).subtype);
+
+  if (!is_array_type(type))
+    return false;
+
+  const array_type2t &arr = to_array_type(type);
+  return (!is_nil_expr(arr.array_size) && !is_constant_int2t(arr.array_size)) ||
+         has_symbolic_array_size(arr.subtype);
+}
+
+/* A propagated array write carries every earlier write to the same object
+ * under its top-level `with`. Those earlier values are already in the L1
+ * object's value set, so only the newest update is new: re-walking the chain
+ * per write made long Python list builds quadratic (#8090). */
+expr2tc goto_symex_statet::shallow_array_update(
+  const expr2tc &rhs,
+  const expr2tc &l1_lhs) const
+{
+  if (!is_with2t(rhs) || !is_array_type(rhs))
+    return rhs;
+
+  const with2t &top_write = to_with2t(rhs);
+  const expr2tc *base = &top_write.source_value;
+  while (is_with2t(*base))
+    base = &to_with2t(*base).source_value;
+  if (!is_symbol2t(*base) || is_symbol2t(top_write.source_value))
+    return rhs;
+
+  expr2tc l1_base = *base;
+  level2.get_original_name(l1_base);
+  if (l1_base != l1_lhs)
+    return rhs;
+
+  return with2tc(
+    rhs->type, l1_lhs, top_write.update_field, top_write.update_value);
 }
 
 void goto_symex_statet::rename_type(expr2tc &expr)
@@ -933,25 +992,32 @@ void goto_symex_statet::rename_type(expr2tc &expr)
 
   // expr->type is const; rename symbolic array sizes on a CoW-detached copy
   // and, if it changed, rebuild the expression with the renamed type.
-  if (is_array_type(expr->type))
+  if (has_symbolic_array_size(expr->type))
   {
     type2tc renamed = expr->type;
-    expr2tc &arr_size = to_array_type(renamed).array_size;
-    if (!is_nil_expr(arr_size) && is_symbol2t(arr_size))
-      rename(arr_size);
-
-    renamed->Foreach_subtype([this](type2tc &t) {
-      if (!is_array_type(t))
-        return;
-
-      expr2tc &arr_size = to_array_type(t).array_size;
-      if (!is_nil_expr(arr_size) && is_symbol2t(arr_size))
-        rename(arr_size);
-    });
-
+    rename_array_sizes(renamed);
     if (renamed != expr->type)
       expr = expr->with_type(renamed);
   }
+}
+
+// Pointer subtypes too: pointer arithmetic over `int (*)[n]` scales by the
+// pointee's size, which would otherwise reach the solver as a free symbol.
+void goto_symex_statet::rename_array_sizes(type2tc &type)
+{
+  if (is_pointer_type(type))
+  {
+    rename_array_sizes(to_pointer_type(type).subtype);
+    return;
+  }
+
+  if (!is_array_type(type))
+    return;
+
+  array_type2t &arr = to_array_type(type);
+  if (!is_nil_expr(arr.array_size) && !is_constant_int2t(arr.array_size))
+    rename(arr.array_size);
+  rename_array_sizes(arr.subtype);
 }
 
 void goto_symex_statet::rename_quantified(
@@ -1088,6 +1154,27 @@ void goto_symex_statet::rename_address(
   }
 }
 
+// The bit width of a pointer's subtype, or none for a symbolic type or an
+// array of non-constant size.
+static std::optional<unsigned int> pointee_width(const type2tc &subtype)
+{
+  if (is_empty_type(subtype))
+    return 8;
+
+  try
+  {
+    return subtype->get_width();
+  }
+  catch (const type2t::symbolic_type_excp &)
+  {
+    return std::nullopt;
+  }
+  catch (const array_type2t::array_size_excp &)
+  {
+    return std::nullopt;
+  }
+}
+
 void goto_symex_statet::fixup_renamed_type(
   expr2tc &expr,
   const type2tc &orig_type)
@@ -1122,31 +1209,16 @@ void goto_symex_statet::fixup_renamed_type(
     if (origsubtype == newsubtype)
       return;
 
-    // Fetch the (bit) size of the pointer subtype.
     // We can't rename pointers to incomplete types (symbol subtypes, or arrays
     // thereof), because here we'd end up trying to get a concrete type for
-    // them, which is incorrect. If get_width() throws symbolic_type_excp,
-    // treat the subtype as unresolvable: insert a typecast when the types
-    // differ (which might lead to some needless casts) and bail out.
-    unsigned int origsize, newsize;
-
-    try
-    {
-      origsize = is_empty_type(origsubtype) ? 8 : origsubtype->get_width();
-      newsize = is_empty_type(newsubtype) ? 8 : newsubtype->get_width();
-    }
-    catch (const type2t::symbolic_type_excp &)
-    {
+    // them, which is incorrect. If either subtype has no width, treat it as
+    // unresolvable and insert a typecast (which might be needless). If the
+    // renaming process has changed the size of the pointer subtype, this will
+    // break all kinds of pointer arith; insert a cast too.
+    const std::optional<unsigned int> origsize = pointee_width(origsubtype);
+    const std::optional<unsigned int> newsize = pointee_width(newsubtype);
+    if (!origsize || !newsize || *origsize != *newsize)
       expr = typecast2tc(orig_type, expr);
-      return;
-    }
-
-    // If the renaming process has changed the size of the pointer subtype, this
-    // will break all kinds of pointer arith; insert a cast.
-    if (origsize != newsize)
-    {
-      expr = typecast2tc(orig_type, expr);
-    }
   }
   else if (is_scalar_type(orig_type) && is_scalar_type(expr->type))
   {

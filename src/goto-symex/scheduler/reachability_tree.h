@@ -305,7 +305,7 @@ public:
      *  DFS the complete schedules are
      *  `schedules_explored - pruned_by_mpor - pruned_by_hash`. Comparing this
      *  figure across configurations without that subtraction reads a reduction
-     *  that is working as one that made the search bigger (issue #6831 W1.4).
+     *  that is working as one that made the search bigger (issue #6831, #6953).
      */
     unsigned long schedules_explored = 0;
     /** These three prune counters share a unit: context-switch points at which
@@ -498,6 +498,11 @@ public:
   static bool has_shared_lifetime(const symbolt &s)
   {
     return s.static_lifetime || s.get_type().is_dynamic_set();
+  }
+
+  bool is_address_taken_local(const irep_idt &name) const
+  {
+    return address_taken_locals.count(name) != 0;
   }
 
   /** Static or heap storage, or a local whose address may reach a thread. */

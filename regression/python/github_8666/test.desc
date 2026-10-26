@@ -1,0 +1,4 @@
+CORE
+main.py
+--unwind 8 --no-unwinding-assertions
+^ERROR: Reading a list attribute whose elements have different types is supported only at a non-negative constant index

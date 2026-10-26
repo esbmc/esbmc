@@ -1,0 +1,5 @@
+CORE
+main.c
+--32 --no-vla-size-check --no-slice
+^VERIFICATION FAILED$
+^\s+assertion n < 3000000000u$

@@ -1,0 +1,4 @@
+CORE
+main.py
+--unwind 8 --no-unwinding-assertions
+^ERROR: .*main.py:26:4: .d\.func., where .d. holds an instance of B or D depending on the path, is not supported$

@@ -89,8 +89,8 @@
 /** Class providing interface to value set tracking code.
  *  This class allows dereference code to get more data out of the environment
  *  in which it is dereferencing, fetching the set of values that a pointer
- *  points at, and also encoding any assertions that occur regarding the validity
- *  of the dereference.
+ *  points at, and also encoding any assertions that occur regarding the
+ * validity of the dereference.
  */
 class dereference_callbackt
 {
@@ -148,8 +148,8 @@ public:
     expr2tc guard;
   };
 
-  virtual void dump_internal_state(const std::list<struct internal_item> &data
-                                   [[maybe_unused]])
+  virtual void dump_internal_state(
+    const std::list<struct internal_item> &data [[maybe_unused]])
   {
   }
 
@@ -376,12 +376,14 @@ private:
    *  @param guard A guard expression representing the execution conditions
    *         under which the dereference occurs; violations are only triggered
    *         when the guard holds.
+   *  @param what The points-to target being dereferenced.
    */
   void check_pointer_alignment(
     modet mode,
     const type2tc &type,
     const expr2tc &deref_expr,
-    const guard2tc &guard);
+    const guard2tc &guard,
+    const expr2tc &what);
 
   /** Construct an expression representing the pointer's offset, in bits, from
    *  the base of the containing object. This is used for alignment checking
@@ -585,6 +587,14 @@ private:
     const expr2tc &accuml_guard,
     modet mode,
     std::list<std::pair<expr2tc, expr2tc>> &output);
+  void construct_struct_ref_from_dyn_offs_members(
+    const expr2tc &value,
+    const expr2tc &offs,
+    const type2tc &type,
+    const guard2tc &guard,
+    const expr2tc &accuml_guard,
+    modet mode,
+    std::list<std::pair<expr2tc, expr2tc>> &output);
   void construct_struct_member_from_byte_array(
     expr2tc &value,
     const expr2tc &offset,
@@ -598,7 +608,22 @@ private:
     const guard2tc &guard,
     modet mode,
     unsigned long alignment = 0);
+  /// Builds a vector or array destination; false for any other type.
+  bool construct_value_ref(
+    expr2tc &value,
+    const expr2tc &offset,
+    const type2tc &type,
+    const guard2tc &guard,
+    modet mode,
+    unsigned long alignment);
   void construct_vector_ref(
+    expr2tc &value,
+    const expr2tc &offset,
+    const type2tc &type,
+    const guard2tc &guard,
+    modet mode,
+    unsigned long alignment);
+  void construct_array_ref(
     expr2tc &value,
     const expr2tc &offset,
     const type2tc &type,

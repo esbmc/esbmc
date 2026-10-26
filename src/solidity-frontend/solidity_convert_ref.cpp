@@ -48,7 +48,8 @@ bool solidity_convertert::get_var_decl_ref(
   const bool is_this_ptr,
   exprt &new_expr)
 {
-  // Function to configure new_expr that has a +ve referenced id, referring to a variable declaration
+  // Function to configure new_expr that has a +ve referenced id, referring to a
+  // variable declaration
   assert(decl["nodeType"] == "VariableDeclaration");
   std::string name, id;
   if (get_var_decl_name(decl, name, id))
@@ -142,8 +143,9 @@ bool solidity_convertert::get_func_decl_ref(
   const nlohmann::json &decl,
   exprt &new_expr)
 {
-  // Function to configure new_expr that has a +ve referenced id, referring to a function declaration
-  // This allow to get func symbol before we add it to the symbol table
+  // Function to configure new_expr that has a +ve referenced id, referring to a
+  // function declaration This allow to get func symbol before we add it to the
+  // symbol table
   assert(
     decl["nodeType"] == "FunctionDefinition" ||
     decl["nodeType"] == "EventDefinition" ||
@@ -159,8 +161,8 @@ bool solidity_convertert::get_func_decl_ref(
   }
 
   typet type;
-  if (get_func_decl_ref_type(
-        decl, type)) // "type-name" as in state-variable-declaration
+  if (get_func_decl_ref_type(decl, type)) // "type-name" as in
+                                          // state-variable-declaration
     return true;
 
   //! function with no value i.e function body
@@ -299,7 +301,7 @@ bool solidity_convertert::get_esbmc_builtin_ref(
     blt_name == "__VERIFIER_assert")
     name = "assert";
   else
-    //!assume it's a solidity built-in func
+    //! assume it's a solidity built-in func
     return get_sol_builtin_ref(decl, new_expr);
   id = "c:@F@" + name;
 
@@ -334,7 +336,8 @@ bool solidity_convertert::get_esbmc_builtin_ref(
 
 /*
   check if it's a solidity built-in function
-  - if so, get the function definition reference, assign to new_expr and return false
+  - if so, get the function definition reference, assign to new_expr and return
+  false
   - if not, return true
 */
 bool solidity_convertert::get_sol_builtin_ref(
@@ -457,8 +460,8 @@ bool solidity_convertert::get_sol_builtin_ref(
         if (get_expr(expr["expression"], base))
           return true;
         typet base_t;
-        if (get_type_description(
-              expr["expression"]["typeDescriptions"], base_t))
+        if (
+          get_type_description(expr["expression"]["typeDescriptions"], base_t))
           return true;
         SolidityGrammar::SolType solt = get_sol_type(base_t);
         if (
@@ -536,8 +539,8 @@ bool solidity_convertert::get_sol_builtin_ref(
           return true;
 
         typet base_t;
-        if (get_type_description(
-              expr["expression"]["typeDescriptions"], base_t))
+        if (
+          get_type_description(expr["expression"]["typeDescriptions"], base_t))
           return true;
 
         SolidityGrammar::SolType solt = get_sol_type(base_t);
@@ -763,10 +766,9 @@ bool solidity_convertert::get_sol_builtin_ref(
             if (func["arguments"].size() == 0)
               // x.push() == x.push(0x00)
               value_expr = gen_zero(uint_type());
-            else if (get_expr(
-                       func["arguments"][0],
-                       expr["argumentTypes"][0],
-                       value_expr))
+            else if (
+              get_expr(
+                func["arguments"][0], expr["argumentTypes"][0], value_expr))
               return true;
 
             // push value must be byte-sized

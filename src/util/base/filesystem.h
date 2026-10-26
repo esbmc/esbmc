@@ -100,8 +100,8 @@ public:
 
   const std::string &path() const noexcept;
 
-  tmp_path &keep(bool yes) &noexcept;
-  tmp_path &&keep(bool yes) &&noexcept;
+  tmp_path &keep(bool yes) & noexcept;
+  tmp_path &&keep(bool yes) && noexcept;
 };
 
 /**
@@ -134,6 +134,25 @@ public:
   }
 
   FILE *file() noexcept;
+};
+
+/**
+ * @brief Points the temp directory the functions below create paths in at
+ *        `dir` for the lifetime of this object, restoring it on destruction.
+ *
+ * It sets the environment variable that boost::filesystem consults first:
+ * TMPDIR on POSIX, TMP on Windows. Not thread-safe.
+ */
+class tmp_dir_override
+{
+  bool _was_set;
+  std::string _old;
+
+public:
+  explicit tmp_dir_override(const std::string &dir);
+  tmp_dir_override(const tmp_dir_override &) = delete;
+  tmp_dir_override &operator=(const tmp_dir_override &) = delete;
+  ~tmp_dir_override();
 };
 
 /**

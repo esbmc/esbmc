@@ -51,3 +51,7 @@ docs/html/
 CMakeUserPresets.json
 
 /src/python-frontend/pytype_infer/tests/
+
+# LLVM coverage counters, written to the working directory by a coverage build
+# when LLVM_PROFILE_FILE is unset
+*.profraw

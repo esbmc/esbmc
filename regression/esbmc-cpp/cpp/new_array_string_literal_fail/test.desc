@@ -1,0 +1,6 @@
+CORE
+main.cpp
+--std c++17 --multi-property
+^VERIFICATION FAILED$
+FAILED .* assertion p\[2\] == 'c'$
+^\*\* 1 of [0-9]+ properties failed

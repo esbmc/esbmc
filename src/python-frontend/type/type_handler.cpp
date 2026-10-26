@@ -1,4 +1,5 @@
 #include <python-frontend/type/type_handler.h>
+#include <clang-c-frontend/padding.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/type/type_utils.h>
@@ -7,6 +8,7 @@
 #include <python-frontend/type/python_typechecking.h>
 #include <python-frontend/python_annotation/annotation_intrinsics.h>
 #include <python-frontend/symbol_id.h>
+#include <algorithm>
 #include <util/arith/arith_tools.h>
 #include <util/arith/bitvector.h>
 #include <util/config/config.h>
@@ -101,6 +103,34 @@ bool type_handler::is_pointer_free(const typet &t) const
   return true; // primitives
 }
 
+bool type_handler::is_pointer_record(const typet &t) const
+{
+  namespacet ns(converter_.symbol_table());
+  const typet &ty = ns.follow(t);
+  if (!ty.is_struct())
+    return false;
+  const auto &components = to_struct_type(ty).components();
+  return !components.empty() &&
+         std::all_of(components.begin(), components.end(), [](const auto &c) {
+           return c.type().is_pointer();
+         });
+}
+
+exprt type_handler::ptr_free_arg(const exprt &payload, const typet &elem_type)
+  const
+{
+  namespacet ns(converter_.symbol_table());
+  const bool payload_is_a_pointer =
+    payload.id() == "address_of" &&
+    ns.follow(payload.op0().type()).is_pointer();
+  return from_integer(
+    payload_is_a_pointer           ? 2
+    : is_pointer_free(elem_type)   ? 1
+    : is_pointer_record(elem_type) ? 3
+                                   : 0,
+    int_type());
+}
+
 bool type_handler::is_constructor_call(const nlohmann::json &json) const
 {
   if (
@@ -139,9 +169,8 @@ bool type_handler::is_constructor_call(const nlohmann::json &json) const
   /* The statement is a constructor call if the function call on the
    * rhs corresponds to the name of a class. */
 
-  // First, check if the class is defined in the AST (handles forward references)
-  // example: class Foo: -> "Bar":
-  // Bar is a class here defined later
+  // First, check if the class is defined in the AST (handles forward
+  // references) example: class Foo: -> "Bar": Bar is a class here defined later
   if (json_utils::is_class(func_name, converter_.ast()))
     return true;
 
@@ -161,7 +190,8 @@ bool type_handler::is_constructor_call(const nlohmann::json &json) const
   return is_ctor_call;
 }
 
-/// This utility maps internal ESBMC types to their corresponding Python type strings
+/// This utility maps internal ESBMC types to their corresponding Python type
+/// strings
 std::string type_handler::type_to_string(const typet &t) const
 {
   if (t == double_type())
@@ -237,7 +267,7 @@ std::string type_handler::get_python_type_name(const typet &t) const
 std::string type_handler::get_var_type(const std::string &var_name) const
 {
   nlohmann::json ref = json_utils::find_var_decl(
-    var_name, converter_.current_function_name(), converter_.ast());
+    var_name, converter_.current_ast_scope(), converter_.ast());
 
   if (ref.empty())
     return std::string();
@@ -385,7 +415,8 @@ bool type_handler::are_types_compatible(const typet &t1, const typet &t2) const
 }
 
 /// Get a normalized/canonical type for list element type inference
-/// This ensures all strings use the same representative type regardless of length
+/// This ensures all strings use the same representative type regardless of
+/// length
 typet type_handler::get_canonical_string_type(const typet &t) const
 {
   // For string types (char arrays), return a canonical string type
@@ -394,7 +425,8 @@ typet type_handler::get_canonical_string_type(const typet &t) const
     const array_typet &arr_type = to_array_type(t);
     if (arr_type.subtype() == char_type())
     {
-      // Return a canonical string type (size 0 array indicates variable length string)
+      // Return a canonical string type (size 0 array indicates variable length
+      // string)
       return build_array(char_type(), 0);
     }
   }
@@ -471,6 +503,23 @@ static void throw_if_unmodelled_builtin_result(const std::string &ast_type)
 /// References:
 /// - Python 3 type system: https://docs.python.org/3/library/stdtypes.html
 /// - ESBMC irep type system: src/util/type.h
+/// The type a generic spelling `Base[...]` names: its base type, except that
+/// "Optional[T]" spelled as one name (a preprocessor-generated or inferred
+/// annotation) resolves like the Optional[T] subscript does (#8016).
+typet type_handler::get_generic_typet(
+  const std::string &ast_type,
+  size_t bracket_pos,
+  size_t type_size) const
+{
+  const std::string base_type = ast_type.substr(0, bracket_pos);
+  const std::string inner =
+    ast_type.substr(bracket_pos + 1, ast_type.size() - bracket_pos - 2);
+  if (base_type == "Optional" && inner.find('[') == std::string::npos)
+    if (const typet t = get_typet(inner); type_utils::is_optional_scalar(t))
+      return build_optional_type(t);
+  return get_typet(base_type, type_size);
+}
+
 typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   const
 {
@@ -487,8 +536,7 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   size_t bracket_pos = ast_type.find('[');
   if (bracket_pos != std::string::npos)
   {
-    std::string base_type = ast_type.substr(0, bracket_pos);
-    return get_typet(base_type, type_size);
+    return get_generic_typet(ast_type, bracket_pos, type_size);
   }
 
   // type: represents Python type objects (int, str, float, bool, etc.)
@@ -535,7 +583,8 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   // Python float type: IEEE 754 double-precision mapping
   // Python floats are implemented using C double (IEEE 754 double-precision)
   // as per Python documentation. This ensures proper precision, range, and
-  // compatibility with Python's numeric type promotion (int -> float -> complex).
+  // compatibility with Python's numeric type promotion (int -> float ->
+  // complex).
   if (ast_type == "float")
     return lower_to_seam(double_type2());
 
@@ -843,6 +892,37 @@ typet type_handler::get_typet_from_call_func(const nlohmann::json &func) const
   throw std::runtime_error("Invalid type");
 }
 
+std::optional<typet>
+type_handler::scalar_array_element_type(const nlohmann::json &elem) const
+{
+  if (
+    elem.value("_type", "") != "Subscript" ||
+    elem["slice"].value("_type", "") == "Slice" ||
+    elem["value"].value("_type", "") != "Name")
+    return std::nullopt;
+  symbol_id sid(
+    converter_.python_file(),
+    converter_.current_classname(),
+    converter_.current_function_name());
+  sid.set_object(elem["value"]["id"].get<std::string>());
+  const symbolt *symbol = converter_.find_symbol(sid.to_string());
+  if (!symbol)
+    symbol = converter_.find_symbol(sid.global_to_string());
+  // A NumPy view is a pointer into its source's storage.
+  if (
+    !symbol ||
+    (!symbol->get_type().is_array() && !symbol->get_type().is_pointer()))
+    return std::nullopt;
+  const typet &subtype = symbol->get_type().subtype();
+  if (
+    !subtype.is_signedbv() && !subtype.is_unsignedbv() &&
+    !subtype.is_floatbv() && !subtype.is_bool())
+    return std::nullopt;
+  if (subtype == char_type())
+    return std::nullopt;
+  return subtype;
+}
+
 typet type_handler::get_typet(const nlohmann::json &elem) const
 {
   // Handle null/empty values
@@ -891,7 +971,8 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
     // Handle Python AST UnaryOp node (e.g., -1, +1, ~1, not x)
     if (elem["_type"] == "UnaryOp" && elem.contains("operand"))
     {
-      // For unary operations, the result type is typically the same as the operand type
+      // For unary operations, the result type is typically the same as the
+      // operand type
       return get_typet(elem["operand"]);
     }
 
@@ -914,7 +995,8 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
     }
 
     // Handle Python AST Tuple node
-    // Converts tuple expressions such as (1, 2) or ("hello", 42, 3.14) to struct types
+    // Converts tuple expressions such as (1, 2) or ("hello", 42, 3.14) to
+    // struct types
     if (elem["_type"] == "Tuple" && elem.contains("elts"))
     {
       struct_typet tuple_type;
@@ -1048,7 +1130,8 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
 
   if (list_value["_type"] == "arg" && list_value.contains("annotation"))
   {
-    // Handle case where annotation is directly a Subscript (e.g., List['Action'])
+    // Handle case where annotation is directly a Subscript (e.g.,
+    // List['Action'])
     if (list_value["annotation"]["_type"] == "Subscript")
     {
       const nlohmann::json &slice = list_value["annotation"]["slice"];
@@ -1077,6 +1160,7 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
       }
       else
         t = empty_typet();
+
       // Phase 4.3 (Part IV §5): build the pointer type IREP2-internal and lower
       // at the seam. The pointee arrives as a legacy typet, so migrate it in.
       return lower_to_seam(pointer_type2tc(migrate_type(t)));
@@ -1273,10 +1357,11 @@ typet type_handler::get_slice_type() const
   return symbol_typet(slice_type_symbol->id);
 }
 
-/// This method inspects the JSON representation of a Python operand node and attempts to
-/// infer its type based on its AST node type (`_type`). It currently supports variable
-/// names, constants (literals), and list subscripts. This type information is used for
-/// symbolic execution or translation within ESBMC.
+/// This method inspects the JSON representation of a Python operand node and
+/// attempts to infer its type based on its AST node type (`_type`). It
+/// currently supports variable names, constants (literals), and list
+/// subscripts. This type information is used for symbolic execution or
+/// translation within ESBMC.
 std::string type_handler::get_operand_type(const nlohmann::json &operand) const
 {
   // Handle variable reference (e.g., `x`)
@@ -1377,14 +1462,16 @@ std::string type_handler::get_operand_type(const nlohmann::json &operand) const
     }
   }
 
-  // Handle call expressions: constructor calls like A() and method calls like B().g()
+  // Handle call expressions: constructor calls like A() and method calls like
+  // B().g()
   else if (operand["_type"] == "Call" && operand.contains("func"))
   {
     const auto &func = operand["func"];
     // Direct constructor call: A() — return the class name as the type
     if (func["_type"] == "Name" && func.contains("id"))
       return func["id"].get<std::string>();
-    // Method call: obj.method() — infer the return type from the class definition
+    // Method call: obj.method() — infer the return type from the class
+    // definition
     if (
       func["_type"] == "Attribute" && func.contains("attr") &&
       func.contains("value"))
@@ -1430,7 +1517,8 @@ std::string type_handler::get_operand_type(const nlohmann::json &operand) const
     }
   }
 
-  // If no known type can be determined, issue a warning and return std::string()
+  // If no known type can be determined, issue a warning and return
+  // std::string()
   log_warning(
     "type_handler::get_operand_type: unable to determine operand type for AST "
     "node: {}",
@@ -1532,7 +1620,7 @@ size_t type_handler::get_type_width(const typet &type) const
   return 32;
 }
 
-typet type_handler::build_optional_type(const typet &base_type)
+typet type_handler::build_optional_type(const typet &base_type) const
 {
   // Create a struct with two fields:
   // 1. is_none: bool - indicates if value is None
@@ -1552,7 +1640,11 @@ typet type_handler::build_optional_type(const typet &base_type)
   value_field.set_access("public");
   optional_type.components().push_back(value_field);
 
-  return optional_type;
+  // Padded here, once: clang_cpp_adjust pads a variable's copy of this inline
+  // struct but not a parameter's, and base_type_eq then rejects the call.
+  typet padded = optional_type;
+  add_padding(padded, converter_.ns);
+  return padded;
 }
 
 bool type_handler::class_derives_from(
@@ -1593,4 +1685,17 @@ typet type_handler::get_dict_type(const nlohmann::json &dict_value) const
   // For now, return the generic dict type
   // In the future, this could infer specific key/value types
   return get_dict_type();
+}
+
+typet type_handler::class_value_type()
+{
+  struct_typet type;
+  type.tag("__ESBMC_PyClass");
+  type.components().push_back(struct_typet::componentt("id", "id", int_type()));
+  return type;
+}
+
+bool type_handler::is_class_value_type(const typet &type)
+{
+  return type.is_struct() && to_struct_type(type).tag() == "__ESBMC_PyClass";
 }

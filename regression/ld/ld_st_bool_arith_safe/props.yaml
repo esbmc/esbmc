@@ -1,0 +1,6 @@
+format_version: "0.1"
+properties:
+  - id: P1
+    kind: invariant
+    expression: "Safe"
+    justification: "ST arithmetic on BOOL operands is computed at 32 bits."

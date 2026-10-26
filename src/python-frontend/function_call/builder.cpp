@@ -3,6 +3,7 @@
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/numpy/numpy_call_expr.h>
+#include <python-frontend/python-dict/python_dict_handler.h>
 #include <python-frontend/python-list/python_list.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/symbol_id.h>
@@ -17,8 +18,24 @@
 #include <boost/algorithm/string/predicate.hpp>
 #include <optional>
 #include <set>
+#include <unordered_map>
 
 using namespace python_expr;
+
+// Which OM class a tagged scalar's no-arg instance method belongs to.
+// Extend this map, not the call site, when a new int/float OM method is
+// added.
+static const std::unordered_map<std::string, std::string> &
+tagged_scalar_method_class()
+{
+  static const std::unordered_map<std::string, std::string> class_by_method = {
+    {"bit_length", "int"},
+    {"bit_count", "int"},
+    {"conjugate", "int"},
+    {"is_integer", "float"},
+  };
+  return class_by_method;
+}
 
 // True for a bare `:` slice, i.e. Slice(lower=None, upper=None, step=None).
 // Mirrors converter_expr.cpp's helper of the same name: used here to tell
@@ -62,6 +79,30 @@ try_get_pylist_struct_type(const typet &type, const namespacet &ns)
 static bool is_pylist_object_type(const typet &type, const namespacet &ns)
 {
   return try_get_pylist_struct_type(type, ns).has_value();
+}
+
+/// `len(list)`. A contract clause cannot name the result of a call, so there it
+/// reads the size field directly.
+static exprt list_length(
+  const exprt &list,
+  const struct_typet &list_struct,
+  bool in_contract_clause)
+{
+  if (in_contract_clause && list.type().is_pointer())
+    return build_deref_member(list, "size", size_type());
+
+  code_typet list_size_type;
+  list_size_type.return_type() = size_type();
+  code_typet::argumentt arg_type;
+  arg_type.type() = pointer_typet(list_struct);
+  list_size_type.arguments().push_back(arg_type);
+
+  symbol_exprt list_size_func("c:@F@__ESBMC_list_size", list_size_type);
+
+  return build_call(
+    list_size_func,
+    size_type(),
+    {list.type().is_pointer() ? list : build_address_of(list)});
 }
 
 /// Python types that define no __len__. Named rather than tested inline so the
@@ -124,8 +165,8 @@ static bool needs_bool_intrinsic_symbol(const std::string &name)
 // impure and leaving the reader to guess which call was the problem.
 static bool is_unsupported_contract_intrinsic(const std::string &name)
 {
-  return name == "__ESBMC_assigns" || name == "__ESBMC_is_fresh" ||
-         name == "__ESBMC_forall" || name == "__ESBMC_exists";
+  return name == "__ESBMC_is_fresh" || name == "__ESBMC_forall" ||
+         name == "__ESBMC_exists";
 }
 
 void function_call_builder::check_contract_call(
@@ -133,16 +174,11 @@ void function_call_builder::check_contract_call(
 {
   const std::string &clause = function_id.get_function();
 
-  // Only `assigns` is reported from here: it is a statement in its own right,
-  // so nothing else sees it. The other unsupported intrinsics are meaningful
-  // only inside a clause, where check_contract_clause already rejects them by
-  // name. Reporting them here would fire on any call sharing the name, outside
-  // any clause, and blame contracts for it.
   if (clause == kEsbmcAssigns)
-    throw std::runtime_error(fmt::format(
-      "{} at line {} is not supported by the Python frontend yet",
-      clause,
-      call_.value("lineno", 0)));
+  {
+    check_assigns_targets();
+    return;
+  }
 
   if (clause != kEsbmcRequires && clause != kEsbmcEnsures)
     return;
@@ -150,12 +186,13 @@ void function_call_builder::check_contract_call(
   // goto_convert aborts on any other arity, so reject it here where the user
   // still gets a line number and a suggestion.
   if (call_["args"].size() != 1)
-    throw std::runtime_error(fmt::format(
-      "{} at line {} takes exactly one argument, got {}; combine conditions "
-      "with 'and'",
-      clause,
-      call_.value("lineno", 0),
-      call_["args"].size()));
+    throw std::runtime_error(
+      fmt::format(
+        "{} at line {} takes exactly one argument, got {}; combine conditions "
+        "with 'and'",
+        clause,
+        call_.value("lineno", 0),
+        call_["args"].size()));
 
   check_contract_clause(call_["args"], clause);
 }
@@ -212,6 +249,9 @@ std::optional<exprt> function_call_builder::build_contract_intrinsic(
   if (function_id.get_function() == kEsbmcOld)
     return build_old_snapshot();
 
+  if (function_id.get_function() == kEsbmcAssigns)
+    return build_assigns_call();
+
   // Loop invariants and function-contract clauses share one shape: a bodiless
   // `void f(bool)` whose call goto_convert lowers into a LOOP_INVARIANT or a
   // marked ASSUME. The symbol must stay valueless: builtin_functions.cpp
@@ -237,6 +277,58 @@ std::optional<exprt> function_call_builder::build_contract_intrinsic(
     code_type);
   converter_.add_symbol(symbol);
   return std::nullopt;
+}
+
+// A frame names places the caller can observe: a module-level global, or an
+// attribute of an object the function reaches. A local or a parameter is
+// invisible to the caller, so naming one states nothing.
+void function_call_builder::check_assigns_targets() const
+{
+  for (const auto &target : call_["args"])
+  {
+    const std::string kind = target.value("_type", "");
+    const std::string name = target.value("id", "");
+    if (kind == "Attribute")
+      continue;
+    if (
+      kind == "Name" && names_module_global(name) &&
+      !names_enclosing_parameter(name))
+      continue;
+    throw std::runtime_error(
+      fmt::format(
+        "{} at line {} names {}; a frame target must be a module-level "
+        "global or an attribute",
+        kEsbmcAssigns,
+        call_.value("lineno", 0),
+        kind == "Name" ? "'" + name + "'" : describe_clause_node(kind)));
+  }
+}
+
+// Lowered as the C macro spells it: __ESBMC_assigns_impl(&t1, &t2, ...), or
+// __ESBMC_assigns_impl((void *)0) for an empty frame.
+exprt function_call_builder::build_assigns_call() const
+{
+  const std::string impl_id = "c:@F@__ESBMC_assigns_impl";
+  const locationt location = converter_.get_location_from_decl(call_);
+  const symbolt *impl = converter_.symbol_table().find_symbol(impl_id);
+  if (impl == nullptr)
+  {
+    code_typet code_type;
+    code_type.return_type() = empty_typet();
+    code_type.make_ellipsis();
+    symbolt symbol = converter_.create_symbol(
+      "", "__ESBMC_assigns_impl", impl_id, location, code_type);
+    impl = converter_.add_symbol_and_get_ptr(symbol);
+  }
+
+  code_function_callt call;
+  call.function() = symbol_expr(*impl);
+  call.location() = location;
+  for (const auto &target : call_["args"])
+    call.arguments().push_back(address_of_exprt(converter_.get_expr(target)));
+  if (call.arguments().empty())
+    call.arguments().push_back(gen_zero(pointer_typet(empty_typet())));
+  return call;
 }
 
 // Whether \p name is a parameter of the function being converted. Only a
@@ -282,43 +374,48 @@ exprt function_call_builder::build_old_snapshot() const
   // instruction it plants would have no reader. Reporting it beats leaving a
   // statement that looks like it did something.
   if (!converter_.in_contract_clause())
-    throw std::runtime_error(fmt::format(
-      "{} at line {} is only meaningful inside a contract clause",
-      kEsbmcOld,
-      line));
+    throw std::runtime_error(
+      fmt::format(
+        "{} at line {} is only meaningful inside a contract clause",
+        kEsbmcOld,
+        line));
 
   if (call_["args"].size() != 1)
-    throw std::runtime_error(fmt::format(
-      "{} at line {} takes exactly one argument, got {}",
-      kEsbmcOld,
-      line,
-      call_["args"].size()));
+    throw std::runtime_error(
+      fmt::format(
+        "{} at line {} takes exactly one argument, got {}",
+        kEsbmcOld,
+        line,
+        call_["args"].size()));
 
   const nlohmann::json &arg = call_["args"][0];
   if (arg.value("_type", "") != "Name")
-    throw std::runtime_error(fmt::format(
-      "{} at line {} takes a variable; {} cannot be snapshotted",
-      kEsbmcOld,
-      line,
-      describe_clause_node(arg.value("_type", ""))));
+    throw std::runtime_error(
+      fmt::format(
+        "{} at line {} takes a variable; {} cannot be snapshotted",
+        kEsbmcOld,
+        line,
+        describe_clause_node(arg.value("_type", ""))));
 
   const std::string &name = arg.value("id", "");
   if (!names_enclosing_parameter(name) && !names_module_global(name))
-    throw std::runtime_error(fmt::format(
-      "{} at line {} takes '{}', which is neither a parameter nor a "
-      "module-level global; a local has no pre-call value to snapshot",
-      kEsbmcOld,
-      line,
-      name));
+    throw std::runtime_error(
+      fmt::format(
+        "{} at line {} takes '{}', which is neither a parameter nor a "
+        "module-level global; a local has no pre-call value to snapshot",
+        kEsbmcOld,
+        line,
+        name));
 
   exprt target = converter_.get_expr(arg);
   if (!is_snapshottable_scalar(target.type()))
-    throw std::runtime_error(fmt::format(
-      "{} at line {} takes '{}', which is not an int, float or bool; only "
-      "scalars can be snapshotted by the Python frontend yet",
-      kEsbmcOld,
-      line,
-      arg.value("id", "")));
+    throw std::runtime_error(
+      fmt::format(
+        "{} at line {} takes '{}', which is not an int, float or bool; only "
+        "scalars can be snapshotted by the Python frontend yet",
+        kEsbmcOld,
+        line,
+        arg.value("id", "")));
 
   // Build what the C macro expands to,
   // `*(__typeof__(x)*)__ESBMC_old_raw((void*)(&x))`, which Python cannot spell
@@ -360,31 +457,9 @@ exprt function_call_builder::build_old_snapshot() const
   return snapshot;
 }
 
-void function_call_builder::check_clause_name(
-  const nlohmann::json &node,
-  const std::string &clause) const
+const symbolt *
+function_call_builder::clause_name_symbol(const std::string &name) const
 {
-  const std::string name = node.value("id", "");
-
-  if (name == kEsbmcReturnValue)
-  {
-    if (clause == kEsbmcRequires)
-      throw std::runtime_error(fmt::format(
-        "{} clause at line {} references {}; a precondition cannot mention "
-        "the return value",
-        clause,
-        node.value("lineno", 0),
-        kEsbmcReturnValue));
-
-    if (returns_no_value(enclosing_return_type()))
-      throw std::runtime_error(fmt::format(
-        "{} clause at line {} references {}, but '{}' returns None",
-        clause,
-        node.value("lineno", 0),
-        kEsbmcReturnValue,
-        converter_.current_function_name()));
-  }
-
   symbol_id sid(
     converter_.python_file(),
     converter_.current_classname(),
@@ -396,13 +471,75 @@ void function_call_builder::check_clause_name(
   const symbolt *sym = converter_.symbol_table().find_symbol(sid.to_string());
   if (!sym)
     sym = converter_.symbol_table().find_symbol(sid.global_to_string());
+  return sym;
+}
+
+static bool is_int_literal(const nlohmann::json &node)
+{
+  if (
+    node.value("_type", "") == "UnaryOp" &&
+    node["op"].value("_type", "") == "USub")
+    return is_int_literal(node["operand"]);
+  return node.value("_type", "") == "Constant" &&
+         node["value"].is_number_integer();
+}
+
+// `len(l)` and `l[k]`, for a list `l` and an int literal `k`, lower to reads
+// of the list object with no call or branch, so a clause may use them (#7629).
+bool function_call_builder::is_pure_list_query(const nlohmann::json &node) const
+{
+  const std::string kind = node.value("_type", "");
+  const nlohmann::json *base = nullptr;
+  if (
+    kind == "Call" && node["func"].value("id", "") == "len" &&
+    node["args"].size() == 1 &&
+    node.value("keywords", nlohmann::json()).empty())
+    base = &node["args"][0];
+  else if (kind == "Subscript" && is_int_literal(node["slice"]))
+    base = &node["value"];
+
+  if (base == nullptr || base->value("_type", "") != "Name")
+    return false;
+  const symbolt *sym = clause_name_symbol(base->value("id", ""));
+  return sym && is_pylist_object_type(sym->get_type(), converter_.ns);
+}
+
+void function_call_builder::check_clause_name(
+  const nlohmann::json &node,
+  const std::string &clause) const
+{
+  const std::string name = node.value("id", "");
+
+  if (name == kEsbmcReturnValue)
+  {
+    if (clause == kEsbmcRequires)
+      throw std::runtime_error(
+        fmt::format(
+          "{} clause at line {} references {}; a precondition cannot mention "
+          "the return value",
+          clause,
+          node.value("lineno", 0),
+          kEsbmcReturnValue));
+
+    if (returns_no_value(enclosing_return_type()))
+      throw std::runtime_error(
+        fmt::format(
+          "{} clause at line {} references {}, but '{}' returns None",
+          clause,
+          node.value("lineno", 0),
+          kEsbmcReturnValue,
+          converter_.current_function_name()));
+  }
+
+  const symbolt *sym = clause_name_symbol(name);
   if (sym && sym->get_type() == any_type())
-    throw std::runtime_error(fmt::format(
-      "{} clause at line {} references '{}', whose type could not be "
-      "determined; annotate the parameter so the clause constrains its value",
-      clause,
-      node.value("lineno", 0),
-      name));
+    throw std::runtime_error(
+      fmt::format(
+        "{} clause at line {} references '{}', whose type could not be "
+        "determined; annotate the parameter so the clause constrains its value",
+        clause,
+        node.value("lineno", 0),
+        name));
 }
 
 // A contract clause is lowered into one ASSUME/ASSERT, so its argument has to
@@ -413,7 +550,8 @@ void function_call_builder::check_clause_name(
 // could not be inferred is a `void *`, so `o > 0` compares a pointer rather
 // than the value the source reads as. Reject all three instead of verifying a
 // different property than the one written. A parameter whose type *is* known,
-// including a list or str, stays allowed.
+// including a list or str, stays allowed, as do `len(l)` and `l[k]` over a
+// list, which lower without a temporary or a branch.
 void function_call_builder::check_contract_clause(
   const nlohmann::json &node,
   const std::string &clause) const
@@ -435,35 +573,54 @@ void function_call_builder::check_contract_clause(
   // ran, and lowers to a snapshot taken there.
   if (
     !node_type.empty() && !is_pure_clause_node(node_type) &&
-    callee != kEsbmcOld)
+    callee != kEsbmcOld && !is_pure_list_query(node))
   {
-    throw std::runtime_error(fmt::format(
-      "{} clause at line {} contains {}; a contract clause must be a pure "
-      "expression{}",
-      clause,
-      node.value("lineno", 0),
-      describe_clause_node(node_type),
-      is_unsupported_contract_intrinsic(callee)
-        ? fmt::format(
-            " ({} is not supported by the Python frontend yet)", callee)
-        : ""));
+    throw std::runtime_error(
+      fmt::format(
+        "{} clause at line {} contains {}; a contract clause must be a pure "
+        "expression{}",
+        clause,
+        node.value("lineno", 0),
+        describe_clause_node(node_type),
+        is_unsupported_contract_intrinsic(callee)
+          ? fmt::format(
+              " ({} is not supported by the Python frontend yet)", callee)
+          : ""));
   }
 
   // A precondition already speaks about the pre-state, and nothing rewrites a
   // snapshot in it: `replace_old_in_expr` is applied to the ensures alone, so
   // the requires would be asserted over a symbol no instruction defines.
   if (callee == kEsbmcOld && clause == kEsbmcRequires)
-    throw std::runtime_error(fmt::format(
-      "{} at line {} says nothing in a precondition, which already speaks "
-      "about the pre-state",
-      kEsbmcOld,
-      node.value("lineno", 0)));
+    throw std::runtime_error(
+      fmt::format(
+        "{} at line {} says nothing in a precondition, which already speaks "
+        "about the pre-state",
+        kEsbmcOld,
+        node.value("lineno", 0)));
 
   if (node_type == "Name")
     check_clause_name(node, clause);
 
   for (const auto &child : node)
     check_contract_clause(child, clause);
+}
+
+// A statement planted while converting a clause runs in the body, not where
+// the clause is checked, so the clause would read a value it never computed.
+void function_call_builder::check_clause_planted_nothing(
+  const std::string &clause,
+  size_t planted) const
+{
+  if (
+    (clause == kEsbmcRequires || clause == kEsbmcEnsures) &&
+    converter_.current_block_statement_count() != planted)
+    throw std::runtime_error(
+      fmt::format(
+        "{} clause at line {} needs a statement to evaluate; a contract clause "
+        "must be a pure expression",
+        clause,
+        call_.value("lineno", 0)));
 }
 
 function_call_builder::function_call_builder(
@@ -527,6 +684,277 @@ static bool is_name_subscript(const nlohmann::json &arg, const char *slice_kind)
          arg["slice"].value("_type", "") == slice_kind &&
          arg.contains("value") && arg["value"].is_object() &&
          arg["value"].value("_type", "") == "Name";
+}
+
+namespace
+{
+/// How a list's name is used across the module, as far as it decides whether
+/// the element types recorded for the list are all the list can hold.
+struct list_name_uses
+{
+  int bindings = 0;
+  /// The list[Class] element of each same-named parameter; "" when a
+  /// parameter is not annotated so.
+  std::set<std::string> params;
+  /// A use the registry cannot follow: an item store, an alias, an argument.
+  bool escapes = false;
+};
+} // namespace
+
+static bool is_name(const nlohmann::json &node, const std::string &name)
+{
+  return node.is_object() && node.value("_type", "") == "Name" &&
+         node.value("id", "") == name;
+}
+
+static void scan_list_uses(
+  const nlohmann::json &node,
+  const std::string &name,
+  list_name_uses &uses);
+
+static void scan_store_target(
+  const nlohmann::json &target,
+  const std::string &name,
+  list_name_uses &uses)
+{
+  if (is_name(target, name))
+    ++uses.bindings;
+  else if (
+    target.value("_type", "") == "Subscript" && is_name(target["value"], name))
+    uses.escapes = true;
+  else
+    scan_list_uses(target, name, uses);
+}
+
+static std::string list_param_class(const nlohmann::json &arg)
+{
+  if (!arg.contains("annotation"))
+    return std::string();
+  const nlohmann::json &annotation = arg["annotation"];
+  if (
+    annotation.is_object() && annotation.value("_type", "") == "Subscript" &&
+    is_name(annotation["value"], "list") &&
+    annotation["slice"].value("_type", "") == "Name")
+    return annotation["slice"].value("id", "");
+  return std::string();
+}
+
+/// Records a bare use of the list's name: a parameter, or an occurrence no
+/// enclosing node accounted for, which lets the list escape.
+static bool scan_name_use(
+  const nlohmann::json &node,
+  const std::string &name,
+  list_name_uses &uses)
+{
+  if (is_name(node, name))
+  {
+    uses.escapes = true;
+    return true;
+  }
+  if (node.value("_type", "") == "arg" && node.value("arg", "") == name)
+  {
+    uses.params.insert(list_param_class(node));
+    return true;
+  }
+  return false;
+}
+
+/// Whether the node reads an item of the list, calls a method on it or takes
+/// its length: the registry follows the first two and the last reads nothing.
+static bool scan_tracked_use(
+  const nlohmann::json &node,
+  const std::string &name,
+  list_name_uses &uses)
+{
+  const std::string type = node.value("_type", "");
+  if (
+    (type == "Subscript" || type == "Attribute") &&
+    is_name(node["value"], name))
+  {
+    if (node.contains("slice"))
+      scan_list_uses(node["slice"], name, uses);
+    return true;
+  }
+  return type == "Call" && is_name(node["func"], "len") &&
+         node["args"].size() == 1 && is_name(node["args"][0], name);
+}
+
+static void scan_list_uses(
+  const nlohmann::json &node,
+  const std::string &name,
+  list_name_uses &uses)
+{
+  if (node.is_array())
+  {
+    for (const auto &child : node)
+      scan_list_uses(child, name, uses);
+    return;
+  }
+  if (
+    !node.is_object() || scan_name_use(node, name, uses) ||
+    scan_tracked_use(node, name, uses))
+    return;
+
+  for (const auto &[key, child] : node.items())
+  {
+    if (key == "targets" && child.is_array())
+      for (const auto &target : child)
+        scan_store_target(target, name, uses);
+    else if (key == "target")
+      scan_store_target(child, name, uses);
+    else if (!(key == "iter" && is_name(child, name)))
+      scan_list_uses(child, name, uses);
+  }
+}
+
+/// The classes of the elements recorded for a list, "" standing for an
+/// element that is not a class instance.
+static std::set<std::string> recorded_element_classes(
+  const python_converter &converter,
+  const std::string &id)
+{
+  std::set<std::string> classes;
+  const auto *recorded = converter.get_element_type_registry().find(id);
+  if (!recorded)
+    return classes;
+
+  for (const auto &elem : *recorded)
+  {
+    typet type = elem.second.is_pointer() ? elem.second.subtype() : elem.second;
+    type = converter.name_space().follow(type);
+    std::string tag =
+      type.is_struct() ? to_struct_type(type).tag().as_string() : std::string();
+    if (tag.rfind("tag-", 0) == 0)
+      tag = tag.substr(4);
+    classes.insert(json_utils::is_class(tag, converter.ast()) ? tag : "");
+  }
+  return classes;
+}
+
+std::string function_call_builder::subscript_receiver_class(
+  const nlohmann::json &receiver) const
+{
+  if (
+    receiver.value("_type", "") != "Subscript" ||
+    receiver["value"].value("_type", "") != "Name")
+    return "str";
+
+  const std::string name = receiver["value"].value("id", "");
+  symbol_id base_sid(
+    converter_.python_file(),
+    converter_.current_classname(),
+    converter_.current_function_name());
+  base_sid.set_object(name);
+  const symbolt *base_sym = converter_.find_symbol(base_sid.to_string());
+  if (
+    !base_sym ||
+    base_sym->get_type() != converter_.get_type_handler().get_list_type())
+    return "str";
+
+  const std::string list_id = base_sym->id.as_string();
+  const std::set<std::string> classes =
+    recorded_element_classes(converter_, list_id);
+  if (classes.empty() || classes == std::set<std::string>{""})
+    return "str";
+
+  const std::string message = fmt::format(
+    "method call on an element of list '{}' at line {} is not supported: its "
+    "elements are not known to share one class",
+    name,
+    call_.value("lineno", 0));
+  if (classes.size() > 1)
+    throw std::runtime_error(message);
+
+  // The registry follows pushes as they are converted, so the class it
+  // reports holds only for a list that nothing else can fill: one binding (or
+  // a parameter annotated with that class), no item stores and no aliases.
+  const std::string &cls = *classes.begin();
+  list_name_uses uses;
+  scan_list_uses(converter_.ast()["body"], name, uses);
+  const bool tracked =
+    !uses.escapes &&
+    ((uses.bindings == 1 && uses.params.empty()) ||
+     (uses.bindings == 0 && uses.params == std::set<std::string>{cls}));
+  if (!tracked)
+    throw std::runtime_error(message);
+
+  // A push converted later, e.g. further down a loop body, must not change
+  // the class this call was dispatched on.
+  converter_.defer_check([&converter = converter_, list_id, cls, message]() {
+    if (recorded_element_classes(converter, list_id) != std::set{cls})
+      throw std::runtime_error(message);
+  });
+  return cls;
+}
+
+std::string function_call_builder::call_receiver_class(
+  const nlohmann::json &inner_call) const
+{
+  const auto inferred = [&]() {
+    return converter_.get_type_handler().get_operand_type(inner_call);
+  };
+  const nlohmann::json &func = inner_call["func"];
+  if (
+    func.value("_type", "") != "Attribute" || func.value("attr", "") != "pop" ||
+    inner_call["args"].size() != 1 || !inner_call["keywords"].empty() ||
+    func["value"].value("_type", "") != "Name")
+    return inferred();
+
+  const std::string name = func["value"].value("id", "");
+  symbol_id sid(
+    converter_.python_file(),
+    converter_.current_classname(),
+    converter_.current_function_name());
+  sid.set_object(name);
+  const symbolt *sym = converter_.find_symbol(sid.to_string());
+  if (!sym)
+    sym = converter_.find_symbol("py:" + converter_.python_file() + "@" + name);
+  python_dict_handler *dict_handler = converter_.get_dict_handler();
+  if (!sym || !dict_handler->is_dict_type(sym->get_type()))
+    return inferred();
+
+  typet value_type =
+    dict_handler->resolve_expected_type_for_dict_subscript(build_symbol(*sym));
+  if (value_type.is_pointer())
+    value_type = value_type.subtype();
+  value_type = converter_.ns.follow(value_type);
+  if (!value_type.is_struct())
+    return inferred();
+
+  std::string tag = to_struct_type(value_type).tag().as_string();
+  if (tag.rfind("tag-", 0) == 0)
+    tag = tag.substr(4);
+  return json_utils::is_class(tag, converter_.ast()) ? tag : inferred();
+}
+
+// The class whose bases super() searches: the class its first argument
+// names, as in super(C, self), or the enclosing class for a bare super().
+static std::string super_start_class(
+  const nlohmann::json &super_call,
+  const std::string &current_class,
+  const nlohmann::json &ast)
+{
+  if (!super_call.contains("args") || super_call["args"].empty())
+    return current_class;
+  const std::string named = super_call["args"][0].value("id", "");
+  return json_utils::is_class(named, ast) ? named : current_class;
+}
+
+// `id`, a method's symbol id under class `from`, rewritten to name the same
+// method under class `to`. A constructor is named after its class.
+static std::string rebase_method_id(
+  std::string id,
+  const std::string &from,
+  const std::string &to,
+  const std::string &method,
+  bool is_ctor)
+{
+  const std::string old_tail = "@C@" + from + "@F@" + (is_ctor ? from : method);
+  const std::size_t pos = id.rfind(old_tail);
+  if (from == to || pos == std::string::npos)
+    return id;
+  return id.replace(
+    pos, old_tail.size(), "@C@" + to + "@F@" + (is_ctor ? to : method));
 }
 
 symbol_id function_call_builder::build_function_id() const
@@ -606,7 +1034,7 @@ symbol_id function_call_builder::build_function_id() const
           module_path_candidate = name;
 
           // Skip module names - let the module handling logic deal with them
-          if (converter_.is_imported_module(name))
+          if (converter_.is_module_receiver(name, node, call_))
             return typet();
 
           symbol_id var_sid(
@@ -744,7 +1172,7 @@ symbol_id function_call_builder::build_function_id() const
         // Nested calls (e.g., u.encode(...).decode(...)) do not always have
         // func.id. Use inferred call result type instead of indexing JSON
         // fields that may be null.
-        obj_name = th.get_operand_type(inner_call);
+        obj_name = call_receiver_class(inner_call);
       }
 
       if (obj_name.empty())
@@ -758,8 +1186,18 @@ symbol_id function_call_builder::build_function_id() const
         // For __init__, use is_ctor=true: parent's __init__ is stored under
         // the class name (e.g. Vehicle::Vehicle), not the literal "__init__".
         bool is_init_call = (func_name == "__init__");
+        const std::string start =
+          super_start_class(inner_call, current_class_name, ast);
         symbolt *base_class_func = converter_.find_function_in_base_classes(
-          current_class_name, function_id.to_string(), func_name, is_init_call);
+          start,
+          rebase_method_id(
+            function_id.to_string(),
+            current_class_name,
+            start,
+            func_name,
+            is_init_call),
+          func_name,
+          is_init_call);
         if (base_class_func)
         {
           return symbol_id::from_string(base_class_func->id.as_string());
@@ -773,14 +1211,14 @@ symbol_id function_call_builder::build_function_id() const
         func_json["value"].contains("id"))
         obj_name = func_json["value"]["id"];
       else
-        obj_name = "str";
+        obj_name = subscript_receiver_class(func_json["value"]);
     }
 
     obj_name = json_utils::get_object_alias(ast, obj_name);
 
     if (
       !json_utils::is_class(obj_name, ast) &&
-      converter_.is_imported_module(obj_name))
+      converter_.is_module_receiver(obj_name, func_json["value"], call_))
     {
       const auto &module_path = converter_.get_imported_module_path(obj_name);
 
@@ -1073,21 +1511,32 @@ symbol_id function_call_builder::build_function_id() const
           "variable so the attribute chain can be typed.");
       }
 
-      // Extract class name from the type, following symbol references
-      typet var_type = var_symbol->get_type().is_pointer()
-                         ? var_symbol->get_type().subtype()
-                         : var_symbol->get_type();
-
-      // Follow symbol type references using the converter's namespace
-      var_type = converter_.ns.follow(var_type);
-
-      if (var_type.is_struct())
+      // A tagged receiver's struct tag isn't a real class; isinstance()
+      // already narrowed its runtime type_id, so dispatch by method name.
+      if (th.is_tagged_scalar_type(var_symbol->get_type()))
       {
-        const struct_typet &struct_type = to_struct_type(var_type);
-        class_name = struct_type.tag().as_string();
+        auto it = tagged_scalar_method_class().find(func_name);
+        class_name = it != tagged_scalar_method_class().end() ? it->second : "";
       }
       else
-        class_name = th.type_to_string(var_type);
+      {
+        // Extract class name from the type, following symbol references
+        typet var_type = var_symbol->get_type().is_pointer()
+                           ? var_symbol->get_type().subtype()
+                           : var_symbol->get_type();
+
+        // Follow symbol type references using the converter's namespace
+        var_type = converter_.ns.follow(var_type);
+
+        if (var_type.is_struct())
+        {
+          const struct_typet &struct_type = to_struct_type(var_type);
+          class_name = struct_type.tag().as_string();
+          use_imported_class_file(function_id, *var_symbol, class_name);
+        }
+        else
+          class_name = th.type_to_string(var_type);
+      }
     }
   }
 
@@ -1114,7 +1563,7 @@ symbol_id function_call_builder::build_function_id() const
       std::string nested_id = ctx + "@F@" + func_name;
       symbol_id sid(python_file, current_class_name, nested_id);
 
-      if (converter_.symbol_table().find_symbol(sid.to_string()))
+      if (nested_function_exists(sid))
       {
         function_id.set_function(nested_id);
         return function_id;
@@ -1126,6 +1575,33 @@ symbol_id function_call_builder::build_function_id() const
   }
 
   return function_id;
+}
+
+// A receiver bound by `from m import obj` has its class defined in m, so its
+// methods live under m's file, not this one (#8375).
+void function_call_builder::use_imported_class_file(
+  symbol_id &function_id,
+  const symbolt &receiver,
+  const std::string &class_name) const
+{
+  if (
+    receiver.module == converter_.python_file() ||
+    !json_utils::find_class(converter_.ast()["body"], class_name).empty())
+    return;
+  const std::string module_path =
+    converter_.find_imported_class_module(class_name).second;
+  if (!module_path.empty())
+    function_id.set_filename(module_path);
+}
+
+bool function_call_builder::nested_function_exists(const symbol_id &sid) const
+{
+  // A sibling defined later in the enclosing body is not converted yet.
+  return converter_.symbol_table().find_symbol(sid.to_string()) ||
+         !json_utils::find_function_by_path(
+            converter_.ast(),
+            json_utils::split_function_path(sid.get_function()))
+            .empty();
 }
 
 exprt function_call_builder::len_of_bitvector_operand(
@@ -1146,14 +1622,237 @@ exprt function_call_builder::len_of_bitvector_operand(
   return from_integer(1, long_long_int_type());
 }
 
+static std::string none_has_no_attribute(const nlohmann::json &call)
+{
+  return "'NoneType' object has no attribute '" +
+         call["func"]["attr"].get<std::string>() + "'";
+}
+
+bool function_call_builder::receiver_is_bound_to_none() const
+{
+  const nlohmann::json &receiver = call_["func"]["value"];
+  if (receiver.value("_type", "") != "Name")
+    return false;
+  const std::string &name = receiver["id"].get_ref<const std::string &>();
+  if (json_utils::count_name_bindings(converter_.ast(), name) != 1)
+    return false;
+  const nlohmann::json decl = json_utils::find_var_decl(
+    name, converter_.current_function_name(), converter_.ast());
+  return decl.contains("value") && decl["value"].is_object() &&
+         decl["value"].value("_type", "") == "Constant" &&
+         decl["value"]["value"].is_null();
+}
+
+static bool annotation_is_optional(const nlohmann::json &ann)
+{
+  return (ann.value("_type", "") == "Subscript" &&
+          ann["value"].value("id", "") == "Optional") ||
+         type_utils::annotation_admits_none(ann);
+}
+
+// A None value, directly or as a branch of a conditional expression.
+static bool is_none_valued(const nlohmann::json &value)
+{
+  if (!value.is_object())
+    return false;
+  if (value.value("_type", "") == "IfExp")
+    return is_none_valued(value["body"]) || is_none_valued(value["orelse"]);
+  return value.value("_type", "") == "Constant" && value["value"].is_null();
+}
+
+// Whether `node` is a parameter, or a single-target assignment, of `name`.
+static bool binds_name(const nlohmann::json &node, const std::string &name)
+{
+  const std::string kind = node.value("_type", "");
+  if (kind == "arg")
+    return node["arg"] == name;
+  const nlohmann::json *target = nullptr;
+  if (kind == "AnnAssign")
+    target = &node["target"];
+  else if (kind == "Assign" && node["targets"].size() == 1)
+    target = &node["targets"][0];
+  return target && target->value("_type", "") == "Name" &&
+         (*target)["id"] == name;
+}
+
+// Whether some parameter, declaration or assignment of `name` under `node`
+// admits None, through its annotation or its value.
+static bool may_hold_none(const nlohmann::json &node, const std::string &name)
+{
+  if (
+    node.is_object() && binds_name(node, name) &&
+    ((node.contains("annotation") && node["annotation"].is_object() &&
+      annotation_is_optional(node["annotation"])) ||
+     (node.contains("value") && is_none_valued(node["value"]))))
+    return true;
+  for (const auto &child : node)
+    if (child.is_structured() && may_hold_none(child, name))
+      return true;
+  return false;
+}
+
+void function_call_builder::raise_if_none_receiver() const
+{
+  const nlohmann::json &receiver = call_["func"]["value"];
+  if (
+    receiver.value("_type", "") != "Name" ||
+    !converter_.can_emit_runtime_guard() ||
+    !may_hold_none(converter_.ast(), receiver["id"].get<std::string>()))
+    return;
+
+  symbol_id sid = converter_.create_symbol_id();
+  sid.set_object(receiver["id"].get<std::string>());
+  const symbolt *symbol = converter_.find_symbol(sid.to_string());
+  if (!symbol || !symbol->get_type().is_pointer())
+    return;
+
+  const typet &pointee = symbol->get_type().subtype();
+  const std::string tag =
+    pointee.id() == "symbol" ? pointee.identifier().as_string() : "";
+  const bool is_instance =
+    boost::starts_with(tag, "tag-") &&
+    json_utils::is_class(tag.substr(4), converter_.ast());
+  if (!is_instance && !type_utils::is_string_type(symbol->get_type()))
+    return;
+
+  const exprt ref = symbol_expr(*symbol);
+  converter_.emit_guarded_raise(
+    equality_exprt(ref, gen_zero(ref.type())),
+    "AttributeError",
+    none_has_no_attribute(call_),
+    converter_.get_location_from_decl(call_));
+}
+
+std::string
+function_call_builder::instance_class_name(const nlohmann::json &node) const
+{
+  const std::string kind = node.value("_type", "");
+  if (kind == "Call")
+  {
+    const nlohmann::json &func = node["func"];
+    if (
+      func.value("_type", "") == "Name" &&
+      json_utils::is_class(func["id"].get<std::string>(), converter_.ast()))
+      return func["id"].get<std::string>();
+    return "";
+  }
+
+  typet type;
+  if (kind == "Name")
+  {
+    symbol_id sid = converter_.create_symbol_id();
+    sid.set_object(node["id"].get<std::string>());
+    const symbolt *symbol = converter_.find_symbol(sid.to_string());
+    if (!symbol)
+      return "";
+    type = symbol->get_type();
+  }
+  else if (kind == "Attribute")
+  {
+    const std::string base = instance_class_name(node["value"]);
+    const symbolt *base_class = converter_.find_symbol("tag-" + base);
+    const std::string attr = node["attr"].get<std::string>();
+    if (
+      base.empty() || !base_class || !base_class->get_type().is_struct() ||
+      !to_struct_type(base_class->get_type()).has_component(attr))
+      return "";
+    type = to_struct_type(base_class->get_type()).get_component(attr).type();
+  }
+
+  if (type.is_pointer())
+    type = type.subtype();
+  std::string tag;
+  if (type.id() == "symbol")
+    tag = type.identifier().as_string();
+  else if (type.is_struct())
+    tag = to_struct_type(type).tag().as_string();
+  return boost::starts_with(tag, "tag-") ? tag.substr(4) : tag;
+}
+
+bool function_call_builder::receiver_class_defines_method() const
+{
+  const auto &ast = converter_.ast();
+  const std::string cls = instance_class_name(call_["func"]["value"]);
+  return json_utils::is_class(cls, ast) &&
+         json_utils::class_defines_method(
+           ast["body"], cls, call_["func"]["attr"].get<std::string>());
+}
+
+exprt function_call_builder::build_method_call_on_receiver() const
+{
+  if (receiver_is_bound_to_none())
+    return converter_.get_exception_handler().gen_exception_raise(
+      "AttributeError", none_has_no_attribute(call_));
+  raise_if_none_receiver();
+  if (receiver_class_defines_method())
+    return nil_exprt();
+  exprt number_error = str_method_on_number_error();
+  if (!number_error.is_nil())
+    return number_error;
+  return converter_.get_string_handler().handle_string_attribute_call(call_);
+}
+
+static std::string constant_number_type_name(const nlohmann::json &value)
+{
+  if (value.is_boolean())
+    return "bool";
+  if (value.is_number_float())
+    return "float";
+  return value.is_number() ? "int" : "";
+}
+
+exprt function_call_builder::str_method_on_number_error() const
+{
+  const std::string method = call_["func"]["attr"].get<std::string>();
+  if (!type_utils::is_str_only_method(method))
+    return nil_exprt();
+
+  const nlohmann::json &recv = call_["func"]["value"];
+  std::string type_name;
+  if (recv.value("_type", "") == "Constant")
+    type_name = constant_number_type_name(recv["value"]);
+  else if (recv.value("_type", "") == "Name")
+  {
+    symbol_id sid = converter_.create_symbol_id();
+    sid.set_object(recv["id"].get<std::string>());
+    const symbolt *symbol = converter_.find_symbol(sid.to_string());
+    const type_handler &types = converter_.get_type_handler();
+    // get_expr follows a retype to str (`x = 3; x = "ab"`), the raw symbol not.
+    if (symbol && types.is_numeric_scalar_type(symbol->get_type()))
+    {
+      const typet current = converter_.get_expr(recv).type();
+      if (types.is_numeric_scalar_type(current))
+        type_name = types.get_python_type_name(current);
+    }
+  }
+  if (type_name.empty())
+    return nil_exprt();
+
+  exprt raise = converter_.get_exception_handler().gen_exception_raise(
+    "AttributeError",
+    "'" + type_name + "' object has no attribute '" + method + "'");
+  raise.location() = converter_.get_location_from_decl(call_);
+  return raise;
+}
+
+// np.round keeps the numpy model: C's round rounds halves away from zero and
+// has no decimals. The models' own `round(x)` is a Name call.
+static bool
+reuses_c_model(const nlohmann::json &call, const symbol_id &function_id)
+{
+  const std::string &function = function_id.get_function();
+  return type_utils::is_c_model_func(function) &&
+         !(function == "round" &&
+           call["func"].value("_type", "") == "Attribute");
+}
+
 exprt function_call_builder::build() const
 {
   if (call_["func"]["_type"] == "Attribute")
   {
-    exprt handled_string_method =
-      converter_.get_string_handler().handle_string_attribute_call(call_);
-    if (!handled_string_method.is_nil())
-      return handled_string_method;
+    exprt handled_method = build_method_call_on_receiver();
+    if (!handled_method.is_nil())
+      return handled_method;
   }
 
   symbol_id function_id = build_function_id();
@@ -1173,21 +1872,8 @@ exprt function_call_builder::build() const
         auto list_struct =
           try_get_pylist_struct_type(arg_symbol->get_type(), converter_.ns);
         if (list_struct)
-        {
-          code_typet list_size_type;
-          list_size_type.return_type() = size_type();
-          code_typet::argumentt arg_type;
-          arg_type.type() = pointer_typet(*list_struct);
-          list_size_type.arguments().push_back(arg_type);
-
-          symbol_exprt list_size_func("c:@F@__ESBMC_list_size", list_size_type);
-
-          return build_call(
-            list_size_func,
-            size_type(),
-            {arg_expr.type().is_pointer() ? arg_expr
-                                          : build_address_of(arg_expr)});
-        }
+          return list_length(
+            arg_expr, *list_struct, converter_.in_contract_clause());
       }
     }
 
@@ -1539,7 +2225,7 @@ exprt function_call_builder::build() const
   if (is_numpy_call(function_id))
   {
     // Adjust the function ID when reusing functions from the C models
-    if (type_utils::is_c_model_func(function_id.get_function()))
+    if (reuses_c_model(call_, function_id))
     {
       function_id.set_prefix("c:");
       function_id.set_filename("");
@@ -1550,8 +2236,10 @@ exprt function_call_builder::build() const
 
   const bool saved = converter_.enter_contract_clause(
     needs_bool_intrinsic_symbol(function_id.get_function()));
+  const size_t planted = converter_.current_block_statement_count();
   function_call_expr call_expr(function_id, call_, converter_);
   exprt result = call_expr.get();
   converter_.restore_contract_clause(saved);
+  check_clause_planted_nothing(function_id.get_function(), planted);
   return result;
 }

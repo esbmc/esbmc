@@ -1,6 +1,9 @@
+#include <algorithm>
+#include <goto-programs/destructor.h>
 #include <goto-programs/goto_convert_class.h>
 #include <irep2/irep2_utils.h>
 #include <util/arith/arith_tools.h>
+#include <util/config/config.h>
 #include <util/lang/c_types.h>
 #include <util/symtab/cprover_prefix.h>
 #include <util/expr/expr_util.h>
@@ -280,6 +283,28 @@ static void lift_old_over_bound_index(
   expr.swap(element);
 }
 
+static bool is_braced_list(const exprt &e)
+{
+  return e.id() == "struct" || e.id() == "array" || e.id() == "constant";
+}
+
+/// x=f(...), and a mem-initializer from a braced list, which initialises the
+/// member in place: convert_assign lowers both without removing the rhs first.
+static bool is_assigned_whole(const exprt &assign)
+{
+  const exprt &rhs = assign.op1();
+  return (rhs.id() == "sideeffect" && rhs.statement() == "function_call") ||
+         (assign.op0().get_bool("#member_init") && is_braced_list(rhs));
+}
+
+/// A class temporary initialised from a braced list, whose class elements
+/// remove_temporary_object constructs in place.
+static bool is_braced_temporary(const exprt &e)
+{
+  return e.id() == "sideeffect" && e.statement() == "temporary_object" &&
+         e.operands().size() == 1 && is_braced_list(e.op0());
+}
+
 /// A side effect other than a nested function call (e.g. ++ on a parameter)
 /// cannot be replicated by argument substitution.
 static bool has_non_call_sideeffect(const exprt &e)
@@ -534,7 +559,8 @@ bool summary_has_sideeffect(const exprt &e)
 /// Fold @p e to a constant boolean: 1 = true, 0 = false, -1 = not a constant.
 /// -1 covers both "genuinely symbolic" and "constant, but the simplifier could
 /// not fold it"; either way the caller rejects the callee, so a stronger
-/// simplifier only widens the set of accepted shapes, it never changes a result.
+/// simplifier only widens the set of accepted shapes, it never changes a
+/// result.
 int summary_fold_bool(const exprt &e)
 {
   expr2tc e2;
@@ -559,10 +585,10 @@ void summary_coerce(exprt &e, const typet &t)
     e.make_typecast(t);
 }
 
-/// Whether `if(c, e, e')' may be pushed into the operands of @p id.  `/', `mod',
-/// `index' and `dereference' are excluded because the mux would then select
-/// their operand rather than their result, leaving a single site where the
-/// source had one per arm -- a divisor check, say, would cover only the
+/// Whether `if(c, e, e')' may be pushed into the operands of @p id.  `/',
+/// `mod', `index' and `dereference' are excluded because the mux would then
+/// select their operand rather than their result, leaving a single site where
+/// the source had one per arm -- a divisor check, say, would cover only the
 /// selected divisor.  (goto_check does not currently instrument inside a
 /// quantifier body, so this is about not depending on that.)
 bool summary_mux_pushable(const irep_idt &id)
@@ -877,9 +903,9 @@ summarize_code(const codet &code, summary_statet &st, const namespacet &ns)
     st.locals = outer;
     // Merge every outer-scope local written on either path; a variable written
     // in only one branch takes its pre-branch value on the other.  Values only
-    // defined on one path (declared without initializer, assigned in one branch)
-    // are left unset so a later unconditional read bails.  Locals declared
-    // inside a branch drop out of scope with the restore above.
+    // defined on one path (declared without initializer, assigned in one
+    // branch) are left unset so a later unconditional read bails.  Locals
+    // declared inside a branch drop out of scope with the restore above.
     std::set<irep_idt> keys;
     for (const auto &kv : then_env)
       if (outer.count(kv.first))
@@ -973,7 +999,8 @@ summarize_code(const codet &code, summary_statet &st, const namespacet &ns)
       if (!summarize_code(*body, st, ns))
         return false;
       // The frontend wraps the loop iterator in a code_expressiont; route it
-      // through summarize_code, which unwraps the statement to apply its effect.
+      // through summarize_code, which unwraps the statement to apply its
+      // effect.
       if (iter && iter->is_not_nil())
       {
         if (iter->is_code())
@@ -1332,6 +1359,45 @@ void goto_convertt::make_temp_symbol(exprt &expr, goto_programt &dest)
   expr = symbol_expr(new_symbol);
 }
 
+bool goto_convertt::has_destructible_sideeffect(const exprt &expr)
+{
+  code_function_callt destructor;
+  if (expr.id() == "sideeffect" && get_destructor(ns, expr.type(), destructor))
+    return true;
+
+  forall_operands (it, expr)
+    if (has_destructible_sideeffect(*it))
+      return true;
+
+  return false;
+}
+
+void goto_convertt::remove_condition_sideeffects(
+  exprt &cond,
+  goto_programt &dest)
+{
+  const locationt location = cond.find_location();
+  const std::size_t stack_size = targets.destructor_stack.size();
+  remove_sideeffects(cond, dest);
+
+  destructor_stackt &stack = targets.destructor_stack;
+  if (
+    in_short_circuit ||
+    std::none_of(stack.begin() + stack_size, stack.end(), is_destructor_entry))
+    return;
+
+  // The temporaries may be read by the condition, so its value is taken
+  // before they are destroyed; the copy keeps block scope.
+  const std::size_t temporaries_size = stack.size();
+  make_temp_symbol(cond, dest);
+  const destructor_stackt cond_entries(
+    stack.begin() + temporaries_size, stack.end());
+  stack.resize(temporaries_size);
+  unwind_destructor_stack(location, stack_size, dest);
+  stack.resize(stack_size);
+  stack.insert(stack.end(), cond_entries.begin(), cond_entries.end());
+}
+
 bool goto_convertt::has_sideeffect(const exprt &expr)
 {
   forall_operands (it, expr)
@@ -1349,7 +1415,8 @@ bool goto_convertt::has_sideeffect(const expr2tc &expr)
   if (is_nil_expr(expr))
     return false;
 
-  // A legacy "sideeffect" exprt migrates to sideeffect2t (function_call, malloc,
+  // A legacy "sideeffect" exprt migrates to sideeffect2t (function_call,
+  // malloc,
   // ++/--, …) OR sideeffect_assign2t (assignment / compound-assignment used as
   // an expression); the legacy has_sideeffect treats both as side effects.
   if (is_sideeffect2t(expr) || is_sideeffect_assign2t(expr))
@@ -1567,8 +1634,8 @@ void goto_convertt::remove_sideeffects(
     // If neither branch has a sideeffect and we are not validating a violation
     // witness, the ternary can stay as an if_exprt — no lowering needed.
     // Under --validate-violation-witness we always lower so that the resulting
-    // IF instruction carries the ? column from expr.location(), which symex_goto
-    // uses for column-accurate branching waypoint matching.
+    // IF instruction carries the ? column from expr.location(), which
+    // symex_goto uses for column-accurate branching waypoint matching.
     if (
       !has_sideeffect(to_if_expr(expr).true_case()) &&
       !has_sideeffect(to_if_expr(expr).false_case()) &&
@@ -1582,11 +1649,16 @@ void goto_convertt::remove_sideeffects(
 
     const locationt location = expr.location();
 
+    const std::size_t true_size = targets.destructor_stack.size();
     goto_programt tmp_true;
     remove_sideeffects(if_expr.true_case(), tmp_true, result_is_used);
 
+    const std::size_t false_size = targets.destructor_stack.size();
     goto_programt tmp_false;
     remove_sideeffects(if_expr.false_case(), tmp_false, result_is_used);
+
+    guard_arm_destructors(
+      if_expr.cond(), true_size, false_size, location, dest);
 
     if (result_is_used)
     {
@@ -1648,13 +1720,7 @@ void goto_convertt::remove_sideeffects(
           remove_sideeffects(result, dest, true);
         }
         else
-        {
-          remove_sideeffects(*it, dest, false);
-
-          // remember these for later checks
-          if (it->is_not_nil())
-            convert(code_expressiont(*it), dest);
-        }
+          remove_comma_operand(*it, dest);
       }
 
       expr.swap(result);
@@ -1662,13 +1728,7 @@ void goto_convertt::remove_sideeffects(
     else // result not used
     {
       Forall_operands (it, expr)
-      {
-        remove_sideeffects(*it, dest, false);
-
-        // remember as expression statement for later checks
-        if (it->is_not_nil())
-          convert(code_expressiont(*it), dest);
-      }
+        remove_comma_operand(*it, dest);
 
       expr = nil_exprt();
     }
@@ -1708,12 +1768,9 @@ void goto_convertt::remove_sideeffects(
 
     if (statement == "assign")
     {
-      // we do a special treatment for x=f(...)
       assert(expr.operands().size() == 2);
 
-      if (
-        expr.op1().id() == "sideeffect" &&
-        to_side_effect_expr(expr.op1()).get_statement() == "function_call")
+      if (is_assigned_whole(expr))
       {
         remove_sideeffects(expr.op0(), dest);
         exprt lhs = expr.op0();
@@ -1794,7 +1851,8 @@ void goto_convertt::remove_sideeffects(
           }
         }
         // Only bypass Forall_operands when we actually rewrote the && chain;
-        // otherwise (e.g. single foo(x) or foo(x)==0) fall through to normal path.
+        // otherwise (e.g. single foo(x) or foo(x)==0) fall through to normal
+        // path.
         if (and_expr)
         {
           remove_function_call(expr, dest, result_is_used);
@@ -1817,9 +1875,10 @@ void goto_convertt::remove_sideeffects(
             (inner->op0().is_and() || inner->op0().id() == "or"))
             inner = &inner->op0();
 
-          // Recurse through the full &&/|| tree so a side effect nested inside a
-          // disjunct's && chain is hoisted at the leaf rather than lowering the
-          // whole nested chain at once (which dropped leading conjuncts, #6298).
+          // Recurse through the full &&/|| tree so a side effect nested inside
+          // a disjunct's && chain is hoisted at the leaf rather than lowering
+          // the whole nested chain at once (which dropped leading conjuncts,
+          // #6298).
           if (inner->is_and() || inner->id() == "or")
           {
             flatten_contract_clause(args.front(), dest);
@@ -1861,9 +1920,8 @@ void goto_convertt::remove_sideeffects(
     }
   }
 
-  // TODO: evaluation order
-  Forall_operands (it, expr)
-    remove_sideeffects(*it, dest);
+  if (!is_braced_temporary(expr))
+    remove_operand_sideeffects(expr, dest);
 
   if (expr.id() == "sideeffect")
   {
@@ -1898,29 +1956,10 @@ void goto_convertt::remove_sideeffects(
       // (destructors before DEADs, innermost temporaries first) right here.
       // A result that is used keeps block-level scope, as does anything
       // without a pending destructor call (plain DEADs of C-style temps).
-      if (!result_is_used)
-      {
-        bool have_destructor = false;
-        for (std::size_t i = stack_size; i < targets.destructor_stack.size();
-             i++)
-          if (targets.destructor_stack[i].get_statement() == "function_call")
-          {
-            have_destructor = true;
-            break;
-          }
-
-        if (have_destructor)
-        {
-          while (targets.destructor_stack.size() > stack_size)
-          {
-            codet d_code = targets.destructor_stack.back();
-            targets.destructor_stack.pop_back();
-            d_code.location() = location;
-            convert(d_code, dest);
-          }
-          expr.make_nil();
-        }
-      }
+      if (
+        !result_is_used &&
+        destroy_full_expression_temporaries(stack_size, location, dest))
+        expr.make_nil();
     }
     else if (statement == "nondet")
     {
@@ -1971,6 +2010,79 @@ void goto_convertt::remove_sideeffects(
   migrate_expr(legacy, expr);
 }
 
+static irep_idt
+compound_assign_operator(const irep_idt &statement, bool is_float)
+{
+  if (statement == "assign+")
+    return is_float ? "ieee_add" : "+";
+  if (statement == "assign-")
+    return is_float ? "ieee_sub" : "-";
+  if (statement == "assign*")
+    return is_float ? "ieee_mul" : "*";
+  if (statement == "assign_div")
+    return is_float ? "ieee_div" : "/";
+  if (statement == "assign_mod")
+    return "mod";
+  if (statement == "assign_shl")
+    return "shl";
+  if (statement == "assign_ashr")
+    return "ashr";
+  if (statement == "assign_lshr")
+    return "lshr";
+  if (statement == "assign_bitand")
+    return "bitand";
+  if (statement == "assign_bitxor")
+    return "bitxor";
+  assert(statement == "assign_bitor");
+  return "bitor";
+}
+
+bool goto_convertt::is_destructor_entry(const codet &entry)
+{
+  return entry.get_statement() == "function_call" ||
+         entry.get_statement() == "ifthenelse";
+}
+
+// A temporary materialized in one arm of `c ? a : b` exists only if that arm
+// ran, yet its destructor runs at the end of the full-expression
+// ([class.temporary]/4), so guard it by the arm's condition, saved before
+// either arm can change what it reads.
+void goto_convertt::guard_arm_destructors(
+  exprt &cond,
+  std::size_t true_size,
+  std::size_t false_size,
+  const locationt &location,
+  goto_programt &dest)
+{
+  destructor_stackt &stack = targets.destructor_stack;
+  if (std::none_of(stack.begin() + true_size, stack.end(), is_destructor_entry))
+    return;
+
+  const symbolt &flag = new_tmp_symbol(bool_typet());
+  const symbol_exprt flag_expr(flag.id, flag.get_type());
+
+  code_declt decl(flag_expr);
+  decl.location() = location;
+  copy(decl, DECL, dest);
+
+  code_assignt assign(flag_expr, cond);
+  assign.location() = location;
+  copy(assign, ASSIGN, dest);
+
+  for (std::size_t i = true_size; i < stack.size(); i++)
+    if (is_destructor_entry(stack[i]))
+    {
+      code_ifthenelset guarded;
+      guarded.cond() = i < false_size ? exprt(flag_expr) : not_exprt(flag_expr);
+      guarded.then_case() = stack[i];
+      guarded.then_case().location() = location;
+      stack[i] = guarded;
+    }
+
+  stack.insert(stack.begin() + true_size, code_deadt(flag_expr));
+  cond = flag_expr;
+}
+
 void goto_convertt::remove_assignment(
   exprt &expr,
   goto_programt &dest,
@@ -1999,88 +2111,10 @@ void goto_convertt::remove_assignment(
       abort();
     }
 
-    exprt rhs;
-
-    if (statement == "assign+")
-    {
-      if (expr_has_floatbv(expr))
-      {
-        rhs.id("ieee_add");
-      }
-      else
-      {
-        rhs.id("+");
-      }
-    }
-    else if (statement == "assign-")
-    {
-      if (expr_has_floatbv(expr))
-      {
-        rhs.id("ieee_sub");
-      }
-      else
-      {
-        rhs.id("-");
-      }
-    }
-    else if (statement == "assign*")
-    {
-      if (expr_has_floatbv(expr))
-      {
-        rhs.id("ieee_mul");
-      }
-      else
-      {
-        rhs.id("*");
-      }
-    }
-    else if (statement == "assign_div")
-    {
-      if (expr_has_floatbv(expr))
-      {
-        rhs.id("ieee_div");
-      }
-      else
-      {
-        rhs.id("/");
-      }
-    }
-    else if (statement == "assign_mod")
-    {
-      rhs.id("mod");
-    }
-    else if (statement == "assign_shl")
-    {
-      rhs.id("shl");
-    }
-    else if (statement == "assign_ashr")
-    {
-      rhs.id("ashr");
-    }
-    else if (statement == "assign_lshr")
-    {
-      rhs.id("lshr");
-    }
-    else if (statement == "assign_bitand")
-    {
-      rhs.id("bitand");
-    }
-    else if (statement == "assign_bitxor")
-    {
-      rhs.id("bitxor");
-    }
-    else if (statement == "assign_bitor")
-    {
-      rhs.id("bitor");
-    }
-    else
-    {
-      std::ostringstream str;
-      str << statement << " not yet supported\n";
-      str << "Location: " << expr.location();
-      log_error("{}", str.str());
-      abort();
-    }
+    // The operation runs in the computation type (C11 6.5.16.2p3), which is
+    // floating-point when E2 is even if E1 is an integer: `i /= 3.5`.
+    exprt rhs(compound_assign_operator(
+      statement, expr_has_floatbv(expr) || expr_has_floatbv(expr.op1())));
 
     rhs.copy_to_operands(expr.op0(), expr.op1());
     rhs.type() = expr.op0().type();
@@ -2131,6 +2165,24 @@ void goto_convertt::remove_assignment(
     expr.make_nil();
 }
 
+// C11 6.5.2.4p2/6.5.3.1p2 define ++ and -- through += 1, so a signed operand
+// of rank below int is promoted (6.3.1.1p2) and cannot overflow. Unsigned
+// operands keep their own type so --unsigned-overflow-check still reports the
+// wrap. _BitInt is not promoted (C23 6.3.1.1p2); it is told apart by having
+// no #cpp_type, the only marker irep2 keeps.
+static bool is_promoted_to_int(const typet &type)
+{
+  if (
+    config.language.lid != language_idt::C &&
+    config.language.lid != language_idt::CPP)
+    return false;
+  if (!type.is_signedbv())
+    return false;
+  if (type.cpp_type().empty())
+    return false;
+  return bv_width(type) < bv_width(int_type());
+}
+
 void goto_convertt::remove_pre(
   exprt &expr,
   goto_programt &dest,
@@ -2176,7 +2228,9 @@ void goto_convertt::remove_pre(
     rhs.type() = int_type();
     rhs.make_typecast(bool_type());
   }
-  else if (op_type.id() == "c_enum" || op_type.id() == "incomplete_c_enum")
+  else if (
+    op_type.id() == "c_enum" || op_type.id() == "incomplete_c_enum" ||
+    is_promoted_to_int(op_type))
   {
     rhs.copy_to_operands(expr.op0(), gen_one(int_type()));
     rhs.op0().make_typecast(int_type());
@@ -2273,7 +2327,9 @@ void goto_convertt::remove_post(
     rhs.type() = int_type();
     rhs.make_typecast(bool_type());
   }
-  else if (op_type.id() == "c_enum" || op_type.id() == "incomplete_c_enum")
+  else if (
+    op_type.id() == "c_enum" || op_type.id() == "incomplete_c_enum" ||
+    is_promoted_to_int(op_type))
   {
     rhs.copy_to_operands(expr.op0(), gen_one(int_type()));
     rhs.op0().make_typecast(int_type());
@@ -2456,9 +2512,8 @@ void goto_convertt::remove_function_call(
     ftype.return_type().id() == "constructor" &&
     call.arguments().size() < to_code_type(ftype).arguments().size())
   {
-    // for constructor, we need to add the implicit `this` as the first argument,
-    // so convert to:
-    // BLAH(&return_value$_BLAH$1, ...)
+    // for constructor, we need to add the implicit `this` as the first
+    // argument, so convert to: BLAH(&return_value$_BLAH$1, ...)
     side_effect_expr_function_callt ctor_call;
     ctor_call.function() = call.function();
     exprt::operandst &args = ctor_call.arguments();
@@ -2508,10 +2563,11 @@ void goto_convertt::remove_cpp_new(
   goto_programt &dest,
   bool result_is_used)
 {
-  // For side effect with 'cpp_new' statement, `expr' refers to the side effect that
-  // contains an initializer. Technically, this function converts the cpp_new side effect
-  // and replaces it with a new symbol if `result_is_used` is true. It's not just simply
-  // removing the side effect node in the exprt tree.
+  // For side effect with 'cpp_new' statement, `expr' refers to the side effect
+  // that contains an initializer. Technically, this function converts the
+  // cpp_new side effect and replaces it with a new symbol if `result_is_used`
+  // is true. It's not just simply removing the side effect node in the exprt
+  // tree.
   codet call;
 
   symbolt new_symbol;
@@ -2545,10 +2601,53 @@ void goto_convertt::remove_cpp_delete(exprt &expr, goto_programt &dest)
   tmp.copy_to_operands(to_unary_expr(expr).op0());
   tmp.set("destructor", expr.find("destructor"));
   tmp.set("dealloc_function", expr.find("dealloc_function"));
+  tmp.set("dealloc_alignment", expr.find("dealloc_alignment"));
 
   convert_cpp_delete(tmp, dest);
 
   expr.make_nil();
+}
+
+/// Remove the side effects of \p expr's operands. A temporary initialising an
+/// aggregate's element is that element ([dcl.init.aggr]/4), destroyed with the
+/// aggregate rather than on its own.
+void goto_convertt::remove_operand_sideeffects(exprt &expr, goto_programt &dest)
+{
+  const bool aggregate =
+    expr.id() == "struct" || (expr.is_constant() && expr.type().is_array());
+
+  // TODO: evaluation order
+  Forall_operands (it, expr)
+  {
+    const bool element_temporary = aggregate && it->id() == "sideeffect" &&
+                                   it->statement() == "temporary_object";
+    const std::size_t pushed = targets.destructor_stack.size();
+    remove_sideeffects(*it, dest);
+    if (element_temporary && it->is_symbol())
+      drop_destructor(to_symbol_expr(*it), pushed);
+  }
+}
+
+/// Unschedule the destructor call on \p object among the scope-exit entries
+/// pushed since the stack held \p from of them.
+void goto_convertt::drop_destructor(
+  const symbol_exprt &object,
+  std::size_t from)
+{
+  auto &stack = targets.destructor_stack;
+  for (std::size_t i = stack.size(); i-- > from;)
+  {
+    if (stack[i].get_statement() != "function_call")
+      continue;
+    const exprt &arg = to_code_function_call(stack[i]).arguments().front();
+    if (
+      arg.id() == "address_of" && arg.op0().is_symbol() &&
+      to_symbol_expr(arg.op0()).get_identifier() == object.get_identifier())
+    {
+      stack.erase(stack.begin() + i);
+      return;
+    }
+  }
 }
 
 void goto_convertt::remove_temporary_object(exprt &expr, goto_programt &dest)
@@ -2579,6 +2678,7 @@ void goto_convertt::remove_temporary_object(exprt &expr, goto_programt &dest)
 
   if (expr.operands().size() == 1)
   {
+    remove_initializer_sideeffects(symbol_expr(new_symbol), expr.op0(), dest);
     codet assignment("assign");
     assignment.reserve_operands(2);
     new_symbol.set_value(expr.op0());

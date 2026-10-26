@@ -1,0 +1,2 @@
+class Q:
+    pass

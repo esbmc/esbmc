@@ -194,7 +194,16 @@ std::string clang_cpp_convertert::rtti_type_name(const clang::CXXRecordDecl &rd)
   // reading as it did before.
   clang::PrintingPolicy pp = rd.getASTContext().getPrintingPolicy();
   pp.SuppressTagKeyword = true;
-  return qtype.getAsString(pp);
+  std::string name = qtype.getAsString(pp);
+  // A local class prints without its enclosing function, so two of one name
+  // would share a type_info; its record id tells them apart.
+  if (rd.getParentFunctionOrMethod())
+  {
+    std::string tag_name, tag_id;
+    get_decl_name(rd, tag_name, tag_id);
+    name += "@" + tag_id;
+  }
+  return name;
 }
 
 irep_idt
@@ -224,7 +233,8 @@ symbolt *clang_cpp_convertert::add_vtable_type_symbol(
    *      void (*do_something)(Base*);
    *    } VftTag_Base;
    * Later, we will instantiate a virtual table as:
-   *  VftTag_Base vtable_TagBase@TagBase = { .do_something = &TagBase::do_someting(); }
+   *  VftTag_Base vtable_TagBase@TagBase = { .do_something =
+   * &TagBase::do_someting(); }
    *
    *  Vtable type has the id in the form of `virtual_table::tag-BLAH`.
    */
@@ -264,9 +274,11 @@ void clang_cpp_convertert::add_vptr(struct_typet &type)
 {
   /*
    * We model the virtual pointer as a `component` to the parent class' type.
-   * This will be the vptr pointing to the vtable that contains the overriden functions.
+   * This will be the vptr pointing to the vtable that contains the overriden
+   * functions.
    *
-   * Vptr has the name in the form of `tag-BLAH@vtable_pointer`, where BLAH is the class name.
+   * Vptr has the name in the form of `tag-BLAH@vtable_pointer`, where BLAH is
+   * the class name.
    */
 
   irep_idt vt_name = vtable_type_prefix + tag_prefix + type.tag().as_string();
@@ -298,7 +310,8 @@ void clang_cpp_convertert::add_vtable_type_entry(
    * We model this entry as a function pointer, pointing to the
    * virtual or overriding method in this class.
    *
-   * Vtable entry's name is of the form ``virtual_table::tag.BLAH::do_something().
+   * Vtable entry's name is of the form
+   * ``virtual_table::tag.BLAH::do_something().
    */
 
   irep_idt vt_name = vtable_type_prefix + tag_prefix + type.tag().as_string();
@@ -348,16 +361,20 @@ void clang_cpp_convertert::add_thunk_method(
    * Suppose Penguin derives Bird, we have the following vtables for Penguin:
    *  virtual_table::Bird@Penguin =
    *    {
-   *      .do_it() = &thunk::c:@S@Penguin@F@do_something#::tag-Bird; // this is the thunk redirecting call to the overriding function
+   *      .do_it() = &thunk::c:@S@Penguin@F@do_something#::tag-Bird; // this is
+   * the thunk redirecting call to the overriding function
    *    };
    *
    *  virtual_table::Penguin@Penguin =
    *    {
-   *      .do_it() = &c:@S@Penguin@F@do_something#::do_it(); // this is the overriding function
+   *      .do_it() = &c:@S@Penguin@F@do_something#::do_it(); // this is the
+   * overriding function
    *    };
    *
-   *  The thunk function's symbol id is of the form - "thunk::c:@S@Penguin@F@do_something#::tag-Bird"
-   *  meaning "a thunk to Penguin's overriding function `do_something` taking a `this` parameter of the type Bird*"
+   *  The thunk function's symbol id is of the form -
+   * "thunk::c:@S@Penguin@F@do_something#::tag-Bird" meaning "a thunk to
+   * Penguin's overriding function `do_something` taking a `this` parameter of
+   * the type Bird*"
    */
 
   /*
@@ -366,7 +383,8 @@ void clang_cpp_convertert::add_thunk_method(
    *  2. its arguments in the symbol table
    *  3. its body
    *
-   *  also need to add this thunk method to the list of components of the derived class' type
+   *  also need to add this thunk method to the list of components of the
+   * derived class' type
    */
 
   std::string base_class_id, base_class_name;
@@ -389,6 +407,12 @@ void clang_cpp_convertert::add_thunk_method(
   {
     typet t = component.type();
     update_thunk_this_type(t, base_class_id);
+    // The thunk fills the base's vtable slot, so it returns what the base
+    // method returns; a covariant override's result is converted in its body.
+    typet base_return;
+    if (get_type(md.getReturnType(), base_return))
+      abort();
+    to_code_type(t).return_type() = base_return;
     // A code type carries its arguments' base names across the seam, which
     // add_thunk_method_arguments reads back (frontends-to-irep2.md §44).
     thunk_func_symb.set_type(migrate_type(t));
@@ -410,7 +434,8 @@ void clang_cpp_convertert::add_thunk_method(
   // signature from several bases (e.g. every derived destructor, or C::f with
   // A::f and B::f), get_ultimate_overridden_method() cannot pick a unique base
   // and keys `component` by the derived method itself. Recover the correct key
-  // per overridden base here so each base's slot is actually overridden (#6198).
+  // per overridden base here so each base's slot is actually overridden
+  // (#6198).
   std::string base_virtual_name, base_virtual_id;
   get_decl_name(
     *get_ultimate_overridden_method(&md), base_virtual_name, base_virtual_id);
@@ -462,9 +487,11 @@ void clang_cpp_convertert::add_thunk_method_arguments(symbolt &thunk_func_symb)
   /*
    * Loop through the arguments of the thunk methods,
    * and add symbol for each argument. We need to
-   * update the identifier field in each argument to indicate it "belongs" to the thunk function.
+   * update the identifier field in each argument to indicate it "belongs" to
+   * the thunk function.
    *
-   * Each argument symbol's id is of the form - "<thunk_func_symbol_ID>::<argument_base_name>"
+   * Each argument symbol's id is of the form -
+   * "<thunk_func_symbol_ID>::<argument_base_name>"
    */
 
   const code_type2t &code_type = to_code_type(thunk_func_symb.get_type2());
@@ -472,10 +499,15 @@ void clang_cpp_convertert::add_thunk_method_arguments(symbolt &thunk_func_symb)
   // from it (frontends-to-irep2.md §44).
   assert(code_type.argument_base_names.size() == code_type.arguments.size());
   std::vector<irep_idt> identifiers = code_type.argument_names;
+  std::vector<irep_idt> base_names = code_type.argument_base_names;
 
   for (std::size_t i = 0; i < code_type.arguments.size(); i++)
   {
-    const irep_idt &base_name = code_type.argument_base_names[i];
+    // An override declared with unnamed parameters has empty base names,
+    // which would collapse every argument onto one symbol (github #8090).
+    irep_idt &base_name = base_names[i];
+    if (base_name.empty())
+      base_name = "__anon_arg" + std::to_string(i);
 
     symbolt arg_symb;
     arg_symb.id = thunk_func_symb.id.as_string() + "::" + base_name.as_string();
@@ -514,7 +546,7 @@ void clang_cpp_convertert::add_thunk_method_arguments(symbolt &thunk_func_symb)
     code_type.ret_type,
     identifiers,
     code_type.ellipsis,
-    code_type.argument_base_names));
+    base_names));
 }
 
 void clang_cpp_convertert::add_thunk_method_body(
@@ -583,8 +615,34 @@ void clang_cpp_convertert::add_thunk_method_body_return(
   code_returnt code_return;
   code_return.return_value() = expr_call;
 
+  // A covariant override returns a pointer to a class derived from the one the
+  // base method returns, and the caller expects the base subobject
+  // ([class.virtual]). The displacement needs a side-effect-free operand, so
+  // the result goes through a local first.
+  const typet &thunk_ret =
+    to_code_type(thunk_func_symb.get_type()).return_type();
+  code_blockt block;
+  if (thunk_ret.is_pointer() && thunk_ret != expr_call.type())
+  {
+    symbolt result_symb;
+    result_symb.id = thunk_func_symb.id.as_string() + "::covariant_result";
+    result_symb.name = "covariant_result";
+    result_symb.mode = mode;
+    result_symb.location = thunk_func_symb.location;
+    result_symb.lvalue = true;
+    result_symb.set_type(expr_call.type());
+    const exprt result =
+      symbol_expr(*context.move_symbol_to_context(result_symb));
+
+    block.copy_to_operands(code_declt(result), code_assignt(result, expr_call));
+    exprt as_base = result;
+    as_base.set("#derived_to_base", thunk_ret.subtype().identifier());
+    code_return.return_value() = as_base;
+  }
+  block.copy_to_operands(code_return);
+
   expr2tc body;
-  migrate_expr(code_return, body);
+  migrate_expr(block, body);
   thunk_func_symb.set_value(body);
 }
 
@@ -715,7 +773,8 @@ void clang_cpp_convertert::add_vtable_variable_symbols(
   {
     const function_switch &switch_map = vft_switch_kv_pair.second;
 
-    // To create the vtable variable symbol we need to get the corresponding type
+    // To create the vtable variable symbol we need to get the corresponding
+    // type
     const symbolt *late_cast_symb = ns.lookup(vft_switch_kv_pair.first);
     assert(late_cast_symb);
     const symbolt *vt_symb_type =
@@ -784,11 +843,9 @@ void clang_cpp_convertert::add_vtable_variable_symbols(
 
     if (context.move(vt_symb_var))
     {
-      log_error(
-        "Failed to add vtable variable symbol {} for class {}",
-        vt_symb_var.id,
-        class_id);
-      abort();
+      // Symbol has already been processed further up
+      // in the call stack. Skip to unprocessed symbols
+      continue;
     }
 
     // Record (vptr-class V → concrete class D) so build_dynamic_cast can
@@ -805,7 +862,8 @@ void clang_cpp_convertert::get_overriden_methods(
   overriden_map &map)
 {
   /*
-   * This function gets all the overriden methods to which we need to create a thunk
+   * This function gets all the overriden methods to which we need to create a
+   * thunk
    */
   for (const auto &md_overriden : md.overridden_methods())
   {
@@ -862,6 +920,40 @@ void clang_cpp_convertert::pre_register_inherited_vtables(
       }
     };
   walk(&cxxrd);
+}
+
+/// Whether @p base is a base class of @p derived reached by a single path.
+static bool is_unambiguous_base(
+  const clang::CXXRecordDecl &derived,
+  const clang::CXXRecordDecl &base)
+{
+  clang::CXXBasePaths paths;
+  if (!derived.isDerivedFrom(&base, paths))
+    return false;
+  clang::ASTContext &ctx = derived.getASTContext();
+#if CLANG_VERSION_MAJOR >= 22
+  const clang::QualType qtype = ctx.getCanonicalTagType(&base);
+#else
+  const clang::QualType qtype = ctx.getRecordType(&base);
+#endif
+  return !paths.isAmbiguous(ctx.getCanonicalType(qtype));
+}
+
+/// Whether a dynamic_cast from @p S to @p T can succeed on an object of
+/// dynamic type @p D, a class at-or-below S.
+static bool is_dynamic_cast_target(
+  const clang::CXXRecordDecl &D,
+  const clang::CXXRecordDecl &S,
+  const clang::CXXRecordDecl &T)
+{
+  if (&D == &T)
+    return true;
+  if (!D.isDerivedFrom(&T))
+    return false;
+  // [expr.dynamic.cast]/8: the cast fails when T occurs more than once in D.
+  // An ambiguous S cannot be re-based (#base_to_derived picks one S), so that
+  // case is left as it was.
+  return !is_unambiguous_base(D, S) || is_unambiguous_base(D, T);
 }
 
 bool clang_cpp_convertert::build_dynamic_cast(
@@ -996,7 +1088,10 @@ bool clang_cpp_convertert::build_dynamic_cast(
   // address, per-D result expression).
   pointer_typet vptr_type(symbol_typet(vtable_type_prefix + vptr_class_id));
   std::vector<std::pair<exprt, exprt>> arms;
-  exprt typed_null = gen_zero(target_type);
+  // Each arm yields a T* (for the reference form too, which derefs it below).
+  const typet result_ptr_type =
+    is_reference ? typet(pointer_typet(target_type)) : target_type;
+  exprt typed_null = gen_zero(result_ptr_type);
 
   auto vptr_it = vtable_classes_per_vptr_.find(vptr_class_id);
   if (vptr_it != vtable_classes_per_vptr_.end())
@@ -1005,7 +1100,7 @@ bool clang_cpp_convertert::build_dynamic_cast(
     {
       if (D != S && !D->isDerivedFrom(S))
         continue;
-      if (!to_void && !(D == T || D->isDerivedFrom(T)))
+      if (!to_void && !is_dynamic_cast_target(*D, *S, *T))
         continue;
 
       std::string D_id, D_name;
@@ -1032,7 +1127,7 @@ bool clang_cpp_convertert::build_dynamic_cast(
         get_decl_name(*T, T_name, T_id);
         result.set("#derived_to_base", T_id);
       }
-      gen_typecast(ns, result, target_type);
+      gen_typecast(ns, result, result_ptr_type);
       arms.push_back({vt_addr, result});
     }
   }
@@ -1047,8 +1142,18 @@ bool clang_cpp_convertert::build_dynamic_cast(
       src_deref, vptr_class_id + "::" + vtable_ptr_suffix, vptr_type);
   }
 
+  // The T's position differs between runtime types (`C1 : A, B` vs
+  // `C2 : A, P, B`), so each matching D selects its own adjusted result
+  // (#8697); `otherwise` is taken when no D matches.
+  auto select_by_vptr = [&](exprt otherwise) {
+    for (auto it = arms.rbegin(); it != arms.rend(); ++it)
+      otherwise =
+        if_exprt(equality_exprt(vptr_read, it->first), it->second, otherwise);
+    return otherwise;
+  };
+
   // OR-chain: vptr == arm0 || vptr == arm1 || ... — used by the reference
-  // form and the T* pointer form. Precondition: arms not empty.
+  // form. Precondition: arms not empty.
   auto vptr_match_any = [&]() -> exprt {
     exprt match = equality_exprt(vptr_read, arms.front().first);
     for (size_t i = 1; i < arms.size(); ++i)
@@ -1067,7 +1172,7 @@ bool clang_cpp_convertert::build_dynamic_cast(
     typet ref_type = pointer_typet(target_type);
     ref_type.set("#reference", true);
 
-    exprt cast_value = src_pointer;
+    exprt cast_value = select_by_vptr(typed_null);
     gen_typecast(ns, cast_value, ref_type);
 
     exprt match = arms.empty() ? exprt(false_exprt()) : vptr_match_any();
@@ -1093,26 +1198,8 @@ bool clang_cpp_convertert::build_dynamic_cast(
     return false;
   }
 
-  exprt cast_or_null;
-  if (arms.empty())
-  {
-    // No reachable D can satisfy the cast — emit a typed null directly.
-    cast_or_null = typed_null;
-  }
-  else if (to_void)
-  {
-    // Per-D results differ; chain ITEs so each D selects its own offset.
-    cast_or_null = typed_null;
-    for (auto it = arms.rbegin(); it != arms.rend(); ++it)
-      cast_or_null = if_exprt(
-        equality_exprt(vptr_read, it->first), it->second, cast_or_null);
-  }
-  else
-  {
-    // T* form: every matching D yields the same `(T*) src`, so collapse
-    // the per-D vptr equalities into one OR-chain with a single result.
-    cast_or_null = if_exprt(vptr_match_any(), arms.front().second, typed_null);
-  }
+  // Null when no reachable D matches.
+  exprt cast_or_null = select_by_vptr(typed_null);
 
   // Null-source guard — without this, src_deref above would crash
   // symbolic execution before the SMT solver ever sees the ITE.

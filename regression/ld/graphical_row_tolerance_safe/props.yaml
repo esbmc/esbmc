@@ -1,0 +1,9 @@
+properties:
+  # The set coil is at y=12, x=200 and the reset coil at y=10, x=300. Beremiz
+  # treats coils less than 10 apart vertically as one row and orders it by x, so
+  # the set runs first and the reset wins; a strict (y, x) order would run the
+  # reset first (#7352).
+  - id: P1
+    kind: invariant
+    expression: "!b || !q"
+    description: "The reset path, later in its row, wins in the scan it is energised"

@@ -59,6 +59,10 @@ bitwuzla_convt::bitwuzla_convt(const namespacet &ns, const optionst &options)
   }
 
   bitw_options.set(bitwuzla::Option::PRODUCE_MODELS, 1);
+  auto user = options.option_values.find("bitwuzla-opt");
+  if (user != options.option_values.end())
+    for (const std::string &kv : user->second)
+      guarded([&] { bitw_options.set(std::vector<std::string>{"--" + kv}); });
   bitw = std::make_unique<bitwuzla::Bitwuzla>(tm, bitw_options);
 }
 
@@ -91,6 +95,22 @@ smt_resultt bitwuzla_convt::dec_solve()
   if (result == bitwuzla::Result::UNSAT)
     return P_UNSATISFIABLE;
 
+  return P_ERROR;
+}
+
+smt_resultt bitwuzla_convt::dec_solve_assuming(const ast_vec &assumptions)
+{
+  pre_solve();
+
+  std::vector<bitwuzla::Term> terms;
+  for (smt_astt a : assumptions)
+    terms.push_back(to_solver_smt_ast<bitw_smt_ast>(a)->a);
+
+  bitwuzla::Result result = bitw->check_sat(terms);
+  if (result == bitwuzla::Result::SAT)
+    return P_SATISFIABLE;
+  if (result == bitwuzla::Result::UNSAT)
+    return P_UNSATISFIABLE;
   return P_ERROR;
 }
 
@@ -767,7 +787,8 @@ smt_astt bitwuzla_convt::overflow_arith(const expr2tc &expr)
       res = tm.mk_term(bitwuzla::Kind::BV_UMUL_OVERFLOW, {side1->a, side2->a});
     }
   }
-  else if (is_div2t(overflow.operand) || is_modulus2t(overflow.operand))
+  else if (
+    is_signed && (is_div2t(overflow.operand) || is_modulus2t(overflow.operand)))
   {
     res = tm.mk_term(bitwuzla::Kind::BV_SDIV_OVERFLOW, {side1->a, side2->a});
   }

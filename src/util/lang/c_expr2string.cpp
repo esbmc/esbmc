@@ -441,6 +441,10 @@ std::string c_expr2stringt::convert_quantifier(
   const std::string &symbol,
   unsigned precedence)
 {
+  // ESBMC's own quantifier: the bound variable's address and the predicate.
+  if (src.operands().size() == 2)
+    return convert_function(src, "__ESBMC_" + src.id_string(), precedence);
+
   if (src.operands().size() != 3)
     return convert_norep(src, precedence);
 
@@ -1190,24 +1194,14 @@ c_expr2stringt::convert_constant(const exprt &src, unsigned &precedence)
     dest = flt.format(format);
 
     if (dest != "" && isdigit(dest[dest.size() - 1]))
-    {
-      if (src.type() == float_type())
-        dest += "f";
-      else if (src.type() == long_double_type())
-        dest += "l";
-    }
+      dest += c_float_literal_suffix(src.type());
   }
   else if (type.id() == "fixedbv")
   {
     dest = fixedbvt(to_constant_expr(src)).to_ansi_c_string();
 
     if (dest != "" && isdigit(dest[dest.size() - 1]))
-    {
-      if (src.type() == float_type())
-        dest += "f";
-      else if (src.type() == long_double_type())
-        dest += "l";
-    }
+      dest += c_float_literal_suffix(src.type());
   }
   else if (is_array_like(type))
   {
@@ -2118,6 +2112,8 @@ std::string c_expr2stringt::convert_code_switch_case(
     labels_string += indent_str(indent);
     labels_string += "case ";
     labels_string += convert(src.case_op());
+    if (src.case_range_hi().is_not_nil())
+      labels_string += " ... " + convert(src.case_range_hi());
     labels_string += ":\n";
   }
 

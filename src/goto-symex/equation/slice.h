@@ -3,7 +3,8 @@
 
 #include <goto-symex/equation/symex_target_equation.h>
 #include <util/base/time_stopping.h>
-#include <util/ssa/algorithms.h>
+#include <goto-programs/property_verdict.h>
+#include <goto-symex/equation/ssa_step_algorithm.h>
 #include <util/config/options.h>
 #include <boost/range/adaptor/reversed.hpp>
 #include <langapi/language_util.h>

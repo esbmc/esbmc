@@ -1,0 +1,6 @@
+CORE
+main.py
+
+^State [0-9]+ file .*main\.py line 13 column 0 thread 0$
+^  TypeError: unsupported operand type\(s\) for \+$
+^VERIFICATION FAILED$

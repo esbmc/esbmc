@@ -36,11 +36,12 @@ void irep2_bad_expr_cast(unsigned actual, unsigned expected, const char *target)
     (actual < expr2t::end_expr_id) ? expr_names[actual] : "<out-of-range>";
   const char *expected_name =
     (expected < expr2t::end_expr_id) ? expr_names[expected] : "<out-of-range>";
-  throw irep2_cast_error(fmt::format(
-    "irep2: to_{}2t() called on expr whose expr_id is {} (target {})",
-    expected_name,
-    actual_name,
-    target));
+  throw irep2_cast_error(
+    fmt::format(
+      "irep2: to_{}2t() called on expr whose expr_id is {} (target {})",
+      expected_name,
+      actual_name,
+      target));
 }
 
 /*************************** Base expr2t definitions **************************/
@@ -51,13 +52,10 @@ expr2t::expr2t(const type2tc &_type, expr_ids id)
 }
 
 expr2t::expr2t(const expr2t &ref)
-  : irep2t(), expr_id(ref.expr_id), type(ref.type)
+  : irep2t(), expr_id(ref.expr_id), type(ref.type), crc_val(0)
 {
-  // Snapshot the cached CRC. Relaxed is enough: callers must already
-  // honour the single-writer contract documented in irep2.h, and the
-  // copy is itself a new value not yet visible to anyone else.
-  crc_val.store(
-    ref.crc_val.load(std::memory_order_relaxed), std::memory_order_relaxed);
+  // Not the source's CRC: a copy is usually edited in place before use, and
+  // cmp trusts a cached CRC to reject.
 }
 
 bool expr2t::operator==(const expr2t &ref) const
@@ -416,6 +414,13 @@ printf_kindt printf_kind_from_name(const irep_idt &name)
 bool expr2t::cmp(const expr2t &o) const
 {
   if (expr_id != o.expr_id)
+    return false;
+  // Differing cached hashes settle it without walking the operands. A hashed
+  // lookup compares every entry that shares its bucket, and two long guard
+  // and-chains would otherwise recurse their whole spine (#9150).
+  const size_t h = crc_val.load(std::memory_order_acquire);
+  const size_t oh = o.crc_val.load(std::memory_order_acquire);
+  if (h != 0 && oh != 0 && h != oh)
     return false;
   switch (expr_id)
   {
@@ -931,7 +936,7 @@ std::string code_continue2t::field_names[esbmct::num_type_fields] =
 std::string code_label2t::field_names[esbmct::num_type_fields] =
   {"label", "code", "", "", ""};
 std::string code_switch_case2t::field_names[esbmct::num_type_fields] =
-  {"is_default", "case_op", "code", "", ""};
+  {"is_default", "case_op", "case_op_hi", "code", ""};
 std::string code_assert2t::field_names[esbmct::num_type_fields] =
   {"guard", "", "", "", ""};
 std::string code_assume2t::field_names[esbmct::num_type_fields] =

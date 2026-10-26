@@ -25,6 +25,9 @@ property_encoder::var_expr(const std::string &name, const LdProperty &p) const
   if (!sym)
     throw std::runtime_error(
       "property '" + p.id + "': undeclared variable '" + name + "'");
+  if (!sym->get_type().is_bool())
+    throw std::runtime_error(
+      "property '" + p.id + "': variable '" + name + "' is not BOOL");
   return symbol_exprt(ld_name(name), sym->get_type());
 }
 
@@ -121,16 +124,19 @@ property_encoder::make_assert(const exprt &cond, const LdProperty &p) const
   return asrt;
 }
 
-// mutual_exclusion: assert !(A && B && ...)
+// mutual_exclusion: assert no two of the variables hold together
 code_blockt property_encoder::encode_mutual_exclusion(const LdProperty &p)
 {
   // Caller (yaml_property_parser) guarantees >= 2 variables.
-  exprt conjunction = var_expr(p.variables[0], p);
-  for (size_t i = 1; i < p.variables.size(); ++i)
-    conjunction = and_exprt(conjunction, var_expr(p.variables[i], p));
+  exprt together = false_exprt();
+  for (size_t i = 0; i < p.variables.size(); ++i)
+    for (size_t j = i + 1; j < p.variables.size(); ++j)
+      together = or_exprt(
+        together,
+        and_exprt(var_expr(p.variables[i], p), var_expr(p.variables[j], p)));
 
   code_blockt blk;
-  blk.copy_to_operands(make_assert(not_exprt(conjunction), p));
+  blk.copy_to_operands(make_assert(not_exprt(together), p));
   return blk;
 }
 

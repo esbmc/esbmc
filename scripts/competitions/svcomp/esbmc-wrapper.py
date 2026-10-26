@@ -30,6 +30,7 @@ class Result:
   fail_memcleanup = 12
   fail_termination = 13
   fail_race = 14
+  fail_python = 15
 
   @staticmethod
   def is_fail(res):
@@ -68,11 +69,26 @@ class Property:
   termination = 4
   memcleanup = 5
   datarace = 6
+  py_assertion = 7
+  py_arithmetic = 8
+  py_datalookup = 9
+  py_dyntyping = 10
+
+# sv-benchmarks' python/properties/*.prp each state that one family of runtime
+# exceptions does not escape main(). --python-check-exceptions scopes a run to
+# that family, and which family a run falsified is still read off the
+# violated-property comment instead of assumed from the flags.
+PYTHON_EXCEPTION_FAMILIES = {
+  Property.py_assertion: ("AssertionError",),
+  Property.py_arithmetic: ("ZeroDivisionError", "FloatingPointError"),
+  Property.py_datalookup: ("KeyError", "IndexError"),
+  Property.py_dyntyping: ("TypeError", "AttributeError"),
+}
 
 # Parsed by the CLI entry point at the bottom; do_exec() is the only reader.
 args = None
 
-def do_exec(cmd_line):
+def do_exec(cmd_line, timeout=None):
 
   if args.dry_run:
     exit(0)
@@ -80,15 +96,20 @@ def do_exec(cmd_line):
   the_args = shlex.split(cmd_line)
 
   p = subprocess.Popen(the_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-  (stdout, stderr) = p.communicate()
+  try:
+    (stdout, stderr) = p.communicate(timeout=timeout)
+  except subprocess.TimeoutExpired:
+    p.kill()
+    p.communicate()
+    return b"Timed out"
 
   return stdout + stderr
 
 # Function to run esbmc
-def run(cmd_line):
+def run(cmd_line, timeout=None):
   print("Verifying with ESBMC")
   print("Command: " + cmd_line)
-  out = do_exec(cmd_line)
+  out = do_exec(cmd_line, timeout)
   print(out.decode())
   return out
 
@@ -117,6 +138,18 @@ def violated_property_text(the_output):
       if row and row.group(1) == "FAILED":
         violated.append(line)
   return "\n".join(violated)
+
+VIOLATION_SITE = re.compile(r"Violated property:\n\s+file (\S+)(?: line (\d+))?")
+
+
+def violation_site(the_output):
+  """(file, line) of the first violated property, or None. The line is None
+  for an uncaught exception, which ESBMC reports without one."""
+  site = VIOLATION_SITE.search(the_output)
+  if site is None:
+    return None
+  return os.path.basename(site.group(1)), site.group(2)
+
 
 MEMORY_LEAK = "dereference failure: forgotten memory"
 UNREACHABILITY_INTRINSIC = "reachability: unreachable code reached"
@@ -154,6 +187,110 @@ def classify_memory_violation(violated):
   return None
 
 
+UNCAUGHT_EXCEPTION = re.compile(r"uncaught exception: (\w+)")
+
+# A plain `assert` lowers to a property whose comment reads "assertion <expr>",
+# and that is the only AssertionError the Python frontend labels as such: a
+# `raise AssertionError(msg)` reaches the table as the bare message, which
+# nothing distinguishes from an operational model failing internally. Matching
+# the bare form too would turn such a failure into a wrong answer on a correct
+# program, so it is deliberately left inconclusive: 0 beats -16.
+ASSERTION_ROW = re.compile(r"\]\s+line\s+\d+\s+assertion\b")
+
+
+# The scalar model raises a TypeError on a dynamically-typed operand as an
+# assertion in scalar.c, so the comment is the bare message, not "uncaught
+# exception: TypeError". A try/except TypeError around the operation still
+# catches it. Only these operand checks count: list.c's "object of this type
+# has no len()" also fails inside the model on correct programs.
+MODEL_TYPEERROR = re.compile(
+  r"TypeError: (?:unsupported operand type\(s\)|comparison not supported"
+  r"|can only concatenate str)")
+
+
+def classify_python_violation(violated, prop):
+  """Does this violation belong to the exception family the property asks about?"""
+  family = PYTHON_EXCEPTION_FAMILIES[prop]
+  if any(name in family for name in UNCAUGHT_EXCEPTION.findall(violated)):
+    return Result.fail_python
+
+  if "TypeError" in family and MODEL_TYPEERROR.search(violated):
+    return Result.fail_python
+
+  if prop == Property.py_assertion and ASSERTION_ROW.search(violated):
+    return Result.fail_python
+
+  return Result.unknown
+
+
+def add_python_module_path(benchmark):
+  """Put sv-benchmarks' _sv_verifier module within the task's import reach.
+
+  A Python task sits in python/<project>/, or a directory below it, and imports
+  _sv_verifier, which sits in python/. CPython resolves an import against the
+  script's own directory and fails the same way, which is why sv-benchmarks'
+  check-syntax.py sets PYTHONPATH; ESBMC follows CPython here, so the search
+  path is supplied rather than the resolution changed.
+  """
+  task_dir = os.path.dirname(os.path.abspath(benchmark))
+  paths = [task_dir, os.path.dirname(task_dir)]
+  # A task may sit deeper, as python/<project>/<task>/main.py does, so the
+  # nearest ancestor above the parent holding _sv_verifier.py is added too.
+  ancestor = paths[-1]
+  while os.path.dirname(ancestor) != ancestor:
+    ancestor = os.path.dirname(ancestor)
+    if os.path.isfile(os.path.join(ancestor, "_sv_verifier.py")):
+      paths.append(ancestor)
+      break
+  if os.environ.get("PYTHONPATH"):
+    paths.append(os.environ["PYTHONPATH"])
+  os.environ["PYTHONPATH"] = os.pathsep.join(paths)
+
+
+def python_property(property_file_content):
+  """The Python track property this file states, or None for any other file."""
+  names = set(re.findall(r"!\s*uncaught\(\s*(\w+)\s*\)", property_file_content))
+  if not names:
+    return None
+  for prop, family in PYTHON_EXCEPTION_FAMILIES.items():
+    if names <= set(family):
+      return prop
+  return None
+
+
+def classify_violation(violated, prop):
+  """What a violated property implies for the property under check, or None.
+
+  None means this violation decides nothing here, which parse_result reads as
+  "keep looking" -- a run that also printed SUCCESSFUL is then read as true.
+  """
+  if "unwinding assertion loop" in violated:
+    return Result.err_unwinding_assertion
+
+  if prop in PYTHON_EXCEPTION_FAMILIES:
+    return classify_python_violation(violated, prop)
+
+  if prop == Property.memcleanup:
+    return Result.fail_memcleanup if MEMORY_LEAK in violated else None
+
+  if prop == Property.termination:
+    return Result.fail_termination
+
+  if prop == Property.memory:
+    return classify_memory_violation(violated)
+
+  if prop == Property.overflow:
+    return Result.fail_overflow
+
+  if prop == Property.reach:
+    return None if UNREACHABILITY_INTRINSIC in violated else Result.fail_reach
+
+  if prop == Property.datarace:
+    return Result.fail_race
+
+  return None
+
+
 def parse_result(the_output, prop):
   # ESBMC also prints a "  CWE: CWE-NNN" line after each violated-property
   # comment (see docs/cwe-mapping.md) and may emit a SARIF report under
@@ -171,36 +308,10 @@ def parse_result(the_output, prop):
   if "Chosen solver doesn\'t support floating-point numbers" in the_output:
     return Result.force_fp_mode
 
-  memory_leak = MEMORY_LEAK
-  unreachability_intrinsic = UNREACHABILITY_INTRINSIC
-
   if "VERIFICATION FAILED" in the_output:
-    violated = violated_property_text(the_output)
-
-    if "unwinding assertion loop" in violated:
-      return Result.err_unwinding_assertion
-
-    if prop == Property.memcleanup:
-      if memory_leak in violated:
-        return Result.fail_memcleanup
-
-    if prop == Property.termination:
-      return Result.fail_termination
-
-    if prop == Property.memory:
-      memory_result = classify_memory_violation(violated)
-      if memory_result is not None:
-        return memory_result
-
-    if prop == Property.overflow:
-      return Result.fail_overflow
-
-    if prop == Property.reach:
-      if unreachability_intrinsic not in violated:
-        return Result.fail_reach
-
-    if prop == Property.datarace:
-      return Result.fail_race
+    decided = classify_violation(violated_property_text(the_output), prop)
+    if decided is not None:
+      return decided
 
   if "VERIFICATION SUCCESSFUL" in the_output:
     return Result.success
@@ -232,6 +343,13 @@ def get_result_string(the_result):
   if the_result == Result.fail_race:
     return "FALSE_DATARACE"
 
+  if the_result == Result.fail_python:
+    # BenchExec maps a bare FALSE to false(unreach-call), and a task
+    # definition whose expected verdict carries no subproperty accepts any
+    # result starting with "false" (benchexec result.get_result_category), so
+    # the Python properties need no new result string.
+    return "FALSE"
+
   if the_result == Result.success:
     return "TRUE"
 
@@ -257,7 +375,9 @@ esbmc_path = "./esbmc "
 # suppresses GCC-acceptable frontend diagnostics, treats __builtin_unreachable
 # as a no-op, emits physical line numbers for witnesses, and avoids malloc/free
 # in the fopen/fclose models.
-esbmc_dargs = "--sv-comp --no-div-by-zero-check --force-malloc-success --force-realloc-success --state-hashing --add-symex-value-sets "
+# No --force-malloc-success / --force-realloc-success: SV-COMP lets an
+# allocation fail (sv-benchmarks !1686).
+esbmc_dargs = "--sv-comp --no-div-by-zero-check --state-hashing --add-symex-value-sets "
 esbmc_dargs += "--no-align-check --k-step 2 --unlimited-k-steps "
 
 # <https://github.com/esbmc/esbmc/pull/1190#issuecomment-1637047028>
@@ -271,7 +391,46 @@ def check_if_benchmark_contains_pthread(benchmark):
         return True
   return False
 
+def strategy_flags(strat):
+  if strat in ("fixed", "kinduction"):
+    return "--k-induction --max-inductive-step 3 "
+  if strat == "falsi":
+    return "--falsification "
+  if strat == "incr":
+    return "--incremental-bmc "
+  print("Unknown strategy")
+  exit(1)
+
+
+def python_exception_flags(prop):
+  """Report only the property's own exception family. Any other uncaught
+  exception ends its path unreported, as CPython stops there, and the
+  program's asserts become assumptions unless AssertionError is the family,
+  so a failure outside the family no longer hides the one asked about."""
+  return "--python-check-exceptions " + ",".join(PYTHON_EXCEPTION_FAMILIES[prop]) + " "
+
+
 def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, validate=False):
+  if prop in PYTHON_EXCEPTION_FAMILIES:
+    # A Python task is a whole program whose only specification is that an
+    # exception family does not escape, so none of the C defaults in dargs
+    # apply. --no-div-by-zero-check in particular would switch off the very
+    # check the arithmetic property asks about. The track has no witness
+    # format yet, so no witness is written.
+    #
+    # --unlimited-k-steps removes the k=50 ceiling on the base case, so a
+    # task whose violation or whose completeness proof needs a loop or
+    # recursion depth past 50 is reached rather than answered UNKNOWN
+    # (--unwind does not raise that bound). --k-step 2 advances k by two per
+    # round, which halves the shallow solver rounds before a deep bound is
+    # reached and is a measurable speedup on these tasks with no verdict
+    # change. They go here, not in strategy_flags, because the C path
+    # already carries --unlimited-k-steps in dargs.
+    return (
+      esbmc_path + "--sv-comp " + benchmark + " "
+      + strategy_flags(strat) + "--k-step 2 --unlimited-k-steps "
+      + python_exception_flags(prop))
+
   command_line = esbmc_path + dargs
 
   # Add benchmark
@@ -288,9 +447,12 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci,
 
   if concurrency:
     # --smt-symex-guard also turns on --smt-during-symex, which is what makes
-    # sibling schedules share a solver context (issue #6831, W3.3); do not add
+    # sibling schedules share a solver context (issue #6831, #7043); do not add
     # it separately, and do not drop the guard without re-measuring.
     command_line += " --smt-symex-guard --bitwuzla --cswitch-skip-readonly-globals "
+    # Unlike --max-context-bound, a truncated schedule space still reports
+    # SUCCESSFUL, so this trades soundness of "true" verdicts for coverage.
+    command_line += "--context-bound 3 "
     #command_line += "--no-slice " # TODO: Witness validation is only working without slicing
 
   # Add witness arg
@@ -322,10 +484,8 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci,
     command_line += "--no-abnormal-memory-leak "
     # many benchmarks assume malloc(0) == NULL and alloca(0) == NULL
     command_line += "--malloc-zero-is-null "
-    strat = "incr"
   elif prop == Property.memcleanup:
     command_line += "--no-pointer-check --no-bounds-check --memory-leak-check --no-assertions "
-    strat = "incr"
   elif prop == Property.reach:
     command_line += "--enable-unreachability-intrinsic "
     if concurrency:
@@ -344,26 +504,41 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci,
   # Add strategy
   if concurrency: # Concurrency only works with incremental
     # A violation needing few context switches can sit deep in unbounded DFS
-    # order, where the task times out with no answer at all (issue #6831, W4).
+    # order, where the task times out with no answer at all (issue #6831, #6947).
     # One bounded round first costs a median 0.02s and can only report a
     # violation -- it never claims a proof, so --incremental-bmc still owns
     # every other verdict.
     command_line += "--falsify-context-bound 1 --incremental-bmc "
   elif prop == Property.overflow: # Overflow only works with incremental
     command_line += "--incremental-bmc "
-  elif strat == "fixed":
-    command_line += "--k-induction --max-inductive-step 3 "
-  elif strat == "kinduction":
-    command_line += "--k-induction --max-inductive-step 3 "
-  elif strat == "falsi":
-    command_line += "--falsification "
-  elif strat == "incr":
-    command_line += "--incremental-bmc "
   else:
-    print("Unknown strategy")
-    exit(1)
+    command_line += strategy_flags(strat)
 
   return command_line
+
+# Python ints are unbounded but ESBMC's default encoding wraps them at 64 bits
+# (esbmc/esbmc#8892), so a violation only the wrapped encoding reaches is false.
+# Bitwuzla does not support the integer encoding, hence --z3.
+IR_RERUN_TIMEOUT = 120
+# Keep both runs together under the competition's 900 s limit.
+TOTAL_BUDGET = 870
+MIN_RERUN_BUDGET = 30
+
+
+def confirmed_by_integer_encoding(esbmc_command_line, the_output, prop, elapsed):
+  """Does a --ir re-run violate the same property at the same file and line?
+
+  A first run that leaves too little of the budget keeps its FALSE unchecked.
+  """
+  budget = min(IR_RERUN_TIMEOUT, TOTAL_BUDGET - elapsed)
+  if budget < MIN_RERUN_BUDGET:
+    return True
+  site = violation_site(the_output)
+  if site is None:
+    return False
+  rerun = run(esbmc_command_line + "--ir --z3 ", budget).decode()
+  return parse_result(rerun, prop) == Result.fail_python and violation_site(rerun) == site
+
 
 def verify(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, witness_path, validate_mode):
   esbmc_command_line = get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, validate=bool(witness_path))
@@ -372,8 +547,12 @@ def verify(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, witness_p
     esbmc_command_line += "--validate-" + validate_mode + "-witness "
     esbmc_command_line += "--witness " + witness_path + " "
 
+  started = time.monotonic()
   output = run(esbmc_command_line)
+  elapsed = time.monotonic() - started
   res = parse_result(output.decode(), prop)
+  if res == Result.fail_python and not confirmed_by_integer_encoding(esbmc_command_line, output.decode(), prop, elapsed):
+    return Result.unknown
   return res
 
 if __name__ == "__main__":
@@ -439,8 +618,14 @@ if __name__ == "__main__":
   elif "CHECK( init(main()), LTL(G ! data-race) )" in property_file_content:
     category_property = Property.datarace
   else:
+    category_property = python_property(property_file_content)
+
+  if not category_property:
     print("Unsupported Property")
     exit(1)
+
+  if category_property in PYTHON_EXCEPTION_FAMILIES:
+    add_python_module_path(benchmark)
 
   result = verify(strategy, category_property, arch, benchmark, concurrency, esbmc_dargs, esbmc_ci, witness_path, validate_mode)
 

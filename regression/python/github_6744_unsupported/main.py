@@ -1,7 +1,6 @@
-def build() -> list[tuple]:
-    return [(1, 2)]
+def offset() -> int:
+    return 1
 
 
-pairs = build()
-for i, (a, b) in enumerate(pairs):
+for i, (a, b) in enumerate([(1, 2)], offset()):
     assert a + b == 3

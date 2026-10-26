@@ -15,25 +15,6 @@
 #include <vector>
 #include <algorithm>
 
-// Largest request malloc may succeed for. PTRDIFF_MAX, as glibc >= 2.30: above
-// it pointer subtraction overflows, and an object's offset -- stored in
-// ptraddr_type2() but read signed by the bounds checks, pointer subtraction and
-// the relational comparator -- becomes indistinguishable from a below-base
-// pointer (R37). alloca bounds a symbolic request by assumption and reports a
-// constant one; realloc joins the cap to its failure condition (R38, R39).
-static BigInt max_object_size()
-{
-  return BigInt::power2m1(ptraddr_type2()->get_width() - 1);
-}
-
-// Largest object smt_memspace.cpp can lay out at all: it places each object at
-// [start, start + size] over ptraddr_type2 and asserts the sum does not wrap.
-static BigInt max_layable_size()
-{
-  return BigInt::power2m1(ptraddr_type2()->get_width()) -
-         config.ansi_c.max_alignment();
-}
-
 // Collect the byte offset and class type of every (transitively) nested base
 // subobject of `t`, relative to the start of `t`.
 static void collect_base_subobject_offsets(
@@ -255,16 +236,21 @@ void goto_symext::symex_realloc(
   }
 
   // ===== determine element type and old object info =====
-  type2tc elem_type;
-  expr2tc old_base_array;
-  bool old_is_array = false;
-  expr2tc old_elem_count;
+  internal_deref_items.clear();
+  expr2tc deref = dereference2tc(get_uint8_type(), src_ptr);
+  dereference(deref, dereferencet::INTERNAL);
+  const std::list<dereference_callbackt::internal_item> old_objects =
+    internal_deref_items;
 
-  if (!analyze_old_object(
-        src_ptr, elem_type, old_base_array, old_is_array, old_elem_count))
-  {
-    // Fallback element type determination
+  type2tc elem_type;
+  if (old_objects.empty())
     elem_type = determine_fallback_element_type(code, lhs);
+  else
+  {
+    expr2tc old_base_array;
+    bool old_is_array;
+    analyze_old_object(
+      old_objects.front().object, elem_type, old_base_array, old_is_array);
   }
 
   // calculate new element count
@@ -278,22 +264,17 @@ void goto_symext::symex_realloc(
   expr2tc new_array =
     create_dynamic_memory_symbol(elem_type, realloc_size, "realloc");
 
-  // copy data
-  copy_memory_content(
-    old_base_array,
-    new_array,
-    old_elem_count,
-    new_elem_count,
-    elem_type,
-    old_is_array,
-    guard);
+  copy_old_objects(old_objects, new_array, new_elem_count, elem_type, guard);
 
   // create result and handle failure modelling
   expr2tc result = create_result_pointer(new_array, lhs->type);
-  result = model_allocation_failure(result, code.operand, guard, over_cap);
+  expr2tc alloc_fail;
+  result =
+    model_allocation_failure(result, code.operand, guard, over_cap, alloc_fail);
 
   // finalize assignment and tracking
-  finalize_realloc_result(lhs, result, new_array, guard, realloc_size);
+  finalize_realloc_result(
+    lhs, result, new_array, guard, realloc_size, alloc_fail);
 }
 
 bool goto_symext::handle_realloc_zero_size(
@@ -318,23 +299,12 @@ bool goto_symext::handle_realloc_zero_size(
   return false;
 }
 
-bool goto_symext::analyze_old_object(
-  const expr2tc &src_ptr,
+void goto_symext::analyze_old_object(
+  const expr2tc &old_obj,
   type2tc &elem_type,
   expr2tc &old_base_array,
-  bool &old_is_array,
-  expr2tc &old_elem_count)
+  bool &old_is_array)
 {
-  internal_deref_items.clear();
-  expr2tc deref = dereference2tc(get_uint8_type(), src_ptr);
-  dereference(deref, dereferencet::INTERNAL);
-
-  if (internal_deref_items.empty())
-    return false;
-
-  expr2tc old_obj = internal_deref_items.front().object;
-
-  // Determine element type and base array from old object
   if (is_index2t(old_obj))
   {
     old_base_array = to_index2t(old_obj).source_value;
@@ -342,24 +312,45 @@ bool goto_symext::analyze_old_object(
     elem_type = old_is_array ? to_array_type(old_base_array->type).subtype
                              : old_base_array->type;
   }
-  else if (is_array_type(old_obj->type))
-  {
-    old_base_array = old_obj;
-    old_is_array = true;
-    elem_type = to_array_type(old_obj->type).subtype;
-  }
   else
   {
     old_base_array = old_obj;
-    old_is_array = false;
-    elem_type = old_obj->type;
+    old_is_array = is_array_type(old_obj->type);
+    elem_type =
+      old_is_array ? to_array_type(old_obj->type).subtype : old_obj->type;
   }
+}
 
-  // Calculate old element count
-  old_elem_count =
-    calculate_old_element_count(old_base_array, elem_type, old_is_array);
+void goto_symext::copy_old_objects(
+  const std::list<dereference_callbackt::internal_item> &old_objects,
+  const expr2tc &new_array,
+  const expr2tc &new_elem_count,
+  const type2tc &elem_type,
+  const guard2tc &guard)
+{
+  for (const auto &item : old_objects)
+  {
+    type2tc old_elem_type;
+    expr2tc old_base_array;
+    bool old_is_array;
+    analyze_old_object(
+      item.object, old_elem_type, old_base_array, old_is_array);
+    // The new object takes the first object's element type; an object of
+    // another element type is not copied, leaving the new contents nondet.
+    if (old_elem_type != elem_type)
+      continue;
 
-  return true;
+    guard2tc copy_guard = guard;
+    copy_guard.add(item.guard);
+    copy_memory_content(
+      old_base_array,
+      new_array,
+      calculate_old_element_count(old_base_array, elem_type, old_is_array),
+      new_elem_count,
+      elem_type,
+      old_is_array,
+      copy_guard);
+  }
 }
 
 type2tc goto_symext::determine_fallback_element_type(
@@ -444,11 +435,12 @@ expr2tc goto_symext::model_allocation_failure(
   const expr2tc &result,
   const expr2tc &old_ptr,
   const guard2tc &guard,
-  const expr2tc &over_cap)
+  const expr2tc &over_cap,
+  expr2tc &alloc_fail)
 {
   if (!options.get_bool_option("force-realloc-success"))
   {
-    expr2tc alloc_fail = sideeffect2tc(
+    alloc_fail = sideeffect2tc(
       get_bool_type(),
       expr2tc(),
       expr2tc(),
@@ -506,7 +498,8 @@ void goto_symext::finalize_realloc_result(
   const expr2tc &result,
   const expr2tc &new_array,
   const guard2tc &guard,
-  const expr2tc &realloc_size)
+  const expr2tc &realloc_size,
+  const expr2tc &alloc_fail)
 {
   expr2tc result_copy(result);
 
@@ -518,12 +511,17 @@ void goto_symext::finalize_realloc_result(
   track_new_pointer(ptr_obj, new_array->type, guard, realloc_size);
 
   // Add to dynamic memory tracking
+  // The leak claim must only cover a successful realloc (#8554).
   guard2tc alloc_guard = cur_state->guard;
+  if (!is_nil_expr(alloc_fail))
+    alloc_guard.add(not2tc(alloc_fail));
   alloc_guard.append(guard);
 
-  unsigned int dynamic_counter = get_dynamic_counter();
-  std::string symbol_name = "dynamic_" + i2string(dynamic_counter) + "_array";
-  dynamic_memory.emplace_back(result_copy, alloc_guard, false, symbol_name);
+  dynamic_memory.emplace_back(
+    result_copy,
+    alloc_guard,
+    false,
+    new_context.find_symbol(to_symbol2t(new_array).thename)->name.as_string());
 }
 
 expr2tc goto_symext::symex_mem_inf(
@@ -884,8 +882,21 @@ expr2tc goto_symext::symex_mem(
   alloc_guard.append(guard);
   dynamic_memory.emplace_back(
     rhs_copy, alloc_guard, !is_malloc, symbol.name.as_string());
+  record_frame_alloca(lhs, rhs_copy, is_malloc);
 
   return to_address_of2t(rhs_addrof).ptr_obj;
+}
+
+void goto_symext::record_frame_alloca(
+  const expr2tc &lhs,
+  const expr2tc &object,
+  bool is_malloc)
+{
+  if (
+    !is_malloc && is_symbol2t(lhs) &&
+    goto_symex_utils::is_alloca_return_value_name(
+      to_symbol2t(lhs).thename.as_string()))
+    cur_state->top().alloca_objects.push_back(object);
 }
 
 void goto_symext::track_new_pointer(
@@ -921,6 +932,22 @@ void goto_symext::track_new_pointer(
     is_nil_expr(size) ? type_byte_size_expr(new_type) : size;
 
   symex_assign(code_assign2tc(sz_index_expr, object_size_exp), true, guard);
+
+  expr2tc ptr = to_pointer_object2t(ptr_obj).ptr_obj;
+  while (is_typecast2t(ptr))
+    ptr = to_typecast2t(ptr).from;
+  if (!is_address_of2t(ptr))
+    return;
+
+  expr2tc obj = to_address_of2t(ptr).ptr_obj;
+  while (is_index2t(obj))
+    obj = to_index2t(obj).source_value;
+  if (!is_symbol2t(obj))
+    return;
+
+  cur_state->rename(object_size_exp);
+  do_simplify(object_size_exp);
+  dynamic_object_sizes[to_symbol2t(obj).thename] = object_size_exp;
 }
 
 void goto_symext::symex_free(const expr2tc &expr)
@@ -1024,9 +1051,13 @@ void goto_symext::symex_free(const expr2tc &expr)
     }
   }
 
-  // Clear the alloc bit.
+  invalidate_object(operand);
+}
+
+void goto_symext::invalidate_object(const expr2tc &ptr)
+{
   type2tc sym_type = array_type2tc(get_bool_type(), expr2tc(), true);
-  expr2tc ptr_obj = pointer_object2tc(pointer_type2(), operand);
+  expr2tc ptr_obj = pointer_object2tc(pointer_type2(), ptr);
   dereference(ptr_obj, dereferencet::READ);
 
   expr2tc valid_sym = symbol2tc(sym_type, valid_ptr_arr_name);

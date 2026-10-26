@@ -363,6 +363,28 @@ smt_astt smt_solver_baset::convert_concat_int_mode(
   return result;
 }
 
+void smt_solver_baset::define(const expr2tc &expr)
+{
+  const equality2t &eq = to_equality2t(expr);
+  const type2tc &t = eq.side_1->type;
+  const bool scalar = is_bool_type(t) || is_bv_type(t) || is_floatbv_type(t);
+  bool converted;
+  {
+    std::lock_guard lock(smt_cache_mutex);
+    converted = smt_cache.find(eq.side_1) != smt_cache.end();
+  }
+  // Aggregates need the flatteners' assign; a symbol already in use would
+  // otherwise stay free.
+  if (!scalar || converted)
+  {
+    convert_assign(expr);
+    return;
+  }
+  smt_astt value = convert_ast(eq.side_2);
+  std::lock_guard lock(smt_cache_mutex);
+  smt_cache.insert({eq.side_1, value, ctx_level});
+}
+
 smt_astt smt_solver_baset::convert_assign(const expr2tc &expr)
 {
   const equality2t &eq = to_equality2t(expr);
@@ -398,6 +420,22 @@ smt_astt smt_solver_baset::convert_assign(const expr2tc &expr)
   ir_ieee_api->propagate_neg_zero_pred(side1, side2);
 
   return side2;
+}
+
+// Brings a shift count to the width of the shifted value, as SMT requires. A
+// wider count is saturated rather than truncated, so x << 2^32 does not become
+// x << 0: shifting by the width already gives the result of any larger count.
+static expr2tc shift_count(const expr2tc &value, const expr2tc &count)
+{
+  const type2tc &type = value->type;
+  if (count->type->get_width() < type->get_width())
+    return typecast2tc(type, count);
+  const BigInt width(type->get_width());
+  return if2tc(
+    type,
+    greaterthanequal2tc(count, constant_int2tc(count->type, width)),
+    constant_int2tc(type, width),
+    typecast2tc(type, count));
 }
 
 // Returns true when convert_ast_node() would recurse into expr's operands
@@ -699,11 +737,12 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
       assert(src_expr->type->type_id == ut.members[c]->type_id);
     }
 #endif
+    const unsigned bits = type_byte_size_bits(expr->type).to_uint64();
+    const unsigned mem_bits = type_byte_size_bits(src_expr->type).to_uint64();
     a = convert_ast(typecast2tc(
-      get_uint_type(type_byte_size_bits(expr->type).to_uint64()),
-      bitcast2tc(
-        get_uint_type(type_byte_size_bits(src_expr->type).to_uint64()),
-        src_expr)));
+      get_uint_type(bits),
+      union_bits_of_member(
+        bitcast2tc(get_uint_type(mem_bits), src_expr), bits)));
     break;
   }
   case expr2t::constant_vector_id:
@@ -729,12 +768,6 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
       break;
     }
 
-    expr2tc flat_expr = expr;
-    if (
-      is_array_type(to_array_type(expr->type).subtype) &&
-      is_constant_array2t(expr))
-      flat_expr = flatten_array_body(expr);
-
     if (is_struct_type(arr.subtype) || is_pointer_type(arr.subtype))
     {
       // Domain sort may be mesed with:
@@ -742,10 +775,10 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
         int_encoding ? config.ansi_c.int_width
                      : array_domain_width_or_word_size(arr));
 
-      a = tuple_array_create_despatch(flat_expr, domain);
+      a = tuple_array_create_despatch(expr, domain);
     }
     else
-      a = array_create(flat_expr);
+      a = array_create(expr);
     break;
   }
   case expr2t::add_id:
@@ -836,7 +869,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     }
     else if (int_encoding)
     {
-      a = mk_div(args[0], args[1]);
+      a = mk_truncated_div(d.type, args[0], args[1]);
     }
     else if (is_unsignedbv_type(d.side_1) && is_unsignedbv_type(d.side_2))
     {
@@ -1055,16 +1088,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
         expr2tc upd = bitcast2tc(
           get_uint_type(mem_bits),
           typecast2tc(tu.members[c], with.update_value));
-        if (mem_bits < bits)
-          upd = concat2tc(
-            get_uint_type(bits),
-            extract2tc(
-              get_uint_type(bits - mem_bits),
-              with.source_value,
-              bits - 1,
-              mem_bits),
-            upd);
-        a = convert_ast(upd);
+        a = convert_ast(union_bits_with_member(with.source_value, upd, bits));
       }
     }
     else
@@ -1365,12 +1389,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   {
     const shl2t &shl = to_shl2t(expr);
     if (shl.side_1->type->get_width() != shl.side_2->type->get_width())
-    {
-      // frontend doesn't cast the second operand up to the width of
-      // the first, which SMT does not enjoy.
-      expr2tc cast = typecast2tc(shl.side_1->type, shl.side_2);
-      args[1] = convert_ast(cast);
-    }
+      args[1] = convert_ast(shift_count(shl.side_1, shl.side_2));
 
     if (int_encoding)
     {
@@ -1390,12 +1409,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   {
     const ashr2t &ashr = to_ashr2t(expr);
     if (ashr.side_1->type->get_width() != ashr.side_2->type->get_width())
-    {
-      // frontend doesn't cast the second operand up to the width of
-      // the first, which SMT does not enjoy.
-      expr2tc cast = typecast2tc(ashr.side_1->type, ashr.side_2);
-      args[1] = convert_ast(cast);
-    }
+      args[1] = convert_ast(shift_count(ashr.side_1, ashr.side_2));
 
     if (int_encoding)
     {
@@ -1415,12 +1429,7 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
   {
     const lshr2t &lshr = to_lshr2t(expr);
     if (lshr.side_1->type->get_width() != lshr.side_2->type->get_width())
-    {
-      // frontend doesn't cast the second operand up to the width of
-      // the first, which SMT does not enjoy.
-      expr2tc cast = typecast2tc(lshr.side_1->type, lshr.side_2);
-      args[1] = convert_ast(cast);
-    }
+      args[1] = convert_ast(shift_count(lshr.side_1, lshr.side_2));
 
     if (int_encoding)
     {
@@ -1777,8 +1786,9 @@ smt_astt smt_solver_baset::convert_ast_node(const expr2tc &expr)
     // We only want expressions of typecast(address_of(symbol)) or
     // address_of(symbol).
     {
-      if (const typecast2t *tc = try_to_typecast2t(symbol);
-          tc && is_address_of2t(tc->from))
+      if (
+        const typecast2t *tc = try_to_typecast2t(symbol);
+        tc && is_address_of2t(tc->from))
         symbol = to_address_of2t(tc->from).ptr_obj;
 
       else if (is_address_of2t(symbol))
@@ -1844,7 +1854,7 @@ smt_astt
 smt_solver_baset::convert_modulus(const modulus2t &m, smt_astt a, smt_astt b)
 {
   if (int_encoding)
-    return mk_mod(a, b);
+    return mk_truncated_rem(m.type, a, b);
   if (is_fixedbv_type(m.side_1) && is_fixedbv_type(m.side_2))
     return mk_bvsmod(a, b);
 
@@ -1859,14 +1869,37 @@ smt_solver_baset::convert_modulus(const modulus2t &m, smt_astt a, smt_astt b)
   return both_unsigned ? mk_bvumod(a, b) : mk_bvsmod(a, b);
 }
 
-void smt_solver_baset::note_division_operands(const expr2tc &expr)
+/// SMT-LIB integer div/mod are Euclidean (0 <= mod < |b|); C11 6.5.5p6
+/// truncates toward zero. The two agree on a non-negative dividend whatever
+/// b's sign, so apply them to |a| and give the result a's sign: one div or
+/// mod per operation, as before (#8662). Unsigned operations stay Euclidean:
+/// integer-mode byte extraction (smt_byteops.cpp) relies on that.
+static smt_astt
+with_dividend_sign(smt_solver_baset &s, smt_astt a, smt_astt of_abs_a)
 {
-  // A propagated `with` chain over a nested array references itself once per
-  // store, so an SSA step is a DAG and an unmemoised walk costs a number of
-  // paths exponential in the store count -- the same reason
-  // pre_register_addresses and get_value_set_rec memoise.
-  std::unordered_set<const expr2t *> seen;
-  note_division_operands(expr, seen);
+  smt_astt a_neg = s.mk_lt(a, s.mk_smt_int(BigInt(0)));
+  return s.mk_ite(a_neg, s.mk_neg(of_abs_a), of_abs_a);
+}
+
+static smt_astt abs_int(smt_solver_baset &s, smt_astt a)
+{
+  return s.mk_ite(s.mk_lt(a, s.mk_smt_int(BigInt(0))), s.mk_neg(a), a);
+}
+
+smt_astt
+smt_solver_baset::mk_truncated_div(const type2tc &type, smt_astt a, smt_astt b)
+{
+  if (!is_signedbv_type(type) || a->sort->id != SMT_SORT_INT)
+    return mk_div(a, b);
+  return with_dividend_sign(*this, a, mk_div(abs_int(*this, a), b));
+}
+
+smt_astt
+smt_solver_baset::mk_truncated_rem(const type2tc &type, smt_astt a, smt_astt b)
+{
+  if (!is_signedbv_type(type) || a->sort->id != SMT_SORT_INT)
+    return mk_mod(a, b);
+  return with_dividend_sign(*this, a, mk_mod(abs_int(*this, a), b));
 }
 
 void smt_solver_baset::note_division_operands(
@@ -2185,9 +2218,6 @@ smt_astt smt_solver_baset::convert_terminal(const expr2tc &expr)
     if (sym.thename == "c:@__ESBMC_alloc")
       current_valid_objects_sym = expr;
 
-    if (sym.thename == "c:@__ESBMC_is_dynamic")
-      cur_dynamic = expr;
-
     // Special case for tuple symbols
     if (is_tuple_ast_type(expr))
       return tuple_api->mk_tuple_symbol(
@@ -2347,6 +2377,23 @@ smt_astt smt_solver_baset::convert_bswap(const expr2tc &expr)
   return convert_ast(swap);
 }
 
+/* The constant of multi-dimensional @p type whose elements, in row-major
+ * order, are @p elems from @p next on; array_create() lays it out. */
+static expr2tc nest_row_major(
+  const type2tc &type,
+  const std::vector<expr2tc> &elems,
+  std::size_t &next)
+{
+  const array_type2t &arr = to_array_type(type);
+  const uint64_t n = to_constant_int2t(arr.array_size).value.to_uint64();
+  std::vector<expr2tc> members;
+  for (uint64_t i = 0; i < n; i++)
+    members.push_back(
+      is_array_type(arr.subtype) ? nest_row_major(arr.subtype, elems, next)
+                                 : elems[next++]);
+  return constant_array2tc(type, members);
+}
+
 smt_astt smt_solver_baset::convert_member(const expr2tc &expr)
 {
   const member2t &member = to_member2t(expr);
@@ -2364,13 +2411,10 @@ smt_astt smt_solver_baset::convert_member(const expr2tc &expr)
     // concat2tc(T, A, B) places A in the high bits; stitch accordingly.
     if (is_array_type(type))
     {
-      if (is_multi_dimensional_array(type))
-        type = flatten_array_type(type);
-
       const bool big_endian =
         (config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN);
-      const array_type2t &arr = to_array_type(type);
-      const unsigned int elem_bits = arr.subtype->get_width();
+      const type2tc elem_type = get_flattened_array_subtype(type);
+      const unsigned int elem_bits = elem_type->get_width();
       const unsigned int elem_bytes = elem_bits / 8;
       const unsigned int num_elems = size.to_uint64() / elem_bits;
       const type2tc bytetype = get_uint8_type();
@@ -2403,15 +2447,14 @@ smt_astt smt_solver_baset::convert_member(const expr2tc &expr)
             val = concat2tc(
               get_uint_type(val->type->get_width() + 8), val, raw_bytes[j]);
         }
-        elems.push_back(bitcast2tc(arr.subtype, val));
+        elems.push_back(bitcast2tc(elem_type, val));
       }
-      return convert_ast(constant_array2tc(type, elems));
+      std::size_t next = 0;
+      return convert_ast(nest_row_major(type, elems, next));
     }
 
     return convert_ast(bitcast2tc(
-      type,
-      typecast2tc(
-        get_uint_type(type_byte_size_bits(type).to_uint64()), to_bv)));
+      type, union_member_bits(to_bv, type_byte_size_bits(type).to_uint64())));
   }
 
   assert(
@@ -2654,8 +2697,16 @@ unsigned long array_domain_width_or_word_size(const array_type2t &arr)
   // or infinite arrays the size is not known statically, so fall back to the
   // machine word size which is always a valid index width.
   if (!is_nil_expr(arr.array_size) && is_constant_int2t(arr.array_size))
-    return size_to_bit_width(
-      to_constant_int2t(arr.array_size).value.to_uint64());
+  {
+    const BigInt &size = to_constant_int2t(arr.array_size).value;
+    if (size.is_uint64())
+      return size_to_bit_width(size.to_uint64());
+    // A padded flattened size past 2^64: strictly larger, as above
+    unsigned long bits = 64;
+    while (BigInt::power2(bits) <= size)
+      bits++;
+    return bits;
+  }
   return config.ansi_c.word_size;
 }
 
@@ -2717,6 +2768,55 @@ static expr2tc gen_additions(const type2tc &type, std::vector<expr2tc> &exprs)
   return gen_additions(type, exprs);
 }
 
+/* A flattened array gives each constant inner dimension a power-of-two
+ * extent, so a flat index is the per-dimension indices side by side and every
+ * stride is a shift; a multiplication by any other constant costs the solver
+ * a multiplier circuit. A variable dimension keeps its size. */
+static BigInt padded_extent(const BigInt &n)
+{
+  BigInt p = 1;
+  while (p < n)
+    p *= 2;
+  return p;
+}
+
+/* @p v as a size_t constant, or a wider one when it does not fit: padding
+ * can take a huge array past 2^64 elements, and wrapping would alias rows. */
+static expr2tc size_constant(const BigInt &v)
+{
+  const unsigned width = size_type2()->get_width();
+  unsigned bits = width;
+  while (v >= BigInt::power2(bits))
+    bits++;
+  return constant_int2tc(bits == width ? size_type2() : get_uint_type(bits), v);
+}
+
+/* The distance between consecutive elements of type @p row in a flattened
+ * array: 1 for a scalar, the product of the padded extents for an array. */
+static expr2tc row_stride(const type2tc &row)
+{
+  BigInt constant = 1;
+  expr2tc variable;
+  for (type2tc t = row; is_array_type(t); t = to_array_type(t).subtype)
+  {
+    const expr2tc &dim = to_array_type(t).array_size;
+    if (is_constant_int2t(dim))
+      constant *= padded_extent(to_constant_int2t(dim).value);
+    else
+    {
+      expr2tc d = typecast2tc(size_type2(), dim);
+      variable = is_nil_expr(variable) ? d : mul2tc(size_type2(), variable, d);
+    }
+  }
+  if (is_nil_expr(variable))
+    return size_constant(constant);
+
+  expr2tc stride =
+    mul2tc(size_type2(), variable, constant_int2tc(size_type2(), constant));
+  simplify(stride);
+  return stride;
+}
+
 expr2tc
 smt_solver_baset::decompose_select_chain(const expr2tc &expr, expr2tc &base)
 {
@@ -2742,13 +2842,11 @@ smt_solver_baset::decompose_select_chain(const expr2tc &expr, expr2tc &base)
   while (is_index2t(idx->source_value))
   {
     idx = &to_index2t(idx->source_value);
-
-    type2tc t = flatten_array_type(idx->type);
-    assert(is_array_type(t));
+    assert(is_array_type(idx->type));
 
     multiplications.push_back(mul2tc(
       subtype,
-      typecast2tc(subtype, to_array_type(t).array_size),
+      typecast2tc(subtype, row_stride(idx->type)),
       typecast2tc(subtype, idx->index)));
   }
 
@@ -2793,20 +2891,16 @@ expr2tc smt_solver_baset::decompose_store_chain(
   assert(is_array_type(with->update_value));
   multiplications.push_back(mul2tc(
     subtype,
-    typecast2tc(
-      subtype,
-      to_array_type(flatten_array_type(with->update_value->type)).array_size),
+    typecast2tc(subtype, row_stride(with->update_value->type)),
     typecast2tc(subtype, with->update_field)));
 
   while (is_with2t(with->update_value) && is_array_type(with->update_value))
   {
     with = &to_with2t(with->update_value);
 
-    type2tc t = flatten_array_type(with->update_value->type);
-
     multiplications.push_back(mul2tc(
       subtype,
-      typecast2tc(subtype, to_array_type(t).array_size),
+      typecast2tc(subtype, row_stride(with->update_value->type)),
       typecast2tc(subtype, with->update_field)));
   }
 
@@ -2942,10 +3036,10 @@ static expr2tc lower_flattened_row_select(const index2t &index)
 /* Name every element of @p row, a row being written whole, as a store of the
  * corresponding read out of it. Correct whatever the row denotes -- the read
  * is of the row expression itself -- which is what makes it the general case
- * behind decompose_stores()' in-place fast path. False when any length it has
- * to enumerate is not a compile-time constant, which leaves the caller to fall
- * back on the whole-array encoding. */
-bool smt_solver_baset::expand_row_stores(
+ * behind decompose_stores()' in-place fast path. The caller has checked that
+ * the row's stride is a compile-time constant, which makes every extent it
+ * enumerates one too. */
+void smt_solver_baset::expand_row_stores(
   const expr2tc &row,
   const expr2tc &offset,
   std::vector<flat_storet> &stores)
@@ -2954,22 +3048,8 @@ bool smt_solver_baset::expand_row_stores(
   const type2tc &dom = offset->type;
   const bool nested = is_array_type(rowtype.subtype);
 
-  BigInt stride = 1;
-  if (nested)
-  {
-    type2tc flat = flatten_array_type(rowtype.subtype);
-    const array_type2t &sub = to_array_type(flat);
-    if (is_nil_expr(sub.array_size) || !is_constant_int2t(sub.array_size))
-      return false;
-    stride = to_constant_int2t(sub.array_size).value;
-  }
-
-  /* Not implied by the caller's check on the flattened size: mul2t folds
-     `n * 0` to `0`, so a zero-length inner dimension makes a row's flattened
-     size constant while this dimension stays symbolic. */
-  if (is_nil_expr(rowtype.array_size) || !is_constant_int2t(rowtype.array_size))
-    return false;
-
+  const BigInt stride =
+    nested ? to_constant_int2t(row_stride(rowtype.subtype)).value : BigInt(1);
   BigInt n = to_constant_int2t(rowtype.array_size).value;
   for (BigInt k = 0; k < n; k = k + 1)
   {
@@ -2977,15 +3057,10 @@ bool smt_solver_baset::expand_row_stores(
     expr2tc elem =
       index2tc(rowtype.subtype, row, constant_int2tc(index_type2(), k));
     if (nested)
-    {
-      if (!expand_row_stores(elem, off, stores))
-        return false;
-    }
+      expand_row_stores(elem, off, stores);
     else
       stores.push_back({off, elem});
   }
-
-  return true;
 }
 
 /* Decompose an array `with` into the flat element updates it denotes, oldest
@@ -3024,13 +3099,12 @@ bool smt_solver_baset::decompose_stores(
     return true;
   }
 
-  type2tc flatrow = flatten_array_type(w.update_value->type);
-  const array_type2t &rowtype = to_array_type(flatrow);
-  if (is_nil_expr(rowtype.array_size) || !is_constant_int2t(rowtype.array_size))
+  const expr2tc stride = row_stride(w.update_value->type);
+  if (!is_constant_int2t(stride))
     return false;
 
-  expr2tc origin = add2tc(
-    dom, offset, mul2tc(dom, field, typecast2tc(dom, rowtype.array_size)));
+  expr2tc origin =
+    add2tc(dom, offset, mul2tc(dom, field, typecast2tc(dom, stride)));
 
   const expr2tc &rowbase = with_chain_base(w.update_value);
   if (
@@ -3041,7 +3115,25 @@ bool smt_solver_baset::decompose_stores(
     return decompose_stores(w.update_value, origin, stores, rowbase_out);
   }
 
-  return expand_row_stores(w.update_value, origin, stores);
+  expand_row_stores(w.update_value, origin, stores);
+  return true;
+}
+
+/* A whole row of a flattened multi-dimensional array read as a value (`s =
+ * a[k]` with `s` itself an array) has no term of its own: the flat select
+ * yields an element. Build the row from its elements instead, each a read the
+ * flattener encodes. Nil when the row's length is not a constant. */
+static expr2tc materialize_flattened_row(const expr2tc &row)
+{
+  const array_type2t &type = to_array_type(row->type);
+  if (is_nil_expr(type.array_size) || !is_constant_int2t(type.array_size))
+    return expr2tc();
+  const uint64_t size = to_constant_int2t(type.array_size).value.to_uint64();
+  std::vector<expr2tc> elements;
+  for (uint64_t i = 0; i < size; ++i)
+    elements.push_back(
+      index2tc(type.subtype, row, constant_int2tc(index_type2(), BigInt(i))));
+  return constant_array2tc(row->type, elements);
 }
 
 // A subscript of a subscript selects another flattened dimension, except
@@ -3062,6 +3154,13 @@ smt_astt smt_solver_baset::convert_array_index(const expr2tc &expr)
   expr2tc lowered = lower_flattened_row_select(index);
   if (!is_nil_expr(lowered))
     return convert_ast(lowered);
+
+  if (is_flattened_row(expr))
+  {
+    expr2tc row = materialize_flattened_row(expr);
+    if (!is_nil_expr(row))
+      return convert_ast(row);
+  }
 
   expr2tc src_value = index.source_value;
 
@@ -3189,18 +3288,23 @@ type2tc smt_solver_baset::flatten_array_type(const type2tc &type)
    * variably-modified element is an int, so the product is taken in size_t:
    * any narrower type wraps or truncates the stride (R61). Every nil
    * array_size is built alongside size_is_infinite, and an infinite outer
-   * level returned above, so none reached here carries one (#7481). */
+   * level returned above, so none reached here carries one (#7481). The
+   * outermost level needs no padding: nothing strides over it. */
+  const expr2tc &outer = to_array_type(type).array_size;
+  assert(!is_nil_expr(outer));
+  const expr2tc stride = row_stride(to_array_type(type).subtype);
   expr2tc arr_size;
-  for (type2tc t = type; is_array_type(t); t = to_array_type(t).subtype)
+  if (is_constant_int2t(outer) && is_constant_int2t(stride))
+    arr_size = size_constant(
+      to_constant_int2t(outer).value * to_constant_int2t(stride).value);
+  else
   {
-    expr2tc dim_size = to_array_type(t).array_size;
-    assert(!is_nil_expr(dim_size));
-    if (dim_size->type != size_type2())
-      dim_size = typecast2tc(size_type2(), dim_size);
-    arr_size = is_nil_expr(arr_size) ? dim_size
-                                     : mul2tc(size_type2(), dim_size, arr_size);
+    arr_size = mul2tc(
+      size_type2(),
+      typecast2tc(size_type2(), outer),
+      typecast2tc(size_type2(), stride));
+    simplify(arr_size);
   }
-  simplify(arr_size);
   return array_type2tc(subtype, arr_size, false);
 }
 
@@ -3229,47 +3333,6 @@ static expr2tc constant_index_into_array(const expr2tc &array, uint64_t idx)
     arr_type.subtype, array, constant_int2tc(arr_size->type, idx));
 }
 
-/**
- * Transforms an expression of array type with constant size into a
- * constant_array2t expression of flattened form, that is, the subtype is not of
- * array type.
- *
- * Works in tandem with flatten_array_type().
- *
- * TODO: also support constant_array_of2t as an optimization
- */
-expr2tc smt_solver_baset::flatten_array_body(const expr2tc &expr)
-{
-  const array_type2t &arr_type = to_array_type(expr->type);
-  bool subtype_is_array = is_array_type(arr_type.subtype);
-
-  // innermost level, just return the array
-  if (!subtype_is_array && is_constant_array2t(expr))
-    return expr;
-
-  const expr2tc &arr_size = arr_type.array_size;
-  assert(is_constant_int2t(arr_size));
-  const BigInt &size = to_constant_int2t(arr_size).value;
-  assert(size.is_uint64());
-
-  std::vector<expr2tc> sub_exprs;
-  for (uint64_t i = 0, sz = size.to_uint64(); i < sz; i++)
-  {
-    expr2tc elem = constant_index_into_array(expr, i);
-
-    if (subtype_is_array)
-    {
-      expr2tc flat_elem = flatten_array_body(elem);
-      const auto &elems = to_constant_array2t(flat_elem).datatype_members;
-      sub_exprs.insert(sub_exprs.end(), elems.begin(), elems.end());
-    }
-    else
-      sub_exprs.push_back(elem);
-  }
-
-  return constant_array2tc(flatten_array_type(expr->type), sub_exprs);
-}
-
 type2tc smt_solver_baset::get_flattened_array_subtype(const type2tc &type)
 {
   // Get the subtype of an array, ensuring that any intermediate arrays have
@@ -3292,6 +3355,12 @@ type2tc smt_solver_baset::get_flattened_array_subtype(const type2tc &type)
 
   // type_rec is now the base type.
   return type_rec;
+}
+
+smt_resultt smt_solver_baset::dec_solve_assuming(const ast_vec &)
+{
+  log_error("{} does not support solving under assumptions", solver_text());
+  abort();
 }
 
 void smt_solver_baset::pre_solve()
@@ -3664,9 +3733,8 @@ expr2tc smt_solver_baset::get_by_ast_uncached(const type2tc &type, smt_astt a)
     {
       expr2tc cast = bitcast2tc(
         member_type,
-        typecast2tc(
-          get_uint_type(type_byte_size_bits(member_type).to_uint64()),
-          uint_rep));
+        union_member_bits(
+          uint_rep, type_byte_size_bits(member_type).to_uint64()));
       simplify(cast);
       members.push_back(cast);
     }
@@ -3966,6 +4034,39 @@ smt_astt smt_solver_baset::array_create(const expr2tc &expr)
 {
   if (is_constant_array_of2t(expr))
     return convert_array_of_prep(expr);
+
+  if (
+    is_constant_array2t(expr) &&
+    is_array_type(to_array_type(expr->type).subtype))
+  {
+    // Store each element at its padded position; no in-bounds index reads
+    // the padding, so it stays unconstrained
+    smt_astt ast = convert_ast(symbol2tc(
+      flatten_array_type(expr->type), mk_fresh_name("array_create::") + "."));
+    std::function<void(const expr2tc &, uint64_t)> store =
+      [&](const expr2tc &e, uint64_t base) {
+        const array_type2t &t = to_array_type(e->type);
+        const uint64_t n = to_constant_int2t(t.array_size).value.to_uint64();
+        const uint64_t stride =
+          to_constant_int2t(row_stride(t.subtype)).value.to_uint64();
+        for (uint64_t i = 0; i < n; i++)
+        {
+          expr2tc elem = constant_index_into_array(e, i);
+          if (is_array_type(t.subtype))
+            store(elem, base + i * stride);
+          else
+          {
+            if (
+              is_bool_type(elem->type) && !int_encoding &&
+              !array_api->supports_bools_in_arrays)
+              elem = typecast2tc(unsignedbv_type2tc(1), elem);
+            ast = ast->update(this, convert_ast(elem), base + i);
+          }
+        }
+      };
+    store(expr, 0);
+    return ast;
+  }
   // Check size
   assert(is_constant_array2t(expr) || is_constant_vector2t(expr));
   expr2tc size = array_or_vector_size(expr->type);
@@ -4052,37 +4153,16 @@ smt_astt smt_solver_baset::convert_array_of_prep(const expr2tc &expr)
     }
     else
     {
-      const constant_array_of2t &arrof = to_constant_array_of2t(rec_expr);
-      assert(is_constant_array2t(arrof.initializer));
-      const constant_array2t &constarray =
-        to_constant_array2t(arrof.initializer);
-      const array_type2t &constarray_type = to_array_type(constarray.type);
-
-      // Duplicate contents repeatedly.
+      // Repeat the row, and let the constant-array path lay it out
       assert(
         is_constant_int2t(arrtype.array_size) &&
         "Cannot have complex nondet-sized array_of initializers");
-      const BigInt &size = to_constant_int2t(arrtype.array_size).value;
-
-      std::vector<expr2tc> new_contents;
-      for (uint64_t i = 0; i < size.to_uint64(); i++)
-        new_contents.insert(
-          new_contents.end(),
-          constarray.datatype_members.begin(),
-          constarray.datatype_members.end());
-
-      // Create new expression, convert and return that.
-      expr2tc newsize = mul2tc(
-        arrtype.array_size->type,
-        arrtype.array_size,
-        constarray_type.array_size);
-      simplify(newsize);
-
-      type2tc new_arr_type =
-        array_type2tc(constarray_type.subtype, newsize, false);
-      expr2tc new_const_array =
-        constant_array2tc(new_arr_type, std::move(new_contents));
-      return convert_ast(new_const_array);
+      const uint64_t size =
+        to_constant_int2t(arrtype.array_size).value.to_uint64();
+      return convert_ast(constant_array2tc(
+        arrof.type,
+        std::vector<expr2tc>(
+          size, to_constant_array_of2t(rec_expr).initializer)));
     }
   }
   else

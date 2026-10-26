@@ -107,7 +107,8 @@ void solidity_convertert::add_static_contract_instance(const std::string c_name)
   if (context.find_symbol(ctor_id) == nullptr)
   {
     // this means that contract, including ctor, has not been parse yet
-    // this will lead to issue in the following process, particuarly this_pointer
+    // this will lead to issue in the following process, particuarly
+    // this_pointer
     const auto &json = find_constructor_ref(c_name);
     if (json.empty())
     {
@@ -551,11 +552,11 @@ nlohmann::json solidity_convertert::reorder_arguments(
 
 /*
   perform multi-transaction verification
-  the idea is to verify the assertions that must be held 
+  the idea is to verify the assertions that must be held
   in any function calling order.
   convert the verifying contract to a "sol_main" function, e.g.
 
-  Contract Base             
+  Contract Base
   {
       constrcutor(){}
       function A(){}
@@ -574,9 +575,12 @@ nlohmann::json solidity_convertert::reorder_arguments(
     }
   }
 
-  Additionally, we need to handle the inheritance. Theoretically, we need to merge (i.e. create a copy) the public and internal state variables and functions inside Base contracts into the Derive contract. However, in practice we do not need to do so. Instead, we 
-    - call the constructors based on the linearizedBaseList 
-    - add the inherited public function call to the if-body 
+  Additionally, we need to handle the inheritance. Theoretically, we need to
+  merge (i.e. create a copy) the public and internal state variables and
+  functions inside Base contracts into the Derive contract. However, in practice
+  we do not need to do so. Instead, we
+    - call the constructors based on the linearizedBaseList
+    - add the inherited public function call to the if-body
 
 */
 bool solidity_convertert::multi_transaction_verification(
@@ -663,8 +667,8 @@ bool solidity_convertert::multi_transaction_verification(
 }
 
 /*
-  This function perform multi-transaction verification on each contract in isolation.
-  To do so, we construct nondetered switch_case;
+  This function perform multi-transaction verification on each contract in
+  isolation. To do so, we construct nondetered switch_case;
 */
 // Shared: call multi_transaction_verification for each contract and collect
 // the resulting _ESBMC_Main_X entry function symbols.

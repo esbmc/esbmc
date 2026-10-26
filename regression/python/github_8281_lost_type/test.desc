@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 5
+^VERIFICATION FAILED$
+isinstance\(\) on a value whose type was lost

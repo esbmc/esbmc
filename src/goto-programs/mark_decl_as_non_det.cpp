@@ -21,11 +21,11 @@ bool mark_decl_as_non_det::runOnFunction(
     // Global variables and function declaration shouldn't reach here
     assert(!s->static_lifetime || !s->get_type().is_code());
 
-    // Explicit initialization of return_values is not needed as it will always be
-    // later initialized (e.g. return_value$foo = FOO()).
+    // Explicit initialization of return_values is not needed as it will always
+    // be later initialized (e.g. return_value$foo = FOO()).
     //
-    // Besides, this can trigger all sort of issues when dealing with concurrency
-    // operational models (data-races).
+    // Besides, this can trigger all sort of issues when dealing with
+    // concurrency operational models (data-races).
     if (has_prefix(s->name, "return_value$"))
       continue;
     // Is the value initialized?
@@ -35,7 +35,8 @@ bool mark_decl_as_non_det::runOnFunction(
       expr2tc new_value =
         code_assign2tc(symbol2tc(decl.type, decl.value), gen_nondet(decl.type));
 
-      // Due to the value set analysis, we need to split declarations and assignments
+      // Due to the value set analysis, we need to split declarations and
+      // assignments
       auto insert_pos = it;
       insert_pos++;
       auto t = F.second.body.instructions.insert(insert_pos, ASSIGN);

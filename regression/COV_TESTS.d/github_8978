@@ -1,0 +1,6 @@
+regression/python/github_8978_attr_instance_arg
+regression/python/github_8978_attr_instance_arg_fail
+regression/python/github_8978_self_attr_arg
+regression/python/github_8978_self_attr_arg_fail
+regression/python/github_8978_self_attr_subclass
+regression/python/github_8978_self_attr_two_classes

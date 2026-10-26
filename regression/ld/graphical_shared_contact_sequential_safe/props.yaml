@@ -1,0 +1,9 @@
+properties:
+  # One contact on v feeds both the reset coil of v and the coil q. Beremiz
+  # emits "IF v THEN v := FALSE; END_IF; q := v;", so q reads v after the reset
+  # and is never set. Reusing the contact's power flow for q would read v from
+  # before the reset (#7352).
+  - id: P1
+    kind: invariant
+    expression: "!q"
+    description: "q reads v after the reset coil has cleared it"

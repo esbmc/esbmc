@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: calling Leaf.m without a converted definition is not yet supported$

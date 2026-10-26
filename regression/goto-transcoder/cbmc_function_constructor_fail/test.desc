@@ -1,0 +1,5 @@
+CORE
+cbmc_function_constructor_fail.goto
+--binary --function harness
+^  assertion g == 3$
+^VERIFICATION FAILED$

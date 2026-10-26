@@ -1,0 +1,6 @@
+format_version: "0.1"
+properties:
+  - id: P1
+    kind: invariant
+    expression: "Ok || !Ok"
+    justification: "32767 and -32768 are accepted INT initial values."

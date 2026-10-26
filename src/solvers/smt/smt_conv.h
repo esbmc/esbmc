@@ -3,6 +3,7 @@
 
 #include <memory>
 #include <string>
+#include <unordered_set>
 #include <irep2/irep2.h>
 #include <util/base/threeval.h>
 #include <solvers/smt/smt_result.h>
@@ -36,6 +37,10 @@ public:
   void push_ctx();
   void pop_ctx();
   smt_resultt dec_solve();
+  /** Solve with each boolean expression in @p assumptions held true for this
+   *  query only. */
+  smt_resultt dec_solve_assuming(const std::vector<expr2tc> &assumptions);
+  bool supports_assumptions() const;
   void pre_solve();
   const std::string solver_text();
 
@@ -45,6 +50,9 @@ public:
    *  method exposes a solver-handle type. */
   void convert_ast(const expr2tc &expr);
   void convert_assign(const expr2tc &expr);
+  /** Like convert_assign, but only binds the symbol to its value; nothing is
+   *  asserted. */
+  void define(const expr2tc &expr);
 
   /** Re-register the address-space entry for a renumbered dynamic object. */
   void renumber_symbol_address(
@@ -69,8 +77,12 @@ public:
   void assert_expr(const expr2tc &e);
   /** Record divisions in @p expr so the modulus conversion can lower a
    *  remainder compositionally exactly when its operands are also
-   *  divided somewhere in the formula. */
-  void note_division_operands(const expr2tc &expr);
+   *  divided somewhere in the formula. Nodes in @p seen are skipped and
+   *  visited ones added, so a set shared across calls walks each node
+   *  once; the expressions must outlive @p seen. */
+  void note_division_operands(
+    const expr2tc &expr,
+    std::unordered_set<const expr2t *> &seen);
   /** Bracket the conversion of one SSA step by its guard and condition, and
    *  name the assignment it makes, if any. Every step must be bracketed; a
    *  bitcast converted outside one is read by no rebuild. */

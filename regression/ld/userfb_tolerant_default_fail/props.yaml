@@ -2,4 +2,4 @@ properties:
   - id: P1
     kind: absence
     expression: "Open"
-    description: "Under --ld-sound-mode the unsupported FB body is a no-op; Open stays false"
+    description: "Unprovable: by default mystery() is nondeterministic, so Open can be set"

@@ -215,7 +215,7 @@ void symex_target_equationt::assignment(
   SSA_step.rhs = rhs;
   SSA_step.hidden = hidden;
   SSA_step.cond = equality2tc(lhs, rhs);
-  SSA_step.type = goto_trace_stept::ASSIGNMENT;
+  SSA_step.type = symex_targett::ASSIGNMENT;
   SSA_step.source = source;
   if (!stack_trace.empty())
     SSA_step.stack_trace_payload() = std::move(stack_trace);
@@ -235,7 +235,7 @@ void symex_target_equationt::output(
   SSA_stept &SSA_step = SSA_steps.back();
 
   SSA_step.guard = guard;
-  SSA_step.type = goto_trace_stept::OUTPUT;
+  SSA_step.type = symex_targett::OUTPUT;
   SSA_step.source = source;
   auto &od = SSA_step.output_payload();
   od.output_args = args;
@@ -258,7 +258,7 @@ void symex_target_equationt::branching(
   SSA_step.guard = guard;
   SSA_step.cond = cond;
   SSA_step.hidden = hidden;
-  SSA_step.type = goto_trace_stept::BREANCHING;
+  SSA_step.type = symex_targett::BREANCHING;
   SSA_step.source = source;
   SSA_step.loop_number = loop_number;
 
@@ -277,7 +277,7 @@ void symex_target_equationt::assumption(
 
   SSA_step.guard = guard;
   SSA_step.cond = cond;
-  SSA_step.type = goto_trace_stept::ASSUME;
+  SSA_step.type = symex_targett::ASSUME;
   SSA_step.source = source;
   SSA_step.loop_number = loop_number;
 
@@ -300,7 +300,7 @@ void symex_target_equationt::assertion(
   SSA_step.guard = guard;
   SSA_step.cond = cond;
   SSA_step.cond_neg = cond_neg;
-  SSA_step.type = goto_trace_stept::ASSERT;
+  SSA_step.type = symex_targett::ASSERT;
   SSA_step.source = source;
   SSA_step.comment = msg;
   if (!stack_trace.empty())
@@ -325,7 +325,7 @@ void symex_target_equationt::renumber(
   SSA_step.guard = guard;
   SSA_step.lhs = symbol;
   SSA_step.rhs = size;
-  SSA_step.type = goto_trace_stept::RENUMBER;
+  SSA_step.type = symex_targett::RENUMBER;
   SSA_step.source = source;
 
   if (debug_print)
@@ -341,12 +341,19 @@ void symex_target_equationt::convert(smt_convt &smt_conv, assertion_modet mode)
 
   // Show the solver every division's operand pair up front: the
   // modulus conversion lowers a remainder compositionally only when
-  // the same operands are divided somewhere in the formula.
-  for (const auto &SSA_step : SSA_steps)
+  // the same operands are divided somewhere in the formula. One visited set
+  // for all steps, as they share subterms and extend each other's guards
+  // (#9150).
   {
-    smt_conv.note_division_operands(SSA_step.guard);
-    smt_conv.note_division_operands(SSA_step.rhs);
-    smt_conv.note_division_operands(SSA_step.cond);
+    std::unordered_set<const expr2t *> division_seen;
+    for (const auto &SSA_step : SSA_steps)
+    {
+      if (SSA_step.ignore)
+        continue;
+      smt_conv.note_division_operands(SSA_step.guard, division_seen);
+      smt_conv.note_division_operands(SSA_step.rhs, division_seen);
+      smt_conv.note_division_operands(SSA_step.cond, division_seen);
+    }
   }
 
   equation_conversion_statet state;
@@ -409,30 +416,30 @@ void symex_target_equationt::SSA_stept::output(
 
   switch (type)
   {
-  case goto_trace_stept::ASSERT:
+  case symex_targett::ASSERT:
     out << "ASSERT"
         << "\n";
     break;
-  case goto_trace_stept::ASSUME:
+  case symex_targett::ASSUME:
     out << "ASSUME"
         << "\n";
     break;
-  case goto_trace_stept::OUTPUT:
+  case symex_targett::OUTPUT:
     out << "OUTPUT"
         << "\n";
     break;
-  case goto_trace_stept::BREANCHING:
+  case symex_targett::BREANCHING:
     out << "BRANCHING"
         << "\n";
     break;
-  case goto_trace_stept::ASSIGNMENT:
+  case symex_targett::ASSIGNMENT:
     out << "ASSIGNMENT (";
     out << (hidden ? "HIDDEN" : "") << ")\n";
     break;
 
   default:
     assert(
-      type == goto_trace_stept::SKIP && config.options.get_bool_option("ltl"));
+      type == symex_targett::SKIP && config.options.get_bool_option("ltl"));
   }
 
   if (is_assert() || is_assume() || is_assignment() || is_branching())
@@ -507,7 +514,7 @@ unsigned int symex_target_equationt::clear_assertions()
 
   for (SSA_stepst::iterator it = SSA_steps.begin(); it != SSA_steps.end(); ++it)
   {
-    if (it->type == goto_trace_stept::ASSERT)
+    if (it->type == symex_targett::ASSERT)
     {
       SSA_stepst::iterator it2 = it;
       --it;

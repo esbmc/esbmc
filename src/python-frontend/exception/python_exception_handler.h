@@ -122,7 +122,8 @@ public:
    *
    * @param element              AST node used for location information.
    * @param func_call_expr       The function-call expression.
-   * @param is_negated           True when the test was wrapped in a UnaryOp Not.
+   * @param is_negated           True when the test was wrapped in a UnaryOp
+   * Not.
    * @param block                Target block.
    * @param attach_assert_message Callback to set the assertion comment.
    */
@@ -155,6 +156,17 @@ private:
   // Internal helpers
   // ------------------------------------------------------------------
 
+  /// Builds the instance thrown by `raise ValueError(...)` and the other
+  /// builtin exceptions: a struct holding the message pointer.
+  exprt
+  build_builtin_exception(const nlohmann::json &exc, const typet &type) const;
+
+  /// True when `raise <exc>` names a variable holding an exception instance
+  /// rather than an exception class.
+  bool raises_instance_variable(
+    const nlohmann::json &exc,
+    const std::string &exc_name) const;
+
   /// Copies `finalbody` in front of every return/break/continue in `body` that
   /// leaves the enclosing try, so those exit edges run the finally as CPython
   /// does. A returned expression is spilled to a temporary first, because
@@ -173,6 +185,14 @@ private:
 
   /// Names the spill temporaries inject_finally_before_escapes introduces.
   unsigned finally_spill_count_ = 0;
+
+  exprt make_finally_rethrow_handler(const nlohmann::json &element);
+
+  void emit_else_clause(
+    const nlohmann::json &element,
+    exprt else_block,
+    const exprt &no_raise,
+    codet &block);
 
   /** Create a temporary boolean symbol used by assertion helpers. */
   symbolt create_assert_temp_variable(const locationt &location) const;

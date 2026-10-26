@@ -177,7 +177,7 @@ static void report_non_termination_cwe(
   goto_trace_stept step;
   step.step_nr = 1;
   step.thread_nr = 0;
-  step.type = goto_trace_stept::ASSERT;
+  step.type = symex_targett::ASSERT;
   step.guard = false; // a violated assert
   step.pc = marker;
   step.comment = comment;
@@ -222,6 +222,14 @@ static bool ends_at_violation(optionst &options, bool &any_violation_found)
   // that find no new violation.
   options.set_option("kind-violation-found", true);
   return !options.get_bool_option("multi-property");
+}
+
+/// Whether the forward condition and inductive step may follow the base case:
+/// a proof needs the base case refuted, not merely left unviolated. A
+/// formula-only run decides no phase, so each still emits its formula.
+static bool may_follow_base_case(const optionst &options, const tvt &base_case)
+{
+  return base_case.is_false() || options.get_bool_option("smt-formula-only");
 }
 
 // This method iteratively applies one of the verification strategies
@@ -276,7 +284,8 @@ int esbmc_parseoptionst::do_bmc_strategy(
 
   // Track whether any violation was found across all k steps.
   // In multi-property mode the loop continues past a violation to check
-  // remaining properties, so we must remember the failure for the final verdict.
+  // remaining properties, so we must remember the failure for the final
+  // verdict.
   bool any_violation_found = false;
 
   // One property table for the whole run, rather than one per k step with the
@@ -314,15 +323,18 @@ int esbmc_parseoptionst::do_bmc_strategy(
     // k-induction
     if (options.get_bool_option("k-induction"))
     {
-      const bool is_bcv =
-        is_base_case_violated(options, goto_functions, k_step).is_true();
-      if (is_bcv && ends_at_violation(options, any_violation_found))
-        return 1;
-
-      // if the property is proven violated in the bs, it's unnecessary to further run fw and is
-      // this will make the trace looks cleaner yet might lead to an extra round to terminate the verification
+      const tvt base_case =
+        is_base_case_violated(options, goto_functions, k_step);
       if (
-        !is_bcv &&
+        base_case.is_true() && ends_at_violation(options, any_violation_found))
+        return 1;
+      const bool may_prove = may_follow_base_case(options, base_case);
+
+      // if the property is proven violated in the bs, it's unnecessary to
+      // further run fw and is this will make the trace looks cleaner yet might
+      // lead to an extra round to terminate the verification
+      if (
+        may_prove &&
         does_forward_condition_hold(options, goto_functions, k_step).is_false())
       {
         if (is_coverage)
@@ -339,8 +351,9 @@ int esbmc_parseoptionst::do_bmc_strategy(
       if (k_step > 1)
       {
         if (
-          !is_bcv && is_inductive_step_violated(options, goto_functions, k_step)
-                       .is_false())
+          may_prove &&
+          is_inductive_step_violated(options, goto_functions, k_step)
+            .is_false())
         {
           if (is_coverage)
             report_coverage(
@@ -414,8 +427,8 @@ int esbmc_parseoptionst::do_bmc_strategy(
       }
 
       // Skip IS for k = 1 (degenerates to a base-case check).
-      if (does_forward_condition_hold(options, goto_functions, k_step)
-            .is_false())
+      if (
+        does_forward_condition_hold(options, goto_functions, k_step).is_false())
       {
         log_result(
           "\nForward condition shows all executions terminate "
@@ -463,13 +476,15 @@ int esbmc_parseoptionst::do_bmc_strategy(
     // incremental-bmc
     if (options.get_bool_option("incremental-bmc"))
     {
-      const bool is_bcv =
-        is_base_case_violated(options, goto_functions, k_step).is_true();
-      if (is_bcv && ends_at_violation(options, any_violation_found))
+      const tvt base_case =
+        is_base_case_violated(options, goto_functions, k_step);
+      if (
+        base_case.is_true() && ends_at_violation(options, any_violation_found))
         return 1;
+      const bool may_prove = may_follow_base_case(options, base_case);
 
       if (
-        !is_bcv &&
+        may_prove &&
         does_forward_condition_hold(options, goto_functions, k_step).is_false())
       {
         if (is_coverage)
@@ -604,7 +619,7 @@ int esbmc_parseoptionst::do_context_bound_deepening(
   return 0;
 }
 
-// Falsification-only pre-pass over a deepening context bound (issue #6831, W4).
+// Falsification-only pre-pass over a deepening context bound (#6831, #6939).
 //
 // --incremental-context-bound cannot compose with the unwinding strategies
 // because both would own the verdict (driver.cpp, #6480). This composes by

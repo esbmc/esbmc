@@ -1,21 +1,25 @@
 #include <ld-frontend/ir_gen/st_fb_translator.h>
 #include <util/arith/arith_tools.h>
+#include <util/arith/ieee_float.h>
 #include <util/lang/c_types.h>
 #include <util/config/config.h>
+#include <cassert>
 #include <cctype>
+#include <cstdlib>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 // Configuration toggle for reproducing the two paper configurations from one
 // binary.  Selected by the --ld-sound-mode CLI flag so the chosen semantics is
 // visible in the verification record (rather than an undiscoverable env var):
 //   default (flag unset) -> "analog-extended": over-approximate unsupported ST
 //                           constructs (function calls, member access) as
-//                           nondeterministic, enabling analog programs (SWaT) to
-//                           be modelled at the cost of soundness (RQ6).
+//                           nondeterministic, enabling analog programs (SWaT)
+//                           to be modelled at the cost of soundness (RQ6).
 //   --ld-sound-mode      -> "sound Boolean/integer": such constructs throw, so
-//                           the FB body falls back to a no-op; no over-
-//                           approximation, zero false positives (RQ2, RQ5).
+//                           the FB body is not translated and its outputs are
+//                           nondeterministic each scan.
 static bool sound_mode()
 {
   return config.options.get_bool_option("ld-sound-mode");
@@ -183,13 +187,17 @@ exprt st_fb_translator::parse_primary()
     }
     std::string num = src_.substr(start, pos_ - start);
     if (is_real)
-      return from_double(std::stod(num), double_type());
+    {
+      exprt lit = from_double(std::stod(num), double_type());
+      lit.set("#st_real_literal", num);
+      return lit;
+    }
     return from_integer(BigInt(std::stoll(num)), int_type());
   }
   // parenthesised
   if (accept_sym("("))
   {
-    exprt e = parse_expr();
+    exprt e = parse_condition();
     expect_sym(")");
     return e;
   }
@@ -228,13 +236,63 @@ exprt st_fb_translator::parse_primary()
 }
 
 // Build a binary arithmetic node, deriving its result type from the operands:
-// promote to double when either side is floating point (REAL/analog), otherwise
-// stay integer.  Hard-coding int here would silently truncate the analog (SWaT)
-// arithmetic this frontend now supports.
+// floating point when either side is REAL/LREAL, otherwise integer.
+// Hard-coding int here would silently truncate the analog (SWaT) arithmetic
+// this frontend now supports.
 static bool is_floating(const typet &t)
 {
   return t.id() == "floatbv" || t.id() == "fixedbv";
 }
+
+// REAL op REAL stays binary32; an LREAL widens the operation to binary64.
+static typet common_float_type(const typet &a, const typet &b)
+{
+  if (a == double_type() || b == double_type())
+    return double_type();
+  return is_floating(a) ? a : b;
+}
+
+static bool is_real_literal_tree(const exprt &e)
+{
+  if (e.is_constant())
+    return !e.get("#st_real_literal").empty();
+  if (
+    e.id() != "ieee_add" && e.id() != "ieee_sub" && e.id() != "ieee_mul" &&
+    e.id() != "ieee_div")
+    return false;
+  for (const auto &op : e.operands())
+    if (!is_real_literal_tree(op))
+      return false;
+  return true;
+}
+
+static void narrow_real_literals(exprt &e, const typet &type)
+{
+  if (e.is_constant())
+  {
+    // Parsed afresh, so the literal is rounded once, as C rounds `0.1f`
+    ieee_floatt f;
+    f.from_float(std::strtof(e.get("#st_real_literal").c_str(), nullptr));
+    f.change_spec(ieee_float_spect(to_floatbv_type(type)));
+    e = f.to_expr();
+    return;
+  }
+  for (auto &op : e.operands())
+    narrow_real_literals(op, type);
+  e.type() = type;
+}
+
+// Untyped real literals take the type of the REAL they meet: MATIEC narrows
+// them to REAL and prints them with an `f` suffix (__REAL_LITERAL,
+// iec_std_lib.h).
+static void narrow_to_context(exprt &e, const typet &context)
+{
+  if (
+    context == float_type() && e.type() == double_type() &&
+    is_real_literal_tree(e))
+    narrow_real_literals(e, context);
+}
+
 // Floating-point arithmetic must use the ieee_* operators: the LD frontend has
 // no adjust pass to rewrite plus/mult on a floatbv operand, and the simplifier
 // asserts on a plain plus/mult node whose type is floatbv.  The irep2 migration
@@ -253,10 +311,68 @@ static irep_idt arith_id(const irep_idt &op, bool real)
     return "ieee_div";
   return op;
 }
+static bool is_integer(const typet &t)
+{
+  return t.id() == "signedbv" || t.id() == "unsignedbv";
+}
+
+// A literal takes its context's type when it fits (IEC 61131-3), so `i + 1`
+// stays cast-free and k-induction still converges (#8194).
+// Returns false for an integer literal that does not fit the other type.
+static bool retype_literal(exprt &lit, const exprt &other)
+{
+  if (
+    !lit.is_constant() || !is_integer(lit.type()) || !is_integer(other.type()))
+    return true;
+  const typet &t = other.type();
+  BigInt v;
+  const bool parsed = !to_integer(lit, v);
+  assert(parsed);
+  const std::size_t width = std::stoul(t.get("width").as_string());
+  const BigInt bound = power(2, width - 1);
+  if (v < -bound || v >= bound)
+    return false;
+  lit = from_integer(v, t);
+  return true;
+}
+
+static exprt assigned_value(exprt rhs, const symbol_exprt &lhs)
+{
+  narrow_to_context(rhs, lhs.type());
+  if (!retype_literal(rhs, lhs))
+    throw std::runtime_error(
+      "st_fb_translator: literal outside the range of '" +
+      lhs.get_identifier().as_string() + "'");
+  return rhs.type() == lhs.type()
+           ? rhs
+           : static_cast<exprt>(typecast_exprt(rhs, lhs.type()));
+}
+
+// Integers of different widths meet at 32 bits, which holds both.
+static void unify_integers(exprt &a, exprt &b)
+{
+  if (a.type() == b.type())
+    return;
+  retype_literal(b, a);
+  retype_literal(a, b);
+  if (a.type() != b.type())
+  {
+    a = typecast_exprt(a, int_type());
+    b = typecast_exprt(b, int_type());
+  }
+}
+
 static exprt make_binary_arith(const irep_idt &op, exprt lhs, exprt rhs)
 {
+  narrow_to_context(lhs, rhs.type());
+  narrow_to_context(rhs, lhs.type());
   const bool real = is_floating(lhs.type()) || is_floating(rhs.type());
-  const typet result = real ? double_type() : int_type();
+  if (!real)
+    unify_integers(lhs, rhs);
+  const typet result = real ? common_float_type(lhs.type(), rhs.type())
+                       : lhs.type() == rhs.type() && is_integer(lhs.type())
+                         ? lhs.type()
+                         : int_type();
   if (lhs.type() != result)
     lhs = typecast_exprt(lhs, result);
   if (rhs.type() != result)
@@ -286,9 +402,26 @@ exprt st_fb_translator::parse_expr()
   return lhs;
 }
 
+// Boolean operators on ANY_BIT operands other than BOOL are bitwise in
+// IEC 61131-3; only the BOOL case is modelled.
+static const exprt &boolean_operand(const exprt &e, const char *op)
+{
+  if (!e.type().is_bool())
+    throw std::runtime_error(
+      std::string("st_fb_translator: ") + op + " on a non-BOOL operand");
+  return e;
+}
+
+exprt st_fb_translator::parse_unary()
+{
+  if (accept_kw("not"))
+    return not_exprt(boolean_operand(parse_unary(), "NOT"));
+  return parse_primary();
+}
+
 exprt st_fb_translator::parse_term()
 {
-  exprt lhs = parse_primary();
+  exprt lhs = parse_unary();
   for (;;)
   {
     irep_idt op;
@@ -298,25 +431,67 @@ exprt st_fb_translator::parse_term()
       op = exprt::div;
     else
       break;
-    lhs = make_binary_arith(op, lhs, parse_primary());
+    lhs = make_binary_arith(op, lhs, parse_unary());
   }
   return lhs;
 }
 
-// Promote a comparison's operands to a common type: if either side is REAL
-// (floating), cast the other to double so a mixed REAL/INT comparison does not
+// Promote a comparison's operands to a common type: if either side is REAL or
+// LREAL, cast both to their common floating type so a mixed comparison does not
 // build a relation node with mismatched operand sorts (the LD frontend has no
 // adjust pass to fix it up later).
 static void promote_numeric(exprt &a, exprt &b)
 {
-  if (is_floating(a.type()) && !is_floating(b.type()))
-    b = typecast_exprt(b, double_type());
-  else if (is_floating(b.type()) && !is_floating(a.type()))
-    a = typecast_exprt(a, double_type());
+  narrow_to_context(a, b.type());
+  narrow_to_context(b, a.type());
+  if (is_floating(a.type()) || is_floating(b.type()))
+  {
+    const typet t = common_float_type(a.type(), b.type());
+    if (a.type() != t)
+      a = typecast_exprt(a, t);
+    if (b.type() != t)
+      b = typecast_exprt(b, t);
+  }
+  else if (is_integer(a.type()) && is_integer(b.type()))
+    unify_integers(a, b);
+}
+
+exprt st_fb_translator::parse_condition()
+{
+  exprt lhs = parse_xor();
+  while (accept_kw("or"))
+  {
+    exprt rhs = parse_xor();
+    lhs = or_exprt(boolean_operand(lhs, "OR"), boolean_operand(rhs, "OR"));
+  }
+  return lhs;
+}
+
+exprt st_fb_translator::parse_xor()
+{
+  exprt lhs = parse_and();
+  while (accept_kw("xor"))
+  {
+    exprt rhs = parse_and();
+    lhs = not_exprt(
+      equality_exprt(boolean_operand(lhs, "XOR"), boolean_operand(rhs, "XOR")));
+  }
+  return lhs;
+}
+
+exprt st_fb_translator::parse_and()
+{
+  exprt lhs = parse_comparison();
+  while (accept_kw("and") || accept_sym("&"))
+  {
+    exprt rhs = parse_comparison();
+    lhs = and_exprt(boolean_operand(lhs, "AND"), boolean_operand(rhs, "AND"));
+  }
+  return lhs;
 }
 
 // value possibly followed by a relational operator (=, <>, <, <=, >, >=)
-exprt st_fb_translator::parse_condition()
+exprt st_fb_translator::parse_comparison()
 {
   exprt lhs = parse_expr();
   irep_idt relop;
@@ -394,19 +569,20 @@ codet st_fb_translator::parse_stmt()
     code_whilet loop;
     loop.cond() = cond;
 
-    // Without the scan-watchdog, the WHILE stays a plain loop: a non-terminating
-    // Ladder Logic Bomb is then caught by ESBMC's unwinding assertion (--unwind),
-    // and no extra assertion is added to the verified model.
+    // Without the scan-watchdog, the WHILE stays a plain loop: a
+    // non-terminating Ladder Logic Bomb is then caught by ESBMC's unwinding
+    // assertion (--unwind), and no extra assertion is added to the verified
+    // model.
     if (!watchdog_enabled())
     {
       loop.body() = body;
       return loop;
     }
 
-    // Scan-watchdog instrumentation (opt-in via --ld-scan-watchdog).  A real PLC
-    // trips a watchdog timer if a scan overruns; a non-terminating rung loop is
-    // exactly such an overrun.  We prepend a per-loop iteration counter and
-    // assert it stays within the scan budget, turning a (trigger-gated)
+    // Scan-watchdog instrumentation (opt-in via --ld-scan-watchdog).  A real
+    // PLC trips a watchdog timer if a scan overruns; a non-terminating rung
+    // loop is exactly such an overrun.  We prepend a per-loop iteration counter
+    // and assert it stays within the scan budget, turning a (trigger-gated)
     // non-terminating Ladder Logic Bomb into a reachable safety violation that
     // incremental BMC detects, while bounded legitimate loops within budget
     // remain SAFE.  This injects an assertion, so it deliberately changes the
@@ -433,7 +609,8 @@ codet st_fb_translator::parse_stmt()
     return out;
   }
 
-  // VAR / VAR_INPUT / ... END_VAR declaration block embedded in the body -> skip
+  // VAR / VAR_INPUT / ... END_VAR declaration block embedded in the body ->
+  // skip
   if (kw == "var" || kw.rfind("var_", 0) == 0)
   {
     require_tolerant("embedded VAR block");
@@ -495,10 +672,8 @@ codet st_fb_translator::parse_stmt()
   }
   symbol_exprt lhs = resolve_(name);
   exprt rhs = parse_condition();
-  accept_sym(";");
-  if (rhs.type() != lhs.type())
-    rhs = typecast_exprt(rhs, lhs.type());
-  return code_assignt(lhs, rhs);
+  expect_sym(";");
+  return code_assignt(lhs, assigned_value(std::move(rhs), lhs));
 }
 
 void st_fb_translator::parse_stmt_list(

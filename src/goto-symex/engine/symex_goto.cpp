@@ -74,11 +74,11 @@ bool goto_symext::chase_copies(expr2tc &expr) const
 
   if (is_symbol2t(expr))
   {
-    auto it =
+    const expr2tc *value =
       copy_definitions.find(irep_idt(to_symbol2t(expr).get_symbol_name()));
-    if (it == copy_definitions.end())
+    if (!value)
       return false;
-    expr = it->second;
+    expr = *value;
     return true;
   }
 
@@ -109,8 +109,6 @@ void goto_symext::record_copy_definition(
   // already inlined by constant propagation and need no chase.
   if (!is_stable_value(rhs) || is_constant_expr(rhs))
     return;
-  if (copy_definitions.size() >= subsumption_map_capacity)
-    return;
 
   // Canonicalize so chains resolve in one substitution pass; drop
   // oversized canonical forms (see max_copy_definition_nodes).
@@ -120,19 +118,16 @@ void goto_symext::record_copy_definition(
     count_nodes_up_to(value, max_copy_definition_nodes) >
     max_copy_definition_nodes)
     return;
-  copy_definitions[irep_idt(to_symbol2t(renamed_lhs).get_symbol_name())] =
-    value;
+  copy_definitions.set(
+    irep_idt(to_symbol2t(renamed_lhs).get_symbol_name()), value);
 }
 
-/// Remember a guard generation's defining condition, up to the
-/// documented capacity.
 void goto_symext::record_guard_definition(
   const expr2tc &guard_expr,
   const expr2tc &new_rhs)
 {
-  if (guard_definitions.size() < subsumption_map_capacity)
-    guard_definitions[irep_idt(to_symbol2t(guard_expr).get_symbol_name())] =
-      new_rhs;
+  guard_definitions.set(
+    irep_idt(to_symbol2t(guard_expr).get_symbol_name()), new_rhs);
 }
 
 /// Whether the accumulated path guard already decides @p new_guard:
@@ -151,7 +146,7 @@ tvt::tv_enumt goto_symext::path_guard_decides(
   bool already_false,
   bool already_true)
 {
-  if (already_false || already_true)
+  if (already_false || already_true || cur_state->guard.is_true())
     return tvt::TV_UNKNOWN;
 
   expr2tc cmp_guard = new_guard;
@@ -160,42 +155,82 @@ tvt::tv_enumt goto_symext::path_guard_decides(
   expr2tc neg_guard = not2tc(cmp_guard);
   do_simplify(neg_guard);
 
-  for (const expr2tc &raw : cur_state->guard.guard_list)
+  // The first conjunct that matches either side decides.
+  const conjunct_indext index = prefix_index(cur_state->guard);
+  const size_t *pos = index.find(cmp_guard);
+  const size_t *neg = index.find(neg_guard);
+  if (pos && (!neg || *pos <= *neg))
+    return tvt::TV_TRUE;
+  return neg ? tvt::TV_FALSE : tvt::TV_UNKNOWN;
+}
+
+goto_symext::conjunct_indext goto_symext::prefix_index(const guard2tc &guard)
+{
+  // Descend the and-chain to the longest indexed prefix. A conjunct is
+  // never an and2t (guard2tc::add unfolds them), so a chain node determines
+  // its prefix.
+  assert(!is_nil_expr(guard));
+  std::vector<const expr2tc *> unindexed;
+  conjunct_indext index;
+  size_t covered = guard.guard_list.size();
+  for (const expr2tc *node = &guard; covered > 0;)
   {
-    bool negated = false;
-    expr2tc conjunct = raw;
-    if (is_not2t(conjunct))
+    if (const conjunct_indext *hit = guard_prefix_index.find(*node))
     {
-      negated = true;
-      conjunct = to_not2t(conjunct).value;
+      index = *hit;
+      break;
     }
-    auto def = is_symbol2t(conjunct)
-                 ? guard_definitions.find(
-                     irep_idt(to_symbol2t(conjunct).get_symbol_name()))
-                 : guard_definitions.end();
-    if (def != guard_definitions.end())
-    {
-      conjunct = def->second;
-      if (negated)
-      {
-        conjunct = not2tc(conjunct);
-        do_simplify(conjunct);
-      }
-    }
-    else
-    {
-      conjunct = raw;
-      cur_state->rename(conjunct);
-      do_simplify(conjunct);
-    }
-    if (chase_copies(conjunct))
-      do_simplify(conjunct);
-    if (conjunct == cmp_guard)
-      return tvt::TV_TRUE;
-    if (conjunct == neg_guard)
-      return tvt::TV_FALSE;
+    unindexed.push_back(node);
+    if (--covered > 0)
+      node = &to_and2t(*node).side_1;
   }
-  return tvt::TV_UNKNOWN;
+
+  for (auto node = unindexed.rbegin(); node != unindexed.rend();
+       ++node, ++covered)
+  {
+    assert(same_pointer(
+      covered == 0 ? **node : to_and2t(**node).side_2,
+      guard.guard_list[covered]));
+    const expr2tc conjunct = rewrite_conjunct(guard.guard_list[covered]);
+    if (!index.find(conjunct))
+      index.set(conjunct, covered);
+    guard_prefix_index.set(**node, index);
+  }
+  return index;
+}
+
+expr2tc goto_symext::rewrite_conjunct(const expr2tc &raw)
+{
+  bool negated = false;
+  expr2tc conjunct = raw;
+  if (is_not2t(conjunct))
+  {
+    negated = true;
+    conjunct = to_not2t(conjunct).value;
+  }
+  const expr2tc *def = is_symbol2t(conjunct)
+                         ? guard_definitions.find(
+                             irep_idt(to_symbol2t(conjunct).get_symbol_name()))
+                         : nullptr;
+  if (def)
+  {
+    conjunct = *def;
+    if (negated)
+    {
+      conjunct = not2tc(conjunct);
+      do_simplify(conjunct);
+    }
+  }
+  else
+  {
+    conjunct = raw;
+    cur_state->rename(conjunct);
+    do_simplify(conjunct);
+  }
+  if (chase_copies(conjunct))
+    do_simplify(conjunct);
+
+  return conjunct;
 }
 
 void goto_symext::symex_goto(const expr2tc &old_guard)
@@ -314,13 +349,6 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
       first_loop);
   }
 
-  // Note: we intentionally do NOT call interval_domain_state->assume() here.
-  // The interval domain is a single shared instance (not forked per branch).
-  // Assuming the fall-through constraint would contaminate the taken path when
-  // it is explored later, causing unsound pruning.  The domain is still updated
-  // by process_instruction (ASSIGN / ASSUME / DEAD), which is sufficient for
-  // tracking loop counters.
-
   symex_witness_branching(
     old_guard,
     new_guard,
@@ -436,13 +464,8 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   merge_state_list.emplace_back(*cur_state);
   record_parked_path(new_state_pc, std::prev(merge_state_list.end()));
 
-  // Capture the interval domain at the if-branch end so phi_function can JOIN
-  // both branches.  Deep-copy so subsequent else-branch writes don't corrupt
-  // it.
-  if (interval_domain_state)
-    merge_state_list.back().interval_snapshot =
-      std::make_shared<interval_domaint::interval_map>(
-        *interval_domain_state->intervals);
+  snapshot_interval_domain(merge_state_list.back());
+  assume_loop_continues(instruction, old_guard, forward, new_guard_true);
 
   // adjust guards
   if (new_guard_true)
@@ -575,6 +598,14 @@ void goto_symext::merge_gotos()
 
       merge_value_sets(merge_state);
 
+      merge_interval_domain(merge_state);
+
+      // One count stands for every merged path: the larger is the sound one.
+      BigInt &stack_total = cur_state->top().stack_frame_total;
+      stack_total = cur_state->guard.is_false()
+                      ? merge_state.stack_frame_total
+                      : std::max(stack_total, merge_state.stack_frame_total);
+
       // adjust depth
       cur_state->num_instructions =
         std::min(cur_state->num_instructions, merge_state.num_instructions);
@@ -585,6 +616,50 @@ void goto_symext::merge_gotos()
 
   // clean up to save some memory
   frame.merge_state_map.erase(state_map_it);
+}
+
+void goto_symext::snapshot_interval_domain(statet::merge_statet &merge_state)
+{
+  if (!interval_domain_state)
+    return;
+  // Share the map; clearing `copied` makes the continuing path copy it before
+  // its next write.
+  merge_state.interval_snapshot = interval_domain_state->intervals;
+  interval_domain_state->copied = false;
+}
+
+void goto_symext::assume_loop_continues(
+  const goto_programt::instructiont &instruction,
+  const expr2tc &guard,
+  bool forward,
+  bool always_jumps)
+{
+  // The parked path resumes from its own snapshot, so the continuing path may
+  // take its branch condition. Without it a counter's bound only survives
+  // arithmetic that ignores wrap-around (#8102).
+  if (
+    always_jumps || !interval_domain_state ||
+    !options.get_bool_option("interval-symex-guard") ||
+    instruction.loop_number == 0)
+    return;
+
+  expr2tc stays = guard;
+  if (forward)
+    make_not(stays);
+  interval_domain_state->assume(stays);
+}
+
+void goto_symext::merge_interval_domain(const statet::merge_statet &merge_state)
+{
+  if (!interval_domain_state)
+    return;
+
+  if (merge_state.interval_snapshot)
+    interval_domain_state->join_snapshot(
+      std::static_pointer_cast<interval_domaint::interval_map>(
+        merge_state.interval_snapshot));
+  else
+    interval_domain_state->make_top();
 }
 
 void goto_symext::merge_locality(const statet::merge_statet &src)
@@ -626,8 +701,9 @@ void goto_symext::merge_value_sets(const statet::merge_statet &src)
 using phi_recordst = std::vector<
   std::pair<renaming::level2t::name_record, renaming::level2t::name_record>>;
 
-/// A DECL re-run on a back-edge moves the frame to a fresh L1 instance, while
-/// a path parked before it still holds its value in the older one (#7903).
+/// A DECL re-run on a back-edge moves the frame to a fresh L1 instance (unless
+/// symex_decl reuses a dead one), while a path parked before it still holds
+/// its value in the older one (#7903).
 /// Only instances still live on the parked path are carried over.
 static void collect_l1_phis(
   const renaming::level1t &level1,
@@ -745,18 +821,6 @@ void goto_symext::phi_function(const statet::merge_statet &merge_state)
     cur_state->rename_type(new_lhs);
     cur_state->rename_type(rhs);
     cur_state->assignment(new_lhs, rhs);
-
-    // process_instruction never sees synthetic phi assignments; update the
-    // interval domain here using the if-branch snapshot so the JOIN is correct
-    // (both SSA names share the same base-name key in the domain).
-    if (
-      interval_domain_state && merge_state.interval_snapshot &&
-      !cur_state->guard.is_false() && !merge_state.guard.is_false())
-    {
-      auto snap = std::static_pointer_cast<interval_domaint::interval_map>(
-        merge_state.interval_snapshot);
-      interval_domain_state->phi_join_with_snapshot(new_lhs, snap);
-    }
 
     target->assignment(
       gen_true_expr(),

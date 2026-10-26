@@ -96,7 +96,7 @@ extern inline symbol_exprt &to_symbol_expr(exprt &expr)
 }
 
 /*! \brief Generic base class for unary expressions
-*/
+ */
 class unary_exprt : public exprt
 {
 public:
@@ -426,7 +426,7 @@ const array_of_exprt &to_array_of_expr(const exprt &expr);
 array_of_exprt &to_array_of_expr(exprt &expr);
 
 /*! \brief union constructor from single element
-*/
+ */
 class union_exprt : public exprt
 {
 public:
@@ -483,15 +483,15 @@ public:
  * \return Object of type \ref union_exprt
  *
  * \ingroup gr_std_expr
-*/
+ */
 const union_exprt &to_union_expr(const exprt &expr);
 /*! \copydoc to_union_expr(const exprt &)
  * \ingroup gr_std_expr
-*/
+ */
 union_exprt &to_union_expr(exprt &expr);
 
 /*! \brief struct constructor from list of elements
-*/
+ */
 class struct_exprt : public exprt
 {
 public:
@@ -525,11 +525,11 @@ public:
  * \return Object of type \ref struct_exprt
  *
  * \ingroup gr_std_expr
-*/
+ */
 const struct_exprt &to_struct_expr(const exprt &expr);
 /*! \copydoc to_struct_expr(const exprt &)
  * \ingroup gr_std_expr
-*/
+ */
 struct_exprt &to_struct_expr(exprt &expr);
 
 class object_descriptor_exprt : public exprt
@@ -1128,7 +1128,7 @@ public:
  * \return Object of type \ref constant_exprt
  *
  * \ingroup gr_std_expr
-*/
+ */
 inline const constant_exprt &to_constant_expr(const exprt &expr)
 {
   assert(expr.id() == exprt::constant);
@@ -1137,7 +1137,7 @@ inline const constant_exprt &to_constant_expr(const exprt &expr)
 
 /*! \copydoc to_constant_expr(const exprt &)
  * \ingroup gr_std_expr
-*/
+ */
 inline constant_exprt &to_constant_expr(exprt &expr)
 {
   assert(expr.id() == exprt::constant);
@@ -1145,7 +1145,7 @@ inline constant_exprt &to_constant_expr(exprt &expr)
 }
 
 /*! \brief The boolean constant true
-*/
+ */
 class true_exprt : public constant_exprt
 {
 public:

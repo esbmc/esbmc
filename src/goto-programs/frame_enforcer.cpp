@@ -1,8 +1,8 @@
 /// \file frame_enforcer.cpp
-/// \brief Implementation of the Operational Frame Rule for verification.
+/// \brief Implementation of the observational frame rule.
 ///
-/// This implements the core "Snapshot → Havoc/Call → Assume/Assert(Unchanged == Snapshot)"
-/// mechanism. See frame_enforcer.h for detailed documentation.
+/// This implements the core "Snapshot → Havoc/Call → Assume/Assert(Unchanged ==
+/// Snapshot)" mechanism. See frame_enforcer.h for detailed documentation.
 
 #include "frame_enforcer.h"
 #include <util/irep/migrate.h>
@@ -109,9 +109,11 @@ frame_enforcert::classified_assignst frame_enforcert::classify_assigns_targets(
       result.array_elem_targets[to_symbol2t(idx.source_value).thename]
         .push_back(idx.index);
     }
-    else if (is_pointer_type(target))
+    else if (is_pointer_type(target) && !is_member2t(target))
     {
-      // Pointer-typed symbol: Clang simplified &(*ptr) to ptr
+      // A bare pointer covers its pointee, so a decayed array parameter
+      // names the array. A pointer field `c->p` names the field itself, as
+      // `*c->p` reaches here as a dereference (#9000).
       result.pointer_targets.push_back(target);
     }
     else if (is_dereference2t(target))
@@ -475,7 +477,8 @@ void frame_enforcert::enforce_frame_rule(
     // In ASSERT mode, add aliasing disjunctions for pointer targets.
     // For each pointer p in pointer_targets whose pointed-to type matches
     // var's type, add: guard = guard || (p == &var)
-    // This means: "var is unchanged OR some pointer in the assigns set aliases it"
+    // This means: "var is unchanged OR some pointer in the assigns set aliases
+    // it"
     if (mode == frame_modet::ASSERT)
     {
       for (const auto &ptr : classified.pointer_targets)
@@ -511,8 +514,11 @@ frame_enforcert::collect_global_variables(const contextt &context)
     if (s.get_type().is_code() || s.is_type || !s.lvalue)
       return;
 
-    // Only process static lifetime variables (globals and static locals)
-    if (!s.static_lifetime)
+    // Only process static lifetime variables (globals and static locals).
+    // Python module globals carry static_lifetime=false and are recognised
+    // by mode and file_local instead, as havoc_static_globals does.
+    const bool python_global = s.mode == "Python" && !s.file_local;
+    if (!s.static_lifetime && !python_global)
       return;
 
     // Skip internal ESBMC symbols

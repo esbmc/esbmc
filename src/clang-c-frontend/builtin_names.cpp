@@ -25,6 +25,8 @@ bool is_abs_builtin_name(const irep_idt &identifier)
 {
   return identifier == "abs" || identifier == "labs" ||
          identifier == "imaxabs" || identifier == "llabs" ||
+         identifier == "__builtin_abs" || identifier == "__builtin_labs" ||
+         identifier == "__builtin_llabs" ||
          compare_float_suffix(identifier, "fabs") ||
          compare_unscore_builtin(identifier, "fabs");
 }

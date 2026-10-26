@@ -1,0 +1,8 @@
+properties:
+  # Only the program writes its mode, which starts FALSE, so q never turns on.
+  # Treating the FB's input of the same name as the program's would sample mode
+  # every scan and report a violation in scan 1.
+  - id: P1
+    kind: invariant
+    expression: "!q"
+    description: "Holds: nothing sets the program's mode"

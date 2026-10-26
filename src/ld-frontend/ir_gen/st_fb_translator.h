@@ -16,9 +16,12 @@
 //                                                        ESBMC's unwinding
 //                                                        assertions detect a
 //                                                        non-terminating LLB)
-//   expr            IDENT | INT_LIT | TRUE | FALSE | expr <op> expr
+//   expr            IDENT | INT_LIT | TRUE | FALSE | NOT expr | expr <op> expr
+//   boolean         OR  XOR  AND (&), on BOOL operands
 //   relop           =  <  <=  >  >=  <>
 //   arith           +  -  *  /
+// Precedence, lowest first, follows IEC 61131-3: OR, XOR, AND, comparison,
+// + -, * /, NOT.
 // Keywords are case-insensitive.  This is deliberately small: it is enough to
 // faithfully translate the function-block bodies that carry Ladder Logic Bombs
 // (comparison/arithmetic guards plus a non-termination payload) so that the
@@ -59,8 +62,12 @@ private:
   // parser -> codet/exprt
   void parse_stmt_list(code_blockt &out, const char *const *terminators);
   codet parse_stmt();
-  exprt parse_condition();
-  exprt parse_expr(); // additive  (+ -), left-assoc
-  exprt parse_term(); // multiplicative (* /), binds tighter than + -
+  exprt parse_condition(); // OR, the loosest level
+  exprt parse_xor();
+  exprt parse_and();
+  exprt parse_comparison();
+  exprt parse_expr();  // additive  (+ -), left-assoc
+  exprt parse_term();  // multiplicative (* /), binds tighter than + -
+  exprt parse_unary(); // NOT
   exprt parse_primary();
 };

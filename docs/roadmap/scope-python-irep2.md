@@ -1,8 +1,49 @@
 # Scope — Phase 9, the Python frontend under `--python-irep2-adjust-only`
 
 Phase 7 (clang-cpp) closed at 3095 of 3095 corpus rows agreeing
-(`scope-clang-cpp-irep2.md` §8.5). This file records Phase 9 the same way: by
-measurement, cause by cause.
+(`scope-clang-cpp-irep2.md` §8.5; that figure no longer holds, see the status
+block there). This file records Phase 9 the same way: by measurement, cause by
+cause.
+
+## Status at 2026-10-01 (`791ed8d1b8`)
+
+The file is two documents: the adjuster census (the first §1–§3) and the
+Phase 9 converter scope ("Phase 9 (python): scope", §1–§15). Section numbers
+are cited from source comments (`python_adjust.cpp` cites the first §1; the
+rest cite the second series), so neither is renumbered.
+
+**The flip has not happened.** `--python-irep2-adjust-only` is default off,
+and `python_language.cpp` still runs the legacy `clang_cpp_adjust` without it.
+
+**§2's "hard failure under the flag: 0" does not hold on an asserting build.**
+On a Debug build with Z3, five CORE tests that pass on the legacy path abort
+under the flag:
+
+| test | under `--python-irep2-adjust-only` |
+|---|---|
+| `precedence2` | `Z3 error Sorts (_ FloatingPoint 11 53) and (_ BitVec 64) are incompatible` |
+| `github_3866`, `github_3866_fail`, `return13-fail` | `z3_conv.cpp` `mk_eq` width assertion |
+| `missing-return14_fail` | `Unexpected type in int/ptr typecast` |
+
+`precedence2`'s only GOTO difference is `assert x is not b`: legacy emits
+`!(x == (double)b)`, the flag `!(x == b)`. `python_adjust`'s equality arm admits
+only bool against a number, so a float/int equality is never reconciled. These
+five are the current flip blockers, together with an SV-COMP run and
+`scope-coupled-arith-assign-conversion.md`'s G5 (both solvers), which they fail.
+`sum_tuple`, separately, aborts on the *legacy* path under Z3 (any float tuple
+sum) and passes under the flag.
+
+Phase 9 (the converter):
+
+- B-2* is **13** (`scripts/irep2/bars.py`), not §15's 15. The partial
+  class-builder commit is no longer counted.
+- #8059 (merged after §14) builds a class object from the name's chars plus
+  `value`, so §14.1's "told apart only by whether the constant has operands" is
+  out of date; what keeps that write legacy now is `migrate_expr` dropping
+  `value`.
+- `struct_type2t` carries `bases` since #8054, so the `python_adjust.cpp`
+  patched-value row may now convert; not measured.
+- The second §7 "Next" and the second §4 "Next" are superseded by §15.
 
 ## 1. The census, and the first cause it found
 
@@ -1002,7 +1043,7 @@ below, with what it needs. None converts mechanically.
 | `python_expr_builder.cpp` `set_symbol_type` | always legacy, for the `bytes` tag (#7902) | carry `#cpp_type` on arrays |
 | `python_expr_builder.cpp` `set_symbol_type_if_carried`, `set_function_type` | the fallback arm of a guarded helper | nothing -- the arm is the guard |
 | `converter_util.cpp` `create_symbol` | struct/union and `bytes` arrays | the two rows below |
-| `python_class_builder.cpp` (2) | a class struct's `bases`, which `exception_typeid.cpp` and `base_type.cpp` read; also its methods and components' `access`, which no Python reader needs | carry `bases` on `struct_type2t` |
+| `python_class_builder.cpp` (partial commit) | written before the members are added | nothing, once the final write below is IREP2-side |
 | `converter_stmt.cpp` class-object value | the operand-less char-array shape (§14) | a distinct class-object type (§14.3 step 3) |
 | `converter_stmt.cpp` array-to-pointer decay, `converter_funcdef.cpp` mutated-parameter pointer and inferred-return arm | no test reaches them | a reaching test, or removal with a C-Dead proof |
 | `converter_symbols.cpp` root retype | arith node consistency (§6.2) | push the retype through the operands |
@@ -1012,6 +1053,11 @@ below, with what it needs. None converts mechanically.
 Storing the final class type IREP2-side (measured 2026-09-28) drops `bases`, and `except
 BaseException` then stops matching a `ValueError`: `regression/python/exception_base_class` and
 `github_4352` fail. `python_adjust.cpp` already restores `bases` by hand for the same reason.
+
+`struct_type2t` now carries `bases` (with whether the key was present at all), and the final class
+type write is IREP2-side: `exception_base_class` and `github_4352` pass, and 44 Python tests whose
+dumps change now keep a `bases` list an earlier IREP2-side write had dropped. Methods and component
+`access` are still dropped; no Python reader needs them.
 
 The three rows that are not design work are the unreached arms: a C-Dead proof over frontend code for
 arbitrary Python input is not tractable, so each needs either a test that reaches it or an argument

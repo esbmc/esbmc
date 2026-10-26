@@ -1,17 +1,12 @@
 #include <assert.h>
 
+/* The big-endian layout from #571. */
+
 struct S {
-#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-	unsigned d : 4;
-	unsigned c : 4;
-	unsigned b : 4;
-	unsigned a : 4;
-#else
 	unsigned a : 4;
 	unsigned b : 4;
 	unsigned c : 4;
 	unsigned d : 4;
-#endif
 };
 
 int main()

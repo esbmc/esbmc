@@ -30,6 +30,30 @@ void element_type_registry::record(
   map_for(slot)[id].emplace_back(elem_id, elem_type);
 }
 
+void element_type_registry::assign(
+  const std::string &id,
+  const typet &elem_type,
+  type_slot slot)
+{
+  map_for(slot)[id] = {entry(std::string(), elem_type)};
+}
+
+void element_type_registry::set_element_type(
+  const std::string &id,
+  size_t index,
+  const typet &elem_type,
+  type_slot slot)
+{
+  auto &entries_list = map_for(slot)[id];
+  if (index < entries_list.size())
+    entries_list[index].second = elem_type;
+  else
+  {
+    entries_list.resize(index + 1, std::make_pair(std::string(), typet()));
+    entries_list[index].second = elem_type;
+  }
+}
+
 void element_type_registry::assign_from(
   const std::string &from,
   const std::string &to,
@@ -84,6 +108,23 @@ void element_type_registry::reverse(const std::string &id, type_slot slot)
   if (it == m.end() || it->second.size() <= 1)
     return;
   std::reverse(it->second.begin(), it->second.end());
+}
+
+void element_type_registry::replace(
+  const std::string &id,
+  size_t index,
+  const std::string &elem_id,
+  const typet &elem_type,
+  type_slot slot)
+{
+  slot_map &m = map_for(slot);
+  auto it = m.find(id);
+  if (it == m.end())
+    return;
+  if (index < it->second.size())
+    it->second[index] = {elem_id, elem_type};
+  else
+    m.erase(it);
 }
 
 const element_type_registry::entries *
@@ -153,6 +194,28 @@ bool element_type_registry::has_mixed_numeric(
       has_int = true;
   }
   return has_int && has_float;
+}
+
+bool element_type_registry::mixes_str_and_number(
+  const std::string &id,
+  type_slot slot) const
+{
+  const entries *e = find(id, slot);
+  if (!e)
+    return false;
+  auto is_str = [](const typet &t) {
+    return (t.is_array() || t.is_pointer()) && t.subtype() == char_type();
+  };
+  auto is_number = [](const typet &t) {
+    return t.is_signedbv() || t.is_unsignedbv() || t.is_floatbv() ||
+           t.is_bool();
+  };
+  auto any = [&](auto pred) {
+    return std::any_of(e->begin(), e->end(), [&](const entry &elem) {
+      return pred(elem.second);
+    });
+  };
+  return any(is_str) && any(is_number);
 }
 
 typet element_type_registry::uniform_element_type(

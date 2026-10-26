@@ -12,6 +12,8 @@ typedef struct
 } poly;
 void add(poly *r, const poly *b)
 {
+  __ESBMC_requires(__ESBMC_is_fresh(r, sizeof(*r)));
+  __ESBMC_requires(__ESBMC_is_fresh(b, sizeof(*b)));
   __ESBMC_requires(r != NULL && b != NULL);
   __ESBMC_assigns(r->coeffs);
   __ESBMC_ensures(1);

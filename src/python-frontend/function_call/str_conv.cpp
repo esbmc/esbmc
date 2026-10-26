@@ -1,12 +1,12 @@
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
+#include <python-frontend/python_expr_builder.h>
 #include <irep2/irep2_utils.h>
 #include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/string/string_builder.h>
 #include <python-frontend/string/string_handler.h>
-#include <python-frontend/math/round_to_nearest_guard.h>
+#include <util/base/host_rounding_mode.h>
 #include <python-frontend/type/type_handler.h>
-#include <python-frontend/math/round_to_nearest_guard.h>
 #include <python-frontend/type/type_utils.h>
 #include <util/arith/arith_tools.h>
 #include <util/lang/c_types.h>
@@ -33,8 +33,6 @@ constexpr unsigned int UTF8_1_BYTE_MAX = 0x7F;
 constexpr unsigned int UTF8_2_BYTE_MAX = 0x7FF;
 constexpr unsigned int UTF8_3_BYTE_MAX = 0xFFFF;
 constexpr unsigned int UTF8_4_BYTE_MAX = 0x10FFFF;
-constexpr unsigned int SURROGATE_START = 0xD800;
-constexpr unsigned int SURROGATE_END = 0xDFFF;
 
 static std::string utf8_encode(unsigned int int_value)
 {
@@ -42,15 +40,6 @@ static std::string utf8_encode(unsigned int int_value)
    * Convert an integer value into its UTF-8 character equivalent
    * similar to the python chr() function
    */
-
-  // Check for surrogate pairs (invalid in UTF-8)
-  if (int_value >= SURROGATE_START && int_value <= SURROGATE_END)
-  {
-    std::ostringstream oss;
-    oss << "Code point 0x" << std::hex << std::uppercase << int_value
-        << " is a surrogate pair, invalid in UTF-8";
-    throw std::invalid_argument(oss.str());
-  }
 
   // Manual UTF-8 encoding
   std::string char_out;
@@ -89,15 +78,15 @@ static std::string utf8_encode(unsigned int int_value)
 // std::to_string's %f (six fractional digits) with trailing zeros stripped, and
 // a ".0" restored for whole numbers (str(1.0) == "1.0"). Shared by
 // handle_float_to_str (str()/repr()) and handle_format's empty-spec float path
-// so format(x) folds identically to str(x); it therefore inherits the same known
-// gap (values needing more than six fractional digits, e.g. str(1/3), or
+// so format(x) folds identically to str(x); it therefore inherits the same
+// known gap (values needing more than six fractional digits, e.g. str(1/3), or
 // scientific notation, e.g. str(1e16)) — pre-existing in str(), not new here.
 std::string py_str_from_double(double d)
 {
   // std::to_string uses %f, which honours the host rounding mode; an earlier
   // symex step can leave the FPU in FE_UPWARD, folding str(0.1) to "0.100001".
   // Pin FE_TONEAREST (CPython's round-half-to-even) for the conversion.
-  const round_to_nearest_guard rounding_guard;
+  const host_rounding_mode rounding_guard(FE_TONEAREST);
   std::string str_val = std::to_string(d);
 
   // Remove unnecessary trailing zeros and dot (to match Python str): "5.500000"
@@ -417,7 +406,7 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
 
 exprt function_call_expr::handle_int_to_str(nlohmann::json &arg) const
 {
-  std::string str_val = std::to_string(arg["value"].get<int>());
+  std::string str_val = std::to_string(arg["value"].get<long long>());
   typet t = type_handler_.get_typet("str", str_val.size() + 1);
   return converter_.make_char_array_expr(
     std::vector<uint8_t>(str_val.begin(), str_val.end()), t);
@@ -431,11 +420,12 @@ exprt function_call_expr::handle_int_to_bytes() const
                                    call_["func"]["value"]["_type"] == "Name" &&
                                    call_["func"]["value"]["id"] == "int";
 
-  // CPython signature: int.to_bytes(length=1, byteorder='big', *, signed=False).
-  // length and byteorder may be passed positionally or by keyword, and both
-  // default (since 3.11). Resolve each from its positional slot, then its
-  // keyword, then the default. The type-method form passes the integer value as
-  // the leading positional argument, shifting the length/byteorder slots by one.
+  // CPython signature: int.to_bytes(length=1, byteorder='big', *,
+  // signed=False). length and byteorder may be passed positionally or by
+  // keyword, and both default (since 3.11). Resolve each from its positional
+  // slot, then its keyword, then the default. The type-method form passes the
+  // integer value as the leading positional argument, shifting the
+  // length/byteorder slots by one.
   const std::size_t value_offset = is_type_method_call ? 1 : 0;
   exprt value = is_type_method_call
                   ? converter_.get_expr(args[0])
@@ -485,8 +475,9 @@ exprt function_call_expr::handle_int_to_bytes() const
     else if (
       byteorder_arg->contains("value") && (*byteorder_arg)["value"].is_string())
       big_endian = (*byteorder_arg)["value"].get<std::string>() == "big";
-    else if (string_handler::extract_constant_string(
-               *byteorder_arg, converter_, folded_byteorder))
+    else if (
+      string_handler::extract_constant_string(
+        *byteorder_arg, converter_, folded_byteorder))
       big_endian = folded_byteorder == "big";
     else
       throw std::runtime_error(
@@ -509,17 +500,18 @@ exprt function_call_expr::handle_int_to_bytes() const
   }
 
   // Fill the output array one byte at a time. For big-endian we start from the
-  // most significant byte; for little-endian we start from the least significant one.
+  // most significant byte; for little-endian we start from the least
+  // significant one.
   for (std::size_t i = 0; i < length; ++i)
   {
     const std::size_t byte_index = big_endian ? (length - 1 - i) : i;
 
-    // Shift the selected byte down to the low 8 bits and mask everything else out.
-    // `lshr`, not the `shr` placeholder: `shr` is only ever resolved by
-    // clang_c_adjust::adjust_expr_shifts (to lshr/ashr on op0's signedness), and
-    // migrate_expr has no `shr` arm — so a surviving `shr` aborts with "migrate
-    // expr failed". `value` is unsignedbv by construction above, which is the
-    // branch adjust_expr_shifts would take anyway.
+    // Shift the selected byte down to the low 8 bits and mask everything else
+    // out. `lshr`, not the `shr` placeholder: `shr` is only ever resolved by
+    // clang_c_adjust::adjust_expr_shifts (to lshr/ashr on op0's signedness),
+    // and migrate_expr has no `shr` arm — so a surviving `shr` aborts with
+    // "migrate expr failed". `value` is unsignedbv by construction above, which
+    // is the branch adjust_expr_shifts would take anyway.
     const exprt shift_amount = from_integer(byte_index * 8, value.type());
     exprt shifted("lshr", value.type());
     shifted.copy_to_operands(value, shift_amount);
@@ -558,10 +550,39 @@ void function_call_expr::handle_float_to_int(nlohmann::json &arg) const
   arg["value"] = static_cast<int>(value);
 }
 
+exprt function_call_expr::guard_nonfinite_float_to_int(
+  exprt operand,
+  const exprt &base) const
+{
+  if (!base.is_nil())
+    return operand;
+  return converter_.guard_nonfinite_float_to_int(
+    std::move(operand), call_, true);
+}
+
+exprt function_call_expr::guard_none_to_float(exprt operand) const
+{
+  return converter_.guard_none_conversion(
+    std::move(operand),
+    "float() argument must be a string or a real number, not 'NoneType'",
+    call_);
+}
+
+exprt function_call_expr::build_float_conversion(
+  const exprt &operand,
+  const typet &float_type) const
+{
+  if (!type_handler_.is_tagged_scalar_type(operand.type()))
+    return python_expr::build_typecast(operand, float_type);
+  return converter_.dynamic_type_handler_.build_numeric_conversion(
+    to_value_expr(operand, converter_.ns),
+    float_type,
+    converter_.get_location_from_decl(call_));
+}
+
 void function_call_expr::handle_int_to_float(nlohmann::json &arg) const
 {
-  int value = arg["value"].get<int>();
-  arg["value"] = static_cast<double>(value);
+  arg["value"] = arg["value"].get<double>();
 }
 
 exprt function_call_expr::handle_base_conversion(
@@ -933,7 +954,8 @@ py_format_number(bool is_int, long long ival, double dval, const std::string &s)
     ++i;
     // CPython's '0' flag sets a '0' fill unless a fill char was explicit, and
     // derives '=' alignment only when no alignment was given — the two effects
-    // are independent (e.g. ">05d" keeps '>' but takes the '0' fill -> "00005").
+    // are independent (e.g. ">05d" keeps '>' but takes the '0' fill ->
+    // "00005").
     if (!fill_specified)
       fill = '0';
     if (align == 0)
@@ -1066,7 +1088,7 @@ py_format_number(bool is_int, long long ival, double dval, const std::string &s)
           : static_cast<char>(std::tolower(static_cast<unsigned char>(type)));
       const char *f = (conv == 'f') ? "%.*f" : (conv == 'e') ? "%.*e" : "%.*g";
       {
-        const round_to_nearest_guard guard;
+        const host_rounding_mode guard(FE_TONEAREST);
         const int n = std::snprintf(nullptr, 0, f, p, ad);
         if (n < 0)
           return std::nullopt;
@@ -1121,10 +1143,11 @@ exprt function_call_expr::handle_format() const
     spec = args[1]["value"].get<std::string>();
   }
 
-  // Only a genuine literal value is folded — a Constant or a unary +/- over one.
-  // extract_constant_integer would also resolve a Name to its bound constant,
-  // but that value can be stale after a reassignment (`x = 255; x = 10`), which
-  // would mis-fold; a variable argument is left unsupported instead.
+  // Only a genuine literal value is folded — a Constant or a unary +/- over
+  // one. extract_constant_integer would also resolve a Name to its bound
+  // constant, but that value can be stale after a reassignment (`x = 255; x =
+  // 10`), which would mis-fold; a variable argument is left unsupported
+  // instead.
   const std::string value_node_type = args[0].value("_type", std::string());
   const bool is_literal_value =
     value_node_type == "Constant" || value_node_type == "UnaryOp";
@@ -1275,53 +1298,53 @@ function_call_expr::extract_string_from_symbol(const symbolt *sym) const
   return result;
 }
 
-exprt function_call_expr::handle_str_symbol_to_float(const symbolt *sym) const
+bool function_call_expr::is_single_assignment_str_symbol(
+  const symbolt *sym,
+  const std::string &name) const
 {
-  auto value_opt = extract_string_from_symbol(sym);
-  if (!value_opt)
-    return from_double(0.0, type_handler_.get_typet("float", 0));
-
-  {
-    std::string digits;
-    const bool separators_ok =
-      type_utils::strip_pep515_underscores(*value_opt, digits);
-    char *end = nullptr;
-    double dval = separators_ok ? std::strtod(digits.c_str(), &end) : 0.0;
-    if (!separators_ok || !end || end != digits.c_str() + digits.size())
-    {
-      log_error(
-        "Failed float conversion from string \"{}\": invalid argument",
-        *value_opt);
-      return from_double(0.0, type_handler_.get_typet("float", 0));
-    }
-    return from_double(dval, type_handler_.get_typet("float", 0));
-  }
+  return sym && sym->get_value().is_constant() &&
+         type_utils::is_string_type(sym->get_type()) &&
+         type_utils::is_string_type(sym->get_value().type()) &&
+         !json_utils::has_multiple_assignments_in_scope(
+           name, converter_.get_current_func_name(), converter_.get_ast_json());
 }
 
-exprt function_call_expr::handle_str_symbol_to_int(const symbolt *sym) const
+std::optional<exprt>
+function_call_expr::handle_str_symbol_to_float(const symbolt *sym) const
 {
   auto value_opt = extract_string_from_symbol(sym);
   if (!value_opt)
-    return from_integer(0, type_handler_.get_typet("int", 0));
+    return std::nullopt;
 
-  const std::string &value = *value_opt;
+  std::string digits;
+  const bool separators_ok =
+    type_utils::strip_pep515_underscores(*value_opt, digits);
+  char *end = nullptr;
+  double dval = separators_ok ? std::strtod(digits.c_str(), &end) : 0.0;
+  if (!separators_ok || !end || end != digits.c_str() + digits.size())
+    return std::nullopt;
+  return from_double(dval, type_handler_.get_typet("float", 0));
+}
+
+std::optional<exprt>
+function_call_expr::handle_str_symbol_to_int(const symbolt *sym) const
+{
+  auto value_opt = extract_string_from_symbol(sym);
+  if (!value_opt)
+    return std::nullopt;
+
   std::string digits;
   if (
-    !type_utils::strip_pep515_underscores(value, digits) || digits.empty() ||
-    !std::all_of(digits.begin(), digits.end(), ::isdigit))
-  {
-    log_error("Invalid string for integer conversion: \"{}\"", value);
-    return from_integer(0, type_handler_.get_typet("int", 0));
-  }
+    !type_utils::strip_pep515_underscores(*value_opt, digits) ||
+    digits.empty() || !std::all_of(digits.begin(), digits.end(), ::isdigit))
+    return std::nullopt;
 
   try
   {
-    int int_val = std::stoi(digits);
-    return from_integer(int_val, type_handler_.get_typet("int", 0));
+    return from_integer(std::stoi(digits), type_handler_.get_typet("int", 0));
   }
-  catch (const std::exception &e)
+  catch (const std::exception &)
   {
-    log_error("Failed int conversion from string \"{}\": {}", value, e.what());
-    return from_integer(0, type_handler_.get_typet("int", 0));
+    return std::nullopt;
   }
 }

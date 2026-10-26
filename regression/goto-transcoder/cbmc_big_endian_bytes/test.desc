@@ -1,0 +1,4 @@
+CORE
+cbmc_big_endian_bytes.goto
+--binary --big-endian
+^VERIFICATION SUCCESSFUL$

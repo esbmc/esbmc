@@ -3,7 +3,9 @@
 
 import importlib.util
 import os
+import tempfile
 import unittest
+from unittest import mock
 
 _spec = importlib.util.spec_from_file_location(
     "esbmc_wrapper", os.path.join(os.path.dirname(__file__), "esbmc-wrapper.py"))
@@ -76,6 +78,107 @@ Violated property:
 VERIFICATION FAILED
 """
 
+# Python track outputs, captured from ESBMC 8.5.0 runs over programs built on
+# sv-benchmarks' python/_sv_verifier.py nondet module.
+
+PY_ZERODIVISION = """
+Violated property:
+  file p_zerodiv.py line 5 column 12 function main
+  uncaught exception: ZeroDivisionError
+  !(c:@__ESBMC_exc_thrown && c:@__ESBMC_exc_typeid == 16)
+
+** Results:
+p_zerodiv.py
+  NOT CHECKED  [global.assertion.1]       line 0  uncaught exception
+  NOT CHECKED  [global.assertion.2]       line 0  uncaught exception: IndexError
+  NOT CHECKED  [global.assertion.3]       line 0  uncaught exception: ValueError
+p_zerodiv.py, function main
+  NOT CHECKED  [main.division-by-zero.1]  line 5  division by zero
+  FAILED       [main.assertion.1]         line 5  uncaught exception: ZeroDivisionError
+
+** 1 of 5 properties failed, 4 not checked
+
+VERIFICATION FAILED
+"""
+
+PY_INDEXERROR = """
+Violated property:
+  file p_index.py line 6 column 12 function main
+  uncaught exception: IndexError
+  !(c:@__ESBMC_exc_thrown && c:@__ESBMC_exc_typeid == 14)
+
+** Results:
+p_index.py, function main
+  FAILED       [main.assertion.1]  line 6  uncaught exception: IndexError
+
+** 1 of 4 properties failed, 3 not checked
+
+VERIFICATION FAILED
+"""
+
+PY_TYPEERROR = """
+Violated property:
+  file p_type.py line 5 column 8 function main
+  uncaught exception: TypeError
+
+** Results:
+p_type.py, function main
+  FAILED       [main.assertion.1]  line 5  uncaught exception: TypeError
+
+** 1 of 5 properties failed, 4 not checked
+
+VERIFICATION FAILED
+"""
+
+PY_ASSERTION = """
+Violated property:
+  file p_assert2.py line 5 column 4 function main
+  assertion x != 3
+  x != 3
+
+** Results:
+p_assert2.py, function main
+  FAILED       [main.assertion.1]  line 5  assertion x != 3
+
+** 1 of 1 properties failed
+
+VERIFICATION FAILED
+"""
+
+# ValueError is in no property of the Python track, so no run that escapes one
+# says anything about any of the four properties.
+PY_VALUEERROR = """
+Violated property:
+  file p_raise_value.py line 6 column 8 function main
+  uncaught exception: ValueError
+
+** Results:
+p_raise_value.py, function main
+  FAILED       [main.assertion.1]  line 6  uncaught exception: ValueError
+
+** 1 of 4 properties failed, 3 not checked
+
+VERIFICATION FAILED
+"""
+
+# ESBMC's own list model failing internally on a correct program: the comment
+# carries no exception type, exactly like `raise AssertionError(msg)` does.
+# Reporting this as an assertion violation is the -16 answer of esbmc #7628's
+# sibling on bm_fannkuch_det.py.
+PY_MODEL_FAILURE = """
+Violated property:
+  file list.c line 108 column 3 function __ESBMC_list_size
+  TypeError: object of this type has no len()
+
+** Results:
+list.c, function __ESBMC_list_size
+  FAILED       [__ESBMC_list_size.assertion.1]  line 108  TypeError: object of this type has no len()
+
+** 1 of 3 properties failed, 2 not checked
+
+VERIFICATION FAILED
+"""
+
 
 class ParseResultTest(unittest.TestCase):
     def verdict(self, output, prop):
@@ -112,6 +215,343 @@ class ParseResultTest(unittest.TestCase):
             self.verdict("** 0 of 3 properties failed, 3 passed\n"
                          "VERIFICATION SUCCESSFUL\n", wrapper.Property.reach),
             "TRUE")
+
+
+# The scalar model's own TypeError on `r + 1`, where `r` is an int on one path
+# and a str on the other.
+PY_MODEL_TYPEERROR = """
+Violated property:
+  file scalar.c line 218 column 3 function __python_scalar_add_num
+  TypeError: unsupported operand type(s) for +
+  (_Bool)tagged && (_Bool)type_matches
+
+
+** Results:
+scalar.c, function __python_scalar_add_num
+  FAILED       [__python_scalar_add_num.assertion.1]  line 218  TypeError: unsupported operand type(s) for +
+
+** 1 of 12 properties failed, 6 passed, 5 not checked
+
+VERIFICATION FAILED
+"""
+
+class PythonPropertyTest(unittest.TestCase):
+    """The Python track scores one exception family per property file.
+
+    One ESBMC run checks every family at once, so the family a run falsified
+    has to be read off the violated-property comment. Crediting a violation to
+    the wrong family is a wrong answer, worth -16.
+    """
+
+    def verdict(self, output, prop):
+        return wrapper.get_result_string(wrapper.parse_result(output, prop))
+
+    def test_zerodivision_falsifies_arithmetic(self):
+        self.assertEqual(
+            self.verdict(PY_ZERODIVISION, wrapper.Property.py_arithmetic), "FALSE")
+
+    def test_zerodivision_says_nothing_about_data_lookup(self):
+        self.assertEqual(
+            self.verdict(PY_ZERODIVISION, wrapper.Property.py_datalookup), "Unknown")
+
+    def test_zerodivision_says_nothing_about_assertion_safety(self):
+        self.assertEqual(
+            self.verdict(PY_ZERODIVISION, wrapper.Property.py_assertion), "Unknown")
+
+    def test_indexerror_falsifies_data_lookup(self):
+        self.assertEqual(
+            self.verdict(PY_INDEXERROR, wrapper.Property.py_datalookup), "FALSE")
+
+    def test_typeerror_falsifies_dynamic_typing(self):
+        self.assertEqual(
+            self.verdict(PY_TYPEERROR, wrapper.Property.py_dyntyping), "FALSE")
+
+    def test_typeerror_says_nothing_about_arithmetic(self):
+        self.assertEqual(
+            self.verdict(PY_TYPEERROR, wrapper.Property.py_arithmetic), "Unknown")
+
+    def test_model_typeerror_falsifies_dynamic_typing(self):
+        self.assertEqual(
+            self.verdict(PY_MODEL_TYPEERROR, wrapper.Property.py_dyntyping), "FALSE")
+
+    def test_model_typeerror_says_nothing_about_arithmetic(self):
+        self.assertEqual(
+            self.verdict(PY_MODEL_TYPEERROR, wrapper.Property.py_arithmetic), "Unknown")
+
+    def test_internal_len_failure_is_not_a_typeerror(self):
+        self.assertEqual(
+            self.verdict(PY_MODEL_FAILURE, wrapper.Property.py_dyntyping), "Unknown")
+
+    def test_assert_falsifies_assertion_safety(self):
+        self.assertEqual(
+            self.verdict(PY_ASSERTION, wrapper.Property.py_assertion), "FALSE")
+
+    def test_assert_says_nothing_about_arithmetic(self):
+        self.assertEqual(
+            self.verdict(PY_ASSERTION, wrapper.Property.py_arithmetic), "Unknown")
+
+    def test_valueerror_falsifies_no_python_property(self):
+        for prop in (wrapper.Property.py_assertion, wrapper.Property.py_arithmetic,
+                     wrapper.Property.py_datalookup, wrapper.Property.py_dyntyping):
+            self.assertEqual(self.verdict(PY_VALUEERROR, prop), "Unknown")
+
+    def test_internal_model_failure_is_not_an_assertion_violation(self):
+        self.assertEqual(
+            self.verdict(PY_MODEL_FAILURE, wrapper.Property.py_assertion), "Unknown")
+
+    def test_successful_python_run_is_true(self):
+        self.assertEqual(
+            self.verdict("** 0 of 7 properties failed, 7 passed\n"
+                         "VERIFICATION SUCCESSFUL\n",
+                         wrapper.Property.py_arithmetic), "TRUE")
+
+
+class IntegerEncodingConfirmationTest(unittest.TestCase):
+    """A Python violation stays FALSE only if a --ir re-run repeats it in place."""
+
+    PASSED = "** 0 of 1 properties failed, 1 passed\n\nVERIFICATION SUCCESSFUL\n"
+    TIMED_OUT = b"Timed out"
+    NO_LINE = PY_ASSERTION.replace(" line 5 column 4", "")
+
+    def verify(self, prop, first, rerun, benchmark="main.py", elapsed=0):
+        outputs = iter([first, rerun])
+        calls = []
+
+        def fake_run(cmd_line, timeout=None):
+            calls.append((cmd_line, timeout))
+            out = next(outputs)
+            return out if isinstance(out, bytes) else out.encode()
+
+        with mock.patch.object(wrapper, "run", fake_run), \
+                mock.patch.object(wrapper.time, "monotonic", side_effect=[0, elapsed]):
+            result = wrapper.verify("kinduction", prop, 64, benchmark, False, "", False, None, None)
+        return wrapper.get_result_string(result), calls
+
+    def test_rerun_at_the_same_line_keeps_false(self):
+        verdict, calls = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, PY_ASSERTION)
+        self.assertEqual(verdict, "FALSE")
+        self.assertTrue(calls[1][0].endswith("--ir --z3 "))
+        self.assertEqual(calls[1][1], wrapper.IR_RERUN_TIMEOUT)
+        self.assertIsNone(calls[0][1])
+
+    def test_a_first_run_leaving_the_full_budget_is_rerun(self):
+        verdict, calls = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, self.PASSED, elapsed=700)
+        self.assertEqual(verdict, "Unknown")
+        self.assertEqual(calls[1][1], wrapper.IR_RERUN_TIMEOUT)
+
+    def test_a_first_run_past_the_threshold_keeps_false_without_a_rerun(self):
+        elapsed = wrapper.TOTAL_BUDGET - wrapper.MIN_RERUN_BUDGET + 1
+        verdict, calls = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, self.PASSED, elapsed=elapsed)
+        self.assertEqual(verdict, "FALSE")
+        self.assertEqual(len(calls), 1)
+
+    def test_a_first_run_at_the_threshold_is_still_rerun(self):
+        elapsed = wrapper.TOTAL_BUDGET - wrapper.MIN_RERUN_BUDGET
+        verdict, calls = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, self.PASSED, elapsed=elapsed)
+        self.assertEqual(verdict, "Unknown")
+        self.assertEqual(calls[1][1], wrapper.MIN_RERUN_BUDGET)
+
+    def test_rerun_that_passes_is_unknown(self):
+        verdict, _ = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, self.PASSED)
+        self.assertEqual(verdict, "Unknown")
+
+    def test_rerun_failing_at_another_line_is_unknown(self):
+        other = PY_ASSERTION.replace("line 5 column 4", "line 9 column 4")
+        verdict, _ = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, other)
+        self.assertEqual(verdict, "Unknown")
+
+    def test_rerun_timeout_is_unknown(self):
+        verdict, _ = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, self.TIMED_OUT)
+        self.assertEqual(verdict, "Unknown")
+
+    def test_rerun_failing_another_property_is_unknown(self):
+        same_site_valueerror = PY_VALUEERROR.replace("p_raise_value.py", "p_assert2.py").replace("line 6 column 8", "line 5 column 4")
+        verdict, _ = self.verify(wrapper.Property.py_assertion, PY_ASSERTION, same_site_valueerror)
+        self.assertEqual(verdict, "Unknown")
+
+    def test_no_line_on_either_side_matches_on_the_file(self):
+        verdict, _ = self.verify(wrapper.Property.py_assertion, self.NO_LINE, self.NO_LINE)
+        self.assertEqual(verdict, "FALSE")
+
+    def test_a_line_on_one_side_only_is_unknown(self):
+        verdict, _ = self.verify(wrapper.Property.py_assertion, self.NO_LINE, PY_ASSERTION)
+        self.assertEqual(verdict, "Unknown")
+
+    def test_a_violation_without_a_site_is_unknown(self):
+        table_only = PY_ASSERTION.split("** Results:")[1]
+        table_only = "** Results:" + table_only
+        verdict, _ = self.verify(wrapper.Property.py_assertion, table_only, table_only)
+        self.assertEqual(verdict, "Unknown")
+
+    def test_a_true_python_verdict_is_not_rerun(self):
+        verdict, calls = self.verify(wrapper.Property.py_assertion, self.PASSED, PY_ASSERTION)
+        self.assertEqual(verdict, "TRUE")
+        self.assertEqual(len(calls), 1)
+
+    def test_a_c_violation_is_never_rerun(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".c") as c_file:
+            verdict, calls = self.verify(wrapper.Property.reach, REACH_WITH_UNCHECKED_UNWINDING, self.PASSED, c_file.name)
+        self.assertEqual(verdict, "FALSE_REACH")
+        self.assertEqual(len(calls), 1)
+
+
+class PythonCommandLineTest(unittest.TestCase):
+    """Each run reports only its property's exception family."""
+
+    def command(self, prop):
+        return wrapper.get_command_line("kinduction", prop, None, "main.py", False, "", False)
+
+    def test_each_property_checks_its_own_family(self):
+        cases = (
+            (wrapper.Property.py_assertion, "AssertionError"),
+            (wrapper.Property.py_arithmetic, "ZeroDivisionError,FloatingPointError"),
+            (wrapper.Property.py_datalookup, "KeyError,IndexError"),
+            (wrapper.Property.py_dyntyping, "TypeError,AttributeError"),
+        )
+        for prop, family in cases:
+            self.assertIn("--python-check-exceptions " + family + " ", self.command(prop))
+
+
+class PythonPropertyFileTest(unittest.TestCase):
+    """python/properties/*.prp in sv-benchmarks, verbatim."""
+
+    def test_each_property_file_is_recognised(self):
+        cases = (
+            ("CHECK( init(main()), ! uncaught(AssertionError))\n",
+             wrapper.Property.py_assertion),
+            ("CHECK( init(main()), ! uncaught(ZeroDivisionError))\n"
+             "CHECK( init(main()), ! uncaught(FloatingPointError))\n",
+             wrapper.Property.py_arithmetic),
+            ("CHECK( init(main()), ! uncaught(KeyError))\n"
+             "CHECK( init(main()), ! uncaught(IndexError))\n",
+             wrapper.Property.py_datalookup),
+            ("CHECK( init(main()), ! uncaught(TypeError))\n"
+             "CHECK( init(main()), ! uncaught(AttributeError))\n",
+             wrapper.Property.py_dyntyping),
+        )
+        for content, expected in cases:
+            self.assertEqual(wrapper.python_property(content), expected)
+
+    def test_a_c_property_file_is_not_a_python_property(self):
+        self.assertIsNone(
+            wrapper.python_property("CHECK( init(main()), LTL(G ! overflow) )\n"))
+
+    def test_an_unknown_exception_family_is_not_matched(self):
+        self.assertIsNone(
+            wrapper.python_property("CHECK( init(main()), ! uncaught(OSError))\n"))
+
+
+class PythonModulePathTest(unittest.TestCase):
+    """A task in python/<project>/ imports _sv_verifier from python/.
+
+    CPython resolves an import against the script's own directory, so the task
+    fails there too unless PYTHONPATH carries the parent; sv-benchmarks' own
+    check-syntax.py sets it for that reason. ESBMC follows CPython, so the
+    wrapper supplies the search path.
+    """
+
+    def setUp(self):
+        self.saved = os.environ.get("PYTHONPATH")
+
+    def tearDown(self):
+        if self.saved is None:
+            os.environ.pop("PYTHONPATH", None)
+        else:
+            os.environ["PYTHONPATH"] = self.saved
+
+    def test_task_directory_and_its_parent_are_both_reachable(self):
+        os.environ.pop("PYTHONPATH", None)
+        wrapper.add_python_module_path("/sv-benchmarks/python/vllm/vllm_cdiv.py")
+        self.assertEqual(
+            os.environ["PYTHONPATH"].split(os.pathsep),
+            ["/sv-benchmarks/python/vllm", "/sv-benchmarks/python"])
+
+    def test_an_existing_pythonpath_is_kept(self):
+        os.environ["PYTHONPATH"] = "/already/here"
+        wrapper.add_python_module_path("/sv-benchmarks/python/vllm/vllm_cdiv.py")
+        self.assertEqual(
+            os.environ["PYTHONPATH"].split(os.pathsep)[-1], "/already/here")
+
+    def test_a_task_nested_deeper_reaches_the_verifier_module(self):
+        os.environ.pop("PYTHONPATH", None)
+        with tempfile.TemporaryDirectory() as root:
+            python = os.path.join(root, "python")
+            task = os.path.join(python, "type-eval-py", "args_assigned_call")
+            os.makedirs(task)
+            with open(os.path.join(python, "_sv_verifier.py"), "w", encoding="utf-8"):
+                pass
+            wrapper.add_python_module_path(os.path.join(task, "main.py"))
+            self.assertIn(python, os.environ["PYTHONPATH"].split(os.pathsep))
+
+    def test_a_relative_benchmark_path_is_made_absolute(self):
+        os.environ.pop("PYTHONPATH", None)
+        wrapper.add_python_module_path("boto3_all_not_none.py")
+        for entry in os.environ["PYTHONPATH"].split(os.pathsep):
+            self.assertTrue(os.path.isabs(entry), entry)
+
+
+class FallThroughTest(unittest.TestCase):
+    """What a violation that decides nothing for the property under check does.
+
+    These pin behaviour the chain in parse_result had only implicitly: a
+    violated property that says nothing about the property being checked falls
+    through to the SUCCESSFUL test, so an output carrying both verdicts is
+    read as TRUE. Characterisation tests, so a refactoring cannot move it.
+    """
+
+    def verdict(self, output, prop):
+        return wrapper.get_result_string(wrapper.parse_result(output, prop))
+
+    LEAKLESS_FAILURE = """
+Violated property:
+  file main.c line 7 column 3 function main
+  dereference failure: invalid pointer
+
+** Results:
+main.c, function main
+  FAILED       [main.deref.1]  line 7  dereference failure: invalid pointer
+
+VERIFICATION FAILED
+"""
+
+    def test_memcleanup_without_a_leak_is_inconclusive(self):
+        self.assertEqual(
+            self.verdict(self.LEAKLESS_FAILURE, wrapper.Property.memcleanup),
+            "Unknown")
+
+    def test_a_run_carrying_both_verdicts_falls_through_to_true(self):
+        self.assertEqual(
+            self.verdict(self.LEAKLESS_FAILURE + "VERIFICATION SUCCESSFUL\n",
+                         wrapper.Property.memcleanup),
+            "TRUE")
+
+    def test_reach_on_the_unreachability_intrinsic_is_inconclusive(self):
+        output = """
+Violated property:
+  file main.c line 7 column 3 function main
+  reachability: unreachable code reached
+
+** Results:
+main.c, function main
+  FAILED       [main.assertion.1]  line 7  reachability: unreachable code reached
+
+VERIFICATION FAILED
+"""
+        self.assertEqual(self.verdict(output, wrapper.Property.reach), "Unknown")
+
+    def test_memory_on_a_comment_no_rule_matches_is_inconclusive(self):
+        output = """
+Violated property:
+  file main.c line 7 column 3 function main
+  unwinding assertion loop 3 is not what this tests
+
+** Results:
+main.c, function main
+  FAILED       [main.assertion.1]  line 7  some comment no rule names
+
+VERIFICATION FAILED
+"""
+        self.assertEqual(self.verdict(output, wrapper.Property.memory), "Unknown")
 
 
 if __name__ == "__main__":
