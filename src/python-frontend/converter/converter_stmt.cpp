@@ -9479,6 +9479,10 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       auto coerce = [&](const exprt &branch) -> exprt {
         if (branch.type() == result_type)
           return branch;
+        if (
+          branch.type().is_array() && result_type.is_pointer() &&
+          result_type.subtype() == branch.type().subtype())
+          return string_handler_.get_array_base_address(branch);
         return typecast_exprt(branch, result_type);
       };
 
