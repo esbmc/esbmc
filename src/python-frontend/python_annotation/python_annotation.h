@@ -169,8 +169,10 @@ private:
     std::string &base_type,
     std::string &element_type);
   std::string infer_dict_value_type(const Json &var_node);
-  std::string
-  resolve_subscript_type(const Json &subscript_node, const Json &body);
+  std::string resolve_subscript_type(
+    const Json &subscript_node,
+    const Json &body,
+    bool nested = false);
 
   // The type of `f(...)[i]` read from f's `list[T]` return annotation, or "Any"
   // when the subscript's base is not such a call.
@@ -402,7 +404,7 @@ private:
   void annotate_global_scope();
   void annotate_function(Json &function_element);
   void annotate_class(Json &class_element);
-  void infer_loop_variable_types(Json &while_stmt);
+  void infer_loop_variable_types(Json &while_stmt, bool synthesized_only);
   Json list_element_annotation(const Json &iter_node);
   Json self_attr_list_element(const std::string &attr);
   void annotate_branch_blocks(Json &element);

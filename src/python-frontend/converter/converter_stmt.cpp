@@ -87,6 +87,12 @@ codet raise_statement(const exprt &raise, const locationt &location)
   return code;
 }
 
+// An unmodelled call yields a nondet of no type; its value is unknown.
+bool is_untyped_nondet(const exprt &e)
+{
+  return e.type().is_empty() && e.statement() == "nondet";
+}
+
 // `lhs = value`, or the raise that evaluating @p value always ends in.
 codet assign_or_raise(
   const exprt &lhs,
@@ -96,6 +102,8 @@ codet assign_or_raise(
   if (const exprt *raise = raised_condition(value))
     return raise_statement(*raise, location);
   code_assignt assign(lhs, value);
+  if (is_untyped_nondet(value))
+    assign.rhs().type() = lhs.type();
   assign.location() = location;
   return assign;
 }
@@ -8711,6 +8719,12 @@ exprt python_converter::apply_bool_dunder_for_not(
 
 exprt python_converter::apply_bool_dunder(exprt cond, const locationt &location)
 {
+  if (is_untyped_nondet(cond))
+  {
+    cond.type() = bool_type();
+    return cond;
+  }
+
   // An optional is truthy when it holds a truthy value (#8016).
   if (type_utils::is_optional_struct(cond.type()))
   {
@@ -10019,6 +10033,27 @@ static std::string unsupported_statement_message(const nlohmann::json &element)
   return element["_type"].get<std::string>() + " statements are not supported";
 }
 
+void python_converter::end_block_scope(const code_blockt &block)
+{
+  // The module body's locals live until the program ends.
+  if (block_nesting_ <= 1)
+    return;
+  for (const exprt &op : block.operands())
+    if (op.is_code() && to_code(op).get_statement() == "decl")
+      out_of_scope_locals_.insert(op.op0().identifier().as_string());
+}
+
+void python_converter::outlive_scope(const std::string &id)
+{
+  if (out_of_scope_locals_.erase(id) == 0)
+    return;
+  // goto_convert emits neither DECL nor DEAD for a static lifetime symbol.
+  symbolt *symbol = symbol_table_.find_symbol(id);
+  assert(symbol);
+  symbol->static_lifetime = true;
+  symbol->set_value(gen_zero(symbol->get_type()));
+}
+
 exprt python_converter::get_block(
   const nlohmann::json &ast_block,
   bool is_function_body,
@@ -10411,6 +10446,7 @@ exprt python_converter::get_block(
   }
 
   current_block = old_block;
+  end_block_scope(block);
 
   return block;
 }
