@@ -87,6 +87,12 @@ codet raise_statement(const exprt &raise, const locationt &location)
   return code;
 }
 
+// An unmodelled call yields a nondet of no type; its value is unknown.
+bool is_untyped_nondet(const exprt &e)
+{
+  return e.type().is_empty() && e.statement() == "nondet";
+}
+
 // `lhs = value`, or the raise that evaluating @p value always ends in.
 codet assign_or_raise(
   const exprt &lhs,
@@ -96,6 +102,8 @@ codet assign_or_raise(
   if (const exprt *raise = raised_condition(value))
     return raise_statement(*raise, location);
   code_assignt assign(lhs, value);
+  if (is_untyped_nondet(value))
+    assign.rhs().type() = lhs.type();
   assign.location() = location;
   return assign;
 }
@@ -8711,6 +8719,12 @@ exprt python_converter::apply_bool_dunder_for_not(
 
 exprt python_converter::apply_bool_dunder(exprt cond, const locationt &location)
 {
+  if (is_untyped_nondet(cond))
+  {
+    cond.type() = bool_type();
+    return cond;
+  }
+
   // An optional is truthy when it holds a truthy value (#8016).
   if (type_utils::is_optional_struct(cond.type()))
   {
