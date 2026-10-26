@@ -34,10 +34,18 @@ public:
   /// the module: it is found by its kind and source range.
   std::optional<std::vector<candidate>> of(const nlohmann::json &expr);
 
+  /// The values a read `name` of a parameter of a module-level def may hold:
+  /// the argument each caller passes and any value the def binds to it.
+  std::optional<std::vector<const nlohmann::json *>>
+  parameter_arguments(const nlohmann::json &name);
+
 private:
   /// The module, then each function the expression is nested in.
   using chaint = std::vector<const nlohmann::json *>;
   using valuet = std::pair<const nlohmann::json *, chaint>;
+
+  /// The node of the module `expr` is a copy of, and the scopes it is in.
+  const nlohmann::json *locate(const nlohmann::json &expr, chaint &chain);
 
   bool resolve(
     const nlohmann::json &expr,

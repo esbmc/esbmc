@@ -1126,6 +1126,15 @@ bool python_converter::dict_values(
         !returned_dict_values(*ast_json, v, out))
         out.push_back(v);
     }
+    // A parameter holds what its callers pass (#9211).
+    function_values values(*ast_json, {});
+    if (const auto args = values.parameter_arguments(container))
+      for (const nlohmann::json *arg : *args)
+      {
+        const std::string kind = arg->value("_type", "");
+        if ((kind != "Dict" && kind != "Name") || !dict_values(*arg, out))
+          return false;
+      }
   }
   else if (type == "Subscript")
   {
