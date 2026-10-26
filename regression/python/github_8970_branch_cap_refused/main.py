@@ -1,4 +1,4 @@
-# Two calls in sequential ifs need more than eight copies of the end.
+# Four calls in sequential ifs need more than 32 copies of the end.
 def f():
     return "a"
 
@@ -18,3 +18,5 @@ if nondet_bool():
     s = h()
 if nondet_bool():
     t = h()
+if nondet_bool():
+    u = h()
