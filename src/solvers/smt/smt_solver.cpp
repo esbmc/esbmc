@@ -3958,7 +3958,7 @@ expr2tc smt_solver_baset::get_by_type(const expr2tc &expr)
   case type2t::complex_id:
   case type2t::struct_id:
   case type2t::pointer_id:
-    return tuple_api->tuple_get(expr);
+    return tuple_api->tuple_get(expr->type, convert_ast(expr));
 
   default:
     if (!options.get_bool_option("non-supported-models-as-zero"))
@@ -3985,10 +3985,35 @@ expr2tc smt_solver_baset::get_by_type(const expr2tc &expr)
   }
 }
 
+static expr2tc restore_array_dimensions(
+  const type2tc &type,
+  const std::vector<expr2tc> &values,
+  size_t &offset)
+{
+  if (!is_array_type(type))
+    return offset < values.size() ? values[offset++] : expr2tc();
+
+  const auto &array = to_array_type(type);
+  if (array.size_is_infinite || !is_constant_int2t(array.array_size))
+    return expr2tc();
+
+  const auto &length = to_constant_int2t(array.array_size).value;
+  if (!length.is_uint64())
+    return expr2tc();
+
+  std::vector<expr2tc> members;
+  for (uint64_t i = 0; i < length.to_uint64(); ++i)
+  {
+    auto member = restore_array_dimensions(array.subtype, values, offset);
+    if (is_nil_expr(member))
+      return expr2tc();
+    members.push_back(std::move(member));
+  }
+  return constant_array2tc(type, std::move(members));
+}
+
 expr2tc smt_solver_baset::get_array(const type2tc &type, smt_astt array)
 {
-  // XXX -- printing multidimensional arrays?
-
   // Fetch the array bounds, if it's huge then assume this is a 1024 element
   // array. Then fetch all elements and formulate a constant_array.
   size_t w = array->sort->get_domain_width();
@@ -3999,9 +4024,7 @@ expr2tc smt_solver_baset::get_array(const type2tc &type, smt_astt array)
   array_type2t ar = to_array_type(flat_type);
 
   expr2tc arr_size;
-  if (type == flat_type && !ar.size_is_infinite)
-    // avoid handelling the flattend multidimensional and malloc arrays(assume
-    // size is infinite)
+  if (!ar.size_is_infinite)
     arr_size = to_array_type(flat_type).array_size;
   else
     arr_size = constant_int2tc(index_type2(), BigInt(1ULL << w));
@@ -4024,14 +4047,20 @@ expr2tc smt_solver_baset::get_array(const type2tc &type, smt_astt array)
   {
     expr2tc elem;
     if (uses_tuple_api)
-      elem =
-        tuple_api->tuple_get_array_elem(array, i, to_array_type(type).subtype);
+      elem = tuple_api->tuple_get_array_elem(array, i, ar.subtype);
     else
       elem = array_api->get_array_elem(array, i, ar.subtype);
     fields.push_back(elem);
   }
 
-  return constant_array2tc(arr_type, fields);
+  if (type != flat_type)
+  {
+    size_t offset = 0;
+    auto shaped = restore_array_dimensions(type, fields, offset);
+    if (!is_nil_expr(shaped))
+      return shaped;
+  }
+  return constant_array2tc(arr_type, std::move(fields));
 }
 
 expr2tc smt_solver_baset::get_array(const expr2tc &expr)

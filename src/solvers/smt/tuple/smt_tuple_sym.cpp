@@ -2,7 +2,6 @@
 #include <solvers/smt/tuple/smt_tuple_array_ast.h>
 #include <solvers/smt/tuple/smt_tuple_sym_ast.h>
 #include <solvers/smt/tuple/smt_tuple_sym.h>
-#include <sstream>
 #include <util/expr/base_type.h>
 #include <util/lang/c_types.h>
 
@@ -115,54 +114,29 @@ smt_astt smt_tuple_sym_flattener::tuple_array_create(
   return newsym;
 }
 
-expr2tc smt_tuple_sym_flattener::tuple_get(const type2tc &, smt_astt)
+expr2tc smt_tuple_sym_flattener::tuple_get(const type2tc &type, smt_astt tuple)
 {
-  log_error(
-    "Fetching tuples from tuple-sym-flattener without the concrete symbol "
-    "is currently not implemented, returning empty expression...");
-  return expr2tc();
+  const type2tc &thetype = is_pointer_type(type) ? ctx->pointer_struct : type;
+  const auto &members = struct_union_members(thetype);
+  std::vector<expr2tc> values;
+  for (size_t i = 0; i < members.size(); ++i)
+    values.push_back(ctx->get_by_ast(members[i], tuple->project(ctx, i)));
+
+  if (is_pointer_type(type))
+  {
+    if (is_nil_expr(values[0]) || is_nil_expr(values[1]))
+      return expr2tc();
+    const auto object = to_constant_int2t(values[0]).value.to_uint64();
+    const auto &offset = to_constant_int2t(values[1]).value;
+    return ctx->pointer_logic.back().pointer_expr(
+      pointer_logict::pointert(object, offset), type);
+  }
+  return constant_struct2tc(type, std::move(values));
 }
 
 expr2tc smt_tuple_sym_flattener::tuple_get(const expr2tc &expr)
 {
-  assert(is_symbol2t(expr) && "Non-symbol in smtlib expr get()");
-  const symbol2t &sym = to_symbol2t(expr);
-  std::string name = sym.get_symbol_name();
-
-  const type2tc &thetype =
-    (is_structure_type(expr->type)) ? expr->type : ctx->pointer_struct;
-  const std::vector<type2tc> &members = struct_union_members(thetype);
-  const std::vector<irep_idt> &member_names =
-    struct_union_member_names(thetype);
-
-  // XXX - what's the correct type to return here.
-  std::vector<expr2tc> outmem;
-
-  // Run through all fields and despatch to 'get' again.
-  unsigned int i = 0;
-  for (auto const &it : members)
-  {
-    std::stringstream ss;
-    ss << name << "." << member_names[i];
-    expr2tc sym = symbol2tc(it, ss.str());
-    outmem.push_back(ctx->get(sym));
-    i++;
-  }
-
-  // If it's a pointer, rewrite.
-  if (is_pointer_type(expr->type))
-  {
-    // Guard against free pointer value
-    if (is_nil_expr(outmem[0]))
-      return expr2tc();
-
-    unsigned int num = to_constant_int2t(outmem[0]).value.to_uint64();
-    unsigned int offs = to_constant_int2t(outmem[1]).value.to_uint64();
-    pointer_logict::pointert p(num, BigInt(offs));
-    return ctx->pointer_logic.back().pointer_expr(p, expr->type);
-  }
-
-  return constant_struct2tc(expr->type, std::move(outmem));
+  return tuple_get(expr->type, ctx->convert_ast(expr));
 }
 
 smt_astt smt_tuple_sym_flattener::tuple_array_of(
