@@ -988,9 +988,6 @@ public:
    *  array. This works by concatenating the domain widths together into one
    *  large domain. */
   type2tc flatten_array_type(const type2tc &type);
-  /** For a multi-dimensional constant array, flatten the actual definition of
-   *  it down to a single dimension */
-  expr2tc flatten_array_body(const expr2tc &expr);
   /** Get the base subtype of an array, delving through any intermediate
    *  multidimensional arrays. */
   type2tc get_flattened_array_subtype(const type2tc &type);
@@ -1019,9 +1016,9 @@ public:
 
   /** Name every element of a row being written whole as a store of the
    *  corresponding read out of it, at @p offset in the flattened array.
-   *  Requires the row's flattened size to be a compile-time constant, which
-   *  both call sites establish; false when a nested row's is not. */
-  bool expand_row_stores(
+   *  Requires the row's stride to be a compile-time constant, which both
+   *  call sites establish. */
+  void expand_row_stores(
     const expr2tc &row,
     const expr2tc &offset,
     std::vector<flat_storet> &stores);
