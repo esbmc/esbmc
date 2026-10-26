@@ -1,5 +1,9 @@
-# Assigning a str method called on an f-string (#9207).
-def name(m: str) -> str:
+def qualify(modulo: str, name: str) -> str:
+    submodulo = f"{modulo}.{name}".lstrip(".")
+    return submodulo
+
+
+def shout(m: str) -> str:
     s = f"{m}".upper()
     return s
 
@@ -11,7 +15,14 @@ t = f".{x}.".lstrip(".")
 assert t == "a."
 ok = f"{x}b".startswith("a")
 assert ok
-assert name("b") == "B"
-for y in ["c", "d"]:
-    u = f"{y}".upper()
-    assert u == "C" or u == "D"
+assert shout("b") == "B"
+
+assert qualify("", "os") == "os"
+assert qualify("pkg", "os") == "pkg.os"
+
+n = 0
+for c in ["b", "c"]:
+    t = f"{c}!".upper()
+    assert t == c.upper() + "!"
+    n += 1
+assert n == 2

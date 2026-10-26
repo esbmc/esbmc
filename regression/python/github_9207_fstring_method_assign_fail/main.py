@@ -1,6 +1,6 @@
-# Assigning a str method called on an f-string (#9207).
-x = "a"
-s = f"{x}".upper()
-assert s == "A"
-t = f".{x}.".lstrip(".")
-assert t == ".a."
+def qualify(modulo: str, name: str) -> str:
+    submodulo = f"{modulo}.{name}".lstrip(".")
+    return submodulo
+
+
+assert qualify("", "os") == ".os"
