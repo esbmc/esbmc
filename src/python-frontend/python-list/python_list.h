@@ -601,6 +601,18 @@ public:
     const typet &lhs_type,
     const typet &rhs_type) const;
 
+  /// Conjoins to @p sizes_ok that the slots @p lhs_at and @p rhs_at hold
+  /// @p lhs_type and @p rhs_type, for compare()'s nested fast path. Only a
+  /// top-level scalar slot is exempt: any other slot was typed through a
+  /// nested list the type map may name by a dead or rebound symbol (#8130).
+  void require_stored_types(
+    expr2tc &sizes_ok,
+    std::size_t depth,
+    const exprt &lhs_at,
+    const typet &lhs_type,
+    const exprt &rhs_at,
+    const typet &rhs_type) const;
+
   exprt build_push_list_call(
     const symbolt &list,
     const nlohmann::json &op,
@@ -896,13 +908,6 @@ public:
    *  list to look up, so it has no single width and yields 0.
    */
   BigInt uniform_elem_size(const exprt &list) const;
-
-  /// Whether the list stored at index @p i of @p list is the one @p elem holds
-  /// now. The type map names a nested element by the symbol it was appended
-  /// from, and a later assignment can rebind that symbol, or a store through
-  /// the outer list or an alias of it can replace the slot (#8130).
-  expr2tc
-  stored_element_is(const symbolt &list, std::size_t i, const symbolt &elem);
 
   /// The element type a subscript's base declares when the type map has no
   /// record of the list: a name's annotation, or a called function's return
