@@ -49,3 +49,5 @@ docs/html/
 
 # Per-developer companion to CMakePresets.json; holds local paths and flags
 CMakeUserPresets.json
+
+/src/python-frontend/pytype_infer/tests/

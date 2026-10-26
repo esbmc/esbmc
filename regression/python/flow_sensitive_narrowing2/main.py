@@ -1,45 +1,51 @@
 def normalize(x):
-    result = []
+    first = ""
+    second = [""]
+    third = 0
+    fourth = ""
+
     i = 0
-    types = [0, 0, 0, 0]
-    
-    
 
     while i < 4:
-         if isinstance(x, int):
-              x = str(x)
-              types[i] = 1
+        if i == 0:
+            if isinstance(x, int):
+                first = str(x)
 
-         elif isinstance(x, str):
-              x = [x]
-              types[i] = 2
+        elif i == 1:
+            if isinstance(first, str):
+                second = [first]
 
-         elif isinstance(x, list):
-              x = len(x)
-              types[i] = 3
+        elif i == 2:
+            if isinstance(second, list):
+                third = len(second)
 
-         else:
-              x = 0
-              types[i] = 4
+        else:
+            if isinstance(third, int):
+                fourth = str(third)
+
+        i += 1
+
+    assert isinstance(first, str)
+    assert isinstance(second, list)
+    assert isinstance(third, int)
+    assert isinstance(fourth, str)
+
+    strings = []
+    numbers = []
+    lists = []
+
+    strings.append(first)
+    strings.append(fourth)
+    numbers.append(third)
+    lists.append(second)
+
+    assert isinstance(strings[0], str)
+    assert isinstance(strings[1], str)
+    assert isinstance(numbers[0], int)
+    assert isinstance(lists[0], list)
+
+    return first
 
 
-         result.append(x)
-         i += 1
-
-    assert len(result) == 4
-    assert len(types) == 4
-
-#    assert types[0] == 1
-#    assert types[1] == 2
-#    assert types[2] == 3 
-#    assert types[3] == 1
-    assert isinstance(result[0], str)
-    assert isinstance(result[1], list) 
-    assert isinstance(result[2], int)
-    assert isinstance(result[3], str)
-
-    return result
-
-
-normalize(5)
-
+value = normalize(5)
+assert value == "5"

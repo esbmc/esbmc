@@ -423,6 +423,7 @@ exprt function_call_expr::handle_isinstance() const
     //A value read from a list element is unboxed from __ESBMC_PyObj::value.
     //Its static C type alone is not enough for isinstance(), beacuse the real
     //Python runtime type is sotred in the sibling `type_id` field.
+    
     exprt element_type_id = converter_.list_element_type_id(obj_expr);
 
     if (element_type_id.is_not_nil() && 
