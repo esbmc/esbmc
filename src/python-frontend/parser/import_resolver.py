@@ -386,9 +386,10 @@ def _unmodelled_import_bindings(stmts: list[ast.stmt]) -> dict[str, object]:
     return objects
 
 
-def _mark_unmodelled_class_bases(tree: ast.Module) -> None:
-    """Mark each class base that CPython resolves to a class of a module with
-    no model. The converter has no such class to derive from and skips it
+def _mark_unmodelled_classes(tree: ast.Module) -> None:
+    """Mark each class base, and each parameter annotation of a top-level
+    function or method, that CPython resolves to a class of a module with no
+    model. The converter has no such class to derive from and skips it
     (#9161), which is sound only once CPython would create the class: it
     evaluates the bases when the definition runs."""
     bound = Counter(name for node in ast.walk(tree) for name in _bound_names(node))
@@ -401,19 +402,52 @@ def _mark_unmodelled_class_bases(tree: ast.Module) -> None:
             return None if owner is None else getattr(owner, node.attr, None)
         return None
 
-    # A top-level class only, after the imports: CPython raises NameError for
-    # a base read before its import has run, and a star import may rebind it.
+    def mark_annotations(stmts: list[ast.stmt], objects: dict[str, object]) -> None:
+        for annotation, expr in _param_annotations(stmts):
+            if isinstance(resolve(expr, objects), type):
+                annotation.unmodelled_class = True
+
+    # A top-level definition only, after the imports: CPython raises NameError
+    # for a name read before its import has run, and a star import may rebind
+    # it.
     for index, stmt in enumerate(tree.body):
         before = tree.body[:index]
-        if not isinstance(stmt, ast.ClassDef) or stmt.keywords or _has_star_import(before):
+        if _has_star_import(before):
             continue
         objects = _unmodelled_import_bindings(before)
+        if not isinstance(stmt, ast.ClassDef):
+            mark_annotations([stmt], objects)
+            continue
+        if stmt.keywords:
+            continue
+        mark_annotations(stmt.body, objects)
         bases = [resolve(base, objects) for base in stmt.bases]
         if not bases or not all(isinstance(base, type) for base in bases):
             continue
         if _can_create_class(stmt.name, bases):
             for base in stmt.bases:
                 base.unmodelled_class = True
+
+
+def _param_annotations(stmts: list[ast.stmt]) -> list[tuple[ast.expr, ast.expr]]:
+    """Each parameter annotation of a function in `stmts` spelled as a name,
+    with the expression it spells. A string annotation is never evaluated."""
+    found = []
+    for func in stmts:
+        if not isinstance(func, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        args = func.args
+        params = args.posonlyargs + args.args + args.kwonlyargs + [args.vararg, args.kwarg]
+        for annotation in (param.annotation for param in params if param is not None):
+            expr = annotation
+            if isinstance(annotation, ast.Constant) and isinstance(annotation.value, str):
+                try:
+                    expr = ast.parse(annotation.value.strip(), mode="eval").body
+                except SyntaxError:
+                    continue
+            if isinstance(expr, (ast.Name, ast.Attribute)):
+                found.append((annotation, expr))
+    return found
 
 
 def _has_star_import(stmts: list[ast.stmt]) -> bool:
@@ -749,9 +783,9 @@ def _finalize_parsed_trees(parsed_trees: ParsedTreeState, entry_tree: ast.Module
     _qualify_imported_nested_classes(parsed_trees, entry_tree)
     if entry_tree is not None:
         _request_vararg_specializations(entry_tree, parsed_trees)
-        _mark_unmodelled_class_bases(entry_tree)
+        _mark_unmodelled_classes(entry_tree)
     for tree, _filename, _pp in parsed_trees.values():
-        _mark_unmodelled_class_bases(tree)
+        _mark_unmodelled_classes(tree)
     started: set[str] = set()
     done: set[str] = set()
     for module_name in parsed_trees:
