@@ -2,6 +2,7 @@ import ast
 from typing import cast, TypeGuard
 from .dataflow_solver import analyze_function, infer_type_from_expr, collect_known_classes, InferenceContext, collect_function_argument_types
 from .lattice import *
+from .cfg_builder import UnsupportedCFGError
 from collections import Counter
 
 
@@ -978,18 +979,27 @@ def annotate_ast(ast_node, opts=None):
 
     for node in ast.walk(ast_node):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            #try:
-            result = analyze_function(node, context)
+            result = None
+            try:
+                result = analyze_function(node, context)
+            except UnsupportedCFGError as exc:
+                print(f"[PYTYPE] skipping {node.name}: {exc}")
+                continue
+           # if result is None:
+             #   print(f"[PYTYPE] Skipping {node.name}: no convergence")
+             #   continue
 
             if result is None:
-                print(f"[PYTYPE] Skipping {node.name}: no convergence")
+                print(
+                    f"[PYTYPE] Skipping {node.name}: "
+                    "no convergence"
+                )
                 continue
-
+            
             print(f"[PYTYPE] Converged: {node.name}")
             cfg, in_envs, out_envs, return_types = result
-            #except UnsupportedCFGError as exc:
-            #   print(f"f[PYTYPE] skipping {node.name}: {exc}")
-            #  continue
+
+         
 
             _, ret_type = derive_param_and_return_types(node, out_envs, return_types, context)
 
