@@ -101,35 +101,30 @@ smt_astt smt_solver_baset::convert_ptr_cmp(
   return convert_ast(op);
 }
 
-/// The quotient of a signed byte difference by an element size, truncated
-/// toward zero as a division would be. A size of 2^k is an arithmetic shift of
-/// the difference, biased by 2^k - 1 when negative since the shift rounds
-/// toward -inf; k < width - 1 keeps the divisor positive when read signed.
-static expr2tc divide_by_element_size(
+smt_astt smt_solver_baset::divide_by_element_size(
   const expr2tc &diff,
-  const expr2tc &size,
-  bool int_encoding)
+  const expr2tc &size)
 {
   const type2tc &type = diff->type;
   if (is_constant_int2t(size) && is_power_of_two(to_constant_int2t(size).value))
   {
     const unsigned int k = to_constant_int2t(size).value.floorPow2();
+    const unsigned int w = type->get_width();
     if (k == 0)
-      return diff;
+      return convert_ast(diff);
 
-    if (!int_encoding && k + 1 < type->get_width())
+    if (!int_encoding && k + 1 < w)
     {
-      expr2tc bias = if2tc(
-        type,
-        lessthan2tc(diff, gen_zero(type)),
-        constant_int2tc(type, BigInt::power2(k) - 1),
-        gen_zero(type));
-      return ashr2tc(
-        type, add2tc(type, diff, bias), constant_int2tc(type, BigInt(k)));
+      smt_astt d = convert_ast(diff);
+      smt_astt zero = mk_smt_bv(BigInt(0), w);
+      smt_astt bias =
+        mk_ite(mk_bvslt(d, zero), mk_smt_bv(BigInt::power2(k) - 1, w), zero);
+      return mk_bvashr(mk_bvadd(d, bias), mk_smt_bv(BigInt(k), w));
     }
   }
 
-  return div2tc(type, diff, typecast2tc(type, size)); // diff is signed
+  // diff is signed
+  return convert_ast(div2tc(type, diff, typecast2tc(type, size)));
 }
 
 smt_astt smt_solver_baset::convert_pointer_arith(
@@ -204,8 +199,7 @@ smt_astt smt_solver_baset::convert_pointer_arith(
       assert(
         !is_constant_int2t(type_size) || !is_constant_int2t(side2_size) ||
         type_size == side2_size);
-      return convert_ast(
-        divide_by_element_size(the_ptr_offs, type_size, int_encoding));
+      return divide_by_element_size(the_ptr_offs, type_size);
     }
     else
     {
