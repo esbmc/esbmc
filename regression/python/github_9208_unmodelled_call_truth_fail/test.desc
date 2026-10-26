@@ -1,0 +1,7 @@
+CORE
+main.py
+--multi-property
+^VERIFICATION FAILED$
+FAILED +\[global\.assertion\.1\] +line 16
+FAILED +\[global\.assertion\.2\] +line 17
+FAILED +\[f\.assertion\.1\] +line +7 +Unsupported function 'islink' is reached
