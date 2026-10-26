@@ -87,6 +87,12 @@ codet raise_statement(const exprt &raise, const locationt &location)
   return code;
 }
 
+// An unmodelled call yields a nondet of no type; its value is unknown.
+bool is_untyped_nondet(const exprt &e)
+{
+  return e.type().is_empty() && e.statement() == "nondet";
+}
+
 // `lhs = value`, or the raise that evaluating @p value always ends in.
 codet assign_or_raise(
   const exprt &lhs,
@@ -96,6 +102,8 @@ codet assign_or_raise(
   if (const exprt *raise = raised_condition(value))
     return raise_statement(*raise, location);
   code_assignt assign(lhs, value);
+  if (is_untyped_nondet(value))
+    assign.rhs().type() = lhs.type();
   assign.location() = location;
   return assign;
 }
@@ -1109,6 +1117,20 @@ exprt python_converter::create_lhs_expression(
 
   lhs.location() = location;
   return lhs;
+}
+
+/// A tagged value and an untagged attribute slot differ in size, so storing
+/// one into the other would overrun or misread the object.
+void python_converter::reject_one_sided_tagged_store(
+  const exprt &lhs,
+  const exprt &rhs) const
+{
+  if (
+    lhs.is_member() && type_handler_.is_tagged_scalar_type(lhs.type()) !=
+                         type_handler_.is_tagged_scalar_type(rhs.type()))
+    throw std::runtime_error(
+      "storing into an attribute that is dynamically typed only on one side "
+      "is not yet supported");
 }
 
 /// A list element that may be a string or a number is read as a tagged
@@ -8014,6 +8036,7 @@ void python_converter::get_var_assign(
       return;
     }
 
+    reject_one_sided_tagged_store(lhs, rhs);
     adopt_tagged_element(lhs_symbol, lhs, rhs);
 
     // Handle type adjustments
@@ -8711,6 +8734,12 @@ exprt python_converter::apply_bool_dunder_for_not(
 
 exprt python_converter::apply_bool_dunder(exprt cond, const locationt &location)
 {
+  if (is_untyped_nondet(cond))
+  {
+    cond.type() = bool_type();
+    return cond;
+  }
+
   // An optional is truthy when it holds a truthy value (#8016).
   if (type_utils::is_optional_struct(cond.type()))
   {
