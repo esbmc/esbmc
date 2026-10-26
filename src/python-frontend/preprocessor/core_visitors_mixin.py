@@ -1241,6 +1241,7 @@ class CoreVisitorsMixin:
                 arg.annotation = self._resolve_annotation_aliases(arg.annotation)
 
     def _prepare_generator_function(self, node):
+        node = self._YieldFromToFor(self).visit(node)
         is_generator = any(isinstance(n, (ast.Yield, ast.YieldFrom)) for n in ast.walk(node))
         if not is_generator:
             return node, False
