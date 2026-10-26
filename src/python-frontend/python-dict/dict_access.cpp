@@ -25,6 +25,16 @@ void python_dict_handler::check_value_type(
   converter_.add_instruction(check);
 }
 
+/// The float_type_id argument of a push or set: an element's own type id
+/// routes a float into the real-sorted __ESBMC_float_buf (and records its
+/// float_idx) so a typed read finds it there (#5501); 0 copies the bytes.
+static exprt float_type_id_arg(const list_elem_info &info)
+{
+  if (info.elem_symbol->get_type().is_floatbv())
+    return build_symbol(*info.elem_type_sym);
+  return from_integer(BigInt(0), size_type());
+}
+
 static char scalar_kind(const typet &t)
 {
   if (type_utils::is_string_type(t))
@@ -629,13 +639,7 @@ void python_dict_handler::handle_dict_subscript_assign(
   else
     value_arg = build_address_of(build_symbol(*value_info.elem_symbol));
 
-  // float_type_id: route a float value into the real-sorted __ESBMC_float_buf
-  // (and record its float_idx) so .values()/.items() reads it back correctly
-  // rather than as float_buf[0] (#5501). Mirrors the dict-literal value push.
-  exprt value_float_type_id =
-    value_info.elem_symbol->get_type().is_floatbv()
-      ? static_cast<exprt>(build_symbol(*value_info.elem_type_sym))
-      : static_cast<exprt>(from_integer(BigInt(0), size_type()));
+  const exprt value_float_type_id = float_type_id_arg(value_info);
 
   set_value_call.arguments().push_back(value_arg);
   set_value_call.arguments().push_back(build_symbol(*value_info.elem_type_sym));
@@ -662,10 +666,7 @@ void python_dict_handler::handle_dict_subscript_assign(
   push_key_call.arguments().push_back(key_arg);
   push_key_call.arguments().push_back(build_symbol(*key_info.elem_type_sym));
   push_key_call.arguments().push_back(key_info.elem_size);
-  push_key_call.arguments().push_back(
-    key_info.elem_symbol->get_type().is_floatbv()
-      ? static_cast<exprt>(build_symbol(*key_info.elem_type_sym))
-      : static_cast<exprt>(from_integer(BigInt(0), size_type())));
+  push_key_call.arguments().push_back(float_type_id_arg(key_info));
   push_key_call.arguments().push_back(
     converter_.get_type_handler().ptr_free_arg(
       key_arg, key_info.elem_symbol->get_type()));
