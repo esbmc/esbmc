@@ -1201,6 +1201,7 @@ private:
 
   exprt
   handle_index_access(const exprt &array, const nlohmann::json &slice_node);
+  exprt index_value(const exprt &index, const nlohmann::json &slice_node);
 
   // True when `array` is a 2-D+ numpy array parameter's decayed pointer
   // symbol (register_function_argument's row-pointer decay), i.e. one whose
