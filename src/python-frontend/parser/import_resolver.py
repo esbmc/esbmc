@@ -386,11 +386,12 @@ def _unmodelled_import_bindings(stmts: list[ast.stmt]) -> dict[str, object]:
     return objects
 
 
-def _mark_unmodelled_class_bases(tree: ast.Module) -> None:
-    """Mark each class base that CPython resolves to a class of a module with
-    no model. The converter has no such class to derive from and skips it
-    (#9161), which is sound only once CPython would create the class: it
-    evaluates the bases when the definition runs."""
+def _mark_unmodelled_classes(tree: ast.Module) -> None:
+    """Mark each class base, and each parameter annotation, that CPython
+    resolves to a class of a module with no model. The converter has no such
+    class to derive from and skips it (#9161), which is sound only once
+    CPython would create the class: it evaluates the bases when the definition
+    runs."""
     bound = Counter(name for node in ast.walk(tree) for name in _bound_names(node))
 
     def resolve(node: ast.expr, objects: dict[str, object]) -> object:
@@ -405,15 +406,43 @@ def _mark_unmodelled_class_bases(tree: ast.Module) -> None:
     # a base read before its import has run, and a star import may rebind it.
     for index, stmt in enumerate(tree.body):
         before = tree.body[:index]
-        if not isinstance(stmt, ast.ClassDef) or stmt.keywords or _has_star_import(before):
+        if _has_star_import(before):
             continue
         objects = _unmodelled_import_bindings(before)
+        _mark_unmodelled_annotations(stmt, lambda node, objects=objects: resolve(node, objects))
+        if not isinstance(stmt, ast.ClassDef) or stmt.keywords:
+            continue
         bases = [resolve(base, objects) for base in stmt.bases]
         if not bases or not all(isinstance(base, type) for base in bases):
             continue
         if _can_create_class(stmt.name, bases):
             for base in stmt.bases:
                 base.unmodelled_class = True
+
+
+def _mark_unmodelled_annotations(stmt: ast.stmt, resolve: Callable[[ast.expr], object]) -> None:
+    """Mark each parameter annotation of a top-level function, or of a method
+    of a top-level class, that resolves to a class of a module with no model
+    (#9204). CPython evaluates these when the def runs, so an annotation that
+    does not resolve keeps the converter's NameError."""
+    if isinstance(stmt, ast.ClassDef):
+        defs = [s for s in stmt.body if isinstance(s, (ast.FunctionDef, ast.AsyncFunctionDef))]
+    elif isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        defs = [stmt]
+    else:
+        return
+    for func in defs:
+        args = func.args
+        params = args.posonlyargs + args.args + args.kwonlyargs + [args.vararg, args.kwarg]
+        for annotation in [p.annotation for p in params if p is not None and p.annotation]:
+            node = annotation
+            if isinstance(annotation, ast.Constant) and isinstance(annotation.value, str):
+                try:
+                    node = ast.parse(annotation.value, mode="eval").body
+                except SyntaxError:
+                    continue
+            if isinstance(resolve(node), type):
+                annotation.unmodelled_class = True
 
 
 def _has_star_import(stmts: list[ast.stmt]) -> bool:
@@ -749,9 +778,9 @@ def _finalize_parsed_trees(parsed_trees: ParsedTreeState, entry_tree: ast.Module
     _qualify_imported_nested_classes(parsed_trees, entry_tree)
     if entry_tree is not None:
         _request_vararg_specializations(entry_tree, parsed_trees)
-        _mark_unmodelled_class_bases(entry_tree)
+        _mark_unmodelled_classes(entry_tree)
     for tree, _filename, _pp in parsed_trees.values():
-        _mark_unmodelled_class_bases(tree)
+        _mark_unmodelled_classes(tree)
     started: set[str] = set()
     done: set[str] = set()
     for module_name in parsed_trees:
