@@ -1209,8 +1209,12 @@ std::string python_annotation<Json>::get_attribute_type(const Json &arg)
      is_rebound_in_scope(obj["id"].template get<std::string>())))
     return "";
 
+  const bool is_self =
+    obj_kind == "Name" && obj["id"] == "self" && !current_class_name_.empty();
   return class_attribute_type(
-    get_argument_type(obj), arg["attr"].template get<std::string>());
+    is_self ? current_class_name_ : get_argument_type(obj),
+    arg["attr"].template get<std::string>(),
+    is_self);
 }
 
 /// The declared type of attribute `attr` on an instance of class `cls`, read
@@ -1218,7 +1222,8 @@ std::string python_annotation<Json>::get_attribute_type(const Json &arg)
 template <class Json>
 std::string python_annotation<Json>::class_attribute_type(
   const std::string &cls,
-  const std::string &attr)
+  const std::string &attr,
+  bool constructed_only)
 {
   for (const std::string &ancestor : get_class_ancestors(cls))
   {
@@ -1227,7 +1232,8 @@ std::string python_annotation<Json>::class_attribute_type(
       return "";
     const Json annotation = json_utils::find_attr_annotation(class_node, attr);
     if (!annotation.empty())
-      return json_utils::render_annotation_type(annotation);
+      return constructed_only ? ""
+                              : json_utils::render_annotation_type(annotation);
     // An unannotated `self.attr = C()` types it as C only when nothing else
     // in the program stores to `.attr` on an instance that could be this one.
     const std::string constructed =
