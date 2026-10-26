@@ -601,6 +601,18 @@ public:
     const typet &lhs_type,
     const typet &rhs_type) const;
 
+  /// Conjoins to @p sizes_ok that the slots @p lhs_at and @p rhs_at hold
+  /// @p lhs_type and @p rhs_type, for compare()'s nested fast path. Only a
+  /// top-level scalar slot is exempt: any other slot was typed through a
+  /// nested list the type map may name by a dead or rebound symbol (#8130).
+  void require_stored_types(
+    expr2tc &sizes_ok,
+    std::size_t depth,
+    const exprt &lhs_at,
+    const typet &lhs_type,
+    const exprt &rhs_at,
+    const typet &rhs_type) const;
+
   exprt build_push_list_call(
     const symbolt &list,
     const nlohmann::json &op,

@@ -94,6 +94,33 @@ std::optional<expr2tc> python_list::fast_elem_equality(
   return equality2tc(lhs_val2, rhs_val2);
 }
 
+void python_list::require_stored_types(
+  expr2tc &sizes_ok,
+  std::size_t depth,
+  const exprt &lhs_at,
+  const typet &lhs_type,
+  const exprt &rhs_at,
+  const typet &rhs_type) const
+{
+  const type_handler &th = converter_.get_type_handler();
+  const typet list_type = th.get_list_type();
+  if (depth == 0 && lhs_type != list_type && rhs_type != list_type)
+    return;
+
+  auto stored_type_is = [&](const exprt &at, const typet &type) {
+    expr2tc stored, expected;
+    migrate_expr(build_deref_member(at, "type_id", size_type()), stored);
+    migrate_expr(
+      from_integer(
+        std::hash<std::string>{}(th.type_to_string(type)), size_type()),
+      expected);
+    return equality2tc(stored, expected);
+  };
+  sizes_ok = and2tc(
+    sizes_ok,
+    and2tc(stored_type_is(lhs_at, lhs_type), stored_type_is(rhs_at, rhs_type)));
+}
+
 /// The float element type_id that lets list_eq compare mixed int and float
 /// elements numerically (Python's 1 == 1.0), merged from both operands.
 size_t python_list::eq_float_type_id(
@@ -403,17 +430,6 @@ exprt python_list::compare(
     // which can be dead or rebound by now (#8130), so its elements are read
     // through the outer list and their types checked at run time.
     const typet list_model_type = converter_.get_type_handler().get_list_type();
-    auto stored_type_is = [&](const exprt &at, const typet &type) {
-      expr2tc stored, expected;
-      migrate_expr(build_deref_member(at, "type_id", size_type()), stored);
-      migrate_expr(
-        from_integer(
-          std::hash<std::string>{}(
-            converter_.get_type_handler().type_to_string(type)),
-          size_type()),
-        expected);
-      return equality2tc(stored, expected);
-    };
     std::function<bool(
       const symbolt *,
       const symbolt *,
@@ -471,12 +487,8 @@ exprt python_list::compare(
         const exprt index = from_integer(BigInt(i), size_type());
         const exprt lhs_at = build_list_at_call(lhs_expr, index, list_value_);
         const exprt rhs_at = build_list_at_call(rhs_expr, index, list_value_);
-        if (depth > 0 || lhs_is_list || rhs_is_list)
-          sizes_ok = and2tc(
-            sizes_ok,
-            and2tc(
-              stored_type_is(lhs_at, lhs_elem_type),
-              stored_type_is(rhs_at, rhs_elem_type)));
+        require_stored_types(
+          sizes_ok, depth, lhs_at, lhs_elem_type, rhs_at, rhs_elem_type);
         expr2tc elem_equal;
 
         if (lhs_is_list || rhs_is_list)
@@ -536,14 +548,15 @@ exprt python_list::compare(
     {
       expr2tc nested_equal;
       expr2tc sizes_ok = gen_true_expr();
-      if (build_nested_equality(
-            lhs_symbol,
-            rhs_symbol,
-            build_symbol(*lhs_symbol),
-            build_symbol(*rhs_symbol),
-            0,
-            nested_equal,
-            sizes_ok))
+      if (
+        build_nested_equality(
+          lhs_symbol,
+          rhs_symbol,
+          build_symbol(*lhs_symbol),
+          build_symbol(*rhs_symbol),
+          0,
+          nested_equal,
+          sizes_ok))
         return unless_resized(nested_equal, sizes_ok);
     }
 
