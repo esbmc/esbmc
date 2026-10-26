@@ -679,7 +679,8 @@ private:
 };
 
 /// Python type name of a scalar argument that this pass can type without a
-/// symbol table: a literal, a negated numeric literal, or a nondet_<T>() call.
+/// symbol table: a literal, a negated numeric literal, or a nondet_<T>() call,
+/// plain or module-qualified.
 std::string literal_scalar_type(const nlohmann::json &node)
 {
   if (is_node(node, "Constant") && node["value"].is_boolean())
@@ -693,16 +694,14 @@ std::string literal_scalar_type(const nlohmann::json &node)
     return type == "int" || type == "float" ? type : "";
   }
 
-  if (
-    is_node(node, "Call") && is_node(node["func"], "Name") &&
-    node["args"].empty() && node["keywords"].empty())
+  if (is_node(node, "Call") && node["args"].empty() && node["keywords"].empty())
   {
     static const std::map<std::string, std::string> nondet = {
       {"nondet_int", "int"},
       {"nondet_float", "float"},
       {"nondet_bool", "bool"},
       {"nondet_str", "str"}};
-    const auto it = nondet.find(node["func"]["id"].get<std::string>());
+    const auto it = nondet.find(callee_name(node["func"]));
     return it == nondet.end() ? "" : it->second;
   }
 
