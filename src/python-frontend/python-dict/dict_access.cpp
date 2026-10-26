@@ -581,6 +581,17 @@ void python_dict_handler::handle_dict_subscript_assign(
   // Get element info for the key
   list_elem_info key_info = list_handler.get_list_element_info(node, key_expr);
 
+  // A loop over the dict reads its keys with the recorded type; without one
+  // it reads each key as an untyped pointer (#9246).
+  if (dict_expr.is_symbol())
+  {
+    const std::string keys_id =
+      get_internal_list_id(dict_expr.identifier().as_string(), true);
+    if (!keys_id.empty())
+      converter_.get_element_type_registry().record(
+        keys_id, key_info.elem_symbol->id.as_string(), key_expr.type());
+  }
+
   // Call find_index(keys, key, type_hash, size) to get the index
   code_function_callt find_call;
   find_call.function() = build_symbol(*find_func);
@@ -651,7 +662,10 @@ void python_dict_handler::handle_dict_subscript_assign(
   push_key_call.arguments().push_back(key_arg);
   push_key_call.arguments().push_back(build_symbol(*key_info.elem_type_sym));
   push_key_call.arguments().push_back(key_info.elem_size);
-  push_key_call.arguments().push_back(from_integer(BigInt(0), size_type()));
+  push_key_call.arguments().push_back(
+    key_info.elem_symbol->get_type().is_floatbv()
+      ? static_cast<exprt>(build_symbol(*key_info.elem_type_sym))
+      : static_cast<exprt>(from_integer(BigInt(0), size_type())));
   push_key_call.arguments().push_back(
     converter_.get_type_handler().ptr_free_arg(
       key_arg, key_info.elem_symbol->get_type()));
