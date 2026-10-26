@@ -1187,6 +1187,19 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
     }
     return "bool";
   }
+  else if (arg["_type"] == "IfExp")
+  {
+    // Only literal arms: a name's inferred type can hide a run-time str.
+    const std::function<bool(const Json &)> is_literal = [&](const Json &e) {
+      const std::string kind = e.value("_type", "");
+      return kind == "Constant" ||
+             (kind == "IfExp" && is_literal(e["body"]) &&
+              is_literal(e["orelse"]));
+    };
+    const std::string body_type = get_argument_type(arg["body"]);
+    if (is_literal(arg) && body_type == get_argument_type(arg["orelse"]))
+      return body_type;
+  }
   else if (arg["_type"] == "Call")
     return get_call_type(arg);
   else if (arg["_type"] == "Attribute")

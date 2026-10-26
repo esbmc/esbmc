@@ -7561,10 +7561,13 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
           arg.type(),
           string_constantt::k_default);
       }
-      else if (arg.is_constant())
+      else if (
+        arg.is_constant() ||
+        (arg.id() == "if" && type_utils::is_string_type(arg.type())))
       {
         // Constant array (e.g. a folded string concat or a str-method result
-        // like "{}".format(x)) must be materialized before address_of_exprt.
+        // like "{}".format(x)) or a str conditional expression must be
+        // materialized before address_of_exprt.
         // The DECL alone leaves the temp uninitialised, so
         // strlen/get_object_size over it reads nondet bytes and runs past the
         // array bounds; emit an explicit assignment of the constant value
