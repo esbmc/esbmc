@@ -173,8 +173,33 @@ smt_astt smt_solver_baset::convert_pointer_arith(
       assert(
         !is_constant_int2t(type_size) || !is_constant_int2t(side2_size) ||
         type_size == side2_size);
-      type_size = typecast2tc(the_ptr_offs->type, type_size); // diff is signed
-      expr2tc ptr_diff = div2tc(the_ptr_offs->type, the_ptr_offs, type_size);
+      const type2tc &diff_type = the_ptr_offs->type;
+      if (
+        is_constant_int2t(type_size) &&
+        is_power_of_two(to_constant_int2t(type_size).value))
+      {
+        const unsigned int k = to_constant_int2t(type_size).value.floorPow2();
+        if (k == 0)
+          return convert_ast(the_ptr_offs);
+
+        // The division truncates toward zero: bias a negative difference by
+        // 2^k - 1 before the arithmetic shift, which rounds toward -inf.
+        if (!int_encoding && k + 1 < diff_type->get_width())
+        {
+          expr2tc bias = if2tc(
+            diff_type,
+            lessthan2tc(the_ptr_offs, gen_zero(diff_type)),
+            constant_int2tc(diff_type, BigInt::power2(k) - 1),
+            gen_zero(diff_type));
+          return convert_ast(ashr2tc(
+            diff_type,
+            add2tc(diff_type, the_ptr_offs, bias),
+            constant_int2tc(diff_type, BigInt(k))));
+        }
+      }
+
+      type_size = typecast2tc(diff_type, type_size); // diff is signed
+      expr2tc ptr_diff = div2tc(diff_type, the_ptr_offs, type_size);
 
       return convert_ast(ptr_diff);
     }
