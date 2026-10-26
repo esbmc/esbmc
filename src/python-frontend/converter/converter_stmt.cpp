@@ -6899,15 +6899,8 @@ bool python_converter::ternary_needs_if_spelling(
   const std::string else_class = instantiated_class(ifexp["orelse"]);
   if (then_class.empty() && else_class.empty())
   {
-    const nlohmann::json callables = callable_function_stubs();
-    const std::string then_kind =
-      dynamic_type_detail::classify_literal_value_kind(
-        ifexp["body"], callables);
-    const std::string else_kind =
-      dynamic_type_detail::classify_literal_value_kind(
-        ifexp["orelse"], callables);
-    return !then_kind.empty() && !else_kind.empty() &&
-           dynamic_type_detail::kinds_diverge({then_kind, else_kind});
+    return dynamic_type_detail::ifexp_arms_diverge(
+      ifexp, callable_function_stubs());
   }
   // Arms constructing different classes are spelled as `if` too, where the
   // preprocessor refuses what would resolve against one class only (#8408).
