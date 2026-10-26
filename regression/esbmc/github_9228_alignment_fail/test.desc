@@ -1,0 +1,5 @@
+CORE
+main.c
+--std c11 --64
+^VERIFICATION FAILED$
+^  assertion \(uintptr_t\)buf % 64 == 0$
