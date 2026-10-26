@@ -561,6 +561,21 @@ static typet self_ctor_arg_type(
   return gen_pointer_type(symbol_typet("tag-" + *classes.begin()));
 }
 
+// The tagged type for an attribute set from a constructor parameter that
+// call sites feed a dynamically-typed name, else what `self` passed as that
+// argument gives it.
+typet python_converter::ctor_param_attr_type(
+  const std::vector<const nlohmann::json *> &module_bodies,
+  const std::string &class_name,
+  const std::string &param_name,
+  int param_idx) const
+{
+  return try_infer_dynamic_param_type(
+           class_name + ".__init__", param_name, param_idx + 1)
+           ? type_handler_.get_tagged_object_type()
+           : self_ctor_arg_type(module_bodies, class_name, param_idx);
+}
+
 typet python_converter::infer_attr_type_from_usage(
   const std::string &class_name,
   const std::string &attr_name)
@@ -842,8 +857,8 @@ typet python_converter::infer_attr_type_from_usage(
       // in, so rebuild var_to_class per body before scanning it.
       if (param_idx >= 0)
       {
-        typet ctor_unified =
-          self_ctor_arg_type(module_bodies, class_name, param_idx);
+        typet ctor_unified = ctor_param_attr_type(
+          module_bodies, class_name, param_name, param_idx);
         for (const auto *b : module_bodies)
         {
           populate_var_map(*b);

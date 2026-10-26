@@ -1316,12 +1316,14 @@ exprt function_call_expr::handle_str_of_type_call() const
   if (type_handler::is_class_value_type(cls.type()))
     throw std::runtime_error(
       "Unsupported: str() of a class that is only known at run time");
-  if (!python_converter::is_class_object(cls))
-    return converter_.get_string_handler().convert_to_string(cls);
-  if (type_utils::is_type_identifier(cls.get_string("value")))
+  if (
+    python_converter::is_class_object(cls) &&
+    type_utils::is_type_identifier(cls.get_string("value")))
     return converter_.get_string_builder().build_string_literal(
       "<class '" + cls.get_string("value") + "'>");
-  return str_of_object(cls, call_["args"][0]);
+  if (python_converter::is_class_object(cls))
+    return str_of_object(cls, call_["args"][0]);
+  return converter_.get_string_handler().convert_to_string(cls);
 }
 
 exprt function_call_expr::handle_type_call() const
