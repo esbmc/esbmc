@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^VERIFICATION FAILED$
+(?s)^  obj = \{\s*\{ 1, 2 \},\s*\{ 3, 4 \}\s*\}$
