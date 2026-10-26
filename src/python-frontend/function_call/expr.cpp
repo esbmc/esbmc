@@ -5811,6 +5811,14 @@ static void reject_unfoldable_key(
 
 // A str variable is passed as &s[0]: a later rebinding to a str of another
 // length retypes it to char*, and &s would then name the pointer itself.
+// An array argument with no object to take the address of: a constant, or a
+// str conditional expression.
+static bool is_value_only_array(const exprt &arg)
+{
+  return arg.is_constant() ||
+         (arg.id() == "if" && type_utils::is_string_type(arg.type()));
+}
+
 static exprt array_argument_address(const exprt &arg)
 {
   if (!arg.is_symbol() || !type_utils::is_string_type(arg.type()))
@@ -7561,9 +7569,7 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
           arg.type(),
           string_constantt::k_default);
       }
-      else if (
-        arg.is_constant() ||
-        (arg.id() == "if" && type_utils::is_string_type(arg.type())))
+      else if (is_value_only_array(arg))
       {
         // Constant array (e.g. a folded string concat or a str-method result
         // like "{}".format(x)) or a str conditional expression must be
