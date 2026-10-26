@@ -236,7 +236,7 @@ class _Plan:
                 self._bind(sub, elt)
 
     def _kind(self, name, seen):
-        """'function' or 'list': what holder `name` holds."""
+        """How deep `name` nests functions: 0 for a function, 1 for a list or dict of them."""
         if name in self.kinds:
             return self.kinds[name]
         if name in seen or not self.values[name]:
@@ -251,31 +251,49 @@ class _Plan:
     def _value_kind(self, expr, seen):
         if isinstance(expr, ast.Name):
             if expr.id in self.functions:
-                return "function"
+                return 0
             if expr.id in self.holders:
                 return self._kind(expr.id, seen)
         elif isinstance(expr, ast.IfExp):
             kinds = {self._value_kind(expr.body, seen), self._value_kind(expr.orelse, seen)}
             if len(kinds) == 1:
                 return kinds.pop()
-        elif isinstance(expr, (ast.List, ast.Tuple)):
-            if expr.elts and all(self._value_kind(e, seen) == "function" for e in expr.elts):
-                return "list"
+        elif isinstance(expr, (ast.List, ast.Tuple, ast.Dict)):
+            return self._literal_kind(expr, seen)
         elif self._is_element(expr):
-            if self._value_kind(expr.value, seen) == "list":
-                return "function"
+            depth = self._value_kind(expr.value, seen)
+            if depth > 0:
+                return depth - 1
         raise _Refused
 
-    @staticmethod
-    def _is_element(expr):
-        """`xs[i]` with a name or literal index, whose evaluation has no effects."""
-        if not isinstance(expr, ast.Subscript) or not isinstance(expr.value, ast.Name):
+    def _literal_kind(self, literal, seen):
+        items = literal.values if isinstance(literal, ast.Dict) else literal.elts
+        if not items or None in getattr(literal, "keys", []):
+            raise _Refused
+        kinds = {self._value_kind(item, seen) for item in items}
+        if len(kinds) != 1:
+            raise _Refused
+        return kinds.pop() + 1
+
+    @classmethod
+    def _is_element(cls, expr):
+        """`xs[i]`, possibly nested, with a name or literal index, whose evaluation has no effects."""
+        if not isinstance(expr, ast.Subscript):
+            return False
+        if not (isinstance(expr.value, ast.Name) or cls._is_element(expr.value)):
             return False
         index = expr.slice
         if isinstance(index, ast.UnaryOp) and isinstance(index.op, ast.USub):
             index = index.operand
-        return isinstance(index, ast.Name) or (isinstance(index, ast.Constant)
-                                               and isinstance(index.value, int))
+        return isinstance(index, (ast.Name, ast.Constant))
+
+    def _element_kind(self, expr):
+        """How deep the value of the element `expr` nests functions, or None."""
+        depth = 0
+        while isinstance(expr, ast.Subscript):
+            expr, depth = expr.value, depth + 1
+        kind = self.kinds.get(expr.id)
+        return None if kind is None else kind - depth
 
     # uses
     def check_uses(self):
@@ -308,7 +326,9 @@ class _Plan:
         if _is_callee(parent, node) and node.id in self.callable_names:
             return
         if self._nested(node) or node.id in self.param_holders:
-            raise _Refused
+            if not self._is_returned_read(node):
+                raise _Refused
+            return
         if isinstance(node.ctx, ast.Store):
             self._check_store(node)
         elif isinstance(node.ctx, ast.Del):
@@ -316,10 +336,50 @@ class _Plan:
         elif node.id in self.functions:
             self._check_value(node)
             setattr(node, _CODE, self.functions[node.id][1])
-        elif self.kinds[node.id] == "function":
+        elif self.kinds[node.id] == 0:
             self._check_function_holder(node, parent)
         else:
-            self._check_list_holder(node, parent)
+            self._check_container_holder(node, parent)
+
+    def _is_returned_read(self, node):
+        """A module holder read in a flat module-level def only as the callee of its `return`."""
+        fn = self._enclosing_def(node)
+        if fn is None or node.id not in self.holders or not isinstance(node.ctx, ast.Load):
+            return False
+        if not self._is_flat(fn, node.id):
+            return False
+        top = node
+        while isinstance(self.parents[id(top)], ast.Subscript) and \
+                self.parents[id(top)].value is top:
+            top = self.parents[id(top)]
+        call = self.parents[id(top)]
+        if not self._is_returned_callee(top, call, node):
+            return False
+        self._check_arguments(call, self.holders[self._site_holder(call)])
+        setattr(self.parents[id(call)], _RETURN, self.holders[node.id])
+        return True
+
+    def _is_flat(self, fn, name):
+        """Whether `fn` has no nested scope and does not bind `name`."""
+        body = ast.Module(fn.body, [])
+        args = fn.args.posonlyargs + fn.args.args + fn.args.kwonlyargs
+        return not (any(isinstance(n, _NESTED) for n in ast.walk(body)) or _rebinds(body, name)
+                    or name in {a.arg
+                                for a in args})
+
+    def _is_returned_callee(self, top, call, node):
+        ret = self.parents[id(call)]
+        return _is_callee(call, top) and isinstance(ret, ast.Return) and ret.value is call and \
+            (top is node or self._is_element(top)) and self._element_kind(top) == 0 and \
+            isinstance(top.ctx, ast.Load)
+
+    def _enclosing_def(self, node):
+        """The module-level def that contains `node` with no scope in between, or None."""
+        parent = self.parents.get(id(node))
+        while parent is not None and not isinstance(parent, _NESTED):
+            parent = self.parents.get(id(parent))
+        return parent if isinstance(parent, ast.FunctionDef) and self.defs.get(
+            parent.name) is parent else None
 
     def check_param_holders(self):
         """Each def with a dispatched parameter or local uses it only where it can be a code."""
@@ -404,17 +464,57 @@ class _Plan:
         else:
             self._check_value(node)
 
-    def _check_list_holder(self, node, parent):
+    def _check_container_holder(self, node, parent):
         if isinstance(parent, ast.Subscript) and parent.value is node:
-            if not self._is_element(parent) or not isinstance(parent.ctx, ast.Load):
-                raise _Refused
-            outer = self.parents[id(parent)]
-            if _is_callee(outer, parent):
-                self._check_site(outer)
-            else:
-                self._check_value(parent)
-        elif not (_is_builtin_call(parent, "len", node) or self._is_plain_value(parent, node)):
+            self._check_element(parent)
+        elif not (_is_builtin_call(parent, "len", node) or self._is_plain_value(parent, node)
+                  or self._is_membership(parent, node) or self._is_update(parent, node)):
             raise _Refused
+
+    def _check_element(self, element):
+        """The outermost element `xs[i]...` is a store target, a callee or a value."""
+        while isinstance(self.parents[id(element)], ast.Subscript) and \
+                self.parents[id(element)].value is element:
+            element = self.parents[id(element)]
+        if not self._is_element(element):
+            raise _Refused
+        outer = self.parents[id(element)]
+        if isinstance(element.ctx, ast.Store):
+            self._check_element_store(element, outer)
+        elif isinstance(element.ctx, ast.Del):
+            if not isinstance(outer, ast.Delete):
+                raise _Refused
+        elif not isinstance(element.ctx, ast.Load):
+            raise _Refused
+        elif _is_callee(outer, element) and self._element_kind(element) == 0:
+            self._check_site(outer)
+        else:
+            self._check_value(element)
+
+    def _check_element_store(self, element, assign):
+        """`xs[i] = value` stores a value as deep as the elements of `xs`."""
+        if not (isinstance(assign, ast.Assign) and assign.targets == [element]):
+            raise _Refused
+        if self._value_kind(assign.value, set()) != self._element_kind(element):
+            raise _Refused
+
+    def _is_membership(self, parent, node):
+        return isinstance(parent, ast.Compare) and len(parent.ops) == 1 and isinstance(
+            parent.ops[0], (ast.In, ast.NotIn)) and parent.comparators[0] is node
+
+    def _is_update(self, attribute, node):
+        """`xs.update(literal)` or `xs.setdefault(key, value)` as a statement, deep as `xs`."""
+        if not (isinstance(attribute, ast.Attribute) and attribute.value is node):
+            return False
+        call = self.parents[id(attribute)]
+        if not (isinstance(call, ast.Call) and call.func is attribute and not call.keywords
+                and isinstance(self.parents[id(call)], ast.Expr)):
+            return False
+        if attribute.attr == "update":
+            return len(call.args) == 1 and isinstance(call.args[0], ast.Dict) and \
+                self._value_kind(call.args[0], set()) == self.kinds[node.id]
+        return attribute.attr == "setdefault" and len(call.args) == 2 and \
+            self._value_kind(call.args[1], set()) == self.kinds[node.id] - 1
 
     def _assign_target(self, node):
         """Whether `node` is bound by an assignment whose value for it can be read off."""
@@ -436,19 +536,23 @@ class _Plan:
         return not any(isinstance(n, ast.Starred) for t in parent.targets for n in ast.walk(t))
 
     def _plain_targets(self, assign):
-        """Whether every target of `assign` is a name or a tuple of names."""
-        return all(
-            isinstance(n, (ast.Name, ast.Tuple, ast.List)) for t in assign.targets
-            for n in ast.walk(t) if not isinstance(n, (ast.expr_context)))
+        """Whether every target of `assign` is a name, an element or a tuple of them."""
+        return all(self._plain_target(t) for t in assign.targets)
+
+    def _plain_target(self, target):
+        if isinstance(target, (ast.Tuple, ast.List)):
+            return all(self._plain_target(t) for t in target.elts)
+        return isinstance(target, ast.Name) or self._is_element(target)
 
     def _check_value(self, expr):
         """`expr`, a function or an element, flows only where a code can stand for it."""
         parent = self.parents[id(expr)]
         if isinstance(parent, ast.IfExp) and expr is not parent.test:
             self._check_value(parent)
-        elif isinstance(parent, (ast.List, ast.Tuple)):
+        elif isinstance(parent, (ast.List, ast.Tuple)) or self._is_dict_value(parent, expr):
             self._check_value_list(parent)
-        elif self._is_plain_value(parent, expr) or self._is_dispatched_argument(parent, expr):
+        elif self._is_plain_value(parent, expr) or self._is_dispatched_argument(parent, expr) \
+                or self._is_update_value(parent, expr):
             pass
         elif isinstance(parent, ast.Compare):
             self._check_identity(parent)
@@ -482,14 +586,27 @@ class _Plan:
             raise _Refused
         setattr(compare, _IDENTITY, True)
 
+    @staticmethod
+    def _is_dict_value(parent, expr):
+        return isinstance(parent, ast.Dict) and any(expr is v for v in parent.values)
+
     def _check_value_list(self, literal):
-        if not self._is_plain_value(self.parents[id(literal)], literal):
+        parent = self.parents[id(literal)]
+        if isinstance(parent, (ast.List, ast.Tuple)) or self._is_dict_value(parent, literal):
+            self._check_value_list(parent)
+        elif not (self._is_plain_value(parent, literal) or self._is_update_value(parent, literal)):
             raise _Refused
+
+    def _is_update_value(self, call, literal):
+        """Whether `literal` is stored by a call that `_is_update` accepts."""
+        return isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute) and \
+            isinstance(call.func.value, ast.Name) and call.func.value.id in self.holders and \
+            call.args[-1] is literal and self._is_update(call.func, call.func.value)
 
     def _is_code(self, expr):
         if isinstance(expr, ast.Name):
-            return expr.id in self.functions or self.kinds.get(expr.id) == "function"
-        return self._is_element(expr) and self.kinds.get(expr.value.id) == "list"
+            return expr.id in self.functions or self.kinds.get(expr.id) == 0
+        return self._is_element(expr) and self._element_kind(expr) == 0
 
     def _check_site(self, call):
         """A call through a holder: every function of its group must take its arguments."""
@@ -509,12 +626,15 @@ class _Plan:
         """The holder `call` goes through, refusing an index another scope may rebind."""
         if isinstance(call.func, ast.Name):
             return call.func.id
-        index = call.func.slice
-        if isinstance(index, ast.Name) and any(
-                isinstance(n, (ast.Global, ast.Nonlocal)) and index.id in n.names
-                for n in ast.walk(self.module)):
-            raise _Refused
-        return call.func.value.id
+        node = call.func
+        while isinstance(node, ast.Subscript):
+            index = node.slice
+            if isinstance(index, ast.Name) and any(
+                    isinstance(n, (ast.Global, ast.Nonlocal)) and index.id in n.names
+                    for n in ast.walk(self.module)):
+                raise _Refused
+            node = node.value
+        return node.id
 
     def _check_always_evaluated(self, call):
         """Only a call evaluated whenever its statement is may be dispatched before it."""
@@ -658,6 +778,6 @@ def dispatch_mixed_function_values(module, path):
 
 
 def _propagated(module, path):
-    analysis = _Analysis(module, path)
+    analysis = _Analysis(module, path, dicts=True)
     analysis.propagate()
     return analysis
