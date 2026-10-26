@@ -167,6 +167,42 @@ bool has_divergent_literal_returns(
   return false;
 }
 
+// A top-level `return a if t else b` whose arms are of different literal kinds.
+bool has_divergent_ifexp_return(
+  const nlohmann::json &function_node,
+  const param_kinds_t &param_kinds,
+  const nlohmann::json &module_body)
+{
+  for (const auto &stmt : function_node["body"])
+  {
+    if (stmt.value("_type", "") != "Return" || !stmt["value"].is_object())
+      continue;
+    const nlohmann::json &value = stmt["value"];
+    if (value.value("_type", "") != "IfExp")
+      continue;
+    std::unordered_set<std::string> kinds;
+    for (const char *arm : {"body", "orelse"})
+      kinds.insert(classify_return_literal_kind(
+        {{"_type", "Return"}, {"value", value[arm]}},
+        param_kinds,
+        module_body));
+    kinds.erase("");
+    if (dynamic_type_detail::kinds_diverge(kinds))
+      return true;
+  }
+  return false;
+}
+
+bool has_divergent_returns(
+  const nlohmann::json &function_node,
+  const param_kinds_t &param_kinds,
+  const nlohmann::json &module_body)
+{
+  return has_divergent_literal_returns(
+           function_node, param_kinds, module_body) ||
+         has_divergent_ifexp_return(function_node, param_kinds, module_body);
+}
+
 bool returns_dynamic_value(
   const nlohmann::json &function_node,
   const nlohmann::json &module_body,
@@ -431,7 +467,7 @@ bool calls_dynamic_function(
 
 // `node` binds `name`: as a parameter, a def, class, import or except alias,
 // or a Name stored or deleted.
-bool binds_name(const nlohmann::json &node, const std::string &name)
+bool binds_name_within(const nlohmann::json &node, const std::string &name)
 {
   if (!node.is_structured())
     return false;
@@ -452,7 +488,7 @@ bool binds_name(const nlohmann::json &node, const std::string &name)
       return true;
   }
   for (const auto &child : node)
-    if (binds_name(child, name))
+    if (binds_name_within(child, name))
       return true;
   return false;
 }
@@ -492,8 +528,8 @@ bool returns_divergent_name(
          dynamic_type_detail::scope_assigns_divergent_literal_types(
            name, module_body, module_body) &&
          is_module_level_def(function_node, module_body) &&
-         !binds_name(function_node["args"], name) &&
-         !binds_name(function_node["body"], name);
+         !binds_name_within(function_node["args"], name) &&
+         !binds_name_within(function_node["body"], name);
 }
 
 // True when `function_node` returns divergent literal kinds, or forwards the
@@ -504,7 +540,7 @@ bool returns_dynamic_value(
   unsigned depth)
 {
   if (
-    has_divergent_literal_returns(
+    has_divergent_returns(
       function_node,
       return_param_kinds(function_node, module_body),
       module_body))
