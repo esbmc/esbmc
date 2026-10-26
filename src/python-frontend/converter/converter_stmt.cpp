@@ -1119,6 +1119,20 @@ exprt python_converter::create_lhs_expression(
   return lhs;
 }
 
+/// A tagged value and an untagged attribute slot differ in size, so storing
+/// one into the other would overrun or misread the object.
+void python_converter::reject_one_sided_tagged_store(
+  const exprt &lhs,
+  const exprt &rhs) const
+{
+  if (
+    lhs.is_member() && type_handler_.is_tagged_scalar_type(lhs.type()) !=
+                         type_handler_.is_tagged_scalar_type(rhs.type()))
+    throw std::runtime_error(
+      "storing into an attribute that is dynamically typed only on one side "
+      "is not yet supported");
+}
+
 /// A list element that may be a string or a number is read as a tagged
 /// scalar; the variable it is stored in becomes one too, whatever type an
 /// annotation (or the loop lowering's inferred one) gave it (#4797).
@@ -8022,6 +8036,7 @@ void python_converter::get_var_assign(
       return;
     }
 
+    reject_one_sided_tagged_store(lhs, rhs);
     adopt_tagged_element(lhs_symbol, lhs, rhs);
 
     // Handle type adjustments
@@ -8920,6 +8935,22 @@ struct loop_depth_guard
 };
 } // namespace
 
+// A str array branch assigned to a `char *` result decays to its base
+// address; a cast would reach the SMT layer as an array-to-pointer typecast.
+static exprt coerce_ternary_branch(
+  const exprt &branch,
+  const typet &result_type,
+  string_handler &strings)
+{
+  if (branch.type() == result_type)
+    return branch;
+  if (
+    branch.type().is_array() && result_type.is_pointer() &&
+    result_type.subtype() == branch.type().subtype())
+    return strings.get_array_base_address(branch);
+  return typecast_exprt(branch, result_type);
+}
+
 exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 {
   // A walrus in a `while` test binds into the condition prelude, which runs
@@ -9490,17 +9521,14 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       result_decl.location() = location;
       current_block->copy_to_operands(result_decl);
 
-      auto coerce = [&](const exprt &branch) -> exprt {
-        if (branch.type() == result_type)
-          return branch;
-        return typecast_exprt(branch, result_type);
-      };
-
-      code_assignt then_assign(result_expr, coerce(then));
+      code_assignt then_assign(
+        result_expr, coerce_ternary_branch(then, result_type, string_handler_));
       then_assign.location() = location;
       then_side_effects.copy_to_operands(then_assign);
 
-      code_assignt else_assign(result_expr, coerce(else_expr));
+      code_assignt else_assign(
+        result_expr,
+        coerce_ternary_branch(else_expr, result_type, string_handler_));
       else_assign.location() = location;
       else_side_effects.copy_to_operands(else_assign);
 
