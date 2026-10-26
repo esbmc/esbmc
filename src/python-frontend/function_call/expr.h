@@ -971,6 +971,17 @@ private:
   void refuse_unheld_attribute(
     const std::string &class_name,
     const std::string &attr) const;
+  /// Refuse `x.attr(...)` when @p attr is an untyped field no class in the MRO
+  /// of @p class_name binds: it is set on the instance, so the method lookup
+  /// a call falls back to would raise a false AttributeError (#9255).
+  void refuse_untyped_attribute(
+    const std::string &class_name,
+    const std::string &attr,
+    const typet &field_type) const;
+  /// Whether a class in the MRO of @p class_name may bind @p attr, or the MRO
+  /// is not known.
+  bool
+  mro_may_bind(const std::string &class_name, const std::string &attr) const;
   /// The functions field @p attr of @p class_name holds, when it is untyped
   /// and no class in its MRO binds @p attr too.
   const python_converter::attribute_functions *held_functions(
