@@ -3289,6 +3289,26 @@ private:
   /// Rewrite @p cond into a call to its class's __bool__ when there is one.
   exprt apply_bool_dunder(exprt cond, const locationt &location);
 
+  /// `is` on a tagged value that folds to a constant; nil when it does not.
+  exprt fold_tagged_identity(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
+
+  /// Python truthiness of a tagged value, a call on its address.
+  exprt tagged_truthiness(exprt value, const nlohmann::json &node);
+
+  /// A unary operator on a tagged operand: `-` and `not` are modelled.
+  exprt handle_tagged_unary_operator(
+    const std::string &op,
+    const exprt &operand,
+    const nlohmann::json &element);
+
+  /// Throws on a tagged operand of an `and`/`or` whose value is used.
+  void refuse_tagged_boolop_operand(const exprt &operand) const;
+
   /// Rewrite a string @p str into `strlen(str) != 0`, its truthiness; any
   /// other value comes back unchanged.
   exprt apply_string_truthiness(const exprt &str, const locationt &location);

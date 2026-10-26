@@ -8678,6 +8678,20 @@ static std::optional<bool> constant_string_is_empty(const exprt &str)
   return first.is_zero();
 }
 
+exprt python_converter::tagged_truthiness(
+  exprt value,
+  const nlohmann::json &node)
+{
+  if (!type_handler_.is_tagged_scalar_type(value.type()))
+    return value;
+  if (current_block)
+    value =
+      tuple_handler_->prepare_rhs_for_unpacking(node, value, *current_block);
+  exprt cond = dynamic_type_handler_.build_truthiness(value);
+  cond.location() = get_location_from_decl(node);
+  return cond;
+}
+
 exprt python_converter::apply_string_truthiness(
   const exprt &str,
   const locationt &location)
@@ -9160,11 +9174,8 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       return cond;
     }
 
-    // A tagged value has no defined truthiness; refuse instead of building
-    // an ill-typed struct-to-bool node.
     if (type_handler_.is_tagged_scalar_type(value_expr.type()))
-      throw std::runtime_error(
-        "truthiness of a dynamically-typed variable is not yet supported");
+      return tagged_truthiness(value_expr, value_node);
 
     exprt bool_expr = typecast_exprt(value_expr, bool_type());
     bool_expr.location() = get_location_from_decl(value_node);
@@ -9314,12 +9325,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     {
       const locationt location = get_location_from_decl(ast_node["test"]);
 
-      // A tagged value has no defined truthiness; refuse instead of
-      // falling through to a struct-typed guard.
-      if (type_handler_.is_tagged_scalar_type(cond.type()))
-        throw std::runtime_error(
-          "truthiness of a dynamically-typed variable is not yet "
-          "supported");
+      cond = tagged_truthiness(cond, ast_node["test"]);
 
       typet value_type = ns.follow(cond.type());
       if (value_type.is_pointer())
@@ -10215,6 +10221,7 @@ exprt python_converter::get_block(
       // class with __bool__ decides the answer. Without this `assert obj` cast
       // the object to bool and passed whatever the dunder said.
       test = apply_bool_dunder(test, get_location_from_decl(element));
+      test = tagged_truthiness(test, element["test"]);
       if (test.statement() == "cpp-throw")
       {
         test.location() = get_location_from_decl(element);
