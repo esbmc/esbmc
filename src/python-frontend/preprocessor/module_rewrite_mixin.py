@@ -3,6 +3,7 @@ import copy
 from collections import Counter
 
 from preprocessor.bound_method_dispatch import dispatch_rebound_methods
+from preprocessor.bound_method_values import lower_method_values
 from preprocessor.check_type_lowering import lower_check_type
 from preprocessor.dotted_imports import alias_dotted_imports
 from preprocessor.decorator_lowering import lower_user_decorators
@@ -562,6 +563,8 @@ class ModuleRewriteMixin:
         inline_zip_names(node)
         lower_iter_next(node)
         lower_zip_builds(node)
+        self._scan_fixed_receivers(node)
+        lower_method_values(node, self.fixed_receivers)
         if entry:
             dispatch_mixed_function_values(node, self.module_name)
         reject_mixed_function_values(node, self.module_name)

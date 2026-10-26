@@ -1,6 +1,8 @@
 CORE
 main.c
---dead-code-check
+--dead-code-check --sarif-output out.sarif
 main\.c:10: dead code: unreachable branch \[guard: flag\]$
 main\.c:13: dead code: unreachable branch \[guard: !\(x > 5\)\]$
 ^VERIFICATION SUCCESSFUL$
+CHECK_JSON out.sarif $.runs[0].results[0].message.text == "dead code: unreachable branch [guard: flag]"
+CHECK_JSON out.sarif $.runs[0].results[1].message.text == "dead code: unreachable branch [guard: !(x > 5)]"
