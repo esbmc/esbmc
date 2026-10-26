@@ -431,7 +431,7 @@ bool calls_dynamic_function(
 
 // `node` binds `name`: as a parameter, a def, class, import or except alias,
 // or a Name stored or deleted.
-bool binds_name_within(const nlohmann::json &node, const std::string &name)
+bool binds_name(const nlohmann::json &node, const std::string &name)
 {
   if (!node.is_structured())
     return false;
@@ -452,7 +452,7 @@ bool binds_name_within(const nlohmann::json &node, const std::string &name)
       return true;
   }
   for (const auto &child : node)
-    if (binds_name_within(child, name))
+    if (binds_name(child, name))
       return true;
   return false;
 }
@@ -492,8 +492,8 @@ bool returns_divergent_name(
          dynamic_type_detail::scope_assigns_divergent_literal_types(
            name, module_body, module_body) &&
          is_module_level_def(function_node, module_body) &&
-         !binds_name_within(function_node["args"], name) &&
-         !binds_name_within(function_node["body"], name);
+         !binds_name(function_node["args"], name) &&
+         !binds_name(function_node["body"], name);
 }
 
 // True when `function_node` returns divergent literal kinds, or forwards the
