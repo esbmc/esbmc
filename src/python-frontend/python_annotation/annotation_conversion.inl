@@ -1209,8 +1209,12 @@ std::string python_annotation<Json>::get_attribute_type(const Json &arg)
      is_rebound_in_scope(obj["id"].template get<std::string>())))
     return "";
 
+  const bool is_self =
+    obj_kind == "Name" && obj["id"] == "self" && !current_class_name_.empty();
   return class_attribute_type(
-    get_argument_type(obj), arg["attr"].template get<std::string>());
+    is_self ? current_class_name_ : get_argument_type(obj),
+    arg["attr"].template get<std::string>(),
+    is_self);
 }
 
 /// The declared type of attribute `attr` on an instance of class `cls`, read
@@ -1218,7 +1222,8 @@ std::string python_annotation<Json>::get_attribute_type(const Json &arg)
 template <class Json>
 std::string python_annotation<Json>::class_attribute_type(
   const std::string &cls,
-  const std::string &attr)
+  const std::string &attr,
+  bool constructed_only)
 {
   for (const std::string &ancestor : get_class_ancestors(cls))
   {
@@ -1227,7 +1232,8 @@ std::string python_annotation<Json>::class_attribute_type(
       return "";
     const Json annotation = json_utils::find_attr_annotation(class_node, attr);
     if (!annotation.empty())
-      return json_utils::render_annotation_type(annotation);
+      return constructed_only ? ""
+                              : json_utils::render_annotation_type(annotation);
     // An unannotated `self.attr = C()` types it as C only when nothing else
     // in the program stores to `.attr` on an instance that could be this one.
     const std::string constructed =
@@ -2821,6 +2827,49 @@ std::string python_annotation<Json>::infer_method_return_type(
 }
 
 template <class Json>
+std::optional<std::string>
+python_annotation<Json>::get_type_from_literal_method(const Json &call)
+{
+  if (!call["func"].contains("value"))
+    return std::nullopt;
+  const Json &receiver = call["func"]["value"];
+  // An f-string has no symbol name either; its methods are str methods.
+  if (receiver["_type"] == "JoinedStr" && call["func"].contains("attr"))
+    return get_string_method_return_type(call["func"]["attr"]);
+  if (receiver["_type"] != "Constant")
+    return std::nullopt;
+
+  std::string obj_type = get_type_from_constant(receiver);
+
+  // For string constants, determine return type based on method name
+  if (obj_type == "str" && call["func"].contains("attr"))
+  {
+    const std::string &method = call["func"]["attr"];
+    return get_string_method_return_type(method);
+  }
+
+  // bytes.hex() returns a str (hex digits), not bytes.
+  if (
+    obj_type == "bytes" && call["func"].contains("attr") &&
+    call["func"]["attr"] == "hex")
+    return "str";
+
+  // (258).to_bytes(...) on an int literal returns bytes.
+  if (
+    obj_type == "int" && call["func"].contains("attr") &&
+    call["func"]["attr"] == "to_bytes")
+    return "bytes";
+
+  // bytes.decode() returns a str.
+  if (
+    obj_type == "bytes" && call["func"].contains("attr") &&
+    call["func"]["attr"] == "decode")
+    return "str";
+
+  return obj_type;
+}
+
+template <class Json>
 std::string python_annotation<Json>::get_type_from_method(const Json &call)
 {
   std::string type("");
@@ -2842,43 +2891,17 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
       return "list";
   }
 
-  // Handle method calls on constant literals
-  // When Python code has " ".join(l), the func["value"] is a Constant node
-  // We need to map string method names to their return types directly
-  // without looking up the object in the AST (which would fail)
+  // Handle method calls on literals: for " ".join(l) or f"{x}".upper() the
+  // receiver has no symbol name, so looking it up in the AST would fail.
+  if (const auto literal_type = get_type_from_literal_method(call))
+    return *literal_type;
+
+  // An f-string receiver is always a str: f"{x}".upper().
   if (
     call["func"].contains("value") &&
-    call["func"]["value"]["_type"] == "Constant")
-  {
-    std::string obj_type = get_type_from_constant(call["func"]["value"]);
-
-    // For string constants, determine return type based on method name
-    if (obj_type == "str" && call["func"].contains("attr"))
-    {
-      const std::string &method = call["func"]["attr"];
-      return get_string_method_return_type(method);
-    }
-
-    // bytes.hex() returns a str (hex digits), not bytes.
-    if (
-      obj_type == "bytes" && call["func"].contains("attr") &&
-      call["func"]["attr"] == "hex")
-      return "str";
-
-    // (258).to_bytes(...) on an int literal returns bytes.
-    if (
-      obj_type == "int" && call["func"].contains("attr") &&
-      call["func"]["attr"] == "to_bytes")
-      return "bytes";
-
-    // bytes.decode() returns a str.
-    if (
-      obj_type == "bytes" && call["func"].contains("attr") &&
-      call["func"]["attr"] == "decode")
-      return "str";
-
-    return obj_type;
-  }
+    call["func"]["value"]["_type"] == "JoinedStr" &&
+    call["func"].contains("attr"))
+    return get_string_method_return_type(call["func"]["attr"]);
 
   // Handle method calls on binary expressions like (s + ",end").split(",", 1)
   if (
@@ -5433,6 +5456,16 @@ Json *python_annotation<Json>::class_init(
   return nullptr;
 }
 
+/// A bare name that @p scope assigns incompatible literal kinds, which must
+/// reach a method as a tagged value rather than as the first kind it takes.
+template <class Json>
+static bool is_dynamically_typed_name(const Json &arg, const Json &scope)
+{
+  return arg.value("_type", "") == "Name" &&
+         dynamic_type_detail::scope_assigns_divergent_literal_types(
+           arg["id"].template get<std::string>(), scope);
+}
+
 template <class Json>
 bool python_annotation<Json>::preprocess_constructor_calls(Json &node)
 {
@@ -5461,6 +5494,10 @@ bool python_annotation<Json>::preprocess_constructor_calls(Json &node)
           if (param.contains("annotation") && !param["annotation"].is_null())
             continue;
           const Json &arg = call_args[i - 1];
+          const Json &scope =
+            current_func != nullptr ? (*current_func)["body"] : ast_["body"];
+          if (is_dynamically_typed_name(arg, scope))
+            continue;
           std::string arg_type = get_argument_type(arg);
           // Subclasses calling one inherited __init__ with different types
           // leave the parameter to the runtime type (type_eq_erased_type).
@@ -5657,7 +5694,8 @@ void python_annotation<Json>::preprocess_receiver_method_calls()
           const Json &params = (*method)["args"]["args"];
           for (size_t i = 1; i < params.size(); ++i)
             seen[{method, i}].insert(
-              i - 1 < node["args"].size()
+              i - 1 < node["args"].size() &&
+                  !is_dynamically_typed_name(node["args"][i - 1], ast_["body"])
                 ? get_argument_type(node["args"][i - 1])
                 : std::string());
           break;

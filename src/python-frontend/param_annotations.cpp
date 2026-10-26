@@ -774,6 +774,145 @@ private:
     return def ? def : find_init(body, name);
   }
 
+  /// What a call reaches. \p key is the function or class name, or
+  /// `Class.method`; \p skipped counts the leading `self` parameters.
+  struct call_target
+  {
+    size_t module;
+    std::string key;
+    const nlohmann::json *def;
+    size_t skipped;
+    bool constructor;
+  };
+
+  struct instance
+  {
+    const nlohmann::json *ctor;
+    size_t module;
+  };
+
+  static bool imports_name(const nlohmann::json &ast, const std::string &name)
+  {
+    for (const auto &stmt : ast["body"])
+      if (is_node(stmt, "ImportFrom"))
+        for (const auto &alias : stmt["names"])
+          if (alias["name"] == name && alias["asname"].is_null())
+            return true;
+    return false;
+  }
+
+  /// The `Cls(...)` a method receiver is: the call itself, or a name one module
+  /// binds once, at top level, to it that the caller is or imports.
+  std::optional<instance>
+  resolve_instance(const nlohmann::json &receiver, size_t caller) const
+  {
+    if (is_node(receiver, "Call"))
+      return instance{&receiver, caller};
+    if (!is_node(receiver, "Name"))
+      return std::nullopt;
+    const std::string id = receiver["id"];
+    std::optional<instance> found;
+    for (size_t i = 0; i < modules_.size(); ++i)
+    {
+      const nlohmann::json &ast = *modules_[i].read;
+      const nlohmann::json *value = json_utils::top_level_value(ast, id);
+      if (
+        !value || !is_node(*value, "Call") ||
+        json_utils::count_name_bindings(ast, id) != 1)
+        continue;
+      if (found)
+        return std::nullopt;
+      found = instance{value, i};
+    }
+    const nlohmann::json &caller_ast = *modules_[caller].read;
+    if (
+      found && found->module != caller &&
+      (!imports_name(caller_ast, id) ||
+       json_utils::count_name_bindings(caller_ast, id) != 1))
+      return std::nullopt;
+    return found;
+  }
+
+  static const nlohmann::json *find_method(
+    const nlohmann::json &body,
+    const std::string &cls,
+    const std::string &method)
+  {
+    for (const auto &elem : body)
+      if (is_node(elem, "ClassDef") && elem["name"] == cls)
+        return elem["decorator_list"].empty() &&
+                   json_utils::count_name_bindings(elem["body"], method) == 1
+                 ? find_function(elem["body"], method)
+                 : nullptr;
+    return nullptr;
+  }
+
+  std::optional<call_target>
+  resolve_method(const nlohmann::json &func, size_t caller) const
+  {
+    if (!is_node(func, "Attribute"))
+      return std::nullopt;
+    const std::optional<instance> receiver =
+      resolve_instance(func["value"], caller);
+    if (!receiver || !is_node((*receiver->ctor)["func"], "Name"))
+      return std::nullopt;
+    const nlohmann::json &ctor_func = (*receiver->ctor)["func"];
+    const std::string cls = ctor_func["id"];
+    const std::optional<size_t> cls_module =
+      resolve_callee(ctor_func, receiver->module);
+    if (
+      !cls_module ||
+      json_utils::count_name_bindings(*modules_[*cls_module].read, cls) != 1)
+      return std::nullopt;
+    const std::string method = func["attr"];
+    const nlohmann::json *def =
+      find_method(modules_[*cls_module].read->at("body"), cls, method);
+    if (!def)
+      return std::nullopt;
+    return call_target{*cls_module, cls + "." + method, def, 1, false};
+  }
+
+  /// Null when the callee is unknown, or a bare name the caller also binds
+  /// otherwise (`from lib import f` beside its own `def f`).
+  std::optional<call_target>
+  resolve_target(const nlohmann::json &func, size_t caller) const
+  {
+    if (std::optional<call_target> method = resolve_method(func, caller))
+      return method;
+    const std::string name = callee_name(func);
+    const std::optional<size_t> callee = resolve_callee(func, caller);
+    if (
+      !callee || (is_node(func, "Name") && json_utils::count_name_bindings(
+                                             *modules_[caller].read, name) > 1))
+      return std::nullopt;
+    const nlohmann::json &body = modules_[*callee].read->at("body");
+    const bool plain = find_function(body, name) != nullptr;
+    return call_target{
+      *callee, name, callee_def(body, name), plain ? 0u : 1u, !plain};
+  }
+
+  static std::string key_owner(const std::string &key)
+  {
+    return key.substr(0, key.find('.'));
+  }
+
+  static std::string key_member(const std::string &key)
+  {
+    const size_t dot = key.find('.');
+    return dot == std::string::npos ? key : key.substr(dot + 1);
+  }
+
+  /// The def a binding key names: a function, a class's `__init__` or a method.
+  static nlohmann::json *key_def(nlohmann::json &body, const std::string &key)
+  {
+    if (key_owner(key) == key)
+      return callee_def(body, key);
+    for (auto &elem : body)
+      if (is_node(elem, "ClassDef") && elem["name"] == key_owner(key))
+        return find_function(elem["body"], key_member(key));
+    return nullptr;
+  }
+
   struct binding
   {
     std::optional<std::string> type;
@@ -831,29 +970,21 @@ private:
   void visit_call(const nlohmann::json &call, size_t caller)
   {
     const std::string name = callee_name(call["func"]);
-    const std::optional<size_t> callee = resolve_callee(call["func"], caller);
-    // A bare name the caller also binds otherwise (`from lib import f` beside
-    // its own `def f`) may reach a function resolve_callee did not pick.
-    const bool rebound =
-      is_node(call["func"], "Name") &&
-      json_utils::count_name_bindings(*modules_[caller].read, name) > 1;
-    if (!callee || rebound)
+    const std::optional<call_target> target =
+      resolve_target(call["func"], caller);
+    if (!target)
     {
       poisoned_.insert(name);
       return;
     }
-    if (modules_[*callee].write == nullptr)
+    if (modules_[target->module].write == nullptr || !target->def)
       return;
 
-    const nlohmann::json &callee_body = modules_[*callee].read->at("body");
-    const nlohmann::json *def = callee_def(callee_body, name);
-    if (!def)
-      return;
-    // A constructor call does not pass `self`.
-    const size_t skipped = find_function(callee_body, name) ? 0 : 1;
+    const nlohmann::json *def = target->def;
+    const size_t skipped = target->skipped;
     if (
       !binds_by_position_only(call, *def) ||
-      (skipped && base_names_.count(name)))
+      (target->constructor && base_names_.count(name)))
     {
       poisoned_.insert(name);
       return;
@@ -875,10 +1006,11 @@ private:
         continue;
       const bool passed = i - skipped < call["args"].size();
       bind(
-        param_key{*callee, name, i},
-        passed ? arg_type(call["args"][i - skipped], caller)
-               : arg_type((*def)["args"]["defaults"][i - required], *callee),
-        *callee != caller);
+        param_key{target->module, target->key, i},
+        passed
+          ? arg_type(call["args"][i - skipped], caller)
+          : arg_type((*def)["args"]["defaults"][i - required], target->module),
+        target->module != caller);
     }
   }
 
@@ -932,16 +1064,18 @@ private:
   {
     for (const auto &[key, entry] : bound_)
     {
-      const auto &[module, func, param] = key;
+      const auto &[module, key_name, param] = key;
       // A function its module binds again (a second def in an `if`) is not
       // the one find_function returns.
       if (
-        !entry.type || !entry.from_other_module || poisoned_.count(func) ||
-        json_utils::count_name_bindings(*modules_[module].read, func) != 1)
+        !entry.type || !entry.from_other_module ||
+        poisoned_.count(key_member(key_name)) ||
+        json_utils::count_name_bindings(
+          *modules_[module].read, key_owner(key_name)) != 1)
         continue;
 
-      nlohmann::json &arg = (*callee_def(
-        modules_[module].write->at("body"), func))["args"]["args"][param];
+      nlohmann::json &arg = (*key_def(
+        modules_[module].write->at("body"), key_name))["args"]["args"][param];
       nlohmann::json annotation{{"_type", "Name"}, {"id", *entry.type}};
       for (const char *field :
            {"lineno", "col_offset", "end_lineno", "end_col_offset"})
