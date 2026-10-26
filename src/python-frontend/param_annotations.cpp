@@ -90,6 +90,12 @@ std::string constant_type_name(const nlohmann::json &node)
   return "";
 }
 
+bool is_none_constant(const nlohmann::json &node)
+{
+  return is_node(node, "Constant") && node.contains("value") &&
+         node["value"].is_null();
+}
+
 /// The type a tuple element names: a constant's type, or the `int`, `float`
 /// or `str` annotation of a parameter of @p scope (the innermost enclosing
 /// def, or null) that the def never rebinds. "" otherwise.
@@ -967,6 +973,19 @@ private:
     return true;
   }
 
+  /// A None passed to parameter @p i whose default is None does not disagree
+  /// with the other call sites: the converter tracks the None of a `T = None`
+  /// parameter (#9263).
+  static bool passes_none_default(
+    const nlohmann::json &arg,
+    const nlohmann::json &defaults,
+    size_t i,
+    size_t required)
+  {
+    return i >= required && is_none_constant(arg) &&
+           is_none_constant(defaults[i - required]);
+  }
+
   void visit_call(const nlohmann::json &call, size_t caller)
   {
     const std::string name = callee_name(call["func"]);
@@ -999,17 +1018,20 @@ private:
     }
     // A parameter the call leaves out takes its default, typed in the
     // callee's module (#8968).
+    const nlohmann::json &defaults = (*def)["args"]["defaults"];
     for (size_t i = skipped; i < params.size(); ++i)
     {
       if (
         params[i].contains("annotation") && !params[i]["annotation"].is_null())
         continue;
       const bool passed = i - skipped < call["args"].size();
+      const nlohmann::json &arg =
+        passed ? call["args"][i - skipped] : defaults[i - required];
+      if (passes_none_default(arg, defaults, i, required))
+        continue;
       bind(
         param_key{target->module, target->key, i},
-        passed
-          ? arg_type(call["args"][i - skipped], caller)
-          : arg_type((*def)["args"]["defaults"][i - required], target->module),
+        arg_type(arg, passed ? caller : target->module),
         target->module != caller);
     }
   }
