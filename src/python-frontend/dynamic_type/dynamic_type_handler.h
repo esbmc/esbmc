@@ -133,9 +133,9 @@ public:
    */
   bool detect_dynamic_return_type(const nlohmann::json &function_node) const;
 
-  /// Every def that `call` may reach as a function value returns a dynamic
-  /// value (#9030).
-  bool function_values_return_dynamic(const nlohmann::json &call) const;
+  /// `call` goes through a parameter of the current function, and every call
+  /// of that function passes a def returning a dynamic value (#9030).
+  bool parameter_call_returns_tagged(const nlohmann::json &call) const;
 
   /**
    * @brief True if some top-level `If` in `scope_body` (a function body or

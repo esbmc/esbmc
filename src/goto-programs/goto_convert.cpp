@@ -320,6 +320,31 @@ static void collect_whole_reads(const expr2tc &e, std::set<irep_idt> &sources)
     [&sources](const expr2tc &op) { collect_whole_reads(op, sources); });
 }
 
+static bool mentions_symbol(const exprt &e, const std::set<irep_idt> &ids)
+{
+  if (e.id() == "symbol" && ids.count(e.identifier()))
+    return true;
+  forall_operands (it, e)
+    if (mentions_symbol(*it, ids))
+      return true;
+  return false;
+}
+
+/// Whether \p e reads a local whose `dead` entry sits on \p stack above
+/// \p from, i.e. one that unwinding to \p from ends.
+static bool reads_unwound_local(
+  const exprt &e,
+  const std::vector<codet> &stack,
+  std::size_t from)
+{
+  std::set<irep_idt> dead;
+  for (std::size_t i = from; i < stack.size(); ++i)
+    if (stack[i].get_statement() == "dead")
+      dead.insert(destructor_entry_symbol(stack[i]));
+  dead.erase(irep_idt());
+  return !dead.empty() && mentions_symbol(e, dead);
+}
+
 /// The objects \p value is a bitwise copy of: the symbols it names and,
 /// transitively, those \p sideeffects assigns into them or into their parts
 /// (`H{C(1)}` lowers to `tmp$2 = { .c=tmp$1 }`).
@@ -451,13 +476,15 @@ void goto_convertt::convert_throw(const exprt &expr_in, goto_programt &dest)
   }
 
   // The exception object is initialised from the operand before any local is
-  // destroyed ([except.throw]p3), so `throw t.v` must not read t after ~T.
+  // destroyed ([except.throw]p3), so `throw t.v` must not read t after ~T,
+  // nor a Python `raise e` read `*e` after `DEAD e` (#9185).
   if (
     detached.empty() && !expr.operands().empty() &&
-    std::any_of(
-      stack.begin() + targets.throw_stack_size,
-      stack.end(),
-      is_destructor_entry))
+    (std::any_of(
+       stack.begin() + targets.throw_stack_size,
+       stack.end(),
+       is_destructor_entry) ||
+     reads_unwound_local(expr.op0(), stack, targets.throw_stack_size)))
   {
     const exprt operand = expr.op0();
     symbol_exprt value(new_tmp_symbol(operand.type()).id, operand.type());

@@ -98,6 +98,7 @@ class _Analysis:
         self.calls = []
         self.scopes = {}
         self.defs = {}
+        self.methods = {}
         self.kinds = {}
         self.imports = {}
         self.kind_stack = set()
@@ -150,8 +151,8 @@ class _Analysis:
             if isinstance(sub, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 self.defs.setdefault(self._binding_scope(sub.name, scope), []).append(sub)
                 self._collect_scopes(sub, scope, path)
-            elif isinstance(sub, ast.Lambda):
-                self._collect_scopes(sub, scope, path)
+            elif isinstance(sub, (ast.Lambda, ast.ClassDef)):
+                self._collect_nested(sub, scope, path)
             elif path is None:
                 continue
             elif isinstance(sub, ast.ImportFrom) and sub.level == 0 and self._local_module(
@@ -164,6 +165,17 @@ class _Analysis:
                     root = alias.name.split(".")[0]
                     imports[alias.asname or root] = alias.name if alias.asname else root
         return scope
+
+    def _collect_nested(self, node, scope, path):
+        """Record the scope of a lambda, or those of the undecorated methods of a
+        class, which a call finds by name."""
+        if isinstance(node, ast.Lambda):
+            self._collect_scopes(node, scope, path)
+            return
+        for member in node.body:
+            if isinstance(member, ast.FunctionDef) and not member.decorator_list:
+                self.methods.setdefault(member.name, []).append(member)
+                self._collect_scopes(member, scope, path)
 
     def _local_module(self, dotted):
         """The source file of a module next to the program, or None."""
@@ -287,6 +299,12 @@ class _Analysis:
         return key
 
     def call(self, expr, scope):
+        """Record a call of a method by its name or of a function value."""
+        if isinstance(expr.func, ast.Attribute) and expr.func.attr in self.methods:
+            return self.method_call(expr, scope)
+        return self.function_call(expr, scope)
+
+    def function_call(self, expr, scope):
         """Record a call, linking a direct call's arguments to the callee's parameters."""
         self.seen_calls.add(id(expr))
         if self._path_of(scope) != self.path:
@@ -316,6 +334,18 @@ class _Analysis:
         result = ("call", id(expr))
         self.calls.append((expr, callee, args, keywords, result))
         return result
+
+    def method_call(self, expr, scope):
+        """Record a call of a method by its name: the result is what each method
+        of that name returns. Arguments are not followed into the parameters,
+        which the converter types per call."""
+        self.seen_calls.add(id(expr))
+        if self._path_of(scope) != self.path:
+            self.imported_calls.add(id(expr))
+        fns = self.methods[expr.func.attr]
+        for fn in fns:
+            self.union(self.result_key(fns[0]), self.result_key(fn))
+        return self.result_key(fns[0])
 
     def _rebound(self, name, scope):
         """Whether `name` is bound other than by its def."""
