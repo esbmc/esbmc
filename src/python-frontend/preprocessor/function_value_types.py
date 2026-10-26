@@ -90,7 +90,8 @@ def _own_nodes(node):
 class _Analysis:
     """The groups of values that function values flow through in one module."""
 
-    def __init__(self, module, path):
+    def __init__(self, module, path, dicts=False):
+        self.dicts = dicts
         self.dir = os.path.dirname(os.path.abspath(path)) if path else ""
         self.path = path
         self.parent = {}
@@ -264,11 +265,8 @@ class _Analysis:
             orelse = self.value(expr.orelse, scope)
             self.union(body, orelse)
             return body or orelse
-        if isinstance(expr, (ast.List, ast.Tuple, ast.Set)):
-            key = ("elements", id(expr))
-            for elt in expr.elts:
-                self.union(key, self.value(elt, scope))
-            return key
+        if isinstance(expr, (ast.List, ast.Tuple, ast.Set, ast.Dict)):
+            return self.elements(expr, scope)
         if isinstance(expr, ast.Subscript):
             return self.value(expr.value, scope)
         if isinstance(expr, ast.Attribute):
@@ -276,6 +274,15 @@ class _Analysis:
         if isinstance(expr, ast.Call):
             return self.call(expr, scope)
         return None
+
+    def elements(self, expr, scope):
+        """The key of the values a list, tuple, set or (when asked for) dict literal holds."""
+        if isinstance(expr, ast.Dict) and not self.dicts:
+            return None
+        key = ("elements", id(expr))
+        for item in expr.values if isinstance(expr, ast.Dict) else expr.elts:
+            self.union(key, self.value(item, scope))
+        return key
 
     def imported_value(self, expr, scope):
         """The key of `module.function`, for a module imported by its path."""
@@ -316,6 +323,7 @@ class _Analysis:
                     self.link_call(fn, expr, scope)
                     self.union(self.result_key(callees[0]), self.result_key(fn))
                 return self.result_key(callees[0])
+        self.link_stored(expr, scope)
         callee = self.value(expr.func, scope)
         args = [self.value(arg, scope) for arg in expr.args]
         keywords = {kw.arg: self.value(kw.value, scope) for kw in expr.keywords if kw.arg}
@@ -355,6 +363,13 @@ class _Analysis:
                 isinstance(node, ast.Name) and node.id == name and isinstance(node.ctx, ast.Store)
                 for node in _own_nodes(self.scopes[key[0]].node))
         return self.rebound[key]
+
+    def link_stored(self, call, scope):
+        """Merge what `d.update(x)` or `d.setdefault(k, x)` stores into the group of `d`."""
+        if self.dicts and isinstance(call.func,
+                                     ast.Attribute) and call.func.attr in ("update", "setdefault"):
+            for arg in call.args[-1:]:
+                self.union(self.value(call.func.value, scope), self.value(arg, scope))
 
     def link_call(self, fn, call, scope):
         args = [self.value(arg, scope) for arg in call.args]
@@ -398,6 +413,8 @@ class _Analysis:
     def _bind(self, target, value, value_node, scope):
         if isinstance(target, ast.Name):
             self.union(self.name_key(target.id, scope), value)
+        elif self.dicts and isinstance(target, ast.Subscript):
+            self.union(self.value(target.value, scope), value)
         elif isinstance(target, (ast.Tuple, ast.List)):
             if isinstance(value_node,
                           (ast.Tuple, ast.List)) and len(value_node.elts) == len(target.elts):
