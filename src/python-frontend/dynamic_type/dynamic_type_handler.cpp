@@ -317,7 +317,7 @@ bool lists_name(const nlohmann::json &node, const std::string &name)
 
 // `node` binds `name` by assignment, parameter, def, class, import, pattern,
 // `global`, `nonlocal`, `except`, `del` or any other target.
-bool binds_name(const nlohmann::json &node, const std::string &name)
+bool binds_name_at(const nlohmann::json &node, const std::string &name)
 {
   const std::string type = node.value("_type", "");
   if (type == "Name")
@@ -332,7 +332,7 @@ size_t count_bindings(const nlohmann::json &node, const std::string &name)
 {
   if (!node.is_structured())
     return 0;
-  size_t count = node.is_object() && binds_name(node, name);
+  size_t count = node.is_object() && binds_name_at(node, name);
   for (const auto &child : node)
     count += count_bindings(child, name);
   return count;
@@ -465,9 +465,9 @@ bool calls_dynamic_function(
          returns_dynamic_value(*callee, module_body, depth + 1);
 }
 
-// `node` binds `name`: as a parameter, a def, class, import or except alias,
-// or a Name stored or deleted.
-bool binds_name_within(const nlohmann::json &node, const std::string &name)
+// `node` or a node under it binds `name`: as a parameter, a def, class, import
+// or except alias, or a Name stored or deleted.
+bool subtree_binds_name(const nlohmann::json &node, const std::string &name)
 {
   if (!node.is_structured())
     return false;
@@ -488,7 +488,7 @@ bool binds_name_within(const nlohmann::json &node, const std::string &name)
       return true;
   }
   for (const auto &child : node)
-    if (binds_name_within(child, name))
+    if (subtree_binds_name(child, name))
       return true;
   return false;
 }
@@ -528,8 +528,8 @@ bool returns_divergent_name(
          dynamic_type_detail::scope_assigns_divergent_literal_types(
            name, module_body, module_body) &&
          is_module_level_def(function_node, module_body) &&
-         !binds_name_within(function_node["args"], name) &&
-         !binds_name_within(function_node["body"], name);
+         !subtree_binds_name(function_node["args"], name) &&
+         !subtree_binds_name(function_node["body"], name);
 }
 
 // True when `function_node` returns divergent literal kinds, or forwards the
