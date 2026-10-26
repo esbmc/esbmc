@@ -327,6 +327,73 @@ bool calls_dynamic_function(
          returns_dynamic_value(*callee, module_body, depth + 1);
 }
 
+// `node` binds `name`: as a parameter, a def, class, import or except alias,
+// or a Name stored or deleted.
+bool binds_name(const nlohmann::json &node, const std::string &name)
+{
+  if (!node.is_structured())
+    return false;
+  if (node.is_object())
+  {
+    const std::string type = node.value("_type", "");
+    if (type == "Name")
+      return node.value("id", "") == name &&
+             node.value("ctx", nlohmann::json::object()).value("_type", "") !=
+               "Load";
+    const char *key =
+      type == "arg" ? "arg"
+      : type == "alias" && node.value("asname", nlohmann::json()).is_string()
+        ? "asname"
+        : "name";
+    const nlohmann::json bound = node.value(key, nlohmann::json());
+    if (bound.is_string() && bound == name)
+      return true;
+  }
+  for (const auto &child : node)
+    if (binds_name(child, name))
+      return true;
+  return false;
+}
+
+// `function_node` sits directly in the module body or in the body of a
+// module-level class, so a name it never binds is the module-level one.
+bool is_module_level_def(
+  const nlohmann::json &function_node,
+  const nlohmann::json &module_body)
+{
+  for (const auto &stmt : module_body)
+  {
+    if (&stmt == &function_node)
+      return true;
+    if (stmt.value("_type", "") == "ClassDef")
+      for (const auto &member : stmt["body"])
+        if (&member == &function_node)
+          return true;
+  }
+  return false;
+}
+
+// `name`, returned by `function_node`, is bound to divergent kinds by the
+// function itself (`scope_body`, its body behind its parameters) or, when the
+// function is module-level and never binds it, by the module body (#9156).
+bool returns_divergent_name(
+  const std::string &name,
+  const nlohmann::json &function_node,
+  const nlohmann::json &scope_body,
+  const nlohmann::json &module_body)
+{
+  if (
+    dynamic_type_detail::scope_assigns_divergent_literal_types(
+      name, scope_body, module_body))
+    return true;
+  return !name.empty() &&
+         dynamic_type_detail::scope_assigns_divergent_literal_types(
+           name, module_body, module_body) &&
+         is_module_level_def(function_node, module_body) &&
+         !binds_name(function_node["args"], name) &&
+         !binds_name(function_node["body"], name);
+}
+
 // True when `function_node` returns divergent literal kinds, or forwards the
 // result of a function that does, directly or through a local (#8890).
 bool returns_dynamic_value(
@@ -352,10 +419,9 @@ bool returns_dynamic_value(
     const nlohmann::json &value = stmt["value"];
     const std::string returned = value.is_object() ? value.value("id", "") : "";
     if (
-      type == "Return" &&
-      (forwarded.count(returned) ||
-       dynamic_type_detail::scope_assigns_divergent_literal_types(
-         returned, scope_body, module_body)))
+      type == "Return" && (forwarded.count(returned) ||
+                           returns_divergent_name(
+                             returned, function_node, scope_body, module_body)))
       return true;
     if (!calls_dynamic_function(value, function_node, module_body, depth))
       continue;
@@ -1288,6 +1354,131 @@ exprt dynamic_type_handler::build_tagged_value(
     target_block.copy_to_operands(instr);
 
   return build_symbol(tag_symbol);
+}
+
+exprt dynamic_type_handler::build_numeric_conversion(
+  const exprt &tagged,
+  const typet &result_type,
+  const locationt &location)
+{
+  const bool to_float = result_type.is_floatbv();
+  const typet int_t = signedbv_typet(config.ansi_c.long_long_int_width);
+
+  // Built as a statement expression, so the operand, the ValueError and the
+  // parse run where Python evaluates the call: once, and only when reached
+  // (an and/or tail, a while test, a lambda body).
+  code_blockt block;
+  auto declare = [&](const std::string &name, const typet &type) {
+    symbolt &sym = converter_.create_tmp_symbol(location, name, type, exprt());
+    code_declt decl(build_symbol(sym));
+    decl.location() = location;
+    block.copy_to_operands(decl);
+    return build_symbol(sym);
+  };
+  auto assign = [&](const exprt &lhs, const exprt &rhs) {
+    code_assignt code(lhs, rhs);
+    code.location() = location;
+    return code;
+  };
+
+  exprt object = declare("$numeric_operand$", tagged.type());
+  block.copy_to_operands(assign(object, tagged));
+  exprt result = declare("$numeric_conversion$", result_type);
+
+  exprt type_id = build_member(object, "type_id", size_type());
+  exprt value = build_member(object, "value", pointer_typet(empty_typet()));
+
+  // The parse runs only on the str path: the models read a NUL-terminated
+  // string, which the bytes of an int or a float are not.
+  const symbolt *is_valid = converter_.symbol_table().find_symbol(
+    to_float ? "c:@F@__python_str_is_float" : "c:@F@__python_str_is_int");
+  const symbolt *parse = converter_.symbol_table().find_symbol(
+    to_float ? "c:@F@__python_str_to_float" : "c:@F@__python_int");
+  if (!is_valid || !parse)
+    throw std::runtime_error("str conversion models not in symbol table");
+
+  std::vector<exprt> parse_args{
+    build_typecast(value, pointer_typet(char_type()))};
+  if (!to_float)
+    parse_args.push_back(from_integer(10, int_type()));
+
+  auto raise_if = [&](
+                    code_blockt &target,
+                    const exprt &cond,
+                    const std::string &exception,
+                    const std::string &message) {
+    code_ifthenelset guard;
+    guard.cond() = cond;
+    guard.then_case() =
+      code_expressiont(converter_.get_exception_handler().gen_exception_raise(
+        exception, message));
+    guard.location() = location;
+    guard.location().property("skipped");
+    target.copy_to_operands(guard);
+  };
+
+  code_blockt from_str;
+  raise_if(
+    from_str,
+    build_not(build_call_expr(*is_valid, bool_type(), parse_args)),
+    "ValueError",
+    to_float ? "could not convert string to float"
+             : "invalid literal for int()");
+  from_str.copy_to_operands(
+    assign(result, build_call_expr(*parse, result_type, parse_args)));
+
+  // A bool is stored as an int (build_tag_field_assigns).
+  exprt is_float =
+    build_equal(type_id, type_handler_.tagged_scalar_type_id(double_type()));
+  // A float payload is read through its bits: a double-typed read of a
+  // pointer that may also target a str payload's bytes trips the solvers.
+  exprt as_int =
+    build_dereference(build_typecast(value, pointer_typet(int_t)), int_t);
+  expr2tc int2;
+  migrate_expr(as_int, int2);
+  exprt as_float =
+    migrate_expr_back(bitcast2tc(migrate_type(double_type()), int2));
+
+  code_blockt from_number;
+  if (to_float)
+    from_number.copy_to_operands(assign(
+      result,
+      build_if(is_float, as_float, build_typecast(as_int, result_type))));
+  else
+  {
+    expr2tc float2;
+    migrate_expr(as_float, float2);
+    raise_if(
+      from_number,
+      build_and(is_float, migrate_expr_back(isinf2tc(float2))),
+      "OverflowError",
+      "cannot convert float infinity to integer");
+    raise_if(
+      from_number,
+      build_and(is_float, migrate_expr_back(isnan2tc(float2))),
+      "ValueError",
+      "cannot convert float NaN to integer");
+    from_number.copy_to_operands(assign(
+      result,
+      build_if(is_float, build_typecast(as_float, result_type), as_int)));
+  }
+
+  code_ifthenelset dispatch;
+  dispatch.cond() = build_equal(
+    type_id, type_handler_.tagged_scalar_type_id(pointer_typet(char_type())));
+  dispatch.then_case() = from_str;
+  dispatch.else_case() = from_number;
+  dispatch.location() = location;
+  block.copy_to_operands(dispatch);
+
+  code_expressiont value_of(result);
+  value_of.location() = location;
+  block.copy_to_operands(value_of);
+
+  side_effect_exprt conversion("statement_expression", result_type);
+  conversion.copy_to_operands(block);
+  conversion.location() = location;
+  return conversion;
 }
 
 void dynamic_type_handler::refuse_float_tag_operation(

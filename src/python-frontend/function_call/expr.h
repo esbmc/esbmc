@@ -461,6 +461,11 @@ private:
   /// holds None; returns the operand to convert.
   exprt guard_none_to_float(exprt operand) const;
 
+  /// float(@p operand) for a non-float operand; a tagged str-or-number
+  /// converts by its runtime tag.
+  exprt
+  build_float_conversion(const exprt &operand, const typet &float_type) const;
+
   /*
    * Handles int-to-float conversions (e.g., float(3)) by generating
    * the appropriate cast expression.

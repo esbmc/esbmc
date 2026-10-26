@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^  assertion __builtin_constant_p\(h\(\)\)$
+^VERIFICATION FAILED$

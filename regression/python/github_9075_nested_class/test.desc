@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: __name__ of a class not known statically
