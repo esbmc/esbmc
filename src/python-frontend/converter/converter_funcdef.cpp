@@ -4211,8 +4211,46 @@ static bool any_return_unsafe_for_tagged_param(
   return false;
 }
 
+// `C.__init__` plus the same name for every module class that reaches it
+// through bases and defines no `__init__` of its own, which a call to that
+// class runs.
+static std::vector<std::string> constructor_callees(
+  const nlohmann::json &module_body,
+  const std::string &callee)
+{
+  std::vector<std::string> callees = {callee};
+  const std::string suffix = ".__init__";
+  if (
+    callee.size() <= suffix.size() ||
+    callee.compare(callee.size() - suffix.size(), suffix.size(), suffix) != 0)
+    return callees;
+  std::set<std::string> reached = {
+    callee.substr(0, callee.size() - suffix.size())};
+  for (bool grew = true; grew;)
+  {
+    grew = false;
+    for (const auto &stmt : module_body)
+    {
+      const std::string name = stmt.value("name", "");
+      if (
+        stmt.value("_type", "") != "ClassDef" || reached.count(name) ||
+        find_method_def(module_body, name, "__init__") != nullptr)
+        continue;
+      for (const auto &base : stmt["bases"])
+        if (base.value("_type", "") == "Name" && reached.count(base["id"]))
+        {
+          reached.insert(name);
+          callees.push_back(name + suffix);
+          grew = true;
+          break;
+        }
+    }
+  }
+  return callees;
+}
+
 bool python_converter::try_infer_dynamic_param_type(
-  const std::string &func_name,
+  const std::string &callee,
   const std::string &param_name,
   size_t param_index) const
 {
@@ -4220,7 +4258,7 @@ bool python_converter::try_infer_dynamic_param_type(
 
   // Refuse when tagging this param could leak into an already-fixed
   // return type (e.g. `return v + v`).
-  const nlohmann::json *func_def = find_function_def(module_body, func_name);
+  const nlohmann::json *func_def = find_callee_def(module_body, callee);
   if (
     func_def != nullptr && func_def->contains("body") &&
     any_return_unsafe_for_tagged_param((*func_def)["body"], param_name))
@@ -4249,27 +4287,14 @@ bool python_converter::try_infer_dynamic_param_type(
                value_node.value("id", ""), *scope_body, callables);
     };
 
-  for (const numpy_param_call_site &site : call_sites)
-  {
-    const nlohmann::json &call = *site.call;
-    if (
-      call.value("func", nlohmann::json::object()).value("_type", "") !=
-        "Name" ||
-      call["func"].value("id", "") != func_name)
-      continue;
-
-    if (
-      call.contains("args") && call["args"].size() > param_index &&
-      diverges_at_site(call["args"][param_index], site))
-      return true;
-
-    if (call.contains("keywords") && call["keywords"].is_array())
-      for (const auto &kw : call["keywords"])
-        if (
-          kw.value("arg", "") == param_name && kw.contains("value") &&
-          diverges_at_site(kw["value"], site))
-          return true;
-  }
+  for (const std::string &name : constructor_callees(module_body, callee))
+    for (const numpy_param_call_site &site : call_sites)
+    {
+      const nlohmann::json *arg =
+        call_site_argument(*site.call, module_body, name, param_index);
+      if (arg != nullptr && diverges_at_site(*arg, site))
+        return true;
+    }
   return false;
 }
 
@@ -4803,8 +4828,7 @@ size_t python_converter::register_function_argument(
   if (
     !numpy_array_param && arg_name != "self" && arg_name != "cls" &&
     arg_type == any_type() &&
-    try_infer_dynamic_param_type(
-      id.get_function(), arg_name, type.arguments().size()))
+    try_infer_dynamic_param_type(callee, arg_name, type.arguments().size()))
   {
     arg_type = type_handler_.get_tagged_object_type();
   }

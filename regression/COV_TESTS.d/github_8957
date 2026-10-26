@@ -1,3 +1,10 @@
 regression/python/github_8957
 regression/python/github_8957_fail
 regression/python/github_8957_read_refused
+regression/python/github_8957_arg
+regression/python/github_8957_arg_fail
+regression/python/github_8957_list
+regression/python/github_8957_nondet
+regression/python/github_8957_rebound
+regression/python/github_8957_self
+regression/python/github_8957_method_return
