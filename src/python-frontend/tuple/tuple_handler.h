@@ -170,9 +170,12 @@ private:
   /// Index of the Starred node in @p targets, or targets.size() if none.
   size_t starred_target_index(const nlohmann::json &targets) const;
 
-  /// The symbol a Name unpacking target denotes, created with @p type if new.
-  symbolt &
-  unpack_target_symbol(const nlohmann::json &name_node, const typet &type);
+  /// The symbol a Name unpacking target denotes, created with @p type if new
+  /// and then declared in @p target_block when it is a function local.
+  symbolt &unpack_target_symbol(
+    const nlohmann::json &name_node,
+    const typet &type,
+    codet &target_block);
 
   typet unpack_target_type(const exprt &rhs, const typet &member_type) const;
 
