@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: unsupported: parameter 'x' of imported 'func' is passed values of different types \(float, int\)$

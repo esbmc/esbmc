@@ -23,7 +23,8 @@ using dynamic_type_detail::collect_branch_literal_kinds;
 using param_kinds_t = std::unordered_map<std::string, std::string>;
 
 // Kinds of the parameters annotated (or inferred from call sites) as int,
-// bool or str, so `return x` counts like a literal of that kind (#8523).
+// bool, float or str, so `return x` counts like a literal of that kind
+// (#8523).
 param_kinds_t collect_param_kinds(const nlohmann::json &function_node)
 {
   param_kinds_t kinds;
@@ -35,8 +36,8 @@ param_kinds_t collect_param_kinds(const nlohmann::json &function_node)
     const std::string type = ann.is_object() ? ann.value("id", "") : "";
     if (type == "int" || type == "bool")
       kinds[arg["arg"].get<std::string>()] = "num";
-    else if (type == "str")
-      kinds[arg["arg"].get<std::string>()] = "str";
+    else if (type == "str" || type == "float")
+      kinds[arg["arg"].get<std::string>()] = type;
   }
   return kinds;
 }
@@ -52,7 +53,10 @@ nlohmann::json body_with_param_kinds(const nlohmann::json &function_node)
        {"targets", {{{"_type", "Name"}, {"id", name}}}},
        {"value",
         {{"_type", "Constant"},
-         {"value", kind == "str" ? nlohmann::json("") : nlohmann::json(0)}}}});
+         {"value",
+          kind == "str"     ? nlohmann::json("")
+          : kind == "float" ? nlohmann::json(0.0)
+                            : nlohmann::json(0)}}}});
   for (const auto &stmt : function_node["body"])
     body.push_back(stmt);
   return body;
