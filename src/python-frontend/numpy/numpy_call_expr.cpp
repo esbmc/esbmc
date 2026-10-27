@@ -1,4 +1,5 @@
 #include <python-frontend/json_utils.h>
+#include <python-frontend/math/bounded_math.h>
 #include <python-frontend/numpy/ndarray_shape.h>
 #include <python-frontend/numpy/numpy_call_expr.h>
 #include <python-frontend/numpy/numpy_nditer.h>
@@ -2135,44 +2136,13 @@ static bool is_supported_numpy_unary_math(const std::string &function)
 
 static double apply_numpy_unary_math(const std::string &function, double value)
 {
-  if (function == "sin")
-    return std::sin(value);
-  if (function == "cos")
-    return std::cos(value);
-  if (function == "exp")
-    return std::exp(value);
-  if (function == "sqrt")
-    return std::sqrt(value);
-  if (function == "arctan")
-    return std::atan(value);
   if (function == "floor")
     return std::floor(value);
   if (function == "fabs")
     return std::fabs(value);
   if (function == "trunc")
     return std::trunc(value);
-  if (function == "arccos")
-    return std::acos(value);
-  if (function == "arcsin")
-    return std::asin(value);
-  if (function == "tan")
-    return std::tan(value);
-  if (function == "log")
-    return std::log(value);
-  if (function == "log2")
-    return std::log2(value);
-  if (function == "log10")
-    return std::log10(value);
-  if (function == "sinh")
-    return std::sinh(value);
-  if (function == "cosh")
-    return std::cosh(value);
-  if (function == "tanh")
-    return std::tanh(value);
-  if (function == "rint")
-    return std::rint(value);
-
-  throw std::runtime_error("Unsupported Numpy unary function: " + function);
+  return bounded_math::host_value(function, value);
 }
 
 static bool should_fallback_to_numpy_model(const std::string &function)
@@ -4726,6 +4696,8 @@ numpy_call_expr::try_early_result(const std::string &function)
 {
   static const std::set<std::string> model_only = {
     "remainder", "nextafter", "isclose"};
+  if (std::optional<exprt> math = try_runtime_math(function))
+    return math;
   if (!model_only.count(function))
     return try_any_all_result(function);
   for (const nlohmann::json &arg : call_["args"])
@@ -5723,29 +5695,163 @@ exprt numpy_call_expr::singular_values(
 
 // NumPy evaluates these with its own vectorised code where the CPU has it
 // (SVML on AVX-512 is tested to 4 ulps of the exact value, tanh differs from
-// glibc by 2 ulps even without it): the result is any double within 8 ulps
-// of the C library's, except where every implementation is
-// exact (a correctly rounded square root, an odd function at a signed zero,
-// exp(0), log(1), or log2 of a power of two).
+// glibc by 2 ulps even without it), so the bound is wider than libm's.
 exprt numpy_call_expr::numpy_math_value(const std::string &function, double x)
 {
-  static const std::set<std::string> odd = {
-    "sin", "tan", "arctan", "arcsin", "sinh", "tanh"};
-  static const std::set<std::string> one_at_zero = {"exp", "cos", "cosh"};
-  static const std::set<std::string> zero_at_one = {
-    "log", "log2", "log10", "arccos"};
-  const double value = apply_numpy_unary_math(function, x);
-  int exponent = 0;
-  const bool power_of_two = x > 0 && std::frexp(x, &exponent) == 0.5;
-  const bool exact =
-    function == "sqrt" || function == "rint" || !std::isfinite(value) ||
-    (x == 0.0 &&
-     (odd.count(function) != 0 || one_at_zero.count(function) != 0)) ||
-    (x == 1.0 && zero_at_one.count(function) != 0) ||
-    (function == "log2" && power_of_two);
-  const double ulp =
-    std::nextafter(std::fabs(value), INFINITY) - std::fabs(value);
-  return lapack_value(value, exact ? 0.0 : 8 * ulp);
+  return bounded_math(converter_, call_).literal(function, x);
+}
+
+// `out=None` and `dtype=float` leave a scalar ufunc's result unchanged.
+static bool only_noop_ufunc_keywords(const nlohmann::json &call)
+{
+  for (const auto &kw : call.value("keywords", nlohmann::json::array()))
+  {
+    const std::string arg = kw.value("arg", "");
+    const nlohmann::json &value = kw["value"];
+    const bool none = value.value("_type", "") == "Constant" &&
+                      value.contains("value") && value["value"].is_null();
+    const bool float64 =
+      value.value("id", "") == "float" || value.value("attr", "") == "float64";
+    if (!(arg == "out" && none) && !(arg == "dtype" && float64))
+      return false;
+  }
+  return true;
+}
+
+static bool is_number_type(const typet &t)
+{
+  return t.is_floatbv() || t.is_signedbv() || t.is_unsignedbv() || t.is_bool();
+}
+
+static const typet &array_leaf_type(const typet &t)
+{
+  return t.is_array() ? array_leaf_type(t.subtype()) : t;
+}
+
+// The shape of @p t with double elements.
+static typet double_shaped(const typet &t)
+{
+  if (!t.is_array())
+    return double_type();
+  return array_typet(double_shaped(t.subtype()), to_array_type(t).size());
+}
+
+// `np.exp(x)` of a number or a numeric array known only at run time.
+std::optional<exprt>
+numpy_call_expr::try_runtime_math(const std::string &function)
+{
+  if (
+    !bounded_math::has_runtime_model(function) || call_["args"].size() != 1 ||
+    !only_noop_ufunc_keywords(call_))
+    return std::nullopt;
+  const nlohmann::json &arg = call_["args"][0];
+  const std::string type = arg.value("_type", "");
+  numeric_value constant;
+  if (
+    type == "List" || type == "Tuple" ||
+    try_extract_numeric_constant(arg, constant))
+    return std::nullopt;
+  // Converting a view operand with current_lhs set would retype the target.
+  exprt *lhs = converter_.current_lhs;
+  converter_.current_lhs = nullptr;
+  const exprt operand = converter_.get_expr(arg);
+  converter_.current_lhs = lhs;
+  const exprt x = copy_of_view(function, operand).value_or(operand);
+  reject_non_numeric_elements(function, x.type());
+  if (is_number_type(array_leaf_type(x.type())))
+  {
+    const exprt result = runtime_math_array(function, bind_array_once(x));
+    if (result.type().is_array() && converter_.current_lhs)
+    {
+      converter_.current_lhs->type() = result.type();
+      converter_.update_symbol(*converter_.current_lhs);
+    }
+    return result;
+  }
+  if (json_utils::ast_contains_call(arg))
+    throw std::runtime_error(
+      "TypeError: numpy." + function +
+      " of a call that does not return a number is not supported");
+  return std::nullopt;
+}
+
+// The elements of a view with constant axes, in row-major order.
+std::optional<exprt>
+numpy_call_expr::copy_of_view(const std::string &function, const exprt &operand)
+{
+  if (!operand.type().is_pointer())
+    return std::nullopt;
+  python_list list(converter_, call_);
+  const std::optional<python_list::strided_view_desc> view =
+    list.describe_strided_view(operand);
+  if (!view)
+    return std::nullopt;
+  if (axes_are_symbolic(view->axes))
+    throw std::runtime_error(
+      "TypeError: numpy." + function +
+      " of a view whose shape is known only at run time is not supported");
+  return list.copy_strided_view(
+    *view, from_integer(0, size_type()), view->axes);
+}
+
+void numpy_call_expr::reject_non_numeric_elements(
+  const std::string &function,
+  const typet &type)
+{
+  const typet &leaf = array_leaf_type(type);
+  if (type.is_array() && leaf == char_type())
+    throw std::runtime_error(
+      "TypeError: numpy." + function + " of a string array is not supported");
+  if (is_complex_type(leaf))
+    throw std::runtime_error(
+      "TypeError: numpy." + function + " of a complex " +
+      (type.is_array() ? "array" : "number") + " is not supported");
+}
+
+exprt numpy_call_expr::bind_array_once(const exprt &array)
+{
+  if (!array.type().is_array() || array.is_symbol())
+    return array;
+  symbolt &tmp =
+    converter_.create_tmp_symbol(call_, "$math_array$", array.type(), exprt());
+  const exprt symbol = symbol_expr(tmp);
+  code_declt decl(symbol);
+  decl.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(decl);
+  if (array.id() == "code" && array.get("statement") == "function_call")
+  {
+    code_function_callt call = to_code_function_call(to_code(array));
+    call.lhs() = symbol;
+    converter_.add_instruction(call);
+  }
+  else
+  {
+    code_assignt assign(symbol, array);
+    assign.location() = decl.location();
+    converter_.add_instruction(assign);
+  }
+  return symbol;
+}
+
+// The function of each element of a number or of a numeric array of
+// concrete shape, read as a number known only at run time.
+exprt numpy_call_expr::runtime_math_array(
+  const std::string &function,
+  const exprt &value)
+{
+  const typet &type = value.type();
+  if (!type.is_array())
+    return bounded_math(converter_, call_)
+      .runtime(function, value, math_module::numpy);
+  const int size = type_handler_.get_array_type_shape(type).front();
+  exprt result(
+    "array",
+    array_typet(
+      double_shaped(type.subtype()), from_integer(size, size_type())));
+  for (int i = 0; i < size; ++i)
+    result.copy_to_operands(runtime_math_array(
+      function, np_index(value, from_integer(i, size_type()), type.subtype())));
+  return result;
 }
 
 // `np.exp(0.3)`, `np.sin(-1.0)`: a numeric literal argument.
@@ -7019,8 +7125,7 @@ exprt numpy_call_expr::create_expr_from_call()
       {
         try
         {
-          exprt folded = fold_numpy_unary_constant_list(
-            converter_, operation, call_["args"][0]);
+          exprt folded = numpy_math_list(operation, call_["args"][0]);
           if (converter_.current_lhs)
           {
             converter_.current_lhs->type() = folded.type();
@@ -7242,8 +7347,7 @@ exprt numpy_call_expr::create_expr_from_call()
           {
             if (allow_numpy_fold)
             {
-              exprt folded =
-                fold_numpy_unary_constant_list(converter_, function, list_arg);
+              exprt folded = numpy_math_list(function, list_arg);
               if (converter_.current_lhs)
               {
                 converter_.current_lhs->type() = folded.type();
@@ -7349,8 +7453,7 @@ exprt numpy_call_expr::create_expr_from_call()
         {
           if (allow_numpy_fold)
           {
-            exprt folded =
-              fold_numpy_unary_constant_list(converter_, function, list_arg);
+            exprt folded = numpy_math_list(function, list_arg);
             if (converter_.current_lhs)
             {
               converter_.current_lhs->type() = folded.type();
@@ -10261,9 +10364,20 @@ exprt numpy_call_expr::scalar_binary_call(
   return unfolded_scalar_binary(function, lhs, rhs, t);
 }
 
+// NumPy 2's names for arcsin, arccos and arctan.
+const std::string &numpy_call_expr::canonical_function()
+{
+  static const std::map<std::string, std::string> aliases = {
+    {"asin", "arcsin"}, {"acos", "arccos"}, {"atan", "arctan"}};
+  auto alias = aliases.find(function_id_.get_function());
+  if (alias != aliases.end())
+    function_id_.set_function(alias->second);
+  return function_id_.get_function();
+}
+
 exprt numpy_call_expr::get()
 {
-  const std::string &function = function_id_.get_function();
+  const std::string &function = canonical_function();
   reject_complex_array_operands(function);
 
   if (std::optional<exprt> permuted = try_build_axis_permutation_view())

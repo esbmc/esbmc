@@ -661,6 +661,7 @@ private:
     const std::string &prefix,
     const std::function<void(const expr2tc &, const locationt &)> &emit_guards);
 
+  friend class bounded_math;
   friend class complex_handler;
   friend class function_call_expr;
   friend class numpy_call_expr;
@@ -724,6 +725,9 @@ private:
 
   void
   get_return_statements(const nlohmann::json &ast_node, codet &target_block);
+  void get_return_with_conditional_spelling(
+    const nlohmann::json &ast_node,
+    codet &target_block);
 
   void get_function_definition(const nlohmann::json &function_node);
 
@@ -873,6 +877,8 @@ private:
     const exprt &expr,
     const nlohmann::json &element,
     codet &target_block);
+
+  std::optional<typet> call_dict_value_type(const nlohmann::json &call);
 
   symbolt create_return_temp_variable(
     const typet &return_type,
@@ -2356,6 +2362,16 @@ private:
     const exprt &lhs,
     const exprt &rhs,
     const std::string &lhs_id) const;
+  std::string pointee_class(const typet &type) const;
+  void retype_for_class_rebind(
+    const nlohmann::json &target,
+    const nlohmann::json &ast_node,
+    bool is_ctor_call,
+    const symbol_id &sid,
+    const locationt &location,
+    symbolt *&lhs_symbol,
+    exprt &lhs,
+    codet &target_block);
   void
   reject_numpy_array_retype(const symbolt &symbol, const typet &type) const;
   bool needs_fresh_numpy_array_slot(
@@ -3288,6 +3304,26 @@ private:
   static std::string op_to_rdunder(const std::string &op);
   /// Rewrite @p cond into a call to its class's __bool__ when there is one.
   exprt apply_bool_dunder(exprt cond, const locationt &location);
+
+  /// `is` on a tagged value that folds to a constant; nil when it does not.
+  exprt fold_tagged_identity(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
+
+  /// Python truthiness of a tagged value, a call on its address.
+  exprt tagged_truthiness(exprt value, const nlohmann::json &node);
+
+  /// A unary operator on a tagged operand: `-` and `not` are modelled.
+  exprt handle_tagged_unary_operator(
+    const std::string &op,
+    const exprt &operand,
+    const nlohmann::json &element);
+
+  /// Throws on a tagged operand of an `and`/`or` whose value is used.
+  void refuse_tagged_boolop_operand(const exprt &operand) const;
 
   /// Rewrite a string @p str into `strlen(str) != 0`, its truthiness; any
   /// other value comes back unchanged.

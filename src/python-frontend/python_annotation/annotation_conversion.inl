@@ -1187,6 +1187,19 @@ std::string python_annotation<Json>::get_argument_type(const Json &arg)
     }
     return "bool";
   }
+  else if (arg["_type"] == "IfExp")
+  {
+    // Only literal arms: a name's inferred type can hide a run-time str.
+    const std::function<bool(const Json &)> is_literal = [&](const Json &e) {
+      const std::string kind = e.value("_type", "");
+      return kind == "Constant" ||
+             (kind == "IfExp" && is_literal(e["body"]) &&
+              is_literal(e["orelse"]));
+    };
+    const std::string body_type = get_argument_type(arg["body"]);
+    if (is_literal(arg) && body_type == get_argument_type(arg["orelse"]))
+      return body_type;
+  }
   else if (arg["_type"] == "Call")
     return get_call_type(arg);
   else if (arg["_type"] == "Attribute")
@@ -6237,8 +6250,28 @@ void python_annotation<Json>::infer_loop_variable_types(
   if (!while_stmt.contains("body"))
     return;
 
+  // The tuple the lowered loop variable holds, and its name. Shared by every
+  // lowered loop in a function, so its unpacking reads are typed here rather
+  // than through a function-wide declaration lookup.
+  std::string loop_var, loop_var_type;
   for (auto &stmt : while_stmt["body"])
   {
+    // `a = loop_var[i]`, which the preprocessor emits to unpack a tuple target
+    if (
+      !loop_var.empty() && stmt["_type"] == "Assign" &&
+      stmt["targets"].size() == 1 && stmt["targets"][0]["_type"] == "Name" &&
+      stmt["value"]["_type"] == "Subscript" &&
+      stmt["value"]["value"].value("id", "") == loop_var &&
+      stmt["value"]["slice"].value("_type", "") == "Constant" &&
+      stmt["value"]["slice"]["value"].is_number_unsigned())
+    {
+      const std::string type = unpacked_name_element_type(
+        loop_var_type, stmt["value"]["slice"]["value"].template get<size_t>());
+      if (type != "Any")
+        update_assignment_node(stmt, type);
+      continue;
+    }
+
     // Look for pattern: loop_var: Any = iterable[ESBMC_index_N]
     // A bare annotation like `x: int` has value == null; nlohmann::json's
     // `contains("value")` returns true for present-but-null members, so an
@@ -6308,6 +6341,12 @@ void python_annotation<Json>::infer_loop_variable_types(
           iter_annotation["id"].template get<std::string>();
         if (type_name == "str")
           stmt["annotation"] = iter_annotation;
+      }
+
+      if (stmt.value("esbmc_synthesized", false))
+      {
+        loop_var = stmt["target"].value("id", "");
+        loop_var_type = json_utils::render_annotation_type(stmt["annotation"]);
       }
     }
   }

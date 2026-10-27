@@ -158,6 +158,21 @@ exprt python_converter::build_emptiness_check(
   return nil_exprt();
 }
 
+exprt python_converter::handle_tagged_unary_operator(
+  const std::string &op,
+  const exprt &operand,
+  const nlohmann::json &element)
+{
+  if (op == "USub")
+    return dynamic_type_handler_.build_neg_tagged(
+      operand, get_location_from_decl(element));
+  if (op == "Not")
+    return not_exprt(tagged_truthiness(operand, element["operand"]));
+  throw std::runtime_error(
+    "operator '" + op +
+    "' on a dynamically-typed variable is not yet supported");
+}
+
 exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
 {
   typet type = current_element_type;
@@ -180,15 +195,8 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
 
   // A tagged operand needs runtime dispatch.
   if (type_handler_.is_tagged_scalar_type(unary_sub.type()))
-  {
-    std::string unary_op = element["op"]["_type"].get<std::string>();
-    if (unary_op == "USub")
-      return dynamic_type_handler_.build_neg_tagged(
-        unary_sub, get_location_from_decl(element));
-    throw std::runtime_error(
-      "operator '" + unary_op +
-      "' on a dynamically-typed variable is not yet supported");
-  }
+    return handle_tagged_unary_operator(
+      element["op"]["_type"].get<std::string>(), unary_sub, element);
 
   // A plain str has no unary minus; reaching the generic arithmetic builder
   // below asserts internally instead of raising.

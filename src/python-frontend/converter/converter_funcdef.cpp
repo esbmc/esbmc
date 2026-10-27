@@ -4117,12 +4117,15 @@ typet python_converter::named_return_type(
 }
 
 /// Whether the parameter takes the Any (void*) default: no annotation at all,
-/// or a bare `Callable`, which is worse than none.
+/// a class of a module with no model (#9204), or a bare `Callable`, which is
+/// worse than none.
 static bool parameter_defaults_to_any(const nlohmann::json &element)
 {
   if (!element.contains("annotation") || element["annotation"].is_null())
     return true;
-  return is_bare_callable_annotation(element["annotation"]);
+  const nlohmann::json &annotation = element["annotation"];
+  return annotation.value("unmodelled_class", false) ||
+         is_bare_callable_annotation(annotation);
 }
 
 void python_converter::track_numpy_param(

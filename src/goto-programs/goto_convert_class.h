@@ -337,6 +337,20 @@ protected:
     std::size_t stack_size,
     goto_programt &dest,
     destructor_stackt &stack);
+  /// Declares the locals @p stack holds past its first @p from entries: a jump
+  /// to where @p stack is live skips their declarations.
+  void declare_skipped_locals(
+    const destructor_stackt &stack,
+    std::size_t from,
+    const locationt &location,
+    goto_programt &dest);
+  /// Where a switch dispatch jumps to reach @p target: the target itself, or a
+  /// stub in @p stubs that first declares the locals the jump skips.
+  goto_programt::targett case_entry(
+    goto_programt::targett target,
+    std::size_t switch_stack_size,
+    const locationt &location,
+    goto_programt &stubs);
   /// A destructor call on the destructor stack, possibly guarded by
   /// guard_arm_destructors; the other entries are DEADs.
   static bool is_destructor_entry(const codet &entry);
@@ -381,6 +395,7 @@ protected:
   typedef exprt::operandst caset;
   typedef std::list<std::pair<goto_programt::targett, caset>> casest;
   typedef std::map<goto_programt::targett, casest::iterator> cases_mapt;
+  typedef std::map<goto_programt::targett, destructor_stackt> case_stackst;
 
   struct targetst
   {
@@ -394,6 +409,8 @@ protected:
 
     casest cases;
     cases_mapt cases_map;
+    /// The destructor stack at each case and default label
+    case_stackst case_stacks;
 
     goto_programt::targett return_target, break_target, continue_target,
       default_target, throw_target, leave_target;
@@ -502,6 +519,7 @@ protected:
       break_stack_size = targets.break_stack_size;
       cases = targets.cases;
       cases_map = targets.cases_map;
+      case_stacks = targets.case_stacks;
     }
 
     void restore(targetst &targets)
@@ -513,6 +531,7 @@ protected:
       targets.break_stack_size = break_stack_size;
       targets.cases = cases;
       targets.cases_map = cases_map;
+      targets.case_stacks = case_stacks;
     }
 
     goto_programt::targett break_target;
@@ -522,6 +541,7 @@ protected:
 
     casest cases;
     cases_mapt cases_map;
+    case_stackst case_stacks;
   };
 
   struct throw_targett

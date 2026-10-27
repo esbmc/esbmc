@@ -1492,7 +1492,8 @@ symbol_id function_call_builder::build_function_id() const
       // Look up variable type from symbol table instead of AST
       symbol_id var_sid(python_file, current_class_name, current_function_name);
       var_sid.set_object(obj_name);
-      symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
+      symbolt *var_symbol = converter_.follow_retype_alias(
+        converter_.find_symbol(var_sid.to_string()));
 
       if (!var_symbol)
       {

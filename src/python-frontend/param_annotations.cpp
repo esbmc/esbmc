@@ -90,6 +90,12 @@ std::string constant_type_name(const nlohmann::json &node)
   return "";
 }
 
+bool is_none_constant(const nlohmann::json &node)
+{
+  return is_node(node, "Constant") && node.contains("value") &&
+         node["value"].is_null();
+}
+
 /// The type a tuple element names: a constant's type, or the `int`, `float`
 /// or `str` annotation of a parameter of @p scope (the innermost enclosing
 /// def, or null) that the def never rebinds. "" otherwise.
@@ -679,7 +685,8 @@ private:
 };
 
 /// Python type name of a scalar argument that this pass can type without a
-/// symbol table: a literal, a negated numeric literal, or a nondet_<T>() call.
+/// symbol table: a literal, a negated numeric literal, or a nondet_<T>() call,
+/// plain or module-qualified.
 std::string literal_scalar_type(const nlohmann::json &node)
 {
   if (is_node(node, "Constant") && node["value"].is_boolean())
@@ -693,16 +700,14 @@ std::string literal_scalar_type(const nlohmann::json &node)
     return type == "int" || type == "float" ? type : "";
   }
 
-  if (
-    is_node(node, "Call") && is_node(node["func"], "Name") &&
-    node["args"].empty() && node["keywords"].empty())
+  if (is_node(node, "Call") && node["args"].empty() && node["keywords"].empty())
   {
     static const std::map<std::string, std::string> nondet = {
       {"nondet_int", "int"},
       {"nondet_float", "float"},
       {"nondet_bool", "bool"},
       {"nondet_str", "str"}};
-    const auto it = nondet.find(node["func"]["id"].get<std::string>());
+    const auto it = nondet.find(callee_name(node["func"]));
     return it == nondet.end() ? "" : it->second;
   }
 
@@ -967,6 +972,19 @@ private:
     return true;
   }
 
+  /// A None passed to parameter @p i whose default is None does not disagree
+  /// with the other call sites: the converter tracks the None of a `T = None`
+  /// parameter (#9263).
+  static bool passes_none_default(
+    const nlohmann::json &arg,
+    const nlohmann::json &defaults,
+    size_t i,
+    size_t required)
+  {
+    return i >= required && is_none_constant(arg) &&
+           is_none_constant(defaults[i - required]);
+  }
+
   void visit_call(const nlohmann::json &call, size_t caller)
   {
     const std::string name = callee_name(call["func"]);
@@ -999,17 +1017,20 @@ private:
     }
     // A parameter the call leaves out takes its default, typed in the
     // callee's module (#8968).
+    const nlohmann::json &defaults = (*def)["args"]["defaults"];
     for (size_t i = skipped; i < params.size(); ++i)
     {
       if (
         params[i].contains("annotation") && !params[i]["annotation"].is_null())
         continue;
       const bool passed = i - skipped < call["args"].size();
+      const nlohmann::json &arg =
+        passed ? call["args"][i - skipped] : defaults[i - required];
+      if (passes_none_default(arg, defaults, i, required))
+        continue;
       bind(
         param_key{target->module, target->key, i},
-        passed
-          ? arg_type(call["args"][i - skipped], caller)
-          : arg_type((*def)["args"]["defaults"][i - required], target->module),
+        arg_type(arg, passed ? caller : target->module),
         target->module != caller);
     }
   }

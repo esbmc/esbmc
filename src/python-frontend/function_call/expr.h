@@ -750,7 +750,11 @@ private:
   exprt handle_cmath_inverse_fast_path();
   // Real-valued math module functions (sin/cos/sqrt/exp/log/etc.).
   bool is_math_function_dispatch_call() const;
+  exprt dispatch_math_call();
   exprt handle_math_function_dispatch();
+  std::optional<std::string> bounded_math_import() const;
+  bool takes_bounded_math(const std::string &function) const;
+  std::optional<exprt> try_bounded_math_call(const std::string &func_name);
 
   // General function call handler
   exprt handle_general_function_call();
@@ -971,6 +975,17 @@ private:
   void refuse_unheld_attribute(
     const std::string &class_name,
     const std::string &attr) const;
+  /// Refuse `x.attr(...)` when @p attr is an untyped field no class in the MRO
+  /// of @p class_name binds: it is set on the instance, so the method lookup
+  /// a call falls back to would raise a false AttributeError (#9255).
+  void refuse_untyped_attribute(
+    const std::string &class_name,
+    const std::string &attr,
+    const typet &field_type) const;
+  /// Whether a class in the MRO of @p class_name may bind @p attr, or the MRO
+  /// is not known.
+  bool
+  mro_may_bind(const std::string &class_name, const std::string &attr) const;
   /// The functions field @p attr of @p class_name holds, when it is untyped
   /// and no class in its MRO binds @p attr too.
   const python_converter::attribute_functions *held_functions(
@@ -1037,6 +1052,9 @@ private:
     const symbolt &callee) const;
 
   typet dict_param_value_type(const symbolt *func, size_t idx) const;
+  bool is_size_builtin() const;
+  bool is_list_typed(const typet &type) const;
+  exprt build_dict_size_call(const exprt &dict);
   std::optional<exprt> build_positional_arguments(
     code_function_callt &call,
     size_t param_offset,
