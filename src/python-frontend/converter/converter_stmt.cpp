@@ -9176,6 +9176,44 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   const bool coverage_mode = is_coverage_mode();
   const bool pytest_generation_mode = is_pytest_generation_mode();
   const bool model_mode = is_model_file(ast_node["test"]);
+  // `__ESBMC_list_size(xs) != 0` for a list or a dict (sized by its keys),
+  // else \p value unchanged. The size query stays inside the condition so
+  // `while heap:` re-evaluates it every iteration.
+  auto size_truthiness = [&](const exprt &value, const locationt &location) {
+    typet list_type = type_handler_.get_list_type();
+    const bool is_dict = dict_handler_->is_dict_type(value.type());
+    if (
+      !is_dict && value.type() != list_type &&
+      !(value.type().is_pointer() && value.type().subtype() == list_type))
+      return value;
+
+    const symbolt *size_func =
+      symbol_table_.find_symbol("c:@F@__ESBMC_list_size");
+    if (!size_func)
+      throw std::runtime_error(
+        "__ESBMC_list_size not found for list condition check");
+
+    // The call is built directly in IREP2; it carries no IREP2 location, so
+    // the location is re-attached to the back-migrated operand below.
+    expr2tc size_arg2;
+    if (is_dict)
+    {
+      expr2tc dict2;
+      migrate_expr(value, dict2);
+      size_arg2 = member2tc(migrate_type(list_type), dict2, "keys");
+    }
+    else
+      migrate_expr(
+        value.type().is_pointer() ? value : address_of_exprt(value), size_arg2);
+    expr2tc size_call2 = side_effect_function_call2tc(
+      migrate_type(size_type()), symbol_expr2tc(*size_func), {size_arg2});
+    exprt cond = migrate_expr_back(
+      notequal2tc(size_call2, gen_zero(migrate_type(size_type()))));
+    cond.location() = location;
+    cond.op0().location() = location;
+    return cond;
+  };
+
   auto to_bool_condition =
     [&](const exprt &value_expr_in, const nlohmann::json &value_node) -> exprt {
     exprt value_expr = value_expr_in;
@@ -9210,36 +9248,10 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     if (value_expr.type().is_bool())
       return value_expr;
 
-    typet list_type = type_handler_.get_list_type();
-    if (
-      value_expr.type() == list_type ||
-      (value_expr.type().is_pointer() &&
-       value_expr.type().subtype() == list_type))
-    {
-      const symbolt *size_func =
-        symbol_table_.find_symbol("c:@F@__ESBMC_list_size");
-      if (!size_func)
-        throw std::runtime_error(
-          "__ESBMC_list_size not found for list condition check");
-
-      // V.3: build `__ESBMC_list_size(xs) != 0` in IREP2, back-migrating once
-      // (mirrors the list-condition path at converter_stmt.cpp:3216). The call
-      // is built directly in IREP2; it carries no IREP2 location, so the
-      // location is re-attached to the back-migrated operand below.
-      exprt size_arg = value_expr.type().is_pointer()
-                         ? value_expr
-                         : address_of_exprt(value_expr);
-      expr2tc size_arg2;
-      migrate_expr(size_arg, size_arg2);
-      expr2tc size_call2 = side_effect_function_call2tc(
-        migrate_type(size_type()), symbol_expr2tc(*size_func), {size_arg2});
-      exprt cond = migrate_expr_back(
-        notequal2tc(size_call2, gen_zero(migrate_type(size_type()))));
-      const locationt cond_loc = get_location_from_decl(value_node);
-      cond.location() = cond_loc;
-      cond.op0().location() = cond_loc;
-      return cond;
-    }
+    value_expr =
+      size_truthiness(value_expr, get_location_from_decl(value_node));
+    if (value_expr.type().is_bool())
+      return value_expr;
 
     if (type_handler_.is_tagged_scalar_type(value_expr.type()))
       return tagged_truthiness(value_expr, value_node);
@@ -9401,37 +9413,10 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       // Objects in conditions are converted with __bool__() when available.
       cond = apply_bool_dunder(cond, location);
 
-      typet list_type = type_handler_.get_list_type();
-      // Python treats lists in conditions by their size, for example:
-      // `1 if xs else 0`.
-      if (
-        current_block &&
-        (cond.type() == list_type ||
-         (cond.type().is_pointer() && cond.type().subtype() == list_type)))
-      {
-        const symbolt *size_func =
-          symbol_table_.find_symbol("c:@F@__ESBMC_list_size");
-        if (!size_func)
-          throw std::runtime_error(
-            "__ESBMC_list_size not found for list condition check");
-
-        // Keep the size query inside the condition expression so constructs
-        // like `while heap:` re-evaluate the current list size every iteration.
-        // V.3: build `__ESBMC_list_size(xs) != 0` in IREP2, back-migrating
-        // once (mirrors the list-condition path at converter_binop.cpp:208).
-        // The call is built directly in IREP2; it carries no IREP2 location,
-        // so the location is re-attached to the back-migrated operand below.
-        exprt size_arg =
-          cond.type().is_pointer() ? cond : address_of_exprt(cond);
-        expr2tc size_arg2;
-        migrate_expr(size_arg, size_arg2);
-        expr2tc size_call2 = side_effect_function_call2tc(
-          migrate_type(size_type()), symbol_expr2tc(*size_func), {size_arg2});
-        cond = migrate_expr_back(
-          notequal2tc(size_call2, gen_zero(migrate_type(size_type()))));
-        cond.location() = location;
-        cond.op0().location() = location;
-      }
+      // Python treats lists and dicts in conditions by their size, for
+      // example: `1 if xs else 0`.
+      if (current_block)
+        cond = size_truthiness(cond, location);
 
       // Python treats strings in conditions by their length: "" is falsy.
       cond = apply_string_truthiness(cond, location);
