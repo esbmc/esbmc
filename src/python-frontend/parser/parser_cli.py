@@ -192,7 +192,7 @@ def main(*, deps: CliDeps) -> int | None:
     import_resolver.split_submodule_imports(tree)
 
     preprocessor = deps.preprocessor_cls(filename)
-    preprocessor.prepare_module(tree)
+    preprocessor.prepare_module(tree, entry=True)
     import_resolver.module_exports["__main__"] = deps.snapshot_exports(preprocessor)
 
     for node in ast.walk(tree):

@@ -1,0 +1,5 @@
+CORE
+main.c
+
+b holds 2, not 1
+^VERIFICATION FAILED$

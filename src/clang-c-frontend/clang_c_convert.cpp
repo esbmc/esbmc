@@ -823,6 +823,45 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   return false;
 }
 
+bool clang_c_convertert::get_function_signature(
+  const clang::FunctionDecl &fd,
+  code_typet &type)
+{
+  if (get_type(fd.getReturnType(), type.return_type()))
+    return true;
+
+  if (fd.isVariadic())
+    type.make_ellipsis();
+
+  if (fd.isInlined())
+    type.inlined(true);
+
+  if (get_function_params(fd, type.arguments()))
+    return true;
+
+  // Check for __ESBMC_contract annotation
+  if (fd.hasAttrs())
+  {
+    for (const auto *attr : fd.getAttrs())
+    {
+      if (const auto *annot = llvm::dyn_cast<clang::AnnotateAttr>(attr))
+      {
+        if (annot->getAnnotation().str() == "__ESBMC_contract")
+        {
+          type.set("#annotated_contract", true);
+          break;
+        }
+      }
+    }
+  }
+
+  // Record the C++ exception specification (noexcept / dynamic throw(...)) as
+  // function-boundary metadata on the type. No-op for C.
+  annotate_exception_specification(fd, type);
+
+  return false;
+}
+
 bool clang_c_convertert::get_function(
   const clang::FunctionDecl &fd,
   exprt &new_expr)
@@ -854,18 +893,9 @@ bool clang_c_convertert::get_function(
   // This will be reset every time a function is parsed
   current_scope_var_num = 1;
 
-  // Build function's type
   code_typet type;
-
-  // Return type
-  if (get_type(fd.getReturnType(), type.return_type()))
+  if (get_function_signature(fd, type))
     return true;
-
-  if (fd.isVariadic())
-    type.make_ellipsis();
-
-  if (fd.isInlined())
-    type.inlined(true);
 
   locationt location_begin;
   get_location_from_decl(fd, location_begin);
@@ -887,32 +917,8 @@ bool clang_c_convertert::get_function(
                      fd.getStorageClass() == clang::SC_PrivateExtern;
   symbol.file_local = (fd.getStorageClass() == clang::SC_Static);
 
+  // Publish the function only after its parameter types are complete.
   symbolt &added_symbol = *context.move_symbol_to_context(symbol);
-
-  // We convert the parameters first so their symbol are added to context
-  // before converting the body, as they may appear on the function body
-  if (get_function_params(fd, type.arguments()))
-    return true;
-
-  // Check for __ESBMC_contract annotation
-  if (fd.hasAttrs())
-  {
-    for (const auto *attr : fd.getAttrs())
-    {
-      if (const auto *annot = llvm::dyn_cast<clang::AnnotateAttr>(attr))
-      {
-        if (annot->getAnnotation().str() == "__ESBMC_contract")
-        {
-          type.set("#annotated_contract", true);
-          break;
-        }
-      }
-    }
-  }
-
-  // Record the C++ exception specification (noexcept / dynamic throw(...)) as
-  // function-boundary metadata on the type. No-op for C.
-  annotate_exception_specification(fd, type);
 
   // A bodyless re-declaration must not clobber the type of a function that is
   // already defined. The definition's argument list carries the parameter
@@ -1661,6 +1667,14 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
 
     complex_typet t;
     t.set_base_type(elem_type);
+    // C11 6.2.5p13 gives a complex type its real type's alignment, which the
+    // target ABI decides (4 for double in an i386 struct) and alignment()
+    // cannot derive from the element.
+    t.set(
+      "alignment",
+      constant_exprt(
+        BigInt(ASTContext->getTypeAlignInChars(&ct).getQuantity()),
+        size_type()));
     new_type = t;
     break;
   }
@@ -2548,8 +2562,8 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     else
     {
       /* Clang failed, i.e., a dynamic offsetof, something like
-       * offsetof(struct S, member[idx]). We're building the equivalent of the
-       * manual offsetof() macro definition. Details below. */
+       * offsetof(struct S, member[idx]). We're building the equivalent of
+       * `(size_t)&((struct S *)0)->member[idx]`. Details below. */
 
       /* TODO: It would be good to put the expression we're constructing here
        *       into compute_pointer_offset(), e.g., already in the adjuster.
@@ -3433,8 +3447,11 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::CaseStmt &case_stmt =
       static_cast<const clang::CaseStmt &>(stmt);
 
-    exprt value;
-    if (get_expr(*case_stmt.getLHS(), value))
+    exprt value, range_hi = nil_exprt();
+    if (
+      get_expr(*case_stmt.getLHS(), value) ||
+      (case_stmt.caseStmtIsGNURange() &&
+       get_expr(*case_stmt.getRHS(), range_hi)))
       return true;
 
     exprt sub_stmt;
@@ -3443,6 +3460,8 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     code_switch_caset switch_case;
     switch_case.case_op() = value;
+    if (range_hi.is_not_nil())
+      switch_case.case_range_hi() = range_hi;
 
     convert_expression_to_code(sub_stmt);
     switch_case.code() = to_code(sub_stmt);
@@ -4123,13 +4142,7 @@ bool clang_c_convertert::get_enum_value(
   assert(e);
 
   if (!e->getInitExpr())
-  {
-    new_expr = constant_exprt(
-      integer2binary(e->getInitVal().getSExtValue(), bv_width(int_type())),
-      integer2string(e->getInitVal().getSExtValue()),
-      int_type());
-    return false;
-  }
+    return get_APValue_expr(clang::APValue(e->getInitVal()), new_expr);
 
   if (get_expr(*e->getInitExpr(), new_expr))
     return true;
@@ -6096,11 +6109,13 @@ bool clang_c_convertert::get_APValue_expr(
   case clang::APValue::Int:
   {
     const llvm::APSInt &Int = value.getInt();
-    int width = Int.getBitWidth();
-    assert(width <= 64);
-    int64_t v = Int.getSExtValue();
-    new_expr = constant_exprt(
-      integer2binary(v, width), integer2string(v), signedbv_typet(width));
+    const unsigned width = Int.getBitWidth();
+    llvm::SmallString<40> digits;
+    Int.toString(digits, 10);
+    const BigInt v = string2integer(std::string(digits));
+    const typet t = Int.isUnsigned() ? typet(unsignedbv_typet(width))
+                                     : typet(signedbv_typet(width));
+    new_expr = constant_exprt(integer2binary(v, width), integer2string(v), t);
     break;
   }
 

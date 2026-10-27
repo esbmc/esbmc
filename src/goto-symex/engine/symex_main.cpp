@@ -236,8 +236,13 @@ void goto_symext::propagate_assume_equality(const expr2tc &the_assumption)
   // assignment() emits no SSA step: lift only a value level2 records (#7974).
   // IEEE-754 +0.0 and -0.0 compare equal but have distinct bit patterns;
   // propagating either would mask signbit-sensitive bugs.
+  // `p == &obj` pins p as a constant does: a requires() naming one object
+  // then reaches the dereferences of p (#8517).
   auto is_liftable = [this](const expr2tc &e) {
-    return is_constant_expr(e) && cur_state->constant_propagation(e) &&
+    const bool pinned_address =
+      is_address_of2t(e) && is_symbol2t(to_address_of2t(e).ptr_obj);
+    return (is_constant_expr(e) || pinned_address) &&
+           cur_state->constant_propagation(e) &&
            !(is_constant_floatbv2t(e) &&
              to_constant_floatbv2t(e).value.is_zero());
   };
@@ -1326,58 +1331,11 @@ void goto_symext::run_intrinsic(
     "(NB: the C spec reserves the __ prefix for the compiler and "
     "environment)",
     symname);
-  abort();
+  exit(6);
 }
 
 namespace
 {
-struct suffix_componentt
-{
-  irep_idt member_name;
-
-  suffix_componentt()
-  {
-  }
-
-  explicit suffix_componentt(irep_idt name) : member_name(name)
-  {
-  }
-
-  bool is_index() const noexcept
-  {
-    return member_name.empty();
-  }
-
-  bool is_member() const noexcept
-  {
-    return !is_index();
-  }
-};
-
-std::vector<suffix_componentt>
-split_suffix_components(const std::string &suffix)
-{
-  std::vector<suffix_componentt> components;
-  const char *begin = suffix.c_str();
-  while (*begin)
-  {
-    if (strncmp(begin, "[]", 2) == 0)
-    {
-      components.emplace_back();
-      begin += 2;
-    }
-    else
-    {
-      assert(*begin == '.');
-      begin++;
-      size_t end = strcspn(begin, ".[");
-      components.emplace_back(std::string(begin, end));
-      begin += end;
-    }
-  }
-  return components;
-}
-
 /* A value-set target is a usable reachability root only if it denotes a
  * concrete object: drop unknown/invalid descriptors and null/string/code
  * objects. Returns the root object symbol, or nil to skip. */
@@ -1820,24 +1778,28 @@ void goto_symext::add_memory_leak_checks()
        * the suffix is empty, sym_expr2 already has pointer type. Otherwise
        * the symbol has a compound type. */
       std::vector<expr2tc> sub_exprs = {sym_expr2};
-      for (const suffix_componentt &c : split_suffix_components(e.suffix))
+      std::string rest = e.suffix;
+      while (!rest.empty())
       {
         /* The suffix consists of a sequence of components, which are either
          * "[]" or ".name" where name is the name of some member of a
          * structure type. */
-        if (c.is_member())
+        if (rest[0] == '.')
         {
+          const type2tc type = sub_exprs[0]->type;
+          assert(is_structure_type(type));
+          const std::vector<irep_idt> names = struct_union_member_names(type);
+          const auto [n, len] =
+            match_leading_component(names, rest.substr(1)).value();
+          const type2tc member_type = struct_union_members(type)[n];
           for (expr2tc &p : sub_exprs)
-          {
-            assert(is_structure_type(p));
-            unsigned n =
-              struct_union_get_component_number(p->type, c.member_name).value();
-            p = member2tc(struct_union_members(p->type)[n], p, c.member_name);
-          }
+            p = member2tc(member_type, p, names[n]);
+          rest.erase(0, 1 + len);
           continue;
         }
 
-        assert(c.is_index());
+        assert(has_prefix(rest, "[]"));
+        rest.erase(0, 2);
         const type2tc &type = sub_exprs[0]->type;
         assert(is_array_type(type));
         const array_type2t &array_type = to_array_type(type);

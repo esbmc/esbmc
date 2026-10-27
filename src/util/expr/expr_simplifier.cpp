@@ -1455,6 +1455,12 @@ static bool same_value_and_sign(const expr2tc &a, const expr2tc &b)
   return a == b && float_signs_agree(a, b);
 }
 
+/** Whether a constant is zero, and +0.0 if it is a float. */
+static bool is_plus_zero(const expr2tc &e)
+{
+  return is_false(e) && same_value_and_sign(e, gen_zero(e->type));
+}
+
 /* An index may be out of bounds. That's an error in the program, but not in
  * the model we're generating, so permit it. Can't simplify it though. */
 static bool index_outside(const constant_int2t &index, size_t size)
@@ -1505,6 +1511,22 @@ expr2tc with2t::do_simplify() const
     // only ever contain one member, and it's the member most recently written.
     if (thetype.members[no] != update_value->type)
       return expr2tc();
+
+    // A literal of the written member alone would zero the bytes of the old
+    // member that the write leaves untouched, unless it covers all of them.
+    try
+    {
+      if (
+        !c_union.datatype_members.empty() &&
+        type_byte_size_bits(update_value->type, migrate_namespace_lookup) <
+          type_byte_size_bits(
+            c_union.datatype_members[0]->type, migrate_namespace_lookup))
+        return expr2tc();
+    }
+    catch (const array_type2t::array_size_excp &)
+    {
+      return expr2tc();
+    }
 
     if (
       c_union.init_field == thetype.member_names[no] &&
@@ -4540,27 +4562,13 @@ static expr2tc cancel_common_unary_operand(
   return expr2tc();
 }
 
-// Returns a Boolean constant when a pointer comparison against NULL is
-// decidable, nil otherwise. `eq` selects the polarity. A pointer value
-// is an (object, offset) pair and no object lives at address zero, so
-// the non-null side peels casts and constant ± offsets down to its
-// root before the address_of root check: `(T *)(&sym + k) == NULL`
-// folds exactly like `&sym == NULL`.
-static expr2tc
-simplify_pointer_null_cmp(const expr2tc &s1, const expr2tc &s2, bool eq)
+// Peels pointer casts and constant ± offsets, which keep the object a
+// pointer refers to. Only pointer-typed links preserve nullness: a cast
+// through an integer type may truncate, and integer arithmetic can wrap
+// to zero, so the peel stops at the first non-pointer node.
+static const expr2tc &peel_pointer_offsets(const expr2tc &e)
 {
-  if (!is_pointer_type(s1) && !is_pointer_type(s2))
-    return expr2tc();
-  bool n1 = is_null_pointer_value(s1);
-  bool n2 = is_null_pointer_value(s2);
-  if (n1 && n2)
-    return eq ? gen_true_expr() : gen_false_expr();
-  if (n1 == n2)
-    return expr2tc();
-  // Only pointer-typed links preserve nullness: a cast through an
-  // integer type may truncate, and integer arithmetic can wrap to
-  // zero, so the peel stops at the first non-pointer node.
-  const expr2tc *p = n1 ? &s2 : &s1;
+  const expr2tc *p = &e;
   while (is_pointer_type((*p)->type))
   {
     if (is_typecast2t(*p) && is_pointer_type(to_typecast2t(*p).from->type))
@@ -4574,9 +4582,50 @@ simplify_pointer_null_cmp(const expr2tc &s1, const expr2tc &s2, bool eq)
     else
       break;
   }
-  if (address_of_is_provably_non_null(*p))
+  return *p;
+}
+
+static expr2tc obj_equals_addr_of(const expr2tc &a, const expr2tc &b);
+
+// `&a + j == &b + k` with a and b provably distinct objects, or nil.
+static expr2tc
+fold_distinct_objects_cmp(const expr2tc &s1, const expr2tc &s2, bool eq)
+{
+  const expr2tc &p1 = peel_pointer_offsets(s1);
+  const expr2tc &p2 = peel_pointer_offsets(s2);
+  if (!is_address_of2t(p1) || !is_address_of2t(p2))
+    return expr2tc();
+  expr2tc same = obj_equals_addr_of(
+    to_address_of2t(p1).ptr_obj, to_address_of2t(p2).ptr_obj);
+  if (
+    !is_nil_expr(same) && is_constant_bool2t(same) &&
+    !to_constant_bool2t(same).value)
     return eq ? gen_false_expr() : gen_true_expr();
   return expr2tc();
+}
+
+// Returns a Boolean constant when a pointer comparison is decidable,
+// nil otherwise. `eq` selects the polarity. A pointer value is an
+// (object, offset) pair. No object lives at address zero, so
+// `(T *)(&sym + k) == NULL` folds exactly like `&sym == NULL`. Two
+// addresses rooted in different objects differ in the object, so
+// `&a + j == &b + k` folds false whatever the offsets.
+static expr2tc
+simplify_pointer_cmp(const expr2tc &s1, const expr2tc &s2, bool eq)
+{
+  if (!is_pointer_type(s1) && !is_pointer_type(s2))
+    return expr2tc();
+  bool n1 = is_null_pointer_value(s1);
+  bool n2 = is_null_pointer_value(s2);
+  if (n1 && n2)
+    return eq ? gen_true_expr() : gen_false_expr();
+  if (n1 != n2)
+  {
+    if (address_of_is_provably_non_null(peel_pointer_offsets(n1 ? s2 : s1)))
+      return eq ? gen_false_expr() : gen_true_expr();
+    return expr2tc();
+  }
+  return fold_distinct_objects_cmp(s1, s2, eq);
 }
 
 /// (x * c) == 0 -> x == 0 when c is odd, or nothing. Restricted to odd
@@ -4614,7 +4663,7 @@ expr2tc equality2t::do_simplify() const
   if (side_1 == side_2 && !is_floatbv_type(side_1) && !is_floatbv_type(side_2))
     return gen_true_expr();
 
-  if (expr2tc r = simplify_pointer_null_cmp(side_1, side_2, true))
+  if (expr2tc r = simplify_pointer_cmp(side_1, side_2, true))
     return r;
 
   // If we're dealing with floatbvs, call IEEE_equalitytor instead
@@ -4709,7 +4758,7 @@ expr2tc notequal2t::do_simplify() const
   if (side_1 == side_2 && !is_floatbv_type(side_1) && !is_floatbv_type(side_2))
     return gen_false_expr();
 
-  if (expr2tc r = simplify_pointer_null_cmp(side_1, side_2, false))
+  if (expr2tc r = simplify_pointer_cmp(side_1, side_2, false))
     return r;
 
   // If we're dealing with floatbvs, call IEEE_notequalitytor instead
@@ -5286,11 +5335,11 @@ expr2tc if2t::do_simplify() const
 
   if (
     is_constant_number(true_value) && is_true(true_value) &&
-    (gen_one(true_value->type) == true_value) && is_false(false_value))
+    (gen_one(true_value->type) == true_value) && is_plus_zero(false_value))
     return typecast_check_return(type, cond);
 
   if (
-    is_constant_number(false_value) && is_false(true_value) &&
+    is_constant_number(false_value) && is_plus_zero(true_value) &&
     (gen_one(false_value->type) == false_value) && is_true(false_value))
     return typecast_check_return(type, not2tc(cond));
 
@@ -5387,7 +5436,9 @@ expr2tc if2t::do_simplify() const
 expr2tc overflow_cast2t::do_simplify() const
 {
   // SMT lowering (smt_overflow.cpp:overflow_cast) defines this as
-  // `operand < 0 || operand > 2^bits - 1` — an unsigned narrowing check.
+  // `operand < 0 || operand > 2^bits - 1` — an unsigned narrowing check —
+  // except for a signed operand at its own width, which is tested against
+  // its type's range.
   // Bool operand: always fits (true=1, false=0), so the cast never overflows.
   if (is_bool_type(operand->type))
     return gen_false_expr();
@@ -5401,6 +5452,12 @@ expr2tc overflow_cast2t::do_simplify() const
   if (is_constant_int2t(operand))
   {
     const BigInt &v = to_constant_int2t(operand).value;
+    const unsigned width = operand->type->get_width();
+    if (is_signedbv_type(operand->type) && bits >= width)
+    {
+      const BigInt half = BigInt::power2(width - 1);
+      return v < -half || v >= half ? gen_true_expr() : gen_false_expr();
+    }
     if (v.is_negative())
       return gen_true_expr();
     return v > BigInt::power2(bits) - 1 ? gen_true_expr() : gen_false_expr();
@@ -5453,8 +5510,6 @@ expr2tc overflow2t::do_simplify() const
 
   return expr2tc();
 }
-
-static expr2tc obj_equals_addr_of(const expr2tc &a, const expr2tc &b);
 
 static expr2tc handle_symmetric_cases(const expr2tc &a, const expr2tc &b)
 {

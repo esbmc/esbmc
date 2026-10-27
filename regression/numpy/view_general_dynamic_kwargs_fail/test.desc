@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: Variable 'kw' is not defined in function 'read' at line 7\.$

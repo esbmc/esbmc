@@ -8,6 +8,7 @@
 #include <python-frontend/type/python_typechecking.h>
 #include <python-frontend/python_annotation/annotation_intrinsics.h>
 #include <python-frontend/symbol_id.h>
+#include <algorithm>
 #include <util/arith/arith_tools.h>
 #include <util/arith/bitvector.h>
 #include <util/config/config.h>
@@ -102,6 +103,19 @@ bool type_handler::is_pointer_free(const typet &t) const
   return true; // primitives
 }
 
+bool type_handler::is_pointer_record(const typet &t) const
+{
+  namespacet ns(converter_.symbol_table());
+  const typet &ty = ns.follow(t);
+  if (!ty.is_struct())
+    return false;
+  const auto &components = to_struct_type(ty).components();
+  return !components.empty() &&
+         std::all_of(components.begin(), components.end(), [](const auto &c) {
+           return c.type().is_pointer();
+         });
+}
+
 exprt type_handler::ptr_free_arg(const exprt &payload, const typet &elem_type)
   const
 {
@@ -110,7 +124,10 @@ exprt type_handler::ptr_free_arg(const exprt &payload, const typet &elem_type)
     payload.id() == "address_of" &&
     ns.follow(payload.op0().type()).is_pointer();
   return from_integer(
-    payload_is_a_pointer ? 2 : (is_pointer_free(elem_type) ? 1 : 0),
+    payload_is_a_pointer           ? 2
+    : is_pointer_free(elem_type)   ? 1
+    : is_pointer_record(elem_type) ? 3
+                                   : 0,
     int_type());
 }
 
@@ -875,6 +892,37 @@ typet type_handler::get_typet_from_call_func(const nlohmann::json &func) const
   throw std::runtime_error("Invalid type");
 }
 
+std::optional<typet>
+type_handler::scalar_array_element_type(const nlohmann::json &elem) const
+{
+  if (
+    elem.value("_type", "") != "Subscript" ||
+    elem["slice"].value("_type", "") == "Slice" ||
+    elem["value"].value("_type", "") != "Name")
+    return std::nullopt;
+  symbol_id sid(
+    converter_.python_file(),
+    converter_.current_classname(),
+    converter_.current_function_name());
+  sid.set_object(elem["value"]["id"].get<std::string>());
+  const symbolt *symbol = converter_.find_symbol(sid.to_string());
+  if (!symbol)
+    symbol = converter_.find_symbol(sid.global_to_string());
+  // A NumPy view is a pointer into its source's storage.
+  if (
+    !symbol ||
+    (!symbol->get_type().is_array() && !symbol->get_type().is_pointer()))
+    return std::nullopt;
+  const typet &subtype = symbol->get_type().subtype();
+  if (
+    !subtype.is_signedbv() && !subtype.is_unsignedbv() &&
+    !subtype.is_floatbv() && !subtype.is_bool())
+    return std::nullopt;
+  if (subtype == char_type())
+    return std::nullopt;
+  return subtype;
+}
+
 typet type_handler::get_typet(const nlohmann::json &elem) const
 {
   // Handle null/empty values
@@ -985,7 +1033,8 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
   }
 
   if (
-    elem["_type"] == "Call" && type_utils::is_builtin_type(elem["func"]["id"]))
+    elem["_type"] == "Call" &&
+    type_utils::is_builtin_type(elem["func"].value("id", "")))
   {
     return get_typet(elem["func"]["id"].get<std::string>());
   }
@@ -1154,7 +1203,7 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
         // Get sub-array type from multi-dimensional list
         if (elts[0]["_type"] == "Call")
         {
-          if (type_utils::is_builtin_type(elts[0]["func"]["id"]))
+          if (type_utils::is_builtin_type(elts[0]["func"].value("id", "")))
             subtype = get_typet(elts[0]["func"]["id"].get<std::string>());
         }
         else if (elts[0].contains("elts"))
@@ -1637,4 +1686,17 @@ typet type_handler::get_dict_type(const nlohmann::json &dict_value) const
   // For now, return the generic dict type
   // In the future, this could infer specific key/value types
   return get_dict_type();
+}
+
+typet type_handler::class_value_type()
+{
+  struct_typet type;
+  type.tag("__ESBMC_PyClass");
+  type.components().push_back(struct_typet::componentt("id", "id", int_type()));
+  return type;
+}
+
+bool type_handler::is_class_value_type(const typet &type)
+{
+  return type.is_struct() && to_struct_type(type).tag() == "__ESBMC_PyClass";
 }

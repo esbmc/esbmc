@@ -1,5 +1,6 @@
 #include <python-frontend/function_call/expr.h>
 #include <python-frontend/json_utils.h>
+#include <python-frontend/python_expr_builder.h>
 #include <irep2/irep2_utils.h>
 #include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/string/string_builder.h>
@@ -32,8 +33,6 @@ constexpr unsigned int UTF8_1_BYTE_MAX = 0x7F;
 constexpr unsigned int UTF8_2_BYTE_MAX = 0x7FF;
 constexpr unsigned int UTF8_3_BYTE_MAX = 0xFFFF;
 constexpr unsigned int UTF8_4_BYTE_MAX = 0x10FFFF;
-constexpr unsigned int SURROGATE_START = 0xD800;
-constexpr unsigned int SURROGATE_END = 0xDFFF;
 
 static std::string utf8_encode(unsigned int int_value)
 {
@@ -41,15 +40,6 @@ static std::string utf8_encode(unsigned int int_value)
    * Convert an integer value into its UTF-8 character equivalent
    * similar to the python chr() function
    */
-
-  // Check for surrogate pairs (invalid in UTF-8)
-  if (int_value >= SURROGATE_START && int_value <= SURROGATE_END)
-  {
-    std::ostringstream oss;
-    oss << "Code point 0x" << std::hex << std::uppercase << int_value
-        << " is a surrogate pair, invalid in UTF-8";
-    throw std::invalid_argument(oss.str());
-  }
 
   // Manual UTF-8 encoding
   std::string char_out;
@@ -416,7 +406,7 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
 
 exprt function_call_expr::handle_int_to_str(nlohmann::json &arg) const
 {
-  std::string str_val = std::to_string(arg["value"].get<int>());
+  std::string str_val = std::to_string(arg["value"].get<long long>());
   typet t = type_handler_.get_typet("str", str_val.size() + 1);
   return converter_.make_char_array_expr(
     std::vector<uint8_t>(str_val.begin(), str_val.end()), t);
@@ -566,13 +556,33 @@ exprt function_call_expr::guard_nonfinite_float_to_int(
 {
   if (!base.is_nil())
     return operand;
-  return converter_.guard_nonfinite_float_to_int(std::move(operand), call_);
+  return converter_.guard_nonfinite_float_to_int(
+    std::move(operand), call_, true);
+}
+
+exprt function_call_expr::guard_none_to_float(exprt operand) const
+{
+  return converter_.guard_none_conversion(
+    std::move(operand),
+    "float() argument must be a string or a real number, not 'NoneType'",
+    call_);
+}
+
+exprt function_call_expr::build_float_conversion(
+  const exprt &operand,
+  const typet &float_type) const
+{
+  if (!type_handler_.is_tagged_scalar_type(operand.type()))
+    return python_expr::build_typecast(operand, float_type);
+  return converter_.dynamic_type_handler_.build_numeric_conversion(
+    to_value_expr(operand, converter_.ns),
+    float_type,
+    converter_.get_location_from_decl(call_));
 }
 
 void function_call_expr::handle_int_to_float(nlohmann::json &arg) const
 {
-  int value = arg["value"].get<int>();
-  arg["value"] = static_cast<double>(value);
+  arg["value"] = arg["value"].get<double>();
 }
 
 exprt function_call_expr::handle_base_conversion(

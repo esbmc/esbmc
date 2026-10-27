@@ -221,6 +221,105 @@ exprt tuple_handler::get_tuple_element(
     array, components[idx].get_name(), components[idx].type());
 }
 
+exprt tuple_handler::copy_str_to_member(
+  const exprt &str,
+  const array_typet &member_type,
+  const locationt &loc,
+  codet &target_block)
+{
+  const size_t width =
+    binary2integer(to_constant_expr(member_type.size()).value().c_str(), false)
+      .to_uint64();
+  const typet &char_t = member_type.subtype();
+  const exprt nul = gen_zero(char_t);
+
+  symbolt &tmp =
+    converter_.create_tmp_symbol(loc, "$tuple_str$", member_type, exprt());
+  const exprt dst = build_symbol(tmp);
+  code_declt decl(dst);
+  decl.location() = loc;
+  target_block.copy_to_operands(decl);
+
+  auto src_at = [&](size_t i) {
+    return build_index(str, from_integer(i, index_type()), char_t);
+  };
+  auto dst_at = [&](size_t i) {
+    return build_index(dst, from_integer(i, index_type()), char_t);
+  };
+  // Bytes past the NUL are not read: the source may be a shorter object.
+  for (size_t i = 0; i < width; i++)
+  {
+    const exprt byte =
+      i == 0 ? src_at(0)
+             : build_if(build_equal(dst_at(i - 1), nul), nul, src_at(i));
+    code_assignt store(dst_at(i), byte);
+    store.location() = loc;
+    target_block.copy_to_operands(store);
+  }
+
+  // A member without a NUL holds a str of exactly `width` characters (#5571);
+  // a longer one cannot be represented.
+  code_assertt fits(build_or(
+    build_equal(dst_at(width - 1), nul), build_equal(src_at(width), nul)));
+  fits.location() = loc;
+  fits.location().comment(
+    "str longer than " + std::to_string(width) +
+    " characters stored in a tuple[str, ...] value is not supported");
+  target_block.copy_to_operands(fits);
+  return dst;
+}
+
+/// Whether a tuple member of type @p from can be converted to @p to: a str
+/// pointer into a fixed-width str member, or one integer width to another.
+static bool is_coercible_member(const typet &from, const typet &to)
+{
+  if (from == to)
+    return true;
+  if (from.is_pointer() && to.is_array())
+    return from.subtype() == char_type() && to.subtype() == char_type() &&
+           to_array_type(to).size().is_constant();
+  auto is_int = [](const typet &t) {
+    return t.id() == "signedbv" || t.id() == "unsignedbv";
+  };
+  return is_int(from) && is_int(to);
+}
+
+exprt tuple_handler::coerce_to_tuple_type(
+  const exprt &value,
+  const typet &target,
+  const locationt &loc,
+  codet &target_block)
+{
+  if (
+    !is_tuple_type(target) || !is_tuple_type(value.type()) ||
+    value.type() == target)
+    return value;
+
+  const struct_typet &from = to_struct_type(value.type());
+  const auto &to_members = to_struct_type(target).components();
+  if (from.components().size() != to_members.size())
+    return value;
+  for (size_t i = 0; i < to_members.size(); i++)
+    if (!is_coercible_member(from.components()[i].type(), to_members[i].type()))
+      return value;
+
+  std::vector<expr2tc> members;
+  members.reserve(to_members.size());
+  for (size_t i = 0; i < to_members.size(); i++)
+  {
+    exprt elem = get_tuple_element(value, from, i);
+    const typet &to_t = to_members[i].type();
+    if (elem.type() != to_t && to_t.is_array())
+      elem = copy_str_to_member(elem, to_array_type(to_t), loc, target_block);
+    else if (elem.type() != to_t)
+      elem = typecast_exprt(elem, to_t);
+    expr2tc e2;
+    migrate_expr(elem, e2);
+    members.push_back(std::move(e2));
+  }
+  return migrate_expr_back(constant_struct2tc(migrate_type(target), members));
+}
+
 exprt tuple_handler::handle_tuple_subscript(
   const exprt &array,
   const nlohmann::json &slice,
@@ -462,14 +561,26 @@ exprt tuple_handler::handle_tuple_subscript(
   return result;
 }
 
+static bool has_side_effect(const exprt &expr)
+{
+  if (expr.id() == "sideeffect")
+    return true;
+  for (const auto &op : expr.operands())
+    if (has_side_effect(op))
+      return true;
+  return false;
+}
+
 exprt tuple_handler::prepare_rhs_for_unpacking(
   const nlohmann::json &ast_node,
   exprt &rhs,
   codet &target_block)
 {
   // If RHS is a function call, we need to create a temporary variable first
-  // because we can't do member access on a side effect expression
-  if (rhs.is_function_call() || rhs.id() == "sideeffect")
+  // because we can't do member access on a side effect expression. A call
+  // nested in the RHS (`*(T *)xs.pop()->value`) is bound too, or each target
+  // would run it again.
+  if (rhs.is_function_call() || has_side_effect(rhs))
   {
     locationt loc = converter_.get_location_from_decl(ast_node);
     std::string temp_name =
@@ -601,37 +712,81 @@ void tuple_handler::handle_tuple_unpacking(
     std::string member_name = "element_" + std::to_string(i);
     const typet &member_type = tuple_type.components()[i].type();
     exprt member_access = build_member(rhs, member_name, member_type);
-    const locationt loc = converter_.get_location_from_decl(ast_node);
-    const exprt target =
-      build_symbol(unpack_target_symbol(targets[t], member_type));
+    const exprt target = build_symbol(unpack_target_symbol(
+      targets[t], unpack_target_type(rhs, member_type), target_block));
+    assign_unpacked_element(
+      target,
+      member_access,
+      converter_.get_location_from_decl(ast_node),
+      target_block);
+    // A list taken out of a tuple literal keeps its element types (#8928).
+    if (rhs.id() == "struct" && rhs.operands()[i].is_symbol())
+      converter_.get_element_type_registry().assign_from(
+        rhs.operands()[i].identifier().as_string(),
+        target.identifier().as_string());
+  }
+}
 
-    // A tuple held in a list is reached through a dereference, and the
-    // dereference layer refuses to build a whole-array rvalue, as C does. A
-    // string element is such an array, so copy it element by element; its size
-    // is static, so the two are the same assignment (#7693).
-    if (
-      member_type.is_array() && to_array_type(member_type).size().is_constant())
-    {
-      const array_typet &arr_t = to_array_type(member_type);
-      const BigInt n =
-        binary2integer(to_constant_expr(arr_t.size()).value().c_str(), false);
-      for (BigInt k = 0; k < n; k = k + 1)
-      {
-        const exprt idx = from_integer(k, index_type());
-        code_assignt store(
-          build_index(target, idx, arr_t.subtype()),
-          build_index(member_access, idx, arr_t.subtype()));
-        store.location() = loc;
-        target_block.copy_to_operands(store);
-      }
-      continue;
-    }
+// A str element of a tuple held in a list or dict (reached through a
+// dereference) outlives the target, so the target can point at it; a later
+// rebinding to a call's char* result then keeps the symbol's type (#8667). A
+// local tuple, such as a loop variable, can expire first, so it is copied.
+typet tuple_handler::unpack_target_type(
+  const exprt &rhs,
+  const typet &member_type) const
+{
+  if (member_type.is_array() && rhs.id() == "dereference")
+    return pointer_typet(member_type.subtype());
+  return member_type;
+}
 
-    // Create assignment
-    code_assignt assign(target, member_access);
+void tuple_handler::assign_unpacked_element(
+  const exprt &target,
+  const exprt &member_access,
+  const locationt &loc,
+  codet &target_block)
+{
+  const typet &member_type = member_access.type();
+
+  // A pointer target shares the element's storage: a str is immutable.
+  if (member_type.is_array() && target.type().is_pointer())
+  {
+    exprt addr = build_address_of(build_index(
+      member_access,
+      from_integer(0, index_type()),
+      to_array_type(member_type).subtype()));
+    if (addr.type() != target.type())
+      addr = typecast_exprt(addr, target.type());
+    code_assignt assign(target, addr);
     assign.location() = loc;
     target_block.copy_to_operands(assign);
+    return;
   }
+
+  // A tuple held in a list is reached through a dereference, and the
+  // dereference layer refuses to build a whole-array rvalue, as C does. A
+  // string element is such an array, so copy it element by element; its size
+  // is static, so the two are the same assignment (#7693).
+  if (member_type.is_array() && to_array_type(member_type).size().is_constant())
+  {
+    const array_typet &arr_t = to_array_type(member_type);
+    const BigInt n =
+      binary2integer(to_constant_expr(arr_t.size()).value().c_str(), false);
+    for (BigInt k = 0; k < n; k = k + 1)
+    {
+      const exprt idx = from_integer(k, index_type());
+      code_assignt store(
+        build_index(target, idx, arr_t.subtype()),
+        build_index(member_access, idx, arr_t.subtype()));
+      store.location() = loc;
+      target_block.copy_to_operands(store);
+    }
+    return;
+  }
+
+  code_assignt assign(target, member_access);
+  assign.location() = loc;
+  target_block.copy_to_operands(assign);
 }
 
 size_t tuple_handler::starred_target_index(const nlohmann::json &targets) const
@@ -644,7 +799,8 @@ size_t tuple_handler::starred_target_index(const nlohmann::json &targets) const
 
 symbolt &tuple_handler::unpack_target_symbol(
   const nlohmann::json &name_node,
-  const typet &type)
+  const typet &type,
+  codet &target_block)
 {
   symbol_id var_sid = converter_.create_symbol_id();
   var_sid.set_object(name_node["id"].get<std::string>());
@@ -662,7 +818,16 @@ symbolt &tuple_handler::unpack_target_symbol(
   new_symbol.lvalue = true;
   new_symbol.file_local = true;
   new_symbol.is_extern = false;
-  return *converter_.symbol_table().move_symbol_to_context(new_symbol);
+  symbolt &added =
+    *converter_.symbol_table().move_symbol_to_context(new_symbol);
+  // Without a declaration a local is shared by every frame of a recursive call
+  if (!converter_.get_current_func_name().empty())
+  {
+    code_declt decl(build_symbol(added));
+    decl.location() = loc;
+    target_block.copy_to_operands(decl);
+  }
+  return added;
 }
 
 void tuple_handler::assign_starred_elements(
@@ -696,8 +861,8 @@ void tuple_handler::assign_starred_elements(
   for (const exprt &op : list_block.operands())
     target_block.copy_to_operands(op);
 
-  const exprt star =
-    build_symbol(unpack_target_symbol(star_value, list_expr.type()));
+  const exprt star = build_symbol(
+    unpack_target_symbol(star_value, list_expr.type(), target_block));
   // Retyping a symbol in place would corrupt its earlier uses
   if (star.type() != list_expr.type())
     throw std::runtime_error(

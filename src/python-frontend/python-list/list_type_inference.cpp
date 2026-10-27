@@ -258,6 +258,36 @@ static typet function_element_type(
   return pointer_typet(func->get_type());
 }
 
+// The element type of one literal element. A call to a user function has no
+// name-derived type; it is left to the recorded element types and flagged.
+static typet literal_element_type(
+  const type_handler &th,
+  const nlohmann::json &elem,
+  bool &unresolved_call)
+{
+  if (const std::optional<typet> element = th.scalar_array_element_type(elem))
+    return *element;
+  try
+  {
+    return th.get_typet(elem);
+  }
+  catch (const std::runtime_error &)
+  {
+    if (elem.value("_type", "") != "Call")
+      throw;
+    unresolved_call = true;
+    return typet();
+  }
+}
+
+// A typed first element beside an unnamed call would read both at one type.
+static void
+reject_mixed_unresolved_call(bool unresolved_call, const typet &first)
+{
+  if (unresolved_call && first != typet())
+    throw std::runtime_error("Invalid type");
+}
+
 typet python_list::infer_literal_element_type(
   const nlohmann::json &list_literal)
 {
@@ -266,6 +296,11 @@ typet python_list::infer_literal_element_type(
     return typet();
 
   const type_handler &th = converter_.get_type_handler();
+  bool unresolved_call = false;
+  // `a[i]` over a NumPy array or view has the array's element type.
+  auto element_type = [&](const nlohmann::json &elem) {
+    return literal_element_type(th, elem, unresolved_call);
+  };
 
   // A heterogeneous int/float literal is promoted to a homogeneous double list
   // at construction (python_list::get, promote_ints), so every element is a
@@ -278,7 +313,7 @@ typet python_list::infer_literal_element_type(
     bool has_int = false, has_float = false;
     for (const auto &e : list_literal["elts"])
     {
-      const typet t = th.get_typet(e);
+      const typet t = element_type(e);
       if (t.is_floatbv())
         has_float = true;
       else if (t.is_signedbv() || t.is_unsignedbv() || t.is_bool())
@@ -288,7 +323,8 @@ typet python_list::infer_literal_element_type(
       return double_type();
   }
 
-  const typet first_type = th.get_typet(first_elem);
+  const typet first_type = element_type(first_elem);
+  reject_mixed_unresolved_call(unresolved_call, first_type);
   // A name with no variable binding may be a function
   if (first_type.is_empty())
     return function_element_type(converter_, first_elem, first_type);

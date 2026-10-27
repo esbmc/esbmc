@@ -4,14 +4,57 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
+#include <vector>
 
 // Pure-AST literal-kind divergence detection, shared by dynamic_type_handler
 // and the annotation pre-pass (which has no symbol table to check against).
 namespace dynamic_type_detail
 {
-// Classifies a literal constant, a nondet_<type> builtin call, or a call to
-// a module-level function with a scalar return annotation (e.g. `mk()`
-// where `def mk() -> str`); "" otherwise. `module_body` may be left empty
+// The name a call's `func` spells, `m.f` for an attribute of a name, and
+// its last component; both "" for any other shape.
+inline std::pair<std::string, std::string>
+callee_names(const nlohmann::json &func)
+{
+  if (
+    func.value("_type", "") != "Attribute" || !func.contains("value") ||
+    func["value"].value("_type", "") != "Name")
+    return {func.value("id", ""), func.value("id", "")};
+  const std::string attr = func.value("attr", "");
+  return {func["value"].value("id", "") + "." + attr, attr};
+}
+
+// The kind of a scalar type named `type`, "" for any other name.
+inline std::string scalar_name_kind(const std::string &type)
+{
+  if (type == "str")
+    return "str";
+  if (type == "int" || type == "bool")
+    return "num";
+  return type == "float" ? "float" : "";
+}
+
+// The kind a nondet_<type> function named `leaf` returns, "" for any other.
+inline std::string nondet_leaf_kind(const std::string &leaf)
+{
+  return leaf.rfind("nondet_", 0) == 0 ? scalar_name_kind(leaf.substr(7)) : "";
+}
+
+// The kind of a literal constant's value.
+inline std::string constant_kind(const nlohmann::json &lit)
+{
+  if (lit.is_string())
+    return "str";
+  if (lit.is_number_integer() || lit.is_boolean())
+    return "num";
+  return lit.is_number_float() ? "float" : "";
+}
+
+// Classifies a literal constant, a nondet_<type> call, plain or qualified
+// by a module as in `_sv_verifier.nondet_str()`, or a call to a function
+// with a scalar return annotation (e.g. `mk()` where `def mk() -> str`);
+// "" otherwise. `module_body` holds the FunctionDefs a call may name, a
+// qualified call `m.mk()` naming one called `m.mk`. It may be left empty
 // where a caller has no access to the full module (the annotation
 // pre-pass).
 inline std::string classify_literal_value_kind(
@@ -20,44 +63,57 @@ inline std::string classify_literal_value_kind(
 {
   if (value.value("_type", "") == "Constant" && value.contains("value"))
   {
-    const auto &lit = value["value"];
-    if (lit.is_string())
-      return "str";
-    if (lit.is_number_integer() || lit.is_boolean())
-      return "num";
-    return "";
+    return constant_kind(value["value"]);
   }
 
-  if (
-    value.value("_type", "") == "Call" && value.contains("func") &&
-    value["func"].value("_type", "") == "Name")
+  if (value.value("_type", "") != "Call" || !value.contains("func"))
+    return "";
+
+  const auto [callee, leaf] = callee_names(value["func"]);
+  const std::string nondet_kind = nondet_leaf_kind(leaf);
+  if (!nondet_kind.empty())
+    return nondet_kind;
+
+  if (module_body.is_array())
   {
-    const std::string &callee = value["func"].value("id", "");
-    if (callee == "nondet_int" || callee == "nondet_bool")
-      return "num";
-    if (callee == "nondet_str")
-      return "str";
-
-    if (module_body.is_array())
+    for (const auto &stmt : module_body)
     {
-      for (const auto &stmt : module_body)
-      {
-        if (
-          !stmt.is_object() || stmt.value("_type", "") != "FunctionDef" ||
-          stmt.value("name", "") != callee || !stmt.contains("returns") ||
-          stmt["returns"].is_null())
-          continue;
+      if (
+        !stmt.is_object() || stmt.value("_type", "") != "FunctionDef" ||
+        stmt.value("name", "") != callee || !stmt.contains("returns") ||
+        stmt["returns"].is_null())
+        continue;
 
-        const std::string ret_name = stmt["returns"].value("id", "");
-        if (ret_name == "str")
-          return "str";
-        if (ret_name == "int" || ret_name == "bool")
-          return "num";
-      }
+      const std::string ret_kind =
+        scalar_name_kind(stmt["returns"].value("id", ""));
+      if (!ret_kind.empty())
+        return ret_kind;
     }
   }
 
   return "";
+}
+
+// Whether a name joining these literal kinds has a type that depends on the
+// path. An int and a float alone are a number of path dependent type, which
+// is refused where it is read (#8973).
+// Whether any name was found to join a float with another kind, so that a
+// tag may hold a float, which the tagged arithmetic and comparison helpers
+// do not model.
+inline bool &float_tags_possible()
+{
+  static bool possible = false;
+  return possible;
+}
+
+inline bool kinds_diverge(const std::unordered_set<std::string> &kinds)
+{
+  const bool int_float_only =
+    kinds.size() == 2 && kinds.count("num") && kinds.count("float");
+  const bool diverge = kinds.size() >= 2 && !int_float_only;
+  if (diverge && kinds.count("float"))
+    float_tags_possible() = true;
+  return diverge;
 }
 
 // Resolves `x = n` via name's own assignment in scope_body.
@@ -103,6 +159,18 @@ inline std::string classify_name_kind(
   return kind;
 }
 
+// `x` for a Name target, `C.v` for an attribute of a name, else "".
+inline std::string assigned_name(const nlohmann::json &target)
+{
+  if (target.value("_type", "") == "Name")
+    return target.value("id", "");
+  if (
+    target.value("_type", "") == "Attribute" && target.contains("value") &&
+    target["value"].value("_type", "") == "Name")
+    return target["value"].value("id", "") + "." + target.value("attr", "");
+  return "";
+}
+
 // Classifies a branch's top-level assignments by literal type; a Name
 // value (e.g. `x = n`) is resolved via scope_body.
 inline std::unordered_map<std::string, std::string>
@@ -137,9 +205,9 @@ classify_branch_literal_assigns(
     else
       continue;
 
-    if (target.value("_type", "") != "Name" || !target.contains("id"))
+    const std::string name = assigned_name(target);
+    if (name.empty())
       continue;
-    const std::string &name = target["id"].get<std::string>();
 
     // A later reassignment invalidates an earlier recorded kind for `name`.
     if (!stmt.contains("value") || stmt["value"].is_null())
@@ -241,8 +309,41 @@ inline bool collect_if_node_literal_kinds(
            module_body);
 }
 
-// True if some top-level `If` in `scope_body` assigns `name` genuinely
-// incompatible literal kinds across every branch.
+// Whether `stmt` assigns to `name`.
+inline bool assigns_name(const nlohmann::json &stmt, const std::string &name)
+{
+  const std::string kind = stmt.value("_type", "");
+  const nlohmann::json *target = nullptr;
+  if (kind == "AnnAssign")
+    target = &stmt["target"];
+  else if (kind == "Assign" && stmt["targets"].size() == 1)
+    target = &stmt["targets"][0];
+  return target && target->is_object() &&
+         target->value("_type", "") == "Name" &&
+         target->value("id", "") == name;
+}
+
+// Whether `value` is a conditional expression whose arms have incompatible
+// literal kinds.
+inline bool ifexp_arms_diverge(
+  const nlohmann::json &value,
+  const nlohmann::json &module_body)
+{
+  if (
+    !value.is_object() || value.value("_type", "") != "IfExp" ||
+    !value.contains("body") || !value.contains("orelse"))
+    return false;
+  const std::string then_kind =
+    classify_literal_value_kind(value["body"], module_body);
+  const std::string else_kind =
+    classify_literal_value_kind(value["orelse"], module_body);
+  return !then_kind.empty() && !else_kind.empty() &&
+         kinds_diverge({then_kind, else_kind});
+}
+
+// True if some top-level `If` in `scope_body`, or a conditional expression
+// bound to `name`, assigns `name` genuinely incompatible literal kinds across
+// every branch.
 inline bool scope_assigns_divergent_literal_types(
   const std::string &name,
   const nlohmann::json &scope_body,
@@ -253,7 +354,13 @@ inline bool scope_assigns_divergent_literal_types(
 
   for (const auto &stmt : scope_body)
   {
-    if (!stmt.is_object() || stmt.value("_type", "") != "If")
+    if (!stmt.is_object())
+      continue;
+    if (
+      assigns_name(stmt, name) && stmt.contains("value") &&
+      ifexp_arms_diverge(stmt["value"], module_body))
+      return true;
+    if (stmt.value("_type", "") != "If")
       continue;
 
     std::unordered_map<std::string, std::unordered_set<std::string>> kinds;
@@ -266,9 +373,118 @@ inline bool scope_assigns_divergent_literal_types(
     auto it = kinds.find(name);
     if (
       it != kinds.end() && leaf_count[name] == leaf_total &&
-      it->second.size() >= 2)
+      kinds_diverge(it->second))
       return true;
   }
   return false;
+}
+
+// A binding of a name to a number: its kind, "int" (bool included) or
+// "float", the value bound, and whether it sits inside a block.
+struct numeric_bindingt
+{
+  std::string kind;
+  nlohmann::json value;
+  bool in_block;
+};
+
+// The kind of number a binding of `name` stores: "int" (bool included),
+// "float", or "" for anything else or another name.
+inline std::string
+numeric_binding_kind(const nlohmann::json &stmt, const std::string &name)
+{
+  if (!assigns_name(stmt, name))
+    return "";
+  const nlohmann::json &annotation = stmt.value("annotation", nlohmann::json());
+  const std::string type =
+    annotation.is_object() ? annotation.value("id", "") : "";
+  if (type == "int" || type == "bool")
+    return "int";
+  return type == "float" ? "float" : "";
+}
+
+// A line field of `node`, or -1 when the preprocessor left it unset.
+inline int line_field(const nlohmann::json &node, const char *key)
+{
+  const auto it = node.find(key);
+  return it != node.end() && it->is_number_integer() ? it->get<int>() : -1;
+}
+
+// Whether `stmt` starts after line `before`, so that, outside a loop that
+// spans `before`, nothing it binds reaches that line.
+inline bool starts_after(const nlohmann::json &stmt, int before)
+{
+  return line_field(stmt, "lineno") >= before;
+}
+
+// Whether `stmt` is a loop whose body runs again after line `before`. A loop
+// the preprocessor built without an end line is taken to span it.
+inline bool loop_spans(const nlohmann::json &stmt, int before)
+{
+  const std::string kind = stmt.value("_type", "");
+  const int end = line_field(stmt, "end_lineno");
+  return (kind == "While" || kind == "For" || kind == "AsyncFor") &&
+         line_field(stmt, "lineno") <= before && (end < 0 || end >= before);
+}
+
+// Records the number `stmt` binds to `name`. A binding on the straight-line
+// spine before line `before` replaces every binding ahead of it on all paths,
+// so those are dropped.
+inline void record_numeric_binding(
+  const nlohmann::json &stmt,
+  const std::string &name,
+  bool nested,
+  int before,
+  std::vector<numeric_bindingt> &bindings)
+{
+  const int line = line_field(stmt, "lineno");
+  if (!nested && line >= 0 && line < before && assigns_name(stmt, name))
+    bindings.clear();
+  const std::string number = numeric_binding_kind(stmt, name);
+  if (!number.empty() && stmt.contains("value") && !stmt["value"].is_null())
+    bindings.push_back({number, stmt["value"], nested});
+}
+
+// The number bindings of `name` in `body`, outside nested scopes, that are
+// live at line `before`. With `include_later`, those starting after it count
+// too, as they do inside a loop that spans it.
+inline void collect_numeric_bindings(
+  const nlohmann::json &body,
+  const std::string &name,
+  bool nested,
+  int before,
+  bool include_later,
+  std::vector<numeric_bindingt> &bindings)
+{
+  for (const auto &stmt : body)
+  {
+    if (!stmt.is_object() || (!include_later && starts_after(stmt, before)))
+      continue;
+    const std::string kind = stmt.value("_type", "");
+    if (kind == "FunctionDef" || kind == "ClassDef")
+      continue;
+    record_numeric_binding(stmt, name, nested, before, bindings);
+    const bool later = include_later || loop_spans(stmt, before);
+    for (const char *key : {"body", "orelse", "finalbody", "handlers", "cases"})
+      if (stmt.contains(key) && stmt[key].is_array())
+        collect_numeric_bindings(
+          stmt[key], name, true, before, later, bindings);
+  }
+}
+
+// Whether the bindings store an int on one path and a float on another: an
+// int and a float, at least one of them inside a block. A name rebound on
+// the straight-line spine has the same type on every path.
+inline bool
+is_path_dependent_number(const std::vector<numeric_bindingt> &bindings)
+{
+  bool has_int = false, has_float = false, in_block = false;
+  for (const auto &binding : bindings)
+  {
+    has_int |= binding.kind == "int";
+    has_float |= binding.kind == "float";
+    in_block |= binding.in_block;
+  }
+  return has_int && has_float && in_block;
 }
 } // namespace dynamic_type_detail

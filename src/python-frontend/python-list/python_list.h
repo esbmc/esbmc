@@ -413,6 +413,9 @@ public:
   view_element_count(const nlohmann::json &node, const strided_view_desc &view);
 
   /// sum / mean / min / max / any / all of a run-time-extent view, as loops.
+  std::optional<exprt> reduce_view_argextreme(
+    const std::string &function,
+    const nlohmann::json &arg);
   std::optional<exprt> try_reduce_symbolic_view(
     const std::string &function,
     const nlohmann::json &arg);
@@ -552,6 +555,8 @@ public:
     const exprt &list_expr,
     const nlohmann::json &slice_node);
 
+  size_t
+  eq_float_type_id(const std::string &lhs_id, const std::string &rhs_id) const;
   exprt compare(const exprt &l1, const exprt &l2, const std::string &op);
 
   exprt contains(const exprt &item, const exprt &list);
@@ -568,11 +573,18 @@ public:
    *
    * @p lhs is the subscript target `*(T *)item->value` of the list subscript
    * this handler was built for. When @p rhs is a tuple of another type than T
-   * (or T is a tuple and @p rhs is not), the pair is rewritten into
-   * `*item = *list_at(tmp, 0)`, with tmp a list holding @p rhs, so the slot
-   * gets the new value, type_id and size. Otherwise both are left unchanged.
+   * (or T is a tuple and @p rhs is not), or T is a non-scalar a list copy may
+   * share, the pair is rewritten into `*item = *list_at(tmp, 0)`, with tmp a
+   * list holding @p rhs, so the slot gets the new value, type_id and size.
+   * Otherwise both are left unchanged.
    */
   void retype_element_store(exprt &lhs, exprt &rhs);
+
+  bool has_shared_payload(const typet &type) const;
+
+  /// Allocates the instance a constructor stores to @p lhs and returns the
+  /// pointer to pass as `self`.
+  exprt allocate_constructed_object(const exprt &lhs);
 
   /// Records @p elem_type as the type of the element @p subscript stores to.
   void record_element_store(
@@ -587,6 +599,18 @@ public:
     exprt lhs_val,
     exprt rhs_val,
     const typet &lhs_type,
+    const typet &rhs_type) const;
+
+  /// Conjoins to @p sizes_ok that the slots @p lhs_at and @p rhs_at hold
+  /// @p lhs_type and @p rhs_type, for compare()'s nested fast path. Only a
+  /// top-level scalar slot is exempt: any other slot was typed through a
+  /// nested list the type map may name by a dead or rebound symbol (#8130).
+  void require_stored_types(
+    expr2tc &sizes_ok,
+    std::size_t depth,
+    const exprt &lhs_at,
+    const typet &lhs_type,
+    const exprt &rhs_at,
     const typet &rhs_type) const;
 
   exprt build_push_list_call(
@@ -638,6 +662,12 @@ public:
     const exprt &array,
     const nlohmann::json &slice_node) const;
 
+  /// Refuses an index other than a non-negative constant into a list
+  /// attribute whose recorded elements have different types (#8666).
+  void reject_mixed_member_element_read(
+    const exprt &array,
+    const nlohmann::json &slice_node) const;
+
   /**
    * @brief Create an empty set
    * @return Expression representing the empty set
@@ -673,8 +703,13 @@ public:
     const exprt &index,
     const locationt &location);
 
+  /// Whether storing a `new_type` value into an element read as `old_type`
+  /// replaces the element rather than writing into its storage.
+  bool
+  store_replaces_element(const typet &old_type, const typet &new_type) const;
+
   /// The __ESBMC_list_set_at call storing `rhs` into the list element `lhs`
-  /// reads, when `rhs` changes the element's type; nullopt otherwise.
+  /// reads, when store_replaces_element holds; nullopt otherwise.
   std::optional<exprt> build_element_replacement(
     const exprt &lhs,
     const exprt &rhs,
@@ -784,6 +819,16 @@ public:
   exprt
   build_shallow_copy_call(const exprt &src_list, const nlohmann::json &element);
 
+  /// tuple(x) of a list: a shallow copy marked as a tuple (#8777).
+  exprt
+  build_tuple_copy_call(const exprt &src_list, const nlohmann::json &element);
+
+  /// Mark `list` as built by tuple(x) (#8777).
+  void build_mark_tuple_call(const exprt &list);
+
+  /// Whether `list` was built by tuple(x) (#8777).
+  exprt build_is_tuple_call(const exprt &list);
+
   /**
    * @brief Build a list remove operation (removes first matching element).
    * Raises ValueError (via assertion) if element is not found.
@@ -864,17 +909,22 @@ public:
    */
   BigInt uniform_elem_size(const exprt &list) const;
 
-  /// Whether the list stored at index @p i of @p list is the one @p elem holds
-  /// now. The type map names a nested element by the symbol it was appended
-  /// from, and a later assignment can rebind that symbol when it is a user
-  /// variable.
-  expr2tc
-  stored_element_is(const symbolt &list, std::size_t i, const symbolt &elem);
-
   /// The element type a subscript's base declares when the type map has no
   /// record of the list: a name's annotation, or a called function's return
   /// annotation. Empty when neither gives one.
   typet unrecorded_base_elem_type();
+
+  /// The element type that a program class in the object's MRO annotates the
+  /// instance-attribute list @p array with; empty when unannotated or nested.
+  typet attribute_elem_type(const exprt &array) const;
+
+  /// The type map's record of @p array, or nullptr when it has none or is an
+  /// annotated instance attribute.
+  const element_type_registry::entries *
+  recorded_elem_types(const exprt &array) const;
+
+  /// The element type of @p array's attribute annotation, or Any without one.
+  typet attribute_elem_type_or_any(const exprt &array) const;
 
   // True when the list's recorded element types include a tagged scalar, whose
   // payload width is per-element and symbolic (#7716).
@@ -996,6 +1046,8 @@ private:
     const exprt &index,
     const nlohmann::json &element);
 
+  exprt bind_list_element(const exprt &list_at_call);
+
   list_elem_info
   get_list_element_info(const nlohmann::json &op, const exprt &elem);
 
@@ -1014,6 +1066,16 @@ private:
   list_elem_info
   get_tagged_element_info(const nlohmann::json &op, const exprt &elem);
 
+  /// Element info for a key that is only compared, never stored: a tagged key
+  /// forwards its runtime value/type_id/size.
+  list_elem_info
+  get_lookup_key_info(const nlohmann::json &op, const exprt &key);
+
+  /// As get_lookup_key_info for a key that is not tagged: a list element read
+  /// at an erased (any) type forwards the element's own value/type_id/size.
+  list_elem_info
+  get_erased_key_info(const nlohmann::json &op, const exprt &key);
+
   // The type_id a tagged scalar carries when it holds a float, or 0 when the
   // caller opts out of the float path (dict values compare via void*).
   exprt tagged_float_type_id(bool enable_float_path) const;
@@ -1023,20 +1085,13 @@ private:
   exprt
   handle_range_slice(const exprt &array, const nlohmann::json &slice_node);
 
-  // Propagate a dict view's element types onto its slice result. Split out for
-  // the same reason as normalize_negative_slice_bound below.
+  // Propagate a dict view's element types onto its slice result. Split out to
+  // keep handle_range_slice's own decision count from growing further.
   void
   copy_dict_view_elem_types(const exprt &array, const std::string &sliced_id);
-
-  // handle_range_slice's process_bound: normalizes a literal negative bound
-  // (-k) to logical_len - k, clamped for an out-of-range k -- see the call
-  // site's own comment for why the clamp differs by step direction. Split
-  // out to keep handle_range_slice's own decision count from growing
-  // further.
-  exprt normalize_negative_slice_bound(
-    const nlohmann::json &operand_node,
-    const exprt &logical_len,
-    bool negative_step);
+  void copy_list_of_dict_view_elem_types(
+    const exprt &array,
+    const std::string &sliced_id);
 
   // Shared core of every ADR-NP-003 scalar pointer view producer; see
   // list_access.cpp for the full rationale, including when this declines.
@@ -1151,6 +1206,7 @@ private:
 
   exprt
   handle_index_access(const exprt &array, const nlohmann::json &slice_node);
+  exprt index_value(const exprt &index, const nlohmann::json &slice_node);
 
   // True when `array` is a 2-D+ numpy array parameter's decayed pointer
   // symbol (register_function_argument's row-pointer decay), i.e. one whose

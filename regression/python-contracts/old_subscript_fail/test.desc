@@ -1,4 +1,4 @@
 CORE
 main.py
 --enforce-contract f
-^ERROR: __ESBMC_ensures clause at line 3 contains a subscript; a contract clause must be a pure expression$
+^ERROR: __ESBMC_old at line 3 takes a variable; a subscript cannot be snapshotted$

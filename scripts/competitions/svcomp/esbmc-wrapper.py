@@ -88,7 +88,7 @@ PYTHON_EXCEPTION_FAMILIES = {
 # Parsed by the CLI entry point at the bottom; do_exec() is the only reader.
 args = None
 
-def do_exec(cmd_line):
+def do_exec(cmd_line, timeout=None):
 
   if args.dry_run:
     exit(0)
@@ -96,15 +96,20 @@ def do_exec(cmd_line):
   the_args = shlex.split(cmd_line)
 
   p = subprocess.Popen(the_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-  (stdout, stderr) = p.communicate()
+  try:
+    (stdout, stderr) = p.communicate(timeout=timeout)
+  except subprocess.TimeoutExpired:
+    p.kill()
+    p.communicate()
+    return b"Timed out"
 
   return stdout + stderr
 
 # Function to run esbmc
-def run(cmd_line):
+def run(cmd_line, timeout=None):
   print("Verifying with ESBMC")
   print("Command: " + cmd_line)
-  out = do_exec(cmd_line)
+  out = do_exec(cmd_line, timeout)
   print(out.decode())
   return out
 
@@ -133,6 +138,18 @@ def violated_property_text(the_output):
       if row and row.group(1) == "FAILED":
         violated.append(line)
   return "\n".join(violated)
+
+VIOLATION_SITE = re.compile(r"Violated property:\n\s+file (\S+)(?: line (\d+))?")
+
+
+def violation_site(the_output):
+  """(file, line) of the first violated property, or None. The line is None
+  for an uncaught exception, which ESBMC reports without one."""
+  site = VIOLATION_SITE.search(the_output)
+  if site is None:
+    return None
+  return os.path.basename(site.group(1)), site.group(2)
+
 
 MEMORY_LEAK = "dereference failure: forgotten memory"
 UNREACHABILITY_INTRINSIC = "reachability: unreachable code reached"
@@ -181,10 +198,23 @@ UNCAUGHT_EXCEPTION = re.compile(r"uncaught exception: (\w+)")
 ASSERTION_ROW = re.compile(r"\]\s+line\s+\d+\s+assertion\b")
 
 
+# The scalar model raises a TypeError on a dynamically-typed operand as an
+# assertion in scalar.c, so the comment is the bare message, not "uncaught
+# exception: TypeError". A try/except TypeError around the operation still
+# catches it. Only these operand checks count: list.c's "object of this type
+# has no len()" also fails inside the model on correct programs.
+MODEL_TYPEERROR = re.compile(
+  r"TypeError: (?:unsupported operand type\(s\)|comparison not supported"
+  r"|can only concatenate str)")
+
+
 def classify_python_violation(violated, prop):
   """Does this violation belong to the exception family the property asks about?"""
   family = PYTHON_EXCEPTION_FAMILIES[prop]
   if any(name in family for name in UNCAUGHT_EXCEPTION.findall(violated)):
+    return Result.fail_python
+
+  if "TypeError" in family and MODEL_TYPEERROR.search(violated):
     return Result.fail_python
 
   if prop == Property.py_assertion and ASSERTION_ROW.search(violated):
@@ -486,6 +516,30 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci,
 
   return command_line
 
+# Python ints are unbounded but ESBMC's default encoding wraps them at 64 bits
+# (esbmc/esbmc#8892), so a violation only the wrapped encoding reaches is false.
+# Bitwuzla does not support the integer encoding, hence --z3.
+IR_RERUN_TIMEOUT = 120
+# Keep both runs together under the competition's 900 s limit.
+TOTAL_BUDGET = 870
+MIN_RERUN_BUDGET = 30
+
+
+def confirmed_by_integer_encoding(esbmc_command_line, the_output, prop, elapsed):
+  """Does a --ir re-run violate the same property at the same file and line?
+
+  A first run that leaves too little of the budget keeps its FALSE unchecked.
+  """
+  budget = min(IR_RERUN_TIMEOUT, TOTAL_BUDGET - elapsed)
+  if budget < MIN_RERUN_BUDGET:
+    return True
+  site = violation_site(the_output)
+  if site is None:
+    return False
+  rerun = run(esbmc_command_line + "--ir --z3 ", budget).decode()
+  return parse_result(rerun, prop) == Result.fail_python and violation_site(rerun) == site
+
+
 def verify(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, witness_path, validate_mode):
   esbmc_command_line = get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, validate=bool(witness_path))
 
@@ -493,8 +547,12 @@ def verify(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, witness_p
     esbmc_command_line += "--validate-" + validate_mode + "-witness "
     esbmc_command_line += "--witness " + witness_path + " "
 
+  started = time.monotonic()
   output = run(esbmc_command_line)
+  elapsed = time.monotonic() - started
   res = parse_result(output.decode(), prop)
+  if res == Result.fail_python and not confirmed_by_integer_encoding(esbmc_command_line, output.decode(), prop, elapsed):
+    return Result.unknown
   return res
 
 if __name__ == "__main__":

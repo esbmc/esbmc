@@ -1,0 +1,5 @@
+CORE
+main.py
+--unwind 5 --no-pointer-check --no-align-check
+^  file .*main.py line 4 
+^VERIFICATION FAILED$

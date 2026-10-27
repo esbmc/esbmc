@@ -166,13 +166,142 @@ class ExpressionRewriteMixin:
                   and self._map_for_lowerable(n, n.iter)):
                 self._map_for_as_plain_for(n)
 
+    _REDUCE_FIRST = """\
+{seq} = list(__iterable)
+if len({seq}) == 0:
+    raise TypeError("reduce() of empty iterable with no initial value")
+{acc} = {seq}[0]
+for {i} in range(1, len({seq})):
+"""
+
+    _REDUCE_INITIAL = """\
+{seq} = list(__iterable)
+{acc} = __initial
+for {i} in range(0, len({seq})):
+"""
+
+    _REDUCE_CALL_STEP = "    {acc} = __function({acc}, {seq}[{i}])\n"
+
+    # The converter cannot call a lambda in place, so its body is inlined.
+    _REDUCE_LAMBDA_STEP = "    {x} = {acc}\n    {y} = {seq}[{i}]\n    {acc} = __function\n"
+
+    @staticmethod
+    def _functools_binding(node, alias):
+        """"reduce" when @p alias of import @p node binds functools.reduce,
+        "module" when it binds functools itself, else None."""
+        if (isinstance(node, ast.ImportFrom) and node.module == "functools" and not node.level
+                and alias.name == "reduce"):
+            return "reduce"
+        if isinstance(node, ast.Import) and alias.name == "functools":
+            return "module"
+        return None
+
+    def _scan_functools_reduce_names(self, module):
+        """Names that can only mean functools.reduce, and names that can only
+        mean the functools module: each bound once, by its import."""
+        sites = self._binding_sites(module)
+        found = {"reduce": set(), "module": set(), None: set()}
+        for n in ast.walk(module):
+            if isinstance(n, (ast.Import, ast.ImportFrom)):
+                for alias in n.names:
+                    name = alias.asname or alias.name
+                    if sites[name] == 1:
+                        found[self._functools_binding(n, alias)].add(name)
+        self.functools_reduce_names = found["reduce"]
+        self.functools_module_names = found["module"]
+
+    def _is_functools_reduce_call(self, node):
+        """Whether @p node calls functools.reduce in a form the fold lowers."""
+        func = node.func
+        named = isinstance(func, ast.Name) and func.id in self.functools_reduce_names
+        qualified = (isinstance(func, ast.Attribute) and func.attr == "reduce"
+                     and isinstance(func.value, ast.Name)
+                     and func.value.id in self.functools_module_names)
+        return ((named or qualified) and len(node.args) in (2, 3) and not node.keywords
+                and (isinstance(node.args[0], ast.Name) or self._is_inlinable_lambda(node.args[0]))
+                and not any(isinstance(a, ast.Starred) for a in node.args))
+
+    @staticmethod
+    def _is_inlinable_lambda(node):
+        """A two-parameter lambda whose body opens no scope of its own, so
+        renaming its parameters' loads renames every use of them."""
+        if not isinstance(node, ast.Lambda):
+            return False
+        args = node.args
+        scopes = (ast.Lambda, ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp,
+                  ast.NamedExpr)
+        return (len(args.args) == 2 and not args.posonlyargs and not args.vararg
+                and not args.kwonlyargs and not args.kwarg and not args.defaults
+                and not any(isinstance(n, scopes) for n in ast.walk(node.body)))
+
+    def _lower_functools_reduce(self, call):
+        """reduce(f, xs[, initial]) -> the left fold functools.reduce performs,
+        raising its TypeError on an empty sequence without an initial value.
+        f is called directly at each step, so its argument and result types
+        are the caller's."""
+        n = self.listcomp_counter
+        self.listcomp_counter += 1
+        names = {
+            "seq": f"ESBMC_reduce_seq_{n}",
+            "acc": f"ESBMC_reduce_acc_{n}",
+            "i": f"ESBMC_reduce_i_{n}",
+            "x": f"ESBMC_reduce_x_{n}",
+            "y": f"ESBMC_reduce_y_{n}"
+        }
+        function = call.args[0]
+        step = self._REDUCE_CALL_STEP
+        if isinstance(function, ast.Lambda):
+            step = self._REDUCE_LAMBDA_STEP
+            function = copy.deepcopy(function.body)
+            for param, name in zip(call.args[0].args.args, (names["x"], names["y"])):
+                function = self._rename_loads(function, param.arg, name)
+        template = (self._REDUCE_FIRST if len(call.args) == 2 else self._REDUCE_INITIAL) + step
+        holes = dict(zip(("__function", "__iterable", "__initial"), [function, *call.args[1:]]))
+
+        class _Fill(ast.NodeTransformer):
+
+            def visit_Name(self, node):
+                """The argument a template placeholder stands for, else @p node."""
+                hole = holes.get(node.id)
+                return copy.deepcopy(hole) if hole is not None else node
+
+        tree = ast.parse(template.format(**names))
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.stmt, ast.expr)):
+                ast.copy_location(node, call)
+        prefix = []
+        for stmt in _Fill().visit(tree).body:
+            visited = self.visit(stmt)
+            prefix.extend(visited if isinstance(visited, list) else [visited])
+        return prefix, self.create_name_node(names["acc"], ast.Load(), call)
+
     class _ListCompExpressionLowerer(ast.NodeTransformer):
         """Utility transformer that lowers list comprehensions, any(genexpr), and all(genexpr) inside an expression."""
 
-        def __init__(self, preprocessor):
+        def __init__(self, preprocessor, root):
             super().__init__()
             self.preprocessor = preprocessor
+            self.root = root
             self.statements = []
+            # Prefix statements run unconditionally, so an expression that
+            # might not be evaluated must not be lowered into them.
+            self.conditional_depth = 0
+
+        def _visit_conditionally(self, node):
+            """Visit @p node, whose operands may go unevaluated."""
+            self.conditional_depth += 1
+            try:
+                return self.generic_visit(node)
+            finally:
+                self.conditional_depth -= 1
+
+        visit_IfExp = visit_BoolOp = visit_Lambda = _visit_conditionally
+
+        def _lower_functools_reduce_call(self, node):
+            """The lowered fold for a functools.reduce call, else None."""
+            if self.conditional_depth or not self.preprocessor._is_functools_reduce_call(node):
+                return None
+            return self.preprocessor._lower_functools_reduce(self.generic_visit(node))
 
         def visit_ListComp(self, node):
             # pylint: disable=protected-access
@@ -206,6 +335,41 @@ class ExpressionRewriteMixin:
         def visit_GeneratorExp(self, node):
             """Lower a genexp not already handled above (any/all/join/...)."""
             return self._lower_as_listcomp(node)
+
+        def _other_code_may_run(self, comp):
+            """True when the expression may run code outside @p comp other than
+            the calls enclosing it, which hoisting @p comp would reorder."""
+            parents = {
+                id(child): parent
+                for parent in ast.walk(self.root)
+                for child in ast.iter_child_nodes(parent)
+            }
+            exempt = {id(n) for n in ast.walk(comp)}
+            node = comp
+            while id(node) in parents:
+                node = parents[id(node)]
+                exempt.add(id(node))
+            return any(
+                isinstance(n, (ast.Call, ast.NamedExpr, ast.Await, ast.Yield,
+                               ast.YieldFrom)) and id(n) not in exempt for n in ast.walk(self.root))
+
+        def visit_DictComp(self, node):
+            """Hoist a dict comprehension over a dict into a temp, so it takes
+            the for-loop lowering an assigned one gets (#5444)."""
+            if self.conditional_depth or self._other_code_may_run(node):
+                return self.generic_visit(node)
+            # pylint: disable=protected-access
+            tmp_id = f"ESBMC_dictcomp_{self.preprocessor.listcomp_counter}"
+            assign = ast.Assign(targets=[ast.Name(id=tmp_id, ctx=ast.Store())], value=node)
+            ast.copy_location(assign, node)
+            lowered = self.preprocessor._maybe_lower_dictcomp_over_items(assign)
+            if lowered is None:
+                return self.generic_visit(node)
+            self.preprocessor.listcomp_counter += 1
+            self.statements.extend(lowered)
+            result = ast.Name(id=tmp_id, ctx=ast.Load())
+            ast.copy_location(result, node)
+            return result
 
         def visit_Call(self, node):  # pylint: disable=protected-access,too-many-locals,too-many-boolean-expressions,too-many-statements
             if (isinstance(node.func, ast.Attribute) and node.func.attr == "join"
@@ -328,13 +492,14 @@ class ExpressionRewriteMixin:
                 ast.fix_missing_locations(listcomp)
                 return self.visit(listcomp)
 
+            gen_call, arity_check = self.preprocessor._unguard_starred_call(node)
             if (isinstance(node.func, ast.Name) and node.func.id == "list" and len(node.args) == 1
-                    and not node.keywords and isinstance(node.args[0], ast.Call)
-                    and isinstance(node.args[0].func, ast.Name)
-                    and node.args[0].func.id in self.preprocessor.generator_funcs):
-                prefix, result = self.preprocessor._lower_list_gen_call(node.args[0], node)
+                    and not node.keywords and isinstance(gen_call, ast.Call)
+                    and isinstance(gen_call.func, ast.Name)
+                    and gen_call.func.id in self.preprocessor.generator_funcs):
+                prefix, result = self.preprocessor._lower_list_gen_call(gen_call, node)
                 if prefix is not None:
-                    self.statements.extend(prefix)
+                    self.statements.extend(arity_check + prefix)
                     return result
 
             # sum(range(EXPR)) -> (EXPR * (EXPR - 1) // 2 if EXPR > 0 else 0).
@@ -378,6 +543,7 @@ class ExpressionRewriteMixin:
                 ast.fix_missing_locations(formula)
                 return self.visit(formula)
 
+            node = self.preprocessor._pack_min_max_key_args(node)
             # Ordered: each constant fold gets first refusal, then the scan
             # that handles what it could not fold.
             for lower in (
@@ -386,6 +552,7 @@ class ExpressionRewriteMixin:
                     self.preprocessor._lower_min_max_key_scan,
                     self.preprocessor._lower_sorted_key_scan,
                     self.preprocessor._lower_tuple_sorted_pair_call,
+                    self._lower_functools_reduce_call,
             ):
                 lowered = lower(node)
                 if lowered is not None:
@@ -461,6 +628,9 @@ class ExpressionRewriteMixin:
                             elt.op, (ast.UAdd, ast.USub)) and isinstance(elt.operand, ast.Constant))
                     if is_pure_literal:
                         folded = copy.deepcopy(elt)
+                        # Each fold is a fresh copy, so record which element it
+                        # reads for `is` to compare by identity (#8412).
+                        folded.esbmc_list_element = f"{node.value.id}[{idx}]"
                         self.ensure_all_locations(folded, node)
                         ast.fix_missing_locations(folded)
                         return folded

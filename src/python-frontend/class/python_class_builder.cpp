@@ -77,6 +77,16 @@ bool python_class_builder::register_method(
   return true;
 }
 
+/// Whether the parser marked \p base, as spelled, as a class of a module with
+/// no model that CPython creates this class from (`unmodelled_class`).
+bool python_class_builder::is_unmodelled_base(const std::string &base) const
+{
+  for (const auto &node : cls_["bases"])
+    if (json_utils::dotted_name(node) == base)
+      return node.value("unmodelled_class", false);
+  return false;
+}
+
 bool python_class_builder::get_bases(struct_typet &st)
 {
   bool has_ud = false;
@@ -95,14 +105,26 @@ bool python_class_builder::get_bases(struct_typet &st)
 
     has_ud = true;
     auto *bsym = conv_.symbol_table_.find_symbol("tag-" + base);
+    if (!bsym && is_unmodelled_base(bfull))
+    {
+      conv_.unmodelled_base_classes_.emplace(pc_.name(), bfull);
+      continue;
+    }
     if (!bsym)
       throw std::runtime_error("Base class not found: " + base);
+
+    const auto opaque = conv_.unmodelled_base_classes_.find(base);
+    if (opaque != conv_.unmodelled_base_classes_.end())
+      conv_.unmodelled_base_classes_.emplace(pc_.name(), opaque->second);
 
     ids.emplace_back(bsym->id);
 
     const auto &bty = static_cast<const struct_typet &>(bsym->get_type());
+    // Bases sharing an ancestor (a diamond) each carry its attributes, which
+    // name one slot of the instance.
     for (const auto &c : bty.components())
-      st.components().push_back(c);
+      if (!st.has_component(c.get_name()))
+        st.components().push_back(c);
   }
   return has_ud;
 }

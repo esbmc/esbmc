@@ -1,0 +1,5 @@
+properties:
+  - id: P1
+    kind: invariant
+    expression: "Safe"
+    description: "#8212: REAL is binary32, so 16777216.0 + 1.0 rounds back to 16777216.0"

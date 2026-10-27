@@ -455,7 +455,17 @@ smt_astt smt_solver_baset::init_pointer_obj(
      * leaves unconstrained, no longer reads as aligned there (#7707). */
     const BigInt a = object_base_alignment(*type, size, ns);
 
-    if (a > 1)
+    if (
+      a > 1 && !int_encoding && is_power_of_two(a) &&
+      a.floorPow2() < ptr_loc_type->get_width())
+    {
+      // start % 2^k == 0 exactly when the low k bits of start are zero.
+      const unsigned int k = a.floorPow2();
+      const type2tc low_type = get_uint_type(k);
+      assert_expr(equality2tc(
+        extract2tc(low_type, start_sym, k - 1, 0), gen_zero(low_type)));
+    }
+    else if (a > 1)
     {
       expr2tc mod =
         modulus2tc(ptr_loc_type, start_sym, constant_int2tc(ptr_loc_type, a));

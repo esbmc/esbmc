@@ -1,0 +1,4 @@
+regression/esbmc/tuple_const_array_member_reads
+regression/esbmc/tuple_const_array_member_reads_fail
+regression/esbmc/tuple_const_array_struct_member
+regression/esbmc/tuple_const_array_struct_member_fail

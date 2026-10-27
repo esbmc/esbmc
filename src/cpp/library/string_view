@@ -15,12 +15,22 @@
 
 namespace std
 {
+class out_of_range;
+
 namespace __sv_detail
 {
 inline size_t min(size_t a, size_t b)
 {
   return a < b ? a : b;
 }
+
+// <string> includes this header before it can define out_of_range, so at()
+// names the type dependently and needs it complete only on instantiation.
+template <class E, class>
+struct dependent
+{
+  typedef E type;
+};
 } // namespace __sv_detail
 
 /* [string.view.template]: string_view is basic_string_view<char>, not a class
@@ -75,13 +85,11 @@ public:
 
   // Element access
   OM_CONSTEXPR const CharT &operator[](size_t pos) const { return str[pos]; }
+  // [string.view.access]: at() throws out_of_range for pos >= size() (#8698).
   const CharT &at(size_t pos) const
   {
-    /* [string.view.access]: at() throws out_of_range for pos >= size(). The
-     * exception is not modelled here (see #6338 for why <string> cannot throw
-     * either), so the precondition is asserted instead -- which at least
-     * reports the violation rather than reading out of bounds. */
-    __ESBMC_assert(pos < len, "string_view::at: pos out of range");
+    if (pos >= len)
+      throw typename __sv_detail::dependent<out_of_range, CharT>::type();
     return str[pos];
   }
   const CharT &front() const { return *str; }
@@ -194,5 +202,7 @@ typedef basic_string_view<char32_t> u32string_view;
 typedef basic_string_view<char8_t> u8string_view;
 #endif
 } // namespace std
+
+#include <string> /* completes std::out_of_range for at() */
 
 #endif // __cplusplus >= 201103L

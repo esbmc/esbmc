@@ -1,0 +1,7 @@
+def measure(s: str) -> tuple[str, int]:
+    return (s, len(s))
+
+
+name, n = measure("abc")
+assert name == "abc"
+assert n == 2

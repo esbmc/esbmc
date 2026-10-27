@@ -171,9 +171,24 @@ public:
 
   /**
    *  Remember a guard generation's defining condition for
-   *  path_guard_decides, up to subsumption_map_capacity.
+   *  path_guard_decides.
    */
   void record_guard_definition(const expr2tc &guard_expr, const expr2tc &rhs);
+
+  /**
+   *  A path-guard conjunct rewritten onto the canonical basis
+   *  path_guard_decides compares on.
+   */
+  expr2tc rewrite_conjunct(const expr2tc &conjunct);
+
+  /** Rewritten conjunct -> position of the first conjunct rewriting to it. */
+  using conjunct_indext = persistent_map<expr2tc, size_t, irep2_hash>;
+
+  /**
+   *  The conjunct index of @p guard, which must not be true. Extends the
+   *  index of the longest prefix already in guard_prefix_index.
+   */
+  conjunct_indext prefix_index(const guard2tc &guard);
 
   /**
    *  Record a copy chain for chase_copies after an unconditional
@@ -344,6 +359,14 @@ public:
   /// opposed to a check symex raises while evaluating its guard.
   static std::string
   assertion_message(const namespacet &ns, const goto_programt::instructiont &i);
+
+  /// Free what only symex reads, once a formula is built: the guard prefix
+  /// index grows with every branching goto and would otherwise live through
+  /// solving.
+  void release_symex_caches()
+  {
+    guard_prefix_index.clear();
+  }
 
 protected:
   /**
@@ -643,6 +666,12 @@ protected:
   bool
   run_builtin(const code_function_call2t &call, const std::string &symname);
 
+  /** __builtin_bounded_<function>(x, exact): the bounded result of a
+   *  transcendental function, from util/arith/transcendental.h. */
+  void symex_bounded_math(
+    const code_function_call2t &call,
+    const std::string &function);
+
   /** Perform yield; forces a context switch point. */
   void intrinsic_yield(reachability_treet &arg);
   /** Perform switch_to; switches control to explicit thread ID. */
@@ -766,6 +795,10 @@ protected:
     const expr2tc &ptr,
     const expr2tc &n,
     const std::string &func);
+
+  /** Claim that a memory builtin's operand, on the path @p guard selects, is
+   *  not a code object; nothing under --no-pointer-check. */
+  void claim_not_code(const expr2tc &guard);
 
   /** Helper for intrinsic_memcmp: resolve @p ptr to a single concrete
    *  primitive object with a constant offset, validating that an
@@ -1423,8 +1456,15 @@ protected:
     const type2tc &new_type,
     const guard2tc &guard,
     const expr2tc &size = expr2tc());
+  /** Records an alloca'd object on the current frame, to die when it returns */
+  void record_frame_alloca(
+    const expr2tc &lhs,
+    const expr2tc &object,
+    bool is_malloc);
   /** Symbolic implementation of free */
   void symex_free(const expr2tc &expr);
+  /** Clear the valid bit of the object \p ptr points to, with no free checks */
+  void invalidate_object(const expr2tc &ptr);
   /** Symbolic implementation of c++'s delete. */
   void symex_cpp_delete(const expr2tc &code);
   /** Symbolic implementation of c++'s new. */
@@ -1467,6 +1507,17 @@ protected:
   /** Assume a printf-family call's return value equals the length of its
    *  output, when both are known. */
   void assume_printf_length(const expr2tc &retval, const expr2tc &len);
+  /** Assume a printf-family call's return value lies in [lo, hi], or is -1
+   *  when `may_fail`. */
+  void assume_printf_range(
+    const expr2tc &retval,
+    const BigInt &lo,
+    const BigInt &hi,
+    bool may_fail);
+  /** Point an asprintf/vasprintf call's `strp` at a fresh heap buffer of
+   *  `retval` + 1 bytes, allocated only when `retval` is non-negative. When
+   *  the result is discarded (`retval` nil) the buffer is 1 byte. */
+  void symex_asprintf_buffer(const expr2tc &strp, const expr2tc &retval);
   /** Run `formatter` over an unrenamed printf-family call; false when the
    *  format is not a constant. `constant_args` is set when every argument
    *  is a constant. */
@@ -1573,19 +1624,6 @@ protected:
    */
   irep_idt guard_identifier_s;
   /**
-   *  Cap on guard_definitions and copy_definitions. Both grow linearly
-   *  with symex length (one entry per branching goto, one per bare
-   *  copy: measured ~10k/~21k entries at 10k branch gotos) and are
-   *  copied whenever an execution state forks, so an interleaving-heavy
-   *  run would otherwise pay an unbounded per-fork cost. Past the cap,
-   *  recording stops: subsumption keeps matching against what was
-   *  recorded and never decides wrongly, it merely stops improving,
-   *  and the per-fork copy is bounded by the cap (~8 MB worst case).
-   *  Single-threaded runs never fork an execution state and only pay
-   *  the recording itself.
-   */
-  static constexpr size_t subsumption_map_capacity = 1 << 16;
-  /**
    *  Cap on one recorded copy definition's flattened node count:
    *  canonicalization doubles nested arithmetic chains per link, and
    *  an oversized definition costs more to match than it prunes.
@@ -1601,8 +1639,10 @@ protected:
    *  symbols that are already level2. Keyed by the L2-qualified symbol
    *  name (an interned irep_idt with a cached hash) rather than the
    *  expression, so a lookup never deep-compares expression trees.
+   *  Persistent, like the maps below: a forked execution state copies it in
+   *  O(1).
    */
-  std::unordered_map<irep_idt, expr2tc> guard_definitions;
+  persistent_map<irep_idt, expr2tc, irep_id_hash> guard_definitions;
   /**
    *  Copy chains between L2 symbol generations: lhs generation -> the
    *  stable value it was unconditionally assigned — a (possibly
@@ -1617,7 +1657,16 @@ protected:
    *  fed into constant propagation: substituting copies globally slices
    *  away the originals' assignments and degrades counterexamples.
    */
-  std::unordered_map<irep_idt, expr2tc> copy_definitions;
+  persistent_map<irep_idt, expr2tc, irep_id_hash> copy_definitions;
+  /**
+   *  prefix_index's result per and-chain node of a path guard. A node is
+   *  the cached base of one guard prefix, and a guard grows by appending
+   *  to that base, so a goto extends the index of its guard's longest
+   *  indexed prefix instead of rescanning every conjunct (#9150). Never
+   *  stale: conjuncts are L2, which renaming leaves alone, and the two maps
+   *  above bind each generation once.
+   */
+  persistent_map<expr2tc, conjunct_indext, irep2_hash> guard_prefix_index;
 
   struct deferred_assumptiont
   {
@@ -1710,7 +1759,8 @@ protected:
    *  the l1 renaming so the same object is recognised across frames (a
    *  va_list reached through a pointer dereferences to the owning
    *  activation's l1 name) and across recursion or loop re-declaration (each
-   *  DECL bumps the l1 number, so a fresh activation needs a fresh va_start).
+   *  DECL of a va_list bumps the l1 number, as va_start takes its address, so
+   *  a fresh activation needs a fresh va_start).
    *  Insertion ignores the path guard, over-approximating towards "started",
    *  so a conditional va_start can never yield a false positive. */
   std::unordered_map<
@@ -1862,8 +1912,9 @@ expr2tc gen_byte_memcpy(
 /**
  * Returns true iff `name` is the goto-program return-value temp for an
  * `alloca` / `__builtin_alloca` call, i.e. exactly matches
- * `<L1-prefix?>return_value$_alloca$<digits>`.  Used to identify which
- * locals symex must free when the calling function returns.
+ * `<L1-prefix?>return_value$_alloca$<digits>` or
+ * `<L1-prefix?>return_value$___builtin_alloca$<digits>`.  Only these
+ * allocations die with their frame; the models' `__ESBMC_alloca` outlives it.
  *
  * A previous substring-only check fired on any user identifier containing
  * `_alloca$` (e.g. a method literally named `alloca$te`), causing symex to

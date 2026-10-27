@@ -1,6 +1,5 @@
-# Contrast case for the dynamic_type_*_knownbug tests: list elements already
-# use a tagged runtime representation (PyObject's value/type_id), so type correctly survives a
-# branch join here.
+# The element types recorded for lst would be the last branch's on both
+# paths, so the rebinding is refused rather than read the other path wrongly.
 
 cond = nondet_bool()
 if cond:

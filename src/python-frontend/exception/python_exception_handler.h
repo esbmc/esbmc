@@ -186,6 +186,14 @@ private:
   /// Names the spill temporaries inject_finally_before_escapes introduces.
   unsigned finally_spill_count_ = 0;
 
+  exprt make_finally_rethrow_handler(const nlohmann::json &element);
+
+  void emit_else_clause(
+    const nlohmann::json &element,
+    exprt else_block,
+    const exprt &no_raise,
+    codet &block);
+
   /** Create a temporary boolean symbol used by assertion helpers. */
   symbolt create_assert_temp_variable(const locationt &location) const;
 

@@ -60,7 +60,7 @@ PlcopenXmlParser::var_kind_from_string(const std::string &s, bool derived)
     {"DINT", VarKind::DINT},
     {"TIME", VarKind::TIME},
     {"REAL", VarKind::REAL},
-    {"LREAL", VarKind::REAL},
+    {"LREAL", VarKind::LREAL},
   };
   auto it = table.find(s);
   if (it != table.end())
@@ -398,6 +398,23 @@ RungElement PlcopenXmlParser::parse_rung_element(const void *node_ptr)
 // Rung / network parsing
 // -----------------------------------------------------------------------
 
+// A textual rung's block reads its pins from named variables, so contacts in
+// the same rung would not gate it and a coil would not see its Q.
+static void reject_block_with_power_flow(const RungNode &rung)
+{
+  bool has_block = false, has_power_flow = false;
+  for (const RungElement &e : rung.elements)
+  {
+    if (e.kind == RungElementKind::Contact || e.kind == RungElementKind::Coil)
+      has_power_flow = true;
+    else
+      has_block = true;
+  }
+  if (has_block && has_power_flow)
+    throw UnsupportedConstructError(
+      "block in a textual rung with contacts or coils", 2);
+}
+
 RungNode PlcopenXmlParser::parse_rung(const void *node_ptr)
 {
   const auto &n = *static_cast<const pugi::xml_node *>(node_ptr);
@@ -411,6 +428,7 @@ RungNode PlcopenXmlParser::parse_rung(const void *node_ptr)
       continue;
     rung.elements.push_back(parse_rung_element(&child));
   }
+  reject_block_with_power_flow(rung);
   return rung;
 }
 // -----------------------------------------------------------------------
@@ -786,6 +804,25 @@ static bool steps_every_scan(const std::string &type_name)
   }
 }
 
+// Beremiz runs blocks and output variables with a positive executionOrderId
+// before the rest; coils it always orders by position (PLCGenerator.py).
+static void reject_execution_order(const pugi::xml_node &n)
+{
+  const std::string t = n.name();
+  const bool ordered =
+    t == "block" || t == "Block" || t == "outVariable" || t == "inOutVariable";
+  if (ordered && n.attribute("executionOrderId").as_int(0) > 0)
+    throw UnsupportedConstructError(t + " with an executionOrderId", 2);
+}
+
+// Jumps and returns skip networks (IEC 61131-3:2025 8.1.6, Table 72), which the
+// single scan loop cannot model; a label is refused as a jump target.
+static void reject_execution_control(const std::string &t)
+{
+  if (t == "jump" || t == "label" || t == "return")
+    throw UnsupportedConstructError(t, 2);
+}
+
 // Resolve a counter's Boolean control pin (R, LD) to the value it carries: the
 // power flow of a contact or block wired to it, or a variable wired to it
 // directly. Empty when the pin is unwired.
@@ -859,9 +896,12 @@ static bool parse_graphical_ld(
   for (auto child : ld_body.children())
   {
     std::string t = child.name();
+    reject_execution_control(t);
     int lid = child.attribute("localId").as_int(-1);
     if (lid < 0)
       continue;
+
+    reject_execution_order(child);
 
     GNode g;
     g.tag = t;
@@ -1115,10 +1155,7 @@ static bool parse_graphical_ld(
 
   // The element a node contributes to a rung that reads its power flow.
   auto pf_contact = [&](int lid) {
-    const GNode &g = nodes.at(lid);
-    if (g.tag != "contact" && g.tag != "block" && g.tag != "Block")
-      throw UnsupportedConstructError(
-        g.tag + (g.var.empty() ? "" : " (var=" + g.var + ")"), 2);
+    require_modeled_source(nodes.at(lid));
     return make_contact(pf_name(lid), false, ContactEdge::None);
   };
 
@@ -1758,17 +1795,21 @@ check_eno_consumers(const pugi::xml_node &blk, const std::string &what)
       throw UnsupportedConstructError("wired ENO on block " + what, 2);
 }
 
-// EN and ENO of a standard block are not modeled. An EN wired to the left power
-// rail (always true) is accepted; any other EN is refused, and so is an ENO
-// that feeds anything but the right power rail.
+// EN and ENO of a standard or user function block are not modeled. An EN
+// wired to the left power rail (always true) is accepted; any other EN is
+// refused, and so is an ENO that feeds anything but the right power rail.
 static void reject_wired_enable_pins(const pugi::xml_node &root)
 {
+  std::set<std::string> user_fbs;
+  for (auto pou : root.select_nodes("//pou[@pouType='functionBlock']"))
+    user_fbs.insert(pou.node().attribute("name").as_string());
+
   for (auto sel : root.select_nodes(
          "//pou[@pouType='program']//block | //pou[@pouType='program']//Block"))
   {
     const pugi::xml_node blk = sel.node();
     const std::string type = blk.attribute("typeName").as_string();
-    if (!fb_kind_of_std(type))
+    if (!fb_kind_of_std(type) && !user_fbs.count(type))
       continue;
     const std::string what =
       type + " (" + blk.attribute("instanceName").as_string() + ")";
@@ -1780,7 +1821,8 @@ static void reject_wired_enable_pins(const pugi::xml_node &root)
 
 static void check_declaration(std::set<std::string> &seen, const VarDecl &v)
 {
-  for (const char *prefix : {"__edge_prev_", "__timer_prev_", "__ctr_prev_"})
+  for (const char *prefix :
+       {"__edge_prev_", "__edge_q_", "__timer_prev_", "__ctr_prev_"})
     if (v.name.rfind(prefix, 0) == 0)
       throw LdParseError(
         "variable " + v.name + " uses the reserved prefix " + prefix);

@@ -1,0 +1,4 @@
+CORE
+main.py
+--unwind 5 --multi-property
+^ERROR: .*main.py:18:13: storing or passing .a., which holds an instance of A or B depending on the path, is not supported$

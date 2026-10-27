@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: using method 'M.f2' as a value is not supported$

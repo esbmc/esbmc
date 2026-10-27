@@ -1,0 +1,9 @@
+CORE
+main.c
+--condition-coverage-rm
+^Reached Conditions:  10
+^Total Conditions:  10
+^Condition Properties - SATISFIED:  9
+^Condition Properties - UNSATISFIED:  1
+^Condition Coverage: 90%
+^COVERAGE ANALYSIS COMPLETE$

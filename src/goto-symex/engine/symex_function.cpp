@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cassert>
+#include <string_view>
 #include <unordered_set>
 #include <goto-symex/scheduler/execution_state.h>
 #include <goto-symex/engine/goto_symex.h>
@@ -17,17 +18,19 @@
 
 bool goto_symex_utils::is_alloca_return_value_name(const std::string &name)
 {
-  static const std::string prefix = "return_value$_alloca$";
-  size_t pos = name.rfind(prefix);
-  if (pos == std::string::npos)
-    return false;
-  size_t rest = pos + prefix.size();
-  if (rest == name.size())
-    return false;
-  for (size_t i = rest; i < name.size(); ++i)
-    if (name[i] < '0' || name[i] > '9')
-      return false;
-  return true;
+  for (std::string_view prefix :
+       {"return_value$_alloca$", "return_value$___builtin_alloca$"})
+  {
+    size_t pos = name.rfind(prefix);
+    if (pos == std::string::npos)
+      continue;
+    size_t rest = pos + prefix.size();
+    if (
+      rest != name.size() &&
+      name.find_first_not_of("0123456789", rest) == std::string::npos)
+      return true;
+  }
+  return false;
 }
 
 namespace
@@ -1034,7 +1037,15 @@ bool goto_symext::run_next_function_ptr_target(bool first)
   if (cur_state->top().cur_function_ptr_targets.size() == 0)
     cur_frame.orig_func_ptr_call = expr2tc();
 
+  const size_t depth = cur_state->call_stack.size();
   symex_function_call_code(state_call);
+
+  // A target whose body is not entered (e.g. at the recursion bound) never
+  // reaches the END_FUNCTION that runs the next target, so run it here.
+  // Otherwise the remaining targets are dropped and their merge snapshots
+  // stay in this frame.
+  if (cur_state->call_stack.size() == depth)
+    run_next_function_ptr_target(false);
 
   return true;
 }
@@ -1105,10 +1116,6 @@ void goto_symext::pop_frame()
     expr2tc l1_sym = symbol2tc(ptr, it.base_name);
     frame.level1.get_ident_name(l1_sym);
 
-    // Call free on alloca'd objects
-    if (goto_symex_utils::is_alloca_return_value_name(it.base_name.as_string()))
-      symex_free(code_free2tc(l1_sym));
-
     // Erase from level 1 propagation
     cur_state->value_set.erase(to_symbol2t(l1_sym).get_symbol_name());
 
@@ -1120,6 +1127,9 @@ void goto_symext::pop_frame()
       get_empty_type(), it.base_name, it.lev, it.l1_num, 0, it.t_num, 0);
     cur_state->value_set.erase(to_symbol2t(tmp_expr).get_symbol_name());
   }
+
+  for (const expr2tc &ptr : frame.alloca_objects)
+    invalidate_object(ptr);
 
   // decrease recursion unwinding counter
   if (!frame.function_identifier.empty())
