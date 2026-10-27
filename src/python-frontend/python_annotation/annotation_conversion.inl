@@ -2566,6 +2566,12 @@ std::string python_annotation<Json>::get_type_from_rhs_variable(
     return "Any"; // Default for cases where annotation is missing or null
 }
 
+template <class Json>
+static bool binds_name_in(const Json *scope, const std::string &name)
+{
+  return scope != nullptr && json_utils::count_name_bindings(*scope, name) > 0;
+}
+
 /// Whether `name` is a variable that may hold a function or a callable
 /// instance, whose calls the converter types instead.
 template <class Json>
@@ -2593,9 +2599,9 @@ bool python_annotation<Json>::holds_callable_value(
         body, stmt["annotation"].value("id", ""), "__call__"))
       return true;
   }
-  // A local such as a loop variable over callable instances (#8351)
-  return current_func != nullptr &&
-         json_utils::count_name_bindings(*current_func, name) > 0;
+  // A local such as a loop variable over callable instances (#8351), or a
+  // parameter of the enclosing function that a nested one calls
+  return binds_name_in(current_func, name) || binds_name_in(parent_func, name);
 }
 
 template <class Json>
