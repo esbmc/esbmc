@@ -4276,7 +4276,7 @@ bool python_converter::try_infer_dynamic_param_type(
     return enclosing_def == nullptr ? nullptr : &(*enclosing_def)["body"];
   };
 
-  const nlohmann::json callables = callable_function_stubs();
+  const nlohmann::json callables = kind_module_body();
   auto diverges_at_site =
     [&](const nlohmann::json &value_node, const numpy_param_call_site &site) {
       if (value_node.value("_type", "") != "Name")
