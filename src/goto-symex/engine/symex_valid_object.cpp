@@ -55,13 +55,6 @@ goto_symext::value_set_objects(const expr2tc &ptr, bool &complete)
 }
 
 /// \p base if it is a named object, nil otherwise.
-///
-/// A pointer reaching a check through a parameter or a local variable is a
-/// plain symbol, so the syntactic address_of tests below find no name and the
-/// check falls back on __ESBMC_alloc and DYNAMIC_SIZE. Neither is maintained
-/// for automatic storage, so the solver may pick a live stack object invalid
-/// or size it arbitrarily, and a caller cannot discharge an is_fresh
-/// precondition it plainly satisfies (#7464).
 expr2tc goto_symext::named_object(const expr2tc &base) const
 {
   const symbolt *sym = ns.lookup(to_symbol2t(base).thename);
@@ -77,6 +70,13 @@ expr2tc goto_symext::named_object(const expr2tc &base) const
   return base;
 }
 
+/// A pointer reaching a check through a parameter or a local variable is a
+/// plain symbol, so the syntactic address_of tests below find no name and the
+/// check falls back on __ESBMC_alloc and DYNAMIC_SIZE. Neither is maintained
+/// for automatic storage, so the solver may pick a live stack object invalid
+/// or size it arbitrarily, and a caller cannot discharge an is_fresh
+/// precondition it plainly satisfies (#7464).
+///
 /// Replace \p expr, a query about \p ptr, by what \p resolve answers for each
 /// object the value set says \p ptr may address. With several candidates, or
 /// one \p resolve cannot answer for, each answer is selected by SAME-OBJECT and
@@ -124,15 +124,20 @@ bool goto_symext::resolve_by_value_set(
 /// tracking it would need is #if 0'd out at the end of this file. The syntactic
 /// path never reaches it, because a named object returns its declared extent
 /// and drops this conjunct. Do the same once the value set has named the
-/// object: a pointer it resolves addresses a live object, and the extent is
-/// checked separately (#7464).
+/// object, which is valid for as long as it is live (#7464); the extent is
+/// checked separately.
 bool goto_symext::resolve_valid_object_by_value_set(
   expr2tc &expr,
   const expr2tc &obj_ref)
 {
   return resolve_by_value_set(
     expr, obj_ref, [this](const expr2tc &obj) -> expr2tc {
-      return is_nil_expr(named_object(obj)) ? expr2tc() : gen_true_expr();
+      if (is_nil_expr(named_object(obj)))
+        return expr2tc();
+      symex_dereference_statet deref_state(*this, *cur_state);
+      dereference_callbackt &callback = deref_state;
+      return callback.is_live_variable(obj) ? gen_true_expr()
+                                            : gen_false_expr();
     });
 }
 
@@ -151,7 +156,16 @@ bool goto_symext::resolve_dynamic_size_by_value_set(expr2tc &expr)
         return heap->second;
       if (is_nil_expr(named_object(obj)))
         return expr2tc();
-      return constant_int2tc(size_type2(), type_byte_size(obj->type, &ns));
+      // An incomplete array states no extent, and a VLA's is in the
+      // __ESBMC_alloc_size the default reads.
+      try
+      {
+        return constant_int2tc(size_type2(), type_byte_size(obj->type, &ns));
+      }
+      catch (const array_type2t::array_size_excp &)
+      {
+        return expr2tc();
+      }
     });
 }
 
