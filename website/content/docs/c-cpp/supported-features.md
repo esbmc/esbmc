@@ -126,7 +126,8 @@ then produce ambiguity errors at parse time.
   is built in place as that prvalue's result object, with no temporary copied
   in and destroyed
 - A function-local static with a dynamic initialiser is initialised on the
-  first pass through its declaration, not before `main` ([stmt.dcl]/3)
+  first pass through its declaration, not before `main` ([stmt.dcl]/3). This
+  includes an array, such as `static int a[2] = {f(), f()};`
 - Under `--std c++14` and earlier, the copy clang elides in `C c = C::make();`
   and `return C(x);` is elided, as it is natively
 - Unions, including anonymous unions
@@ -141,6 +142,10 @@ then produce ambiguity errors at parse time.
 - Destructor chains for members and bases, including virtual base destructors
 - Destructors run on return paths, for discarded results, and for temporaries
   destroyed mid-expression
+- Objects with static storage duration are destroyed after `main` returns and
+  the `atexit` handlers have run: constructed function-local statics first,
+  then globals in reverse definition order. A failing
+  assertion in such a destructor is reported
 
 {{< callout type="warning" >}}
 The order in which constructors and destructors run is not correct in every
@@ -208,9 +213,12 @@ case. See [Limitations](/docs/c-cpp/limitations#constructor-and-destructor-order
   the returned pointer was reported out of bounds
 - A user-replaced `operator new` / `operator delete` — global, class-level,
   sized or array form — is called instead of the built-in allocator, so a pool
-  allocator that hands out overlapping storage is caught. The aligned
-  (`std::align_val_t`) and user-placement forms are not routed and keep the
-  built-in path
+  allocator that hands out overlapping storage is caught. For a type with
+  new-extended alignment, a defined aligned `operator new(size_t,
+  std::align_val_t)` and its `operator delete` are called with `alignof(T)`.
+  `new (pool) T` and `new (pool) T[n]` call a program-defined placement
+  `operator new(size_t, Pool &)` with their arguments, rather than building the
+  object in fresh memory
 - Detection of dangling pointers, double `delete` and mismatched operators
 - Placement `new`, including the form without an initialiser; the address is
   evaluated once, before the initialiser, so `new (std::addressof(buf)) T(...)`
@@ -234,8 +242,11 @@ additionally lowers exception handling into explicit control flow, which enables
 Other exception behaviour:
 
 - `dynamic_cast<T&>` throws `std::bad_cast` on a failed reference cast
-- `std::vector::at` and `std::string::at` throw `std::out_of_range` rather than
-  asserting
+- `std::out_of_range` is thrown rather than asserted by `at` on `std::vector`,
+  `std::string`, `std::deque`, `std::array` and `std::string_view`, by
+  `std::string::substr` and `std::string::erase` on a bad position, and by
+  `std::map::at` and `std::unordered_map::at` on a missing key (`map::at` no
+  longer inserts it)
 - `std::bad_cast` and `std::bad_typeid` derive from `std::exception` with a
   virtual `what()`
 - The exception-state globals are thread-local, so each thread raises, catches
@@ -351,7 +362,7 @@ members are `constexpr`, and `char_traits<char>` compares as `unsigned char`
 | --- | --- |
 | `<algorithm>` | Including the C++11 algorithms and `move_backward` |
 | `<numeric>` | `iota`, `gcd`, `lcm`, `reduce` |
-| `<cmath>` | The C99 `<cmath>` functions resolve in namespace `std`, as [cmath.syn] requires: the classifiers `std::isnan`, `std::isinf`, `std::isfinite`, `std::isnormal` and `std::signbit` are re-declared as `std::` overloads lowered to ESBMC's native FP intrinsics, and `std::ilogb`, `logb`, `scalbn`, `scalbln`, `fma`, `remquo`, `lround`, `llround`, `lrint`, `llrint`, `nexttoward` and `nan` resolve as well (`ilogb`, `logb` and `nexttoward` have no model in ESBMC's libc and return a nondeterministic value). `fmod`, `remainder` and `remquo` lower to the solver's exact FP remainder rather than being computed as `x - y*(int)(x/y)`, which double-rounded and overflowed the cast for a large quotient |
+| `<cmath>` | The C99 `<cmath>` functions resolve in namespace `std`, as [cmath.syn] requires: the classifiers `std::isnan`, `std::isinf`, `std::isfinite`, `std::isnormal` and `std::signbit` are re-declared as `std::` overloads lowered to ESBMC's native FP intrinsics, and `std::ilogb`, `logb`, `scalbn`, `scalbln`, `fma`, `remquo`, `lround`, `llround`, `lrint`, `llrint`, `nexttoward` and `nan` resolve as well (`nexttoward` has no model in ESBMC's libc and returns a nondeterministic value). `fmod`, `remainder` and `remquo` lower to the solver's exact FP remainder rather than being computed as `x - y*(int)(x/y)`, which double-rounded and overflowed the cast for a large quotient |
 | `<complex>`, `<random>` | |
 
 `std::min(double, double)` returns `double`. It was declared to return `int`, so

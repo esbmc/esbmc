@@ -158,7 +158,7 @@ stronger guarantees.
 | `__ESBMC_assigns(arr[i])`                   | A single array element             |
 | `__ESBMC_assigns(arr)`                      | Every element of the array         |
 | `__ESBMC_assigns(p->sub->field)`            | A path through more than one pointer, rooted at a parameter |
-| `__ESBMC_assigns(x, y, z)`                  | Multiple targets (up to 5)         |
+| `__ESBMC_assigns(x, y, z)`                  | Multiple targets (up to 6)         |
 | `__ESBMC_assigns()` or `__ESBMC_assigns(0)` | Nothing — declares a pure function |
 
 An index in an assigns target is read **in the pre-state**: `__ESBMC_assigns(buf[head], head)`
@@ -592,8 +592,33 @@ A clause the lowering cannot express is rejected with a diagnostic naming the
 clause and line — a function call or subscript inside the condition, a
 reference whose type cannot be determined, `__ESBMC_return_value` inside
 `requires` or on a function annotated `-> None` — rather than being silently
-dropped. `__ESBMC_old`, `__ESBMC_assigns`, and the quantified forms are not yet
-available in Python.
+dropped. `__ESBMC_old` and the quantified forms are not yet available in
+Python.
+
+`__ESBMC_assigns(...)` declares the frame as in C. A target must be a
+module-level global or an attribute; a local or a parameter is rejected. An
+empty `__ESBMC_assigns()` declares that the function writes nothing. Under
+`--replace-call-with-contract` only the listed targets are havocked, and under
+`--enforce-contract` a write outside the frame is reported
+([#8753](https://github.com/esbmc/esbmc/pull/8753)):
+
+```python
+g: int = 0
+
+def pure(n: int) -> int:
+    __ESBMC_requires(n > 0)
+    __ESBMC_assigns()
+    __ESBMC_ensures(__ESBMC_return_value == n)
+    return n
+
+def main() -> None:
+    global g
+    g = 5
+    v: int = pure(3)
+    assert g == 5 and v == 3   # holds with --replace-call-with-contract pure
+
+main()
+```
 
 ## Quick reference
 
