@@ -399,7 +399,10 @@ def _mark_unmodelled_classes(tree: ast.Module) -> None:
             return objects.get(node.id) if bound[node.id] == 1 else None
         if isinstance(node, ast.Attribute):
             owner = resolve(node.value, objects)
-            return None if owner is None else getattr(owner, node.attr, None)
+            value = None if owner is None else getattr(owner, node.attr, None)
+            # A submodule is an attribute only if something imported it, which
+            # may be the parser itself rather than the program.
+            return None if isinstance(value, ModuleType) else value
         return None
 
     def mark_annotations(stmts: list[ast.stmt], objects: dict[str, object]) -> None:
