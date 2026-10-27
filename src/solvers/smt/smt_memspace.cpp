@@ -101,6 +101,32 @@ smt_astt smt_solver_baset::convert_ptr_cmp(
   return convert_ast(op);
 }
 
+smt_astt smt_solver_baset::divide_by_element_size(
+  const expr2tc &diff,
+  const expr2tc &size)
+{
+  const type2tc &type = diff->type;
+  smt_astt d = convert_ast(diff);
+  if (is_constant_int2t(size) && is_power_of_two(to_constant_int2t(size).value))
+  {
+    const unsigned int k = to_constant_int2t(size).value.floorPow2();
+    const unsigned int w = type->get_width();
+    if (k == 0)
+      return d;
+
+    if (!int_encoding && k + 1 < w)
+    {
+      smt_astt zero = mk_smt_bv(BigInt(0), w);
+      smt_astt bias =
+        mk_ite(mk_bvslt(d, zero), mk_smt_bv(BigInt::power2(k) - 1, w), zero);
+      return mk_bvashr(mk_bvadd(d, bias), mk_smt_bv(BigInt(k), w));
+    }
+  }
+
+  smt_astt s = convert_ast(typecast2tc(type, size));
+  return int_encoding ? mk_truncated_div(type, d, s) : mk_bvsdiv(d, s);
+}
+
 smt_astt smt_solver_baset::convert_pointer_arith(
   const expr2tc &expr,
   const type2tc &type)
@@ -173,10 +199,7 @@ smt_astt smt_solver_baset::convert_pointer_arith(
       assert(
         !is_constant_int2t(type_size) || !is_constant_int2t(side2_size) ||
         type_size == side2_size);
-      type_size = typecast2tc(the_ptr_offs->type, type_size); // diff is signed
-      expr2tc ptr_diff = div2tc(the_ptr_offs->type, the_ptr_offs, type_size);
-
-      return convert_ast(ptr_diff);
+      return divide_by_element_size(the_ptr_offs, type_size);
     }
     else
     {

@@ -784,6 +784,11 @@ public:
    *  multiplications or casting is required to honor the C semantics of
    *  pointer arith. */
   smt_astt convert_pointer_arith(const expr2tc &expr, const type2tc &t);
+  /** The quotient of a signed byte difference by an element size, truncated
+   *  toward zero. A size of 2^k is an arithmetic shift of the difference,
+   *  biased by 2^k - 1 when negative since the shift rounds toward -inf;
+   *  k < width - 1 keeps the divisor positive when read signed. */
+  smt_astt divide_by_element_size(const expr2tc &diff, const expr2tc &size);
   /** Compare two pointers. This attempts to optimize cases where we can avoid
    *  comparing the integer representation of a pointer, as that's hugely
    *  inefficient sometimes (and gets bitblasted).
