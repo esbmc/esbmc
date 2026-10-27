@@ -661,6 +661,7 @@ private:
     const std::string &prefix,
     const std::function<void(const expr2tc &, const locationt &)> &emit_guards);
 
+  friend class bounded_math;
   friend class complex_handler;
   friend class function_call_expr;
   friend class numpy_call_expr;

@@ -243,6 +243,11 @@ const struct group_opt_templ all_cmd_options[] = {
      {"python-no-fold",
       NULL,
       "Disable NumPy constant folding in the Python frontend"},
+     {"python-math-ulps",
+      boost::program_options::value<int>()->value_name("n"),
+      "How many ulps a math or NumPy transcendental function's result may "
+      "lie from the C library's value (default 8); 0 assumes a correctly "
+      "rounded library"},
      {"python-typecheck",
       NULL,
       "Type-check the input with mypy --strict and print the report."},

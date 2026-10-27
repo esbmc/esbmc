@@ -1,4 +1,5 @@
 #include <python-frontend/function_call/expr.h>
+#include <python-frontend/math/bounded_math.h>
 #include <python-frontend/math/cmath_lowering_policy.h>
 #include <python-frontend/math/complex_handler.h>
 #include <python-frontend/math/complex_handler_utils.h>
@@ -3948,6 +3949,54 @@ exprt function_call_expr::handle_cmath_inverse_fast_path()
   return build_if(migrate_expr_back(fast_guard), fast_path, model_call);
 }
 
+static std::string numpy_spelling(const std::string &math_name)
+{
+  static const std::map<std::string, std::string> numpy_names = {
+    {"asin", "arcsin"}, {"acos", "arccos"}, {"atan", "arctan"}};
+  auto renamed = numpy_names.find(math_name);
+  return renamed == numpy_names.end() ? math_name : renamed->second;
+}
+
+// The math function that `name` is bound to by a top-level
+// `from math import f as name` of a module that does not redefine it.
+static std::optional<std::string>
+math_import_of(const nlohmann::json &ast, const std::string &name)
+{
+  std::optional<std::string> imported;
+  for (const auto &node : ast.value("body", nlohmann::json::array()))
+  {
+    const std::string type = node.value("_type", "");
+    if (type == "FunctionDef" && node.value("name", "") == name)
+      return std::nullopt;
+    // `from . import x` has a null module.
+    if (type != "ImportFrom" || node["module"] != "math")
+      continue;
+    for (const auto &alias : node["names"])
+    {
+      const std::string original = alias.value("name", "");
+      const nlohmann::json &as = alias["asname"];
+      if ((as.is_string() ? as.get<std::string>() : original) == name)
+        imported = original;
+    }
+  }
+  return imported;
+}
+
+// A bounded math function imported by name into the program, which its
+// math.* spelling would dispatch.
+std::optional<std::string> function_call_expr::bounded_math_import() const
+{
+  if (
+    call_["func"].value("_type", "") != "Name" ||
+    converter_.is_model_file(call_))
+    return std::nullopt;
+  std::optional<std::string> imported =
+    math_import_of(converter_.ast(), function_id_.get_function());
+  if (!imported || !bounded_math::is_bounded(numpy_spelling(*imported)))
+    return std::nullopt;
+  return imported;
+}
+
 bool function_call_expr::is_math_function_dispatch_call() const
 {
   const std::string &func_name = function_id_.get_function();
@@ -3959,15 +4008,75 @@ bool function_call_expr::is_math_function_dispatch_call() const
     caller = get_object_name();
   }
   return converter_.get_math_handler().is_math_dispatch_target_cached(
-    caller, func_name);
+           caller, func_name) ||
+         bounded_math_import().has_value();
+}
+
+static bool is_number_literal(const nlohmann::json &node)
+{
+  const std::string type = node.value("_type", "");
+  if (type == "UnaryOp")
+    return is_number_literal(node["operand"]);
+  return type == "Constant";
+}
+
+bool function_call_expr::takes_bounded_math(const std::string &function) const
+{
+  const nlohmann::json &args = call_["args"];
+  return bounded_math::is_bounded(function) && args.size() == 1 &&
+         call_.value("keywords", nlohmann::json::array()).empty() &&
+         !is_number_literal(args[0]) && !converter_.is_model_file(call_) &&
+         !math_guard_utils::call_has_complex_in_args_or_keywords(
+           call_,
+           converter_,
+           type_handler_,
+           converter_.current_function_name());
+}
+
+// math.exp(x) in the program, of a number known only at run time: the model
+// numpy.exp(x) uses, with math's ValueError and OverflowError. Calls inside
+// the models keep the C library models their own algorithms are tuned to.
+std::optional<exprt>
+function_call_expr::try_bounded_math_call(const std::string &func_name)
+{
+  const std::string function = numpy_spelling(func_name);
+  if (!takes_bounded_math(function))
+    return std::nullopt;
+  const nlohmann::json &arg = call_["args"][0];
+  const exprt x = converter_.get_expr(arg);
+  if (is_cpp_throw_expr(x))
+    return x;
+  const typet &t = x.type();
+  if (!t.is_floatbv() && !t.is_signedbv() && !t.is_unsignedbv() && !t.is_bool())
+  {
+    if (!json_utils::ast_contains_call(arg))
+      return std::nullopt;
+    return converter_.get_math_handler().handle(func_name, x, call_);
+  }
+  return bounded_math(converter_, call_)
+    .runtime(function, x, math_module::math);
+}
+
+static std::string math_function_name(const std::string &raw_func_name)
+{
+  return raw_func_name.rfind("__ESBMC_", 0) == 0 ? raw_func_name.substr(8)
+                                                 : raw_func_name;
+}
+
+exprt function_call_expr::dispatch_math_call()
+{
+  if (std::optional<std::string> imported = bounded_math_import())
+    function_id_.set_function(*imported);
+  if (
+    std::optional<exprt> bounded =
+      try_bounded_math_call(math_function_name(function_id_.get_function())))
+    return *bounded;
+  return handle_math_function_dispatch();
 }
 
 exprt function_call_expr::handle_math_function_dispatch()
 {
-  const std::string &raw_func_name = function_id_.get_function();
-  const std::string func_name = raw_func_name.rfind("__ESBMC_", 0) == 0
-                                  ? raw_func_name.substr(8)
-                                  : raw_func_name;
+  const std::string func_name = math_function_name(function_id_.get_function());
   const auto &args = call_["args"];
   auto raise_math_real_type_error = [this]() -> exprt {
     return complex_utils::raise_math_real_type_error_expr(converter_);
@@ -4498,7 +4607,7 @@ function_call_expr::get_dispatch_table()
 
     // Math module functions (sin, cos, sqrt, exp, log, etc.)
     {[this]() { return is_math_function_dispatch_call(); },
-     [this]() { return handle_math_function_dispatch(); },
+     [this]() { return dispatch_math_call(); },
      "math.sin/cos/sqrt/exp/log/etc"},
 
     // Math.comb function with type checking
