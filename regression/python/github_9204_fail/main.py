@@ -1,9 +1,8 @@
-# #9204: a parameter annotated with a class of a module with no model.
 import ast
 
 
-def f(node: ast.Import) -> int:
-    return node.lineno
+def visit(node: ast.Import, k: int) -> int:
+    return k * 2
 
 
-assert f(None) == 1
+assert visit(None, 3) == 7

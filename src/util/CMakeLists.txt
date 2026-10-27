@@ -30,7 +30,7 @@ add_library(util_esbmc irep/xml_irep.cpp base/xml.cpp
         irep/irep_serialization.cpp symtab/symbol_serialization.cpp arith/fixedbv.cpp
         base/signal_catcher.cpp irep/migrate.cpp symtab/show_symbol_table.cpp
         expr/type_byte_size.cpp ssa/goto_expr_factory.cpp
-        expr/string_constant.cpp lang/c_types.cpp lang/python_types.cpp arith/ieee_float.cpp lang/c_qualifiers.cpp
+        expr/string_constant.cpp lang/c_types.cpp lang/python_types.cpp arith/ieee_float.cpp arith/transcendental.cpp lang/c_qualifiers.cpp
         lang/c_sizeof.cpp lang/c_link.cpp lang/c_typecast.cpp symtab/fix_symbol.cpp
         lang/c_expr2string.cpp lang/cpp_expr2string.cpp expr/type2name.cpp
         lang/exception_specification.cpp

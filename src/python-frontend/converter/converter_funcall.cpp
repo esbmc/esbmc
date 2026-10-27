@@ -2328,12 +2328,15 @@ exprt python_converter::materialize_list_function_call(
 
   const code_function_callt &call = to_code_function_call(to_code(expr));
 
-  // Only handle list-returning functions and array-value-returning functions
-  // (e.g. bytes): both need a bound temporary before they can be indexed or
-  // sliced, since a code_function_callt embedded directly as an index/slice
-  // operand is a statement, not a value (#4807's list case; bytes hits the
-  // same gap when a `-> bytes` call is indexed inline, e.g. `f()[0:8]`).
-  if (call.type() != type_handler_.get_list_type() && !call.type().is_array())
+  // Only handle list-returning functions, array-value-returning functions
+  // (e.g. bytes) and dict-returning functions: each needs a bound temporary
+  // before it can be indexed or sliced, since a code_function_callt embedded
+  // directly as an index/slice operand is a statement, not a value (#4807's
+  // list case; bytes hits the same gap when a `-> bytes` call is indexed
+  // inline, e.g. `f()[0:8]`, and a dict when read as `f()[k]`).
+  if (
+    call.type() != type_handler_.get_list_type() && !call.type().is_array() &&
+    !dict_handler_->is_dict_type(ns.follow(call.type())))
     return expr;
 
   locationt location = get_location_from_decl(element);

@@ -750,7 +750,11 @@ private:
   exprt handle_cmath_inverse_fast_path();
   // Real-valued math module functions (sin/cos/sqrt/exp/log/etc.).
   bool is_math_function_dispatch_call() const;
+  exprt dispatch_math_call();
   exprt handle_math_function_dispatch();
+  std::optional<std::string> bounded_math_import() const;
+  bool takes_bounded_math(const std::string &function) const;
+  std::optional<exprt> try_bounded_math_call(const std::string &func_name);
 
   // General function call handler
   exprt handle_general_function_call();
@@ -1037,6 +1041,9 @@ private:
     const symbolt &callee) const;
 
   typet dict_param_value_type(const symbolt *func, size_t idx) const;
+  bool is_size_builtin() const;
+  bool is_list_typed(const typet &type) const;
+  exprt build_dict_size_call(const exprt &dict);
   std::optional<exprt> build_positional_arguments(
     code_function_callt &call,
     size_t param_offset,

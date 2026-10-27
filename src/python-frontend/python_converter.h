@@ -661,6 +661,7 @@ private:
     const std::string &prefix,
     const std::function<void(const expr2tc &, const locationt &)> &emit_guards);
 
+  friend class bounded_math;
   friend class complex_handler;
   friend class function_call_expr;
   friend class numpy_call_expr;
@@ -873,6 +874,8 @@ private:
     const exprt &expr,
     const nlohmann::json &element,
     codet &target_block);
+
+  std::optional<typet> call_dict_value_type(const nlohmann::json &call);
 
   symbolt create_return_temp_variable(
     const typet &return_type,

@@ -387,11 +387,11 @@ def _unmodelled_import_bindings(stmts: list[ast.stmt]) -> dict[str, object]:
 
 
 def _mark_unmodelled_classes(tree: ast.Module) -> None:
-    """Mark each class base, and each parameter annotation, that CPython
-    resolves to a class of a module with no model. The converter has no such
-    class to derive from and skips it (#9161), which is sound only once
-    CPython would create the class: it evaluates the bases when the definition
-    runs."""
+    """Mark each class base, and each parameter annotation of a top-level
+    function or method, that CPython resolves to a class of a module with no
+    model. The converter has no such class to derive from and skips it
+    (#9161), which is sound only once CPython would create the class: it
+    evaluates the bases when the definition runs."""
     bound = Counter(name for node in ast.walk(tree) for name in _bound_names(node))
 
     def resolve(node: ast.expr, objects: dict[str, object]) -> object:
@@ -405,17 +405,25 @@ def _mark_unmodelled_classes(tree: ast.Module) -> None:
             return None if isinstance(value, ModuleType) else value
         return None
 
-    # A top-level class only, after the imports: CPython raises NameError for
-    # a base read before its import has run, and a star import may rebind it.
+    def mark_annotations(stmts: list[ast.stmt], objects: dict[str, object]) -> None:
+        for annotation, expr in _param_annotations(stmts):
+            if isinstance(resolve(expr, objects), type):
+                annotation.unmodelled_class = True
+
+    # A top-level definition only, after the imports: CPython raises NameError
+    # for a name read before its import has run, and a star import may rebind
+    # it.
     for index, stmt in enumerate(tree.body):
         before = tree.body[:index]
         if _has_star_import(before):
             continue
         objects = _unmodelled_import_bindings(before)
-        if not bound["Any"]:
-            _mark_unmodelled_annotations(stmt, lambda node, objects=objects: resolve(node, objects))
-        if not isinstance(stmt, ast.ClassDef) or stmt.keywords:
+        if not isinstance(stmt, ast.ClassDef):
+            mark_annotations([stmt], objects)
             continue
+        if stmt.keywords:
+            continue
+        mark_annotations(stmt.body, objects)
         bases = [resolve(base, objects) for base in stmt.bases]
         if not bases or not all(isinstance(base, type) for base in bases):
             continue
@@ -424,30 +432,25 @@ def _mark_unmodelled_classes(tree: ast.Module) -> None:
                 base.unmodelled_class = True
 
 
-def _mark_unmodelled_annotations(stmt: ast.stmt, resolve: Callable[[ast.expr], object]) -> None:
-    """Annotate as Any each parameter of a top-level function, or of a method
-    of a top-level class, whose annotation resolves to a class of a module
-    with no model (#9204). CPython evaluates these when the def runs, so an
-    annotation that does not resolve keeps the converter's NameError."""
-    if isinstance(stmt, ast.ClassDef):
-        defs = [s for s in stmt.body if isinstance(s, (ast.FunctionDef, ast.AsyncFunctionDef))]
-    elif isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
-        defs = [stmt]
-    else:
-        return
-    for func in defs:
+def _param_annotations(stmts: list[ast.stmt]) -> list[tuple[ast.expr, ast.expr]]:
+    """Each parameter annotation of a function in `stmts` spelled as a name,
+    with the expression it spells. A string annotation is never evaluated."""
+    found = []
+    for func in stmts:
+        if not isinstance(func, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
         args = func.args
         params = args.posonlyargs + args.args + args.kwonlyargs + [args.vararg, args.kwarg]
-        for param in [p for p in params if p is not None and p.annotation]:
-            node = param.annotation
-            if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        for annotation in (param.annotation for param in params if param is not None):
+            expr = annotation
+            if isinstance(annotation, ast.Constant) and isinstance(annotation.value, str):
                 try:
-                    node = ast.parse(node.value, mode="eval").body
-                except (SyntaxError, ValueError):
+                    expr = ast.parse(annotation.value.strip(), mode="eval").body
+                except SyntaxError:
                     continue
-            if isinstance(resolve(node), type):
-                param.annotation = ast.copy_location(ast.Name(id="Any", ctx=ast.Load()),
-                                                     param.annotation)
+            if isinstance(expr, (ast.Name, ast.Attribute)):
+                found.append((annotation, expr))
+    return found
 
 
 def _has_star_import(stmts: list[ast.stmt]) -> bool:
