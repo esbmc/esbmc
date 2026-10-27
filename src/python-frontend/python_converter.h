@@ -3325,6 +3325,11 @@ private:
   /// Python truthiness of a tagged value, a call on its address.
   exprt tagged_truthiness(exprt value, const nlohmann::json &node);
 
+  /// A subscript whose base is a tagged value, read as the str it holds;
+  /// nullopt for any other base.
+  std::optional<exprt>
+  try_index_tagged_str(exprt array, const nlohmann::json &element);
+
   /// A unary operator on a tagged operand: `-` and `not` are modelled.
   exprt handle_tagged_unary_operator(
     const std::string &op,
