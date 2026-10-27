@@ -1116,7 +1116,7 @@ plain_assigned_value(const nlohmann::json &stmt, const std::string &name)
   auto binds = [&](const nlohmann::json &target) {
     return target.value("_type", "") == "Name" && target["id"] == name;
   };
-  const std::string type = stmt.value("_type", "");
+  const std::string type = stmt.is_object() ? stmt.value("_type", "") : "";
   if (
     type == "Assign" && stmt["targets"].size() == 1 &&
     binds(stmt["targets"][0]))
