@@ -1,0 +1,4 @@
+regression/esbmc/github_7855-reread
+regression/esbmc/github_7855-reread-later-object
+regression/esbmc/github_7855-repeated-store
+regression/esbmc/github_7855-repeated-store_fail
