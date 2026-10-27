@@ -7,6 +7,19 @@ static BigInt type_max_value(const type2tc &type)
   return BigInt::power2(is_signedbv_type(type) ? width - 1 : width) - 1;
 }
 
+/// The result of @p sum is >= both operands. An unsigned sum wraps exactly
+/// when it ends up below one of them, so one comparison suffices there.
+static expr2tc sum_not_below_operands(const expr2tc &sum)
+{
+  const add2t &add = to_add2t(sum);
+  expr2tc ge1 = greaterthanequal2tc(sum, add.side_1);
+  if (
+    is_unsignedbv_type(sum) && add.side_1->type == sum->type &&
+    add.side_2->type == sum->type)
+    return ge1;
+  return and2tc(ge1, greaterthanequal2tc(sum, add.side_2));
+}
+
 smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
 {
   const overflow2t &overflow = to_overflow2t(expr);
@@ -93,16 +106,7 @@ smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
       }
     }
 
-    // The result must be >= both operands. An unsigned sum wraps exactly when
-    // it ends up below one of them, so one comparison suffices.
-    expr2tc ge1 = greaterthanequal2tc(overflow.operand, side1);
-    if (
-      is_unsignedbv_type(overflow.operand) &&
-      side1->type == overflow.operand->type &&
-      side2->type == overflow.operand->type)
-      return mk_not(convert_ast(ge1));
-    expr2tc ge2 = greaterthanequal2tc(overflow.operand, side2);
-    return mk_not(mk_and(convert_ast(ge1), convert_ast(ge2)));
+    return mk_not(convert_ast(sum_not_below_operands(overflow.operand)));
   }
 
   case expr2t::sub_id:
