@@ -6,6 +6,7 @@
 #include <goto-programs/abstract-interpretation/interval_domain.h>
 #include <goto-symex/state/goto_symex_state.h>
 #include <goto-symex/equation/symex_target.h>
+#include <functional>
 #include <map>
 #include <optional>
 #include <pointer-analysis/dereference.h>
@@ -1112,10 +1113,12 @@ protected:
    */
   void replace_dynamic_allocation(expr2tc &expr);
 
-  /// The object \p ptr addresses, resolved through the value set, or nil.
-  expr2tc value_set_object(const expr2tc &ptr);
-  /// The named object \p ptr addresses, resolved through the value set, or nil.
-  expr2tc value_set_named_object(const expr2tc &ptr);
+  std::vector<expr2tc> value_set_objects(const expr2tc &ptr, bool &complete);
+  expr2tc named_object(const expr2tc &base) const;
+  bool resolve_by_value_set(
+    expr2tc &expr,
+    const expr2tc &ptr,
+    const std::function<expr2tc(const expr2tc &)> &resolve);
   bool resolve_valid_object_by_value_set(expr2tc &expr, const expr2tc &obj_ref);
   bool resolve_dynamic_size_by_value_set(expr2tc &expr);
   void replace_valid_object(expr2tc &expr);
