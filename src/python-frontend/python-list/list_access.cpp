@@ -4725,6 +4725,24 @@ static bool array_size_negative_index_target(
           list_node["value"].value("_type", "") != "List");
 }
 
+// A variable index into a literal of user calls reads every element at the
+// recorded type, so the recorded types must agree.
+static void reject_unresolved_call_elements(
+  const nlohmann::json &list_node,
+  const element_type_registry &recorded,
+  const std::string &list_name)
+{
+  const nlohmann::json &literal = list_node.value("value", nlohmann::json());
+  const bool holds_call =
+    literal.contains("elts") &&
+    std::any_of(
+      literal["elts"].begin(),
+      literal["elts"].end(),
+      [](const nlohmann::json &e) { return e.value("_type", "") == "Call"; });
+  if (holds_call && recorded.uniform_element_type(list_name) == typet())
+    throw std::runtime_error("Invalid type");
+}
+
 // True when `list_node` is a variable declaration whose initializer is a
 // literal List AST node, giving a compile-time element count to normalize a
 // negative index against. Split out of normalize_index_access_position to
@@ -5114,7 +5132,10 @@ exprt python_list::handle_index_access(
     {
       const std::string &list_name = array.identifier().as_string();
       if (elem_types().find(list_name))
+      {
+        reject_unresolved_call_elements(list_node, elem_types(), list_name);
         elem_type = elem_types().last_element_type(list_name);
+      }
     }
 
     // Nested subscript chains like W[i][j] where the base is a Name with a
