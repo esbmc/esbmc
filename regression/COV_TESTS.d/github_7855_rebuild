@@ -2,3 +2,8 @@ regression/esbmc/github_7855-reread
 regression/esbmc/github_7855-reread-later-object
 regression/esbmc/github_7855-repeated-store
 regression/esbmc/github_7855-repeated-store_fail
+regression/esbmc/github_7855-all-witnesses_fail
+regression/bitwuzla/ts_bmc_int_to_ptr_push_pop_fail
+regression/bitwuzla/ts_bmc_int_to_ptr_push_pop
+regression/esbmc/github_7855-byte-update-sds
+regression/esbmc/github_7855-byte-update-sds_fail
