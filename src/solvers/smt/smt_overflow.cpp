@@ -93,8 +93,14 @@ smt_astt smt_solver_baset::overflow_arith(const expr2tc &expr)
       }
     }
 
-    // Just ensure the result is >= both operands.
+    // The result must be >= both operands. An unsigned sum wraps exactly when
+    // it ends up below one of them, so one comparison suffices.
     expr2tc ge1 = greaterthanequal2tc(overflow.operand, side1);
+    if (
+      is_unsignedbv_type(overflow.operand) &&
+      side1->type == overflow.operand->type &&
+      side2->type == overflow.operand->type)
+      return mk_not(convert_ast(ge1));
     expr2tc ge2 = greaterthanequal2tc(overflow.operand, side2);
     return mk_not(mk_and(convert_ast(ge1), convert_ast(ge2)));
   }

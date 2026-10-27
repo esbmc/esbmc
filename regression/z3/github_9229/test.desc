@@ -1,0 +1,5 @@
+CORE
+main.c
+--unsigned-overflow-check --z3
+^  PASSED .*line   7  arithmetic overflow on add$
+^VERIFICATION SUCCESSFUL$
