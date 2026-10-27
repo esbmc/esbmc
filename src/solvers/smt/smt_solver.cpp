@@ -278,6 +278,14 @@ void smt_solver_baset::pop_ctx()
     flattened, [this](const auto &kv) { return kv.second.level >= ctx_level; });
   std::erase_if(
     ptr_flow, [this](const auto &kv) { return kv.second.first >= ctx_level; });
+  if (base_addrspace_tied && *base_addrspace_tied >= ctx_level)
+    base_addrspace_tied.reset();
+  std::erase_if(int_to_ptr_objects, [this](const int_to_ptr_objectt &c) {
+    return c.level >= ctx_level;
+  });
+  for (int_to_ptr_objectt &c : int_to_ptr_objects)
+    if (c.closed_at && *c.closed_at >= ctx_level)
+      c.closed_at.reset();
 
   pointer_logic.pop_back();
   addr_space_sym_num.pop_back();
@@ -3368,6 +3376,8 @@ void smt_solver_baset::pre_solve()
   // A new solve produces a fresh model; drop memoised l_get values.
   l_get_cache.clear();
   get_ast_cache.clear();
+
+  close_int_to_ptr_objects();
 
   // NB: always perform tuple constraint adding first, as it covers tuple
   // arrays too, and might end up generating more ASTs to be encoded in

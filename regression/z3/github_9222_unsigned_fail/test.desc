@@ -1,0 +1,7 @@
+CORE
+main.c
+--z3 --unsigned-overflow-check
+^\s+u = 65536
+^\s+v = 65536
+arithmetic overflow on mul
+^VERIFICATION FAILED$

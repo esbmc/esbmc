@@ -7,10 +7,10 @@
 // N to the caller's actual argument, giving a call-site-visible extent, and
 // the existing enforce-mode copy-loop builder (materialize_ptr_region_old_
 // snapshot, generalised to take that extent directly) fills a real
-// array-typed temp with it, exactly as it already does for the same
-// quantified reference when it appears only in a loop_invariant instead
-// (see github_4219_old_in_forall_array_param_replace_mode_loopinv_pass,
-// which exercises exactly that shape and is fully fixed).
+// array-typed temp with it. (The same quantified reference appearing only
+// in a loop_invariant builds no snapshot at all, since nothing reads it;
+// see github_4219_old_in_forall_array_param_replace_mode_loopinv_pass and
+// #7627.)
 //
 // This exact test is not: when the SAME quantified reference is used
 // directly inside ensures's own forall (rather than only in a

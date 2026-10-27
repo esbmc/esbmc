@@ -248,6 +248,31 @@ smt_astt z3_convt::mk_bvmul(smt_astt a, smt_astt b)
     a->sort);
 }
 
+smt_astt z3_convt::overflow_arith(const expr2tc &expr)
+{
+  const overflow2t &overflow = to_overflow2t(expr);
+  const expr2tc &op1 = *overflow.operand->get_sub_expr(0);
+  const expr2tc &op2 = *overflow.operand->get_sub_expr(1);
+
+  // Z3's predicates avoid the generic check's double-width multiplier (#9222).
+  if (
+    int_encoding || !is_mul2t(overflow.operand) || !is_bv_type(op1) ||
+    op1->type != op2->type)
+    return smt_solver_baset::overflow_arith(expr);
+
+  const z3::expr &a = to_solver_smt_ast<z3_smt_ast>(convert_ast(op1))->a;
+  const z3::expr &b = to_solver_smt_ast<z3_smt_ast>(convert_ast(op2))->a;
+  const bool is_signed = is_signedbv_type(op1);
+
+  z3::expr no_overflow =
+    z3::to_expr(z3_ctx, Z3_mk_bvmul_no_overflow(z3_ctx, a, b, is_signed));
+  if (is_signed)
+    no_overflow = no_overflow &&
+                  z3::to_expr(z3_ctx, Z3_mk_bvmul_no_underflow(z3_ctx, a, b));
+
+  return new_ast(!no_overflow, boolean_sort);
+}
+
 smt_astt z3_convt::mk_mod(smt_astt a, smt_astt b)
 {
   assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);

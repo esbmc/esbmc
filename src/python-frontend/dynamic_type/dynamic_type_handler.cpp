@@ -23,9 +23,10 @@ using dynamic_type_detail::collect_branch_literal_kinds;
 using param_kinds_t = std::unordered_map<std::string, std::string>;
 
 // Kinds of the parameters annotated (or inferred from call sites) as int,
-// bool or str, or Optional of one, so `return x` counts like a literal of that
-// kind (#8523, #9285).
-param_kinds_t collect_param_kinds(const nlohmann::json &function_node)
+// bool or str, so `return x` counts like a literal of that kind (#8523).
+// With @p optional, also those annotated `Optional` of one (#9285).
+param_kinds_t
+collect_param_kinds(const nlohmann::json &function_node, bool optional = false)
 {
   param_kinds_t kinds;
   if (!function_node.contains("args") || !function_node["args"].is_object())
@@ -33,7 +34,7 @@ param_kinds_t collect_param_kinds(const nlohmann::json &function_node)
   for (const auto &arg : function_node["args"].value("args", nlohmann::json()))
   {
     const auto &ann = arg.value("annotation", nlohmann::json());
-    std::string type = type_utils::optional_inner_name(ann);
+    std::string type = optional ? type_utils::optional_inner_name(ann) : "";
     if (type.empty() && ann.is_object())
       type = ann.value("id", "");
     if (type == "int" || type == "bool")
@@ -263,11 +264,11 @@ param_kinds_t return_param_kinds(
   const nlohmann::json &function_node,
   const nlohmann::json &module_body)
 {
-  param_kinds_t kinds = collect_param_kinds(function_node);
+  param_kinds_t kinds = collect_param_kinds(function_node, true);
   if (!returns_free_name(function_node["body"], function_node))
     return kinds;
   if (const nlohmann::json *outer = enclosing_def(module_body, function_node))
-    kinds.merge(collect_param_kinds(*outer));
+    kinds.merge(collect_param_kinds(*outer, true));
   return kinds;
 }
 
