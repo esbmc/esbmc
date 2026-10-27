@@ -22,17 +22,37 @@ using dynamic_type_detail::collect_branch_literal_kinds;
 
 using param_kinds_t = std::unordered_map<std::string, std::string>;
 
+// `T` for an annotation `Optional[T]` or `T | None`, else the annotation.
+const nlohmann::json &optional_operand(const nlohmann::json &ann)
+{
+  if (!ann.is_object())
+    return ann;
+  if (
+    ann.value("_type", "") == "Subscript" &&
+    ann["value"].value("id", "") == "Optional")
+    return ann["slice"];
+  if (
+    ann.value("_type", "") == "BinOp" &&
+    ann["op"].value("_type", "") == "BitOr" &&
+    ann["right"].value("_type", "") == "Constant" &&
+    ann["right"]["value"].is_null())
+    return ann["left"];
+  return ann;
+}
+
 // Kinds of the parameters annotated (or inferred from call sites) as int,
 // bool, float or str, so `return x` counts like a literal of that kind
-// (#8523).
-param_kinds_t collect_param_kinds(const nlohmann::json &function_node)
+// (#8523). With @p optional, also those annotated `Optional` of one (#9285).
+param_kinds_t
+collect_param_kinds(const nlohmann::json &function_node, bool optional = false)
 {
   param_kinds_t kinds;
   if (!function_node.contains("args") || !function_node["args"].is_object())
     return kinds;
   for (const auto &arg : function_node["args"].value("args", nlohmann::json()))
   {
-    const auto &ann = arg.value("annotation", nlohmann::json());
+    const nlohmann::json &written = arg.value("annotation", nlohmann::json());
+    const nlohmann::json &ann = optional ? optional_operand(written) : written;
     const std::string type = ann.is_object() ? ann.value("id", "") : "";
     if (type == "int" || type == "bool")
       kinds[arg["arg"].get<std::string>()] = "num";
@@ -264,11 +284,11 @@ param_kinds_t return_param_kinds(
   const nlohmann::json &function_node,
   const nlohmann::json &module_body)
 {
-  param_kinds_t kinds = collect_param_kinds(function_node);
+  param_kinds_t kinds = collect_param_kinds(function_node, true);
   if (!returns_free_name(function_node["body"], function_node))
     return kinds;
   if (const nlohmann::json *outer = enclosing_def(module_body, function_node))
-    kinds.merge(collect_param_kinds(*outer));
+    kinds.merge(collect_param_kinds(*outer, true));
   return kinds;
 }
 

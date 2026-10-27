@@ -1664,29 +1664,60 @@ bool python_converter::needs_zero_division_guard(
   return !in_rhs_type_probe_ && !in_contract_clause_;
 }
 
+/// `is` between two tagged values holds when their payloads are one object.
+/// A differing payload proves nothing, since CPython may share an int or str
+/// between two objects, so that path reports an unsupported property, which
+/// the SV-COMP wrapper reads as unknown. The assertion is neither an assume
+/// nor a False answer.
+exprt python_converter::tagged_identity_by_payload(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &element)
+{
+  if (!can_emit_runtime_guard())
+    return nil_exprt();
+  const typet payload = pointer_typet(empty_typet());
+  code_assertt check(
+    python_expr::build_equal(
+      python_expr::build_member(lhs, "value", payload),
+      python_expr::build_member(rhs, "value", payload)));
+  check.location() = get_location_from_decl(element);
+  check.location().user_provided(true);
+  check.location().comment(
+    "Unsupported: 'is' between two dynamically-typed values that are not "
+    "known to be one object");
+  current_block->copy_to_operands(check);
+  return migrate_expr_back(op == "Is" ? gen_true_expr() : gen_false_expr());
+}
+
 /// `is` between a tagged value and a name whose identity the tag cannot
 /// affect. A tag holds only a number or a str, so it is never a class or a def,
-/// and a name is identical to itself. Between two other values `is` on numbers
-/// or strs is up to CPython's interning, so those stay unfolded.
+/// and a name is identical to itself. Between two tags it follows the payload.
 exprt python_converter::fold_tagged_identity(
   const std::string &op,
   const exprt &lhs,
   const exprt &rhs,
   const nlohmann::json &left,
-  const nlohmann::json &right)
+  const nlohmann::json &right,
+  const nlohmann::json &element)
 {
   const bool lhs_tagged = type_handler_.is_tagged_scalar_type(lhs.type());
+  const bool both_tagged =
+    lhs_tagged && type_handler_.is_tagged_scalar_type(rhs.type());
+  const bool same_name = left.value("_type", "") == "Name" &&
+                         right.value("_type", "") == "Name" &&
+                         left["id"] == right["id"];
+  if (both_tagged && !same_name)
+    return tagged_identity_by_payload(op, lhs, rhs, element);
+
   const nlohmann::json &other = lhs_tagged ? right : left;
   if (other.value("_type", "") != "Name")
     return nil_exprt();
 
   bool same = false;
-  if (lhs_tagged && type_handler_.is_tagged_scalar_type(rhs.type()))
-  {
-    if (left.value("_type", "") != "Name" || left["id"] != right["id"])
-      return nil_exprt();
+  if (both_tagged)
     same = true;
-  }
   else
   {
     const std::string name = other["id"].get<std::string>();
@@ -1734,7 +1765,7 @@ exprt python_converter::handle_tagged_scalar_binop(
   if (op == "Is" || op == "IsNot")
   {
     if (
-      exprt folded = fold_tagged_identity(op, lhs, rhs, left, right);
+      exprt folded = fold_tagged_identity(op, lhs, rhs, left, right, element);
       folded.is_not_nil())
       return folded;
     const auto &other =

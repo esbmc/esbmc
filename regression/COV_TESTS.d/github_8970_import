@@ -1,0 +1,6 @@
+regression/python/github_8970_import
+regression/python/github_8970_import_fail
+regression/python/github_8970_import_redefined_refused
+regression/python/github_8970_import_conditional_refused
+regression/python/github_8970_import_twice_refused
+regression/python/github_8970_import_module_alias_refused
