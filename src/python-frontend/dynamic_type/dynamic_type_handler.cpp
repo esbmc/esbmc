@@ -167,6 +167,42 @@ bool has_divergent_literal_returns(
   return false;
 }
 
+// A top-level `return a if t else b` whose arms are of different literal kinds.
+bool has_divergent_ifexp_return(
+  const nlohmann::json &function_node,
+  const param_kinds_t &param_kinds,
+  const nlohmann::json &module_body)
+{
+  for (const auto &stmt : function_node["body"])
+  {
+    if (stmt.value("_type", "") != "Return" || !stmt["value"].is_object())
+      continue;
+    const nlohmann::json &value = stmt["value"];
+    if (value.value("_type", "") != "IfExp")
+      continue;
+    std::unordered_set<std::string> kinds;
+    for (const char *arm : {"body", "orelse"})
+      kinds.insert(classify_return_literal_kind(
+        {{"_type", "Return"}, {"value", value[arm]}},
+        param_kinds,
+        module_body));
+    kinds.erase("");
+    if (dynamic_type_detail::kinds_diverge(kinds))
+      return true;
+  }
+  return false;
+}
+
+bool has_divergent_returns(
+  const nlohmann::json &function_node,
+  const param_kinds_t &param_kinds,
+  const nlohmann::json &module_body)
+{
+  return has_divergent_literal_returns(
+           function_node, param_kinds, module_body) ||
+         has_divergent_ifexp_return(function_node, param_kinds, module_body);
+}
+
 bool returns_dynamic_value(
   const nlohmann::json &function_node,
   const nlohmann::json &module_body,
@@ -504,7 +540,7 @@ bool returns_dynamic_value(
   unsigned depth)
 {
   if (
-    has_divergent_literal_returns(
+    has_divergent_returns(
       function_node,
       return_param_kinds(function_node, module_body),
       module_body))
@@ -1411,6 +1447,20 @@ exprt dynamic_type_handler::build_isinstance_check(
   throw std::runtime_error(
     "isinstance() against this type is not yet supported for a "
     "dynamically-typed variable");
+}
+
+exprt dynamic_type_handler::build_truthiness(const exprt &tagged)
+{
+  const symbolt *func =
+    converter_.symbol_table().find_symbol("c:@F@__python_scalar_truthy");
+  assert(func && "__python_scalar_truthy not found in symbol table");
+  exprt call = build_call_expr(
+    *func,
+    int_type(),
+    {build_address_of(tagged),
+     type_handler_.tagged_scalar_type_id(pointer_typet(char_type())),
+     type_handler_.tagged_scalar_type_id(double_type())});
+  return build_not(build_equal(call, from_integer(0, int_type())));
 }
 
 bool dynamic_type_handler::parameter_call_returns_tagged(

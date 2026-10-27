@@ -1,4 +1,5 @@
 #include <python-frontend/function_call/expr.h>
+#include <python-frontend/math/bounded_math.h>
 #include <python-frontend/math/cmath_lowering_policy.h>
 #include <python-frontend/math/complex_handler.h>
 #include <python-frontend/math/complex_handler_utils.h>
@@ -3948,6 +3949,54 @@ exprt function_call_expr::handle_cmath_inverse_fast_path()
   return build_if(migrate_expr_back(fast_guard), fast_path, model_call);
 }
 
+static std::string numpy_spelling(const std::string &math_name)
+{
+  static const std::map<std::string, std::string> numpy_names = {
+    {"asin", "arcsin"}, {"acos", "arccos"}, {"atan", "arctan"}};
+  auto renamed = numpy_names.find(math_name);
+  return renamed == numpy_names.end() ? math_name : renamed->second;
+}
+
+// The math function that `name` is bound to by a top-level
+// `from math import f as name` of a module that does not redefine it.
+static std::optional<std::string>
+math_import_of(const nlohmann::json &ast, const std::string &name)
+{
+  std::optional<std::string> imported;
+  for (const auto &node : ast.value("body", nlohmann::json::array()))
+  {
+    const std::string type = node.value("_type", "");
+    if (type == "FunctionDef" && node.value("name", "") == name)
+      return std::nullopt;
+    // `from . import x` has a null module.
+    if (type != "ImportFrom" || node["module"] != "math")
+      continue;
+    for (const auto &alias : node["names"])
+    {
+      const std::string original = alias.value("name", "");
+      const nlohmann::json &as = alias["asname"];
+      if ((as.is_string() ? as.get<std::string>() : original) == name)
+        imported = original;
+    }
+  }
+  return imported;
+}
+
+// A bounded math function imported by name into the program, which its
+// math.* spelling would dispatch.
+std::optional<std::string> function_call_expr::bounded_math_import() const
+{
+  if (
+    call_["func"].value("_type", "") != "Name" ||
+    converter_.is_model_file(call_))
+    return std::nullopt;
+  std::optional<std::string> imported =
+    math_import_of(converter_.ast(), function_id_.get_function());
+  if (!imported || !bounded_math::is_bounded(numpy_spelling(*imported)))
+    return std::nullopt;
+  return imported;
+}
+
 bool function_call_expr::is_math_function_dispatch_call() const
 {
   const std::string &func_name = function_id_.get_function();
@@ -3959,15 +4008,75 @@ bool function_call_expr::is_math_function_dispatch_call() const
     caller = get_object_name();
   }
   return converter_.get_math_handler().is_math_dispatch_target_cached(
-    caller, func_name);
+           caller, func_name) ||
+         bounded_math_import().has_value();
+}
+
+static bool is_number_literal(const nlohmann::json &node)
+{
+  const std::string type = node.value("_type", "");
+  if (type == "UnaryOp")
+    return is_number_literal(node["operand"]);
+  return type == "Constant";
+}
+
+bool function_call_expr::takes_bounded_math(const std::string &function) const
+{
+  const nlohmann::json &args = call_["args"];
+  return bounded_math::is_bounded(function) && args.size() == 1 &&
+         call_.value("keywords", nlohmann::json::array()).empty() &&
+         !is_number_literal(args[0]) && !converter_.is_model_file(call_) &&
+         !math_guard_utils::call_has_complex_in_args_or_keywords(
+           call_,
+           converter_,
+           type_handler_,
+           converter_.current_function_name());
+}
+
+// math.exp(x) in the program, of a number known only at run time: the model
+// numpy.exp(x) uses, with math's ValueError and OverflowError. Calls inside
+// the models keep the C library models their own algorithms are tuned to.
+std::optional<exprt>
+function_call_expr::try_bounded_math_call(const std::string &func_name)
+{
+  const std::string function = numpy_spelling(func_name);
+  if (!takes_bounded_math(function))
+    return std::nullopt;
+  const nlohmann::json &arg = call_["args"][0];
+  const exprt x = converter_.get_expr(arg);
+  if (is_cpp_throw_expr(x))
+    return x;
+  const typet &t = x.type();
+  if (!t.is_floatbv() && !t.is_signedbv() && !t.is_unsignedbv() && !t.is_bool())
+  {
+    if (!json_utils::ast_contains_call(arg))
+      return std::nullopt;
+    return converter_.get_math_handler().handle(func_name, x, call_);
+  }
+  return bounded_math(converter_, call_)
+    .runtime(function, x, math_module::math);
+}
+
+static std::string math_function_name(const std::string &raw_func_name)
+{
+  return raw_func_name.rfind("__ESBMC_", 0) == 0 ? raw_func_name.substr(8)
+                                                 : raw_func_name;
+}
+
+exprt function_call_expr::dispatch_math_call()
+{
+  if (std::optional<std::string> imported = bounded_math_import())
+    function_id_.set_function(*imported);
+  if (
+    std::optional<exprt> bounded =
+      try_bounded_math_call(math_function_name(function_id_.get_function())))
+    return *bounded;
+  return handle_math_function_dispatch();
 }
 
 exprt function_call_expr::handle_math_function_dispatch()
 {
-  const std::string &raw_func_name = function_id_.get_function();
-  const std::string func_name = raw_func_name.rfind("__ESBMC_", 0) == 0
-                                  ? raw_func_name.substr(8)
-                                  : raw_func_name;
+  const std::string func_name = math_function_name(function_id_.get_function());
   const auto &args = call_["args"];
   auto raise_math_real_type_error = [this]() -> exprt {
     return complex_utils::raise_math_real_type_error_expr(converter_);
@@ -4498,7 +4607,7 @@ function_call_expr::get_dispatch_table()
 
     // Math module functions (sin, cos, sqrt, exp, log, etc.)
     {[this]() { return is_math_function_dispatch_call(); },
-     [this]() { return handle_math_function_dispatch(); },
+     [this]() { return dispatch_math_call(); },
      "math.sin/cos/sqrt/exp/log/etc"},
 
     // Math.comb function with type checking
@@ -4732,7 +4841,8 @@ function_call_expr::find_receiver_symbol(symbol_id &obj_symbol_id) const
   if (caller.empty())
     return nullptr;
   obj_symbol_id.set_object(caller);
-  return converter_.find_symbol(obj_symbol_id.to_string());
+  return converter_.follow_retype_alias(
+    converter_.find_symbol(obj_symbol_id.to_string()));
 }
 
 exprt function_call_expr::handle_general_function_call()
@@ -5817,6 +5927,14 @@ static void reject_unfoldable_key(
 
 // A str variable is passed as &s[0]: a later rebinding to a str of another
 // length retypes it to char*, and &s would then name the pointer itself.
+// An array argument with no object to take the address of: a constant, or a
+// str conditional expression.
+static bool is_value_only_array(const exprt &arg)
+{
+  return arg.is_constant() ||
+         (arg.id() == "if" && type_utils::is_string_type(arg.type()));
+}
+
 static exprt array_argument_address(const exprt &arg)
 {
   if (!arg.is_symbol() || !type_utils::is_string_type(arg.type()))
@@ -6195,7 +6313,10 @@ std::optional<exprt> function_call_expr::try_indirect_member_call()
   const python_converter::attribute_functions *held =
     held_functions(class_name, attr, field_type);
   if (!held && (!field_type.is_pointer() || !field_type.subtype().is_code()))
+  {
+    refuse_untyped_attribute(class_name, attr, field_type);
     return std::nullopt;
+  }
 
   exprt recv = converter_.get_expr(func_json["value"]);
   typet recv_type = recv.type();
@@ -6221,12 +6342,7 @@ void function_call_expr::refuse_unheld_attribute(
 {
   const python_converter::attribute_functions *held =
     converter_.function_attribute(attr);
-  const auto mro = converter_.class_mro(class_name);
-  if (
-    !held || !held->bound || !mro ||
-    std::any_of(mro->begin(), mro->end(), [&](const auto &cls) {
-      return converter_.class_binds_name(cls, attr);
-    }))
+  if (!held || !held->bound || mro_may_bind(class_name, attr))
     return;
   throw std::runtime_error(
     "calling attribute '" + attr + "' on a '" + class_name +
@@ -6234,19 +6350,35 @@ void function_call_expr::refuse_unheld_attribute(
     "supported");
 }
 
+void function_call_expr::refuse_untyped_attribute(
+  const std::string &class_name,
+  const std::string &attr,
+  const typet &field_type) const
+{
+  if (field_type == any_type() && !mro_may_bind(class_name, attr))
+    throw std::runtime_error(
+      "calling attribute '" + attr +
+      "', whose value is not known, is not supported");
+}
+
 const python_converter::attribute_functions *function_call_expr::held_functions(
   const std::string &class_name,
   const std::string &attr,
   const typet &field_type) const
 {
-  const auto mro = converter_.class_mro(class_name);
-  if (
-    field_type != any_type() || !mro ||
-    std::any_of(mro->begin(), mro->end(), [&](const auto &cls) {
-      return converter_.class_binds_name(cls, attr);
-    }))
+  if (field_type != any_type() || mro_may_bind(class_name, attr))
     return nullptr;
   return converter_.function_attribute(attr);
+}
+
+bool function_call_expr::mro_may_bind(
+  const std::string &class_name,
+  const std::string &attr) const
+{
+  const auto mro = converter_.class_mro(class_name);
+  return !mro || std::any_of(mro->begin(), mro->end(), [&](const auto &cls) {
+    return converter_.class_binds_name(cls, attr);
+  });
 }
 
 code_typet function_call_expr::held_signature(
@@ -7124,6 +7256,34 @@ constant_byteorder(const nlohmann::json &node, const nlohmann::json &module)
 }
 
 // Keyed on the resolved callee so an aliased call folds too (#7945).
+bool function_call_expr::is_size_builtin() const
+{
+  return function_id_.get_function() == "__ESBMC_get_object_size" ||
+         function_id_.get_function() == "strlen";
+}
+
+bool function_call_expr::is_list_typed(const typet &type) const
+{
+  const typet &list_type = type_handler_.get_list_type();
+  return type == list_type ||
+         (type.is_pointer() && type.subtype() == list_type && type.is_symbol());
+}
+
+exprt function_call_expr::build_dict_size_call(const exprt &dict)
+{
+  const exprt bound = converter_.materialize_list_function_call(
+    dict, call_, *converter_.current_block);
+  const symbolt *list_size_func_sym =
+    converter_.find_symbol("c:@F@__ESBMC_list_size");
+  assert(list_size_func_sym);
+  code_function_callt list_size_func_call;
+  list_size_func_call.function() = build_symbol(*list_size_func_sym);
+  list_size_func_call.arguments().push_back(
+    build_member(bound, "keys", type_handler_.get_list_type()));
+  list_size_func_call.type() = signedbv_typet(64);
+  return list_size_func_call;
+}
+
 exprt function_call_expr::fold_from_bytes_byteorder(
   exprt arg,
   const nlohmann::json &node,
@@ -7379,13 +7539,7 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
     arg = fold_from_bytes_byteorder(
       arg, arg_node, *func_symbol, params, param_idx, converter_.ast());
 
-    if (
-      (function_id_.get_function() == "__ESBMC_get_object_size" ||
-       function_id_.get_function() == "strlen") &&
-      (arg.type() == type_handler_.get_list_type() ||
-       (arg.type().is_pointer() &&
-        arg.type().subtype() == type_handler_.get_list_type() &&
-        arg.type().is_symbol())))
+    if (is_size_builtin() && is_list_typed(arg.type()))
     {
       symbolt *list_symbol = nullptr;
 
@@ -7443,6 +7597,13 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
 
       return list_size_func_call;
     }
+
+    // len(f()) where f returns a dict: a named dict takes __ESBMC_len_dict,
+    // but an inline call reaches here and strlen would read the struct bytes.
+    if (
+      is_size_builtin() && converter_.get_dict_handler()->is_dict_type(
+                             converter_.ns.follow(arg.type())))
+      return build_dict_size_call(arg);
 
     // Handle function calls used as arguments
     if (arg.is_code() && arg.is_function_call())
@@ -7567,10 +7728,11 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
           arg.type(),
           string_constantt::k_default);
       }
-      else if (arg.is_constant())
+      else if (is_value_only_array(arg))
       {
         // Constant array (e.g. a folded string concat or a str-method result
-        // like "{}".format(x)) must be materialized before address_of_exprt.
+        // like "{}".format(x)) or a str conditional expression must be
+        // materialized before address_of_exprt.
         // The DECL alone leaves the temp uninitialised, so
         // strlen/get_object_size over it reads nondet bytes and runs past the
         // array bounds; emit an explicit assignment of the constant value

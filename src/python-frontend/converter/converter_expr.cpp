@@ -1614,10 +1614,67 @@ std::optional<exprt> python_converter::try_dispatch_dict_subscript(
     check_type = !expected_type.is_empty();
   }
 
+  // A dict returned by a user function's call, as in f()[k], has no name to
+  // type its value by either; the handler's str default would misread any
+  // other value.
+  if (std::optional<typet> returned = call_dict_value_type(base))
+  {
+    if (returned->is_empty())
+      throw std::runtime_error(
+        "subscripting a dict returned by a call is not supported unless its "
+        "value type is known; bind the result to a name first");
+    expected_type = *returned;
+    check_type = !type_handler_.type_to_string(expected_type).empty();
+  }
+
   // Pass the expected type to the dict handler
   // If empty, the handler will use its default heuristics
   return dict_handler_->handle_dict_subscript(
     array, element["slice"], expected_type, check_type);
+}
+
+/// The value type of the dict that @p call returns: the callee's `dict[K, V]`
+/// annotation, else the one scalar or str value type recorded for the dict
+/// its return statement names. Empty when neither is known, and nullopt when
+/// @p call does not call a module-level function.
+std::optional<typet>
+python_converter::call_dict_value_type(const nlohmann::json &call)
+{
+  if (call.value("_type", "") != "Call")
+    return std::nullopt;
+  const nlohmann::json &func = call["func"];
+  if (func.value("_type", "") != "Name")
+    return std::nullopt;
+  const std::string name = func["id"].get<std::string>();
+
+  const nlohmann::json func_def =
+    json_utils::try_find_function((*ast_json)["body"], name);
+  if (func_def.empty())
+    return std::nullopt;
+  if (func_def.contains("returns") && !func_def["returns"].is_null())
+  {
+    const typet annotated =
+      dict_handler_->get_dict_value_type_from_annotation(func_def["returns"]);
+    if (!annotated.is_nil() && !annotated.is_empty())
+      return annotated;
+  }
+
+  // A callee defined after this call has not been converted yet.
+  const std::string func_id = symbol_id(python_file(), "", name).to_string();
+  if (!symbol_table_.find_symbol(func_id))
+    return empty_typet();
+  const exprt ret = get_return_from_func(func_id.c_str());
+  if (ret.is_nil() || ret.operands().empty() || !ret.op0().is_symbol())
+    return empty_typet();
+  const std::string &vals_id = python_dict_handler::get_internal_list_id(
+    ret.op0().identifier().as_string(), false);
+  if (vals_id.empty())
+    return empty_typet();
+  const typet uniform = element_type_registry_.uniform_element_type(
+    vals_id, type_slot::dict_value_types);
+  if (uniform == typet() || type_handler_.type_to_string(uniform).empty())
+    return empty_typet();
+  return uniform;
 }
 
 std::optional<exprt> python_converter::try_dispatch_multidim_tuple_axes(

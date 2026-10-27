@@ -853,6 +853,14 @@ exprt python_converter::emit_guarded_boolop(
   return result;
 }
 
+void python_converter::refuse_tagged_boolop_operand(const exprt &operand) const
+{
+  if (type_handler_.is_tagged_scalar_type(operand.type()))
+    throw std::runtime_error(
+      "a dynamically-typed variable as an and/or operand whose value is "
+      "used is not yet supported");
+}
+
 exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
 {
   // `and`/`or` short-circuit: a later operand may not execute. get_named_expr
@@ -911,6 +919,7 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
   for (const auto &operand : element["values"])
   {
     exprt operand_expr = get_boolop_operand(operand, operand_effects);
+    refuse_tagged_boolop_operand(operand_expr);
     in_lazy_operand_ = true;
     logical_expr.copy_to_operands(operand_expr);
     contains_non_boolean |= !operand_expr.is_boolean();
@@ -1655,6 +1664,43 @@ bool python_converter::needs_zero_division_guard(
   return !in_rhs_type_probe_ && !in_contract_clause_;
 }
 
+/// `is` between a tagged value and a name whose identity the tag cannot
+/// affect. A tag holds only a number or a str, so it is never a class or a def,
+/// and a name is identical to itself. Between two other values `is` on numbers
+/// or strs is up to CPython's interning, so those stay unfolded.
+exprt python_converter::fold_tagged_identity(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &left,
+  const nlohmann::json &right)
+{
+  const bool lhs_tagged = type_handler_.is_tagged_scalar_type(lhs.type());
+  const nlohmann::json &other = lhs_tagged ? right : left;
+  if (other.value("_type", "") != "Name")
+    return nil_exprt();
+
+  bool same = false;
+  if (lhs_tagged && type_handler_.is_tagged_scalar_type(rhs.type()))
+  {
+    if (left.value("_type", "") != "Name" || left["id"] != right["id"])
+      return nil_exprt();
+    same = true;
+  }
+  else
+  {
+    const std::string name = other["id"].get<std::string>();
+    const bool holds_object =
+      class_identity_operand(other, lhs_tagged ? rhs : lhs) ||
+      (!json_utils::try_find_function((*ast_json)["body"], name).empty() &&
+       count_bindings(*ast_json, name) == 1);
+    if (!holds_object)
+      return nil_exprt();
+  }
+  return migrate_expr_back(
+    same == (op == "Is") ? gen_true_expr() : gen_false_expr());
+}
+
 /// A tagged-scalar operand needs runtime dispatch instead of any of the
 /// static-type-driven paths, none of which know how to handle a PyObject-shaped
 /// operand.
@@ -1687,6 +1733,10 @@ exprt python_converter::handle_tagged_scalar_binop(
   // emitted yet, and returning a constant would discard them.
   if (op == "Is" || op == "IsNot")
   {
+    if (
+      exprt folded = fold_tagged_identity(op, lhs, rhs, left, right);
+      folded.is_not_nil())
+      return folded;
     const auto &other =
       type_handler_.is_tagged_scalar_type(lhs.type()) ? right : left;
     if (

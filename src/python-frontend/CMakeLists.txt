@@ -56,6 +56,7 @@ add_library(pythonfrontend STATIC
             python-list/list_comprehension.cpp
             python-list/list_set_ops.cpp
             math/python_math.cpp
+            math/bounded_math.cpp
             set/python_set.cpp
             type/python_typechecking.cpp
             pythonastgen.c

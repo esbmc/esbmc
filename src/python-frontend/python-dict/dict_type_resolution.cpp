@@ -2,14 +2,23 @@
 
 using namespace python_expr;
 
+/// A subscript whose base can be converted again to retype the read. A call
+/// to a module-level function was typed by its first conversion, and
+/// converting it again would call it twice.
+bool python_dict_handler::is_retypable_subscript(const nlohmann::json &node)
+{
+  return type_utils::is_dict_subscript(node) &&
+         !converter_.call_dict_value_type(node["value"]).has_value();
+}
+
 void python_dict_handler::resolve_dict_subscript_types(
   const nlohmann::json &left,
   const nlohmann::json &right,
   exprt &lhs,
   exprt &rhs)
 {
-  bool lhs_is_dict_subscript = type_utils::is_dict_subscript(left);
-  bool rhs_is_dict_subscript = type_utils::is_dict_subscript(right);
+  bool lhs_is_dict_subscript = is_retypable_subscript(left);
+  bool rhs_is_dict_subscript = is_retypable_subscript(right);
 
   bool lhs_is_ptr = lhs.type().is_pointer();
   bool rhs_is_ptr = rhs.type().is_pointer();

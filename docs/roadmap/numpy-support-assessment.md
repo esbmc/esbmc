@@ -1,6 +1,6 @@
 # ESBMC NumPy — Remaining Work
 
-**Updated:** 2026-10-22.
+**Updated:** 2026-10-25.
 
 This file tracks only what is **not yet implemented, broken, risky, or queued
 as backlog** in the NumPy module. If an item is not listed here as a gap, TODO,
@@ -35,6 +35,7 @@ and its stages, ADR-NP-004 the SMT-array scalability decision, and "principle
 | Direct constructor chaining | Supported for the current concrete constructor subset and direct literal `np.array(...)` receivers across the pinned reducers/views (`sum`, `mean`, `min`, `max`, `argsort`, `searchsorted`, `flatten`, `ravel`, `transpose`, `.T`, `reshape`, `argmin`, `argmax`, `diagonal`, `prod`, `std`, and `var`). Remaining gaps are method forms tied to unsupported constructors, symbolic constructor payloads, or broader unsupported APIs. |
 | Statistics | `a.sum()`/`a.mean()`/`a.min()`/`a.max()`/`a.any()`/`a.all()`/`a.argmin()`/`a.argmax()` method forms and their `axis=0/1` variants are supported over concrete 1-D/2-D ndarrays (including function-returned arrays), sharing the same reducer/comparison policy as the functional forms. Still missing: axis/keepdims/out/overwrite/nan-policy style variants beyond concrete flattened/literal `median` and `percentile`, and reducer axes outside 2-D concrete `axis=0/1`. |
 | Linear algebra | `det` of concrete matrices up to 4x4, `inv` and `solve` up to 3x3, `eigvals` of 2x2 matrices and diagonal matrices of any size (complex results, including conjugate pairs) and `svd(..., compute_uv=False)` of 2x2 matrices. Their results are any double within a bound of LAPACK's rounding around the exact value, so an exact comparison fails as it may in NumPy, and a bound that overflows leaves the result unconstrained; factors that are exact with power-of-two pivots, structurally singular matrices and diagonal or triangular eigenvalue problems give NumPy's own value. Missing: eigenvectors (`eig` rejects, `eigvals` is the supported form), the `U` and `Vh` factors of `svd`, larger matrices, symbolic matrix entries, and further `norm` axes/orders. |
+| Math functions | `exp`, `log`, `log2`, `log10`, `sqrt`, `sin`, `cos`, `tan`, `arcsin`/`asin`, `arccos`/`acos`, `arctan`/`atan`, `sinh`, `cosh` and `tanh` of run-time numbers, and of arrays and views of constant shape element by element, are bounded, and `math.*` shares the model with Python's `ValueError`/`OverflowError`. Missing: the other transcendental functions (`expm1`, `log1p`, `exp2`, `arcsinh`/`asinh`, `arccosh`, `arctanh`, `cbrt`, `hypot`, `arctan2`) reject in NumPy while their `math.*` forms still use the C library models (item 1); `np.isnan`/`np.isinf`/`np.isfinite` and the constants `np.inf`/`np.nan` are not recognised; complex arguments, string arrays and views of run-time shape reject; keywords other than `out=None` and `dtype=float` take the older paths. |
 | Random | Generator state and objects (`seed`, `get_state`, `set_state`, `default_rng`, `Generator`, `RandomState`) and every unmodelled `np.random` function (`shuffle`, `permutation`, `multivariate_normal`, `laplace`, `logistic`, ...) raise `TypeError`; `choice(p=...)` does too, since a probability vector has no encoding that keeps ADR-NP-002's over-approximation. Parameters must be scalars (no broadcasting of array parameters). `size` must be integer literals, at most 1024 samples (each sample is unrolled); a `size` read at run time rejects. `choice` takes a 1-D literal sequence, ndarray or view, not an integer `a` or a slice of a string array. `randint` rejects `dtype=bool` and `uint64`, and narrow integer dtypes are stored at 64 bit as for the constructors. |
 | Structured arrays | Record dtypes. |
 | Views / strides | Views passed to lambdas used as callbacks, through `**kwargs` or to other modules' functions; views passed to multi-statement functions outside the subset whose layout is read from the call sites (see the shared-buffer view model row); views stored by mutation, in attributes or globals; `reshape`/`ravel` of N-D views with a run-time stride; arrays whose shape has no static upper bound (`np.zeros(n)` with `n` unconstrained). |
@@ -44,13 +45,12 @@ and its stages, ADR-NP-004 the SMT-array scalability decision, and "principle
 
 ## Soundness / performance concerns
 
-1. **A NumPy math function of a run-time argument uses ESBMC's C math
-   model.** `np.exp(x)`, `np.sin(x)` and the other transcendental ufuncs of a
-   value only known at run time are computed by the C operational models,
-   whose values are not those of the C library, so an exact comparison can
-   give a wrong success. A literal argument (and a literal list) is bounded
-   instead: any double within 8 ulps of the C library's value, exact where
-   every implementation is. The same models serve `math.exp(x)`.
+1. **`math.*` functions outside the bounded set use ESBMC's C math
+   models.** `math.expm1`, `log1p`, `exp2`, `asinh`, `acosh`, `atanh`,
+   `atan2`, `hypot` and `pow` of a run-time argument, the functions of
+   `models/math.py` built on the C models (`gamma`, `lgamma`, `erf`) and
+   `cmath` run models whose values are not those of the C library, so an
+   exact comparison can give a wrong success.
 2. **Element-wise broadcasting** still requires concrete shapes at conversion
    time; symbolic shapes work only for selected array creation paths.
 3. **Scalability wall** (#5121, closed): arrays are still represented as fully
@@ -74,7 +74,13 @@ and its stages, ADR-NP-004 the SMT-array scalability decision, and "principle
 7. **Linear algebra and math results are over-approximated.** They are
    bounded rather than exact, so `det(m) == -2` fails as in NumPy, and a
    comparison that holds in NumPy only by its exact rounding
-   (`np.exp(1.0) >= np.e`) is reported as a possible failure.
+   (`np.exp(1.0) >= np.e`) is reported as a possible failure unless
+   `--python-math-ulps 0` assumes a correctly rounded C library (unsound
+   where NumPy uses SVML). A math function of a run-time number is bounded
+   between fixed breakpoints, so a property tighter than the gap between
+   two breakpoints fails; `sin`/`cos` beyond ±8 and `tan` beyond ±4.5 keep
+   only their range. An argument that is constant after symex propagation
+   gets the literal result.
 
 ---
 
@@ -88,15 +94,15 @@ verdict. Gaps in "Missing indexing / slicing" and "Missing API
 surface" should reject explicitly; any known false alarm must be listed as a
 separate gap instead of treated as supported behavior.
 
-The known wrong successes are item 1 (a NumPy math function of a run-time
-argument) and the operand order inside a `lambda` body or a chained
+The known wrong successes are item 1 (`math.*` functions outside the bounded
+set) and the operand order inside a `lambda` body or a chained
 comparison (item 5). Every other remaining item is documented backlog.
 
-`regression/numpy` pins one `KNOWNBUG` test (2026-10-22):
+`regression/numpy` pins one `KNOWNBUG` test (2026-10-25):
 
 | test | expected | today |
 |---|---|---|
-| `e` | SUCCESSFUL | `VERIFICATION FAILED` (false alarm: `np.exp(1.0)` is bounded, item 7) |
+| `e` | SUCCESSFUL | `VERIFICATION FAILED` (false alarm: `np.exp(1.0)` lies within 8 ulps of the C library's value, and SVML may return a value below `np.e`; `SUCCESSFUL` with `--python-math-ulps 0`, item 7) |
 
 A view passed to a multi-statement user function keeps its shape, strides
 and aliasing: subviews taken in the callee, nested and recursive callees,
@@ -128,20 +134,20 @@ reject, each pinned by a `CORE` test:
 
 ## Prioritised next steps
 
-1. **Math functions of run-time arguments** — bound `np.exp(x)` and the other
-   transcendental ufuncs (and `math.*`) around a sound model instead of the C
-   operational models (item 1).
-2. **Linear algebra breadth** — eigenvectors and the `svd` factors, larger
+1. **Linear algebra breadth** — eigenvectors and the `svd` factors, larger
    and symbolic matrices, more `norm` axes/orders.
-3. **Rebinding and call forms** — a rebind to another shape inside a branch
+2. **Rebinding and call forms** — a rebind to another shape inside a branch
    or loop (item 6), element-wise results and views returned by a call and
    passed straight on as arguments, the operand order inside a `lambda` body
    or a chained comparison.
-4. **Dtype width and non-numeric arrays** — storage and arithmetic in the
+3. **Dtype width and non-numeric arrays** — storage and arithmetic in the
    dtype's own width (NEP 50 promotion), and the string/complex array
    consumers that reject today; `object`/structured/custom dtypes stay out.
-5. **Random generator state** — `Generator`/`default_rng`, `seed` and
+4. **Random generator state** — `Generator`/`default_rng`, `seed` and
    probability-vector `choice`; each needs its own ADR-NP-002 decision first.
+5. **Remaining math functions** — bound `expm1`, `log1p`, `exp2`, the
+   inverse hyperbolic functions, `cbrt`, `hypot` and `arctan2` (NumPy and
+   `math.*`, item 1) and recognise `np.isnan`/`np.isinf`/`np.inf`/`np.nan`.
 
 The residual view forms in the table above (lambdas passed on, `**kwargs`, a
 per-type copy of a callee) are narrow and each needs something outside the
@@ -153,16 +159,15 @@ view model; they stay rejected.
 
 The backlog closes in five PRs:
 
-1. **Math function soundness** — a bounded model for transcendental ufuncs
-   and `math.*` of run-time arguments, which also lets `e` leave
-   `KNOWNBUG`.
-2. **Linear algebra expansion** — eigenvectors, `svd` factors, larger and
+1. **Linear algebra expansion** — eigenvectors, `svd` factors, larger and
    symbolic matrices, `norm`; the largest of the five.
-3. **Rebinding and call forms** — item 6 and the call forms in step 3.
-4. **Dtype width and non-numeric arrays** — narrow-width storage and
+2. **Rebinding and call forms** — item 6 and the call forms in step 2.
+3. **Dtype width and non-numeric arrays** — narrow-width storage and
    arithmetic, string/complex array consumers.
-5. **Random generator state** — after the ADR decision on state and
+4. **Random generator state** — after the ADR decision on state and
    probabilities.
+5. **Remaining math functions** — step 5, on the bounded model of
+   `util/arith/transcendental.h`; the smallest of the five.
 
 ---
 

@@ -666,6 +666,12 @@ protected:
   bool
   run_builtin(const code_function_call2t &call, const std::string &symname);
 
+  /** __builtin_bounded_<function>(x, exact): the bounded result of a
+   *  transcendental function, from util/arith/transcendental.h. */
+  void symex_bounded_math(
+    const code_function_call2t &call,
+    const std::string &function);
+
   /** Perform yield; forces a context switch point. */
   void intrinsic_yield(reachability_treet &arg);
   /** Perform switch_to; switches control to explicit thread ID. */

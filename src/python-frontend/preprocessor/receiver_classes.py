@@ -305,12 +305,18 @@ def _check_isinstance(node, receivers, classes, context, module_name):
     raise exc
 
 
+def _outside_names(body, params):
+    """A scope's parameters and globals, which take their C type from outside
+    the scope."""
+    return set(params).union(*(node.names for node in _scope_nodes(body)
+                               if isinstance(node, (ast.Global, ast.Nonlocal))))
+
+
 def _isinstance_context(body, receivers, classes, returns, params):
     """The definite class at each isinstance call and each receiver's static
     class, without a parameter or a global, which take their C type from
     outside this scope."""
-    outside = set(params).union(*(node.names for node in _scope_nodes(body)
-                                  if isinstance(node, (ast.Global, ast.Nonlocal))))
+    outside = _outside_names(body, params)
     static = _static_classes(body, receivers, classes, returns)
     return (_definite_classes(body, receivers, classes, returns), {
         name: cls
@@ -327,11 +333,118 @@ def _parameters(func):
     }
 
 
-def _check_scope(body, classes, returns, module_name, params=frozenset()):
-    receivers = _receiver_classes(body, classes, returns)
+def _spine_construction(stmt, name, classes):
+    """Whether `stmt` binds `name`, and only it, to a direct construction of a
+    class of this module."""
+    if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
+        target = stmt.targets[0]
+    elif isinstance(stmt, ast.AnnAssign) and stmt.value is not None:
+        target = stmt.target
+    else:
+        return False
+    value = stmt.value
+    return (isinstance(target, ast.Name) and target.id == name and isinstance(value, ast.Call)
+            and isinstance(value.func, ast.Name) and value.func.id in classes)
+
+
+def _own_nodes(body):
+    """The nodes of a scope, without descending into any def, lambda or class."""
+    stack = list(body)
+    while stack:
+        node = stack.pop()
+        yield node
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
+            stack.extend(ast.iter_child_nodes(node))
+
+
+def _binding_nodes(body, name):
+    """The nodes of this scope that bind `name`."""
+    for node in _own_nodes(body):
+        if isinstance(node, ast.Name):
+            bound = node.id == name and not isinstance(node.ctx, ast.Load)
+        elif isinstance(node, (ast.ExceptHandler, ast.FunctionDef, ast.AsyncFunctionDef,
+                               ast.ClassDef, ast.MatchAs, ast.MatchStar)):
+            bound = node.name == name
+        elif isinstance(node, ast.MatchMapping):
+            bound = node.rest == name
+        elif isinstance(node, ast.alias):
+            bound = (node.asname or node.name.split(".")[0]) == name
+        else:
+            bound = False
+        if bound:
+            yield node
+
+
+def _read_in_nested_scope(name, module, scope):
+    """Whether a function, lambda or class other than `scope` names `name`."""
+    for node in ast.walk(module):
+        if node is scope or not isinstance(
+                node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)):
+            continue
+        if any(isinstance(n, ast.Name) and n.id == name for n in ast.walk(node)):
+            return True
+    return False
+
+
+def _read_only_as_receiver(name, body):
+    """Whether every read of `name` in this scope is an attribute access on it
+    or an isinstance test of it."""
+    for parent in _scope_nodes(body):
+        for node in ast.iter_child_nodes(parent):
+            if (isinstance(node, ast.Name) and node.id == name and isinstance(node.ctx, ast.Load)
+                    and not isinstance(parent, ast.Attribute)
+                    and _isinstance_receiver(parent, {name}) is None):
+                return False
+    return True
+
+
+def _rebound_on_spine(name, module, scope, classes):
+    """Whether every binding of `name` in `scope` (a top-level function, or
+    the module when None) constructs a class at the top level of the scope,
+    and the name is read only as a receiver and in no other scope. The
+    converter then gives each rebinding to another class its own symbol, so
+    the name holds one class at each read."""
+    body = module.body if scope is None else scope.body
+    bindings = list(_binding_nodes(body, name))
+    if scope is None and not bindings:
+        # The module pass also walks top-level function bodies.
+        return all(
+            _rebound_on_spine(name, module, f, classes) for f in module.body
+            if isinstance(f, ast.FunctionDef) and any(_binding_nodes(f.body, name)))
+    outside = set() if scope is None else _outside_names(scope.body, _parameters(scope))
+    spine = {
+        id(s.targets[0] if isinstance(s, ast.Assign) else s.target)
+        for s in body if _spine_construction(s, name, classes)
+    }
+    return (name not in outside and all(id(node) in spine for node in bindings)
+            and _read_only_as_receiver(name, body)
+            and not _read_in_nested_scope(name, module, scope))
+
+
+def _scope_receivers(scope, module, classes, returns):
+    """The receivers of the module or a function `scope`, without those the
+    converter rebinds on the spine of the module or a top-level function."""
+    receivers = _receiver_classes(scope.body, classes, returns)
+    if scope is module:
+        owner = None
+    elif isinstance(scope, ast.FunctionDef) and scope in module.body:
+        owner = scope
+    else:
+        return receivers
+    return {
+        name: found
+        for name, found in receivers.items() if not _rebound_on_spine(name, module, owner, classes)
+    }
+
+
+def _check_scope(scope, module, classes, returns, module_name):
+    """Check the module or a function `scope`."""
+    body = scope.body
+    receivers = _scope_receivers(scope, module, classes, returns)
     if not receivers:
         return
     _check_escapes(body, receivers, module_name)
+    params = frozenset() if scope is module else _parameters(scope)
     context = _isinstance_context(body, receivers, classes, returns, params)
     called = set()
     for node in _scope_nodes(body):
@@ -383,7 +496,7 @@ def refuse_path_dependent_receivers(module, module_name):
         and s.returns.id in classes
     }
     _check_inline_constructions(module, classes, returns, module_name)
-    _check_scope(module.body, classes, returns, module_name)
+    _check_scope(module, module, classes, returns, module_name)
     for node in ast.walk(module):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            _check_scope(node.body, classes, returns, module_name, _parameters(node))
+            _check_scope(node, module, classes, returns, module_name)

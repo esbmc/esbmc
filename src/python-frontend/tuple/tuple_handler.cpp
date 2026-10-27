@@ -712,8 +712,8 @@ void tuple_handler::handle_tuple_unpacking(
     std::string member_name = "element_" + std::to_string(i);
     const typet &member_type = tuple_type.components()[i].type();
     exprt member_access = build_member(rhs, member_name, member_type);
-    const exprt target = build_symbol(
-      unpack_target_symbol(targets[t], unpack_target_type(rhs, member_type)));
+    const exprt target = build_symbol(unpack_target_symbol(
+      targets[t], unpack_target_type(rhs, member_type), target_block));
     assign_unpacked_element(
       target,
       member_access,
@@ -799,7 +799,8 @@ size_t tuple_handler::starred_target_index(const nlohmann::json &targets) const
 
 symbolt &tuple_handler::unpack_target_symbol(
   const nlohmann::json &name_node,
-  const typet &type)
+  const typet &type,
+  codet &target_block)
 {
   symbol_id var_sid = converter_.create_symbol_id();
   var_sid.set_object(name_node["id"].get<std::string>());
@@ -817,7 +818,16 @@ symbolt &tuple_handler::unpack_target_symbol(
   new_symbol.lvalue = true;
   new_symbol.file_local = true;
   new_symbol.is_extern = false;
-  return *converter_.symbol_table().move_symbol_to_context(new_symbol);
+  symbolt &added =
+    *converter_.symbol_table().move_symbol_to_context(new_symbol);
+  // Without a declaration a local is shared by every frame of a recursive call
+  if (!converter_.get_current_func_name().empty())
+  {
+    code_declt decl(build_symbol(added));
+    decl.location() = loc;
+    target_block.copy_to_operands(decl);
+  }
+  return added;
 }
 
 void tuple_handler::assign_starred_elements(
@@ -851,8 +861,8 @@ void tuple_handler::assign_starred_elements(
   for (const exprt &op : list_block.operands())
     target_block.copy_to_operands(op);
 
-  const exprt star =
-    build_symbol(unpack_target_symbol(star_value, list_expr.type()));
+  const exprt star = build_symbol(
+    unpack_target_symbol(star_value, list_expr.type(), target_block));
   // Retyping a symbol in place would corrupt its earlier uses
   if (star.type() != list_expr.type())
     throw std::runtime_error(

@@ -125,6 +125,9 @@ public:
     const std::string &type_name,
     bool type_is_user_class) const;
 
+  /// Python truthiness of a tagged value, decided by its runtime type.
+  exprt build_truthiness(const exprt &tagged);
+
   /**
    * @brief True if a function's top-level if/elif/else chain -- including
    * an early return with no else, falling through to the next statement --

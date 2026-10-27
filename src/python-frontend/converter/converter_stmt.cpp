@@ -1932,7 +1932,9 @@ exprt python_converter::get_rhs_with_dict_resolution(
   const nlohmann::json &ast_node,
   const typet &target_type)
 {
-  if (!type_utils::is_dict_subscript(ast_node["value"]))
+  if (
+    !type_utils::is_dict_subscript(ast_node["value"]) ||
+    call_dict_value_type(ast_node["value"]["value"]))
     return get_expr(ast_node["value"]);
 
   // Check if we need special dict subscript handling for typed variables
@@ -6476,6 +6478,62 @@ bool python_converter::is_numpy_array_to_view_rebind(
          rhs.type().is_pointer() && numpy_array_symbols_.count(lhs_id) != 0;
 }
 
+// The class of this module @p type points to, or "".
+std::string python_converter::pointee_class(const typet &type) const
+{
+  if (!type.is_pointer() || !type.subtype().is_symbol())
+    return "";
+  const std::string tag =
+    to_symbol_type(type.subtype()).get_identifier().as_string();
+  const std::string cls = tag.compare(0, 4, "tag-") == 0 ? tag.substr(4) : "";
+  return json_utils::is_class(cls, *ast_json) ? cls : "";
+}
+
+// A constructor call allocates its object into current_lhs while the call is
+// converted, so the slot it stores to must be settled first: the live slot of
+// an instance already rebound to another class, or a fresh one for a rebind
+// to another class on the unconditional spine (`a = A(); a = C()`), as the
+// name's symbol points to one class.
+void python_converter::retype_for_class_rebind(
+  const nlohmann::json &target,
+  const nlohmann::json &ast_node,
+  bool is_ctor_call,
+  const symbol_id &sid,
+  const locationt &location,
+  symbolt *&lhs_symbol,
+  exprt &lhs,
+  codet &target_block)
+{
+  if (
+    !is_ctor_call || !lhs_symbol || !current_class_name_.empty() ||
+    loop_body_depth_ != 0 || !lhs.is_symbol() ||
+    target.value("_type", "") != "Name")
+    return;
+  symbolt *const orig = lhs_symbol;
+  symbolt *const live = follow_retype_alias(orig);
+  const std::string from = pointee_class(live->get_type());
+  if (from.empty())
+    return;
+  lhs_symbol = live;
+  lhs = symbol_expr(*live);
+  const std::string cls = ast_node["value"]["func"].value("id", "");
+  if (
+    block_nesting_ != function_body_depth_ + 1 || cls == from ||
+    !json_utils::is_class(cls, *ast_json) ||
+    (!current_func_name_.empty() && is_global_variable(sid)) ||
+    is_read_in_other_scope(
+      *ast_json, orig->name.as_string(), current_func_name_, false))
+    return;
+  lhs_symbol = mint_retyped_symbol(
+    *orig,
+    orig->id.as_string(),
+    gen_pointer_type(symbol_typet("tag-" + cls)),
+    location,
+    sid,
+    target_block);
+  lhs = symbol_expr(*lhs_symbol);
+}
+
 bool python_converter::is_attribute_store_of_numpy_view(
   const nlohmann::json &target,
   const nlohmann::json &value)
@@ -7790,6 +7848,15 @@ void python_converter::get_var_assign(
   const bool has_value = has_non_null_value(ast_node);
   bool is_ctor_call =
     has_value && type_handler_.is_constructor_call(ast_node["value"]);
+  retype_for_class_rebind(
+    target,
+    ast_node,
+    is_ctor_call,
+    sid,
+    location_begin,
+    lhs_symbol,
+    lhs,
+    target_block);
   current_lhs = &lhs;
   is_converting_lhs = false;
 
@@ -8678,6 +8745,20 @@ static std::optional<bool> constant_string_is_empty(const exprt &str)
   return first.is_zero();
 }
 
+exprt python_converter::tagged_truthiness(
+  exprt value,
+  const nlohmann::json &node)
+{
+  if (!type_handler_.is_tagged_scalar_type(value.type()))
+    return value;
+  if (current_block)
+    value =
+      tuple_handler_->prepare_rhs_for_unpacking(node, value, *current_block);
+  exprt cond = dynamic_type_handler_.build_truthiness(value);
+  cond.location() = get_location_from_decl(node);
+  return cond;
+}
+
 exprt python_converter::apply_string_truthiness(
   const exprt &str,
   const locationt &location)
@@ -9160,11 +9241,8 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
       return cond;
     }
 
-    // A tagged value has no defined truthiness; refuse instead of building
-    // an ill-typed struct-to-bool node.
     if (type_handler_.is_tagged_scalar_type(value_expr.type()))
-      throw std::runtime_error(
-        "truthiness of a dynamically-typed variable is not yet supported");
+      return tagged_truthiness(value_expr, value_node);
 
     exprt bool_expr = typecast_exprt(value_expr, bool_type());
     bool_expr.location() = get_location_from_decl(value_node);
@@ -9314,12 +9392,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     {
       const locationt location = get_location_from_decl(ast_node["test"]);
 
-      // A tagged value has no defined truthiness; refuse instead of
-      // falling through to a struct-typed guard.
-      if (type_handler_.is_tagged_scalar_type(cond.type()))
-        throw std::runtime_error(
-          "truthiness of a dynamically-typed variable is not yet "
-          "supported");
+      cond = tagged_truthiness(cond, ast_node["test"]);
 
       typet value_type = ns.follow(cond.type());
       if (value_type.is_pointer())
@@ -9738,6 +9811,32 @@ exprt python_converter::check_float_fits_int_return(
     "hold; not modelled");
   target_block.copy_to_operands(check);
   return result;
+}
+
+void python_converter::get_return_with_conditional_spelling(
+  const nlohmann::json &ast_node,
+  codet &target_block)
+{
+  const nlohmann::json &value = ast_node["value"];
+  if (
+    !value.is_null() && value.value("_type", "") == "IfExp" &&
+    type_handler_.is_tagged_scalar_type(current_func_return_type_))
+  {
+    // One return slot cannot yield two kinds, so spell it as an `if`.
+    nlohmann::json if_node = ast_node;
+    if_node["_type"] = "If";
+    if_node["test"] = value["test"];
+    if_node.erase("value");
+    for (const char *arm : {"body", "orelse"})
+    {
+      nlohmann::json ret = ast_node;
+      ret["value"] = value[arm];
+      if_node[arm] = nlohmann::json::array({ret});
+    }
+    target_block.copy_to_operands(get_conditional_stm(if_node));
+    return;
+  }
+  get_return_statements(ast_node, target_block);
 }
 
 void python_converter::get_return_statements(
@@ -10178,7 +10277,7 @@ exprt python_converter::get_block(
     }
     case StatementType::RETURN:
     {
-      get_return_statements(element, block);
+      get_return_with_conditional_spelling(element, block);
       break;
     }
     case StatementType::ASSERT:
@@ -10215,6 +10314,7 @@ exprt python_converter::get_block(
       // class with __bool__ decides the answer. Without this `assert obj` cast
       // the object to bool and passed whatever the dunder said.
       test = apply_bool_dunder(test, get_location_from_decl(element));
+      test = tagged_truthiness(test, element["test"]);
       if (test.statement() == "cpp-throw")
       {
         test.location() = get_location_from_decl(element);
