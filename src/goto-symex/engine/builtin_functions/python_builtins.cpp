@@ -132,14 +132,19 @@ static bool is_tuple_element(const expr2tc &value)
            .starts_with("tag-tuple");
 }
 
-/// The object a value set names for @p value, or @p current when @p value is
-/// a tuple element and the object is its NULL-object, which says nothing.
+/// The object a value set names for @p value, or @p current when the object
+/// says nothing about it: a Python number has one exact static type, whatever
+/// object the value set pairs it with (a NULL-object or the string a zip
+/// merged it with), and a tuple element's NULL-object is no object at all.
 static expr2tc points_to_object(
   const expr2tc &value,
   const expr2tc &object,
   const expr2tc &current)
 {
-  return is_tuple_element(value) && is_null_object2t(object) ? current : object;
+  const bool says_nothing =
+    is_python_number_type(value->type) ||
+    (is_tuple_element(value) && is_null_object2t(object));
+  return says_nothing ? current : object;
 }
 
 void goto_symext::simplify_python_builtins(expr2tc &expr)
