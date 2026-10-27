@@ -9748,6 +9748,32 @@ exprt python_converter::check_float_fits_int_return(
   return result;
 }
 
+void python_converter::get_return_with_conditional_spelling(
+  const nlohmann::json &ast_node,
+  codet &target_block)
+{
+  const nlohmann::json &value = ast_node["value"];
+  if (
+    !value.is_null() && value.value("_type", "") == "IfExp" &&
+    type_handler_.is_tagged_scalar_type(current_func_return_type_))
+  {
+    // One return slot cannot yield two kinds, so spell it as an `if`.
+    nlohmann::json if_node = ast_node;
+    if_node["_type"] = "If";
+    if_node["test"] = value["test"];
+    if_node.erase("value");
+    for (const char *arm : {"body", "orelse"})
+    {
+      nlohmann::json ret = ast_node;
+      ret["value"] = value[arm];
+      if_node[arm] = nlohmann::json::array({ret});
+    }
+    target_block.copy_to_operands(get_conditional_stm(if_node));
+    return;
+  }
+  get_return_statements(ast_node, target_block);
+}
+
 void python_converter::get_return_statements(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -10186,7 +10212,7 @@ exprt python_converter::get_block(
     }
     case StatementType::RETURN:
     {
-      get_return_statements(element, block);
+      get_return_with_conditional_spelling(element, block);
       break;
     }
     case StatementType::ASSERT:

@@ -167,6 +167,42 @@ bool has_divergent_literal_returns(
   return false;
 }
 
+// A top-level `return a if t else b` whose arms are of different literal kinds.
+bool has_divergent_ifexp_return(
+  const nlohmann::json &function_node,
+  const param_kinds_t &param_kinds,
+  const nlohmann::json &module_body)
+{
+  for (const auto &stmt : function_node["body"])
+  {
+    if (stmt.value("_type", "") != "Return" || !stmt["value"].is_object())
+      continue;
+    const nlohmann::json &value = stmt["value"];
+    if (value.value("_type", "") != "IfExp")
+      continue;
+    std::unordered_set<std::string> kinds;
+    for (const char *arm : {"body", "orelse"})
+      kinds.insert(classify_return_literal_kind(
+        {{"_type", "Return"}, {"value", value[arm]}},
+        param_kinds,
+        module_body));
+    kinds.erase("");
+    if (dynamic_type_detail::kinds_diverge(kinds))
+      return true;
+  }
+  return false;
+}
+
+bool has_divergent_returns(
+  const nlohmann::json &function_node,
+  const param_kinds_t &param_kinds,
+  const nlohmann::json &module_body)
+{
+  return has_divergent_literal_returns(
+           function_node, param_kinds, module_body) ||
+         has_divergent_ifexp_return(function_node, param_kinds, module_body);
+}
+
 bool returns_dynamic_value(
   const nlohmann::json &function_node,
   const nlohmann::json &module_body,
@@ -504,7 +540,7 @@ bool returns_dynamic_value(
   unsigned depth)
 {
   if (
-    has_divergent_literal_returns(
+    has_divergent_returns(
       function_node,
       return_param_kinds(function_node, module_body),
       module_body))
