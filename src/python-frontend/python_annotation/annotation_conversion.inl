@@ -5232,6 +5232,39 @@ std::string python_annotation<Json>::infer_type_from_parameter_default(
 }
 
 template <class Json>
+static bool is_none_constant(const Json &node)
+{
+  return node.value("_type", "") == "Constant" && node.contains("value") &&
+         node["value"].is_null();
+}
+
+/// The calls that type parameter @p index. A None passed to a None default is
+/// left out, as the converter tracks that None itself (#9286), unless every
+/// call passes it.
+template <class Json>
+static std::vector<Json> calls_typing_param(
+  const Json &function_element,
+  size_t index,
+  const std::vector<Json> &calls)
+{
+  const Json &args = function_element["args"];
+  if (!args.contains("defaults"))
+    return calls;
+  const size_t first_default = args["args"].size() - args["defaults"].size();
+  if (
+    index < first_default ||
+    !is_none_constant(args["defaults"][index - first_default]))
+    return calls;
+  std::vector<Json> typing;
+  for (const Json &call : calls)
+    if (
+      !call.contains("args") || index >= call["args"].size() ||
+      !is_none_constant(call["args"][index]))
+      typing.push_back(call);
+  return typing.empty() ? calls : typing;
+}
+
+template <class Json>
 void python_annotation<Json>::infer_parameter_types(Json &function_element)
 {
   const std::string &func_name = function_element["name"];
@@ -5333,6 +5366,8 @@ void python_annotation<Json>::infer_parameter_types(Json &function_element)
         needs_inference = true; // No annotation at all
 
       std::string inferred_type;
+      const std::vector<Json> calls =
+        calls_typing_param(function_element, i, function_calls);
 
       // Leave the parameter unannotated if a call site feeds it a variable
       // that's genuinely dynamically-typed (e.g. `x = 1`/`x = "a"` across an
@@ -5341,7 +5376,7 @@ void python_annotation<Json>::infer_parameter_types(Json &function_element)
       bool arg_is_dynamically_typed = false;
       if (needs_inference)
       {
-        for (const Json &call : function_calls)
+        for (const Json &call : calls)
         {
           if (!call.contains("args") || i >= call["args"].size())
             continue;
@@ -5360,10 +5395,10 @@ void python_annotation<Json>::infer_parameter_types(Json &function_element)
 
       // Try to infer type from function calls if available
       if (
-        needs_inference && !arg_is_dynamically_typed && !function_calls.empty())
+        needs_inference && !arg_is_dynamically_typed && !calls.empty())
       {
         std::vector<std::string> call_types =
-          collect_parameter_types_from_calls(i, function_calls);
+          collect_parameter_types_from_calls(i, calls);
 
         if (
           parent_func == nullptr && call_types.size() > 1 &&
@@ -5381,7 +5416,7 @@ void python_annotation<Json>::infer_parameter_types(Json &function_element)
         std::string saved_ctx = current_func_name_context_;
         current_func_name_context_ = call_site_context;
         inferred_type = infer_parameter_type_at_call_sites(
-          func_name, i, function_calls, search_context);
+          func_name, i, calls, search_context);
         current_func_name_context_ = saved_ctx;
       }
 
