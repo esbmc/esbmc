@@ -6312,7 +6312,10 @@ std::optional<exprt> function_call_expr::try_indirect_member_call()
   const python_converter::attribute_functions *held =
     held_functions(class_name, attr, field_type);
   if (!held && (!field_type.is_pointer() || !field_type.subtype().is_code()))
+  {
+    refuse_untyped_attribute(class_name, attr, field_type);
     return std::nullopt;
+  }
 
   exprt recv = converter_.get_expr(func_json["value"]);
   typet recv_type = recv.type();
@@ -6338,12 +6341,7 @@ void function_call_expr::refuse_unheld_attribute(
 {
   const python_converter::attribute_functions *held =
     converter_.function_attribute(attr);
-  const auto mro = converter_.class_mro(class_name);
-  if (
-    !held || !held->bound || !mro ||
-    std::any_of(mro->begin(), mro->end(), [&](const auto &cls) {
-      return converter_.class_binds_name(cls, attr);
-    }))
+  if (!held || !held->bound || mro_may_bind(class_name, attr))
     return;
   throw std::runtime_error(
     "calling attribute '" + attr + "' on a '" + class_name +
@@ -6351,19 +6349,35 @@ void function_call_expr::refuse_unheld_attribute(
     "supported");
 }
 
+void function_call_expr::refuse_untyped_attribute(
+  const std::string &class_name,
+  const std::string &attr,
+  const typet &field_type) const
+{
+  if (field_type == any_type() && !mro_may_bind(class_name, attr))
+    throw std::runtime_error(
+      "calling attribute '" + attr +
+      "', whose value is not known, is not supported");
+}
+
 const python_converter::attribute_functions *function_call_expr::held_functions(
   const std::string &class_name,
   const std::string &attr,
   const typet &field_type) const
 {
-  const auto mro = converter_.class_mro(class_name);
-  if (
-    field_type != any_type() || !mro ||
-    std::any_of(mro->begin(), mro->end(), [&](const auto &cls) {
-      return converter_.class_binds_name(cls, attr);
-    }))
+  if (field_type != any_type() || mro_may_bind(class_name, attr))
     return nullptr;
   return converter_.function_attribute(attr);
+}
+
+bool function_call_expr::mro_may_bind(
+  const std::string &class_name,
+  const std::string &attr) const
+{
+  const auto mro = converter_.class_mro(class_name);
+  return !mro || std::any_of(mro->begin(), mro->end(), [&](const auto &cls) {
+    return converter_.class_binds_name(cls, attr);
+  });
 }
 
 code_typet function_call_expr::held_signature(
