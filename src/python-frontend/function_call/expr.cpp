@@ -4841,7 +4841,8 @@ function_call_expr::find_receiver_symbol(symbol_id &obj_symbol_id) const
   if (caller.empty())
     return nullptr;
   obj_symbol_id.set_object(caller);
-  return converter_.find_symbol(obj_symbol_id.to_string());
+  return converter_.follow_retype_alias(
+    converter_.find_symbol(obj_symbol_id.to_string()));
 }
 
 exprt function_call_expr::handle_general_function_call()
