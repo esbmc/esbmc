@@ -1413,6 +1413,20 @@ exprt dynamic_type_handler::build_isinstance_check(
     "dynamically-typed variable");
 }
 
+exprt dynamic_type_handler::build_truthiness(const exprt &tagged)
+{
+  const symbolt *func =
+    converter_.symbol_table().find_symbol("c:@F@__python_scalar_truthy");
+  assert(func && "__python_scalar_truthy not found in symbol table");
+  exprt call = build_call_expr(
+    *func,
+    int_type(),
+    {build_address_of(tagged),
+     type_handler_.tagged_scalar_type_id(pointer_typet(char_type())),
+     type_handler_.tagged_scalar_type_id(double_type())});
+  return build_not(build_equal(call, from_integer(0, int_type())));
+}
+
 bool dynamic_type_handler::parameter_call_returns_tagged(
   const nlohmann::json &call) const
 {
