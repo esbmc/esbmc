@@ -22,27 +22,6 @@ using dynamic_type_detail::collect_branch_literal_kinds;
 
 using param_kinds_t = std::unordered_map<std::string, std::string>;
 
-// The name `T` of an annotation `T`, `Optional[T]`, `T | None` or `None | T`.
-std::string annotation_name_or_optional(const nlohmann::json &ann)
-{
-  if (!ann.is_object())
-    return "";
-  const std::string node = ann.value("_type", "");
-  if (node == "Subscript" && ann["value"].value("id", "") == "Optional")
-    return ann["slice"].value("id", "");
-  if (node == "BinOp" && ann["op"].value("_type", "") == "BitOr")
-  {
-    for (const auto &[side, other] :
-         {std::pair{"left", "right"}, {"right", "left"}})
-      if (
-        ann[other].value("_type", "") == "Constant" &&
-        ann[other].contains("value") && ann[other]["value"].is_null())
-        return ann[side].value("id", "");
-    return "";
-  }
-  return ann.value("id", "");
-}
-
 // Kinds of the parameters annotated (or inferred from call sites) as int,
 // bool or str, or Optional of one, so `return x` counts like a literal of that
 // kind (#8523, #9285).
@@ -53,8 +32,10 @@ param_kinds_t collect_param_kinds(const nlohmann::json &function_node)
     return kinds;
   for (const auto &arg : function_node["args"].value("args", nlohmann::json()))
   {
-    const std::string type =
-      annotation_name_or_optional(arg.value("annotation", nlohmann::json()));
+    const auto &ann = arg.value("annotation", nlohmann::json());
+    std::string type = type_utils::optional_inner_name(ann);
+    if (type.empty() && ann.is_object())
+      type = ann.value("id", "");
     if (type == "int" || type == "bool")
       kinds[arg["arg"].get<std::string>()] = "num";
     else if (type == "str")

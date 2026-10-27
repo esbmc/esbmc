@@ -6108,38 +6108,7 @@ python_converter::extract_target_name(const nlohmann::json &target) const
 std::string python_converter::annotated_optional_class(
   const nlohmann::json &annotation) const
 {
-  if (!annotation.is_object() || annotation.is_null())
-    return "";
-
-  std::string cls;
-  // Optional[Class] : Subscript(value=Name("Optional"), slice=Name(Class))
-  if (
-    annotation.value("_type", "") == "Subscript" &&
-    annotation.contains("value") && annotation["value"].contains("id") &&
-    annotation["value"]["id"] == "Optional" && annotation.contains("slice") &&
-    annotation["slice"].contains("id"))
-    cls = annotation["slice"]["id"].get<std::string>();
-  // `Class | None` (PEP 604) : BinOp(BitOr, left, right) with one side None.
-  else if (
-    annotation.value("_type", "") == "BinOp" && annotation.contains("op") &&
-    annotation["op"].value("_type", "") == "BitOr" &&
-    annotation.contains("left") && annotation.contains("right"))
-  {
-    auto is_none = [](const nlohmann::json &n) {
-      return n.value("_type", "") == "Constant" && n.contains("value") &&
-             n["value"].is_null();
-    };
-    auto name_id = [](const nlohmann::json &n) -> std::string {
-      return n.value("_type", "") == "Name" && n.contains("id")
-               ? n["id"].get<std::string>()
-               : std::string();
-    };
-    if (is_none(annotation["right"]))
-      cls = name_id(annotation["left"]);
-    else if (is_none(annotation["left"]))
-      cls = name_id(annotation["right"]);
-  }
-
+  const std::string cls = type_utils::optional_inner_name(annotation);
   if (cls.empty() || !json_utils::is_class(cls, *ast_json))
     return "";
   return cls;
