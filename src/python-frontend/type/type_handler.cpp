@@ -1033,7 +1033,8 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
   }
 
   if (
-    elem["_type"] == "Call" && type_utils::is_builtin_type(elem["func"]["id"]))
+    elem["_type"] == "Call" &&
+    type_utils::is_builtin_type(elem["func"].value("id", "")))
   {
     return get_typet(elem["func"]["id"].get<std::string>());
   }
@@ -1202,7 +1203,7 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
         // Get sub-array type from multi-dimensional list
         if (elts[0]["_type"] == "Call")
         {
-          if (type_utils::is_builtin_type(elts[0]["func"]["id"]))
+          if (type_utils::is_builtin_type(elts[0]["func"].value("id", "")))
             subtype = get_typet(elts[0]["func"]["id"].get<std::string>());
         }
         else if (elts[0].contains("elts"))
