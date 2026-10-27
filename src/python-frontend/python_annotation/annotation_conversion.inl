@@ -186,7 +186,11 @@ std::string python_annotation<Json>::infer_dict_value_type(const Json &var_node)
       func_def["returns"]["slice"]["elts"].size() >= 2)
     {
       const Json &val_type = func_def["returns"]["slice"]["elts"][1];
-      if (val_type["_type"] == "Subscript" && val_type["value"].contains("id"))
+      // Bare "Optional" cannot hold None; fall back to the dict's own
+      // annotation (#9301).
+      if (
+        val_type["_type"] == "Subscript" && val_type["value"].contains("id") &&
+        val_type["value"]["id"] != "Optional")
         return val_type["value"]["id"].template get<std::string>();
     }
   }
