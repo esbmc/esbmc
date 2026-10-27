@@ -1525,6 +1525,13 @@ private:
     const nlohmann::json &value_node,
     const std::unordered_map<std::string, nlohmann::json> &param_annotations);
 
+  /// infer_tuple_struct_from_value over every value that can reach `value` in
+  /// `method`, or empty_typet when their shapes differ.
+  typet shared_tuple_struct(
+    const nlohmann::json &value,
+    const nlohmann::json &method,
+    const std::unordered_map<std::string, nlohmann::json> &param_annotations);
+
   exprt get_return_from_func(const char *func_symbol_id);
 
   void create_builtin_symbols();

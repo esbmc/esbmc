@@ -63,6 +63,7 @@ class ModuleLifecycleMixin:
         self._builtin_shadow_names = self._scan_builtin_shadow_names(node)
         self._unobservable_builtin_keys = self._scan_unobservable_builtin_keys(node)
         self._closed_lambda_bindings = self._scan_closed_lambda_bindings(node)
+        self._fix_constructor_varargs(node)
         self._fixed_length_starred = self._scan_fixed_length_starred(node)
         self._vararg_alias_calls = self._scan_vararg_alias_calls(node)
         # Per-module scope for the eq-only set and call-origin map.
