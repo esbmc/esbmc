@@ -354,6 +354,8 @@ public:
     exprt &lhs,
     exprt &rhs);
 
+  bool is_retypable_subscript(const nlohmann::json &node);
+
   /**
    * @brief Extract value type from dict type annotation
    *

@@ -1037,6 +1037,9 @@ private:
     const symbolt &callee) const;
 
   typet dict_param_value_type(const symbolt *func, size_t idx) const;
+  bool is_size_builtin() const;
+  bool is_list_typed(const typet &type) const;
+  exprt build_dict_size_call(const exprt &dict);
   std::optional<exprt> build_positional_arguments(
     code_function_callt &call,
     size_t param_offset,
