@@ -6,6 +6,10 @@ unsigned nondet_uint(void);
 int a[10];
 double d[10];
 char c[10];
+struct s
+{
+  int a, b, c;
+} st[10];
 
 int main(void)
 {
@@ -18,6 +22,8 @@ int main(void)
   assert(d - &d[i] == -(long)i);
   assert(&c[i] - c == i);
   assert(c - &c[i] == -(long)i);
+  assert(&st[i] - st == i);
+  assert(st - &st[i] == -(long)i);
 
   /* 6 bytes is not a whole number of ints: +6/4 and -6/4 truncate to 1, -1. */
   int *q = (int *)((char *)a + 6);
