@@ -10116,7 +10116,9 @@ exprt python_converter::string_literal_address(const exprt &array)
 
 /// \p value as the current function returns it (#8016): wrapped when the
 /// function returns Optional; when it cannot hold None, an optional's value,
-/// with None reported rather than read as zero.
+/// with None reported rather than read as zero. The only return of a function
+/// whose return type is not inferred yet keeps the optional, which then types
+/// the function (#9074).
 exprt python_converter::coerce_optional_return(
   const exprt &value,
   const locationt &location,
@@ -10124,7 +10126,9 @@ exprt python_converter::coerce_optional_return(
 {
   if (type_utils::is_optional_struct(current_func_return_type_))
     return wrap_in_optional(value, current_func_return_type_);
-  if (!type_utils::is_optional_struct(value.type()))
+  if (
+    !type_utils::is_optional_struct(value.type()) ||
+    (current_func_return_type_.is_empty() && current_func_single_return_))
     return value;
   return narrow_optional_return(value, location, target_block);
 }

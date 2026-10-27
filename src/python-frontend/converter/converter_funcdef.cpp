@@ -5567,6 +5567,29 @@ static bool any_return(
   return false;
 }
 
+/// The `return` statements in \p node, those of nested scopes excluded.
+static size_t count_returns(const nlohmann::json &node)
+{
+  if (node.is_array())
+  {
+    size_t count = 0;
+    for (const auto &child : node)
+      count += count_returns(child);
+    return count;
+  }
+  if (!node.is_object())
+    return 0;
+  const std::string type = node.value("_type", "");
+  if (
+    type == "FunctionDef" || type == "AsyncFunctionDef" || type == "ClassDef" ||
+    type == "Lambda")
+    return 0;
+  size_t count = type == "Return";
+  for (const auto &child : node)
+    count += count_returns(child);
+  return count;
+}
+
 bool python_converter::is_numpy_param_operand(
   const nlohmann::json &node,
   const nlohmann::json &func_def) const
@@ -6162,6 +6185,8 @@ void python_converter::get_function_definition(
   current_func_return_type_ = type.return_type();
   const bool saved_func_annotated_int = current_func_annotated_int_;
   current_func_annotated_int_ = is_written_int_annotation(return_node);
+  const bool saved_func_single_return = current_func_single_return_;
+  current_func_single_return_ = count_returns(function_node["body"]) == 1;
 
   // Nondet stub functions (nondet_int/char/bool/float/str/complex and their
   // __VERIFIER_nondet_* aliases) are intercepted at their call sites by
@@ -6227,6 +6252,7 @@ void python_converter::get_function_definition(
   // Restore saved function return type (for nested function defs)
   current_func_return_type_ = saved_func_return_type;
   current_func_annotated_int_ = saved_func_annotated_int;
+  current_func_single_return_ = saved_func_single_return;
 
   // If return type is empty/unannotated, try to infer from return statements
   if (type.return_type().is_empty())
