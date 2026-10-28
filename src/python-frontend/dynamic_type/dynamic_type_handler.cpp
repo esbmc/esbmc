@@ -20,6 +20,7 @@ using namespace python_expr;
 
 namespace
 {
+using dynamic_type_detail::assigned_value_at;
 using dynamic_type_detail::collect_branch_literal_kinds;
 using dynamic_type_detail::count_bindings;
 using dynamic_type_detail::single_assigned_value;
@@ -555,22 +556,11 @@ bool bound_once_at_top_level(
   const nlohmann::json &module_body,
   const std::string &name)
 {
-  if (count_bindings(module_body, name) != 1)
-    return false;
-  for (const auto &stmt : module_body)
-  {
-    const std::string type = stmt.value("_type", "");
-    if (
-      type == "Assign" && stmt["targets"].size() == 1 &&
-      stmt["targets"][0].value("_type", "") == "Name" &&
-      stmt["targets"][0].value("id", "") == name)
-      return true;
-    if (
-      type == "AnnAssign" && stmt["target"].value("id", "") == name &&
-      stmt.contains("value") && !stmt["value"].is_null())
-      return true;
-  }
-  return false;
+  return count_bindings(module_body, name) == 1 &&
+         std::any_of(
+           module_body.begin(), module_body.end(), [&](const auto &stmt) {
+             return assigned_value_at(stmt, name) != nullptr;
+           });
 }
 } // namespace
 
