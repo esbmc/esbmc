@@ -7,6 +7,7 @@
 #include <util/symtab/symbol.h>
 #include <python-frontend/symbol_id.h>
 #include <nlohmann/json.hpp>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -67,13 +68,14 @@ public:
 
   /**
    * @brief Fills in the tagged-object fields for `name` from an
-   * already-converted value
+   * already-converted value; `value_node` is the source `rhs` came from
    */
   void assign(
     const exprt &rhs,
     const locationt &location,
     const std::string &name,
-    codet &target_block);
+    codet &target_block,
+    const nlohmann::json &value_node);
 
   /**
    * @brief Redirects `symbol` to its tagged-object alias, if a pre-existing
@@ -210,12 +212,14 @@ private:
    * fields (value/type_id/size/float_idx) from an already-converted value.
    * Shared by assign() (literal or non-literal reassignment) and
    * declare_dynamic_type_names() (initializing a pre-existing alias from
-   * its prior value)
+   * its prior value). `interned_text` is set when `rhs` is an interned str
+   * literal, whose tags then share one payload
    */
   std::vector<codet> build_tag_field_assigns(
     symbolt &tag_symbol,
     const exprt &rhs,
-    const locationt &location);
+    const locationt &location,
+    const std::optional<std::string> &interned_text = std::nullopt);
 
   /// The static object of a module name @p rhs bound once, nil for any other
   /// value; sets @p elem_size.

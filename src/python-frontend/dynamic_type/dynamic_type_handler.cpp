@@ -13,6 +13,8 @@
 #include <util/irep/std_code.h>
 #include <util/irep/std_expr.h>
 #include <util/lang/c_types.h>
+#include <algorithm>
+#include <cctype>
 
 using namespace python_expr;
 
@@ -527,33 +529,21 @@ std::string scalar_kind(const typet &type)
   return type_utils::is_string_type(type) ? "str" : "";
 }
 
-// The text of a str literal that CPython interns, i.e. one spelled as an
-// identifier: every occurrence of it is one object.
-std::optional<std::string> interned_str_literal(const exprt &value)
+// The text of `node` when it is a str literal that CPython interns, i.e. one
+// spelled as an identifier: every occurrence of it is one object. Decided on
+// the source, since the converter folds computed strings into the same
+// constant a literal gives.
+std::optional<std::string> interned_str_text(const nlohmann::json &node)
 {
   if (
-    (!value.is_constant() && value.id() != "array") ||
-    !value.type().is_array() || value.type().subtype() != char_type())
+    node.value("_type", "") != "Constant" || !node["value"].is_string() ||
+    node.contains("encoded_bytes"))
     return std::nullopt;
+  const std::string text = node["value"];
 
-  std::string text;
-  for (const exprt &op : value.operands())
-  {
-    BigInt c;
-    if (to_integer(op, c))
-      return std::nullopt;
-    text += static_cast<char>(c.to_int64());
-  }
-  if (text.empty() || text.back() != '\0')
-    return std::nullopt;
-  text.pop_back();
-
-  auto is_word = [](char c) {
-    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_' ||
-           (c >= '0' && c <= '9');
-  };
+  auto is_word = [](unsigned char c) { return std::isalnum(c) || c == '_'; };
   if (
-    text.empty() || (text[0] >= '0' && text[0] <= '9') ||
+    text.empty() || std::isdigit(static_cast<unsigned char>(text[0])) ||
     !std::all_of(text.begin(), text.end(), is_word))
     return std::nullopt;
   return text;
@@ -918,7 +908,8 @@ exprt dynamic_type_handler::build_scalar_payload(
 std::vector<codet> dynamic_type_handler::build_tag_field_assigns(
   symbolt &tag_symbol,
   const exprt &rhs,
-  const locationt &location)
+  const locationt &location,
+  const std::optional<std::string> &interned_text)
 {
   std::vector<codet> instructions;
 
@@ -926,8 +917,10 @@ std::vector<codet> dynamic_type_handler::build_tag_field_assigns(
   // them holds (#9348).
   exprt elem_size;
   exprt tag_value;
-  if (const auto text = interned_str_literal(rhs))
-    tag_value = interned_str_payload(*text, rhs, elem_size);
+  if (
+    interned_text && rhs.type().is_array() &&
+    rhs.type().subtype() == char_type())
+    tag_value = interned_str_payload(*interned_text, rhs, elem_size);
   else
     tag_value = module_name_payload(rhs, location, instructions, elem_size);
   if (tag_value.is_nil())
@@ -982,11 +975,13 @@ void dynamic_type_handler::assign(
   const exprt &rhs,
   const locationt &location,
   const std::string &name,
-  codet &target_block)
+  codet &target_block,
+  const nlohmann::json &value_node)
 {
   symbolt *tag_symbol = find_tag_symbol(name);
 
-  for (const codet &instr : build_tag_field_assigns(*tag_symbol, rhs, location))
+  for (const codet &instr : build_tag_field_assigns(
+         *tag_symbol, rhs, location, interned_str_text(value_node)))
     target_block.copy_to_operands(instr);
 }
 
