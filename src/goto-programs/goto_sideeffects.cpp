@@ -2300,23 +2300,10 @@ void goto_convertt::remove_post(
     abort();
   }
 
-  exprt rhs;
+  exprt rhs(compound_assign_operator(
+    statement == "postincrement" ? "assign+" : "assign-",
+    expr.type().is_floatbv()));
   rhs.location() = expr.location();
-
-  if (statement == "postincrement")
-  {
-    if (expr.type().is_floatbv())
-      rhs.id("ieee_add");
-    else
-      rhs.id("+");
-  }
-  else
-  {
-    if (expr.type().is_floatbv())
-      rhs.id("ieee_sub");
-    else
-      rhs.id("-");
-  }
 
   const typet &op_type = ns.follow(expr.op0().type());
 
