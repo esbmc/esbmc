@@ -1,3 +1,4 @@
+#include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/math/bounded_math.h>
 #include <python-frontend/numpy/ndarray_shape.h>
@@ -718,6 +719,16 @@ static double solve_radius(
   return lapack_tolerance * infinity_norm(a) * infinity_norm(inverse) * largest;
 }
 
+// Thrown for a matrix LAPACK factors with a zero pivot, which NumPy reports
+// with a LinAlgError the program may catch.
+struct singular_matrix_error : std::runtime_error
+{
+  singular_matrix_error()
+    : std::runtime_error("numpy.linalg.LinAlgError: Singular matrix")
+  {
+  }
+};
+
 // Matrices larger than this reject before any result is built: the
 // cofactor determinant and every unrolled result grow with the order.
 constexpr std::size_t max_linalg_order = 6;
@@ -772,7 +783,7 @@ static double eliminate(double &entry, double factor, double pivot_row)
 static void check_pivot(const std::string &function, double pivot, double error)
 {
   if (pivot == 0.0 && error == 0.0)
-    throw std::runtime_error("numpy.linalg.LinAlgError: Singular matrix");
+    throw singular_matrix_error();
   if (std::fabs(pivot) <= 64 * error)
     throw std::runtime_error(
       "TypeError: numpy.linalg." + function +
@@ -5572,6 +5583,33 @@ exprt numpy_call_expr::lapack_matrix(
   return array;
 }
 
+// The literal a numpy.linalg operand stands for: the list of np.array(list)
+// or of a constructor such as np.eye(3). A scalar has no matrix dimensions.
+void numpy_call_expr::unwrap_linalg_operand(nlohmann::json &arg) const
+{
+  scalar_value scalar;
+  if (
+    function_id_.get_function() != "norm" &&
+    try_extract_scalar_constant(arg, scalar))
+    throw std::runtime_error(
+      "numpy.linalg.LinAlgError: 0-dimensional array given. Array must be at "
+      "least two-dimensional");
+  if (arg.value("_type", "") != "Call")
+    return;
+  const nlohmann::json &func = arg["func"];
+  if (
+    (func.value("id", "") == "array" || func.value("attr", "") == "array") &&
+    !arg["args"].empty())
+  {
+    arg = nlohmann::json(arg["args"][0]);
+    return;
+  }
+  if (
+    std::optional<nlohmann::json> literal =
+      materialize_numpy_constructor_array(arg, converter_.ast()))
+    arg = *literal;
+}
+
 // The constant real square matrix an eigvals or svd call reads.
 std::vector<std::vector<double>> numpy_call_expr::linalg_matrix(
   const std::function<void(nlohmann::json &)> &unwrap)
@@ -6453,6 +6491,33 @@ exprt numpy_call_expr::norm_array(
 // cond(A) * eps of the largest entry.
 exprt numpy_call_expr::linalg_inverse(const std::vector<std::vector<double>> &m)
 {
+  try
+  {
+    return bounded_inverse(m);
+  }
+  catch (const singular_matrix_error &)
+  {
+    raise_singular_matrix();
+    return lapack_matrix(
+      std::vector<std::vector<double>>(m.size(), std::vector<double>(m.size())),
+      0.0);
+  }
+}
+
+// NumPy's LinAlgError for a singular matrix, raised where the call runs.
+void numpy_call_expr::raise_singular_matrix()
+{
+  exprt raise = converter_.get_exception_handler().gen_exception_raise(
+    "LinAlgError", "Singular matrix");
+  raise.location() = converter_.get_location_from_decl(call_);
+  code_expressiont raise_code(raise);
+  raise_code.location() = raise.location();
+  converter_.add_instruction(raise_code);
+}
+
+exprt numpy_call_expr::bounded_inverse(
+  const std::vector<std::vector<double>> &m)
+{
   const std::size_t n = m.size();
   std::vector<std::vector<double>> inverse(n, std::vector<double>(n));
   for (std::size_t j = 0; j < n; ++j)
@@ -6472,6 +6537,22 @@ exprt numpy_call_expr::linalg_inverse(const std::vector<std::vector<double>> &m)
 
 // solve(A, b), exact or bounded as inv is.
 exprt numpy_call_expr::linalg_solve(
+  const std::string &function,
+  const std::vector<std::vector<double>> &m,
+  const std::vector<double> &b)
+{
+  try
+  {
+    return bounded_solve(function, m, b);
+  }
+  catch (const singular_matrix_error &)
+  {
+    raise_singular_matrix();
+    return lapack_vector(std::vector<double>(b.size()), 0.0);
+  }
+}
+
+exprt numpy_call_expr::bounded_solve(
   const std::string &function,
   const std::vector<std::vector<double>> &m,
   const std::vector<double> &b)
@@ -7704,18 +7785,7 @@ exprt numpy_call_expr::create_expr_from_call()
     {
       nlohmann::json arg = call_["args"][0];
       resolve_var(arg);
-      if (
-        arg.is_object() && arg.contains("_type") && arg["_type"] == "Call" &&
-        arg.contains("func") && arg["func"].is_object() &&
-        ((arg["func"].contains("_type") && arg["func"]["_type"] == "Name" &&
-          arg["func"].contains("id") && arg["func"]["id"] == "array") ||
-         (arg["func"].contains("_type") &&
-          arg["func"]["_type"] == "Attribute" && arg["func"].contains("attr") &&
-          arg["func"]["attr"] == "array")) &&
-        arg.contains("args") && arg["args"].is_array() && !arg["args"].empty())
-      {
-        arg = arg["args"][0];
-      }
+      unwrap_linalg_operand(arg);
 
       std::vector<std::vector<scalar_value>> matrix;
       if (!try_extract_scalar_2d_list(arg, matrix))
@@ -7731,20 +7801,9 @@ exprt numpy_call_expr::create_expr_from_call()
       return lapack_value(exact, det_radius(real, exact));
     }
 
-    auto unwrap_np_array_arg = [&resolve_var](nlohmann::json &arg) {
+    auto unwrap_np_array_arg = [&resolve_var, this](nlohmann::json &arg) {
       resolve_var(arg);
-      if (
-        arg.is_object() && arg.contains("_type") && arg["_type"] == "Call" &&
-        arg.contains("func") && arg["func"].is_object() &&
-        ((arg["func"].contains("_type") && arg["func"]["_type"] == "Name" &&
-          arg["func"].contains("id") && arg["func"]["id"] == "array") ||
-         (arg["func"].contains("_type") &&
-          arg["func"]["_type"] == "Attribute" && arg["func"].contains("attr") &&
-          arg["func"]["attr"] == "array")) &&
-        arg.contains("args") && arg["args"].is_array() && !arg["args"].empty())
-      {
-        arg = arg["args"][0];
-      }
+      unwrap_linalg_operand(arg);
     };
 
     if (function == "inv")
@@ -8324,23 +8383,8 @@ exprt numpy_call_expr::create_expr_from_call()
 
     if (function == "solve")
     {
-      auto unwrap = [](nlohmann::json &arg) {
-        if (
-          arg.is_object() && arg.contains("_type") && arg["_type"] == "Call" &&
-          arg.contains("func") && arg["func"].is_object() &&
-          ((arg["func"].contains("_type") && arg["func"]["_type"] == "Name" &&
-            arg["func"].contains("id") && arg["func"]["id"] == "array") ||
-           (arg["func"].contains("_type") &&
-            arg["func"]["_type"] == "Attribute" &&
-            arg["func"].contains("attr") && arg["func"]["attr"] == "array")) &&
-          arg.contains("args") && arg["args"].is_array() &&
-          !arg["args"].empty())
-        {
-          arg = arg["args"][0];
-        }
-      };
-      unwrap(lhs);
-      unwrap(rhs);
+      unwrap_linalg_operand(lhs);
+      unwrap_linalg_operand(rhs);
 
       std::vector<std::vector<scalar_value>> A;
       if (!try_extract_scalar_2d_list(lhs, A))

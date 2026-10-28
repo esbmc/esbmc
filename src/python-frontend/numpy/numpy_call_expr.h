@@ -302,6 +302,13 @@ private:
     const std::vector<std::vector<double>> &m);
   void assume_singular_order(const std::vector<exprt> &sigmas);
   exprt linalg_inverse(const std::vector<std::vector<double>> &m);
+  exprt bounded_inverse(const std::vector<std::vector<double>> &m);
+  void raise_singular_matrix();
+  exprt bounded_solve(
+    const std::string &function,
+    const std::vector<std::vector<double>> &m,
+    const std::vector<double> &b);
+  void unwrap_linalg_operand(nlohmann::json &arg) const;
   std::vector<std::vector<exprt>>
   runtime_entries(const nlohmann::json &arg, std::size_t &rank);
   exprt within_radius(const exprt &value, const exprt &radius);
