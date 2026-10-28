@@ -5875,6 +5875,217 @@ exprt numpy_call_expr::singular_values(
   return array;
 }
 
+static bool is_number_type(const typet &t)
+{
+  return t.is_floatbv() || t.is_signedbv() || t.is_unsignedbv() || t.is_bool();
+}
+
+static const typet &array_leaf_type(const typet &t)
+{
+  return t.is_array() ? array_leaf_type(t.subtype()) : t;
+}
+
+// The shape of @p t with double elements.
+// A string literal anywhere in a list literal makes NumPy build a string
+// array, which no numpy.linalg function takes.
+static bool contains_string_constant(const nlohmann::json &node)
+{
+  if (!node.is_object() && !node.is_array())
+    return false;
+  if (
+    node.is_object() && node.value("_type", "") == "Constant" &&
+    node.contains("value") && node["value"].is_string())
+    return true;
+  return std::any_of(node.begin(), node.end(), [](const nlohmann::json &child) {
+    return contains_string_constant(child);
+  });
+}
+
+static exprt ieee_op(const char *op, const exprt &a, const exprt &b)
+{
+  exprt result(op, double_type());
+  result.copy_to_operands(a, b);
+  result.add("rounding_mode") =
+    symbol_exprt("c:@__ESBMC_rounding_mode", int_type());
+  return result;
+}
+
+static exprt abs_double(const exprt &value)
+{
+  expr2tc value2;
+  migrate_expr(value, value2);
+  return migrate_expr_back(abs2tc(migrate_type(double_type()), value2));
+}
+
+static exprt is_finite_double(const exprt &value)
+{
+  expr2tc value2;
+  migrate_expr(value, value2);
+  return migrate_expr_back(not2tc(or2tc(isnan2tc(value2), isinf2tc(value2))));
+}
+
+// The value of a cofactor expansion and the sum of its terms' magnitudes.
+static std::pair<exprt, exprt>
+cofactor_terms(const std::vector<std::vector<exprt>> &m)
+{
+  if (m.size() == 1)
+    return {m[0][0], abs_double(m[0][0])};
+  exprt value, magnitude;
+  for (std::size_t j = 0; j < m.size(); ++j)
+  {
+    std::vector<std::vector<exprt>> minor;
+    for (std::size_t i = 1; i < m.size(); ++i)
+    {
+      minor.push_back(m[i]);
+      minor.back().erase(minor.back().begin() + j);
+    }
+    const auto [minor_value, minor_magnitude] = cofactor_terms(minor);
+    const exprt term = ieee_op("ieee_mul", m[0][j], minor_value);
+    const exprt size =
+      ieee_op("ieee_mul", abs_double(m[0][j]), minor_magnitude);
+    if (j == 0)
+    {
+      value = term;
+      magnitude = size;
+      continue;
+    }
+    value = ieee_op(j % 2 ? "ieee_sub" : "ieee_add", value, term);
+    magnitude = ieee_op("ieee_add", magnitude, size);
+  }
+  return {value, magnitude};
+}
+
+// The entries of a numeric array of rank 1 or 2 known only at run time, as
+// doubles read from it once, rows of one row for rank 1; empty otherwise.
+std::vector<std::vector<exprt>>
+numpy_call_expr::runtime_entries(const nlohmann::json &arg)
+{
+  exprt *lhs = converter_.current_lhs;
+  converter_.current_lhs = nullptr;
+  const exprt value = converter_.get_expr(arg);
+  converter_.current_lhs = lhs;
+  const std::vector<int> shape =
+    type_handler_.get_array_type_shape(value.type());
+  const typet &leaf = array_leaf_type(value.type());
+  if (
+    shape.empty() || shape.size() > 2 || !is_number_type(leaf) ||
+    leaf == char_type())
+    return {};
+  const exprt array = bind_array_once(value);
+  std::vector<exprt> rows = {array};
+  if (shape.size() == 2)
+  {
+    rows.clear();
+    for (int i = 0; i < shape[0]; ++i)
+      rows.push_back(
+        np_index(array, from_integer(i, size_type()), value.type().subtype()));
+  }
+  std::vector<std::vector<exprt>> entries;
+  for (const exprt &row : rows)
+  {
+    entries.emplace_back();
+    for (int j = 0; j < shape.back(); ++j)
+    {
+      const exprt entry =
+        np_index(row, from_integer(j, size_type()), row.type().subtype());
+      entries.back().push_back(
+        entry.type() == double_type() ? entry
+                                      : typecast_exprt(entry, double_type()));
+    }
+  }
+  return entries;
+}
+
+// Any double within `radius` of `value`, or any double at all when the
+// radius is not finite.
+exprt numpy_call_expr::within_radius(const exprt &value, const exprt &radius)
+{
+  const exprt result = lapack_value(0.0, INFINITY);
+  code_assumet within{or_exprt(
+    not_exprt(is_finite_double(radius)),
+    and_exprt(
+      binary_relation_exprt(result, ">=", ieee_op("ieee_sub", value, radius)),
+      binary_relation_exprt(
+        result, "<=", ieee_op("ieee_add", value, radius))))};
+  within.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(within);
+  return result;
+}
+
+// det of a matrix of order at most 3 with entries known only at run time:
+// the cofactor expansion, within lapack_tolerance of the sum of its terms'
+// magnitudes, which covers LU's rounding and NumPy's sum of logarithms.
+exprt numpy_call_expr::symbolic_det(const nlohmann::json &arg, bool strings)
+{
+  const std::vector<std::vector<exprt>> m =
+    strings ? std::vector<std::vector<exprt>>() : runtime_entries(arg);
+  if (m.size() < 2 || m.size() > 3 || m.size() != m.front().size())
+    throw std::runtime_error(
+      "TypeError: numpy.linalg.det currently supports only constant 2D "
+      "numeric arrays");
+  const auto [value, magnitude] = cofactor_terms(m);
+  return within_radius(
+    value,
+    ieee_op(
+      "ieee_mul", from_double(lapack_tolerance, double_type()), magnitude));
+}
+
+// norm of a vector, or the Frobenius norm of a matrix, with entries known
+// only at run time: the infinity norms are exact, and the sums the others
+// take are rounded relative to their value.
+exprt numpy_call_expr::symbolic_norm(
+  const nlohmann::json &arg,
+  norm_order order)
+{
+  const std::vector<std::vector<exprt>> m = runtime_entries(arg);
+  if (m.empty() || (m.size() > 1 && order != norm_order::l2))
+    throw std::runtime_error(
+      "TypeError: numpy.linalg.norm currently supports only constant "
+      "numeric arrays");
+  std::vector<exprt> magnitudes;
+  exprt::operandst nans;
+  for (const auto &row : m)
+    for (const exprt &entry : row)
+    {
+      magnitudes.push_back(abs_double(entry));
+      expr2tc entry2;
+      migrate_expr(entry, entry2);
+      nans.push_back(migrate_expr_back(isnan2tc(entry2)));
+    }
+  if (order == norm_order::positive_inf || order == norm_order::negative_inf)
+  {
+    const char *better = order == norm_order::positive_inf ? ">" : "<";
+    exprt extreme = magnitudes.front();
+    for (std::size_t i = 1; i < magnitudes.size(); ++i)
+      extreme = if_exprt(
+        binary_relation_exprt(magnitudes[i], better, extreme),
+        magnitudes[i],
+        extreme);
+    return if_exprt(or_exprt(nans), from_double(NAN, double_type()), extreme);
+  }
+  exprt sum = order == norm_order::l1
+                ? magnitudes.front()
+                : ieee_op("ieee_mul", magnitudes.front(), magnitudes.front());
+  for (std::size_t i = 1; i < magnitudes.size(); ++i)
+    sum = ieee_op(
+      "ieee_add",
+      sum,
+      order == norm_order::l1
+        ? magnitudes[i]
+        : ieee_op("ieee_mul", magnitudes[i], magnitudes[i]));
+  exprt value = sum;
+  if (order == norm_order::l2)
+  {
+    value = exprt("ieee_sqrt", double_type());
+    value.copy_to_operands(sum);
+    value.add("rounding_mode") =
+      symbol_exprt("c:@__ESBMC_rounding_mode", int_type());
+  }
+  return within_radius(
+    value,
+    ieee_op("ieee_mul", from_double(lapack_tolerance, double_type()), value));
+}
+
 // inv: exact when LU's factors are exact, otherwise rounded by about
 // cond(A) * eps of the largest entry.
 exprt numpy_call_expr::linalg_inverse(const std::vector<std::vector<double>> &m)
@@ -6092,17 +6303,6 @@ static bool only_noop_ufunc_keywords(const nlohmann::json &call)
   return true;
 }
 
-static bool is_number_type(const typet &t)
-{
-  return t.is_floatbv() || t.is_signedbv() || t.is_unsignedbv() || t.is_bool();
-}
-
-static const typet &array_leaf_type(const typet &t)
-{
-  return t.is_array() ? array_leaf_type(t.subtype()) : t;
-}
-
-// The shape of @p t with double elements.
 static typet double_shaped(const typet &t)
 {
   if (!t.is_array())
@@ -7156,11 +7356,7 @@ exprt numpy_call_expr::create_expr_from_call()
 
       std::vector<std::vector<scalar_value>> matrix;
       if (!try_extract_scalar_2d_list(arg, matrix))
-      {
-        throw std::runtime_error(
-          "TypeError: numpy.linalg.det currently supports only constant 2D "
-          "numeric arrays");
-      }
+        return symbolic_det(call_["args"][0], contains_string_constant(arg));
 
       const std::vector<std::vector<double>> real =
         checked_square_matrix(function, matrix);
@@ -7299,9 +7495,7 @@ exprt numpy_call_expr::create_expr_from_call()
         return converter_.get_expr(
           to_json_constant(make_real_scalar(std::abs(scalar.value.real()))));
 
-      throw std::runtime_error(
-        "TypeError: numpy.linalg.norm currently supports only constant "
-        "numeric arrays");
+      return symbolic_norm(call_["args"][0], order);
     }
 
     static const std::set<std::string> decompositions = {

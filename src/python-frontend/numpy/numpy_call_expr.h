@@ -25,6 +25,8 @@ std::string extract_numpy_dtype_name(
 nlohmann::json
 numpy_literal_with_dtype(const nlohmann::json &call, const nlohmann::json &ast);
 
+enum class norm_order;
+
 class numpy_call_expr : public function_call_expr
 {
 public:
@@ -299,6 +301,10 @@ private:
     const std::vector<std::vector<double>> &m);
   void assume_singular_order(const std::vector<exprt> &sigmas);
   exprt linalg_inverse(const std::vector<std::vector<double>> &m);
+  std::vector<std::vector<exprt>> runtime_entries(const nlohmann::json &arg);
+  exprt within_radius(const exprt &value, const exprt &radius);
+  exprt symbolic_det(const nlohmann::json &arg, bool strings);
+  exprt symbolic_norm(const nlohmann::json &arg, norm_order order);
   exprt linalg_solve(
     const std::string &function,
     const std::vector<std::vector<double>> &m,
