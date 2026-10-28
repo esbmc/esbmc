@@ -1,9 +1,11 @@
 #include <python-frontend/param_annotations.h>
 #include <python-frontend/json_utils.h>
 
+#include <algorithm>
 #include <map>
 #include <optional>
 #include <set>
+#include <stdexcept>
 #include <tuple>
 
 namespace
@@ -954,6 +956,7 @@ private:
   {
     std::optional<std::string> type;
     bool from_other_module;
+    std::set<std::string> kinds;
   };
   std::map<param_key, binding> bound_;
   std::set<std::string> poisoned_;
@@ -983,7 +986,9 @@ private:
     if (!type.empty())
       inferred = type;
     auto [entry, inserted] =
-      bound_.emplace(key, binding{inferred, other_module});
+      bound_.emplace(key, binding{inferred, other_module, {}});
+    if (!type.empty())
+      entry->second.kinds.insert(type);
     if (inserted)
       return;
     if (entry->second.type != inferred)
@@ -1113,6 +1118,50 @@ private:
         in_annotation || it.key() == "annotation" || it.key() == "returns");
   }
 
+  /// Whether @p node reads @p name only as `isinstance(name, ...)`, which
+  /// symex answers from the type the value had before its cast to `void *`.
+  static bool
+  read_only_by_isinstance(const nlohmann::json &node, const std::string &name)
+  {
+    if (node.is_array())
+      return std::all_of(node.begin(), node.end(), [&](const auto &elem) {
+        return read_only_by_isinstance(elem, name);
+      });
+    if (!node.is_object())
+      return true;
+    if (is_node(node, "Name"))
+      return node["id"] != name;
+    const bool tests_name =
+      is_node(node, "Call") && callee_name(node["func"]) == "isinstance" &&
+      node["args"].size() == 2 && is_node(node["args"][0], "Name") &&
+      node["args"][0]["id"] == name;
+    if (tests_name)
+      return read_only_by_isinstance(node["args"][1], name);
+    return std::all_of(node.begin(), node.end(), [&](const auto &child) {
+      return read_only_by_isinstance(child, name);
+    });
+  }
+
+  /// A parameter passed values of different types stays untyped and is read
+  /// through `void *`, which truncates a float (#9284).
+  static void refuse_float_among_kinds(
+    const std::string &function,
+    const nlohmann::json &def,
+    const std::string &param,
+    const std::set<std::string> &kinds)
+  {
+    if (
+      kinds.size() < 2 || !kinds.count("float") ||
+      read_only_by_isinstance(def["body"], param))
+      return;
+    std::string spelled;
+    for (const std::string &kind : kinds)
+      spelled += (spelled.empty() ? "" : ", ") + kind;
+    throw std::runtime_error(
+      "unsupported: parameter '" + param + "' of imported '" + function +
+      "' is passed values of different types (" + spelled + ")");
+  }
+
   void apply() const
   {
     for (const auto &[key, entry] : bound_)
@@ -1121,14 +1170,19 @@ private:
       // A function its module binds again (a second def in an `if`) is not
       // the one find_function returns.
       if (
-        !entry.type || !entry.from_other_module ||
-        poisoned_.count(key_member(key_name)) ||
+        !entry.from_other_module || poisoned_.count(key_member(key_name)) ||
         json_utils::count_name_bindings(
           *modules_[module].read, key_owner(key_name)) != 1)
         continue;
 
-      nlohmann::json &arg = (*key_def(
-        modules_[module].write->at("body"), key_name))["args"]["args"][param];
+      nlohmann::json &def =
+        *key_def(modules_[module].write->at("body"), key_name);
+      nlohmann::json &arg = def["args"]["args"][param];
+      if (!entry.type)
+      {
+        refuse_float_among_kinds(key_name, def, arg["arg"], entry.kinds);
+        continue;
+      }
       nlohmann::json annotation{{"_type", "Name"}, {"id", *entry.type}};
       for (const char *field :
            {"lineno", "col_offset", "end_lineno", "end_col_offset"})
