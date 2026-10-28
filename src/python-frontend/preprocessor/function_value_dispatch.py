@@ -613,10 +613,9 @@ class _Plan:
         return False
 
     def _is_dispatched_param(self, fn, expr, group):
-        """Whether `expr` names a parameter of `fn` that `fn` dispatches on, in `group`."""
+        """Whether `expr` names a parameter or local of `fn` that `fn` dispatches on, in `group`."""
         return isinstance(expr, ast.Name) and self.param_holders.get(fn.name, {}).get(
-            expr.id) == group and expr.id in {a.arg
-                                              for a in fn.args.posonlyargs + fn.args.args}
+            expr.id) == group
 
     def _check_returner(self, fn, group):
         """`fn` has no nested scope and returns a function of `group` on every path."""
@@ -658,7 +657,7 @@ class _Plan:
             return
         if _is_callee(parent, node) and node.id in self.callable_names:
             return
-        if self._nested(node) or node.id in self.param_holders:
+        if self._nested(node) or self._takes_dispatched_parameter(node.id):
             if not self._is_returned_read(node):
                 raise _Refused
             return
@@ -673,6 +672,14 @@ class _Plan:
             self._check_function_holder(node, parent)
         else:
             self._check_container_holder(node, parent)
+
+    def _takes_dispatched_parameter(self, name):
+        """Whether the def `name` dispatches on one of its parameters, not only on a local."""
+        fn = self.defs.get(name)
+        if fn is None or name not in self.param_holders:
+            return False
+        params = {a.arg for a in fn.args.posonlyargs + fn.args.args}
+        return bool(params & set(self.param_holders[name]))
 
     def _is_returned_read(self, node):
         """A module holder read in a flat module-level def only as the callee of its `return`."""
@@ -722,7 +729,7 @@ class _Plan:
 
     def check_param_holders(self):
         """Each def with a dispatched parameter or local uses it only where it can be a code."""
-        names = set(self.functions) | set(self.holders)
+        names = set(self.functions)
         for name, variables in self.param_holders.items():
             fn = self.defs[name]
             nodes = list(ast.walk(ast.Module(fn.body, [])))
