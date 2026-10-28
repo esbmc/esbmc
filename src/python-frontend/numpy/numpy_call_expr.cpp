@@ -6685,11 +6685,13 @@ exprt numpy_call_expr::svd_factors(const std::vector<std::vector<double>> &m)
   double gap = INFINITY;
   for (std::size_t k = 0; k + 1 < n; ++k)
     gap = std::min(gap, triples[k].sigma - triples[k + 1].sigma);
-  if (!diagonal && gap == 0)
+  const double value_radius = diagonal ? 0.0 : 1e-12 * norm;
+  // A gap within the singular values' rounding may be a repeated value, and
+  // rounding can make it negative.
+  if (!diagonal && gap <= 2 * value_radius)
     throw std::runtime_error(
       "TypeError: numpy.linalg.svd of a non-diagonal matrix with a repeated "
       "singular value is not supported");
-  const double value_radius = diagonal ? 0.0 : 1e-12 * norm;
   const double vector_radius = diagonal ? 0.0 : 1e-12 * (1 + norm / gap);
   std::vector<exprt> sigmas;
   std::vector<std::vector<exprt>> us, vs;
