@@ -25,3 +25,5 @@ regression/python/github_9312_shadowed_module
 regression/python/github_9312_shared_name_fail
 regression/python/github_9312_tuple_fail
 regression/python/github_9312_unbound_module_fail
+regression/python/github_9312_attr_receiver_fail
+regression/python/github_9312_extra_file_fail
