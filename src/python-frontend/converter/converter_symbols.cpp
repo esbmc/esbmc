@@ -346,6 +346,31 @@ bool python_converter::class_binds_name(
          may_bind_name(node->value("body", nlohmann::json()), name, false);
 }
 
+bool python_converter::is_sole_class_binding(const std::string &name) const
+{
+  std::vector<const nlohmann::json *> bodies = reachable_module_bodies();
+  if (extra_asts_)
+    for (const nlohmann::json &extra : *extra_asts_)
+      if (
+        extra.contains("body") &&
+        std::find(bodies.begin(), bodies.end(), &extra["body"]) == bodies.end())
+        bodies.push_back(&extra["body"]);
+
+  unsigned bindings = 0;
+  for (const nlohmann::json *body : bodies)
+    for (const auto &stmt : *body)
+    {
+      if (!may_bind_name(stmt, name, true))
+        continue;
+      if (
+        ++bindings > 1 || stmt.value("_type", "") != "ClassDef" ||
+        stmt.value("name", "") != name ||
+        may_bind_name(stmt.value("body", nlohmann::json()), name, true))
+        return false;
+    }
+  return bindings == 1;
+}
+
 const nlohmann::json *python_converter::sole_binding(
   const std::string &name,
   const std::string &statement) const

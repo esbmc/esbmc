@@ -1738,6 +1738,9 @@ private:
   /// base's @p name.
   bool class_binds_name(const std::string &class_name, const std::string &name)
     const;
+  /// Whether the program and every module it imports bind @p name once only,
+  /// at any depth, by a class statement.
+  bool is_sole_class_binding(const std::string &name) const;
 
   symbolt *find_imported_symbol(const std::string &symbol_id) const;
   /// The symbol @p sym_id names in the module whose file it names, or through

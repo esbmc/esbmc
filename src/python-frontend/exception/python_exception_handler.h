@@ -161,6 +161,13 @@ private:
   exprt
   build_builtin_exception(const nlohmann::json &exc, const typet &type) const;
 
+  /// The class name in `module.Class` read at @p use, or empty unless the
+  /// receiver is bound only by `import` of one module, imported at the top of
+  /// the file before @p use, and no other imported module defines the class.
+  std::string module_class_name(
+    const nlohmann::json &node,
+    const nlohmann::json &use) const;
+
   /// True when `raise <exc>` names a variable holding an exception instance
   /// rather than an exception class.
   bool raises_instance_variable(
