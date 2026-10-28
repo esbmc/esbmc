@@ -130,6 +130,32 @@ TEST_CASE("store writes through the pointer", "[andersen][solve]")
   REQUIRE(a.points_to(ny) == std::unordered_set<andersent::node_id>{nw});
 }
 
+TEST_CASE(
+  "a store through TOP reaches every addressed object",
+  "[andersen][solve]")
+{
+  // x = &y;  t -> TOP;  z = &w;  *t = z;   =>  w in pts(y), but not in pts(v),
+  // whose address the program never forms
+  andersent a;
+  auto nx = a.get_node(make_var("x"));
+  auto ny = a.get_node(make_var("y"));
+  auto nt = a.get_node(make_var("t"));
+  auto nz = a.get_node(make_var("z"));
+  auto nw = a.get_node(make_var("w"));
+  auto nv = a.get_node(make_var("v"));
+
+  using k = andersent::constraint_kindt;
+  a.add_constraint(k::ADDRESS_OF, nx, ny);
+  a.points_to_top(nt);
+  a.add_constraint(k::ADDRESS_OF, nz, nw);
+  a.add_constraint(k::STORE, nt, nz); // *t = z
+
+  a.solve();
+
+  REQUIRE(a.points_to(ny).count(nw) == 1);
+  REQUIRE(a.points_to(nv).empty());
+}
+
 TEST_CASE("classic mixed example", "[andersen][solve]")
 {
   // p=&a; q=&b; p=q; r=&p; s=*r; *r=q;

@@ -1,5 +1,5 @@
-// The write through t[i] reaches lists, not tbl. Havocking only tbl would
-// leave lists[i].off at 0 and the inductive step would prove the bound.
+// The write through t[i] reaches lists, not tbl. Naming no object for t[i]
+// would leave lists unhavocked and the inductive step would prove the bound.
 extern void abort(void);
 void reach_error() {}
 void __VERIFIER_assert(int c) { if (!c) { ERROR: { reach_error(); abort(); } } }

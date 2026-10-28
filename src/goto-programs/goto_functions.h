@@ -127,4 +127,9 @@ void get_local_identifiers(const goto_functiont &, std::set<irep_idt> &dest);
 
 bool spawns_threads(const goto_functionst &goto_functions);
 
+/// The functions the entry point may reach, calls through function pointers
+/// included: every function named in a reachable body.
+std::unordered_set<irep_idt, irep_id_hash>
+reachable_functions(const goto_functionst &goto_functions);
+
 #endif

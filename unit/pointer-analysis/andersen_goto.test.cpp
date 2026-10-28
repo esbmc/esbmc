@@ -62,19 +62,12 @@ expr2tc find_symbol(
   return found;
 }
 
-/// The set of pointees the analysis reports for a local, as their symbol
-/// names.  An `unknown` (TOP) target is reported as "*".
-std::set<std::string> targets_of(
-  andersent &a,
-  const goto_functionst &functions,
-  const char *func,
-  const char *name)
+/// The set of pointees the analysis reports for \p e, as their symbol names.
+/// An `unknown` (TOP) target is reported as "*".
+std::set<std::string> targets_of(andersent &a, const expr2tc &e)
 {
-  const expr2tc sym = find_symbol(functions, func, name);
-  REQUIRE(!is_nil_expr(sym));
-
   value_setst::valuest values;
-  a.get_values(goto_programt::const_targett(), sym, values);
+  a.get_values(goto_programt::const_targett(), e, values);
 
   std::set<std::string> result;
   for (const expr2tc &v : values)
@@ -96,6 +89,17 @@ std::set<std::string> targets_of(
       result.insert("?");
   }
   return result;
+}
+
+std::set<std::string> targets_of(
+  andersent &a,
+  const goto_functionst &functions,
+  const char *func,
+  const char *name)
+{
+  const expr2tc sym = find_symbol(functions, func, name);
+  REQUIRE(!is_nil_expr(sym));
+  return targets_of(a, sym);
 }
 
 goto_functionst compile(std::string src)
@@ -185,18 +189,39 @@ TEST_CASE("andersen query answers what a load holds", "[andersen][goto]")
   const expr2tc i = symbol2tc(get_uint32_type(), "i");
   const expr2tc load =
     dereference2tc(to_pointer_type(t->type).subtype, add2tc(t->type, t, i));
+  REQUIRE(targets_of(andersen, load) == std::set<std::string>{"a", "b"});
+}
 
-  value_setst::valuest values;
-  andersen.get_values(goto_programt::const_targett(), load, values);
-  std::set<std::string> names;
-  for (const expr2tc &v : values)
-  {
-    REQUIRE(is_object_descriptor2t(v));
-    const std::string id =
-      to_symbol2t(to_object_descriptor2t(v).object).get_symbol_name();
-    names.insert(id.substr(id.rfind('@') + 1));
-  }
-  REQUIRE(names == std::set<std::string>{"a", "b"});
+TEST_CASE(
+  "andersen query passes TOP and the nondet sentinel through a load",
+  "[andersen][goto]")
+{
+  // *u loads from the sentinel, which yields another unconstrained pointer;
+  // *w loads from anywhere, so it may hold anything.
+  std::string src = R"(
+    int **ext(void);
+    int **__ESBMC_ext(void);
+    int main(void)
+    {
+      int **u = ext();
+      int **w = __ESBMC_ext();
+      return 0;
+    }
+  )";
+
+  goto_functionst functions = compile(src);
+  andersent andersen;
+  andersen(functions);
+
+  const auto load = [&](const char *name) {
+    const expr2tc p = find_symbol(functions, "main", name);
+    REQUIRE(!is_nil_expr(p));
+    return dereference2tc(to_pointer_type(p->type).subtype, p);
+  };
+  REQUIRE(
+    targets_of(andersen, load("u")) ==
+    std::set<std::string>{andersent::nondet_object_name});
+  REQUIRE(targets_of(andersen, load("w")) == std::set<std::string>{"*"});
 }
 
 TEST_CASE(
