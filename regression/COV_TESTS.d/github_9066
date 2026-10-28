@@ -31,7 +31,6 @@ regression/numpy/broadcast_mismatch_caught_success
 regression/numpy/det_1x1_success
 regression/numpy/det_4x4_rounding_fail
 regression/numpy/det_4x4_success
-regression/numpy/det_5x5_unsupported_fail
 regression/numpy/elementwise_broadcast_concrete_success
 regression/numpy/elementwise_dtype_promotion_edge
 regression/numpy/elementwise_float_mod_fail

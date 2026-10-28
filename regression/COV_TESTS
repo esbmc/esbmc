@@ -431,7 +431,6 @@ regression/numpy/nditer_readonly_success
 regression/numpy/norm_axis_fail
 regression/numpy/norm_vector_inf_success
 regression/numpy/norm_vector_l1_success
-regression/numpy/np_linalg_boundary_4x4_fail
 regression/numpy/np_linalg_boundary_singular_edge
 regression/numpy/np_linalg_boundary_symbolic_fail
 regression/numpy/np_linalg_eig_diagonal_success

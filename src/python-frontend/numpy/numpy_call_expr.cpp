@@ -25,6 +25,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cfloat>
 #include <cmath>
 #include <complex>
 #include <functional>
@@ -482,129 +483,9 @@ static bool is_square_matrix(
   return true;
 }
 
-static scalar_value
-determinant_2x2(const std::vector<std::vector<scalar_value>> &m)
-{
-  const auto a = m[0][0].value;
-  const auto b = m[0][1].value;
-  const auto c = m[1][0].value;
-  const auto d = m[1][1].value;
-  const auto det = a * d - b * c;
-  const bool complex_out = m[0][0].is_complex || m[0][1].is_complex ||
-                           m[1][0].is_complex || m[1][1].is_complex;
-  return complex_out ? make_complex_scalar(det.real(), det.imag())
-                     : make_real_scalar(det.real());
-}
-
-static scalar_value
-determinant_3x3(const std::vector<std::vector<scalar_value>> &m)
-{
-  const auto a = m[0][0].value;
-  const auto b = m[0][1].value;
-  const auto c = m[0][2].value;
-  const auto d = m[1][0].value;
-  const auto e = m[1][1].value;
-  const auto f = m[1][2].value;
-  const auto g = m[2][0].value;
-  const auto h = m[2][1].value;
-  const auto i = m[2][2].value;
-
-  const auto det =
-    a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
-  bool complex_out = false;
-  for (const auto &row : m)
-  {
-    for (const auto &v : row)
-      complex_out = complex_out || v.is_complex;
-  }
-  return complex_out ? make_complex_scalar(det.real(), det.imag())
-                     : make_real_scalar(det.real());
-}
-
-static bool inverse_2x2(
-  const std::vector<std::vector<scalar_value>> &m,
-  std::vector<std::vector<scalar_value>> &inv)
-{
-  auto det = determinant_2x2(m);
-  if (std::abs(det.value) < 1e-15)
-    return false;
-  auto d = det.value;
-  inv.resize(2, std::vector<scalar_value>(2));
-  inv[0][0] = make_real_scalar((m[1][1].value / d).real());
-  inv[0][1] = make_real_scalar((-m[0][1].value / d).real());
-  inv[1][0] = make_real_scalar((-m[1][0].value / d).real());
-  inv[1][1] = make_real_scalar((m[0][0].value / d).real());
-  return true;
-}
-
-static bool inverse_3x3(
-  const std::vector<std::vector<scalar_value>> &m,
-  std::vector<std::vector<scalar_value>> &inv)
-{
-  auto det = determinant_3x3(m);
-  if (std::abs(det.value) < 1e-15)
-    return false;
-  auto d = det.value;
-
-  inv.resize(3, std::vector<scalar_value>(3));
-  inv[0][0] = make_real_scalar(
-    ((m[1][1].value * m[2][2].value - m[1][2].value * m[2][1].value) / d)
-      .real());
-  inv[0][1] = make_real_scalar(
-    ((m[0][2].value * m[2][1].value - m[0][1].value * m[2][2].value) / d)
-      .real());
-  inv[0][2] = make_real_scalar(
-    ((m[0][1].value * m[1][2].value - m[0][2].value * m[1][1].value) / d)
-      .real());
-  inv[1][0] = make_real_scalar(
-    ((m[1][2].value * m[2][0].value - m[1][0].value * m[2][2].value) / d)
-      .real());
-  inv[1][1] = make_real_scalar(
-    ((m[0][0].value * m[2][2].value - m[0][2].value * m[2][0].value) / d)
-      .real());
-  inv[1][2] = make_real_scalar(
-    ((m[0][2].value * m[1][0].value - m[0][0].value * m[1][2].value) / d)
-      .real());
-  inv[2][0] = make_real_scalar(
-    ((m[1][0].value * m[2][1].value - m[1][1].value * m[2][0].value) / d)
-      .real());
-  inv[2][1] = make_real_scalar(
-    ((m[0][1].value * m[2][0].value - m[0][0].value * m[2][1].value) / d)
-      .real());
-  inv[2][2] = make_real_scalar(
-    ((m[0][0].value * m[1][1].value - m[0][1].value * m[1][0].value) / d)
-      .real());
-  return true;
-}
-
-static bool solve_linear_system(
-  const std::vector<std::vector<scalar_value>> &A,
-  const std::vector<scalar_value> &b,
-  std::vector<scalar_value> &x)
-{
-  std::size_t n = A.size();
-  if (n > 3)
-    return false;
-
-  std::vector<std::vector<scalar_value>> inv;
-  bool ok = (n == 2) ? inverse_2x2(A, inv) : inverse_3x3(A, inv);
-  if (!ok)
-    return false;
-
-  x.resize(n);
-  for (std::size_t i = 0; i < n; ++i)
-  {
-    std::complex<double> sum = 0.0;
-    for (std::size_t j = 0; j < n; ++j)
-      sum += inv[i][j].value * b[j].value;
-    x[i] = make_real_scalar(sum.real());
-  }
-  return true;
-}
-
 // LAPACK factorises with partial pivoting and NumPy's det sums logarithms,
 // so neither result is the exact one computed here; these bounds are well
-// above the rounding error of either for matrices of order at most 4.
+// above the rounding error of either for matrices of order at most 6.
 constexpr double lapack_tolerance = 1e-12;
 
 static std::vector<std::vector<double>>
@@ -813,6 +694,90 @@ static double solve_radius(
   double largest)
 {
   return lapack_tolerance * infinity_norm(a) * infinity_norm(inverse) * largest;
+}
+
+// Matrices larger than this reject before any result is built: the
+// cofactor determinant and every unrolled result grow with the order.
+constexpr std::size_t max_linalg_order = 6;
+
+// The real square matrix a numpy.linalg function reads, checked as NumPy
+// checks it: rows of different lengths raise NumPy's ValueError, and a
+// non-square, complex or too large matrix rejects.
+static std::vector<std::vector<double>> checked_square_matrix(
+  const std::string &function,
+  const std::vector<std::vector<scalar_value>> &matrix)
+{
+  for (const auto &row : matrix)
+    if (row.size() != matrix.front().size())
+      throw std::runtime_error(
+        "ValueError: numpy.linalg." + function +
+        ": the matrix rows have different lengths");
+  std::size_t n = 0;
+  if (!is_square_matrix(matrix, n))
+    throw std::runtime_error(
+      "TypeError: numpy.linalg." + function + " requires a square 2D matrix");
+  for (const auto &row : matrix)
+    for (const auto &value : row)
+      if (value.is_complex)
+        throw std::runtime_error(
+          "TypeError: numpy.linalg." + function +
+          " does not support complex-valued matrices");
+  if (n > max_linalg_order)
+    throw std::runtime_error(
+      "TypeError: numpy.linalg." + function + " supports only matrices up to " +
+      std::to_string(max_linalg_order) + "x" +
+      std::to_string(max_linalg_order));
+  return real_matrix(matrix);
+}
+
+// The solution of m x = b for each column b of `rhs`, by Gauss-Jordan
+// elimination with partial pivoting as LAPACK's getrf/getrs factor. A zero
+// pivot is LAPACK's singular matrix; a pivot within rounding of zero might be
+// one for LAPACK, so the result there is unknown and rejects.
+static std::vector<std::vector<double>> gauss_jordan(
+  const std::string &function,
+  std::vector<std::vector<double>> m,
+  std::vector<std::vector<double>> rhs)
+{
+  const std::size_t n = m.size();
+  const double scale = max_abs(m);
+  for (std::size_t k = 0; k < n; ++k)
+  {
+    std::size_t pivot = k;
+    for (std::size_t i = k + 1; i < n; ++i)
+      if (std::fabs(m[i][k]) > std::fabs(m[pivot][k]))
+        pivot = i;
+    if (m[pivot][k] == 0.0)
+      throw std::runtime_error("numpy.linalg.LinAlgError: Singular matrix");
+    if (std::fabs(m[pivot][k]) <= 64 * DBL_EPSILON * n * scale)
+      throw std::runtime_error(
+        "TypeError: numpy.linalg." + function +
+        " of a matrix within rounding of singular is not supported");
+    std::swap(m[pivot], m[k]);
+    std::swap(rhs[pivot], rhs[k]);
+    for (std::size_t i = 0; i < n; ++i)
+    {
+      if (i == k)
+        continue;
+      const double factor = m[i][k] / m[k][k];
+      for (std::size_t j = k; j < n; ++j)
+        m[i][j] -= factor * m[k][j];
+      for (std::size_t j = 0; j < rhs[i].size(); ++j)
+        rhs[i][j] -= factor * rhs[k][j];
+    }
+  }
+  for (std::size_t i = 0; i < n; ++i)
+    for (double &value : rhs[i])
+      value /= m[i][i];
+  return rhs;
+}
+
+static std::vector<std::vector<double>> identity_matrix(std::size_t n)
+{
+  std::vector<std::vector<double>> identity(n, std::vector<double>(n, 0.0));
+  for (std::size_t i = 0; i < n; ++i)
+    identity[i][i] = 1.0;
+  return identity;
 }
 
 static bool literal_list_contains_bool(const nlohmann::json &node)
@@ -5565,6 +5530,18 @@ static bool is_diagonal(const std::vector<std::vector<double>> &m)
   return true;
 }
 
+static bool is_triangular(const std::vector<std::vector<double>> &m)
+{
+  bool upper = true, lower = true;
+  for (std::size_t i = 0; i < m.size(); ++i)
+    for (std::size_t j = 0; j < m.size(); ++j)
+    {
+      upper = upper && (i <= j || m[i][j] == 0.0);
+      lower = lower && (i >= j || m[i][j] == 0.0);
+    }
+  return upper || lower;
+}
+
 static double frobenius_norm(const std::vector<std::vector<double>> &m)
 {
   double sum = 0.0;
@@ -5606,6 +5583,46 @@ eigenvalue_radius(const std::vector<std::vector<double>> &m, double square)
   return std::min(1e-12 * norm * (1 + norm / separation), 1e-6 * norm);
 }
 
+// `values` in an order chosen nondeterministically: LAPACK's balancing may
+// permute a triangular matrix's eigenvalues.
+std::vector<exprt>
+numpy_call_expr::in_any_order(const std::vector<exprt> &values)
+{
+  const std::size_t n = values.size();
+  std::vector<exprt> slots;
+  exprt::operandst distinct;
+  for (std::size_t k = 0; k < n; ++k)
+  {
+    symbolt &tmp =
+      converter_.create_tmp_symbol(call_, "$order$", size_type(), exprt());
+    const exprt slot = symbol_expr(tmp);
+    code_declt decl(slot);
+    decl.location() = converter_.get_location_from_decl(call_);
+    converter_.add_instruction(decl);
+    code_assignt assign(slot, side_effect_expr_nondett(size_type()));
+    assign.location() = decl.location();
+    converter_.add_instruction(assign);
+    distinct.push_back(
+      binary_relation_exprt(slot, "<", from_integer(n, size_type())));
+    for (const exprt &earlier : slots)
+      distinct.push_back(not_exprt(equality_exprt(slot, earlier)));
+    slots.push_back(slot);
+  }
+  code_assumet permutation{and_exprt(distinct)};
+  permutation.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(permutation);
+  std::vector<exprt> ordered;
+  for (const exprt &slot : slots)
+  {
+    exprt chosen = values.back();
+    for (std::size_t i = n - 1; i-- > 0;)
+      chosen = if_exprt(
+        equality_exprt(slot, from_integer(i, size_type())), values[i], chosen);
+    ordered.push_back(chosen);
+  }
+  return ordered;
+}
+
 // The eigenvalues of a 2x2 matrix that is not diagonal: a real pair in
 // either order, or a complex pair with the positive imaginary part first.
 std::vector<exprt>
@@ -5635,7 +5652,8 @@ numpy_call_expr::eigenvalue_pair(const std::vector<std::vector<double>> &m)
 }
 
 // NumPy returns complex eigenvalues, from LAPACK's dgeev: a diagonal matrix
-// keeps its entries, in order.
+// keeps its entries, in order, and a triangular one has its diagonal in
+// some order.
 exprt numpy_call_expr::eigenvalues(const std::vector<std::vector<double>> &m)
 {
   const std::size_t n = m.size();
@@ -5643,17 +5661,26 @@ exprt numpy_call_expr::eigenvalues(const std::vector<std::vector<double>> &m)
     if (row.size() != n)
       throw std::runtime_error(
         "TypeError: numpy.linalg.eigvals requires a square 2D matrix");
+  if (n > max_linalg_order)
+    throw std::runtime_error(
+      "TypeError: numpy.linalg.eigvals supports only matrices up to " +
+      std::to_string(max_linalg_order) + "x" +
+      std::to_string(max_linalg_order));
   std::vector<exprt> values;
-  if (is_diagonal(m))
+  if (n == 2 && !is_diagonal(m))
+    values = eigenvalue_pair(m);
+  else if (is_triangular(m))
+  {
     for (std::size_t i = 0; i < n; ++i)
       values.push_back(
         make_complex(lapack_value(m[i][i], 0.0), lapack_value(0.0, 0.0)));
-  else if (n == 2)
-    values = eigenvalue_pair(m);
+    if (!is_diagonal(m))
+      values = in_any_order(values);
+  }
   else
     throw std::runtime_error(
-      "TypeError: numpy.linalg.eigvals supports only 2x2 and diagonal "
-      "matrices currently");
+      "TypeError: numpy.linalg.eigvals supports only 2x2, diagonal and "
+      "triangular matrices currently");
   exprt array(
     "array",
     array_typet(get_complex_struct_type(), from_integer(n, size_type())));
@@ -5846,6 +5873,46 @@ exprt numpy_call_expr::singular_values(
   exprt array("array", array_typet(first.type(), from_integer(2, size_type())));
   array.copy_to_operands(first, second);
   return array;
+}
+
+// inv: exact when LU's factors are exact, otherwise rounded by about
+// cond(A) * eps of the largest entry.
+exprt numpy_call_expr::linalg_inverse(const std::vector<std::vector<double>> &m)
+{
+  const std::size_t n = m.size();
+  std::vector<std::vector<double>> inverse(n, std::vector<double>(n));
+  for (std::size_t j = 0; j < n; ++j)
+  {
+    const std::optional<std::vector<double>> column =
+      exact_solve(m, identity_matrix(n)[j]);
+    if (!column)
+    {
+      inverse = gauss_jordan("inv", m, identity_matrix(n));
+      return lapack_matrix(inverse, solve_radius(m, inverse, max_abs(inverse)));
+    }
+    for (std::size_t i = 0; i < n; ++i)
+      inverse[i][j] = (*column)[i];
+  }
+  return lapack_matrix(inverse, 0.0);
+}
+
+// solve(A, b), exact or bounded as inv is.
+exprt numpy_call_expr::linalg_solve(
+  const std::string &function,
+  const std::vector<std::vector<double>> &m,
+  const std::vector<double> &b)
+{
+  if (const std::optional<std::vector<double>> computed = exact_solve(m, b))
+    return lapack_vector(*computed, 0.0);
+  std::vector<std::vector<double>> rhs;
+  for (double value : b)
+    rhs.push_back({value});
+  std::vector<double> solution;
+  for (const auto &row : gauss_jordan(function, m, rhs))
+    solution.push_back(row[0]);
+  const std::vector<std::vector<double>> inverse =
+    gauss_jordan(function, m, identity_matrix(m.size()));
+  return lapack_vector(solution, solve_radius(m, inverse, max_abs({solution})));
 }
 
 // Singular values are never negative and come in descending order.
@@ -7095,30 +7162,8 @@ exprt numpy_call_expr::create_expr_from_call()
           "numeric arrays");
       }
 
-      std::size_t n = 0;
-      if (!is_square_matrix(matrix, n))
-      {
-        throw std::runtime_error(
-          "TypeError: numpy.linalg.det requires a square 2D matrix");
-      }
-
-      for (const auto &row : matrix)
-      {
-        for (const auto &value : row)
-        {
-          if (value.is_complex)
-          {
-            throw std::runtime_error(
-              "TypeError: numpy.linalg.det does not support complex-valued "
-              "matrices");
-          }
-        }
-      }
-
-      if (n > 4)
-        throw std::runtime_error(
-          "TypeError: numpy.linalg.det supports only matrices up to 4x4");
-      const std::vector<std::vector<double>> real = real_matrix(matrix);
+      const std::vector<std::vector<double>> real =
+        checked_square_matrix(function, matrix);
       if (const std::optional<double> computed = exact_det(real))
         return lapack_value(*computed, 0.0);
       if (structurally_singular(real))
@@ -7154,48 +7199,7 @@ exprt numpy_call_expr::create_expr_from_call()
           "TypeError: numpy.linalg.inv currently supports only constant 2D "
           "numeric arrays");
 
-      std::size_t n = 0;
-      if (!is_square_matrix(matrix, n))
-        throw std::runtime_error(
-          "TypeError: numpy.linalg.inv requires a square 2D matrix");
-
-      for (const auto &row : matrix)
-        for (const auto &value : row)
-          if (value.is_complex)
-            throw std::runtime_error(
-              "TypeError: numpy.linalg.inv does not support complex-valued "
-              "matrices");
-
-      std::vector<std::vector<scalar_value>> inv;
-      bool ok = false;
-      if (n == 2)
-        ok = inverse_2x2(matrix, inv);
-      else if (n == 3)
-        ok = inverse_3x3(matrix, inv);
-      else
-        throw std::runtime_error(
-          "TypeError: numpy.linalg.inv supports only 2x2 and 3x3 matrices");
-
-      if (!ok)
-        throw std::runtime_error("numpy.linalg.LinAlgError: Singular matrix");
-
-      const std::vector<std::vector<double>> real = real_matrix(matrix);
-      std::vector<std::vector<double>> inverse = real_matrix(inv);
-      bool exact = true;
-      for (std::size_t j = 0; j < n && exact; ++j)
-      {
-        std::vector<double> unit(n, 0.0);
-        unit[j] = 1.0;
-        const std::optional<std::vector<double>> column =
-          exact_solve(real, unit);
-        exact = column.has_value();
-        for (std::size_t i = 0; i < n && exact; ++i)
-          inverse[i][j] = (*column)[i];
-      }
-      if (!exact)
-        inverse = real_matrix(inv);
-      return lapack_matrix(
-        inverse, exact ? 0.0 : solve_radius(real, inverse, max_abs(inverse)));
+      return linalg_inverse(checked_square_matrix(function, matrix));
     }
 
     if (function == "norm")
@@ -7884,14 +7888,9 @@ exprt numpy_call_expr::create_expr_from_call()
           "TypeError: numpy.linalg.solve requires a constant 2D numeric "
           "matrix as first argument");
 
-      std::size_t n = 0;
-      if (!is_square_matrix(A, n))
-        throw std::runtime_error(
-          "TypeError: numpy.linalg.solve requires a square matrix");
-
-      if (n != 2 && n != 3)
-        throw std::runtime_error(
-          "TypeError: numpy.linalg.solve supports only 2x2 and 3x3 matrices");
+      const std::vector<std::vector<double>> real =
+        checked_square_matrix(function, A);
+      const std::size_t n = real.size();
 
       std::vector<scalar_value> b;
       if (!try_extract_scalar_1d_list(rhs, b))
@@ -7904,25 +7903,10 @@ exprt numpy_call_expr::create_expr_from_call()
           "ValueError: numpy.linalg.solve: matrix and vector sizes are "
           "incompatible");
 
-      std::vector<scalar_value> x;
-      std::vector<std::vector<scalar_value>> inv;
-      if (
-        !solve_linear_system(A, b, x) ||
-        !(n == 2 ? inverse_2x2(A, inv) : inverse_3x3(A, inv)))
-        throw std::runtime_error("numpy.linalg.LinAlgError: Singular matrix");
-
-      std::vector<double> solution, rhs_values;
-      for (const scalar_value &value : x)
-        solution.push_back(value.value.real());
+      std::vector<double> rhs_values;
       for (const scalar_value &value : b)
         rhs_values.push_back(value.value.real());
-      if (
-        const std::optional<std::vector<double>> computed =
-          exact_solve(real_matrix(A), rhs_values))
-        return lapack_vector(*computed, 0.0);
-      const double radius =
-        solve_radius(real_matrix(A), real_matrix(inv), max_abs({solution}));
-      return lapack_vector(solution, radius);
+      return linalg_solve(function, real, rhs_values);
     }
 
     if (should_fallback_to_numpy_model(function))

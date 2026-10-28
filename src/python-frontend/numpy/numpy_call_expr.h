@@ -283,6 +283,7 @@ private:
   exprt nondet_bool();
   exprt eigenvalues(const std::vector<std::vector<double>> &m);
   exprt eigen_decomposition(const std::vector<std::vector<double>> &m);
+  std::vector<exprt> in_any_order(const std::vector<exprt> &values);
   void eigen_pair_2x2(
     const std::vector<std::vector<double>> &m,
     std::vector<exprt> &values,
@@ -297,6 +298,11 @@ private:
     const std::string &function,
     const std::vector<std::vector<double>> &m);
   void assume_singular_order(const std::vector<exprt> &sigmas);
+  exprt linalg_inverse(const std::vector<std::vector<double>> &m);
+  exprt linalg_solve(
+    const std::string &function,
+    const std::vector<std::vector<double>> &m,
+    const std::vector<double> &b);
   exprt svd_factors(const std::vector<std::vector<double>> &m);
   exprt lapack_vector(const std::vector<double> &exact, double radius);
   exprt
