@@ -1,0 +1,10 @@
+regression/python/github_8971_tagidx
+regression/python/github_8971_tagidx_empty_fail
+regression/python/github_8971_tagidx_fail
+regression/python/github_8971_tagidx_lazy
+regression/python/github_8971_tagidx_negative_fail
+regression/python/github_8971_tagidx_nondet
+regression/python/github_8971_tagidx_nondet_fail
+regression/python/github_8971_tagidx_range_fail
+regression/python/github_8971_tagidx_slice
+regression/python/github_8971_tagidx_unnarrowed
