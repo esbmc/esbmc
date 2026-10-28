@@ -98,6 +98,20 @@ def _hoist_callee(call, names):
     return before + [bind]
 
 
+def _has_no_params(fn):
+    """Whether `fn` takes no argument of any kind."""
+    args = fn.args
+    return not (args.args or args.posonlyargs or args.kwonlyargs or args.vararg or args.kwarg)
+
+
+def _returns_name(fn):
+    """The name `fn` returns when its body is just `return name`, else None."""
+    if len(fn.body) == 1 and isinstance(fn.body[0], ast.Return) and isinstance(
+            fn.body[0].value, ast.Name):
+        return fn.body[0].value.id
+    return None
+
+
 def _constant_returners(module):
     """The module-level defs `def r(): return t` that only return another such def `t`."""
     defs = {s.name: s for s in module.body if isinstance(s, ast.FunctionDef)}
@@ -108,12 +122,9 @@ def _constant_returners(module):
 
     found = {}
     for name, fn in defs.items():
-        body = fn.body
-        if sole(name) and not fn.args.args + fn.args.posonlyargs + fn.args.kwonlyargs and not (
-                fn.args.vararg or fn.args.kwarg) and len(body) == 1 and isinstance(
-                    body[0], ast.Return) and isinstance(body[0].value, ast.Name) \
-                and sole(body[0].value.id):
-            found[name] = body[0].value.id
+        target = _returns_name(fn)
+        if target is not None and _has_no_params(fn) and sole(name) and sole(target):
+            found[name] = target
     return found
 
 
