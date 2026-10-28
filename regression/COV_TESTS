@@ -433,7 +433,6 @@ regression/numpy/norm_vector_inf_success
 regression/numpy/norm_vector_l1_success
 regression/numpy/np_linalg_boundary_singular_edge
 regression/numpy/np_linalg_boundary_symbolic_fail
-regression/numpy/np_linalg_eig_diagonal_success
 regression/numpy/np_linalg_eig_non_square_fail
 regression/numpy/np_linalg_inv_2x2_success
 regression/numpy/np_linalg_inv_singular_fail
@@ -1802,7 +1801,6 @@ regression/python/list_extend17_fail
 regression/python/math_edge_fsum_fail
 regression/python/set_from_param
 regression/numpy/unique_nan_edge
-regression/numpy/det4
 regression/numpy/np_smt_array_small_write_success
 regression/numpy/multiply_broadcast_row_col_edge
 regression/numpy/numpy_var_1d_edge_singleton
