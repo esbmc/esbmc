@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^VERIFICATION FAILED$
+FAILED +\[global.assertion.[0-9]+\] +line +0 +uncaught exception: TypeError

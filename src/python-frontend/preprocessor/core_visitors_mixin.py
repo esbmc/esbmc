@@ -1217,6 +1217,8 @@ class CoreVisitorsMixin:
             raise NotImplementedError(
                 f"Unpacking *x into {self._display_name(function_name)}() is supported only "
                 "when x is a list or tuple of statically known length")
+        if self._forwards_own_kwargs(node):
+            return False
         keywords = self._build_keyword_map(node)
         self._validate_kwonly_args(function_name, kwonly_args, keywords)
         self._validate_positional_call_arity(node, function_name, expected_args)

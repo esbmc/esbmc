@@ -13,6 +13,7 @@
 #include <util/irep/std_code.h>
 #include <util/irep/std_expr.h>
 #include <util/lang/c_types.h>
+#include <util/lang/python_types.h>
 
 using namespace python_expr;
 
@@ -588,8 +589,10 @@ bool dynamic_type_handler::joins_divergent_kinds(
 {
   const symbolt *existing =
     converter_.symbol_table().find_symbol(bound_symbol_id(name).to_string());
+  const bool declared_any = existing && existing->get_type() == any_type();
   if (
-    existing && !type_handler_.is_numeric_scalar_type(existing->get_type()) &&
+    existing && !declared_any &&
+    !type_handler_.is_numeric_scalar_type(existing->get_type()) &&
     !type_handler_.is_string_type(existing->get_type()))
     return false;
   // `C.v` is tagged only at module level, where its store is a global one.
@@ -601,7 +604,9 @@ bool dynamic_type_handler::joins_divergent_kinds(
   // The value bound before the `if` is the one a path that skips every
   // assignment keeps. An already tagged name keeps its slot, and a retyped
   // one holds its value in a symbol other than `existing`.
-  if (existing && !is_tagged(name) && !converter_.is_retyped(existing->id))
+  if (
+    existing && !declared_any && !is_tagged(name) &&
+    !converter_.is_retyped(existing->id))
     kinds.insert(scalar_kind(existing->get_type()));
   else if (keeps_value)
     return false;
@@ -662,6 +667,9 @@ void dynamic_type_handler::declare_dynamic_type_names(
 
       // Initialize from the pre-existing value, in case something reads the
       // alias before a branch's assign() runs.
+      // A name declared Any holds no scalar to copy, and both arms assign it.
+      if (existing_symbol->get_type() == any_type())
+        continue;
       exprt existing_value = build_symbol(*existing_symbol);
       for (const codet &instr : build_tag_field_assigns(
              *alias_symbol_ptr, existing_value, alias_location))
