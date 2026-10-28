@@ -3405,6 +3405,8 @@ private:
   typet current_func_return_type_;
   /// Whether the program annotates the current function `-> int`.
   bool current_func_annotated_int_ = false;
+  /// Whether the current function has one `return` statement (#9074).
+  bool current_func_single_return_ = false;
   /// The target of a ternary that is itself a return value; see
   /// optional_ternary_type.
   typet ternary_return_target_;
