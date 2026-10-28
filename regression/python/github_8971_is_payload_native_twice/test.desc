@@ -1,5 +1,4 @@
 CORE
 main.py
 
-^VERIFICATION FAILED$
-Unsupported: .is. between two dynamically-typed values that are not known to be one object
+^VERIFICATION SUCCESSFUL$
