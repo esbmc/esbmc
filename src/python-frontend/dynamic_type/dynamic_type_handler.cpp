@@ -19,6 +19,8 @@ using namespace python_expr;
 namespace
 {
 using dynamic_type_detail::collect_branch_literal_kinds;
+using dynamic_type_detail::count_bindings;
+using dynamic_type_detail::single_assigned_value;
 
 using param_kinds_t = std::unordered_map<std::string, std::string>;
 
@@ -296,71 +298,6 @@ struct argument_kinds
   size_t other = 0;
 };
 
-bool field_is(
-  const nlohmann::json &node,
-  const char *field,
-  const std::string &name)
-{
-  return node.contains(field) && node[field].is_string() &&
-         node[field].get<std::string>() == name;
-}
-
-std::string context_of(const nlohmann::json &node)
-{
-  if (!node.contains("ctx") || !node["ctx"].is_object())
-    return "";
-  return node["ctx"].value("_type", "");
-}
-
-bool lists_name(const nlohmann::json &node, const std::string &name)
-{
-  if (!node.contains("names") || !node["names"].is_array())
-    return false;
-  for (const auto &listed : node["names"])
-    if (listed.is_string() && listed.get<std::string>() == name)
-      return true;
-  return false;
-}
-
-// `node` binds `name` by assignment, parameter, def, class, import, pattern,
-// `global`, `nonlocal`, `except`, `del` or any other target.
-bool binds_name_at(const nlohmann::json &node, const std::string &name)
-{
-  const std::string type = node.value("_type", "");
-  if (type == "Name")
-    return field_is(node, "id", name) && context_of(node) != "Load";
-  if (type == "arg")
-    return field_is(node, "arg", name);
-  return field_is(node, "name", name) || field_is(node, "asname", name) ||
-         field_is(node, "rest", name) || lists_name(node, name);
-}
-
-size_t count_bindings(const nlohmann::json &node, const std::string &name)
-{
-  if (!node.is_structured())
-    return 0;
-  size_t count = node.is_object() && binds_name_at(node, name);
-  for (const auto &child : node)
-    count += count_bindings(child, name);
-  return count;
-}
-
-// The value a module-level `name = value` binds, when that is the only
-// binding of `name` anywhere in the module.
-const nlohmann::json *single_assigned_value(
-  const nlohmann::json &module_body,
-  const std::string &name)
-{
-  if (count_bindings(module_body, name) != 1)
-    return nullptr;
-  for (const auto &stmt : module_body)
-    if (
-      stmt.value("_type", "") == "Assign" && stmt["targets"].size() == 1 &&
-      stmt["targets"][0].value("id", "") == name)
-      return &stmt["value"];
-  return nullptr;
-}
-
 // Counts the leaves of `arg` that name a def returning a dynamic value and
 // those that are anything else.
 void classify_argument(
@@ -623,7 +560,7 @@ std::unordered_set<std::string> dynamic_type_handler::detect_dynamic_type_names(
     }
   }
 
-  const nlohmann::json callables = converter_.callable_function_stubs();
+  const nlohmann::json callables = converter_.kind_module_body();
   auto collect = [&](const nlohmann::json &block) {
     return collect_branch_literal_kinds(
       block, kinds, leaf_count, leaf_total, *scope_body, callables);

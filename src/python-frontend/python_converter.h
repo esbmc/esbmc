@@ -472,6 +472,9 @@ public:
   /// import binds, as `mk` after `from helper import mk` and `helper.mk`
   /// after `import helper`.
   nlohmann::json callable_function_stubs() const;
+  /// The stubs followed by the current module's own statements, which a name
+  /// read off the module is resolved against.
+  nlohmann::json kind_module_body() const;
   /// Whether a straight-line retype moved @p id's value to another symbol.
   bool is_retyped(const irep_idt &id) const
   {
