@@ -6108,38 +6108,7 @@ python_converter::extract_target_name(const nlohmann::json &target) const
 std::string python_converter::annotated_optional_class(
   const nlohmann::json &annotation) const
 {
-  if (!annotation.is_object() || annotation.is_null())
-    return "";
-
-  std::string cls;
-  // Optional[Class] : Subscript(value=Name("Optional"), slice=Name(Class))
-  if (
-    annotation.value("_type", "") == "Subscript" &&
-    annotation.contains("value") && annotation["value"].contains("id") &&
-    annotation["value"]["id"] == "Optional" && annotation.contains("slice") &&
-    annotation["slice"].contains("id"))
-    cls = annotation["slice"]["id"].get<std::string>();
-  // `Class | None` (PEP 604) : BinOp(BitOr, left, right) with one side None.
-  else if (
-    annotation.value("_type", "") == "BinOp" && annotation.contains("op") &&
-    annotation["op"].value("_type", "") == "BitOr" &&
-    annotation.contains("left") && annotation.contains("right"))
-  {
-    auto is_none = [](const nlohmann::json &n) {
-      return n.value("_type", "") == "Constant" && n.contains("value") &&
-             n["value"].is_null();
-    };
-    auto name_id = [](const nlohmann::json &n) -> std::string {
-      return n.value("_type", "") == "Name" && n.contains("id")
-               ? n["id"].get<std::string>()
-               : std::string();
-    };
-    if (is_none(annotation["right"]))
-      cls = name_id(annotation["left"]);
-    else if (is_none(annotation["left"]))
-      cls = name_id(annotation["right"]);
-  }
-
+  const std::string cls = type_utils::optional_inner_name(annotation);
   if (cls.empty() || !json_utils::is_class(cls, *ast_json))
     return "";
   return cls;
@@ -6957,8 +6926,7 @@ bool python_converter::ternary_needs_if_spelling(
   const std::string else_class = instantiated_class(ifexp["orelse"]);
   if (then_class.empty() && else_class.empty())
   {
-    return dynamic_type_detail::ifexp_arms_diverge(
-      ifexp, callable_function_stubs());
+    return dynamic_type_detail::ifexp_arms_diverge(ifexp, kind_module_body());
   }
   // Arms constructing different classes are spelled as `if` too, where the
   // preprocessor refuses what would resolve against one class only (#8408).
@@ -10101,7 +10069,9 @@ exprt python_converter::string_literal_address(const exprt &array)
 
 /// \p value as the current function returns it (#8016): wrapped when the
 /// function returns Optional; when it cannot hold None, an optional's value,
-/// with None reported rather than read as zero.
+/// with None reported rather than read as zero. The only return of a function
+/// whose return type is not inferred yet keeps the optional, which then types
+/// the function (#9074).
 exprt python_converter::coerce_optional_return(
   const exprt &value,
   const locationt &location,
@@ -10109,7 +10079,9 @@ exprt python_converter::coerce_optional_return(
 {
   if (type_utils::is_optional_struct(current_func_return_type_))
     return wrap_in_optional(value, current_func_return_type_);
-  if (!type_utils::is_optional_struct(value.type()))
+  if (
+    !type_utils::is_optional_struct(value.type()) ||
+    (current_func_return_type_.is_empty() && current_func_single_return_))
     return value;
   return narrow_optional_return(value, location, target_block);
 }

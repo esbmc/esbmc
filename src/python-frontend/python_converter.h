@@ -472,6 +472,9 @@ public:
   /// import binds, as `mk` after `from helper import mk` and `helper.mk`
   /// after `import helper`.
   nlohmann::json callable_function_stubs() const;
+  /// The stubs followed by the current module's own statements, which a name
+  /// read off the module is resolved against.
+  nlohmann::json kind_module_body() const;
   /// Whether a straight-line retype moved @p id's value to another symbol.
   bool is_retyped(const irep_idt &id) const
   {
@@ -1532,6 +1535,13 @@ private:
    */
   typet infer_tuple_struct_from_value(
     const nlohmann::json &value_node,
+    const std::unordered_map<std::string, nlohmann::json> &param_annotations);
+
+  /// infer_tuple_struct_from_value over every value that can reach `value` in
+  /// `method`, or empty_typet when their shapes differ.
+  typet shared_tuple_struct(
+    const nlohmann::json &value,
+    const nlohmann::json &method,
     const std::unordered_map<std::string, nlohmann::json> &param_annotations);
 
   exprt get_return_from_func(const char *func_symbol_id);
@@ -3404,6 +3414,8 @@ private:
   typet current_func_return_type_;
   /// Whether the program annotates the current function `-> int`.
   bool current_func_annotated_int_ = false;
+  /// Whether the current function has one `return` statement (#9074).
+  bool current_func_single_return_ = false;
   /// The target of a ternary that is itself a return value; see
   /// optional_ternary_type.
   typet ternary_return_target_;

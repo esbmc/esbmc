@@ -166,6 +166,13 @@ bool python_annotation<Json>::extract_type_info(
   return false;
 }
 
+/// A bare `Optional` or `Union` head cannot hold None, so the read keeps the
+/// type of the dict it comes from instead.
+inline std::string dict_value_head_type(const std::string &head)
+{
+  return head == "Optional" || head == "Union" ? "Any" : head;
+}
+
 template <class Json>
 std::string python_annotation<Json>::infer_dict_value_type(const Json &var_node)
 {
@@ -187,7 +194,8 @@ std::string python_annotation<Json>::infer_dict_value_type(const Json &var_node)
     {
       const Json &val_type = func_def["returns"]["slice"]["elts"][1];
       if (val_type["_type"] == "Subscript" && val_type["value"].contains("id"))
-        return val_type["value"]["id"].template get<std::string>();
+        return dict_value_head_type(
+          val_type["value"]["id"].template get<std::string>());
     }
   }
 
