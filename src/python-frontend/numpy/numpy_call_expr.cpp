@@ -6637,8 +6637,8 @@ diagonal_singular_triples(const std::vector<std::vector<double>> &m)
   return triples;
 }
 
-// A 2x2 matrix: v are the eigenvectors of A^T A, u = A v / sigma, and a
-// zero sigma takes the unit vector orthogonal to the other u.
+// A 2x2 matrix: v are the eigenvectors of A^T A, u1 = A v1 / sigma1 and u2
+// the unit vector orthogonal to u1.
 static std::vector<singular_triple>
 singular_triples_2x2(const std::vector<std::vector<double>> &m)
 {
@@ -6654,12 +6654,19 @@ singular_triples_2x2(const std::vector<std::vector<double>> &m)
   for (std::size_t k = 0; k < 2; ++k)
   {
     const double sigma = k == 0 ? largest : smallest;
-    std::vector<double> u = {
+    const std::vector<double> image = {
       a * v[k][0] + b * v[k][1], c * v[k][0] + d * v[k][1]};
-    if (sigma == 0.0)
+    std::vector<double> u = {image[0] / sigma, image[1] / sigma};
+    // A v / sigma amplifies rounding by sigma1 / sigma2: u2 is the unit
+    // vector orthogonal to u1, on the side A v2 points to.
+    if (k == 1)
+    {
+      const double side =
+        image[1] * triples[0].u[0] - image[0] * triples[0].u[1];
       u = {-triples[0].u[1], triples[0].u[0]};
-    else
-      u = {u[0] / sigma, u[1] / sigma};
+      if (side < 0)
+        u = {-u[0], -u[1]};
+    }
     triples.push_back({sigma, u, v[k]});
   }
   return triples;
