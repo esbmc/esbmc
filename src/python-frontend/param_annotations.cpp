@@ -716,30 +716,13 @@ std::string literal_scalar_type(const nlohmann::json &node)
   return constant_type_name(node);
 }
 
-/// The value @p node assigns to the bare name @p name, or null.
-const nlohmann::json *
-assignment_value(const nlohmann::json &node, const std::string &name)
-{
-  auto binds = [&](const nlohmann::json &target) {
-    return is_node(target, "Name") && target["id"] == name;
-  };
-  if (
-    is_node(node, "Assign") && node["targets"].size() == 1 &&
-    binds(node["targets"][0]))
-    return &node["value"];
-  if (
-    is_node(node, "AnnAssign") && binds(node["target"]) &&
-    !node["value"].is_null())
-    return &node["value"];
-  return nullptr;
-}
-
 /// The value of the `name = ...` or `name: T = ...` statement under @p node,
 /// in whatever block it sits.
 const nlohmann::json *
 plain_assignment_value(const nlohmann::json &node, const std::string &name)
 {
-  if (const nlohmann::json *value = assignment_value(node, name))
+  if (
+    const nlohmann::json *value = json_utils::plain_assigned_value(node, name))
     return value;
   if (node.is_structured())
     for (const auto &child : node)

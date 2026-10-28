@@ -1124,24 +1124,30 @@ count_name_bindings(const nlohmann::json &node, const std::string &name)
   return n;
 }
 
-// The value a top-level `name = ...` or `name: T = ...` statement assigns.
+// The value `stmt` assigns when it is a plain `name = ...` or `name: T = ...`.
 inline const nlohmann::json *
-top_level_value(const nlohmann::json &module, const std::string &name)
+plain_assigned_value(const nlohmann::json &stmt, const std::string &name)
 {
   auto binds = [&](const nlohmann::json &target) {
     return target.value("_type", "") == "Name" && target["id"] == name;
   };
+  const std::string type = stmt.is_object() ? stmt.value("_type", "") : "";
+  if (
+    type == "Assign" && stmt["targets"].size() == 1 &&
+    binds(stmt["targets"][0]))
+    return &stmt["value"];
+  if (type == "AnnAssign" && binds(stmt["target"]) && !stmt["value"].is_null())
+    return &stmt["value"];
+  return nullptr;
+}
+
+// The value a top-level `name = ...` or `name: T = ...` statement assigns.
+inline const nlohmann::json *
+top_level_value(const nlohmann::json &module, const std::string &name)
+{
   for (const auto &stmt : module["body"])
-  {
-    const std::string type = stmt.value("_type", "");
-    if (
-      type == "Assign" && stmt["targets"].size() == 1 &&
-      binds(stmt["targets"][0]))
-      return &stmt["value"];
-    if (
-      type == "AnnAssign" && binds(stmt["target"]) && !stmt["value"].is_null())
-      return &stmt["value"];
-  }
+    if (const nlohmann::json *value = plain_assigned_value(stmt, name))
+      return value;
   return nullptr;
 }
 
