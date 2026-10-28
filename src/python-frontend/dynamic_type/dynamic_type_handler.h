@@ -217,6 +217,14 @@ private:
     const exprt &rhs,
     const locationt &location);
 
+  /// The static object of a module name @p rhs bound once, nil for any other
+  /// value; sets @p elem_size.
+  exprt module_name_payload(
+    const exprt &rhs,
+    const locationt &location,
+    std::vector<codet> &instructions,
+    exprt &elem_size);
+
   /// A fresh copy of @p rhs as a tag's `.value`; sets @p elem_size.
   exprt build_scalar_payload(
     const exprt &rhs,

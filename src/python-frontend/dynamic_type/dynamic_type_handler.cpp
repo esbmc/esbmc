@@ -558,6 +558,30 @@ std::optional<std::string> interned_str_literal(const exprt &value)
     return std::nullopt;
   return text;
 }
+
+// `name` has one binding in the whole module, a top-level assignment, so it
+// names one object for the whole run.
+bool bound_once_at_top_level(
+  const nlohmann::json &module_body,
+  const std::string &name)
+{
+  if (count_bindings(module_body, name) != 1)
+    return false;
+  for (const auto &stmt : module_body)
+  {
+    const std::string type = stmt.value("_type", "");
+    if (
+      type == "Assign" && stmt["targets"].size() == 1 &&
+      stmt["targets"][0].value("_type", "") == "Name" &&
+      stmt["targets"][0].value("id", "") == name)
+      return true;
+    if (
+      type == "AnnAssign" && stmt["target"].value("id", "") == name &&
+      stmt.contains("value") && !stmt["value"].is_null())
+      return true;
+  }
+  return false;
+}
 } // namespace
 
 dynamic_type_handler::dynamic_type_handler(
@@ -793,6 +817,52 @@ exprt dynamic_type_handler::interned_str_payload(
     pointer_typet(empty_typet()));
 }
 
+exprt dynamic_type_handler::module_name_payload(
+  const exprt &rhs,
+  const locationt &location,
+  std::vector<codet> &instructions,
+  exprt &elem_size)
+{
+  if (
+    !rhs.is_symbol() ||
+    (!type_utils::is_integer_type(rhs.type()) && !rhs.type().is_floatbv()))
+    return nil_exprt();
+  const symbolt *source =
+    converter_.symbol_table().find_symbol(to_symbol_expr(rhs).get_identifier());
+  if (!source)
+    return nil_exprt();
+  const std::string name = source->name.as_string();
+  symbol_id sid = converter_.create_symbol_id();
+  sid.set_object(name);
+  if (
+    sid.global_to_string() != source->id.as_string() ||
+    !bound_once_at_top_level(converter_.ast()["body"], name))
+    return nil_exprt();
+
+  const std::string object_id = source->id.as_string() + "$object";
+  if (!converter_.symbol_table().find_symbol(object_id))
+  {
+    symbolt object;
+    object.id = object_id;
+    object.name = name + "$object";
+    object.set_type(migrate_type(rhs.type()));
+    object.lvalue = true;
+    object.static_lifetime = true;
+    object.is_extern = false;
+    converter_.symbol_table().add(object);
+  }
+  const symbolt *object = converter_.symbol_table().find_symbol(object_id);
+
+  // The name is never rebound, so every store writes the same value.
+  code_assignt store(build_symbol(*object), rhs);
+  store.location() = location;
+  instructions.push_back(store);
+
+  elem_size = type_handler_.tagged_scalar_byte_size(rhs);
+  return build_typecast(
+    build_address_of(build_symbol(*object)), pointer_typet(empty_typet()));
+}
+
 exprt dynamic_type_handler::build_scalar_payload(
   const exprt &rhs,
   const locationt &location,
@@ -852,13 +922,15 @@ std::vector<codet> dynamic_type_handler::build_tag_field_assigns(
 {
   std::vector<codet> instructions;
 
-  // Tags built from one interned str share its object, so `is` between them
-  // holds (#9348).
+  // Tags built from one object share it as their payload, so `is` between
+  // them holds (#9348).
   exprt elem_size;
   exprt tag_value;
   if (const auto text = interned_str_literal(rhs))
     tag_value = interned_str_payload(*text, rhs, elem_size);
   else
+    tag_value = module_name_payload(rhs, location, instructions, elem_size);
+  if (tag_value.is_nil())
     tag_value = build_scalar_payload(rhs, location, instructions, elem_size);
 
   // Normalise to the canonical str type before hashing, so type_id
