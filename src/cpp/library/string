@@ -3389,46 +3389,53 @@ getline(istream &is, basic_string<CharT, Traits, Alloc> &str, char delim);
 template <typename CharT, typename Traits, typename Alloc>
 istream &getline(istream &is, basic_string<CharT, Traits, Alloc> &str);
 
-std::string to_string(int value)
+// N4659 [string.conversions]/7: the value printed as by sprintf with the
+// overload's own length modifier, so no overload narrows through int.
+static std::string
+__esbmc_integer_to_string(unsigned long long magnitude, bool negative)
 {
-  char buffer[50];
-  itoa(value, buffer, 10);
-  return string(buffer);
-}
-
-std::string to_string(long value)
-{
-  char buffer[50];
-  itoa(value, buffer, 10);
-  return string(buffer);
+  char buffer[22];
+  int i = sizeof(buffer) - 1;
+  buffer[i] = '\0';
+  do
+  {
+    buffer[--i] = '0' + magnitude % 10;
+    magnitude /= 10;
+  } while (magnitude != 0);
+  if (negative)
+    buffer[--i] = '-';
+  return string(&buffer[i]);
 }
 
 std::string to_string(long long value)
 {
-  char buffer[50];
-  itoa(value, buffer, 10);
-  return string(buffer);
+  return __esbmc_integer_to_string(
+    value < 0 ? 0ULL - (unsigned long long)value : value, value < 0);
 }
 
-std::string to_string(unsigned value)
+std::string to_string(int value)
 {
-  char buffer[50];
-  itoa(value, buffer, 10);
-  return string(buffer);
+  return to_string((long long)value);
 }
 
-std::string to_string(unsigned long value)
+std::string to_string(long value)
 {
-  char buffer[50];
-  itoa(value, buffer, 10);
-  return string(buffer);
+  return to_string((long long)value);
 }
 
 std::string to_string(unsigned long long value)
 {
-  char buffer[50];
-  itoa(value, buffer, 10);
-  return string(buffer);
+  return __esbmc_integer_to_string(value, false);
+}
+
+std::string to_string(unsigned value)
+{
+  return to_string((unsigned long long)value);
+}
+
+std::string to_string(unsigned long value)
+{
+  return to_string((unsigned long long)value);
 }
 
 std::string to_string(float value)
