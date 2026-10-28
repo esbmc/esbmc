@@ -420,10 +420,23 @@ class VarargMixin:
         spec.body = packs + spec.body
         self.functionParams[spec_name] = [arg.arg for arg in spec.args.args]
         self.functionKwonlyParams[spec_name] = []
-        if vararg_name in packed_params and vararg_name not in self._names_bound_in(func_def.body):
-            self._spell_out_forwarded_varargs(spec, vararg_name, pad)
+        vararg_name, kwarg_name = self._forwarded_packs(func_def, packed_params)
+        if vararg_name or kwarg_name:
+            self._spell_out_forwarded_varargs(spec, vararg_name, pad, kwarg_name,
+                                              list(zip(kwnames, kw_pad)))
         ast.fix_missing_locations(spec)
         return spec
+
+    def _forwarded_packs(self, func_def, packed_params):
+        """The *args and **kwargs names each copy of `func_def` can spell out."""
+        bound = self._names_bound_in(func_def.body)
+        vararg = func_def.args.vararg.arg if func_def.args.vararg else None
+        kwarg = func_def.args.kwarg.arg if func_def.args.kwarg else None
+        if vararg not in packed_params or vararg in bound:
+            vararg = None
+        if kwarg not in packed_params or not self._only_forwarded(func_def.body, kwarg, bound):
+            kwarg = None
+        return vararg, kwarg
 
     def _forwards_own_varargs(self, node):
         """Whether each `*x` in call `node` forwards the visited def's own *args.
@@ -443,6 +456,25 @@ class VarargMixin:
             isinstance(arg.value, ast.Name) and arg.value.id == vararg for arg in node.args
             if isinstance(arg, ast.Starred))
 
+    def _forwards_own_kwargs(self, node):
+        """Whether call `node` splats only the visited def's own **kwargs.
+
+        Each fixed-arity copy of the def spells the splat out as the keywords
+        it packs, so binding waits for the copy.
+        """
+        func_def = self._vararg_scope_stack[-1] if self._vararg_scope_stack else None
+        if (func_def is None or func_def.args.kwarg is None or not isinstance(node.func, ast.Name)
+                or not any(kw.arg is None for kw in node.keywords)):
+            return False
+        kwarg = func_def.args.kwarg.arg
+        params = func_def.args.posonlyargs + func_def.args.args + func_def.args.kwonlyargs
+        bound = self._names_bound_in(func_def.body) | {arg.arg for arg in params}
+        if node.func.id in bound or not self._only_forwarded(func_def.body, kwarg, bound):
+            return False
+        return all(
+            isinstance(kw.value, ast.Name) and kw.value.id == kwarg for kw in node.keywords
+            if kw.arg is None)
+
     def _names_bound_in(self, body):
         return {
             name
@@ -451,20 +483,53 @@ class VarargMixin:
             for name in self._bound_names(inner)
         }
 
-    def _spell_out_forwarded_varargs(self, spec, vararg_name, pad):
-        """Pass each `*vararg_name` in `spec` as the names it packs, then bind the call."""
+    @staticmethod
+    def _only_forwarded(body, kwarg_name, bound):
+        """Whether `body` reads `kwarg_name` only as `**kwarg_name`, so it is never mutated."""
+        if kwarg_name in bound:
+            return False
+        nodes = [inner for stmt in body for inner in ast.walk(stmt)]
+        splats = {
+            id(node.value)
+            for node in nodes if isinstance(node, ast.keyword) and node.arg is None
+        }
+        return all(
+            id(node) in splats for node in nodes
+            if isinstance(node, ast.Name) and node.id == kwarg_name)
+
+    def _spell_out_forwarded_varargs(self, spec, vararg_name, pad, kwarg_name, kw_pad):
+        """Pass each `*vararg_name` and `**kwarg_name` in `spec` as the names they pack,
+        then bind the call."""
         mixin = self
 
         def forwarded(arg):
             return (isinstance(arg, ast.Starred) and isinstance(arg.value, ast.Name)
                     and arg.value.id == vararg_name)
 
+        def forwarded_kwargs(kw):
+            return (kw.arg is None and isinstance(kw.value, ast.Name) and kw.value.id == kwarg_name)
+
+        def spelled_keywords(node):
+            if not any(forwarded_kwargs(kw) for kw in node.keywords):
+                return node.keywords
+            keywords = []
+            for kw in node.keywords:
+                if forwarded_kwargs(kw):
+                    keywords.extend(
+                        ast.copy_location(
+                            ast.keyword(arg=key, value=ast.Name(id=name, ctx=ast.Load())), kw)
+                        for key, name in kw_pad)
+                else:
+                    keywords.append(kw)
+            return keywords
+
         class Forward(ast.NodeTransformer):
-            """Splice the packed names into each call that forwards `*vararg_name`."""
+            """Splice the packed names into each call that forwards them."""
 
             def visit_Call(self, node):  # pylint: disable=invalid-name,missing-function-docstring
                 self.generic_visit(node)
-                if not any(forwarded(arg) for arg in node.args):
+                keywords = spelled_keywords(node)
+                if keywords is node.keywords and not any(forwarded(arg) for arg in node.args):
                     return node
                 args = []
                 for arg in node.args:
@@ -475,6 +540,13 @@ class VarargMixin:
                     else:
                         args.append(arg)
                 node.args = args
+                node.keywords = keywords
+                names = [kw.arg for kw in keywords if kw.arg is not None]
+                repeated = next((name for name in names if names.count(name) > 1), None)
+                if repeated is not None:
+                    message = (f"{ast.unparse(node.func)}() got multiple values for keyword "
+                               f"argument '{repeated}'")
+                    return mixin.visit(mixin._raising_call(node, message))  # pylint: disable=protected-access
                 raising = mixin._bind_call_arguments(node)  # pylint: disable=protected-access
                 if raising is not None:
                     return raising
