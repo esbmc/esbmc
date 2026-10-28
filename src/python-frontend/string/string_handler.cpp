@@ -3128,10 +3128,17 @@ exprt string_handler::read_tagged_str_receiver(
     return receiver;
 
   // The receiver is read twice, so only a symbol qualifies, and the guard
-  // must run exactly where the call is evaluated.
-  if (
-    !receiver.is_symbol() || !type_utils::is_str_only_method(method) ||
-    !converter_.can_emit_runtime_guard())
+  // must run exactly where the call is evaluated. A type probe is discarded,
+  // so it only needs the type of the str the real conversion reads.
+  if (!receiver.is_symbol() || !type_utils::is_str_only_method(method))
+    throw std::runtime_error(
+      "calling '" + method +
+      "' on a dynamically-typed variable is not yet supported");
+  if (converter_.in_type_probe())
+    return build_typecast(
+      build_member(receiver, "value", pointer_typet(empty_typet())),
+      pointer_typet(char_type()));
+  if (!converter_.can_emit_runtime_guard())
     throw std::runtime_error(
       "calling '" + method +
       "' on a dynamically-typed variable is not yet supported");
