@@ -165,6 +165,16 @@ def _takes_positional(fn, count):
                 or args.posonlyargs) and len(args.args) == count
 
 
+def _always_returns(block):
+    """Whether every path through `block` ends in a `return` or a `raise`."""
+    if not block:
+        return False
+    last = block[-1]
+    if isinstance(last, (ast.Return, ast.Raise)):
+        return True
+    return isinstance(last, ast.If) and _always_returns(last.body) and _always_returns(last.orelse)
+
+
 def _is_callee(parent, node):
     return isinstance(parent, ast.Call) and parent.func is node
 
@@ -206,6 +216,8 @@ class _Plan:
         self.groups = []
         self.holders = {}
         self.param_holders = {}
+        self.returners = {}
+        self.returned_names = set()
         self.local_fns = set()
         self.imported = set()
         defs = {stmt.name: stmt for stmt in module.body if isinstance(stmt, ast.FunctionDef)}
@@ -235,6 +247,9 @@ class _Plan:
         for key in [k for k in analysis.parent if analysis.find(k) == root]:
             if key[0] == "elements":
                 continue
+            if key[0] == "result":
+                self._add_returner(by_id.get(key[1]), group)
+                continue
             if key[0] == "name" and key[1] in by_id:
                 self._add_param_holder(analysis, by_id[key[1]], key[2], group)
                 continue
@@ -242,6 +257,12 @@ class _Plan:
                 raise _Refused
             if key[2] not in self.functions:
                 self.holders[key[2]] = group
+
+    def _add_returner(self, fn, group):
+        """Record a module-level def whose every return is a function of `group`."""
+        if fn is None or fn.name in self.returners:
+            raise _Refused
+        self.returners[fn.name] = group
 
     def _add_param_holder(self, analysis, fn, param, group):
         """Record a parameter or local of a module-level def, which the def may dispatch on."""
@@ -299,6 +320,8 @@ class _Plan:
             depth = self._value_kind(expr.value, seen)
             if depth > 0:
                 return depth - 1
+        elif self._is_returner_call(expr):
+            return 0
         raise _Refused
 
     def _literal_kind(self, literal, seen):
@@ -309,6 +332,10 @@ class _Plan:
         if len(kinds) != 1:
             raise _Refused
         return kinds.pop() + 1
+
+    def _is_returner_call(self, expr):
+        return isinstance(expr, ast.Call) and isinstance(
+            expr.func, ast.Name) and expr.func.id in self.returners
 
     @classmethod
     def _is_element(cls, expr):
@@ -333,6 +360,9 @@ class _Plan:
     # uses
     def check_uses(self):
         names = set(self.functions) | set(self.holders) | set(self.param_holders)
+        names |= set(self.returners)
+        for name in self.returners:
+            self._check_returner(self.defs[name], self.returners[name])
         bound = _bound_names([self.module])
         if bound & _REFLECTIVE or any(n.startswith(_PREFIX) for n in bound):
             raise _Refused
@@ -361,8 +391,41 @@ class _Plan:
             parent = self.parents.get(id(parent))
         return False
 
+    def _check_returner(self, fn, group):
+        """`fn` has no nested scope and returns a function of `group` on every path."""
+        body = ast.Module(fn.body, [])
+        if fn.name in self.functions or fn.decorator_list or not _always_returns(fn.body) or any(
+                isinstance(
+                    n, _NESTED + (ast.Yield, ast.YieldFrom, ast.Await, ast.Global, ast.Nonlocal))
+                for n in ast.walk(body)):
+            raise _Refused
+        for node in ast.walk(body):
+            if isinstance(node, ast.Return):
+                self._check_returned_function(node.value, group)
+
+    def _check_returned_function(self, expr, group):
+        if isinstance(expr, ast.IfExp):
+            self._check_returned_function(expr.body, group)
+            self._check_returned_function(expr.orelse, group)
+        elif isinstance(expr, ast.Name) and self.functions.get(expr.id, (None, ))[0] == group:
+            setattr(expr, _CODE, self.functions[expr.id][1])
+            self.returned_names.add(id(expr))
+        else:
+            raise _Refused
+
+    def _check_returner_use(self, node, parent):
+        """A returner is only called, at module level, for a value that a code can stand for."""
+        if not (_is_callee(parent, node) and not self._nested(node)):
+            raise _Refused
+        self._check_value(parent)
+
     def _check_use(self, node):
         parent = self.parents[id(node)]
+        if id(node) in self.returned_names:
+            return
+        if node.id in self.returners:
+            self._check_returner_use(node, parent)
+            return
         if _is_callee(parent, node) and node.id in self.callable_names:
             return
         if self._nested(node) or node.id in self.param_holders:
@@ -652,6 +715,8 @@ class _Plan:
     def _is_code(self, expr):
         if isinstance(expr, ast.Name):
             return expr.id in self.functions or self.kinds.get(expr.id) == 0
+        if self._is_returner_call(expr):
+            return True
         return self._is_element(expr) and self._element_kind(expr) == 0
 
     def _check_site(self, call):
