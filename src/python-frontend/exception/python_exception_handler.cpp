@@ -438,6 +438,36 @@ bool python_exception_handler::raises_instance_variable(
          converter_.find_symbol("tag-" + exc_name) == nullptr;
 }
 
+std::string
+python_exception_handler::module_class_name(const nlohmann::json &node) const
+{
+  if (
+    node.value("_type", "") != "Attribute" || !node["attr"].is_string() ||
+    node["value"].value("_type", "") != "Name" ||
+    !node["value"]["id"].is_string())
+    return "";
+
+  const std::string module_name = node["value"]["id"].get<std::string>();
+  const std::string class_name = node["attr"].get<std::string>();
+  if (
+    !json_utils::imports_module(converter_.ast(), module_name) ||
+    !converter_.is_module_receiver(module_name, node["value"], node))
+    return "";
+
+  // A class symbol is keyed by name alone, so `m.E` resolves only when the
+  // converted `E` comes from m's own file and no other module defines an `E`
+  // that would share its symbol.
+  const nlohmann::json *module =
+    json_utils::load_module_json(module_name, converter_.ast());
+  const symbolt *cls = converter_.find_symbol("tag-" + class_name);
+  if (
+    !module || !cls ||
+    cls->module.as_string() != module->value("filename", std::string()) ||
+    json_utils::count_emitted_classes(class_name, converter_.ast()) != 1)
+    return "";
+  return class_name;
+}
+
 exprt python_exception_handler::build_builtin_exception(
   const nlohmann::json &exc,
   const typet &type) const
@@ -503,8 +533,10 @@ void python_exception_handler::get_raise_statement(
     exc_name = element["exc"]["id"].get<std::string>();
   else if (element["exc"].is_string())
     exc_name = element["exc"].get<std::string>();
+  else if (element["exc"].contains("func"))
+    exc_name = module_class_name(element["exc"]["func"]);
   else
-    exc_name = ""; // fallback
+    exc_name = module_class_name(element["exc"]);
 
   typet type;
   exprt raise;
@@ -623,15 +655,17 @@ void python_exception_handler::emit_catch_block(
   // Create exception variable symbol before processing body
   if (!type_node.is_null())
   {
-    // Only a bare name (`except ValueError:`) is modelled. A dotted type such
-    // as `except socket.error:` is an Attribute node with no "id"; reject it
-    // with a clean diagnostic rather than crashing on the missing json key.
-    if (!type_node.contains("id"))
+    // A bare name (`except ValueError:`) or a class of an imported module
+    // (`except subprocess.SubprocessError:`) is modelled. Any other dotted
+    // type, such as `except socket.error:` with socket unmodelled, is refused.
+    const std::string type_name = type_node.contains("id")
+                                    ? type_node["id"].get<std::string>()
+                                    : module_class_name(type_node);
+    if (type_name.empty())
       throw std::runtime_error(
         "except with a dotted/attribute exception type is not supported");
 
-    exception_type =
-      type_handler_.get_typet(type_node["id"].get<std::string>());
+    exception_type = type_handler_.get_typet(type_name);
 
     std::string name;
     symbol_id sid = converter_.create_symbol_id();

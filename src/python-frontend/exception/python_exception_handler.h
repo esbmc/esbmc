@@ -167,6 +167,11 @@ private:
     const nlohmann::json &exc,
     const std::string &exc_name) const;
 
+  /// The class `E` that `m.E` names when `m` is bound by a top-level
+  /// `import m` and the converted class `E` is m's and the only one so named,
+  /// or "".
+  std::string module_class_name(const nlohmann::json &node) const;
+
   /// Copies `finalbody` in front of every return/break/continue in `body` that
   /// leaves the enclosing try, so those exit edges run the finally as CPython
   /// does. A returned expression is spilled to a temporary first, because

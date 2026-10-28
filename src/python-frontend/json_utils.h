@@ -437,6 +437,64 @@ void collect_class_definition_lines(
   }
 }
 
+/// The parsed JSON file at `path`, or null when it cannot be read. Files are
+/// cached to avoid repeated filesystem reads.
+template <typename JsonType>
+const JsonType *load_json_file(const std::string &path)
+{
+  static std::unordered_map<std::string, JsonType> cache;
+
+  auto it = cache.find(path);
+  if (it == cache.end())
+  {
+    std::ifstream f(path);
+    if (!f.is_open())
+      return nullptr;
+    it = cache.emplace(path, JsonType::parse(f, nullptr, false)).first;
+  }
+  return it->second.is_discarded() ? nullptr : &it->second;
+}
+
+/// The JSON emitted for imported module `module_name`, or null when there is
+/// none.
+template <typename JsonType>
+const JsonType *
+load_module_json(const std::string &module_name, const JsonType &ast_json)
+{
+  if (!ast_json.contains("ast_output_dir"))
+    return nullptr;
+
+  return load_json_file<JsonType>(
+    ast_json["ast_output_dir"].template get<std::string>() + "/" +
+    dotted_to_path(module_name) + ".json");
+}
+
+/// How many classes named `class_name` the emitted modules define, at any
+/// scope the converter registers a class symbol for.
+template <typename JsonType>
+size_t
+count_emitted_classes(const std::string &class_name, const JsonType &ast_json)
+{
+  if (!ast_json.contains("ast_output_dir"))
+    return 0;
+
+  std::vector<int> lines;
+  std::error_code ec;
+  for (std::filesystem::recursive_directory_iterator
+         it(ast_json["ast_output_dir"].template get<std::string>(), ec),
+       end;
+       !ec && it != end;
+       it.increment(ec))
+  {
+    if (it->path().extension() != ".json")
+      continue;
+    const JsonType *module = load_json_file<JsonType>(it->path().string());
+    if (module && module->contains("body"))
+      collect_class_definition_lines((*module)["body"], class_name, lines);
+  }
+  return lines.size();
+}
+
 template <typename JsonType>
 bool is_class(const std::string &name, const JsonType &ast_json)
 {
@@ -451,36 +509,18 @@ bool is_class(const std::string &name, const JsonType &ast_json)
   if (count_function_scope_classes(ast_json["body"], name) == 1)
     return true;
 
-  // Cache loaded module JSONs
-  // To avoid repeated filesystem reads across calls
-  static std::unordered_map<std::string, JsonType> module_cache;
-
   // ast_output_dir may be absent in minimal/test JSON documents
   // that have no imported modules;
   // skip the import scan in that case.
   if (!ast_json.contains("ast_output_dir"))
     return false;
 
-  const std::string output_dir =
-    ast_json["ast_output_dir"].template get<std::string>();
-
   // Check whether name is a class defined in an imported module
   // Use continue after a negative result
   // so that all Import&ImportFrom nodes are scanned
   auto load_and_check = [&](const std::string &module_name) -> bool {
-    const std::string path =
-      output_dir + "/" + dotted_to_path(module_name) + ".json";
-    auto it = module_cache.find(path);
-    if (it == module_cache.end())
-    {
-      std::ifstream f(path);
-      if (!f.is_open())
-        return false;
-      JsonType j;
-      f >> j;
-      it = module_cache.emplace(path, std::move(j)).first;
-    }
-    return is_class(name, it->second);
+    const JsonType *module = load_module_json(module_name, ast_json);
+    return module && is_class(name, *module);
   };
 
   for (const auto &obj : ast_json["body"])
@@ -567,6 +607,23 @@ JsonType &find_function_or_throw(JsonType &json, const std::string &func_name)
       return elem;
   }
   throw std::runtime_error("Function " + func_name + " not found\n");
+}
+
+/// True when `import <module>` (without an alias) appears at the AST top level.
+template <typename JsonType>
+bool imports_module(const JsonType &ast, const std::string &module)
+{
+  for (const auto &stmt : ast["body"])
+  {
+    if (stmt.value("_type", "") != "Import" || !stmt.contains("names"))
+      continue;
+    for (const auto &name : stmt["names"])
+      if (
+        name.value("name", "") == module &&
+        name.value("asname", JsonType()).is_null())
+        return true;
+  }
+  return false;
 }
 
 /// True when `from <module> import <entity>` appears at the AST top level.
