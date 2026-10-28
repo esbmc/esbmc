@@ -1142,6 +1142,8 @@ void clang_c_adjust::adjust_side_effect_assignment(exprt &expr)
     statement == "assign_shl" || statement == "assign_shr" ||
     statement == "assign_lshr" || statement == "assign_ashr")
   {
+    // C11 6.5.7p3: each operand is promoted on its own (#9436).
+    gen_typecast_arithmetic(ns, op0);
     gen_typecast_arithmetic(ns, op1);
 
     if (is_number(op1.type()))
