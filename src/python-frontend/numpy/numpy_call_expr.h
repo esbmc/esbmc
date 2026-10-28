@@ -301,10 +301,14 @@ private:
     const std::vector<std::vector<double>> &m);
   void assume_singular_order(const std::vector<exprt> &sigmas);
   exprt linalg_inverse(const std::vector<std::vector<double>> &m);
-  std::vector<std::vector<exprt>> runtime_entries(const nlohmann::json &arg);
+  std::vector<std::vector<exprt>>
+  runtime_entries(const nlohmann::json &arg, std::size_t &rank);
   exprt within_radius(const exprt &value, const exprt &radius);
   exprt symbolic_det(const nlohmann::json &arg, bool strings);
   exprt symbolic_norm(const nlohmann::json &arg, norm_order order);
+  exprt linalg_norm(const std::function<void(nlohmann::json &)> &unwrap);
+  exprt
+  norm_array(const std::vector<std::vector<double>> &rows, bool as_matrix);
   exprt linalg_solve(
     const std::string &function,
     const std::vector<std::vector<double>> &m,

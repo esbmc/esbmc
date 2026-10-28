@@ -2047,12 +2047,19 @@ static std::size_t searchsorted_position(
   return elements.size();
 }
 
+// `ord` of numpy.linalg.norm: none is the default (2 for vectors, the
+// Frobenius norm for matrices) and other any order the frontend does not
+// model.
 enum class norm_order
 {
+  none,
   l2,
   l1,
+  minus_one,
   positive_inf,
-  negative_inf
+  negative_inf,
+  frobenius,
+  other
 };
 
 static bool is_numpy_inf_attr(const nlohmann::json &node)
@@ -2065,17 +2072,31 @@ static bool is_numpy_inf_attr(const nlohmann::json &node)
          node["value"].value("id", std::string()) == "np";
 }
 
+// `ord` given as None, a string or a number; nullopt for anything else.
+static std::optional<norm_order> constant_norm_order(const nlohmann::json &node)
+{
+  if (node.value("_type", "") == "Constant" && node.contains("value"))
+  {
+    if (node["value"].is_null())
+      return norm_order::none;
+    if (node["value"].is_string())
+      return node["value"] == "fro" ? norm_order::frobenius : norm_order::other;
+  }
+  static const std::map<double, norm_order> orders = {
+    {1.0, norm_order::l1},
+    {2.0, norm_order::l2},
+    {-1.0, norm_order::minus_one}};
+  numeric_value value;
+  if (!try_extract_numeric_constant(node, value))
+    return std::nullopt;
+  auto order = orders.find(to_double(value));
+  return order == orders.end() ? norm_order::other : order->second;
+}
+
 static norm_order parse_norm_order(const nlohmann::json &node)
 {
-  numeric_value value;
-  if (try_extract_numeric_constant(node, value))
-  {
-    const double order = to_double(value);
-    if (order == 1.0)
-      return norm_order::l1;
-    if (order == 2.0)
-      return norm_order::l2;
-  }
+  if (const std::optional<norm_order> order = constant_norm_order(node))
+    return *order;
 
   if (is_numpy_inf_attr(node))
     return norm_order::positive_inf;
@@ -5958,7 +5979,7 @@ cofactor_terms(const std::vector<std::vector<exprt>> &m)
 // The entries of a numeric array of rank 1 or 2 known only at run time, as
 // doubles read from it once, rows of one row for rank 1; empty otherwise.
 std::vector<std::vector<exprt>>
-numpy_call_expr::runtime_entries(const nlohmann::json &arg)
+numpy_call_expr::runtime_entries(const nlohmann::json &arg, std::size_t &rank)
 {
   exprt *lhs = converter_.current_lhs;
   converter_.current_lhs = nullptr;
@@ -5971,6 +5992,7 @@ numpy_call_expr::runtime_entries(const nlohmann::json &arg)
     shape.empty() || shape.size() > 2 || !is_number_type(leaf) ||
     leaf == char_type())
     return {};
+  rank = shape.size();
   const exprt array = bind_array_once(value);
   std::vector<exprt> rows = {array};
   if (shape.size() == 2)
@@ -6012,14 +6034,52 @@ exprt numpy_call_expr::within_radius(const exprt &value, const exprt &radius)
   return result;
 }
 
+// The largest (`better` ">") or smallest magnitude, NaN when one is NaN.
+static exprt
+extreme_magnitude(const std::vector<exprt> &magnitudes, const char *better)
+{
+  exprt extreme = magnitudes.front();
+  exprt::operandst nans;
+  for (const exprt &magnitude : magnitudes)
+  {
+    extreme = if_exprt(
+      binary_relation_exprt(magnitude, better, extreme), magnitude, extreme);
+    expr2tc magnitude2;
+    migrate_expr(magnitude, magnitude2);
+    nans.push_back(migrate_expr_back(isnan2tc(magnitude2)));
+  }
+  return if_exprt(or_exprt(nans), from_double(NAN, double_type()), extreme);
+}
+
+// The sum of the magnitudes, or the square root of the sum of their squares.
+static exprt
+sum_of_magnitudes(const std::vector<exprt> &magnitudes, bool squares)
+{
+  exprt sum = nil_exprt();
+  for (const exprt &magnitude : magnitudes)
+  {
+    const exprt term =
+      squares ? ieee_op("ieee_mul", magnitude, magnitude) : magnitude;
+    sum = sum.is_nil() ? term : ieee_op("ieee_add", sum, term);
+  }
+  if (!squares)
+    return sum;
+  exprt root("ieee_sqrt", double_type());
+  root.copy_to_operands(sum);
+  root.add("rounding_mode") =
+    symbol_exprt("c:@__ESBMC_rounding_mode", int_type());
+  return root;
+}
+
 // det of a matrix of order at most 3 with entries known only at run time:
 // the cofactor expansion, within lapack_tolerance of the sum of its terms'
 // magnitudes, which covers LU's rounding and NumPy's sum of logarithms.
 exprt numpy_call_expr::symbolic_det(const nlohmann::json &arg, bool strings)
 {
+  std::size_t rank = 0;
   const std::vector<std::vector<exprt>> m =
-    strings ? std::vector<std::vector<exprt>>() : runtime_entries(arg);
-  if (m.size() < 2 || m.size() > 3 || m.size() != m.front().size())
+    strings ? std::vector<std::vector<exprt>>() : runtime_entries(arg, rank);
+  if (rank != 2 || m.size() < 2 || m.size() > 3 || m.size() != m.front().size())
     throw std::runtime_error(
       "TypeError: numpy.linalg.det currently supports only constant 2D "
       "numeric arrays");
@@ -6037,53 +6097,236 @@ exprt numpy_call_expr::symbolic_norm(
   const nlohmann::json &arg,
   norm_order order)
 {
-  const std::vector<std::vector<exprt>> m = runtime_entries(arg);
-  if (m.empty() || (m.size() > 1 && order != norm_order::l2))
+  std::size_t rank = 0;
+  const std::vector<std::vector<exprt>> m = runtime_entries(arg, rank);
+  const bool sum_of_squares =
+    order == norm_order::none ||
+    order == (rank == 1 ? norm_order::l2 : norm_order::frobenius);
+  const bool vector_order = order == norm_order::l1 ||
+                            order == norm_order::positive_inf ||
+                            order == norm_order::negative_inf;
+  if (m.empty() || !(sum_of_squares || (rank == 1 && vector_order)))
     throw std::runtime_error(
       "TypeError: numpy.linalg.norm currently supports only constant "
       "numeric arrays");
   std::vector<exprt> magnitudes;
-  exprt::operandst nans;
   for (const auto &row : m)
     for (const exprt &entry : row)
-    {
       magnitudes.push_back(abs_double(entry));
-      expr2tc entry2;
-      migrate_expr(entry, entry2);
-      nans.push_back(migrate_expr_back(isnan2tc(entry2)));
-    }
   if (order == norm_order::positive_inf || order == norm_order::negative_inf)
-  {
-    const char *better = order == norm_order::positive_inf ? ">" : "<";
-    exprt extreme = magnitudes.front();
-    for (std::size_t i = 1; i < magnitudes.size(); ++i)
-      extreme = if_exprt(
-        binary_relation_exprt(magnitudes[i], better, extreme),
-        magnitudes[i],
-        extreme);
-    return if_exprt(or_exprt(nans), from_double(NAN, double_type()), extreme);
-  }
-  exprt sum = order == norm_order::l1
-                ? magnitudes.front()
-                : ieee_op("ieee_mul", magnitudes.front(), magnitudes.front());
-  for (std::size_t i = 1; i < magnitudes.size(); ++i)
-    sum = ieee_op(
-      "ieee_add",
-      sum,
-      order == norm_order::l1
-        ? magnitudes[i]
-        : ieee_op("ieee_mul", magnitudes[i], magnitudes[i]));
-  exprt value = sum;
-  if (order == norm_order::l2)
-  {
-    value = exprt("ieee_sqrt", double_type());
-    value.copy_to_operands(sum);
-    value.add("rounding_mode") =
-      symbol_exprt("c:@__ESBMC_rounding_mode", int_type());
-  }
+    return extreme_magnitude(
+      magnitudes, order == norm_order::positive_inf ? ">" : "<");
+  const exprt value = sum_of_magnitudes(magnitudes, sum_of_squares);
   return within_radius(
     value,
     ieee_op("ieee_mul", from_double(lapack_tolerance, double_type()), value));
+}
+
+namespace
+{
+struct norm_request
+{
+  norm_order order = norm_order::none;
+  std::optional<long long> axis;
+  bool keepdims = false;
+};
+} // namespace
+
+static norm_request parse_norm_request(const nlohmann::json &call)
+{
+  norm_request request;
+  if (call["args"].size() == 2)
+    request.order = parse_norm_order(call["args"][1]);
+  for (const auto &kw : call.value("keywords", nlohmann::json::array()))
+  {
+    const std::string arg = kw.value("arg", "");
+    numeric_value value;
+    if (arg == "ord")
+      request.order = parse_norm_order(kw["value"]);
+    else if (arg == "keepdims")
+      request.keepdims = kw["value"].value("value", nlohmann::json()) == true;
+    else if (arg == "axis" && try_extract_numeric_constant(kw["value"], value))
+      request.axis = value.int_value;
+    else if (arg != "axis" || !kw["value"]["value"].is_null())
+      throw std::runtime_error(
+        "TypeError: numpy.linalg.norm keyword '" + arg + "' is not supported");
+  }
+  return request;
+}
+
+static double vector_norm(const std::vector<double> &v, norm_order order)
+{
+  if (order == norm_order::frobenius)
+    throw std::runtime_error(
+      "ValueError: Invalid norm order 'fro' for vectors");
+  double squares = 0.0, sum = 0.0, largest = 0.0, smallest = INFINITY;
+  for (double value : v)
+  {
+    squares += value * value;
+    sum += std::fabs(value);
+    largest = std::max(largest, std::fabs(value));
+    smallest = std::min(smallest, std::fabs(value));
+  }
+  if (v.empty() || order == norm_order::none || order == norm_order::l2)
+    return std::sqrt(squares);
+  if (order == norm_order::l1)
+    return sum;
+  if (order == norm_order::positive_inf)
+    return largest;
+  if (order == norm_order::negative_inf)
+    return smallest;
+  throw std::runtime_error(
+    "TypeError: numpy.linalg.norm order is not supported");
+}
+
+// The largest or smallest absolute sum of a column (by_rows false) or a row.
+static double absolute_sum_extreme(
+  const std::vector<std::vector<double>> &m,
+  bool by_rows,
+  bool largest)
+{
+  std::vector<double> sums(by_rows ? m.size() : m.front().size(), 0.0);
+  for (std::size_t i = 0; i < m.size(); ++i)
+    for (std::size_t j = 0; j < m[i].size(); ++j)
+      sums[by_rows ? i : j] += std::fabs(m[i][j]);
+  return largest ? *std::max_element(sums.begin(), sums.end())
+                 : *std::min_element(sums.begin(), sums.end());
+}
+
+static double
+matrix_norm(const std::vector<std::vector<double>> &m, norm_order order)
+{
+  if (order == norm_order::none || order == norm_order::frobenius)
+    return frobenius_norm(m);
+  if (order == norm_order::l1 || order == norm_order::minus_one)
+    return absolute_sum_extreme(m, false, order == norm_order::l1);
+  if (order == norm_order::positive_inf || order == norm_order::negative_inf)
+    return absolute_sum_extreme(m, true, order == norm_order::positive_inf);
+  if (order != norm_order::l2)
+    throw std::runtime_error("ValueError: Invalid norm order for matrices.");
+  if (m.size() != 2 || m[0].size() != 2)
+    throw std::runtime_error(
+      "TypeError: numpy.linalg.norm ord=2 of a matrix supports only 2x2 "
+      "matrices");
+  const double a = m[0][0], b = m[0][1], c = m[1][0], d = m[1][1];
+  return (std::hypot(a + d, c - b) + std::hypot(a - d, b + c)) / 2;
+}
+
+// The norms along `axis` of a matrix: of each column for axis 0, of each row
+// for axis 1.
+static std::vector<double> axis_norms(
+  const std::vector<std::vector<double>> &m,
+  long long axis,
+  norm_order order)
+{
+  std::vector<std::vector<double>> lines;
+  for (std::size_t k = 0; k < (axis == 0 ? m.front().size() : m.size()); ++k)
+  {
+    lines.emplace_back();
+    for (std::size_t i = 0; i < (axis == 0 ? m.size() : m[k].size()); ++i)
+      lines.back().push_back(axis == 0 ? m[i][k] : m[k][i]);
+  }
+  std::vector<double> norms;
+  for (const auto &line : lines)
+    norms.push_back(vector_norm(line, order));
+  return norms;
+}
+
+// The constant numeric array norm reads, as rows of one row for a vector;
+// nullopt when it is not constant.
+static std::optional<std::vector<std::vector<double>>>
+constant_norm_operand(const nlohmann::json &arg, std::size_t &rank)
+{
+  std::vector<scalar_value> values_1d;
+  std::vector<std::vector<scalar_value>> values_2d;
+  if (try_extract_scalar_1d_list(arg, values_1d))
+  {
+    rank = 1;
+    values_2d = {values_1d};
+  }
+  else if (try_extract_scalar_2d_list(arg, values_2d) && !values_2d.empty())
+    rank = 2;
+  else
+    return std::nullopt;
+  for (const auto &row : values_2d)
+    for (const auto &value : row)
+      if (value.is_complex)
+        throw std::runtime_error(
+          "TypeError: numpy.linalg.norm does not support complex values");
+  return real_matrix(values_2d);
+}
+
+// `axis` counted from the front, or NumPy's AxisError when it is out of
+// bounds; 0 when there is none.
+static long long
+checked_norm_axis(const std::optional<long long> &axis, std::size_t rank)
+{
+  if (!axis)
+    return 0;
+  const long long front =
+    *axis < 0 ? *axis + static_cast<long long>(rank) : *axis;
+  if (front < 0 || front >= static_cast<long long>(rank))
+    throw std::runtime_error(
+      "AxisError: axis " + std::to_string(*axis) +
+      " is out of bounds for array of dimension " + std::to_string(rank));
+  return front;
+}
+
+// numpy.linalg.norm of a constant vector or matrix, along an axis or not,
+// with its keepdims shape; of an array known only at run time, whole.
+exprt numpy_call_expr::linalg_norm(
+  const std::function<void(nlohmann::json &)> &unwrap)
+{
+  if (call_["args"].empty() || call_["args"].size() > 2)
+    throw std::runtime_error(
+      "TypeError: numpy.linalg.norm expects an array and optional order");
+  const norm_request request = parse_norm_request(call_);
+  nlohmann::json arg = call_["args"][0];
+  unwrap(arg);
+  scalar_value scalar;
+  if (try_extract_scalar_constant(arg, scalar))
+    return from_double(std::abs(scalar.value.real()), double_type());
+  std::size_t rank = 0;
+  const auto m = constant_norm_operand(arg, rank);
+  if (!m)
+  {
+    if (request.axis || request.keepdims)
+      throw std::runtime_error(
+        "TypeError: numpy.linalg.norm of a run-time array supports neither "
+        "axis nor keepdims");
+    return symbolic_norm(call_["args"][0], request.order);
+  }
+  const long long axis = checked_norm_axis(request.axis, rank);
+  if (rank == 2 && request.axis)
+  {
+    const std::vector<double> norms = axis_norms(*m, axis, request.order);
+    if (!request.keepdims || axis == 0)
+      return norm_array({norms}, request.keepdims);
+    std::vector<std::vector<double>> column;
+    for (double value : norms)
+      column.push_back({value});
+    return norm_array(column, true);
+  }
+  const double value = rank == 1 ? vector_norm(m->front(), request.order)
+                                 : matrix_norm(*m, request.order);
+  if (!request.keepdims)
+    return from_double(value, double_type());
+  return norm_array({{value}}, rank == 2);
+}
+
+// A norm array: the rows as a matrix, or the single row as a vector.
+exprt numpy_call_expr::norm_array(
+  const std::vector<std::vector<double>> &rows,
+  bool as_matrix)
+{
+  const exprt result =
+    as_matrix ? lapack_matrix(rows, 0.0) : lapack_vector(rows.front(), 0.0);
+  if (converter_.current_lhs)
+  {
+    converter_.current_lhs->type() = result.type();
+    converter_.update_symbol(*converter_.current_lhs);
+  }
+  return result;
 }
 
 // inv: exact when LU's factors are exact, otherwise rounded by about
@@ -7399,104 +7642,7 @@ exprt numpy_call_expr::create_expr_from_call()
     }
 
     if (function == "norm")
-    {
-      if (call_["args"].empty() || call_["args"].size() > 2)
-        throw std::runtime_error(
-          "TypeError: numpy.linalg.norm expects an array and optional order");
-
-      norm_order order = norm_order::l2;
-      if (call_["args"].size() == 2)
-        order = parse_norm_order(call_["args"][1]);
-
-      if (call_.contains("keywords"))
-      {
-        for (const auto &kw : call_["keywords"])
-        {
-          if (kw["_type"] != "keyword" || kw["arg"].is_null())
-            continue;
-
-          const std::string arg = kw["arg"].get<std::string>();
-          if (arg == "axis")
-            throw std::runtime_error(
-              "TypeError: numpy.linalg.norm axis is not supported");
-          if (arg == "ord")
-          {
-            order = parse_norm_order(kw["value"]);
-            continue;
-          }
-          throw std::runtime_error(
-            "TypeError: numpy.linalg.norm keyword '" + arg +
-            "' is not supported");
-        }
-      }
-
-      nlohmann::json arg = call_["args"][0];
-      unwrap_np_array_arg(arg);
-
-      std::vector<scalar_value> values_1d;
-      std::vector<std::vector<scalar_value>> values_2d;
-
-      if (try_extract_scalar_1d_list(arg, values_1d))
-      {
-        if (values_1d.empty())
-          return converter_.get_expr(to_json_constant(make_real_scalar(0.0)));
-
-        double sum_sq = 0.0;
-        double sum_abs = 0.0;
-        double max_abs = 0.0;
-        double min_abs = std::numeric_limits<double>::infinity();
-        for (const auto &v : values_1d)
-        {
-          if (v.is_complex)
-            throw std::runtime_error(
-              "TypeError: numpy.linalg.norm does not support complex values");
-          const double abs_value = std::abs(v.value.real());
-          sum_sq += abs_value * abs_value;
-          sum_abs += abs_value;
-          max_abs = std::max(max_abs, abs_value);
-          min_abs = std::min(min_abs, abs_value);
-        }
-
-        double result = std::sqrt(sum_sq);
-        if (order == norm_order::l1)
-          result = sum_abs;
-        else if (order == norm_order::positive_inf)
-          result = max_abs;
-        else if (order == norm_order::negative_inf)
-          result = min_abs;
-
-        return converter_.get_expr(to_json_constant(make_real_scalar(result)));
-      }
-
-      if (try_extract_scalar_2d_list(arg, values_2d))
-      {
-        if (order != norm_order::l2)
-          throw std::runtime_error(
-            "TypeError: numpy.linalg.norm matrix order is not supported");
-
-        double sum_sq = 0.0;
-        for (const auto &row : values_2d)
-        {
-          for (const auto &v : row)
-          {
-            if (v.is_complex)
-              throw std::runtime_error(
-                "TypeError: numpy.linalg.norm does not support complex "
-                "values");
-            sum_sq += v.value.real() * v.value.real();
-          }
-        }
-        return converter_.get_expr(
-          to_json_constant(make_real_scalar(std::sqrt(sum_sq))));
-      }
-
-      scalar_value scalar;
-      if (try_extract_scalar_constant(arg, scalar))
-        return converter_.get_expr(
-          to_json_constant(make_real_scalar(std::abs(scalar.value.real()))));
-
-      return symbolic_norm(call_["args"][0], order);
-    }
+      return linalg_norm(unwrap_np_array_arg);
 
     static const std::set<std::string> decompositions = {
       "eig", "eigvals", "svd"};
