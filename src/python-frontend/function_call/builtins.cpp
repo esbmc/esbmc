@@ -959,19 +959,6 @@ static bool init_binds(
   return base_init_binds(cls, attr, ast);
 }
 
-static bool has_subclass(const std::string &name, const nlohmann::json &ast)
-{
-  if (ast.is_object() && ast.value("_type", "") == "ClassDef")
-    for (const auto &base : ast["bases"])
-      if (base.value("id", "") == name)
-        return true;
-  if (!ast.is_object() && !ast.is_array())
-    return false;
-  return std::any_of(ast.begin(), ast.end(), [&](const auto &child) {
-    return has_subclass(name, child);
-  });
-}
-
 /// An imported module can subclass a class or bind attributes that the scan
 /// of this module does not see; typing and __future__ bind neither.
 static bool imports_other_modules(const nlohmann::json &ast)

@@ -437,6 +437,21 @@ void collect_class_definition_lines(
   }
 }
 
+/// Whether a class under @p ast lists @p name as a base.
+template <typename JsonType>
+bool has_subclass(const std::string &name, const JsonType &ast)
+{
+  if (ast.is_object() && ast.value("_type", "") == "ClassDef")
+    for (const auto &base : ast["bases"])
+      if (base.value("id", "") == name)
+        return true;
+  if (!ast.is_object() && !ast.is_array())
+    return false;
+  return std::any_of(ast.begin(), ast.end(), [&](const auto &child) {
+    return has_subclass(name, child);
+  });
+}
+
 template <typename JsonType>
 bool is_class(const std::string &name, const JsonType &ast_json)
 {
