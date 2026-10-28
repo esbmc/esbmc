@@ -1,5 +1,5 @@
-# pick is invoked through the alias get, and the function it returns gives
-# str or int.
+# pick is invoked through the alias get, which nothing else binds, and the
+# function it returns gives str or int.
 def s():
     return "a"
 

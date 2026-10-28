@@ -28,6 +28,7 @@ import copy
 import itertools
 import re
 
+from preprocessor.function_value_lift import lift_nested_defs
 from preprocessor.function_value_types import _Analysis, _differ, _own_nodes
 
 # The most copies of the rest of the module that one module may need.
@@ -174,6 +175,34 @@ def _mixed_groups(analysis):
         if any(_differ(a, b) for a in kinds for b in kinds):
             roots.append(root)
     return roots
+
+
+def _dispatch_groups(analysis):
+    """The mixed groups, and the groups of the defs that return into them.
+
+    `func()()` goes through two groups: the defs `func` may return, which return the functions
+    of a mixed group, and those functions. The first group needs codes too, for a call through
+    one of its values to be a value of the second.
+    """
+    roots = _mixed_groups(analysis)
+    for root in list(roots):
+        returners = {
+            key[1]
+            for key in analysis.parent if key[0] == "result" and analysis.find(key) == root
+        }
+        for other, members in analysis.members.items():
+            if other not in roots and any(id(m[0]) in returners for m in members.values()):
+                roots.append(other)
+    return roots
+
+
+def _nested_members(module, analysis, roots):
+    """The `(outer, inner)` names of the functions in `roots`' groups that a def nests."""
+    return {(outer.name, member[0].name)
+            for root in roots
+            for member in analysis.members[root].values()
+            for outer in module.body
+            if isinstance(outer, ast.FunctionDef) and any(member[0] is s for s in outer.body)}
 
 
 def _parents(module):
@@ -386,7 +415,7 @@ def _chain(arms, callee, origin):
 class _Plan:
     """Check that every use of the groups' names can be rewritten, and mark them."""
 
-    def __init__(self, module, analysis, roots):
+    def __init__(self, module, analysis, roots, lifted=frozenset()):
         self.module = module
         self.parents = _parents(module)
         self.functions = {}
@@ -411,6 +440,7 @@ class _Plan:
             for code, fn in enumerate(fns):
                 self.functions[fn.name] = (group, code)
             self._add_holders(analysis, root, group, defs)
+        self.lifted_groups = {self.functions[name][0] for name in lifted if name in self.functions}
         self.callable_names = set(self.functions) | set(self.param_holders)
         self.kinds = {}
         self.values = {}
@@ -422,7 +452,7 @@ class _Plan:
         """Record the module names and parameters in `root`'s group; refuse any other value."""
         by_id = {id(fn): fn for fn in defs.values()}
         for key in [k for k in analysis.parent if analysis.find(k) == root]:
-            if key[0] == "elements":
+            if key[0] in ("elements", "call"):
                 continue
             if key[0] == "result":
                 self._add_returner(by_id.get(key[1]), group)
@@ -510,9 +540,23 @@ class _Plan:
             raise _Refused
         return kinds.pop() + 1
 
+    def _call_result_group(self, expr):
+        """The group of the functions that call `expr` returns, or None.
+
+        `expr` calls a returner, or a holder all of whose functions are returners into one group.
+        """
+        if not (isinstance(expr, ast.Call) and isinstance(expr.func, ast.Name)):
+            return None
+        name = expr.func.id
+        if name in self.returners:
+            return self.returners[name]
+        if name not in self.holders or self.kinds.get(name, 0) != 0:
+            return None
+        groups = {self.returners.get(fn.name) for fn in self.groups[self.holders[name]]}
+        return groups.pop() if len(groups) == 1 else None
+
     def _is_returner_call(self, expr):
-        return isinstance(expr, ast.Call) and isinstance(
-            expr.func, ast.Name) and expr.func.id in self.returners
+        return self._call_result_group(expr) is not None
 
     @classmethod
     def _is_element(cls, expr):
@@ -577,7 +621,7 @@ class _Plan:
     def _check_returner(self, fn, group):
         """`fn` has no nested scope and returns a function of `group` on every path."""
         body = ast.Module(fn.body, [])
-        if fn.name in self.functions or fn.decorator_list or not _always_returns(fn.body) or any(
+        if fn.decorator_list or not _always_returns(fn.body) or any(
                 isinstance(
                     n, _NESTED + (ast.Yield, ast.YieldFrom, ast.Await, ast.Global, ast.Nonlocal))
                 for n in ast.walk(body)):
@@ -608,7 +652,8 @@ class _Plan:
         parent = self.parents[id(node)]
         if id(node) in self.returned_names:
             return
-        if node.id in self.returners:
+        if node.id in self.returners and (node.id not in self.functions
+                                          or _is_callee(parent, node)):
             self._check_returner_use(node, parent)
             return
         if _is_callee(parent, node) and node.id in self.callable_names:
@@ -757,6 +802,8 @@ class _Plan:
     def _check_function_holder(self, node, parent):
         if _is_callee(parent, node):
             self._check_site(parent)
+            if self._is_returner_call(parent):
+                self._check_value(parent)
         else:
             self._check_value(node)
 
@@ -878,9 +925,22 @@ class _Plan:
         if len(compare.ops) != 1 or not isinstance(compare.ops[0],
                                                    (ast.Is, ast.IsNot, ast.Eq, ast.NotEq)):
             raise _Refused
-        if not all(self._is_code(side) for side in (compare.left, compare.comparators[0])):
+        sides = (compare.left, compare.comparators[0])
+        if not all(self._is_code(side) for side in sides):
+            raise _Refused
+        if any(self._code_group(side) in self.lifted_groups for side in sides):
             raise _Refused
         setattr(compare, _IDENTITY, True)
+
+    def _code_group(self, expr):
+        """The group of the functions `expr` may be, which a lifted function is one of."""
+        if self._is_returner_call(expr):
+            return self._call_result_group(expr)
+        while isinstance(expr, ast.Subscript):
+            expr = expr.value
+        if expr.id in self.functions:
+            return self.functions[expr.id][0]
+        return self.holders.get(expr.id)
 
     @staticmethod
     def _is_dict_value(parent, expr):
@@ -1077,7 +1137,7 @@ def _hoisted_in_groups(module, path):
     candidate = copy.deepcopy(module)
     _hoist_callees(candidate)
     analysis = _propagated(candidate, path)
-    roots = set(_mixed_groups(analysis))
+    roots = set(_dispatch_groups(analysis))
     return {
         key[2]
         for key in analysis.parent
@@ -1095,13 +1155,16 @@ def _check_hoisted_dispatched(module):
 
 def dispatch_mixed_function_values(module, path):
     """Rewrite calls through mixed function values into dispatches, when every use allows it."""
-    if not _mixed_groups(_propagated(module, path)):
+    original = _propagated(module, path)
+    if not _mixed_groups(original):
         return
     candidate = copy.deepcopy(module)
     try:
-        _hoist_callees(candidate, _hoisted_in_groups(module, path))
+        lifted = lift_nested_defs(candidate,
+                                  _nested_members(module, original, _dispatch_groups(original)))
+        _hoist_callees(candidate, _hoisted_in_groups(candidate, path))
         analysis = _propagated(candidate, path)
-        plan = _Plan(candidate, analysis, _mixed_groups(analysis))
+        plan = _Plan(candidate, analysis, _dispatch_groups(analysis), lifted)
         plan.check_uses()
         plan.check_param_holders()
         plan.check_imported()
