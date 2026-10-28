@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <array>
 #include <cfloat>
+#include <climits>
 #include <cmath>
 #include <complex>
 #include <functional>
@@ -677,10 +678,31 @@ static double cofactor_det(const std::vector<std::vector<double>> &m)
   return sum;
 }
 
+// The sum of the magnitudes of the terms of the determinant.
+static double permanent_of_magnitudes(const std::vector<std::vector<double>> &m)
+{
+  if (m.size() == 1)
+    return std::fabs(m[0][0]);
+  double sum = 0.0;
+  for (std::size_t j = 0; j < m.size(); ++j)
+  {
+    std::vector<std::vector<double>> minor;
+    for (std::size_t i = 1; i < m.size(); ++i)
+    {
+      minor.push_back(m[i]);
+      minor.back().erase(minor.back().begin() + j);
+    }
+    sum += std::fabs(m[0][j]) * permanent_of_magnitudes(minor);
+  }
+  return sum;
+}
+
+// LU rounds the determinant by about eps times the magnitudes of its terms,
+// and NumPy's sum of logarithms by eps times |log det| relative to it.
 static double
 det_radius(const std::vector<std::vector<double>> &m, double determinant)
 {
-  const double scale = std::pow(max_abs(m), static_cast<double>(m.size()));
+  const double scale = permanent_of_magnitudes(m);
   const double magnitude = std::fabs(determinant);
   const double logarithm = magnitude > 0 ? std::fabs(std::log(magnitude)) : 0;
   return lapack_tolerance * (scale + magnitude * (1.0 + logarithm));
@@ -730,38 +752,67 @@ static std::vector<std::vector<double>> checked_square_matrix(
   return real_matrix(matrix);
 }
 
+// `entry -= factor * pivot_row`, returning the rounding it added: none
+// when the product and the difference are exact.
+static double eliminate(double &entry, double factor, double pivot_row)
+{
+  const double product = factor * pivot_row;
+  const double difference = entry - product;
+  const double back = difference - entry;
+  const bool exact = std::fma(factor, pivot_row, -product) == 0.0 &&
+                     (entry - (difference - back)) + (-product - back) == 0.0;
+  entry = difference;
+  return exact ? 0.0
+               : DBL_EPSILON * (std::fabs(product) + std::fabs(difference));
+}
+
+// A pivot of LU: exactly zero, LAPACK's singular matrix, or within the
+// rounding `error` accumulated on it, where LAPACK's own order of operations
+// may make it zero; either way no result is built.
+static void check_pivot(const std::string &function, double pivot, double error)
+{
+  if (pivot == 0.0 && error == 0.0)
+    throw std::runtime_error("numpy.linalg.LinAlgError: Singular matrix");
+  if (std::fabs(pivot) <= 64 * error)
+    throw std::runtime_error(
+      "TypeError: numpy.linalg." + function +
+      " of a matrix within rounding of singular is not supported");
+}
+
 // The solution of m x = b for each column b of `rhs`, by Gauss-Jordan
-// elimination with partial pivoting as LAPACK's getrf/getrs factor. A zero
-// pivot is LAPACK's singular matrix; a pivot within rounding of zero might be
-// one for LAPACK, so the result there is unknown and rejects.
+// elimination with partial pivoting as LAPACK's getrf/getrs factor, with a
+// running bound on the rounding error of each entry of m.
 static std::vector<std::vector<double>> gauss_jordan(
   const std::string &function,
   std::vector<std::vector<double>> m,
   std::vector<std::vector<double>> rhs)
 {
   const std::size_t n = m.size();
-  const double scale = max_abs(m);
+  std::vector<std::vector<double>> error(n, std::vector<double>(n, 0.0));
   for (std::size_t k = 0; k < n; ++k)
   {
     std::size_t pivot = k;
     for (std::size_t i = k + 1; i < n; ++i)
       if (std::fabs(m[i][k]) > std::fabs(m[pivot][k]))
         pivot = i;
-    if (m[pivot][k] == 0.0)
-      throw std::runtime_error("numpy.linalg.LinAlgError: Singular matrix");
-    if (std::fabs(m[pivot][k]) <= 64 * DBL_EPSILON * n * scale)
-      throw std::runtime_error(
-        "TypeError: numpy.linalg." + function +
-        " of a matrix within rounding of singular is not supported");
+    check_pivot(function, m[pivot][k], error[pivot][k]);
     std::swap(m[pivot], m[k]);
+    std::swap(error[pivot], error[k]);
     std::swap(rhs[pivot], rhs[k]);
     for (std::size_t i = 0; i < n; ++i)
     {
-      if (i == k)
+      if (i == k || m[i][k] == 0.0)
         continue;
       const double factor = m[i][k] / m[k][k];
+      const bool exact_factor = std::fma(factor, m[k][k], -m[i][k]) == 0.0;
+      const double factor_error =
+        std::fabs(factor) *
+        (error[i][k] / std::fabs(m[i][k]) + error[k][k] / std::fabs(m[k][k]) +
+         (exact_factor ? 0.0 : DBL_EPSILON));
       for (std::size_t j = k; j < n; ++j)
-        m[i][j] -= factor * m[k][j];
+        error[i][j] += eliminate(m[i][j], factor, m[k][j]) +
+                       std::fabs(factor) * error[k][j] +
+                       std::fabs(m[k][j]) * factor_error;
       for (std::size_t j = 0; j < rhs[i].size(); ++j)
         rhs[i][j] -= factor * rhs[k][j];
     }
@@ -6154,50 +6205,106 @@ static norm_request parse_norm_request(const nlohmann::json &call)
   return request;
 }
 
-static double vector_norm(const std::vector<double> &v, norm_order order)
+// A norm and whether every implementation computes it exactly.
+struct norm_value
+{
+  double value;
+  bool exact;
+};
+
+// Whether non-negative terms sum exactly in any order: every partial sum
+// is a multiple of the smallest term's last bit below 2^53 of them.
+static bool exact_nonnegative_sum(const std::vector<double> &terms)
+{
+  int lowest = INT_MAX;
+  double sum = 0.0;
+  for (double term : terms)
+  {
+    sum += term;
+    if (term == 0.0)
+      continue;
+    int exponent = 0;
+    const auto mantissa = static_cast<unsigned long long>(
+      std::ldexp(std::frexp(term, &exponent), 53));
+    lowest = std::min(lowest, exponent - 53 + __builtin_ctzll(mantissa));
+  }
+  return std::isfinite(sum) &&
+         (lowest == INT_MAX || sum < std::ldexp(1.0, lowest + 53));
+}
+
+// sqrt of the sum of the squares, exact when the squares, their sum and the
+// square root are.
+static norm_value two_norm(const std::vector<double> &v)
+{
+  std::vector<double> squares;
+  bool exact = true;
+  for (double value : v)
+  {
+    squares.push_back(value * value);
+    exact = exact && std::fma(value, value, -squares.back()) == 0.0;
+  }
+  const double sum = std::accumulate(squares.begin(), squares.end(), 0.0);
+  const double root = std::sqrt(sum);
+  exact = exact && exact_nonnegative_sum(squares) &&
+          std::fma(root, root, -sum) == 0.0;
+  return {root, exact};
+}
+
+static norm_value vector_norm(const std::vector<double> &v, norm_order order)
 {
   if (order == norm_order::frobenius)
     throw std::runtime_error(
       "ValueError: Invalid norm order 'fro' for vectors");
-  double squares = 0.0, sum = 0.0, largest = 0.0, smallest = INFINITY;
-  for (double value : v)
-  {
-    squares += value * value;
-    sum += std::fabs(value);
-    largest = std::max(largest, std::fabs(value));
-    smallest = std::min(smallest, std::fabs(value));
-  }
   if (v.empty() || order == norm_order::none || order == norm_order::l2)
-    return std::sqrt(squares);
+    return two_norm(v);
+  std::vector<double> magnitudes;
+  for (double value : v)
+    magnitudes.push_back(std::fabs(value));
   if (order == norm_order::l1)
-    return sum;
+    return {
+      std::accumulate(magnitudes.begin(), magnitudes.end(), 0.0),
+      exact_nonnegative_sum(magnitudes)};
   if (order == norm_order::positive_inf)
-    return largest;
+    return {*std::max_element(magnitudes.begin(), magnitudes.end()), true};
   if (order == norm_order::negative_inf)
-    return smallest;
+    return {*std::min_element(magnitudes.begin(), magnitudes.end()), true};
   throw std::runtime_error(
     "TypeError: numpy.linalg.norm order is not supported");
 }
 
 // The largest or smallest absolute sum of a column (by_rows false) or a row.
-static double absolute_sum_extreme(
+static norm_value absolute_sum_extreme(
   const std::vector<std::vector<double>> &m,
   bool by_rows,
   bool largest)
 {
-  std::vector<double> sums(by_rows ? m.size() : m.front().size(), 0.0);
+  std::vector<std::vector<double>> lines(by_rows ? m.size() : m.front().size());
   for (std::size_t i = 0; i < m.size(); ++i)
     for (std::size_t j = 0; j < m[i].size(); ++j)
-      sums[by_rows ? i : j] += std::fabs(m[i][j]);
-  return largest ? *std::max_element(sums.begin(), sums.end())
-                 : *std::min_element(sums.begin(), sums.end());
+      lines[by_rows ? i : j].push_back(std::fabs(m[i][j]));
+  std::vector<double> sums;
+  bool exact = true;
+  for (const auto &line : lines)
+  {
+    sums.push_back(std::accumulate(line.begin(), line.end(), 0.0));
+    exact = exact && exact_nonnegative_sum(line);
+  }
+  return {
+    largest ? *std::max_element(sums.begin(), sums.end())
+            : *std::min_element(sums.begin(), sums.end()),
+    exact};
 }
 
-static double
+static norm_value
 matrix_norm(const std::vector<std::vector<double>> &m, norm_order order)
 {
   if (order == norm_order::none || order == norm_order::frobenius)
-    return frobenius_norm(m);
+  {
+    std::vector<double> entries;
+    for (const auto &row : m)
+      entries.insert(entries.end(), row.begin(), row.end());
+    return two_norm(entries);
+  }
   if (order == norm_order::l1 || order == norm_order::minus_one)
     return absolute_sum_extreme(m, false, order == norm_order::l1);
   if (order == norm_order::positive_inf || order == norm_order::negative_inf)
@@ -6209,12 +6316,12 @@ matrix_norm(const std::vector<std::vector<double>> &m, norm_order order)
       "TypeError: numpy.linalg.norm ord=2 of a matrix supports only 2x2 "
       "matrices");
   const double a = m[0][0], b = m[0][1], c = m[1][0], d = m[1][1];
-  return (std::hypot(a + d, c - b) + std::hypot(a - d, b + c)) / 2;
+  return {(std::hypot(a + d, c - b) + std::hypot(a - d, b + c)) / 2, false};
 }
 
 // The norms along `axis` of a matrix: of each column for axis 0, of each row
 // for axis 1.
-static std::vector<double> axis_norms(
+static std::vector<norm_value> axis_norms(
   const std::vector<std::vector<double>> &m,
   long long axis,
   norm_order order)
@@ -6226,7 +6333,7 @@ static std::vector<double> axis_norms(
     for (std::size_t i = 0; i < (axis == 0 ? m.size() : m[k].size()); ++i)
       lines.back().push_back(axis == 0 ? m[i][k] : m[k][i]);
   }
-  std::vector<double> norms;
+  std::vector<norm_value> norms;
   for (const auto &line : lines)
     norms.push_back(vector_norm(line, order));
   return norms;
@@ -6299,28 +6406,41 @@ exprt numpy_call_expr::linalg_norm(
   const long long axis = checked_norm_axis(request.axis, rank);
   if (rank == 2 && request.axis)
   {
-    const std::vector<double> norms = axis_norms(*m, axis, request.order);
+    std::vector<exprt> norms;
+    for (const norm_value &norm : axis_norms(*m, axis, request.order))
+      norms.push_back(bounded_norm(norm));
     if (!request.keepdims || axis == 0)
       return norm_array({norms}, request.keepdims);
-    std::vector<std::vector<double>> column;
-    for (double value : norms)
-      column.push_back({value});
+    std::vector<std::vector<exprt>> column;
+    for (const exprt &norm : norms)
+      column.push_back({norm});
     return norm_array(column, true);
   }
-  const double value = rank == 1 ? vector_norm(m->front(), request.order)
-                                 : matrix_norm(*m, request.order);
+  const exprt value = bounded_norm(
+    rank == 1 ? vector_norm(m->front(), request.order)
+              : matrix_norm(*m, request.order));
   if (!request.keepdims)
-    return from_double(value, double_type());
+    return value;
   return norm_array({{value}}, rank == 2);
+}
+
+// A rounded norm is within lapack_tolerance of the computed one; one every
+// implementation computes exactly keeps its value.
+exprt numpy_call_expr::bounded_norm(const norm_value &norm)
+{
+  return lapack_value(
+    norm.value, norm.exact ? 0.0 : lapack_tolerance * norm.value);
 }
 
 // A norm array: the rows as a matrix, or the single row as a vector.
 exprt numpy_call_expr::norm_array(
-  const std::vector<std::vector<double>> &rows,
+  const std::vector<std::vector<exprt>> &rows,
   bool as_matrix)
 {
-  const exprt result =
-    as_matrix ? lapack_matrix(rows, 0.0) : lapack_vector(rows.front(), 0.0);
+  std::vector<exprt> arrays;
+  for (const auto &row : rows)
+    arrays.push_back(double_array(row));
+  const exprt result = as_matrix ? double_array(arrays) : arrays.front();
   if (converter_.current_lhs)
   {
     converter_.current_lhs->type() = result.type();

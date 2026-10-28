@@ -26,6 +26,7 @@ nlohmann::json
 numpy_literal_with_dtype(const nlohmann::json &call, const nlohmann::json &ast);
 
 enum class norm_order;
+struct norm_value;
 
 class numpy_call_expr : public function_call_expr
 {
@@ -307,8 +308,8 @@ private:
   exprt symbolic_det(const nlohmann::json &arg, bool strings);
   exprt symbolic_norm(const nlohmann::json &arg, norm_order order);
   exprt linalg_norm(const std::function<void(nlohmann::json &)> &unwrap);
-  exprt
-  norm_array(const std::vector<std::vector<double>> &rows, bool as_matrix);
+  exprt norm_array(const std::vector<std::vector<exprt>> &rows, bool as_matrix);
+  exprt bounded_norm(const norm_value &norm);
   exprt linalg_solve(
     const std::string &function,
     const std::vector<std::vector<double>> &m,
