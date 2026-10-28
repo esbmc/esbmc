@@ -481,7 +481,7 @@ regression/numpy/view_escape_attribute_fail
 regression/numpy/view_escape_return_local_array_success
 regression/numpy/view_function_broadcast_to_write_fail
 regression/numpy/view_function_expand_dims_readonly_success
-regression/numpy/view_function_invalid_axis_edge
+regression/numpy/swapaxes_axis_oob_fail
 regression/numpy/view_function_singleton_axis_edge
 regression/numpy/view_global_param_escape_fail
 regression/numpy/view_identity_owndata_fail
@@ -1508,7 +1508,7 @@ regression/numpy/github_4668_np_multiply_scalar_array_unsupported
 regression/esbmc/builtin_missing_body_wrong_pc
 regression/esbmc/double_free_assume
 regression/goto-coverage/github_2365_3
-regression/numpy/view_reshape_incompatible_edge
+regression/numpy/reshape_view_incompatible_fail
 regression/python/string-split-whitespace-only-maxsplit1
 regression/python/github_3087
 regression/loop-invariants/loop_assigns_check_fail
@@ -1635,10 +1635,10 @@ regression/esbmc-cpp/cpp/ch12_17
 regression/python/github_3637_fail
 regression/esbmc-cpp11/array/array_01
 regression/numpy/github_4668_radd_from_ones
-regression/numpy/github_4668_mul_array_array_same_1d
+regression/numpy/array_array_arith_success
 regression/numpy/stack_1d_to_2d_success
 regression/python/typing_tuple_attr_annotation_fail
-regression/numpy/github_4668_rmul_1d
+regression/numpy/github_4668_rmul
 regression/numpy/fmod
 regression/python/string-split-concat-reassign
 regression/python/dict_class_value_reinit_fail
@@ -1707,7 +1707,7 @@ regression/python/math32_exp
 regression/numpy/harness_numpy_reduce
 regression/python/math33_hyper_inv
 regression/numpy/symbolic_shape_single_axis_edge
-regression/numpy/view_function_squeeze_readonly_success
+regression/numpy/squeeze_unit_axis_success
 regression/numpy/github_4666_bool_index_1d
 regression/numpy/float_symbolic_broadcast_ops_success
 regression/numpy/zeros_empty_tuple_fail
