@@ -6672,10 +6672,25 @@ singular_triples_2x2(const std::vector<std::vector<double>> &m)
   return triples;
 }
 
+// The smallest gap between consecutive singular values. A gap within
+// their rounding may be a repeated value, and rounding can make it negative.
+static double
+singular_gap(const std::vector<singular_triple> &triples, double rounding)
+{
+  double gap = INFINITY;
+  for (std::size_t k = 0; k + 1 < triples.size(); ++k)
+    gap = std::min(gap, triples[k].sigma - triples[k + 1].sigma);
+  if (gap <= rounding)
+    throw std::runtime_error(
+      "TypeError: numpy.linalg.svd of a non-diagonal matrix with a repeated "
+      "singular value is not supported");
+  return gap;
+}
+
 // svd's (U, S, Vh) of a 2x2 or diagonal matrix. Each pair of singular
 // vectors has an arbitrary sign, flipped together so U @ diag(S) @ Vh keeps
-// A; their components are as accurate as the gap between the singular
-// values allows.
+// A unless the singular value is zero; their components are as accurate as
+// the gap between the singular values allows.
 exprt numpy_call_expr::svd_factors(const std::vector<std::vector<double>> &m)
 {
   const std::size_t n = m.size();
@@ -6689,30 +6704,25 @@ exprt numpy_call_expr::svd_factors(const std::vector<std::vector<double>> &m)
   const std::vector<singular_triple> triples =
     diagonal ? diagonal_singular_triples(m) : singular_triples_2x2(m);
   const double norm = frobenius_norm(m);
-  double gap = INFINITY;
-  for (std::size_t k = 0; k + 1 < n; ++k)
-    gap = std::min(gap, triples[k].sigma - triples[k + 1].sigma);
   const double value_radius = diagonal ? 0.0 : 1e-12 * norm;
-  // A gap within the singular values' rounding may be a repeated value, and
-  // rounding can make it negative.
-  if (!diagonal && gap <= 2 * value_radius)
-    throw std::runtime_error(
-      "TypeError: numpy.linalg.svd of a non-diagonal matrix with a repeated "
-      "singular value is not supported");
+  const double gap =
+    diagonal ? INFINITY : singular_gap(triples, 2 * value_radius);
   const double vector_radius = diagonal ? 0.0 : 1e-12 * (1 + norm / gap);
   std::vector<exprt> sigmas;
   std::vector<std::vector<exprt>> us, vs;
   for (const singular_triple &t : triples)
   {
     sigmas.push_back(lapack_value(t.sigma, value_radius));
+    // A zero singular value ties no sign between its u and v.
     const exprt flip = nondet_bool();
+    const exprt flip_v = t.sigma == 0.0 ? nondet_bool() : flip;
     std::vector<exprt> u, v;
     for (std::size_t i = 0; i < n; ++i)
     {
       const exprt ui = lapack_value(t.u[i], vector_radius);
       const exprt vi = lapack_value(t.v[i], vector_radius);
       u.push_back(if_exprt(flip, negate_double(ui), ui));
-      v.push_back(if_exprt(flip, negate_double(vi), vi));
+      v.push_back(if_exprt(flip_v, negate_double(vi), vi));
     }
     us.push_back(u);
     vs.push_back(v);
