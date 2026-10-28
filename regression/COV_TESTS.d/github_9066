@@ -145,7 +145,6 @@ regression/numpy/np_linalg_inv_rounding_fail
 regression/numpy/np_linalg_rounding_singular_edge
 regression/numpy/np_linalg_rounding_success
 regression/numpy/np_linalg_solve_rounding_fail
-regression/numpy/np_linalg_svd_factors_unsupported_fail
 regression/numpy/numpy_math_list_rounding_fail
 regression/numpy/numpy_math_rounding_success
 regression/numpy/numpy_math_scalar_rounding_fail

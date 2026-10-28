@@ -292,6 +292,12 @@ private:
   exprt linalg_tuple(const std::vector<exprt> &parts);
   std::vector<exprt> eigenvalue_pair(const std::vector<std::vector<double>> &m);
   exprt singular_values(const std::vector<std::vector<double>> &m);
+  bool svd_values_only() const;
+  exprt linalg_decomposition(
+    const std::string &function,
+    const std::vector<std::vector<double>> &m);
+  void assume_singular_order(const std::vector<exprt> &sigmas);
+  exprt svd_factors(const std::vector<std::vector<double>> &m);
   exprt lapack_vector(const std::vector<double> &exact, double radius);
   exprt
   lapack_matrix(const std::vector<std::vector<double>> &exact, double radius);

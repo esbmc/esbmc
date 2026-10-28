@@ -5831,14 +5831,6 @@ exprt numpy_call_expr::eigen_decomposition(
 exprt numpy_call_expr::singular_values(
   const std::vector<std::vector<double>> &m)
 {
-  bool values_only = false;
-  for (const auto &kw : call_.value("keywords", nlohmann::json::array()))
-    values_only = values_only || (kw.value("arg", "") == "compute_uv" &&
-                                  kw["value"].value("value", true) == false);
-  if (!values_only)
-    throw std::runtime_error(
-      "TypeError: numpy.linalg.svd returns the U and Vh factors, which are "
-      "not supported; pass compute_uv=False");
   if (m.size() != 2 || m[0].size() != 2 || m[1].size() != 2)
     throw std::runtime_error(
       "TypeError: numpy.linalg.svd currently supports only 2x2 matrices");
@@ -5850,12 +5842,162 @@ exprt numpy_call_expr::singular_values(
   const double radius = 1e-12 * frobenius_norm(m);
   const exprt first = lapack_value(largest, radius);
   const exprt second = lapack_value(smallest, radius);
-  code_assumet ordered(binary_relation_exprt(first, ">=", second));
-  ordered.location() = converter_.get_location_from_decl(call_);
-  converter_.add_instruction(ordered);
+  assume_singular_order({first, second});
   exprt array("array", array_typet(first.type(), from_integer(2, size_type())));
   array.copy_to_operands(first, second);
   return array;
+}
+
+// Singular values are never negative and come in descending order.
+void numpy_call_expr::assume_singular_order(const std::vector<exprt> &sigmas)
+{
+  exprt::operandst facts;
+  for (std::size_t k = 0; k < sigmas.size(); ++k)
+    facts.push_back(binary_relation_exprt(
+      sigmas[k],
+      ">=",
+      k + 1 < sigmas.size() ? sigmas[k + 1] : from_double(0.0, double_type())));
+  code_assumet ordered{and_exprt(facts)};
+  ordered.location() = converter_.get_location_from_decl(call_);
+  converter_.add_instruction(ordered);
+}
+
+exprt numpy_call_expr::linalg_decomposition(
+  const std::string &function,
+  const std::vector<std::vector<double>> &m)
+{
+  if (function == "eig")
+    return eigen_decomposition(m);
+  if (function == "eigvals")
+    return eigenvalues(m);
+  return svd_values_only() ? singular_values(m) : svd_factors(m);
+}
+
+bool numpy_call_expr::svd_values_only() const
+{
+  bool values_only = false;
+  for (const auto &kw : call_.value("keywords", nlohmann::json::array()))
+    values_only = values_only || (kw.value("arg", "") == "compute_uv" &&
+                                  kw["value"].value("value", true) == false);
+  return values_only;
+}
+
+namespace
+{
+// One singular value with its left and right singular vectors.
+struct singular_triple
+{
+  double sigma;
+  std::vector<double> u, v;
+};
+} // namespace
+
+// A diagonal matrix's singular values are its entries' magnitudes in
+// descending order, with unit vectors and the entry's sign kept in v.
+static std::vector<singular_triple>
+diagonal_singular_triples(const std::vector<std::vector<double>> &m)
+{
+  const std::size_t n = m.size();
+  std::vector<std::size_t> order(n);
+  std::iota(order.begin(), order.end(), 0);
+  std::stable_sort(
+    order.begin(), order.end(), [&](std::size_t i, std::size_t j) {
+      return std::fabs(m[i][i]) > std::fabs(m[j][j]);
+    });
+  std::vector<singular_triple> triples;
+  for (std::size_t k : order)
+  {
+    std::vector<double> u(n, 0.0), v(n, 0.0);
+    u[k] = 1.0;
+    v[k] = m[k][k] < 0 ? -1.0 : 1.0;
+    triples.push_back({std::fabs(m[k][k]), u, v});
+  }
+  return triples;
+}
+
+// A 2x2 matrix: v are the eigenvectors of A^T A, u = A v / sigma, and a
+// zero sigma takes the unit vector orthogonal to the other u.
+static std::vector<singular_triple>
+singular_triples_2x2(const std::vector<std::vector<double>> &m)
+{
+  const double a = m[0][0], b = m[0][1], c = m[1][0], d = m[1][1];
+  const double largest =
+    (std::hypot(a + d, c - b) + std::hypot(a - d, b + c)) / 2;
+  const double smallest = std::fabs(a * d - b * c) / largest;
+  const double p = a * a + c * c, q = a * b + c * d, r = b * b + d * d;
+  const double theta = std::atan2(2 * q, p - r) / 2;
+  const std::vector<std::vector<double>> v = {
+    {std::cos(theta), std::sin(theta)}, {-std::sin(theta), std::cos(theta)}};
+  std::vector<singular_triple> triples;
+  for (std::size_t k = 0; k < 2; ++k)
+  {
+    const double sigma = k == 0 ? largest : smallest;
+    std::vector<double> u = {
+      a * v[k][0] + b * v[k][1], c * v[k][0] + d * v[k][1]};
+    if (sigma == 0.0)
+      u = {-triples[0].u[1], triples[0].u[0]};
+    else
+      u = {u[0] / sigma, u[1] / sigma};
+    triples.push_back({sigma, u, v[k]});
+  }
+  return triples;
+}
+
+// svd's (U, S, Vh) of a 2x2 or diagonal matrix. Each pair of singular
+// vectors has an arbitrary sign, flipped together so U @ diag(S) @ Vh keeps
+// A; their components are as accurate as the gap between the singular
+// values allows.
+exprt numpy_call_expr::svd_factors(const std::vector<std::vector<double>> &m)
+{
+  const std::size_t n = m.size();
+  const bool square = std::all_of(
+    m.begin(), m.end(), [n](const auto &row) { return row.size() == n; });
+  const bool diagonal = square && is_diagonal(m);
+  if (!square || (!diagonal && n != 2))
+    throw std::runtime_error(
+      "TypeError: numpy.linalg.svd supports only 2x2 and diagonal matrices "
+      "currently");
+  const std::vector<singular_triple> triples =
+    diagonal ? diagonal_singular_triples(m) : singular_triples_2x2(m);
+  const double norm = frobenius_norm(m);
+  double gap = INFINITY;
+  for (std::size_t k = 0; k + 1 < n; ++k)
+    gap = std::min(gap, triples[k].sigma - triples[k + 1].sigma);
+  if (!diagonal && gap == 0)
+    throw std::runtime_error(
+      "TypeError: numpy.linalg.svd of a non-diagonal matrix with a repeated "
+      "singular value is not supported");
+  const double value_radius = diagonal ? 0.0 : 1e-12 * norm;
+  const double vector_radius = diagonal ? 0.0 : 1e-12 * (1 + norm / gap);
+  std::vector<exprt> sigmas;
+  std::vector<std::vector<exprt>> us, vs;
+  for (const singular_triple &t : triples)
+  {
+    sigmas.push_back(lapack_value(t.sigma, value_radius));
+    const exprt flip = nondet_bool();
+    std::vector<exprt> u, v;
+    for (std::size_t i = 0; i < n; ++i)
+    {
+      const exprt ui = lapack_value(t.u[i], vector_radius);
+      const exprt vi = lapack_value(t.v[i], vector_radius);
+      u.push_back(if_exprt(flip, negate_double(ui), ui));
+      v.push_back(if_exprt(flip, negate_double(vi), vi));
+    }
+    us.push_back(u);
+    vs.push_back(v);
+  }
+  assume_singular_order(sigmas);
+  std::vector<exprt> u_rows, vh_rows;
+  for (std::size_t i = 0; i < n; ++i)
+  {
+    std::vector<exprt> row;
+    for (std::size_t k = 0; k < n; ++k)
+      row.push_back(us[k][i]);
+    u_rows.push_back(double_array(row));
+    vh_rows.push_back(double_array(vs[i]));
+  }
+  return linalg_tuple(
+    {double_array(u_rows), double_array(sigmas), double_array(vh_rows)});
 }
 
 // NumPy evaluates these with its own vectorised code where the CPU has it
@@ -7158,14 +7300,10 @@ exprt numpy_call_expr::create_expr_from_call()
         "numeric arrays");
     }
 
-    // svd's U and Vh factors are not modelled; svd(compute_uv=False)
-    // returns only the values.
-    if (function == "eig")
-      return eigen_decomposition(linalg_matrix(unwrap_np_array_arg));
-    if (function == "eigvals")
-      return eigenvalues(linalg_matrix(unwrap_np_array_arg));
-    if (function == "svd")
-      return singular_values(linalg_matrix(unwrap_np_array_arg));
+    static const std::set<std::string> decompositions = {
+      "eig", "eigvals", "svd"};
+    if (decompositions.count(function) != 0)
+      return linalg_decomposition(function, linalg_matrix(unwrap_np_array_arg));
 
     if (is_complex_function(function))
     {
