@@ -2405,6 +2405,9 @@ void goto_convertt::remove_post(
   {
     exprt tmp = expr.op0();
     make_temp_symbol(tmp, dest);
+    // A bit-field operand is narrower than the expression's type (#9443).
+    if (tmp.type() != expr.type())
+      tmp.make_typecast(expr.type());
     expr.swap(tmp);
   }
   else
