@@ -1,0 +1,3 @@
+regression/python/github_9348_interned_str
+regression/python/github_9348_interned_str_fail
+regression/python/github_9348_str_not_interned_unsupported

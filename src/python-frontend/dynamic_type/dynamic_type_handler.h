@@ -217,6 +217,20 @@ private:
     const exprt &rhs,
     const locationt &location);
 
+  /// A fresh copy of @p rhs as a tag's `.value`; sets @p elem_size.
+  exprt build_scalar_payload(
+    const exprt &rhs,
+    const locationt &location,
+    std::vector<codet> &instructions,
+    exprt &elem_size);
+
+  /// The one static object holding the interned str @p text; sets
+  /// @p elem_size.
+  exprt interned_str_payload(
+    const std::string &text,
+    const exprt &rhs,
+    exprt &elem_size);
+
   /**
    * @brief Resolves `name` to its tagged-object symbol, following `aliases_`
    * if it was aliased from a pre-existing variable. Shared by assign() and

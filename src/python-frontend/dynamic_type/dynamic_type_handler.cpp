@@ -526,6 +526,38 @@ std::string scalar_kind(const typet &type)
     return "float";
   return type_utils::is_string_type(type) ? "str" : "";
 }
+
+// The text of a str literal that CPython interns, i.e. one spelled as an
+// identifier: every occurrence of it is one object.
+std::optional<std::string> interned_str_literal(const exprt &value)
+{
+  if (
+    (!value.is_constant() && value.id() != "array") ||
+    !value.type().is_array() || value.type().subtype() != char_type())
+    return std::nullopt;
+
+  std::string text;
+  for (const exprt &op : value.operands())
+  {
+    BigInt c;
+    if (to_integer(op, c))
+      return std::nullopt;
+    text += static_cast<char>(c.to_int64());
+  }
+  if (text.empty() || text.back() != '\0')
+    return std::nullopt;
+  text.pop_back();
+
+  auto is_word = [](char c) {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_' ||
+           (c >= '0' && c <= '9');
+  };
+  if (
+    text.empty() || (text[0] >= '0' && text[0] <= '9') ||
+    !std::all_of(text.begin(), text.end(), is_word))
+    return std::nullopt;
+  return text;
+}
 } // namespace
 
 dynamic_type_handler::dynamic_type_handler(
@@ -737,13 +769,36 @@ bool dynamic_type_handler::tagged_binop_result_may_be_tagged(
   return op == "Add";
 }
 
-std::vector<codet> dynamic_type_handler::build_tag_field_assigns(
-  symbolt &tag_symbol,
+exprt dynamic_type_handler::interned_str_payload(
+  const std::string &text,
   const exprt &rhs,
-  const locationt &location)
+  exprt &elem_size)
 {
-  std::vector<codet> instructions;
+  elem_size = from_integer(text.size() + 1, size_type());
+  const std::string id = "py:@interned_str@" + text;
+  if (!converter_.symbol_table().find_symbol(id))
+  {
+    symbolt sym;
+    sym.id = id;
+    sym.name = "interned_str$" + text;
+    sym.set_type(migrate_type(rhs.type()));
+    sym.set_value(migrate_expr(rhs));
+    sym.static_lifetime = true;
+    sym.is_extern = false;
+    converter_.symbol_table().add(sym);
+  }
+  const symbolt *sym = converter_.symbol_table().find_symbol(id);
+  return build_typecast(
+    converter_.get_string_handler().get_array_base_address(build_symbol(*sym)),
+    pointer_typet(empty_typet()));
+}
 
+exprt dynamic_type_handler::build_scalar_payload(
+  const exprt &rhs,
+  const locationt &location,
+  std::vector<codet> &instructions,
+  exprt &elem_size)
+{
   exprt value_to_store = rhs;
   if (rhs.type() == bool_type())
     value_to_store =
@@ -758,7 +813,6 @@ std::vector<codet> dynamic_type_handler::build_tag_field_assigns(
 
   // A runtime string has no statically known length -- measure it with
   // the bounded-length helper, +1 for the trailing NUL.
-  exprt elem_size;
   if (
     value_to_store.type().is_pointer() &&
     value_to_store.type().subtype() == char_type())
@@ -779,20 +833,33 @@ std::vector<codet> dynamic_type_handler::build_tag_field_assigns(
   // A pointer `backing` already refers to non-expiring storage, so use it
   // as `.value` directly. Anything else lives in `backing`'s own stack
   // storage, which goes DEAD at branch exit, so it needs an explicit copy.
-  exprt tag_value;
   if (value_to_store.type().is_pointer())
-    tag_value =
-      build_typecast(build_symbol(backing), pointer_typet(empty_typet()));
+    return build_typecast(build_symbol(backing), pointer_typet(empty_typet()));
+
+  const symbolt *copy_func =
+    converter_.symbol_table().find_symbol("c:@F@__python_scalar_tag_copy");
+  assert(copy_func && "__python_scalar_tag_copy not found in symbol table");
+  exprt backing_addr = build_typecast(
+    build_address_of(build_symbol(backing)), pointer_typet(empty_typet()));
+  return build_call_expr(
+    *copy_func, pointer_typet(empty_typet()), {backing_addr, elem_size});
+}
+
+std::vector<codet> dynamic_type_handler::build_tag_field_assigns(
+  symbolt &tag_symbol,
+  const exprt &rhs,
+  const locationt &location)
+{
+  std::vector<codet> instructions;
+
+  // Tags built from one interned str share its object, so `is` between them
+  // holds (#9348).
+  exprt elem_size;
+  exprt tag_value;
+  if (const auto text = interned_str_literal(rhs))
+    tag_value = interned_str_payload(*text, rhs, elem_size);
   else
-  {
-    const symbolt *copy_func =
-      converter_.symbol_table().find_symbol("c:@F@__python_scalar_tag_copy");
-    assert(copy_func && "__python_scalar_tag_copy not found in symbol table");
-    exprt backing_addr = build_typecast(
-      build_address_of(build_symbol(backing)), pointer_typet(empty_typet()));
-    tag_value = build_call_expr(
-      *copy_func, pointer_typet(empty_typet()), {backing_addr, elem_size});
-  }
+    tag_value = build_scalar_payload(rhs, location, instructions, elem_size);
 
   // Normalise to the canonical str type before hashing, so type_id
   // doesn't vary with length or array-vs-pointer shape. A bool keeps its
