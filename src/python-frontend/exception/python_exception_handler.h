@@ -167,6 +167,9 @@ private:
     const nlohmann::json &exc,
     const std::string &exc_name) const;
 
+  /// The exception class a `raise` operand names, or "" when it names none.
+  std::string raised_class_name(const nlohmann::json &exc) const;
+
   /// The class `E` that `m.E` names when `m` is bound by a top-level
   /// `import m` and the converted class `E` is m's and the only one so named,
   /// or "".

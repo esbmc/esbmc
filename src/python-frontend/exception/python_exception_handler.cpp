@@ -468,6 +468,18 @@ python_exception_handler::module_class_name(const nlohmann::json &node) const
   return class_name;
 }
 
+std::string
+python_exception_handler::raised_class_name(const nlohmann::json &exc) const
+{
+  if (exc.contains("func") && exc["func"].contains("id"))
+    return exc["func"]["id"].get<std::string>();
+  if (exc.contains("id"))
+    return exc["id"].get<std::string>();
+  if (exc.is_string())
+    return exc.get<std::string>();
+  return module_class_name(exc.contains("func") ? exc["func"] : exc);
+}
+
 exprt python_exception_handler::build_builtin_exception(
   const nlohmann::json &exc,
   const typet &type) const
@@ -524,19 +536,7 @@ void python_exception_handler::get_raise_statement(
     return;
   }
 
-  std::string exc_name;
-
-  // Try to extract the exception name from different AST shapes
-  if (element["exc"].contains("func") && element["exc"]["func"].contains("id"))
-    exc_name = element["exc"]["func"]["id"].get<std::string>();
-  else if (element["exc"].contains("id"))
-    exc_name = element["exc"]["id"].get<std::string>();
-  else if (element["exc"].is_string())
-    exc_name = element["exc"].get<std::string>();
-  else if (element["exc"].contains("func"))
-    exc_name = module_class_name(element["exc"]["func"]);
-  else
-    exc_name = module_class_name(element["exc"]);
+  const std::string exc_name = raised_class_name(element["exc"]);
 
   typet type;
   exprt raise;
