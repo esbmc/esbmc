@@ -128,8 +128,12 @@ def _resolve_constant(call, constants):
         call.func = ast.copy_location(ast.Name(constants[inner.func.id], ast.Load()), inner)
 
 
-def _hoist_callees(module):
-    """Give every callee that is a call or a conditional its own statement, at module level."""
+def _hoist_callees(module, wanted=None):
+    """Give every callee that is a call or a conditional its own statement, at module level.
+
+    With `wanted`, only a statement one of whose temporaries is in it is changed; the
+    temporaries are numbered the same either way.
+    """
     if any(name.startswith(_HOISTED) for name in _bound_names(module.body)):
         raise _Refused
     names = itertools.count()
@@ -140,7 +144,11 @@ def _hoist_callees(module):
         if call is not None:
             _resolve_constant(call, constants)
         if call is not None and not isinstance(call.func, ast.Name):
-            body.extend(_hoist_callee(call, names))
+            trial = copy.deepcopy(stmt)
+            hoisted = _hoist_callee(_whole_call(trial), names)
+            if wanted is None or {h.targets[0].id for h in hoisted} & wanted:
+                body.extend(hoisted)
+                stmt = trial
         body.append(stmt)
     module.body = [
         stmt for stmt in body if not (isinstance(stmt, ast.FunctionDef) and stmt.name in constants
@@ -1064,13 +1072,34 @@ class _Dispatch:
                     node.id = f"{_PREFIX}{self.arms}_{base}"
 
 
+def _hoisted_in_groups(module, path):
+    """The temporaries of `_hoist_callees` that a mixed group holds."""
+    candidate = copy.deepcopy(module)
+    _hoist_callees(candidate)
+    analysis = _propagated(candidate, path)
+    roots = set(_mixed_groups(analysis))
+    return {
+        key[2]
+        for key in analysis.parent
+        if key[0] == "name" and key[2].startswith(_HOISTED) and analysis.find(key) in roots
+    }
+
+
+def _check_hoisted_dispatched(module):
+    """A temporary is called only through a dispatch, which calls the function directly."""
+    for node in ast.walk(module):
+        if isinstance(node, ast.Call) and isinstance(node.func,
+                                                     ast.Name) and _HOISTED in node.func.id:
+            raise _Refused
+
+
 def dispatch_mixed_function_values(module, path):
     """Rewrite calls through mixed function values into dispatches, when every use allows it."""
     if not _mixed_groups(_propagated(module, path)):
         return
     candidate = copy.deepcopy(module)
     try:
-        _hoist_callees(candidate)
+        _hoist_callees(candidate, _hoisted_in_groups(module, path))
         analysis = _propagated(candidate, path)
         plan = _Plan(candidate, analysis, _mixed_groups(analysis))
         plan.check_uses()
@@ -1079,6 +1108,7 @@ def dispatch_mixed_function_values(module, path):
         _Codes().visit(candidate)
         _Returns(plan.groups).visit(candidate)
         candidate.body, _ = _Dispatch(plan.groups, plan.holders).statements(candidate.body)
+        _check_hoisted_dispatched(candidate)
     except _Refused:
         return
     for node in ast.walk(candidate):
