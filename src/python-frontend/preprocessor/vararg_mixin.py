@@ -25,6 +25,96 @@ class VarargMixin:
             if isinstance(stmt, ast.FunctionDef) and bind_counts.get(stmt.name) == 1
         }
 
+    def _fix_constructor_varargs(self, module):
+        """Give each `__init__(self, *args)` the arity every construction passes (#9073).
+
+        A class qualifies when every read of its name is a call with that many
+        positional arguments. A module that can call an `__init__` without the
+        class name (`type(...)`, `__class__`, `x.__init__(...)`) is left alone.
+        Only the entry module is scanned, so a module it imports is trusted not
+        to construct its classes.
+        """
+        if not self.is_entry_module or self._has_star_import(module):
+            return
+        parents, bind_counts, calls_to = self._index_module(module)
+        if "type" in calls_to or any(map(self._constructs_without_name, parents)):
+            return
+        for cls in module.body:
+            if not isinstance(cls, ast.ClassDef):
+                continue
+            calls = calls_to.get(cls.name, [])
+            if not self._called_only_by(cls, calls, parents, bind_counts):
+                continue
+            init = self._plain_init(cls)
+            if init is None or any(
+                    call.keywords or any(isinstance(arg, ast.Starred) for arg in call.args)
+                    for call in calls):
+                continue
+            arities = {len(call.args) for call in calls}
+            if len(arities) == 1:
+                self._fix_init_arity(init, arities.pop() + 1)
+
+    def _index_module(self, module):
+        """Parent links, binding counts and calls by callee name for `module`."""
+        parents = {}
+        bind_counts = {}
+        calls_to = {}
+        for node in ast.walk(module):
+            for child in ast.iter_child_nodes(node):
+                parents[child] = node
+            for bound in self._bound_names(node):
+                bind_counts[bound] = bind_counts.get(bound, 0) + 1
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                calls_to.setdefault(node.func.id, []).append(node)
+        return parents, bind_counts, calls_to
+
+    @staticmethod
+    def _plain_init(class_def):
+        """`class_def`'s `__init__`, when nothing in the class can change the
+        arguments a construction passes it."""
+        methods = [s for s in class_def.body if isinstance(s, ast.FunctionDef)]
+        init = next((m for m in methods if m.name == "__init__"), None)
+        # A base can bring a metaclass, so any base disqualifies the class.
+        if class_def.bases or class_def.keywords or class_def.decorator_list or any(
+                m.decorator_list or m.name == "__new__" for m in methods):
+            return None
+        return init
+
+    @staticmethod
+    def _constructs_without_name(node):
+        """Whether `node` can run some class's `__init__` without naming the class.
+
+        `super().__init__(...)` only reaches a class from a subclass, which
+        reads the class name and so disqualifies it already.
+        """
+        if isinstance(node, ast.Name):
+            return node.id == "__class__"
+        if not isinstance(node, ast.Attribute):
+            return False
+        if node.attr == "__class__":
+            return True
+        return node.attr == "__init__" and not (isinstance(node.value, ast.Call) and isinstance(
+            node.value.func, ast.Name) and node.value.func.id == "super")
+
+    @staticmethod
+    def _fix_init_arity(init, arity):
+        """Replace `init`'s *args by the `arity` positional parameters it packs."""
+        args = init.args
+        extra = arity - len(args.args)
+        if args.vararg is None or args.kwarg or args.kwonlyargs or args.posonlyargs or extra < 0:
+            return
+        pad = [f"_esbmc_va_{i}" for i in range(extra)]
+        pack = ast.Assign(targets=[ast.Name(id=args.vararg.arg, ctx=ast.Store())],
+                          value=ast.Tuple(elts=[ast.Name(id=name, ctx=ast.Load()) for name in pad],
+                                          ctx=ast.Load()))
+        args.args += [ast.arg(arg=name) for name in pad]
+        args.vararg = None
+        # Every construction passes all the parameters, and a default would
+        # otherwise attach to the trailing packed ones.
+        args.defaults = []
+        init.body.insert(0, ast.copy_location(pack, init.body[0]))
+        ast.fix_missing_locations(init)
+
     def _scan_vararg_alias_calls(self, module):
         """Map each call through a module-level alias of a variadic def to the def.
 
@@ -330,10 +420,23 @@ class VarargMixin:
         spec.body = packs + spec.body
         self.functionParams[spec_name] = [arg.arg for arg in spec.args.args]
         self.functionKwonlyParams[spec_name] = []
-        if vararg_name in packed_params and vararg_name not in self._names_bound_in(func_def.body):
-            self._spell_out_forwarded_varargs(spec, vararg_name, pad)
+        vararg_name, kwarg_name = self._forwarded_packs(func_def, packed_params)
+        if vararg_name or kwarg_name:
+            self._spell_out_forwarded_varargs(spec, vararg_name, pad, kwarg_name,
+                                              list(zip(kwnames, kw_pad)))
         ast.fix_missing_locations(spec)
         return spec
+
+    def _forwarded_packs(self, func_def, packed_params):
+        """The *args and **kwargs names each copy of `func_def` can spell out."""
+        bound = self._names_bound_in(func_def.body)
+        vararg = func_def.args.vararg.arg if func_def.args.vararg else None
+        kwarg = func_def.args.kwarg.arg if func_def.args.kwarg else None
+        if vararg not in packed_params or vararg in bound:
+            vararg = None
+        if kwarg not in packed_params or not self._only_forwarded(func_def.body, kwarg, bound):
+            kwarg = None
+        return vararg, kwarg
 
     def _forwards_own_varargs(self, node):
         """Whether each `*x` in call `node` forwards the visited def's own *args.
@@ -353,6 +456,25 @@ class VarargMixin:
             isinstance(arg.value, ast.Name) and arg.value.id == vararg for arg in node.args
             if isinstance(arg, ast.Starred))
 
+    def _forwards_own_kwargs(self, node):
+        """Whether call `node` splats only the visited def's own **kwargs.
+
+        Each fixed-arity copy of the def spells the splat out as the keywords
+        it packs, so binding waits for the copy.
+        """
+        func_def = self._vararg_scope_stack[-1] if self._vararg_scope_stack else None
+        if (func_def is None or func_def.args.kwarg is None or not isinstance(node.func, ast.Name)
+                or not any(kw.arg is None for kw in node.keywords)):
+            return False
+        kwarg = func_def.args.kwarg.arg
+        params = func_def.args.posonlyargs + func_def.args.args + func_def.args.kwonlyargs
+        bound = self._names_bound_in(func_def.body) | {arg.arg for arg in params}
+        if node.func.id in bound or not self._only_forwarded(func_def.body, kwarg, bound):
+            return False
+        return all(
+            isinstance(kw.value, ast.Name) and kw.value.id == kwarg for kw in node.keywords
+            if kw.arg is None)
+
     def _names_bound_in(self, body):
         return {
             name
@@ -361,20 +483,53 @@ class VarargMixin:
             for name in self._bound_names(inner)
         }
 
-    def _spell_out_forwarded_varargs(self, spec, vararg_name, pad):
-        """Pass each `*vararg_name` in `spec` as the names it packs, then bind the call."""
+    @staticmethod
+    def _only_forwarded(body, kwarg_name, bound):
+        """Whether `body` reads `kwarg_name` only as `**kwarg_name`, so it is never mutated."""
+        if kwarg_name in bound:
+            return False
+        nodes = [inner for stmt in body for inner in ast.walk(stmt)]
+        splats = {
+            id(node.value)
+            for node in nodes if isinstance(node, ast.keyword) and node.arg is None
+        }
+        return all(
+            id(node) in splats for node in nodes
+            if isinstance(node, ast.Name) and node.id == kwarg_name)
+
+    def _spell_out_forwarded_varargs(self, spec, vararg_name, pad, kwarg_name, kw_pad):
+        """Pass each `*vararg_name` and `**kwarg_name` in `spec` as the names they pack,
+        then bind the call."""
         mixin = self
 
         def forwarded(arg):
             return (isinstance(arg, ast.Starred) and isinstance(arg.value, ast.Name)
                     and arg.value.id == vararg_name)
 
+        def forwarded_kwargs(kw):
+            return (kw.arg is None and isinstance(kw.value, ast.Name) and kw.value.id == kwarg_name)
+
+        def spelled_keywords(node):
+            if not any(forwarded_kwargs(kw) for kw in node.keywords):
+                return node.keywords
+            keywords = []
+            for kw in node.keywords:
+                if forwarded_kwargs(kw):
+                    keywords.extend(
+                        ast.copy_location(
+                            ast.keyword(arg=key, value=ast.Name(id=name, ctx=ast.Load())), kw)
+                        for key, name in kw_pad)
+                else:
+                    keywords.append(kw)
+            return keywords
+
         class Forward(ast.NodeTransformer):
-            """Splice the packed names into each call that forwards `*vararg_name`."""
+            """Splice the packed names into each call that forwards them."""
 
             def visit_Call(self, node):  # pylint: disable=invalid-name,missing-function-docstring
                 self.generic_visit(node)
-                if not any(forwarded(arg) for arg in node.args):
+                keywords = spelled_keywords(node)
+                if keywords is node.keywords and not any(forwarded(arg) for arg in node.args):
                     return node
                 args = []
                 for arg in node.args:
@@ -385,6 +540,13 @@ class VarargMixin:
                     else:
                         args.append(arg)
                 node.args = args
+                node.keywords = keywords
+                names = [kw.arg for kw in keywords if kw.arg is not None]
+                repeated = next((name for name in names if names.count(name) > 1), None)
+                if repeated is not None:
+                    message = (f"{ast.unparse(node.func)}() got multiple values for keyword "
+                               f"argument '{repeated}'")
+                    return mixin.visit(mixin._raising_call(node, message))  # pylint: disable=protected-access
                 raising = mixin._bind_call_arguments(node)  # pylint: disable=protected-access
                 if raising is not None:
                     return raising
@@ -472,17 +634,8 @@ class VarargMixin:
         the name only indexes, iterates, measures, compares or unpacks it. An
         unpacking is mapped only below that statement, where `xs` is bound.
         """
-        parents = {}
-        bind_counts = {}
+        parents, bind_counts, calls_to = self._index_module(module)
         unsafe = set()
-        calls_to = {}
-        for node in ast.walk(module):
-            for child in ast.iter_child_nodes(node):
-                parents[child] = node
-            for bound in self._bound_names(node):
-                bind_counts[bound] = bind_counts.get(bound, 0) + 1
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
-                calls_to.setdefault(node.func.id, []).append(node)
         len_bound = "len" in bind_counts
         for node, parent in parents.items():
             if not isinstance(node, ast.Name) or not isinstance(node.ctx, ast.Load):

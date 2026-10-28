@@ -437,6 +437,21 @@ void collect_class_definition_lines(
   }
 }
 
+/// Whether a class under @p ast lists @p name as a base.
+template <typename JsonType>
+bool has_subclass(const std::string &name, const JsonType &ast)
+{
+  if (ast.is_object() && ast.value("_type", "") == "ClassDef")
+    for (const auto &base : ast["bases"])
+      if (base.value("id", "") == name)
+        return true;
+  if (!ast.is_object() && !ast.is_array())
+    return false;
+  return std::any_of(ast.begin(), ast.end(), [&](const auto &child) {
+    return has_subclass(name, child);
+  });
+}
+
 template <typename JsonType>
 bool is_class(const std::string &name, const JsonType &ast_json)
 {
@@ -1109,24 +1124,30 @@ count_name_bindings(const nlohmann::json &node, const std::string &name)
   return n;
 }
 
-// The value a top-level `name = ...` or `name: T = ...` statement assigns.
+// The value `stmt` assigns when it is a plain `name = ...` or `name: T = ...`.
 inline const nlohmann::json *
-top_level_value(const nlohmann::json &module, const std::string &name)
+plain_assigned_value(const nlohmann::json &stmt, const std::string &name)
 {
   auto binds = [&](const nlohmann::json &target) {
     return target.value("_type", "") == "Name" && target["id"] == name;
   };
+  const std::string type = stmt.is_object() ? stmt.value("_type", "") : "";
+  if (
+    type == "Assign" && stmt["targets"].size() == 1 &&
+    binds(stmt["targets"][0]))
+    return &stmt["value"];
+  if (type == "AnnAssign" && binds(stmt["target"]) && !stmt["value"].is_null())
+    return &stmt["value"];
+  return nullptr;
+}
+
+// The value a top-level `name = ...` or `name: T = ...` statement assigns.
+inline const nlohmann::json *
+top_level_value(const nlohmann::json &module, const std::string &name)
+{
   for (const auto &stmt : module["body"])
-  {
-    const std::string type = stmt.value("_type", "");
-    if (
-      type == "Assign" && stmt["targets"].size() == 1 &&
-      binds(stmt["targets"][0]))
-      return &stmt["value"];
-    if (
-      type == "AnnAssign" && binds(stmt["target"]) && !stmt["value"].is_null())
-      return &stmt["value"];
-  }
+    if (const nlohmann::json *value = plain_assigned_value(stmt, name))
+      return value;
   return nullptr;
 }
 

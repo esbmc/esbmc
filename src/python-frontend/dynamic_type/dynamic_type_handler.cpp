@@ -13,36 +13,21 @@
 #include <util/irep/std_code.h>
 #include <util/irep/std_expr.h>
 #include <util/lang/c_types.h>
+#include <util/lang/python_types.h>
 
 using namespace python_expr;
 
 namespace
 {
 using dynamic_type_detail::collect_branch_literal_kinds;
+using dynamic_type_detail::count_bindings;
+using dynamic_type_detail::single_assigned_value;
 
 using param_kinds_t = std::unordered_map<std::string, std::string>;
 
-// `T` for an annotation `Optional[T]` or `T | None`, else the annotation.
-const nlohmann::json &optional_operand(const nlohmann::json &ann)
-{
-  if (!ann.is_object())
-    return ann;
-  if (
-    ann.value("_type", "") == "Subscript" &&
-    ann["value"].value("id", "") == "Optional")
-    return ann["slice"];
-  if (
-    ann.value("_type", "") == "BinOp" &&
-    ann["op"].value("_type", "") == "BitOr" &&
-    ann["right"].value("_type", "") == "Constant" &&
-    ann["right"]["value"].is_null())
-    return ann["left"];
-  return ann;
-}
-
 // Kinds of the parameters annotated (or inferred from call sites) as int,
-// bool or str, so `return x` counts like a literal of that kind (#8523).
-// With @p optional, also those annotated `Optional` of one (#9285).
+// bool, float or str, so `return x` counts like a literal of that kind
+// (#8523). With @p optional, also those annotated `Optional` of one (#9285).
 param_kinds_t
 collect_param_kinds(const nlohmann::json &function_node, bool optional = false)
 {
@@ -51,13 +36,14 @@ collect_param_kinds(const nlohmann::json &function_node, bool optional = false)
     return kinds;
   for (const auto &arg : function_node["args"].value("args", nlohmann::json()))
   {
-    const nlohmann::json &written = arg.value("annotation", nlohmann::json());
-    const nlohmann::json &ann = optional ? optional_operand(written) : written;
-    const std::string type = ann.is_object() ? ann.value("id", "") : "";
+    const auto &ann = arg.value("annotation", nlohmann::json());
+    std::string type = optional ? type_utils::optional_inner_name(ann) : "";
+    if (type.empty() && ann.is_object())
+      type = ann.value("id", "");
     if (type == "int" || type == "bool")
       kinds[arg["arg"].get<std::string>()] = "num";
-    else if (type == "str")
-      kinds[arg["arg"].get<std::string>()] = "str";
+    else if (type == "str" || type == "float")
+      kinds[arg["arg"].get<std::string>()] = type;
   }
   return kinds;
 }
@@ -73,7 +59,10 @@ nlohmann::json body_with_param_kinds(const nlohmann::json &function_node)
        {"targets", {{{"_type", "Name"}, {"id", name}}}},
        {"value",
         {{"_type", "Constant"},
-         {"value", kind == "str" ? nlohmann::json("") : nlohmann::json(0)}}}});
+         {"value",
+          kind == "str"     ? nlohmann::json("")
+          : kind == "float" ? nlohmann::json(0.0)
+                            : nlohmann::json(0)}}}});
   for (const auto &stmt : function_node["body"])
     body.push_back(stmt);
   return body;
@@ -309,71 +298,6 @@ struct argument_kinds
   size_t tagged = 0;
   size_t other = 0;
 };
-
-bool field_is(
-  const nlohmann::json &node,
-  const char *field,
-  const std::string &name)
-{
-  return node.contains(field) && node[field].is_string() &&
-         node[field].get<std::string>() == name;
-}
-
-std::string context_of(const nlohmann::json &node)
-{
-  if (!node.contains("ctx") || !node["ctx"].is_object())
-    return "";
-  return node["ctx"].value("_type", "");
-}
-
-bool lists_name(const nlohmann::json &node, const std::string &name)
-{
-  if (!node.contains("names") || !node["names"].is_array())
-    return false;
-  for (const auto &listed : node["names"])
-    if (listed.is_string() && listed.get<std::string>() == name)
-      return true;
-  return false;
-}
-
-// `node` binds `name` by assignment, parameter, def, class, import, pattern,
-// `global`, `nonlocal`, `except`, `del` or any other target.
-bool binds_name_at(const nlohmann::json &node, const std::string &name)
-{
-  const std::string type = node.value("_type", "");
-  if (type == "Name")
-    return field_is(node, "id", name) && context_of(node) != "Load";
-  if (type == "arg")
-    return field_is(node, "arg", name);
-  return field_is(node, "name", name) || field_is(node, "asname", name) ||
-         field_is(node, "rest", name) || lists_name(node, name);
-}
-
-size_t count_bindings(const nlohmann::json &node, const std::string &name)
-{
-  if (!node.is_structured())
-    return 0;
-  size_t count = node.is_object() && binds_name_at(node, name);
-  for (const auto &child : node)
-    count += count_bindings(child, name);
-  return count;
-}
-
-// The value a module-level `name = value` binds, when that is the only
-// binding of `name` anywhere in the module.
-const nlohmann::json *single_assigned_value(
-  const nlohmann::json &module_body,
-  const std::string &name)
-{
-  if (count_bindings(module_body, name) != 1)
-    return nullptr;
-  for (const auto &stmt : module_body)
-    if (
-      stmt.value("_type", "") == "Assign" && stmt["targets"].size() == 1 &&
-      stmt["targets"][0].value("id", "") == name)
-      return &stmt["value"];
-  return nullptr;
-}
 
 // Counts the leaves of `arg` that name a def returning a dynamic value and
 // those that are anything else.
@@ -637,7 +561,7 @@ std::unordered_set<std::string> dynamic_type_handler::detect_dynamic_type_names(
     }
   }
 
-  const nlohmann::json callables = converter_.callable_function_stubs();
+  const nlohmann::json callables = converter_.kind_module_body();
   auto collect = [&](const nlohmann::json &block) {
     return collect_branch_literal_kinds(
       block, kinds, leaf_count, leaf_total, *scope_body, callables);
@@ -665,8 +589,10 @@ bool dynamic_type_handler::joins_divergent_kinds(
 {
   const symbolt *existing =
     converter_.symbol_table().find_symbol(bound_symbol_id(name).to_string());
+  const bool declared_any = existing && existing->get_type() == any_type();
   if (
-    existing && !type_handler_.is_numeric_scalar_type(existing->get_type()) &&
+    existing && !declared_any &&
+    !type_handler_.is_numeric_scalar_type(existing->get_type()) &&
     !type_handler_.is_string_type(existing->get_type()))
     return false;
   // `C.v` is tagged only at module level, where its store is a global one.
@@ -678,7 +604,9 @@ bool dynamic_type_handler::joins_divergent_kinds(
   // The value bound before the `if` is the one a path that skips every
   // assignment keeps. An already tagged name keeps its slot, and a retyped
   // one holds its value in a symbol other than `existing`.
-  if (existing && !is_tagged(name) && !converter_.is_retyped(existing->id))
+  if (
+    existing && !declared_any && !is_tagged(name) &&
+    !converter_.is_retyped(existing->id))
     kinds.insert(scalar_kind(existing->get_type()));
   else if (keeps_value)
     return false;
@@ -739,6 +667,9 @@ void dynamic_type_handler::declare_dynamic_type_names(
 
       // Initialize from the pre-existing value, in case something reads the
       // alias before a branch's assign() runs.
+      // A name declared Any holds no scalar to copy, and both arms assign it.
+      if (existing_symbol->get_type() == any_type())
+        continue;
       exprt existing_value = build_symbol(*existing_symbol);
       for (const codet &instr : build_tag_field_assigns(
              *alias_symbol_ptr, existing_value, alias_location))

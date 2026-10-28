@@ -1,11 +1,10 @@
 /* The result is the only definition of what the call returns, so it is a fresh
- * nondet. For a pointer that leaves it without a value set: `p == &a` is proved
- * from the ensures, but the write through p does not reach a.
+ * nondet with no value set. The ensures `== &a` pins it, so the write through p
+ * reaches a (#7066).
  *
  * Leaving the result undeclared instead is what #7009 was: the ensures would be
  * assumed about the caller's stale pointer, `p == &a` would be assume-false and
- * everything after the call would pass vacuously. A reported failure is the
- * safe direction of the two, and unlike the other it is visible. */
+ * everything after the call would pass vacuously. */
 int a;
 
 int *pick(int c)

@@ -483,7 +483,10 @@ def _is_submodule_import(package_name: str, name: str) -> bool:
     # CPython reads the package attribute first; only a missing one, or the
     # submodule itself, falls through to importing `package_name.name`.
     attr = getattr(package, name, None)
-    if attr is not None and getattr(attr, "__name__", None) != qualname:
+    # type(), not getattr or isinstance: a proxy object may raise on any
+    # attribute read (#9311).
+    is_submodule = issubclass(type(attr), ModuleType) and attr.__name__ == qualname
+    if attr is not None and not is_submodule:
         return False
     try:
         spec = importlib.util.find_spec(qualname)
