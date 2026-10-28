@@ -494,17 +494,7 @@ void python_exception_handler::get_raise_statement(
     return;
   }
 
-  std::string exc_name;
-
-  // Try to extract the exception name from different AST shapes
-  if (element["exc"].contains("func") && element["exc"]["func"].contains("id"))
-    exc_name = element["exc"]["func"]["id"].get<std::string>();
-  else if (element["exc"].contains("id"))
-    exc_name = element["exc"]["id"].get<std::string>();
-  else if (element["exc"].is_string())
-    exc_name = element["exc"].get<std::string>();
-  else
-    exc_name = ""; // fallback
+  const std::string exc_name = raised_class_name(element["exc"]);
 
   typet type;
   exprt raise;
@@ -610,6 +600,33 @@ void python_exception_handler::get_raise_statement(
   block.move_to_operands(code_expr);
 }
 
+std::string
+python_exception_handler::raised_class_name(const nlohmann::json &exc) const
+{
+  const nlohmann::json &target = exc.contains("func") ? exc["func"] : exc;
+  if (target.contains("id"))
+    return target["id"].get<std::string>();
+  if (target.is_string())
+    return target.get<std::string>();
+  return module_class_name(target);
+}
+
+std::string
+python_exception_handler::module_class_name(const nlohmann::json &node) const
+{
+  // Imported modules' classes are converted under their bare names, which is
+  // what both a raise and an except clause match on.
+  if (node.value("_type", "") != "Attribute")
+    return "";
+  const nlohmann::json &value = node["value"];
+  if (
+    value.value("_type", "") != "Name" ||
+    !converter_.is_module_receiver(value["id"].get<std::string>(), value, node))
+    return "";
+  const std::string attr = node["attr"].get<std::string>();
+  return json_utils::is_class(attr, converter_.ast()) ? attr : "";
+}
+
 // Emit a single catch block for `type_node` (an exception-type Name node, or
 // null for a bare `except:`), running the handler body. Appends it to `block`.
 void python_exception_handler::emit_catch_block(
@@ -623,15 +640,14 @@ void python_exception_handler::emit_catch_block(
   // Create exception variable symbol before processing body
   if (!type_node.is_null())
   {
-    // Only a bare name (`except ValueError:`) is modelled. A dotted type such
-    // as `except socket.error:` is an Attribute node with no "id"; reject it
-    // with a clean diagnostic rather than crashing on the missing json key.
-    if (!type_node.contains("id"))
+    const std::string class_name = type_node.contains("id")
+                                     ? type_node["id"].get<std::string>()
+                                     : module_class_name(type_node);
+    if (class_name.empty())
       throw std::runtime_error(
         "except with a dotted/attribute exception type is not supported");
 
-    exception_type =
-      type_handler_.get_typet(type_node["id"].get<std::string>());
+    exception_type = type_handler_.get_typet(class_name);
 
     std::string name;
     symbol_id sid = converter_.create_symbol_id();
