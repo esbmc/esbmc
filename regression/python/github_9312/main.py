@@ -1,4 +1,3 @@
-# Issue #9312: an except clause naming module.Class.
 import subprocess
 
 def run(x: int) -> int:

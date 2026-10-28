@@ -3408,6 +3408,28 @@ receiver_class(const nlohmann::json &receiver, const nlohmann::json &body)
   return is_module_class(body, name) ? name : "";
 }
 
+// `func` is `Class.method`, where `method` is a `@staticmethod` of the
+// module-level `cls`, so the call passes no `self`.
+static bool is_static_method_call(
+  const nlohmann::json &func,
+  const nlohmann::json &module_body,
+  const std::string &cls,
+  const std::string &method)
+{
+  if (
+    func.value("_type", "") != "Attribute" ||
+    func.value("attr", "") != method ||
+    func["value"].value("_type", "") != "Name" || func["value"]["id"] != cls)
+    return false;
+  const nlohmann::json *def = find_method_def(module_body, cls, method);
+  if (def == nullptr)
+    return false;
+  for (const auto &decorator : (*def)["decorator_list"])
+    if (decorator.value("id", "") == "staticmethod")
+      return true;
+  return false;
+}
+
 // Whether `call` calls the callee `callee` names, and how many parameters
 // the call does not pass: `self` for a method or a constructor.
 static std::optional<std::size_t> callee_parameter_offset(
@@ -3423,6 +3445,10 @@ static std::optional<std::size_t> callee_parameter_offset(
              : std::nullopt;
   const std::string cls = callee.substr(0, dot);
   const std::string method = callee.substr(dot + 1);
+  if (
+    method != "__init__" &&
+    is_static_method_call(func, module_body, cls, method))
+    return 0;
   const bool matches =
     method == "__init__"
       ? func.value("_type", "") == "Name" && func.value("id", "") == cls
@@ -4175,14 +4201,16 @@ references_name(const nlohmann::json &node, const std::string &param_name)
   return false;
 }
 
-// Safe only as a `Compare` (always bool); anything else, e.g. `v + v`, may
-// itself evaluate to a tagged value the fixed return type can't hold.
+// Safe as a `Compare` (always bool) or as the parameter itself, which the
+// function then returns tagged. Anything else, e.g. `v + v`, may itself
+// evaluate to a tagged value the fixed return type can't hold.
 static bool return_value_safe_for_tagged_param(
   const nlohmann::json &value,
   const std::string &param_name)
 {
-  return !references_name(value, param_name) ||
-         value.value("_type", std::string()) == "Compare";
+  const std::string kind = value.value("_type", std::string());
+  return !references_name(value, param_name) || kind == "Compare" ||
+         (kind == "Name" && value.value("id", std::string()) == param_name);
 }
 
 // True if some `return` statement anywhere in 'body' would be unsafe once
@@ -4209,6 +4237,52 @@ static bool any_return_unsafe_for_tagged_param(
         return true;
   }
   return false;
+}
+
+// Counts the value-carrying returns in `body` that are the bare parameter and
+// those that are anything else.
+static void count_param_returns(
+  const nlohmann::json &body,
+  const std::string &param_name,
+  size_t &bare,
+  size_t &other)
+{
+  if (!body.is_array())
+    return;
+  for (const auto &stmt : body)
+  {
+    if (!stmt.is_object())
+      continue;
+    if (
+      stmt.value("_type", std::string()) == "Return" &&
+      stmt.contains("value") && !stmt["value"].is_null())
+    {
+      const nlohmann::json &value = stmt["value"];
+      const bool is_param = value.value("_type", std::string()) == "Name" &&
+                            value.value("id", std::string()) == param_name;
+      (is_param ? bare : other)++;
+    }
+    for (const char *key : {"body", "orelse"})
+      if (stmt.contains(key))
+        count_param_returns(stmt[key], param_name, bare, other);
+  }
+}
+
+// Tagging `param_name` would leak into the fixed return type of `func_def`.
+// Returning the parameter itself is safe only when nothing else is returned
+// and the parameter is never rebound, so the return type is simply the tag.
+static bool tagged_param_return_unsafe(
+  const nlohmann::json &func_def,
+  const std::string &param_name)
+{
+  if (!func_def.contains("body"))
+    return false;
+  if (any_return_unsafe_for_tagged_param(func_def["body"], param_name))
+    return true;
+  size_t bare = 0;
+  size_t other = 0;
+  count_param_returns(func_def["body"], param_name, bare, other);
+  return bare > 0 && (other > 0 || count_bindings(func_def, param_name) > 1);
 }
 
 // `C.__init__` plus the same name for every module class that reaches it
@@ -4259,9 +4333,7 @@ bool python_converter::try_infer_dynamic_param_type(
   // Refuse when tagging this param could leak into an already-fixed
   // return type (e.g. `return v + v`).
   const nlohmann::json *func_def = find_callee_def(module_body, callee);
-  if (
-    func_def != nullptr && func_def->contains("body") &&
-    any_return_unsafe_for_tagged_param((*func_def)["body"], param_name))
+  if (func_def != nullptr && tagged_param_return_unsafe(*func_def, param_name))
     return false;
 
   std::vector<numpy_param_call_site> call_sites;
@@ -4276,7 +4348,7 @@ bool python_converter::try_infer_dynamic_param_type(
     return enclosing_def == nullptr ? nullptr : &(*enclosing_def)["body"];
   };
 
-  const nlohmann::json callables = callable_function_stubs();
+  const nlohmann::json callables = kind_module_body();
   auto diverges_at_site =
     [&](const nlohmann::json &value_node, const numpy_param_call_site &site) {
       if (value_node.value("_type", "") != "Name")
@@ -5567,6 +5639,29 @@ static bool any_return(
   return false;
 }
 
+/// The `return` statements in \p node, those of nested scopes excluded.
+static size_t count_returns(const nlohmann::json &node)
+{
+  if (node.is_array())
+  {
+    size_t count = 0;
+    for (const auto &child : node)
+      count += count_returns(child);
+    return count;
+  }
+  if (!node.is_object())
+    return 0;
+  const std::string type = node.value("_type", "");
+  if (
+    type == "FunctionDef" || type == "AsyncFunctionDef" || type == "ClassDef" ||
+    type == "Lambda")
+    return 0;
+  size_t count = type == "Return";
+  for (const auto &child : node)
+    count += count_returns(child);
+  return count;
+}
+
 bool python_converter::is_numpy_param_operand(
   const nlohmann::json &node,
   const nlohmann::json &func_def) const
@@ -6162,6 +6257,8 @@ void python_converter::get_function_definition(
   current_func_return_type_ = type.return_type();
   const bool saved_func_annotated_int = current_func_annotated_int_;
   current_func_annotated_int_ = is_written_int_annotation(return_node);
+  const bool saved_func_single_return = current_func_single_return_;
+  current_func_single_return_ = count_returns(function_node["body"]) == 1;
 
   // Nondet stub functions (nondet_int/char/bool/float/str/complex and their
   // __VERIFIER_nondet_* aliases) are intercepted at their call sites by
@@ -6227,6 +6324,7 @@ void python_converter::get_function_definition(
   // Restore saved function return type (for nested function defs)
   current_func_return_type_ = saved_func_return_type;
   current_func_annotated_int_ = saved_func_annotated_int;
+  current_func_single_return_ = saved_func_single_return;
 
   // If return type is empty/unannotated, try to infer from return statements
   if (type.return_type().is_empty())

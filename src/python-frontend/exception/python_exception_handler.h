@@ -91,6 +91,11 @@ public:
     const nlohmann::json &type_node,
     codet &block);
 
+  // Class named by a raise's exception expression read at @p use, or "" when
+  // unknown.
+  std::string
+  raised_class_name(const nlohmann::json &exc, const nlohmann::json &use) const;
+
   // -----------------------------------------------------------------------
   // Assertion helpers (previously python_converter private methods)
   // -----------------------------------------------------------------------

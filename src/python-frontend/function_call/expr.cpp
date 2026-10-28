@@ -1041,6 +1041,68 @@ static bool is_plain_class(const std::string &name, const nlohmann::json &ast)
     });
 }
 
+/// Whether @p node stores to, or deletes, an attribute that changes how an
+/// instance prints, or calls setattr, which can do either.
+static bool rebinds_repr_attribute(const nlohmann::json &node)
+{
+  if (node.is_object())
+  {
+    const std::string kind = node.value("_type", "");
+    const std::string attr = node.value("attr", "");
+    if (
+      kind == "Attribute" && node["ctx"].value("_type", "") != "Load" &&
+      (attr == "__str__" || attr == "__repr__" || attr == "__class__"))
+      return true;
+    if (kind == "Call" && node["func"].value("id", "") == "setattr")
+      return true;
+  }
+  for (const auto &child : node)
+    if (child.is_structured() && rebinds_repr_attribute(child))
+      return true;
+  return false;
+}
+
+/// Whether neither @p name, a class of @p ast, nor a base of it other than
+/// object defines __str__ or __repr__.
+static bool
+inherits_object_repr(const std::string &name, const nlohmann::json &ast)
+{
+  const nlohmann::json cls = find_class(ast["body"], name);
+  if (
+    cls.empty() || count_bindings(cls, "__str__") ||
+    count_bindings(cls, "__repr__"))
+    return false;
+  return std::all_of(
+    cls["bases"].begin(), cls["bases"].end(), [&](const nlohmann::json &b) {
+      const std::string base = b.value("id", "");
+      return base == "object" || inherits_object_repr(base, ast);
+    });
+}
+
+/// The class whose default repr str() of @p value gives, or "" when that is
+/// not known: a plain class of the main module with no subclass, so the
+/// static type is the runtime class.
+static std::string
+default_repr_class(const exprt &value, const python_converter &converter)
+{
+  typet type = value.type();
+  if (type.is_pointer())
+    type = type.subtype();
+  if (type.id() != "symbol")
+    return "";
+  const typet &followed = converter.name_space().follow(type);
+  if (!followed.is_struct())
+    return "";
+  const std::string name = to_struct_type(followed).tag().as_string();
+  const nlohmann::json &ast = converter.get_ast_json();
+  if (
+    converter.python_file() != converter.main_python_filename() ||
+    !is_plain_class(name, ast) || json_utils::has_subclass(name, ast) ||
+    rebinds_repr_attribute(ast) || !inherits_object_repr(name, ast))
+    return "";
+  return name;
+}
+
 /// What str() of the class object @p name, converted from @p arg, gives, or
 /// "" when that is not known: a class object holds only the bare name.
 static std::string class_object_str(
@@ -1065,7 +1127,30 @@ exprt function_call_expr::str_of_object(exprt &value, const nlohmann::json &arg)
 {
   const locationt location = converter_.get_location_from_decl(call_);
   if (!python_converter::is_class_object(value))
-    return converter_.dispatch_unary_dunder_operator("str", value, location);
+  {
+    exprt dunder =
+      converter_.dispatch_unary_dunder_operator("str", value, location);
+    const std::string cls = default_repr_class(value, converter_);
+    if (!dunder.is_nil() || cls.empty())
+      return dunder;
+    if (value.id() == "sideeffect")
+    {
+      code_expressiont call(value);
+      call.location() = location;
+      converter_.add_instruction(call);
+    }
+    const exprt repr =
+      converter_.get_string_handler().build_default_object_repr(
+        "<__main__." + cls + " object at 0x", location);
+    if (value.id() == "sideeffect" || !value.type().is_pointer())
+      return repr;
+    const exprt none =
+      converter_.get_string_builder().build_string_literal("None");
+    return if_exprt(
+      equality_exprt(value, gen_zero(value.type())),
+      build_address_of(build_index(none, from_integer(0, size_type()))),
+      repr);
+  }
   const std::string text =
     class_object_str(value.get_string("value"), arg, converter_);
   if (text.empty())

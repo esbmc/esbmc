@@ -1,0 +1,13 @@
+regression/python/github_8971_pass_call_receiver
+regression/python/github_8971_pass_ident
+regression/python/github_8971_pass_ident_fail
+regression/python/github_8971_pass_ident_type_fail
+regression/python/github_8971_pass_method
+regression/python/github_8971_pass_method_fail
+regression/python/github_8971_pass_mixed_return
+regression/python/github_8971_pass_rebound
+regression/python/github_8971_pass_returned_lambda
+regression/python/github_8971_pass_star_args
+regression/python/github_8971_pass_static
+regression/python/github_8971_pass_static_fail
+regression/python/github_8971_pass_untagged

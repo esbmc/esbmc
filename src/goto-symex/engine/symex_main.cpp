@@ -227,8 +227,15 @@ void goto_symext::propagate_assume_equality(const expr2tc &the_assumption)
     return;
 
   const equality2t &eq = to_equality2t(c);
-  expr2tc lhs = eq.side_1;
-  expr2tc rhs = eq.side_2;
+  // A contract's ensures compares the havocked result through a cast to its
+  // own type, `(int *)return_value$0 == &a` (#7066).
+  auto strip_noop_casts = [](expr2tc e) {
+    while (is_typecast2t(e) && to_typecast2t(e).from->type == e->type)
+      e = to_typecast2t(e).from;
+    return e;
+  };
+  expr2tc lhs = strip_noop_casts(eq.side_1);
+  expr2tc rhs = strip_noop_casts(eq.side_2);
 
   // Only propagate when the other side is a constant: a symbol == symbol
   // assumption must NOT be turned into an assignment, as that perturbs the
