@@ -168,7 +168,8 @@ private:
 
   /// The class name in `module.Class` read at @p use, or empty unless the
   /// receiver is bound only by `import` of one module, imported at the top of
-  /// the file before @p use, and no other imported module defines the class.
+  /// the file before @p use, and that module's class is the program's only
+  /// binding of the name.
   std::string module_class_name(
     const nlohmann::json &node,
     const nlohmann::json &use) const;

@@ -1,6 +1,5 @@
 #include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/exception/exception_utils.h>
-#include <set>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python-list/python_list.h>
@@ -8,6 +7,7 @@
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/type/type_utils.h>
+#include <set>
 #include <util/arith/arith_tools.h>
 #include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
@@ -535,7 +535,7 @@ std::string python_exception_handler::module_class_name(
   // in the program could make `module.name` another class at run time.
   const symbolt *cls = converter_.find_symbol("tag-" + name);
   if (
-    !cls || cls->module != converter_.get_imported_module_path(module) ||
+    !cls || cls->module != converter_.module_file(module) ||
     !converter_.is_sole_class_binding(name))
     return "";
   return name;

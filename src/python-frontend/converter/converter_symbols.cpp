@@ -352,7 +352,7 @@ bool python_converter::is_sole_class_binding(const std::string &name) const
   if (extra_asts_)
     for (const nlohmann::json &extra : *extra_asts_)
       if (
-        extra.contains("body") &&
+        extra.contains("body") && extra["body"].is_array() &&
         std::find(bodies.begin(), bodies.end(), &extra["body"]) == bodies.end())
         bodies.push_back(&extra["body"]);
 

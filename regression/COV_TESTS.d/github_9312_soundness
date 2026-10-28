@@ -1,4 +1,5 @@
 regression/python/github_9312_absent_fail
+regression/python/github_9312_alias_leak_fail
 regression/python/github_9312_base_fail
 regression/python/github_9312_builtin_module_fail
 regression/python/github_9312_builtin_name_fail
