@@ -689,7 +689,9 @@ class _Plan:
         fn = self.defs.get(name)
         if fn is None or name not in self.param_holders:
             return False
-        params = {a.arg for a in fn.args.posonlyargs + fn.args.args}
+        args = fn.args
+        params = {a.arg for a in args.posonlyargs + args.args + args.kwonlyargs}
+        params |= {a.arg for a in (args.vararg, args.kwarg) if a is not None}
         return bool(params & set(self.param_holders[name]))
 
     def _is_returned_read(self, node):
