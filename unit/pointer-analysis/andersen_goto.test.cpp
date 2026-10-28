@@ -225,6 +225,29 @@ TEST_CASE(
 }
 
 TEST_CASE(
+  "andersen frontend skips what the entry point cannot reach",
+  "[andersen][goto]")
+{
+  std::string src = R"(
+    int a;
+    int *p;
+    void never(void) { p = &a; }
+    int main(void) { return 0; }
+  )";
+
+  goto_functionst functions = compile(src);
+  REQUIRE(functions.function_map.count(functions.main_id()) == 1);
+  andersent reached;
+  reached(functions);
+  REQUIRE(targets_of(reached, functions, "", "p").empty());
+
+  functions.function_map.erase(functions.main_id());
+  andersent whole;
+  whole(functions);
+  REQUIRE(targets_of(whole, functions, "", "p") == std::set<std::string>{"a"});
+}
+
+TEST_CASE(
   "andersen frontend interns one node per allocation site",
   "[andersen][goto]")
 {

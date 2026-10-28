@@ -294,6 +294,7 @@ protected:
   node_id eval_value(const expr2tc &rhs, unsigned location_number);
   node_id eval_integer(const expr2tc &rhs, unsigned location_number);
   node_id eval_constant_aggregate(const expr2tc &rhs, unsigned location_number);
+  node_id opaque(const expr2tc &rhs, unsigned location_number);
 
   /// Lowers `lhs := rhs` to whichever of the four constraints fits.
   void handle_assign(

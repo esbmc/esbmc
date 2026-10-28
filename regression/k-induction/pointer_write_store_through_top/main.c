@@ -1,5 +1,5 @@
-// h is rebuilt from a double, so the analysis cannot say where it points; the
-// store through it puts &other in tbl. The loop's writes through tbl[i] then
+// h is rebuilt from a double that holds &tbl[0], and the store through it
+// puts &other in tbl. The loop's writes through tbl[i] then
 // reach other: havocking other with lists still proves its bound.
 extern void abort(void);
 void reach_error() {}

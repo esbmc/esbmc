@@ -83,6 +83,8 @@ bool may_hold_address(const type2tc &t)
     return true;
   if (is_array_type(t))
     return may_hold_address(to_array_type(t).subtype);
+  if (is_vector_type(t))
+    return may_hold_address(to_vector_type(t).subtype);
   if (is_struct_type(t) || is_union_type(t))
   {
     const std::vector<type2tc> &members =
@@ -744,10 +746,20 @@ andersent::node_id andersent::eval_value(const expr2tc &r, unsigned loc)
     is_constant_array2t(r) || is_constant_array_of2t(r))
     return eval_constant_aggregate(r, loc);
 
-  // Anything else is a value this frontend does not model.  Leaving the set
-  // empty would be an unsound under-approximation; TOP is the safe answer.
+  return opaque(r, loc);
+}
+
+andersent::node_id andersent::opaque(const expr2tc &r, unsigned loc)
+{
+  // A value this frontend does not model.  Leaving the set empty would be an
+  // unsound under-approximation; TOP is the safe answer.  The addresses its
+  // operands hold still enter the set, so a store through TOP reaches them.
   const node_id t = fresh_node();
   points_to_top(t);
+  r->foreach_operand([this, t, loc](const expr2tc &op) {
+    if (!is_nil_expr(op))
+      add_constraint(constraint_kindt::COPY, t, eval_rhs(op, loc));
+  });
   return t;
 }
 
@@ -835,7 +847,7 @@ void andersent::handle_assign(
   if (!may_hold_address(lhs->type))
   {
     if (mentions_pointer(r))
-      assign_top(lhs, loc);
+      assign_node(lhs, opaque(r, loc), loc);
     return;
   }
   if (!may_carry_pointer(lhs->type) && is_constant_int2t(r))
