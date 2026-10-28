@@ -5662,8 +5662,9 @@ expr2tc code_contractst::declare_call_result(
   // Unlike the three havoc sites, this one does not skip a pointer under
   // --add-symex-value-sets. They leave existing state alone; this one is the
   // result's only definition, and omitting it puts the ensures back over the
-  // caller's stale value. A pointer result therefore carries no value set, so
-  // a write through it is lost (github_7009_pointer_result_knownbug).
+  // caller's stale value. A pointer result therefore carries no value set; a
+  // write through it reaches an object only when an ensures pins the result to
+  // it (github_7009_pointer_result).
   static size_t counter = 0;
   expr2tc result = declare_local_symbol(
     "__ESBMC_return_value$" + std::to_string(counter++), result_type);

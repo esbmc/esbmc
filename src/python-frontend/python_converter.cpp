@@ -317,6 +317,14 @@ nlohmann::json python_converter::callable_function_stubs() const
   return stubs;
 }
 
+nlohmann::json python_converter::kind_module_body() const
+{
+  nlohmann::json body = callable_function_stubs();
+  for (const auto &stmt : (*ast_json)["body"])
+    body.push_back(stmt);
+  return body;
+}
+
 /// The source file of the AST emitted for @p module, or "" when there is none.
 std::string python_converter::module_source_file(
   const std::string &module,

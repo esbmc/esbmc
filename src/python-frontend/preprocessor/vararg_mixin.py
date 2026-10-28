@@ -25,6 +25,96 @@ class VarargMixin:
             if isinstance(stmt, ast.FunctionDef) and bind_counts.get(stmt.name) == 1
         }
 
+    def _fix_constructor_varargs(self, module):
+        """Give each `__init__(self, *args)` the arity every construction passes (#9073).
+
+        A class qualifies when every read of its name is a call with that many
+        positional arguments. A module that can call an `__init__` without the
+        class name (`type(...)`, `__class__`, `x.__init__(...)`) is left alone.
+        Only the entry module is scanned, so a module it imports is trusted not
+        to construct its classes.
+        """
+        if not self.is_entry_module or self._has_star_import(module):
+            return
+        parents, bind_counts, calls_to = self._index_module(module)
+        if "type" in calls_to or any(map(self._constructs_without_name, parents)):
+            return
+        for cls in module.body:
+            if not isinstance(cls, ast.ClassDef):
+                continue
+            calls = calls_to.get(cls.name, [])
+            if not self._called_only_by(cls, calls, parents, bind_counts):
+                continue
+            init = self._plain_init(cls)
+            if init is None or any(
+                    call.keywords or any(isinstance(arg, ast.Starred) for arg in call.args)
+                    for call in calls):
+                continue
+            arities = {len(call.args) for call in calls}
+            if len(arities) == 1:
+                self._fix_init_arity(init, arities.pop() + 1)
+
+    def _index_module(self, module):
+        """Parent links, binding counts and calls by callee name for `module`."""
+        parents = {}
+        bind_counts = {}
+        calls_to = {}
+        for node in ast.walk(module):
+            for child in ast.iter_child_nodes(node):
+                parents[child] = node
+            for bound in self._bound_names(node):
+                bind_counts[bound] = bind_counts.get(bound, 0) + 1
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                calls_to.setdefault(node.func.id, []).append(node)
+        return parents, bind_counts, calls_to
+
+    @staticmethod
+    def _plain_init(class_def):
+        """`class_def`'s `__init__`, when nothing in the class can change the
+        arguments a construction passes it."""
+        methods = [s for s in class_def.body if isinstance(s, ast.FunctionDef)]
+        init = next((m for m in methods if m.name == "__init__"), None)
+        # A base can bring a metaclass, so any base disqualifies the class.
+        if class_def.bases or class_def.keywords or class_def.decorator_list or any(
+                m.decorator_list or m.name == "__new__" for m in methods):
+            return None
+        return init
+
+    @staticmethod
+    def _constructs_without_name(node):
+        """Whether `node` can run some class's `__init__` without naming the class.
+
+        `super().__init__(...)` only reaches a class from a subclass, which
+        reads the class name and so disqualifies it already.
+        """
+        if isinstance(node, ast.Name):
+            return node.id == "__class__"
+        if not isinstance(node, ast.Attribute):
+            return False
+        if node.attr == "__class__":
+            return True
+        return node.attr == "__init__" and not (isinstance(node.value, ast.Call) and isinstance(
+            node.value.func, ast.Name) and node.value.func.id == "super")
+
+    @staticmethod
+    def _fix_init_arity(init, arity):
+        """Replace `init`'s *args by the `arity` positional parameters it packs."""
+        args = init.args
+        extra = arity - len(args.args)
+        if args.vararg is None or args.kwarg or args.kwonlyargs or args.posonlyargs or extra < 0:
+            return
+        pad = [f"_esbmc_va_{i}" for i in range(extra)]
+        pack = ast.Assign(targets=[ast.Name(id=args.vararg.arg, ctx=ast.Store())],
+                          value=ast.Tuple(elts=[ast.Name(id=name, ctx=ast.Load()) for name in pad],
+                                          ctx=ast.Load()))
+        args.args += [ast.arg(arg=name) for name in pad]
+        args.vararg = None
+        # Every construction passes all the parameters, and a default would
+        # otherwise attach to the trailing packed ones.
+        args.defaults = []
+        init.body.insert(0, ast.copy_location(pack, init.body[0]))
+        ast.fix_missing_locations(init)
+
     def _scan_vararg_alias_calls(self, module):
         """Map each call through a module-level alias of a variadic def to the def.
 
@@ -472,17 +562,8 @@ class VarargMixin:
         the name only indexes, iterates, measures, compares or unpacks it. An
         unpacking is mapped only below that statement, where `xs` is bound.
         """
-        parents = {}
-        bind_counts = {}
+        parents, bind_counts, calls_to = self._index_module(module)
         unsafe = set()
-        calls_to = {}
-        for node in ast.walk(module):
-            for child in ast.iter_child_nodes(node):
-                parents[child] = node
-            for bound in self._bound_names(node):
-                bind_counts[bound] = bind_counts.get(bound, 0) + 1
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
-                calls_to.setdefault(node.func.id, []).append(node)
         len_bound = "len" in bind_counts
         for node, parent in parents.items():
             if not isinstance(node, ast.Name) or not isinstance(node.ctx, ast.Load):

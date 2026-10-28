@@ -755,6 +755,36 @@ void smt_solver_baset::bump_addrspace_array(
     addr_space_arr_type,
     "__ESBMC_addrspace_arr_" + std::to_string(addr_space_sym_num.back()));
   convert_assign(equality2tc(newname, store));
+  if (base_addrspace_tied)
+    tie_base_addrspace(idx, val);
+}
+
+expr2tc smt_solver_baset::base_addrspace_array() const
+{
+  // init_addr_space_array() starts the version count at 1.
+  return symbol2tc(addr_space_arr_type, "__ESBMC_addrspace_arr_1");
+}
+
+void smt_solver_baset::tie_base_addrspace(unsigned int idx, const expr2tc &val)
+{
+  assert_expr(equality2tc(
+    index2tc(
+      addr_space_type,
+      base_addrspace_array(),
+      constant_int2tc(machine_ptr, BigInt(idx))),
+    val));
+}
+
+void smt_solver_baset::tie_base_addrspace_to_objects()
+{
+  if (base_addrspace_tied)
+    return;
+  for (const auto &[id, may_be_freed] : addr_space_data.back())
+    tie_base_addrspace(
+      id,
+      symbol2tc(
+        addr_space_type, "__ESBMC_ptr_addr_range_" + std::to_string(id)));
+  base_addrspace_tied = ctx_level;
 }
 
 std::string smt_solver_baset::get_cur_addrspace_ident()

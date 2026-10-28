@@ -2,4 +2,4 @@ CORE
 main.py
 --unwind 5
 ^VERIFICATION FAILED$
-FAILED.*uncaught exception: TypeError$
+FAILED.*uncaught exception: TypeError

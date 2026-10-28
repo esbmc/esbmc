@@ -472,6 +472,9 @@ public:
   /// import binds, as `mk` after `from helper import mk` and `helper.mk`
   /// after `import helper`.
   nlohmann::json callable_function_stubs() const;
+  /// The stubs followed by the current module's own statements, which a name
+  /// read off the module is resolved against.
+  nlohmann::json kind_module_body() const;
   /// Whether a straight-line retype moved @p id's value to another symbol.
   bool is_retyped(const irep_idt &id) const
   {
@@ -1523,6 +1526,13 @@ private:
    */
   typet infer_tuple_struct_from_value(
     const nlohmann::json &value_node,
+    const std::unordered_map<std::string, nlohmann::json> &param_annotations);
+
+  /// infer_tuple_struct_from_value over every value that can reach `value` in
+  /// `method`, or empty_typet when their shapes differ.
+  typet shared_tuple_struct(
+    const nlohmann::json &value,
+    const nlohmann::json &method,
     const std::unordered_map<std::string, nlohmann::json> &param_annotations);
 
   exprt get_return_from_func(const char *func_symbol_id);
@@ -3311,7 +3321,16 @@ private:
     const exprt &lhs,
     const exprt &rhs,
     const nlohmann::json &left,
-    const nlohmann::json &right);
+    const nlohmann::json &right,
+    const nlohmann::json &element);
+
+  /// `is` between two tagged values: True when the payload is one object,
+  /// otherwise an unsupported property. Nil where no guard can be emitted.
+  exprt tagged_identity_by_payload(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &element);
 
   /// Python truthiness of a tagged value, a call on its address.
   exprt tagged_truthiness(exprt value, const nlohmann::json &node);

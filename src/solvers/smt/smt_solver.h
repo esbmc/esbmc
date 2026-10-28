@@ -932,6 +932,27 @@ public:
   void bump_addrspace_array(unsigned int idx, const expr2tc &val);
   /** Get the symbol name for the current address-allocation record array. */
   std::string get_cur_addrspace_ident();
+  /** The address-space version every other one is stored over. */
+  expr2tc base_addrspace_array() const;
+  void tie_base_addrspace(unsigned int idx, const expr2tc &val);
+  /** Gives the base version every object's range, now and on registration,
+   *  for convert_typecast_to_ptr(), the only reader of a slot before it is
+   *  stored. */
+  void tie_base_addrspace_to_objects();
+  /** The context level the base version was tied at; empty when no cast to a
+   *  pointer needed it. */
+  std::optional<unsigned int> base_addrspace_tied;
+  /** The object of a pointer convert_typecast_to_ptr() made, the context
+   *  level it was made at, and the one close_int_to_ptr_objects() closed it
+   *  at. */
+  struct int_to_ptr_objectt
+  {
+    smt_astt object;
+    unsigned int level;
+    std::optional<unsigned int> closed_at;
+  };
+  std::vector<int_to_ptr_objectt> int_to_ptr_objects;
+  void close_int_to_ptr_objects();
 
   /** Operand pairs of every division seen by note_division_operands. */
   std::set<std::pair<expr2tc, expr2tc>> divided_operand_pairs;
@@ -955,6 +976,16 @@ public:
   smt_astt convert_typecast_to_ints_from_bool(const typecast2t &cast);
   /** Typecast something (i.e. an integer) to a pointer */
   smt_astt convert_typecast_to_ptr(const typecast2t &cast);
+  smt_astt name_object_by_value(
+    const expr2tc &ptr,
+    const expr2tc &target,
+    smt_astt not_matched,
+    bool from_byte_update);
+  smt_astt address_holds(
+    const expr2tc &ptr,
+    const expr2tc &addrspace,
+    const expr2tc &target,
+    bool in_range);
   /** Typecast a pointer to an integer */
   smt_astt convert_typecast_from_ptr(const typecast2t &cast);
   /** Typecast structs to other structs */

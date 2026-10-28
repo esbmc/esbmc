@@ -393,6 +393,32 @@ public:
     return false;
   }
 
+  /// The name `T` of an annotation `Optional[T]`, `T | None` or `None | T`;
+  /// "" otherwise.
+  static std::string optional_inner_name(const nlohmann::json &ann)
+  {
+    if (!ann.is_object())
+      return "";
+    if (
+      ann.value("_type", "") == "Subscript" && ann.contains("value") &&
+      ann["value"].value("id", "") == "Optional" && ann.contains("slice"))
+      return ann["slice"].value("id", "");
+    if (
+      ann.value("_type", "") != "BinOp" || !ann.contains("op") ||
+      ann["op"].value("_type", "") != "BitOr" || !ann.contains("left") ||
+      !ann.contains("right"))
+      return "";
+    auto is_none = [](const nlohmann::json &n) {
+      return n.value("_type", "") == "Constant" && n.contains("value") &&
+             n["value"].is_null();
+    };
+    if (is_none(ann["right"]))
+      return ann["left"].value("id", "");
+    if (is_none(ann["left"]))
+      return ann["right"].value("id", "");
+    return "";
+  }
+
   static bool is_integer_type(const typet &type)
   {
     return type.is_signedbv() || type.is_unsignedbv();
