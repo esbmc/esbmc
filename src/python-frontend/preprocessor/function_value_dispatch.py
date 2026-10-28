@@ -25,6 +25,7 @@ function_value_types refuses the call as before.
 
 import ast
 import copy
+import itertools
 import re
 
 from preprocessor.function_value_types import _Analysis, _differ, _own_nodes
@@ -32,6 +33,7 @@ from preprocessor.function_value_types import _Analysis, _differ, _own_nodes
 # The most copies of the rest of the module that one module may need.
 _CAP = 32
 _PREFIX = "_esbmc_fv"
+_HOISTED = "_esbmc_hc"
 # Marks left on nodes between checking a use and rewriting it.
 _SITE = "esbmc_fv_site"
 _CODE = "esbmc_fv_code"
@@ -56,6 +58,101 @@ _COMPOUND = tuple(
 
 class _Refused(Exception):
     """A condition for the rewrite does not hold."""
+
+
+def _simple_callee(func):
+    """A callee that is a module-level name, a call of one, or a conditional of names."""
+    if isinstance(func, ast.Name):
+        return True
+    if isinstance(func, ast.Call):
+        return _simple_callee(func.func)
+    return isinstance(func, ast.IfExp) and all(
+        isinstance(arm, ast.Name) for arm in (func.body, func.orelse))
+
+
+def _whole_call(stmt):
+    """The call that is all of `stmt`, an expression or an assignment to names; else None."""
+    if isinstance(stmt, ast.Expr):
+        value = stmt.value
+    elif isinstance(stmt, ast.Assign) and all(isinstance(t, ast.Name) for t in stmt.targets):
+        value = stmt.value
+    else:
+        return None
+    return value if isinstance(value, ast.Call) and _simple_callee(value.func) else None
+
+
+def _hoist_callee(call, names):
+    """Bind the callee of `call`, when it is not a name, to a temporary; the statements, in order.
+
+    Python evaluates a callee, arguments included, before the arguments of the call it
+    is the callee of, so the temporaries keep the order when `call` is a whole statement.
+    """
+    before = _hoist_callee(call.func, names) if isinstance(call.func, ast.Call) else []
+    if isinstance(call.func, ast.Name):
+        return before
+    temp = ast.Name(f"{_HOISTED}{next(names)}", ast.Store())
+    ast.copy_location(temp, call)
+    bind = ast.copy_location(ast.Assign([temp], call.func, None), call)
+    call.func = ast.copy_location(ast.Name(temp.id, ast.Load()), call)
+    return before + [bind]
+
+
+def _constant_returners(module):
+    """The module-level defs `def r(): return t` that only return another such def `t`."""
+    defs = {s.name: s for s in module.body if isinstance(s, ast.FunctionDef)}
+
+    def sole(name):
+        return name in defs and not defs[name].decorator_list and sum(
+            _binds_name(s, name) for s in module.body) == 1
+
+    found = {}
+    for name, fn in defs.items():
+        body = fn.body
+        if sole(name) and not fn.args.args + fn.args.posonlyargs + fn.args.kwonlyargs and not (
+                fn.args.vararg or fn.args.kwarg) and len(body) == 1 and isinstance(
+                    body[0], ast.Return) and isinstance(body[0].value, ast.Name) \
+                and sole(body[0].value.id):
+            found[name] = body[0].value.id
+    return found
+
+
+def _resolve_constant(call, constants):
+    """Replace a callee `r()` by `t` where `def r(): return t`, which has no effect to keep."""
+    inner = call.func
+    if not isinstance(inner, ast.Call):
+        return
+    _resolve_constant(inner, constants)
+    inner = call.func
+    if isinstance(inner.func, ast.Name) and inner.func.id in constants and not inner.args \
+            and not inner.keywords:
+        call.func = ast.copy_location(ast.Name(constants[inner.func.id], ast.Load()), inner)
+
+
+def _hoist_callees(module):
+    """Give every callee that is a call or a conditional its own statement, at module level."""
+    if any(name.startswith(_HOISTED) for name in _bound_names(module.body)):
+        raise _Refused
+    names = itertools.count()
+    constants = _constant_returners(module)
+    body = []
+    for stmt in module.body:
+        call = _whole_call(stmt)
+        if call is not None:
+            _resolve_constant(call, constants)
+        if call is not None and not isinstance(call.func, ast.Name):
+            body.extend(_hoist_callee(call, names))
+        body.append(stmt)
+    module.body = [
+        stmt for stmt in body if not (isinstance(stmt, ast.FunctionDef) and stmt.name in constants
+                                      and not _reads_outside(body, stmt))
+    ]
+
+
+def _reads_outside(body, fn):
+    """Whether a statement of `body` other than `fn` mentions the name of `fn`."""
+    return any(
+        isinstance(n, ast.Name) and n.id == fn.name for stmt in body if stmt is not fn
+        for n in ast.walk(stmt))
 
 
 def _mixed_groups(analysis):
@@ -118,6 +215,78 @@ def _bound_names(nodes):
             elif isinstance(getattr(node, "name", None), str):
                 names.add(node.name)
     return names
+
+
+def _scope_locals(scope):
+    """The names a def, lambda or class binds for itself: parameters and its own bindings."""
+    args = getattr(scope, "args", None)
+    names = set()
+    if args is not None:
+        names.update(a.arg for a in args.posonlyargs + args.args + args.kwonlyargs)
+        names.update(a.arg for a in (args.vararg, args.kwarg) if a is not None)
+    declared = set()
+    for node in _own_nodes(scope):
+        if isinstance(node, (ast.Global, ast.Nonlocal)):
+            declared.update(node.names)
+        elif isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Load):
+            names.add(node.id)
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.add(node.name)
+        elif isinstance(node, ast.alias):
+            names.add((node.asname or node.name).split(".")[0])
+    return names - declared
+
+
+_DEFINING = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
+
+
+class _VisibleNames:
+    """The names that nodes read or bind where the module can see them.
+
+    A parameter or a local of a nested def is its own variable, so it does not count; a name
+    that such a def declares `global` or `nonlocal`, or reads without binding, does.
+    """
+
+    def __init__(self):
+        self.names = set()
+
+    def visit(self, node, local):
+        if isinstance(node, _DEFINING):
+            self._definition(node, local)
+            return
+        self._own(node, local)
+        for child in ast.iter_child_nodes(node):
+            self.visit(child, local)
+
+    def _definition(self, node, local):
+        """A def, lambda or class: its decorators and defaults belong to the enclosing scope."""
+        lam = isinstance(node, ast.Lambda)
+        if not lam and node.name not in local:
+            self.names.add(node.name)
+        outside = [] if lam else list(node.decorator_list)
+        if not isinstance(node, ast.ClassDef):
+            outside += node.args.defaults + [d for d in node.args.kw_defaults if d is not None]
+        for child in outside:
+            self.visit(child, local)
+        for child in [node.body] if lam else node.body:
+            self.visit(child, local | _scope_locals(node))
+
+    def _own(self, node, local):
+        if isinstance(node, ast.Name) and node.id not in local:
+            self.names.add(node.id)
+        elif isinstance(node, (ast.Global, ast.Nonlocal)):
+            self.names.update(node.names)
+        elif isinstance(node, ast.alias):
+            self.names.add((node.asname or node.name).split(".")[0])
+        elif isinstance(node, ast.ExceptHandler) and node.name and node.name not in local:
+            self.names.add(node.name)
+
+
+def _visible_names(nodes):
+    visible = _VisibleNames()
+    for node in nodes:
+        visible.visit(node, frozenset())
+    return visible.names
 
 
 def _sole_def(fn, defs, module, analysis):
@@ -391,6 +560,12 @@ class _Plan:
             parent = self.parents.get(id(parent))
         return False
 
+    def _is_dispatched_param(self, fn, expr, group):
+        """Whether `expr` names a parameter of `fn` that `fn` dispatches on, in `group`."""
+        return isinstance(expr, ast.Name) and self.param_holders.get(fn.name, {}).get(
+            expr.id) == group and expr.id in {a.arg
+                                              for a in fn.args.posonlyargs + fn.args.args}
+
     def _check_returner(self, fn, group):
         """`fn` has no nested scope and returns a function of `group` on every path."""
         body = ast.Module(fn.body, [])
@@ -401,12 +576,14 @@ class _Plan:
             raise _Refused
         for node in ast.walk(body):
             if isinstance(node, ast.Return):
-                self._check_returned_function(node.value, group)
+                self._check_returned_function(node.value, group, fn)
 
-    def _check_returned_function(self, expr, group):
+    def _check_returned_function(self, expr, group, fn):
         if isinstance(expr, ast.IfExp):
-            self._check_returned_function(expr.body, group)
-            self._check_returned_function(expr.orelse, group)
+            self._check_returned_function(expr.body, group, fn)
+            self._check_returned_function(expr.orelse, group, fn)
+        elif self._is_dispatched_param(fn, expr, group):
+            self.returned_names.add(id(expr))
         elif isinstance(expr, ast.Name) and self.functions.get(expr.id, (None, ))[0] == group:
             setattr(expr, _CODE, self.functions[expr.id][1])
             self.returned_names.add(id(expr))
@@ -516,6 +693,8 @@ class _Plan:
 
     def _check_variable_use(self, use, group, is_param):
         """A load is a returned call or an argument to dispatch on; a store assigns a function."""
+        if id(use) in self.returned_names:
+            return
         parent = self.parents[id(use)]
         if isinstance(use.ctx, ast.Load):
             if not self._is_dispatched_argument(parent, use):
@@ -833,7 +1012,7 @@ class _Dispatch:
     def _branch(self, stmts, i, before):
         """Copy the end of `stmts` into each branch of the `if` at `i`, so a call can split."""
         stmt = stmts[i]
-        before = before | _bound_names(stmts[:i] + [stmt.test])
+        before = before | _visible_names(stmts[:i] + [stmt.test])
         branches, total = [], 0
         for branch in (stmt.body, stmt.orelse):
             body, leaves = self.statements(branch + copy.deepcopy(stmts[i + 1:]), before)
@@ -872,7 +1051,7 @@ class _Dispatch:
             for s in rest
             for n in ast.walk(s) if isinstance(n, ast.Name) and not isinstance(n.ctx, ast.Load)
         } - self.holders
-        if stored & (before | _bound_names(stmts[:i])):
+        if stored & (before | _visible_names(stmts[:i])):
             raise _Refused
         return stored
 
@@ -890,8 +1069,9 @@ def dispatch_mixed_function_values(module, path):
     if not _mixed_groups(_propagated(module, path)):
         return
     candidate = copy.deepcopy(module)
-    analysis = _propagated(candidate, path)
     try:
+        _hoist_callees(candidate)
+        analysis = _propagated(candidate, path)
         plan = _Plan(candidate, analysis, _mixed_groups(analysis))
         plan.check_uses()
         plan.check_param_holders()

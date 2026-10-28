@@ -1,5 +1,5 @@
-# pick returns a function returning str or one returning int, so the call
-# through its result has no single type and is refused.
+# pick returns a function returning str or one returning int, and its result
+# is called directly, so each path sees its own result type.
 def s():
     return "a"
 
