@@ -3233,6 +3233,14 @@ void dereferencet::check_alignment(
 
   // Perform conversion to bytes here
   minwidth = access_alignment(minwidth / 8);
+
+  /* No C scalar is aligned beyond the fundamental alignment; one wider than
+   * that is a _BitInt, which the target aligns to its _BitInt cap (#8692).
+   * Demanding the full width would fail every such access, since no object
+   * base is aligned past the fundamental alignment either. */
+  const configt::ansi_ct &c = config.ansi_c;
+  if (minwidth > c.max_alignment() && c.bitint_max_align != 0)
+    minwidth = c.bitint_max_align;
   expr2tc addr = typecast2tc(
     size_type2(),
     div2tc(offset_bits->type, offset_bits, gen_long(offset_bits->type, 8)));
