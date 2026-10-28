@@ -282,6 +282,14 @@ private:
   linalg_matrix(const std::function<void(nlohmann::json &)> &unwrap);
   exprt nondet_bool();
   exprt eigenvalues(const std::vector<std::vector<double>> &m);
+  exprt eigen_decomposition(const std::vector<std::vector<double>> &m);
+  void eigen_pair_2x2(
+    const std::vector<std::vector<double>> &m,
+    std::vector<exprt> &values,
+    std::vector<std::vector<exprt>> &columns);
+  std::vector<exprt>
+  signed_column(const std::vector<double> &exact, double radius);
+  exprt linalg_tuple(const std::vector<exprt> &parts);
   std::vector<exprt> eigenvalue_pair(const std::vector<std::vector<double>> &m);
   exprt singular_values(const std::vector<std::vector<double>> &m);
   exprt lapack_vector(const std::vector<double> &exact, double radius);

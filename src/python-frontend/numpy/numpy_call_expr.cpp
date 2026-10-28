@@ -10,6 +10,7 @@
 #include <python-frontend/python-list/python_list.h>
 #include <python-frontend/python_expr_builder.h>
 #include <python-frontend/symbol_id.h>
+#include <python-frontend/tuple/tuple_handler.h>
 #include <irep2/irep2_utils.h>
 #include <util/arith/arith_tools.h>
 #include <util/lang/c_types.h>
@@ -5661,6 +5662,170 @@ exprt numpy_call_expr::eigenvalues(const std::vector<std::vector<double>> &m)
   return array;
 }
 
+static std::size_t require_square(const std::vector<std::vector<double>> &m)
+{
+  for (const auto &row : m)
+    if (row.size() != m.size())
+      throw std::runtime_error(
+        "numpy.linalg.LinAlgError: Last 2 dimensions of the array must be "
+        "square");
+  return m.size();
+}
+
+static exprt negate_double(const exprt &value)
+{
+  expr2tc value2;
+  migrate_expr(value, value2);
+  return migrate_expr_back(neg2tc(migrate_type(double_type()), value2));
+}
+
+// A unit eigenvector of a 2x2 matrix for `lambda`: the larger of the two
+// null-space directions of A - lambda I, which keeps it accurate.
+static std::vector<double>
+unit_eigenvector_2x2(const std::vector<std::vector<double>> &m, double lambda)
+{
+  const std::vector<double> p = {m[0][1], lambda - m[0][0]};
+  const std::vector<double> q = {lambda - m[1][1], m[1][0]};
+  const std::vector<double> &u =
+    std::hypot(p[0], p[1]) >= std::hypot(q[0], q[1]) ? p : q;
+  const double length = std::hypot(u[0], u[1]);
+  return {u[0] / length, u[1] / length};
+}
+
+// A column of `lapack_value`s around `exact`, with an arbitrary sign as
+// LAPACK's eigenvectors have.
+std::vector<exprt>
+numpy_call_expr::signed_column(const std::vector<double> &exact, double radius)
+{
+  const exprt flip = nondet_bool();
+  std::vector<exprt> column;
+  for (double value : exact)
+  {
+    const exprt bounded = lapack_value(value, radius);
+    column.push_back(if_exprt(flip, negate_double(bounded), bounded));
+  }
+  return column;
+}
+
+// The real eigenvalues of a 2x2 matrix that is not diagonal, each paired
+// with its unit eigenvector, in either order. The eigenvectors are as
+// accurate as the gap between the eigenvalues allows.
+void numpy_call_expr::eigen_pair_2x2(
+  const std::vector<std::vector<double>> &m,
+  std::vector<exprt> &values,
+  std::vector<std::vector<exprt>> &columns)
+{
+  const double a = m[0][0], b = m[0][1], c = m[1][0], d = m[1][1];
+  const double mid = (a + d) / 2, half = (a - d) / 2;
+  const double square = half * half + b * c;
+  if (square < 0)
+    throw std::runtime_error(
+      "TypeError: numpy.linalg.eig of a matrix with complex eigenvalues is "
+      "not supported");
+  if (square == 0)
+    throw std::runtime_error(
+      "TypeError: numpy.linalg.eig of a non-diagonal matrix with a repeated "
+      "eigenvalue is not supported");
+  const bool triangular = b == 0.0 || c == 0.0;
+  const std::vector<double> lambdas =
+    triangular
+      ? std::vector<double>{a, d}
+      : std::vector<double>{mid + std::sqrt(square), mid - std::sqrt(square)};
+  const double norm = frobenius_norm(m);
+  const double gap = std::fabs(lambdas[0] - lambdas[1]);
+  const double vector_radius = 1e-12 * (1 + norm / gap);
+  std::vector<exprt> found_values;
+  std::vector<std::vector<exprt>> found_columns;
+  for (double lambda : lambdas)
+  {
+    found_values.push_back(lapack_value(lambda, eigenvalue_radius(m, square)));
+    found_columns.push_back(signed_column(
+      unit_eigenvector_2x2(m, lambda),
+      vector_radius < 1 ? vector_radius : INFINITY));
+  }
+  const exprt swap = nondet_bool();
+  for (std::size_t k = 0; k < 2; ++k)
+  {
+    values.push_back(if_exprt(swap, found_values[1 - k], found_values[k]));
+    std::vector<exprt> column;
+    for (std::size_t i = 0; i < 2; ++i)
+      column.push_back(
+        if_exprt(swap, found_columns[1 - k][i], found_columns[k][i]));
+    columns.push_back(column);
+  }
+}
+
+// `(values, vectors)` as a Python tuple of two arrays.
+exprt numpy_call_expr::linalg_tuple(const std::vector<exprt> &parts)
+{
+  std::vector<typet> types;
+  std::vector<expr2tc> members;
+  for (const exprt &part : parts)
+  {
+    symbolt &tmp =
+      converter_.create_tmp_symbol(call_, "$linalg$", part.type(), exprt());
+    const exprt symbol = symbol_expr(tmp);
+    code_declt decl(symbol);
+    decl.location() = converter_.get_location_from_decl(call_);
+    converter_.add_instruction(decl);
+    code_assignt assign(symbol, part);
+    assign.location() = decl.location();
+    converter_.add_instruction(assign);
+    types.push_back(part.type());
+    expr2tc member;
+    migrate_expr(symbol, member);
+    members.push_back(member);
+  }
+  const struct_typet type =
+    converter_.get_tuple_handler().create_tuple_struct_type(types);
+  return migrate_expr_back(constant_struct2tc(migrate_type(type), members));
+}
+
+static exprt double_array(const std::vector<exprt> &values)
+{
+  const typet element = values.front().type();
+  exprt array(
+    "array", array_typet(element, from_integer(values.size(), size_type())));
+  for (const exprt &value : values)
+    array.copy_to_operands(value);
+  return array;
+}
+
+// eig of a real matrix whose eigenvalues are real: the eigenvalues, and unit
+// eigenvectors as the columns of the second result. A diagonal matrix keeps
+// its entries and the identity, as LAPACK's dgeev leaves it.
+exprt numpy_call_expr::eigen_decomposition(
+  const std::vector<std::vector<double>> &m)
+{
+  const std::size_t n = require_square(m);
+  std::vector<exprt> values;
+  std::vector<std::vector<exprt>> columns;
+  if (is_diagonal(m))
+    for (std::size_t j = 0; j < n; ++j)
+    {
+      values.push_back(lapack_value(m[j][j], 0.0));
+      std::vector<exprt> column;
+      for (std::size_t i = 0; i < n; ++i)
+        column.push_back(lapack_value(i == j ? 1.0 : 0.0, 0.0));
+      columns.push_back(column);
+    }
+  else if (n == 2)
+    eigen_pair_2x2(m, values, columns);
+  else
+    throw std::runtime_error(
+      "TypeError: numpy.linalg.eig supports only 2x2 and diagonal matrices "
+      "currently");
+  std::vector<exprt> rows;
+  for (std::size_t i = 0; i < n; ++i)
+  {
+    std::vector<exprt> row;
+    for (std::size_t j = 0; j < n; ++j)
+      row.push_back(columns[j][i]);
+    rows.push_back(double_array(row));
+  }
+  return linalg_tuple({double_array(values), double_array(rows)});
+}
+
 // svd(compute_uv=False) of a 2x2 matrix: the singular values in descending
 // order, from a formula that keeps the smaller one accurate.
 exprt numpy_call_expr::singular_values(
@@ -6993,13 +7158,10 @@ exprt numpy_call_expr::create_expr_from_call()
         "numeric arrays");
     }
 
-    // numpy.linalg.eig and svd also return eigenvectors and the U and Vh
-    // factors, which are not modelled; eigvals and svd(compute_uv=False)
-    // return only the values.
+    // svd's U and Vh factors are not modelled; svd(compute_uv=False)
+    // returns only the values.
     if (function == "eig")
-      throw std::runtime_error(
-        "TypeError: numpy.linalg.eig returns eigenvectors, which are not "
-        "supported; use numpy.linalg.eigvals");
+      return eigen_decomposition(linalg_matrix(unwrap_np_array_arg));
     if (function == "eigvals")
       return eigenvalues(linalg_matrix(unwrap_np_array_arg));
     if (function == "svd")
