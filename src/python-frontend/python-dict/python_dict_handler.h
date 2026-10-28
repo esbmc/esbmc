@@ -755,6 +755,16 @@ private:
     const exprt &value_expr,
     const locationt &location);
 
+  /// Append to \p target_block a heap copy of the dict \p value; returns the
+  /// pointer to it.
+  const symbolt &heap_copy_dict(
+    const nlohmann::json &node,
+    const exprt &value,
+    const locationt &location,
+    codet &target_block);
+
+  constant_exprt nested_dict_type_hash(const typet &dict_type);
+
   /**
    * @brief Store the dict v of `d[k] = v` by pointer to a heap copy, as
    * store_nested_dict_value stores a nested dict literal by pointer
