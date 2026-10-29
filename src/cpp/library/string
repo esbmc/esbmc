@@ -2033,7 +2033,8 @@ basic_string<CharT, Traits, Alloc> &basic_string<CharT, Traits, Alloc>::insert(
 {
 __ESBMC_HIDE:
   int len = this->length(), i, k;
-  __ESBMC_assert((pos1 >= 0) && (pos1 < len), "basic_string overflow");
+  if (pos1 > len)
+    throw std::out_of_range();
   __ESBMC_assert(s.str != NULL, "The parameter must be different than NULL");
   int lenOne = pos1 + 1;
   char one[STRING_CAPACITY];
@@ -2076,7 +2077,8 @@ basic_string<CharT, Traits, Alloc> &basic_string<CharT, Traits, Alloc>::insert(
 __ESBMC_HIDE:
   int len = this->length(), i, k;
   int sLen = s.length();
-  __ESBMC_assert((pos1 >= 0) && (pos1 < len), "basic_string overflow");
+  if (pos1 > len)
+    throw std::out_of_range();
   __ESBMC_assert(
     (pos2 >= 0) && (pos2 < s.length()) && ((pos2 + n) < sLen) && (n > 0),
     "basic_string overflow");
@@ -2121,7 +2123,8 @@ __ESBMC_HIDE:
   int len = this->length(), i, k;
   int lim = n;
   int sLen = strlen(s);
-  __ESBMC_assert((pos1 >= 0) && (pos1 < len), "basic_string overflow");
+  if (pos1 > len)
+    throw std::out_of_range();
   __ESBMC_assert(n > 0, "basic_string overflow");
   __ESBMC_assert(s != NULL, "The parameter must be different than NULL");
   __ESBMC_assert(lim < sLen, "basic_string overflow");
@@ -2162,7 +2165,8 @@ basic_string<CharT, Traits, Alloc>::insert(size_t pos1, const char *s)
 {
 __ESBMC_HIDE:
   int len = this->length(), i, k;
-  __ESBMC_assert(pos1 >= 0, "basic_string overflow");
+  if (pos1 > len)
+    throw std::out_of_range();
   __ESBMC_assert(s != NULL, "The parameter must be different than NULL");
   int sLen = strlen(s);
   int lenOne = pos1 + 1;
@@ -2203,9 +2207,9 @@ basic_string<CharT, Traits, Alloc>::insert(size_t pos1, size_t n, char c)
 __ESBMC_HIDE:
   int len = this->length(), i, k;
   int sLen = n;
-  __ESBMC_assert(
-    (pos1 >= 0) && (pos1 < len) && ((pos1 + n) < len) && (n > 0),
-    "basic_string overflow");
+  if (pos1 > len)
+    throw std::out_of_range();
+  __ESBMC_assert(((pos1 + n) < len) && (n > 0), "basic_string overflow");
   char s[STRING_CAPACITY];
   for (i = 0; i < n; i++)
   {
