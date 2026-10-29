@@ -538,15 +538,27 @@ public:
   }
 
 #if __cplusplus >= 201103L
+  // [associative.reqmts]: X(il) inserts each element, so keys end up sorted
+  // and a repeated key keeps its first value.
   map(std::initializer_list<value_type> list)
   {
     this->__om_allocate();
-    this->_size = list.size();
-    auto begin = list.begin();
-    for (size_type i = 0; i < _size; ++i)
+    this->_size = 0;
+    for (const value_type &e : list)
     {
-      this->_key[i] = (begin + i)->first;
-      this->_value[i] = (begin + i)->second;
+      int i = 0;
+      while (i < _size && key_compare()(_key[i], e.first))
+        ++i;
+      if (i < _size && !key_compare()(e.first, _key[i]))
+        continue;
+      for (int j = _size; j > i; --j)
+      {
+        _key[j] = _key[j - 1];
+        _value[j] = _value[j - 1];
+      }
+      _key[i] = e.first;
+      _value[i] = e.second;
+      ++_size;
     }
   }
 #endif
