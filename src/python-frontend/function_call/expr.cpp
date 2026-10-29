@@ -8008,31 +8008,32 @@ void function_call_expr::forward_keyword_arguments(
   const locationt &location,
   const symbolt &func_symbol)
 {
-  if (!call_.contains("keywords") || !call_["keywords"].is_array())
-    return;
-  for (const auto &kw : call_["keywords"])
+  if (call_.contains("keywords") && call_["keywords"].is_array())
   {
-    if (!kw.contains("arg") || kw["arg"].is_null())
+    for (const auto &kw : call_["keywords"])
     {
-      // The preprocessor spells out a splat whose keys it knows (#9329).
-      const auto &value = kw["value"];
-      if (value["_type"] == "Dict" && value["keys"].empty())
-        continue;
-      throw std::runtime_error(
-        "unsupported: a ** argument whose keys are not known statically");
-    }
-    const std::string kw_name = kw["arg"].get<std::string>();
-    for (size_t i = 0; i < params.size(); ++i)
-    {
-      if (params[i].get_base_name().as_string() == kw_name)
+      if (!kw.contains("arg") || kw["arg"].is_null())
       {
-        exprt kw_val = converter_.get_expr(kw["value"]);
-        refuse_float_to_int_argument(kw_val, params[i].type(), func_symbol);
-        kw_val = coerce_tagged_argument(kw_val, params[i].type(), location);
-        if (call.arguments().size() <= i)
-          call.arguments().resize(i + 1);
-        call.arguments()[i] = kw_val;
-        break;
+        // The preprocessor spells out a splat whose keys it knows (#9329).
+        const auto &value = kw["value"];
+        if (value["_type"] == "Dict" && value["keys"].empty())
+          continue;
+        throw std::runtime_error(
+          "unsupported: a ** argument whose keys are not known statically");
+      }
+      const std::string kw_name = kw["arg"].get<std::string>();
+      for (size_t i = 0; i < params.size(); ++i)
+      {
+        if (params[i].get_base_name().as_string() == kw_name)
+        {
+          exprt kw_val = converter_.get_expr(kw["value"]);
+          refuse_float_to_int_argument(kw_val, params[i].type(), func_symbol);
+          kw_val = coerce_tagged_argument(kw_val, params[i].type(), location);
+          if (call.arguments().size() <= i)
+            call.arguments().resize(i + 1);
+          call.arguments()[i] = kw_val;
+          break;
+        }
       }
     }
   }
