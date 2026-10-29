@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: .*main.py:8:4: Unpacking \*\*x into inner\(\) is supported only when x is a dict of constant str keys the callee takes$

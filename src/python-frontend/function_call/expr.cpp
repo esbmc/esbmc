@@ -7995,6 +7995,49 @@ void function_call_expr::reject_numpy_layout_mismatch(
       "the one inferred for its parameter is not supported");
 }
 
+/// Forward keyword arguments to their parameter slots so the callee
+/// receives the supplied value. The validation loop in finalize_call only
+/// fills in default values for *missing* params, so kwargs would otherwise be
+/// marked "provided" yet never actually passed. Subsumes the min/max-default
+/// specific path: with the *_default models exposing a named `default`
+/// parameter, the generic forwarding lands the value in the right slot for
+/// free.
+void function_call_expr::forward_keyword_arguments(
+  code_function_callt &call,
+  const code_typet::argumentst &params,
+  const locationt &location,
+  const symbolt &func_symbol)
+{
+  if (!call_.contains("keywords") || !call_["keywords"].is_array())
+    return;
+  for (const auto &kw : call_["keywords"])
+  {
+    if (!kw.contains("arg") || kw["arg"].is_null())
+    {
+      // The preprocessor spells out a splat whose keys it knows (#9329).
+      const auto &value = kw["value"];
+      if (value["_type"] == "Dict" && value["keys"].empty())
+        continue;
+      throw std::runtime_error(
+        "unsupported: a ** argument whose keys are not known statically");
+    }
+    const std::string kw_name = kw["arg"].get<std::string>();
+    for (size_t i = 0; i < params.size(); ++i)
+    {
+      if (params[i].get_base_name().as_string() == kw_name)
+      {
+        exprt kw_val = converter_.get_expr(kw["value"]);
+        refuse_float_to_int_argument(kw_val, params[i].type(), func_symbol);
+        kw_val = coerce_tagged_argument(kw_val, params[i].type(), location);
+        if (call.arguments().size() <= i)
+          call.arguments().resize(i + 1);
+        call.arguments()[i] = kw_val;
+        break;
+      }
+    }
+  }
+}
+
 exprt function_call_expr::finalize_call(
   code_function_callt &call,
   size_t param_offset,
@@ -8003,35 +8046,7 @@ exprt function_call_expr::finalize_call(
   symbolt *obj_symbol)
 {
   const auto &params = to_code_type(func_symbol->get_type()).arguments();
-  // Forward keyword arguments to their parameter slots so the callee
-  // receives the supplied value. The validation loop below only fills in
-  // default values for *missing* params, so kwargs would otherwise be
-  // marked "provided" yet never actually passed. Subsumes the
-  // min/max-default specific path: with the *_default models exposing a
-  // named `default` parameter, the generic forwarding lands the value in
-  // the right slot for free.
-  if (call_.contains("keywords") && call_["keywords"].is_array())
-  {
-    for (const auto &kw : call_["keywords"])
-    {
-      if (!kw.contains("arg") || kw["arg"].is_null())
-        continue; // skip **kwargs unpacking
-      const std::string kw_name = kw["arg"].get<std::string>();
-      for (size_t i = 0; i < params.size(); ++i)
-      {
-        if (params[i].get_base_name().as_string() == kw_name)
-        {
-          exprt kw_val = converter_.get_expr(kw["value"]);
-          refuse_float_to_int_argument(kw_val, params[i].type(), *func_symbol);
-          kw_val = coerce_tagged_argument(kw_val, params[i].type(), location);
-          if (call.arguments().size() <= i)
-            call.arguments().resize(i + 1);
-          call.arguments()[i] = kw_val;
-          break;
-        }
-      }
-    }
-  }
+  forward_keyword_arguments(call, params, location, *func_symbol);
 
   // Add default arguments for missing parameters
   size_t num_provided_args = call_["args"].size();

@@ -1,10 +1,11 @@
 regression/python/github_9329
-regression/python/github_9329_extra_key_fail
+regression/python/github_9329_extra_key_unsupported_fail
 regression/python/github_9329_fail
 regression/python/github_9329_kwargs_callee
 regression/python/github_9329_literal
 regression/python/github_9329_literal_fail
 regression/python/github_9329_local
 regression/python/github_9329_loop
-regression/python/github_9329_mutated
+regression/python/github_9329_mutated_unsupported
 regression/python/github_9329_reordered
+regression/python/github_9329_shadowed_callee_unsupported_fail
