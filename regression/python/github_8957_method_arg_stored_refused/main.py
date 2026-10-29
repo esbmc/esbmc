@@ -14,3 +14,4 @@ a = K()
 c = nondet_bool()
 h = a.f
 r = a.call(a.f if c else a.g)
+h()

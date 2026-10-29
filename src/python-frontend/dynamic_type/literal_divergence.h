@@ -199,9 +199,8 @@ inline std::string annotated_return_kind(
 
 // The kind `self.<name>()` returns: every class defining `name` must agree on
 // one scalar return annotation, as `self` may be an instance of any of them.
-inline std::string method_return_kind(
-  const std::string &name,
-  const nlohmann::json &module_body)
+inline std::string
+method_return_kind(const std::string &name, const nlohmann::json &module_body)
 {
   std::string agreed;
   if (!module_body.is_array())
@@ -228,6 +227,52 @@ inline std::string method_return_kind(
   return agreed;
 }
 
+// Whether `callee` spells `self.<leaf>` or `<name>.<leaf>` for a module-level
+// `name = Class(...)` of a class defined in the module.
+inline bool is_instance_call(
+  const std::string &callee,
+  const std::string &leaf,
+  const nlohmann::json &module_body)
+{
+  if (callee.size() <= leaf.size() + 1)
+    return false;
+  const std::string receiver =
+    callee.substr(0, callee.size() - leaf.size() - 1);
+  if (receiver == "self")
+    return true;
+  const nlohmann::json *bound = single_assigned_value(module_body, receiver);
+  if (
+    !bound || !bound->is_object() || bound->value("_type", "") != "Call" ||
+    !bound->contains("func") || (*bound)["func"].value("_type", "") != "Name")
+    return false;
+  const std::string cls = (*bound)["func"].value("id", "");
+  for (const auto &stmt : module_body)
+    if (
+      stmt.is_object() && stmt.value("_type", "") == "ClassDef" &&
+      stmt.value("name", "") == cls)
+      return true;
+  return false;
+}
+
+// The kind of an unannotated module-level def whose body is one `return`.
+inline std::string forwarded_return_kind(
+  const std::string &callee,
+  const nlohmann::json &module_body,
+  unsigned depth)
+{
+  if (!module_body.is_array())
+    return "";
+  for (const auto &stmt : module_body)
+    if (
+      stmt.is_object() && stmt.value("_type", "") == "FunctionDef" &&
+      stmt.value("name", "") == callee && stmt["body"].size() == 1 &&
+      stmt["body"][0].value("_type", "") == "Return" &&
+      stmt["body"][0].contains("value") && stmt["body"][0]["value"].is_object())
+      return classify_literal_value_kind(
+        stmt["body"][0]["value"], module_body, depth + 1);
+  return "";
+}
+
 // The kind of a call: a nondet_<type> function, a builtin conversion, abs of
 // a number, or a function with a scalar return annotation.
 inline std::string classify_call_kind(
@@ -252,9 +297,13 @@ inline std::string classify_call_kind(
   }
 
   const std::string kind = annotated_return_kind(callee, module_body);
-  return kind.empty() && callee == "self." + leaf
-           ? method_return_kind(leaf, module_body)
-           : kind;
+  if (!kind.empty())
+    return kind;
+  const std::string method_kind = is_instance_call(callee, leaf, module_body)
+                                    ? method_return_kind(leaf, module_body)
+                                    : "";
+  return method_kind.empty() ? forwarded_return_kind(callee, module_body, depth)
+                             : method_kind;
 }
 
 inline std::string classify_literal_value_kind(
