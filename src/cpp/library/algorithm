@@ -1537,41 +1537,27 @@ void inplace_merge(BidIt first, BidIt mid, BidIt last, Pr pred)
 template <class InIt1, class InIt2>
 bool includes(InIt1 first1, InIt1 last1, InIt2 first2, InIt2 last2)
 {
-  while (first1 != last1)
+  for (; first2 != last2; ++first1)
   {
-    if (*first2 < *first1)
-      break;
-    else if (*first1 < *first2)
-      ++first1;
-    else
-    {
-      ++first1;
+    if (first1 == last1 || *first2 < *first1)
+      return false;
+    if (!(*first1 < *first2))
       ++first2;
-    }
-    if (first2 == last2)
-      return true;
   }
-  return false;
+  return true;
 }
 
 template <class InIt1, class InIt2, class Pr>
 bool includes(InIt1 first1, InIt1 last1, InIt2 first2, InIt2 last2, Pr pred)
 {
-  while (first1 != last1)
+  for (; first2 != last2; ++first1)
   {
-    if (pred(*first2, *first1))
-      break;
-    else if (pred(*first1, *first2))
-      ++first1;
-    else
-    {
-      ++first1;
+    if (first1 == last1 || pred(*first2, *first1))
+      return false;
+    if (!pred(*first1, *first2))
       ++first2;
-    }
-    if (first2 == last2)
-      return true;
   }
-  return false;
+  return true;
 }
 
 template <class InIt1, class InIt2, class OutIt>
