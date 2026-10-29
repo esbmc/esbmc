@@ -1,0 +1,5 @@
+CORE
+main.c
+--64 --unwind 20
+^VERIFICATION FAILED$
+dereference failure on memchr: reading memory segment of size 4 with 64 bytes$
