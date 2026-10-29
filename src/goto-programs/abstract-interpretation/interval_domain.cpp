@@ -1005,17 +1005,10 @@ void interval_domaint::transform(
   case RETURN:
   {
     // After a return, all function arguments becomes nondet
+    havoc_arguments(instruction.function, ns);
     const symbolt *current_function = ns.lookup(instruction.function);
     type2tc t = migrate_symbol_type(*current_function);
     const code_type2t &function = to_code_type(t);
-
-    for (size_t i = 0; i < function.arguments.size(); i++)
-    {
-      const type2tc &arg_type = function.arguments[i];
-      const expr2tc arg_symbol =
-        symbol2tc(arg_type, function.argument_names[i]);
-      havoc_rec(arg_symbol);
-    }
 
     /* The current implementation of the abstract interpreter do not store
      * the return variable (which would be too tricky anyway). We can deal
@@ -1099,6 +1092,8 @@ void interval_domaint::transform(
   to--;
   if (from->is_end_function() && to->is_function_call())
   {
+    havoc_reentered_locals(to->function, from->function, ai, ns);
+
     // TODO: deal with recursive functions
     if (from->function == to->function)
       return;
@@ -1397,6 +1392,32 @@ void interval_domaint::havoc_written_arguments(const code_function_call2t &call)
       clear_state();
       return;
     }
+}
+
+void interval_domaint::havoc_arguments(
+  const irep_idt &function_id,
+  const namespacet &ns)
+{
+  type2tc t = migrate_symbol_type(*ns.lookup(function_id));
+  const code_type2t &function = to_code_type(t);
+  for (size_t i = 0; i < function.arguments.size(); i++)
+    havoc_rec(symbol2tc(function.arguments[i], function.argument_names[i]));
+}
+
+/// The callee's exit state may hold a nested activation's values for the
+/// caller's own locals (#9500).
+void interval_domaint::havoc_reentered_locals(
+  const irep_idt &caller,
+  const irep_idt &callee,
+  const ai_baset &ai,
+  const namespacet &ns)
+{
+  const std::vector<expr2tc> *locals = ai.reentered_locals(caller, callee);
+  if (!locals)
+    return;
+  for (const expr2tc &decl : *locals)
+    havoc_rec(decl);
+  havoc_arguments(caller, ns);
 }
 
 void interval_domaint::havoc_rec(const expr2tc &expr)

@@ -1,0 +1,5 @@
+regression/esbmc/github_9500
+regression/esbmc/github_9500_fail
+regression/esbmc/github_9500_mutual_fail
+regression/esbmc/github_9500_param_fail
+regression/esbmc/github_9500_nonrecursive

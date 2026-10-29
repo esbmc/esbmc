@@ -3,9 +3,12 @@
 
 #include "ai.h"
 
+#include <algorithm>
 #include <cassert>
+#include <functional>
 #include <memory>
 #include <sstream>
+#include <unordered_set>
 
 #include <util/irep/std_code.h>
 #include <util/irep/std_expr.h>
@@ -69,6 +72,95 @@ void ai_baset::initialize(const goto_functionst &goto_functions)
 {
   forall_goto_functions (it, goto_functions)
     initialize(it->second);
+  find_call_cycles(goto_functions);
+}
+
+/// Tarjan's strongly connected components over the direct calls; a call
+/// through a function pointer never enters a body here (see
+/// do_function_call_rec), so it cannot close a cycle.
+void ai_baset::find_call_cycles(const goto_functionst &goto_functions)
+{
+  call_cycle.clear();
+  cycle_locals.clear();
+
+  std::unordered_map<irep_idt, std::vector<irep_idt>, irep_id_hash> callees;
+  forall_goto_functions (f_it, goto_functions)
+    forall_goto_program_instructions (i_it, f_it->second.body)
+      if (i_it->is_function_call())
+      {
+        const expr2tc &function = to_code_function_call2t(i_it->code).function;
+        if (is_symbol2t(function))
+          callees[f_it->first].push_back(to_symbol2t(function).thename);
+      }
+
+  struct numbert
+  {
+    unsigned index, lowlink;
+  };
+  std::unordered_map<irep_idt, numbert, irep_id_hash> number;
+  std::vector<irep_idt> stack;
+  std::unordered_set<irep_idt, irep_id_hash> on_stack;
+  unsigned cycles = 0;
+  std::function<void(const irep_idt &)> visit = [&](const irep_idt &f) {
+    const unsigned index = number.size();
+    number[f] = {index, index};
+    stack.push_back(f);
+    on_stack.insert(f);
+    auto calls = callees.find(f);
+    const std::vector<irep_idt> none;
+    const std::vector<irep_idt> &called =
+      calls == callees.end() ? none : calls->second;
+    for (const irep_idt &g : called)
+    {
+      if (!number.count(g))
+      {
+        visit(g);
+        number[f].lowlink = std::min(number[f].lowlink, number[g].lowlink);
+      }
+      else if (on_stack.count(g))
+        number[f].lowlink = std::min(number[f].lowlink, number[g].index);
+    }
+    if (number[f].lowlink != index)
+      return;
+    std::vector<irep_idt> component;
+    do
+    {
+      component.push_back(stack.back());
+      on_stack.erase(stack.back());
+      stack.pop_back();
+    } while (component.back() != f);
+    if (
+      component.size() == 1 &&
+      std::find(called.begin(), called.end(), f) == called.end())
+      return;
+    for (const irep_idt &g : component)
+      call_cycle[g] = cycles;
+    ++cycles;
+  };
+  forall_goto_functions (f_it, goto_functions)
+    if (!number.count(f_it->first))
+      visit(f_it->first);
+
+  forall_goto_functions (f_it, goto_functions)
+    if (call_cycle.count(f_it->first))
+    {
+      std::vector<expr2tc> &locals = cycle_locals[f_it->first];
+      forall_goto_program_instructions (i_it, f_it->second.body)
+        if (i_it->is_decl())
+          locals.push_back(i_it->code);
+    }
+}
+
+const std::vector<expr2tc> *
+ai_baset::reentered_locals(const irep_idt &caller, const irep_idt &callee) const
+{
+  auto caller_cycle = call_cycle.find(caller);
+  auto callee_cycle = call_cycle.find(callee);
+  if (
+    caller_cycle == call_cycle.end() || callee_cycle == call_cycle.end() ||
+    caller_cycle->second != callee_cycle->second)
+    return nullptr;
+  return &cycle_locals.at(caller);
 }
 
 void ai_baset::finalize()

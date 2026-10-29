@@ -7,6 +7,8 @@
 #include <iosfwd>
 #include <map>
 #include <memory>
+#include <unordered_map>
+#include <vector>
 #include <goto-programs/abstract-interpretation/ai_domain.h>
 #include <goto-programs/goto_functions.h>
 #include <util/base/xml.h>
@@ -87,7 +89,19 @@ public:
   virtual void
   output(const goto_functionst &goto_functions, std::ostream &out) const;
 
+  /// The DECLs of @p caller when it shares a call-graph cycle with @p callee,
+  /// so a nested activation of @p caller, whose locals have the same symbols,
+  /// may have left its own values in the state at the return site; nullptr
+  /// otherwise.
+  const std::vector<expr2tc> *
+  reentered_locals(const irep_idt &caller, const irep_idt &callee) const;
+
 protected:
+  void find_call_cycles(const goto_functionst &goto_functions);
+
+  std::unordered_map<irep_idt, unsigned, irep_id_hash> call_cycle;
+  std::unordered_map<irep_idt, std::vector<expr2tc>, irep_id_hash> cycle_locals;
+
   // overload to add a factory
   virtual void initialize(const goto_programt &);
   virtual void initialize(const goto_functiont &);
