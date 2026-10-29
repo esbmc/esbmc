@@ -114,14 +114,11 @@ smt_astt smt_tuple_sym_flattener::tuple_array_create(
   return newsym;
 }
 
-expr2tc smt_tuple_sym_flattener::tuple_get(const type2tc &type, smt_astt tuple)
+static expr2tc make_tuple_value(
+  smt_solver_baset *ctx,
+  const type2tc &type,
+  std::vector<expr2tc> values)
 {
-  const type2tc &thetype = is_pointer_type(type) ? ctx->pointer_struct : type;
-  const auto &members = struct_union_members(thetype);
-  std::vector<expr2tc> values;
-  for (size_t i = 0; i < members.size(); ++i)
-    values.push_back(ctx->get_by_ast(members[i], tuple->project(ctx, i)));
-
   if (is_pointer_type(type))
   {
     if (is_nil_expr(values[0]) || is_nil_expr(values[1]))
@@ -134,9 +131,15 @@ expr2tc smt_tuple_sym_flattener::tuple_get(const type2tc &type, smt_astt tuple)
   return constant_struct2tc(type, std::move(values));
 }
 
-expr2tc smt_tuple_sym_flattener::tuple_get(const expr2tc &expr)
+expr2tc smt_tuple_sym_flattener::tuple_get(const type2tc &type, smt_astt tuple)
 {
-  return tuple_get(expr->type, ctx->convert_ast(expr));
+  const type2tc &thetype = is_pointer_type(type) ? ctx->pointer_struct : type;
+  const auto &members = struct_union_members(thetype);
+  std::vector<expr2tc> values;
+  for (size_t i = 0; i < members.size(); ++i)
+    values.push_back(ctx->get_by_ast(members[i], tuple->project(ctx, i)));
+
+  return make_tuple_value(ctx, type, std::move(values));
 }
 
 smt_astt smt_tuple_sym_flattener::tuple_array_of(
@@ -182,11 +185,19 @@ expr2tc smt_tuple_sym_flattener::tuple_get_array_elem(
   uint64_t index,
   const type2tc &subtype)
 {
-  /* TODO: missing implementation */
-  throw type2t::symbolic_type_excp();
-  (void)array;
-  (void)index;
-  (void)subtype;
+  const type2tc &type =
+    is_pointer_type(subtype) ? ctx->pointer_struct : subtype;
+  const auto &members = struct_union_members(type);
+  std::vector<expr2tc> values;
+  for (size_t i = 0; i < members.size(); ++i)
+  {
+    smt_astt field = array->project(ctx, i);
+    values.push_back(
+      is_tuple_ast_type(members[i])
+        ? tuple_get_array_elem(field, index, members[i])
+        : ctx->array_api->get_array_elem(field, index, members[i]));
+  }
+  return make_tuple_value(ctx, subtype, std::move(values));
 }
 
 smt_sortt smt_tuple_sym_flattener::mk_struct_sort(const type2tc &type)

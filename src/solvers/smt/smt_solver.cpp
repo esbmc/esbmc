@@ -4043,6 +4043,14 @@ expr2tc smt_solver_baset::get_array(const type2tc &type, smt_astt array)
   else
     elem_size = BigInt(1ULL << w);
 
+  const bool truncated = elem_size > BigInt(1ULL << w);
+  if (truncated)
+  {
+    elem_size = BigInt(1ULL << w);
+    arr_type = array_type2tc(
+      ar.subtype, constant_int2tc(index_type2(), elem_size), false);
+  }
+
   for (size_t i = 0; i < elem_size; i++)
   {
     expr2tc elem;
@@ -4053,7 +4061,7 @@ expr2tc smt_solver_baset::get_array(const type2tc &type, smt_astt array)
     fields.push_back(elem);
   }
 
-  if (type != flat_type)
+  if (type != flat_type && !truncated)
   {
     size_t offset = 0;
     auto shaped = restore_array_dimensions(type, fields, offset);

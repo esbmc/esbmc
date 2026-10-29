@@ -22,7 +22,6 @@ public:
   smt_astt tuple_create(const expr2tc &structdef) override;
   smt_astt tuple_fresh(smt_sortt s, std::string name = "") override;
   smt_astt mk_tuple_symbol(const std::string &name, smt_sortt s) override;
-  expr2tc tuple_get(const expr2tc &expr) override;
   expr2tc tuple_get(const type2tc &type, smt_astt a) override;
 
   expr2tc tuple_get_rec(tuple_node_smt_astt tuple);
