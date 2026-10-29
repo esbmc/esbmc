@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: .*main\.py:[0-9]+:[0-9]+: (unsupported: )?.*
