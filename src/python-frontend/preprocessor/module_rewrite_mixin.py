@@ -7,6 +7,7 @@ from preprocessor.bound_method_values import lower_method_values
 from preprocessor.check_type_lowering import lower_check_type
 from preprocessor.dotted_imports import alias_dotted_imports
 from preprocessor.decorator_lowering import lower_user_decorators
+from preprocessor.dict_splat import spell_out_dict_splats
 from preprocessor.itertools_lowering import lower_itertools
 from preprocessor.coroutine_lowering import lower_coroutines
 from preprocessor.match_lowering import lower_match_statements
@@ -560,6 +561,7 @@ class ModuleRewriteMixin:
         lower_check_type(node, self.module_name)
         _rename_shadowed_classes(node)
         alias_dotted_imports(node)
+        spell_out_dict_splats(node)
         inline_zip_names(node)
         lower_iter_next(node)
         lower_zip_builds(node)
