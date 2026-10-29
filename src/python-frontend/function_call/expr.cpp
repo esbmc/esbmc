@@ -2002,6 +2002,40 @@ static bool builds_set(const nlohmann::json &value)
           value["func"].value("id", "") == "frozenset");
 }
 
+static bool
+is_attribute_named(const nlohmann::json &node, const std::string &attr)
+{
+  return node.is_object() && node.value("_type", "") == "Attribute" &&
+         node.value("attr", "") == attr;
+}
+
+/// The targets of an Assign or AnnAssign that has a value; empty otherwise.
+static std::vector<const nlohmann::json *>
+assignment_targets(const nlohmann::json &node)
+{
+  std::vector<const nlohmann::json *> targets;
+  const std::string kind = node.value("_type", "");
+  if (
+    (kind != "Assign" && kind != "AnnAssign") || !node.contains("value") ||
+    !node["value"].is_object())
+    return targets;
+  if (kind == "AnnAssign")
+    targets.push_back(&node["target"]);
+  else
+    for (const auto &target : node["targets"])
+      targets.push_back(&target);
+  return targets;
+}
+
+/// A store other than a plain assignment: augmented, or a loop or `with`
+/// target.
+static bool is_other_store(const nlohmann::json &node, const std::string &attr)
+{
+  const std::string kind = node.value("_type", "");
+  return (kind == "AugAssign" || kind == "For" || kind == "With") &&
+         node.contains("target") && is_attribute_named(node["target"], attr);
+}
+
 /// Counts the stores of an attribute named @p attr, and how many of them
 /// build a set.
 static void count_attribute_stores(
@@ -2018,28 +2052,13 @@ static void count_attribute_stores(
   }
   if (!node.is_object())
     return;
-  const std::string kind = node.value("_type", "");
-  const bool assign = kind == "Assign" || kind == "AnnAssign";
-  if (assign && node.contains("value") && node["value"].is_object())
-  {
-    std::vector<const nlohmann::json *> targets;
-    if (kind == "Assign")
-      for (const auto &t : node["targets"])
-        targets.push_back(&t);
-    else
-      targets.push_back(&node["target"]);
-    for (const nlohmann::json *t : targets)
-      if (t->value("_type", "") == "Attribute" && t->value("attr", "") == attr)
-      {
-        ++stores;
-        set_stores += builds_set(node["value"]);
-      }
-  }
-  else if (
-    (kind == "AugAssign" || kind == "For" || kind == "With") &&
-    node.contains("target") && node["target"].is_object() &&
-    node["target"].value("attr", "") == attr)
-    ++stores;
+  for (const nlohmann::json *target : assignment_targets(node))
+    if (is_attribute_named(*target, attr))
+    {
+      ++stores;
+      set_stores += builds_set(node["value"]);
+    }
+  stores += is_other_store(node, attr);
   for (auto it = node.begin(); it != node.end(); ++it)
     if (it.value().is_structured())
       count_attribute_stores(it.value(), attr, stores, set_stores);
