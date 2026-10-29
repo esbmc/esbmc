@@ -264,6 +264,18 @@ bool is_property_def(const JsonType &function_def)
   return false;
 }
 
+template <typename JsonType>
+bool is_staticmethod_def(const JsonType &function_def)
+{
+  if (function_def.contains("decorator_list"))
+    for (const auto &dec : function_def["decorator_list"])
+      if (
+        dec.value("_type", std::string()) == "Name" &&
+        dec.value("id", std::string()) == "staticmethod")
+        return true;
+  return false;
+}
+
 /// True when a module-level class in @p ast_body defines a @property named
 /// @p name.
 template <typename JsonType>
