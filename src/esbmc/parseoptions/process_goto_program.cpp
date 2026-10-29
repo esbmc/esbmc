@@ -461,7 +461,7 @@ bool esbmc_parseoptionst::process_goto_program(
       remove_no_op(goto_functions);
       goto_loop_invariant_combined(goto_functions);
       disable_is_if_unsound(
-        goto_k_induction(goto_functions, ns, checks_past_violation));
+        goto_k_induction(goto_functions, context, checks_past_violation));
     }
     else
     {
@@ -472,7 +472,7 @@ bool esbmc_parseoptionst::process_goto_program(
 
       if (is_k_induction)
         disable_is_if_unsound(
-          goto_k_induction(goto_functions, ns, checks_past_violation));
+          goto_k_induction(goto_functions, context, checks_past_violation));
 
       if (wants_loop_invariants())
         apply_loop_invariants(goto_functions, context, options, is_k_induction);
@@ -517,7 +517,7 @@ bool esbmc_parseoptionst::process_goto_program(
       // NOT settle it — otherwise the verdict loop short-circuits on the
       // ranking flag and the havoc'd markers would just be dead work.
       if (!ranking_proved)
-        goto_termination(goto_functions, options, ns);
+        goto_termination(goto_functions, options, context);
     }
 
     // Pass B (post-k-induction loop bounds): when interval analysis ran

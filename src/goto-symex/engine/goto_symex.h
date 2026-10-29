@@ -614,6 +614,22 @@ protected:
    */
   bool get_unwind_recursion(const irep_idt &identifier, BigInt unwind);
 
+  /** Whether the recursion entering \p identifier closes through a dispatch
+   *  the inductive step can cut off soundly: one to a Solidity dispatcher
+   *  that goto_k_induction gave a havoc (see dispatch_havoc_id).
+   *  @param identifier Name of the function being re-entered.
+   *  @return True if such a dispatch is \p identifier or sits between its
+   *  latest frame and the top of the stack. */
+  bool recursion_through_dispatch(const irep_idt &identifier) const;
+
+  /** Run, in the inductive step, the call to \p identifier that a dispatch
+   *  havoc answers (see dispatch_havoc_id): skip the havoc goto_k_induction
+   *  placed ahead of a dispatch under another one to the same dispatcher, and
+   *  run the havoc in place of a dispatch past the unwinding bound.
+   *  @param identifier Name of the function called.
+   *  @return True if the call was handled here. */
+  bool symex_dispatch_havoc(const irep_idt &identifier);
+
   /** Convert an actual argument to its parameter's type, claiming the call
    *  undefined when the two are incompatible. */
   expr2tc argument_value(

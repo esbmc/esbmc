@@ -117,7 +117,7 @@ public:
   {
     // The order `process_goto_program` uses: the pass expects the SKIPs gone.
     remove_no_op(prog.functions);
-    goto_k_induction(prog.functions, ns, false);
+    goto_k_induction(prog.functions, prog.context, false);
 
     opts.set_option("unwind", unwind);
     opts.set_option("inductive-step", true);

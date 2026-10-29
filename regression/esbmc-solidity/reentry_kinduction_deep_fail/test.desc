@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--sol contract.sol --contract Nest --no-standard-checks --k-induction --max-k-step 10
+^VERIFICATION FAILED$
