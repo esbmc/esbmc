@@ -1,0 +1,4 @@
+CORE
+main.c
+--houdini-loop-invariants --k-induction
+^ERROR: --houdini-loop-invariants cannot be combined with --k-induction$
