@@ -566,6 +566,13 @@ def _tag_receivers(scope, module, classes, returns, fresh):
         return
     tags = {name: f"ESBMC_receiver_class_{name}" for name in names}
     index = {cls: number for number, cls in enumerate(sorted(classes))}
+    _rewrite_isinstance(body, receivers, tags, index, classes)
+    _tag_bindings(body, tags, index, classes, fresh)
+
+
+def _rewrite_isinstance(body, receivers, tags, index, classes):
+    """Replace each isinstance on a tagged receiver among this scope's own
+    nodes with its test of the tag."""
     for parent in list(_own_nodes(body)):
         for field, value in ast.iter_fields(parent):
             children = value if isinstance(value, list) else [value]
@@ -578,8 +585,12 @@ def _tag_receivers(scope, module, classes, returns, fresh):
                     value[position] = test
                 else:
                     setattr(parent, field, test)
+
+
+def _tag_bindings(body, tags, index, classes, fresh):
+    """Make each binding of a tagged receiver also store its class."""
     assignments = _name_assignments(body)
-    bindings = {id(assignments[id(node)]) for name in names for node in _binding_nodes(body, name)}
+    bindings = {id(assignments[id(node)]) for name in tags for node in _binding_nodes(body, name)}
     for block in list(_scope_blocks(body)):
         rewritten = []
         for stmt in block:
