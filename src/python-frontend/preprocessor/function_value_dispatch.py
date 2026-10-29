@@ -30,6 +30,7 @@ import re
 
 from preprocessor.function_value_lift import lift_nested_defs
 from preprocessor.function_value_methods import lift_bound_methods
+from preprocessor.function_value_params import specialise_function_parameters
 from preprocessor.function_value_types import _Analysis, _differ, _own_nodes
 
 # The most copies of the rest of the module that one module may need.
@@ -1178,12 +1179,14 @@ def dispatch_mixed_function_values(module, path):
     """Rewrite calls through mixed function values into dispatches, when every use allows it."""
     candidate = copy.deepcopy(module)
     lifted_methods = _may_lift_methods(module) and lift_bound_methods(candidate)
-    original = _propagated(candidate if lifted_methods else module, path)
+    lifted_methods = specialise_function_parameters(candidate) or lifted_methods
+    base = candidate if lifted_methods else module
+    original = _propagated(base, path)
     if not _mixed_groups(original):
         return
     try:
         lifted = lift_nested_defs(candidate,
-                                  _nested_members(module, original, _dispatch_groups(original)))
+                                  _nested_members(base, original, _dispatch_groups(original)))
         _hoist_callees(candidate, _hoisted_in_groups(candidate, path))
         analysis = _propagated(candidate, path)
         plan = _Plan(candidate, analysis, _dispatch_groups(analysis), lifted)
