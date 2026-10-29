@@ -31,6 +31,7 @@ public:
         options.get_bool_option("no-pointer-relation-check")),
       disable_unlimited_scanf_check(
         options.get_bool_option("no-unlimited-scanf-check")),
+      disable_narrowing_check(options.get_bool_option("no-narrowing-check")),
       enable_overflow_check(options.get_bool_option("overflow-check")),
       enable_unsigned_overflow_check(
         options.get_bool_option("unsigned-overflow-check")),
@@ -152,6 +153,7 @@ protected:
   bool disable_div_by_zero_check;
   bool disable_pointer_relation_check;
   bool disable_unlimited_scanf_check;
+  bool disable_narrowing_check;
   bool enable_overflow_check;
   bool enable_unsigned_overflow_check;
   bool enable_ub_shift_check;
@@ -379,7 +381,10 @@ void goto_checkt::cast_overflow_check(
   bool is_solidity = (config.language.lid == language_idt::SOLIDITY);
   if (is_solidity)
   {
-    if (!enable_overflow_check && !enable_unsigned_overflow_check)
+    // Solidity narrowing is opt-in via --narrowing-check, independent of
+    // arithmetic overflow checks. The CLI disables it by default through
+    // --no-standard-checks; --no-narrowing-check also disables it directly.
+    if (disable_narrowing_check)
       return;
     // Only check casts in .sol files, not C library models
     const std::string &file = loc.get_file().as_string();

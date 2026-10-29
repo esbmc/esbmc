@@ -22,14 +22,12 @@ bool solidity_convertert::get_tuple_definition(const nlohmann::json &ast_node)
 {
   log_debug("solidity", "\t@@@ Parsing tuple...");
 
+  // Free functions (outside any contract) also produce tuple types
+  // (e.g. `function unpackTokenId(...) returns (uint256, uint32)`).
+  // The tuple struct type is keyed only by ast node id, so the
+  // current-contract check is not actually needed here.
   std::string current_contractName;
   get_current_contract_name(ast_node, current_contractName);
-  if (current_contractName.empty())
-  {
-    log_error(
-      "Cannot get the contract name. Tuple should always within a contract.");
-    return true;
-  }
 
   struct_typet t = struct_typet();
 
@@ -78,12 +76,27 @@ bool solidity_convertert::get_tuple_definition(const nlohmann::json &ast_node)
     const std::string mem_name = "mem" + std::to_string(counter);
     const std::string mem_id = "sol:@C@" + current_contractName + "@" + name +
                                "@" + mem_name + "#" +
-                               i2string(ast_node["id"].get<std::int16_t>());
+                               i2string(ast_node["id"].get<int>());
 
-    // get type
+    // get type — route through the decl-aware overload when the tuple
+    // component's AST carries a typeName, so array shapes flow through
+    // get_array_pointer_type and end up as pointers (consistent with
+    // get_function_params and get_var_decl). The plain typeDescriptions
+    // path lowers fixed-outer NestedArrayTypeName to a real array_typet,
+    // which then fights the rest of the call/assignment plumbing.
     typet mem_type;
-    if (get_type_description(arg.value()["typeDescriptions"], mem_type))
-      return true;
+    if (arg.value().contains("typeName"))
+    {
+      if (
+        get_type_description(
+          arg.value(), arg.value()["typeName"]["typeDescriptions"], mem_type))
+        return true;
+    }
+    else
+    {
+      if (get_type_description(arg.value()["typeDescriptions"], mem_type))
+        return true;
+    }
 
     // construct comp
     comp.type() = mem_type;
@@ -210,8 +223,10 @@ bool solidity_convertert::get_tuple_instance_name(
 {
   std::string c_name;
   get_current_contract_name(ast_node, c_name);
+  // Free functions have no owning contract; use a synthetic scope
+  // so multi-return free functions still get a distinct tuple instance.
   if (c_name.empty())
-    return true;
+    c_name = "__free__";
 
   name = "tuple_instance$" + std::to_string(ast_node["id"].get<int>());
   id = "sol:@C@" + c_name + "@" + name;
@@ -232,13 +247,47 @@ bool solidity_convertert::get_tuple_function_ref(
   // - Identifier: direct function reference (e.g., func())
   // - MemberAccess: cross-contract call (e.g., p.getPair())
   int ref_decl_id;
-  if (ast_node["nodeType"] == "Identifier")
+  if (
+    ast_node["nodeType"] == "Identifier" ||
+    ast_node["nodeType"] == "MemberAccess")
   {
+    // Builtin low-level calls (`addr.call`, `addr.delegatecall`,
+    // `addr.staticcall`) and other builtin tuple-producing members
+    // are MemberAccess nodes with no referencedDeclaration. The
+    // tuple instance for their (bool, bytes) return is synthesised
+    // by the low-level call path, not by the per-function tuple
+    // registry — fail softly so the caller falls back.
+    if (
+      !ast_node.contains("referencedDeclaration") ||
+      ast_node["referencedDeclaration"].is_null())
+    {
+      log_debug(
+        "solidity",
+        "get_tuple_function_ref: callee has no referencedDeclaration "
+        "(nodeType={}), cannot resolve tuple instance",
+        ast_node["nodeType"].get<std::string>());
+      return true;
+    }
     ref_decl_id = ast_node["referencedDeclaration"].get<int>();
-  }
-  else if (ast_node["nodeType"] == "MemberAccess")
-  {
-    ref_decl_id = ast_node["referencedDeclaration"].get<int>();
+
+    // Call through a function-pointer variable: the referencedDeclaration
+    // points to a VariableDeclaration of FunctionTypeName, not to any
+    // FunctionDefinition. No per-callee tuple_instance symbol exists for
+    // these (we do not inline the target), so fail softly and let the
+    // caller fall back to nondet-per-member over-approximation.
+    const nlohmann::json &ref_node =
+      find_node_by_id(src_ast_json["nodes"], ref_decl_id);
+    if (
+      ref_node.is_object() &&
+      ref_node.value("nodeType", "") == "VariableDeclaration")
+    {
+      log_debug(
+        "solidity",
+        "get_tuple_function_ref: callee is a function-pointer variable "
+        "(refDecl={}), falling back to nondet tuple",
+        ref_decl_id);
+      return true;
+    }
   }
   else
   {
@@ -272,6 +321,55 @@ bool solidity_convertert::get_tuple_function_ref(
     {
       new_expr = symbol_expr(*context.find_symbol(alt_id));
       return false;
+    }
+  }
+
+  // Libraries / interfaces / abstract contracts are not in contractNamesList
+  // but their tuple instances are still emitted under their own scope.
+  for (const auto &lib_name : nonContractNamesList)
+  {
+    std::string alt_id = "sol:@C@" + lib_name + "@" + name;
+    if (context.find_symbol(alt_id) != nullptr)
+    {
+      new_expr = symbol_expr(*context.find_symbol(alt_id));
+      return false;
+    }
+  }
+
+  // Free functions (outside any contract) have their tuple instance
+  // stored under the synthetic "__free__" scope by
+  // get_tuple_instance_name().
+  {
+    std::string free_id = "sol:@C@__free__@" + name;
+    if (context.find_symbol(free_id) != nullptr)
+    {
+      new_expr = symbol_expr(*context.find_symbol(free_id));
+      return false;
+    }
+  }
+
+  // The callee's FunctionDefinition has not been processed yet (e.g. the
+  // call site is reached during inline-method-population for an inheriting
+  // contract before we walk the callee's owning contract). Materialise the
+  // tuple struct + instance on demand so the lookup can proceed.
+  const nlohmann::json &fn_def =
+    find_node_by_id(src_ast_json["nodes"], ref_decl_id);
+  if (
+    fn_def.is_object() &&
+    fn_def.value("nodeType", "") == "FunctionDefinition" &&
+    fn_def.contains("returnParameters"))
+  {
+    typet rt;
+    if (
+      !get_type_description(fn_def["returnParameters"], rt) &&
+      get_sol_type(rt) == SolidityGrammar::SolType::TUPLE_RETURNS)
+    {
+      exprt dump;
+      if (!get_tuple_definition(fn_def) && !get_tuple_instance(fn_def, dump))
+      {
+        new_expr = dump;
+        return false;
+      }
     }
   }
 
@@ -407,7 +505,21 @@ bool solidity_convertert::construct_tuple_assigments(
 
   assert(lhs.type().is_code() && to_code(lhs).statement() == "block");
   exprt new_rhs = rhs;
-  if (rt_sol == SolidityGrammar::SolType::TUPLE_RETURNS)
+  bool rhs_is_nondet = false;
+
+  // If the RHS is already a non-struct sideeffect (e.g. abi.decode(data,
+  // (T,U,...)) lowered by the builtin path to a single-uint256 identity
+  // call), we cannot split it into tuple members the normal way. Treat
+  // it as a fully nondet tuple RHS — matches the over-approximation
+  // documented in src/c2goto/library/solidity/solidity_abi.c and the
+  // sibling fallback in the return-statement tuple path.
+  if (
+    rt_sol != SolidityGrammar::SolType::TUPLE_RETURNS &&
+    !new_rhs.type().is_struct() && new_rhs.id() == "sideeffect")
+  {
+    rhs_is_nondet = true;
+  }
+  else if (rt_sol == SolidityGrammar::SolType::TUPLE_RETURNS)
   {
     // (x,y) = func();
     // => func() populates tuple instance; then extract members
@@ -419,10 +531,82 @@ bool solidity_convertert::construct_tuple_assigments(
     else if (expr.contains("initialValue"))
       rhs_call_json = &expr["initialValue"];
 
-    if (rhs_call_json && rhs_call_json->contains("expression"))
+    // Conditional RHS: (x, y) = cond ? (a, b) : (c, d);
+    // The rest of this block only understands FunctionCall-shaped RHS
+    // (looking up the callee via `.expression`). For a Conditional whose
+    // branches are both TupleExpressions we decompose element-wise into
+    // per-slot ternaries before the function-call path can drop the
+    // statement. Other Conditional shapes (e.g. function-call branches)
+    // fall back to nondet-per-slot — sound over-approximation.
+    if (
+      rhs_call_json && rhs_call_json->is_object() &&
+      rhs_call_json->value("nodeType", "") == "Conditional")
+    {
+      const nlohmann::json &cond_j = (*rhs_call_json)["condition"];
+      const nlohmann::json &true_j = (*rhs_call_json)["trueExpression"];
+      const nlohmann::json &false_j = (*rhs_call_json)["falseExpression"];
+
+      const bool both_tuple_literals =
+        true_j.is_object() && false_j.is_object() &&
+        true_j.value("nodeType", "") == "TupleExpression" &&
+        false_j.value("nodeType", "") == "TupleExpression" &&
+        true_j.contains("components") && false_j.contains("components");
+
+      if (both_tuple_literals)
+      {
+        exprt cond_expr;
+        if (get_expr(cond_j, cond_expr))
+          return true;
+
+        const auto &t_comps = true_j["components"];
+        const auto &f_comps = false_j["components"];
+
+        for (size_t i = 0; i < lhs.operands().size(); ++i)
+        {
+          exprt lop = lhs.operands().at(i);
+          if (lop.is_nil())
+            continue;
+          if (
+            i >= t_comps.size() || i >= f_comps.size() ||
+            t_comps[i].is_null() || f_comps[i].is_null())
+          {
+            log_error(
+              "tuple conditional assignment: branch arity mismatch at slot {}",
+              i);
+            return true;
+          }
+          exprt t_val, f_val;
+          if (get_expr(t_comps[i], t_val))
+            return true;
+          if (get_expr(f_comps[i], f_val))
+            return true;
+
+          // Align both branches to the LHS slot type before building the
+          // ternary so the if_expr has a single well-defined type.
+          convert_type_expr(ns, t_val, lop, empty_json);
+          convert_type_expr(ns, f_val, lop, empty_json);
+
+          exprt ternary("if", lop.type());
+          ternary.copy_to_operands(cond_expr, t_val, f_val);
+
+          get_tuple_assignment(expr, lop, ternary);
+        }
+        return false;
+      }
+
+      // Unhandled Conditional shape: fall through to nondet fallback.
+      rhs_is_nondet = true;
+    }
+    else if (rhs_call_json && rhs_call_json->contains("expression"))
     {
       if (get_tuple_function_ref((*rhs_call_json)["expression"], new_rhs))
-        return true;
+      {
+        // Builtin tuple-producing callee (abi.decode(data, (T,U,...)),
+        // addr.call(...), ...) has no per-function tuple instance.
+        // Over-approximate each LHS slot as nondet — matches the
+        // corresponding fallback in the return-statement tuple path.
+        rhs_is_nondet = true;
+      }
     }
     else
     {
@@ -430,12 +614,56 @@ bool solidity_convertert::construct_tuple_assigments(
       return true;
     }
 
-    get_tuple_function_call(rhs);
+    if (!rhs_is_nondet)
+      get_tuple_function_call(rhs);
   }
 
+  if (rhs_is_nondet)
+  {
+    // No RHS struct to pull components from — synthesise an independent
+    // nondet value for every non-nil LHS slot and return.
+    for (const auto &lop : lhs.operands())
+    {
+      if (lop.is_nil())
+        continue;
+      exprt rop;
+      get_nondet_expr(lop.type(), rop);
+      get_tuple_assignment(expr, lop, rop);
+    }
+    return false;
+  }
+
+  // A struct-typed tuple RHS can arrive as an UNRESOLVED symbol type
+  // (`tag-struct C.Holder`) rather than an inlined struct_typet -- this is what
+  // solc's synthesised public getter for a `mapping(K => Struct)` state
+  // variable produces, e.g. `(uint a, uint b) = c.Acc(k);`. `is_struct()` is
+  // false on the symbol type itself, so follow it through the namespace before
+  // deciding, and keep the resolved type so the component lookup below sees the
+  // real struct.
+  {
+    const typet &followed = ns.follow(new_rhs.type());
+    if (followed.is_struct())
+      new_rhs.type() = followed;
+    else if (
+      new_rhs.id() == "dereference" && new_rhs.operands().size() == 1 &&
+      new_rhs.op0().type().id() == "pointer")
+    {
+      // A `mapping(K => Struct)` slot now arrives as
+      // `*(struct S *)map_fixed_arr_get(...)`; the dereference can reach here
+      // carrying a nil type, so recover the struct from the pointer's subtype.
+      const typet sub = ns.follow(new_rhs.op0().type().subtype());
+      if (sub.is_struct())
+        new_rhs.type() = sub;
+    }
+  }
   if (!new_rhs.type().is_struct())
   {
-    log_error("expecting struct type for tuple RHS, got {}", new_rhs);
+    log_error(
+      "expecting struct type for tuple RHS, got id={} type_id={} "
+      "followed_id={}",
+      new_rhs.id().as_string(),
+      new_rhs.type().id().as_string(),
+      ns.follow(new_rhs.type()).id().as_string());
     return true;
   }
 
@@ -481,8 +709,21 @@ bool solidity_convertert::construct_tuple_assigments(
     }
 
     exprt rop;
-    if (get_tuple_member_call(new_rhs.identifier(), comp, rop))
-      return true;
+    if (new_rhs.id() == "symbol")
+    {
+      if (get_tuple_member_call(new_rhs.identifier(), comp, rop))
+        return true;
+    }
+    else
+    {
+      // The RHS is not a named tuple instance but an lvalue EXPRESSION -- this
+      // is what solc's synthesised getter for `mapping(K => Struct)` lowers to
+      // now that such a mapping is reached BY REFERENCE
+      // (`*(struct S *)map_fixed_arr_get(&m, k, sizeof(S))`, see
+      // solidity_convert_mapping.cpp). Take the component straight off it.
+      rop = member_exprt(new_rhs, comp.get("name"), comp.type());
+      rop.location() = new_rhs.location();
+    }
 
     // Nested tuple: LHS operand is a code_blockt (inner tuple),
     // RHS component is a tuple struct — recursively unpack.
@@ -519,8 +760,37 @@ bool solidity_convertert::flatten_nested_tuple_assignment(
   assert(lhs_json.value("nodeType", "") == "TupleExpression");
   assert(lhs_json.contains("components"));
 
-  const auto &lhs_comps = lhs_json["components"];
-  const auto &rhs_comps = rhs_json["components"];
+  // Strip redundant outer parens. `((a, b)) = (2, true)` parses as a
+  // 1-component TupleExpression wrapping the real 2-tuple. Without unwrapping
+  // we'd recurse into the leaf branch with a non-tuple RHS and crash on
+  // rhs["components"]. Unwrap whenever a single-element tuple contains a
+  // tuple (or until LHS/RHS arity matches).
+  auto unwrap_paren_tuple =
+    [](const nlohmann::json &n) -> const nlohmann::json & {
+    const nlohmann::json *cur = &n;
+    while (
+      cur->is_object() && cur->value("nodeType", "") == "TupleExpression" &&
+      cur->contains("components") && (*cur)["components"].is_array() &&
+      (*cur)["components"].size() == 1 && !(*cur)["components"][0].is_null() &&
+      (*cur)["components"][0].is_object() &&
+      (*cur)["components"][0].value("nodeType", "") == "TupleExpression")
+      cur = &(*cur)["components"][0];
+    return *cur;
+  };
+  const nlohmann::json &lhs_unwrapped = unwrap_paren_tuple(lhs_json);
+  const nlohmann::json &rhs_unwrapped =
+    rhs_json.is_object() ? unwrap_paren_tuple(rhs_json) : rhs_json;
+
+  const auto &lhs_comps = lhs_unwrapped["components"];
+  if (
+    !rhs_unwrapped.is_object() ||
+    rhs_unwrapped.value("nodeType", "") != "TupleExpression" ||
+    !rhs_unwrapped.contains("components"))
+  {
+    log_error("nested tuple: RHS is not a TupleExpression after unwrapping");
+    return true;
+  }
+  const auto &rhs_comps = rhs_unwrapped["components"];
 
   for (size_t i = 0; i < lhs_comps.size(); i++)
   {
@@ -541,7 +811,16 @@ bool solidity_convertert::flatten_nested_tuple_assignment(
       if (get_type_description(rhs_val["typeDescriptions"], rhs_t))
         return true;
 
-      if (get_sol_type(rhs_t) == SolidityGrammar::SolType::TUPLE_RETURNS)
+      // Only treat the RHS as a tuple-returning function call when it
+      // actually *is* a FunctionCall node. A tuple LITERAL (e.g.
+      // `((1, 2), 3)`) has typeString `tuple(...)` too, which would
+      // otherwise misclassify as TUPLE_RETURNS and trip on the absent
+      // `.expression` field inside get_tuple_function_ref.
+      const bool rhs_is_fn_call =
+        rhs_val.is_object() && rhs_val.value("nodeType", "") == "FunctionCall";
+      if (
+        rhs_is_fn_call &&
+        get_sol_type(rhs_t) == SolidityGrammar::SolType::TUPLE_RETURNS)
       {
         // RHS is a function call returning tuple.
         // 1. Call the function (populates its tuple instance)

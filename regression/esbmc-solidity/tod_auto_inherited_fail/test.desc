@@ -1,0 +1,6 @@
+CORE
+contract.solast
+--sol contract.sol --contract Leaf --tod-race-check=auto --bound --unwind 2 --no-unwinding-assertions --no-standard-checks --cvc5
+REQUIRES solc_binary
+^--tod-race-check: discovered 1 candidate pair\(s\) in 'Leaf'$
+^--tod-race-check summary: 1 pair\(s\) — 0 clean, 1 TOD found, 0 error$

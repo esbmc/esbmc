@@ -128,6 +128,14 @@ ContractBodyElementT get_contract_body_element_t(const nlohmann::json &element)
   {
     return ModifierDef;
   }
+  else if (element["nodeType"] == "UserDefinedValueTypeDefinition")
+  {
+    // Contract-scoped `type T is <elementary>;`. The type is pre-
+    // registered in UserDefinedVarMap during top-level AST setup,
+    // and references are resolved through that map — the body
+    // iteration just needs to skip the definition node.
+    return UserDefinedValueTypeDef;
+  }
   else
   {
     log_error(
@@ -151,6 +159,7 @@ const char *contract_body_element_to_str(ContractBodyElementT type)
     ENUM_TO_STR(EventDef)
     ENUM_TO_STR(UsingForDef)
     ENUM_TO_STR(ModifierDef)
+    ENUM_TO_STR(UserDefinedValueTypeDef)
     ENUM_TO_STR(ContractBodyElementTError)
   default:
   {
@@ -271,11 +280,12 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     else if (
       uint_string_to_type_map.count(typeString) ||
       int_string_to_type_map.count(typeString) || typeString == "bool" ||
-      typeString == "string" || typeString.starts_with("literal_string") ||
+      typeString == "string" ||
+      typeString.compare(0, 14, "literal_string") == 0 ||
       typeString == "string storage ref" ||
       typeString == "string storage pointer" || typeString == "string memory" ||
-      typeString == "address payable" || typeString == "address" ||
-      typeString.starts_with("bytes"))
+      typeString == "string calldata" || typeString == "address payable" ||
+      typeString == "address" || typeString.compare(0, 5, "bytes") == 0)
     {
       // For state var declaration,
       return ElementaryTypeName;
@@ -286,6 +296,20 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     }
     else if (typeIdentifier.compare(0, 11, "t_contract$") == 0)
     {
+      return ContractTypeName;
+    }
+    else if (typeIdentifier.compare(0, 8, "t_super$") == 0)
+    {
+      // `super` inside a derived contract is typed
+      // `type(contract super X)` (with typeIdentifier
+      // `t_type$_t_super$_X_$N_$`). After the TypeConversionName
+      // branch strips the outer `type(...)` wrapper we arrive here
+      // with the naked `t_super$...` form. Treat it as the enclosing
+      // contract — downstream member-access lowering for `super.f`
+      // already bypasses the override map via the dedicated
+      // super-path in get_call_expr / get_super_function_call, so
+      // reporting ContractTypeName here is sufficient to let the
+      // type survive initial resolution.
       return ContractTypeName;
     }
 
@@ -322,10 +346,15 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     }
     else
     {
+      // Unsupported type-name (fixed-point literals, rational_const,
+      // "string calldata slice", "function () external returns (contract)"
+      // etc.). Return the error sentinel so get_type_description's
+      // default branch can emit a clean CONVERSION ERROR instead of
+      // aborting the process.
       log_error(
         "Got type-name typeString={}. Unsupported type-name type",
         type_name["typeString"].get<std::string>());
-      abort();
+      return TypeNameTError;
     }
   }
   else
@@ -336,12 +365,21 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     {
       return ParameterList;
     }
+    else if (type_name["nodeType"] == "FunctionTypeName")
+    {
+      // Internal/external function-type parameters and struct fields
+      // (e.g. `function(uint) pure returns (uint) f`). Lowered to an
+      // opaque pointer in the frontend — indirect calls through these
+      // parameters are not executed, they return nondet values (see
+      // get_type_description Pointer case and convert_call handling).
+      return Pointer;
+    }
     else
     {
       log_error(
         "Got type-name nodeType={}. Unsupported type-name type",
         type_name["nodeType"].get<std::string>());
-      abort();
+      return TypeNameTError;
     }
   }
 
@@ -414,13 +452,14 @@ ElementaryTypeNameT get_elementary_type_name_t(const nlohmann::json &type_name)
     // Will not be used
     return RA_LITERAL;
   }
-  if (typeString.starts_with("literal_string"))
+  if (typeString.compare(0, 14, "literal_string") == 0)
   {
     return STRING_LITERAL;
   }
   if (
     typeString == "string" || typeString == "string storage ref" ||
-    typeString == "string memory" || typeString == "string storage pointer")
+    typeString == "string memory" || typeString == "string storage pointer" ||
+    typeString == "string calldata")
   {
     return STRING;
   }
@@ -823,7 +862,7 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
   }
   else if (expr["nodeType"] == "Literal")
   {
-    if (expr.contains("subdenomination"))
+    if (expr.contains("subdenomination") && !expr["subdenomination"].is_null())
     {
       std::string unit = expr["subdenomination"];
 
@@ -893,8 +932,18 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
     assert(expr.contains("expression"));
     SolidityGrammar::TypeNameT type_name =
       get_type_name_t(expr["expression"]["typeDescriptions"]);
-    if (
+    // A null/missing referencedDeclaration means there is no
+    // user-defined declaration to point at — the member is a
+    // Solidity builtin (e.g. `string.concat`, `abi.encode`,
+    // `.length`, `addr.code`, `addr.balance`, `block.number`).
+    // Address-typed builtins (.code/.codehash/.balance/.call/...)
+    // still need AddressMemberCall, so we check that first.
+    const bool has_ref_decl =
       expr.contains("referencedDeclaration") &&
+      expr["referencedDeclaration"].is_number_integer() &&
+      expr["referencedDeclaration"].get<int>() > 0;
+    if (
+      has_ref_decl &&
       is_sol_library_function(expr["referencedDeclaration"].get<int>()))
       return LibraryMemberCall;
     else if (type_name == SolidityGrammar::TypeNameT::StructTypeName)
@@ -905,12 +954,11 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
       return ContractMemberCall;
     else if (is_address_member_call(expr))
       return AddressMemberCall;
+    else if (!has_ref_decl)
+      return BuiltinMemberCall;
     else if (type_name == SolidityGrammar::TypeNameT::TypeConversionName)
       return TypeMemberCall;
     else
-      // TODO Assume it's a builtin member
-      //  due to that the BuiltinTypeName cannot cover all the builtin member
-      //  e.g. string.concat ==> TypeConversionName
       return BuiltinMemberCall;
   }
   else if (expr["nodeType"] == "ImplicitCastExprClass")
@@ -924,6 +972,12 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
   else if (expr["nodeType"] == "IndexRangeAccess")
   {
     return IndexRangeAccess;
+  }
+  else if (expr["nodeType"] == "ElementaryTypeNameExpression")
+  {
+    // A raw elementary type expression (e.g. `string` in
+    // `string.concat(...)`, `bytes` in `type(bytes).max`).
+    return ElementaryTypeNameExpr;
   }
 
   // fall-through
@@ -1192,6 +1246,7 @@ const char *expression_to_str(ExpressionT type)
     ENUM_TO_STR(TypeConversionExpression)
     ENUM_TO_STR(TypePropertyExpression)
     ENUM_TO_STR(NullExpr)
+    ENUM_TO_STR(ElementaryTypeNameExpr)
     ENUM_TO_STR(ExpressionTError)
   default:
   {
@@ -1429,6 +1484,7 @@ const char *sol_type_to_str(SolType t)
     SOL_ENUM_TO_STR(STRUCT)
     SOL_ENUM_TO_STR(CONTRACT)
     SOL_ENUM_TO_STR(LIBRARY)
+    SOL_ENUM_TO_STR(FUNC_PTR)
     SOL_ENUM_TO_STR(TUPLE_RETURNS)
     SOL_ENUM_TO_STR(TUPLE_INSTANCE)
     SOL_ENUM_TO_STR(UNSET)
@@ -1554,6 +1610,7 @@ SolType str_to_sol_type(const std::string &s)
     {"STRUCT", SolType::STRUCT},
     {"CONTRACT", SolType::CONTRACT},
     {"LIBRARY", SolType::LIBRARY},
+    {"FUNC_PTR", SolType::FUNC_PTR},
     {"TUPLE_RETURNS", SolType::TUPLE_RETURNS},
     {"TUPLE_INSTANCE", SolType::TUPLE_INSTANCE},
   };

@@ -33,6 +33,6 @@
 void goto_termination(
   goto_functionst &goto_functions,
   optionst &options,
-  const namespacet &ns);
+  contextt &context);
 
 #endif /* GOTO_PROGRAMS_GOTO_TERMINATION_H_ */

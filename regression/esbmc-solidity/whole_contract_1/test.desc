@@ -1,4 +1,4 @@
 CORE
 contract.solast
---sol example1.sol --contract Robot --unwind 3 --no-unwinding-assertions --no-standard-checks
+--sol example1.sol --contract Robot --no-standard-checks --unwind 20 --no-unwinding-assertions
 ^VERIFICATION SUCCESSFUL$

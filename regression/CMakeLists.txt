@@ -134,6 +134,13 @@ if(NOT WIN32)
     endif()
 endif()
 
+# A `solc` executable is on PATH. Most Solidity tests ship a precompiled .solast,
+# but the TOD checks generate a harness contract at run time and compile it.
+find_program(ESBMC_TEST_SOLC_BINARY solc)
+if(ESBMC_TEST_SOLC_BINARY)
+    list(APPEND ESBMC_TEST_CAPABILITIES solc_binary)
+endif()
+
 # The per-test budget is long enough for a test that takes minutes to solve.
 # ESBMC_REGRESS_TIMEOUT is one global number, so a test needing more than a
 # short leg allows has no way to ask for more; without this it is reported as
@@ -205,7 +212,12 @@ function(add_esbmc_regression folder modes)
         list(REMOVE_ITEM SUBDIRS benchmarks)
     endif()
     foreach(test ${SUBDIRS})
-        add_esbmc_regression_test(${folder} "${modes}" ${test} ${ARGN})
+        # A subdirectory without a test.desc is not a test: testing_tool.py
+        # asserts the file exists, so registering such a directory (e.g. a
+        # stray ctest `Testing/` artifact) yields a permanently failing test.
+        if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${regression}/${test}/test.desc)
+            add_esbmc_regression_test(${folder} "${modes}" ${test} ${ARGN})
+        endif()
     endforeach()
 endfunction()
 
@@ -781,6 +793,10 @@ math(EXPR ESBMC_REGRESS_TIMEOUT_VERY_SLOW "${ESBMC_REGRESS_TIMEOUT} * 3")
 math(EXPR ESBMC_REGRESS_CTEST_TIMEOUT_VERY_SLOW
      "${ESBMC_REGRESS_TIMEOUT_VERY_SLOW} + 30")
 set(_very_slow_regression_tests
+    # napp_state_2d_dyn_address_fail is a FAILED case the base case reaches at
+    # k = 21; every inductive step on the way is a real (non-vacuous) query,
+    # ~128s in total on a local Release build.
+    "regression/esbmc-solidity/napp_state_2d_dyn_address_fail"
     "regression/quixbugs/shortest_path_lengths"
     "regression/quixbugs/shortest_path_lengths_fail"
     # humaneval_62 (derivative) verifies SUCCESSFUL but is heavy: its body is a

@@ -37,5 +37,9 @@ contract DynArray1DPass {
         arr.push(42);
         assert(arr.length == 1);
         assert(arr[0] == 42);
+
+        // restore state for inductive harness
+        arr.pop();
+        assert(arr.length == 0);
     }
 }

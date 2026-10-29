@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0
+// KNOWNBUG: a re-entrant dispatch writes the `new Target()` instance through
+// `t`, a heap pointer the points-to analysis cannot name, so goto_k_induction
+// cannot havoc what the dispatch writes and disables the inductive step.
 pragma solidity >=0.8.0 <0.9.0;
 
 // Bound-mode staticcall read-only enforcement: the Caller snapshots

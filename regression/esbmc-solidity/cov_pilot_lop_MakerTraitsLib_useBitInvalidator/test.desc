@@ -1,0 +1,6 @@
+KNOWNBUG
+contract.solast
+--sol contract.sol --function useBitInvalidator --branch-coverage-claims --k-induction --unlimited-k-steps --memlimit 8g --timeout 90 --quiet --no-assertions
+^Branches : 2$
+^Reached : 0$
+^Branch Coverage: 0%$

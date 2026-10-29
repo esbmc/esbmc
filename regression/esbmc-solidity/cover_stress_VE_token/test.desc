@@ -1,0 +1,5 @@
+KNOWNBUG
+contract.solast
+--sol contract.sol --contract VE --k-induction --no-standard-check --branch-coverage-claims --bitwuzla
+^Branches : [1-9]
+^Branch Coverage:

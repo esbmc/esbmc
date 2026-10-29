@@ -1,0 +1,5 @@
+CORE
+contract.solast
+--sol contract.sol --contract Derived --tod-race-check=takeSnapshot,scaleBase --k-induction --max-k-step 20 --k-step 3
+REQUIRES solc_binary
+^VERIFICATION FAILED$

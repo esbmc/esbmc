@@ -1,4 +1,4 @@
 KNOWNBUG
 contract.solast
---sol contract.sol --contract ProxyMis --unwind 2 --no-unwinding-assertions --no-standard-checks --bound
+--sol contract.sol --contract ProxyMis --no-standard-checks --bound --k-induction --max-k-step 20 --k-step 3
 ^VERIFICATION SUCCESSFUL$

@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--sol contract.sol --contract C --focus-function contradictionWhile --solidity-max-tx 1
+^VERIFICATION SUCCESSFUL$

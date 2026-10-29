@@ -1,0 +1,21 @@
+{
+  "covered": [
+    {
+      "cond": "!(v > 10)",
+      "loc": "file contract.sol line 21 function setX"
+    },
+    {
+      "cond": "!(w > 20)",
+      "loc": "file contract.sol line 26 function setY"
+    },
+    {
+      "cond": "v > 10",
+      "loc": "file contract.sol line 21 function setX"
+    },
+    {
+      "cond": "w > 20",
+      "loc": "file contract.sol line 26 function setY"
+    }
+  ],
+  "version": 1
+}

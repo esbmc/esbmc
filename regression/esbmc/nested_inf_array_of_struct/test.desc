@@ -1,0 +1,4 @@
+CORE
+main.c
+--bitwuzla --k-induction --unlimited-k-steps --memlimit 8g --timeout 20 --branch-coverage-claims
+^Branch Coverage: 100%$

@@ -13,13 +13,52 @@
 #include <util/expr/expr_util.h>
 #include <util/base/i2string.h>
 #include <util/base/prefix.h>
+#include <util/irep/migrate.h>
 #include <util/irep/std_expr.h>
 #include <util/message/message.h>
 #include <iterator>
 #include <memory>
 #include <optional>
+#include <set>
 #include <unordered_map>
 #include <unordered_set>
+
+bool is_solidity_dispatcher(const irep_idt &id)
+{
+  const std::string &s = id.as_string();
+  const std::string prefix = "sol:@C@";
+  if (!has_prefix(s, prefix))
+    return false;
+  const size_t at = s.find('@', prefix.size());
+  return at != std::string::npos &&
+         s.compare(
+           at,
+           std::string::npos,
+           "@_ESBMC_Nondet_Extcall_" +
+             s.substr(prefix.size(), at - prefix.size()) + "#") == 0;
+}
+
+irep_idt dispatch_havoc_id(const irep_idt &dispatcher)
+{
+  return dispatcher.as_string() + "$havoc";
+}
+
+irep_idt dispatcher_of_havoc(const irep_idt &havoc)
+{
+  const std::string &s = havoc.as_string();
+  const std::string suffix = "$havoc";
+  if (
+    s.size() <= suffix.size() ||
+    s.compare(s.size() - suffix.size(), suffix.size(), suffix) != 0)
+    return irep_idt();
+  return s.substr(0, s.size() - suffix.size());
+}
+
+bool is_dispatch_havoc(const irep_idt &id)
+{
+  const irep_idt dispatcher = dispatcher_of_havoc(id);
+  return !dispatcher.empty() && is_solidity_dispatcher(dispatcher);
+}
 
 namespace
 {
@@ -245,12 +284,28 @@ void add_havoc_assigns(
     add(lhs, rhs);
 }
 
+/// Havoc the loop's modified variables in front of its head. With an
+/// @p exits_at_head, an execution whose concrete state leaves the loop at its
+/// head jumps over the havocs (and over the ASSUME(entry_cond) placed after
+/// them) straight to the head, which then exits with that state. Without the
+/// jump the ASSUME would kill every zero-trip execution, and with it every
+/// claim past the loop, so the inductive step could prove them vacuously.
 void make_nondet_assign(
   goto_functiont &goto_function,
   goto_programt::targett &loop_head,
-  const havocst &havocs)
+  const havocst &havocs,
+  const expr2tc &exits_at_head)
 {
   goto_programt dest;
+  if (!is_nil_expr(exits_at_head))
+  {
+    goto_programt::targett skip = dest.add_instruction(GOTO);
+    skip->guard = exits_at_head;
+    skip->inductive_step_instruction = true;
+    skip->location = loop_head->location;
+    // Auxiliary: coverage must not count it as a branch of the program.
+    skip->location.property("skipped");
+  }
   add_havoc_assigns(dest, havocs, loop_head->location);
   const size_t inserted = dest.instructions.size();
   goto_function.body.insert_swap(loop_head, dest);
@@ -260,7 +315,10 @@ void make_nondet_assign(
   // "walk while inductive_step_instruction" heuristic, which also swallowed an
   // ASSUME a previous pass had left after the head and so retargeted the back
   // edge past the loop's exit IF.
+  const goto_programt::targett first = loop_head;
   std::advance(loop_head, inserted);
+  if (!is_nil_expr(exits_at_head))
+    first->targets.push_back(loop_head);
 }
 
 bool contains_rec(const expr2tc &expr, const loopst::loop_varst &vars)
@@ -300,48 +358,27 @@ void remove_unrelated_loop_cond(guardst &guards, const loopst &loop)
   }
 }
 
-void assume_loop_entry_cond_before_loop(
-  goto_functiont &goto_function,
-  goto_programt::targett &loop_head,
-  const guardst &guards)
+/// The guard of the loop head when the head is the loop's own exit test, i.e.
+/// the condition under which the loop runs zero times; nil otherwise. Only
+/// that test qualifies: it is evaluated before any body instruction, whereas a
+/// break test elsewhere in the body reads values the body has yet to compute.
+expr2tc exit_guard_at_head(
+  goto_programt::const_targett loop_head,
+  goto_programt::const_targett loop_exit)
 {
-  // Combine all per-branch loop-entry guards into one ASSUME and
-  // insert it via raw `insert(loop_head, ...)` immediately before the
-  // loop_head IF. This runs *after* make_nondet_assign in
-  // transform_loop, so the layout becomes
-  //
-  //   NONDET havocs               [inductive_step]   <- make_nondet_assign
-  //   ASSUME(entry_cond)          [inductive_step]   <- this insert
-  //   loop_head: IF !cond GOTO exit                  <- original IF
-  //   body
-  //   GOTO loop_head  -> back-edge targets the IF
-  //   exit:
-  //
-  // Two properties matter for soundness/precision:
-  //   1. The ASSUME comes *after* the NONDET havocs, so it constrains
-  //      the just-havoced state (the actual inductive-hypothesis pin),
-  //      not the pre-loop concrete values.
-  //   2. The ASSUME sits *before* loop_head and is reached only via
-  //      fall-through from the havocs. The back-edge
-  //      (adjust_loop_head_and_exit retargets it at loop_head, the
-  //      IF) skips both the havocs and the ASSUME on every iteration
-  //      after the first, so the natural exit on `cond` is never
-  //      blocked by a re-firing entry-cond assume.
-  //
-  // The legacy `insert_swap(tmp_head, ASSUME)` placement (one ASSUME
-  // per branch, swapped *at* the branch instruction) was unsound
-  // for the loop_head IF because insert_swap pins external jumps to
-  // the iterator: back-edges then landed on the ASSUME and re-fired
-  // it on every iteration, killing the natural-exit path in IS and
-  // producing vacuous UNSAT proofs (e.g. SV-COMP
-  // sll_of_sll_nondet_append-2). The earlier fix that combined the
-  // ASSUME and placed it *after* loop_head fixed SLL but over-
-  // constrained loops where the body modifies a loop-exit variable
-  // (e.g. `i++` in array_3-1): the back-edge re-evaluated the
-  // ASSUME on the iteration where the body's increment had pushed
-  // the variable past the exit condition, again killing a natural
-  // path.
-  //
+  if (
+    !loop_head->is_goto() || is_true(loop_head->guard) ||
+    loop_head->targets.size() != 1)
+    return expr2tc();
+  const auto target = loop_head->targets.front();
+  return target->location_number > loop_exit->location_number ? loop_head->guard
+                                                              : expr2tc();
+}
+
+/// The per-branch loop-entry guards combined into one condition, or nil when
+/// there is nothing to assume.
+expr2tc loop_entry_cond(const guardst &guards)
+{
   // Iterate the collected guards directly instead of walking the
   // instruction range and looking each one up: after
   // make_nondet_assign's insert_swap the walk-and-lookup approach
@@ -362,7 +399,7 @@ void assume_loop_entry_cond_before_loop(
     // any unresolved false among the branch guards skips the whole
     // entry-cond instrumentation.
     if (is_false(loop_cond))
-      return;
+      return expr2tc();
 
     combined.add(loop_cond);
   }
@@ -371,11 +408,60 @@ void assume_loop_entry_cond_before_loop(
   if (
     is_nil_expr(combined_expr) || is_true(combined_expr) ||
     is_false(combined_expr))
+    return expr2tc();
+  return combined_expr;
+}
+
+void assume_loop_entry_cond_before_loop(
+  goto_functiont &goto_function,
+  goto_programt::targett &loop_head,
+  const expr2tc &entry_cond)
+{
+  // Insert the combined entry condition as one ASSUME via raw
+  // `insert(loop_head, ...)` immediately before the loop_head IF. This
+  // runs *after* make_nondet_assign in transform_loop, so the layout
+  // becomes
+  //
+  //   IF exits_at_head GOTO loop_head [inductive_step] <- make_nondet_assign
+  //   NONDET havocs               [inductive_step]   <- make_nondet_assign
+  //   ASSUME(entry_cond)          [inductive_step]   <- this insert
+  //   loop_head: IF !cond GOTO exit                  <- original IF
+  //   body
+  //   GOTO loop_head  -> back-edge targets the IF
+  //   exit:
+  //
+  // Two properties matter for soundness/precision:
+  //   1. The ASSUME comes *after* the NONDET havocs, so it constrains
+  //      the just-havoced state (the actual inductive-hypothesis pin),
+  //      not the pre-loop concrete values.
+  //   2. The ASSUME sits *before* loop_head and is reached only via
+  //      fall-through from the havocs, while the leading IF lets an
+  //      execution that does not enter the loop bypass both. The back-edge
+  //      (adjust_loop_head_and_exit retargets it at loop_head, the
+  //      IF) skips both the havocs and the ASSUME on every iteration
+  //      after the first, so the natural exit on `cond` is never
+  //      blocked by a re-firing entry-cond assume.
+  //
+  // The legacy `insert_swap(tmp_head, ASSUME)` placement (one ASSUME
+  // per branch, swapped *at* the branch instruction) was unsound
+  // for the loop_head IF because insert_swap pins external jumps to
+  // the iterator: back-edges then landed on the ASSUME and re-fired
+  // it on every iteration, killing the natural-exit path in IS and
+  // producing vacuous UNSAT proofs (e.g. SV-COMP
+  // sll_of_sll_nondet_append-2). The earlier fix that combined the
+  // ASSUME and placed it *after* loop_head fixed SLL but over-
+  // constrained loops where the body modifies a loop-exit variable
+  // (e.g. `i++` in array_3-1): the back-edge re-evaluated the
+  // ASSUME on the iteration where the body's increment had pushed
+  // the variable past the exit condition, again killing a natural
+  // path.
+
+  if (is_nil_expr(entry_cond))
     return;
 
   goto_programt::instructiont instruction;
   instruction.type = ASSUME;
-  instruction.guard = combined_expr;
+  instruction.guard = entry_cond;
   instruction.inductive_step_instruction = true;
   instruction.location = loop_head->location;
   goto_function.body.instructions.insert(loop_head, instruction);
@@ -520,7 +606,8 @@ void transform_loop(
   goto_functiont &goto_function,
   loopst &loop,
   const havocst &havocs,
-  bool continue_past_failed_assertions)
+  bool continue_past_failed_assertions,
+  bool zero_trip_bypass)
 {
   goto_programt::targett loop_head = loop.get_original_loop_head();
   goto_programt::targett loop_exit = loop.get_original_loop_exit();
@@ -549,11 +636,17 @@ void transform_loop(
   // assume_loop_entry_cond_before_loop runs the iterator is correct
   // and the ASSUME ends up between the havocs and the IF.
 
+  const expr2tc entry_cond = loop_entry_cond(guards);
+  // Only an inserted ASSUME can kill a zero-trip execution.
+  const expr2tc exits_at_head = zero_trip_bypass && !is_nil_expr(entry_cond)
+                                  ? exit_guard_at_head(loop_head, loop_exit)
+                                  : expr2tc();
+
   // Create the nondet assignments on the beginning of the loop
-  make_nondet_assign(goto_function, loop_head, havocs);
+  make_nondet_assign(goto_function, loop_head, havocs, exits_at_head);
 
   // Assume the loop entry condition before going into the loop
-  assume_loop_entry_cond_before_loop(goto_function, loop_head, guards);
+  assume_loop_entry_cond_before_loop(goto_function, loop_head, entry_cond);
 
   // Check if the loop exit needs to be updated. We must point to the
   // assume that was inserted in the previous transformation
@@ -1808,13 +1901,14 @@ bool pin_havoced_pointers(const loop_writest &w, pinst &pins)
   return true;
 }
 
-/// The functions the entry point may reach, calls through function pointers
-/// included: every function named in a reachable body.
+/// The functions \p root may call, directly or not, calls through function
+/// pointers included: every function named in a body it reaches. \p root is
+/// among them only when it may call itself.
 std::unordered_set<irep_idt, irep_id_hash>
-reachable_functions(const goto_functionst &goto_functions)
+called_from(const goto_functionst &goto_functions, const irep_idt &root)
 {
-  std::unordered_set<irep_idt, irep_id_hash> seen{goto_functions.main_id()};
-  std::vector<irep_idt> work{goto_functions.main_id()};
+  std::unordered_set<irep_idt, irep_id_hash> seen;
+  std::vector<irep_idt> work{root};
   while (!work.empty())
   {
     auto it = goto_functions.function_map.find(work.back());
@@ -1831,6 +1925,96 @@ reachable_functions(const goto_functionst &goto_functions)
         });
   }
   return seen;
+}
+
+/// The functions the entry point may reach.
+std::unordered_set<irep_idt, irep_id_hash>
+reachable_functions(const goto_functionst &goto_functions)
+{
+  auto seen = called_from(goto_functions, goto_functions.main_id());
+  seen.insert(goto_functions.main_id());
+  return seen;
+}
+
+/// The Solidity dispatchers some call made in a dispatch reaches again: an
+/// external call that the contract's methods answer.
+std::vector<irep_idt>
+reentrant_dispatchers(const goto_functionst &goto_functions)
+{
+  std::vector<irep_idt> dispatchers;
+  forall_goto_functions (it, goto_functions)
+    if (
+      it->second.body_available && is_solidity_dispatcher(it->first) &&
+      called_from(goto_functions, it->first).count(it->first))
+      dispatchers.push_back(it->first);
+  return dispatchers;
+}
+
+/// A function that calls \p dispatcher in a loop. The loop's modified set is
+/// what one dispatch may write, re-entries included.
+goto_functiont
+dispatch_loop(const irep_idt &dispatcher, const goto_functiont &dispatch)
+{
+  goto_functiont f;
+  f.type = code_type2tc(
+    std::vector<type2tc>{}, get_empty_type(), std::vector<irep_idt>{}, false);
+  f.body_available = true;
+  f.body.hide = true;
+  const locationt &location = dispatch.body.instructions.front().location;
+
+  goto_programt &body = f.body;
+  goto_programt::targett head = body.add_instruction(GOTO);
+  head->guard = not2tc(gen_nondet(get_bool_type()));
+  goto_programt::targett call = body.add_instruction(FUNCTION_CALL);
+  call->code = code_function_call2tc(
+    expr2tc(), symbol2tc(dispatch.type, dispatcher), std::vector<expr2tc>{});
+  goto_programt::targett back = body.add_instruction(GOTO);
+  back->guard = gen_true_expr();
+  back->targets.push_back(head);
+  head->targets.push_back(body.add_instruction(END_FUNCTION));
+  for (auto &instr : body.instructions)
+    instr.location = location;
+  f.update_instructions_function(dispatch_havoc_id(dispatcher));
+  return f;
+}
+
+/// Precede every call to a dispatcher in \p dispatchers with a call to its
+/// havoc. Symex runs that havoc only for a dispatch that no dispatch to the
+/// same dispatcher is under.
+void havoc_before_dispatch(
+  goto_functionst &goto_functions,
+  const std::vector<irep_idt> &dispatchers)
+{
+  Forall_goto_functions (it, goto_functions)
+    for (auto i = it->second.body.instructions.begin();
+         i != it->second.body.instructions.end();
+         ++i)
+    {
+      if (!i->is_function_call())
+        continue;
+      const expr2tc &callee = to_code_function_call2t(i->code).function;
+      if (
+        !is_symbol2t(callee) ||
+        std::find(
+          dispatchers.begin(),
+          dispatchers.end(),
+          to_symbol2t(callee).thename) == dispatchers.end())
+        continue;
+      goto_programt::instructiont havoc(FUNCTION_CALL);
+      havoc.code = code_function_call2tc(
+        expr2tc(),
+        symbol2tc(
+          goto_functions.function_map
+            .at(dispatch_havoc_id(to_symbol2t(callee).thename))
+            .type,
+          dispatch_havoc_id(to_symbol2t(callee).thename)),
+        std::vector<expr2tc>{});
+      havoc.location = i->location;
+      havoc.function = i->function;
+      havoc.inductive_step_instruction = true;
+      it->second.body.insert_swap(i, havoc);
+      ++i; // past the dispatch, now after the havoc
+    }
 }
 
 /// Whether a loop may allocate heap memory: some reachable function allocates
@@ -1903,13 +2087,12 @@ bool calls_nondet_memory(const goto_functionst &goto_functions)
 }
 } // namespace
 
-/// Havocs what the loop of \p w writes and transforms it for the inductive
-/// step. Returns false when a write through a pointer stays uncovered.
-bool havoc_loop(
+/// What the inductive step havocs for the loop of \p w. Returns false when a
+/// write through a pointer stays uncovered.
+bool loop_havocs(
   goto_functionst &goto_functions,
-  goto_functiont &goto_function,
   const loop_writest &w,
-  bool continue_past_failed_assertions)
+  havocst &havocs)
 {
   loopst &loop = w.loop;
   // Before the empty-modified-set skip: a loop that only writes through
@@ -1920,7 +2103,7 @@ bool havoc_loop(
   if (loop.get_modified_loop_vars().empty() && through.empty())
     return covered;
 
-  havocst havocs{ordered(through), ordered(loop.get_modified_loop_vars()), {}};
+  havocs = {ordered(through), ordered(loop.get_modified_loop_vars()), {}};
   if (loop.writes_through_pointer() && !pin_havoced_pointers(w, havocs.pins))
     covered = false;
   // Symex answers the call by name, but goto_loopst, for the loops still to
@@ -1931,7 +2114,295 @@ bool havoc_loop(
     goto_functions.function_map[to_symbol2t(havoc_object).thename].type =
       havoc_object->type;
   }
-  transform_loop(goto_function, loop, havocs, continue_past_failed_assertions);
+  return covered;
+}
+
+/// Havocs what the loop of \p w writes and transforms it for the inductive
+/// step. Returns false when a write through a pointer stays uncovered.
+bool havoc_loop(
+  goto_functionst &goto_functions,
+  goto_functiont &goto_function,
+  const loop_writest &w,
+  bool continue_past_failed_assertions,
+  bool zero_trip_bypass)
+{
+  havocst havocs;
+  const bool covered = loop_havocs(goto_functions, w, havocs);
+  if (havocs.through.empty() && havocs.vars.empty())
+    return covered;
+  transform_loop(
+    goto_function,
+    w.loop,
+    havocs,
+    continue_past_failed_assertions,
+    zero_trip_bypass);
+  return covered;
+}
+
+/// Whether a pointer may point to a given object.
+using reachest = std::function<bool(const expr2tc &)>;
+
+/// The field of the struct \p object that a write to \p lvalue reaches:
+/// empty when the write does not reach \p object, nullopt when it may reach it
+/// other than through one field. \p reaches tells whether a dereferenced
+/// pointer may point to \p object.
+std::optional<irep_idt> field_written(
+  const expr2tc &lvalue,
+  const expr2tc &object,
+  const reachest &reaches)
+{
+  // The access applied right on the base, which a field write makes a member.
+  expr2tc base = lvalue, access;
+  while (is_member2t(base) || is_index2t(base))
+  {
+    access = base;
+    base = is_member2t(base) ? to_member2t(base).source_value
+                             : to_index2t(base).source_value;
+  }
+  if (is_symbol2t(base))
+  {
+    if (to_symbol2t(base).thename != to_symbol2t(object).thename)
+      return irep_idt();
+  }
+  else if (is_dereference2t(base))
+  {
+    if (!reaches(to_dereference2t(base).value))
+      return irep_idt();
+    if (
+      !is_struct_type(base->type) ||
+      to_struct_type(base->type).name != to_struct_type(object->type).name)
+      return std::nullopt;
+  }
+  else
+    return std::nullopt;
+  if (is_nil_expr(access) || !is_member2t(access))
+    return std::nullopt;
+  return to_member2t(access).member;
+}
+
+/// Adds to \p fields the field of \p object that a write to \p lvalue reaches.
+/// Returns false when it may reach \p object other than through a field.
+bool note_field(
+  const expr2tc &lvalue,
+  const expr2tc &object,
+  const reachest &reaches,
+  std::set<irep_idt> &fields)
+{
+  if (is_nil_expr(lvalue))
+    return true;
+  const std::optional<irep_idt> field = field_written(lvalue, object, reaches);
+  if (field && !field->empty())
+    fields.insert(*field);
+  return field.has_value();
+}
+
+/// Whether \p call may write what \p reaches accepts through a pointer
+/// argument with no body to say where: symex runs a bodyless callee, an
+/// intrinsic among them, by name.
+bool bodyless_call_reaches(
+  const goto_functionst &goto_functions,
+  const code_function_call2t &call,
+  const reachest &reaches)
+{
+  const auto callee =
+    goto_functions.function_map.find(to_symbol2t(call.function).thename);
+  if (
+    callee != goto_functions.function_map.end() &&
+    callee->second.body_available)
+    return false;
+  return std::any_of(
+    call.operands.begin(), call.operands.end(), [&](const expr2tc &arg) {
+      return !is_nil_expr(arg) && is_pointer_type(arg->type) && reaches(arg);
+    });
+}
+
+/// Adds to \p fields the fields of \p object that \p instr may write.
+/// Returns false when it may write \p object other than field by field.
+bool note_fields(
+  const goto_functionst &goto_functions,
+  const instructiont &instr,
+  const expr2tc &object,
+  const reachest &reaches,
+  std::set<irep_idt> &fields)
+{
+  if (instr.is_assign())
+    return note_field(
+      to_code_assign2t(instr.code).target, object, reaches, fields);
+  if (!instr.is_function_call())
+    return true;
+  const code_function_call2t &call = to_code_function_call2t(instr.code);
+  return note_field(call.ret, object, reaches, fields) &&
+         is_symbol2t(call.function) &&
+         !bodyless_call_reaches(goto_functions, call, reaches);
+}
+
+/// The fields of the struct \p object that \p functions may write, or nullopt
+/// when they may write it other than field by field.
+std::optional<std::set<irep_idt>> fields_written(
+  const goto_functionst &goto_functions,
+  const std::unordered_set<irep_idt, irep_id_hash> &functions,
+  const loop_writest &w,
+  const expr2tc &object)
+{
+  const irep_idt &name = to_symbol2t(object).thename;
+  const reachest reaches = [&w, &name](const expr2tc &ptr) {
+    const targetst t = targets_of(w.points_to, w.loop, ptr);
+    return t.anything || names(t.named, name);
+  };
+  std::set<irep_idt> fields;
+  for (const irep_idt &id : functions)
+  {
+    const auto f = goto_functions.function_map.find(id);
+    if (f == goto_functions.function_map.end() || !f->second.body_available)
+      continue;
+    for (const auto &instr : f->second.body.instructions)
+      if (!note_fields(goto_functions, instr, object, reaches, fields))
+        return std::nullopt;
+  }
+  return fields;
+}
+
+/// Replaces the body of the dispatch loop \p goto_function (see dispatch_loop)
+/// with the havoc of what its loop writes. A local of a function the dispatch
+/// calls is left alone: every call declares it afresh, and the instance live
+/// where symex runs the havoc belongs to a caller the dispatch cannot reach
+/// unless the local's address is taken. Of a contract or other struct the
+/// dispatch writes field by field, only the fields it writes are havoced.
+/// Returns false when a write through a pointer stays uncovered.
+bool havoc_dispatch(
+  goto_functionst &goto_functions,
+  goto_functiont &goto_function,
+  const loop_writest &w)
+{
+  havocst havocs;
+  const bool covered = loop_havocs(goto_functions, w, havocs);
+  const irep_idt dispatcher = dispatcher_of_havoc(w.function);
+  auto functions = called_from(goto_functions, dispatcher);
+  functions.insert(dispatcher);
+
+  std::vector<expr2tc> vars;
+  std::unordered_map<irep_idt, std::set<irep_idt>, irep_id_hash> narrowed;
+  for (const expr2tc &var : havocs.vars)
+  {
+    if (!is_symbol2t(var))
+    {
+      vars.push_back(var);
+      continue;
+    }
+    const irep_idt &name = to_symbol2t(var).thename;
+    if (
+      w.derivations.local_elsewhere(name, w.function) &&
+      !w.address_taken.count(name))
+      continue;
+    const std::optional<std::set<irep_idt>> fields =
+      is_struct_type(var->type)
+        ? fields_written(goto_functions, functions, w, var)
+        : std::nullopt;
+    std::vector<expr2tc> members;
+    for (const irep_idt &field : fields ? *fields : std::set<irep_idt>())
+      if (const auto n = struct_union_get_component_number(var->type, field))
+        members.push_back(
+          member2tc(to_struct_type(var->type).members[*n], var, field));
+    if (members.empty() || members.size() != fields->size())
+    {
+      vars.push_back(var);
+      continue;
+    }
+    vars.insert(vars.end(), members.begin(), members.end());
+    narrowed[name] = *fields;
+  }
+  havocs.vars = std::move(vars);
+  // A pin restores the provenance of an address the havoc overwrote, so it
+  // has nothing to do in a field the havoc leaves alone.
+  havocs.pins.erase(
+    std::remove_if(
+      havocs.pins.begin(),
+      havocs.pins.end(),
+      [&narrowed](const std::pair<expr2tc, expr2tc> &pin) {
+        expr2tc base = pin.first, field;
+        while (is_member2t(base))
+        {
+          field = base;
+          base = to_member2t(base).source_value;
+        }
+        if (!is_symbol2t(base) || is_nil_expr(field))
+          return false;
+        const auto it = narrowed.find(to_symbol2t(base).thename);
+        return it != narrowed.end() &&
+               !it->second.count(to_member2t(field).member);
+      }),
+    havocs.pins.end());
+
+  const locationt location = goto_function.body.instructions.front().location;
+  goto_programt body;
+  add_havoc_assigns(body, havocs, location);
+  body.add_instruction(END_FUNCTION)->location = location;
+  goto_function.body.swap(body);
+  goto_function.update_instructions_function(w.function);
+  return covered;
+}
+
+/// Adds a dispatch loop (see dispatch_loop), named by dispatch_havoc_id, for
+/// every dispatcher a dispatch may reach again, and returns those dispatchers.
+std::vector<irep_idt>
+add_dispatch_loops(goto_functionst &goto_functions, contextt &context)
+{
+  const std::vector<irep_idt> dispatchers =
+    reentrant_dispatchers(goto_functions);
+  for (const irep_idt &dispatcher : dispatchers)
+  {
+    const irep_idt id = dispatch_havoc_id(dispatcher);
+    const goto_functiont &f = goto_functions.function_map[id] =
+      dispatch_loop(dispatcher, goto_functions.function_map.at(dispatcher));
+    if (context.find_symbol(id) != nullptr)
+      continue;
+    symbolt symbol;
+    symbol.id = symbol.name = id;
+    set_symbol_type(symbol, f.type);
+    symbol.location = f.body.instructions.front().location;
+    context.move_symbol_to_context(symbol);
+  }
+  return dispatchers;
+}
+
+/// Turns the dispatch loop of each of \p dispatchers into its havoc (see
+/// havoc_dispatch). Returns false, after logging why, when one cannot cover
+/// what a dispatch writes.
+bool havoc_dispatches(
+  goto_functionst &goto_functions,
+  const std::vector<irep_idt> &dispatchers,
+  andersent &points_to,
+  const derivationst &derivations,
+  bool drops_unresolved,
+  const std::unordered_set<irep_idt, irep_id_hash> &address_taken)
+{
+  bool covered = true;
+  for (const irep_idt &dispatcher : dispatchers)
+  {
+    const irep_idt id = dispatch_havoc_id(dispatcher);
+    goto_functiont &f = goto_functions.function_map.at(id);
+    goto_loopst loops(id, goto_functions, f);
+    loopst &loop = loops.get_loops().front();
+    const iterationt iteration =
+      drops_unresolved ? iteration_of(f, loop) : iterationt();
+    if (
+      havoc_dispatch(
+        goto_functions,
+        f,
+        {loop,
+         id,
+         points_to,
+         derivations,
+         drops_unresolved,
+         address_taken,
+         iteration}))
+      continue;
+    log_warning(
+      "k-induction cannot havoc what a call to {} writes through a pointer. "
+      "Disabling inductive step",
+      id2string(dispatcher));
+    covered = false;
+  }
   return covered;
 }
 
@@ -1970,9 +2441,14 @@ unsettled_by_loops(goto_functionst &goto_functions)
 
 bool goto_k_induction(
   goto_functionst &goto_functions,
-  const namespacet &,
-  bool continue_past_failed_assertions)
+  contextt &context,
+  bool continue_past_failed_assertions,
+  bool zero_trip_bypass)
 {
+  // Added before the analyses so that they cover the dispatch loops.
+  const std::vector<irep_idt> dispatchers =
+    add_dispatch_loops(goto_functions, context);
+
   // Andersen and loop_shapest key on location numbers, which inlining
   // restarts in every function.
   goto_functions.update();
@@ -2020,6 +2496,15 @@ bool goto_k_induction(
       "earlier iterations. Disabling inductive step");
     disable_inductive_step = true;
   }
+  // Before the loops are transformed, which would widen what the dispatch
+  // loops write.
+  disable_inductive_step |= !havoc_dispatches(
+    goto_functions,
+    dispatchers,
+    points_to,
+    derivations,
+    drops_unresolved,
+    address_taken);
   bool uncovered_write = false;
   Forall_goto_functions (it, goto_functions)
   {
@@ -2051,10 +2536,12 @@ bool goto_k_induction(
            drops_unresolved,
            address_taken,
            *iteration++},
-          continue_past_failed_assertions) &&
+          continue_past_failed_assertions,
+          zero_trip_bypass) &&
         decides)
         uncovered_write = true;
   }
+  havoc_before_dispatch(goto_functions, dispatchers);
   goto_functions.update();
   if (uncovered_write)
     log_warning(

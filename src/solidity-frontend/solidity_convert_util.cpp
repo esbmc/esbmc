@@ -8,6 +8,7 @@
 
 #include <solidity-frontend/solidity_convert.h>
 #include <solidity-frontend/typecast.h>
+#include <functional>
 #include <util/arith/arith_tools.h>
 #include <util/arith/bitvector.h>
 #include <util/lang/c_sizeof.h>
@@ -18,10 +19,60 @@
 #include <util/irep/std_expr.h>
 #include <util/message/message.h>
 #include <algorithm>
+#include <cctype>
+#include <cstring>
 #include <regex>
 #include <optional>
 
 #include <fstream>
+
+// Lexically-declaring contract of an AST node: the top-level
+// ContractDefinition whose source byte span contains the node's `src`
+// start offset. This is the definition of "lexical declarer" itself and
+// is invariant across inheritance merge-by-copy and modifier splicing
+// (merge/splice copy the json verbatim including `src`, so a decision
+// keeps its original textual offset = inside its declaring contract's
+// span). Uniform for FunctionDefinition AND ModifierDefinition (the
+// latter has no `scope` field). Done on the AST at stamp time — not on
+// goto `it->location` line ranges (that was the unsound rejected Fix-A,
+// a different layer). Empty for file-scope/free constructs (correctly
+// unattributed → excluded under --contract). Contract spans do not
+// overlap (siblings in the flattened SourceUnit).
+const std::string &
+solidity_convertert::current_decl_contract(const nlohmann::json &ast_node)
+{
+  static const std::string empty;
+  if (!cd_id_to_name_built)
+  {
+    cd_id_to_name_built = true;
+    if (src_ast_json.contains("nodes") && src_ast_json["nodes"].is_array())
+      for (const auto &n : src_ast_json["nodes"])
+        if (
+          n.is_object() && n.value("nodeType", "") == "ContractDefinition" &&
+          n.contains("name") && n.contains("src"))
+        {
+          const std::string s = n["src"].get<std::string>();
+          size_t c1 = s.find(':');
+          size_t c2 = s.find(':', c1 + 1);
+          long st = std::stol(s.substr(0, c1));
+          long ln = std::stol(s.substr(c1 + 1, c2 - c1 - 1));
+          cd_spans.push_back({st, st + ln, n["name"].get<std::string>()});
+        }
+  }
+
+  if (!ast_node.is_object())
+    return empty;
+  const std::string src = ast_node.contains("src")
+                            ? ast_node["src"].get<std::string>()
+                            : get_src_from_json(ast_node);
+  if (src.empty() || src.find(':') == std::string::npos)
+    return empty;
+  long off = std::stol(src.substr(0, src.find(':')));
+  for (const auto &sp : cd_spans)
+    if (off >= sp.start && off < sp.end)
+      return sp.name;
+  return empty;
+}
 
 void solidity_convertert::get_location_from_node(
   const nlohmann::json &ast_node,
@@ -37,6 +88,9 @@ void solidity_convertert::get_location_from_node(
   {
     location.set_function(current_functionName); // set the function where this
                                                  // local variable belongs to
+    const std::string &dc = current_decl_contract(ast_node);
+    if (!dc.empty())
+      location.set("sol_decl_contract", dc);
   }
 }
 
@@ -57,6 +111,13 @@ void solidity_convertert::get_start_location_from_stmt(
 
   if (!function_name.empty())
     location.set_function(function_name);
+
+  if (current_functionDecl)
+  {
+    const std::string &dc = current_decl_contract(ast_node);
+    if (!dc.empty())
+      location.set("sol_decl_contract", dc);
+  }
 }
 
 void solidity_convertert::get_final_location_from_stmt(
@@ -76,6 +137,13 @@ void solidity_convertert::get_final_location_from_stmt(
 
   if (!function_name.empty())
     location.set_function(function_name);
+
+  if (current_functionDecl)
+  {
+    const std::string &dc = current_decl_contract(ast_node);
+    if (!dc.empty())
+      location.set("sol_decl_contract", dc);
+  }
 }
 
 unsigned int solidity_convertert::get_line_number(
@@ -106,6 +174,12 @@ unsigned int solidity_convertert::get_line_number(
 
   // the line number can be calculated by counting the number of line breaks
   // prior to the identifier.
+  // Clamp byte_position to contract_contents.size() to avoid
+  // heap-buffer-overflow when AST nodes carry synthetic/out-of-range src
+  // offsets (observed on auxiliary vars populated before typechecking in large
+  // import closures).
+  if (byte_position > contract_contents.size())
+    byte_position = contract_contents.size();
   unsigned int loc = std::count(
                        contract_contents.begin(),
                        (contract_contents.begin() + byte_position),
@@ -118,10 +192,21 @@ size_t
 solidity_convertert::add_offset(const std::string &src, size_t start_position)
 {
   // extract the length from "start:length:index"
-  std::string offset = src.substr(1, src.find(":"));
-  // already added 1 in start_position
-  size_t end_position = start_position + std::stoul(offset);
-  return end_position;
+  // The previous implementation was `src.substr(1, src.find(":"))`,
+  // which only worked by accident for multi-digit start positions and
+  // crashed (`stoul` invalid_argument) when the start digit count made
+  // the substring begin at or past the first colon (e.g. src="5:3:0"
+  // yielded ":" → stoul throws). Properly slice the *second* field.
+  const auto first = src.find(":");
+  if (first == std::string::npos)
+    return start_position;
+  const auto second = src.find(":", first + 1);
+  const std::string offset = (second == std::string::npos)
+                               ? src.substr(first + 1)
+                               : src.substr(first + 1, second - first - 1);
+  if (offset.empty() || !std::isdigit(static_cast<unsigned char>(offset[0])))
+    return start_position;
+  return start_position + std::stoul(offset);
 }
 
 std::string
@@ -179,18 +264,27 @@ bool solidity_convertert::get_constant_value(
   nlohmann::json tmp = find_node_by_id(src_ast_json, ref_id);
   while (!tmp.empty() && tmp.contains("value"))
   {
-    auto val_json = tmp["value"];
-    if (!val_json.contains("value"))
+    const auto &val_json = tmp["value"];
+    if (
+      val_json.is_object() && val_json.contains("value") &&
+      val_json["value"].is_string())
     {
-      assert(val_json.contains("referencedDeclaration"));
-      int new_ref_id = val_json["referencedDeclaration"].get<int>();
-      tmp = find_node_by_id(src_ast_json, new_ref_id);
-    }
-    else
-    {
-      value = tmp["value"]["value"].get<std::string>();
+      value = val_json["value"].get<std::string>();
       return false;
     }
+    // Follow simple Identifier chains; anything else (TupleExpression,
+    // BinaryOperation, ...) is not resolvable here.
+    if (
+      val_json.is_object() && val_json.contains("referencedDeclaration") &&
+      val_json["referencedDeclaration"].is_number_integer())
+    {
+      int new_ref_id = val_json["referencedDeclaration"].get<int>();
+      if (new_ref_id <= 0)
+        return true;
+      tmp = find_node_by_id(src_ast_json, new_ref_id);
+      continue;
+    }
+    return true;
   }
 
   return true;
@@ -232,12 +326,17 @@ void solidity_convertert::convert_expression_to_code(exprt &expr)
 bool solidity_convertert::check_intrinsic_function(
   const nlohmann::json &ast_node)
 {
-  // function to detect special intrinsic functions, e.g. ___ESBMC_assume
+  // function to detect special intrinsic functions, e.g. ___ESBMC_assume.
+  // __ESBMC_reverted is a verification-only revert-observation stub: the user
+  // declares an empty body so solc can compile, and the frontend hijacks calls
+  // to the C intrinsic (get_sol_builtin_ref).  Treat it as intrinsic here so
+  // the dead empty body is not materialized.
   return (
     ast_node.contains("name") && (ast_node["name"] == "__ESBMC_assume" ||
                                   ast_node["name"] == "__VERIFIER_assume" ||
                                   ast_node["name"] == "__ESBMC_assert" ||
-                                  ast_node["name"] == "__VERIFIER_assert"));
+                                  ast_node["name"] == "__VERIFIER_assert" ||
+                                  ast_node["name"] == "__ESBMC_reverted"));
 }
 
 nlohmann::json solidity_convertert::make_implicit_cast_expr(
@@ -273,14 +372,15 @@ solidity_convertert::make_pointee_type(const nlohmann::json &sub_expr)
     sub_expr["typeString"].get<std::string>().find("function") !=
     std::string::npos)
   {
-    // Add more special functions here
+    // Match all function types by their typeIdentifier prefix.
+    // Function types with parameters (e.g. function(uint) pure returns(uint))
+    // are handled as FunctionNoProto (losing param info) — sufficient for
+    // FunctionToPointer decay even though indirect calls are not yet supported.
     if (
       sub_expr["typeString"].get<std::string>().find("function ()") !=
         std::string::npos ||
-      sub_expr["typeIdentifier"].get<std::string>().find(
-        "t_function_assert_pure$") != std::string::npos ||
-      sub_expr["typeIdentifier"].get<std::string>().find(
-        "t_function_internal_pure$") != std::string::npos)
+      sub_expr["typeIdentifier"].get<std::string>().find("t_function_") !=
+        std::string::npos)
     {
       // e.g. FunctionNoProto: "typeString": "function () returns (uint8)" with
       // () empty after keyword 'function' "function ()" contains the function
@@ -328,8 +428,18 @@ solidity_convertert::make_pointee_type(const nlohmann::json &sub_expr)
                 "typeString": ")" +
             matches[1].str() + R"("
               })");
-          adjusted_expr["returnParameters"]["parameters"][0]
-                       ["typeDescriptions"] = j2;
+          auto rtn_params = R"(
+              {
+                "nodeType": "ParameterList",
+                "parameters": [
+                  {
+                    "typeDescriptions": {}
+                  }
+                ]
+              }
+            )"_json;
+          rtn_params["parameters"][0]["typeDescriptions"] = j2;
+          adjusted_expr["returnParameters"] = rtn_params;
         }
         else if (
           sub_expr["typeString"].get<std::string>().find("returns (contract") !=
@@ -419,23 +529,104 @@ nlohmann::json solidity_convertert::make_array_elementary_type(
   nlohmann::json elementary_type;
   const std::string typeIdentifier =
     type_descrpt["typeIdentifier"].get<std::string>();
+  const std::string typeString =
+    type_descrpt.contains("typeString")
+      ? type_descrpt["typeString"].get<std::string>()
+      : "";
 
-  // 2. extract type info
-  // e.g.
-  //  bytes[] memory x => "t_array$_t_bytes_$dyn_storage_ptr"  => t_bytes
-  //  [1,2,3]          => "t_array$_t_uint8_$3_memory_ptr      => t_uint8
-  assert(typeIdentifier.substr(0, 8) == "t_array$");
-  std::regex rgx("\\$_\\w*_\\$");
+  // 2. extract element identifier by scanning the typeIdentifier from the
+  // back for the outer array's size delimiter "_$<dyn|digits>".  Anything
+  // before it is the element type identifier (which may itself carry a
+  // location suffix for reference types like string/bytes/struct).
+  // Examples:
+  //   t_array$_t_uint256_$dyn_memory_ptr           → t_uint256
+  //   t_array$_t_string_memory_ptr_$2_memory_ptr   → t_string_memory_ptr
+  //   t_array$_t_bytes_$dyn_storage_ptr            → t_bytes
+  // Guard: callers occasionally hand us a typeDescriptions whose
+  // identifier is not an array (e.g. degenerate tuple contexts such as
+  // `return (a, [1,2,3][0])`, where the element typeDescriptions bubbled
+  // up one level). Return an empty element descriptor so the caller's
+  // recovery path (typeString/fallback) kicks in instead of crashing
+  // inside substr below.
+  if (typeIdentifier.compare(0, 9, "t_array$_") != 0)
+  {
+    elementary_type = {
+      {"typeIdentifier", typeIdentifier}, {"typeString", typeString}};
+    return elementary_type;
+  }
+  const std::string prefix = "t_array$_";
+  std::string rest = typeIdentifier.substr(prefix.size());
 
-  std::smatch match;
-  if (!std::regex_search(typeIdentifier, match, rgx))
-    assert(!"Cannot find array element type in typeIdentifier");
-  std::string sub_match = match[0];
-  std::string t_type = sub_match.substr(2, sub_match.length() - 4);
-  std::string type = t_type.substr(2);
+  std::string elem_id;
+  size_t last = rest.rfind("_$");
+  while (last != std::string::npos)
+  {
+    std::string after = rest.substr(last + 2);
+    if (
+      after.compare(0, 3, "dyn") == 0 ||
+      (!after.empty() && std::isdigit(static_cast<unsigned char>(after[0]))))
+    {
+      elem_id = rest.substr(0, last);
+      break;
+    }
+    if (last < 2)
+      break;
+    last = rest.rfind("_$", last - 1);
+  }
+  if (elem_id.empty())
+    elem_id = rest;
 
-  // 3. populate node
-  elementary_type = {{"typeIdentifier", t_type}, {"typeString", type}};
+  // 3. strip trailing data-location suffix from the element identifier so it
+  // maps back to a plain elementary/reference type recognised by
+  // get_type_name_t (e.g. t_string_memory_ptr → t_string).
+  static const char *const loc_suffixes[] = {
+    "_memory_ptr",
+    "_storage_ptr",
+    "_calldata_ptr",
+    "_memory",
+    "_storage",
+    "_calldata"};
+  for (const char *suf : loc_suffixes)
+  {
+    size_t slen = std::strlen(suf);
+    if (
+      elem_id.size() > slen &&
+      elem_id.compare(elem_id.size() - slen, slen, suf) == 0)
+    {
+      elem_id.erase(elem_id.size() - slen);
+      break;
+    }
+  }
+
+  // 4. derive element typeString: strip data-location qualifier and the
+  // trailing "[<size>]" from the array typeString.
+  std::string elem_ts = typeString;
+  auto strip_loc = [](std::string &s) {
+    for (const char *suf :
+         {" storage ref",
+          " storage pointer",
+          " storage",
+          " memory",
+          " calldata"})
+    {
+      size_t slen = std::strlen(suf);
+      if (s.size() > slen && s.compare(s.size() - slen, slen, suf) == 0)
+      {
+        s.erase(s.size() - slen);
+        return;
+      }
+    }
+  };
+  strip_loc(elem_ts);
+  auto last_bracket = elem_ts.rfind('[');
+  if (last_bracket != std::string::npos)
+    elem_ts.erase(last_bracket);
+  strip_loc(elem_ts);
+  if (elem_ts.empty() && elem_id.compare(0, 2, "t_") == 0)
+    elem_ts = elem_id.substr(2);
+
+  // 5. populate node
+  elementary_type = {{"typeIdentifier", elem_id}, {"typeString", elem_ts}};
 
   return elementary_type;
 }
@@ -477,10 +668,15 @@ solidity_convertert::get_array_size(const nlohmann::json &type_descrpt)
 
 bool solidity_convertert::is_dyn_array(const nlohmann::json &ast_node)
 {
+  if (!ast_node.contains("typeDescriptions"))
+    return false;
+  auto type = SolidityGrammar::get_type_name_t(ast_node["typeDescriptions"]);
+  if (type == SolidityGrammar::DynArrayTypeName)
+    return true;
   if (
-    ast_node.contains("typeDescriptions") &&
-    SolidityGrammar::get_type_name_t(ast_node["typeDescriptions"]) ==
-      SolidityGrammar::DynArrayTypeName)
+    type == SolidityGrammar::NestedArrayTypeName &&
+    ast_node.contains("nodeType") && ast_node["nodeType"] == "ArrayTypeName" &&
+    !ast_node.contains("length"))
     return true;
   return false;
 }
@@ -746,6 +942,75 @@ void solidity_convertert::get_size_expr(const exprt &rhs, exprt &size_expr)
     uint_type());
 }
 
+// T1.1 Stage S2: emit `_ESBMC_dynarr_idx(this->$address, pos)` so element
+// reads/writes on state-var dyn-arrays are addr-keyed.  See declaration
+// in solidity_convert.h.
+bool solidity_convertert::get_dynarr_elem_idx(const exprt &pos, exprt &out)
+{
+  exprt this_expr;
+  if (current_functionDecl)
+  {
+    if (get_func_decl_this_ref(*current_functionDecl, this_expr))
+      return true;
+  }
+  else if (!current_baseContractName.empty())
+  {
+    if (get_ctor_decl_this_ref(current_baseContractName, this_expr))
+      return true;
+  }
+  else
+  {
+    log_error("get_dynarr_elem_idx: no current function or contract context");
+    return true;
+  }
+
+  exprt addr_expr = member_exprt(this_expr, "$address", addr_t);
+
+  side_effect_expr_function_callt fold_call;
+  get_library_function_call_no_args(
+    "_ESBMC_dynarr_idx",
+    "c:@F@_ESBMC_dynarr_idx",
+    unsignedbv_typet(64),
+    pos.location(),
+    fold_call);
+  fold_call.arguments().push_back(addr_expr);
+
+  exprt pos_u256 = pos;
+  solidity_gen_typecast(ns, pos_u256, unsignedbv_typet(256));
+  fold_call.arguments().push_back(pos_u256);
+
+  out = fold_call;
+  return false;
+}
+
+// T1.1 Stage S1: addr-keyed dyn-array length helper.  See
+// solidity_convert.h:get_dynarr_len_ref docstring.
+bool solidity_convertert::get_dynarr_len_ref(const symbolt &len_sym, exprt &out)
+{
+  exprt this_expr;
+  if (current_functionDecl)
+  {
+    if (get_func_decl_this_ref(*current_functionDecl, this_expr))
+      return true;
+  }
+  else if (!current_baseContractName.empty())
+  {
+    if (get_ctor_decl_this_ref(current_baseContractName, this_expr))
+      return true;
+  }
+  else
+  {
+    log_error(
+      "get_dynarr_len_ref: no current function or contract context for {}",
+      len_sym.name.as_string());
+    return true;
+  }
+
+  exprt addr_expr = member_exprt(this_expr, "$address", addr_t);
+  out = index_exprt(symbol_expr(len_sym), addr_expr, unsignedbv_typet(256));
+  return false;
+}
+
 void solidity_convertert::store_update_dyn_array(
   const exprt &dyn_arr,
   const exprt &size_expr,
@@ -762,6 +1027,95 @@ void solidity_convertert::store_update_dyn_array(
   length_expr.arguments().push_back(dyn_arr);
   length_expr.arguments().push_back(size_expr);
   store_call = length_expr;
+}
+
+// Detect `new C(...)` initialization for any variable declaration id,
+// covering both shapes:
+//   1. State var:  VariableDeclaration { id, value: FunctionCall(NewExpr) }
+//   2. Local var:  VariableDeclarationStatement {
+//                    declarations: [{ id }],
+//                    initialValue: FunctionCall(NewExpr) }
+// Walks src_ast_json once per call.  Used by the auto-bind logic so cross-
+// contract calls on `new`-created locals execute the callee body in unbound
+// mode (matching SMTChecker).
+bool solidity_convertert::is_new_created_decl(int decl_id) const
+{
+  // Recognise both shapes:
+  //   new C(args)            -> FunctionCall(NewExpression, args)
+  //   new C{value: v}(args)  ->
+  //   FunctionCall(FunctionCallOptions(NewExpression), args)
+  auto is_new_call = [](const nlohmann::json &v) {
+    if (
+      !v.is_object() || v.value("nodeType", "") != "FunctionCall" ||
+      !v.contains("expression"))
+      return false;
+    const auto &inner = v["expression"];
+    if (!inner.is_object())
+      return false;
+    if (inner.value("nodeType", "") == "NewExpression")
+      return true;
+    if (
+      inner.value("nodeType", "") == "FunctionCallOptions" &&
+      inner.contains("expression") && inner["expression"].is_object() &&
+      inner["expression"].value("nodeType", "") == "NewExpression")
+      return true;
+    return false;
+  };
+
+  std::function<bool(const nlohmann::json &)> walk =
+    [&](const nlohmann::json &node) -> bool {
+    if (node.is_object())
+    {
+      const std::string nt = node.value("nodeType", "");
+      if (nt == "VariableDeclaration" && node.value("id", -1) == decl_id)
+      {
+        if (node.contains("value") && is_new_call(node["value"]))
+          return true;
+      }
+      if (nt == "VariableDeclarationStatement" && node.contains("declarations"))
+      {
+        for (const auto &d : node["declarations"])
+        {
+          if (d.is_object() && d.value("id", -1) == decl_id)
+          {
+            if (
+              node.contains("initialValue") &&
+              is_new_call(node["initialValue"]))
+              return true;
+          }
+        }
+      }
+      // Assignment form: `p = new C(...)` in a function body (e.g. a state var
+      // declared `C p;` then assigned in the constructor — the shape the R2
+      // differential harness uses).  The decl carries no `value`, so the two
+      // branches above miss it; recognise the Assignment whose LHS Identifier
+      // references decl_id and whose RHS is a `new` call.  Without this, a
+      // getter on such an instance is treated as a truly-unbound external call
+      // and havoc'd to nondet under --unbound (false differences).
+      if (
+        nt == "Assignment" && node.value("operator", "") == "=" &&
+        node.contains("leftHandSide") && node.contains("rightHandSide"))
+      {
+        const auto &lhs = node["leftHandSide"];
+        if (
+          lhs.is_object() && lhs.value("nodeType", "") == "Identifier" &&
+          lhs.value("referencedDeclaration", -1) == decl_id &&
+          is_new_call(node["rightHandSide"]))
+          return true;
+      }
+      for (auto it = node.begin(); it != node.end(); ++it)
+        if (walk(it.value()))
+          return true;
+    }
+    else if (node.is_array())
+    {
+      for (const auto &c : node)
+        if (walk(c))
+          return true;
+    }
+    return false;
+  };
+  return walk(src_ast_json);
 }
 
 // convert new array rhs
@@ -796,9 +1150,15 @@ bool solidity_convertert::get_empty_array_ref(
   if (get_expr(callee_arg_json, literal_type, size))
     return true;
 
-  // 3. do calloc
+  // 3. do alloc — pick calloc (zero-init) for constant sizes, malloc
+  // (symbolic-safe) otherwise. calloc's internal memset loop creates a
+  // VLA-typed backing when the size is symbolic, which loses indexed
+  // write/read tracking through later pointer reassignment.
   side_effect_expr_function_callt calc_call;
-  get_calloc_function_call(location_begin, calc_call);
+  if (size.is_constant())
+    get_calloc_function_call(location_begin, calc_call);
+  else
+    get_malloc_array_function_call(location_begin, calc_call);
 
   exprt size_of_expr;
   get_size_of_expr(elem_type, size_of_expr);
@@ -820,6 +1180,8 @@ exprt solidity_convertert::make_aux_var(exprt &val, const locationt &location)
   std::string aux_name, aux_id;
   get_aux_var(aux_name, aux_id);
 
+  // State-variable-ness is keyed by symbol id (sol_state_vars), so the aux
+  // var does not inherit it from the value it copies.
   typet t = val.type();
   std::string debug_modulename = get_modulename_from_path(absolute_path);
 
@@ -846,6 +1208,10 @@ const nlohmann::json &solidity_convertert::find_last_parent(
   const nlohmann::json &root,
   const nlohmann::json &target)
 {
+  // Walks the AST tree to find the closest parent OBJECT that contains
+  // `target` (as a direct field value, or as an element of one of its
+  // array fields). Always returns an object, never an array — callers
+  // expect to look up keys like `arguments`, `src`, etc. on the result.
   using Frame = const nlohmann::json *; // Pointer to a node
   std::stack<Frame> stack;
   stack.push(&root);
@@ -862,18 +1228,24 @@ const nlohmann::json &solidity_convertert::find_last_parent(
         const auto &value = it.value();
         if (value == target)
           return *node;
-
+        if (value.is_array())
+        {
+          for (const auto &element : value)
+            if (element == target)
+              return *node;
+        }
         if (value.is_structured())
           stack.push(&value);
       }
     }
     else if (node->is_array())
     {
+      // Arrays should normally be reached via their owning object so the
+      // object-branch above already inspected them. Keep this branch only
+      // to recurse into nested structured elements when the root itself
+      // happens to be an array.
       for (const auto &element : *node)
       {
-        if (element == target)
-          return *node;
-
         if (element.is_structured())
           stack.push(&element);
       }
@@ -891,6 +1263,28 @@ const nlohmann::json &solidity_convertert::find_parent_contract(
   const nlohmann::json &root,
   const nlohmann::json &target)
 {
+  // Lazy memo keyed by the node's exact serialised content. This
+  // function's result is a pure function of `target` CONTENT (the DFS
+  // returns the enclosing contract of the FIRST node that deep-`==`s
+  // target; `root` is invariant — every caller passes
+  // src_ast_json["nodes"]). The key MUST be the full content: the
+  // Solidity frontend mutates AST nodes in place during conversion
+  // (implicit-cast insertion, type annotation), so a node's (src,id)
+  // is NOT a stable content identity across calls — only the
+  // serialised value captures content-at-call-time. Two nodes with
+  // equal content have equal dumps and the DFS yields the same first
+  // match for both, so caching by dump is bug-for-bug identical to the
+  // uncached DFS, and robust to copies / sub-references / synthetic
+  // nodes. Cached ContractDefinition pointers stay valid for the run
+  // (top-level contract objects never relocate). Cleared per
+  // convert() run.
+  const std::string key = target.dump();
+  auto memo_it = fpc_memo.find(key);
+  if (memo_it != fpc_memo.end())
+    return memo_it->second ? *(memo_it->second) : empty_json;
+
+  const nlohmann::json *result = nullptr; // enclosing contract, or none
+
   using Frame = std::pair<const nlohmann::json *, const nlohmann::json *>;
   std::stack<Frame> stack;
   // Begin with the root, with no current contract context.
@@ -908,11 +1302,19 @@ const nlohmann::json &solidity_convertert::find_parent_contract(
       current_contract = node;
     }
 
-    // check if this node is the target.
-    // We use pointer identity comparison to ensure an exact match.
+    // Match by DEEP VALUE EQUALITY, not pointer identity. (A prior
+    // comment here wrongly claimed "pointer identity"; the code always
+    // did `*node == target`.) This is load-bearing, not an oversight:
+    // get_current_contract_name() and inheritance resolution depend on
+    // returning the enclosing contract of the FIRST content-equal node
+    // in DFS order — callers routinely pass content-copies / merged /
+    // synthetic nodes whose address differs from the AST original, and
+    // switching to `node == &target` regresses inherited/merged-member
+    // cases. Do not "fix" this to pointer identity.
     if (*node == target)
     {
-      return current_contract ? *current_contract : empty_json;
+      result = current_contract;
+      break;
     }
 
     // If the node is an object, iterate over its values.
@@ -937,8 +1339,8 @@ const nlohmann::json &solidity_convertert::find_parent_contract(
     }
   }
 
-  // If the target was not found, return an empty JSON.
-  return empty_json;
+  fpc_memo.emplace(key, result);
+  return result ? *result : empty_json;
 }
 
 // Pure DFS: find the first node with matching "id" field in any JSON subtree.
@@ -1019,18 +1421,24 @@ const nlohmann::json &solidity_convertert::find_decl_ref(int ref_id)
 
         bool is_library =
           node.contains("contractKind") && node["contractKind"] == "library";
+        bool is_interface =
+          node.contains("contractKind") && node["contractKind"] == "interface";
         bool is_base = !current_baseContractName.empty() &&
                        node.contains("name") &&
                        node["name"] == current_baseContractName;
 
-        // Only search inside matching contract or library
-        if (is_base || is_library)
+        // Search inside the current base, libraries, and interfaces.
+        // Interfaces routinely host struct definitions that are referenced
+        // by member access from other contracts (e.g. 1inch limit-order-
+        // protocol: `struct Order` lives in `interface IOrderMixin` and
+        // every extension accesses `order.maker` through it).
+        if (is_base || is_library || is_interface)
         {
           const auto &result = find_node_by_id(node, id);
           if (!result.empty())
             return result;
         }
-        // Skip other contracts
+        // Skip other non-base, non-interface, non-library contracts
       }
       else
       {

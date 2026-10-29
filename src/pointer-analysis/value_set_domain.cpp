@@ -39,6 +39,16 @@ void value_set_domaint::transform(
   }
   break;
 
+  case ASSUME:
+    // Refine value-sets by the ASSUME guard. Currently handles `p != 0` to
+    // strip null branches from pointer-typed value-sets — see
+    // value_sett::apply_assume. Without this VSA treats every ASSUME as
+    // no-op, so `__ESBMC_assume(alloc != 0)` after a potentially-failing
+    // allocator leaves the null branch in the points-to set for every
+    // subsequent read of that pointer.
+    value_set->apply_assume(from_l->guard);
+    break;
+
   default:;
     // do nothing
   }

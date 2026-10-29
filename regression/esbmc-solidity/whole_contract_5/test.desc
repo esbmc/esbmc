@@ -1,4 +1,4 @@
 CORE
 contract.solast
---sol example1.sol --contract Robot --unwind 3 --no-unwinding-assertions
+--sol example1.sol --contract Robot --k-induction --max-k-step 20 --k-step 3
 ^VERIFICATION FAILED$

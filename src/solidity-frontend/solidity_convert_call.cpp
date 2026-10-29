@@ -98,6 +98,7 @@ bool solidity_convertert::get_library_function_call(
     }
 
     //  builtin functions do not need the this object as the first arguments
+    const nlohmann::json *param_decl = nullptr;
     for (const auto &arg : caller["arguments"].items())
     {
       // Stop collecting arguments once we have enough for the C model function.
@@ -116,12 +117,36 @@ bool solidity_convertert::get_library_function_call(
           tid.compare(0, 7, "t_type$") == 0 ||
           tid.compare(0, 23, "t_function_declaration_") == 0)
           continue;
+        // [APPROX: UNDER] Function references passed by name as r-values
+        // (internal or external function types), e.g. Utils.sum in
+        // Utils.reduce(x, Utils.sum, 0). Substitute an opaque nondet
+        // pointer — indirect calls through the parameter inside the callee
+        // are modelled as nondet returns by the function-pointer indirect-
+        // call path in get_call_expr. This loses the precise callee
+        // identity (UNDER-approximation of control flow): bugs inside
+        // functions reachable only via such fn-ptr arguments are not
+        // detected. No false positives — the nondet return covers every
+        // possible value.
+        if (
+          tid.compare(0, 20, "t_function_internal_") == 0 ||
+          tid.compare(0, 20, "t_function_external_") == 0)
+        {
+          exprt nondet_fp =
+            exprt("sideeffect", gen_pointer_type(empty_typet()));
+          nondet_fp.type().set("#sol_func_ptr", true);
+          nondet_fp.statement("nondet");
+          call.arguments().push_back(nondet_fp);
+          if (itr != itr_end)
+            ++itr;
+          continue;
+        }
       }
 
       exprt single_arg;
       if (itr != itr_end && (*itr).contains("typeDescriptions"))
       {
         param = (*itr)["typeDescriptions"];
+        param_decl = &(*itr);
         ++itr;
       }
       else if (arg.value().contains("commonType"))
@@ -132,8 +157,40 @@ bool solidity_convertert::get_library_function_call(
       if (get_expr(arg.value(), param, single_arg))
         return true;
 
+      // Coerce the actual argument to the formal parameter's type, mirroring
+      // the same fixup in get_non_library_function_call. Without this,
+      // built-in lowerings whose result type differs from the declared
+      // Solidity type — e.g. abi.encodeWithSelector → uint256 identity (see
+      // solidity_abi.c) being passed to a `bytes memory` parameter
+      // (BytesDynamic struct) — leak a scalar through the call boundary
+      // and goto-symex aborts at the function-arg type check with
+      // `type mismatch: got unsignedbv, expected struct`. SafeERC20's
+      // _callOptionalReturn(IERC20, bytes memory) is the canonical case.
+      if (param_decl != nullptr)
+      {
+        typet formal_t;
+        bool got_formal = false;
+        if (param_decl->contains("typeName"))
+        {
+          if (!get_type_description(
+                *param_decl,
+                (*param_decl)["typeName"]["typeDescriptions"],
+                formal_t))
+            got_formal = true;
+        }
+        else if (!param.is_null())
+        {
+          if (!get_type_description(param, formal_t))
+            got_formal = true;
+        }
+
+        if (got_formal && single_arg.type() != formal_t)
+          convert_type_expr(ns, single_arg, formal_t, arg.value());
+      }
+
       call.arguments().push_back(single_arg);
       param = nullptr;
+      param_decl = nullptr;
     }
   }
 
@@ -220,6 +277,7 @@ bool solidity_convertert::get_non_library_function_call(
 
     nlohmann::json param_nodes = decl_ref["parameters"]["parameters"];
     nlohmann::json param = nullptr;
+    const nlohmann::json *param_decl = nullptr;
     nlohmann::json::iterator itr = param_nodes.begin();
 
     for (const auto &arg : caller["arguments"].items())
@@ -230,6 +288,7 @@ bool solidity_convertert::get_non_library_function_call(
         {
           param = (*itr)["typeDescriptions"];
         }
+        param_decl = &(*itr);
         ++itr;
       }
 
@@ -237,8 +296,44 @@ bool solidity_convertert::get_non_library_function_call(
       if (get_expr(arg.value(), param, single_arg))
         return true;
 
+      // Coerce the argument to the formal parameter's type. Built-in
+      // model functions (e.g. abi.encode / abi.encodeCall / keccak256
+      // → uint256 identity in solidity_abi.c, and address.call result
+      // → tuple struct) return a different concrete shape than the
+      // declared Solidity argument type. Without an explicit cast the
+      // raw uint256 / scalar leaks into the call and goto-symex's
+      // type check aborts at the boundary, e.g.
+      //   abi.encodeCall(this.g, (...)) → uint256, then
+      //   removeSignature(bytes calldata x) expects BytesDynamic.
+      // convert_type_expr already knows how to wrap uint256 → bytes
+      // via bytes_dynamic_from_uint and the various other shape
+      // conversions, so just dispatch through it once we have the
+      // formal parameter type.
+      if (param_decl != nullptr)
+      {
+        typet formal_t;
+        bool got_formal = false;
+        if (param_decl->contains("typeName"))
+        {
+          if (!get_type_description(
+                *param_decl,
+                (*param_decl)["typeName"]["typeDescriptions"],
+                formal_t))
+            got_formal = true;
+        }
+        else if (!param.is_null())
+        {
+          if (!get_type_description(param, formal_t))
+            got_formal = true;
+        }
+
+        if (got_formal && single_arg.type() != formal_t)
+          convert_type_expr(ns, single_arg, formal_t, arg.value());
+      }
+
       call.arguments().push_back(single_arg);
       param = nullptr;
+      param_decl = nullptr;
     }
   }
   else
@@ -317,6 +412,29 @@ void solidity_convertert::extract_new_contracts()
       current_baseContractName = top_level_node["name"].get<std::string>();
       process_node(top_level_node);
       current_baseContractName = old;
+    }
+  }
+
+  // TOD harness mode: every contract-typed function parameter is
+  // allocated via cpp_new at assign_param_nondet time, so every contract
+  // effectively has a `new` call-site.  Force newContractSet to cover
+  // all declared contracts so the mapping dispatch picks the pointer-
+  // based store shape (not the global infinity-array fallback).  Kept
+  // gated on an active TOD harness — non-TOD verification still relies
+  // on the legacy singleton + infinity-array mapping model for
+  // pre-existing tests.
+  const bool tod_active =
+    !config.options.get_option("tod-race-check").empty() ||
+    !config.options.get_option("tod-balance-check").empty();
+  if (tod_active)
+  {
+    for (const auto &top_level_node : src_ast_json["nodes"])
+    {
+      if (
+        top_level_node.contains("nodeType") &&
+        top_level_node["nodeType"] == "ContractDefinition" &&
+        top_level_node.contains("name"))
+        newContractSet.insert(top_level_node["name"].get<std::string>());
     }
   }
 }
@@ -432,25 +550,74 @@ bool solidity_convertert::assign_param_nondet(
   {
     if (p_node.contains("typeDescriptions"))
     {
+      // Mirror get_function_params: when the parameter AST carries a
+      // typeName, route through the decl-aware overload so the resulting
+      // type matches what the callee's parameter symbol uses (pointer for
+      // arrays, not a real array_typet). Without this the harness builds
+      // a different shape than the callee expects, and downstream checks
+      // either silently miscompile or trip type-equality assertions.
       typet t;
-      if (get_type_description(p_node["typeDescriptions"], t))
-        return true;
+      if (p_node.contains("typeName"))
+      {
+        if (
+          get_type_description(
+            p_node, p_node["typeName"]["typeDescriptions"], t))
+          return true;
+      }
+      else
+      {
+        if (get_type_description(p_node["typeDescriptions"], t))
+          return true;
+      }
       if (get_sol_type(t) == SolidityGrammar::SolType::CONTRACT)
       {
-        /*
-            e.g. function run(Base x)
-            ==>
-            if(nondet_bool())
-            {
-              __ESBMC_Object_m.run(_ESBMC_Object_Base)
-              / / where its cname = ["Base", "Derive"]
-            }
-          */
         std::string base_cname = get_sol_contract(t);
         assert(!base_cname.empty());
-        exprt s;
-        get_static_contract_instance_ref(base_cname, s);
-        call.arguments().push_back(s);
+        // Contract-typed harness parameter: emit a nondet pointer of the
+        // declared contract/interface type. The SAT solver then picks any
+        // value: aliasing a tracked `_ESBMC_Object_<C>` singleton (or any
+        // state-var pointer of compatible type), or staying distinct from
+        // them. This is the only sound model of "an external caller can
+        // pass any address the EVM lets it construct" — including the
+        // contract's own state-var pointers, which is the case behind the
+        // pin `dispatcher_contract_param_eq_state_var_unsound_fail`.
+        //
+        // The previous default was `get_new_object_ctor_call` (fresh
+        // `cpp_new` allocation). That was sound for the c1/c2 distinctness
+        // scenario the original commit fixed, but unsound for the dual
+        // direction: a real caller invoking `c.f(c.T())` makes the param
+        // alias `T`, yet the fresh allocation gives a pointer statically
+        // != T's pointer, so `if (param == T) {body}` was vacuously
+        // unreachable and any bug in `body` was hidden from ESBMC's
+        // verification (false negative, soundness violation).
+        //
+        // Independent nondet pointers preserve c1/c2 distinctness when the
+        // solver picks different values for each call site, and witness
+        // aliasing when it picks the same — both regimes reachable.
+        //
+        // --bound mode still routes through `build_bound_drive_helper` so
+        // the dispatcher can drive state transitions on a valid instance;
+        // the bound-mode soundness gap on this pattern is a separate
+        // follow-up (the bound helper also fresh-allocates, but it needs
+        // a real allocation to host the dispatcher's state mutations).
+        if (is_bound)
+        {
+          symbolt drive_sym;
+          if (build_bound_drive_helper(base_cname, drive_sym))
+            return true;
+          side_effect_expr_function_callt drive_call;
+          drive_call.function() = symbol_expr(drive_sym);
+          drive_call.type() = to_code_type(drive_sym.get_type()).return_type();
+          drive_call.location() = drive_sym.location;
+          call.arguments().push_back(drive_call);
+        }
+        else
+        {
+          exprt nondet_ptr;
+          typet ptr_t = pointer_typet(symbol_typet(prefix + base_cname));
+          get_nondet_expr(ptr_t, nondet_ptr);
+          call.arguments().push_back(nondet_ptr);
+        }
       }
       else if (
         get_sol_type(t) == SolidityGrammar::SolType::STRING && is_pointer_check)
@@ -467,8 +634,158 @@ bool solidity_convertert::assign_param_nondet(
           nondet_str);
         call.arguments().push_back(nondet_str);
       }
+      else if (get_sol_type(t) == SolidityGrammar::SolType::BYTES_DYN)
+      {
+        // For `bytes calldata` / `bytes memory` entry-harness parameters,
+        // build a nondet BytesDynamic via llc_nondet_bytes() so that
+        // init-checks inside the callee do not fire spuriously. The helper
+        // sets initialized==1 and capacity==length; length is fully nondet
+        // size_t (post-T1.2). Direct user declarations (e.g. `bytes memory
+        // x;`) still flow through the normal struct-init path. Contracts
+        // that need a tighter length range must require() it explicitly.
+        side_effect_expr_function_callt nondet_b;
+        get_library_function_call_no_args(
+          "llc_nondet_bytes",
+          "c:@F@llc_nondet_bytes",
+          t,
+          locationt(),
+          nondet_b);
+        call.arguments().push_back(nondet_b);
+      }
+      else if (
+        (get_sol_type(t) == SolidityGrammar::SolType::ARRAY ||
+         get_sol_type(t) == SolidityGrammar::SolType::DYNARRAY) &&
+        t.is_pointer() && !t.subtype().is_pointer())
+      {
+        // 1D array parameter (fixed or dynamic, e.g. `uint8[3] memory`,
+        // `uint256[] calldata`): synthesize a backing allocation so the
+        // callee body can read/write through the pointer without
+        // dereferencing a nil arg. Without this the harness would call
+        // `f(nil)` on every external entry that takes an array, and any
+        // in-body element read or _ESBMC_arrcpy would trip a null-pointer
+        // assertion against a value the user never authored. The contents
+        // stay zero-initialised, which is a sound under-approximation of
+        // "an external caller passed some array of the declared length".
+        // Fixed-length: take N from #sol_array_size.
+        // Dynamic-length: pick a small constant (kHarnessDynLen). The
+        // length is recorded in the array header, so `a.length` reads
+        // the same value.
+        constexpr unsigned long kHarnessDynLen = 4;
+        std::string sz_str = t.get("#sol_array_size").as_string();
+        unsigned long sz_val =
+          sz_str.empty() ? kHarnessDynLen : std::stoul(sz_str);
+        std::string sz_repr = sz_str.empty() ? std::to_string(sz_val) : sz_str;
+        exprt size_expr = constant_exprt(
+          integer2binary(sz_val, bv_width(uint_type())), sz_repr, uint_type());
+
+        exprt sizeof_expr;
+        get_size_of_expr(t.subtype(), sizeof_expr);
+
+        side_effect_expr_function_callt alloc;
+        get_calloc_function_call(locationt(), alloc);
+        alloc.arguments().push_back(size_expr);
+        alloc.arguments().push_back(sizeof_expr);
+
+        exprt cast_alloc = typecast_exprt(alloc, t);
+        call.arguments().push_back(cast_alloc);
+      }
+      else if (
+        (get_sol_type(t) == SolidityGrammar::SolType::ARRAY ||
+         get_sol_type(t) == SolidityGrammar::SolType::DYNARRAY) &&
+        t.is_pointer() && t.subtype().is_pointer() &&
+        !t.subtype().subtype().is_pointer())
+      {
+        // 2D array parameter (any combination of fixed/dynamic outer and
+        // inner). Routes through the _ESBMC_alloc_nested_2d helper so the
+        // outer pointer's slots actually point at allocated inner buffers
+        // — passing nil here would null-deref on the first `a[i][j]`
+        // read, and a single-level alloc would null-deref on the second
+        // index. Same bounded-content over-approximation as the 1D case.
+        constexpr unsigned long kHarnessDynLen = 4;
+        std::string outer_sz = t.get("#sol_array_size").as_string();
+        std::string inner_sz = t.subtype().get("#sol_array_size").as_string();
+        unsigned long outer_n =
+          outer_sz.empty() ? kHarnessDynLen : std::stoul(outer_sz);
+        unsigned long inner_n =
+          inner_sz.empty() ? kHarnessDynLen : std::stoul(inner_sz);
+        std::string outer_repr =
+          outer_sz.empty() ? std::to_string(outer_n) : outer_sz;
+        std::string inner_repr =
+          inner_sz.empty() ? std::to_string(inner_n) : inner_sz;
+
+        exprt outer_expr = constant_exprt(
+          integer2binary(outer_n, bv_width(uint_type())),
+          outer_repr,
+          uint_type());
+        exprt inner_expr = constant_exprt(
+          integer2binary(inner_n, bv_width(uint_type())),
+          inner_repr,
+          uint_type());
+
+        exprt elem_sizeof;
+        get_size_of_expr(t.subtype().subtype(), elem_sizeof);
+
+        side_effect_expr_function_callt alloc;
+        get_library_function_call_no_args(
+          "_ESBMC_alloc_nested_2d",
+          "c:@F@_ESBMC_alloc_nested_2d",
+          pointer_typet(empty_typet()),
+          locationt(),
+          alloc);
+        alloc.arguments().push_back(outer_expr);
+        alloc.arguments().push_back(inner_expr);
+        alloc.arguments().push_back(elem_sizeof);
+
+        exprt cast_alloc = typecast_exprt(alloc, t);
+        call.arguments().push_back(cast_alloc);
+      }
       else
-        call.arguments().push_back(static_cast<const exprt &>(get_nil_irep()));
+      {
+        // Scalar harness parameter (uint/int/bool/address/bytesN/enum):
+        //
+        // bytesN SITS HERE AND IS NOT A SCALAR, AND THAT IS A KNOWN, MEASURED
+        // GAP -- recorded here rather than fixed, because the obvious fix was
+        // tried and made the pipeline worse.
+        //
+        // bytesN lowers to `BytesStatic { unsigned char data[32]; size_t
+        // length; }`, so the whole-struct nondet below leaves `.length` as free
+        // as `.data`. `bytes_static_equal` returns FALSE OUTRIGHT on a length
+        // mismatch (solidity_bytes.c:354), and an ABI bytesN argument has
+        // length N by construction, so the model admits states the chain
+        // cannot produce. MEASURED -- both of these are Solidity tautologies
+        // and ESBMC reports VERIFICATION FAILED for them:
+        //
+        //     b == bytes32(uint256(b))
+        //     !(b == bytes32(uint256(1))) && uint256(b) == 1
+        //
+        // PoC notes/coverage/poc/D12_Bytes32LengthFree.sol; pinned by
+        // solidity_bytesn_param_length_free_knownbug.
+        //
+        // WHAT WAS TRIED AND REVERTED: passing
+        // `bytes_static_from_uint(nondet_uint256(), N)`, which pins `.length`
+        // and made both tautologies SUCCESSFUL. It also routes around
+        // `get_nondet_expr` -- and the paragraph below is exactly why that is
+        // not free. The parameter's value stopped being recoverable, so the
+        // emitter reported it DEFAULTED, and on D11_Bytes32Equality the funnel
+        // went from 3 paths / 3 cases / 0 merges to 3 paths / 1 case / 1 merge.
+        // A sound model whose counterexample cannot be read back is not an
+        // improvement for a pipeline whose deliverable is the test. Any real
+        // fix has to pin the length AND keep the value recoverable.
+        //
+        // Pass an explicit nondet side-effect rather than a nil arg. The
+        // sibling branches above already pass real nondet values for
+        // string/bytes/array params; a nil scalar left the callee param as
+        // an unassigned free symbol (symex_function.cpp:168 "is this valid?"
+        // no-ops on nil), which is semantically nondet but invisible to the
+        // testcase-generation machinery (collect_nondet_values only sees
+        // `nondet$symex::` symbols). get_nondet_expr lowers to
+        // sideeffect(nondet) -> replace_nondet mints `nondet$symex::nondetN`,
+        // so the value is both sound (unchanged reachability) and recoverable
+        // for witness/testcase emission.
+        exprt nondet_scalar;
+        get_nondet_expr(t, nondet_scalar);
+        call.arguments().push_back(nondet_scalar);
+      }
     }
     ++cnt;
   }
@@ -557,6 +874,335 @@ bool solidity_convertert::get_high_level_member_access(
     expr, empty_json, base, member, _mem_call, is_func_call, new_expr);
 }
 
+bool solidity_convertert::handle_forge_std_assert(
+  const std::string &name,
+  const nlohmann::json &expr,
+  const locationt &l,
+  exprt &new_expr,
+  bool &handled)
+{
+  handled = false;
+
+  // Arity-1 boolean assertions.
+  if (name == "assertTrue" || name == "assertFalse")
+  {
+    if (!expr.contains("arguments") || expr["arguments"].size() < 1)
+      return false;
+    nlohmann::json blit = {
+      {"typeIdentifier", "t_bool"}, {"typeString", "bool"}};
+    exprt x;
+    if (get_expr(expr["arguments"][0], blit, x))
+      return true;
+    exprt cond = (name == "assertFalse") ? (exprt)not_exprt(x) : x;
+    code_assertt a(cond);
+    a.location() = l;
+    new_expr = a;
+    handled = true;
+    log_warning("[foundry] lowered forge-std {} to assert", name);
+    return false;
+  }
+
+  // Arity-3 approximate-equality assertion: assertApproxEqAbs(a, b, maxDelta)
+  // passes iff |a - b| <= maxDelta (boundary inclusive, order-independent —
+  // verified vs real forge). The `*Decimal` variant appends a `decimals` arg
+  // that only affects failure-message formatting (ignored, like the other
+  // *Decimal asserts). We encode the absolute difference as a ternary
+  //   (a >= b ? a - b : b - a)
+  // which is underflow-free for unsigned operands (the dominant real usage) and
+  // matches forge-std's stdMath.delta exactly. The delta is cast to maxDelta's
+  // type before the comparison. (Extreme int256 spans whose difference
+  // overflows the signed operand type are a residual — real forge-std widens
+  // internally; typical test magnitudes are unaffected.)
+  if (name == "assertApproxEqAbs" || name == "assertApproxEqAbsDecimal")
+  {
+    if (!expr.contains("arguments") || expr["arguments"].size() < 3)
+      return false;
+    const nlohmann::json &a0j = expr["arguments"][0];
+    const nlohmann::json &a1j = expr["arguments"][1];
+    const nlohmann::json &a2j = expr["arguments"][2];
+    nlohmann::json t0 =
+      a0j.contains("typeDescriptions")
+        ? a0j["typeDescriptions"]
+        : nlohmann::json{
+            {"typeIdentifier", "t_uint256"}, {"typeString", "uint256"}};
+    exprt a0, a1, maxd;
+    if (get_expr(a0j, t0, a0))
+      return true;
+    if (get_expr(a1j, t0, a1))
+      return true;
+    if (get_expr(a2j, t0, maxd))
+      return true;
+    solidity_gen_typecast(ns, a1, a0.type());
+    // |a - b| via ternary (underflow-free for unsigned).
+    exprt ge = binary_relation_exprt(a0, ">=", a1);
+    exprt fwd = exprt("-", a0.type());
+    fwd.copy_to_operands(a0, a1);
+    exprt bwd = exprt("-", a0.type());
+    bwd.copy_to_operands(a1, a0);
+    exprt absdiff = if_exprt(ge, fwd, bwd);
+    solidity_gen_typecast(ns, absdiff, maxd.type());
+    exprt cond = binary_relation_exprt(absdiff, "<=", maxd);
+    code_assertt a(cond);
+    a.location() = l;
+    new_expr = a;
+    handled = true;
+    log_warning("[foundry] lowered forge-std {} to assert", name);
+    return false;
+  }
+
+  // Arity-2 comparison assertions.
+  // The `*Decimal` variants have an extra trailing `decimals` argument that
+  // only affects failure-message formatting, NOT the pass/fail verdict
+  // (verified vs real forge), so they map to the same comparison on
+  // args[0]/args[1] and the 3rd arg is simply ignored. `assertEqUint` is an
+  // alias of `assertEq`.
+  bool is_eq = false, is_neq = false;
+  const char *rel = nullptr;
+  if (name == "assertEq" || name == "assertEqUint" || name == "assertEqDecimal")
+    is_eq = true;
+  else if (
+    name == "assertNotEq" || name == "assertNeq" ||
+    name == "assertNotEqDecimal")
+    is_neq = true;
+  else if (name == "assertGt" || name == "assertGtDecimal")
+    rel = ">";
+  else if (name == "assertGe" || name == "assertGeDecimal")
+    rel = ">=";
+  else if (name == "assertLt" || name == "assertLtDecimal")
+    rel = "<";
+  else if (name == "assertLe" || name == "assertLeDecimal")
+    rel = "<=";
+  else
+    return false; // not a recognized forge-std assertion
+
+  if (!expr.contains("arguments") || expr["arguments"].size() < 2)
+    return false;
+
+  // Convert arg0 with its own type; hint arg1 with arg0's type so a literal
+  // second operand (the idiomatic `assertEq(actual, expectedLiteral)`) is
+  // typed to match. Reconcile with a typecast for the comparison.
+  const nlohmann::json &a0j = expr["arguments"][0];
+  const nlohmann::json &a1j = expr["arguments"][1];
+  nlohmann::json t0 =
+    a0j.contains("typeDescriptions")
+      ? a0j["typeDescriptions"]
+      : nlohmann::json{
+          {"typeIdentifier", "t_uint256"}, {"typeString", "uint256"}};
+  exprt a0, a1;
+  if (get_expr(a0j, t0, a0))
+    return true;
+  if (get_expr(a1j, t0, a1))
+    return true;
+  solidity_gen_typecast(ns, a1, a0.type());
+
+  // Reference-type equality (assertEq / assertNotEq only). The generic
+  // equality_exprt below compares heap references: for dynamic `bytes` and for
+  // arrays it would treat two content-equal-but-distinct operands as UNEQUAL —
+  // a false WRONG (reports a correct test as FAILED), violating the never-
+  // false-WRONG contract. Handle these operand types explicitly:
+  //   - dynamic `bytes`: lower to the precise content comparison via the
+  //     C-model helper bytes_dynamic_equal(a, b, $dynamic_pool);
+  //   - arrays (`T[]` / `T[N]`): no cheap content-equality lowering exists, so
+  //     conservatively PRUNE (ASSUME(false)) rather than emit a false-WRONG
+  //     reference assert. This may render the assertion vacuous (an array
+  //     mismatch bug can be missed) but never reports a correct test as WRONG.
+  if (is_eq || is_neq)
+  {
+    if (is_bytes_type(a0.type()))
+    {
+      // Mirror the existing `bytes == bytes` lowering
+      // (solidity_convert_expr.cpp BO_EQ/BO_NE): operands are passed by address
+      // via aux vars, the pool by member, and the return type is the C bool
+      // (`bool_t`), not bool_typet().
+      side_effect_expr_function_callt beq;
+      get_library_function_call_no_args(
+        "bytes_dynamic_equal", "c:@F@bytes_dynamic_equal", bool_t, l, beq);
+      exprt a0_tmp = make_aux_var(a0, l);
+      exprt a1_tmp = make_aux_var(a1, l);
+      beq.arguments().push_back(address_of_exprt(a0_tmp));
+      beq.arguments().push_back(address_of_exprt(a1_tmp));
+      exprt pool;
+      if (get_dynamic_pool(expr, pool))
+        return true;
+      beq.arguments().push_back(pool);
+      // The helper returns a C `_Bool` (a bitvector); coerce it to the SMT
+      // boolean sort so it is a valid assert/negation operand.
+      exprt pred = typecast_exprt(beq, bool_typet());
+      exprt cond = is_neq ? (exprt)not_exprt(pred) : pred;
+      code_assertt a(cond);
+      a.location() = l;
+      new_expr = a;
+      handled = true;
+      log_warning(
+        "[foundry] lowered forge-std {} on bytes to bytes_dynamic_equal", name);
+      return false;
+    }
+    const std::string tid = t0.value("typeIdentifier", "");
+    if (tid.rfind("t_array", 0) == 0)
+    {
+      exprt f = false_exprt();
+      code_assumet ap(f);
+      ap.location() = l;
+      new_expr = ap;
+      handled = true;
+      log_warning(
+        "[foundry] {} on array operands -> path pruned (no content-equality "
+        "lowering; conservative, no false WRONG)",
+        name);
+      return false;
+    }
+  }
+
+  exprt cond;
+  if (is_eq)
+    cond = equality_exprt(a0, a1);
+  else if (is_neq)
+    cond = binary_relation_exprt(a0, "notequal", a1);
+  else
+    cond = binary_relation_exprt(a0, rel, a1);
+
+  code_assertt a(cond);
+  a.location() = l;
+  new_expr = a;
+  handled = true;
+  log_warning("[foundry] lowered forge-std {} to assert", name);
+  return false;
+}
+
+bool solidity_convertert::handle_foundry_cheatcode(
+  const nlohmann::json &expr,
+  const locationt &l,
+  exprt &new_expr,
+  bool &handled)
+{
+  handled = false;
+
+  // Cheatcode name = the MemberAccess memberName on the FunctionCall callee.
+  if (
+    !expr.contains("expression") || !expr["expression"].is_object() ||
+    !expr["expression"].contains("memberName"))
+    return false;
+  const std::string m = expr["expression"]["memberName"].get<std::string>();
+
+  // vm.expectRevert([selector|data]) — arm the expectation that the NEXT
+  // external call reverts. Handled before the one-arg guard because it may take
+  // zero args. The selector/return-data payload is ignored (conservative: a
+  // call that reverts with a *different* error still satisfies this, so we may
+  // miss a wrong test, but never emit a false WRONG). Consumed at the next
+  // external call site (get_high_level_member_access) which injects
+  // `assert(_ESBMC_sol_reverted_flag)` after the call.
+  if (m == "expectRevert")
+  {
+    pending_expect_revert = true;
+    new_expr = code_skipt();
+    handled = true;
+    log_warning(
+      "[foundry] armed vm.expectRevert (next external call must revert)");
+    return false;
+  }
+
+  // All modeled cheatcodes here take exactly one argument.
+  if (
+    !expr.contains("arguments") || !expr["arguments"].is_array() ||
+    expr["arguments"].empty())
+    return false;
+
+  // vm.assume(cond) -> path-pruning ASSUME (sound: assume only prunes, so it
+  // can never cause a false WRONG). Enables bounded property/fuzz tests.
+  if (m == "assume")
+  {
+    nlohmann::json blit = {
+      {"typeIdentifier", "t_bool"}, {"typeString", "bool"}};
+    exprt cond;
+    if (get_expr(expr["arguments"][0], blit, cond))
+      return true;
+    code_assumet a(cond);
+    a.location() = l;
+    new_expr = a;
+    handled = true;
+    log_warning("[foundry] modeled cheatcode vm.assume");
+    return false;
+  }
+
+  // Block/tx-environment setters — each is a single deterministic global
+  // assignment (the simplest, least-error-prone cheatcodes). Each verified
+  // against real `forge test`. All take one argument; coinbase is
+  // address-typed, the rest uint256 — handled generically by converting with
+  // the arg's own type.
+  //   vm.warp(t)       -> block_timestamp = t
+  //   vm.roll(n)       -> block_number    = n
+  //   vm.fee(x)        -> block_basefee   = x
+  //   vm.chainId(x)    -> block_chainid   = x
+  //   vm.prevrandao(x) -> block_prevrandao  = x
+  //   vm.txGasPrice(x) -> tx_gasprice     = x
+  //   vm.coinbase(a)   -> block_coinbase  = a
+  // NOTE: vm.difficulty is deliberately NOT modeled — real forge reverts on it
+  // after the Paris hard fork ("use prevrandao instead", EIP-4399), so modeling
+  // it as a set would DISAGREE with `forge test`. It falls through to prune.
+  const char *global = nullptr;
+  if (m == "warp")
+    global = "c:@block_timestamp";
+  else if (m == "roll")
+    global = "c:@block_number";
+  else if (m == "fee")
+    global = "c:@block_basefee";
+  else if (m == "chainId")
+    global = "c:@block_chainid";
+  else if (m == "prevrandao")
+    global = "c:@block_prevrandao";
+  else if (m == "txGasPrice")
+    global = "c:@tx_gasprice";
+  else if (m == "coinbase")
+    global = "c:@block_coinbase";
+  else
+  {
+    // Conservative hard-taint gate (design-plan F1.0). We cannot model this
+    // cheatcode's effect, so the continuation is unknown; prune it with
+    // ASSUME(false). Assertions BEFORE this reached point are still checked
+    // (reachability-sensitive), so a real pre-cheatcode bug is still found;
+    // only the un-modelable suffix is suppressed. This can never introduce a
+    // false WRONG (the never-false-WRONG invariant), at the cost of missing
+    // bugs downstream of an unmodeled cheatcode (completeness, acceptable for
+    // the conservative "report CORRECT unless definitely WRONG" contract).
+    exprt f = false_exprt();
+    code_assumet a(f);
+    a.location() = l;
+    new_expr = a;
+    handled = true;
+    log_warning(
+      "[foundry] UNMODELED cheatcode vm.{} -> path pruned "
+      "(conservative; no false WRONG, downstream bugs not explored)",
+      m);
+    return false;
+  }
+
+  const symbolt *g = context.find_symbol(global);
+  if (g == nullptr)
+    return true;
+  exprt lhs = symbol_expr(*g);
+
+  exprt arg0;
+  const nlohmann::json &a0j = expr["arguments"][0];
+  nlohmann::json lit =
+    a0j.contains("typeDescriptions")
+      ? a0j["typeDescriptions"]
+      : nlohmann::json{
+          {"typeIdentifier", "t_uint256"}, {"typeString", "uint256"}};
+  if (get_expr(a0j, lit, arg0))
+    return true;
+  solidity_gen_typecast(ns, arg0, lhs.type());
+
+  // Hand back an unconverted `assign` side-effect (mirrors the high-level call
+  // result at the msg_sender-prank path); the caller converts it to code.
+  exprt assign = side_effect_exprt("assign", lhs.type());
+  assign.location() = l;
+  assign.copy_to_operands(lhs, arg0);
+  new_expr = assign;
+  handled = true;
+  log_warning("[foundry] modeled cheatcode vm.{} (block env setter)", m);
+  return false;
+}
+
 /**
  * Conversion:
   constructor()
@@ -629,6 +1275,20 @@ bool solidity_convertert::get_high_level_member_access(
 
   locationt l;
   get_location_from_node(expr, l);
+
+  // Foundry cheatcode interception: `vm.<name>(...)` on the forge-std cheatcode
+  // handle is not a real external call. The handle may be typed `Vm` or its
+  // parent `VmSafe` (view/pure cheatcodes) — both must be gated so no cheatcode
+  // escapes to the external-call harness (see solidity_convert_expr.cpp).
+  if (is_func_call && (_cname == "Vm" || _cname == "VmSafe"))
+  {
+    bool handled = false;
+    if (handle_foundry_cheatcode(expr, l, new_expr, handled))
+      return true;
+    if (handled)
+      return false;
+  }
+
   std::unordered_set<std::string> cname_set = structureTypingMap[_cname];
   assert(!cname_set.empty());
   if (cname_set.size() > 1)
@@ -676,7 +1336,11 @@ bool solidity_convertert::get_high_level_member_access(
       }
       else if (
         get_high_level_call_wrapper(
-          cname, cur_this_expr, front_block, back_block))
+          cname,
+          cur_this_expr,
+          front_block,
+          back_block,
+          nonContractNamesList.count(cname) != 0))
         return true;
 
       for (auto op : front_block.operands())
@@ -859,30 +1523,38 @@ bool solidity_convertert::get_high_level_member_access(
     {
       assert(!member.name().empty());
 
-      if (inheritanceMap[_cname].count(str))
+      // Verify the target struct actually has this component. solc 0.6.x
+      // using-for attaches library methods to contract-typed variables,
+      // producing a high-level member access whose cname_set can include
+      // the library itself (UniERC20). Libraries have no state, so e.g.
+      // an accidental `$address` access on them would abort in
+      // get_component_number. Treat a missing component as revert.
+      bool struct_has_member = false;
+      const symbolt *struct_sym = context.find_symbol(prefix + str);
+      if (struct_sym != nullptr && struct_sym->get_type().id() == "struct")
+        struct_has_member =
+          to_struct_type(struct_sym->get_type()).has_component(member.name());
+
+      if (struct_has_member && inheritanceMap[_cname].count(str))
         memcall = member_exprt(_base, member.name(), member.type());
+      else if (
+        struct_has_member &&
+        is_var_getter_matched(str, member.name().as_string(), member.type()))
+      {
+        memcall = member_exprt(_base, member.name(), member.type());
+      }
       else
       {
-        // check if the state variable exsist in the target contract
-        // signature: type + name
-        // this is due to that the structureTypeMap only ensure the function
-        // signature matched
-        if (
-          is_var_getter_matched(str, member.name().as_string(), member.type()))
-          memcall = member_exprt(_base, member.name(), member.type());
-        else
-        {
-          // this should be a revert
-          // however, esbmc-kind havs trouble in __ESBMC_asusme(false) (v7.8)
-          side_effect_expr_function_callt call;
-          get_library_function_call_no_args(
-            "__ESBMC_assume", "c:@F@__ESBMC_assume", empty_typet(), l, call);
+        // this should be a revert
+        // however, esbmc-kind havs trouble in __ESBMC_asusme(false) (v7.8)
+        side_effect_expr_function_callt call;
+        get_library_function_call_no_args(
+          "__ESBMC_assume", "c:@F@__ESBMC_assume", empty_typet(), l, call);
 
-          exprt arg = false_exprt();
-          call.arguments().push_back(arg);
-          memcall = call;
-          is_revert = true;
-        }
+        exprt arg = false_exprt();
+        call.arguments().push_back(arg);
+        memcall = call;
+        is_revert = true;
       }
     }
     rhs = memcall;
@@ -902,17 +1574,83 @@ bool solidity_convertert::get_high_level_member_access(
       exprt back_block = code_blockt();
       if (is_call_w_options)
       {
+        // Credit the SAME object the method body executes on. The multi-type
+        // dispatcher runs the call on the static singleton `_base`
+        // (`call.arguments().at(0) = _base` above), so for the value transfer
+        // to be visible to the body's own `this->$balance` the credit must
+        // land on `_base->$balance`, not the dynamic-instance pointer
+        // `new_base`. Crediting `new_base` left the body's balance at 0, so a
+        // subsequent `.call{value:a}` read 0 and reverted — silently dropping
+        // every `{value:}` transfer to a `new`-created instance whenever >=2
+        // contract types shared the method name (which is exactly the shape of
+        // a differential harness: P and M are two such types).
         if (
           model_transaction(
-            expr, this_expr, new_base, balance, l, front_block, back_block))
+            expr, this_expr, _base, balance, l, front_block, back_block))
         {
           log_error("failed to model the transaction property changes");
           return true;
         }
       }
       else if (
-        get_high_level_call_wrapper(cname, this_expr, front_block, back_block))
+        get_high_level_call_wrapper(
+          cname,
+          this_expr,
+          front_block,
+          back_block,
+          nonContractNamesList.count(cname) != 0))
         return true;
+
+      // Record the calling instance's $address in the global
+      // `_ESBMC_caller_inst_addr` for the DURATION of this call (save before,
+      // restore after), so the low-level `.call`/`$call` builders can present
+      // it as the reentrant msg.sender — making a callback see
+      // msg.sender == address(p). Gated on a polymorphic cluster
+      // (cname_set.size() > 1): single-type calls run the body on the instance
+      // already, so this->$address is correct without it. Only this dedicated
+      // global is touched (no registered $address changes), so address-keyed
+      // transfer/EOA dispatch and the sol_addr_array lookups are unaffected.
+      if (cname_set.size() > 1 && str == _cname)
+      {
+        const symbolt *cia_sym_p =
+          context.find_symbol("c:@_ESBMC_caller_inst_addr");
+        if (cia_sym_p != nullptr)
+        {
+          exprt cia = symbol_expr(*cia_sym_p);
+          exprt inst_addr = member_exprt(new_base, "$address", addr_t);
+
+          std::string sv_name = "_saved_caller_inst_addr";
+          std::string sv_id = "sol:@" + sv_name + std::to_string(aux_counter++);
+          symbolt sv;
+          get_default_symbol(
+            sv,
+            get_modulename_from_path(absolute_path),
+            addr_t,
+            sv_name,
+            sv_id,
+            member.location());
+          sv.lvalue = true;
+          sv.file_local = true;
+          exprt sv_sym = symbol_expr(*move_symbol_to_context(sv));
+          code_declt sv_decl(sv_sym);
+
+          exprt save = side_effect_exprt("assign", addr_t);
+          save.copy_to_operands(sv_sym, cia);
+          exprt set = side_effect_exprt("assign", addr_t);
+          set.copy_to_operands(cia, inst_addr);
+          exprt restore = side_effect_exprt("assign", addr_t);
+          restore.copy_to_operands(cia, sv_sym);
+          convert_expression_to_code(save);
+          convert_expression_to_code(set);
+          convert_expression_to_code(restore);
+
+          back_block.operands().push_back(restore);
+          front_block.operands().insert(front_block.operands().begin(), set);
+          front_block.operands().insert(front_block.operands().begin(), save);
+          front_block.operands().insert(
+            front_block.operands().begin(), sv_decl);
+        }
+      }
 
       // if-body
       code_blockt block;
@@ -968,9 +1706,9 @@ bool solidity_convertert::get_high_level_member_access(
  * in bound mode by finding the enclosing FunctionCall AST node, extracting
  * arguments, and dispatching to get_low_level_member_accsss.
  *
- * e.g. x.call{value: val}("")
- *   @base: (this->)x
- *   @mem_name: call
+ * e.g.   x.call{value: val}("")
+ * @base:     (this->)x
+ * @mem_name: call
  */
 bool solidity_convertert::get_bound_low_level_call(
   const nlohmann::json &expr,
@@ -1090,12 +1828,22 @@ bool solidity_convertert::get_low_level_member_accsss(
       if (get_expr(options[0], literal_type, value))
         return true;
 
+      // --reentry-balance-drain-check: emit pre-snapshots and post-assert
+      // around the call.  `value_for_call` is the symbol the caller MUST
+      // pass into call.arguments() so the user-side value expression is
+      // evaluated exactly once (the assert references the same snapshot).
+      exprt value_for_call;
+      if (
+        emit_balance_drain_wrapper(
+          cname, this_object, value, loc, value_for_call))
+        return true;
+
       std::string func_id = "sol:@C@" + cname + "@F@$call#1";
 
       get_library_function_call_no_args(func_name, func_id, bool_t, loc, call);
       call.arguments().push_back(this_object);
       call.arguments().push_back(addr);
-      call.arguments().push_back(value);
+      call.arguments().push_back(value_for_call);
     }
     else
     {
@@ -1108,18 +1856,39 @@ bool solidity_convertert::get_low_level_member_accsss(
       call.arguments().push_back(addr);
     }
 
-    // Emit the dispatch for its side effects, but leave the tuple's
-    // `success` field as the nondet_bool initial value produced by
-    // get_llc_ret_tuple(). Real EVM low-level calls can fail for many
-    // reasons (out-of-gas, target revert, cold access, etc.); modeling
-    // the boolean return as nondet is the soundest over-approximation
-    // and matches delegatecall/staticcall below.
-    convert_expression_to_code(call);
-    move_to_front_block(call);
-
+    // Wire the dispatch's own boolean return value into the tuple's
+    // `success` slot.  $call#0/#1 bodies return `true` on the
+    // tracked-target success path (the target's receive/fallback was
+    // invoked and our model completed it) and `false` / `nondet_bool`
+    // on the EOA fallthrough depending on variant.  Previously we
+    // discarded the return and the tuple's `success` was a fresh
+    // `nondet_bool` initialised by `get_llc_ret_tuple`, so user code
+    // doing `(bool ok, ) = addr.call(...)` observed an arbitrary
+    // value — making it impossible to prove `ok` true on a tracked-
+    // target success path.  Now the dispatch value is propagated
+    // deterministically and the over-approx lives only on the paths
+    // where the $call body itself emits `nondet_bool` (EOA, library
+    // unknown).
     symbolt dump;
     get_llc_ret_tuple(dump);
-    new_expr = symbol_expr(dump);
+    exprt dump_expr = symbol_expr(dump);
+
+    // The tuple's `success` field is laid out as `unsigned int` (C
+    // struct padding of _Bool), not raw bool — cast the bool-typed
+    // dispatch return to match the member's type before assigning.
+    const struct_typet &tup_stype = to_struct_type(ns.follow(dump_expr.type()));
+    assert(!tup_stype.components().empty());
+    const typet &x_type = tup_stype.components().front().type();
+    exprt dump_x = member_exprt(dump_expr, "x", x_type);
+    exprt call_casted = call;
+    if (call_casted.type() != x_type)
+      solidity_gen_typecast(ns, call_casted, x_type);
+    exprt assign_succ = side_effect_exprt("assign", x_type);
+    assign_succ.copy_to_operands(dump_x, call_casted);
+    convert_expression_to_code(assign_succ);
+    move_to_front_block(assign_succ);
+
+    new_expr = dump_expr;
   }
   else if (mem_name == "transfer")
   {
@@ -1127,12 +1896,18 @@ bool solidity_convertert::get_low_level_member_accsss(
     exprt addr = base;
     assert(!arg.is_nil());
 
+    // --reentry-balance-drain-check: see emit_balance_drain_wrapper
+    exprt value_for_call;
+    if (
+      emit_balance_drain_wrapper(cname, this_object, arg, loc, value_for_call))
+      return true;
+
     std::string func_name = "transfer";
     std::string func_id = "sol:@C@" + cname + "@F@$transfer#0";
     get_library_function_call_no_args(func_name, func_id, bool_t, loc, call);
     call.arguments().push_back(this_object);
     call.arguments().push_back(addr);
-    call.arguments().push_back(arg);
+    call.arguments().push_back(value_for_call);
 
     new_expr = call;
   }
@@ -1142,12 +1917,18 @@ bool solidity_convertert::get_low_level_member_accsss(
     exprt addr = base;
     assert(!arg.is_nil());
 
+    // --reentry-balance-drain-check: see emit_balance_drain_wrapper
+    exprt value_for_call;
+    if (
+      emit_balance_drain_wrapper(cname, this_object, arg, loc, value_for_call))
+      return true;
+
     std::string func_name = "send";
     std::string func_id = "sol:@C@" + cname + "@F@$send#0";
     get_library_function_call_no_args(func_name, func_id, bool_t, loc, call);
     call.arguments().push_back(this_object);
     call.arguments().push_back(addr);
-    call.arguments().push_back(arg);
+    call.arguments().push_back(value_for_call);
 
     new_expr = call;
   }
@@ -1163,13 +1944,28 @@ bool solidity_convertert::get_low_level_member_accsss(
     call.arguments().push_back(this_object);
     call.arguments().push_back(addr);
 
-    // Dispatch for side effects; keep success as nondet (see call case).
-    convert_expression_to_code(call);
-    move_to_front_block(call);
-
+    // Wire the dispatch return into the tuple's success slot (see
+    // call case above for rationale).
     symbolt dump;
     get_llc_ret_tuple(dump);
-    new_expr = symbol_expr(dump);
+    exprt dump_expr = symbol_expr(dump);
+
+    // The tuple's `success` field is laid out as `unsigned int` (C
+    // struct padding of _Bool), not raw bool — cast the bool-typed
+    // dispatch return to match the member's type before assigning.
+    const struct_typet &tup_stype = to_struct_type(ns.follow(dump_expr.type()));
+    assert(!tup_stype.components().empty());
+    const typet &x_type = tup_stype.components().front().type();
+    exprt dump_x = member_exprt(dump_expr, "x", x_type);
+    exprt call_casted = call;
+    if (call_casted.type() != x_type)
+      solidity_gen_typecast(ns, call_casted, x_type);
+    exprt assign_succ = side_effect_exprt("assign", x_type);
+    assign_succ.copy_to_operands(dump_x, call_casted);
+    convert_expression_to_code(assign_succ);
+    move_to_front_block(assign_succ);
+
+    new_expr = dump_expr;
   }
   else if (mem_name == "delegatecall")
   {
@@ -1184,13 +1980,28 @@ bool solidity_convertert::get_low_level_member_accsss(
     call.arguments().push_back(this_object);
     call.arguments().push_back(addr);
 
-    // Dispatch for side effects; keep success as nondet (see call case).
-    convert_expression_to_code(call);
-    move_to_front_block(call);
-
+    // Wire the dispatch return into the tuple's success slot (see
+    // call case above for rationale).
     symbolt dump;
     get_llc_ret_tuple(dump);
-    new_expr = symbol_expr(dump);
+    exprt dump_expr = symbol_expr(dump);
+
+    // The tuple's `success` field is laid out as `unsigned int` (C
+    // struct padding of _Bool), not raw bool — cast the bool-typed
+    // dispatch return to match the member's type before assigning.
+    const struct_typet &tup_stype = to_struct_type(ns.follow(dump_expr.type()));
+    assert(!tup_stype.components().empty());
+    const typet &x_type = tup_stype.components().front().type();
+    exprt dump_x = member_exprt(dump_expr, "x", x_type);
+    exprt call_casted = call;
+    if (call_casted.type() != x_type)
+      solidity_gen_typecast(ns, call_casted, x_type);
+    exprt assign_succ = side_effect_exprt("assign", x_type);
+    assign_succ.copy_to_operands(dump_x, call_casted);
+    convert_expression_to_code(assign_succ);
+    move_to_front_block(assign_succ);
+
+    new_expr = dump_expr;
   }
   else
   {
@@ -1252,6 +2063,60 @@ bool solidity_convertert::get_bind_cname_expr(
 
   bind_cname_expr = member_exprt(lvar, "_ESBMC_bind_cname", string_t);
   bind_cname_expr.location() = l;
+  return false;
+}
+
+bool solidity_convertert::get_or_create_bind_shadow(
+  const exprt &lvar,
+  const std::string &declared_cname,
+  exprt &shadow_out)
+{
+  if (lvar.id() != "symbol")
+    return true;
+  if (declared_cname.empty())
+    return true;
+
+  const std::string lvar_id = lvar.identifier().as_string();
+  const std::string lvar_name = lvar.name().as_string();
+  const std::string shadow_id = lvar_id + "$bind";
+  const std::string shadow_name = lvar_name + "$bind";
+
+  const symbolt *existing = context.find_symbol(shadow_id);
+  if (existing == nullptr)
+  {
+    symbolt s;
+    const std::string debug_mod = get_modulename_from_path(absolute_path);
+    get_default_symbol(
+      s, debug_mod, string_t, shadow_name, shadow_id, lvar.location());
+    s.lvalue = true;
+    s.file_local = true;
+
+    exprt init_val;
+    get_cname_expr(declared_cname, init_val);
+    solidity_gen_typecast(ns, init_val, string_t);
+    s.set_value(init_val);
+
+    move_symbol_to_context(s);
+    existing = context.find_symbol(shadow_id);
+    if (existing == nullptr)
+      return true;
+  }
+
+  shadow_out = symbol_expr(*existing);
+  return false;
+}
+
+bool solidity_convertert::get_bind_shadow_read(
+  const exprt &base,
+  exprt &shadow_out)
+{
+  if (base.id() != "symbol")
+    return true;
+  const std::string shadow_id = base.identifier().as_string() + "$bind";
+  const symbolt *existing = context.find_symbol(shadow_id);
+  if (existing == nullptr)
+    return true;
+  shadow_out = symbol_expr(*existing);
   return false;
 }
 
@@ -1731,12 +2596,39 @@ bool solidity_convertert::validate_delegate_shadow_compatible(
       node["referencedDeclaration"].get<int>() > 0)
     {
       int ref_id = node["referencedDeclaration"].get<int>();
-      const nlohmann::json &decl = find_decl_ref(ref_id);
+      // The body being validated is from a non-caller contract whose
+      // own state vars are NOT visible to find_decl_ref (which scopes
+      // by current_baseContractName + libs/interfaces). Searching the
+      // top-level src_ast_json directly finds the decl regardless of
+      // which contract owns it — required for the cross-contract
+      // delegate-shadow validation to actually inspect target-side
+      // state-var refs.
+      auto find_decl_anywhere = [&](int id) -> const nlohmann::json * {
+        for (const auto &cn : src_ast_json["nodes"])
+        {
+          if (!cn.is_object())
+            continue;
+          if (cn.value("nodeType", "") != "ContractDefinition")
+            continue;
+          if (!cn.contains("nodes"))
+            continue;
+          for (const auto &sub : cn["nodes"])
+          {
+            if (
+              sub.is_object() && sub.contains("id") &&
+              sub["id"].is_number_integer() && sub["id"].get<int>() == id)
+              return &sub;
+          }
+        }
+        return nullptr;
+      };
+      const nlohmann::json *decl_p = find_decl_anywhere(ref_id);
       if (
-        !decl.empty() && !decl.is_null() &&
-        decl.value("nodeType", "") == "VariableDeclaration" &&
-        decl.value("stateVariable", false))
+        decl_p != nullptr &&
+        decl_p->value("nodeType", "") == "VariableDeclaration" &&
+        decl_p->value("stateVariable", false))
       {
+        const nlohmann::json &decl = *decl_p;
         std::string name = decl.value("name", "");
         std::string ty = decl.contains("typeDescriptions")
                            ? decl["typeDescriptions"].value("typeString", "")
@@ -1817,7 +2709,8 @@ bool solidity_convertert::try_inline_delegate_shadow_helper_call(
   exprt &new_expr)
 {
   // Must have a body to inline. Abstract/virtual functions fall through.
-  if (!fdecl.contains("body"))
+  // 0.6.x emits `body: null` for unimplemented functions; treat as missing.
+  if (!fdecl.contains("body") || fdecl["body"].is_null())
     return true;
   if (
     !fdecl.contains("parameters") ||
@@ -2007,7 +2900,7 @@ bool solidity_convertert::try_get_delegate_shadow_call(
       find_function_by_signature(str, target_sig);
     if (decl_ref.empty() || decl_ref.is_null())
       continue;
-    if (!decl_ref.contains("body"))
+    if (!decl_ref.contains("body") || decl_ref["body"].is_null())
       continue;
     if (validate_delegate_shadow_compatible(caller_cname, decl_ref["body"]))
       continue;
@@ -2193,17 +3086,11 @@ bool solidity_convertert::try_get_delegate_shadow_call(
     convert_expression_to_code(assign_succ);
     then.move_to_operands(assign_succ);
 
-    // Guard: _addr == _ESBMC_Object_cand.$address
-    exprt static_ins;
-    get_static_contract_instance_ref(cand.cname, static_ins);
-    exprt mem_addr = member_exprt(static_ins, "$address", addr_t);
-    exprt cond = exprt("=", bool_t);
-    cond.operands().push_back(base);
-    cond.operands().push_back(mem_addr);
-
-    codet if_expr("ifthenelse");
-    if_expr.copy_to_operands(cond, then);
-    wrapper_block.copy_to_operands(if_expr);
+    // Delegatecall dispatches by function signature, not by address.
+    // The candidate was already matched by name in
+    // try_get_delegate_shadow_call, so emit the inlined body unconditionally.
+    // With only one matching candidate per signature, there is no ambiguity.
+    wrapper_block.move_to_operands(then);
   }
 
   // Push the whole wrapper as one unit. Doing it here (after all get_block
@@ -2321,9 +3208,127 @@ bool solidity_convertert::try_get_signature_dispatched_call(
 // function calls rather than invoke this `call` e.g.
 // addr.call(abi.encodeWithSignature("doSomething(uint256)", 123))
 // => _ESBMC_Object_Base.doSomething(123);
+//
+// `is_library` = true when this $call#0 is being populated for a
+// library.  In that case the `this` pointer has no meaningful content
+// (libraries don't own a singleton with a `$address` field), so we
+// skip the msg.sender swap and reentry-mutex updates.  The
+// address-dispatch ladder itself still fires: reads of _ESBMC_Object_X
+// via `get_static_contract_instance_ref(str, ...)` are preserved so
+// external state updates in X remain visible to the caller.
+exprt solidity_convertert::reentrant_msg_sender(
+  const std::string &cname,
+  const exprt &fallback_addr)
+{
+  // Only a contract in a multi-type structural cluster is invoked via the
+  // bind_cname dispatcher that records _ESBMC_caller_inst_addr; a single-type
+  // contract runs its body on the instance already, so this->$address is
+  // correct. Skip the conditional there to avoid bloating call-heavy formulas
+  // with an always-false branch on the global.
+  if (structureTypingMap[cname].size() <= 1)
+    return fallback_addr;
+
+  const symbolt *cia = context.find_symbol("c:@_ESBMC_caller_inst_addr");
+  if (cia == nullptr)
+    return fallback_addr;
+
+  exprt cia_e = symbol_expr(*cia); // addr_t (uint160)
+  exprt cond("notequal", bool_t);
+  cond.copy_to_operands(cia_e, from_integer(0, cia_e.type()));
+
+  exprt chosen = cia_e;
+  if (chosen.type() != fallback_addr.type())
+    chosen = typecast_exprt(chosen, fallback_addr.type());
+
+  return if_exprt(cond, chosen, fallback_addr);
+}
+
+void solidity_convertert::emit_call_revert_clear(
+  code_blockt &blk,
+  symbol_exprt &saved_out,
+  const locationt &loc)
+{
+  // The revert-flag model (solidity_misc.c) is always linked into the GOTO
+  // library before frontend conversion runs.
+  const symbolt *flag_sym = context.find_symbol("c:@_ESBMC_sol_reverted_flag");
+  assert(flag_sym && "revert-flag model must be linked");
+  exprt flag_expr = symbol_expr(*flag_sym);
+
+  // bool _saved = _ESBMC_sol_reverted_flag;  (remember caller's status)
+  std::string nm, id;
+  get_aux_var(nm, id);
+  symbolt s;
+  get_default_symbol(
+    s,
+    get_modulename_from_path(absolute_path),
+    flag_sym->get_type(),
+    nm,
+    id,
+    loc);
+  s.lvalue = true;
+  s.file_local = true;
+  saved_out = symbol_exprt(move_symbol_to_context(s)->id, flag_sym->get_type());
+  blk.copy_to_operands(code_declt(saved_out));
+  blk.copy_to_operands(code_assignt(saved_out, flag_expr));
+
+  // _ESBMC_sol_clear_revert();  (clean baseline for THIS call)
+  exprt clear_stmt;
+  build_revert_flag_call(
+    "_ESBMC_sol_clear_revert", "c:@F@_ESBMC_sol_clear_revert", loc, clear_stmt);
+  blk.copy_to_operands(clear_stmt);
+}
+
+void solidity_convertert::emit_call_revert_return(
+  code_blockt &blk,
+  const symbol_exprt &saved,
+  const exprt *value_rollback,
+  const locationt &loc)
+{
+  const symbolt *flag_sym = context.find_symbol("c:@_ESBMC_sol_reverted_flag");
+  assert(flag_sym && "revert-flag model must be linked");
+  exprt flag_expr = symbol_expr(*flag_sym);
+
+  // bool _rev = _ESBMC_sol_reverted_flag;  (snapshot THIS call's outcome)
+  std::string nm, id;
+  get_aux_var(nm, id);
+  symbolt s;
+  get_default_symbol(
+    s,
+    get_modulename_from_path(absolute_path),
+    flag_sym->get_type(),
+    nm,
+    id,
+    loc);
+  s.lvalue = true;
+  s.file_local = true;
+  symbol_exprt reverted(move_symbol_to_context(s)->id, flag_sym->get_type());
+  blk.copy_to_operands(code_declt(reverted));
+  blk.copy_to_operands(code_assignt(reverted, flag_expr));
+
+  // _ESBMC_sol_reverted_flag = _saved;  (scoped observation: restore caller)
+  blk.copy_to_operands(code_assignt(flag_expr, saved));
+
+  // if (_rev) { <value_rollback> }  — undo the direct value transfer the EVM
+  // rolls back on failure.  This is transfer-only (1 level): deep state a
+  // reentrant callee subtree mutated is not unwound here, matching the
+  // pre-existing revert-model granularity (`*this = save` per frame).
+  if (value_rollback != nullptr)
+  {
+    codet rb_if("ifthenelse");
+    rb_if.copy_to_operands(reverted, *value_rollback);
+    blk.copy_to_operands(rb_if);
+  }
+
+  // return !_rev;  — ok is false iff the callee reverted.
+  code_returnt ret;
+  ret.return_value() = not_exprt(reverted);
+  blk.copy_to_operands(ret);
+}
+
 bool solidity_convertert::get_call_definition(
   const std::string &cname,
-  exprt &new_expr)
+  exprt &new_expr,
+  bool is_library)
 {
   std::string call_name = "call";
   std::string call_id = "sol:@C@" + cname + "@F@$call#0";
@@ -2384,22 +3389,32 @@ bool solidity_convertert::get_call_definition(
   exprt msg_sender = symbol_expr(msg_sender_sym);
   symbolt this_sym = *context.find_symbol(call_id + "#this");
   exprt this_expr = symbol_expr(this_sym);
-  exprt this_address = member_exprt(this_expr, "$address", addr_t);
+  // Libraries don't own a singleton with a `$address`/`$mutex` field, so
+  // the this-derived expressions below are only meaningful for contracts.
+  exprt this_address;
+  if (!is_library)
+    this_address = member_exprt(this_expr, "$address", addr_t);
 
-  // uint160_t old_sender =  msg_sender;
-  symbolt old_sender;
-  get_default_symbol(
-    old_sender,
-    debug_modulename,
-    addr_t,
-    "old_sender",
-    "sol:@C@" + cname + "@F@old_sender#" + std::to_string(aux_counter++),
-    locationt());
-  symbolt &added_old_sender = *move_symbol_to_context(old_sender);
-  code_declt old_sender_decl(symbol_expr(added_old_sender));
-  added_old_sender.set_value(symbol_expr2tc(msg_sender_sym));
-  old_sender_decl.operands().push_back(msg_sender);
-  func_body.move_to_operands(old_sender_decl);
+  // uint160_t old_sender =  msg_sender;  (contracts only; libraries skip
+  // the msg.sender swap since the inlined library's caller's msg.sender
+  // is already the active value.)
+  symbolt *added_old_sender_ptr = nullptr;
+  if (!is_library)
+  {
+    symbolt old_sender;
+    get_default_symbol(
+      old_sender,
+      debug_modulename,
+      addr_t,
+      "old_sender",
+      "sol:@C@" + cname + "@F@old_sender#" + std::to_string(aux_counter++),
+      locationt());
+    added_old_sender_ptr = move_symbol_to_context(old_sender);
+    code_declt old_sender_decl(symbol_expr(*added_old_sender_ptr));
+    added_old_sender_ptr->set_value(msg_sender);
+    old_sender_decl.operands().push_back(msg_sender);
+    func_body.move_to_operands(old_sender_decl);
+  }
 
   for (auto str : contractNamesList)
   {
@@ -2412,13 +3427,17 @@ bool solidity_convertert::get_call_definition(
 
     code_blockt then;
 
-    // msg_sender = this.address;
-    exprt assign_sender = side_effect_exprt("assign", addr_t);
-    assign_sender.copy_to_operands(msg_sender, this_address);
-    convert_expression_to_code(assign_sender);
-    then.move_to_operands(assign_sender);
+    if (!is_library)
+    {
+      // msg_sender = this.address;
+      exprt assign_sender = side_effect_exprt("assign", addr_t);
+      assign_sender.copy_to_operands(
+        msg_sender, reentrant_msg_sender(cname, this_address));
+      convert_expression_to_code(assign_sender);
+      then.move_to_operands(assign_sender);
+    }
 
-    if (is_reentry_check)
+    if (is_reentry_check && !is_library)
     {
       exprt _mutex;
       get_contract_mutex_expr(cname, this_expr, _mutex);
@@ -2430,13 +3449,19 @@ bool solidity_convertert::get_call_definition(
       then.move_to_operands(assign_lock);
     }
 
+    // Low-level-call failure modeling: clear the revert flag, run the
+    // callee, return `ok = !reverted` (below) — a reverting callee makes
+    // `(bool ok, ) = addr.call(...)` observe `ok == false`.
+    symbol_exprt saved_revert;
+    emit_call_revert_clear(then, saved_revert, locationt());
+
     // _ESBMC_Nondet_Extcall_x();
     code_function_callt call;
     if (get_unbound_funccall(str, call))
       return true;
     then.move_to_operands(call);
 
-    if (is_reentry_check)
+    if (is_reentry_check && !is_library)
     {
       exprt _mutex;
       get_contract_mutex_expr(cname, this_expr, _mutex);
@@ -2448,17 +3473,18 @@ bool solidity_convertert::get_call_definition(
       then.move_to_operands(assign_unlock);
     }
 
-    // msg_sender = old_sender;
-    exprt assign_sender_restore = side_effect_exprt("assign", addr_t);
-    assign_sender_restore.copy_to_operands(
-      msg_sender, symbol_expr(added_old_sender));
-    convert_expression_to_code(assign_sender_restore);
-    then.move_to_operands(assign_sender_restore);
+    if (!is_library)
+    {
+      // msg_sender = old_sender;
+      exprt assign_sender_restore = side_effect_exprt("assign", addr_t);
+      assign_sender_restore.copy_to_operands(
+        msg_sender, symbol_expr(*added_old_sender_ptr));
+      convert_expression_to_code(assign_sender_restore);
+      then.move_to_operands(assign_sender_restore);
+    }
 
-    // return true;
-    code_returnt ret_true;
-    ret_true.return_value() = true_exprt();
-    then.move_to_operands(ret_true);
+    // return !reverted;  ($call#0 moves no value -> no rollback)
+    emit_call_revert_return(then, saved_revert, nullptr, locationt());
 
     // _addr == _ESBMC_Object_str.$address
     exprt static_ins;
@@ -2525,7 +3551,13 @@ bool solidity_convertert::model_transaction(
   const symbolt &msg_value_sym = *context.find_symbol("c:@msg_value");
   exprt msg_value = symbol_expr(msg_value_sym);
 
-  if (get_high_level_call_wrapper(cname, this_expr, front_block, back_block))
+  if (
+    get_high_level_call_wrapper(
+      cname,
+      this_expr,
+      front_block,
+      back_block,
+      nonContractNamesList.count(cname) != 0))
     return true;
 
   exprt this_balance = member_exprt(this_expr, "$balance", val_t);
@@ -2544,31 +3576,56 @@ bool solidity_convertert::model_transaction(
   old_val_decl.operands().push_back(msg_value);
   front_block.move_to_operands(old_val_decl);
 
+  // Solidity int literals default to signedbv at the source level, but
+  // every balance / msg_value field is unsignedbv_256. Align the value
+  // type once so the downstream comparison and arithmetic don't feed
+  // mismatched-signedness operands into smt_conv's `<` / `+=` / `-=`
+  // (which assert is_signedbv == is_signedbv at encoding time).
+  exprt value_typed = value;
+  if (value_typed.type() != val_t)
+    solidity_gen_typecast(ns, value_typed, val_t);
+
   // msg_value = _val;
-  exprt assign_val = side_effect_exprt("assign", value.type());
-  assign_val.copy_to_operands(msg_value, value);
+  exprt assign_val = side_effect_exprt("assign", val_t);
+  assign_val.copy_to_operands(msg_value, value_typed);
   convert_expression_to_code(assign_val);
   front_block.move_to_operands(assign_val);
 
-  // if(this.balance < val) return false;
-  exprt less_than = exprt("<", bool_t);
-  less_than.copy_to_operands(this_balance, value);
-  codet cmp_less_than("ifthenelse");
-  code_returnt ret_false;
-  ret_false.return_value() = false_exprt();
-  cmp_less_than.copy_to_operands(less_than, ret_false);
-  front_block.move_to_operands(cmp_less_than);
+  // Solidity 0.8 `new C{value:V}()` and `target.method{value:V}(...)`
+  // both REVERT on insufficient sender balance — they are not
+  // early-returns. A `return false` here would let callers keep
+  // executing past the revert and observe a partially-initialised
+  // state (e.g. constructor exits before assigning state-variable
+  // pointers, leaving them at their initial NONDET value, which
+  // breaks subsequent `address(stateVar).balance` reads). Model the
+  // revert as __ESBMC_assume(false) so the infeasible path is pruned
+  // at the SMT level — matches the pattern in get_transfer_definition.
+  // if(this.balance < val) __ESBMC_assume(false);
+  {
+    exprt less_than = exprt("<", bool_t);
+    less_than.copy_to_operands(this_balance, value_typed);
+    codet cmp_less_than("ifthenelse");
+
+    side_effect_expr_function_callt assume_call;
+    get_library_function_call_no_args(
+      "__ESBMC_assume", "c:@F@__ESBMC_assume", empty_typet(), loc, assume_call);
+    assume_call.arguments().push_back(false_exprt());
+    convert_expression_to_code(assume_call);
+
+    cmp_less_than.copy_to_operands(less_than, assume_call);
+    front_block.move_to_operands(cmp_less_than);
+  }
 
   // this.balance -= _val;
   exprt sub_assign = side_effect_exprt("assign-", val_t);
-  sub_assign.copy_to_operands(this_balance, value);
+  sub_assign.copy_to_operands(this_balance, value_typed);
   convert_expression_to_code(sub_assign);
   front_block.move_to_operands(sub_assign);
 
   // base.balance += _val;
   exprt target_balance = member_exprt(base, "$balance", val_t);
   exprt add_assign = side_effect_exprt("assign+", val_t);
-  add_assign.copy_to_operands(target_balance, value);
+  add_assign.copy_to_operands(target_balance, value_typed);
   convert_expression_to_code(add_assign);
   front_block.move_to_operands(add_assign);
 
@@ -2583,10 +3640,129 @@ bool solidity_convertert::model_transaction(
   return false;
 }
 
-// `call(address _addr, uint _val)`
+// --reentry-balance-drain-check: at every value-transfer call site,
+// emit
+//   uint256 __re_drain_val = V;
+//   uint256 __re_drain_pre = this->$balance;
+// to the front block, and
+//   __ESBMC_assert(
+//     __re_drain_val > __re_drain_pre ||
+//     this->$balance >= __re_drain_pre - __re_drain_val,
+//     "reentrancy balance drain")
+// to the back block.  Returns the symbol exprt to substitute for
+// `value` in the call's argument list — guarantees single evaluation
+// of an arbitrary value expression (e.g. `computeAmount()`) across
+// the call argument and the post-assert.
+//
+// When the check is disabled or `this_expr` is nil (library context),
+// `replacement_value` is set to `value` and the helper returns false
+// without touching front/back blocks.
+//
+// Postcondition: on a successful injection,
+// `outbound_drain_site_count[cname]` is incremented by 1.
+bool solidity_convertert::emit_balance_drain_wrapper(
+  const std::string &cname,
+  const exprt &this_expr,
+  const exprt &value,
+  const locationt &loc,
+  exprt &replacement_value)
+{
+  // Default no-op fallthrough: caller's call argument stays as-is.
+  replacement_value = value;
+
+  if (!is_reentry_balance_drain_check)
+    return false;
+  if (this_expr.is_nil())
+    return false;
+  if (cname.empty())
+    return false;
+
+  typet u256 = unsignedbv_typet(256);
+  std::string mname = get_modulename_from_path(absolute_path);
+
+  // 1. uint256 __re_drain_val = V;
+  symbolt val_sym;
+  std::string val_id =
+    "sol:@C@" + cname + "@F@__re_drain_val#" + std::to_string(aux_counter++);
+  get_default_symbol(val_sym, mname, u256, "__re_drain_val", val_id, loc);
+  symbolt &added_val = *move_symbol_to_context(val_sym);
+  added_val.set_value(value);
+  code_declt val_decl(symbol_expr(added_val));
+  val_decl.operands().push_back(value);
+  move_to_front_block(val_decl);
+
+  // 2. uint256 __re_drain_pre = this->$balance;
+  exprt this_balance = member_exprt(this_expr, "$balance", u256);
+  symbolt pre_sym;
+  std::string pre_id =
+    "sol:@C@" + cname + "@F@__re_drain_pre#" + std::to_string(aux_counter++);
+  get_default_symbol(pre_sym, mname, u256, "__re_drain_pre", pre_id, loc);
+  symbolt &added_pre = *move_symbol_to_context(pre_sym);
+  added_pre.set_value(this_balance);
+  code_declt pre_decl(symbol_expr(added_pre));
+  pre_decl.operands().push_back(this_balance);
+  move_to_front_block(pre_decl);
+
+  // 3. __ESBMC_assert(
+  //      __re_drain_val > __re_drain_pre ||
+  //      this->$balance >= __re_drain_pre - __re_drain_val,
+  //      "reentrancy balance drain");
+  //
+  // The disjunction guards against unsigned underflow when
+  // `__re_drain_val > __re_drain_pre` (the transfer would have
+  // failed in real EVM — call returns false / transfer reverts —
+  // so balance is unchanged on that path).  Without the guard,
+  // `pre - val` wraps to a giant unsigned value and the >= check
+  // almost certainly fails, producing a spurious counterexample.
+  exprt val_sym_expr = symbol_expr(added_val);
+  exprt pre_sym_expr = symbol_expr(added_pre);
+
+  exprt under_guard(">", bool_t);
+  under_guard.copy_to_operands(val_sym_expr, pre_sym_expr);
+
+  exprt sub("-", u256);
+  sub.copy_to_operands(pre_sym_expr, val_sym_expr);
+  exprt geq(">=", bool_t);
+  geq.copy_to_operands(this_balance, sub);
+
+  exprt or_expr("or", bool_t);
+  or_expr.copy_to_operands(under_guard, geq);
+
+  side_effect_expr_function_callt assert_call;
+  get_library_function_call_no_args(
+    "__ESBMC_assert", "c:@F@__ESBMC_assert", empty_typet(), loc, assert_call);
+  assert_call.arguments().push_back(or_expr);
+  string_constantt msg("reentrancy balance drain");
+  assert_call.arguments().push_back(msg);
+  convert_expression_to_code(assert_call);
+  move_to_back_block(assert_call);
+
+  // Replace V with the snapshot symbol in the call's argument list —
+  // single-evaluation guarantee.
+  replacement_value = val_sym_expr;
+  outbound_drain_site_count[cname]++;
+  return false;
+}
+
+// `call(address _addr, uint _val)`.  `is_library=true` adapts the body
+// for library scope: libraries have no `this.$balance` / `this.$mutex`
+// / real `this->$address`, so we skip the sender swap to
+// `this->$address` (emit nondet msg.sender instead — matches D's
+// over-approximation of the enclosing-contract address), skip the
+// debit + underflow-revert side (the caller contract's $balance isn't
+// reachable from inside the library's `$call#1` body), and skip the
+// reentry-mutex toggles.  The CREDIT side stays: target contract's
+// `$balance += _val` still fires, and the receive/fallback dispatch
+// is preserved so external state updates propagate.  The boolean
+// return is NONDET (real EVM can revert for gas / target-revert /
+// cold-access reasons even when a tracked receive would have
+// succeeded — a sound over-approximation).  For addresses that match
+// no tracked contract, the library falls through to `_ESBMC_eoa_credit`
+// so EOA balance reads still see the credit under `--bound`.
 bool solidity_convertert::get_call_value_definition(
   const std::string &cname,
-  exprt &new_expr)
+  exprt &new_expr,
+  bool is_library)
 {
   std::string call_name = "call";
   std::string call_id = "sol:@C@" + cname + "@F@$call#1";
@@ -2675,8 +3851,16 @@ bool solidity_convertert::get_call_value_definition(
   exprt msg_value = symbol_expr(msg_value_sym);
   symbolt this_sym = *context.find_symbol(call_id + "#this");
   exprt this_expr = symbol_expr(this_sym);
-  exprt this_address = member_exprt(this_expr, "$address", addrp_t);
-  exprt this_balance = member_exprt(this_expr, "$balance", val_t);
+  // Library scope has no meaningful `this->$address` / `this->$balance`
+  // — Lib is a dummy singleton with no real address or balance slot.
+  // Only construct these member accesses for contracts.
+  exprt this_address;
+  exprt this_balance;
+  if (!is_library)
+  {
+    this_address = member_exprt(this_expr, "$address", addrp_t);
+    this_balance = member_exprt(this_expr, "$balance", val_t);
+  }
 
   // uint256_t old_value = msg_value;
   symbolt old_value;
@@ -2747,26 +3931,62 @@ bool solidity_convertert::get_call_value_definition(
     convert_expression_to_code(assign_val);
     then.move_to_operands(assign_val);
 
-    // msg_sender = this.$address;
+    // msg_sender swap: for contracts use the caller's this.$address;
+    // for libraries use the ambient _ESBMC_enclosing_contract_address
+    // — the currently-executing contract's address, written at every
+    // contract-method entry by `get_function_definition`'s wrapper.
+    // This is the deterministic replacement for the earlier NONDET
+    // over-approximation.
+    exprt new_sender;
+    if (is_library)
+    {
+      new_sender = symbol_expr(
+        *context.find_symbol("c:@_ESBMC_enclosing_contract_address"));
+    }
+    else
+    {
+      new_sender = reentrant_msg_sender(cname, this_address);
+    }
     exprt assign_sender = side_effect_exprt("assign", addrp_t);
-    assign_sender.copy_to_operands(msg_sender, this_address);
+    assign_sender.copy_to_operands(msg_sender, new_sender);
     convert_expression_to_code(assign_sender);
     then.move_to_operands(assign_sender);
 
-    // if(this.balance < val) return false;
-    exprt less_than = exprt("<", bool_t);
-    less_than.copy_to_operands(this_balance, val_expr);
-    codet cmp_less_than("ifthenelse");
-    code_returnt ret_false;
-    ret_false.return_value() = false_exprt();
-    cmp_less_than.copy_to_operands(less_than, ret_false);
-    then.move_to_operands(cmp_less_than);
+    if (!is_library)
+    {
+      // if(this.balance < val) return false;
+      exprt less_than = exprt("<", bool_t);
+      less_than.copy_to_operands(this_balance, val_expr);
+      codet cmp_less_than("ifthenelse");
+      code_returnt ret_false;
+      ret_false.return_value() = false_exprt();
+      cmp_less_than.copy_to_operands(less_than, ret_false);
+      then.move_to_operands(cmp_less_than);
 
-    // this.balance -= _val;
-    exprt sub_assign = side_effect_exprt("assign-", val_t);
-    sub_assign.copy_to_operands(this_balance, val_expr);
-    convert_expression_to_code(sub_assign);
-    then.move_to_operands(sub_assign);
+      // this.balance -= _val;
+      exprt sub_assign = side_effect_exprt("assign-", val_t);
+      sub_assign.copy_to_operands(this_balance, val_expr);
+      convert_expression_to_code(sub_assign);
+      then.move_to_operands(sub_assign);
+    }
+    else
+    {
+      // Library caller: debit the ENCLOSING CONTRACT's $balance via
+      // the pointer-dispatch helper.  Skip the underflow revert
+      // check — the helper is best-effort: it may silently
+      // under-approx if the enclosing contract isn't tracked (e.g.
+      // library-from-Harness before any contract method entered).
+      side_effect_expr_function_callt debit_call;
+      get_library_function_call_no_args(
+        "_ESBMC_enclosing_debit",
+        "c:@F@_ESBMC_enclosing_debit",
+        empty_typet(),
+        locationt(),
+        debit_call);
+      debit_call.arguments().push_back(val_expr);
+      convert_expression_to_code(debit_call);
+      then.move_to_operands(debit_call);
+    }
 
     // _ESBMC_Object_str.balance += _val;
     exprt target_balance = member_exprt(static_ins, "$balance", val_t);
@@ -2775,7 +3995,7 @@ bool solidity_convertert::get_call_value_definition(
     convert_expression_to_code(add_assign);
     then.move_to_operands(add_assign);
 
-    if (is_reentry_check)
+    if (is_reentry_check && !is_library)
     {
       exprt _mutex;
       get_contract_mutex_expr(cname, this_expr, _mutex);
@@ -2787,6 +4007,12 @@ bool solidity_convertert::get_call_value_definition(
       then.move_to_operands(assign_lock);
     }
 
+    // Low-level-call failure modeling: clear the revert flag, run the
+    // callee, then return `ok = !reverted` (below) instead of a constant
+    // `true`, so a reverting receive/fallback surfaces as `ok == false`.
+    symbol_exprt saved_revert;
+    emit_call_revert_clear(then, saved_revert, locationt());
+
     // func_call, e.g. receive(&_ESBMC_Object_str)
     side_effect_expr_function_callt call;
     if (get_non_library_function_call(decl_ref, empty_json, call))
@@ -2795,7 +4021,7 @@ bool solidity_convertert::get_call_value_definition(
     convert_expression_to_code(call);
     then.move_to_operands(call);
 
-    if (is_reentry_check)
+    if (is_reentry_check && !is_library)
     {
       exprt _mutex;
       get_contract_mutex_expr(cname, this_expr, _mutex);
@@ -2821,19 +4047,70 @@ bool solidity_convertert::get_call_value_definition(
     convert_expression_to_code(assign_sender_restore);
     then.move_to_operands(assign_sender_restore);
 
-    // return true;
-    code_returnt ret_true;
-    ret_true.return_value() = true_exprt();
-    then.move_to_operands(ret_true);
+    // Tracked-target match: the target's receive/fallback was invoked.
+    // Return `ok = !reverted` so a reverting callee is observable as a
+    // failed call (gas exhaustion is still not modeled).  On revert, undo
+    // the value transfer the EVM rolls back: the callee's `*this = save`
+    // only restores the target's post-credit snapshot, so the caller's
+    // debit and the target's credit both survive a naive return — leaving
+    // `(ok==false ∧ balance moved)`, a state real EVM never reaches.
+    code_blockt value_rollback;
+    const exprt *vr = nullptr;
+    if (!is_library)
+    {
+      // this.$balance += _val;  (undo the debit)
+      exprt add_back = side_effect_exprt("assign+", val_t);
+      add_back.copy_to_operands(this_balance, val_expr);
+      convert_expression_to_code(add_back);
+      value_rollback.move_to_operands(add_back);
+
+      // _ESBMC_Object_str.$balance -= _val;  (undo the credit)
+      exprt tgt_bal = member_exprt(static_ins, "$balance", val_t);
+      exprt sub_back = side_effect_exprt("assign-", val_t);
+      sub_back.copy_to_operands(tgt_bal, val_expr);
+      convert_expression_to_code(sub_back);
+      value_rollback.move_to_operands(sub_back);
+      vr = &value_rollback;
+    }
+    emit_call_revert_return(then, saved_revert, vr, locationt());
 
     codet if_expr("ifthenelse");
     if_expr.copy_to_operands(_equal, then);
     func_body.move_to_operands(if_expr);
   }
-  // add "Return false;" in the end
-  code_returnt return_expr;
-  return_expr.return_value() = false_exprt();
-  func_body.move_to_operands(return_expr);
+
+  if (is_library)
+  {
+    // Library fallthrough: address matched no tracked contract.  Credit
+    // the EOA-balance map so a subsequent `recipient.balance` read under
+    // `--bound` still observes the transfer (matches the EOA tracking
+    // from transfer/send documented in CLAUDE.md "EOA Balance Modeling").
+    side_effect_expr_function_callt eoa_credit;
+    get_library_function_call_no_args(
+      "_ESBMC_eoa_credit",
+      "c:@F@_ESBMC_eoa_credit",
+      empty_typet(),
+      locationt(),
+      eoa_credit);
+    eoa_credit.arguments().push_back(addr_expr);
+    eoa_credit.arguments().push_back(val_expr);
+    convert_expression_to_code(eoa_credit);
+    func_body.move_to_operands(eoa_credit);
+
+    code_returnt return_nondet;
+    side_effect_expr_function_callt nondet_call;
+    get_library_function_call_no_args(
+      "nondet_bool", "c:@F@nondet_bool", bool_t, locationt(), nondet_call);
+    return_nondet.return_value() = nondet_call;
+    func_body.move_to_operands(return_nondet);
+  }
+  else
+  {
+    // add "Return false;" in the end
+    code_returnt return_expr;
+    return_expr.return_value() = false_exprt();
+    func_body.move_to_operands(return_expr);
+  }
 
   added_symbol.set_value(migrate_expr(func_body));
   new_expr = symbol_expr(added_symbol);
@@ -2842,7 +4119,8 @@ bool solidity_convertert::get_call_value_definition(
 
 bool solidity_convertert::get_transfer_definition(
   const std::string &cname,
-  exprt &new_expr)
+  exprt &new_expr,
+  bool is_library)
 {
   std::string call_name = "transfer";
   std::string call_id = "sol:@C@" + cname + "@F@$transfer#0";
@@ -2886,6 +4164,15 @@ bool solidity_convertert::get_transfer_definition(
 
   added_symbol.set_type(migrate_type(t));
 
+  // Library mode adapts the body in-place — see the companion comment
+  // in `get_call_value_definition`.  Summary: the per-target dispatch
+  // + target-balance credit + receive/fallback stay; the caller-side
+  // debit (this.$balance -=), the underflow revert check, the reentry
+  // mutex, and the msg_sender swap to this.$address are omitted (no
+  // `this` balance slot in library scope; msg_sender swaps to NONDET
+  // instead).  The fallback EOA path keeps `_ESBMC_eoa_credit` and
+  // omits the sender-side debit.
+
   code_blockt func_body;
   exprt addr_expr = symbol_expr(addr_added_symbol);
   exprt val_expr = symbol_expr(val_added_symbol);
@@ -2902,8 +4189,13 @@ bool solidity_convertert::get_transfer_definition(
   exprt msg_value = symbol_expr(msg_value_sym);
   symbolt this_sym = *context.find_symbol(call_id + "#this");
   exprt this_expr = symbol_expr(this_sym);
-  exprt this_address = member_exprt(this_expr, "$address", addrp_t);
-  exprt this_balance = member_exprt(this_expr, "$balance", val_t);
+  exprt this_address;
+  exprt this_balance;
+  if (!is_library)
+  {
+    this_address = member_exprt(this_expr, "$address", addrp_t);
+    this_balance = member_exprt(this_expr, "$balance", val_t);
+  }
 
   // uint256_t old_value = msg_value;
   symbolt old_value;
@@ -2972,42 +4264,71 @@ bool solidity_convertert::get_transfer_definition(
     convert_expression_to_code(assign_val);
     then.move_to_operands(assign_val);
 
-    // msg_sender = this.$address;
+    // msg_sender swap: contracts use this.$address; libraries use
+    // the ambient _ESBMC_enclosing_contract_address (see
+    // get_call_value_definition for rationale).
+    exprt new_sender;
+    if (is_library)
+    {
+      new_sender = symbol_expr(
+        *context.find_symbol("c:@_ESBMC_enclosing_contract_address"));
+    }
+    else
+    {
+      new_sender = reentrant_msg_sender(cname, this_address);
+    }
     exprt assign_sender = side_effect_exprt("assign", addrp_t);
-    assign_sender.copy_to_operands(msg_sender, this_address);
+    assign_sender.copy_to_operands(msg_sender, new_sender);
     convert_expression_to_code(assign_sender);
     then.move_to_operands(assign_sender);
 
-    // Real Solidity transfer() reverts on insufficient balance (it is a
-    // void-returning function in the language; returning `false` here
-    // would let callers keep executing past a revert and observe a
-    // partially updated state). Model the revert as __ESBMC_assume(false)
-    // so the infeasible path is pruned at the SMT level.
-    // if(this.balance < val) __ESBMC_assume(false);
+    if (!is_library)
     {
-      exprt less_than = exprt("<", bool_t);
-      less_than.copy_to_operands(this_balance, val_expr);
-      codet cmp_less_than("ifthenelse");
+      // Real Solidity transfer() reverts on insufficient balance (it is a
+      // void-returning function in the language; returning `false` here
+      // would let callers keep executing past a revert and observe a
+      // partially updated state). Model the revert as __ESBMC_assume(false)
+      // so the infeasible path is pruned at the SMT level.
+      // if(this.balance < val) __ESBMC_assume(false);
+      {
+        exprt less_than = exprt("<", bool_t);
+        less_than.copy_to_operands(this_balance, val_expr);
+        codet cmp_less_than("ifthenelse");
 
-      side_effect_expr_function_callt assume_call;
+        side_effect_expr_function_callt assume_call;
+        get_library_function_call_no_args(
+          "__ESBMC_assume",
+          "c:@F@__ESBMC_assume",
+          empty_typet(),
+          locationt(),
+          assume_call);
+        assume_call.arguments().push_back(false_exprt());
+        convert_expression_to_code(assume_call);
+
+        cmp_less_than.copy_to_operands(less_than, assume_call);
+        then.move_to_operands(cmp_less_than);
+      }
+
+      // this.balance -= _val;
+      exprt sub_assign = side_effect_exprt("assign-", val_t);
+      sub_assign.copy_to_operands(this_balance, val_expr);
+      convert_expression_to_code(sub_assign);
+      then.move_to_operands(sub_assign);
+    }
+    else
+    {
+      // Library caller: debit the enclosing contract's $balance.
+      side_effect_expr_function_callt debit_call;
       get_library_function_call_no_args(
-        "__ESBMC_assume",
-        "c:@F@__ESBMC_assume",
+        "_ESBMC_enclosing_debit",
+        "c:@F@_ESBMC_enclosing_debit",
         empty_typet(),
         locationt(),
-        assume_call);
-      assume_call.arguments().push_back(false_exprt());
-      convert_expression_to_code(assume_call);
-
-      cmp_less_than.copy_to_operands(less_than, assume_call);
-      then.move_to_operands(cmp_less_than);
+        debit_call);
+      debit_call.arguments().push_back(val_expr);
+      convert_expression_to_code(debit_call);
+      then.move_to_operands(debit_call);
     }
-
-    // this.balance -= _val;
-    exprt sub_assign = side_effect_exprt("assign-", val_t);
-    sub_assign.copy_to_operands(this_balance, val_expr);
-    convert_expression_to_code(sub_assign);
-    then.move_to_operands(sub_assign);
 
     // _ESBMC_Object_str.balance += _val;
     exprt target_balance = member_exprt(static_ins, "$balance", val_t);
@@ -3019,7 +4340,7 @@ bool solidity_convertert::get_transfer_definition(
     // Only call receive/fallback if the contract has one
     if (has_payable_callback)
     {
-      if (is_reentry_check)
+      if (is_reentry_check && !is_library)
       {
         exprt _mutex;
         get_contract_mutex_expr(cname, this_expr, _mutex);
@@ -3041,7 +4362,7 @@ bool solidity_convertert::get_transfer_definition(
       convert_expression_to_code(call);
       then.move_to_operands(call);
 
-      if (is_reentry_check)
+      if (is_reentry_check && !is_library)
       {
         exprt _mutex;
         get_contract_mutex_expr(cname, this_expr, _mutex);
@@ -3077,10 +4398,85 @@ bool solidity_convertert::get_transfer_definition(
     if_expr.copy_to_operands(_equal, then);
     func_body.move_to_operands(if_expr);
   }
-  // add "Return false;" in the end
-  code_returnt return_expr;
-  return_expr.return_value() = false_exprt();
-  func_body.move_to_operands(return_expr);
+
+  // EOA / unknown-recipient fallback.  Real EVM `transfer(addr, val)`
+  // moves `val` out of the sender regardless of whether the recipient
+  // is a tracked contract, an EOA, or an unknown address.  Deduct from
+  // sender (contracts only; libraries have no owned balance), then
+  // credit the recipient's slot in the global EOA balance map
+  // (`_ESBMC_eoa_credit`) so a subsequent `addr.balance` read sees
+  // the new value.  This is what unlocks order-sensitive properties on
+  // recipient balances (e.g. SolidiFI TOD-Balance pattern A).
+  //
+  // Guard against uint256 underflow on `this.$balance -= _val`: real
+  // EVM transfers REVERT when the sender's balance is insufficient.
+  // Without this guard the deduct wraps to a near-2^256 value, letting
+  // downstream `address(this).balance` reads observe an enormous balance
+  // that real EVM never produces — breaks plain debit invariants like
+  // `balance_after <= balance_before` and two-Vault conservation
+  // (regression-locked by `transfer_standalone_partial_state_unobservable_pass`
+  // and `transfer_standalone_balance_invariant_pass`, 2026-04-30).
+  // Note that the multi-instance dispatch above matches only the static
+  // `_ESBMC_Object_<C>` per contract type; new-allocated instances of the
+  // same type fall through to this EOA branch even when the recipient is
+  // technically a tracked contract, making this guard load-bearing for
+  // ANY transfer involving non-static instances.
+  {
+    if (!is_library)
+    {
+      // __ESBMC_assume(this->$balance >= _val);
+      side_effect_expr_function_callt assume_call;
+      get_library_function_call_no_args(
+        "__ESBMC_assume",
+        "c:@F@__ESBMC_assume",
+        empty_typet(),
+        locationt(),
+        assume_call);
+      exprt geq = exprt(">=", bool_t);
+      geq.copy_to_operands(this_balance, val_expr);
+      assume_call.arguments().push_back(geq);
+      convert_expression_to_code(assume_call);
+      func_body.move_to_operands(assume_call);
+
+      // this->$balance -= _val;
+      exprt sub_assign = side_effect_exprt("assign-", val_t);
+      sub_assign.copy_to_operands(this_balance, val_expr);
+      convert_expression_to_code(sub_assign);
+      func_body.move_to_operands(sub_assign);
+    }
+    else
+    {
+      // Library caller: debit enclosing contract's $balance.
+      side_effect_expr_function_callt debit_call;
+      get_library_function_call_no_args(
+        "_ESBMC_enclosing_debit",
+        "c:@F@_ESBMC_enclosing_debit",
+        empty_typet(),
+        locationt(),
+        debit_call);
+      debit_call.arguments().push_back(val_expr);
+      convert_expression_to_code(debit_call);
+      func_body.move_to_operands(debit_call);
+    }
+
+    // _ESBMC_eoa_credit(_addr, _val);
+    side_effect_expr_function_callt eoa_credit;
+    get_library_function_call_no_args(
+      "_ESBMC_eoa_credit",
+      "c:@F@_ESBMC_eoa_credit",
+      empty_typet(),
+      locationt(),
+      eoa_credit);
+    eoa_credit.arguments().push_back(addr_expr);
+    eoa_credit.arguments().push_back(val_expr);
+    convert_expression_to_code(eoa_credit);
+    func_body.move_to_operands(eoa_credit);
+
+    // return true;
+    code_returnt return_expr;
+    return_expr.return_value() = true_exprt();
+    func_body.move_to_operands(return_expr);
+  }
 
   added_symbol.set_value(migrate_expr(func_body));
   new_expr = symbol_expr(added_symbol);
@@ -3089,7 +4485,8 @@ bool solidity_convertert::get_transfer_definition(
 
 bool solidity_convertert::get_send_definition(
   const std::string &cname,
-  exprt &new_expr)
+  exprt &new_expr,
+  bool is_library)
 {
   std::string call_name = "send";
   std::string call_id = "sol:@C@" + cname + "@F@$send#0";
@@ -3134,6 +4531,14 @@ bool solidity_convertert::get_send_definition(
 
   added_symbol.set_type(migrate_type(t));
 
+  // Library mode: see `get_transfer_definition` / `get_call_value_definition`
+  // — caller-side debit + mutex + sender swap to this.$address are
+  // skipped; credit side + receive/fallback dispatch kept; returns
+  // nondet bool on tracked-target success (send is specced to return
+  // false on failure, and library-scope reverts are opaque to the
+  // caller).  EOA fallback credits the global EOA map and returns
+  // nondet bool, matching send's failure-observable semantics.
+
   code_blockt func_body;
   exprt addr_expr = symbol_expr(addr_added_symbol);
   exprt val_expr = symbol_expr(val_added_symbol);
@@ -3150,8 +4555,13 @@ bool solidity_convertert::get_send_definition(
   exprt msg_value = symbol_expr(msg_value_sym);
   symbolt this_sym = *context.find_symbol(call_id + "#this");
   exprt this_expr = symbol_expr(this_sym);
-  exprt this_address = member_exprt(this_expr, "$address", addr_t);
-  exprt this_balance = member_exprt(this_expr, "$balance", val_t);
+  exprt this_address;
+  exprt this_balance;
+  if (!is_library)
+  {
+    this_address = member_exprt(this_expr, "$address", addr_t);
+    this_balance = member_exprt(this_expr, "$balance", val_t);
+  }
 
   // uint256_t old_value = msg_value;
   symbolt old_value;
@@ -3218,28 +4628,56 @@ bool solidity_convertert::get_send_definition(
     convert_expression_to_code(assign_val);
     then.move_to_operands(assign_val);
 
-    // msg_sender = this.$address;
+    // msg_sender swap: contracts use this.$address; libraries use
+    // the ambient _ESBMC_enclosing_contract_address.
+    exprt new_sender;
+    if (is_library)
+    {
+      new_sender = symbol_expr(
+        *context.find_symbol("c:@_ESBMC_enclosing_contract_address"));
+    }
+    else
+    {
+      new_sender = reentrant_msg_sender(cname, this_address);
+    }
     exprt assign_sender = side_effect_exprt("assign", addr_t);
-    assign_sender.copy_to_operands(msg_sender, this_address);
+    assign_sender.copy_to_operands(msg_sender, new_sender);
     convert_expression_to_code(assign_sender);
     then.move_to_operands(assign_sender);
 
-    // if(this.balance < val) return false;
-    exprt less_than = exprt("<", val_expr.type());
-    less_than.copy_to_operands(this_balance, val_expr);
-    //! "ifthenelse" has to be declared as codet, not exprt and use
-    //! convert_expr_to_code
-    codet cmp_less_than("ifthenelse");
-    code_returnt ret_false;
-    ret_false.return_value() = false_exprt();
-    cmp_less_than.copy_to_operands(less_than, ret_false);
-    then.move_to_operands(cmp_less_than);
+    if (!is_library)
+    {
+      // if(this.balance < val) return false;
+      exprt less_than = exprt("<", val_expr.type());
+      less_than.copy_to_operands(this_balance, val_expr);
+      //! "ifthenelse" has to be declared as codet, not exprt and use
+      //! convert_expr_to_code
+      codet cmp_less_than("ifthenelse");
+      code_returnt ret_false;
+      ret_false.return_value() = false_exprt();
+      cmp_less_than.copy_to_operands(less_than, ret_false);
+      then.move_to_operands(cmp_less_than);
 
-    // this.balance -= _val;
-    exprt sub_assign = side_effect_exprt("assign-", val_t);
-    sub_assign.copy_to_operands(this_balance, val_expr);
-    convert_expression_to_code(sub_assign);
-    then.move_to_operands(sub_assign);
+      // this.balance -= _val;
+      exprt sub_assign = side_effect_exprt("assign-", val_t);
+      sub_assign.copy_to_operands(this_balance, val_expr);
+      convert_expression_to_code(sub_assign);
+      then.move_to_operands(sub_assign);
+    }
+    else
+    {
+      // Library caller: debit enclosing contract's $balance.
+      side_effect_expr_function_callt debit_call;
+      get_library_function_call_no_args(
+        "_ESBMC_enclosing_debit",
+        "c:@F@_ESBMC_enclosing_debit",
+        empty_typet(),
+        locationt(),
+        debit_call);
+      debit_call.arguments().push_back(val_expr);
+      convert_expression_to_code(debit_call);
+      then.move_to_operands(debit_call);
+    }
 
     // _ESBMC_Object_str.balance += _val;
     exprt target_balance = member_exprt(static_ins, "$balance", val_t);
@@ -3248,10 +4686,14 @@ bool solidity_convertert::get_send_definition(
     convert_expression_to_code(add_assign);
     then.move_to_operands(add_assign);
 
-    // Only call receive/fallback if the contract has one
+    // Only call receive/fallback if the contract has one.  When it does,
+    // model call failure as `ok = !reverted`; without a callback there is
+    // no body that can revert, so the success path stays deterministic.
+    symbol_exprt saved_revert;
+    bool wrapped_revert = false;
     if (has_payable_callback)
     {
-      if (is_reentry_check)
+      if (is_reentry_check && !is_library)
       {
         exprt _mutex;
         get_contract_mutex_expr(cname, this_expr, _mutex);
@@ -3263,6 +4705,9 @@ bool solidity_convertert::get_send_definition(
         then.move_to_operands(assign_lock);
       }
 
+      emit_call_revert_clear(then, saved_revert, locationt());
+      wrapped_revert = true;
+
       // func_call, e.g. receive(&_ESBMC_Object_str)
       side_effect_expr_function_callt call;
       if (get_non_library_function_call(decl_ref, empty_json, call))
@@ -3271,7 +4716,7 @@ bool solidity_convertert::get_send_definition(
       convert_expression_to_code(call);
       then.move_to_operands(call);
 
-      if (is_reentry_check)
+      if (is_reentry_check && !is_library)
       {
         exprt _mutex;
         get_contract_mutex_expr(cname, this_expr, _mutex);
@@ -3298,20 +4743,93 @@ bool solidity_convertert::get_send_definition(
     convert_expression_to_code(assign_sender_restore);
     then.move_to_operands(assign_sender_restore);
 
-    // return true;
-    code_returnt ret_true;
-    ret_true.return_value() = true_exprt();
-    then.move_to_operands(ret_true);
+    // Tracked-target match: receive/fallback was invoked on a known
+    // contract.  Return `ok = !reverted` when a callback ran (a reverting
+    // receive/fallback makes `send` return false), undoing the value
+    // transfer the EVM rolls back; deterministic `true` only when the
+    // target has no callback that could revert.
+    if (wrapped_revert)
+    {
+      code_blockt value_rollback;
+      const exprt *vr = nullptr;
+      if (!is_library)
+      {
+        // this.$balance += _val;  (undo the debit)
+        exprt add_back = side_effect_exprt("assign+", val_t);
+        add_back.copy_to_operands(this_balance, val_expr);
+        convert_expression_to_code(add_back);
+        value_rollback.move_to_operands(add_back);
+
+        // _ESBMC_Object_str.$balance -= _val;  (undo the credit)
+        exprt tgt_bal = member_exprt(static_ins, "$balance", val_t);
+        exprt sub_back = side_effect_exprt("assign-", val_t);
+        sub_back.copy_to_operands(tgt_bal, val_expr);
+        convert_expression_to_code(sub_back);
+        value_rollback.move_to_operands(sub_back);
+        vr = &value_rollback;
+      }
+      emit_call_revert_return(then, saved_revert, vr, locationt());
+    }
+    else
+    {
+      code_returnt ret_outcome;
+      ret_outcome.return_value() = true_exprt();
+      then.move_to_operands(ret_outcome);
+    }
 
     codet if_expr("ifthenelse");
     if_expr.copy_to_operands(_equal, then);
     func_body.move_to_operands(if_expr);
   }
 
-  // add "return false;" in the end
-  code_returnt return_expr;
-  return_expr.return_value() = false_exprt();
-  func_body.move_to_operands(return_expr);
+  // EOA / unknown-recipient fallback for `send`.  Same shape as
+  // transfer: deduct from sender (contracts only), credit recipient
+  // via the global EOA balance map.  See note in
+  // get_transfer_definition.  send's bool return is `true` on EOA
+  // success path for contracts; library mirrors — the non-library
+  // model already ignores EVM-level revert reasons (out-of-gas,
+  // cold-access), so library should too.
+  {
+    if (!is_library)
+    {
+      // this->$balance -= _val;
+      exprt sub_assign = side_effect_exprt("assign-", val_t);
+      sub_assign.copy_to_operands(this_balance, val_expr);
+      convert_expression_to_code(sub_assign);
+      func_body.move_to_operands(sub_assign);
+    }
+    else
+    {
+      // Library caller: debit enclosing contract's $balance.
+      side_effect_expr_function_callt debit_call;
+      get_library_function_call_no_args(
+        "_ESBMC_enclosing_debit",
+        "c:@F@_ESBMC_enclosing_debit",
+        empty_typet(),
+        locationt(),
+        debit_call);
+      debit_call.arguments().push_back(val_expr);
+      convert_expression_to_code(debit_call);
+      func_body.move_to_operands(debit_call);
+    }
+
+    // _ESBMC_eoa_credit(_addr, _val);
+    side_effect_expr_function_callt eoa_credit;
+    get_library_function_call_no_args(
+      "_ESBMC_eoa_credit",
+      "c:@F@_ESBMC_eoa_credit",
+      empty_typet(),
+      locationt(),
+      eoa_credit);
+    eoa_credit.arguments().push_back(addr_expr);
+    eoa_credit.arguments().push_back(val_expr);
+    convert_expression_to_code(eoa_credit);
+    func_body.move_to_operands(eoa_credit);
+
+    code_returnt ret_outcome;
+    ret_outcome.return_value() = true_exprt();
+    func_body.move_to_operands(ret_outcome);
+  }
 
   added_symbol.set_value(migrate_expr(func_body));
   new_expr = symbol_expr(added_symbol);
@@ -3325,7 +4843,8 @@ bool solidity_convertert::get_send_definition(
 // at runtime but are not checked by ESBMC).
 bool solidity_convertert::get_staticcall_definition(
   const std::string &cname,
-  exprt &new_expr)
+  exprt &new_expr,
+  bool is_library)
 {
   std::string call_name = "staticcall";
   std::string call_id = "sol:@C@" + cname + "@F@$staticcall#0";
@@ -3364,6 +4883,74 @@ bool solidity_convertert::get_staticcall_definition(
   func_body.move_to_operands(label);
 
   exprt addr_expr = symbol_expr(addr_added_symbol);
+
+  // Library mode: keep the static-call semantics (snapshot target +
+  // Nondet_Extcall + restore) but drop the msg.sender swap and the
+  // this-owning snapshot bookkeeping.  The dispatch still fires so
+  // read effects propagate to the caller; writes observed from the
+  // target are rolled back, matching static-call semantics.
+  if (is_library)
+  {
+    for (auto str : contractNamesList)
+    {
+      if (nonContractNamesList.count(str) != 0 && str != cname)
+        continue;
+      if (!has_callable_func(str))
+        continue;
+
+      exprt static_ins;
+      get_static_contract_instance_ref(str, static_ins);
+
+      code_blockt then;
+
+      symbolt snap_sym;
+      get_default_symbol(
+        snap_sym,
+        debug_modulename,
+        static_ins.type(),
+        "sc_snap",
+        "sol:@C@" + cname + "@F@staticcall@sc_snap_lib_" + str + "#" +
+          std::to_string(aux_counter++),
+        locationt());
+      symbolt &added_snap = *move_symbol_to_context(snap_sym);
+      added_snap.set_value(static_ins);
+      code_declt snap_decl(symbol_expr(added_snap));
+      snap_decl.operands().push_back(static_ins);
+      then.move_to_operands(snap_decl);
+
+      symbol_exprt saved_revert;
+      emit_call_revert_clear(then, saved_revert, locationt());
+
+      code_function_callt call;
+      if (get_unbound_funccall(str, call))
+        return true;
+      then.move_to_operands(call);
+
+      exprt assign_restore = side_effect_exprt("assign", static_ins.type());
+      assign_restore.copy_to_operands(static_ins, symbol_expr(added_snap));
+      convert_expression_to_code(assign_restore);
+      then.move_to_operands(assign_restore);
+
+      // return !reverted;  (explicit callee revert fails the staticcall)
+      emit_call_revert_return(then, saved_revert, nullptr, locationt());
+
+      exprt mem_addr = member_exprt(static_ins, "$address", addr_t);
+      exprt _equal = exprt("=", bool_t);
+      _equal.operands().push_back(addr_expr);
+      _equal.operands().push_back(mem_addr);
+      codet if_expr("ifthenelse");
+      if_expr.copy_to_operands(_equal, then);
+      func_body.move_to_operands(if_expr);
+    }
+
+    code_returnt return_expr;
+    return_expr.return_value() = false_exprt();
+    func_body.move_to_operands(return_expr);
+    added_symbol.set_value(func_body);
+    new_expr = symbol_expr(added_symbol);
+    return false;
+  }
+
   const symbolt &msg_sender_sym = *context.find_symbol("c:@msg_sender");
   exprt msg_sender = symbol_expr(msg_sender_sym);
   symbolt this_sym = *context.find_symbol(call_id + "#this");
@@ -3424,7 +5011,8 @@ bool solidity_convertert::get_staticcall_definition(
 
     // msg_sender = this.address;
     exprt assign_sender = side_effect_exprt("assign", addr_t);
-    assign_sender.copy_to_operands(msg_sender, this_address);
+    assign_sender.copy_to_operands(
+      msg_sender, reentrant_msg_sender(cname, this_address));
     convert_expression_to_code(assign_sender);
     then.move_to_operands(assign_sender);
 
@@ -3434,6 +5022,10 @@ bool solidity_convertert::get_staticcall_definition(
     // snapshot/restore below guarantees the target's state observed by the
     // caller is identical before and after the dispatch. Leaving the mutex
     // alone avoids spurious reentrancy reports for view-only interactions.
+
+    // Low-level-call failure modeling: clear, run callee, return !reverted.
+    symbol_exprt saved_revert;
+    emit_call_revert_clear(then, saved_revert, locationt());
 
     // _ESBMC_Nondet_Extcall_x();
     code_function_callt call;
@@ -3454,10 +5046,11 @@ bool solidity_convertert::get_staticcall_definition(
     convert_expression_to_code(assign_sender_restore);
     then.move_to_operands(assign_sender_restore);
 
-    // return true;
-    code_returnt ret_true;
-    ret_true.return_value() = true_exprt();
-    then.move_to_operands(ret_true);
+    // return !reverted;  (an explicit revert in the callee fails the
+    // staticcall; staticcall moves no value -> no rollback.  The implicit
+    // "state-write under staticcall reverts" case stays modeled by the
+    // snapshot restore above.)
+    emit_call_revert_return(then, saved_revert, nullptr, locationt());
 
     // _addr == _ESBMC_Object_str.$address
     exprt mem_addr = member_exprt(static_ins, "$address", addr_t);
@@ -3488,7 +5081,8 @@ bool solidity_convertert::get_staticcall_definition(
 // reentrancy and control flow but not storage layout sharing.
 bool solidity_convertert::get_delegatecall_definition(
   const std::string &cname,
-  exprt &new_expr)
+  exprt &new_expr,
+  bool is_library)
 {
   std::string call_name = "delegatecall";
   std::string call_id = "sol:@C@" + cname + "@F@$delegatecall#0";
@@ -3528,6 +5122,13 @@ bool solidity_convertert::get_delegatecall_definition(
   label.code() = code_skipt();
   func_body.move_to_operands(label);
 
+  // Delegatecall preserves msg.sender / msg.value (the target executes
+  // in the caller's context).  In library scope we keep the per-target
+  // dispatch — the target's external functions still fire and can
+  // observe the ambient context — but skip the reentry-mutex toggles
+  // (no `this` mutex to own) and return a nondet bool (library-scope
+  // EVM reverts are opaque to the caller).
+
   exprt addr_expr = symbol_expr(addr_added_symbol);
 
   for (auto str : contractNamesList)
@@ -3543,7 +5144,7 @@ bool solidity_convertert::get_delegatecall_definition(
     symbolt this_sym = *context.find_symbol(call_id + "#this");
     exprt this_expr = symbol_expr(this_sym);
 
-    if (is_reentry_check)
+    if (is_reentry_check && !is_library)
     {
       exprt _mutex;
       get_contract_mutex_expr(cname, this_expr, _mutex);
@@ -3553,13 +5154,17 @@ bool solidity_convertert::get_delegatecall_definition(
       then.move_to_operands(assign_lock);
     }
 
+    // Low-level-call failure modeling: clear, run callee, return !reverted.
+    symbol_exprt saved_revert;
+    emit_call_revert_clear(then, saved_revert, locationt());
+
     // _ESBMC_Nondet_Extcall_x();
     code_function_callt call;
     if (get_unbound_funccall(str, call))
       return true;
     then.move_to_operands(call);
 
-    if (is_reentry_check)
+    if (is_reentry_check && !is_library)
     {
       exprt _mutex;
       get_contract_mutex_expr(cname, this_expr, _mutex);
@@ -3569,10 +5174,12 @@ bool solidity_convertert::get_delegatecall_definition(
       then.move_to_operands(assign_unlock);
     }
 
-    // return true;
-    code_returnt ret_true;
-    ret_true.return_value() = true_exprt();
-    then.move_to_operands(ret_true);
+    // Tracked-target match: the target's nondet-extcall fired.  Return
+    // `ok = !reverted` so a reverting callee surfaces as a failed
+    // delegatecall (gas not modeled).  delegatecall moves no value, so
+    // there is no transfer to roll back.  Library-scope delegatecall to
+    // an unknown address still falls through to `return false` below.
+    emit_call_revert_return(then, saved_revert, nullptr, locationt());
 
     // _addr == _ESBMC_Object_str.$address
     exprt static_ins;

@@ -4,6 +4,7 @@
 #include <unordered_set>
 #include <goto-symex/scheduler/execution_state.h>
 #include <goto-symex/engine/goto_symex.h>
+#include <goto-programs/goto_k_induction.h>
 #include <langapi/language_util.h>
 #include <util/arith/arith_tools.h>
 #include <util/expr/base_type.h>
@@ -141,11 +142,38 @@ bool recursion_has_no_base_case(
 }
 } // namespace
 
+bool goto_symext::recursion_through_dispatch(const irep_idt &identifier) const
+{
+  const auto latest = std::find_if(
+    cur_state->call_stack.rbegin(),
+    cur_state->call_stack.rend(),
+    [&identifier](const goto_symex_statet::framet &f) {
+      return f.function_identifier == identifier;
+    });
+  return latest != cur_state->call_stack.rend() &&
+         std::any_of(
+           cur_state->call_stack.rbegin(),
+           std::next(latest),
+           [this](const goto_symex_statet::framet &f) {
+             return is_solidity_dispatcher(f.function_identifier) &&
+                    goto_functions.function_map.count(
+                      dispatch_havoc_id(f.function_identifier));
+           });
+}
+
 bool goto_symext::get_unwind_recursion(
   const irep_idt &identifier,
   BigInt unwind)
 {
   BigInt this_loop_max_unwind = max_unwind;
+  const bool through_dispatch =
+    unwind != 0 && recursion_through_dispatch(identifier);
+
+  // In the inductive step a recursion through a dispatch ends at the
+  // dispatcher's bound, where symex runs the dispatch havoc instead. Cutting
+  // another function of the cycle off first would drop its paths.
+  if (inductive_step && through_dispatch && !is_solidity_dispatcher(identifier))
+    this_loop_max_unwind = 0;
 
   if (unwind != 0)
   {
@@ -154,7 +182,7 @@ bool goto_symext::get_unwind_recursion(
 
     if (
       (k_induction || inductive_step) &&
-      !options.get_bool_option("disable-inductive-step"))
+      !options.get_bool_option("disable-inductive-step") && !through_dispatch)
     {
       log_warning(
         "k-induction does not support recursion yet. Disabling inductive step");
@@ -377,10 +405,43 @@ void goto_symext::symex_function_call(const expr2tc &code)
 {
   const code_function_call2t &call = to_code_function_call2t(code);
 
-  if (is_symbol2t(call.function))
-    symex_function_call_code(code);
-  else
+  if (!is_symbol2t(call.function))
     symex_function_call_deref(code);
+  else if (!symex_dispatch_havoc(to_symbol2t(call.function).thename))
+    symex_function_call_code(code);
+}
+
+bool goto_symext::symex_dispatch_havoc(const irep_idt &identifier)
+{
+  if (!inductive_step)
+    return false;
+
+  // goto_k_induction put this havoc ahead of a dispatch. A dispatch under one
+  // to the same dispatcher starts from a state the outer dispatch's havoc
+  // already covers, so only the outermost runs it.
+  if (is_dispatch_havoc(identifier))
+  {
+    if (cur_state->function_unwind[dispatcher_of_havoc(identifier)] == 0)
+      return false;
+    cur_state->source.pc++;
+    return true;
+  }
+
+  // A dispatch past the bound runs the havoc of what it may write in its
+  // place: an unwinding assumption would drop the paths through it.
+  const irep_idt havoc = dispatch_havoc_id(identifier);
+  const BigInt &unwind = cur_state->function_unwind[identifier];
+  if (
+    !is_solidity_dispatcher(identifier) ||
+    !goto_functions.function_map.count(havoc) || max_unwind == 0 ||
+    unwind < max_unwind)
+    return false;
+  get_unwind_recursion(identifier, unwind);
+  symex_function_call_code(code_function_call2tc(
+    expr2tc(),
+    symbol2tc(goto_functions.function_map.at(havoc).type, havoc),
+    std::vector<expr2tc>{}));
+  return true;
 }
 
 /// Ackermannise rather than drop congruence outright: for every earlier

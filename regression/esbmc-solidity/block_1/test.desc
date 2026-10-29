@@ -1,4 +1,5 @@
 THOROUGH
 contract.solast
---sol contract.sol --contract Base --k-induction --overflow-check
+--sol contract.sol --contract Base --k-induction --overflow-check --div-by-zero-check
 ^VERIFICATION FAILED$
+division by zero

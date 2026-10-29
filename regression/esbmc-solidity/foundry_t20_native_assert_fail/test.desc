@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--sol contract.sol --contract CounterTest --focus-function test_bug --no-standard-checks --unwind 3 --no-unwinding-assertions
+^VERIFICATION FAILED$

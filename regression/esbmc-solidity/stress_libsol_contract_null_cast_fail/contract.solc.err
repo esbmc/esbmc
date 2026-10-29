@@ -1,0 +1,6 @@
+Warning: Comparison of variables of contract type is deprecated and scheduled for removal. Use an explicit cast to address type and compare the addresses instead.
+  --> stress_libsol_contract_null_cast_fail/contract.sol:16:16:
+   |
+16 |         assert(p != Pool(address(0)));
+   |                ^^^^^^^^^^^^^^^^^^^^^
+

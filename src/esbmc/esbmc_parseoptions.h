@@ -47,6 +47,9 @@ public:
 protected:
   virtual void get_command_line_options(optionst &options);
   virtual int do_bmc(bmct &bmc);
+  bool is_solidity_input() const;
+  void set_solidity_check_defaults(optionst &options) const;
+  void expand_no_standard_checks(optionst &options) const;
 
   virtual bool
   get_goto_program(optionst &options, goto_functionst &goto_functions);
@@ -109,7 +112,8 @@ protected:
   tvt is_base_case_violated(
     optionst &options,
     goto_functionst &goto_functions,
-    const uint64_t &k_step);
+    const uint64_t &k_step,
+    foundry_generator *foundry_gen = nullptr);
 
   tvt does_forward_condition_hold(
     optionst &options,

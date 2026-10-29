@@ -1,0 +1,6 @@
+CORE
+contract.solast
+--sol contract.sol --contract Leaf --branch-coverage --generate-foundry-testcase --no-assertions --unwind 3
+^Generated Foundry coverage test with 2 case\(s\)
+^Foundry: 2 deploy\(s\) with base-forwarded constructor args
+^COVERAGE ANALYSIS COMPLETE$

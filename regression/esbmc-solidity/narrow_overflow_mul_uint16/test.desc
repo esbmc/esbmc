@@ -1,0 +1,5 @@
+CORE
+contract.solast
+--sol contract.sol --unsigned-overflow-check --contract NarrowMul --solidity-max-tx 1
+^VERIFICATION FAILED$
+arithmetic overflow on mul

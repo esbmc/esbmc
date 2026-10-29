@@ -71,17 +71,36 @@ void clang_cpp_maint::adjust_init(code_assignt &assignment, codet &adjusted)
     //
     // Use code_assignt rather than code_declt: globals already have storage,
     // so a decl is dropped by goto-conversion and the zero-init would be lost.
-    namespacet ns(context);
-    exprt zero = gen_zero(get_complete_type(assignment.lhs().type(), ns), true);
-    if (zero.is_not_nil())
+    //
+    // Exception: Solidity peer-instance globals (`_ESBMC_Object_<C>`) get
+    // their state-var fields nondet'd by the Solidity dispatcher harness on
+    // entry, modelling the cross-call symbolic state of contract storage.
+    // Zero-initialising them here forces every contract-typed field to NULL
+    // BEFORE the harness loop runs, which makes assertions that compare
+    // such fields against peer-instance addresses (the lowering of
+    // `Contract(address(0))`) trivially hold. Skip the zero-init for these.
+    bool is_sol_peer_instance = false;
+    if (assignment.lhs().id() == "symbol")
     {
-      // Guard against gen_zero returning nil for unresolved/dependent types
-      // (e.g. a global of an incomplete type).  Skipping the zero-init in
-      // that case preserves prior behaviour rather than enqueuing a malformed
-      // ASSIGN.
-      code_assignt zero_init(assignment.lhs(), zero);
-      zero_init.location() = assignment.location();
-      adjusted.copy_to_operands(zero_init);
+      const irep_idt &lhs_id = assignment.lhs().identifier();
+      const std::string &s = id2string(lhs_id);
+      is_sol_peer_instance = s.find("_ESBMC_Object_") != std::string::npos;
+    }
+    namespacet ns(context);
+    if (!is_sol_peer_instance)
+    {
+      exprt zero =
+        gen_zero(get_complete_type(assignment.lhs().type(), ns), true);
+      if (zero.is_not_nil())
+      {
+        // Guard against gen_zero returning nil for unresolved/dependent types
+        // (e.g. a global of an incomplete type).  Skipping the zero-init in
+        // that case preserves prior behaviour rather than enqueuing a
+        // malformed ASSIGN.
+        code_assignt zero_init(assignment.lhs(), zero);
+        zero_init.location() = assignment.location();
+        adjusted.copy_to_operands(zero_init);
+      }
     }
 
     // Get rhs - this represents the constructor call

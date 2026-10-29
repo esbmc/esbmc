@@ -17,6 +17,7 @@
 #include <util/arith/mp_arith.h>
 #include <util/irep/std_expr.h>
 #include <util/message/message.h>
+#include <util/irep/std_types.h>
 #include <fstream>
 
 /*
@@ -63,9 +64,15 @@ void solidity_convertert::get_static_contract_instance_ref(
   new_expr.pretty_name(name);
 }
 
-void solidity_convertert::add_static_contract_instance(const std::string c_name)
+void solidity_convertert::add_static_contract_instance(
+  const std::string c_name,
+  bool run_ctor)
 {
-  log_debug("solidity", "\tAdd static instance of contract {}", c_name);
+  log_debug(
+    "solidity",
+    "\tAdd static instance of contract {}{}",
+    c_name,
+    run_ctor ? "" : " (not deployed: base of the --contract target)");
 
   std::string ctor_ins_name, ctor_ins_id;
   get_static_contract_instance_name(c_name, ctor_ins_name, ctor_ins_id);
@@ -142,6 +149,13 @@ void solidity_convertert::add_static_contract_instance(const std::string c_name)
     log_error("failed to construct a temporary object");
     abort();
   }
+
+  // The symbol's `value` is what clang_c_maint::static_lifetime_init turns
+  // into the `<C>(&_ESBMC_Object_<C>)` call at the top of __ESBMC_main.
+  // Leaving it nil registers the singleton (every `$call` ladder and the
+  // enclosing-debit helper still resolve it) without deploying it.
+  if (!run_ctor)
+    return;
 
   added_sym.set_value(ctor);
 }
@@ -254,10 +268,10 @@ void solidity_convertert::get_inherit_ctor_definition(
         node["nodes"].push_back(ctor_json);
     }
 
+    // 0.6.x emits `body: null` for unimplemented functions; treat as missing.
     if (
-      (*current_functionDecl).contains("body") ||
-      ((*current_functionDecl).contains("implemented") &&
-       (*current_functionDecl)["implemented"] == true))
+      (*current_functionDecl).contains("body") &&
+      !(*current_functionDecl)["body"].is_null())
     {
       log_debug(
         "solidity", "@@@ parsing function {}'s body", current_functionName);
@@ -347,7 +361,13 @@ void solidity_convertert::get_inherit_static_contract_instance(
   get_new_object(symbol_typet(prefix + c_name), this_object);
   call.arguments().push_back(this_object);
 
-  if (args_list.contains("arguments"))
+  // 0.6.x emits `arguments: null` for parent specifiers with no constructor
+  // arguments (e.g. `contract C is IFoo`); 0.8.x omits the field. Treat
+  // both as "no args" so we don't try to look up an interface's missing
+  // constructor.
+  if (
+    args_list.contains("arguments") && !args_list["arguments"].is_null() &&
+    !args_list["arguments"].empty())
   {
     // get param type
     auto &decl_ref = find_constructor_ref(c_name);
@@ -382,6 +402,26 @@ void solidity_convertert::get_inherit_static_contract_instance(
 
       call.arguments().push_back(single_arg);
       param = nullptr;
+    }
+  }
+  else
+  {
+    // Abstract/intermediate contract that inherits from a ctor-bearing base
+    // without supplying base-ctor args in its own header or modifier list.
+    // Example: `abstract contract G is ERC20, Ownable { constructor(X x) {} }`
+    // — ERC20's (name, symbol) are supplied by the concrete descendant, not
+    // by G. We still synthesise an `_ESBMC_aux_ERC20` copy helper for G so
+    // that field copy works, and that helper's call must match the callee's
+    // formal arity (this + N user params + aux bool). Pad with nondet
+    // placeholders via assign_param_nondet so symex's
+    // argument_assignments doesn't trip "function call: not enough
+    // arguments". The helper's value is only used to copy fields over, so
+    // exact argument values don't matter — only the shape does.
+    auto &decl_ref = find_constructor_ref(c_name);
+    if (!decl_ref.empty() && !decl_ref.is_null())
+    {
+      if (assign_param_nondet(decl_ref, call))
+        log_error("failed to pad nondet args for inherited ctor of {}", c_name);
     }
   }
 
@@ -454,7 +494,8 @@ bool solidity_convertert::get_high_level_call_wrapper(
   const std::string cname,
   const exprt &this_expr,
   exprt &front_block,
-  exprt &back_block)
+  exprt &back_block,
+  bool is_library)
 {
   std::string debug_modulename = get_modulename_from_path(absolute_path);
   exprt msg_sender = symbol_expr(*context.find_symbol("c:@msg_sender"));
@@ -474,9 +515,29 @@ bool solidity_convertert::get_high_level_call_wrapper(
   front_block.move_to_operands(old_sender_decl);
 
   // msg_sender = this.address;
-  exprt this_address = member_exprt(this_expr, "$address", addr_t);
+  //
+  // Libraries are inlined into the caller's context in real Solidity:
+  // when a library body performs an external call, msg.sender for
+  // the callee should be the ENCLOSING CONTRACT's address.  We can't
+  // reach the enclosing contract's `this` through the library's own
+  // `this` (Lib is a dummy singleton with no real $address), so we
+  // read it from the global `_ESBMC_enclosing_contract_address`
+  // ambient that every contract-method entry sets (see
+  // `get_function_definition` in solidity_convert_modifier.cpp).
+  // Contracts still use `this_expr->$address` directly — their own
+  // `this` IS the caller.
+  exprt new_sender_value;
+  if (is_library)
+  {
+    new_sender_value =
+      symbol_expr(*context.find_symbol("c:@_ESBMC_enclosing_contract_address"));
+  }
+  else
+  {
+    new_sender_value = member_exprt(this_expr, "$address", addr_t);
+  }
   exprt assign_sender = side_effect_exprt("assign", addr_t);
-  assign_sender.copy_to_operands(msg_sender, this_address);
+  assign_sender.copy_to_operands(msg_sender, new_sender_value);
   convert_expression_to_code(assign_sender);
   front_block.move_to_operands(assign_sender);
 
@@ -550,6 +611,101 @@ nlohmann::json solidity_convertert::reorder_arguments(
   return clean_expr;
 }
 
+// Emit `_sol_per_tx_reseed()` at the top of a dispatcher while-loop
+// iteration. Each iter == one EVM transaction with its own
+// msg.sender / msg.value / tx.* / block.*. Always fires — frozen-
+// sender behaviour was itself unsound (made inverted access-control
+// bugs unreachable by construction), so there is no opt-out.
+// The C symbol comes from src/c2goto/library/solidity/solidity_misc.c.
+long solidity_convertert::get_tx_bound()
+{
+  // Coverage and TOD modes manage their own exploration (k-step ladders,
+  // transaction-ordering enumeration) and need the full unbounded harness:
+  // a fixed tx bound distorts coverage counts and hides ordering races.
+  // --solidity-precise likewise opts back into the unbounded (sound) harness.
+  static const char *const unbounded_modes[] = {
+    "solidity-precise",
+    "tod-race-check",
+    "tod-balance-check",
+    "assertion-coverage",
+    "assertion-coverage-claims",
+    "branch-coverage",
+    "branch-coverage-claims",
+    "branch-function-coverage",
+    "branch-function-coverage-claims",
+    "condition-coverage",
+    "condition-coverage-claims",
+    "condition-coverage-rm",
+    "condition-coverage-claims-rm",
+    "k-path-coverage",
+    "k-path-coverage-claims"};
+
+  const std::string max_tx_opt = config.options.get_option("solidity-max-tx");
+  bool mode_forces_unbounded = false;
+  for (const char *opt : unbounded_modes)
+    if (!config.options.get_option(opt).empty())
+    {
+      mode_forces_unbounded = true;
+      break;
+    }
+
+  long bound;
+  if (!max_tx_opt.empty())
+    bound = std::stol(max_tx_opt); // explicit user choice always wins
+  else if (mode_forces_unbounded)
+    bound = 0; // unbounded
+  else
+    bound = 2; // bounded-by-default
+
+  if (bound > 0 && !tx_bound_warned)
+  {
+    log_warning(
+      "Solidity harness: transaction sequence bounded to {} tx (default). A "
+      "VERIFICATION SUCCESSFUL result is bounded -- it means no violation "
+      "within {} transaction(s), NOT an unbounded proof; bugs requiring more "
+      "transactions are not explored. Use --solidity-precise (or "
+      "--solidity-max-tx 0) for an unbounded proof.",
+      bound,
+      bound);
+    tx_bound_warned = true;
+  }
+  return bound;
+}
+
+void solidity_convertert::emit_tx_driver(codet &func_body, const codet &tx_body)
+{
+  const long bound = get_tx_bound();
+  if (bound <= 0)
+  {
+    // unbounded: while(nondet_bool) { tx_body }
+    side_effect_expr_function_callt cond_expr = nondet_bool_expr;
+    code_whilet code_while;
+    code_while.cond() = cond_expr;
+    code_while.body() = tx_body;
+    func_body.move_to_operands(code_while);
+  }
+  else
+    // bounded: deterministically emit the transaction body `bound` times.
+    for (long i = 0; i < bound; ++i)
+      func_body.copy_to_operands(tx_body);
+}
+
+void solidity_convertert::emit_per_tx_reseed_call(codet &out)
+{
+  const symbolt *reseed_sym = context.find_symbol("c:@F@_sol_per_tx_reseed");
+  if (reseed_sym == nullptr)
+  {
+    log_warning(
+      "_sol_per_tx_reseed not found in symbol table; per-tx ambient "
+      "reseed disabled. The Solidity C library may not be linked.");
+    return;
+  }
+  code_function_callt reseed_call;
+  reseed_call.location() = reseed_sym->location;
+  reseed_call.function() = symbol_expr(*reseed_sym);
+  out.move_to_operands(reseed_call);
+}
+
 /*
   perform multi-transaction verification
   the idea is to verify the assertions that must be held
@@ -589,12 +745,12 @@ bool solidity_convertert::multi_transaction_verification(
   log_debug(
     "Solidity", "@@@ performs transaction verification on contract {}", c_name);
 
-  // 0. initialize "sol_main" body and while-loop body
-  codet func_body, while_body;
+  // 0. initialize "sol_main" body and per-transaction body
+  codet func_body, tx_body;
   static_lifetime_init(context, func_body);
   func_body.make_block();
-  static_lifetime_init(context, while_body);
-  while_body.make_block();
+  static_lifetime_init(context, tx_body);
+  tx_body.make_block();
 
   // add __ESBMC_HIDE
   code_labelt label;
@@ -613,20 +769,32 @@ bool solidity_convertert::multi_transaction_verification(
     return true;
   }
 
-  // get sol harness function and move into the while body
+  // Per-tx ambient reseed: each dispatcher iter is a fresh EVM tx
+  // with its own msg.sender / msg.value / tx.* / block.* context.
+  // The constructor's `owner = msg.sender` already ran outside the
+  // while-loop (deployer-binding), so reseeding here properly
+  // distinguishes deployer identity from per-iter sender identities.
+  // Without this, contracts that compare msg.sender to a stored
+  // owner-like address see a frozen invariant `msg.sender == owner`
+  // and access-control bugs become unreachable (false negatives).
+  emit_per_tx_reseed_call(tx_body);
+
+  // get sol harness function and move into the per-transaction body
   code_function_callt func_call;
   if (get_unbound_funccall(c_name, func_call))
     return true;
-  while_body.move_to_operands(func_call);
 
-  // while-cond:
-  side_effect_expr_function_callt cond_expr = nondet_bool_expr;
+  tx_body.move_to_operands(func_call);
 
-  // while-loop statement:
-  code_whilet code_while;
-  code_while.cond() = cond_expr;
-  code_while.body() = while_body;
-  func_body.move_to_operands(code_while);
+  // Transaction-sequence driver (see --solidity-max-tx / --solidity-precise).
+  // Default: deterministically unroll to N=2 transactions so k-induction/BMC
+  // converges on the otherwise-unbounded harness loop; --solidity-max-tx 0 or
+  // --solidity-precise restores the unbounded while(nondet_bool) loop. A
+  // bounded harness is an under-approximation: SUCCESSFUL means "no violation
+  // within N tx", NOT an unbounded proof; FAILED stays sound. Each unrolled tx
+  // re-calls _sol_per_tx_reseed, so msg.sender/value/block.* are freshly
+  // havoc'd per transaction.
+  emit_tx_driver(func_body, tx_body);
 
   // construct _ESBMC_Main_Base
   symbolt new_symbol;

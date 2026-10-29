@@ -1,0 +1,4 @@
+KNOWNBUG
+contract.solast
+--sol contract.sol --contract C --branch-coverage-claims --k-induction --unlimited-k-steps --memlimit 8g --timeout 25 --quiet --no-assertions
+^Branch Coverage:

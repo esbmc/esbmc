@@ -1,0 +1,6 @@
+CORE
+contract.solast
+--sol contract.sol --contract Holder --branch-coverage --generate-foundry-testcase --no-assertions --unwind 3
+^Generated Foundry coverage test with 2 case\(s\)
+^Foundry: 1 contract-typed arg type\(s\) UNSUPPORTED
+^COVERAGE ANALYSIS COMPLETE$

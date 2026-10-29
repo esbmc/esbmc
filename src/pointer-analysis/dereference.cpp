@@ -532,6 +532,22 @@ expr2tc dereferencet::resolve_nonscalar_if(
   return if2tc(expr->type, ifref.cond, t, f);
 }
 
+// Literal arrays have no underlying memory location to dereference.
+static expr2tc constant_array_element(const index2t &index)
+{
+  if (
+    !is_constant_array2t(index.source_value) || !is_constant_int2t(index.index))
+    return expr2tc();
+
+  const auto &arr = to_constant_array2t(index.source_value);
+  const auto &idx = to_constant_int2t(index.index);
+  if (idx.value.is_negative() || !idx.value.is_uint64())
+    return expr2tc();
+
+  const uint64_t i = idx.as_ulong();
+  return i < arr.datatype_members.size() ? arr.datatype_members[i] : expr2tc();
+}
+
 expr2tc dereferencet::dereference_expr_nonscalar(
   expr2tc &expr,
   guard2tc &guard,
@@ -592,6 +608,16 @@ expr2tc dereferencet::dereference_expr_nonscalar(
   {
     index2t &index = to_index2t(expr);
     dereference_expr(index.index, guard, dereferencet::READ);
+
+    if (!is_write(mode))
+    {
+      expr2tc element = constant_array_element(index);
+      if (!is_nil_expr(element))
+      {
+        dereference_expr(element, guard, mode);
+        return element;
+      }
+    }
 
     /* Now free of dereferences, fold in any value symex already knows for
      * the index (e.g. an array index stored in a struct field): a constant
@@ -914,7 +940,7 @@ void dereferencet::check_pointer_alignment(
   /* The object is not known here -- build_reference_to() has yet to unpack the
    * descriptor -- so this pre-check keeps assuming the base carries the width.
    * The object-aware sites below make the claim that actually bites. */
-  check_alignment(access_size_bits, ptr_offset_bits, guard, expr2tc());
+  check_alignment(access_size_bits, type, ptr_offset_bits, guard, expr2tc());
 }
 
 expr2tc dereferencet::create_pointer_offset_bits(const expr2tc &deref_expr)
@@ -1509,7 +1535,7 @@ void dereferencet::construct_from_array(
     {
       const BigInt access_bits = type_byte_size_bits(type);
       if (object_base_alignment(value) * 8 < access_bits)
-        check_alignment(access_bits, offset, guard, value);
+        check_alignment(access_bits, type, offset, guard, value);
     }
 
     value = index2tc(arr_subtype, value, div);
@@ -1575,7 +1601,7 @@ void dereferencet::construct_from_array(
 
   // No alignment guarantee: assert that it's correct.
   if (!is_correctly_aligned)
-    check_alignment(deref_size, std::move(mod), guard, value);
+    check_alignment(deref_size, type, std::move(mod), guard, value);
 
   if (!overflows_boundaries)
   {
@@ -3154,7 +3180,7 @@ void dereferencet::check_data_obj_access(
    * manner (e.g. for __attribute__((packed)) structures),
    * check that the access being made is aligned. */
   if (is_scalar_type(type) && !mode.unaligned)
-    check_alignment(access_sz, std::move(offset), guard, value);
+    check_alignment(access_sz, type, std::move(offset), guard, value);
 }
 
 BigInt dereferencet::object_base_alignment(const expr2tc &object) const
@@ -3187,6 +3213,7 @@ BigInt dereferencet::object_base_alignment(const expr2tc &object) const
 
 void dereferencet::check_alignment(
   BigInt minwidth,
+  const type2tc &type,
   const expr2tc &offset_bits,
   const guard2tc &guard,
   const expr2tc &object)
@@ -3207,6 +3234,16 @@ void dereferencet::check_alignment(
 
   // Perform conversion to bytes here
   minwidth = access_alignment(minwidth / 8);
+
+  /* No C integer is aligned beyond the fundamental alignment; one wider than
+   * that is a _BitInt, which the target aligns to its _BitInt cap (#8692).
+   * Demanding the full width would fail every such access, since no object
+   * base is aligned past the fundamental alignment either. A wider float,
+   * `long double` under --32, keeps its width. */
+  const configt::ansi_ct &c = config.ansi_c;
+  if (
+    is_bv_type(type) && minwidth > c.max_alignment() && c.bitint_max_align != 0)
+    minwidth = c.bitint_max_align;
   expr2tc addr = typecast2tc(
     size_type2(),
     div2tc(offset_bits->type, offset_bits, gen_long(offset_bits->type, 8)));

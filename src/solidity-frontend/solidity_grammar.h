@@ -28,6 +28,7 @@ enum ContractBodyElementT
   EventDef,    // rule event-definition
   UsingForDef, // rule using-for-directive
   ModifierDef, // rule modifier-definition
+  UserDefinedValueTypeDef, // `type T is <elementary>;` (pre-registered)
   ContractBodyElementTError
 };
 ContractBodyElementT get_contract_body_element_t(const nlohmann::json &element);
@@ -424,6 +425,13 @@ enum ExpressionT
   // Null Expression
   NullExpr,
 
+  // Raw elementary type used as an expression value
+  // (e.g. `string` in `string.concat(...)`, `bytes` in
+  // `type(bytes).max`). The node carries only a type and has no
+  // runtime value — we lower it to a dummy expression of the
+  // corresponding type so member-access paths can read the type.
+  ElementaryTypeNameExpr,
+
   ExpressionTError
 };
 ExpressionT get_expression_t(const nlohmann::json &expr);
@@ -615,6 +623,9 @@ enum class SolType
   // contract / library
   CONTRACT,
   LIBRARY,
+
+  // opaque function pointer (internal/external fn type)
+  FUNC_PTR,
 
   // tuples (ESBMC internal)
   TUPLE_RETURNS,

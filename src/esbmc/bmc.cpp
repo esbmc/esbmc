@@ -220,8 +220,16 @@ static bool is_bounded_round(const optionst &options)
          strategy_owns_property_table(options);
 }
 
-bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
-  : options(opts), context(_context), ns(context), program(funcs)
+bmct::bmct(
+  goto_functionst &funcs,
+  optionst &opts,
+  contextt &_context,
+  foundry_generator *ext_foundry_gen)
+  : options(opts),
+    context(_context),
+    ns(context),
+    program(funcs),
+    foundry_gen_ext(ext_foundry_gen)
 {
   interleaving_number = 0;
   interleaving_failed = 0;
@@ -490,6 +498,9 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
   {
     ctest_gen.generate_single(ctest_output_dir(options), eq, smt_conv, ns);
   }
+
+  if (options.get_bool_option("generate-foundry-testcase"))
+    foundry_gen.generate_single(eq, smt_conv, ns);
 
   if (options.get_bool_option("generate-html-report"))
     generate_html_report("1", ns, goto_trace, options);
@@ -1501,6 +1512,7 @@ void report_coverage(
   const std::unordered_multiset<std::string> &reached_mul_claims,
   pytest_generator &pytest_gen,
   ctest_generator &ctest_gen,
+  foundry_generator &foundry_gen,
   const std::string &partial_reason)
 {
   // --dead-code-check reuses the coverage machinery for instrumentation but
@@ -1896,6 +1908,8 @@ void report_coverage(
   {
     ctest_gen.generate(ctest_output_dir(options));
   }
+  if (options.get_bool_option("generate-foundry-testcase"))
+    foundry_gen.generate();
 }
 
 /* Closing line of a coverage run, in place of a verification verdict: it says
@@ -2581,8 +2595,14 @@ static void report_empty_coverage(const optionst &options)
     std::unordered_multiset<std::string> empty_mul_reached;
     pytest_generator empty_pytest;
     ctest_generator empty_ctest;
+    foundry_generator empty_foundry;
     report_coverage(
-      options, empty_reached, empty_mul_reached, empty_pytest, empty_ctest);
+      options,
+      empty_reached,
+      empty_mul_reached,
+      empty_pytest,
+      empty_ctest,
+      empty_foundry);
   }
 }
 
@@ -3102,6 +3122,7 @@ static void report_partial_coverage(
   const std::unordered_multiset<std::string> &reached_mul_claims,
   pytest_generator &pytest_gen,
   ctest_generator &ctest_gen,
+  foundry_generator &foundry_gen,
   const std::string &reason,
   size_t decided_claims,
   size_t remaining_claims)
@@ -3130,6 +3151,7 @@ static void report_partial_coverage(
         reached_mul_claims,
         pytest_gen,
         ctest_gen,
+        foundry_gen,
         reason);
   }
   catch (const std::bad_alloc &)
@@ -3707,6 +3729,8 @@ smt_resultt bmct::multi_property_check(
         options.get_bool_option("generate-pytest-testcase");
       const bool want_ctest =
         options.get_bool_option("generate-ctest-testcase");
+      const bool want_foundry =
+        options.get_bool_option("generate-foundry-testcase");
 
       // A bare "{index}-" prefix collides across k-induction phases/k-steps,
       // since ce_counter restarts at zero on every bmct (discussion #6070);
@@ -3781,6 +3805,8 @@ smt_resultt bmct::multi_property_check(
           pytest_gen.collect(local_eq, *solver_ptr);
         if (want_ctest)
           ctest_gen.collect(local_eq, *solver_ptr, ns);
+        if (want_foundry)
+          foundry().collect(local_eq, *solver_ptr, ns);
 
         witnesses.push_back(std::move(w));
 
@@ -3914,6 +3940,7 @@ smt_resultt bmct::multi_property_check(
       reached_mul_claims,
       pytest_gen,
       ctest_gen,
+      foundry_gen,
       reason,
       decided_claims.load(),
       remaining_claims);
@@ -3968,7 +3995,12 @@ smt_resultt bmct::multi_property_check(
   // For coverage with fixed bound unwinding
   if (reports_bounded_coverage(options))
     report_coverage(
-      options, reached_claims, reached_mul_claims, pytest_gen, ctest_gen);
+      options,
+      reached_claims,
+      reached_mul_claims,
+      pytest_gen,
+      ctest_gen,
+      foundry_gen);
 
   return final_result;
 }

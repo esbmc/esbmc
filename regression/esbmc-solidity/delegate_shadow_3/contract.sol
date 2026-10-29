@@ -1,4 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0
+// KNOWNBUG: the delegatecall re-enters ProxyMis without bound. The inductive
+// step answers the re-entries past its bound with a havoc of what a dispatch
+// writes, `x` among them, so the innermost unfolded `assert(x == 7)` sees an
+// arbitrary `x`. Proving it needs the invariant `x == 0 || x == 7`, which
+// k-induction does not infer. The step used to cut the re-entries off
+// instead, which is unsound (see reentry_kinduction_deep_fail).
 pragma solidity >=0.8.0;
 
 // Layout mismatch: Logic accesses state var `y` which Proxy does not

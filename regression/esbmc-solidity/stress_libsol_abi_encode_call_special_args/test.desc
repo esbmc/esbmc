@@ -1,0 +1,14 @@
+KNOWNBUG
+contract.solast
+--sol contract.sol --contract C --no-standard-checks --k-induction --max-k-step 20 --k-step 3
+^VERIFICATION SUCCESSFUL$
+Asserts `keccak256(abi.encodeWithSignature(...)) == keccak256(abi.encodeCall(...))`
+for equivalent selectors, but our identity-abi model returns nondet
+BytesDynamic for `returns (bytes memory)` functions whose body is an
+identity-chain uint256.  Two such calls produce distinct nondet
+values, so the equality cannot be proved.  Previously reported
+SUCCESSFUL only because the bytes_static_from_uint pack loop was
+truncated at low unwind, leaving the high bytes zero on both sides
+and silently making memcmp match.  Fixing the pack to straight-line
+32 assignments exposed the over-approximation — revisit when the
+abi model distinguishes signatures/selectors semantically.

@@ -1,0 +1,4 @@
+KNOWNBUG
+contract.solast
+--sol contract.sol --contract Bal --bound --no-standard-checks --unwind 2 --no-unwinding-assertions --cvc5
+^VERIFICATION SUCCESSFUL$

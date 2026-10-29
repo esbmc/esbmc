@@ -1,0 +1,86 @@
+// Auto-generated TOD (Transaction Order Dependence) harness
+// Contract: Derived
+// Pair:     takeSnapshot vs scaleBase
+// Mode:     race
+
+// SPDX-License-Identifier: MIT
+pragma solidity >=0.8.0;
+
+// TOD classification helpers.  An assertion failure inside one
+// of these functions tells the user which TOD category fired.
+function __tod_race_check(bool cond) pure {
+    assert(cond); // TOD-Race: non-commutative state update
+}
+function __tod_balance_check(bool cond) pure {
+    assert(cond); // TOD-Balance: order-dependent ETH movement
+}
+
+// ESBMC intrinsic stubs (the frontend ignores the bodies).
+function __ESOL_nondet_state_forward(Derived c) {
+    // replaced by ESBMC with a bounded nondet-dispatch loop
+    // over c's public/external methods.
+}
+function __ESOL_deep_copy(Derived src) pure returns (Derived) {
+    // replaced by ESBMC with _ESBMC_clone_Derived: per-field deep copy of *src
+    // into a fresh instance with a distinct $address and
+    // independent heap-allocated array buffers.
+    return src;
+}
+
+// ===== Dependencies =====
+contract Base {
+    uint public baseX;
+
+    constructor() {
+        baseX = 5;
+    }
+}
+
+// ===== End dependencies =====
+
+// ===== Target contract =====
+contract Derived is Base {
+    uint public derivedY;
+
+    constructor() {
+        derivedY = 0;
+    }
+
+    // Reads inherited baseX, writes derivedY.
+    function takeSnapshot() public {
+        derivedY = baseX + derivedY;
+    }
+
+    // Writes inherited baseX.
+    function scaleBase(uint n) public {
+        baseX = baseX * n;
+    }
+}
+
+// ===== TOD harness =====
+// ----- takeSnapshot vs scaleBase -----
+// Shared state variables (touched by both):
+//   - derivedY
+//   - baseX
+contract TOD_takeSnapshot_scaleBase {
+    function test(
+        uint256 b_n
+    ) public {
+        Derived c1 = new Derived();
+        __ESOL_nondet_state_forward(c1);
+        Derived c2 = __ESOL_deep_copy(c1);
+        require(address(c1) != address(c2), "isolate c1/c2");
+        // Order 1: c1 runs takeSnapshot then scaleBase
+        c1.takeSnapshot();
+        c1.scaleBase(b_n);
+
+        // Order 2: c2 runs scaleBase then takeSnapshot
+        c2.scaleBase(b_n);
+        c2.takeSnapshot();
+
+        // Race check: if any shared state differs the pair is order-dependent
+        __tod_race_check(c1.derivedY() == c2.derivedY());
+        __tod_race_check(c1.baseX() == c2.baseX());
+    }
+}
+

@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--sol contract.sol --contract C --k-induction --unlimited-k-steps --memlimit 4g --timeout 60 --no-assertions
+^VERIFICATION SUCCESSFUL$

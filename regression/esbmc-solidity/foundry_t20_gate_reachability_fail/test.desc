@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--sol contract.sol --contract ReachTest --focus-function test_bug_before_unmodeled --no-standard-checks --unwind 3 --no-unwinding-assertions
+^VERIFICATION FAILED$

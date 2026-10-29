@@ -1,4 +1,4 @@
 CORE
 contract.solast
---sol contract.sol --contract Base --no-visibility --k-induction
+--sol contract.sol --contract Base --no-visibility --div-by-zero-check --k-induction
 ^VERIFICATION FAILED$

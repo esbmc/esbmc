@@ -1,4 +1,4 @@
 CORE
 contract.solast
---sol contract.sol --no-standard-checks --contract BitwiseFail --unwind 1 --no-unwinding-assertions
+--sol contract.sol --no-standard-checks --contract BitwiseFail --k-induction --max-k-step 20 --k-step 3
 ^VERIFICATION FAILED$

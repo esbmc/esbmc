@@ -1,4 +1,4 @@
 CORE
 contract.solast
---sol contract.sol --contract FixedDynPass --no-standard-checks --unwind 5 --no-unwinding-assertions
+--sol contract.sol --contract FixedDynPass --no-standard-checks --unwind 20 --no-unwinding-assertions
 ^VERIFICATION SUCCESSFUL$

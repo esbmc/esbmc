@@ -1,0 +1,5 @@
+CORE
+contract.solast
+--sol contract.sol --contract H --overflow-check --unwind 8 --no-unwinding-assertions
+^VERIFICATION FAILED$
+arithmetic overflow on sub

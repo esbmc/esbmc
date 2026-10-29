@@ -65,6 +65,33 @@ bool solidity_convertert::get_type_description(
   }
   case SolidityGrammar::TypeNameT::Pointer:
   {
+    // FunctionTypeName parameter / struct field (internal or external
+    // function types, e.g. `function(uint) pure returns (uint) f`).
+    // Lowered to an opaque void* — indirect calls through it return
+    // nondet values (handled in convert_call).
+    if (
+      type_name.contains("nodeType") &&
+      type_name["nodeType"] == "FunctionTypeName")
+    {
+      new_type = gen_pointer_type(empty_typet());
+      new_type.set("#sol_func_ptr", true);
+      set_sol_type(new_type, SolidityGrammar::SolType::FUNC_PTR);
+      break;
+    }
+
+    // typeDescriptions-only form (e.g. mapping value type, struct field
+    // stored only as a typeIdentifier/typeString pair, or a builtin
+    // function reference such as `abi.encode` captured as a tuple
+    // component): any `t_function_*` kind is lowered to the same opaque
+    // fn-ptr shape as the FunctionTypeName case above.
+    if (typeIdentifier.compare(0, 11, "t_function_") == 0)
+    {
+      new_type = gen_pointer_type(empty_typet());
+      new_type.set("#sol_func_ptr", true);
+      set_sol_type(new_type, SolidityGrammar::SolType::FUNC_PTR);
+      break;
+    }
+
     // auxiliary type: pointer (FuncToPtr decay)
     // This part is for FunctionToPointer decay only
     assert(
@@ -171,6 +198,22 @@ bool solidity_convertert::get_type_description(
             * width: 32
             * #cpp_type: signed_int
     */
+    // B2: If every dimension is a compile-time fixed size, use a
+    // native nested `array_typet(array_typet(T, inner_N), outer_M)`
+    // embedded directly in the surrounding struct. This sidesteps the
+    // `T**` + nested-calloc value-set aliasing bug entirely. Mixed
+    // (at least one dynamic) shapes still fall through to the
+    // pointer-backed path below.
+    if (!decl.empty() && decl.contains("typeName"))
+    {
+      typet native_t;
+      if (try_native_nested_fixed_array(decl["typeName"], native_t))
+      {
+        new_type = native_t;
+        break;
+      }
+    }
+
     typet base_type;
     if (
       !decl.empty() && decl.contains("typeName") &&
@@ -185,6 +228,47 @@ bool solidity_convertert::get_type_description(
           decl["typeName"]["baseType"]["typeDescriptions"],
           base_type))
         return true;
+
+      // Phase 5 Surface 1: preserve fixed-inner-array typing through outer
+      // dyn-array wrap. The recursion above decays inner `T[N]` to
+      // `pointer<T>` with `#sol_array_size=N` tag (via get_array_pointer_type).
+      // If we hand that to get_array_pointer_type unchanged, the outer wrap
+      // produces `pointer<pointer<T>>` (= T**) and the N tag is lost — which
+      // creates a read/write asymmetry on `T[N][]` parameter access (writes
+      // hit packed N*sizeof(T) byte offsets but reads follow T** typed
+      // deref). Lift back to `array<T, N>` so the outer wrap produces
+      // `pointer<array<T, N>>` and the per-row stride is preserved on both
+      // sides. Gate strictly on pointer + #sol_array_size + SolType::ARRAY
+      // (NOT DYNARRAY) so fully-dyn `T[][]` and 1D dyn paths are unaffected.
+      if (
+        base_type.id() == "pointer" &&
+        !base_type.get("#sol_array_size").empty() &&
+        get_sol_type(base_type) == SolidityGrammar::SolType::ARRAY)
+      {
+        const std::string n_str = id2string(base_type.get("#sol_array_size"));
+        try
+        {
+          unsigned long n = std::stoul(n_str);
+          if (n != 0)
+          {
+            constant_exprt sz(
+              integer2binary(BigInt(n), bv_width(int_type())),
+              integer2string(BigInt(n)),
+              int_type());
+            typet inner_subtype = base_type.subtype();
+            base_type = array_typet(inner_subtype, sz);
+            // Preserve the size tag at the new array_typet level so
+            // downstream code that reads #sol_array_size still works.
+            base_type.set("#sol_array_size", n_str);
+            set_sol_type(base_type, SolidityGrammar::SolType::ARRAY);
+          }
+        }
+        catch (const std::exception &)
+        {
+          // base_type stays as pointer<T> (degraded); outer wrap produces
+          // T** as before. Soundness preserved by falling through.
+        }
+      }
 
       if (get_array_pointer_type(decl, base_type, new_type))
         return true;
@@ -267,15 +351,14 @@ bool solidity_convertert::get_type_description(
       // Extract base typeString: strip trailing "[<size>]" from typeString
       std::string base_ts = typeString;
       auto strip_loc = [](std::string &s) {
-        static const std::string sufs[] = {
-          " storage ref", " storage", " memory", " calldata"};
-        for (const std::string &suf : sufs)
+        for (const char *suf :
+             {" storage ref", " storage", " memory", " calldata"})
         {
           if (
-            s.size() > suf.size() &&
-            s.compare(s.size() - suf.size(), suf.size(), suf) == 0)
+            s.size() > strlen(suf) &&
+            s.compare(s.size() - strlen(suf), strlen(suf), suf) == 0)
           {
-            s.erase(s.size() - suf.size());
+            s.erase(s.size() - strlen(suf));
             return;
           }
         }
@@ -300,7 +383,21 @@ bool solidity_convertert::get_type_description(
       }
       else
       {
-        unsigned z_ext_value = std::stoul(outer_size_str, nullptr);
+        // Pathological huge sizes (e.g. `T[2**240]`) overflow `unsigned
+        // long` and crash stoul. We cannot materialise that many elements
+        // anyway, so degrade to DYNARRAY (pointer model) and let downstream
+        // accesses lower to nondet reads. Sound over-approximation.
+        unsigned long z_ext_value = 0;
+        try
+        {
+          z_ext_value = std::stoul(outer_size_str, nullptr);
+        }
+        catch (const std::exception &)
+        {
+          new_type = gen_pointer_type(base_type);
+          set_sol_type(new_type, SolidityGrammar::SolType::DYNARRAY);
+          break;
+        }
         new_type = array_typet(
           base_type,
           constant_exprt(
@@ -349,7 +446,19 @@ bool solidity_convertert::get_type_description(
         return true;
 
       std::string the_size = get_array_size(type_name);
-      unsigned z_ext_value = std::stoul(the_size, nullptr);
+      unsigned z_ext_value = 0;
+      try
+      {
+        z_ext_value = std::stoul(the_size, nullptr);
+      }
+      catch (const std::exception &)
+      {
+        // Size does not fit in unsigned long (e.g. uint[2**100]).
+        // Degrade to a dynamic-array pointer model so we don't crash.
+        new_type = gen_pointer_type(the_type);
+        set_sol_type(new_type, SolidityGrammar::SolType::DYNARRAY);
+        break;
+      }
       new_type = array_typet(
         the_type,
         constant_exprt(
@@ -435,9 +544,13 @@ bool solidity_convertert::get_type_description(
   case SolidityGrammar::TypeNameT::ContractTypeName:
   {
     // e.g. ContractName tmp = new ContractName(Args);
+    // typeString is normally "contract ContractName" but `super`
+    // inside a derived contract arrives here as
+    // "contract super ContractName" (typeIdentifier `t_super$_X_$N`).
+    // Take the last whitespace-separated token as the contract name.
 
     std::string constructor_name = typeString;
-    size_t pos = constructor_name.find(" ");
+    size_t pos = constructor_name.rfind(" ");
     std::string cname = constructor_name.substr(pos + 1);
     std::string id = prefix + cname;
 
@@ -530,10 +643,14 @@ bool solidity_convertert::get_type_description(
         "typeIdentifier": "t_mapping$_t_address_$_t_uint256_$",
         "typeString": "mapping(address => uint256)"
     */
-    // we need to check if it's inside a contract used in a new expression
-    // statement
-    assert(!current_baseContractName.empty());
-    bool is_new_expr = should_treat_as_new(current_baseContractName);
+    // Mappings declared inside free-standing structs (e.g. `struct itmap {
+    // mapping(uint => IndexValue) data; ... }` declared at file scope) are
+    // converted before any contract scope is set. There's no contract to
+    // gate `is_new_expr` against — fall through to the slow infinite-array
+    // encoding which is correct in every mode (`should_treat_as_new("")`
+    // returns false, but explicit short-circuit avoids relying on that).
+    bool is_new_expr = !current_baseContractName.empty() &&
+                       should_treat_as_new(current_baseContractName);
 
     if (is_new_expr)
       new_type = symbol_typet(lib_prefix + "mapping_t");
@@ -542,6 +659,12 @@ bool solidity_convertert::get_type_description(
       // we will populate the size type later
       new_type = array_typet();
       new_type.size(exprt("infinity"));
+      // Wide-BV index: mapping keys are up to 256 bits in Solidity; we
+      // index the per-mapping infinite array directly with the raw key
+      // (no XOR fold). The index_width annotation flows through migrate
+      // to array_type2t::index_width and is consumed by smt_conv +
+      // adjust_index. Closes ledger #22's path-1 256→64 fold gap.
+      new_type.set("#esbmc_index_width", "256");
     }
     set_sol_type(new_type, SolidityGrammar::SolType::MAPPING);
     break;
@@ -686,26 +809,50 @@ bool solidity_convertert::get_array_to_pointer_type(
   const nlohmann::json &type_descriptor,
   typet &new_type)
 {
-  // Function to get the base type in ArrayToPointer decay
-  //  - unrolled the get_type...
-  if (
-    type_descriptor["typeString"].get<std::string>().find("uint8") !=
-    std::string::npos)
-  {
-    new_type = unsigned_char_type();
-    new_type.cpp_type("unsigned_char");
-  }
-  else
-  {
-    log_error("Unsupported types in ArrayToPointer decay");
+  // Function to get the base type in ArrayToPointer decay.
+  // Recognise the common element-type prefixes in Solidity's
+  // typeString (e.g. "uint8[]", "uint256[] calldata",
+  // "int256[]", "address[]") and map to the matching scalar type.
+  const std::string ts = type_descriptor["typeString"].get<std::string>();
+
+  // uintN / intN
+  auto try_int_width = [&](const std::string &prefix, bool is_signed) -> bool {
+    auto pos = ts.find(prefix);
+    if (pos == std::string::npos)
+      return false;
+    size_t e = pos + prefix.size();
+    size_t start = e;
+    while (e < ts.size() && std::isdigit(static_cast<unsigned char>(ts[e])))
+      ++e;
+    if (e == start)
+      return false;
+    unsigned bits = std::stoul(ts.substr(start, e - start));
+    if (bits == 0 || bits > 256 || (bits % 8) != 0)
+      return false;
+    new_type =
+      is_signed ? (typet)signedbv_typet(bits) : (typet)unsignedbv_typet(bits);
+    new_type.cpp_type(is_signed ? "signed_int" : "unsigned_int");
     return true;
+  };
+
+  if (try_int_width("uint", false))
+    return false;
+  if (try_int_width("int", true))
+    return false;
+  if (ts.find("address") != std::string::npos)
+  {
+    new_type = unsignedbv_typet(160);
+    new_type.set("#cpp_type", "unsigned_int");
+    return false;
+  }
+  if (ts.find("bool") != std::string::npos)
+  {
+    new_type = bool_typet();
+    return false;
   }
 
-  // TODO: More var decl attributes checks:
-  //    - Constant
-  //    - Volatile
-  //    - isRestrict
-  return false;
+  log_error("Unsupported types in ArrayToPointer decay: {}", ts);
+  return true;
 }
 
 bool solidity_convertert::get_elementary_type_name_uint(
@@ -922,12 +1069,23 @@ bool solidity_convertert::get_elementary_type_name(
   }
   case SolidityGrammar::ElementaryTypeNameT::STRING_LITERAL:
   {
-    // it's fine even if the json is not the exact parent
-    auto json = find_last_parent(src_ast_json, type_name);
-    assert(!json.empty());
-    string_constantt x(json["value"].get<std::string>());
-    set_sol_type(x.type(), SolidityGrammar::SolType::STRING_LITERAL);
-    new_type = x.type();
+    // Try to locate the owning Literal node to recover the exact
+    // char-array type. find_last_parent uses deep equality, so if the
+    // same typeDescriptions appears under an arguments[] array the
+    // returned parent can itself be that array (no "value" key).
+    // Fall back to the generic string_t (char*) in that case.
+    const auto &json = find_last_parent(src_ast_json, type_name);
+    if (json.is_object() && json.contains("value") && json["value"].is_string())
+    {
+      string_constantt x(json["value"].get<std::string>());
+      set_sol_type(x.type(), SolidityGrammar::SolType::STRING_LITERAL);
+      new_type = x.type();
+    }
+    else
+    {
+      new_type = string_t;
+      set_sol_type(new_type, SolidityGrammar::SolType::STRING_LITERAL);
+    }
 
     break;
   }
@@ -1027,17 +1185,88 @@ bool solidity_convertert::get_parameter_list(
   return false;
 }
 
+bool solidity_convertert::try_native_nested_fixed_array(
+  const nlohmann::json &type_name_node,
+  typet &result)
+{
+  // Walk the AST typeName chain from outermost to innermost, collecting
+  // each ArrayTypeName level's `length` literal. Bail out to the
+  // pointer-backed path if any level is dynamic or the length literal
+  // cannot be decoded.
+  std::vector<unsigned long long> dims;
+  const nlohmann::json *cur = &type_name_node;
+
+  while (cur->contains("baseType"))
+  {
+    if (!cur->contains("length") || (*cur)["length"].is_null())
+      return false;
+    const auto &len_node = (*cur)["length"];
+    std::string len_str;
+    if (
+      len_node.is_object() && len_node.contains("value") &&
+      len_node["value"].is_string())
+      len_str = len_node["value"].get<std::string>();
+    if (len_str.empty())
+      return false;
+    unsigned long long n = 0;
+    try
+    {
+      n = std::stoull(len_str);
+    }
+    catch (const std::exception &)
+    {
+      return false;
+    }
+    dims.push_back(n);
+    cur = &(*cur)["baseType"];
+  }
+
+  // Need at least two dimensions to enter the native-nested path.
+  // 1D fixed arrays stay on the pointer model for now.
+  if (dims.size() < 2)
+    return false;
+
+  if (!cur->contains("typeDescriptions"))
+    return false;
+
+  typet leaf_t;
+  if (get_type_description((*cur)["typeDescriptions"], leaf_t))
+    return false;
+
+  // Build nested array_typet from innermost out.
+  typet acc = leaf_t;
+  for (auto it = dims.rbegin(); it != dims.rend(); ++it)
+  {
+    constant_exprt sz(
+      integer2binary(BigInt(*it), bv_width(int_type())),
+      integer2string(BigInt(*it)),
+      int_type());
+    acc = array_typet(acc, sz);
+  }
+
+  // Tag the outermost dim so downstream sites that expect
+  // #sol_array_size on the outer fixed-array wrapper still see it.
+  acc.set("#sol_array_size", std::to_string(dims.front()));
+  set_sol_type(acc, SolidityGrammar::SolType::ARRAY);
+  result = acc;
+  return true;
+}
+
 bool solidity_convertert::get_array_pointer_type(
   const nlohmann::json &decl,
   const typet &base_type,
   typet &new_type)
 {
-  // For dynamic arrays of mappings, model as 2D infinite array instead of
-  // pointer.  mapping(K=>V)[] is semantically mapping(uint => mapping(K=>V))
-  // + length counter.  The pointer/malloc model cannot handle infinite-sized
-  // mapping elements.
+  // For arrays whose element is a mapping, model the WHOLE array as an
+  // infinite-sized 2D array instead of a pointer or fixed-size struct
+  // member.  `mapping(K=>V)[N]` is semantically a finite map from
+  // [0..N) to mapping(K=>V); the mapping element is itself unbounded,
+  // so the pointer/malloc model cannot allocate it (and trying to lay
+  // it out as a fixed-size struct member trips
+  // array_type2t::get_width on the inner mapping during state-var
+  // initialisation). The same treatment already applies to dynamic
+  // arrays of mappings.
   if (
-    !decl["typeName"].contains("length") &&
     get_sol_type(base_type) == SolidityGrammar::SolType::MAPPING &&
     base_type.is_array())
   {
@@ -1053,16 +1282,89 @@ bool solidity_convertert::get_array_pointer_type(
   if (decl["typeName"].contains("length"))
   {
     std::string length;
-    if (decl["typeName"]["length"].contains("value"))
-      length = decl["typeName"]["length"]["value"].get<std::string>();
-    else
+    const auto &len_node = decl["typeName"]["length"];
+    if (len_node.contains("value") && len_node["value"].is_string())
+      length = len_node["value"].get<std::string>();
+
+    // Prefer the array type's own typeString first: solc has already
+    // constant-folded the length (e.g. "uint256[10]"), so this is the
+    // authoritative post-folding size and avoids chasing constant refs
+    // through TupleExpression/BinaryOperation value nodes that
+    // get_constant_value cannot handle.
+    if (length.empty())
     {
-      // assume it's a constant
-      assert(decl["typeName"]["length"].contains("referencedDeclaration"));
+      const std::string ts =
+        decl["typeName"].contains("typeDescriptions") &&
+            decl["typeName"]["typeDescriptions"].contains("typeString") &&
+            decl["typeName"]["typeDescriptions"]["typeString"].is_string()
+          ? decl["typeName"]["typeDescriptions"]["typeString"]
+              .get<std::string>()
+          : std::string();
+      auto lb = ts.rfind('[');
+      auto rb = ts.rfind(']');
+      if (lb != std::string::npos && rb != std::string::npos && rb > lb + 1)
+      {
+        const std::string inner = ts.substr(lb + 1, rb - lb - 1);
+        if (
+          !inner.empty() &&
+          std::all_of(inner.begin(), inner.end(), [](unsigned char ch) {
+            return std::isdigit(ch);
+          }))
+          length = inner;
+      }
+    }
+
+    // Last resort: follow the constant reference (simple literal chains).
+    if (
+      length.empty() && len_node.contains("referencedDeclaration") &&
+      len_node["referencedDeclaration"].is_number_integer() &&
+      len_node["referencedDeclaration"].get<int>() > 0)
+    {
       if (
         get_constant_value(
-          decl["typeName"]["length"]["referencedDeclaration"], length))
-        return true;
+          len_node["referencedDeclaration"].get<int>(), length))
+        length.clear();
+    }
+
+    if (length.empty())
+    {
+      // Could not resolve the fixed length — degrade to dynamic array
+      // so the frontend does not crash on huge/unresolvable sizes.
+      set_sol_type(new_type, SolidityGrammar::SolType::DYNARRAY);
+      return false;
+    }
+    // Solidity allows arbitrarily large static array sizes (e.g.
+    // `uint[2**253]`), which blow up downstream when GOTO/SMT tries to
+    // materialize the element-count-by-element-width product. Clang's
+    // C frontend caps static arrays around 2^58 elements; match that
+    // and degrade to DYNARRAY above the cap so verification can still
+    // proceed on benign code paths that never actually index such an
+    // array with a concrete large value.
+    {
+      constexpr unsigned long long kMaxStaticArrayElems = 1ULL << 56;
+      bool too_big = length.size() > 19; // > max uint64 digit count
+      if (!too_big)
+      {
+        try
+        {
+          unsigned long long n = std::stoull(length);
+          if (n > kMaxStaticArrayElems)
+            too_big = true;
+        }
+        catch (const std::exception &)
+        {
+          too_big = true;
+        }
+      }
+      if (too_big)
+      {
+        log_warning(
+          "Solidity array length {} exceeds supported static size; "
+          "modelling as dynamic array",
+          length);
+        set_sol_type(new_type, SolidityGrammar::SolType::DYNARRAY);
+        return false;
+      }
     }
     set_sol_array_size(new_type, length);
     set_sol_type(new_type, SolidityGrammar::SolType::ARRAY);
@@ -1264,10 +1566,36 @@ void solidity_convertert::convert_type_expr(
       // byte4("123") -> string
       // bytes(x)  -> string literal
       // bytes2(0x1234) -> int literal
+      // uint256-result -> bytes (e.g. abi.encode/encodeCall lowered to
+      //                  the uint256 identity in solidity_abi.c being
+      //                  used in a `bytes` context)
 
       locationt loc = src_expr.location();
       if (is_bytes_type(dest_type))
       {
+        // bytes_dynamic_from_string expects a `const char *`. A scalar
+        // (e.g. the abi.encode* identity uint256, or any other non-pointer
+        // value being narrowed to bytes) cannot be safely dereferenced
+        // through that path — it would either crash symex with an invalid
+        // dereference or silently read garbage. Fall back to the bounded
+        // nondet bytes harness used by other approximation sites — sound
+        // OVER-approximation: "the encoder produced some bytes of length
+        // ∈ [32, 1024] with initialized==1". Same rationale as the
+        // string-constant fallback in the return-statement handler.
+        if (!src_type.is_pointer() && !src_type.is_array())
+        {
+          side_effect_expr_function_callt nondet_b;
+          get_library_function_call_no_args(
+            "llc_nondet_bytes",
+            "c:@F@llc_nondet_bytes",
+            dest_type,
+            loc,
+            nondet_b);
+          src_expr = make_aux_var(nondet_b, loc);
+          set_sol_type(src_expr.type(), SolidityGrammar::SolType::BYTES_DYN);
+          return;
+        }
+
         side_effect_expr_function_callt call;
         get_library_function_call_no_args(
           "bytes_dynamic_from_string",
@@ -1422,7 +1750,26 @@ void solidity_convertert::convert_type_expr(
       else
         t = addrp_t;
 
-      src_expr = member_exprt(src_expr, comp_name, t);
+      // Only build the synthetic $address member when src_expr's
+      // resolved struct actually carries it (a contract instance).
+      // Inside a `library` function body src_expr is the library
+      // struct, which has no $address. A library executes via
+      // DELEGATECALL in the caller's context, so address(this) is the
+      // enclosing contract's address — model it with the ambient
+      // _ESBMC_enclosing_contract_address (same choice as the library
+      // branch in solidity_convert_call.cpp ~3336). Without this guard
+      // member_exprt(<library struct>, "$address") survives the
+      // frontend and aborts at migrate.cpp -> irep2_type.cpp
+      // get_component_number during goto_convert.
+      if (struct_type_has_component(src_expr.type(), comp_name))
+        src_expr = member_exprt(src_expr, comp_name, t);
+      else
+      {
+        exprt encl = symbol_expr(
+          *context.find_symbol("c:@_ESBMC_enclosing_contract_address"));
+        solidity_gen_typecast(ns, encl, t);
+        src_expr = encl;
+      }
     }
     else if (
       (SolidityGrammar::is_address_type(src_sol_type) ||
@@ -1438,6 +1785,47 @@ void solidity_convertert::convert_type_expr(
 
       exprt c_ins;
       std::string _cname = get_sol_contract(dest_type);
+      // A library is converted in round 1, before any contract/interface
+      // struct type exists (round 2). `IFoo(addr)` inside a library body then
+      // referenced tag-IFoo before it was registered, and the implicit
+      // typecast that follows ns.follow()ed the missing symbol: SIGSEGV in
+      // irept::read (perennial Product: PayoffDefinitionLib._providerContract
+      // `IContractPayoffProvider(address(bytes20(...)))`; minimal: a library
+      // `function f(address a) internal pure returns (I) { return I(a); }`).
+      // Convert that contract on demand; get_contract_definition saves and
+      // restores the current conversion context for exactly this re-entry.
+      // Bases first (most-base to most-derived): converting a derived
+      // interface registers builtins on its bases (move_builtin_to_contract
+      // aborts with "parsing order error" when a base is not registered yet).
+      if (!_cname.empty() && context.find_symbol(prefix + _cname) == nullptr)
+      {
+        std::vector<std::string> order;
+        std::map<int, std::string> id2name;
+        const nlohmann::json *def = nullptr;
+        for (const auto &n : src_ast_json["nodes"])
+          if (n.value("nodeType", "") == "ContractDefinition")
+          {
+            id2name[n["id"].get<int>()] = n["name"].get<std::string>();
+            if (n["name"] == _cname)
+              def = &n;
+          }
+        if (def && def->contains("linearizedBaseContracts"))
+          for (auto it = (*def)["linearizedBaseContracts"].rbegin();
+               it != (*def)["linearizedBaseContracts"].rend();
+               ++it)
+            if (id2name.count(it->get<int>()))
+              order.push_back(id2name[it->get<int>()]);
+        if (order.empty())
+          order.push_back(_cname);
+        for (const auto &b : order)
+          if (
+            context.find_symbol(prefix + b) == nullptr &&
+            get_contract_definition(b))
+          {
+            log_error("failed to convert contract {} referenced by a cast", b);
+            abort();
+          }
+      }
       get_static_contract_instance_ref(_cname, c_ins);
 
       // Propagate the cast address into the singleton's $address member
@@ -1536,6 +1924,19 @@ void solidity_convertert::convert_type_expr(
         }
 
         src_expr = new_arr;
+      }
+      else if (src_expr.id() != irept::id_array)
+      {
+        // Runtime fixed-array reference (id_index for `s[1]`, id_symbol for
+        // `local_arr`, etc.). The aux-array materialization below assumes
+        // src_expr is a literal whose operands can become a static
+        // initializer; for live expressions that path produces a
+        // static-lifetime symbol whose `value` references function-local
+        // state (e.g. `((uint256)(&s[0][0]))[1]`) and migrate_expr crashes
+        // on the type-mismatched index2t source. Decay to a pointer the
+        // normal C way and skip the rest of this branch.
+        solidity_gen_typecast(ns, src_expr, dest_type);
+        return;
       }
 
       // allow fall-through

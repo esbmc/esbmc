@@ -721,7 +721,7 @@ void insert_abort_call_markers_for_function(
 void goto_termination(
   goto_functionst &goto_functions,
   optionst &options,
-  const namespacet &ns)
+  contextt &context)
 {
   // Build the Aborts summary first so insert_abort_call_markers_for_
   // function can recognise abort/_Exit/__assert_fail and user-level
@@ -734,7 +734,7 @@ void goto_termination(
   // there; library helpers (body.hide) DO have loops but those are
   // explicitly skipped in the per-function pass below.
   goto_k_induction(
-    goto_functions, ns, options.get_bool_option("multi-property"));
+    goto_functions, context, options.get_bool_option("multi-property"), false);
 
   // Per-function pass: inject no-op-cycle ASSUMEs, gate IS for loops
   // that would make IS UNSAT unsound, and insert termination

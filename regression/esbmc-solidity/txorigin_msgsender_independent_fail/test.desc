@@ -1,0 +1,5 @@
+CORE
+contract.solast
+--sol contract.sol --no-standard-checks --contract A --focus-function setACL --incremental-bmc
+^VERIFICATION FAILED$
+^  assertion msg_sender == this->ACL$

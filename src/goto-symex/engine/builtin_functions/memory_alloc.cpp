@@ -199,6 +199,10 @@ void goto_symext::copy_single_element(
   expr2tc new_elem = index2tc(new_elem_type, new_array, idx);
 
   cur_state->rename(old_elem);
+  // Same-width bit-vectors only (see copy_old_objects): the conversion keeps
+  // the bit pattern.
+  if (old_elem->type != new_elem_type)
+    old_elem = typecast2tc(new_elem_type, old_elem);
   symex_assign(code_assign2tc(new_elem, old_elem), false, guard);
 }
 
@@ -337,7 +341,14 @@ void goto_symext::copy_old_objects(
       item.object, old_elem_type, old_base_array, old_is_array);
     // The new object takes the first object's element type; an object of
     // another element type is not copied, leaving the new contents nondet.
-    if (old_elem_type != elem_type)
+    // A bit-vector of the same width differs only in signedness (`char`
+    // against `unsigned char` buffers), and converting it keeps every bit, so
+    // it is copied: dropping it would leave the live object's bytes nondet
+    // whenever an untaken path's object came first.
+    if (
+      old_elem_type != elem_type &&
+      !(is_bv_type(old_elem_type) && is_bv_type(elem_type) &&
+        old_elem_type->get_width() == elem_type->get_width()))
       continue;
 
     guard2tc copy_guard = guard;
@@ -345,9 +356,9 @@ void goto_symext::copy_old_objects(
     copy_memory_content(
       old_base_array,
       new_array,
-      calculate_old_element_count(old_base_array, elem_type, old_is_array),
+      calculate_old_element_count(old_base_array, old_elem_type, old_is_array),
       new_elem_count,
-      elem_type,
+      old_elem_type,
       old_is_array,
       copy_guard);
   }

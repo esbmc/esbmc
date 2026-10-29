@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--contract Dreive --sol contract.sol --no-standard-checks --bound --unwind 20 --no-unwinding-assertions
+^VERIFICATION FAILED$

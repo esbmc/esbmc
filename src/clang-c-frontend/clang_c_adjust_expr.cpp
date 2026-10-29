@@ -7,6 +7,7 @@
 #include <util/arith/arith_tools.h>
 #include <util/arith/bitvector.h>
 #include <util/lang/c_types.h>
+#include <util/config/config.h>
 #include <util/lang/c_sizeof.h>
 #include <util/symtab/base_subobject.h>
 #include <util/symtab/cprover_prefix.h>
@@ -22,6 +23,51 @@
 clang_c_adjust::clang_c_adjust(contextt &_context)
   : context(_context), ns(namespacet(context))
 {
+}
+
+/// SOLIDITY HAS NO INTEGER PROMOTION, AND APPLYING C'S MAKES THE OVERFLOW CHECK
+/// VACUOUS BELOW 32 BITS.
+///
+/// `uint8 + uint8` is uint8 arithmetic in Solidity and reverts Panic(0x11) at
+/// 256 -- measured on chain, forge 1.7.1 / solc 0.8.34, in
+/// notes/coverage/poc/D19_PanicSemantics.t.sol. C's usual arithmetic
+/// conversions widen both operands to at least `int`
+/// (`c_typecastt::implicit_typecast_arithmetic`, util/c_typecast.cpp: "minimum
+/// promotion"), and Solidity reaches this adjuster because
+/// solidity_language.cpp's Phase 4 runs the C++ adjuster over converter output
+/// wholesale.
+///
+/// The consequence is not imprecision. `goto_checkt::overflow_check` takes its
+/// width from the expression's own type, so after the widening it asks whether
+/// 200 + 248 overflows an int32 -- it does not, and the claim is TRUE for every
+/// model. MEASURED (notes/coverage/poc/D21_NarrowOverflowMissed.sol, verdict
+/// read from the VERIFICATION line):
+///
+///     uint8/uint16/int8 `+`, uint8 `*`, uint8 `-`   VERIFICATION SUCCESSFUL
+///     uint32/uint64/uint128/uint256/int256          VERIFICATION FAILED
+///
+/// The cut is exactly at the promotion target. `uint8 -` matters most: unsigned
+/// underflow is the commonest real Solidity panic, and promotion to a SIGNED
+/// 32-bit type hides it perfectly, because 0 - 1 is an ordinary -1 in int32.
+///
+/// GATED ON THE OPERANDS ALREADY AGREEING, deliberately. The Solidity frontend
+/// has already coerced both operands to solc's `commonType`
+/// (`solidity_convertert::get_binary_operator_expr`), so for every well-typed
+/// Solidity arithmetic node the equality holds and the widening is pure damage.
+/// When the types disagree the old path still runs unchanged, which keeps this
+/// function's behaviour identical for the C and C++ frontends and for any
+/// mixed-type expression that reaches it.
+static bool sol_keeps_operand_width(const exprt &op)
+{
+  if (config.language.lid != language_idt::SOLIDITY)
+    return false;
+  const irep_idt &id = op.type().id();
+  return id == "unsignedbv" || id == "signedbv";
+}
+
+static bool sol_keeps_operand_width(const exprt &op0, const exprt &op1)
+{
+  return op0.type() == op1.type() && sol_keeps_operand_width(op0);
 }
 
 bool clang_c_adjust::adjust()
@@ -520,7 +566,12 @@ void clang_c_adjust::adjust_expr_shifts(exprt &expr)
   const typet type0 = ns.follow(op0.type());
   const typet type1 = ns.follow(op1.type());
 
-  gen_typecast_arithmetic(ns, op0);
+  // op0 only: a Solidity shift's RESULT is the left operand's type, so widening
+  // it turns `uint8 << n` into 32-bit arithmetic (the chain truncates it --
+  // measured, 200 << 1 == 144). op1 is the shift DISTANCE and is legitimately
+  // allowed to differ from op0, so it keeps the C path.
+  if (!sol_keeps_operand_width(op0))
+    gen_typecast_arithmetic(ns, op0);
   gen_typecast_arithmetic(ns, op1);
 
   if (is_number(op0.type()) && is_number(op1.type()))
@@ -721,7 +772,8 @@ void clang_c_adjust::adjust_expr_binary_arithmetic(exprt &expr)
   const typet o_type0 = ns.follow(op0.type());
   const typet o_type1 = ns.follow(op1.type());
 
-  gen_typecast_arithmetic(ns, op0, op1);
+  if (!sol_keeps_operand_width(op0, op1))
+    gen_typecast_arithmetic(ns, op0, op1);
 
   const typet &type0 = op0.type();
   const typet &type1 = op1.type();
@@ -791,7 +843,22 @@ void clang_c_adjust::adjust_index(index_exprt &index)
       std::swap(array_expr, index_expr);
   }
 
-  gen_typecast(ns, index_expr, index_type());
+  // Honour an explicit index width annotation on the array's type
+  // (`__ESBMC_inf_size:N` parsed in clang_c_convert). Used by the
+  // Solidity mapping storage to declare a 480-bit-indexed infinite
+  // array. Default
+  // (no annotation): cast to size_t-style index_type() as before.
+  {
+    const typet &final_array_type = ns.follow(array_expr.type());
+    irep_idt iw;
+    if (final_array_type.is_array())
+      iw = final_array_type.get("#esbmc_index_width");
+    if (!iw.empty())
+      gen_typecast(
+        ns, index_expr, unsignedbv_typet(std::stoul(iw.as_string())));
+    else
+      gen_typecast(ns, index_expr, index_type());
+  }
 
   const typet &final_array_type = ns.follow(array_expr.type());
   if (final_array_type.id() == "pointer")
@@ -1169,7 +1236,14 @@ void clang_c_adjust::adjust_side_effect_assignment(exprt &expr)
     }
   }
 
-  gen_typecast_arithmetic(ns, op0, op1);
+  // Compound assignment (`x += a`). Widening the LVALUE here is what makes
+  // goto_check's Solidity narrowing workaround (goto_check.cpp, "detect
+  // implicit narrowing in assignments like (signed int)x = (signed int)x + 10")
+  // necessary at all -- that workaround fires only when the target IS a
+  // typecast, which is why `x += 10` was caught and `x = x + 1` was not. With
+  // the promotion gone, both shapes produce the same 8-bit claim.
+  if (!sol_keeps_operand_width(op0, op1))
+    gen_typecast_arithmetic(ns, op0, op1);
 }
 
 void clang_c_adjust::adjust_side_effect_function_call(

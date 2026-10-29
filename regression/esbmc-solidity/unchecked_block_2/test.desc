@@ -1,4 +1,4 @@
 CORE
 contract.solast
---unsigned-overflow-check --sol contract.sol --unwind 1 --no-unwinding-assertions
+--unsigned-overflow-check --sol contract.sol --unwind 20 --no-unwinding-assertions
 ^VERIFICATION SUCCESSFUL$

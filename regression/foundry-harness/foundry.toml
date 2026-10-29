@@ -1,0 +1,41 @@
+# Frozen environment for stage-4 acceptance.
+#
+# Section 5.3's only vetoing criterion is "a generated test, run against the
+# UNMODIFIED contract, passes". That criterion cannot be evaluated at all without
+# a Foundry project that compiles what the generator emits, so this directory
+# exists before the generator does.
+#
+# Everything that can change a result is pinned here rather than left to
+# whatever is installed: the compiler, the optimizer, the EVM version, the fuzz
+# run count and the fuzz SEED. An unpinned seed makes "the test passed" a
+# statement about one lucky draw; an unpinned solc makes the numbers in the paper
+# unreproducible on any other machine.
+#
+# The versions this was verified against are recorded in README.md, together
+# with the full resolved `forge config` output, so a future mismatch is visible
+# rather than silent.
+
+[profile.default]
+src = "src"
+test = "test"
+libs = ["lib"]
+
+# Pinned. solc is resolved by solc-select on this machine; see README.md.
+solc_version = "0.8.34"
+
+# Off on purpose: the generated tests are about control flow, and optimiser
+# passes can merge or delete branches, which is the one thing that would make a
+# path-coverage claim about the source untrue of the compiled artifact.
+optimizer = false
+
+# The generated tests use no cheatcodes beyond what forge-std/Test.sol exposes,
+# but pinning the EVM version keeps `block.*` semantics fixed across upgrades.
+evm_version = "cancun"
+
+[fuzz]
+# Parameterised tests render coordinate boxes with `bound(...)`, which is a
+# mapping and never rejects, so runs is a coverage knob rather than a rejection
+# risk. Pinned so the reported numbers mean the same thing twice.
+runs = 256
+seed = "0x1"
+max_test_rejects = 65536

@@ -607,6 +607,67 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     }
   }
 
+  if (cmdline.isset("coverage-multi-tx"))
+  {
+    // --coverage-multi-tx keeps the multi-transaction dispatcher loop LIVE in
+    // Solidity coverage mode (see the neutralization site below), and the
+    // Foundry generator reconstructs the ordered call sequence from that loop's
+    // per-iteration dispatcher-guard markers.
+    //
+    // --solidity-max-tx N instead makes get_tx_bound() emit a DETERMINISTIC
+    // unroll of N transaction bodies (no loop). That reconstructs unreliably —
+    // the generator can mis-attribute which method ran in each transaction (it
+    // emitted `fire(); fire();` where `arm(); fire();` was needed) — so the two
+    // flags are incompatible: route the transaction bound through the live
+    // loop.
+    if (cmdline.isset("solidity-max-tx"))
+    {
+      log_error(
+        "--coverage-multi-tx is incompatible with --solidity-max-tx: an "
+        "explicit tx bound forces a deterministic unroll whose Foundry "
+        "reconstruction is unreliable. Bound the live dispatcher loop with "
+        "--incremental-bmc (recommended) or --unwind N instead.");
+      abort();
+    }
+    // The live loop is an unbounded `while(nondet_bool())`; symex needs a
+    // whole-program bounding strategy or it diverges. Loop-specific bounds
+    // (--unwindset / --unwindsetname) are NOT accepted here: they target a
+    // named loop, not necessarily the dispatcher, so they cannot guarantee the
+    // loop is bounded. Require an explicit global strategy rather than
+    // guessing.
+    if (
+      !cmdline.isset("unwind") && !cmdline.isset("incremental-bmc") &&
+      !cmdline.isset("k-induction") && !cmdline.isset("k-induction-parallel") &&
+      !cmdline.isset("termination") && !cmdline.isset("base-case") &&
+      !cmdline.isset("forward-condition") && !cmdline.isset("inductive-step"))
+    {
+      log_error(
+        "--coverage-multi-tx keeps the unbounded multi-transaction dispatcher "
+        "loop live; it needs a global bounding strategy. Add --incremental-bmc "
+        "(recommended: discovers the transaction depth dynamically) or "
+        "--unwind N (N reaches up to ~N-1 transactions).");
+      abort();
+    }
+  }
+
+  // The deterministic-unroll path (--solidity-max-tx N, N>=2) reconstructs a
+  // multi-transaction Foundry sequence UNRELIABLY: the generator can
+  // mis-attribute which method ran in each transaction (emitting fire();fire();
+  // where arm();fire(); was needed). Surface it and point at the reliable path.
+  if (
+    cmdline.isset("generate-foundry-testcase") &&
+    cmdline.isset("solidity-max-tx") && !cmdline.isset("coverage-multi-tx"))
+  {
+    const long n = strtol(cmdline.getval("solidity-max-tx"), nullptr, 10);
+    if (n >= 2)
+      log_warning(
+        "--solidity-max-tx {} with --generate-foundry-testcase reconstructs "
+        "multi-transaction sequences unreliably (methods can be mis-attributed "
+        "across transactions). For reliable ordered sequences use "
+        "--coverage-multi-tx --incremental-bmc instead.",
+        n);
+  }
+
   if (cmdline.isset("base-case"))
   {
     options.set_option("base-case", true);
