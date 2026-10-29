@@ -940,7 +940,7 @@ void dereferencet::check_pointer_alignment(
   /* The object is not known here -- build_reference_to() has yet to unpack the
    * descriptor -- so this pre-check keeps assuming the base carries the width.
    * The object-aware sites below make the claim that actually bites. */
-  check_alignment(access_size_bits, ptr_offset_bits, guard, expr2tc());
+  check_alignment(access_size_bits, type, ptr_offset_bits, guard, expr2tc());
 }
 
 expr2tc dereferencet::create_pointer_offset_bits(const expr2tc &deref_expr)
@@ -1535,7 +1535,7 @@ void dereferencet::construct_from_array(
     {
       const BigInt access_bits = type_byte_size_bits(type);
       if (object_base_alignment(value) * 8 < access_bits)
-        check_alignment(access_bits, offset, guard, value);
+        check_alignment(access_bits, type, offset, guard, value);
     }
 
     value = index2tc(arr_subtype, value, div);
@@ -1601,7 +1601,7 @@ void dereferencet::construct_from_array(
 
   // No alignment guarantee: assert that it's correct.
   if (!is_correctly_aligned)
-    check_alignment(deref_size, std::move(mod), guard, value);
+    check_alignment(deref_size, type, std::move(mod), guard, value);
 
   if (!overflows_boundaries)
   {
@@ -3180,7 +3180,7 @@ void dereferencet::check_data_obj_access(
    * manner (e.g. for __attribute__((packed)) structures),
    * check that the access being made is aligned. */
   if (is_scalar_type(type) && !mode.unaligned)
-    check_alignment(access_sz, std::move(offset), guard, value);
+    check_alignment(access_sz, type, std::move(offset), guard, value);
 }
 
 BigInt dereferencet::object_base_alignment(const expr2tc &object) const
@@ -3213,6 +3213,7 @@ BigInt dereferencet::object_base_alignment(const expr2tc &object) const
 
 void dereferencet::check_alignment(
   BigInt minwidth,
+  const type2tc &type,
   const expr2tc &offset_bits,
   const guard2tc &guard,
   const expr2tc &object)
@@ -3234,12 +3235,14 @@ void dereferencet::check_alignment(
   // Perform conversion to bytes here
   minwidth = access_alignment(minwidth / 8);
 
-  /* No C scalar is aligned beyond the fundamental alignment; one wider than
+  /* No C integer is aligned beyond the fundamental alignment; one wider than
    * that is a _BitInt, which the target aligns to its _BitInt cap (#8692).
    * Demanding the full width would fail every such access, since no object
-   * base is aligned past the fundamental alignment either. */
+   * base is aligned past the fundamental alignment either. A wider float,
+   * `long double` under --32, keeps its width. */
   const configt::ansi_ct &c = config.ansi_c;
-  if (minwidth > c.max_alignment() && c.bitint_max_align != 0)
+  if (
+    is_bv_type(type) && minwidth > c.max_alignment() && c.bitint_max_align != 0)
     minwidth = c.bitint_max_align;
   expr2tc addr = typecast2tc(
     size_type2(),
