@@ -1606,15 +1606,19 @@ bool function_call_builder::nested_function_exists(const symbol_id &sid) const
 }
 
 exprt function_call_builder::len_of_bitvector_operand(
-  const nlohmann::json &arg) const
+  const nlohmann::json &arg,
+  const typet &lowered_type) const
 {
   // A single character also lowers to a bitvector and does have length 1, so
   // tell the two apart by the Python type. Anything the annotator could not
   // type keeps the historical answer: get_operand_type reports a BinOp as its
   // left operand's type, so `3 * "x,"` looks like an int, and refusing on that
-  // alone would reject a real str/list.
-  const std::string arg_py_type =
-    converter_.get_type_handler().get_operand_type(arg);
+  // alone would reject a real str/list. A value wider than a character is no
+  // character, so an untyped one, such as the result of an imported function,
+  // is an int (#9336).
+  std::string arg_py_type = converter_.get_type_handler().get_operand_type(arg);
+  if (arg_py_type.empty() && bv_width(lowered_type) > bv_width(char_type()))
+    arg_py_type = "int";
 
   if (is_unsized_python_type(arg_py_type))
     return converter_.get_exception_handler().gen_exception_raise(
@@ -1879,7 +1883,7 @@ exprt function_call_builder::build() const
     }
 
     if (arg_expr.type().is_signedbv() || arg_expr.type().is_unsignedbv())
-      return len_of_bitvector_operand(call_["args"][0]);
+      return len_of_bitvector_operand(call_["args"][0], arg_expr.type());
 
     typet len_arg_type = converter_.ns.follow(arg_expr.type());
     if (len_arg_type.is_array() && len_arg_type.subtype() != char_type())

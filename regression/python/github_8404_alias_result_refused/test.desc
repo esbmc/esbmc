@@ -1,4 +1,0 @@
-CORE
-main.py
-
-^ERROR: .*main\.py:20:4: unsupported: this call may be 's' or 'i', which return different types \(str and int\)$

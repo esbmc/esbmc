@@ -738,9 +738,14 @@ void python_exception_handler::emit_catch_block(
   // Create exception variable symbol before processing body
   if (!type_node.is_null())
   {
-    const std::string class_name = type_node.contains("id")
-                                     ? type_node["id"].get<std::string>()
-                                     : module_class_name(type_node, element);
+    // numpy.linalg.LinAlgError is two attributes deep, past what
+    // module_class_name reads.
+    const bool linalg_error = type_node.value("attr", "") == "LinAlgError" &&
+                              type_node["value"].value("attr", "") == "linalg";
+    const std::string class_name =
+      type_node.contains("id") ? type_node["id"].get<std::string>()
+      : linalg_error           ? "LinAlgError"
+                               : module_class_name(type_node, element);
     if (class_name.empty())
       throw std::runtime_error(
         "except with a dotted/attribute exception type is not supported");

@@ -1,4 +1,4 @@
 CORE
 other.py
 main.py
-^ERROR: except with a dotted/attribute exception type is not supported$
+^ERROR: class 'E' is defined in both

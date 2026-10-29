@@ -8,5 +8,4 @@ if flag:
     second = n
 else:
     second = "text"
-same = first is second
-assert same or not same
+assert first is second

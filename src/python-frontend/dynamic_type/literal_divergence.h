@@ -59,23 +59,30 @@ count_bindings(const nlohmann::json &node, const std::string &name)
   return count;
 }
 
+// The value `node` binds to `name` when it is `name = value`.
+inline const nlohmann::json *
+assigned_value_at(const nlohmann::json &node, const std::string &name)
+{
+  const std::string type = node.value("_type", "");
+  if (
+    type == "Assign" && node["targets"].size() == 1 &&
+    node["targets"][0].value("id", "") == name)
+    return &node["value"];
+  if (
+    type == "AnnAssign" && node["target"].value("id", "") == name &&
+    node.contains("value") && !node["value"].is_null())
+    return &node["value"];
+  return nullptr;
+}
+
 inline const nlohmann::json *
 assigned_value_in(const nlohmann::json &node, const std::string &name)
 {
   if (!node.is_structured())
     return nullptr;
   if (node.is_object())
-  {
-    const std::string type = node.value("_type", "");
-    if (
-      type == "Assign" && node["targets"].size() == 1 &&
-      node["targets"][0].value("id", "") == name)
-      return &node["value"];
-    if (
-      type == "AnnAssign" && node["target"].value("id", "") == name &&
-      node.contains("value") && !node["value"].is_null())
-      return &node["value"];
-  }
+    if (const nlohmann::json *value = assigned_value_at(node, name))
+      return value;
   for (const auto &child : node)
     if (const nlohmann::json *found = assigned_value_in(child, name))
       return found;

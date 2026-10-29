@@ -6658,7 +6658,8 @@ bool python_converter::try_tagged_var_assign(
        type_handler_.is_string_type(rhs.type())) &&
       !(on_spine && rhs.type().is_floatbv()))
     {
-      dynamic_type_handler_.assign(rhs, location, name, target_block);
+      dynamic_type_handler_.assign(
+        rhs, location, name, target_block, ast_node["value"]);
       return true;
     }
 
