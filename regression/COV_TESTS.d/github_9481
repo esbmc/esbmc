@@ -1,0 +1,9 @@
+regression/python/github_9481_call_result
+regression/python/github_9481_call_result_fail
+regression/python/github_9481_parameter
+regression/python/github_9481_parameter_fail
+regression/python/github_9481_keyword
+regression/python/github_9481_annotated
+regression/python/github_9481_list_argument
+regression/python/github_9481_mixed_arguments
+regression/python/github_9481_list_result
