@@ -1,3 +1,5 @@
 regression/python/github_9319_ints
 regression/python/github_9319_raw_unsupported
+regression/python/github_9319_same_name_method_unsupported_fail
+regression/python/github_9319_same_name_nested_unsupported_fail
 regression/python/github_9319_unsupported

@@ -25,8 +25,12 @@ public:
   bool
   may_be_non_number(const nlohmann::json &expr, const nlohmann::json &scope);
 
-  /// The one function called `function_name`, nested or not, or the module.
+  /// The top-level function called `function_name`, or the module.
   const nlohmann::json &scope_of(const std::string &function_name) const;
+
+  /// The function or lambda whose own scope holds `node`, the module for a
+  /// node at module level, or null for a node this module does not hold.
+  const nlohmann::json *scope_containing(const nlohmann::json &node) const;
 
 private:
   using scoped = std::pair<const nlohmann::json *, const nlohmann::json *>;
@@ -49,6 +53,8 @@ private:
     const nlohmann::json &callee,
     const nlohmann::json &scope,
     unsigned depth) const;
+  std::vector<const nlohmann::json *>
+  return_values(const nlohmann::json &fn, bool &returns, bool &yields) const;
   std::vector<scoped> returned_functions(
     const nlohmann::json &call,
     const nlohmann::json &scope,
@@ -58,8 +64,7 @@ private:
     const std::string &name,
     std::vector<scoped> &out,
     unsigned depth) const;
-  const std::vector<const nlohmann::json *> &
-  callers(const nlohmann::json &def, unsigned depth) const;
+  std::vector<const nlohmann::json *> callers(const nlohmann::json &def) const;
   const nlohmann::json *top_level_def(const std::string &name) const;
   const nlohmann::json &enclosing_scope(const nlohmann::json &node) const;
   void index(const nlohmann::json &node, const nlohmann::json *scope);
