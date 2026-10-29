@@ -1,4 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0
+// KNOWNBUG: the frontend does not pass a revert up to the caller
+// (build_revert_rollback_block), so when `require(errorCount < 10)` fails,
+// `rate` returns without writing its tuple and `test` asserts on a stale one.
+// `feed.getData` may re-enter without bound, and the inductive step havocs
+// what the re-entries write, `errorCount` among them, which makes that path
+// reachable in the step. The step used to cut the re-entries off instead,
+// which is unsound (see reentry_kinduction_deep_fail).
 pragma solidity >=0.8.1;
 
 interface DataFeed {

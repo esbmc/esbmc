@@ -1,3 +1,8 @@
+// KNOWNBUG: branch coverage ends when the inductive step proves the uncovered
+// branches unreachable. `transfer` may re-enter the contract without bound,
+// and with the re-entries past its bound havoced the step proves no k, so
+// the run reaches the timeout. The step used to cut the re-entries off
+// instead, which is unsound (see reentry_kinduction_deep_fail).
 pragma solidity ^0.8.0;
 
 contract owned {

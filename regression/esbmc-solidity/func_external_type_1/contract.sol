@@ -1,4 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0
+// KNOWNBUG: a re-entrant dispatch writes the bytes pool through
+// `$dynamic_pool.pool`, a heap pointer the points-to analysis cannot name, so
+// goto_k_induction cannot havoc what the dispatch writes and disables the
+// inductive step.
 pragma solidity >=0.8.0 <0.9.0;
 
 // External function types: callback stored in struct, invoked later.
