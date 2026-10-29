@@ -263,13 +263,21 @@ inline std::string forwarded_return_kind(
   if (!module_body.is_array())
     return "";
   for (const auto &stmt : module_body)
+  {
     if (
-      stmt.is_object() && stmt.value("_type", "") == "FunctionDef" &&
-      stmt.value("name", "") == callee && stmt["body"].size() == 1 &&
-      stmt["body"][0].value("_type", "") == "Return" &&
-      stmt["body"][0].contains("value") && stmt["body"][0]["value"].is_object())
-      return classify_literal_value_kind(
-        stmt["body"][0]["value"], module_body, depth + 1);
+      !stmt.is_object() || stmt.value("_type", "") != "FunctionDef" ||
+      stmt.value("name", "") != callee)
+      continue;
+    const auto body = stmt.find("body");
+    if (body == stmt.end() || !body->is_array() || body->size() != 1)
+      return "";
+    const nlohmann::json &ret = body->front();
+    if (
+      !ret.is_object() || ret.value("_type", "") != "Return" ||
+      !ret.contains("value") || !ret["value"].is_object())
+      return "";
+    return classify_literal_value_kind(ret["value"], module_body, depth + 1);
+  }
   return "";
 }
 
