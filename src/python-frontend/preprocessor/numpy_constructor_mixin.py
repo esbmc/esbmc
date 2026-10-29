@@ -4,7 +4,8 @@ import copy
 
 
 class NumpyConstructorMixin:
-    """Spell a NumPy constructor call in the one form the frontend reads.
+    """Spell a NumPy constructor or numpy.linalg call in the one form the
+    frontend reads.
 
     The frontend reads the leading value parameters of a constructor
     positionally and the others as keywords. Binding them here gives every
@@ -24,7 +25,16 @@ class NumpyConstructorMixin:
         "eye": (("N", "M", "k", "dtype", "order"), 2, ("device", "like")),
         "identity": (("n", "dtype"), 1, ("like", )),
         "array": (("object", "dtype"), 1, ("copy", "order", "subok", "ndmin", "like")),
+        "det": (("a", ), 1, ()),
+        "inv": (("a", ), 1, ()),
+        "eig": (("a", ), 1, ()),
+        "eigvals": (("a", ), 1, ()),
+        "solve": (("a", "b"), 2, ()),
+        "norm": (("x", "ord", "axis", "keepdims"), 2, ()),
+        "svd": (("a", "full_matrices", "compute_uv", "hermitian"), 1, ()),
     }
+    # Functions of numpy.linalg, bound only when called through it.
+    _NUMPY_LINALG_FUNCTIONS = frozenset({"det", "inv", "eig", "eigvals", "solve", "norm", "svd"})
     _NUMPY_REQUIRED_PARAMS = {
         "linspace": ("start", "stop"),
         "full": ("shape", "fill_value"),
@@ -33,6 +43,13 @@ class NumpyConstructorMixin:
         "eye": ("N", ),
         "identity": ("n", ),
         "array": ("object", ),
+        "det": ("a", ),
+        "inv": ("a", ),
+        "eig": ("a", ),
+        "eigvals": ("a", ),
+        "solve": ("a", "b"),
+        "norm": ("x", ),
+        "svd": ("a", ),
     }
 
     def _record_numpy_import(self, node):
@@ -43,11 +60,18 @@ class NumpyConstructorMixin:
                     self.numpy_module_names.add(alias.asname or "numpy")
         elif node.module == "numpy":
             for alias in node.names:
-                if alias.name in self._NUMPY_CONSTRUCTOR_SIGNATURES:
+                if (alias.name in self._NUMPY_CONSTRUCTOR_SIGNATURES
+                        and alias.name not in self._NUMPY_LINALG_FUNCTIONS):
                     self.numpy_constructor_names[alias.asname or alias.name] = alias.name
 
     def _numpy_constructor_name(self, node):
         func = node.func
+        if (isinstance(func, ast.Attribute) and func.attr in self._NUMPY_LINALG_FUNCTIONS):
+            linalg = func.value
+            through_linalg = (isinstance(linalg, ast.Attribute) and linalg.attr == "linalg"
+                              and isinstance(linalg.value, ast.Name)
+                              and linalg.value.id in self.numpy_module_names)
+            return func.attr if through_linalg else None
         if (isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name)
                 and func.value.id in self.numpy_module_names
                 and func.attr in self._NUMPY_CONSTRUCTOR_SIGNATURES):
@@ -73,6 +97,10 @@ class NumpyConstructorMixin:
         try:
             bound = self._bind_numpy_parameters(name, node)
         except TypeError as error:
+            if name in self._NUMPY_LINALG_FUNCTIONS:
+                # Reading the numpy.linalg module has no effect to keep, and
+                # the frontend does not evaluate a module as a value.
+                node.func = ast.Name(id=name, ctx=ast.Load())
             return self.visit(self._raising_call(node, str(error)))
         self._spell_numpy_constructor_call(name, node, bound)
         return None
