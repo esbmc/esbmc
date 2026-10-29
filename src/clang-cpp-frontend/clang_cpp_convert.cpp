@@ -2237,7 +2237,9 @@ bool clang_cpp_convertert::subobject_destructors(
   std::vector<subobject_destructort> &out)
 {
   const clang::CXXRecordDecl *parent = md.getParent();
-  if (!parent || !parent->hasDefinition())
+  // A union has no bases, and its members are variant members, which its
+  // destructor does not destroy (C++ [class.dtor]/9).
+  if (!parent || !parent->hasDefinition() || parent->isUnion())
     return false;
 
   const auto &[this_id, this_ptr_type] = method_this(md);
