@@ -80,6 +80,7 @@ void ai_baset::initialize(const goto_functionst &goto_functions)
 /// do_function_call_rec), so it cannot close a cycle.
 void ai_baset::find_call_cycles(const goto_functionst &goto_functions)
 {
+  call_site_function.clear();
   call_cycle.clear();
   cycle_locals.clear();
 
@@ -88,6 +89,7 @@ void ai_baset::find_call_cycles(const goto_functionst &goto_functions)
     forall_goto_program_instructions (i_it, f_it->second.body)
       if (i_it->is_function_call())
       {
+        call_site_function[&*i_it] = f_it->first;
         const expr2tc &function = to_code_function_call2t(i_it->code).function;
         if (is_symbol2t(function))
           callees[f_it->first].push_back(to_symbol2t(function).thename);

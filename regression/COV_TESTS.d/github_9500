@@ -3,3 +3,6 @@ regression/esbmc/github_9500_fail
 regression/esbmc/github_9500_mutual_fail
 regression/esbmc/github_9500_param_fail
 regression/esbmc/github_9500_nonrecursive
+regression/esbmc/github_9500_ret_global_fail
+regression/esbmc/github_9500_ret_pointer_fail
+regression/esbmc-cpp/cpp/github_9500_inlined_fail

@@ -221,9 +221,8 @@ public:
    */
   void havoc_rec(const expr2tc &expr);
   void havoc_arguments(const irep_idt &function_id, const namespacet &ns);
-  void havoc_reentered_locals(
-    const irep_idt &caller,
-    const irep_idt &callee,
+  void apply_return(
+    goto_programt::const_targett call,
     const ai_baset &ai,
     const namespacet &ns);
 

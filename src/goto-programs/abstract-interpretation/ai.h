@@ -96,9 +96,17 @@ public:
   const std::vector<expr2tc> *
   reentered_locals(const irep_idt &caller, const irep_idt &callee) const;
 
+  /// The function whose body holds the FUNCTION_CALL @p call.
+  const irep_idt &function_of(goto_programt::const_targett call) const
+  {
+    return call_site_function.at(&*call);
+  }
+
 protected:
   void find_call_cycles(const goto_functionst &goto_functions);
 
+  std::unordered_map<const goto_programt::instructiont *, irep_idt>
+    call_site_function;
   std::unordered_map<irep_idt, unsigned, irep_id_hash> call_cycle;
   std::unordered_map<irep_idt, std::vector<expr2tc>, irep_id_hash> cycle_locals;
 

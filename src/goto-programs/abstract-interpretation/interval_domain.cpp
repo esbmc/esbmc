@@ -1088,28 +1088,49 @@ void interval_domaint::transform(
     }
   }
 
-  // Let's deal with returns now.
   to--;
   if (from->is_end_function() && to->is_function_call())
+    apply_return(to, ai, ns);
+}
+
+/// The edge from the callee's END_FUNCTION back to @p call. A body is entered
+/// only through a direct call (see ai_baset::do_function_call_rec), and the
+/// caller is the function holding @p call, which an inlined instruction's
+/// own `function` does not name (#9500).
+void interval_domaint::apply_return(
+  goto_programt::const_targett call,
+  const ai_baset &ai,
+  const namespacet &ns)
+{
+  const code_function_call2t &code = to_code_function_call2t(call->code);
+  const irep_idt &caller = ai.function_of(call);
+  const irep_idt &callee = to_symbol2t(code.function).thename;
+
+  // The callee's exit state may hold a nested activation's values for the
+  // caller's own locals.
+  if (const std::vector<expr2tc> *locals = ai.reentered_locals(caller, callee))
   {
-    havoc_reentered_locals(to->function, from->function, ai, ns);
-
-    // TODO: deal with recursive functions
-    if (from->function == to->function)
-      return;
-
-    const code_function_call2t &code_function_call =
-      to_code_function_call2t(to->code);
-
-    // Apply assignment over return value
-    if (!is_nil_expr(code_function_call.ret))
-    {
-      expr2tc return_var = symbol2tc(
-        code_function_call.ret->type,
-        fmt::format("c:{}:ret", instruction.function));
-      assign(code_assign2tc(code_function_call.ret, return_var));
-    }
+    for (const expr2tc &decl : *locals)
+      havoc_rec(decl);
+    havoc_arguments(caller, ns);
   }
+
+  if (is_nil_expr(code.ret))
+    return;
+
+  // c:callee:ret is not tracked across a self-recursive return.
+  if (caller == callee)
+  {
+    if (is_symbol2t(code.ret))
+      havoc_rec(code.ret);
+    else
+      clear_state();
+    return;
+  }
+
+  expr2tc return_var =
+    symbol2tc(code.ret->type, fmt::format("c:{}:ret", callee));
+  assign(code_assign2tc(code.ret, return_var));
 }
 
 template <class Interval>
@@ -1402,22 +1423,6 @@ void interval_domaint::havoc_arguments(
   const code_type2t &function = to_code_type(t);
   for (size_t i = 0; i < function.arguments.size(); i++)
     havoc_rec(symbol2tc(function.arguments[i], function.argument_names[i]));
-}
-
-/// The callee's exit state may hold a nested activation's values for the
-/// caller's own locals (#9500).
-void interval_domaint::havoc_reentered_locals(
-  const irep_idt &caller,
-  const irep_idt &callee,
-  const ai_baset &ai,
-  const namespacet &ns)
-{
-  const std::vector<expr2tc> *locals = ai.reentered_locals(caller, callee);
-  if (!locals)
-    return;
-  for (const expr2tc &decl : *locals)
-    havoc_rec(decl);
-  havoc_arguments(caller, ns);
 }
 
 void interval_domaint::havoc_rec(const expr2tc &expr)
