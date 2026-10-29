@@ -3425,7 +3425,9 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
               return ret["value"]["id"].template get<std::string>();
           }
           std::string inferred_type = infer_method_return_type(member, obj);
-          if (!inferred_type.empty())
+          // A static method returning its parameter has no type until the
+          // converter sees the arguments (#9343).
+          if (!inferred_type.empty() || json_utils::is_staticmethod_def(member))
             return inferred_type;
         }
       }
