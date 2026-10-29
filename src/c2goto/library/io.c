@@ -41,7 +41,8 @@ int putchar(int c)
 __ESBMC_HIDE:;
   _Bool error;
   printf("%c", c);
-  return (error ? -1 : c);
+  // C11 7.21.7.3p3: returns the character written, i.e. (unsigned char)c.
+  return (error ? EOF : (unsigned char)c);
 }
 
 int puts(const char *s)

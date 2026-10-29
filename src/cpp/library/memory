@@ -819,10 +819,10 @@ class shared_ptr
     if (--__c->__scount == 0)
     {
       delete __p;
-      __p = nullptr;
       if (--__c->__wcount == 0)
         delete __c;
     }
+    __p = nullptr;
     __c = nullptr;
   }
 

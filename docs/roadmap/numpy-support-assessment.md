@@ -1,6 +1,6 @@
 # ESBMC NumPy — Remaining Work
 
-**Updated:** 2026-10-25.
+**Updated:** 2026-10-28.
 
 This file tracks only what is **not yet implemented, broken, risky, or queued
 as backlog** in the NumPy module. If an item is not listed here as a gap, TODO,
@@ -34,7 +34,7 @@ and its stages, ADR-NP-004 the SMT-array scalability decision, and "principle
 | Sorting / searching | Symbolic array shapes and symbolic `sorter=` operands for `searchsorted` reject explicitly. Genuine 2-D array input is also rejected, matching NumPy's `ValueError: object too deep for desired array`; 1-D row/column views remain supported. |
 | Direct constructor chaining | Supported for the current concrete constructor subset and direct literal `np.array(...)` receivers across the pinned reducers/views (`sum`, `mean`, `min`, `max`, `argsort`, `searchsorted`, `flatten`, `ravel`, `transpose`, `.T`, `reshape`, `argmin`, `argmax`, `diagonal`, `prod`, `std`, and `var`). Remaining gaps are method forms tied to unsupported constructors, symbolic constructor payloads, or broader unsupported APIs. |
 | Statistics | `a.sum()`/`a.mean()`/`a.min()`/`a.max()`/`a.any()`/`a.all()`/`a.argmin()`/`a.argmax()` method forms and their `axis=0/1` variants are supported over concrete 1-D/2-D ndarrays (including function-returned arrays), sharing the same reducer/comparison policy as the functional forms. Still missing: axis/keepdims/out/overwrite/nan-policy style variants beyond concrete flattened/literal `median` and `percentile`, and reducer axes outside 2-D concrete `axis=0/1`. |
-| Linear algebra | `det` of concrete matrices up to 4x4, `inv` and `solve` up to 3x3, `eigvals` of 2x2 matrices and diagonal matrices of any size (complex results, including conjugate pairs) and `svd(..., compute_uv=False)` of 2x2 matrices. Their results are any double within a bound of LAPACK's rounding around the exact value, so an exact comparison fails as it may in NumPy, and a bound that overflows leaves the result unconstrained; factors that are exact with power-of-two pivots, structurally singular matrices and diagonal or triangular eigenvalue problems give NumPy's own value. Missing: eigenvectors (`eig` rejects, `eigvals` is the supported form), the `U` and `Vh` factors of `svd`, larger matrices, symbolic matrix entries, and further `norm` axes/orders. |
+| Linear algebra | Constant matrices: `det` up to 6x6, `inv` and `solve` up to 6x6, `eig` (eigenvalues and unit eigenvectors) of 2x2 matrices with distinct real eigenvalues and of diagonal ones, `eigvals` of 2x2, diagonal and triangular matrices up to 6x6, `svd` values of 2x2 matrices and its `U`, `S`, `Vh` factors of 2x2 and diagonal ones, and `norm` of vectors (orders 1, 2, inf, -inf) and matrices (fro, 1, -1, inf, -inf, and 2 for a 2x2 matrix) with `axis` and `keepdims`. Matrices with run-time entries: `det` up to 3x3 and the vector and Frobenius norms. Results are bounded around the exact value, eigenvectors and singular vectors with either sign and eigenvalues in either order; a result every IEEE implementation computes exactly keeps its value, and a bound that overflows leaves the result unconstrained. Keywords bind as in CPython, constructor arrays (`np.eye(3)`) and views are read, and a singular matrix raises a `LinAlgError` the program can catch. Missing: `eig`/`svd` of larger dense or non-square matrices, complex eigenvalues in `eig`, a repeated eigenvalue or singular value of a non-diagonal matrix, complex matrices, run-time entries for `inv`/`solve`/`eig`/`eigvals`/`svd` and for `det` past 3x3, `norm` orders `nuc`/-2/p, matrices past 6x6; a non-square or 0-d operand rejects during conversion instead of raising a catchable `LinAlgError`. |
 | Math functions | `exp`, `log`, `log2`, `log10`, `sqrt`, `sin`, `cos`, `tan`, `arcsin`/`asin`, `arccos`/`acos`, `arctan`/`atan`, `sinh`, `cosh` and `tanh` of run-time numbers, and of arrays and views of constant shape element by element, are bounded, and `math.*` shares the model with Python's `ValueError`/`OverflowError`. Missing: the other transcendental functions (`expm1`, `log1p`, `exp2`, `arcsinh`/`asinh`, `arccosh`, `arctanh`, `cbrt`, `hypot`, `arctan2`) reject in NumPy while their `math.*` forms still use the C library models (item 1); `np.isnan`/`np.isinf`/`np.isfinite` and the constants `np.inf`/`np.nan` are not recognised; complex arguments, string arrays and views of run-time shape reject; keywords other than `out=None` and `dtype=float` take the older paths. |
 | Random | Generator state and objects (`seed`, `get_state`, `set_state`, `default_rng`, `Generator`, `RandomState`) and every unmodelled `np.random` function (`shuffle`, `permutation`, `multivariate_normal`, `laplace`, `logistic`, ...) raise `TypeError`; `choice(p=...)` does too, since a probability vector has no encoding that keeps ADR-NP-002's over-approximation. Parameters must be scalars (no broadcasting of array parameters). `size` must be integer literals, at most 1024 samples (each sample is unrolled); a `size` read at run time rejects. `choice` takes a 1-D literal sequence, ndarray or view, not an integer `a` or a slice of a string array. `randint` rejects `dtype=bool` and `uint64`, and narrow integer dtypes are stored at 64 bit as for the constructors. |
 | Structured arrays | Record dtypes. |
@@ -80,7 +80,16 @@ and its stages, ADR-NP-004 the SMT-array scalability decision, and "principle
    between fixed breakpoints, so a property tighter than the gap between
    two breakpoints fails; `sin`/`cos` beyond ±8 and `tan` beyond ±4.5 keep
    only their range. An argument that is constant after symex propagation
-   gets the literal result.
+   gets the literal result. In linear algebra, elimination tracks the
+   rounding on each entry and rejects a pivot within it, as LAPACK's order of
+   operations may make that pivot zero; `det`'s bound uses the magnitudes of
+   its terms, and concrete norms are bounded unless exact in every IEEE
+   implementation.
+8. **The suite's cost is in its slow tests, not its count.**
+   `regression/numpy` has 2418 tests; six linear algebra tests that repeated
+   another test's contract were removed, each listed with its replacement in
+   the commit that removes them. Shortening the CI run needs per-test CI
+   timings to merge the expensive programs.
 
 ---
 
@@ -134,20 +143,21 @@ reject, each pinned by a `CORE` test:
 
 ## Prioritised next steps
 
-1. **Linear algebra breadth** — eigenvectors and the `svd` factors, larger
-   and symbolic matrices, more `norm` axes/orders.
-2. **Rebinding and call forms** — a rebind to another shape inside a branch
+1. **Rebinding and call forms** — a rebind to another shape inside a branch
    or loop (item 6), element-wise results and views returned by a call and
    passed straight on as arguments, the operand order inside a `lambda` body
    or a chained comparison.
-3. **Dtype width and non-numeric arrays** — storage and arithmetic in the
+2. **Dtype width and non-numeric arrays** — storage and arithmetic in the
    dtype's own width (NEP 50 promotion), and the string/complex array
    consumers that reject today; `object`/structured/custom dtypes stay out.
-4. **Random generator state** — `Generator`/`default_rng`, `seed` and
+3. **Random generator state** — `Generator`/`default_rng`, `seed` and
    probability-vector `choice`; each needs its own ADR-NP-002 decision first.
-5. **Remaining math functions** — bound `expm1`, `log1p`, `exp2`, the
+4. **Remaining math functions** — bound `expm1`, `log1p`, `exp2`, the
    inverse hyperbolic functions, `cbrt`, `hypot` and `arctan2` (NumPy and
    `math.*`, item 1) and recognise `np.isnan`/`np.isinf`/`np.inf`/`np.nan`.
+5. **Linear algebra remainder** — `eig`/`svd` of larger dense matrices,
+   run-time entries beyond `det` and `norm`, and the shape errors as
+   catchable `LinAlgError`s.
 
 The residual view forms in the table above (lambdas passed on, `**kwargs`, a
 per-type copy of a callee) are narrow and each needs something outside the
@@ -159,15 +169,15 @@ view model; they stay rejected.
 
 The backlog closes in five PRs:
 
-1. **Linear algebra expansion** — eigenvectors, `svd` factors, larger and
-   symbolic matrices, `norm`; the largest of the five.
-2. **Rebinding and call forms** — item 6 and the call forms in step 2.
-3. **Dtype width and non-numeric arrays** — narrow-width storage and
-   arithmetic, string/complex array consumers.
-4. **Random generator state** — after the ADR decision on state and
+1. **Rebinding and call forms** — item 6 and the call forms in step 1.
+2. **Dtype width and non-numeric arrays** — narrow-width storage and
+   arithmetic, string/complex array consumers; the largest of the five.
+3. **Random generator state** — after the ADR decision on state and
    probabilities.
-5. **Remaining math functions** — step 5, on the bounded model of
+4. **Remaining math functions** — step 4, on the bounded model of
    `util/arith/transcendental.h`; the smallest of the five.
+5. **Linear algebra remainder** — step 5, on the bounds and checks the
+   current `numpy.linalg` support shares.
 
 ---
 

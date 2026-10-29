@@ -1,4 +1,0 @@
-CORE
-main.py
---incremental-bmc
-^ERROR: TypeError: numpy.linalg.eig returns eigenvectors, which are not supported; use numpy.linalg.eigvals$
