@@ -123,51 +123,18 @@ void __esbmc_set_cleanup_level(int level)
 /************************** Infinite Array Implementation
  * **************************/
 
-/* These internal functions insert_key_value(), search_key() and delete_key()
- * need to be called in an atomic context. */
+/* Thread-specific data: one value per (thread, key), NULL until set, as a
+ * newly created key holds NULL in every thread (#9433). Keys are never
+ * reused, so at most __ESBMC_TSD_KEYS_MAX (glibc's PTHREAD_KEYS_MAX) exist. */
+#define __ESBMC_TSD_KEYS_MAX 1024
 
-typedef struct thread_key
-{
-  pthread_t thread;
-  pthread_key_t key;
-  const void *value;
-} __ESBMC_thread_key;
+__attribute__((
+  annotate("__ESBMC_inf_size"))) static void *__ESBMC_pthread_tsd[1];
 
-__attribute__((annotate(
-  "__ESBMC_inf_size"))) static __ESBMC_thread_key __ESBMC_pthread_thread_key[1];
-
-static void insert_key_value(pthread_key_t key, const void *value)
+static unsigned long tsd_index(pthread_key_t key)
 {
 __ESBMC_HIDE:;
-  pthread_t thread = __ESBMC_get_thread_id();
-  __ESBMC_pthread_thread_key[thread].thread = thread;
-  __ESBMC_pthread_thread_key[thread].key = key;
-  __ESBMC_pthread_thread_key[thread].value = value;
-}
-
-static __ESBMC_thread_key *search_key(pthread_key_t key)
-{
-__ESBMC_HIDE:;
-  pthread_t thread = __ESBMC_get_thread_id();
-  if (
-    __ESBMC_pthread_thread_key[thread].thread == thread &&
-    __ESBMC_pthread_thread_key[thread].key == key)
-  {
-    return &__ESBMC_pthread_thread_key[thread];
-  }
-  return NULL;
-}
-
-static int delete_key(__ESBMC_thread_key *l)
-{
-__ESBMC_HIDE:;
-  pthread_t thread = __ESBMC_get_thread_id();
-  if (&__ESBMC_pthread_thread_key[thread] == l)
-  {
-    __ESBMC_pthread_thread_key[thread].thread = 0; // Mark as empty
-    return 0;
-  }
-  return -1;
+  return (unsigned long)__ESBMC_get_thread_id() * __ESBMC_TSD_KEYS_MAX + key;
 }
 
 /************************** Thread creation and exit **************************/
@@ -205,11 +172,10 @@ __ESBMC_HIDE:;
   // source: https://linux.die.net/man/3/pthread_key_create
   for (unsigned long i = 0; i < __ESBMC_next_thread_key; ++i)
   {
-    __ESBMC_thread_key *l = search_key(i);
-    if (__ESBMC_thread_key_destructors[i] && l->value)
+    if (__ESBMC_thread_key_destructors[i] && __ESBMC_pthread_tsd[tsd_index(i)])
     {
-      __ESBMC_thread_key_destructors[i]((void *)l->value);
-      delete_key(l);
+      __ESBMC_thread_key_destructors[i](__ESBMC_pthread_tsd[tsd_index(i)]);
+      __ESBMC_pthread_tsd[tsd_index(i)] = NULL;
     }
   }
   __ESBMC_atomic_end();
@@ -1206,13 +1172,16 @@ __ESBMC_HIDE:;
   __ESBMC_assert(
     key != NULL,
     "In pthread_key_create, key parameter must be different than NULL.");
-  // the value NULL shall be associated with the new key in all active threads
-  insert_key_value(__ESBMC_next_thread_key, NULL);
-  __ESBMC_thread_key_destructors[__ESBMC_next_thread_key] = destructor;
-  // store the newly created key value at *key
-  *key = __ESBMC_next_thread_key++;
+  int result = EAGAIN;
+  if (__ESBMC_next_thread_key < __ESBMC_TSD_KEYS_MAX)
+  {
+    __ESBMC_thread_key_destructors[__ESBMC_next_thread_key] = destructor;
+    // store the newly created key value at *key
+    *key = __ESBMC_next_thread_key++;
+    result = 0;
+  }
   __ESBMC_atomic_end();
-  return 0;
+  return result;
 }
 
 // The pthread_getspecific() function shall return
@@ -1226,13 +1195,8 @@ __ESBMC_HIDE:;
   // If no thread-specific data value is associated with key,
   // then the value NULL shall be returned.
   void *result = NULL;
-  if (key <= __ESBMC_next_thread_key)
-  {
-    // Return the thread-specific data value associated
-    // with the given key.
-    __ESBMC_thread_key *l = search_key(key);
-    result = (l == NULL) ? NULL : (void *)l->value;
-  }
+  if (key < __ESBMC_next_thread_key)
+    result = __ESBMC_pthread_tsd[tsd_index(key)];
   __ESBMC_atomic_end();
   // No errors are returned from pthread_getspecific().
   return result;
@@ -1246,7 +1210,7 @@ int pthread_setspecific(pthread_key_t key, const void *value)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
-  insert_key_value(key, value);
+  __ESBMC_pthread_tsd[tsd_index(key)] = (void *)value;
   __ESBMC_atomic_end();
   // A NULL value is valid; POSIX's only mandatory error is ENOMEM.
   return 0;
