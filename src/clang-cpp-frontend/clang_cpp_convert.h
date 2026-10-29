@@ -7,6 +7,11 @@
 #include <clang-c-frontend/clang_c_convert.h>
 #include <optional>
 
+namespace clang
+{
+class MemberPointerType;
+} // namespace clang
+
 class clang_cpp_convertert : public clang_c_convertert
 {
 public:
@@ -40,6 +45,9 @@ protected:
   bool get_type(const clang::QualType &type, typet &new_type) override;
 
   bool get_type(const clang::Type &the_type, typet &new_type) override;
+
+  bool
+  get_member_pointer_type(const clang::MemberPointerType &mpt, typet &new_type);
 
   bool get_method(const clang::CXXMethodDecl &md, exprt &new_expr);
 
