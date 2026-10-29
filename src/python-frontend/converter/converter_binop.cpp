@@ -2123,7 +2123,7 @@ exprt python_converter::checked_erased_int(
   // Only a value that can come from sources of different known kinds can be
   // anything but the int the cast below assumes.
   value_kinds kinds(*ast_json);
-  if (!kinds.diverges(node, kinds.scope_of(current_func_name_)))
+  if (!kinds.may_be_non_number(node, kinds.scope_of(current_func_name_)))
     return operand;
 
   const locationt location = get_location_from_decl(element);
@@ -2669,8 +2669,8 @@ exprt python_converter::get_binary_operator_expr(
     if (is_any_ptr(lhs) && is_any_ptr(rhs))
     {
       const typet int_type = type_handler_.get_typet("int", 0);
-      lhs = typecast_exprt(lhs, int_type);
-      rhs = typecast_exprt(rhs, int_type);
+      lhs = typecast_exprt(checked_erased_int(lhs, left, element), int_type);
+      rhs = typecast_exprt(checked_erased_int(rhs, right, element), int_type);
     }
     else if (is_any_ptr(lhs) && is_integer(rhs))
       lhs = typecast_exprt(checked_erased_int(lhs, left, element), rhs.type());
