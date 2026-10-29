@@ -1,0 +1,5 @@
+CORE
+main.c
+--tuple-node-flattener
+^VERIFICATION FAILED$
+(?s)^State [0-9]+ file [^\n]*main\.c line 15 column [0-9]+ function main thread 0\n-+\n  obj = \{\s*\{\s*\{ \.value=1, \.inner=\{ \.tag=11 \} \},\s*\{ \.value=2, \.inner=\{ \.tag=12 \} \}\s*\},\s*\{\s*\{ \.value=3, \.inner=\{ \.tag=13 \} \},\s*\{ \.value=4, \.inner=\{ \.tag=14 \} \}\s*\}\s*\}$

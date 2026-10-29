@@ -1,5 +1,5 @@
 CORE
 main.c
-
+--z3
 ^VERIFICATION FAILED$
-(?s)^  obj = \{\s*\{ 1, 2 \},\s*\{ 3, 4 \}\s*\}$
+(?s)^State [0-9]+ file [^\n]*main\.c line 4 column [0-9]+ function main thread 0\n-+\n  obj = \{\s*\{ 1, 2 \},\s*\{ 3, 4 \}\s*\}$
