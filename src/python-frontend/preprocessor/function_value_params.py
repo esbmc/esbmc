@@ -67,22 +67,31 @@ def _body_keeps(fn, param):
         (n.id == fn.name or (n.id == param and not isinstance(n.ctx, ast.Load))) for n in nodes)
 
 
-def _specialise(module, fn, index):
-    """Drop parameter `index` of `fn` when all its calls pass one module-level function."""
+def _passed_function(module, fn, index):
+    """The one module-level def named at `index` by every call of `fn`, with those calls."""
     sites = _call_sites(module, fn.name)
     if not sites or not sites[0] or _binding_count(module, fn.name) != 1:
-        return False
+        return None
     calls, parents = sites
-    param = fn.args.args[index].arg
     if any(c.keywords or any(isinstance(a, ast.Starred)
                              for a in c.args) or len(c.args) != len(fn.args.args) for c in calls):
-        return False
+        return None
     targets = {_bound_function(c, index, module, parents) for c in calls}
-    if len(targets) != 1 or None in targets or not _body_keeps(fn, param):
-        return False
+    if len(targets) != 1 or None in targets or not _body_keeps(fn, fn.args.args[index].arg):
+        return None
     target = targets.pop()
     if target == fn.name or _is_local_to(fn, target):
+        return None
+    return target, calls
+
+
+def _specialise(module, fn, index):
+    """Drop parameter `index` of `fn` when all its calls pass one module-level function."""
+    passed = _passed_function(module, fn, index)
+    if passed is None:
         return False
+    target, calls = passed
+    param = fn.args.args[index].arg
     for node in _own_nodes(fn):
         if isinstance(node, ast.Name) and node.id == param:
             node.id = target

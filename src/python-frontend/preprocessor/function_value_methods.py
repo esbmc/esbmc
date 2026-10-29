@@ -274,22 +274,25 @@ def _locals_of(fn):
     return names
 
 
-def _lift_method(receiver, fn, arity, anchor):
-    """`fn` as a module-level function with `self` read as `receiver`, or None."""
-    import copy
+def _is_liftable(receiver, fn, arity):
     args = fn.args
     if (fn.decorator_list or args.vararg or args.kwarg or args.kwonlyargs or args.posonlyargs
             or args.defaults or len(args.args) != arity + 1 or args.args[0].arg != "self"):
-        return None
+        return False
     if any(
             isinstance(n, _SCOPES + (ast.Global, ast.Nonlocal, ast.Yield, ast.YieldFrom, ast.Await))
-            for n in _own_nodes(fn)):
-        return None
-    if not _self_is_contained(fn):
-        return None
+            for n in _own_nodes(fn)) or not _self_is_contained(fn):
+        return False
     uses_self = any(isinstance(n, ast.Name) and n.id == "self" for n in ast.walk(fn))
-    if uses_self and receiver in _locals_of(fn):
+    return not (uses_self and receiver in _locals_of(fn))
+
+
+def _lift_method(receiver, fn, arity, anchor):
+    """`fn` as a module-level function with `self` read as `receiver`, or None."""
+    import copy
+    if not _is_liftable(receiver, fn, arity):
         return None
+    args = fn.args
     lifted = ast.FunctionDef(name=f"{BOUND}{receiver}_{fn.name}",
                              args=ast.arguments([], [ast.arg(a.arg) for a in args.args[1:]], None,
                                                 [], [], None, []),
