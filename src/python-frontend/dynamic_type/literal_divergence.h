@@ -227,6 +227,50 @@ method_return_kind(const std::string &name, const nlohmann::json &module_body)
   return agreed;
 }
 
+// Whether some `global` statement declares `name`.
+inline bool declares_global(const nlohmann::json &node, const std::string &name)
+{
+  if (!node.is_structured())
+    return false;
+  if (node.is_object() && node.value("_type", "") == "Global")
+    for (const auto &declared : node["names"])
+      if (declared == name)
+        return true;
+  for (const auto &child : node)
+    if (declares_global(child, name))
+      return true;
+  return false;
+}
+
+// The value of the one module-level `name = value`, where no function can
+// rebind `name`; a parameter or local of the same name elsewhere is another
+// variable.
+inline const nlohmann::json *module_instance_value(
+  const nlohmann::json &module_body,
+  const std::string &name)
+{
+  if (!module_body.is_array() || declares_global(module_body, name))
+    return nullptr;
+  const nlohmann::json *bound = nullptr;
+  for (const auto &stmt : module_body)
+  {
+    if (!stmt.is_object())
+      continue;
+    const std::string type = stmt.value("_type", "");
+    if (
+      (type == "FunctionDef" || type == "ClassDef") &&
+      stmt.value("name", "") == name)
+      return nullptr;
+    if (const nlohmann::json *value = assigned_value_at(stmt, name))
+    {
+      if (bound)
+        return nullptr;
+      bound = value;
+    }
+  }
+  return bound;
+}
+
 // Whether `callee` spells `self.<leaf>` or `<name>.<leaf>` for a module-level
 // `name = Class(...)` of a class defined in the module.
 inline bool is_instance_call(
@@ -240,7 +284,7 @@ inline bool is_instance_call(
     callee.substr(0, callee.size() - leaf.size() - 1);
   if (receiver == "self")
     return true;
-  const nlohmann::json *bound = single_assigned_value(module_body, receiver);
+  const nlohmann::json *bound = module_instance_value(module_body, receiver);
   if (
     !bound || !bound->is_object() || bound->value("_type", "") != "Call" ||
     !bound->contains("func") || (*bound)["func"].value("_type", "") != "Name")
