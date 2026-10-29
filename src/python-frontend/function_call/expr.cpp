@@ -2230,18 +2230,25 @@ inner_scope(const nlohmann::json &node, const store_scope &scope)
 
 /// Counts the stores of an attribute named @p attr, and how many of them
 /// store a set.
+using store_test = bool (*)(
+  const nlohmann::json &ast,
+  const nlohmann::json &value,
+  const store_scope &scope);
+
 static void count_attribute_stores(
   const nlohmann::json &ast,
   const nlohmann::json &node,
   const std::string &attr,
   const store_scope &scope,
+  store_test stores_kind,
   size_t &stores,
-  size_t &set_stores)
+  size_t &kind_stores)
 {
   if (node.is_array())
   {
     for (const auto &child : node)
-      count_attribute_stores(ast, child, attr, scope, stores, set_stores);
+      count_attribute_stores(
+        ast, child, attr, scope, stores_kind, stores, kind_stores);
     return;
   }
   if (!node.is_object())
@@ -2250,24 +2257,34 @@ static void count_attribute_stores(
     if (is_attribute_named(*target, attr))
     {
       ++stores;
-      set_stores += stores_set(ast, node["value"], scope);
+      kind_stores += stores_kind(ast, node["value"], scope);
     }
   stores += is_other_store(node, attr);
   const store_scope inner = inner_scope(node, scope);
   for (auto it = node.begin(); it != node.end(); ++it)
     if (it.value().is_structured())
-      count_attribute_stores(ast, it.value(), attr, inner, stores, set_stores);
+      count_attribute_stores(
+        ast, it.value(), attr, inner, stores_kind, stores, kind_stores);
 }
 
-/// Every store to an attribute named @p attr stores a set, so a value read from
-/// it is one, whichever instance holds it.
+/// Whether every store to an attribute named @p attr passes @p stores_kind, so
+/// a value read from it is of that kind whichever instance holds it.
+static bool attribute_only_stores(
+  const nlohmann::json &ast,
+  const std::string &attr,
+  store_test stores_kind)
+{
+  size_t stores = 0;
+  size_t kind_stores = 0;
+  count_attribute_stores(
+    ast, ast, attr, store_scope(), stores_kind, stores, kind_stores);
+  return stores > 0 && stores == kind_stores;
+}
+
 static bool
 attribute_only_stores_sets(const nlohmann::json &ast, const std::string &attr)
 {
-  size_t stores = 0;
-  size_t set_stores = 0;
-  count_attribute_stores(ast, ast, attr, store_scope(), stores, set_stores);
-  return stores > 0 && stores == set_stores;
+  return attribute_only_stores(ast, attr, stores_set);
 }
 
 const symbolt *
@@ -3243,6 +3260,94 @@ exprt function_call_expr::handle_list_reverse() const
   converter_.get_element_type_registry().reverse(list_symbol->id.as_string());
 
   return reverse_call;
+}
+
+/// Whether @p value builds a list: a display, a comprehension or `list(...)`.
+static bool builds_list(const nlohmann::json &value)
+{
+  const std::string kind = value.value("_type", "");
+  if (kind == "List" || kind == "ListComp")
+    return true;
+  return kind == "Call" && value["func"].value("_type", "") == "Name" &&
+         value["func"].value("id", "") == "list";
+}
+
+static bool is_list_annotation(const nlohmann::json &annotation)
+{
+  if (!annotation.is_object())
+    return false;
+  const nlohmann::json &base = annotation.value("_type", "") == "Subscript"
+                                 ? annotation["value"]
+                                 : annotation;
+  const std::string name = base.value("id", "");
+  return name == "list" || name == "List";
+}
+
+/// Whether @p value is a constructor parameter annotated as a list. An
+/// unannotated one gets its annotation from the calls, which the annotation
+/// pass fills in only when they agree.
+static bool
+is_list_parameter(const nlohmann::json &value, const store_scope &scope)
+{
+  if (
+    value.value("_type", "") != "Name" || scope.function == nullptr ||
+    scope.function->value("name", "") != "__init__" || scope.cls.empty())
+    return false;
+  const std::string name = value.value("id", "");
+  const int position = parameter_position(*scope.function, name);
+  return position >= 0 &&
+         json_utils::count_name_bindings(*scope.function, name) == 1 &&
+         is_list_annotation(
+           (*scope.function)["args"]["args"][position + 1].value(
+             "annotation", nlohmann::json()));
+}
+
+static bool stores_list(
+  const nlohmann::json &,
+  const nlohmann::json &value,
+  const store_scope &scope)
+{
+  return builds_list(value) || is_list_parameter(value, scope);
+}
+
+/// Methods of a set that a list does not have.
+static bool is_set_only_method(const std::string &name)
+{
+  static const std::set<std::string> names = {
+    "add",
+    "discard",
+    "update",
+    "union",
+    "intersection",
+    "difference",
+    "issubset",
+    "issuperset",
+    "isdisjoint",
+    "symmetric_difference"};
+  return names.count(name) > 0;
+}
+
+bool function_call_expr::is_set_method_on_list_attribute() const
+{
+  const auto &func = call_["func"];
+  if (
+    func["_type"] != "Attribute" ||
+    func["value"].value("_type", "") != "Attribute" ||
+    !is_set_only_method(function_id_.get_function()))
+    return false;
+  const exprt receiver = converter_.get_expr(func["value"]);
+  return receiver.type() == type_handler_.get_list_type() &&
+         attribute_only_stores(
+           converter_.ast(), func["value"].value("attr", ""), stores_list);
+}
+
+exprt function_call_expr::raise_list_has_no_method() const
+{
+  exprt raise = converter_.get_exception_handler().gen_exception_raise(
+    "AttributeError",
+    "'list' object has no attribute '" + function_id_.get_function() + "'");
+  raise.location() = converter_.get_location_from_decl(call_);
+  return raise;
 }
 
 bool function_call_expr::is_set_method_call() const
@@ -4925,6 +5030,11 @@ function_call_expr::get_dispatch_table()
     {[this]() { return is_set_method_call(); },
      [this]() { return handle_set_method(); },
      "set methods"},
+
+    // A set method on an attribute that only ever holds a list.
+    {[this]() { return is_set_method_on_list_attribute(); },
+     [this]() { return raise_list_has_no_method(); },
+     "set method on a list attribute"},
 
     // List methods
     {[this]() { return is_list_method_call(); },

@@ -588,6 +588,8 @@ private:
 
   // Set method detection and handling
   bool is_set_method_call() const;
+  bool is_set_method_on_list_attribute() const;
+  exprt raise_list_has_no_method() const;
   exprt handle_set_method() const;
 
   // List method detection and handling
