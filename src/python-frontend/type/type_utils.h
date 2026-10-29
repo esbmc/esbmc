@@ -182,7 +182,7 @@ public:
       "RuntimeError",      "StopIteration",
       "EOFError",          "UnboundLocalError",
       "ArithmeticError",   "FloatingPointError",
-      "LookupError"};
+      "LookupError",       "LinAlgError"};
     return exceptions.count(name) != 0;
   }
 

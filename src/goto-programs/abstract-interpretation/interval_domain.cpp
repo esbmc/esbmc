@@ -1291,6 +1291,16 @@ void interval_domaint::assign(const expr2tc &expr, const bool recursive)
 {
   assert(is_code_assign2t(expr));
   auto const &c = to_code_assign2t(expr);
+
+  // `(T)x = e` writes x = (typeof(x))e, as in symex_assign_typecast (#9453).
+  if (is_typecast2t(c.target))
+  {
+    const expr2tc &object = to_typecast2t(c.target).from;
+    assign(
+      code_assign2tc(object, typecast2tc(object->type, c.source)), recursive);
+    return;
+  }
+
   auto isbvop = is_bv_type(c.source) && is_bv_type(c.target);
   auto isfloatbvop = is_floatbv_type(c.source) && is_floatbv_type(c.target);
 

@@ -4323,51 +4323,203 @@ static std::vector<std::string> constructor_callees(
   return callees;
 }
 
+// A call with the function and class it sits in.
+struct call_context
+{
+  const nlohmann::json *call;
+  const nlohmann::json *function;
+  std::string cls;
+};
+
+static void collect_call_contexts(
+  const nlohmann::json &node,
+  const nlohmann::json *function,
+  const std::string &cls,
+  std::vector<call_context> &out)
+{
+  if (node.is_array())
+  {
+    for (const auto &elem : node)
+      collect_call_contexts(elem, function, cls, out);
+    return;
+  }
+  if (!node.is_object())
+    return;
+
+  const std::string type = node.value("_type", "");
+  if (type == "Call")
+    out.push_back({&node, function, cls});
+  if (type == "FunctionDef")
+    function = &node;
+  std::string next_cls = cls;
+  if (type == "ClassDef")
+  {
+    function = nullptr;
+    next_cls = node.value("name", "");
+  }
+  for (auto it = node.begin(); it != node.end(); ++it)
+    if (it.value().is_object() || it.value().is_array())
+      collect_call_contexts(it.value(), function, next_cls, out);
+}
+
+// The call is a statement of its function's own body, so it runs on every
+// path. A conditional base constructor leaves the attributes it sets unset on
+// the other paths, and a read of one would raise AttributeError.
+static bool runs_on_every_path(const call_context &site)
+{
+  if (site.function == nullptr)
+    return false;
+  for (const auto &stmt : (*site.function)["body"])
+    if (
+      stmt.value("_type", "") == "Expr" && stmt.contains("value") &&
+      &stmt["value"] == site.call)
+      return true;
+  return false;
+}
+
+static bool is_super_init_call(const nlohmann::json &call)
+{
+  const nlohmann::json &func = call.value("func", nlohmann::json());
+  return func.value("attr", "") == "__init__" && func.contains("value") &&
+         func["value"].value("_type", "") == "Call" &&
+         func["value"]["func"].value("id", "") == "super";
+}
+
+static bool derives_from(
+  const nlohmann::json &module_body,
+  const std::string &cls,
+  const std::string &base)
+{
+  for (const auto &stmt : module_body)
+    if (stmt.value("_type", "") == "ClassDef" && stmt.value("name", "") == cls)
+      for (const auto &parent : stmt["bases"])
+        if (parent.value("_type", "") == "Name" && parent["id"] == base)
+          return true;
+  return false;
+}
+
+// What `super().__init__(...)` passes for parameter `param_index` of
+// `base.__init__`, when the class around the call derives from `base`.
+static const nlohmann::json *super_init_argument(
+  const call_context &site,
+  const nlohmann::json &module_body,
+  const std::string &base,
+  size_t param_index)
+{
+  if (
+    !is_super_init_call(*site.call) || param_index < 1 ||
+    !runs_on_every_path(site) || !derives_from(module_body, site.cls, base) ||
+    site.call->value("args", nlohmann::json::array()).size() < param_index)
+    return nullptr;
+  return &(*site.call)["args"][param_index - 1];
+}
+
+// The argument `site` passes for parameter `param_index` of `callee`.
+static const nlohmann::json *site_argument(
+  const call_context &site,
+  const nlohmann::json &module_body,
+  const std::string &callee,
+  size_t param_index)
+{
+  if (
+    const nlohmann::json *arg =
+      call_site_argument(*site.call, module_body, callee, param_index))
+    return arg;
+  const std::string suffix = ".__init__";
+  const bool constructor =
+    callee.size() > suffix.size() &&
+    callee.compare(callee.size() - suffix.size(), suffix.size(), suffix) == 0;
+  return constructor ? super_init_argument(
+                         site,
+                         module_body,
+                         callee.substr(0, callee.size() - suffix.size()),
+                         param_index)
+                     : nullptr;
+}
+
+// `f` for a function, `C.m` for a method, as callee names are spelt.
+static std::string callee_name_of(const call_context &site)
+{
+  const std::string name = site.function->value("name", "");
+  return site.cls.empty() ? name : site.cls + "." + name;
+}
+
+// Tagging the parameter could leak into an already-fixed return type (e.g.
+// `return v + v`).
+static bool tagging_leaks_into_return(
+  const nlohmann::json &module_body,
+  const std::string &callee,
+  const std::string &param_name)
+{
+  const nlohmann::json *func_def = find_callee_def(module_body, callee);
+  return func_def != nullptr &&
+         tagged_param_return_unsafe(*func_def, param_name);
+}
+
 bool python_converter::try_infer_dynamic_param_type(
   const std::string &callee,
   const std::string &param_name,
   size_t param_index) const
 {
+  std::set<std::string> visiting;
+  return infer_dynamic_param_forwarded(
+    callee, param_name, param_index, visiting);
+}
+
+bool python_converter::infer_dynamic_param_forwarded(
+  const std::string &callee,
+  const std::string &param_name,
+  size_t param_index,
+  std::set<std::string> &visiting) const
+{
   const nlohmann::json &module_body = (*ast_json)["body"];
 
-  // Refuse when tagging this param could leak into an already-fixed
-  // return type (e.g. `return v + v`).
-  const nlohmann::json *func_def = find_callee_def(module_body, callee);
-  if (func_def != nullptr && tagged_param_return_unsafe(*func_def, param_name))
+  if (tagging_leaks_into_return(module_body, callee, param_name))
     return false;
 
-  std::vector<numpy_param_call_site> call_sites;
-  collect_call_sites(*ast_json, "", call_sites);
+  const std::string key = callee + "#" + std::to_string(param_index);
+  if (!visiting.insert(key).second)
+    return false;
 
-  auto scope_body_for =
-    [&](const numpy_param_call_site &site) -> const nlohmann::json * {
-    if (site.enclosing_function.empty())
-      return &module_body;
-    const nlohmann::json *enclosing_def =
-      find_function_def(module_body, site.enclosing_function);
-    return enclosing_def == nullptr ? nullptr : &(*enclosing_def)["body"];
-  };
-
+  std::vector<call_context> call_sites;
+  collect_call_contexts(module_body, nullptr, "", call_sites);
   const nlohmann::json callables = kind_module_body();
-  auto diverges_at_site =
-    [&](const nlohmann::json &value_node, const numpy_param_call_site &site) {
-      if (value_node.value("_type", "") != "Name")
-        return false;
-      const nlohmann::json *scope_body = scope_body_for(site);
-      return scope_body != nullptr &&
-             dynamic_type_handler_.scope_assigns_divergent_literal_types(
-               value_node.value("id", ""), *scope_body, callables);
+
+  // A parameter of the call's own function that is tagged in turn.
+  auto forwards_tagged_param =
+    [&](const nlohmann::json &arg, const call_context &site) {
+      const std::string name = arg.value("id", "");
+      const auto &params = (*site.function)["args"]["args"];
+      for (size_t i = 0; i < params.size(); ++i)
+        if (params[i].value("arg", "") == name)
+          return count_bindings(*site.function, name) <= 1 &&
+                 infer_dynamic_param_forwarded(
+                   callee_name_of(site), name, i, visiting);
+      return false;
     };
 
+  auto diverges_at_site =
+    [&](const nlohmann::json &value_node, const call_context &site) {
+      if (value_node.value("_type", "") != "Name")
+        return false;
+      const nlohmann::json &scope_body =
+        site.function == nullptr ? module_body : (*site.function)["body"];
+      return dynamic_type_handler_.scope_assigns_divergent_literal_types(
+               value_node.value("id", ""), scope_body, callables) ||
+             (site.function != nullptr &&
+              forwards_tagged_param(value_node, site));
+    };
+
+  bool tagged = false;
   for (const std::string &name : constructor_callees(module_body, callee))
-    for (const numpy_param_call_site &site : call_sites)
+    for (const call_context &site : call_sites)
     {
       const nlohmann::json *arg =
-        call_site_argument(*site.call, module_body, name, param_index);
-      if (arg != nullptr && diverges_at_site(*arg, site))
-        return true;
+        site_argument(site, module_body, name, param_index);
+      tagged = tagged || (arg != nullptr && diverges_at_site(*arg, site));
     }
-  return false;
+  visiting.erase(key);
+  return tagged;
 }
 
 std::optional<typet> python_converter::try_infer_bytes_param_size(
