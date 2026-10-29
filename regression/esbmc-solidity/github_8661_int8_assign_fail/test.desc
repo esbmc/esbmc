@@ -1,5 +1,5 @@
 CORE
 contract.solast
 --sol contract.sol --contract C --overflow-check --unwind 3 --no-unwinding-assertions
-^  Narrowing assignment overflow$
+^  arithmetic overflow on add$
 ^VERIFICATION FAILED$
