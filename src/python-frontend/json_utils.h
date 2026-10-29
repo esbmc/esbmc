@@ -264,6 +264,8 @@ bool is_property_def(const JsonType &function_def)
   return false;
 }
 
+/// Whether @p function_def carries the builtin @staticmethod decorator; a
+/// dotted spelling names some other object.
 template <typename JsonType>
 bool is_staticmethod_def(const JsonType &function_def)
 {
