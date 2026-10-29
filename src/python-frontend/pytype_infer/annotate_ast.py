@@ -363,6 +363,7 @@ def is_typed_assignment(stmt, merged, already_annotated) -> TypeGuard[ast.Assign
     if not can_make_annotation(inferred_type):
         return False
 
+
 # if isinstance(stmt.value, ast.List):
 # if len(stmt.value.elts) == 0:
 #    return False
@@ -985,21 +986,17 @@ def annotate_ast(ast_node, opts=None):
             except UnsupportedCFGError as exc:
                 print(f"[PYTYPE] skipping {node.name}: {exc}")
                 continue
-           # if result is None:
-             #   print(f"[PYTYPE] Skipping {node.name}: no convergence")
-             #   continue
+        # if result is None:
+        #   print(f"[PYTYPE] Skipping {node.name}: no convergence")
+        #   continue
 
             if result is None:
-                print(
-                    f"[PYTYPE] Skipping {node.name}: "
-                    "no convergence"
-                )
+                print(f"[PYTYPE] Skipping {node.name}: "
+                      "no convergence")
                 continue
-            
+
             print(f"[PYTYPE] Converged: {node.name}")
             cfg, in_envs, out_envs, return_types = result
-
-         
 
             _, ret_type = derive_param_and_return_types(node, out_envs, return_types, context)
 
