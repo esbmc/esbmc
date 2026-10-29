@@ -6512,10 +6512,13 @@ expr2tc ieee_fma2t::do_simplify() const
   }
 
   // If x*y is an exact infinity and z is an infinity with the opposite sign,
-  // NaN is returned and FE_INVALID is raised
-  n1 *= n2;
+  // NaN is returned and FE_INVALID is raised. The exact product of two finite
+  // operands is finite even when rounding it alone would overflow, so test the
+  // operands rather than a rounded n1 * n2 (#9426).
+  const bool product_sign = n1.get_sign() != n2.get_sign();
   if (
-    (n1.is_infinity() && n3.is_infinity()) && (n1.get_sign() != n3.get_sign()))
+    (n1.is_infinity() || n2.is_infinity()) && n3.is_infinity() &&
+    product_sign != n3.get_sign())
   {
     n1.make_NaN();
     return constant_floatbv2tc(n1);
