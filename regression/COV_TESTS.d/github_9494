@@ -1,8 +1,10 @@
+regression/python/github_9494_foo_fail
 regression/python/github_9494_list_methods
 regression/python/github_9494_list_parameter
 regression/python/github_9494_literal_fail
 regression/python/github_9494_local_fail
-regression/python/github_9494_mixed_construction
+regression/python/github_9494_mixed_construction_fail
 regression/python/github_9494_param_fail
 regression/python/github_9494_set_attribute
+regression/python/github_9494_sorted_fail
 regression/python/github_9494_update_fail

@@ -3310,35 +3310,38 @@ static bool stores_list(
   return builds_list(value) || is_list_parameter(value, scope);
 }
 
-/// Methods of a set that a list does not have.
-static bool is_set_only_method(const std::string &name)
+/// Whether a list has a method (or dunder) named @p name.
+static bool is_list_method(const std::string &name)
 {
   static const std::set<std::string> names = {
-    "add",
-    "discard",
-    "update",
-    "union",
-    "intersection",
-    "difference",
-    "issubset",
-    "issuperset",
-    "isdisjoint",
-    "symmetric_difference"};
-  return names.count(name) > 0;
+    "append",
+    "extend",
+    "insert",
+    "remove",
+    "pop",
+    "clear",
+    "index",
+    "count",
+    "sort",
+    "reverse",
+    "copy"};
+  return names.count(name) > 0 || name.rfind("__", 0) == 0;
 }
 
-bool function_call_expr::is_set_method_on_list_attribute() const
+bool function_call_expr::is_unknown_method_on_list_attribute() const
 {
   const auto &func = call_["func"];
   if (
     func["_type"] != "Attribute" ||
     func["value"].value("_type", "") != "Attribute" ||
-    !is_set_only_method(function_id_.get_function()))
+    is_list_method(function_id_.get_function()))
     return false;
-  const exprt receiver = converter_.get_expr(func["value"]);
-  return receiver.type() == type_handler_.get_list_type() &&
-         attribute_only_stores(
-           converter_.ast(), func["value"].value("attr", ""), stores_list);
+  // The AST test comes first: reading the receiver can emit code or fail for
+  // an attribute of a module or an unknown object.
+  return attribute_only_stores(
+           converter_.ast(), func["value"].value("attr", ""), stores_list) &&
+         converter_.get_expr(func["value"]).type() ==
+           type_handler_.get_list_type();
 }
 
 exprt function_call_expr::raise_list_has_no_method() const
@@ -5031,10 +5034,10 @@ function_call_expr::get_dispatch_table()
      [this]() { return handle_set_method(); },
      "set methods"},
 
-    // A set method on an attribute that only ever holds a list.
-    {[this]() { return is_set_method_on_list_attribute(); },
+    // A method a list lacks, on an attribute that only ever holds a list.
+    {[this]() { return is_unknown_method_on_list_attribute(); },
      [this]() { return raise_list_has_no_method(); },
-     "set method on a list attribute"},
+     "unknown method on a list attribute"},
 
     // List methods
     {[this]() { return is_list_method_call(); },
