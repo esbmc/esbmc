@@ -1,4 +1,0 @@
-CORE
-main.py
-
-^ERROR: .*using method .* as a value is not supported

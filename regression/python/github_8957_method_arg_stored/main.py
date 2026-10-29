@@ -1,4 +1,4 @@
-# The method value is also stored, which the lift does not follow.
+# A bound method is also stored and called; the lift leaves that use as it is.
 class K:
     def f(self):
         return "s"
@@ -14,4 +14,8 @@ a = K()
 c = nondet_bool()
 h = a.f
 r = a.call(a.f if c else a.g)
-h()
+assert h() == "s"
+if c:
+    assert r == "s"
+else:
+    assert r == 1

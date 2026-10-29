@@ -6,7 +6,7 @@ class K:
     def f(self):
         return "s"
 
-    def g(self):
+    def g(self) -> int:
         return self.n
 
     def call(self, a):
