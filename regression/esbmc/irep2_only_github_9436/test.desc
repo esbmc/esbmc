@@ -1,0 +1,4 @@
+CORE
+main.c
+--clang-c-irep2-adjust-only --ub-shift-check --overflow-check
+^VERIFICATION SUCCESSFUL$
