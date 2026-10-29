@@ -2570,8 +2570,15 @@ std::string python_annotation<Json>::get_type_from_rhs_variable(
   {
     return rhs_node["annotation"]["id"];
   }
-  else
-    return "Any"; // Default for cases where annotation is missing or null
+
+  // `list[int]` is a Subscript with no id, and still names a list.
+  if (
+    rhs_node.contains("annotation") && rhs_node["annotation"].is_object() &&
+    rhs_node["annotation"].value("_type", "") == "Subscript" &&
+    rhs_node["annotation"]["value"].value("id", "") == "list")
+    return "list";
+
+  return "Any"; // Default for cases where annotation is missing or null
 }
 
 template <class Json>
