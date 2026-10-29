@@ -382,6 +382,32 @@ def _takes_positional(fn, count):
                 or args.posonlyargs) and len(args.args) == count
 
 
+_INDEX_OPS = (ast.Add, ast.Sub, ast.Mult, ast.FloorDiv, ast.Mod)
+
+
+def _is_pure_index(index):
+    """An index whose evaluation has no effect: names and ints combined by arithmetic.
+
+    `abs(x)` and `len(x)` count too. Division by zero still raises, and the index is evaluated
+    again in each test of a dispatch, which gives the same value or the same exception.
+    """
+    if isinstance(index, (ast.Name, ast.Constant)):
+        return True
+    if isinstance(index, ast.UnaryOp):
+        return isinstance(index.op, (ast.USub, ast.UAdd)) and _is_pure_index(index.operand)
+    if isinstance(index, ast.BinOp):
+        return isinstance(index.op, _INDEX_OPS) and _is_pure_index(index.left) and _is_pure_index(
+            index.right)
+    return isinstance(index, ast.Call) and isinstance(index.func, ast.Name) \
+        and index.func.id in ("abs", "len") and len(index.args) == 1 and not index.keywords \
+        and _is_pure_index(index.args[0])
+
+
+def _is_pure_slice(sl):
+    return isinstance(sl, ast.Slice) and all(part is None or _is_pure_index(part)
+                                             for part in (sl.lower, sl.upper, sl.step))
+
+
 def _always_returns(block):
     """Whether every path through `block` ends in a `return` or a `raise`."""
     if not block:
@@ -540,6 +566,8 @@ class _Plan:
                 return depth - 1
         elif self._is_returner_call(expr):
             return 0
+        elif self._is_holder_slice(expr):
+            return self._value_kind(expr.value, seen)
         raise _Refused
 
     def _literal_kind(self, literal, seen):
@@ -566,6 +594,11 @@ class _Plan:
         groups = {self.returners.get(fn.name) for fn in self.groups[self.holders[name]]}
         return groups.pop() if len(groups) == 1 else None
 
+    def _is_holder_slice(self, expr):
+        """`xs[a:b]` of a list or dict-free holder: a copy that holds the same codes."""
+        return isinstance(expr, ast.Subscript) and isinstance(expr.value, ast.Name) \
+            and expr.value.id in self.holders and _is_pure_slice(expr.slice)
+
     def _is_returner_call(self, expr):
         return self._call_result_group(expr) is not None
 
@@ -576,10 +609,7 @@ class _Plan:
             return False
         if not (isinstance(expr.value, ast.Name) or cls._is_element(expr.value)):
             return False
-        index = expr.slice
-        if isinstance(index, ast.UnaryOp) and isinstance(index.op, ast.USub):
-            index = index.operand
-        return isinstance(index, (ast.Name, ast.Constant))
+        return _is_pure_index(expr.slice)
 
     def _element_kind(self, expr):
         """How deep the value of the element `expr` nests functions, or None."""
@@ -596,6 +626,8 @@ class _Plan:
         for name in self.returners:
             self._check_returner(self.defs[name], self.returners[name])
         bound = _bound_names([self.module])
+        if _rebinds(self.module, "abs") or _rebinds(self.module, "len"):
+            raise _Refused
         if bound & _REFLECTIVE or any(n.startswith(_PREFIX) for n in bound):
             raise _Refused
         for node in ast.walk(self.module):
@@ -819,7 +851,10 @@ class _Plan:
             self._check_value(node)
 
     def _check_container_holder(self, node, parent):
-        if isinstance(parent, ast.Subscript) and parent.value is node:
+        if self._is_holder_slice(parent) and parent.value is node:
+            if not self._is_plain_value(self.parents[id(parent)], parent):
+                raise _Refused
+        elif isinstance(parent, ast.Subscript) and parent.value is node:
             self._check_element(parent)
         elif not (_is_builtin_call(parent, "len", node) or self._is_plain_value(parent, node)
                   or self._is_membership(parent, node) or self._is_update(parent, node)):
@@ -997,10 +1032,12 @@ class _Plan:
             return call.func.id
         node = call.func
         while isinstance(node, ast.Subscript):
-            index = node.slice
-            if isinstance(index, ast.Name) and any(
-                    isinstance(n, (ast.Global, ast.Nonlocal)) and index.id in n.names
-                    for n in ast.walk(self.module)):
+            shared = {
+                n
+                for g in ast.walk(self.module) if isinstance(g, (ast.Global, ast.Nonlocal))
+                for n in g.names
+            }
+            if any(isinstance(n, ast.Name) and n.id in shared for n in ast.walk(node.slice)):
                 raise _Refused
             node = node.value
         return node.id
