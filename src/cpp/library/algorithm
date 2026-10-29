@@ -1522,16 +1522,36 @@ OutIt merge(
   return source;
 }
 
+// Insert each element of [mid, last) after its equivalents in [first, mid):
+// [alg.merge]/8 requires a stable merge, which sort() is not.
 template <class BidIt>
 void inplace_merge(BidIt first, BidIt mid, BidIt last)
 {
-  sort(first, last);
+  for (; mid != last; ++mid)
+    for (BidIt j = mid; j != first;)
+    {
+      BidIt prev = j;
+      --prev;
+      if (!(*j < *prev))
+        break;
+      swap(*j, *prev);
+      j = prev;
+    }
 }
 
 template <class BidIt, class Pr>
 void inplace_merge(BidIt first, BidIt mid, BidIt last, Pr pred)
 {
-  sort(first, last, pred);
+  for (; mid != last; ++mid)
+    for (BidIt j = mid; j != first;)
+    {
+      BidIt prev = j;
+      --prev;
+      if (!pred(*j, *prev))
+        break;
+      swap(*j, *prev);
+      j = prev;
+    }
 }
 
 template <class InIt1, class InIt2>
