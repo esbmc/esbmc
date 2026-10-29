@@ -1,0 +1,6 @@
+regression/python/github_unexpected_keyword_caught
+regression/python/github_unexpected_keyword_ctor
+regression/python/github_unexpected_keyword_decorated
+regression/python/github_unexpected_keyword_fail
+regression/python/github_unexpected_keyword_kwargs
+regression/python/github_unexpected_keyword_method

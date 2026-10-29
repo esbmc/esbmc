@@ -203,6 +203,11 @@ class VarargMixin:
             self.functionVarargs.add(qualified_name)
         else:
             self.functionVarargs.discard(qualified_name)
+        # A decorator may give the name another signature.
+        if node.args.kwarg or node.decorator_list:
+            self.functionAnyKeywords.add(qualified_name)
+        else:
+            self.functionAnyKeywords.discard(qualified_name)
         if node.args.vararg or node.args.kwarg:
             # Registered only once visited, since a specialization is a copy of
             # the body as the converter will see it -- an unvisited body still
