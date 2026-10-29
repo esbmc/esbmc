@@ -514,7 +514,6 @@ void andersent::solve()
 
     // Snapshot: resolving a dereference through n can grow pts[n] itself.
     const std::unordered_set<node_id> targets = pts[n];
-    const bool anywhere = targets.count(TOP) != 0;
 
     // A pointer that may point anywhere reaches every object whose address
     // the program forms, so each one holds what is stored through it.
@@ -527,33 +526,10 @@ void andersent::solve()
       }
 
     for (node_id p : loads[n]) // p = *n
-    {
-      // There are no nameable objects "inside" TOP to draw an edge from, so a
-      // load through a may-point-anywhere pointer yields an unknown value.
-      if (anywhere && pts[p].insert(TOP).second)
-        enqueue(p);
-
-      for (node_id o : targets)
-        if (o == nondet)
-        {
-          if (pts[p].insert(o).second)
-            enqueue(p);
-        }
-        else if (o != TOP && add_copy_edge(o, p))
-          enqueue(p);
-    }
+      propagate_load(p, targets, nondet, enqueue);
 
     for (node_id q : stores[n]) // *n = q
-    {
-      // A store through such a pointer writes to an unknown object: pts[TOP]
-      // collects it for the objects above.
-      if (anywhere && join(TOP, q))
-        enqueue(TOP);
-
-      for (node_id o : targets)
-        if (o != TOP && o != nondet && add_copy_edge(q, o))
-          enqueue(o);
-    }
+      propagate_store(q, targets, nondet, enqueue);
 
     for (node_id m : copy_edges[n])
       if (join(m, n))
@@ -561,6 +537,43 @@ void andersent::solve()
   }
 
   solved = true;
+}
+
+void andersent::propagate_load(
+  node_id p,
+  const std::unordered_set<node_id> &targets,
+  node_id nondet,
+  const std::function<void(node_id)> &enqueue)
+{
+  // There are no nameable objects "inside" TOP to draw an edge from, so a
+  // load through a may-point-anywhere pointer yields an unknown value.
+  if (targets.count(TOP) && pts[p].insert(TOP).second)
+    enqueue(p);
+
+  for (node_id o : targets)
+    if (o == nondet)
+    {
+      if (pts[p].insert(o).second)
+        enqueue(p);
+    }
+    else if (o != TOP && add_copy_edge(o, p))
+      enqueue(p);
+}
+
+void andersent::propagate_store(
+  node_id q,
+  const std::unordered_set<node_id> &targets,
+  node_id nondet,
+  const std::function<void(node_id)> &enqueue)
+{
+  // A store through such a pointer writes to an unknown object: pts[TOP]
+  // collects it for the objects that may be addressed through it.
+  if (targets.count(TOP) && join(TOP, q))
+    enqueue(TOP);
+
+  for (node_id o : targets)
+    if (o != TOP && o != nondet && add_copy_edge(q, o))
+      enqueue(o);
 }
 
 const std::unordered_set<andersent::node_id> &
