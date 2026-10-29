@@ -7,3 +7,4 @@ regression/python/github_9481_annotated
 regression/python/github_9481_list_argument
 regression/python/github_9481_mixed_arguments
 regression/python/github_9481_list_result
+regression/python/github_9481_mixed_add_fail
