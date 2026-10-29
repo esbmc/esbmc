@@ -1676,6 +1676,9 @@ template <class Json>
 std::string python_annotation<Json>::list_concat_type(const Json &binop)
 {
   const Json &rhs = binop["right"];
+  // Repeating a list keeps its element type (`[0] * n`).
+  if (binop["op"]["_type"] == "Mult")
+    return get_list_type_from_literal(binop["left"]);
   if (binop["op"]["_type"] != "Add")
     return "list";
   const std::string callee =
@@ -1761,7 +1764,9 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
     if (
       (op == "Add" || op == "Mult") && lhs["_type"] != "List" &&
       (rhs["_type"] == "List" || rhs["_type"] == "ListComp"))
-      return "list";
+      return op == "Mult" && rhs["_type"] == "List"
+               ? get_list_type_from_literal(rhs)
+               : "list";
   }
 
   if (lhs["_type"] == "BinOp")
