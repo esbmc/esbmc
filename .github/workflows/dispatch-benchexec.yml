@@ -189,6 +189,15 @@ jobs:
         with:
           name: esbmc-result
           path: output.zip
+      # benchexec.sh does not propagate benchexec's exit status, so a run that
+      # aborts before any task (e.g. "Memory banks ... do not have enough memory
+      # for all runs") still passed with an artifact holding only the header.
+      - name: Fail if benchexec produced no results
+        run: |
+          if ! ls "$HOME"/esbmc-output/*results*.xml.bz2 > /dev/null 2>&1; then
+            echo "::error::benchexec wrote no results XML; see the Run Benchexec step"
+            exit 1
+          fi
       - name: Checkout code for validation
         if: ${{ inputs.validate == true }}
         uses: actions/checkout@v6

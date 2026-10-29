@@ -463,11 +463,8 @@ public:
   {
     if (this != &other)
     {
-      deleter(ptr);
-
-      ptr = other.ptr;
+      reset(other.release());
       deleter = std::move(other.deleter);
-      other.ptr = nullptr;
     }
     return *this;
   }
@@ -486,9 +483,7 @@ public:
   template <class U, class E>
   unique_ptr &operator=(unique_ptr<U, E> &&other) noexcept
   {
-    if (ptr)
-      deleter(ptr);
-    ptr = other.release();
+    reset(other.release());
     deleter = std::move(other.get_deleter());
     return *this;
   }
@@ -500,7 +495,8 @@ public:
    * leak on correct RAII and misses a real use-after-free. */
   ~unique_ptr()
   {
-    deleter(ptr);
+    if (ptr)
+      deleter(ptr);
   }
 
   T *operator->() const
@@ -520,13 +516,13 @@ public:
     return temp;
   }
 
+  // [unique.ptr.single.modifiers]/4
   void reset(T *p = nullptr)
   {
-    if (ptr != p)
-    {
-      deleter(ptr);
-      ptr = p;
-    }
+    T *old = ptr;
+    ptr = p;
+    if (old)
+      deleter(old);
   }
 
   T *get() const
@@ -602,10 +598,8 @@ public:
   {
     if (this != &other)
     {
-      deleter(ptr);
-      ptr = other.ptr;
+      reset(other.release());
       deleter = std::move(other.deleter);
-      other.ptr = nullptr;
     }
     return *this;
   }
@@ -622,16 +616,15 @@ public:
   template <class U, class E>
   unique_ptr &operator=(unique_ptr<U[], E> &&other) noexcept
   {
-    if (ptr)
-      deleter(ptr);
-    ptr = other.release();
+    reset(other.release());
     deleter = std::move(other.get_deleter());
     return *this;
   }
 
   ~unique_ptr()
   {
-    deleter(ptr);
+    if (ptr)
+      deleter(ptr);
   }
 
   T &operator[](size_t i) const
@@ -651,13 +644,13 @@ public:
     return temp;
   }
 
+  // [unique.ptr.single.modifiers]/4
   void reset(T *p = nullptr)
   {
-    if (ptr != p)
-    {
-      deleter(ptr);
-      ptr = p;
-    }
+    T *old = ptr;
+    ptr = p;
+    if (old)
+      deleter(old);
   }
 
   D &get_deleter()
@@ -819,10 +812,10 @@ class shared_ptr
     if (--__c->__scount == 0)
     {
       delete __p;
-      __p = nullptr;
       if (--__c->__wcount == 0)
         delete __c;
     }
+    __p = nullptr;
     __c = nullptr;
   }
 

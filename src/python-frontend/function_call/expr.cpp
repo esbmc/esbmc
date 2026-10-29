@@ -81,21 +81,6 @@ find_method_def(const nlohmann::json &class_node, const std::string &method)
   return nullptr;
 }
 
-/// Whether \p method_def carries the @staticmethod decorator. The decorator
-/// decides this, not the first parameter's name, which Python does not fix.
-bool is_staticmethod_def(const nlohmann::json &method_def)
-{
-  if (!method_def.contains("decorator_list"))
-    return false;
-
-  for (const auto &d : method_def["decorator_list"])
-    if (
-      node_type_of(d) == "Name" && d.contains("id") &&
-      d["id"] == "staticmethod")
-      return true;
-  return false;
-}
-
 /// An explicit `Base.__init__(self, ...)` call invokes the named base class's
 /// constructor with self passed explicitly; it is not an object construction.
 /// Letting it fall through to the ClassMethod classification allocates no fresh
@@ -294,7 +279,7 @@ bool function_call_expr::resolves_to_staticmethod(
     pending.pop_front();
 
     if (const nlohmann::json *def = find_method_def(cls, method))
-      return is_staticmethod_def(*def);
+      return json_utils::is_staticmethod_def(*def);
 
     if (!cls.contains("bases") || !cls["bases"].is_array())
       continue;
@@ -1990,6 +1975,91 @@ std::string function_call_expr::get_object_name() const
   return json_utils::get_object_alias(converter_.ast(), obj_name);
 }
 
+/// Whether @p value builds a set: `set(...)`, `frozenset(...)`, a set display
+/// or a set comprehension.
+static bool builds_set(const nlohmann::json &value)
+{
+  const std::string kind = value.value("_type", "");
+  if (kind == "Set" || kind == "SetComp")
+    return true;
+  return kind == "Call" && value["func"].value("_type", "") == "Name" &&
+         (value["func"].value("id", "") == "set" ||
+          value["func"].value("id", "") == "frozenset");
+}
+
+static bool
+is_attribute_named(const nlohmann::json &node, const std::string &attr)
+{
+  return node.is_object() && node.value("_type", "") == "Attribute" &&
+         node.value("attr", "") == attr;
+}
+
+/// The targets of an Assign or AnnAssign that has a value; empty otherwise.
+static std::vector<const nlohmann::json *>
+assignment_targets(const nlohmann::json &node)
+{
+  std::vector<const nlohmann::json *> targets;
+  const std::string kind = node.value("_type", "");
+  if (
+    (kind != "Assign" && kind != "AnnAssign") || !node.contains("value") ||
+    !node["value"].is_object())
+    return targets;
+  if (kind == "AnnAssign")
+    targets.push_back(&node["target"]);
+  else
+    for (const auto &target : node["targets"])
+      targets.push_back(&target);
+  return targets;
+}
+
+/// A store other than a plain assignment: augmented, or a loop or `with`
+/// target.
+static bool is_other_store(const nlohmann::json &node, const std::string &attr)
+{
+  const std::string kind = node.value("_type", "");
+  return (kind == "AugAssign" || kind == "For" || kind == "With") &&
+         node.contains("target") && is_attribute_named(node["target"], attr);
+}
+
+/// Counts the stores of an attribute named @p attr, and how many of them
+/// build a set.
+static void count_attribute_stores(
+  const nlohmann::json &node,
+  const std::string &attr,
+  size_t &stores,
+  size_t &set_stores)
+{
+  if (node.is_array())
+  {
+    for (const auto &child : node)
+      count_attribute_stores(child, attr, stores, set_stores);
+    return;
+  }
+  if (!node.is_object())
+    return;
+  for (const nlohmann::json *target : assignment_targets(node))
+    if (is_attribute_named(*target, attr))
+    {
+      ++stores;
+      set_stores += builds_set(node["value"]);
+    }
+  stores += is_other_store(node, attr);
+  for (auto it = node.begin(); it != node.end(); ++it)
+    if (it.value().is_structured())
+      count_attribute_stores(it.value(), attr, stores, set_stores);
+}
+
+/// Every store to an attribute named @p attr builds a set, so a value read from
+/// it is one, whichever instance holds it.
+static bool
+attribute_only_stores_sets(const nlohmann::json &ast, const std::string &attr)
+{
+  size_t stores = 0;
+  size_t set_stores = 0;
+  count_attribute_stores(ast, attr, stores, set_stores);
+  return stores > 0 && stores == set_stores;
+}
+
 const symbolt *
 function_call_expr::get_object_list_symbol(std::string &display_name) const
 {
@@ -2131,6 +2201,8 @@ function_call_expr::get_object_list_symbol(std::string &display_name) const
     {
       symbolt &tmp = converter_.create_tmp_symbol(
         call_, "$attr_list$", list_type, attr_expr);
+      tmp.is_set = attribute_only_stores_sets(
+        converter_.ast(), func_value["attr"].get<std::string>());
       return &tmp;
     }
 
