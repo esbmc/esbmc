@@ -1,0 +1,8 @@
+regression/python/github_8957_method_arg
+regression/python/github_8957_method_arg_arity_refused
+regression/python/github_8957_method_arg_fail
+regression/python/github_8957_method_arg_self_collision_refused
+regression/python/github_8957_method_arg_state
+regression/python/github_8957_method_arg_state_fail
+regression/python/github_8957_method_arg_stored_refused
+regression/python/github_8957_method_arg_str_fail
