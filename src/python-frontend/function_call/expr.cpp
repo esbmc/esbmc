@@ -1990,6 +1990,72 @@ std::string function_call_expr::get_object_name() const
   return json_utils::get_object_alias(converter_.ast(), obj_name);
 }
 
+/// Whether @p value builds a set: `set(...)`, `frozenset(...)`, a set display
+/// or a set comprehension.
+static bool builds_set(const nlohmann::json &value)
+{
+  const std::string kind = value.value("_type", "");
+  if (kind == "Set" || kind == "SetComp")
+    return true;
+  return kind == "Call" && value["func"].value("_type", "") == "Name" &&
+         (value["func"].value("id", "") == "set" ||
+          value["func"].value("id", "") == "frozenset");
+}
+
+/// Counts the stores of an attribute named @p attr, and how many of them
+/// build a set.
+static void count_attribute_stores(
+  const nlohmann::json &node,
+  const std::string &attr,
+  size_t &stores,
+  size_t &set_stores)
+{
+  if (node.is_array())
+  {
+    for (const auto &child : node)
+      count_attribute_stores(child, attr, stores, set_stores);
+    return;
+  }
+  if (!node.is_object())
+    return;
+  const std::string kind = node.value("_type", "");
+  const bool assign = kind == "Assign" || kind == "AnnAssign";
+  if (assign && node.contains("value") && node["value"].is_object())
+  {
+    std::vector<const nlohmann::json *> targets;
+    if (kind == "Assign")
+      for (const auto &t : node["targets"])
+        targets.push_back(&t);
+    else
+      targets.push_back(&node["target"]);
+    for (const nlohmann::json *t : targets)
+      if (t->value("_type", "") == "Attribute" && t->value("attr", "") == attr)
+      {
+        ++stores;
+        set_stores += builds_set(node["value"]);
+      }
+  }
+  else if (
+    (kind == "AugAssign" || kind == "For" || kind == "With") &&
+    node.contains("target") && node["target"].is_object() &&
+    node["target"].value("attr", "") == attr)
+    ++stores;
+  for (auto it = node.begin(); it != node.end(); ++it)
+    if (it.value().is_structured())
+      count_attribute_stores(it.value(), attr, stores, set_stores);
+}
+
+/// Every store to an attribute named @p attr builds a set, so a value read from
+/// it is one, whichever instance holds it.
+static bool
+attribute_only_stores_sets(const nlohmann::json &ast, const std::string &attr)
+{
+  size_t stores = 0;
+  size_t set_stores = 0;
+  count_attribute_stores(ast, attr, stores, set_stores);
+  return stores > 0 && stores == set_stores;
+}
+
 const symbolt *
 function_call_expr::get_object_list_symbol(std::string &display_name) const
 {
@@ -2131,6 +2197,8 @@ function_call_expr::get_object_list_symbol(std::string &display_name) const
     {
       symbolt &tmp = converter_.create_tmp_symbol(
         call_, "$attr_list$", list_type, attr_expr);
+      tmp.is_set = attribute_only_stores_sets(
+        converter_.ast(), func_value["attr"].get<std::string>());
       return &tmp;
     }
 
