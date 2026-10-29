@@ -81,21 +81,6 @@ find_method_def(const nlohmann::json &class_node, const std::string &method)
   return nullptr;
 }
 
-/// Whether \p method_def carries the @staticmethod decorator. The decorator
-/// decides this, not the first parameter's name, which Python does not fix.
-bool is_staticmethod_def(const nlohmann::json &method_def)
-{
-  if (!method_def.contains("decorator_list"))
-    return false;
-
-  for (const auto &d : method_def["decorator_list"])
-    if (
-      node_type_of(d) == "Name" && d.contains("id") &&
-      d["id"] == "staticmethod")
-      return true;
-  return false;
-}
-
 /// An explicit `Base.__init__(self, ...)` call invokes the named base class's
 /// constructor with self passed explicitly; it is not an object construction.
 /// Letting it fall through to the ClassMethod classification allocates no fresh
@@ -294,7 +279,7 @@ bool function_call_expr::resolves_to_staticmethod(
     pending.pop_front();
 
     if (const nlohmann::json *def = find_method_def(cls, method))
-      return is_staticmethod_def(*def);
+      return json_utils::is_staticmethod_def(*def);
 
     if (!cls.contains("bases") || !cls["bases"].is_array())
       continue;
