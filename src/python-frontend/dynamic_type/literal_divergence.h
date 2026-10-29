@@ -197,6 +197,37 @@ inline std::string annotated_return_kind(
   return "";
 }
 
+// The kind `self.<name>()` returns: every class defining `name` must agree on
+// one scalar return annotation, as `self` may be an instance of any of them.
+inline std::string method_return_kind(
+  const std::string &name,
+  const nlohmann::json &module_body)
+{
+  std::string agreed;
+  if (!module_body.is_array())
+    return agreed;
+  for (const auto &cls : module_body)
+  {
+    if (!cls.is_object() || cls.value("_type", "") != "ClassDef")
+      continue;
+    for (const auto &stmt : cls["body"])
+    {
+      if (
+        stmt.value("_type", "") != "FunctionDef" ||
+        stmt.value("name", "") != name)
+        continue;
+      const std::string kind =
+        stmt.contains("returns") && stmt["returns"].is_object()
+          ? scalar_name_kind(stmt["returns"].value("id", ""))
+          : "";
+      if (kind.empty() || (!agreed.empty() && kind != agreed))
+        return "";
+      agreed = kind;
+    }
+  }
+  return agreed;
+}
+
 // The kind of a call: a nondet_<type> function, a builtin conversion, abs of
 // a number, or a function with a scalar return annotation.
 inline std::string classify_call_kind(
@@ -220,7 +251,10 @@ inline std::string classify_call_kind(
     return kind == "num" || kind == "float" ? kind : "";
   }
 
-  return annotated_return_kind(callee, module_body);
+  const std::string kind = annotated_return_kind(callee, module_body);
+  return kind.empty() && callee == "self." + leaf
+           ? method_return_kind(leaf, module_body)
+           : kind;
 }
 
 inline std::string classify_literal_value_kind(

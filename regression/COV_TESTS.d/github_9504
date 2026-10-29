@@ -1,0 +1,9 @@
+regression/python/github_9504
+regression/python/github_9504_fail
+regression/python/github_9504_function
+regression/python/github_9504_isinstance
+regression/python/github_9504_isinstance_fail
+regression/python/github_9504_literal
+regression/python/github_9504_override
+regression/python/github_9504_str
+regression/python/github_9504_str_fail
