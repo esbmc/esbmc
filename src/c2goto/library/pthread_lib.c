@@ -159,25 +159,33 @@ __ESBMC_HIDE:;
   __ESBMC_num_threads_running--;
 }
 
+static _Bool tsd_destructor_pass(void)
+{
+__ESBMC_HIDE:;
+  _Bool called = 0;
+  for (unsigned long i = 0; i < __ESBMC_next_thread_key; ++i)
+  {
+    void *value = __ESBMC_pthread_tsd[tsd_index(i)];
+    if (__ESBMC_thread_key_destructors[i] && value)
+    {
+      __ESBMC_pthread_tsd[tsd_index(i)] = NULL;
+      __ESBMC_thread_key_destructors[i](value);
+      called = 1;
+    }
+  }
+  return called;
+}
+
 void pthread_exec_key_destructors(void)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
-  // At thread exit, if a key value has a non-NULL destructor pointer,
-  // and the thread has a non-NULL value associated with that key,
-  // the value of the key is set to NULL, and then the function pointed to
-  // is called with the previously associated value as its sole argument.
-  // The order of destructor calls is unspecified if more than one destructor
-  // exists for a thread when it exits.
-  // source: https://linux.die.net/man/3/pthread_key_create
-  for (unsigned long i = 0; i < __ESBMC_next_thread_key; ++i)
-  {
-    if (__ESBMC_thread_key_destructors[i] && __ESBMC_pthread_tsd[tsd_index(i)])
-    {
-      __ESBMC_thread_key_destructors[i](__ESBMC_pthread_tsd[tsd_index(i)]);
-      __ESBMC_pthread_tsd[tsd_index(i)] = NULL;
-    }
-  }
+  // POSIX.1-2017 pthread_key_create: clear each non-NULL value, then call its
+  // destructor; repeat while destructors ran, for at most
+  // PTHREAD_DESTRUCTOR_ITERATIONS (4) passes. Unrolled rather than looped so
+  // that an unwind bound never truncates thread exit.
+  if (tsd_destructor_pass() && tsd_destructor_pass() && tsd_destructor_pass())
+    tsd_destructor_pass();
   __ESBMC_atomic_end();
 }
 
