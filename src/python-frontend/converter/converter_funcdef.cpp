@@ -2533,16 +2533,24 @@ python_converter::bind_numpy_constructor_argument(const nlohmann::json &arg)
     throw std::runtime_error(
       "TypeError: a numpy constructor called as an argument where nothing can "
       "be bound first, such as a contract, is not supported");
+  return bind_to_fresh_name(arg, "ESBMC_constructor_arg_");
+}
+
+// `value` bound to a new name ahead of the current statement, and that name.
+nlohmann::json python_converter::bind_to_fresh_name(
+  const nlohmann::json &value,
+  const std::string &prefix)
+{
   nlohmann::json name = {
     {"_type", "Name"},
-    {"id", "ESBMC_constructor_arg_" + std::to_string(++nditer_counter_)},
+    {"id", prefix + std::to_string(++nditer_counter_)},
     {"ctx", {{"_type", "Store"}}}};
-  copy_location_fields_from_decl(arg, name);
+  copy_location_fields_from_decl(value, name);
   nlohmann::json bind = {
     {"_type", "Assign"},
     {"targets", nlohmann::json::array({name})},
-    {"value", arg}};
-  copy_location_fields_from_decl(arg, bind);
+    {"value", value}};
+  copy_location_fields_from_decl(value, bind);
   emit_statement_into_current_block(bind);
   name["ctx"] = {{"_type", "Load"}};
   return name;

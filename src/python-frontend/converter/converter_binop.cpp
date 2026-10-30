@@ -1903,7 +1903,7 @@ exprt python_converter::once_bound_exponent(
 
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
-  if (std::optional<exprt> bound = try_bound_method_compare(element))
+  if (std::optional<exprt> bound = try_lowered_compare(element))
     return *bound;
 
   // Extract left and right operands from AST
@@ -2031,6 +2031,37 @@ bool python_converter::may_rebind_left(
   if (!type.is_pointer() && !type_utils::is_string_type(type))
     return contains_call(right);
   return left.value("_type", "") == "Name" && calls_user_code(right);
+}
+
+std::optional<exprt>
+python_converter::try_lowered_compare(const nlohmann::json &element)
+{
+  std::optional<exprt> bound = try_bound_method_compare(element);
+  return bound ? bound : try_chained_compare_with_call(element);
+}
+
+// `0 < g + bump() < 7`: the pairs convert the middle term separately, so its
+// call would run twice and the second read of g would come after it. Python
+// evaluates the left operand and the middle term once, in that order.
+std::optional<exprt>
+python_converter::try_chained_compare_with_call(const nlohmann::json &element)
+{
+  if (
+    element.value("_type", "") != "Compare" ||
+    element["comparators"].size() < 2 ||
+    element["comparators"][0].value("_type", "") != "BinOp" ||
+    !contains_call(element["comparators"][0]) || in_rhs_type_probe_)
+    return std::nullopt;
+  if (!can_emit_operand_statement())
+    throw std::runtime_error(
+      "TypeError: a call inside the middle term of a chained comparison where "
+      "nothing can be bound first, such as a loop condition, is not supported");
+  nlohmann::json bound = element;
+  if (element["left"].value("_type", "") != "Constant")
+    bound["left"] = bind_to_fresh_name(element["left"], "ESBMC_chained_");
+  bound["comparators"][0] =
+    bind_to_fresh_name(element["comparators"][0], "ESBMC_chained_");
+  return get_binary_operator_expr(bound);
 }
 
 // Python reads the left operand before it runs a call in the right one,

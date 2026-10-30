@@ -2320,6 +2320,11 @@ private:
   std::optional<typet>
   literal_numpy_array_type(const nlohmann::json &call) const;
   nlohmann::json bind_numpy_constructor_argument(const nlohmann::json &arg);
+  nlohmann::json
+  bind_to_fresh_name(const nlohmann::json &value, const std::string &prefix);
+  std::optional<exprt> try_lowered_compare(const nlohmann::json &element);
+  std::optional<exprt>
+  try_chained_compare_with_call(const nlohmann::json &element);
 
   bool contains_tracked_numpy_view_object(const nlohmann::json &node);
 
