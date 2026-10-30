@@ -6,21 +6,17 @@
 
 namespace std
 {
+// [alg.min.max]: only operator< is required, and a tie returns the first
+// argument.
 template <class T>
 const T &max(const T &left, const T &right)
 {
-  if (left > right)
-    return left;
-  else
-    return right;
+  return (left < right) ? right : left;
 }
 
 template <class T>
 const T &min(const T &left, const T &right)
 {
-  if (left < right)
-    return left;
-  else
-    return right;
+  return (right < left) ? right : left;
 }
 } // namespace std

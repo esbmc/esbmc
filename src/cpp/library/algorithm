@@ -2295,26 +2295,17 @@ void sort_heap(RanIt first, RanIt last, Pr pred)
 
 const double max(const double left, const double right)
 {
-  if (left > right)
-    return left;
-  else
-    return right;
+  return (left < right) ? right : left;
 }
 
 const int max(const int left, const int right)
 {
-  if (left > right)
-    return left;
-  else
-    return right;
+  return (left < right) ? right : left;
 }
 
 const char max(const char left, const char right)
 {
-  if (left > right)
-    return left;
-  else
-    return right;
+  return (left < right) ? right : left;
 }
 
 template <class Ty, class Pr>
@@ -2322,26 +2313,17 @@ const Ty &min(const Ty &left, const Ty &right, Pr pred);
 
 const int min(const int left, const int right)
 {
-  if (left < right)
-    return left;
-  else
-    return right;
+  return (right < left) ? right : left;
 }
 
 const double min(const double left, const double right)
 {
-  if (left < right)
-    return left;
-  else
-    return right;
+  return (right < left) ? right : left;
 }
 
 const char min(const char left, const char right)
 {
-  if (left < right)
-    return left;
-  else
-    return right;
+  return (right < left) ? right : left;
 }
 
 // Returns by value (T) rather than the standard's `const T&` to avoid an IR
