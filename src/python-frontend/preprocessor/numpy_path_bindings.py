@@ -92,10 +92,33 @@ def _rank(call):
     return len(first.elts)
 
 
+def _operands(node):
+    """The operands of `node` if it is scalar when they all are, or None."""
+    if isinstance(node, ast.BinOp):
+        return [node.left, node.right]
+    if isinstance(node, ast.UnaryOp):
+        return [node.operand]
+    if isinstance(node, ast.Compare):
+        return [node.left] + node.comparators
+    if isinstance(node, ast.IfExp):
+        return [node.test, node.body, node.orelse]
+    return None
+
+
+def _is_scalar_call(node):
+    if not isinstance(node, ast.Call) or node.keywords:
+        return False
+    if isinstance(node.func, ast.Name):
+        return node.func.id in _SCALAR_BUILTINS
+    return (isinstance(node.func, ast.Attribute) and not node.args
+            and isinstance(node.func.value, ast.Name) and node.func.attr in _REDUCERS)
+
+
 def _is_scalar(node, name, rank):
     """Whether `node` is a scalar on every binding of `name`, of rank `rank` at most."""
-    if isinstance(node, ast.Constant):
-        return True
+    operands = _operands(node)
+    if operands is not None:
+        return all(_is_scalar(n, name, rank) for n in operands)
     if isinstance(node, ast.Name):
         return node.id != name
     if isinstance(node, ast.Subscript):
@@ -103,20 +126,7 @@ def _is_scalar(node, name, rank):
                 and not isinstance(node.slice, (ast.Slice, ast.Tuple, ast.List)))
     if isinstance(node, ast.Attribute):
         return isinstance(node.value, ast.Name) and node.attr in _SCALAR_ATTRIBUTES
-    if isinstance(node, ast.BinOp):
-        return _is_scalar(node.left, name, rank) and _is_scalar(node.right, name, rank)
-    if isinstance(node, ast.UnaryOp):
-        return _is_scalar(node.operand, name, rank)
-    if isinstance(node, ast.Compare):
-        return all(_is_scalar(n, name, rank) for n in [node.left] + node.comparators)
-    if isinstance(node, ast.IfExp):
-        return all(_is_scalar(n, name, rank) for n in (node.test, node.body, node.orelse))
-    if not isinstance(node, ast.Call) or node.keywords:
-        return False
-    if isinstance(node.func, ast.Name):
-        return node.func.id in _SCALAR_BUILTINS
-    return (isinstance(node.func, ast.Attribute) and not node.args
-            and isinstance(node.func.value, ast.Name) and node.func.attr in _REDUCERS)
+    return isinstance(node, ast.Constant) or _is_scalar_call(node)
 
 
 def _walk_scope(stmts):
@@ -170,6 +180,7 @@ class _Rewriter:
         self.slots = [f"esbmc_np_{name}_{i}" for i in range(len(sites))]
         self.ids = {id(site): i for i, site in enumerate(sites)}
         self.tests = 0
+        self.rebinding_loops = 0
 
     def _store(self, target, value, at):
         assign = ast.Assign(targets=[ast.Name(id=target, ctx=ast.Store())], value=value)
@@ -201,12 +212,22 @@ class _Rewriter:
             keywords=[])
         return ast.fix_missing_locations(ast.copy_location(ast.Raise(exc=error), at))
 
-    def _dispatch(self, stmt):
-        """`stmt` once per binding, under a test of the tag."""
-        # What it binds or returns would hold another array on each path.
+    def _reject_array_binding(self, stmt):
+        """What `stmt` binds or returns would hold another array on each path."""
         value = stmt.value if isinstance(stmt, (ast.Assign, ast.AugAssign, ast.Return)) else None
         if value is not None and not _is_scalar(value, self.name, self.rank):
             raise _Unsupported()
+
+    def _reject_escape_from_loop(self, stmt):
+        """A binding in a loop reuses its variable, which an escaped array would see."""
+        if self.rebinding_loops > 0:
+            self._reject_array_binding(stmt)
+            if isinstance(stmt, ast.Expr):
+                raise _Unsupported()
+
+    def _dispatch(self, stmt):
+        """`stmt` once per binding, under a test of the tag."""
+        self._reject_array_binding(stmt)
         chain = [self._unbound_error(stmt)] if self.may_be_unbound else []
         last = len(self.slots) - 1
         for index in range(last, -1, -1):
@@ -242,9 +263,26 @@ class _Rewriter:
         stmt.orelse, after_else = self.lower(stmt.orelse, known)
         return before + [stmt], after_body if after_body == after_else else None
 
+    def _lower_loop(self, stmt, known):
+        has_site = any(id(n) in self.ids for n in ast.walk(stmt))
+        header = stmt.iter if isinstance(stmt, (ast.For, ast.AsyncFor)) else stmt.test
+        if _reads(header, self.name):
+            # A while test runs again after the body, where the tag may differ.
+            if known is None or (has_site and isinstance(stmt, ast.While)):
+                raise _Unsupported()
+            self._rename(header, known)
+        entry = None if has_site else known
+        self.rebinding_loops += has_site
+        stmt.body, _ = self.lower(stmt.body, entry)
+        stmt.orelse, _ = self.lower(stmt.orelse, entry)
+        self.rebinding_loops -= has_site
+        return [stmt], entry
+
     def _lower_compound(self, stmt, known):
         if isinstance(stmt, ast.If):
             return self._lower_if(stmt, known)
+        if isinstance(stmt, (ast.For, ast.AsyncFor, ast.While)):
+            return self._lower_loop(stmt, known)
         if not _reads(stmt, self.name):
             return [stmt], known
         raise _Unsupported()
@@ -269,8 +307,10 @@ class _Rewriter:
             elif not _reads(stmt, self.name):
                 lowered.append(stmt)
             elif known is not None:
+                self._reject_escape_from_loop(stmt)
                 lowered.append(self._rename(stmt, known))
             else:
+                self._reject_escape_from_loop(stmt)
                 lowered += self._dispatch(stmt)
         return lowered, known
 
