@@ -1,0 +1,5 @@
+CORE
+main.c
+--64 --no-standard-checks
+^VERIFICATION FAILED$
+assertion !signbit\(r\)$
