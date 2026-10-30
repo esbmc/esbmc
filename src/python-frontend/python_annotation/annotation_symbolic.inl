@@ -46,15 +46,18 @@ bool python_annotation<Json>::are_specializable_types(
 {
   if (are_all_user_classes(types))
     return true;
-  bool has_int = false, has_float = false;
+  bool has_int = false, has_float = false, has_str = false;
   for (const auto &t : types)
   {
     if (t != "int" && t != "float" && t != "str" && t != "bool")
       return false;
     has_int |= t == "int";
     has_float |= t == "float";
+    has_str |= t == "str";
   }
-  return has_int && has_float;
+  // A str among numbers would otherwise leave the parameter void *, which a
+  // str comparison then dereferences as a pointer (#9284, #8314).
+  return (has_int && has_float) || (has_str && (has_int || has_float));
 }
 
 // Whether `func_name` already has a specialization pending that covers
