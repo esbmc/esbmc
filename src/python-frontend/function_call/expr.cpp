@@ -1987,6 +1987,182 @@ static bool builds_set(const nlohmann::json &value)
           value["func"].value("id", "") == "frozenset");
 }
 
+/// The def of the module-level function @p name, or null.
+static const nlohmann::json *
+module_function(const nlohmann::json &ast, const std::string &name)
+{
+  for (const auto &stmt : ast["body"])
+    if (
+      stmt.value("_type", "") == "FunctionDef" &&
+      stmt.value("name", "") == name)
+      return &stmt;
+  return nullptr;
+}
+
+/// Collects the values of the `return` statements of @p body, without entering
+/// nested defs or classes.
+static void collect_returns(
+  const nlohmann::json &body,
+  std::vector<const nlohmann::json *> &returns,
+  bool &bare)
+{
+  if (!body.is_array())
+    return;
+  for (const auto &stmt : body)
+  {
+    const std::string kind = stmt.value("_type", "");
+    if (kind == "FunctionDef" || kind == "ClassDef" || kind == "Lambda")
+      continue;
+    if (kind == "Return")
+    {
+      if (stmt.contains("value") && stmt["value"].is_object())
+        returns.push_back(&stmt["value"]);
+      else
+        bare = true;
+    }
+    for (const char *key : {"body", "orelse", "finalbody"})
+      if (stmt.contains(key))
+        collect_returns(stmt[key], returns, bare);
+    if (stmt.contains("handlers"))
+      for (const auto &handler : stmt["handlers"])
+        collect_returns(handler["body"], returns, bare);
+  }
+}
+
+/// Whether @p value, or the call it makes, yields a set: it builds one, or it
+/// calls a module function that returns a set on every path.
+static bool yields_set(const nlohmann::json &ast, const nlohmann::json &value)
+{
+  if (builds_set(value))
+    return true;
+  if (
+    value.value("_type", "") != "Call" ||
+    value["func"].value("_type", "") != "Name")
+    return false;
+  const nlohmann::json *callee =
+    module_function(ast, value["func"].value("id", ""));
+  if (!callee)
+    return false;
+  std::vector<const nlohmann::json *> returns;
+  bool bare = false;
+  collect_returns((*callee)["body"], returns, bare);
+  if (bare || returns.empty())
+    return false;
+  return std::all_of(
+    returns.begin(), returns.end(), [](const nlohmann::json *r) {
+      return builds_set(*r);
+    });
+}
+
+/// The enclosing def of an attribute store and the class around it.
+struct store_scope
+{
+  const nlohmann::json *function = nullptr;
+  std::string cls;
+};
+
+/// Whether @p annotation names a set type: `set`, `Set`, `frozenset`, or one
+/// of them subscripted.
+static bool is_set_annotation(const nlohmann::json &annotation)
+{
+  if (!annotation.is_object())
+    return false;
+  const nlohmann::json &base = annotation.value("_type", "") == "Subscript"
+                                 ? annotation["value"]
+                                 : annotation;
+  const std::string name = base.value("id", "");
+  return name == "set" || name == "Set" || name == "frozenset";
+}
+
+/// The index of parameter @p name among the parameters of @p function after
+/// `self`, or -1.
+static int
+parameter_position(const nlohmann::json &function, const std::string &name)
+{
+  const auto &params = function["args"]["args"];
+  for (size_t i = 1; i < params.size(); ++i)
+    if (params[i].value("arg", "") == name)
+      return static_cast<int>(i) - 1;
+  return -1;
+}
+
+/// The argument a constructor call passes for the parameter at @p position
+/// named @p name, or null.
+static const nlohmann::json *constructor_argument(
+  const nlohmann::json &call,
+  int position,
+  const std::string &name)
+{
+  if (call["args"].size() > static_cast<size_t>(position))
+    return &call["args"][position];
+  if (call.contains("keywords"))
+    for (const auto &keyword : call["keywords"])
+      if (keyword.value("arg", "") == name)
+        return &keyword["value"];
+  return nullptr;
+}
+
+/// Counts the calls of class @p cls, and those that pass a set for the
+/// constructor parameter at @p position.
+static void count_constructor_sets(
+  const nlohmann::json &ast,
+  const nlohmann::json &node,
+  const std::string &cls,
+  int position,
+  const std::string &name,
+  size_t &calls,
+  size_t &set_calls)
+{
+  if (!node.is_structured())
+    return;
+  if (
+    node.is_object() && node.value("_type", "") == "Call" &&
+    node["func"].value("_type", "") == "Name" &&
+    node["func"].value("id", "") == cls)
+  {
+    ++calls;
+    const nlohmann::json *arg = constructor_argument(node, position, name);
+    set_calls += arg != nullptr && yields_set(ast, *arg);
+  }
+  for (const auto &child : node)
+    count_constructor_sets(ast, child, cls, position, name, calls, set_calls);
+}
+
+/// Whether @p value is a parameter of the constructor around the store that
+/// every construction of the class, or its annotation, makes a set.
+static bool is_set_parameter(
+  const nlohmann::json &ast,
+  const nlohmann::json &value,
+  const store_scope &scope)
+{
+  if (
+    value.value("_type", "") != "Name" || scope.function == nullptr ||
+    scope.function->value("name", "") != "__init__" || scope.cls.empty())
+    return false;
+  const std::string name = value.value("id", "");
+  const int position = parameter_position(*scope.function, name);
+  if (
+    position < 0 || json_utils::count_name_bindings(*scope.function, name) != 1)
+    return false;
+  const auto &param = (*scope.function)["args"]["args"][position + 1];
+  if (is_set_annotation(param.value("annotation", nlohmann::json())))
+    return true;
+  size_t calls = 0;
+  size_t set_calls = 0;
+  count_constructor_sets(
+    ast, ast["body"], scope.cls, position, name, calls, set_calls);
+  return calls > 0 && calls == set_calls;
+}
+
+/// Whether the value stored to an attribute is a set.
+static bool stores_set(
+  const nlohmann::json &ast,
+  const nlohmann::json &value,
+  const store_scope &scope)
+{
+  return yields_set(ast, value) || is_set_parameter(ast, value, scope);
+}
+
 static bool
 is_attribute_named(const nlohmann::json &node, const std::string &attr)
 {
@@ -2021,18 +2197,36 @@ static bool is_other_store(const nlohmann::json &node, const std::string &attr)
          node.contains("target") && is_attribute_named(node["target"], attr);
 }
 
+/// The scope a child of @p node sits in.
+static store_scope
+inner_scope(const nlohmann::json &node, const store_scope &scope)
+{
+  store_scope inner = scope;
+  const std::string kind = node.value("_type", "");
+  if (kind == "ClassDef")
+  {
+    inner.cls = node.value("name", "");
+    inner.function = nullptr;
+  }
+  else if (kind == "FunctionDef")
+    inner.function = &node;
+  return inner;
+}
+
 /// Counts the stores of an attribute named @p attr, and how many of them
-/// build a set.
+/// store a set.
 static void count_attribute_stores(
+  const nlohmann::json &ast,
   const nlohmann::json &node,
   const std::string &attr,
+  const store_scope &scope,
   size_t &stores,
   size_t &set_stores)
 {
   if (node.is_array())
   {
     for (const auto &child : node)
-      count_attribute_stores(child, attr, stores, set_stores);
+      count_attribute_stores(ast, child, attr, scope, stores, set_stores);
     return;
   }
   if (!node.is_object())
@@ -2041,22 +2235,23 @@ static void count_attribute_stores(
     if (is_attribute_named(*target, attr))
     {
       ++stores;
-      set_stores += builds_set(node["value"]);
+      set_stores += stores_set(ast, node["value"], scope);
     }
   stores += is_other_store(node, attr);
+  const store_scope inner = inner_scope(node, scope);
   for (auto it = node.begin(); it != node.end(); ++it)
     if (it.value().is_structured())
-      count_attribute_stores(it.value(), attr, stores, set_stores);
+      count_attribute_stores(ast, it.value(), attr, inner, stores, set_stores);
 }
 
-/// Every store to an attribute named @p attr builds a set, so a value read from
+/// Every store to an attribute named @p attr stores a set, so a value read from
 /// it is one, whichever instance holds it.
 static bool
 attribute_only_stores_sets(const nlohmann::json &ast, const std::string &attr)
 {
   size_t stores = 0;
   size_t set_stores = 0;
-  count_attribute_stores(ast, attr, stores, set_stores);
+  count_attribute_stores(ast, ast, attr, store_scope(), stores, set_stores);
   return stores > 0 && stores == set_stores;
 }
 
