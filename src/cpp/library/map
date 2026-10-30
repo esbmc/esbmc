@@ -861,6 +861,7 @@ public:
 
           this->_size++;
           this->_value[i] = val.second;
+          it.it_pair = value_type(this->_key[i], this->_value[i]);
           _pair.first = it;
           _pair.second = true;
           return _pair;
@@ -870,7 +871,8 @@ public:
       this->_size++;
       this->_key[s] = val.first;
       this->_value[s] = val.second;
-      _pair.first = this->end();
+      it.it_pair = value_type(this->_key[s], this->_value[s]);
+      _pair.first = it;
       _pair.second = true;
       return _pair;
     }
@@ -917,6 +919,7 @@ public:
 
           this->_size++;
           this->_value[i] = val.second;
+          it.it_pair = value_type(this->_key[i], this->_value[i]);
           return it;
         }
         it++;
@@ -924,7 +927,8 @@ public:
       this->_size++;
       this->_key[s] = x;
       this->_value[s] = val.second;
-      return this->end();
+      it.it_pair = value_type(this->_key[s], this->_value[s]);
+      return it;
     }
   }
 
@@ -954,11 +958,11 @@ public:
           }
           this->_key[j - 1] = Key();
           this->_value[j - 1] = T();
-          return this->_size;
+          return 1;
         }
       }
     }
-    return this->_size;
+    return 0;
   }
 
   void erase(iterator position)
