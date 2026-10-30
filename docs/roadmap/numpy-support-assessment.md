@@ -20,8 +20,8 @@ and its stages, ADR-NP-004 the SMT-array scalability decision, and "principle
 
 | Feature | Status | Notes |
 |---|---|---|
-| General NumPy array returns from user functions | Partial | Concrete array/view/descriptor returns from supported constructors, bare parameters, parameter subscript/subarrays, supported descriptor calls over parameters, and element-wise arithmetic over constructors or array parameters (`return a * 2`, `b = a + 1; return b`, `return (a * 2)[1]`) are implemented; arrays built by `np.zeros`/`ones`/`full`/`empty`/`arange`/`eye`/`identity`/`linspace` with literal arguments, bound to a name or written inline as the argument, are passed to functions like `np.array` literals, with their `dtype=`. Remaining gaps, each rejected with its own `TypeError`: a call whose returned element-wise result is passed directly as an argument (`first(make())` with `make` returning `a / 2`); a view returned by a function and passed directly as an argument (`total(tail(base))`); such a constructor written as an argument inside a `lambda` or an `and`/`or` operand; one function called with arrays of different shapes or element types. Genuinely symbolic parameter shapes are rejected when unsupported metadata/view consumers need concrete shape information; `len()` on such parameters remains supported through its independent path. |
-| Shared-buffer view model | Partial | ADR-NP-003 etapa 3: every supported view is a pointer into its source's storage plus a per-axis shape and stride, which may be run-time values. This covers 1-D to rank 4 slices (literal or symbolic bounds and steps, multi-axis tuples), row/column/subarray views, `transpose`/`.T` (also indexed inline, `x.T[0][1]`)/`swapaxes`/`moveaxis`, `reshape`/`ravel`/`.flat` (a view when NumPy's no-copy rule allows, otherwise a copy), `squeeze`, `expand_dims`, read-only `broadcast_to`, `diagonal`, and views of array parameters. Reads and writes, including symbolic indices, go through one address computation, so aliasing holds in both directions. Copies (`np.copy`, `view.copy()`, `np.array(view)`, and the same three over an inline slice such as `a[1:3].copy()`), `tolist()`, flattened reducers, `any`/`all` and basic `nditer` accept these views. A view also keeps its metadata when it leaves direct local use: a call to a function that is a single return expression over its parameters (after any local aliases) is folded into the caller, so views passed in or returned alias as written; a literal `list`/`tuple`/`dict` holding views binds each element to its own view and is read back by literal index or key; `alias = view` carries shape, strides and read-only state; a name bound on two paths to views with the same layout over the same array is one view. A 1-D view passed to `sum`, `any`, `all`, `min`, `max`, `tuple`, `reversed`, `print`, `list` or `sorted` is read as `view.tolist()`, `sorted`/`min`/`max` with `key=` (and `reverse=` or `default=`, constant or run-time) included, and a copied view (of a list-backed source) is read as it is by the same builtins except `list`; a view passed to an ndarray method, a user method, a class constructor or a module-level lambda over its parameters binds like a function parameter. Remaining gaps, each rejected with its own `TypeError`: a view passed to `list()` when it is a copy, to a lambda that is passed on as a callback, through `**kwargs`, or to a function of another non-NumPy module; a view passed to a user function that is not a single return expression when its layout cannot be read from every call site (the source is `np.full` with an unbounded size or with an `order=`/`device=`/`like=` keyword, or is rebound inside a branch or loop; call sites disagree on the element type or the rank); a view whose layout the callee reads at run time (run-time bounds, or one callee called with different layouts) when the call's arguments contain calls or it sits in a short-circuit operand, a comprehension or a loop condition; a view returned by such a function unless every `return` yields the same parameter; such calls to the right of an array name or attribute in the same expression; a view stored by `append`, item assignment or a comprehension, in a nested container, an attribute or a global; a container of views that is mutated, indexed by a run-time key, bound inside a branch or loop, or used as a whole; views returned from more than one path; a source name rebound inside a branch or loop while views of it are alive; a name bound on different paths to views with a different rank, element type or read-only state, or to different layouts or arrays inside a loop or while a nested function reads the name; an array rebound while a view bound per path to it or to another array is alive; `reshape`/`ravel` of an N-D view whose stride is only known at run time (whether NumPy copies depends on that stride); an N-D slice with run-time bounds that is used without being bound to a name. |
+| General NumPy array returns from user functions | Partial | Concrete array/view/descriptor returns from supported constructors, bare parameters, parameter subscript/subarrays, supported descriptor calls over parameters, and element-wise arithmetic over constructors or array parameters (`return a * 2`, `b = a + 1; return b`, `return (a * 2)[1]`) are implemented; arrays built by `np.zeros`/`ones`/`full`/`empty`/`arange`/`eye`/`identity`/`linspace` with literal arguments, bound to a name or written inline as the argument, are passed to functions like `np.array` literals, with their `dtype=`. A returned element-wise result (`first(make())` with `make` returning `a / 2` over a literal array or a local bound once to one), a positional call to a function that is one slice of a parameter (`mutate(tail(a))`), and such a constructor written as an argument inside a `lambda` or an `and`/`or` operand are also passed directly. Remaining gaps, each rejected with its own `TypeError`: one function called with arrays of different shapes or element types; such a constructor in a contract; a returned view passed by keyword or from a function that does more than slice. Genuinely symbolic parameter shapes are rejected when unsupported metadata/view consumers need concrete shape information; `len()` on such parameters remains supported through its independent path. |
+| Shared-buffer view model | Partial | ADR-NP-003 etapa 3: every supported view is a pointer into its source's storage plus a per-axis shape and stride, which may be run-time values. This covers 1-D to rank 4 slices (literal or symbolic bounds and steps, multi-axis tuples), row/column/subarray views, `transpose`/`.T` (also indexed inline, `x.T[0][1]`)/`swapaxes`/`moveaxis`, `reshape`/`ravel`/`.flat` (a view when NumPy's no-copy rule allows, otherwise a copy), `squeeze`, `expand_dims`, read-only `broadcast_to`, `diagonal`, and views of array parameters. Reads and writes, including symbolic indices, go through one address computation, so aliasing holds in both directions. Copies (`np.copy`, `view.copy()`, `np.array(view)`, and the same three over an inline slice such as `a[1:3].copy()`), `tolist()`, flattened reducers, `any`/`all` and basic `nditer` accept these views. A view also keeps its metadata when it leaves direct local use: a call to a function that is a single return expression over its parameters (after any local aliases) is folded into the caller, so views passed in or returned alias as written; a literal `list`/`tuple`/`dict` holding views binds each element to its own view and is read back by literal index or key; `alias = view` carries shape, strides and read-only state; a name bound on two paths to views with the same layout over the same array is one view. A 1-D view passed to `sum`, `any`, `all`, `min`, `max`, `tuple`, `reversed`, `print`, `list` or `sorted` is read as `view.tolist()`, `sorted`/`min`/`max` with `key=` (and `reverse=` or `default=`, constant or run-time) included, and a copied view (of a list-backed source) is read as it is by the same builtins except `list`; a view passed to an ndarray method, a user method, a class constructor or a module-level lambda over its parameters binds like a function parameter. Remaining gaps, each rejected with its own `TypeError`: a view passed to `list()` when it is a copy, to a lambda that is passed on as a callback, through `**kwargs`, or to a function of another non-NumPy module; a view passed to a user function that is not a single return expression when its layout cannot be read from every call site (the source is `np.full` with an unbounded size or with an `order=`/`device=`/`like=` keyword; call sites disagree on the element type or the rank); a view whose layout the callee reads at run time (run-time bounds, or one callee called with different layouts) when the call's arguments contain calls or it sits in a short-circuit operand, a comprehension or a loop condition; a view returned by such a function unless every `return` yields the same parameter; such calls to the right of an array name or attribute in the same expression; a view stored by `append`, item assignment or a comprehension, in a nested container, an attribute or a global; a container of views that is mutated, indexed by a run-time key, bound inside a branch or loop, or used as a whole; views returned from more than one path; a source name rebound inside a branch or loop to anything but a constructor with literal arguments while views of it are alive; a name bound on different paths to views with a different rank, element type or read-only state, or to different layouts or arrays inside a loop or while a nested function reads the name; an array rebound while a view bound per path to it or to another array is alive; `reshape`/`ravel` of an N-D view whose stride is only known at run time (whether NumPy copies depends on that stride); an N-D slice with run-time bounds that is used without being bound to a name. |
 
 ---
 
@@ -60,17 +60,19 @@ and its stages, ADR-NP-004 the SMT-array scalability decision, and "principle
    index on an array or a view is normalized like NumPy's and an out-of-range
    one raises a catchable `IndexError`. Arrays with no static bound on their
    shape remain out of scope.
-5. **A call in a right operand runs after the left operand is read** in
-   statements, assignments, loop conditions, conditional expressions and
-   `and`/`or` operands, whether the left operand is a number, a `str` or a
-   reference to a list or another object. It still runs first inside a `lambda` body and in the
-   middle operand of a chained comparison (`0 < g + bump() < 7`), and a left
-   operand that could fail (a list element) is not read ahead of a
-   conditional arm.
-6. **A NumPy array rebound to another shape or dtype** gets its own symbol
-   only in straight-line code that no other function reads; inside a
-   branch or loop, or while a function reads the name, the rebind rejects
-   with a `TypeError` (`array_rebind_other_shape_*_fail`).
+5. **A left operand that could fail is not read ahead of a conditional
+   arm.** A call in a right operand otherwise runs after the left operand is
+   read, in lambda bodies and chained comparisons too; a chained comparison
+   with a call inside arithmetic in its middle term rejects in a loop
+   condition, where nothing can be bound first.
+6. **A NumPy array rebound on a path** gets one variable per binding and a tag
+   when every binding is a constructor with literal arguments, so a read on an
+   unknown path runs per binding. Any other binding, a `try` or `with` around
+   a read, a `while` test over the name, a lambda or generator reading it, a
+   writer through `global`, or a statement binding the array itself on an
+   unknown path rejects with a `TypeError`. A program valid only on the path
+   taken (`a[1][1]` under a guard, `a` 1-D otherwise) rejects too, because
+   each read is converted for every binding.
 7. **Linear algebra and math results are over-approximated.** They are
    bounded rather than exact, so `det(m) == -2` fails as in NumPy, and a
    comparison that holds in NumPy only by its exact rounding
@@ -86,7 +88,7 @@ and its stages, ADR-NP-004 the SMT-array scalability decision, and "principle
    its terms, and concrete norms are bounded unless exact in every IEEE
    implementation.
 8. **The suite's cost is in its slow tests, not its count.**
-   `regression/numpy` has 2418 tests; six linear algebra tests that repeated
+   `regression/numpy` has 2396 tests; six linear algebra tests that repeated
    another test's contract were removed, each listed with its replacement in
    the commit that removes them. Shortening the CI run needs per-test CI
    timings to merge the expensive programs.
@@ -103,9 +105,8 @@ verdict. Gaps in "Missing indexing / slicing" and "Missing API
 surface" should reject explicitly; any known false alarm must be listed as a
 separate gap instead of treated as supported behavior.
 
-The known wrong successes are item 1 (`math.*` functions outside the bounded
-set) and the operand order inside a `lambda` body or a chained
-comparison (item 5). Every other remaining item is documented backlog.
+The known wrong success is item 1 (`math.*` functions outside the bounded
+set). Every other remaining item is documented backlog.
 
 `regression/numpy` pins one `KNOWNBUG` test (2026-10-25):
 
@@ -131,7 +132,7 @@ reject, each pinned by a `CORE` test:
 | `view_general_lambda_escape_fail` | a lambda that receives the view stores it elsewhere | rejected: the lambda is not a plain function |
 | `view_general_external_method_fail` | a function of another module receives the view | rejected: function of a non-NumPy module |
 | `view_param_element_type_conflict_fail` | one function takes an int view and a float view | rejected: view passed to a multi-statement function |
-| `view_param_branch_source_rebind_fail` | the source array is rebound inside a branch before the view is taken | rejected: rebinding a numpy array to another shape inside a branch |
+| `view_param_branch_source_rebind_fail` | the source array is rebound inside a branch before the view is taken | rejected: rebinding a numpy array to another shape inside a branch, as the view would hold another array per path |
 | `view_param_operand_array_name_fail` | `b + f(v)[0]` with an array name `b` to the left of a view-returning call | rejected: an array operand is not bound to a temporary, which a later call could change through an alias |
 | `view_param_return_multi_path_fail` | a function returns one of two view parameters | rejected: returning a copied numpy view |
 | `view_branch_merge_loop_fail` | a view name rebound to another layout inside a loop | rejected: different shape, strides or storage on different paths |
@@ -143,19 +144,15 @@ reject, each pinned by a `CORE` test:
 
 ## Prioritised next steps
 
-1. **Rebinding and call forms** — a rebind to another shape inside a branch
-   or loop (item 6), element-wise results and views returned by a call and
-   passed straight on as arguments, the operand order inside a `lambda` body
-   or a chained comparison.
-2. **Dtype width and non-numeric arrays** — storage and arithmetic in the
+1. **Dtype width and non-numeric arrays** — storage and arithmetic in the
    dtype's own width (NEP 50 promotion), and the string/complex array
    consumers that reject today; `object`/structured/custom dtypes stay out.
-3. **Random generator state** — `Generator`/`default_rng`, `seed` and
+2. **Random generator state** — `Generator`/`default_rng`, `seed` and
    probability-vector `choice`; each needs its own ADR-NP-002 decision first.
-4. **Remaining math functions** — bound `expm1`, `log1p`, `exp2`, the
+3. **Remaining math functions** — bound `expm1`, `log1p`, `exp2`, the
    inverse hyperbolic functions, `cbrt`, `hypot` and `arctan2` (NumPy and
    `math.*`, item 1) and recognise `np.isnan`/`np.isinf`/`np.inf`/`np.nan`.
-5. **Linear algebra remainder** — `eig`/`svd` of larger dense matrices,
+4. **Linear algebra remainder** — `eig`/`svd` of larger dense matrices,
    run-time entries beyond `det` and `norm`, and the shape errors as
    catchable `LinAlgError`s.
 
@@ -167,16 +164,15 @@ view model; they stay rejected.
 
 ## Suggested next PRs
 
-The backlog closes in five PRs:
+The backlog closes in four PRs:
 
-1. **Rebinding and call forms** — item 6 and the call forms in step 1.
-2. **Dtype width and non-numeric arrays** — narrow-width storage and
-   arithmetic, string/complex array consumers; the largest of the five.
-3. **Random generator state** — after the ADR decision on state and
+1. **Dtype width and non-numeric arrays** — narrow-width storage and
+   arithmetic, string/complex array consumers; the largest of the four.
+2. **Random generator state** — after the ADR decision on state and
    probabilities.
-4. **Remaining math functions** — step 4, on the bounded model of
-   `util/arith/transcendental.h`; the smallest of the five.
-5. **Linear algebra remainder** — step 5, on the bounds and checks the
+3. **Remaining math functions** — step 3, on the bounded model of
+   `util/arith/transcendental.h`; the smallest of the four.
+4. **Linear algebra remainder** — step 4, on the bounds and checks the
    current `numpy.linalg` support shares.
 
 ---
