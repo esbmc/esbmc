@@ -1649,14 +1649,25 @@ exprt python_converter::handle_membership_operator(
 // inside a clause, which is a specification rather than code. A lambda body
 // is converted while the enclosing block is current, so its guard goes into a
 // statement expression evaluated with the division (#8889).
-bool python_converter::needs_zero_division_guard(
+//
+// A negative shift count raises a catchable ValueError the same way.
+static bool is_shift_op(const std::string &op)
+{
+  return op == "LShift" || op == "RShift";
+}
+
+bool python_converter::needs_operand_guard(
   const std::string &op,
   const exprt &rhs) const
 {
-  if (op != "Div" && op != "FloorDiv" && op != "Mod")
+  if (is_shift_op(op))
+  {
+    if (!rhs.type().is_signedbv())
+      return false;
+  }
+  else if (op != "Div" && op != "FloorDiv" && op != "Mod")
     return false;
-
-  if (
+  else if (
     !rhs.type().is_signedbv() && !rhs.type().is_unsignedbv() &&
     !rhs.type().is_floatbv())
     return false;
@@ -2774,16 +2785,16 @@ exprt python_converter::get_binary_operator_expr(
       return fallback;
   }
 
-  return build_division_guarded_binop(op, lhs, rhs, element);
+  return build_guarded_binop(op, lhs, rhs, element);
 }
 
-exprt python_converter::build_division_guarded_binop(
+exprt python_converter::build_guarded_binop(
   const std::string &op,
   exprt lhs,
   exprt rhs,
   const nlohmann::json &element)
 {
-  if (!needs_zero_division_guard(op, rhs))
+  if (!needs_operand_guard(op, rhs))
     return build_arithmetic_binop(op, lhs, rhs, element);
 
   // An and/or tail, a chained-comparison tail or a while test is evaluated
@@ -2806,13 +2817,26 @@ exprt python_converter::build_division_guarded_binop(
   lhs = hoist_side_effecting_operand(lhs, element, "$div_lhs$");
   rhs = hoist_side_effecting_operand(rhs, element, "$div_rhs$");
 
-  exprt is_zero("=", bool_type());
-  is_zero.copy_to_operands(rhs, gen_zero(rhs.type()));
-  emit_guarded_raise(
-    is_zero,
-    "ZeroDivisionError",
-    "division by zero",
-    get_location_from_decl(element));
+  if (is_shift_op(op))
+  {
+    exprt is_negative("<", bool_type());
+    is_negative.copy_to_operands(rhs, gen_zero(rhs.type()));
+    emit_guarded_raise(
+      is_negative,
+      "ValueError",
+      "negative shift count",
+      get_location_from_decl(element));
+  }
+  else
+  {
+    exprt is_zero("=", bool_type());
+    is_zero.copy_to_operands(rhs, gen_zero(rhs.type()));
+    emit_guarded_raise(
+      is_zero,
+      "ZeroDivisionError",
+      "division by zero",
+      get_location_from_decl(element));
+  }
   current_block = saved_block;
 
   exprt result = build_arithmetic_binop(op, lhs, rhs, element);
