@@ -2045,14 +2045,9 @@ exprt python_converter::snapshot_left_operand(
   // that cannot fail is taken out of it.
   const bool safe = lhs.is_symbol() || is_in_bounds_constant_index(lhs) ||
                     conditional_expr_depth_ == 0;
-  // An and/or operand after the first plants its statements in a block of its
-  // own, which runs only where the operand is evaluated.
-  const bool can_emit =
-    can_emit_runtime_guard() || (in_operand_effects_block_ && current_block &&
-                                 safe_to_emit_side_effecting_statement());
   if (
-    !can_emit || !is_read_ahead_type(type) || !safe || lhs.is_constant() ||
-    !may_rebind_left(left, lhs, right))
+    !can_emit_operand_statement() || !is_read_ahead_type(type) || !safe ||
+    lhs.is_constant() || !may_rebind_left(left, lhs, right))
     return lhs;
   exprt value = lhs;
   if (value.is_function_call())

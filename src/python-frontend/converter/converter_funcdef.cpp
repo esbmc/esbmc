@@ -2529,10 +2529,10 @@ python_converter::bind_numpy_constructor_argument(const nlohmann::json &arg)
 {
   if (!is_numpy_literal_constructor(arg) || in_rhs_type_probe_)
     return arg;
-  if (!can_emit_runtime_guard())
+  if (!can_emit_operand_statement())
     throw std::runtime_error(
-      "TypeError: a numpy constructor called as an argument inside a lambda, "
-      "a short-circuit operand or a contract is not supported");
+      "TypeError: a numpy constructor called as an argument where nothing can "
+      "be bound first, such as a contract, is not supported");
   nlohmann::json name = {
     {"_type", "Name"},
     {"id", "ESBMC_constructor_arg_" + std::to_string(++nditer_counter_)},

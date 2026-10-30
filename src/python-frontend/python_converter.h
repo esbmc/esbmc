@@ -397,6 +397,19 @@ public:
            !in_lazy_operand_;
   }
 
+  // An and/or operand after the first plants its statements in a block of its
+  // own, which runs only where the operand is evaluated.
+  bool can_emit_operand_statement() const
+  {
+    return can_emit_runtime_guard() ||
+           (in_operand_effects_block_ && current_block &&
+            safe_to_emit_side_effecting_statement());
+  }
+
+  /// Convert a lambda's body with @p block current, so what it plants runs in
+  /// the body, ahead of its return, each time the lambda is called.
+  exprt get_lambda_body_expr(const nlohmann::json &body, code_blockt &block);
+
   // A raise lowers to a jump to the function's end, which every later state
   // then merges with, so a guard that only replaces an operational-model
   // assert is planted only where an enclosing `try` can catch it.
