@@ -331,6 +331,11 @@ private:
   void refuse_isinstance_on_path_dependent_number(
     const nlohmann::json &obj_arg,
     const std::vector<nlohmann::json> &types) const;
+  nlohmann::json bound_value(const nlohmann::json &name) const;
+  bool is_symbolic_int_power(const nlohmann::json &node) const;
+  void refuse_type_of_symbolic_int_power(
+    const nlohmann::json &arg,
+    const exprt &value) const;
   exprt handle_isinstance() const;
 
   /// Binds a call operand of isinstance to a temporary, so it runs exactly
