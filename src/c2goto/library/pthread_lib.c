@@ -257,12 +257,11 @@ void pthread_exit(void *retval)
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
 
-  // Run key destructors first
-  pthread_exec_key_destructors();
-
-  // Run cleanup handlers
+  // POSIX.1-2017 pthread_exit: cleanup handlers run before TSD destructors.
   while (pthread_cleanup_enabled && __esbmc_get_cleanup_level() > 0)
     pthread_cleanup_pop(1); // 1 means execute the handler
+
+  pthread_exec_key_destructors();
 
   pthread_t threadid = __ESBMC_get_thread_id();
   __ESBMC_pthread_end_values[threadid] = retval;
