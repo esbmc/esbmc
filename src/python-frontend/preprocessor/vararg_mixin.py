@@ -203,8 +203,7 @@ class VarargMixin:
             self.functionVarargs.add(qualified_name)
         else:
             self.functionVarargs.discard(qualified_name)
-        # A decorator may give the name another signature.
-        if node.args.kwarg or node.decorator_list:
+        if node.args.kwarg:
             self.functionAnyKeywords.add(qualified_name)
         else:
             self.functionAnyKeywords.discard(qualified_name)
