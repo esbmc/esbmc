@@ -188,6 +188,11 @@ public:
     const nlohmann::json &annotation_node,
     const nlohmann::json &element);
 
+  typet named_annotation_type(
+    const nlohmann::json &annotation_node,
+    const std::string &name,
+    size_t type_size = 0);
+
   /// The type of `Optional[<slice>]`, or an empty typet when the slice is not
   /// handled.
   typet get_optional_type(const nlohmann::json &slice);
@@ -2472,6 +2477,7 @@ private:
   void reject_numpy_view_method_call(const nlohmann::json &func) const;
   void reject_numpy_view_callee(const nlohmann::json &call);
   void reject_inline_runtime_numpy_slice(const nlohmann::json &call) const;
+  void reject_unmodelled_class_call(const nlohmann::json &call) const;
   void reject_numpy_view_container_store(const nlohmann::json &ast_node);
   bool is_numpy_view_syntax(
     const nlohmann::json &value,

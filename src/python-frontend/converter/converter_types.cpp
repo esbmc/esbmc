@@ -439,6 +439,18 @@ static bool names_list_annotation(const std::string &name)
   return name == "list" || name == "List" || name == "Sequence";
 }
 
+/// The type an annotation spelling class \p name stands for. A class of a
+/// module with no model has no type of its own, so the value is opaque.
+typet python_converter::named_annotation_type(
+  const nlohmann::json &annotation_node,
+  const std::string &name,
+  size_t type_size)
+{
+  if (annotation_node.value("unmodelled_class", false))
+    return any_type();
+  return type_handler_.get_typet(name, type_size);
+}
+
 typet python_converter::get_type_from_annotation(
   const nlohmann::json &annotation_node,
   const nlohmann::json &element)
@@ -836,7 +848,8 @@ typet python_converter::get_type_from_annotation(
   }
   else if (
     annotation_node["_type"] == "Attribute" && annotation_node.contains("attr"))
-    return type_handler_.get_typet(annotation_node["attr"].get<std::string>());
+    return named_annotation_type(
+      annotation_node, annotation_node["attr"].get<std::string>());
   else if (annotation_node.contains("id"))
   {
     std::string type_id = annotation_node["id"].get<std::string>();
