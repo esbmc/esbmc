@@ -119,8 +119,6 @@ void value_kinds::index(const nlohmann::json &node, const nlohmann::json *scope)
       scope_[&child] = scope;
     if (node_type(child) == "Call")
       calls_.push_back(&child);
-    if (node_type(child) == "FunctionDef")
-      defs_.push_back(&child);
     index(child, is_function(child) ? &child : scope);
   }
 }
@@ -141,13 +139,6 @@ value_kinds::scope_of(const std::string &function_name) const
   return def ? *def : module_;
 }
 
-const nlohmann::json *
-value_kinds::scope_containing(const nlohmann::json &node) const
-{
-  auto it = scope_.find(&node);
-  return it == scope_.end() ? nullptr : it->second;
-}
-
 const nlohmann::json *value_kinds::top_level_def(const std::string &name) const
 {
   for (const auto &stmt : module_["body"])
@@ -166,8 +157,7 @@ value_kinds::enclosing_scope(const nlohmann::json &node) const
 void value_kinds::parameter_values(
   const nlohmann::json &def,
   const std::string &name,
-  std::vector<scoped> &out,
-  unsigned depth) const
+  std::vector<scoped> &out) const
 {
   const nlohmann::json &ps = params(def);
   const auto it =
@@ -248,7 +238,7 @@ std::vector<value_kinds::scoped> value_kinds::name_values(
         }))
     {
       if (node_type(scope) == "FunctionDef")
-        parameter_values(scope, name, out, depth);
+        parameter_values(scope, name, out);
       return out;
     }
   }

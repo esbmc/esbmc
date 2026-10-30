@@ -2123,9 +2123,7 @@ exprt python_converter::checked_erased_int(
   // Only a value that can come from sources of different known kinds can be
   // anything but the int the cast below assumes.
   value_kinds kinds(*ast_json);
-  const nlohmann::json *scope = kinds.scope_containing(node);
-  if (!kinds.may_be_non_number(
-        node, scope ? *scope : kinds.scope_of(current_func_name_)))
+  if (!kinds.may_be_non_number(node, kinds.scope_of(current_func_name_)))
     return operand;
 
   const locationt location = get_location_from_decl(element);

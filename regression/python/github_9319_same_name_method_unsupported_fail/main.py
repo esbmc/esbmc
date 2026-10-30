@@ -8,4 +8,4 @@ class C:
         return v
 
 
-z = inc("s") if nondet_bool() else inc(2)
+z = inc("s") if nondet_bool() else inc(True)

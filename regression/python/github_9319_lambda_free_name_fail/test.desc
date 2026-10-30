@@ -1,0 +1,7 @@
+CORE
+main.py
+
+^  file .*main\.py line 12 column 11 function raw$
+^  ISINSTANCE\(a, 0\)$
+^VERIFICATION FAILED$
+Unsupported: arithmetic on a value whose type was lost$

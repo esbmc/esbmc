@@ -28,9 +28,6 @@ public:
   /// The top-level function called `function_name`, or the module.
   const nlohmann::json &scope_of(const std::string &function_name) const;
 
-  /// The function or lambda whose own scope holds `node`, the module for a
-  /// node at module level, or null for a node this module does not hold.
-  const nlohmann::json *scope_containing(const nlohmann::json &node) const;
 
 private:
   using scoped = std::pair<const nlohmann::json *, const nlohmann::json *>;
@@ -62,8 +59,7 @@ private:
   void parameter_values(
     const nlohmann::json &def,
     const std::string &name,
-    std::vector<scoped> &out,
-    unsigned depth) const;
+    std::vector<scoped> &out) const;
   std::vector<const nlohmann::json *> callers(const nlohmann::json &def) const;
   const nlohmann::json *top_level_def(const std::string &name) const;
   const nlohmann::json &enclosing_scope(const nlohmann::json &node) const;
@@ -73,7 +69,6 @@ private:
   /// The function or lambda whose own scope holds each node, or the module.
   std::unordered_map<const nlohmann::json *, const nlohmann::json *> scope_;
   std::vector<const nlohmann::json *> calls_;
-  std::vector<const nlohmann::json *> defs_;
   mutable std::
     unordered_map<const nlohmann::json *, std::vector<const nlohmann::json *>>
       callers_;

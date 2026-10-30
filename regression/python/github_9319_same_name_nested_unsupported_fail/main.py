@@ -10,5 +10,5 @@ def other():
     return inc(3)
 
 
-z = inc("s") if nondet_bool() else inc(2)
+z = inc("s") if nondet_bool() else inc(True)
 y = other()
