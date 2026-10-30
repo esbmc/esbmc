@@ -9646,6 +9646,15 @@ exprt python_converter::box_value_on_heap(
 /// target, as an assigned one takes the variable's.
 exprt python_converter::get_return_value(const nlohmann::json &value)
 {
+  if (value.value("_type", "") == "Dict")
+  {
+    // A returned dict literal stores its values as the annotated dict does.
+    typet &value_hint = dict_handler_->literal_value_type_hint;
+    value_hint = current_func_dict_value_type_;
+    exprt result = get_expr(value);
+    value_hint = typet();
+    return result;
+  }
   if (value.value("_type", "") != "IfExp")
     return get_expr(value);
   ternary_return_target_ = current_func_return_type_;

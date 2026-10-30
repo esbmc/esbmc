@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--std c++17
+^VERIFICATION FAILED$
+^  assertion std::signbit\(std::max\(0.0, -0.0\)\)$

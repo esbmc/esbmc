@@ -6410,6 +6410,8 @@ void python_converter::get_function_definition(
   // Save function return type for use in get_return_statements
   typet saved_func_return_type = current_func_return_type_;
   current_func_return_type_ = type.return_type();
+  const typet saved_func_dict_value_type = current_func_dict_value_type_;
+  current_func_dict_value_type_ = dict_annotation_value_type(return_node);
   const bool saved_func_annotated_int = current_func_annotated_int_;
   current_func_annotated_int_ = is_written_int_annotation(return_node);
   const bool saved_func_single_return = current_func_single_return_;
@@ -6478,6 +6480,7 @@ void python_converter::get_function_definition(
 
   // Restore saved function return type (for nested function defs)
   current_func_return_type_ = saved_func_return_type;
+  current_func_dict_value_type_ = saved_func_dict_value_type;
   current_func_annotated_int_ = saved_func_annotated_int;
   current_func_single_return_ = saved_func_single_return;
 

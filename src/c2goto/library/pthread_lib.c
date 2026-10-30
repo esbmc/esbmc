@@ -123,51 +123,18 @@ void __esbmc_set_cleanup_level(int level)
 /************************** Infinite Array Implementation
  * **************************/
 
-/* These internal functions insert_key_value(), search_key() and delete_key()
- * need to be called in an atomic context. */
+/* Thread-specific data: one value per (thread, key), NULL until set, as a
+ * newly created key holds NULL in every thread (#9433). Keys are never
+ * reused, so at most __ESBMC_TSD_KEYS_MAX (glibc's PTHREAD_KEYS_MAX) exist. */
+#define __ESBMC_TSD_KEYS_MAX 1024
 
-typedef struct thread_key
-{
-  pthread_t thread;
-  pthread_key_t key;
-  const void *value;
-} __ESBMC_thread_key;
+__attribute__((
+  annotate("__ESBMC_inf_size"))) static void *__ESBMC_pthread_tsd[1];
 
-__attribute__((annotate(
-  "__ESBMC_inf_size"))) static __ESBMC_thread_key __ESBMC_pthread_thread_key[1];
-
-static void insert_key_value(pthread_key_t key, const void *value)
+static unsigned long tsd_index(pthread_key_t key)
 {
 __ESBMC_HIDE:;
-  pthread_t thread = __ESBMC_get_thread_id();
-  __ESBMC_pthread_thread_key[thread].thread = thread;
-  __ESBMC_pthread_thread_key[thread].key = key;
-  __ESBMC_pthread_thread_key[thread].value = value;
-}
-
-static __ESBMC_thread_key *search_key(pthread_key_t key)
-{
-__ESBMC_HIDE:;
-  pthread_t thread = __ESBMC_get_thread_id();
-  if (
-    __ESBMC_pthread_thread_key[thread].thread == thread &&
-    __ESBMC_pthread_thread_key[thread].key == key)
-  {
-    return &__ESBMC_pthread_thread_key[thread];
-  }
-  return NULL;
-}
-
-static int delete_key(__ESBMC_thread_key *l)
-{
-__ESBMC_HIDE:;
-  pthread_t thread = __ESBMC_get_thread_id();
-  if (&__ESBMC_pthread_thread_key[thread] == l)
-  {
-    __ESBMC_pthread_thread_key[thread].thread = 0; // Mark as empty
-    return 0;
-  }
-  return -1;
+  return (unsigned long)__ESBMC_get_thread_id() * __ESBMC_TSD_KEYS_MAX + key;
 }
 
 /************************** Thread creation and exit **************************/
@@ -192,26 +159,33 @@ __ESBMC_HIDE:;
   __ESBMC_num_threads_running--;
 }
 
+static _Bool tsd_destructor_pass(void)
+{
+__ESBMC_HIDE:;
+  _Bool called = 0;
+  for (unsigned long i = 0; i < __ESBMC_next_thread_key; ++i)
+  {
+    void *value = __ESBMC_pthread_tsd[tsd_index(i)];
+    if (__ESBMC_thread_key_destructors[i] && value)
+    {
+      __ESBMC_pthread_tsd[tsd_index(i)] = NULL;
+      __ESBMC_thread_key_destructors[i](value);
+      called = 1;
+    }
+  }
+  return called;
+}
+
 void pthread_exec_key_destructors(void)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
-  // At thread exit, if a key value has a non-NULL destructor pointer,
-  // and the thread has a non-NULL value associated with that key,
-  // the value of the key is set to NULL, and then the function pointed to
-  // is called with the previously associated value as its sole argument.
-  // The order of destructor calls is unspecified if more than one destructor
-  // exists for a thread when it exits.
-  // source: https://linux.die.net/man/3/pthread_key_create
-  for (unsigned long i = 0; i < __ESBMC_next_thread_key; ++i)
-  {
-    __ESBMC_thread_key *l = search_key(i);
-    if (__ESBMC_thread_key_destructors[i] && l->value)
-    {
-      __ESBMC_thread_key_destructors[i]((void *)l->value);
-      delete_key(l);
-    }
-  }
+  // POSIX.1-2017 pthread_key_create: clear each non-NULL value, then call its
+  // destructor; repeat while destructors ran, for at most
+  // PTHREAD_DESTRUCTOR_ITERATIONS (4) passes. Unrolled rather than looped so
+  // that an unwind bound never truncates thread exit.
+  if (tsd_destructor_pass() && tsd_destructor_pass() && tsd_destructor_pass())
+    tsd_destructor_pass();
   __ESBMC_atomic_end();
 }
 
@@ -283,12 +257,11 @@ void pthread_exit(void *retval)
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
 
-  // Run key destructors first
-  pthread_exec_key_destructors();
-
-  // Run cleanup handlers
+  // POSIX.1-2017 pthread_exit: cleanup handlers run before TSD destructors.
   while (pthread_cleanup_enabled && __esbmc_get_cleanup_level() > 0)
     pthread_cleanup_pop(1); // 1 means execute the handler
+
+  pthread_exec_key_destructors();
 
   pthread_t threadid = __ESBMC_get_thread_id();
   __ESBMC_pthread_end_values[threadid] = retval;
@@ -1206,13 +1179,16 @@ __ESBMC_HIDE:;
   __ESBMC_assert(
     key != NULL,
     "In pthread_key_create, key parameter must be different than NULL.");
-  // the value NULL shall be associated with the new key in all active threads
-  insert_key_value(__ESBMC_next_thread_key, NULL);
-  __ESBMC_thread_key_destructors[__ESBMC_next_thread_key] = destructor;
-  // store the newly created key value at *key
-  *key = __ESBMC_next_thread_key++;
+  int result = EAGAIN;
+  if (__ESBMC_next_thread_key < __ESBMC_TSD_KEYS_MAX)
+  {
+    __ESBMC_thread_key_destructors[__ESBMC_next_thread_key] = destructor;
+    // store the newly created key value at *key
+    *key = __ESBMC_next_thread_key++;
+    result = 0;
+  }
   __ESBMC_atomic_end();
-  return 0;
+  return result;
 }
 
 // The pthread_getspecific() function shall return
@@ -1226,13 +1202,8 @@ __ESBMC_HIDE:;
   // If no thread-specific data value is associated with key,
   // then the value NULL shall be returned.
   void *result = NULL;
-  if (key <= __ESBMC_next_thread_key)
-  {
-    // Return the thread-specific data value associated
-    // with the given key.
-    __ESBMC_thread_key *l = search_key(key);
-    result = (l == NULL) ? NULL : (void *)l->value;
-  }
+  if (key < __ESBMC_next_thread_key)
+    result = __ESBMC_pthread_tsd[tsd_index(key)];
   __ESBMC_atomic_end();
   // No errors are returned from pthread_getspecific().
   return result;
@@ -1246,7 +1217,7 @@ int pthread_setspecific(pthread_key_t key, const void *value)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
-  insert_key_value(key, value);
+  __ESBMC_pthread_tsd[tsd_index(key)] = (void *)value;
   __ESBMC_atomic_end();
   // A NULL value is valid; POSIX's only mandatory error is ENOMEM.
   return 0;

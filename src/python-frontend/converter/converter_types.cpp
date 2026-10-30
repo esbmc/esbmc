@@ -451,6 +451,17 @@ typet python_converter::named_annotation_type(
   return type_handler_.get_typet(name, type_size);
 }
 
+typet python_converter::dict_annotation_value_type(
+  const nlohmann::json &annotation)
+{
+  if (
+    !annotation.is_object() || annotation.value("_type", "") != "Subscript" ||
+    !annotation["slice"].contains("elts") ||
+    annotation["slice"]["elts"].size() != 2)
+    return typet();
+  return get_type_from_annotation(annotation["slice"]["elts"][1], annotation);
+}
+
 typet python_converter::get_type_from_annotation(
   const nlohmann::json &annotation_node,
   const nlohmann::json &element)

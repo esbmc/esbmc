@@ -2359,7 +2359,8 @@ exprt python_converter::materialize_list_function_call(
   // inline, e.g. `f()[0:8]`, and a dict when read as `f()[k]`).
   if (
     call.type() != type_handler_.get_list_type() && !call.type().is_array() &&
-    !dict_handler_->is_dict_type(ns.follow(call.type())))
+    !dict_handler_->is_dict_type(ns.follow(call.type())) &&
+    !tuple_handler_->is_tuple_type(ns.follow(call.type())))
     return expr;
 
   locationt location = get_location_from_decl(element);
