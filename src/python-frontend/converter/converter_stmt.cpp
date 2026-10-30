@@ -1119,15 +1119,16 @@ exprt python_converter::create_lhs_expression(
   return lhs;
 }
 
-/// A tagged value and an untagged attribute slot differ in size, so storing
-/// one into the other would overrun or misread the object.
+/// A tagged value stored into an untagged attribute slot would overrun or
+/// misread the object. The other direction (an untagged value into a
+/// tagged slot) is a plain box, handled later in get_var_assign.
 void python_converter::reject_one_sided_tagged_store(
   const exprt &lhs,
   const exprt &rhs) const
 {
   if (
-    lhs.is_member() && type_handler_.is_tagged_scalar_type(lhs.type()) !=
-                         type_handler_.is_tagged_scalar_type(rhs.type()))
+    lhs.is_member() && !type_handler_.is_tagged_scalar_type(lhs.type()) &&
+    type_handler_.is_tagged_scalar_type(rhs.type()))
     throw std::runtime_error(
       "storing into an attribute that is dynamically typed only on one side "
       "is not yet supported");
@@ -8267,6 +8268,18 @@ void python_converter::get_var_assign(
     }
 
     python_list(*this, target).retype_element_store(lhs, rhs);
+
+    // Box a plain value into a dynamically-typed attribute's fields.
+    if (
+      type_handler_.is_tagged_scalar_type(lhs.type()) &&
+      !type_handler_.is_tagged_scalar_type(rhs.type()))
+    {
+      dynamic_type_handler_.assign_to_lvalue(
+        rhs, location_begin, lhs, target_block);
+      current_lhs = nullptr;
+      return;
+    }
+
     code_assignt code_assign(lhs, rhs);
     code_assign.location() = location_begin;
     target_block.copy_to_operands(code_assign);

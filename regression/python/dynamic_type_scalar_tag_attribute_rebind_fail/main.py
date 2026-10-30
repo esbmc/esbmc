@@ -5,4 +5,4 @@ class C:
 
 o = C()
 o.b = "x"
-assert o.b == "x"
+assert o.b == "y"
