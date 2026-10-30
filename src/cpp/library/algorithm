@@ -1952,8 +1952,8 @@ OutIt set_symmetric_difference(
     }
     if (first2 == last2)
     {
-      while (first2 != last2)
-        *dest++ = *first2++;
+      while (first1 != last1)
+        *dest++ = *first1++;
       return dest;
     }
 
@@ -2003,8 +2003,8 @@ OutIt *set_symmetric_difference(
     }
     if (first2 == last2)
     {
-      while (first2 != last2)
-        *dest++ = *first2++;
+      while (first1 != last1)
+        *dest++ = *first1++;
       return dest;
     }
 
@@ -2043,8 +2043,8 @@ OutIt set_symmetric_difference(
     }
     if (first2 == last2)
     {
-      while (first2 != last2)
-        *dest++ = *first2++;
+      while (first1 != last1)
+        *dest++ = *first1++;
       return dest;
     }
 
@@ -2084,8 +2084,8 @@ OutIt set_symmetric_difference(
     }
     if (first2 == last2)
     {
-      while (first2 != last2)
-        *dest++ = *first2++;
+      while (first1 != last1)
+        *dest++ = *first1++;
       return dest;
     }
 
