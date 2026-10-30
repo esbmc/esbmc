@@ -2085,6 +2085,8 @@ public:
   }
   void erase(iterator position)
   {
+    __ESBMC_assert(
+      position.it_pos < this->_size, "Invalid argument: iterator out of range");
     iterator next = position;
     ++next;
     erase(position, next);
@@ -2114,6 +2116,11 @@ public:
 
   void erase(iterator first, iterator last)
   {
+    __ESBMC_assert(
+      first.it_key == this->_key && last.it_key == this->_key &&
+        0 <= first.it_pos && first.it_pos <= last.it_pos &&
+        last.it_pos <= this->_size,
+      "Invalid iterator range");
     int n = last.it_pos - first.it_pos;
     for (int i = first.it_pos; i + n < this->_size; i++)
     {
