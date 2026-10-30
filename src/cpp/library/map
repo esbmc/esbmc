@@ -2085,75 +2085,54 @@ public:
   }
   void erase(iterator position)
   {
-    if (this->_size != 0)
-    {
-      unsigned int s = this->_size;
-      for (int i = 0; i < s; i++)
-      {
-        if (this->_key[i] == position.it_key[position.it_pos])
-        {
-          this->_size--;
-          int j;
-          for (j = i; j < s; j++)
-          {
-            this->_key[j] = this->_key[j + 1];
-            this->_value[j] = this->_value[j + 1];
-          }
-          this->_key[j - 1] = Key();
-          this->_value[j - 1] = T();
-          return;
-        }
-      }
-    }
+    __ESBMC_assert(
+      position.it_pos < this->_size, "Invalid argument: iterator out of range");
+    iterator next = position;
+    ++next;
+    erase(position, next);
   }
 
   size_type erase(const key_type &k)
   {
-    if (this->_size != 0)
+    size_type n = 0;
+    for (int i = 0; i < this->_size; i++)
     {
-      unsigned int s = this->_size;
-      for (int i = 0; i < s; i++)
+      if (this->_key[i] == k)
+        n++;
+      else
       {
-        if (this->_key[i] == k)
-        {
-          this->_size--;
-          int j;
-          for (j = i; j < s; j++)
-          {
-            this->_key[j] = this->_key[j + 1];
-            this->_value[j] = this->_value[j + 1];
-          }
-          this->_key[j - 1] = Key();
-          this->_value[j - 1] = T();
-          return this->_size;
-        }
+        this->_key[i - n] = this->_key[i];
+        this->_value[i - n] = this->_value[i];
       }
     }
-    return this->_size;
+    for (int i = this->_size - n; i < this->_size; i++)
+    {
+      this->_key[i] = Key();
+      this->_value[i] = T();
+    }
+    this->_size -= n;
+    return n;
   }
 
   void erase(iterator first, iterator last)
   {
-    if (this->_size != 0)
+    __ESBMC_assert(
+      first.it_key == this->_key && last.it_key == this->_key &&
+        0 <= first.it_pos && first.it_pos <= last.it_pos &&
+        last.it_pos <= this->_size,
+      "Invalid iterator range");
+    int n = last.it_pos - first.it_pos;
+    for (int i = first.it_pos; i + n < this->_size; i++)
     {
-      unsigned int s = this->_size;
-      for (int i = 0; i < s; i++)
-      {
-        if (this->_key[i] == first.it_key[first.it_pos])
-        {
-          this->_size = this->_size - (last.it_pos - first.it_pos);
-          int j;
-          for (j = i; j < s; j++)
-          {
-            this->_key[j] = this->_key[j + last.it_pos];
-            this->_value[j] = this->_value[j + last.it_pos];
-          }
-          this->_key[j - 1] = Key();
-          this->_value[j - 1] = T();
-          return;
-        }
-      }
+      this->_key[i] = this->_key[i + n];
+      this->_value[i] = this->_value[i + n];
     }
+    for (int i = this->_size - n; i < this->_size; i++)
+    {
+      this->_key[i] = Key();
+      this->_value[i] = T();
+    }
+    this->_size -= n;
   }
 
   key_compare key_comp() const
