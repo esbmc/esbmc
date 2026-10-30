@@ -599,6 +599,7 @@ class ModuleRewriteMixin:
         self._scan_dict_literal_bindings_and_calls(node)
         self.module_class_names, self.instance_var_classes = \
             self._build_var_class_map(node)
+        self.factory_classes = self._scan_factory_classes(node, self.module_class_names)
         self.attr_list_element_classes = self._scan_attr_list_element_classes(node)
         self.list_var_element_classes = self._scan_list_var_element_classes(node)
         self.module_dunder_all = self._capture_dunder_all(node)
