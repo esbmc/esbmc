@@ -127,11 +127,10 @@ public:
   {
     _size = 0;
   }
-  queue(std::deque<int> &x) : _size(x.size()), head(0), tail(0)
+  explicit queue(const Container &c) : _size(0), head(0), tail(0)
   {
-  }
-  queue(std::list<int> &x) : _size(x.size()), head(0), tail(0)
-  {
+    for (typename Container::const_iterator it = c.begin(); it != c.end(); ++it)
+      push(*it);
   }
 
   void push(const T &t)
