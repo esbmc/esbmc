@@ -28,7 +28,6 @@ public:
   /// The top-level function called `function_name`, or the module.
   const nlohmann::json &scope_of(const std::string &function_name) const;
 
-
 private:
   using scoped = std::pair<const nlohmann::json *, const nlohmann::json *>;
 
