@@ -490,12 +490,15 @@ public:
    *  an address-taken local count as shared: copying a pointer to it accesses
    *  nothing. Intrinsics that read through a pointer argument are keyed where
    *  symex dispatches them.
+   *  @param all_shared When non-null, receives every shared object the pointer
+   *  may reach; the result is still the first of them.
    */
   expr2tc resolve_pointer_target(
     const namespacet &ns,
     const expr2tc &ptr,
     bool &to_global,
-    bool through_deref);
+    bool through_deref,
+    std::vector<expr2tc> *all_shared = nullptr);
 
   /**
    *  Record what a dereference reaches when the pointer it goes through is not
