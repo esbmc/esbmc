@@ -2,5 +2,6 @@ regression/python/github_9284_default_str
 regression/python/github_9284_default_str_fail
 regression/python/github_9284_explicit_str
 regression/python/github_9284_int_call_fail
+regression/python/github_9284_str_float_unsupported
 regression/python/github_9284_str_int_float
 regression/python/github_9284_two_params
