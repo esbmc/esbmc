@@ -1659,7 +1659,7 @@ OutIt set_union(
     }
     if (pred(*first1, *first2))
       *dest++ = *first1++;
-    else if (pred(*first2 < *first1))
+    else if (pred(*first2, *first1))
       *dest++ = *first2++;
     else
     {
@@ -1860,7 +1860,7 @@ OutIt set_difference(
 {
   while (first1 != last1 && first2 != last2)
   {
-    if (*first1 < *first2)
+    if (pred(*first1, *first2))
       *dest++ = *first1++;
     else if (pred(*first2, *first1))
       first2++;
