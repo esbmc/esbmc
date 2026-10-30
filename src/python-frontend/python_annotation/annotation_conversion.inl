@@ -1928,8 +1928,9 @@ bool python_annotation<Json>::is_array_operand(
     name, body.contains("body") ? body["body"] : ast_["body"]);
   if (decl.empty())
     decl = find_annotated_assign(name, ast_["body"]);
-  return !decl.empty() && decl.contains("annotation") &&
-         decl["annotation"].value("id", std::string()) == "list";
+  if (decl.empty() && body.contains("args"))
+    decl = find_annotated_assign(name, body["args"]["args"]);
+  return operand_annotation_type(decl) == "list";
 }
 
 /// True division of an int or bool yields a float, and so does other
