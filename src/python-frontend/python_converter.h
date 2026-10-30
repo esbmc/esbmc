@@ -1389,6 +1389,8 @@ private:
   // is_numpy_array_literal_call() check one-for-one (same call count there)
   // instead of adding a second, separate dispatch branch for the `Call`
   // case, to keep that function's own decision count down.
+  std::optional<typet>
+  numpy_elementwise_return_type(const nlohmann::json &func_def) const;
   std::optional<typet> try_infer_numpy_array_arg_type(
     const nlohmann::json &arg,
     const nlohmann::json &module_body) const;

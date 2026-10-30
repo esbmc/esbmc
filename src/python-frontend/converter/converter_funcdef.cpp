@@ -1497,6 +1497,50 @@ static bool numpy_array_literal_return(
   return true;
 }
 
+static bool is_number_literal(const nlohmann::json &node)
+{
+  const nlohmann::json &value =
+    node.value("_type", "") == "UnaryOp" ? node["operand"] : node;
+  return value.value("_type", "") == "Constant" && value.contains("value") &&
+         value["value"].is_number();
+}
+
+// The function's only return when it is `a / 2` over a literal array, written
+// inline or bound once to a local.
+static const nlohmann::json *elementwise_return(const nlohmann::json &func_def)
+{
+  std::vector<const nlohmann::json *> returns;
+  collect_reachable_returns(func_def["body"], returns);
+  if (returns.size() != 1 || !returns[0]->contains("value"))
+    return nullptr;
+  const nlohmann::json &value = (*returns[0])["value"];
+  return value.value("_type", "") == "BinOp" &&
+             (is_number_literal(value["left"]) ||
+              is_number_literal(value["right"]))
+           ? &value
+           : nullptr;
+}
+
+static typet with_element_type(const typet &type, const typet &element)
+{
+  if (!type.is_array())
+    return element;
+  array_typet array = to_array_type(type);
+  array.subtype() = with_element_type(array.subtype(), element);
+  return array;
+}
+
+static bool yields_float(const nlohmann::json &binop)
+{
+  const auto is_float = [](const nlohmann::json &node) {
+    const nlohmann::json &value =
+      node.value("_type", "") == "UnaryOp" ? node["operand"] : node;
+    return value.contains("value") && value["value"].is_number_float();
+  };
+  return binop["op"].value("_type", "") == "Div" || is_float(binop["left"]) ||
+         is_float(binop["right"]);
+}
+
 static void collect_call_sites(
   const nlohmann::json &node,
   const std::string &enclosing_function,
@@ -2504,6 +2548,29 @@ python_converter::bind_numpy_constructor_argument(const nlohmann::json &arg)
   return name;
 }
 
+static const nlohmann::json *
+sole_local_numpy_literal(const nlohmann::json &def, const std::string &name);
+
+// `make()` returning `a / 2`: the result has a's shape and the promoted dtype.
+std::optional<typet> python_converter::numpy_elementwise_return_type(
+  const nlohmann::json &func_def) const
+{
+  const nlohmann::json *binop = elementwise_return(func_def);
+  if (!binop)
+    return std::nullopt;
+  const nlohmann::json &operand =
+    is_number_literal((*binop)["left"]) ? (*binop)["right"] : (*binop)["left"];
+  const nlohmann::json *source =
+    operand.value("_type", "") == "Name"
+      ? sole_local_numpy_literal(func_def, operand.value("id", ""))
+      : (is_numpy_array_literal_call(operand) ? &operand : nullptr);
+  std::optional<typet> type =
+    source ? literal_numpy_array_type(*source) : std::nullopt;
+  if (type && yields_float(*binop))
+    return with_element_type(*type, double_type());
+  return type;
+}
+
 std::optional<typet> python_converter::try_infer_numpy_array_arg_type(
   const nlohmann::json &arg,
   const nlohmann::json &module_body) const
@@ -2522,10 +2589,10 @@ std::optional<typet> python_converter::try_infer_numpy_array_arg_type(
   const nlohmann::json *callee_def =
     find_function_def(module_body, callee_func.value("id", ""));
   nlohmann::json literal_call;
-  if (
-    callee_def == nullptr ||
-    !numpy_array_literal_return(*callee_def, literal_call, type_handler_))
+  if (callee_def == nullptr)
     return std::nullopt;
+  if (!numpy_array_literal_return(*callee_def, literal_call, type_handler_))
+    return numpy_elementwise_return_type(*callee_def);
 
   return type_handler_.get_typet(
     numpy_literal_with_dtype(literal_call, *ast_json));
@@ -5846,6 +5913,7 @@ bool python_converter::is_numpy_arithmetic_node(
     if (
       is_numpy_array_constructor_expr(node[side]) ||
       is_numpy_param_operand(node[side], func_def) ||
+      sole_local_numpy_literal(func_def, node[side].value("id", "")) ||
       is_numpy_arithmetic_node(node[side], func_def))
       return true;
   return false;
