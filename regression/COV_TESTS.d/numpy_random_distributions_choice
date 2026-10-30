@@ -7,7 +7,7 @@ regression/numpy/array_floordiv_fail
 regression/numpy/array_int_negative_power_fail
 regression/numpy/array_nd_arith_fail
 regression/numpy/array_pow_bitwise_fail
-regression/numpy/array_rebind_other_shape_branch_fail
+regression/numpy/array_rebind_branch_wrong_value_fail
 regression/numpy/array_rebind_other_shape_fail
 regression/numpy/array_rebind_other_shape_function_edge
 regression/numpy/array_rebind_other_shape_global_read_fail
