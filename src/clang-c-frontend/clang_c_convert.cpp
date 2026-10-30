@@ -4369,6 +4369,18 @@ bool clang_c_convertert::get_cast_expr(
 
     if (routed)
     {
+      // [conv.ptr]/3: a null pointer converts to a null pointer, not to the
+      // base subobject's offset from null. CK_UncheckedDerivedToBase only
+      // feeds member access, which is UB on null. A side-effecting operand is
+      // left unguarded rather than evaluated twice, as in
+      // clang_c_adjust::adjust_derived_to_base.
+      if (
+        ptr_mode && cast.getCastKind() == clang::CK_DerivedToBase &&
+        !cast.getSubExpr()->HasSideEffects(*ASTContext))
+        cur = if_exprt(
+          equality_exprt(expr, gen_zero(expr.type())),
+          gen_zero(cur.type()),
+          cur);
       expr = cur;
       break;
     }
