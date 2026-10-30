@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--full-inlining --interval-analysis
+^VERIFICATION FAILED$
+assertion l != 20$
