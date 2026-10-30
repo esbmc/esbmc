@@ -2022,50 +2022,14 @@ public:
 
   iterator find(const key_type &x)
   {
-    size_type s = this->_size;
     iterator it = this->begin();
-    if (this->_size == 0)
+    for (int i = 0; i < this->_size; i++)
     {
-      return it;
+      if (this->_key[i] == x)
+        return it;
+      it++;
     }
-    else
-    {
-      for (int i = 0; i < s; i++)
-      {
-        if (this->_key[i] == x)
-        {
-          return it;
-        }
-        if (key_compare()((Key &)x, this->_key[i]))
-        {
-          int j;
-          Key y = x;
-          Key t;
-          T u, v;
-
-          for (j = i; j < s; j++)
-          {
-            t = this->_key[j];
-            this->_key[j] = y;
-            y = t;
-            u = this->_value[j];
-            this->_value[j] = v;
-            v = u;
-          }
-          this->_key[j] = y;
-          this->_value[j] = u;
-
-          this->_size++;
-          this->_value[i] = T();
-          return it;
-        }
-        it++;
-      }
-      this->_size++;
-      this->_key[s] = x;
-      this->_value[s] = T();
-      return this->end();
-    }
+    return this->end();
   }
 
   void swap(multimap &x)
@@ -2077,65 +2041,52 @@ public:
   }
   void erase(iterator position)
   {
-    if (this->_size != 0)
-    {
-      unsigned int s = this->_size;
-      for (int i = 0; i < s; i++)
-      {
-        if (this->_key[i] == position.it_key[position.it_pos])
-        {
-          this->_size--;
-          int j;
-          for (j = i; j < s; j++)
-          {
-            this->_key[j] = this->_key[j + 1];
-            this->_value[j] = this->_value[j + 1];
-          }
-          this->_key[j - 1] = Key();
-          this->_value[j - 1] = T();
-          return;
-        }
-      }
-    }
+    __ESBMC_assert(
+      position.it_pos < this->_size, "Invalid argument: iterator out of range");
+    iterator next = position;
+    ++next;
+    erase(position, next);
   }
 
   size_type erase(const key_type &k)
   {
-    if (this->_size != 0)
+    size_type n = 0;
+    for (int i = 0; i < this->_size; i++)
     {
-      unsigned int s = this->_size;
-      for (int i = 0; i < s; i++)
+      if (this->_key[i] == k)
+        n++;
+      else
       {
-        if (this->_key[i] == k)
-        {
-          this->_size--;
-          int j;
-          for (j = i; j < s; j++)
-          {
-            this->_key[j] = this->_key[j + 1];
-            this->_value[j] = this->_value[j + 1];
-          }
-          this->_key[j - 1] = Key();
-          this->_value[j - 1] = T();
-          return this->_size;
-        }
+        this->_key[i - n] = this->_key[i];
+        this->_value[i - n] = this->_value[i];
       }
     }
-    return this->_size;
+    for (int i = this->_size - n; i < this->_size; i++)
+    {
+      this->_key[i] = Key();
+      this->_value[i] = T();
+    }
+    this->_size -= n;
+    return n;
   }
 
   void erase(iterator first, iterator last)
   {
+    __ESBMC_assert(
+      first.it_key == this->_key && last.it_key == this->_key &&
+        0 <= first.it_pos && first.it_pos <= last.it_pos &&
+        last.it_pos <= this->_size,
+      "Invalid iterator range");
     int n = last.it_pos - first.it_pos;
-    for (int j = first.it_pos; j + n < this->_size; j++)
+    for (int i = first.it_pos; i + n < this->_size; i++)
     {
-      this->_key[j] = this->_key[j + n];
-      this->_value[j] = this->_value[j + n];
+      this->_key[i] = this->_key[i + n];
+      this->_value[i] = this->_value[i + n];
     }
-    for (int j = this->_size - n; j < this->_size; j++)
+    for (int i = this->_size - n; i < this->_size; i++)
     {
-      this->_key[j] = Key();
-      this->_value[j] = T();
+      this->_key[i] = Key();
+      this->_value[i] = T();
     }
     this->_size -= n;
   }

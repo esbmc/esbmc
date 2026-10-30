@@ -7667,13 +7667,8 @@ typet function_call_expr::dict_param_value_type(const symbolt *func, size_t idx)
     converter_.ast()["body"], func->name.as_string());
   if (fn.empty() || idx >= fn["args"]["args"].size())
     return typet();
-  const nlohmann::json &ann =
-    fn["args"]["args"][idx].value("annotation", nlohmann::json());
-  if (
-    !ann.is_object() || ann.value("_type", "") != "Subscript" ||
-    !ann["slice"].contains("elts") || ann["slice"]["elts"].size() != 2)
-    return typet();
-  return converter_.get_type_from_annotation(ann["slice"]["elts"][1], ann);
+  return converter_.dict_annotation_value_type(
+    fn["args"]["args"][idx].value("annotation", nlohmann::json()));
 }
 
 // A numpy string or complex array is read only element by element; a callee
