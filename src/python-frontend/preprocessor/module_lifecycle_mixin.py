@@ -1,5 +1,6 @@
 import ast
 
+from preprocessor.numpy_path_bindings import lower_numpy_path_bindings
 from preprocessor.path_dependent_attributes import lower_path_dependent_attributes
 
 
@@ -59,6 +60,7 @@ class ModuleLifecycleMixin:
         self._bind_nested_classes_via_self(node)
         if self.is_entry_module:
             lower_path_dependent_attributes(node)
+            lower_numpy_path_bindings(node)
         self._copy_methods_into_heirs(node)
         self._builtin_shadow_names = self._scan_builtin_shadow_names(node)
         self._unobservable_builtin_keys = self._scan_unobservable_builtin_keys(node)

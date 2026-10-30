@@ -2677,6 +2677,11 @@ private:
 
   void
   update_numpy_array_binding(const exprt &lhs, const nlohmann::json &rhs_node);
+  void keep_numpy_shape_across_paths(
+    const std::string &lhs_id,
+    const nlohmann::json &rhs_node,
+    bool unconditional_assignment,
+    const std::optional<std::vector<std::size_t>> &shape_before);
 
   bool update_numpy_array_binding_from_name(
     const exprt &lhs,
