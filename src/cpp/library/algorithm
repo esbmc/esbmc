@@ -1131,73 +1131,43 @@ void partial_sort(RanIt first, RanIt mid, RanIt last, Pr pred)
 template <class InIt, class RanIt>
 RanIt partial_sort_copy(InIt first1, InIt last1, RanIt first2, RanIt last2)
 {
-  InIt pilgrim1 = first1;
-  RanIt pilgrim2 = first2;
-  while (pilgrim2 < last2)
-    *pilgrim2++ = *pilgrim1++;
-  RanIt i, j;
-  for (i = first2; i != last2; i++)
-  {
-    j = i;
-    while ((j != first2) && (*j < *(j - 1)))
-    {
+  RanIt r = first2;
+  for (; first1 != last1 && r != last2; ++first1, ++r)
+    *r = *first1;
+  if (r == first2)
+    return r;
+  for (RanIt i = first2; i != r; ++i)
+    for (RanIt j = i; j != first2 && *j < *(j - 1); --j)
       std::swap(*j, *(j - 1));
-      j--;
-    }
-  }
-  pilgrim2--;
-  while (pilgrim1 != last1)
-    if (*pilgrim1 < *pilgrim2)
+  for (; first1 != last1; ++first1)
+    if (*first1 < *(r - 1))
     {
-      *pilgrim2 = *pilgrim1;
-      for (i = first2; i != last2; i++)
-      {
-        j = i;
-        while ((j != first2) && (*j < *(j - 1)))
-        {
-          std::swap(*j, *(j - 1));
-          j--;
-        }
-      }
-      pilgrim1++;
+      *(r - 1) = *first1;
+      for (RanIt j = r - 1; j != first2 && *j < *(j - 1); --j)
+        std::swap(*j, *(j - 1));
     }
-  return pilgrim2;
+  return r;
 }
 
 template <class InIt, class RanIt>
 RanIt partial_sort_copy(InIt *first1, InIt *last1, RanIt first2, RanIt last2)
 {
-  InIt *pilgrim1 = first1;
-  RanIt pilgrim2 = first2;
-  while (pilgrim2 < last2)
-    *pilgrim2++ = *pilgrim1++;
-  RanIt i, j;
-  for (i = first2; i != last2; i++)
-  {
-    j = i;
-    while ((j != first2) && (*j < *(j - 1)))
-    {
+  RanIt r = first2;
+  for (; first1 != last1 && r != last2; ++first1, ++r)
+    *r = *first1;
+  if (r == first2)
+    return r;
+  for (RanIt i = first2; i != r; ++i)
+    for (RanIt j = i; j != first2 && *j < *(j - 1); --j)
       std::swap(*j, *(j - 1));
-      j--;
-    }
-  }
-  pilgrim2--;
-  while (pilgrim1 != last1)
-    if (*pilgrim1 < *pilgrim2)
+  for (; first1 != last1; ++first1)
+    if (*first1 < *(r - 1))
     {
-      *pilgrim2 = *pilgrim1;
-      for (i = first2; i != last2; i++)
-      {
-        j = i;
-        while ((j != first2) && (*j < *(j - 1)))
-        {
-          std::swap(*j, *(j - 1));
-          j--;
-        }
-      }
-      pilgrim1++;
+      *(r - 1) = *first1;
+      for (RanIt j = r - 1; j != first2 && *j < *(j - 1); --j)
+        std::swap(*j, *(j - 1));
     }
-  return pilgrim2;
+  return r;
 }
 
 template <class InIt, class RanIt, class Pr>
@@ -1208,37 +1178,22 @@ RanIt partial_sort_copy(
   RanIt last2,
   Pr pred)
 {
-  InIt pilgrim1 = first1;
-  RanIt pilgrim2 = first2;
-  while (pilgrim2 < last2)
-    *pilgrim2++ = *pilgrim1++;
-  RanIt i, j;
-  for (i = first2; i != last2; i++)
-  {
-    j = i;
-    while ((j != first2) && pred(*j, *(j - 1)))
-    {
+  RanIt r = first2;
+  for (; first1 != last1 && r != last2; ++first1, ++r)
+    *r = *first1;
+  if (r == first2)
+    return r;
+  for (RanIt i = first2; i != r; ++i)
+    for (RanIt j = i; j != first2 && pred(*j, *(j - 1)); --j)
       std::swap(*j, *(j - 1));
-      j--;
-    }
-  }
-  pilgrim2--;
-  while (pilgrim1 != last1)
-    if (pred(*pilgrim1, *pilgrim2))
+  for (; first1 != last1; ++first1)
+    if (pred(*first1, *(r - 1)))
     {
-      *pilgrim2 = *pilgrim1;
-      for (i = first2; i != last2; i++)
-      {
-        j = i;
-        while ((j != first2) && pred(*j, *(j - 1)))
-        {
-          std::swap(*j, *(j - 1));
-          j--;
-        }
-      }
-      pilgrim1++;
+      *(r - 1) = *first1;
+      for (RanIt j = r - 1; j != first2 && pred(*j, *(j - 1)); --j)
+        std::swap(*j, *(j - 1));
     }
-  return pilgrim2;
+  return r;
 }
 
 template <class InIt, class RanIt, class Pr>
@@ -1249,37 +1204,22 @@ RanIt partial_sort_copy(
   RanIt last2,
   Pr pred)
 {
-  InIt *pilgrim1 = first1;
-  RanIt pilgrim2 = first2;
-  while (pilgrim2 < last2)
-    *pilgrim2++ = *pilgrim1++;
-  RanIt i, j;
-  for (i = first2; i != last2; i++)
-  {
-    j = i;
-    while ((j != first2) && pred(*j, *(j - 1)))
-    {
+  RanIt r = first2;
+  for (; first1 != last1 && r != last2; ++first1, ++r)
+    *r = *first1;
+  if (r == first2)
+    return r;
+  for (RanIt i = first2; i != r; ++i)
+    for (RanIt j = i; j != first2 && pred(*j, *(j - 1)); --j)
       std::swap(*j, *(j - 1));
-      j--;
-    }
-  }
-  pilgrim2--;
-  while (pilgrim1 != last1)
-    if (pred(*pilgrim1, *pilgrim2))
+  for (; first1 != last1; ++first1)
+    if (pred(*first1, *(r - 1)))
     {
-      *pilgrim2 = *pilgrim1;
-      for (i = first2; i != last2; i++)
-      {
-        j = i;
-        while ((j != first2) && pred(*j, *(j - 1)))
-        {
-          std::swap(*j, *(j - 1));
-          j--;
-        }
-      }
-      pilgrim1++;
+      *(r - 1) = *first1;
+      for (RanIt j = r - 1; j != first2 && pred(*j, *(j - 1)); --j)
+        std::swap(*j, *(j - 1));
     }
-  return pilgrim2;
+  return r;
 }
 
 /* [alg.nth.element]: the element at nth ends up where it would be if the
