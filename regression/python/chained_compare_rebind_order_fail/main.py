@@ -1,0 +1,10 @@
+g: int = 1
+
+
+def bump() -> int:
+    global g
+    g = 5
+    return 1
+
+
+assert 3 < g + bump() < 7
