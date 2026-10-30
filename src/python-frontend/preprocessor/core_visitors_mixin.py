@@ -1229,6 +1229,10 @@ class CoreVisitorsMixin:
                 "when x is a list or tuple of statically known length")
         if self._forwards_own_kwargs(node):
             return False
+        if any(kw.arg is None for kw in node.keywords):
+            raise NotImplementedError(
+                f"Unpacking **x into {self._display_name(function_name)}() is supported only "
+                "when x is a dict of constant str keys the callee takes")
         keywords = self._build_keyword_map(node)
         self._validate_unexpected_keywords(function_name, expected_args, kwonly_args, keywords)
         self._validate_kwonly_args(function_name, kwonly_args, keywords)

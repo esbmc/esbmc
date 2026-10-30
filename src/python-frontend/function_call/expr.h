@@ -1071,6 +1071,12 @@ private:
     const typet &arg_type,
     const code_typet::argumentst &params,
     size_t param_idx) const;
+  void forward_keyword_arguments(
+    code_function_callt &call,
+    const code_typet::argumentst &params,
+    const locationt &location,
+    const symbolt &func_symbol);
+
   exprt finalize_call(
     code_function_callt &call,
     size_t param_offset,

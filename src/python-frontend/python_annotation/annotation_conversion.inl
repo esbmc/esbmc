@@ -1676,6 +1676,9 @@ template <class Json>
 std::string python_annotation<Json>::list_concat_type(const Json &binop)
 {
   const Json &rhs = binop["right"];
+  // Repeating a list keeps its element type (`[0] * n`).
+  if (binop["op"]["_type"] == "Mult")
+    return get_list_type_from_literal(binop["left"]);
   if (binop["op"]["_type"] != "Add")
     return "list";
   const std::string callee =
@@ -1761,7 +1764,9 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
     if (
       (op == "Add" || op == "Mult") && lhs["_type"] != "List" &&
       (rhs["_type"] == "List" || rhs["_type"] == "ListComp"))
-      return "list";
+      return op == "Mult" && rhs["_type"] == "List"
+               ? get_list_type_from_literal(rhs)
+               : "list";
   }
 
   if (lhs["_type"] == "BinOp")
@@ -1928,8 +1933,9 @@ bool python_annotation<Json>::is_array_operand(
     name, body.contains("body") ? body["body"] : ast_["body"]);
   if (decl.empty())
     decl = find_annotated_assign(name, ast_["body"]);
-  return !decl.empty() && decl.contains("annotation") &&
-         decl["annotation"].value("id", std::string()) == "list";
+  if (decl.empty() && body.contains("args"))
+    decl = find_annotated_assign(name, body["args"]["args"]);
+  return operand_annotation_type(decl) == "list";
 }
 
 /// True division of an int or bool yields a float, and so does other
@@ -2570,8 +2576,15 @@ std::string python_annotation<Json>::get_type_from_rhs_variable(
   {
     return rhs_node["annotation"]["id"];
   }
-  else
-    return "Any"; // Default for cases where annotation is missing or null
+
+  // `list[int]` is a Subscript with no id, and still names a list.
+  if (
+    rhs_node.contains("annotation") && rhs_node["annotation"].is_object() &&
+    rhs_node["annotation"].value("_type", "") == "Subscript" &&
+    rhs_node["annotation"]["value"].value("id", "") == "list")
+    return "list";
+
+  return "Any"; // Default for cases where annotation is missing or null
 }
 
 template <class Json>
@@ -3425,7 +3438,9 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
               return ret["value"]["id"].template get<std::string>();
           }
           std::string inferred_type = infer_method_return_type(member, obj);
-          if (!inferred_type.empty())
+          // A static method returning its parameter has no type until the
+          // converter sees the arguments (#9343).
+          if (!inferred_type.empty() || json_utils::is_staticmethod_def(member))
             return inferred_type;
         }
       }

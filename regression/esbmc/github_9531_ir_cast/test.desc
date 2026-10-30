@@ -1,0 +1,4 @@
+CORE
+main.c
+--ir --z3 --no-simplify
+^VERIFICATION SUCCESSFUL$
