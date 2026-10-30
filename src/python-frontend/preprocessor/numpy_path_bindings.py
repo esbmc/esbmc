@@ -1,7 +1,7 @@
 """Give a NumPy array name rebound on some paths one variable per binding.
 
 The converter's symbol for a name holds one array type, so a rebind to another
-shape or dtype on a path cannot retype it. Each binding gets its own variable
+shape or dtype on a path, or one a function reads, cannot retype it. Each binding gets its own variable
 instead, a tag records the one that ran last, and a statement reading the name
 where the tag is not known is repeated for each binding:
 
@@ -30,7 +30,8 @@ _DTYPES = {"int", "float", "bool", "complex"}
 _SCALAR_ATTRIBUTES = {"ndim", "size"}
 _SCALAR_BUILTINS = {"len", "int", "float", "bool"}
 _REDUCERS = {"sum", "mean", "min", "max", "any", "all", "item"}
-_SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
+_FUNCTIONS = (ast.FunctionDef, ast.AsyncFunctionDef)
+_SCOPES = _FUNCTIONS + (ast.Lambda, ast.ClassDef)
 _COMPOUND = (ast.If, ast.For, ast.While, ast.Try, ast.With, ast.AsyncFor, ast.AsyncWith, ast.Match)
 
 
@@ -149,6 +150,12 @@ def _reads(node, name):
     return any(isinstance(n, ast.Name) and n.id == name for n in ast.walk(node))
 
 
+def _deferred_read(stmt, name):
+    """Whether `stmt` holds code reading `name` after the statement has run."""
+    return any(
+        isinstance(n, (ast.Lambda, ast.GeneratorExp)) and _reads(n, name) for n in ast.walk(stmt))
+
+
 def _binds_otherwise(node, name, sites):
     """Whether `node` binds `name` other than by one of the `sites`."""
     if isinstance(node, ast.Name):
@@ -161,7 +168,7 @@ def _binds_otherwise(node, name, sites):
     return isinstance(node, (ast.Global, ast.Nonlocal)) and name in node.names
 
 
-def _rebinds_in_function(function, name):
+def _has_own_binding(function, name):
     """Whether `function` has its own `name`, so that it does not read the module's."""
     args = function.args
     params = args.posonlyargs + args.args + args.kwonlyargs + [args.vararg, args.kwarg]
@@ -173,8 +180,9 @@ def _rebinds_in_function(function, name):
 class _Rewriter:
     """Rewrites the reads and bindings of one name in one scope."""
 
-    def __init__(self, name, sites):
+    def __init__(self, name, sites, reads_in_functions):
         self.name = name
+        self.reads_in_functions = reads_in_functions
         self.sites = sites
         self.rank = max(_rank(site.value) for site in sites)
         self.tag = f"esbmc_np_{name}_tag"
@@ -190,14 +198,9 @@ class _Rewriter:
     def preamble(self, at):
         """Bind every variable before the first statement that may need it."""
         stmts = [self._store(s, copy.deepcopy(c.value), at) for s, c in zip(self.slots, self.sites)]
-        unbound = not any(self._is_spine_first(at, s) for s in self.sites)
-        stmts.append(self._store(self.tag, ast.Constant(-1 if unbound else 0), at))
-        self.may_be_unbound = unbound
+        self.may_be_unbound = at is not self.sites[0]
+        stmts.append(self._store(self.tag, ast.Constant(-1 if self.may_be_unbound else 0), at))
         return stmts
-
-    @staticmethod
-    def _is_spine_first(at, site):
-        return at is site
 
     def _rename(self, stmt, index):
         for node in ast.walk(stmt):
@@ -288,6 +291,16 @@ class _Rewriter:
             return [stmt], known
         raise _Unsupported()
 
+    def lower_scope(self, stmt):
+        """A function reads whichever binding the tag holds when it is called."""
+        if not _reads(stmt, self.name):
+            return stmt
+        if not self.reads_in_functions or not isinstance(stmt, _FUNCTIONS):
+            raise _Unsupported()
+        if not _has_own_binding(stmt, self.name):
+            stmt.body, _ = self.lower(stmt.body, None)
+        return stmt
+
     def lower(self, stmts, known):
         """Rewrite `stmts`, entered with binding `known` (None when unknown)."""
         lowered = []
@@ -302,11 +315,11 @@ class _Rewriter:
                 new, known = self._lower_compound(stmt, known)
                 lowered += new
             elif isinstance(stmt, _SCOPES):
-                if _reads(stmt, self.name):
-                    raise _Unsupported()
-                lowered.append(stmt)
+                lowered.append(self.lower_scope(stmt))
             elif not _reads(stmt, self.name):
                 lowered.append(stmt)
+            elif _deferred_read(stmt, self.name):
+                raise _Unsupported()
             elif known is not None:
                 self._reject_escape_from_loop(stmt)
                 lowered.append(self._rename(stmt, known))
@@ -323,6 +336,9 @@ def _sites(scope_body, name, aliases):
         return None
     if any(_binds_otherwise(n, name, sites) for n in _walk_scope(scope_body)):
         return None
+    if any(isinstance(n, (ast.Global, ast.Nonlocal)) and name in n.names
+           for stmt in scope_body for n in ast.walk(stmt)):
+        return None
     sites.sort(key=lambda s: (s.lineno, s.col_offset))
     return sites
 
@@ -334,29 +350,40 @@ def _keeps_storage_elsewhere(scope_body, name):
         for n in _walk_scope(scope_body))
 
 
-def _needs_rewrite(scope_body, sites, name):
-    if all(any(s is top for top in scope_body) for s in sites):
+def _read_in_function(scope_body, name):
+    return any(
+        isinstance(n, _FUNCTIONS) and _reads(n, name) and not _has_own_binding(n, name)
+        for stmt in scope_body for n in ast.walk(stmt))
+
+
+def _needs_rewrite(scope, sites, name):
+    differs = len({_layout(s.value) for s in sites}) > 1
+    if isinstance(scope, ast.Module) and differs and _read_in_function(scope.body, name):
+        return True
+    if all(any(s is top for top in scope.body) for s in sites):
         return False
-    return (len({_layout(s.value) for s in sites}) > 1
-            or _keeps_storage_elsewhere(scope_body, name))
+    return differs or _keeps_storage_elsewhere(scope.body, name)
 
 
 def _lower_name(scope, name, aliases):
     sites = _sites(scope.body, name, aliases)
-    if not sites or not _needs_rewrite(scope.body, sites, name):
+    if not sites or not _needs_rewrite(scope, sites, name):
         return
     first = next(
         i for i, stmt in enumerate(scope.body) if any(n is sites[0] for n in ast.walk(stmt)))
-    rewriter = _Rewriter(name, sites)
+    rewriter = _Rewriter(name, sites, isinstance(scope, ast.Module))
     preamble = rewriter.preamble(scope.body[first])
     # A failed rewrite must leave the scope as it was: only the copy is touched.
     original = copy.deepcopy(scope.body)
     try:
-        body, _ = rewriter.lower(scope.body[first:], 0 if scope.body[first] is sites[0] else None)
+        before = [
+            rewriter.lower_scope(s) if isinstance(s, _SCOPES) else s for s in scope.body[:first]
+        ]
+        body, _ = rewriter.lower(scope.body[first:], None)
     except _Unsupported:
         scope.body = original
         return
-    scope.body = scope.body[:first] + preamble + body
+    scope.body = before + preamble + body
 
 
 def _candidate_names(scope_body):
@@ -370,9 +397,9 @@ def lower_numpy_path_bindings(module):
     aliases = _numpy_aliases(module)
     if not aliases:
         return
-    scopes = [module] + [
-        n for n in ast.walk(module) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
-    ]
-    for scope in scopes:
+    for name in _candidate_names(module.body):
+        _lower_name(module, name, aliases)
+    # Walked afterwards: a failed rewrite of the module replaces its statements.
+    for scope in [n for n in ast.walk(module) if isinstance(n, _FUNCTIONS)]:
         for name in _candidate_names(scope.body):
             _lower_name(scope, name, aliases)
