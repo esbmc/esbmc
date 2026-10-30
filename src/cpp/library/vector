@@ -702,6 +702,9 @@ public:
 
   void reserve(size_type n)
   {
+    // [vector.capacity]: length_error if n > max_size().
+    if (n > max_size())
+      throw std::length_error();
     if (n > _capacity)
     {
       // realloc in place, as assign() already does: it preserves [0, _size),
@@ -801,6 +804,8 @@ public:
       int new_capacity = _capacity * 2;
       if (new_capacity < 1)
         new_capacity = 1;
+      if (new_capacity > VECTOR_CAPACITY)
+        new_capacity = VECTOR_CAPACITY;
       reserve(new_capacity);
     }
 
