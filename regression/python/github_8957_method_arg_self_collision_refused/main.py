@@ -1,16 +1,20 @@
-# The method reads self and has a parameter named like the instance, so the lift would capture it.
+# run reads self and has a parameter named like the instance, so lifting it would capture the name.
 class K:
+    def __init__(self):
+        self.n = 1
+
     def f(self):
         return "s"
 
     def g(self):
         return 1
 
-    def run(self, a, b):
-        return a(b) if self.g() else None
-
     def call(self, x):
         return x()
+
+    def run(self, a, b):
+        k = self.n
+        return a(b)
 
 
 a = K()
