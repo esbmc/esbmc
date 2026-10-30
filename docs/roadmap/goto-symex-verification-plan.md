@@ -12412,6 +12412,34 @@ the fix is reverted, and dropping `vsnprintf` from the bounded kinds fails
 Not fixed: a conversion that reads the `va_list` still leaves the destination
 unchanged, as does any output `sprintf` would not store.
 
+### M9 (R143) — 2026-10-30, the jumps R130 did not lower
+
+R130's entry left `sigsetjmp`, `siglongjmp` and `_longjmp` without a model.
+Their calls returned nondet values or fell through, so with `f` doing
+`g = 1; siglongjmp(b, 2);`, the program
+`if (sigsetjmp(b, 0) == 0) f(); else assert(g == 0);` aborts natively and was
+SUCCESSFUL, and the same held for `_setjmp` and `_longjmp`.
+
+**Fixed** by modelling `sigsetjmp`, `__sigsetjmp` (glibc's `sigsetjmp` is a
+macro for it) and `_longjmp` and `siglongjmp` as calls to `setjmp` and
+`longjmp`, and treating their call sites as R130's. The signal mask is not
+modelled. `program_calls_longjmp` skips the bodies of the `_longjmp` and
+`siglongjmp` models: they are linked whenever `<setjmp.h>` is included, and
+their calls to `longjmp` would otherwise lower every such program.
+
+`siglongjmp_frames` repeats `longjmp_frames` with `sigsetjmp` and
+`siglongjmp` for the jump out of three frames and `_setjmp` and `_longjmp`
+for the recursive one; master fails it. `siglongjmp_frames_fail` runs under
+`--multi-property` and pins one jump through `sigsetjmp` and one through
+`__sigsetjmp`; `underscore_longjmp_fail` pins `_longjmp`. Both are SUCCESSFUL
+on master. Dropping any of the four names from the lowering changes the
+verdict of a fail test, under the default solver (Bitwuzla), `--z3` and
+`--k-induction`. A passing test cannot pin these: a jump that escapes ends the
+path, and the assertions after it are never checked.
+
+Not fixed: the R130 residuals other than these names, and `sigsetjmp`'s
+`savemask`.
+
 ---
 
 ## Appendix A — Methodological basis
