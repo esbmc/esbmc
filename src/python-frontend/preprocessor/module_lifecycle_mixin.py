@@ -1,4 +1,5 @@
 import ast
+import pytype_infer
 
 from preprocessor.path_dependent_attributes import lower_path_dependent_attributes
 
@@ -74,6 +75,14 @@ class ModuleLifecycleMixin:
         try:
             node = self.generic_visit(node)
             self._import_used_vararg_specs(node)
+
+            #print("Before pytype module annotations:")
+            #print(ast.unparse(node))
+
+            node = pytype_infer.annotate_tree(node)
+
+            print("After pytype annotation module:")
+            print(ast.unparse(node))
 
             if self._needs_dataclass_initvar_import:
                 self._ensure_dataclass_initvar_import(node)
