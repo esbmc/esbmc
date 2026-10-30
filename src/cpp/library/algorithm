@@ -1469,15 +1469,15 @@ bool binary_search(FwdIt first, FwdIt last, const Ty &val, Pr pred)
 template <class InIt1, class InIt2, class OutIt>
 OutIt merge(InIt1 first1, InIt1 last1, InIt2 first2, InIt2 last2, OutIt dest)
 {
-  InIt1 pilgrim1 = first1;
-  InIt2 pilgrim2 = first2;
-  while (pilgrim1 != last1)
-    if (*pilgrim2 < *pilgrim1)
-      *dest++ = *pilgrim2++;
+  while (first1 != last1 && first2 != last2)
+    if (*first2 < *first1)
+      *dest++ = *first2++;
     else
-      *dest++ = *pilgrim1++;
-  while (pilgrim2 < last2)
-    *dest++ = *pilgrim2++;
+      *dest++ = *first1++;
+  while (first1 != last1)
+    *dest++ = *first1++;
+  while (first2 != last2)
+    *dest++ = *first2++;
   return dest;
 }
 
@@ -1489,15 +1489,15 @@ OutIt merge(
   InIt2 *last2,
   OutIt source)
 {
-  InIt1 *pilgrim1 = first1;
-  InIt2 *pilgrim2 = first2;
-  while (pilgrim1 != last1)
-    if (*pilgrim2 < *pilgrim1)
-      *source++ = *pilgrim2++;
+  while (first1 != last1 && first2 != last2)
+    if (*first2 < *first1)
+      *source++ = *first2++;
     else
-      *source++ = *pilgrim1++;
-  while (pilgrim2 < last2)
-    *source++ = *pilgrim2++;
+      *source++ = *first1++;
+  while (first1 != last1)
+    *source++ = *first1++;
+  while (first2 != last2)
+    *source++ = *first2++;
   return source;
 }
 
@@ -1510,15 +1510,15 @@ OutIt merge(
   OutIt source,
   Pr pred)
 {
-  InIt1 pilgrim1 = first1;
-  InIt2 pilgrim2 = first2;
-  while (pilgrim1 != last1)
-    if (pred(*pilgrim2, *pilgrim1))
-      *source++ = *pilgrim2++;
+  while (first1 != last1 && first2 != last2)
+    if (pred(*first2, *first1))
+      *source++ = *first2++;
     else
-      *source++ = *pilgrim1++;
-  while (pilgrim2 < last2)
-    *source++ = *pilgrim2++;
+      *source++ = *first1++;
+  while (first1 != last1)
+    *source++ = *first1++;
+  while (first2 != last2)
+    *source++ = *first2++;
   return source;
 }
 
