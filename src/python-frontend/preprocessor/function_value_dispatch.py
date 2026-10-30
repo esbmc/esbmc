@@ -506,6 +506,13 @@ def _always_returns(block):
     return isinstance(last, ast.If) and _always_returns(last.body) and _always_returns(last.orelse)
 
 
+def _fixed_arity(fn):
+    """Whether `fn` takes only plain positional parameters, so a wrong count is a TypeError."""
+    args = fn.args
+    return not (args.vararg or args.kwarg or args.kwonlyargs or args.defaults or args.posonlyargs
+                or fn.decorator_list)
+
+
 def _is_callee(parent, node):
     return isinstance(parent, ast.Call) and parent.func is node
 
@@ -828,7 +835,7 @@ class _Plan:
         call = self.parents[id(top)]
         if not self._is_returned_callee(top, call, node):
             return False
-        self._check_arguments(call, self.holders[self._site_holder(call)])
+        self._check_arguments(call, self.holders[self._site_holder(call)], returned=True)
         setattr(self.parents[id(call)], _RETURN, self.holders[node.id])
         return True
 
@@ -932,7 +939,7 @@ class _Plan:
         ret = self.parents[id(call)]
         if not (_is_callee(call, use) and isinstance(ret, ast.Return) and ret.value is call):
             raise _Refused
-        self._check_arguments(call, group)
+        self._check_arguments(call, group, returned=True)
         setattr(ret, _RETURN, group)
 
     def _check_store(self, node):
@@ -1116,12 +1123,21 @@ class _Plan:
         self._check_always_evaluated(call)
         setattr(call, _SITE, group)
 
-    def _check_arguments(self, call, group):
-        """Every function of `group` takes exactly the positional arguments of `call`."""
+    def _check_arguments(self, call, group, returned=False):
+        """Every function of `group` takes exactly the positional arguments of `call`.
+
+        In a `return h(args)` a function that cannot take them, and takes no default, variadic
+        or keyword-only parameter, makes CPython raise TypeError, which that arm raises too. Its
+        arguments are constants, so skipping them changes nothing.
+        """
         if call.keywords or any(isinstance(a, ast.Starred) for a in call.args):
             raise _Refused
-        if not all(_takes_positional(fn, len(call.args)) for fn in self.groups[group]):
-            raise _Refused
+        for fn in self.groups[group]:
+            if _takes_positional(fn, len(call.args)):
+                continue
+            if not (returned and _fixed_arity(fn)
+                    and all(isinstance(a, ast.Constant) for a in call.args)):
+                raise _Refused
 
     def _site_holder(self, call):
         """The holder `call` goes through, refusing an index another scope may rebind."""
@@ -1187,9 +1203,18 @@ class _Returns(ast.NodeTransformer):
         if group is None:
             return node
         call = node.value
-        arms = [[ast.Return(ast.Call(ast.Name(fn.name, ast.Load()), copy.deepcopy(call.args), []))]
-                for fn in self.groups[group]]
+        arms = [self._arm(fn, call) for fn in self.groups[group]]
         return _chain(arms, call.func, node)
+
+    @staticmethod
+    def _arm(fn, call):
+        """`return fn(args)`, or the TypeError CPython raises when `fn` takes another count."""
+        if _takes_positional(fn, len(call.args)):
+            return [
+                ast.Return(ast.Call(ast.Name(fn.name, ast.Load()), copy.deepcopy(call.args), []))
+            ]
+        message = f"{fn.name}() takes {len(fn.args.args)} positional arguments but {len(call.args)} were given"
+        return [ast.Raise(ast.Call(ast.Name("TypeError", ast.Load()), [ast.Constant(message)], []))]
 
 
 class _Dispatch:
