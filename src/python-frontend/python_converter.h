@@ -187,6 +187,8 @@ public:
   typet get_type_from_annotation(
     const nlohmann::json &annotation_node,
     const nlohmann::json &element);
+  /// The V of a `dict[K, V]` annotation, or an empty type.
+  typet dict_annotation_value_type(const nlohmann::json &annotation);
 
   /// The type of `Optional[<slice>]`, or an empty typet when the slice is not
   /// handled.
@@ -3436,6 +3438,8 @@ private:
   namespacet ns;
   typet current_element_type;
   typet current_func_return_type_;
+  /// The V of the current function's `-> dict[K, V]` annotation (#9306).
+  typet current_func_dict_value_type_;
   /// Whether the program annotates the current function `-> int`.
   bool current_func_annotated_int_ = false;
   /// Whether the current function has one `return` statement (#9074).
