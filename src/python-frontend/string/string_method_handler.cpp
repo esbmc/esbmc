@@ -1,5 +1,7 @@
 #include <python-frontend/string/char_utils.h>
 #include <python-frontend/exception/exception_utils.h>
+#include <python-frontend/exception/python_exception_handler.h>
+#include <python-frontend/json_utils.h>
 #include <python-frontend/math/python_int_overflow.h>
 #include <python-frontend/python-list/python_list.h>
 #include <util/base/host_rounding_mode.h>
@@ -699,6 +701,16 @@ std::optional<exprt> dispatch_split_method(
   {
     throw std::runtime_error(
       method_name + "() only supports constant sep in minimal support");
+  }
+  else if (parsed.separator.empty())
+  {
+    // Raising here would drop the calls in the receiver, which CPython
+    // evaluates before split() rejects the separator.
+    if (json_utils::ast_contains_call(receiver_json))
+      throw std::runtime_error(
+        method_name + "() with an empty sep on a call receiver is unsupported");
+    return converter.get_exception_handler().gen_exception_raise(
+      "ValueError", "empty separator");
   }
 
   if (maxsplit_node != nullptr)
