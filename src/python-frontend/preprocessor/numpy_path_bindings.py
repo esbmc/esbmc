@@ -16,7 +16,8 @@ where the tag is not known is repeated for each binding:
                                  else:
                                      n = len(esbmc_np_a_1)
 
-Only constructors with literal arguments qualify, as their variables must exist
+A view of an earlier binding keeps pointing at that binding's variable, which a
+later binding does not write. Only constructors with literal arguments qualify, as their variables must exist
 on every path. Any other form leaves the scope unchanged, for the converter to
 accept or reject.
 """
@@ -326,14 +327,23 @@ def _sites(scope_body, name, aliases):
     return sites
 
 
-def _needs_rewrite(scope_body, sites):
+def _keeps_storage_elsewhere(scope_body, name):
+    """Whether a statement of the scope may leave an array over the storage of `name`."""
+    return any(
+        isinstance(n, ast.Assign) and _reads(n.value, name) and not _is_scalar(n.value, name, 1)
+        for n in _walk_scope(scope_body))
+
+
+def _needs_rewrite(scope_body, sites, name):
+    if all(any(s is top for top in scope_body) for s in sites):
+        return False
     return (len({_layout(s.value) for s in sites}) > 1
-            and any(not any(s is top for top in scope_body) for s in sites))
+            or _keeps_storage_elsewhere(scope_body, name))
 
 
 def _lower_name(scope, name, aliases):
     sites = _sites(scope.body, name, aliases)
-    if not sites or not _needs_rewrite(scope.body, sites):
+    if not sites or not _needs_rewrite(scope.body, sites, name):
         return
     first = next(
         i for i, stmt in enumerate(scope.body) if any(n is sites[0] for n in ast.walk(stmt)))
