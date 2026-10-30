@@ -1097,82 +1097,28 @@ void stable_sort(BidIt begin, BidIt end, Pr pred)
 template <class RanIt>
 void partial_sort(RanIt first, RanIt mid, RanIt last)
 {
-  RanIt pilgrim, pos;
-  mid--;
-  swap(*first, *mid);
-  mid = first;
-  for (pilgrim = first + 1; pilgrim < last; pilgrim++)
+  for (RanIt j = first; j < mid; ++j)
   {
-    if (*pilgrim < *mid)
-    {
-      swap(*pilgrim, *mid);
-      mid = pilgrim;
-      pos = mid - 1;
-      while (*mid < *pos)
-      {
-        swap(*mid, *pos);
-        mid = pos;
-        pos--;
-      }
-    }
-  }
-  RanIt i, j;
-  RanIt iMin;
-  for (j = first; j < mid - 1; j++)
-  {
-    iMin = j;
-    for (i = j + 1; i < mid; i++)
-    {
+    RanIt iMin = j;
+    for (RanIt i = j + 1; i < last; ++i)
       if (*i < *iMin)
-      {
         iMin = i;
-      }
-    }
     if (iMin != j)
-    {
       swap(*j, *iMin);
-    }
   }
 }
 
 template <class RanIt, class Pr>
 void partial_sort(RanIt first, RanIt mid, RanIt last, Pr pred)
 {
-  RanIt pilgrim, pos;
-  mid--;
-  swap(*first, *mid);
-  mid = first;
-  for (pilgrim = first + 1; pilgrim < last; pilgrim++)
+  for (RanIt j = first; j < mid; ++j)
   {
-    if (pred(*pilgrim, *mid))
-    {
-      swap(*pilgrim, *mid);
-      mid = pilgrim;
-      pos = mid - 1;
-      while (pred(*mid, *pos))
-      {
-        swap(*mid, *pos);
-        mid = pos;
-        pos--;
-      }
-    }
-  }
-  RanIt i, j;
-  RanIt iMin;
-  for (j = first; j < mid - 1; j++)
-  {
-    iMin = j;
-    for (i = j + 1; i < mid; i++)
-    {
+    RanIt iMin = j;
+    for (RanIt i = j + 1; i < last; ++i)
       if (pred(*i, *iMin))
-      {
         iMin = i;
-      }
-    }
     if (iMin != j)
-    {
       swap(*j, *iMin);
-    }
   }
 }
 
