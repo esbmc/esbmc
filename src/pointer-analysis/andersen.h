@@ -1,6 +1,7 @@
 #ifndef CPROVER_POINTER_ANALYSIS_ANDERSEN_H
 #define CPROVER_POINTER_ANALYSIS_ANDERSEN_H
 
+#include <functional>
 #include <optional>
 #include <unordered_map>
 #include <unordered_set>
@@ -253,6 +254,19 @@ protected:
   /// True iff `pts[to]` grew.
   bool add_copy_edge(node_id from, node_id to);
 
+  /// Resolve `p = *n` and `*n = q` against \p targets, a snapshot of
+  /// `pts[n]`, passing every node whose set grew to \p enqueue.
+  void propagate_load(
+    node_id p,
+    const std::unordered_set<node_id> &targets,
+    node_id nondet,
+    const std::function<void(node_id)> &enqueue);
+  void propagate_store(
+    node_id q,
+    const std::unordered_set<node_id> &targets,
+    node_id nondet,
+    const std::function<void(node_id)> &enqueue);
+
   /// A node pointing to the heap object allocated at \p loc.
   node_id allocation(const type2tc &type, unsigned loc);
 
@@ -294,6 +308,7 @@ protected:
   node_id eval_value(const expr2tc &rhs, unsigned location_number);
   node_id eval_integer(const expr2tc &rhs, unsigned location_number);
   node_id eval_constant_aggregate(const expr2tc &rhs, unsigned location_number);
+  node_id opaque(const expr2tc &rhs, unsigned location_number);
 
   /// Lowers `lhs := rhs` to whichever of the four constraints fits.
   void handle_assign(
