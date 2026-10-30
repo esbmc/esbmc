@@ -379,6 +379,11 @@ public:
   // A runtime guard emitted into current_block runs once, unconditionally,
   // ahead of the enclosing statement; that is wrong for an expression Python
   // evaluates conditionally or repeatedly (an and/or tail, a while test).
+  bool in_type_probe() const
+  {
+    return in_rhs_type_probe_;
+  }
+
   bool can_emit_runtime_guard() const
   {
     return current_block && safe_to_emit_side_effecting_statement() &&
@@ -519,6 +524,17 @@ public:
     const nlohmann::json &receiver,
     const nlohmann::json &use) const;
   std::string current_module_name() const;
+
+  /// The file of the module named @p module_name, looked up by its own name:
+  /// unlike get_imported_module_path, an alias bound in another module cannot
+  /// stand in for it. Empty when the module was not collected.
+  std::string module_file(const std::string &module_name) const
+  {
+    const auto pooled = module_ast_pool_.find(module_name);
+    return pooled == module_ast_pool_.end()
+             ? std::string()
+             : pooled->second.value("filename", std::string());
+  }
 
   const std::string
   get_imported_module_path(const std::string &module_name) const
@@ -1757,6 +1773,9 @@ private:
   /// base's @p name.
   bool class_binds_name(const std::string &class_name, const std::string &name)
     const;
+  /// Whether the program and every module it imports bind @p name once only,
+  /// at any depth, by a class statement.
+  bool is_sole_class_binding(const std::string &name) const;
 
   symbolt *find_imported_symbol(const std::string &symbol_id) const;
   /// The symbol @p sym_id names in the module whose file it names, or through

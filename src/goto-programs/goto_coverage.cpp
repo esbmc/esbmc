@@ -1309,6 +1309,13 @@ void goto_coveraget::condition_coverage()
         if (it->is_assume())
           continue;
 
+        // Skip the uncaught-exception and exception-specification checks that
+        // remove_exceptions synthesizes: they are ESBMC's properties, not the
+        // program's conditions, and a library model that may throw would add
+        // them to every caller (#9418).
+        if (it->is_assert() && it->location.property() == "exception")
+          continue;
+
         // e.g. assert(a == 1);
         if (
           it->is_assert() &&

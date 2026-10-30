@@ -1,4 +1,5 @@
 CORE
 main.py
 
+^  FAILED .* assertion return_value\$_run\$1 == 0$
 ^VERIFICATION FAILED$
