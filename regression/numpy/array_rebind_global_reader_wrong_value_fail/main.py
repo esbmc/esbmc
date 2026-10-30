@@ -7,6 +7,6 @@ def first() -> int:
     return int(a[0])
 
 
-assert a[1] != 2
+assert a[1] == 2
 a = np.array([5, 6, 7])
-assert first() == 5
+assert first() == 1
