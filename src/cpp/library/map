@@ -931,9 +931,8 @@ public:
   void insert(iterator first, iterator last)
   {
     for (iterator it = first; it.it_pos != last.it_pos; it++)
-    {
-      (*this)[it.it_key[it.it_pos]] = it.it_value[it.it_pos];
-    }
+      if (count(it.it_key[it.it_pos]) == 0)
+        (*this)[it.it_key[it.it_pos]] = it.it_value[it.it_pos];
   }
 
   size_type erase(const key_type &k)
