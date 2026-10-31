@@ -214,6 +214,24 @@ std::optional<size_t> string_length_bound(const expr2tc &object)
   return (nbytes - 1).to_uint64();
 }
 
+// C11 7.21.6.1p8: %ls converts each wide character as if by wcrtomb. Below
+// 0x80 that is the same single byte in the C and UTF-8 locales; for any other
+// character the output is unknown and this returns nullopt.
+std::optional<std::string> wide_string_as_ascii(const constant_string2t &wide)
+{
+  std::string str;
+  for (size_t i = 0; i < wide.array_size(); i++)
+  {
+    const BigInt c = to_constant_int2t(wide.at(i)).value;
+    if (c.is_zero())
+      break;
+    if (c.is_negative() || c >= 0x80)
+      return std::nullopt;
+    str += static_cast<char>(c.to_uint64());
+  }
+  return str;
+}
+
 // Pick the integer cast target for a given signedness and length modifier.
 type2tc pick_int_type(bool is_signed, length_modt mod)
 {
@@ -461,6 +479,20 @@ void printf_formattert::process_format(std::ostream &out)
       break;
     }
     const expr2tc symbol2 = get_base_object(*(next_operand++));
+    if (length_mod == length_modt::L && is_constant_string2t(symbol2))
+    {
+      const std::optional<std::string> str =
+        wide_string_as_ascii(to_constant_string2t(symbol2));
+      if (str)
+        emit(pad_field(
+          "",
+          str->substr(0, conv.precision.value_or(str->size())),
+          conv,
+          false));
+      else
+        bounded = false;
+      break;
+    }
     exprt char_array = migrate_expr_back(symbol2);
     if (char_array.id() == "string-constant")
     {
