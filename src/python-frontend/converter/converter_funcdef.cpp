@@ -5747,6 +5747,9 @@ const nlohmann::json &python_converter::resolve_return_annotation_node(
 {
   static const nlohmann::json null_return_annotation = nullptr;
   const nlohmann::json &returns = function_node["returns"];
+  // A class of a module with no model says no more than no annotation.
+  if (returns.is_object() && returns.value("unmodelled_class", false))
+    return null_return_annotation;
 
   // Only bypass an annotation the annotator itself produced (absent, or
   // marked _inferred_annotation) -- an annotation the user actually wrote
