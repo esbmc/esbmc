@@ -16,10 +16,20 @@ list_elem_info python_list::get_tagged_element_info(
 {
   const locationt location = converter_.get_location_from_decl(op);
 
+  // type_id, value and size are three reads, so a call such as ops.pop() is
+  // bound first or each read would run it again (#8913).
+  exprt tagged;
+  const exprt binding = converter_.bind_operand_read_twice(elem, op, tagged);
+  if (binding.is_nil())
+    throw std::runtime_error(
+      "appending the result of a call to a list is not supported here");
+  if (binding != tagged)
+    converter_.add_instruction(code_expressiont(binding));
+
   symbolt &elem_type_sym =
     converter_.create_tmp_symbol(op, "$list_elem_type$", size_type(), exprt());
   code_assignt type_id_assign(
-    build_symbol(elem_type_sym), build_member(elem, "type_id", size_type()));
+    build_symbol(elem_type_sym), build_member(tagged, "type_id", size_type()));
   type_id_assign.location() = location;
   converter_.add_instruction(type_id_assign);
 
@@ -29,7 +39,7 @@ list_elem_info python_list::get_tagged_element_info(
   code_assignt value_assign(
     build_symbol(elem_symbol),
     build_typecast(
-      build_member(elem, "value", pointer_typet(empty_typet())),
+      build_member(tagged, "value", pointer_typet(empty_typet())),
       char_ptr_type));
   value_assign.location() = location;
   converter_.add_instruction(value_assign);
@@ -37,7 +47,7 @@ list_elem_info python_list::get_tagged_element_info(
   list_elem_info tagged_info;
   tagged_info.elem_type_sym = &elem_type_sym;
   tagged_info.elem_symbol = &elem_symbol;
-  tagged_info.elem_size = build_member(elem, "size", size_type());
+  tagged_info.elem_size = build_member(tagged, "size", size_type());
   tagged_info.location = location;
   return tagged_info;
 }
@@ -517,6 +527,25 @@ exprt python_list::as_object_reference(
     gen_pointer_type(elem.type()));
 }
 
+/// The element to forward as a tagged object: @p elem itself when it is one,
+/// or the object a pop() read an element of erased type from. Erased, the
+/// element would be read as a pointer and overrun a short str payload (#8913).
+static exprt tagged_element_source(const type_handler &th, const exprt &elem)
+{
+  if (th.is_tagged_scalar_type(elem.type()))
+    return elem;
+  if (elem.type() != any_type() || elem.id() != "dereference")
+    return nil_exprt();
+  const exprt &cast = elem.op0();
+  if (cast.id() != "typecast" || cast.op0().id() != "member")
+    return nil_exprt();
+  const exprt &value = cast.op0();
+  if (value.component_name() != "value" || value.op0().id() != "dereference")
+    return nil_exprt();
+  const exprt &object = value.op0().op0();
+  return build_dereference(object, object.type().subtype());
+}
+
 exprt python_list::build_push_list_call(
   const symbolt &list,
   const nlohmann::json &op,
@@ -525,9 +554,11 @@ exprt python_list::build_push_list_call(
 {
   const exprt elem = as_object_reference(op, elem_in);
 
-  if (converter_.get_type_handler().is_tagged_scalar_type(elem.type()))
+  const exprt tagged =
+    tagged_element_source(converter_.get_type_handler(), elem);
+  if (tagged.is_not_nil())
   {
-    const list_elem_info elem_info = get_tagged_element_info(op, elem);
+    const list_elem_info elem_info = get_tagged_element_info(op, tagged);
     const symbolt *push_tagged_sym =
       converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push_tagged");
     if (!push_tagged_sym)
@@ -650,9 +681,11 @@ exprt python_list::build_insert_list_call(
   const nlohmann::json &op,
   const exprt &elem)
 {
-  if (converter_.get_type_handler().is_tagged_scalar_type(elem.type()))
+  const exprt tagged =
+    tagged_element_source(converter_.get_type_handler(), elem);
+  if (tagged.is_not_nil())
   {
-    const list_elem_info elem_info = get_tagged_element_info(op, elem);
+    const list_elem_info elem_info = get_tagged_element_info(op, tagged);
     const symbolt *insert_tagged_sym =
       converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_insert_tagged");
     if (!insert_tagged_sym)
