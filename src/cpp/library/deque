@@ -878,12 +878,9 @@ public:
   }
   iterator erase(iterator first, iterator last)
   {
-    iterator it;
-    while (first != last)
-    {
-      it = erase(last--);
-    }
-    return it;
+    for (int n = last.pos - first.pos; n > 0; n--)
+      erase(first);
+    return first;
   }
 
   void swap(deque &v1)

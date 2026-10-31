@@ -1,0 +1,7 @@
+regression/python/github_8971_fwd_conditional
+regression/python/github_8971_fwd_ctor
+regression/python/github_8971_fwd_ctor_fail
+regression/python/github_8971_fwd_nested
+regression/python/github_8971_fwd_super
+regression/python/github_8971_fwd_super_fail
+regression/python/github_8971_fwd_untagged

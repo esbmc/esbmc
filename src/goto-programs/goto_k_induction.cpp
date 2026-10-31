@@ -1808,31 +1808,6 @@ bool pin_havoced_pointers(const loop_writest &w, pinst &pins)
   return true;
 }
 
-/// The functions the entry point may reach, calls through function pointers
-/// included: every function named in a reachable body.
-std::unordered_set<irep_idt, irep_id_hash>
-reachable_functions(const goto_functionst &goto_functions)
-{
-  std::unordered_set<irep_idt, irep_id_hash> seen{goto_functions.main_id()};
-  std::vector<irep_idt> work{goto_functions.main_id()};
-  while (!work.empty())
-  {
-    auto it = goto_functions.function_map.find(work.back());
-    work.pop_back();
-    if (it == goto_functions.function_map.end() || !it->second.body_available)
-      continue;
-    for (const auto &instr : it->second.body.instructions)
-      for (const expr2tc &e : {instr.code, instr.guard})
-        for_each_subexpr(e, [&](const expr2tc &sub) {
-          if (
-            is_symbol2t(sub) && is_code_type(sub->type) &&
-            seen.insert(to_symbol2t(sub).thename).second)
-            work.push_back(to_symbol2t(sub).thename);
-        });
-  }
-  return seen;
-}
-
 /// Whether a loop may allocate heap memory: some reachable function allocates
 /// at an instruction that may run inside a loop, its own or a caller's.
 bool loop_allocates_heap(

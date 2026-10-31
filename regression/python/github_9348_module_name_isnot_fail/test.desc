@@ -1,0 +1,6 @@
+CORE
+main.py
+--multi-property
+^VERIFICATION FAILED$
+FAILED\s+\[global\.assertion\.1\]\s+line\s+6\s+assertion 0$
+PASSED\s+\[global\.assertion\.2\]\s+line\s+6\s+Unsupported: 'is' between two

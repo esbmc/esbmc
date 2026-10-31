@@ -7,6 +7,7 @@
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/type/type_utils.h>
+#include <set>
 #include <util/arith/arith_tools.h>
 #include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
@@ -428,6 +429,118 @@ bool python_exception_handler::body_has_escaping_control_flow(
   return false;
 }
 
+namespace
+{
+// Records the module that import statement \p node of type \p type binds to
+// \p name in \p modules, or sets \p other when it binds it another way
+// (`from m import name`, or an import that did not resolve).
+void record_import_binding(
+  const nlohmann::json &node,
+  const std::string &type,
+  const std::string &name,
+  std::set<std::string> &modules,
+  bool &other)
+{
+  const bool resolved = type == "Import" &&
+                        !node.value("module_not_found", false) &&
+                        !node.value("module_unmodelled", false);
+  for (const auto &alias : node["names"])
+  {
+    const std::string full = alias.value("name", "");
+    const bool has_as = alias.contains("asname") && alias["asname"].is_string();
+    const std::string bound = has_as ? alias["asname"].get<std::string>()
+                                     : full.substr(0, full.find('.'));
+    if (bound != name)
+      continue;
+    if (resolved)
+      modules.insert(has_as ? full : bound);
+    else
+      other = true;
+  }
+}
+
+// Collects into \p modules the module each `import` anywhere under \p node
+// binds to \p name, and sets \p other when anything else binds it by import.
+void collect_import_bindings(
+  const nlohmann::json &node,
+  const std::string &name,
+  std::set<std::string> &modules,
+  bool &other)
+{
+  if (node.is_array())
+  {
+    for (const auto &child : node)
+      collect_import_bindings(child, name, modules, other);
+    return;
+  }
+  if (!node.is_object())
+    return;
+  const std::string type = node.value("_type", "");
+  if ((type == "Import" || type == "ImportFrom") && node.contains("names"))
+    record_import_binding(node, type, name, modules, other);
+  else
+    for (const auto &item : node.items())
+      collect_import_bindings(item.value(), name, modules, other);
+}
+
+// The module that \p name names at \p use: every binding of it is a plain
+// `import` of that one module, and one of them is at the top of \p ast before
+// \p use. Empty otherwise.
+std::string imported_module_of(
+  const nlohmann::json &ast,
+  const std::string &name,
+  const nlohmann::json &use)
+{
+  std::set<std::string> modules;
+  bool other = false;
+  collect_import_bindings(ast["body"], name, modules, other);
+  if (other || modules.size() != 1)
+    return "";
+
+  const int use_line = use.value("lineno", 0);
+  for (const auto &stmt : ast["body"])
+  {
+    if (
+      stmt.value("_type", "") == "Import" &&
+      stmt.value("lineno", use_line) < use_line)
+    {
+      std::set<std::string> here;
+      collect_import_bindings(stmt, name, here, other);
+      if (!here.empty())
+        return *modules.begin();
+    }
+  }
+  return "";
+}
+} // namespace
+
+std::string python_exception_handler::module_class_name(
+  const nlohmann::json &node,
+  const nlohmann::json &use) const
+{
+  if (
+    node.value("_type", "") != "Attribute" ||
+    node["value"].value("_type", "") != "Name")
+    return "";
+  const std::string receiver = node["value"]["id"].get<std::string>();
+  if (!converter_.is_module_receiver(receiver, node["value"], use))
+    return "";
+  const std::string module =
+    imported_module_of(converter_.ast(), receiver, use);
+  const std::string name = node["attr"].get<std::string>();
+  if (module.empty() || type_utils::is_python_exceptions(name))
+    return "";
+
+  // Class symbols are keyed by name alone, so any other binding of this name
+  // in the program could make `module.name` another class at run time.
+  const symbolt *cls = converter_.find_symbol("tag-" + name);
+  if (
+    !cls || cls->module != converter_.module_file(module) ||
+    !converter_.is_sole_class_binding(name))
+    return "";
+  return name;
+}
+
 bool python_exception_handler::raises_instance_variable(
   const nlohmann::json &exc,
   const std::string &exc_name) const
@@ -494,17 +607,7 @@ void python_exception_handler::get_raise_statement(
     return;
   }
 
-  std::string exc_name;
-
-  // Try to extract the exception name from different AST shapes
-  if (element["exc"].contains("func") && element["exc"]["func"].contains("id"))
-    exc_name = element["exc"]["func"]["id"].get<std::string>();
-  else if (element["exc"].contains("id"))
-    exc_name = element["exc"]["id"].get<std::string>();
-  else if (element["exc"].is_string())
-    exc_name = element["exc"].get<std::string>();
-  else
-    exc_name = ""; // fallback
+  const std::string exc_name = raised_class_name(element["exc"], element);
 
   typet type;
   exprt raise;
@@ -610,6 +713,18 @@ void python_exception_handler::get_raise_statement(
   block.move_to_operands(code_expr);
 }
 
+std::string python_exception_handler::raised_class_name(
+  const nlohmann::json &exc,
+  const nlohmann::json &use) const
+{
+  const nlohmann::json &target = exc.contains("func") ? exc["func"] : exc;
+  if (target.contains("id"))
+    return target["id"].get<std::string>();
+  if (target.is_string())
+    return target.get<std::string>();
+  return module_class_name(target, use);
+}
+
 // Emit a single catch block for `type_node` (an exception-type Name node, or
 // null for a bare `except:`), running the handler body. Appends it to `block`.
 void python_exception_handler::emit_catch_block(
@@ -623,15 +738,19 @@ void python_exception_handler::emit_catch_block(
   // Create exception variable symbol before processing body
   if (!type_node.is_null())
   {
-    // Only a bare name (`except ValueError:`) is modelled. A dotted type such
-    // as `except socket.error:` is an Attribute node with no "id"; reject it
-    // with a clean diagnostic rather than crashing on the missing json key.
-    if (!type_node.contains("id"))
+    // numpy.linalg.LinAlgError is two attributes deep, past what
+    // module_class_name reads.
+    const bool linalg_error = type_node.value("attr", "") == "LinAlgError" &&
+                              type_node["value"].value("attr", "") == "linalg";
+    const std::string class_name =
+      type_node.contains("id") ? type_node["id"].get<std::string>()
+      : linalg_error           ? "LinAlgError"
+                               : module_class_name(type_node, element);
+    if (class_name.empty())
       throw std::runtime_error(
         "except with a dotted/attribute exception type is not supported");
 
-    exception_type =
-      type_handler_.get_typet(type_node["id"].get<std::string>());
+    exception_type = type_handler_.get_typet(class_name);
 
     std::string name;
     symbol_id sid = converter_.create_symbol_id();

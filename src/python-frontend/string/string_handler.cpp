@@ -844,6 +844,67 @@ exprt string_handler::build_nondet_string_fallback(const locationt &location)
   return build_nondet_string(location);
 }
 
+exprt string_handler::build_default_object_repr(
+  const std::string &prefix,
+  const locationt &location)
+{
+  constexpr int max_digits = 16;
+  const int start = prefix.size();
+  const typet array_type =
+    array_typet(char_type(), from_integer(start + max_digits + 2, size_type()));
+  symbolt &repr = converter_.create_tmp_symbol(
+    location, "$object_repr$", array_type, exprt());
+  const exprt text = symbol_expr(repr);
+
+  auto add = [&](codet code) {
+    code.location() = location;
+    converter_.add_instruction(code);
+  };
+  auto at = [&](const exprt &index) { return build_index(text, index); };
+  auto chr = [](char c) { return from_integer(c, char_type()); };
+
+  add(code_declt(text));
+  add(code_assignt(text, side_effect_expr_nondett(array_type)));
+  for (int i = 0; i < start; ++i)
+    add(code_assignt(at(from_integer(i, size_type())), chr(prefix[i])));
+
+  symbolt &count = converter_.create_tmp_symbol(
+    location, "$repr_digits$", size_type(), exprt());
+  const exprt digits = symbol_expr(count);
+  add(code_declt(digits));
+  add(code_assignt(digits, side_effect_expr_nondett(size_type())));
+  add(code_assumet(and_exprt(
+    binary_relation_exprt(digits, ">=", from_integer(1, size_type())),
+    binary_relation_exprt(
+      digits, "<=", from_integer(max_digits, size_type())))));
+
+  // Concrete indices only, so a terminator stays at a known position and a
+  // later strlen() stops unwinding.
+  for (int i = 0; i <= max_digits; ++i)
+  {
+    const exprt pos = from_integer(i, size_type());
+    const exprt c = at(from_integer(start + i, size_type()));
+    auto in = [&](char lo, char hi) {
+      return and_exprt(
+        binary_relation_exprt(c, ">=", chr(lo)),
+        binary_relation_exprt(c, "<=", chr(hi)));
+    };
+    const exprt is_digit = binary_relation_exprt(pos, "<", digits);
+    if (i < max_digits)
+      add(code_assumet(
+        or_exprt(not_exprt(is_digit), or_exprt(in('0', '9'), in('a', 'f')))));
+    add(code_assignt(
+      c,
+      if_exprt(
+        is_digit,
+        c,
+        if_exprt(equality_exprt(pos, digits), chr('>'), chr('\0')))));
+  }
+  add(code_assignt(
+    at(from_integer(start + max_digits + 1, size_type())), chr('\0')));
+  return build_address_of(at(from_integer(0, size_type())));
+}
+
 BigInt string_handler::get_string_size(const exprt &expr)
 {
   if (!expr.type().is_array())
@@ -3067,10 +3128,17 @@ exprt string_handler::read_tagged_str_receiver(
     return receiver;
 
   // The receiver is read twice, so only a symbol qualifies, and the guard
-  // must run exactly where the call is evaluated.
-  if (
-    !receiver.is_symbol() || !type_utils::is_str_only_method(method) ||
-    !converter_.can_emit_runtime_guard())
+  // must run exactly where the call is evaluated. A type probe is discarded,
+  // so it only needs the type of the str the real conversion reads.
+  if (!receiver.is_symbol() || !type_utils::is_str_only_method(method))
+    throw std::runtime_error(
+      "calling '" + method +
+      "' on a dynamically-typed variable is not yet supported");
+  if (converter_.in_type_probe())
+    return build_typecast(
+      build_member(receiver, "value", pointer_typet(empty_typet())),
+      pointer_typet(char_type()));
+  if (!converter_.can_emit_runtime_guard())
     throw std::runtime_error(
       "calling '" + method +
       "' on a dynamically-typed variable is not yet supported");

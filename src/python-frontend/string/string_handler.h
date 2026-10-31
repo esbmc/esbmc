@@ -107,6 +107,12 @@ public:
   /// A bounded, NUL-terminated str of nondet content, as nondet_str() gives.
   exprt build_nondet_string(const locationt &location);
 
+  /// CPython's default object repr, @p prefix followed by the address as 1 to
+  /// 16 nondet lowercase hex digits and ">".
+  exprt build_default_object_repr(
+    const std::string &prefix,
+    const locationt &location);
+
   /// The nondet str buffer size: --nondet-str-length plus the NUL.
   static int nondet_str_buffer_size();
 

@@ -2300,23 +2300,10 @@ void goto_convertt::remove_post(
     abort();
   }
 
-  exprt rhs;
+  exprt rhs(compound_assign_operator(
+    statement == "postincrement" ? "assign+" : "assign-",
+    expr.type().is_floatbv()));
   rhs.location() = expr.location();
-
-  if (statement == "postincrement")
-  {
-    if (expr.type().is_floatbv())
-      rhs.id("ieee_add");
-    else
-      rhs.id("+");
-  }
-  else
-  {
-    if (expr.type().is_floatbv())
-      rhs.id("ieee_sub");
-    else
-      rhs.id("-");
-  }
 
   const typet &op_type = ns.follow(expr.op0().type());
 
@@ -2405,6 +2392,9 @@ void goto_convertt::remove_post(
   {
     exprt tmp = expr.op0();
     make_temp_symbol(tmp, dest);
+    // A bit-field operand is narrower than the expression's type (#9443).
+    if (tmp.type() != expr.type())
+      tmp.make_typecast(expr.type());
     expr.swap(tmp);
   }
   else

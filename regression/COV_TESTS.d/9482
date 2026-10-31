@@ -1,0 +1,4 @@
+regression/esbmc-cpp17/cpp/union_member_not_destroyed
+regression/esbmc-cpp17/cpp/union_member_not_destroyed_fail
+regression/esbmc-cpp17/cpp/github_9420
+regression/esbmc-cpp17/cpp/github_9420_fail
