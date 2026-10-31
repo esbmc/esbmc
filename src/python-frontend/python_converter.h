@@ -2654,9 +2654,8 @@ private:
 
   /// Raise Python's TypeError for item assignment on an immutable container,
   /// reporting whether `container_type` is one.
-  bool reject_immutable_item_assignment(
-    const typet &container_type,
-    codet &target_block);
+  bool
+  reject_immutable_item_assignment(const exprt &container, codet &target_block);
 
   void record_numpy_view_copy(const exprt &lhs, const nlohmann::json &rhs_node);
   std::string numpy_view_source_of(const std::string &storage_id) const;
@@ -3187,6 +3186,12 @@ private:
     const typet &element,
     const typet &result_type,
     const locationt &location);
+  exprt numpy_complex_element_op(
+    const std::string &op,
+    const exprt &x,
+    const exprt &y,
+    const typet &type);
+  exprt numpy_complex_quotient(const exprt &x, const exprt &y);
   exprt numpy_or_array_operation(
     const std::string &op,
     exprt &lhs,

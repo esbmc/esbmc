@@ -453,7 +453,7 @@ public:
   {
     if (type.is_floatbv())
       return to_floatbv_type(type).get_width() < 64;
-    return is_numpy_numeric_element(type);
+    return is_numpy_numeric_element(type) || is_complex64_type(type);
   }
 
   /// A character of a string's storage, which a numeric 8-bit element is not.

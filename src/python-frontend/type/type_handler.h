@@ -36,6 +36,19 @@ inline const struct_typet &get_complex_struct_type()
   return instance;
 }
 
+// complex64: the layout of complex with each component holding a float32 value,
+// which every store and operation rounds to, so a value reads as NumPy's does
+// while the handlers over complex stay in double.
+inline const struct_typet &get_complex64_struct_type()
+{
+  static const struct_typet instance = []() {
+    struct_typet t = get_complex_struct_type();
+    t.tag("complex64");
+    return t;
+  }();
+  return instance;
+}
+
 inline bool is_complex_type(const typet &type)
 {
   if (type.id() == "symbol")
@@ -46,7 +59,12 @@ inline bool is_complex_type(const typet &type)
 
   const struct_typet &struct_type = to_struct_type(type);
   const std::string tag = struct_type.tag().as_string();
-  return tag == "complex" || tag == "tag-complex";
+  return tag == "complex" || tag == "tag-complex" || tag == "complex64";
+}
+
+inline bool is_complex64_type(const typet &type)
+{
+  return type.is_struct() && to_struct_type(type).tag() == "complex64";
 }
 
 inline exprt make_complex(const exprt &real, const exprt &imag)
@@ -68,6 +86,24 @@ inline exprt make_complex(const exprt &real, const exprt &imag)
   std::vector<expr2tc> members{to_double2(real), to_double2(imag)};
   return migrate_expr_back(
     constant_struct2tc(migrate_type(get_complex_struct_type()), members));
+}
+
+/// @p value, real or complex, stored as an element of the complex type @p type.
+inline exprt
+complex_as_element(const exprt &real, const exprt &imag, const typet &type)
+{
+  const type2tc dt = migrate_type(cached_double_type());
+  const auto component = [&](const exprt &part) -> expr2tc {
+    expr2tc value;
+    migrate_expr(part, value);
+    if (!is_complex64_type(type))
+      return part.type() == cached_double_type() ? value
+                                                 : typecast2tc(dt, value);
+    return typecast2tc(
+      dt, typecast2tc(migrate_type(build_float_type(32)), value));
+  };
+  std::vector<expr2tc> members{component(real), component(imag)};
+  return migrate_expr_back(constant_struct2tc(migrate_type(type), members));
 }
 
 inline exprt promote_to_complex(const exprt &value)

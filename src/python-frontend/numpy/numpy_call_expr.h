@@ -1,5 +1,6 @@
 #pragma once
 
+#include <python-frontend/numpy/numpy_dtype.h>
 #include <python-frontend/numpy/numpy_reducer_shared.h>
 
 #include <python-frontend/function_call/expr.h>
@@ -138,6 +139,11 @@ private:
 
   std::string get_dtype() const;
   typet get_typet_from_dtype() const;
+  std::optional<numpy_dtypet> runtime_fill_dtype() const;
+  typet string_element_type(std::size_t literal_width) const;
+  exprt full_of_literal_array(
+    const std::vector<std::size_t> &dims,
+    const nlohmann::json &fill);
   std::optional<exprt> try_narrow_operand_call(const std::string &function);
   bool is_narrow_operand(const nlohmann::json &arg) const;
   bool has_narrow_operand() const;

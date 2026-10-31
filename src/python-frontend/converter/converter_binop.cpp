@@ -3092,13 +3092,18 @@ exprt python_converter::build_bytes_concat(const exprt &lhs, const exprt &rhs)
 }
 
 // Complex arrays are stored and indexed; no arithmetic over them is modelled.
-static void reject_complex_array_arithmetic(const exprt &lhs, const exprt &rhs)
+// Over complex numbers only the four operations have a NumPy rule modelled
+// here.
+static void reject_unmodelled_complex_operator(
+  const std::string &op,
+  const typet &result_leaf)
 {
   if (
-    type_utils::is_numpy_complex_array(lhs.type()) ||
-    type_utils::is_numpy_complex_array(rhs.type()))
+    is_complex_type(result_leaf) && op != "Add" && op != "Sub" &&
+    op != "Mult" && op != "Div")
     throw std::runtime_error(
-      "TypeError: arithmetic on a numpy complex array is not supported");
+      "TypeError: numpy element-wise '" + op +
+      "' over complex numbers is not supported");
 }
 
 static exprt cast_to(const exprt &value, const typet &type)
@@ -3108,7 +3113,8 @@ static exprt cast_to(const exprt &value, const typet &type)
 
 static bool is_numeric_scalar_type(const typet &type)
 {
-  return type.is_signedbv() || type.is_unsignedbv() || type.is_floatbv();
+  return type.is_signedbv() || type.is_unsignedbv() || type.is_floatbv() ||
+         is_complex_type(type);
 }
 
 // Characters are 8-bit integers, as in the frontend's string arrays.
@@ -3162,7 +3168,9 @@ static typet elementwise_result_type(
   const numpy_operandt &rhs)
 {
   const numpy_dtypet result = numpy_promote(lhs, rhs);
-  if (op == "Div" && result.kind != numpy_dtypet::kindt::floating)
+  if (
+    op == "Div" &&
+    (result.is_integer() || result.kind == numpy_dtypet::kindt::boolean))
     return double_type();
   if (result.kind == numpy_dtypet::kindt::floating && result.bits == 64)
     return double_type();
@@ -3304,6 +3312,87 @@ exprt python_converter::numpy_element_op(
     equality_exprt(y, from_integer(0, type)), from_integer(0, type), raw);
 }
 
+static exprt real_part(const exprt &value)
+{
+  return member_exprt(value, "real", double_type());
+}
+
+static exprt imag_part(const exprt &value)
+{
+  return member_exprt(value, "imag", double_type());
+}
+
+// NumPy's complex division (Smith's algorithm), whose zero divisor gives
+// infinities and NaNs in IEEE arithmetic rather than Python's exception.
+exprt python_converter::numpy_complex_quotient(const exprt &x, const exprt &y)
+{
+  const typet dt = double_type();
+  const nlohmann::json no_node;
+  const auto op = [&](const char *name, const exprt &a, const exprt &b) {
+    return numpy_element_op(name, a, b, dt);
+  };
+  const exprt a = real_part(x), b = imag_part(x);
+  const exprt c = real_part(y), d = imag_part(y);
+  const exprt abs_c = cast_to(math_handler_.handle_fabs(c, no_node), dt);
+  const exprt abs_d = cast_to(math_handler_.handle_fabs(d, no_node), dt);
+  const exprt one = from_double(1.0, dt);
+  const exprt ratio_c = op("Div", d, c);
+  const exprt scale_c = op("Div", one, op("Add", c, op("Mult", d, ratio_c)));
+  const exprt ratio_d = op("Div", c, d);
+  const exprt scale_d = op("Div", one, op("Add", d, op("Mult", c, ratio_d)));
+  const exprt c_larger = binary_relation_exprt(abs_c, ">=", abs_d);
+  const exprt zero_divisor = and_exprt(
+    equality_exprt(abs_c, gen_zero(dt)), equality_exprt(abs_d, gen_zero(dt)));
+  const exprt real = if_exprt(
+    zero_divisor,
+    op("Div", a, abs_c),
+    if_exprt(
+      c_larger,
+      op("Mult", op("Add", a, op("Mult", b, ratio_c)), scale_c),
+      op("Mult", op("Add", op("Mult", a, ratio_d), b), scale_d)));
+  const exprt imag = if_exprt(
+    zero_divisor,
+    op("Div", b, abs_c),
+    if_exprt(
+      c_larger,
+      op("Mult", op("Sub", b, op("Mult", a, ratio_c)), scale_c),
+      op("Mult", op("Sub", op("Mult", b, ratio_d), a), scale_d)));
+  return make_complex(real, imag);
+}
+
+// `x op y` for one complex element pair, rounded to the result's type.
+exprt python_converter::numpy_complex_element_op(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  const typet &type)
+{
+  const typet dt = double_type();
+  const exprt x = promote_to_complex(lhs);
+  const exprt y = promote_to_complex(rhs);
+  const auto real_op = [&](const char *name, const exprt &a, const exprt &b) {
+    return numpy_element_op(name, a, b, dt);
+  };
+  exprt result;
+  if (op == "Div")
+    result = numpy_complex_quotient(x, y);
+  else if (op == "Mult")
+    result = make_complex(
+      real_op(
+        "Sub",
+        real_op("Mult", real_part(x), real_part(y)),
+        real_op("Mult", imag_part(x), imag_part(y))),
+      real_op(
+        "Add",
+        real_op("Mult", real_part(x), imag_part(y)),
+        real_op("Mult", imag_part(x), real_part(y))));
+  else
+    result = make_complex(
+      real_op(op.c_str(), real_part(x), real_part(y)),
+      real_op(op.c_str(), imag_part(x), imag_part(y)));
+  return complex_as_element(real_part(result), imag_part(result), type);
+}
+
 // `lhs op rhs` into an array of `type`, row by row; a number operand is
 // applied to every element.
 exprt python_converter::numpy_elementwise(
@@ -3312,6 +3401,8 @@ exprt python_converter::numpy_elementwise(
   const exprt &rhs,
   const typet &type)
 {
+  if (is_complex_type(type))
+    return numpy_complex_element_op(op, lhs, rhs, type);
   if (!type.is_array())
   {
     // Narrow integers are computed at 64 bits and wrapped by the cast back, as
@@ -3537,9 +3628,12 @@ exprt python_converter::numpy_array_arithmetic(
     if (!raised.is_nil())
       return raised;
   }
+  reject_unmodelled_complex_operator(op, result_leaf);
   if (op == "Pow" && !result_leaf.is_floatbv())
     guard_negative_exponents(rhs, location);
-  if (bitwise_ops().count(op) && result_leaf.is_floatbv())
+  if (
+    bitwise_ops().count(op) &&
+    (result_leaf.is_floatbv() || is_complex_type(result_leaf)))
     return raise_in_expression(
       "TypeError",
       "ufunc '" + bitwise_ufunc(op) + "' not supported for the input types",
@@ -3617,7 +3711,6 @@ exprt python_converter::handle_array_operations(
   const nlohmann::json &right,
   const nlohmann::json &element)
 {
-  reject_complex_array_arithmetic(lhs, rhs);
   if (!lhs.type().is_array() && !rhs.type().is_array())
   {
     if (

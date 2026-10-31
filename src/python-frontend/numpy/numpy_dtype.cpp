@@ -41,7 +41,8 @@ typet numpy_dtypet::element_type() const
   case kindt::floating:
     return build_float_type(bits);
   case kindt::complex:
-    return get_complex_struct_type();
+    return bits == 64 ? typet(get_complex64_struct_type())
+                      : typet(get_complex_struct_type());
   case kindt::string:
     return typet();
   }
@@ -96,7 +97,8 @@ std::optional<numpy_dtypet> numpy_dtype_of_element(const typet &element)
   if (element.is_floatbv())
     return numpy_dtypet{kindt::floating, to_floatbv_type(element).get_width()};
   if (is_complex_type(element))
-    return numpy_dtypet{kindt::complex, 128};
+    return numpy_dtypet{
+      kindt::complex, is_complex64_type(element) ? 64u : 128u};
   return std::nullopt;
 }
 

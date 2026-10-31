@@ -3489,9 +3489,16 @@ bool python_converter::return_call_only_references_params_or_modules(
 /// not intercepted here updates its char array with a whole string value, which
 /// trips with2t::assert_consistency and aborts instead of reporting anything.
 bool python_converter::reject_immutable_item_assignment(
-  const typet &container_type,
+  const exprt &container,
   codet &target_block)
 {
+  // A numpy string array parameter is a pointer to its fixed-width elements,
+  // which is mutable, unlike the pointer to chars of a str.
+  const typet &container_type = container.type();
+  if (
+    !container_type.is_array() &&
+    numpy_param_as_array(container).type().is_array())
+    return false;
   const char *kind = tuple_handler_->is_tuple_type(container_type) ? "tuple"
                      : type_utils::is_string_type(container_type)  ? "str"
                                                                    : nullptr;
@@ -7166,6 +7173,14 @@ exprt python_converter::fit_numpy_integer_store(
   if (lhs.id() != "index" || !lhs.op0().type().is_array())
     return rhs;
   const typet &element = lhs.type();
+  if (is_complex_type(element))
+  {
+    const exprt complex_rhs = promote_to_complex(rhs);
+    return complex_as_element(
+      member_exprt(complex_rhs, "real", double_type()),
+      member_exprt(complex_rhs, "imag", double_type()),
+      element);
+  }
   const bool integer = element.is_signedbv() || element.is_unsignedbv();
   if (integer && rhs.type().is_floatbv())
     return typecast_exprt(guard_nonfinite_float_to_int(rhs, value), element);
@@ -7486,12 +7501,7 @@ void python_converter::get_var_assign(
     exprt container_expr = get_expr(target["value"]);
     typet container_type = container_expr.type();
 
-    // A numpy string array parameter is a pointer to its fixed-width elements,
-    // which is mutable, unlike the pointer to chars of a str.
-    if (
-      numpy_param_as_array(container_expr).type().is_array() ==
-        container_type.is_array() &&
-      reject_immutable_item_assignment(container_type, target_block))
+    if (reject_immutable_item_assignment(container_expr, target_block))
       return;
 
     // Handle object subscript assignment via __setitem__:
@@ -10647,6 +10657,14 @@ static typet numpy_typed_shape(
 // NUL padding to the array's fixed width for a string.
 static exprt as_numpy_element(const exprt &value, const typet &element)
 {
+  if (is_complex_type(element) && !element.is_array())
+  {
+    const exprt promoted = promote_to_complex(value);
+    return complex_as_element(
+      member_exprt(promoted, "real", double_type()),
+      member_exprt(promoted, "imag", double_type()),
+      element);
+  }
   if (value.type() == element || !element.is_array())
     return value.type() == element ? value : typecast_exprt(value, element);
   exprt padded = gen_zero(element);

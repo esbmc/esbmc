@@ -5,6 +5,7 @@
 #include <python-frontend/type/type_handler.h>
 
 #include <irep2/irep2_utils.h>
+#include <map>
 #include <util/arith/arith_tools.h>
 #include <util/lang/c_types.h>
 #include <util/expr/expr_util.h>
@@ -330,6 +331,34 @@ exprt complex_handler::normalize_numeric_expr(const exprt &value) const
 // Public entry points
 // -----------------------------------------------------------------------
 
+static std::string op_symbol(const std::string &op_name)
+{
+  static const std::map<std::string, std::string> symbols = {
+    {"Add", "+"}, {"Sub", "-"}, {"Mult", "*"}, {"Div", "/"}, {"Pow", "**"}};
+  const auto symbol = symbols.find(op_name);
+  return symbol == symbols.end() ? op_name : symbol->second;
+}
+
+// A complex number with an array, or a complex64 element, follows NumPy. Nil
+// for a pair of Python numbers.
+exprt complex_handler::numpy_complex_operation(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &element) const
+{
+  if (
+    element.value("_type", "") != "BinOp" ||
+    (!lhs.type().is_array() && !rhs.type().is_array() &&
+     !type_utils::is_numpy_scalar_type(lhs.type()) &&
+     !type_utils::is_numpy_scalar_type(rhs.type())))
+    return nil_exprt();
+  exprt x = lhs;
+  exprt y = rhs;
+  return converter_.numpy_or_array_operation(
+    op, x, y, element["left"], element["right"], element);
+}
+
 exprt complex_handler::handle_binary_op(
   const std::string &op,
   const exprt &lhs,
@@ -338,21 +367,11 @@ exprt complex_handler::handle_binary_op(
 {
   clear_cache();
 
-  // ---- helper lambdas (lightweight, capturing *this) ----
+  const exprt numpy_result = numpy_complex_operation(op, lhs, rhs, element);
+  if (!numpy_result.is_nil())
+    return numpy_result;
 
-  auto op_symbol = [](const std::string &op_name) -> std::string {
-    if (op_name == "Add")
-      return "+";
-    if (op_name == "Sub")
-      return "-";
-    if (op_name == "Mult")
-      return "*";
-    if (op_name == "Div")
-      return "/";
-    if (op_name == "Pow")
-      return "**";
-    return op_name;
-  };
+  // ---- helper lambdas (lightweight, capturing *this) ----
 
   auto expr_python_type_name = [&](const exprt &e) -> std::string {
     const typet &t = e.type();
