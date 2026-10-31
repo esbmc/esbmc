@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: Unsupported: the type of an int raised to a power that is not a constant

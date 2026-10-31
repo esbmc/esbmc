@@ -12581,6 +12581,82 @@ not against master. Both under the default solver (Bitwuzla), `--z3` and
 
 Not fixed: `strcoll_l` and `strxfrm_l` have no model, nor do `strcoll` and
 `strxfrm` (`cstd/strcoll` and `cstd/strxfrm` are KNOWNBUG).
+### M9 (R146) — 2026-10-31, the `va_list` R137 did not read
+
+R137's entry left open that a `vsprintf` or `vsnprintf` conversion that reads
+the `va_list` leaves the destination unchanged. The return value already came
+from `recover_va_list_args`, but `format_printf_output` and
+`printf_output_length` never saw the recovered arguments. After
+`fmt("x%dy", 42)`, where `fmt` passes its `va_list` to `vsprintf(b, f, ap)`,
+the result was 4 and `b[4]` still held its old character, so
+`assert(b[4] == '\0')` was FAILED; and `fmt("%d", 123456)` into `char b[4]`
+was SUCCESSFUL, although it writes seven bytes.
+
+**Fixed** by `printf_args`, which gives both functions the arguments a call
+formats: its operands after the format, or for `vsprintf` and `vsnprintf` the
+arguments `recover_va_list_args` recovers. When they cannot be recovered the
+list is empty and a conversion that needs one stays unbounded, as before.
+
+`vsprintf_va_list_args` checks the text, NUL and untouched tail of a
+`vsprintf` with an integer argument, a truncating `vsnprintf` with a string
+and an integer, and the length of a `%x` of a nondet value below 10; master
+fails it. `vsprintf_va_list_args_fail` pins the bounds violation of the
+seven-byte write and is SUCCESSFUL on master. Removing the recovery fails
+both; removing it from `printf_output_length` alone fails the passing test.
+Both under the default solver (Bitwuzla), `--z3` and `--k-induction`.
+
+Not fixed: recovery is limited to targets where `va_list` is a pointer
+(AArch64), to a `va_list` that is a local of the variadic function itself,
+and to calls before any `va_arg`, so on x86-64 these calls still leave the
+destination unchanged.
+### M9 (R150) — 2026-10-31, the case-insensitive compare with a locale
+
+R134's entry left `strcasecmp_l` and `strncasecmp_l` without a model, so each
+returned a nondet value: `strcasecmp_l("AbC", "abc", c) == 0` was FAILED
+for `c` from `newlocale(LC_ALL_MASK, "C", 0)`, as was any assertion on the
+result.
+
+**Fixed** by modelling both on the POSIX targets as `strncasecmp` with the
+locale ignored. Only the C locale is modelled, as for `tolower`, so the
+results are those of the C or POSIX locale; a locale that folds a letter
+differently (Turkish dotted I) is not modelled.
+
+`strcasecmp_l_model` checks equality across case, the sign for a smaller and
+a longer string, a prefix shorter than the difference, a prefix covering it,
+and `n == 0`; master fails it, and it passes natively. `strcasecmp_l_model_fail`
+runs under `--multi-property` and pins a wrong sign and a wrong equality.
+Making `strncasecmp_l` ignore `n` fails the passing test. Both under the
+default solver (Bitwuzla), `--z3` and `--k-induction`.
+
+Not fixed: the other `_l` functions (`tolower_l`, `strcoll_l`, `strxfrm_l`)
+still have no model, and `log(M_E) == 1.0` is still FAILED (R133).
+### M9 (R149) — 2026-10-31, the warning that stopped R130's armv8 build
+
+Since R130 landed, the Monday `Weekly` run's `static armv8 DebugOpt` job no
+longer compiles (on 10-05 it built and failed four regression tests,
+`char_walk_arrays` and `github_8048_huge_vla` with their `_fail` twins; from
+10-12 a build failure hides its tests). It builds with GCC 14 and `-Werror`,
+and GCC reports writing 8 bytes "into a region of size 0"
+(`-Wstringop-overflow`) in `lower_longjmp.cpp`. `build_dispatch` read
+`slot->type` and `to_symbol2t(slot)` through a non-const `expr2tc`, whose
+`operator->` detaches the node and, without `NDEBUG`, calls `mark_writer`; GCC
+could not rule out a null node on that path. Every use of `slot` only reads,
+so it is now `const`.
+
+The same warning reproduces with Homebrew's GCC 15 at `-O2 -Werror` and goes
+away with the change; making `slot` const alone is enough, and the reads of
+`count` in `new_slot` do not trigger it. With the change, every C++ object
+compiles under GCC 15 DebugOpt with `-Werror` (Homebrew's fmt 12 needs
+`-Wno-error=deprecated-declarations`, which CI's bundled fmt does not). No
+regression test: the change does not alter the GOTO program, and the
+`longjmp` tests give the same verdicts. The Linux GCC 14 build is checked only
+by the next Monday run.
+
+Not fixed: those four armv8 tests, unchecked since 10-05, and the other
+Monday failures, whose jobs also failed on 10-05: `Simplifier equivalence` (`github_8660_object_size_offset`, `overflow_10_fir`,
+`overflow_16_fir_new`), Windows DebugOpt (`k-induction_cpp_stack_empty_bug`
+and three `goto-transcoder` tests), and the macOS build's
+`github_9081_optional_dict_value_fail`.
 
 ---
 

@@ -1,4 +1,0 @@
-CORE
-main.py
---incremental-bmc
-^ERROR: TypeError: a numpy constructor called as an argument inside a lambda, a short-circuit operand or a contract is not supported$

@@ -185,6 +185,7 @@ protected:
   /// zero and aborts -- the default path never gets there because it lowers to
   /// ieee_div, which is exempt from that check (§88).
   void adjust_complex_arith(expr2tc &expr);
+  void adjust_complex_equality(expr2tc &expr);
 
   /// IREP2 form of clang_c_adjust::adjust_expr_unary_complex: `-z` negates both
   /// components, GNU `~z` conjugates. Unported, either reaches the solver still

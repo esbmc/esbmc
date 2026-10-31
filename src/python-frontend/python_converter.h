@@ -386,6 +386,11 @@ public:
   // A runtime guard emitted into current_block runs once, unconditionally,
   // ahead of the enclosing statement; that is wrong for an expression Python
   // evaluates conditionally or repeatedly (an and/or tail, a while test).
+  bool unpack_record_in_force() const
+  {
+    return unpack_record_trusted_;
+  }
+
   bool in_type_probe() const
   {
     return in_rhs_type_probe_;
@@ -396,6 +401,19 @@ public:
     return current_block && safe_to_emit_side_effecting_statement() &&
            !in_lazy_operand_;
   }
+
+  // An and/or operand after the first plants its statements in a block of its
+  // own, which runs only where the operand is evaluated.
+  bool can_emit_operand_statement() const
+  {
+    return can_emit_runtime_guard() ||
+           (in_operand_effects_block_ && current_block &&
+            safe_to_emit_side_effecting_statement());
+  }
+
+  /// Convert a lambda's body with @p block current, so what it plants runs in
+  /// the body, ahead of its return, each time the lambda is called.
+  exprt get_lambda_body_expr(const nlohmann::json &body, code_blockt &block);
 
   // A raise lowers to a jump to the function's end, which every later state
   // then merges with, so a guard that only replaces an operational-model
@@ -906,6 +924,8 @@ private:
 
   std::optional<typet> call_dict_value_type(const nlohmann::json &call);
 
+  bool is_call_bound_dict(const nlohmann::json &name);
+
   symbolt create_return_temp_variable(
     const typet &return_type,
     const locationt &location,
@@ -1389,6 +1409,8 @@ private:
   // is_numpy_array_literal_call() check one-for-one (same call count there)
   // instead of adding a second, separate dispatch branch for the `Call`
   // case, to keep that function's own decision count down.
+  std::optional<typet>
+  numpy_elementwise_return_type(const nlohmann::json &func_def) const;
   std::optional<typet> try_infer_numpy_array_arg_type(
     const nlohmann::json &arg,
     const nlohmann::json &module_body) const;
@@ -2305,6 +2327,13 @@ private:
   std::optional<typet>
   literal_numpy_array_type(const nlohmann::json &call) const;
   nlohmann::json bind_numpy_constructor_argument(const nlohmann::json &arg);
+  nlohmann::json
+  bind_to_fresh_name(const nlohmann::json &value, const std::string &prefix);
+  std::optional<exprt> try_lowered_compare(const nlohmann::json &element);
+  std::optional<exprt>
+  try_chained_compare_with_call(const nlohmann::json &element);
+  nlohmann::json chained_compare_as_pairs(const nlohmann::json &element);
+  void reject_walrus_in_boolop(const nlohmann::json &element);
 
   bool contains_tracked_numpy_view_object(const nlohmann::json &node);
 
@@ -2677,6 +2706,11 @@ private:
 
   void
   update_numpy_array_binding(const exprt &lhs, const nlohmann::json &rhs_node);
+  void keep_numpy_shape_across_paths(
+    const std::string &lhs_id,
+    const nlohmann::json &rhs_node,
+    bool unconditional_assignment,
+    const std::optional<std::vector<std::size_t>> &shape_before);
 
   bool update_numpy_array_binding_from_name(
     const exprt &lhs,
@@ -3508,6 +3542,7 @@ private:
   // a loop invariant raised inside the loop body. C emits nothing from a
   // clause either.
   bool in_contract_clause_ = false;
+  bool lowering_chained_compare_ = false;
   bool in_lazy_operand_ = false;
   // Number of try bodies enclosing the statement being converted.
   unsigned try_body_depth_ = 0;
