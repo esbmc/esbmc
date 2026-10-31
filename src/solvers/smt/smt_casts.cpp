@@ -237,10 +237,27 @@ smt_solver_baset::convert_typecast_to_ints_intmode(const typecast2t &cast)
     return convert_ast(cast.from);
 
   if (is_bv_type(cast.type) && is_bv_type(cast.from))
+  {
     // NB: this means negative numbers assigned to unsigned ints remain
     // negative. This IMO is one of the inaccuracies accepted by the use of
     // ir mode.
-    return convert_ast(cast.from);
+    smt_astt value = convert_ast(cast.from);
+    const unsigned width = cast.type->get_width();
+    if (
+      !is_concat2t(cast.from) || !is_unsignedbv_type(cast.from) ||
+      !is_signedbv_type(cast.type) || cast.from->type->get_width() != width)
+      return value;
+
+    // Bytes joined into an unsigned value read back as a signed one, so a
+    // value above the signed maximum is negative (#9531). Other casts keep
+    // their value: the extra branch slows every --ir solve that has one.
+    const BigInt modulus = BigInt::power2(width);
+    const BigInt half = BigInt::power2(width - 1);
+    return mk_ite(
+      mk_ge(value, mk_smt_int(half)),
+      mk_sub(value, mk_smt_int(modulus)),
+      value);
+  }
 
   smt_astt a = convert_ast(cast.from);
 

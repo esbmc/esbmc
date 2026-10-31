@@ -1521,6 +1521,16 @@ protected:
    *  `retval` + 1 bytes, allocated only when `retval` is non-negative. When
    *  the result is discarded (`retval` nil) the buffer is 1 byte. */
   void symex_asprintf_buffer(const expr2tc &strp, const expr2tc &retval);
+  /** The arguments an unrenamed printf-family call formats: its operands
+   *  after the format, or for vsprintf and vsnprintf those
+   *  recover_va_list_args recovers, empty when it cannot. */
+  std::vector<expr2tc> printf_args(const code_printf2t &call, size_t fmt_idx);
+  /** Write through each %n operand `formatter` recorded the number of
+   *  characters output before it (C11 7.21.6.1p8). */
+  void assign_printf_percent_n(const printf_formattert &formatter);
+  /** Fold each char-array argument with a static initializer to a string
+   *  constant, which printf_formattert can measure. */
+  void fold_printf_char_arrays(std::list<expr2tc> &args);
   /** Run `formatter` over an unrenamed printf-family call; false when the
    *  format is not a constant. `constant_args` is set when every argument
    *  is a constant. */

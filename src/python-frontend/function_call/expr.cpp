@@ -81,21 +81,6 @@ find_method_def(const nlohmann::json &class_node, const std::string &method)
   return nullptr;
 }
 
-/// Whether \p method_def carries the @staticmethod decorator. The decorator
-/// decides this, not the first parameter's name, which Python does not fix.
-bool is_staticmethod_def(const nlohmann::json &method_def)
-{
-  if (!method_def.contains("decorator_list"))
-    return false;
-
-  for (const auto &d : method_def["decorator_list"])
-    if (
-      node_type_of(d) == "Name" && d.contains("id") &&
-      d["id"] == "staticmethod")
-      return true;
-  return false;
-}
-
 /// An explicit `Base.__init__(self, ...)` call invokes the named base class's
 /// constructor with self passed explicitly; it is not an object construction.
 /// Letting it fall through to the ClassMethod classification allocates no fresh
@@ -294,7 +279,7 @@ bool function_call_expr::resolves_to_staticmethod(
     pending.pop_front();
 
     if (const nlohmann::json *def = find_method_def(cls, method))
-      return is_staticmethod_def(*def);
+      return json_utils::is_staticmethod_def(*def);
 
     if (!cls.contains("bases") || !cls["bases"].is_array())
       continue;
@@ -1009,6 +994,17 @@ exact_class_of(const nlohmann::json &arg, const nlohmann::json &ast)
   return "";
 }
 
+/// Rewrite the None literal of `str(None)` to "None", which is repr(None):
+/// NoneType inherits object.__str__. With an encoding, CPython raises
+/// TypeError instead, so only a lone argument is rewritten.
+static void fold_str_of_none(const nlohmann::json &call, nlohmann::json &arg)
+{
+  if (
+    call["args"].size() == 1 && arg["_type"] == "Constant" &&
+    arg["value"].is_null())
+    arg["value"] = "None";
+}
+
 /// Whether @p name is a builtin class that the module never rebinds.
 static bool is_builtin_class(const std::string &name, const nlohmann::json &ast)
 {
@@ -1157,6 +1153,28 @@ exprt function_call_expr::str_of_object(exprt &value, const nlohmann::json &arg)
     return converter_.get_string_handler().build_nondet_string_fallback(
       location);
   return converter_.get_string_builder().build_string_literal(text);
+}
+
+// float() ignores outer whitespace: str.isspace(), which also counts \x1c-\x1f.
+static std::string strip_py_space(const std::string &s)
+{
+  auto is_space = [](unsigned char c) {
+    return std::isspace(c) || (c >= 0x1c && c <= 0x1f);
+  };
+  const auto first = std::find_if_not(s.begin(), s.end(), is_space);
+  const auto last = std::find_if_not(s.rbegin(), s.rend(), is_space).base();
+  return first < last ? std::string(first, last) : std::string();
+}
+
+// strtod does not know PEP 515, so drop the separators first (#7558).
+static bool parse_py_float(const std::string &s, double &out)
+{
+  std::string digits;
+  if (s.empty() || !type_utils::strip_pep515_underscores(s, digits))
+    return false;
+  char *end = nullptr;
+  out = std::strtod(digits.c_str(), &end);
+  return end == digits.c_str() + digits.size();
 }
 
 exprt function_call_expr::build_constant_from_arg() const
@@ -1496,14 +1514,11 @@ exprt function_call_expr::build_constant_from_arg() const
 
   else if (func_name == "float" && is_string_arg(arg))
   {
-    std::string str_val = arg["value"].get<std::string>();
+    const std::string raw_val = arg["value"].get<std::string>();
+    const std::string trimmed = strip_py_space(raw_val);
 
-    // Convert to lowercase for case-insensitive comparison
+    std::string str_val = trimmed;
     std::transform(str_val.begin(), str_val.end(), str_val.begin(), ::tolower);
-
-    // Remove whitespace
-    str_val.erase(
-      std::remove_if(str_val.begin(), str_val.end(), ::isspace), str_val.end());
 
     // Handle special float string values
     if (const auto special = nonfinite_float_from_spelling(str_val))
@@ -1511,14 +1526,8 @@ exprt function_call_expr::build_constant_from_arg() const
     {
       // Try to parse as regular float
       {
-        const std::string raw_val = arg["value"].get<std::string>();
-        // strtod does not know PEP 515, so drop the separators first (#7558).
-        std::string digits;
-        const bool separators_ok =
-          type_utils::strip_pep515_underscores(raw_val, digits);
-        char *end = nullptr;
-        double dval = separators_ok ? std::strtod(digits.c_str(), &end) : 0.0;
-        if (!separators_ok || !end || end != digits.c_str() + digits.size())
+        double dval;
+        if (!parse_py_float(trimmed, dval))
         {
           std::string m =
             "could not convert string to float : '" + raw_val + "'";
@@ -1617,6 +1626,8 @@ exprt function_call_expr::build_constant_from_arg() const
 
   else if (func_name == "str")
   {
+    fold_str_of_none(call_, arg);
+
     // Try __str__ dispatch for custom objects with __str__ defined.
     exprt value_expr = converter_.get_expr(arg);
     // convert_to_string folds a call statement it cannot type to a constant,
@@ -2002,6 +2013,182 @@ static bool builds_set(const nlohmann::json &value)
           value["func"].value("id", "") == "frozenset");
 }
 
+/// The def of the module-level function @p name, or null.
+static const nlohmann::json *
+module_function(const nlohmann::json &ast, const std::string &name)
+{
+  for (const auto &stmt : ast["body"])
+    if (
+      stmt.value("_type", "") == "FunctionDef" &&
+      stmt.value("name", "") == name)
+      return &stmt;
+  return nullptr;
+}
+
+/// Collects the values of the `return` statements of @p body, without entering
+/// nested defs or classes.
+static void collect_returns(
+  const nlohmann::json &body,
+  std::vector<const nlohmann::json *> &returns,
+  bool &bare)
+{
+  if (!body.is_array())
+    return;
+  for (const auto &stmt : body)
+  {
+    const std::string kind = stmt.value("_type", "");
+    if (kind == "FunctionDef" || kind == "ClassDef" || kind == "Lambda")
+      continue;
+    if (kind == "Return")
+    {
+      if (stmt.contains("value") && stmt["value"].is_object())
+        returns.push_back(&stmt["value"]);
+      else
+        bare = true;
+    }
+    for (const char *key : {"body", "orelse", "finalbody"})
+      if (stmt.contains(key))
+        collect_returns(stmt[key], returns, bare);
+    if (stmt.contains("handlers"))
+      for (const auto &handler : stmt["handlers"])
+        collect_returns(handler["body"], returns, bare);
+  }
+}
+
+/// Whether @p value, or the call it makes, yields a set: it builds one, or it
+/// calls a module function that returns a set on every path.
+static bool yields_set(const nlohmann::json &ast, const nlohmann::json &value)
+{
+  if (builds_set(value))
+    return true;
+  if (
+    value.value("_type", "") != "Call" ||
+    value["func"].value("_type", "") != "Name")
+    return false;
+  const nlohmann::json *callee =
+    module_function(ast, value["func"].value("id", ""));
+  if (!callee)
+    return false;
+  std::vector<const nlohmann::json *> returns;
+  bool bare = false;
+  collect_returns((*callee)["body"], returns, bare);
+  if (bare || returns.empty())
+    return false;
+  return std::all_of(
+    returns.begin(), returns.end(), [](const nlohmann::json *r) {
+      return builds_set(*r);
+    });
+}
+
+/// The enclosing def of an attribute store and the class around it.
+struct store_scope
+{
+  const nlohmann::json *function = nullptr;
+  std::string cls;
+};
+
+/// Whether @p annotation names a set type: `set`, `Set`, `frozenset`, or one
+/// of them subscripted.
+static bool is_set_annotation(const nlohmann::json &annotation)
+{
+  if (!annotation.is_object())
+    return false;
+  const nlohmann::json &base = annotation.value("_type", "") == "Subscript"
+                                 ? annotation["value"]
+                                 : annotation;
+  const std::string name = base.value("id", "");
+  return name == "set" || name == "Set" || name == "frozenset";
+}
+
+/// The index of parameter @p name among the parameters of @p function after
+/// `self`, or -1.
+static int
+parameter_position(const nlohmann::json &function, const std::string &name)
+{
+  const auto &params = function["args"]["args"];
+  for (size_t i = 1; i < params.size(); ++i)
+    if (params[i].value("arg", "") == name)
+      return static_cast<int>(i) - 1;
+  return -1;
+}
+
+/// The argument a constructor call passes for the parameter at @p position
+/// named @p name, or null.
+static const nlohmann::json *constructor_argument(
+  const nlohmann::json &call,
+  int position,
+  const std::string &name)
+{
+  if (call["args"].size() > static_cast<size_t>(position))
+    return &call["args"][position];
+  if (call.contains("keywords"))
+    for (const auto &keyword : call["keywords"])
+      if (keyword.value("arg", "") == name)
+        return &keyword["value"];
+  return nullptr;
+}
+
+/// Counts the calls of class @p cls, and those that pass a set for the
+/// constructor parameter at @p position.
+static void count_constructor_sets(
+  const nlohmann::json &ast,
+  const nlohmann::json &node,
+  const std::string &cls,
+  int position,
+  const std::string &name,
+  size_t &calls,
+  size_t &set_calls)
+{
+  if (!node.is_structured())
+    return;
+  if (
+    node.is_object() && node.value("_type", "") == "Call" &&
+    node["func"].value("_type", "") == "Name" &&
+    node["func"].value("id", "") == cls)
+  {
+    ++calls;
+    const nlohmann::json *arg = constructor_argument(node, position, name);
+    set_calls += arg != nullptr && yields_set(ast, *arg);
+  }
+  for (const auto &child : node)
+    count_constructor_sets(ast, child, cls, position, name, calls, set_calls);
+}
+
+/// Whether @p value is a parameter of the constructor around the store that
+/// every construction of the class, or its annotation, makes a set.
+static bool is_set_parameter(
+  const nlohmann::json &ast,
+  const nlohmann::json &value,
+  const store_scope &scope)
+{
+  if (
+    value.value("_type", "") != "Name" || scope.function == nullptr ||
+    scope.function->value("name", "") != "__init__" || scope.cls.empty())
+    return false;
+  const std::string name = value.value("id", "");
+  const int position = parameter_position(*scope.function, name);
+  if (
+    position < 0 || json_utils::count_name_bindings(*scope.function, name) != 1)
+    return false;
+  const auto &param = (*scope.function)["args"]["args"][position + 1];
+  if (is_set_annotation(param.value("annotation", nlohmann::json())))
+    return true;
+  size_t calls = 0;
+  size_t set_calls = 0;
+  count_constructor_sets(
+    ast, ast["body"], scope.cls, position, name, calls, set_calls);
+  return calls > 0 && calls == set_calls;
+}
+
+/// Whether the value stored to an attribute is a set.
+static bool stores_set(
+  const nlohmann::json &ast,
+  const nlohmann::json &value,
+  const store_scope &scope)
+{
+  return yields_set(ast, value) || is_set_parameter(ast, value, scope);
+}
+
 static bool
 is_attribute_named(const nlohmann::json &node, const std::string &attr)
 {
@@ -2036,18 +2223,43 @@ static bool is_other_store(const nlohmann::json &node, const std::string &attr)
          node.contains("target") && is_attribute_named(node["target"], attr);
 }
 
+/// The scope a child of @p node sits in.
+static store_scope
+inner_scope(const nlohmann::json &node, const store_scope &scope)
+{
+  store_scope inner = scope;
+  const std::string kind = node.value("_type", "");
+  if (kind == "ClassDef")
+  {
+    inner.cls = node.value("name", "");
+    inner.function = nullptr;
+  }
+  else if (kind == "FunctionDef")
+    inner.function = &node;
+  return inner;
+}
+
 /// Counts the stores of an attribute named @p attr, and how many of them
-/// build a set.
+/// store a set.
+using store_test = bool (*)(
+  const nlohmann::json &ast,
+  const nlohmann::json &value,
+  const store_scope &scope);
+
 static void count_attribute_stores(
+  const nlohmann::json &ast,
   const nlohmann::json &node,
   const std::string &attr,
+  const store_scope &scope,
+  store_test stores_kind,
   size_t &stores,
-  size_t &set_stores)
+  size_t &kind_stores)
 {
   if (node.is_array())
   {
     for (const auto &child : node)
-      count_attribute_stores(child, attr, stores, set_stores);
+      count_attribute_stores(
+        ast, child, attr, scope, stores_kind, stores, kind_stores);
     return;
   }
   if (!node.is_object())
@@ -2056,23 +2268,34 @@ static void count_attribute_stores(
     if (is_attribute_named(*target, attr))
     {
       ++stores;
-      set_stores += builds_set(node["value"]);
+      kind_stores += stores_kind(ast, node["value"], scope);
     }
   stores += is_other_store(node, attr);
+  const store_scope inner = inner_scope(node, scope);
   for (auto it = node.begin(); it != node.end(); ++it)
     if (it.value().is_structured())
-      count_attribute_stores(it.value(), attr, stores, set_stores);
+      count_attribute_stores(
+        ast, it.value(), attr, inner, stores_kind, stores, kind_stores);
 }
 
-/// Every store to an attribute named @p attr builds a set, so a value read from
-/// it is one, whichever instance holds it.
+/// Whether every store to an attribute named @p attr passes @p stores_kind, so
+/// a value read from it is of that kind whichever instance holds it.
+static bool attribute_only_stores(
+  const nlohmann::json &ast,
+  const std::string &attr,
+  store_test stores_kind)
+{
+  size_t stores = 0;
+  size_t kind_stores = 0;
+  count_attribute_stores(
+    ast, ast, attr, store_scope(), stores_kind, stores, kind_stores);
+  return stores > 0 && stores == kind_stores;
+}
+
 static bool
 attribute_only_stores_sets(const nlohmann::json &ast, const std::string &attr)
 {
-  size_t stores = 0;
-  size_t set_stores = 0;
-  count_attribute_stores(ast, attr, stores, set_stores);
-  return stores > 0 && stores == set_stores;
+  return attribute_only_stores(ast, attr, stores_set);
 }
 
 const symbolt *
@@ -3048,6 +3271,97 @@ exprt function_call_expr::handle_list_reverse() const
   converter_.get_element_type_registry().reverse(list_symbol->id.as_string());
 
   return reverse_call;
+}
+
+/// Whether @p value builds a list: a display, a comprehension or `list(...)`.
+static bool builds_list(const nlohmann::json &value)
+{
+  const std::string kind = value.value("_type", "");
+  if (kind == "List" || kind == "ListComp")
+    return true;
+  return kind == "Call" && value["func"].value("_type", "") == "Name" &&
+         value["func"].value("id", "") == "list";
+}
+
+static bool is_list_annotation(const nlohmann::json &annotation)
+{
+  if (!annotation.is_object())
+    return false;
+  const nlohmann::json &base = annotation.value("_type", "") == "Subscript"
+                                 ? annotation["value"]
+                                 : annotation;
+  const std::string name = base.value("id", "");
+  return name == "list" || name == "List";
+}
+
+/// Whether @p value is a constructor parameter annotated as a list. An
+/// unannotated one gets its annotation from the calls, which the annotation
+/// pass fills in only when they agree.
+static bool
+is_list_parameter(const nlohmann::json &value, const store_scope &scope)
+{
+  if (
+    value.value("_type", "") != "Name" || scope.function == nullptr ||
+    scope.function->value("name", "") != "__init__" || scope.cls.empty())
+    return false;
+  const std::string name = value.value("id", "");
+  const int position = parameter_position(*scope.function, name);
+  return position >= 0 &&
+         json_utils::count_name_bindings(*scope.function, name) == 1 &&
+         is_list_annotation(
+           (*scope.function)["args"]["args"][position + 1].value(
+             "annotation", nlohmann::json()));
+}
+
+static bool stores_list(
+  const nlohmann::json &,
+  const nlohmann::json &value,
+  const store_scope &scope)
+{
+  return builds_list(value) || is_list_parameter(value, scope);
+}
+
+/// Whether a list has a method (or dunder) named @p name.
+static bool is_list_method(const std::string &name)
+{
+  static const std::set<std::string> names = {
+    "append",
+    "extend",
+    "insert",
+    "remove",
+    "pop",
+    "clear",
+    "index",
+    "count",
+    "sort",
+    "reverse",
+    "copy"};
+  return names.count(name) > 0 || name.rfind("__", 0) == 0;
+}
+
+bool function_call_expr::is_unknown_method_on_list_attribute() const
+{
+  const auto &func = call_["func"];
+  if (
+    func["_type"] != "Attribute" ||
+    func["value"].value("_type", "") != "Attribute" ||
+    is_list_method(function_id_.get_function()))
+    return false;
+  // The AST test comes first: reading the receiver can emit code or fail for
+  // an attribute of a module or an unknown object.
+  return attribute_only_stores(
+           converter_.ast(), func["value"].value("attr", ""), stores_list) &&
+         converter_.get_expr(func["value"]).type() ==
+           type_handler_.get_list_type();
+}
+
+exprt function_call_expr::raise_list_has_no_method() const
+{
+  exprt raise = converter_.get_exception_handler().gen_exception_raise(
+    "AttributeError",
+    "'list' object has no attribute '" + function_id_.get_function() + "'");
+  raise.location() = converter_.get_location_from_decl(call_);
+  return raise;
 }
 
 bool function_call_expr::is_set_method_call() const
@@ -4730,6 +5044,11 @@ function_call_expr::get_dispatch_table()
     {[this]() { return is_set_method_call(); },
      [this]() { return handle_set_method(); },
      "set methods"},
+
+    // A method a list lacks, on an attribute that only ever holds a list.
+    {[this]() { return is_unknown_method_on_list_attribute(); },
+     [this]() { return raise_list_has_no_method(); },
+     "unknown method on a list attribute"},
 
     // List methods
     {[this]() { return is_list_method_call(); },
@@ -7487,13 +7806,8 @@ typet function_call_expr::dict_param_value_type(const symbolt *func, size_t idx)
     converter_.ast()["body"], func->name.as_string());
   if (fn.empty() || idx >= fn["args"]["args"].size())
     return typet();
-  const nlohmann::json &ann =
-    fn["args"]["args"][idx].value("annotation", nlohmann::json());
-  if (
-    !ann.is_object() || ann.value("_type", "") != "Subscript" ||
-    !ann["slice"].contains("elts") || ann["slice"]["elts"].size() != 2)
-    return typet();
-  return converter_.get_type_from_annotation(ann["slice"]["elts"][1], ann);
+  return converter_.dict_annotation_value_type(
+    fn["args"]["args"][idx].value("annotation", nlohmann::json()));
 }
 
 // A numpy string or complex array is read only element by element; a callee
@@ -7995,34 +8309,39 @@ void function_call_expr::reject_numpy_layout_mismatch(
       "the one inferred for its parameter is not supported");
 }
 
-exprt function_call_expr::finalize_call(
+/// Forward keyword arguments to their parameter slots so the callee
+/// receives the supplied value. The validation loop in finalize_call only
+/// fills in default values for *missing* params, so kwargs would otherwise be
+/// marked "provided" yet never actually passed. Subsumes the min/max-default
+/// specific path: with the *_default models exposing a named `default`
+/// parameter, the generic forwarding lands the value in the right slot for
+/// free.
+void function_call_expr::forward_keyword_arguments(
   code_function_callt &call,
-  size_t param_offset,
+  const code_typet::argumentst &params,
   const locationt &location,
-  const symbolt *func_symbol,
-  symbolt *obj_symbol)
+  const symbolt &func_symbol)
 {
-  const auto &params = to_code_type(func_symbol->get_type()).arguments();
-  // Forward keyword arguments to their parameter slots so the callee
-  // receives the supplied value. The validation loop below only fills in
-  // default values for *missing* params, so kwargs would otherwise be
-  // marked "provided" yet never actually passed. Subsumes the
-  // min/max-default specific path: with the *_default models exposing a
-  // named `default` parameter, the generic forwarding lands the value in
-  // the right slot for free.
   if (call_.contains("keywords") && call_["keywords"].is_array())
   {
     for (const auto &kw : call_["keywords"])
     {
       if (!kw.contains("arg") || kw["arg"].is_null())
-        continue; // skip **kwargs unpacking
+      {
+        // The preprocessor spells out a splat whose keys it knows (#9329).
+        const auto &value = kw["value"];
+        if (value["_type"] == "Dict" && value["keys"].empty())
+          continue;
+        throw std::runtime_error(
+          "unsupported: a ** argument whose keys are not known statically");
+      }
       const std::string kw_name = kw["arg"].get<std::string>();
       for (size_t i = 0; i < params.size(); ++i)
       {
         if (params[i].get_base_name().as_string() == kw_name)
         {
           exprt kw_val = converter_.get_expr(kw["value"]);
-          refuse_float_to_int_argument(kw_val, params[i].type(), *func_symbol);
+          refuse_float_to_int_argument(kw_val, params[i].type(), func_symbol);
           kw_val = coerce_tagged_argument(kw_val, params[i].type(), location);
           if (call.arguments().size() <= i)
             call.arguments().resize(i + 1);
@@ -8032,6 +8351,17 @@ exprt function_call_expr::finalize_call(
       }
     }
   }
+}
+
+exprt function_call_expr::finalize_call(
+  code_function_callt &call,
+  size_t param_offset,
+  const locationt &location,
+  const symbolt *func_symbol,
+  symbolt *obj_symbol)
+{
+  const auto &params = to_code_type(func_symbol->get_type()).arguments();
+  forward_keyword_arguments(call, params, location, *func_symbol);
 
   // Add default arguments for missing parameters
   size_t num_provided_args = call_["args"].size();

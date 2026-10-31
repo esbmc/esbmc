@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--std c++17 --unwind 20
+^  FAILED +\[main\.assertion\.[0-9]+\] .*assertion n == 1
+^VERIFICATION FAILED$

@@ -95,25 +95,29 @@ def _instances(module, classes):
     return found
 
 
+def _is_scope_or_flow(node):
+    return isinstance(node,
+                      _SCOPES + (ast.Global, ast.Nonlocal, ast.Yield, ast.YieldFrom, ast.Await))
+
+
+def _is_self_method(value, table):
+    return (isinstance(value, ast.Attribute) and isinstance(value.value, ast.Name)
+            and value.value.id == "self" and value.attr in table)
+
+
 def _returned_methods(fn, table):
     """The names of the methods `fn` returns as `self.m` on every path, else None."""
-    if fn.decorator_list or not fn.args.args or fn.args.args[0].arg != "self":
+    if not (_has_plain_signature(fn) and fn.args.args and fn.args.args[0].arg == "self"):
         return None
-    args = fn.args
-    if args.vararg or args.kwarg or args.kwonlyargs or args.posonlyargs or args.defaults:
-        return None
-    names, always = [], _always_returns(fn.body)
+    names = []
     for node in _own_nodes(fn):
-        if isinstance(node, _SCOPES) or isinstance(
-                node, (ast.Global, ast.Nonlocal, ast.Yield, ast.YieldFrom, ast.Await)):
+        if _is_scope_or_flow(node):
             return None
         if isinstance(node, ast.Return):
-            value = node.value
-            if not (isinstance(value, ast.Attribute) and isinstance(value.value, ast.Name)
-                    and value.value.id == "self" and value.attr in table):
+            if not _is_self_method(node.value, table):
                 return None
-            names.append(value.attr)
-    return names if always and names else None
+            names.append(node.value.attr)
+    return names if _always_returns(fn.body) and names else None
 
 
 def _always_returns(block):

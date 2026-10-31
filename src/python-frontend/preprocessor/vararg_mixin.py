@@ -203,6 +203,10 @@ class VarargMixin:
             self.functionVarargs.add(qualified_name)
         else:
             self.functionVarargs.discard(qualified_name)
+        if node.args.kwarg:
+            self.functionAnyKeywords.add(qualified_name)
+        else:
+            self.functionAnyKeywords.discard(qualified_name)
         if node.args.vararg or node.args.kwarg:
             # Registered only once visited, since a specialization is a copy of
             # the body as the converter will see it -- an unvisited body still

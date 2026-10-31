@@ -36,6 +36,7 @@ void printf_formattert::print(std::ostream &out)
   max_outlen = 0;
   bounded = true;
   exact = true;
+  percent_n.clear();
 
   try
   {
@@ -272,6 +273,85 @@ type2tc printf_int_type(bool is_signed, const std::string &mod)
   return it == mods.end() ? type2tc() : pick_int_type(is_signed, it->second);
 }
 
+// A '*' width or precision is read from the next int argument (C11
+// 7.21.6.1p5). A non-constant one leaves the output length unknown, and so
+// does a large one, rather than rendering a field of up to 2^31 characters.
+std::optional<int64_t> printf_formattert::star_operand()
+{
+  if (next_operand == operands.end())
+  {
+    bounded = false;
+    return std::nullopt;
+  }
+  const expr2tc arg = make_type(*(next_operand++), int_type2());
+  if (!is_constant_int2t(arg))
+  {
+    bounded = false;
+    return std::nullopt;
+  }
+  const int64_t value = to_constant_int2t(arg).value.to_int64();
+  if (value > 4096 || value < -4096)
+  {
+    bounded = false;
+    return std::nullopt;
+  }
+  return value;
+}
+
+char printf_formattert::parse_width(char ch, unsigned &width, bool &left)
+{
+  if (ch != '*')
+  {
+    while (isdigit(ch))
+    {
+      width = width * 10 + (ch - '0');
+      ch = next();
+    }
+    return ch;
+  }
+  // A negative width is a '-' flag followed by a positive width.
+  if (const auto w = star_operand())
+  {
+    left |= *w < 0;
+    width = *w < 0 ? -*w : *w;
+  }
+  return next();
+}
+
+char printf_formattert::parse_precision(
+  char ch,
+  std::optional<unsigned> &precision)
+{
+  precision = 0;
+  if (ch != '*')
+  {
+    while (isdigit(ch))
+    {
+      *precision = *precision * 10 + (ch - '0');
+      ch = next();
+    }
+    return ch;
+  }
+  // A negative precision is taken as if it were omitted.
+  const auto p = star_operand();
+  if (p && *p >= 0)
+    precision = *p;
+  else
+    precision.reset();
+  return next();
+}
+
+// %n prints nothing; its pointer receives the length so far.
+void printf_formattert::record_percent_n()
+{
+  if (next_operand == operands.end())
+  {
+    bounded = false;
+    return;
+  }
+  percent_n.push_back({*(next_operand++), min_outlen, max_outlen, bounded});
+}
+
 void printf_formattert::process_format(std::ostream &out)
 {
   conversiont conv;
@@ -287,23 +367,9 @@ void printf_formattert::process_format(std::ostream &out)
     ch = next();
   }
 
-  while (isdigit(ch)) // width
-  {
-    conv.width = conv.width * 10 + (ch - '0');
-    ch = next();
-  }
-
+  ch = parse_width(ch, conv.width, conv.left);
   if (ch == '.') // precision
-  {
-    conv.precision = 0;
-    ch = next();
-
-    while (isdigit(ch))
-    {
-      *conv.precision = *conv.precision * 10 + (ch - '0');
-      ch = next();
-    }
-  }
+    ch = parse_precision(next(), conv.precision);
 
   format_constantt format_constant;
   format_constant.precision = conv.precision.value_or(6);
@@ -538,6 +604,10 @@ void printf_formattert::process_format(std::ostream &out)
     emit(pad_field("", "0x" + std::string(hex_chars, '0'), conv, false));
     break;
   }
+
+  case 'n':
+    record_percent_n();
+    break;
 
   default:
     exact = false;

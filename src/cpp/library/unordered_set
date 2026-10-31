@@ -4,6 +4,7 @@
 // Post-C++03 header: inert in older modes, matching libstdc++/libc++ (#3387).
 #if __cplusplus >= 201103L
 
+#include <initializer_list>
 #include <utility>
 #include <memory> /* std::allocator, for the Allocator parameter */
 
@@ -145,6 +146,10 @@ public:
     ~unordered_set() { size_ = 0; }
 
     explicit unordered_set(size_type /*bucket_count*/) : size_(0) {}
+
+    unordered_set(std::initializer_list<value_type> init) : size_(0) {
+        insert(init.begin(), init.end());
+    }
     
     // Iterator range constructor
     template<typename InputIterator>
@@ -245,11 +250,7 @@ public:
             return std::make_pair(iterator(data_, idx, size_), false);
         }
         
-        if (size_ >= MAX_SIZE) {
-            // Array full
-            return std::make_pair(end(), false);
-        }
-        
+        __ESBMC_assert(size_ < MAX_SIZE, "unordered_set capacity exceeded");
         // Insert new element
         data_[size_] = key;
         iterator result(data_, size_, size_ + 1);
@@ -465,6 +466,10 @@ public:
 
     explicit unordered_multiset(size_type /*bucket_count*/) : size_(0) {}
 
+    unordered_multiset(std::initializer_list<value_type> init) : size_(0) {
+        insert(init.begin(), init.end());
+    }
+
     template<typename InputIterator>
     unordered_multiset(InputIterator first, InputIterator last) : size_(0) {
         insert(first, last);
@@ -522,10 +527,12 @@ public:
 
     // [unord.multiset] erase(k) removes every equivalent key.
     size_type erase(const key_type& key) {
+        // key may refer to an element that the compaction overwrites.
+        const key_type k = key;
         size_type removed = 0;
         size_type out = 0;
         for (size_type i = 0; i < size_; ++i) {
-            if (equal_function_(data_[i], key)) {
+            if (equal_function_(data_[i], k)) {
                 ++removed;
             } else {
                 data_[out] = data_[i];

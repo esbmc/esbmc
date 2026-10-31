@@ -1,0 +1,6 @@
+CORE
+main.c
+--std c11
+^VERIFICATION FAILED$
+assertion s.b == 0
+^\*\* 1 of \d+ properties failed

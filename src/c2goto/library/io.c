@@ -5,7 +5,9 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
 
 #ifdef _MINGW
@@ -137,7 +139,6 @@ __ESBMC_HIDE:;
   // Set currently reading state
   __esbmc_currently_reading = 1;
 
-  _Bool early_termination = 0;
   // check for pre-conditions
   __ESBMC_assert(
     stream == stdin || stream != NULL,
@@ -147,48 +148,23 @@ __ESBMC_HIDE:;
   if (size < 2)
     return NULL;
 
+  // C17 7.21.7.2: read at most size - 1 characters, keeping a newline; on
+  // end-of-file before any character, leave str unchanged and return NULL.
   int i = 0;
-  // add non-deterministic characters to str
-  for (i = 0; i <= (size - 1); i++)
+  while (i < size - 1)
   {
-    // produce non-deterministic character
     int character = getc(stream);
-    // stop if we get a new line character or an EOF
+    if (character == EOF)
+    {
+      if (i == 0)
+        return NULL;
+      break;
+    }
+    str[i++] = character;
     if (character == '\n')
-    {
-      // A newline character makes fgets stop reading,
-      // but it is considered a valid character by the function
-      // and included in the string copied to str
-      str[i] = '\n';
-      early_termination = 1;
       break;
-    }
-    else if (character == EOF)
-    {
-      // we end the loop based on non-determinism
-      early_termination = 1;
-      break;
-    }
-    // this should store the character
-    str[i] = character;
   }
-
-  // has the loop terminated before filling in all positions?
-  // note that the loop can stop at any iteration
-  if (early_termination)
-  {
-    // didn't we reach the total buffer size?
-    if (i < (size - 1))
-    {
-      // append a terminating '\0' to the next position and return
-      str[++i] = '\0';
-      return str;
-    }
-  }
-
-  // append a terminating '\0' to the last position and return
-  str[size - 1] = '\0';
-
+  str[i] = '\0';
   return str;
 }
 
@@ -282,6 +258,8 @@ __ESBMC_HIDE:;
 int fputs(const char *s, FILE *stream)
 {
 __ESBMC_HIDE:;
+  // C17 7.21.7.4p2: s is read up to and including its null character.
+  (void)strlen(s);
   // Clear reading state when writing
   __esbmc_currently_reading = 0;
 
@@ -323,11 +301,11 @@ __ESBMC_HIDE:;
 ssize_t read(int fildes, void *buf, size_t nbyte)
 {
 __ESBMC_HIDE:;
-  // For valid file descriptors, succeed with positive bytes read
+  // A valid read returns 0 at end-of-file or up to nbyte bytes (POSIX read())
   if (fildes >= 0 && buf != NULL && nbyte > 0)
   {
     ssize_t nread = nondet_long();
-    __ESBMC_assume(nread > 0 && nread <= nbyte);
+    __ESBMC_assume(nread >= 0 && (size_t)nread <= nbyte);
 
     size_t i;
     for (i = 0; i < nread; i++)
@@ -392,6 +370,18 @@ __ESBMC_HIDE:;
 size_t fwrite(const void *ptr, size_t size, size_t nitems, FILE *stream)
 {
 __ESBMC_HIDE:;
+  // C17 7.21.8.2p2: all size * nitems bytes are read; accessing the first and
+  // the last one checks the whole range lies within one live object. A
+  // product that overflows cannot fit any object.
+  size_t bytes;
+  if (__builtin_mul_overflow(size, nitems, &bytes))
+    bytes = SIZE_MAX;
+  if (bytes > 0)
+  {
+    const unsigned char *p = ptr;
+    (void)p[0];
+    (void)p[bytes - 1];
+  }
   size_t nwrite;
   __ESBMC_assume(nwrite <= nitems);
   return nwrite;
@@ -400,6 +390,7 @@ __ESBMC_HIDE:;
 int fputs_unlocked(const char *s, FILE *stream)
 {
 __ESBMC_HIDE:;
+  (void)strlen(s);
   // Always set pending data when fputs_unlocked is called with valid parameters
   if (stream != NULL)
   {

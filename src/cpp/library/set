@@ -411,7 +411,7 @@ public:
       v1++;
     }
     _size = i;
-    std::sort(buf, buf + _size /*,rule*/);
+    std::sort(buf, buf + _size, rule);
   }
 
   template <class Iterator>
@@ -576,7 +576,7 @@ public:
   {
     // Find the correct position to insert while maintaining sorted order
     int insert_pos = 0;
-    while (insert_pos < _size && buf[insert_pos] < x)
+    while (insert_pos < _size && !rule(x, buf[insert_pos]))
     {
       insert_pos++;
     }
@@ -619,24 +619,20 @@ public:
 
   size_type erase(const key_type &x)
   {
-    int k;
-    for (k = 0; k != _size; k++)
-      if (buf[k] == x)
-        break;
-
-    if (k == _size)
+    // x may refer to an element that the compaction overwrites.
+    const key_type k = x;
+    size_type n = 0;
+    for (size_t i = 0; i < _size; i++)
     {
-      return 0; // Element not found, nothing erased
+      if (buf[i] == k)
+        n++;
+      else
+        buf[i - n] = buf[i];
     }
-
-    // Element found, erase it
-    for (int i = k + 1; i < _size; i++)
-    {
-      buf[i - 1] = buf[i];
-    }
-    _size--;
-    buf[_size] = Key();
-    return 1; // One element erased
+    for (size_t i = _size - n; i < _size; i++)
+      buf[i] = Key();
+    _size -= n;
+    return n;
   }
 
   void erase(iterator first, iterator last)
@@ -670,12 +666,12 @@ public:
 
   key_compare key_comp() const
   {
-    return Compare();
+    return rule;
   }
 
   value_compare value_comp() const
   {
-    return Compare();
+    return rule;
   }
   // set operations:
 
@@ -717,12 +713,12 @@ public:
   }
 #endif
 
-  // lower_bound returns iterator to first element >= x
+  // lower_bound returns iterator to first element not ordered before x
   iterator lower_bound(const key_type &x)
   {
     for (int i = 0; i < _size; i++)
     {
-      if (buf[i] >= x)
+      if (!rule(buf[i], x))
       {
         return iterator(buf, i);
       }
@@ -734,7 +730,7 @@ public:
   {
     for (int i = 0; i < _size; i++)
     {
-      if (buf[i] >= x)
+      if (!rule(buf[i], x))
       {
         return const_iterator(buf, i);
       }
@@ -742,12 +738,12 @@ public:
     return end();
   }
 
-  // upper_bound returns iterator to first element > x
+  // upper_bound returns iterator to first element ordered after x
   iterator upper_bound(const key_type &x)
   {
     for (int i = 0; i < _size; i++)
     {
-      if (buf[i] > x)
+      if (rule(x, buf[i]))
       {
         return iterator(buf, i);
       }
@@ -759,7 +755,7 @@ public:
   {
     for (int i = 0; i < _size; i++)
     {
-      if (buf[i] > x)
+      if (rule(x, buf[i]))
       {
         return const_iterator(buf, i);
       }
@@ -1212,7 +1208,7 @@ public:
     while (v1 != v2)
       buf[i++] = *v1++;
     _size = i;
-    std::sort(buf, buf + _size /*,rule*/);
+    std::sort(buf, buf + _size, rule);
     _size = std::unique(buf, buf + _size) - buf;
   }
 
@@ -1232,7 +1228,7 @@ public:
       first++;
     }
     _size = i;
-    std::sort(buf, buf + _size /*,rule*/);
+    std::sort(buf, buf + _size, rule);
     _size = std::unique(buf, buf + _size) - buf;
   }
 
@@ -1385,7 +1381,7 @@ public:
 
     // Find the correct position to insert while maintaining sorted order
     int insert_pos = 0;
-    while (insert_pos < _size && buf[insert_pos] < x)
+    while (insert_pos < _size && rule(buf[insert_pos], x))
     {
       insert_pos++;
     }
@@ -1477,12 +1473,12 @@ public:
 
   key_compare key_comp() const
   {
-    return Compare();
+    return rule;
   }
 
   value_compare value_comp() const
   {
-    return Compare();
+    return rule;
   }
   // set operations:
 
@@ -1524,12 +1520,12 @@ public:
   }
 #endif
 
-  // lower_bound returns iterator to first element >= x
+  // lower_bound returns iterator to first element not ordered before x
   iterator lower_bound(const key_type &x)
   {
     for (int i = 0; i < _size; i++)
     {
-      if (buf[i] >= x)
+      if (!rule(buf[i], x))
       {
         return iterator(buf, i);
       }
@@ -1541,7 +1537,7 @@ public:
   {
     for (int i = 0; i < _size; i++)
     {
-      if (buf[i] >= x)
+      if (!rule(buf[i], x))
       {
         return const_iterator(buf, i);
       }
@@ -1549,12 +1545,12 @@ public:
     return end();
   }
 
-  // upper_bound returns iterator to first element > x
+  // upper_bound returns iterator to first element ordered after x
   iterator upper_bound(const key_type &x)
   {
     for (int i = 0; i < _size; i++)
     {
-      if (buf[i] > x)
+      if (rule(x, buf[i]))
       {
         return iterator(buf, i);
       }
@@ -1566,7 +1562,7 @@ public:
   {
     for (int i = 0; i < _size; i++)
     {
-      if (buf[i] > x)
+      if (rule(x, buf[i]))
       {
         return const_iterator(buf, i);
       }

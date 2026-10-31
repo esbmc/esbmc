@@ -1,0 +1,2 @@
+regression/esbmc-unix/por_multi_target_pointer_write
+regression/esbmc-unix/por_multi_target_pointer_write_fail

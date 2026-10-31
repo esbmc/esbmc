@@ -995,6 +995,16 @@ class CoreVisitorsMixin:
     def _display_name(function_name):
         return function_name.split(".")[-1] if "." in function_name else function_name
 
+    def _validate_unexpected_keywords(self, function_name, expected_args, kwonly_args, keywords):
+        if function_name in self.functionAnyKeywords:
+            return
+        unexpected = next(
+            (name for name in keywords
+             if name is not None and name not in expected_args and name not in kwonly_args), None)
+        if unexpected is not None:
+            raise CallBindingError(f"{self._display_name(function_name)}() got an unexpected "
+                                   f"keyword argument '{unexpected}'")
+
     def _validate_kwonly_args(self, function_name, kwonly_args, keywords):
         missing_kwonly = [
             kwarg for kwarg in kwonly_args
@@ -1219,7 +1229,12 @@ class CoreVisitorsMixin:
                 "when x is a list or tuple of statically known length")
         if self._forwards_own_kwargs(node):
             return False
+        if any(kw.arg is None for kw in node.keywords):
+            raise NotImplementedError(
+                f"Unpacking **x into {self._display_name(function_name)}() is supported only "
+                "when x is a dict of constant str keys the callee takes")
         keywords = self._build_keyword_map(node)
+        self._validate_unexpected_keywords(function_name, expected_args, kwonly_args, keywords)
         self._validate_kwonly_args(function_name, kwonly_args, keywords)
         self._validate_positional_call_arity(node, function_name, expected_args)
         self._validate_duplicate_positional_keyword(node, expected_args, keywords)

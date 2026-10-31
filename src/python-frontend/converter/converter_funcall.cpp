@@ -574,6 +574,7 @@ exprt python_converter::get_call_expr(const nlohmann::json &element)
       return *call;
   reject_numpy_view_callee(element);
   reject_inline_runtime_numpy_slice(element);
+  reject_unmodelled_class_call(element);
   if (std::optional<nlohmann::json> folded = fold_numpy_view_call(element))
     return get_expr(*folded);
   if (std::optional<exprt> call = call_returned_function(element))
@@ -587,6 +588,18 @@ exprt python_converter::get_call_expr(const nlohmann::json &element)
   if (numpy_random::is_random_call(element, *ast_json))
     return numpy_random(*this, element).get();
   return get_function_call(element);
+}
+
+/// The parser marks a call of a class from a module with no model, whose
+/// instance the converter has no type for.
+void python_converter::reject_unmodelled_class_call(
+  const nlohmann::json &call) const
+{
+  if (call.value("unmodelled_class", false))
+    throw std::runtime_error(
+      "unsupported: creating an instance of " +
+      json_utils::dotted_name(call["func"]) +
+      ", a class of a module that is not modelled");
 }
 
 // `obj.prop()` on a @property: CPython runs the getter, then calls the value
@@ -2346,7 +2359,8 @@ exprt python_converter::materialize_list_function_call(
   // inline, e.g. `f()[0:8]`, and a dict when read as `f()[k]`).
   if (
     call.type() != type_handler_.get_list_type() && !call.type().is_array() &&
-    !dict_handler_->is_dict_type(ns.follow(call.type())))
+    !dict_handler_->is_dict_type(ns.follow(call.type())) &&
+    !tuple_handler_->is_tuple_type(ns.follow(call.type())))
     return expr;
 
   locationt location = get_location_from_decl(element);
@@ -2369,6 +2383,16 @@ exprt python_converter::materialize_list_function_call(
   new_call.location() = location;
 
   target_block.copy_to_operands(new_call);
+
+  if (
+    call.type() == type_handler_.get_list_type() && call.function().is_symbol())
+  {
+    const exprt ret =
+      get_return_from_func(call.function().identifier().c_str());
+    if (!ret.is_nil() && ret.operands().size() == 1 && ret.op0().is_symbol())
+      element_type_registry_.assign_from(
+        ret.op0().identifier().as_string(), tmp_var_symbol.id.as_string());
+  }
 
   // Return reference to the temp variable
   return symbol_expr(tmp_var_symbol);
