@@ -23,7 +23,7 @@ std::string numpy_dtypet::name() const
   case kindt::complex:
     return "complex" + std::to_string(bits);
   case kindt::string:
-    return "str";
+    return bits == 0 ? "str" : "str" + std::to_string(bits);
   }
   return {};
 }

@@ -422,6 +422,17 @@ void python_converter::reject_builtin_over_complex_array(
       node["func"]["id"].get<std::string>() + "() is not supported");
 }
 
+// sum() of a narrow array wraps at its width, so it reads the elements.
+bool python_converter::is_narrow_builtin_sum(const nlohmann::json &node)
+{
+  if (
+    node["func"].value("id", "") != "sum" ||
+    !is_rank1_numpy_array_name(node["args"][0]))
+    return false;
+  const auto dtype = numpy_array_dtype(node["args"][0]);
+  return dtype && type_utils::is_numpy_scalar_type(dtype->element_type());
+}
+
 // Replaces, in the expressions of `node`, each view argument of a
 // list-consuming builtin by the list of its elements.
 bool python_converter::adapt_numpy_view_builtin_arguments(nlohmann::json &node)
@@ -443,7 +454,7 @@ bool python_converter::adapt_numpy_view_builtin_arguments(nlohmann::json &node)
       "TypeError: passing a numpy view to " +
       node["func"]["id"].get<std::string>() +
       "() with a key or another element-dependent keyword is not supported");
-  if (is_builtin_over_numpy_view(node))
+  if (is_builtin_over_numpy_view(node) && !is_narrow_builtin_sum(node))
   {
     node["args"][0] = tolist_call(node["args"][0]);
     changed = true;

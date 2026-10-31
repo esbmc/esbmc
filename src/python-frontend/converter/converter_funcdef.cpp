@@ -2509,24 +2509,47 @@ static nlohmann::json zero_literal(
 
 // The array type of a literal np.array call, or of another constructor with
 // literal arguments: the type of a literal of the same shape and dtype.
+static bool stores_real_numbers(const numpy_dtypet &dtype)
+{
+  return dtype.kind != numpy_dtypet::kindt::complex &&
+         dtype.kind != numpy_dtypet::kindt::string;
+}
+
+static typet
+in_real_dtype(const typet &type, const std::optional<numpy_dtypet> &dtype)
+{
+  return dtype && stores_real_numbers(*dtype)
+           ? with_element_type(type, dtype->element_type())
+           : type;
+}
+
+static bool has_dtype_keyword(const nlohmann::json &call)
+{
+  const auto &keywords = call.value("keywords", nlohmann::json::array());
+  return std::any_of(
+    keywords.begin(), keywords.end(), [](const nlohmann::json &kw) {
+      return kw.value("arg", "") == "dtype";
+    });
+}
+
+std::optional<numpy_dtypet>
+python_converter::constructor_keyword_dtype(const nlohmann::json &call) const
+{
+  for (const auto &kw : call.value("keywords", nlohmann::json::array()))
+    if (kw.value("arg", "") == "dtype")
+      return numpy_dtype_from_name(
+        extract_numpy_dtype_name(kw["value"], *ast_json));
+  return std::nullopt;
+}
+
 std::optional<typet>
 python_converter::literal_numpy_array_type(const nlohmann::json &call) const
 {
-  std::string dtype;
-  for (const auto &kw : call.value("keywords", nlohmann::json::array()))
-    if (kw.value("arg", "") == "dtype")
-      dtype = extract_numpy_dtype_name(kw["value"], *ast_json);
-  const auto parsed = numpy_dtype_from_name(dtype);
-  const auto in_dtype = [&](const typet &type) -> typet {
-    return parsed && !parsed->element_type().is_nil() &&
-               !parsed->element_type().id().empty() &&
-               parsed->kind != numpy_dtypet::kindt::complex
-             ? with_element_type(type, parsed->element_type())
-             : type;
-  };
+  const std::optional<numpy_dtypet> dtype = constructor_keyword_dtype(call);
   if (is_numpy_array_literal_call(call))
-    return in_dtype(
-      type_handler_.get_typet(numpy_literal_with_dtype(call, *ast_json)));
+    return in_real_dtype(
+      type_handler_.get_typet(numpy_literal_with_dtype(call, *ast_json)),
+      dtype);
   auto layout = literal_constructor_layout(call);
   if (!layout || layout->first.empty())
     return std::nullopt;
@@ -2536,13 +2559,11 @@ python_converter::literal_numpy_array_type(const nlohmann::json &call) const
   for (const auto &kw : call.value("keywords", nlohmann::json::array()))
     if (kw.value("arg", "") != "dtype")
       return std::nullopt;
-  if (
-    !dtype.empty() &&
-    (!parsed || parsed->kind == numpy_dtypet::kindt::complex ||
-     parsed->kind == numpy_dtypet::kindt::string))
+  if (has_dtype_keyword(call) && (!dtype || !stores_real_numbers(*dtype)))
     return std::nullopt;
-  return in_dtype(
-    type_handler_.get_typet(zero_literal(layout->first, 0, layout->second)));
+  return in_real_dtype(
+    type_handler_.get_typet(zero_literal(layout->first, 0, layout->second)),
+    dtype);
 }
 
 // `f(np.eye(2))`: a constructor written as an argument is bound to a name

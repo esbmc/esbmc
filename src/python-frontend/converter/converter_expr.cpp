@@ -1013,6 +1013,12 @@ std::optional<exprt> python_converter::try_get_numpy_pointer_view_shape_attr(
   const symbolt &symbol,
   const std::string &attr_name)
 {
+  const nlohmann::json name = {
+    {"_type", "Name"}, {"id", symbol.name.as_string()}};
+  if (
+    std::optional<exprt> storage = try_get_numpy_storage_attr(name, attr_name))
+    return storage;
+
   auto it = numpy_pointer_view_info_.find(symbol.id.as_string());
   if (it == numpy_pointer_view_info_.end() && !symbol.name.empty())
     it = numpy_pointer_view_info_.find(symbol.name.as_string());
@@ -1341,7 +1347,7 @@ std::optional<exprt> python_converter::try_get_numpy_value_shape_attr(
   const std::string &attr_name)
 {
   if (attr_name != "shape" && attr_name != "ndim" && attr_name != "size")
-    return std::nullopt;
+    return try_get_numpy_storage_attr(base_node, attr_name);
 
   if (
     std::optional<exprt> tracked_attr =
@@ -2610,11 +2616,6 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     break;
   case ExpressionType::VARIABLE_REF:
   {
-    if (std::optional<exprt> attr = try_get_numpy_storage_attr(element))
-    {
-      expr = *attr;
-      break;
-    }
     std::string var_name;
     bool is_class_attr = false;
     if (element["_type"] == "Name")

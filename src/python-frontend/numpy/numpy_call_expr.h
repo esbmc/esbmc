@@ -138,6 +138,12 @@ private:
 
   std::string get_dtype() const;
   typet get_typet_from_dtype() const;
+  std::optional<exprt> try_narrow_operand_call(const std::string &function);
+  bool is_narrow_operand(const nlohmann::json &arg) const;
+  bool has_narrow_operand() const;
+  std::optional<exprt> narrow_ufunc_as_operator(const std::string &function);
+  std::optional<exprt>
+  call_with_narrow_constructors_bound(const std::string &function);
   size_t get_dtype_size() const;
 
   // `*_like`'s element type from dtype= (an override) or the base array's

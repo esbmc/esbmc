@@ -487,7 +487,7 @@ public:
     {
       const typet &subtype = type.subtype();
       // Direct pointer to char: char*
-      if (subtype == char_type())
+      if (is_char_storage(subtype))
         return true;
       // Pointer to char array: char(*)[N] (string literals)
       if (subtype.is_array() && is_char_storage(subtype.subtype()))
