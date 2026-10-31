@@ -921,15 +921,19 @@ exprt function_call_expr::handle_bool_call(
   if (is_complex_type(value_expr.type()))
     return complex_to_bool_expr(value_expr);
 
-  // A container is true when non-empty; relabelling its pointer as a bool
-  // leaves a term the solver rejects. A str keeps the path below: strlen stops
-  // at an embedded NUL, which bool("\x00") must not.
-  if (!type_utils::is_string_type(value_expr.type()))
+  if (type_utils::is_string_type(value_expr.type()))
   {
-    const exprt is_empty = converter_.build_emptiness_check(value_expr, call_);
-    if (is_empty.is_not_nil())
-      return not_exprt(is_empty);
+    const locationt location = converter_.get_location_from_decl(call_);
+    if (value_expr.is_function_call())
+      value_expr = converter_.store_call_result(value_expr, location, "bool");
+    return converter_.apply_string_truthiness(value_expr, location);
   }
+
+  // A container is true when non-empty; relabelling its pointer as a bool
+  // leaves a term the solver rejects.
+  const exprt is_empty = converter_.build_emptiness_check(value_expr, call_);
+  if (is_empty.is_not_nil())
+    return not_exprt(is_empty);
 
   const typet bool_t = type_handler_.get_typet("bool", arg_size);
   return retype_or_typecast(value_expr, bool_t);
