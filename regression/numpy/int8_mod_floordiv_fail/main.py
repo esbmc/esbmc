@@ -1,5 +1,6 @@
 import numpy as np
 
-a = np.add(7, 0, dtype=np.int8)
-b = np.add(3, 0, dtype=np.int8)
-assert a % b == 0
+x = np.array([100, -100], dtype=np.int8)
+u = np.array([200, 100], dtype=np.uint8)
+mixed = x + u
+assert mixed[0] == 44
