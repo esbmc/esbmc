@@ -904,7 +904,18 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
       return cond;
     }
 
-    return apply_string_truthiness(value_expr, get_location_from_decl(element));
+    exprt cond =
+      apply_string_truthiness(value_expr, get_location_from_decl(element));
+    // A str parameter may hold None, which is false; strlen must not read it.
+    if (!cond.is_boolean() || !value_expr.type().is_pointer())
+      return cond;
+    expr2tc value2, cond2;
+    migrate_expr(value_expr, value2);
+    migrate_expr(cond, cond2);
+    exprt guarded = migrate_expr_back(
+      and2tc(notequal2tc(value2, gen_zero(value2->type)), cond2));
+    guarded.location() = cond.location();
+    return guarded;
   };
 
   // Mark that we're processing operands in an expression context
