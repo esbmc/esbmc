@@ -4998,29 +4998,111 @@ static auto create_binary_op(
   return bin_op;
 }
 
+// Reduces a dtype spelling to its canonical name; a spelling it does not know
+// is returned as written. A code or width NumPy accepts but the model does not
+// is rejected specifically, never read as another dtype.
 static std::string normalize_numpy_dtype_name(const std::string &dtype)
 {
-  if (dtype == "bool" || dtype == "bool_")
-    return "bool";
-  if (dtype == "int" || dtype == "int_")
-    return "int64";
-  if (dtype == "uint" || dtype == "uint_")
-    return "uint64";
-  if (dtype == "float" || dtype == "float_")
-    return "float64";
-  if (dtype == "complex" || dtype == "complex_")
-    return "complex128";
-  if (dtype == "str_" || dtype == "unicode")
-    return "str";
-  if (dtype == "object_" || dtype == "O")
-    return "object";
-  return dtype;
+  static const std::map<std::string, std::string> aliases = {
+    {"bool_", "bool"},
+    {"?", "bool"},
+    {"b1", "bool"},
+    {"int", "int64"},
+    {"int_", "int64"},
+    {"i8", "int64"},
+    {"l", "int64"},
+    {"q", "int64"},
+    {"intp", "int64"},
+    {"longlong", "int64"},
+    {"long", "int64"},
+    {"uint", "uint64"},
+    {"uint_", "uint64"},
+    {"u8", "uint64"},
+    {"L", "uint64"},
+    {"Q", "uint64"},
+    {"uintp", "uint64"},
+    {"ulonglong", "uint64"},
+    {"ulong", "uint64"},
+    {"i1", "int8"},
+    {"b", "int8"},
+    {"byte", "int8"},
+    {"i2", "int16"},
+    {"h", "int16"},
+    {"short", "int16"},
+    {"i4", "int32"},
+    {"i", "int32"},
+    {"intc", "int32"},
+    {"u1", "uint8"},
+    {"B", "uint8"},
+    {"ubyte", "uint8"},
+    {"u2", "uint16"},
+    {"H", "uint16"},
+    {"ushort", "uint16"},
+    {"u4", "uint32"},
+    {"I", "uint32"},
+    {"uintc", "uint32"},
+    {"float", "float64"},
+    {"float_", "float64"},
+    {"f8", "float64"},
+    {"d", "float64"},
+    {"double", "float64"},
+    {"f4", "float32"},
+    {"f", "float32"},
+    {"single", "float32"},
+    {"f2", "float16"},
+    {"e", "float16"},
+    {"half", "float16"},
+    {"complex", "complex128"},
+    {"complex_", "complex128"},
+    {"c16", "complex128"},
+    {"D", "complex128"},
+    {"cdouble", "complex128"},
+    {"c8", "complex64"},
+    {"F", "complex64"},
+    {"csingle", "complex64"},
+    {"str_", "str"},
+    {"unicode", "str"},
+    {"U", "str"},
+    {"object_", "object"},
+    {"O", "object"}};
+  std::string name = dtype;
+  if (name.size() > 1 && (name[0] == '<' || name[0] == '=' || name[0] == '|'))
+    name = name.substr(1);
+  else if (name.size() > 1 && name[0] == '>')
+    throw std::runtime_error(
+      "TypeError: a non-native numpy byte order is not supported");
+  if (name.empty())
+    return name;
+  const bool sized =
+    name.size() > 1 &&
+    std::all_of(name.begin() + 1, name.end(), [](unsigned char c) {
+      return std::isdigit(c) != 0;
+    });
+  if (name[0] == 'V' && (sized || name.size() == 1))
+    throw std::runtime_error("TypeError: numpy void dtypes are not supported");
+  if (name[0] == 'S' && (sized || name.size() == 1))
+    throw std::runtime_error("TypeError: numpy bytes dtypes are not supported");
+  if (name[0] == 'U' && sized)
+  {
+    constexpr std::size_t max_numpy_string_width = 1024;
+    const std::string digits = name.substr(1);
+    if (
+      digits.size() > 4 || std::stoul(digits) == 0 ||
+      std::stoul(digits) > max_numpy_string_width)
+      throw std::runtime_error(
+        "TypeError: numpy string width " + digits + " is not supported");
+    return name;
+  }
+  const auto alias = aliases.find(name);
+  return alias == aliases.end() ? name : alias->second;
 }
 
 // The scalar dtypes a constructor can store, plus object, which every
 // constructor rejects with its own diagnostic further on.
 static bool is_named_numpy_dtype(const std::string &dtype)
 {
+  if (numpy_dtype_from_name(dtype))
+    return true;
   static const std::set<std::string> names = {
     "bool",
     "int8",
@@ -5071,6 +5153,47 @@ literal_shape_dims(const nlohmann::json &elts, const std::string &function)
   return dims;
 }
 
+static void count_name_bindings(
+  const nlohmann::json &node,
+  const std::string &name,
+  std::size_t &bindings,
+  const nlohmann::json *&value)
+{
+  if (node.is_object())
+  {
+    const std::string kind = node.value("_type", "");
+    if (kind == "arg" && node.value("arg", "") == name)
+      ++bindings;
+    if (
+      kind == "Name" && node.value("id", "") == name && node.contains("ctx") &&
+      node["ctx"].value("_type", "") != "Load")
+      ++bindings;
+    if (
+      (kind == "Assign" && node["targets"].size() == 1 &&
+       node["targets"][0].value("id", "") == name) ||
+      (kind == "AnnAssign" && node["target"].value("id", "") == name))
+      value = &node["value"];
+  }
+  if (node.is_object() || node.is_array())
+    for (const auto &child : node)
+      count_name_bindings(child, name, bindings, value);
+}
+
+// What `dt = np.int8` binds, when the program binds @p name nowhere else and to
+// a spelling reading it twice cannot evaluate anything.
+static const nlohmann::json *
+stable_dtype_binding(const nlohmann::json &ast, const std::string &name)
+{
+  std::size_t bindings = 0;
+  const nlohmann::json *value = nullptr;
+  count_name_bindings(ast, name, bindings, value);
+  if (bindings != 1 || value == nullptr)
+    return nullptr;
+  const std::string kind = value->value("_type", "");
+  return kind == "Name" || kind == "Attribute" || kind == "Constant" ? value
+                                                                     : nullptr;
+}
+
 // The single normalization of a dtype= argument: a scalar type named by a
 // builtin, a numpy attribute or a string, or a specific rejection.
 std::string extract_numpy_dtype_name(
@@ -5102,6 +5225,8 @@ std::string extract_numpy_dtype_name(
   const std::string name = normalize_numpy_dtype_name(dtype_node["id"]);
   if (is_named_numpy_dtype(name))
     return name;
+  if (const nlohmann::json *bound = stable_dtype_binding(ast, dtype_node["id"]))
+    return extract_numpy_dtype_name(*bound, ast);
   throw std::runtime_error("Unsupported dtype value: " + name);
 }
 
@@ -5165,7 +5290,9 @@ static nlohmann::json make_numpy_typed_constant(
   if (normalized.empty())
     return {{"_type", "Constant"}, {"value", value.value.real()}};
 
-  if (normalized == "str")
+  if (
+    numpy_dtype_from_name(normalized) &&
+    numpy_dtype_from_name(normalized)->kind == numpy_dtypet::kindt::string)
     throw std::runtime_error(
       "TypeError: converting numbers to a numpy string dtype is not "
       "supported");
@@ -5241,7 +5368,9 @@ static nlohmann::json cast_numpy_literal_to_dtype(
 
   if (is_numpy_string_literal(node))
   {
-    if (normalize_numpy_dtype_name(dtype) == "str")
+    const auto parsed =
+      numpy_dtype_from_name(normalize_numpy_dtype_name(dtype));
+    if (parsed && parsed->kind == numpy_dtypet::kindt::string)
       return node;
     throw std::runtime_error(
       "TypeError: converting a string to a numeric numpy dtype is not "
@@ -6932,7 +7061,13 @@ typet numpy_call_expr::constructor_element_type(
   const nlohmann::json &list) const
 {
   if (std::optional<std::size_t> width = numpy_string_width(list))
+  {
+    // An explicit `U<n>` fixes the width; as_numpy_element truncates to it.
+    const auto parsed = numpy_dtype_from_name(get_dtype());
+    if (parsed && parsed->kind == numpy_dtypet::kindt::string && parsed->bits)
+      return type_handler_.build_array(char_type(), parsed->bits / 32 + 1);
     return type_handler_.build_array(char_type(), *width + 1);
+  }
   if (has_complex_leaf(list))
     return get_complex_struct_type();
   // int64, float64 and bool are what the literal already converts to.

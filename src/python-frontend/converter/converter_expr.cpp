@@ -2513,6 +2513,15 @@ exprt python_converter::get_module_member(
   symbolt *symbol = find_symbol(module_sid.to_string());
   if (!symbol)
   {
+    // `dt = np.int8` binds a dtype; only its spelling is ever read, by
+    // extract_numpy_dtype_name through the binding.
+    if (
+      is_imported_numpy_module_alias(*ast_json, var_name) &&
+      numpy_dtype_from_name(attr_name))
+    {
+      nlohmann::json spelling = {{"_type", "Constant"}, {"value", attr_name}};
+      return get_expr(spelling);
+    }
     throw std::runtime_error(
       fmt::format(
         "Module member '{}' not found in module '{}'", attr_name, var_name));

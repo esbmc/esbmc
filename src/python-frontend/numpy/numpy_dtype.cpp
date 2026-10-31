@@ -73,9 +73,13 @@ std::optional<numpy_dtypet> numpy_dtype_from_name(const std::string &name)
     {"complex128", {kindt::complex, 128}},
     {"str", {kindt::string, 0}}};
   const auto it = dtypes.find(name);
-  if (it == dtypes.end())
-    return std::nullopt;
-  return it->second;
+  if (it != dtypes.end())
+    return it->second;
+  // `U<n>`: four bytes a character, as `.itemsize` reports them.
+  if (name.size() > 1 && name[0] == 'U')
+    return numpy_dtypet{
+      kindt::string, static_cast<unsigned>(std::stoul(name.substr(1))) * 32};
+  return std::nullopt;
 }
 
 std::optional<numpy_dtypet> numpy_dtype_of_element(const typet &element)
