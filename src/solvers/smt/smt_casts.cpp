@@ -244,12 +244,13 @@ smt_solver_baset::convert_typecast_to_ints_intmode(const typecast2t &cast)
     smt_astt value = convert_ast(cast.from);
     const unsigned width = cast.type->get_width();
     if (
-      !is_unsignedbv_type(cast.from) || !is_signedbv_type(cast.type) ||
-      cast.from->type->get_width() != width)
+      !is_concat2t(cast.from) || !is_unsignedbv_type(cast.from) ||
+      !is_signedbv_type(cast.type) || cast.from->type->get_width() != width)
       return value;
 
-    // An unsigned value above the signed maximum reads back negative, as when
-    // a signed integer is reassembled from its bytes (#9531).
+    // Bytes joined into an unsigned value read back as a signed one, so a
+    // value above the signed maximum is negative (#9531). Other casts keep
+    // their value: the extra branch slows every --ir solve that has one.
     const BigInt modulus = BigInt::power2(width);
     const BigInt half = BigInt::power2(width - 1);
     return mk_ite(

@@ -195,14 +195,19 @@ bool goto_symext::recover_va_list_args(
   return true;
 }
 
-// One past a printf-family call's last argument operand. A v* call's arguments
-// sit behind its va_list, its last operand; leaving it out makes any
-// conversion that needs an argument unbounded.
-static size_t printf_args_end(const code_printf2t &call)
+std::vector<expr2tc>
+goto_symext::printf_args(const code_printf2t &call, size_t fmt_idx)
 {
-  const bool takes_va_list =
-    call.kind == printf_kindt::VSPRINTF || call.kind == printf_kindt::VSNPRINTF;
-  return call.operands.size() - (takes_va_list ? 1 : 0);
+  // A v* call's arguments sit behind its va_list, its last operand. When they
+  // cannot be recovered, a conversion that needs one is unbounded.
+  if (
+    call.kind == printf_kindt::VSPRINTF || call.kind == printf_kindt::VSNPRINTF)
+  {
+    std::list<expr2tc> recovered;
+    recover_va_list_args(call, fmt_idx, recovered);
+    return {recovered.begin(), recovered.end()};
+  }
+  return {call.operands.begin() + fmt_idx + 1, call.operands.end()};
 }
 
 bool goto_symext::format_printf_output(
@@ -218,11 +223,9 @@ bool goto_symext::format_printf_output(
     return false;
 
   constant_args = true;
-  const size_t end = printf_args_end(call);
   std::list<expr2tc> args;
-  for (size_t i = fmt_idx + 1; i < end; i++)
+  for (expr2tc arg : printf_args(call, fmt_idx))
   {
-    expr2tc arg = call.operands[i];
     cur_state->rename(arg);
     do_simplify(arg);
     constant_args &= is_constant_int2t(arg) || is_literal_string_start(arg);
@@ -372,7 +375,8 @@ expr2tc goto_symext::printf_output_length(
   size_t text = 0;
   max_len = 0;
   expr2tc len = gen_zero(int_type2());
-  size_t arg = fmt_idx + 1;
+  const std::vector<expr2tc> args = printf_args(call, fmt_idx);
+  size_t arg = 0;
   for (size_t i = 0; i < f.size(); i++)
   {
     if (f[i] != '%')
@@ -392,9 +396,9 @@ expr2tc goto_symext::printf_output_length(
     const size_t conv = i;
     while (i < f.size() && std::string("jlzt").find(f[i]) != std::string::npos)
       i++;
-    if (i == f.size() || arg == printf_args_end(call))
+    if (i == f.size() || arg == args.size())
       return expr2tc();
-    expr2tc v = call.operands[arg++];
+    expr2tc v = args[arg++];
     expr2tc conv_len;
     const size_t max_before = max_len;
     // A length modifier on %s makes it a wide string.

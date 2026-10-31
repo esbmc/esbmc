@@ -1,0 +1,7 @@
+CORE
+main.c
+--64 --multi-property
+^VERIFICATION FAILED$
+FAILED.*line 12 .*assertion r != 6
+FAILED.*line 17 .*assertion r == 2
+FAILED.*line 20 .*assertion r == 2
