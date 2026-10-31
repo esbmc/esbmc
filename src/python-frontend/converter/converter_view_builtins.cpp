@@ -409,7 +409,9 @@ void python_converter::reject_builtin_over_complex_array(
   const nlohmann::json &node) const
 {
   if (
-    !is_builtin_over_numpy_view(node) || node["func"].value("id", "") == "list")
+    !is_builtin_over_numpy_view(node) ||
+    node["func"].value("id", "") == "list" ||
+    node["func"].value("id", "") == "sum")
     return;
   const nlohmann::json &arg = node["args"][0];
   const std::string id = arg.value("_type", "") == "Name"
@@ -433,8 +435,11 @@ bool python_converter::is_narrow_builtin_sum(const nlohmann::json &node)
     !is_rank1_numpy_array_name(node["args"][0]))
     return false;
   const auto dtype = numpy_array_dtype(node["args"][0]);
-  return dtype &&
-         (dtype->is_integer() ||
+  if (!dtype)
+    return false;
+  if (dtype->kind == numpy_dtypet::kindt::complex)
+    return true;
+  return (dtype->is_integer() ||
           dtype->kind == numpy_dtypet::kindt::floating) &&
          dtype->bits < 64;
 }

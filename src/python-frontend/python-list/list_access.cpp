@@ -2112,7 +2112,8 @@ exprt python_list::emit_ll_temp(
 // np.eye/np.full can bind list objects; only numeric storage is strided.
 static bool is_numeric_storage(const typet &elem_type)
 {
-  return is_number(elem_type) || elem_type.is_bool();
+  return is_number(elem_type) || elem_type.is_bool() ||
+         is_complex_type(elem_type);
 }
 
 std::optional<python_list::strided_view_desc> python_list::contiguous_view_desc(

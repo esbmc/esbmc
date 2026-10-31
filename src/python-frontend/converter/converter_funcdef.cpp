@@ -2542,14 +2542,25 @@ python_converter::constructor_keyword_dtype(const nlohmann::json &call) const
   return std::nullopt;
 }
 
+typet python_converter::literal_call_array_type(
+  const nlohmann::json &call,
+  const std::optional<numpy_dtypet> &dtype) const
+{
+  const typet shape =
+    type_handler_.get_typet(numpy_literal_with_dtype(call, *ast_json));
+  if (dtype && dtype->kind == numpy_dtypet::kindt::complex)
+    return with_element_type(shape, dtype->element_type());
+  if (numpy_literal_call_is_complex(call))
+    return with_element_type(shape, get_complex_struct_type());
+  return in_real_dtype(shape, dtype);
+}
+
 std::optional<typet>
 python_converter::literal_numpy_array_type(const nlohmann::json &call) const
 {
   const std::optional<numpy_dtypet> dtype = constructor_keyword_dtype(call);
   if (is_numpy_array_literal_call(call))
-    return in_real_dtype(
-      type_handler_.get_typet(numpy_literal_with_dtype(call, *ast_json)),
-      dtype);
+    return literal_call_array_type(call, dtype);
   auto layout = literal_constructor_layout(call);
   if (!layout || layout->first.empty())
     return std::nullopt;
@@ -5868,34 +5879,41 @@ void python_converter::reject_incompatible_numpy_local_return_branches(
 // doesn't add a decision point to get_function_definition itself, which is
 // already far over the complexity gate.
 // `return x[i]` as the last statement, `x` a parameter a call site passes a
-// numpy string array for: the element is a str.
-bool python_converter::returns_numpy_string_element(
+// numpy string or complex array for: the annotation of the element it returns.
+const nlohmann::json *python_converter::numpy_element_annotation(
   const nlohmann::json &function_node) const
 {
+  static const nlohmann::json str_annotation = {
+    {"_type", "Name"}, {"id", "str"}};
+  static const nlohmann::json complex_annotation = {
+    {"_type", "Name"}, {"id", "complex"}};
   const nlohmann::json &body = function_node["body"];
   if (
     is_loading_models || body.empty() ||
     body.back().value("_type", "") != "Return")
-    return false;
+    return nullptr;
   const nlohmann::json &value = body.back()["value"];
   if (
     !value.is_object() || value.value("_type", "") != "Subscript" ||
     value["value"].value("_type", "") != "Name" ||
     value["slice"].value("_type", "") == "Slice")
-    return false;
+    return nullptr;
   const nlohmann::json &params = function_node["args"]["args"];
   for (std::size_t i = 0; i < params.size(); ++i)
   {
     typet type;
     std::set<std::string> visiting;
     if (
-      params[i].value("arg", "") == value["value"].value("id", "") &&
-      try_infer_numpy_param_type(
-        function_node.value("name", ""), i, type, visiting) &&
-      type_utils::is_numpy_string_array(type))
-      return true;
+      params[i].value("arg", "") != value["value"].value("id", "") ||
+      !try_infer_numpy_param_type(
+        function_node.value("name", ""), i, type, visiting))
+      continue;
+    if (type_utils::is_numpy_string_array(type))
+      return &str_annotation;
+    if (type.is_array() && is_complex_type(type.subtype()))
+      return &complex_annotation;
   }
-  return false;
+  return nullptr;
 }
 
 const nlohmann::json &python_converter::resolve_return_annotation_node(
@@ -5914,10 +5932,9 @@ const nlohmann::json &python_converter::resolve_return_annotation_node(
   // shape. A synthesized one also gives way to a tagged return (#8890).
   bool is_synthesized =
     returns.is_null() || returns.value("_inferred_annotation", false);
-  static const nlohmann::json str_annotation = {
-    {"_type", "Name"}, {"id", "str"}};
-  if (is_synthesized && returns_numpy_string_element(function_node))
-    return str_annotation;
+  if (is_synthesized)
+    if (const nlohmann::json *element = numpy_element_annotation(function_node))
+      return *element;
   if (
     is_synthesized &&
     (local_var_numpy_array_return(function_node) ||
