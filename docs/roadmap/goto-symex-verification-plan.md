@@ -12558,6 +12558,27 @@ Not fixed: `nextafterl` and `frexpl` have no model on 32-bit x86, where
 `long double` is 12 bytes. The floating-point exception flags have no model:
 `fetestexcept` returns a nondet value after any `feraiseexcept`.
 
+### M9 (R150) — 2026-10-31, the case-insensitive compare with a locale
+
+R134's entry left `strcasecmp_l` and `strncasecmp_l` without a model, so each
+returned a nondet value: `strcasecmp_l("AbC", "abc", c) == 0` was FAILED
+for `c` from `newlocale(LC_ALL_MASK, "C", 0)`, as was any assertion on the
+result.
+
+**Fixed** by modelling both on the POSIX targets as `strncasecmp` with the
+locale ignored. Only the C locale is modelled, as for `tolower`, so the
+results are those of the C or POSIX locale; a locale that folds a letter
+differently (Turkish dotted I) is not modelled.
+
+`strcasecmp_l_model` checks equality across case, the sign for a smaller and
+a longer string, a prefix shorter than the difference, a prefix covering it,
+and `n == 0`; master fails it, and it passes natively. `strcasecmp_l_model_fail`
+runs under `--multi-property` and pins a wrong sign and a wrong equality.
+Making `strncasecmp_l` ignore `n` fails the passing test. Both under the
+default solver (Bitwuzla), `--z3` and `--k-induction`.
+
+Not fixed: the other `_l` functions (`tolower_l`, `strcoll_l`, `strxfrm_l`)
+still have no model, and `log(M_E) == 1.0` is still FAILED (R133).
 ### M9 (R149) — 2026-10-31, the warning that stopped R130's armv8 build
 
 Since R130 landed, the Monday `Weekly` run's `static armv8 DebugOpt` job no
