@@ -107,3 +107,47 @@ int toupper(int c)
 __ESBMC_HIDE:;
   return (c >= 'a' && c <= 'z') ? c - ('a' - 'A') : c;
 }
+
+#if defined(__unix__) || defined(__APPLE__) || defined(__MACH__)
+#  include <locale.h>
+#  if defined(__APPLE__)
+#    include <xlocale.h>
+#  endif
+
+/* Only the C locale is modelled. */
+#  define CTYPE_L(f)                                                           \
+    int f##_l(int c, locale_t loc)                                             \
+    {                                                                          \
+    __ESBMC_HIDE:;                                                             \
+      return f(c);                                                             \
+    }
+
+#  undef isalnum_l
+CTYPE_L(isalnum)
+#  undef isalpha_l
+CTYPE_L(isalpha)
+#  undef isblank_l
+CTYPE_L(isblank)
+#  undef iscntrl_l
+CTYPE_L(iscntrl)
+#  undef isdigit_l
+CTYPE_L(isdigit)
+#  undef isgraph_l
+CTYPE_L(isgraph)
+#  undef islower_l
+CTYPE_L(islower)
+#  undef isprint_l
+CTYPE_L(isprint)
+#  undef ispunct_l
+CTYPE_L(ispunct)
+#  undef isspace_l
+CTYPE_L(isspace)
+#  undef isupper_l
+CTYPE_L(isupper)
+#  undef isxdigit_l
+CTYPE_L(isxdigit)
+#  undef tolower_l
+CTYPE_L(tolower)
+#  undef toupper_l
+CTYPE_L(toupper)
+#endif

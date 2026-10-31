@@ -319,6 +319,73 @@ void function_call_expr::refuse_isinstance_on_path_dependent_number(
       "supported");
 }
 
+/// Plants an assertion that the SV-COMP wrapper reads as Unknown, or stops the
+/// conversion where no statement can be planted.
+void function_call_expr::plant_unsupported(const std::string &message) const
+{
+  if (!converter_.can_emit_runtime_guard())
+    throw std::runtime_error(message);
+  code_assertt check{false_exprt()};
+  check.location() = converter_.get_location_from_decl(call_);
+  check.location().user_provided(true);
+  check.location().comment(message);
+  converter_.current_block->copy_to_operands(check);
+}
+
+/// The value a name is bound to, or an empty object.
+nlohmann::json function_call_expr::bound_value(const nlohmann::json &name) const
+{
+  const nlohmann::json decl = json_utils::find_var_decl(
+    name["id"].get<std::string>(),
+    converter_.current_function_name(),
+    converter_.ast());
+  return decl.is_object() && decl.contains("value") && decl["value"].is_object()
+           ? decl["value"]
+           : nlohmann::json::object();
+}
+
+/// Whether @p node is `base ** exponent` with an int base and an exponent that
+/// is not an integer literal.
+bool function_call_expr::is_symbolic_int_power(const nlohmann::json &node) const
+{
+  if (
+    node.value("_type", "") != "BinOp" ||
+    node["op"].value("_type", "") != "Pow")
+    return false;
+  const nlohmann::json &left = node["left"];
+  const nlohmann::json &right = node["right"];
+  const std::string left_kind = left.value("_type", "");
+  if (left_kind != "Constant" && left_kind != "Name")
+    return false;
+  const typet left_type = converter_.get_expr(left).type();
+  const nlohmann::json exponent =
+    right.value("_type", "") == "Name" ? bound_value(right) : right;
+  const nlohmann::json &literal =
+    exponent.value("_type", "") == "UnaryOp" ? exponent["operand"] : exponent;
+  return (left_type.is_signedbv() || left_type.is_unsignedbv()) &&
+         !(literal.value("_type", "") == "Constant" &&
+           literal["value"].is_number_integer());
+}
+
+/// `int ** n` is an int for a non-negative n and a float otherwise, but a
+/// symbolic exponent is lowered to a double, so a type read from the result
+/// would be wrong on some path (#8944).
+void function_call_expr::refuse_type_of_symbolic_int_power(
+  const nlohmann::json &arg,
+  const exprt &value) const
+{
+  if (!value.type().is_floatbv())
+    return;
+  const nlohmann::json node =
+    arg.value("_type", "") == "Name" ? bound_value(arg) : arg;
+  if (!is_symbolic_int_power(node))
+    return;
+  const std::string message =
+    "Unsupported: the type of an int raised to a power that is not a "
+    "constant, which is an int or a float depending on its sign";
+  plant_unsupported(message);
+}
+
 /// A function whose return type is guessed from its return statements types
 /// an arithmetic result as a double, so isinstance(result, int) would read that
 /// guess (typpete_functions).
@@ -333,18 +400,8 @@ void function_call_expr::refuse_isinstance_on_guessed_return(
     });
   if (!asks_number || converter_.guessed_return_functions_.empty())
     return;
-  nlohmann::json call = obj_arg;
-  if (obj_arg.value("_type", "") == "Name")
-  {
-    const nlohmann::json decl = json_utils::find_var_decl(
-      obj_arg["id"].get<std::string>(),
-      converter_.current_function_name(),
-      converter_.ast());
-    call =
-      decl.is_object() && decl.contains("value") && decl["value"].is_object()
-        ? decl["value"]
-        : nlohmann::json::object();
-  }
+  const nlohmann::json call =
+    obj_arg.value("_type", "") == "Name" ? bound_value(obj_arg) : obj_arg;
   if (
     call.value("_type", "") != "Call" ||
     call["func"].value("_type", "") != "Name" ||
@@ -354,13 +411,7 @@ void function_call_expr::refuse_isinstance_on_guessed_return(
   const std::string message =
     "Unsupported: the type of a value returned by a function whose return "
     "type could not be inferred";
-  if (!converter_.can_emit_runtime_guard())
-    throw std::runtime_error(message);
-  code_assertt check{false_exprt()};
-  check.location() = converter_.get_location_from_decl(call_);
-  check.location().user_provided(true);
-  check.location().comment(message);
-  converter_.current_block->copy_to_operands(check);
+  plant_unsupported(message);
 }
 
 /// isinstance(obj, list) or isinstance(obj, tuple) when either answer comes
@@ -570,6 +621,7 @@ exprt function_call_expr::handle_isinstance() const
   collect_classinfo(args[1], types);
   refuse_isinstance_on_path_dependent_number(obj_arg, types);
   refuse_isinstance_on_guessed_return(obj_arg, types);
+  refuse_type_of_symbolic_int_power(obj_arg, obj_expr);
 
   const exprt decided = isinstance_without_type_name(obj_arg, obj_expr, types);
   if (decided.is_not_nil())
@@ -1365,6 +1417,7 @@ exprt function_call_expr::handle_type_call() const
     throw std::runtime_error("type() requires exactly 1 argument");
 
   exprt arg_expr = converter_.get_expr(args[0]);
+  refuse_type_of_symbolic_int_power(args[0], arg_expr);
   if (python_converter::is_class_object(arg_expr))
     return converter_.make_class_object("type");
   const std::string instance_class = exact_instance_class(args[0], arg_expr);

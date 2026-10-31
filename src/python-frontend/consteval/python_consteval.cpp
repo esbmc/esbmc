@@ -1018,6 +1018,17 @@ python_consteval::exec_stmt(const nlohmann::json &stmt, Env &env)
   return std::nullopt; // Unsupported statement type
 }
 
+// string_val holds UTF-8 bytes, and len, indexing, slicing, iteration and find
+// here are byte-wise, while CPython counts code points (#7552).
+static std::optional<PyConstValue> ascii_string_constant(const std::string &s)
+{
+  if (std::any_of(s.begin(), s.end(), [](char c) {
+        return static_cast<unsigned char>(c) >= 0x80;
+      }))
+    return std::nullopt;
+  return PyConstValue::make_string(s);
+}
+
 std::optional<PyConstValue>
 python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
 {
@@ -1047,7 +1058,7 @@ python_consteval::eval_expr(const nlohmann::json &node, const Env &env)
       return PyConstValue{
         PyConstValue::FLOAT, false, 0, val.get<double>(), "", {}};
     if (val.is_string())
-      return PyConstValue::make_string(val.get<std::string>());
+      return ascii_string_constant(val.get_ref<const std::string &>());
     return std::nullopt;
   }
 

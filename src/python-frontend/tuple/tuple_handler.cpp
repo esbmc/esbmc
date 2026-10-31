@@ -720,11 +720,28 @@ void tuple_handler::handle_tuple_unpacking(
       converter_.get_location_from_decl(ast_node),
       target_block);
     // A list taken out of a tuple literal keeps its element types (#8928).
-    if (rhs.id() == "struct" && rhs.operands()[i].is_symbol())
+    const exprt source = unpacked_list_source(rhs, i);
+    if (source.is_symbol())
       converter_.get_element_type_registry().assign_from(
-        rhs.operands()[i].identifier().as_string(),
-        target.identifier().as_string());
+        source.identifier().as_string(), target.identifier().as_string());
   }
+}
+
+// The list a tuple's element @p i was built from: the literal's own operand,
+// or for a tuple variable bound once to a literal and read once, the operand of
+// that literal.
+exprt tuple_handler::unpacked_list_source(const exprt &rhs, size_t i) const
+{
+  if (rhs.id() == "struct")
+    return rhs.operands()[i];
+  if (!rhs.is_symbol() || !converter_.unpack_record_in_force())
+    return nil_exprt();
+  const symbolt *tuple = converter_.find_symbol(rhs.identifier().as_string());
+  if (
+    !tuple || tuple->get_value().id() != "struct" ||
+    tuple->get_value().operands().size() <= i)
+    return nil_exprt();
+  return tuple->get_value().operands()[i];
 }
 
 // A str element of a tuple held in a list or dict (reached through a

@@ -386,6 +386,11 @@ public:
   // A runtime guard emitted into current_block runs once, unconditionally,
   // ahead of the enclosing statement; that is wrong for an expression Python
   // evaluates conditionally or repeatedly (an and/or tail, a while test).
+  bool unpack_record_in_force() const
+  {
+    return unpack_record_trusted_;
+  }
+
   bool in_type_probe() const
   {
     return in_rhs_type_probe_;
@@ -3418,6 +3423,10 @@ private:
 
   /// Throws on a tagged operand of an `and`/`or` whose value is used.
   void refuse_tagged_boolop_operand(const exprt &operand) const;
+
+  /// The truthiness of a str and/or operand: false for None or "", else true.
+  /// Any other value comes back unchanged.
+  exprt boolop_string_truthiness(const exprt &value, const locationt &location);
 
   /// Rewrite a string @p str into `strlen(str) != 0`, its truthiness; any
   /// other value comes back unchanged.
