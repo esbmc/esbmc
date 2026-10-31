@@ -5422,6 +5422,13 @@ static nlohmann::json cast_numpy_literal_to_dtype(
     "TypeError: np.array(..., dtype=...) requires literal numeric elements");
 }
 
+static bool has_complex_leaf(const nlohmann::json &list);
+
+bool numpy_literal_call_is_complex(const nlohmann::json &call)
+{
+  return !call["args"].empty() && has_complex_leaf(call["args"][0]);
+}
+
 nlohmann::json
 numpy_literal_with_dtype(const nlohmann::json &call, const nlohmann::json &ast)
 {
@@ -11117,15 +11124,10 @@ void numpy_call_expr::reject_complex_array_operands(
   const std::string &function) const
 {
   static const std::set<std::string> reducers = {
-    "sum",
-    "prod",
-    "mean",
     "min",
     "max",
     "argmin",
     "argmax",
-    "any",
-    "all",
     "std",
     "var",
     "median",
@@ -11498,11 +11500,145 @@ std::optional<exprt> numpy_call_expr::call_with_narrow_constructors_bound(
   return converter_.get_expr(bound);
 }
 
+// The elements of a complex array or view, as subscripts of @p operand in C
+// order; nullopt for a run-time layout.
+std::optional<std::vector<nlohmann::json>>
+numpy_call_expr::complex_element_nodes(const nlohmann::json &operand)
+{
+  const exprt storage =
+    converter_.numpy_param_as_array(converter_.get_expr(operand));
+  std::vector<std::size_t> shape;
+  if (storage.type().is_array())
+  {
+    const auto extents = type_handler_.get_array_type_shape(storage.type());
+    shape.assign(extents.begin(), extents.end());
+  }
+  else if (operand.value("_type", "") == "Name")
+  {
+    const auto *info =
+      converter_.find_numpy_pointer_view_info(operand.value("id", ""));
+    if (!info || info->is_symbolic())
+      return std::nullopt;
+    shape.assign(info->shape.begin(), info->shape.end());
+  }
+  std::vector<nlohmann::json> nodes = {operand};
+  for (const std::size_t extent : shape)
+  {
+    std::vector<nlohmann::json> next;
+    for (const nlohmann::json &node : nodes)
+      for (std::size_t i = 0; i < extent; ++i)
+      {
+        nlohmann::json index = {{"_type", "Constant"}, {"value", i}};
+        nlohmann::json item = {
+          {"_type", "Subscript"}, {"value", node}, {"slice", index}};
+        converter_.copy_location_fields_from_decl(call_, item);
+        converter_.copy_location_fields_from_decl(call_, item["slice"]);
+        next.push_back(std::move(item));
+      }
+    nodes = std::move(next);
+  }
+  return nodes;
+}
+
+// any/all over complex elements, each read for its truth.
+exprt numpy_call_expr::complex_truth_reduce(
+  const std::string &function,
+  const std::vector<nlohmann::json> &nodes)
+{
+  exprt result = gen_boolean(function == "all");
+  for (const nlohmann::json &node : nodes)
+  {
+    const exprt truth =
+      complex_to_bool_expr(promote_to_complex(converter_.get_expr(node)));
+    result = function == "all" ? exprt(and_exprt(result, truth))
+                               : exprt(or_exprt(result, truth));
+  }
+  return result;
+}
+
+// sum, prod and mean over complex elements, as the operators in turn.
+exprt numpy_call_expr::complex_value_reduce(
+  const std::string &function,
+  const std::vector<nlohmann::json> &nodes)
+{
+  const auto located = [&](nlohmann::json node) {
+    converter_.copy_location_fields_from_decl(call_, node);
+    return node;
+  };
+  const auto binary =
+    [&](const char *op, nlohmann::json left, nlohmann::json right) {
+      return located(
+        {{"_type", "BinOp"},
+         {"left", std::move(left)},
+         {"op", {{"_type", op}}},
+         {"right", std::move(right)}});
+    };
+  nlohmann::json total =
+    located({{"_type", "Constant"}, {"value", function == "prod" ? 1 : 0}});
+  for (const nlohmann::json &node : nodes)
+    total = binary(function == "prod" ? "Mult" : "Add", total, node);
+  if (function == "mean")
+    total = binary(
+      "Div", total, located({{"_type", "Constant"}, {"value", nodes.size()}}));
+  return retype_current_lhs_and_return(converter_, converter_.get_expr(total));
+}
+
+// The complex array a reducer call reads; nullopt when it reads something else.
+std::optional<nlohmann::json>
+numpy_call_expr::complex_reducer_operand(const std::string &function) const
+{
+  const auto &args = call_.value("args", nlohmann::json::array());
+  const nlohmann::json &func = call_["func"];
+  const bool method = args.empty() && func.value("_type", "") == "Attribute";
+  if (args.empty() && !method)
+    return std::nullopt;
+  const nlohmann::json &operand = method ? func["value"] : args[0];
+  if (!is_complex_operand(operand))
+    return std::nullopt;
+  if (
+    args.size() > 1 ||
+    !call_.value("keywords", nlohmann::json::array()).empty())
+    throw std::runtime_error(
+      "TypeError: numpy." + function +
+      "() over a complex array with axis or keywords is not supported");
+  return operand;
+}
+
+// np.sum and the like over complex numbers; nullopt for any other call.
+std::optional<exprt>
+numpy_call_expr::try_complex_reducer(const std::string &function)
+{
+  static const std::set<std::string> reducers = {
+    "sum", "prod", "mean", "any", "all"};
+  if (reducers.count(function) == 0)
+    return std::nullopt;
+  std::optional<nlohmann::json> reduced = complex_reducer_operand(function);
+  if (!reduced)
+    return std::nullopt;
+  nlohmann::json operand = std::move(*reduced);
+  const bool logical = function == "any" || function == "all";
+  if (converter_.in_rhs_type_probe_)
+    return logical
+             ? exprt(gen_boolean(false))
+             : make_complex(gen_zero(double_type()), gen_zero(double_type()));
+  if (operand.value("_type", "") == "Call")
+    operand = converter_.bind_to_fresh_name(operand, "ESBMC_constructor_arg_");
+  const auto nodes = complex_element_nodes(operand);
+  if (!nodes || nodes->empty())
+    throw std::runtime_error(
+      "TypeError: numpy." + function +
+      "() over this complex array is not supported");
+  return logical ? complex_truth_reduce(function, *nodes)
+                 : complex_value_reduce(function, *nodes);
+}
+
 // A call over a narrow operand: a function not known to read the element type
 // rejects rather than misreading the storage.
 std::optional<exprt>
 numpy_call_expr::try_narrow_operand_call(const std::string &function)
 {
+  if (std::optional<exprt> reduced = try_complex_reducer(function))
+    return reduced;
   static const std::set<std::string> reads_element_type = {
     "array",       "asarray",      "copy",         "zeros_like", "ones_like",
     "empty_like",  "full_like",    "sum",          "prod",       "mean",

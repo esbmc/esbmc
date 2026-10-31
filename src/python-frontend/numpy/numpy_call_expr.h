@@ -22,6 +22,9 @@ std::string extract_numpy_dtype_name(
   const nlohmann::json &dtype_node,
   const nlohmann::json &ast);
 
+/// Whether the literal of `np.array(literal)` holds a complex number.
+bool numpy_literal_call_is_complex(const nlohmann::json &call);
+
 /// The literal `np.array(literal, dtype=...)` stores, cast to its dtype.
 nlohmann::json
 numpy_literal_with_dtype(const nlohmann::json &call, const nlohmann::json &ast);
@@ -145,6 +148,17 @@ private:
     const std::vector<std::size_t> &dims,
     const nlohmann::json &fill);
   std::optional<exprt> try_narrow_operand_call(const std::string &function);
+  std::optional<std::vector<nlohmann::json>>
+  complex_element_nodes(const nlohmann::json &operand);
+  std::optional<nlohmann::json>
+  complex_reducer_operand(const std::string &function) const;
+  std::optional<exprt> try_complex_reducer(const std::string &function);
+  exprt complex_truth_reduce(
+    const std::string &function,
+    const std::vector<nlohmann::json> &nodes);
+  exprt complex_value_reduce(
+    const std::string &function,
+    const std::vector<nlohmann::json> &nodes);
   bool is_narrow_operand(const nlohmann::json &arg) const;
   bool has_narrow_operand() const;
   std::optional<exprt> narrow_ufunc_as_operator(const std::string &function);

@@ -5333,7 +5333,8 @@ std::optional<exprt> function_call_expr::try_builtin_sum_over_numpy_scalars()
     symbol ? converter_.ns.follow(symbol->get_type()) : typet();
   if (
     !type.is_array() ||
-    !type_utils::is_numpy_scalar_type(type_utils::array_scalar_type(type)))
+    (!type_utils::is_numpy_scalar_type(type_utils::array_scalar_type(type)) &&
+     !type_utils::is_numpy_complex_array(type)))
     return std::nullopt;
   BigInt length;
   if (to_integer(to_array_type(type).size(), length))
@@ -7851,16 +7852,6 @@ typet function_call_expr::dict_param_value_type(const symbolt *func, size_t idx)
     fn["args"]["args"][idx].value("annotation", nlohmann::json()));
 }
 
-// A numpy complex array is read only element by element; a callee would read
-// its storage as numbers.
-static void reject_unmodelled_numpy_array_argument(const typet &type)
-{
-  if (type_utils::is_numpy_complex_array(type))
-    throw std::runtime_error(
-      "TypeError: passing a numpy complex array to a function is not "
-      "supported");
-}
-
 std::optional<exprt> function_call_expr::build_positional_arguments(
   code_function_callt &call,
   size_t param_offset,
@@ -8216,7 +8207,6 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
     }
 
     reject_list_for_numpy_parameter(arg.type(), params, param_idx);
-    reject_unmodelled_numpy_array_argument(arg.type());
 
     // All array function arguments (e.g. bytes type) are handled as pointers.
     if (arg.type().is_array())

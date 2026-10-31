@@ -3984,8 +3984,12 @@ private:
   std::optional<numpy_dtypet> numpy_array_dtype(const nlohmann::json &base);
   std::optional<numpy_dtypet>
   constructor_keyword_dtype(const nlohmann::json &call) const;
+  typet literal_call_array_type(
+    const nlohmann::json &call,
+    const std::optional<numpy_dtypet> &dtype) const;
   bool is_narrow_builtin_sum(const nlohmann::json &node);
-  bool returns_numpy_string_element(const nlohmann::json &function_node) const;
+  const nlohmann::json *
+  numpy_element_annotation(const nlohmann::json &function_node) const;
   std::optional<exprt>
   try_numpy_string_membership(const nlohmann::json &element);
   /// `b = a[0]` keeps the scalar's dtype; rebinding such a name rejects.
