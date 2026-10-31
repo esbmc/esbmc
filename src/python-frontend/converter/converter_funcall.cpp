@@ -2384,6 +2384,16 @@ exprt python_converter::materialize_list_function_call(
 
   target_block.copy_to_operands(new_call);
 
+  if (
+    call.type() == type_handler_.get_list_type() && call.function().is_symbol())
+  {
+    const exprt ret =
+      get_return_from_func(call.function().identifier().c_str());
+    if (!ret.is_nil() && ret.operands().size() == 1 && ret.op0().is_symbol())
+      element_type_registry_.assign_from(
+        ret.op0().identifier().as_string(), tmp_var_symbol.id.as_string());
+  }
+
   // Return reference to the temp variable
   return symbol_expr(tmp_var_symbol);
 }

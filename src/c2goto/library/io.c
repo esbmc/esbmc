@@ -5,7 +5,9 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
 
 #ifdef _MINGW
@@ -256,6 +258,8 @@ __ESBMC_HIDE:;
 int fputs(const char *s, FILE *stream)
 {
 __ESBMC_HIDE:;
+  // C17 7.21.7.4p2: s is read up to and including its null character.
+  (void)strlen(s);
   // Clear reading state when writing
   __esbmc_currently_reading = 0;
 
@@ -366,6 +370,18 @@ __ESBMC_HIDE:;
 size_t fwrite(const void *ptr, size_t size, size_t nitems, FILE *stream)
 {
 __ESBMC_HIDE:;
+  // C17 7.21.8.2p2: all size * nitems bytes are read; accessing the first and
+  // the last one checks the whole range lies within one live object. A
+  // product that overflows cannot fit any object.
+  size_t bytes;
+  if (__builtin_mul_overflow(size, nitems, &bytes))
+    bytes = SIZE_MAX;
+  if (bytes > 0)
+  {
+    const unsigned char *p = ptr;
+    (void)p[0];
+    (void)p[bytes - 1];
+  }
   size_t nwrite;
   __ESBMC_assume(nwrite <= nitems);
   return nwrite;
@@ -374,6 +390,7 @@ __ESBMC_HIDE:;
 int fputs_unlocked(const char *s, FILE *stream)
 {
 __ESBMC_HIDE:;
+  (void)strlen(s);
   // Always set pending data when fputs_unlocked is called with valid parameters
   if (stream != NULL)
   {
