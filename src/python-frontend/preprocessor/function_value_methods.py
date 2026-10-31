@@ -274,14 +274,25 @@ def _locals_of(fn):
     return names
 
 
-def _is_liftable(receiver, fn, arity):
+def _has_plain_signature(fn):
     args = fn.args
-    if (fn.decorator_list or args.vararg or args.kwarg or args.kwonlyargs or args.posonlyargs
-            or args.defaults or len(args.args) != arity + 1 or args.args[0].arg != "self"):
+    return not (fn.decorator_list or args.vararg or args.kwarg or args.kwonlyargs
+                or args.posonlyargs or args.defaults)
+
+
+def _takes_self_and(fn, arity):
+    return len(fn.args.args) == arity + 1 and fn.args.args[0].arg == "self"
+
+
+def _has_scope_or_flow_node(fn):
+    flow = _SCOPES + (ast.Global, ast.Nonlocal, ast.Yield, ast.YieldFrom, ast.Await)
+    return any(isinstance(n, flow) for n in _own_nodes(fn))
+
+
+def _is_liftable(receiver, fn, arity):
+    if not (_has_plain_signature(fn) and _takes_self_and(fn, arity)):
         return False
-    if any(
-            isinstance(n, _SCOPES + (ast.Global, ast.Nonlocal, ast.Yield, ast.YieldFrom, ast.Await))
-            for n in _own_nodes(fn)) or not _self_is_contained(fn):
+    if _has_scope_or_flow_node(fn) or not _self_is_contained(fn):
         return False
     uses_self = any(isinstance(n, ast.Name) and n.id == "self" for n in ast.walk(fn))
     return not (uses_self and receiver in _locals_of(fn))
@@ -331,7 +342,7 @@ def _lift_argument_calls(module, receiver, table, anchor):
     for call in _argument_calls(module, receiver, table):
         callee = _lift_method(receiver, table[call.func.attr], len(call.args), anchor)
         names = {n for a in call.args for n in _bound_names(a, receiver, table) or []}
-        values = {n: _method_value_function(receiver, table[n], anchor) for n in names}
+        values = {n: _method_value_function(receiver, table[n], anchor) for n in sorted(names)}
         if callee is None or None in values.values():
             continue
         definitions[callee.name] = callee
