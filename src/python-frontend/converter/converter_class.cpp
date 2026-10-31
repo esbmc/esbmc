@@ -1388,7 +1388,7 @@ void python_converter::get_attributes_from_self(
       }
       else
       {
-        type = type_handler_.get_typet(annotated_type);
+        type = named_annotation_type(stmt["annotation"], annotated_type);
         // Python class instances have reference semantics. When the
         // attribute holds an *aliased* class-instance reference — i.e. the
         // RHS is a Name referring to another variable (typically a method
