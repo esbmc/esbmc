@@ -1,4 +1,4 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR: TypeError: numpy.linalg.norm does not support complex values$
+^ERROR: TypeError: numpy\.norm\(\) over a complex array is not supported$

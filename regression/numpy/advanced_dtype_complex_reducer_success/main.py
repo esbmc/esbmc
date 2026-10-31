@@ -41,3 +41,13 @@ t = m.T
 assert t[0][1] == 3
 s = np.array([1 + 1j, 1j], dtype=np.complex64)
 assert np.sum(s) == 1 + 2j
+
+
+def second(x):
+    return x[1]
+
+
+imaginary = np.array([1j, 2j])
+assert second(imaginary) == 2j
+held = second(imaginary)
+assert held == 2j

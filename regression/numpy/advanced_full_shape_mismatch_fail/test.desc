@@ -1,0 +1,4 @@
+CORE
+main.py
+--incremental-bmc
+^ERROR: ValueError: could not broadcast numpy\.full\(\) fill of shape \(3,\)
