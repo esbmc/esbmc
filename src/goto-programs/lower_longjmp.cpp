@@ -17,15 +17,25 @@ bool calls(const goto_programt::instructiont &insn, const char *fn)
 
 bool is_setjmp(const goto_programt::instructiont &insn)
 {
-  return calls(insn, "c:@F@setjmp") || calls(insn, "c:@F@_setjmp");
+  return calls(insn, "c:@F@setjmp") || calls(insn, "c:@F@_setjmp") ||
+         calls(insn, "c:@F@sigsetjmp") || calls(insn, "c:@F@__sigsetjmp");
+}
+
+bool is_longjmp(const goto_programt::instructiont &insn)
+{
+  return calls(insn, "c:@F@longjmp") || calls(insn, "c:@F@_longjmp") ||
+         calls(insn, "c:@F@siglongjmp");
 }
 
 bool program_calls_longjmp(const goto_functionst &goto_functions)
 {
+  // The library's longjmp wrappers are linked whenever <setjmp.h> is
+  // included, so their calls do not count.
   for (const auto &[id, f] : goto_functions.function_map)
-    for (const auto &insn : f.body.instructions)
-      if (calls(insn, "c:@F@longjmp"))
-        return true;
+    if (id != "c:@F@_longjmp" && id != "c:@F@siglongjmp")
+      for (const auto &insn : f.body.instructions)
+        if (is_longjmp(insn))
+          return true;
   return false;
 }
 
