@@ -297,11 +297,11 @@ __ESBMC_HIDE:;
 ssize_t read(int fildes, void *buf, size_t nbyte)
 {
 __ESBMC_HIDE:;
-  // For valid file descriptors, succeed with positive bytes read
+  // A valid read returns 0 at end-of-file or up to nbyte bytes (POSIX read())
   if (fildes >= 0 && buf != NULL && nbyte > 0)
   {
     ssize_t nread = nondet_long();
-    __ESBMC_assume(nread > 0 && nread <= nbyte);
+    __ESBMC_assume(nread >= 0 && (size_t)nread <= nbyte);
 
     size_t i;
     for (i = 0; i < nread; i++)
