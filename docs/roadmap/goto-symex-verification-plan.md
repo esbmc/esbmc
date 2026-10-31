@@ -12558,6 +12558,30 @@ Not fixed: `nextafterl` and `frexpl` have no model on 32-bit x86, where
 `long double` is 12 bytes. The floating-point exception flags have no model:
 `fetestexcept` returns a nondet value after any `feraiseexcept`.
 
+### M9 (R151) — 2026-10-31, the classification functions that take a locale
+
+The POSIX `<ctype.h>` functions that take a `locale_t` (`isalpha_l` through
+`isxdigit_l`, `tolower_l` and `toupper_l`) had no model, so each returned a
+nondet value: `tolower_l('A', c) == 'a'` was FAILED for `c` from
+`newlocale(LC_ALL_MASK, "C", 0)`. ESBMC defines `__NO_CTYPE`, and on macOS
+`_DONT_USE_CTYPE_INLINE_`, so both glibc and the macOS SDK declare them as
+functions rather than expanding them through the locale's tables.
+
+**Fixed** by modelling each on the POSIX targets as its locale-free
+counterpart, with the locale ignored: only the C locale is modelled, as for
+the functions without a locale and for R150's `strcasecmp_l`.
+
+`ctype_l_model` checks a value each function accepts and one it rejects, or
+one each conversion changes and one it leaves alone; master fails it, and it
+passes natively. `ctype_l_model_fail` pins a wrong `tolower_l` and a wrong
+`isdigit_l` under `--multi-property`; it is FAILED on master too, where the
+results are nondet, so it guards against a model that returns a constant,
+not against master. Both under the default solver (Bitwuzla), `--z3` and
+`--k-induction`.
+
+Not fixed: `strcoll_l` and `strxfrm_l` have no model, nor do `strcoll` and
+`strxfrm` (`cstd/strcoll` and `cstd/strxfrm` are KNOWNBUG).
+
 ---
 
 ## Appendix A — Methodological basis
