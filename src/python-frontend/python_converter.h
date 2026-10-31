@@ -2325,6 +2325,8 @@ private:
   std::optional<exprt> try_lowered_compare(const nlohmann::json &element);
   std::optional<exprt>
   try_chained_compare_with_call(const nlohmann::json &element);
+  nlohmann::json chained_compare_as_pairs(const nlohmann::json &element);
+  void reject_walrus_in_boolop(const nlohmann::json &element);
 
   bool contains_tracked_numpy_view_object(const nlohmann::json &node);
 
@@ -3533,6 +3535,7 @@ private:
   // a loop invariant raised inside the loop body. C emits nothing from a
   // clause either.
   bool in_contract_clause_ = false;
+  bool lowering_chained_compare_ = false;
   bool in_lazy_operand_ = false;
   // Number of try bodies enclosing the statement being converted.
   unsigned try_body_depth_ = 0;

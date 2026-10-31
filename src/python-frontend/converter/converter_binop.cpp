@@ -861,15 +861,24 @@ void python_converter::refuse_tagged_boolop_operand(const exprt &operand) const
       "used is not yet supported");
 }
 
+// A chained comparison's own bindings are planted in each operand's block.
+void python_converter::reject_walrus_in_boolop(const nlohmann::json &element)
+{
+  const bool own_bindings = std::exchange(lowering_chained_compare_, false);
+  if (
+    !own_bindings && element.contains("values") &&
+    contains_named_expr(element["values"]))
+    throw std::runtime_error(
+      "Walrus operator ':=' in a boolean (and/or) operand is not supported");
+}
+
 exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
 {
   // `and`/`or` short-circuit: a later operand may not execute. get_named_expr
   // emits a walrus binding unconditionally, so a walrus inside any operand
   // would bind even when Python would skip it. Refuse with a clean diagnostic
   // rather than return an unsound verdict.
-  if (element.contains("values") && contains_named_expr(element["values"]))
-    throw std::runtime_error(
-      "Walrus operator ':=' in a boolean (and/or) operand is not supported");
+  reject_walrus_in_boolop(element);
 
   std::string op(element["op"]["_type"].get<std::string>());
   exprt logical_expr(
@@ -2040,28 +2049,74 @@ python_converter::try_lowered_compare(const nlohmann::json &element)
   return bound ? bound : try_chained_compare_with_call(element);
 }
 
-// `0 < g + bump() < 7`: the pairs convert the middle term separately, so its
-// call would run twice and the second read of g would come after it. Python
-// evaluates the left operand and the middle term once, in that order.
+// A call inside a larger comparator: the pairs convert the term separately, and
+// only a term that is itself a call is bound for both of them.
+static bool has_call_in_expression(const nlohmann::json &comparator)
+{
+  return comparator.value("_type", "") != "Call" && contains_call(comparator);
+}
+
+// `a < g + bump() < c` as `a < (t := g + bump()) and t < c`: each term runs
+// once, in order, and only if the pairs before it held. An and/or operand
+// plants the binding in its own block, which keeps that short-circuit.
 std::optional<exprt>
 python_converter::try_chained_compare_with_call(const nlohmann::json &element)
 {
   if (
     element.value("_type", "") != "Compare" ||
-    element["comparators"].size() < 2 ||
-    element["comparators"][0].value("_type", "") != "BinOp" ||
-    !contains_call(element["comparators"][0]) || in_rhs_type_probe_)
+    element["comparators"].size() < 2 || in_rhs_type_probe_ ||
+    contains_named_expr(element) ||
+    std::none_of(
+      element["comparators"].begin(),
+      element["comparators"].end(),
+      has_call_in_expression))
     return std::nullopt;
-  if (!can_emit_operand_statement())
+  if (!can_emit_operand_statement() || conditional_expr_depth_ != 0)
     throw std::runtime_error(
-      "TypeError: a call inside the middle term of a chained comparison where "
-      "nothing can be bound first, such as a loop condition, is not supported");
-  nlohmann::json bound = element;
-  if (element["left"].value("_type", "") != "Constant")
-    bound["left"] = bind_to_fresh_name(element["left"], "ESBMC_chained_");
-  bound["comparators"][0] =
-    bind_to_fresh_name(element["comparators"][0], "ESBMC_chained_");
-  return get_binary_operator_expr(bound);
+      "TypeError: a call inside a term of a chained comparison where nothing "
+      "can be bound first, such as a loop condition, is not supported");
+  const nlohmann::json pairs = chained_compare_as_pairs(element);
+  lowering_chained_compare_ = true;
+  return get_expr(pairs);
+}
+
+nlohmann::json
+python_converter::chained_compare_as_pairs(const nlohmann::json &element)
+{
+  const nlohmann::json &comparators = element["comparators"];
+  nlohmann::json previous =
+    element["left"].value("_type", "") == "Constant"
+      ? element["left"]
+      : bind_to_fresh_name(element["left"], "ESBMC_chained_");
+  nlohmann::json pairs = nlohmann::json::array();
+  for (std::size_t i = 0; i < comparators.size(); ++i)
+  {
+    nlohmann::json term = comparators[i];
+    nlohmann::json next = term;
+    if (term.value("_type", "") != "Constant")
+    {
+      next = {
+        {"_type", "Name"},
+        {"id", "ESBMC_chained_" + std::to_string(++nditer_counter_)},
+        {"ctx", {{"_type", "Store"}}}};
+      copy_location_fields_from_decl(comparators[i], next);
+      term = {{"_type", "NamedExpr"}, {"target", next}, {"value", term}};
+      copy_location_fields_from_decl(comparators[i], term);
+      next["ctx"] = {{"_type", "Load"}};
+    }
+    nlohmann::json pair = {
+      {"_type", "Compare"},
+      {"left", previous},
+      {"ops", nlohmann::json::array({element["ops"][i]})},
+      {"comparators", nlohmann::json::array({term})}};
+    copy_location_fields_from_decl(element, pair);
+    pairs.push_back(pair);
+    previous = next;
+  }
+  nlohmann::json all = {
+    {"_type", "BoolOp"}, {"op", {{"_type", "And"}}}, {"values", pairs}};
+  copy_location_fields_from_decl(element, all);
+  return all;
 }
 
 // Python reads the left operand before it runs a call in the right one,

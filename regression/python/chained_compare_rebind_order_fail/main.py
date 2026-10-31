@@ -7,4 +7,4 @@ def bump() -> int:
     return 1
 
 
-assert 3 < g + bump() < 7
+assert not (0 < g + bump() < 3)
