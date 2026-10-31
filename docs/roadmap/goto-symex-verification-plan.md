@@ -12412,6 +12412,29 @@ the fix is reverted, and dropping `vsnprintf` from the bounded kinds fails
 Not fixed: a conversion that reads the `va_list` still leaves the destination
 unchanged, as does any output `sprintf` would not store.
 
+### M9 (R148) — 2026-10-31, the `<csetjmp>` with nothing in `std`
+
+R130's entry left open that `<csetjmp>` does not parse in C++ mode. The header
+parses; the operational model's `<csetjmp>` only included `<setjmp.h>`, so
+`std::jmp_buf` and `std::longjmp` were undeclared and any program that names
+them stopped with a parsing error. Probing the rest of the stale residuals
+first: the `__sync_*` return through a signed temporary,
+`__builtin_rotateleft32`, `__builtin_clrsb`, `i /= 3.5` under Z3, a struct
+read back with `va_arg` and the comma operator's temporaries, all open in
+earlier entries, now agree with the native program on master.
+
+**Fixed** by declaring `jmp_buf` and `longjmp` in `std` ([csetjmp.syn]), as
+libc++ does; `setjmp` stays a macro.
+
+`csetjmp_std` jumps out of a called function with `std::longjmp` into a
+`std::jmp_buf` and checks the value `setjmp` returns and that the callee ran
+once; `csetjmp_std_fail` pins the wrong value. Both are parsing errors on
+master, agree with the native program, and give the same verdict under the
+default solver (Bitwuzla), `--z3` and `--k-induction`, and in C++98, 11, 17
+and 20.
+
+Not fixed: `strcasecmp_l` and `strncasecmp_l` still have no model (R134), and
+`log(M_E) == 1.0` is still FAILED (R133).
 ### M9 (R145) — 2026-10-30, the destructors `exit()` skipped
 
 R142's entry left open that `exit()` runs the atexit handlers but not the
