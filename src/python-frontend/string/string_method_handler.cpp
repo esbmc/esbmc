@@ -1,5 +1,7 @@
 #include <python-frontend/string/char_utils.h>
 #include <python-frontend/exception/exception_utils.h>
+#include <python-frontend/exception/python_exception_handler.h>
+#include <python-frontend/json_utils.h>
 #include <python-frontend/math/python_int_overflow.h>
 #include <python-frontend/python-list/python_list.h>
 #include <util/base/host_rounding_mode.h>
@@ -660,6 +662,35 @@ struct split_method_argst
 
 static bool is_none_literal_json(const nlohmann::json &node);
 
+/// Reads the constant sep of split()/rsplit() into \p separator, "" when it is
+/// omitted or None. An explicit empty sep yields the ValueError CPython raises.
+static std::optional<exprt> read_split_separator(
+  const std::string &method_name,
+  const nlohmann::json *sep_node,
+  const nlohmann::json &receiver_json,
+  python_converter &converter,
+  std::string &separator)
+{
+  if (sep_node == nullptr || is_none_literal_json(*sep_node))
+  {
+    separator = "";
+    return std::nullopt;
+  }
+  if (!string_handler::extract_constant_string(*sep_node, converter, separator))
+    throw std::runtime_error(
+      method_name + "() only supports constant sep in minimal support");
+  if (!separator.empty())
+    return std::nullopt;
+
+  // Raising here would drop the calls in the receiver, which CPython
+  // evaluates before split() rejects the separator.
+  if (json_utils::ast_contains_call(receiver_json))
+    throw std::runtime_error(
+      method_name + "() with an empty sep on a call receiver is unsupported");
+  return converter.get_exception_handler().gen_exception_raise(
+    "ValueError", "empty separator");
+}
+
 std::optional<exprt> dispatch_split_method(
   const std::string &method_name,
   const nlohmann::json &receiver_json,
@@ -690,16 +721,10 @@ std::optional<exprt> dispatch_split_method(
   const nlohmann::json *maxsplit_node = resolve_positional_or_keyword_arg(
     method_name, args, keyword_values, "maxsplit", 1, false);
 
-  if (sep_node == nullptr || is_none_literal_json(*sep_node))
-  {
-    parsed.separator = "";
-  }
-  else if (!string_handler::extract_constant_string(
-             *sep_node, converter, parsed.separator))
-  {
-    throw std::runtime_error(
-      method_name + "() only supports constant sep in minimal support");
-  }
+  if (
+    std::optional<exprt> raise = read_split_separator(
+      method_name, sep_node, receiver_json, converter, parsed.separator))
+    return raise;
 
   if (maxsplit_node != nullptr)
   {

@@ -4303,6 +4303,46 @@ bool clang_c_convertert::get_cast_expr(
 
   switch (cast.getCastKind())
   {
+  case clang::CK_LValueToRValue:
+  {
+    if (
+      config.options.get_bool_option("volatile-check") &&
+      cast.getSubExpr()->getType().isVolatileQualified())
+    {
+      locationt location;
+      get_start_location_from_stmt(cast, location);
+      const std::string path = location.file().as_string();
+      symbolt &snapshot =
+        anon_symbol.new_symbol(context, type, path + "$volatile_read$");
+      get_default_symbol(
+        snapshot,
+        get_modulename_from_path(path),
+        type,
+        snapshot.name,
+        snapshot.id,
+        location);
+      snapshot.file_local = true;
+
+      // Keep the original access so pointer and bounds checks still apply.
+      code_blockt body;
+      code_declt load(symbol_expr(snapshot), expr);
+      load.location() = location;
+      body.move_to_operands(load);
+      // Preserve bit-field widths before conversion (C11 6.7.2.1/10).
+      exprt nondet = side_effect_exprt("nondet", expr.type());
+      gen_typecast(ns, nondet, type);
+      code_expressiont result(nondet);
+      result.location() = location;
+      body.move_to_operands(result);
+      side_effect_exprt read("statement_expression", type);
+      read.copy_to_operands(body);
+      read.location() = location;
+      expr = read;
+    }
+    gen_typecast(ns, expr, type);
+    break;
+  }
+
   case clang::CK_ArrayToPointerDecay:
   case clang::CK_FunctionToPointerDecay:
   case clang::CK_BuiltinFnToFnPtr:
@@ -4369,6 +4409,18 @@ bool clang_c_convertert::get_cast_expr(
 
     if (routed)
     {
+      // [conv.ptr]/3: a null pointer converts to a null pointer, not to the
+      // base subobject's offset from null. CK_UncheckedDerivedToBase only
+      // feeds member access, which is UB on null. A side-effecting operand is
+      // left unguarded rather than evaluated twice, as in
+      // clang_c_adjust::adjust_derived_to_base.
+      if (
+        ptr_mode && cast.getCastKind() == clang::CK_DerivedToBase &&
+        !cast.getSubExpr()->HasSideEffects(*ASTContext))
+        cur = if_exprt(
+          equality_exprt(expr, gen_zero(expr.type())),
+          gen_zero(cur.type()),
+          cur);
       expr = cur;
       break;
     }
@@ -4438,7 +4490,6 @@ bool clang_c_convertert::get_cast_expr(
   case clang::CK_FloatingCast:
 
   case clang::CK_ToVoid:
-  case clang::CK_LValueToRValue:
 
   case clang::CK_PointerToBoolean:
   case clang::CK_PointerToIntegral:
