@@ -238,6 +238,21 @@ std::optional<std::string> wide_literal_as_ascii(const expr2tc &arg)
   return str;
 }
 
+// The text a %s argument prints when it is a string literal; `wide` for %ls.
+std::optional<std::string> literal_text(const expr2tc &arg, bool wide)
+{
+  if (wide)
+  {
+    std::optional<std::string> text = wide_literal_as_ascii(arg);
+    if (text)
+      return text;
+  }
+  const exprt char_array = migrate_expr_back(get_base_object(arg));
+  if (char_array.id() == "string-constant")
+    return char_array.value().as_string();
+  return std::nullopt;
+}
+
 // Pick the integer cast target for a given signedness and length modifier.
 type2tc pick_int_type(bool is_signed, length_modt mod)
 {
@@ -486,12 +501,8 @@ void printf_formattert::process_format(std::ostream &out)
     }
     const expr2tc &arg = *(next_operand++);
     const expr2tc symbol2 = get_base_object(arg);
-    std::optional<std::string> text;
-    if (length_mod == length_modt::L)
-      text = wide_literal_as_ascii(arg);
-    exprt char_array = migrate_expr_back(symbol2);
-    if (!text && char_array.id() == "string-constant")
-      text = char_array.value().as_string();
+    const std::optional<std::string> text =
+      literal_text(arg, length_mod == length_modt::L);
     if (text)
     {
       emit(pad_field(
