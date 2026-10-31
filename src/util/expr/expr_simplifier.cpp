@@ -6081,6 +6081,14 @@ expr2tc bswap2t::do_simplify() const
   return from_integer(new_value, type);
 }
 
+/// The 2-op float functors fold into a copy of the first operand; drop its
+/// source spelling, which c_expr2string would print in place of the value.
+static void drop_float_cformat(expr2tc &e)
+{
+  if (is_constant_floatbv2t(e))
+    to_constant_floatbv2t(e).cformat = irep_idt();
+}
+
 template <template <typename> class TFunctor, typename constructor>
 static expr2tc simplify_floatbv_2ops(
   const type2tc &type,
@@ -6199,11 +6207,7 @@ static expr2tc simplify_floatbv_2ops(
       rounding_mode,
       is_constant,
       get_value);
-
-    // The functors fold into a copy of the first operand; drop its source
-    // spelling, which c_expr2string would print in place of the value.
-    if (is_constant_floatbv2t(simpl_res))
-      to_constant_floatbv2t(simpl_res).cformat = irep_idt();
+    drop_float_cformat(simpl_res);
   }
   else
   {
