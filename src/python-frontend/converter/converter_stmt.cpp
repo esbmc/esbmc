@@ -10652,7 +10652,8 @@ static exprt as_numpy_element(const exprt &value, const typet &element)
     padded.operands().at(0) = typecast_exprt(value, element.subtype());
     return padded;
   }
-  for (std::size_t i = 0; i < value.operands().size(); ++i)
+  const std::size_t width = padded.operands().size() - 1;
+  for (std::size_t i = 0; i < value.operands().size() && i < width; ++i)
     padded.operands().at(i) = value.operands()[i];
   return padded;
 }
