@@ -6199,6 +6199,11 @@ static expr2tc simplify_floatbv_2ops(
       rounding_mode,
       is_constant,
       get_value);
+
+    // The functors fold into a copy of the first operand; drop its source
+    // spelling, which c_expr2string would print in place of the value.
+    if (is_constant_floatbv2t(simpl_res))
+      to_constant_floatbv2t(simpl_res).cformat = irep_idt();
   }
   else
   {
