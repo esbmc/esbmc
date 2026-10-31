@@ -12442,6 +12442,64 @@ memory; master reports the leak.
 
 Not fixed: the R142 residuals other than this one. Under `exit()` the leak
 check still runs only when an atexit handler was registered.
+### M9 (R143) — 2026-10-30, the jumps R130 did not lower
+
+R130's entry left `sigsetjmp`, `siglongjmp` and `_longjmp` without a model.
+Their calls returned nondet values or fell through, so with `f` doing
+`g = 1; siglongjmp(b, 2);`, the program
+`if (sigsetjmp(b, 0) == 0) f(); else assert(g == 0);` aborts natively and was
+SUCCESSFUL, and the same held for `_setjmp` and `_longjmp`.
+
+**Fixed** by modelling `sigsetjmp`, `__sigsetjmp` (glibc's `sigsetjmp` is a
+macro for it) and `_longjmp` and `siglongjmp` as calls to `setjmp` and
+`longjmp`, and treating their call sites as R130's. The signal mask is not
+modelled. `program_calls_longjmp` skips the bodies of the `_longjmp` and
+`siglongjmp` models: they are linked whenever `<setjmp.h>` is included, and
+their calls to `longjmp` would otherwise lower every such program.
+
+`siglongjmp_frames` repeats `longjmp_frames` with `sigsetjmp` and
+`siglongjmp` for the jump out of three frames and `_setjmp` and `_longjmp`
+for the recursive one; master fails it. `siglongjmp_frames_fail` runs under
+`--multi-property` and pins one jump through `sigsetjmp` and one through
+`__sigsetjmp`; `underscore_longjmp_fail` pins `_longjmp`. Both are SUCCESSFUL
+on master. Dropping any of the four names from the lowering changes the
+verdict of a fail test, under the default solver (Bitwuzla), `--z3` and
+`--k-induction`. A passing test cannot pin these: a jump that escapes ends the
+path, and the assertions after it are never checked.
+
+Not fixed: the R130 residuals other than these names, and `sigsetjmp`'s
+`savemask`.
+### M9 (R144) — 2026-10-30, the steps R141 left without a model
+
+R141's entry left `nextafterl`, `nexttoward`, `nexttowardf` and `nexttowardl`
+without a model, so each returned a nondet value: `nextafterl(1.0L, 2.0L)`
+was not `1.0L + LDBL_EPSILON`, and `nexttoward(1.0, 2.0L)` was not
+`1.0 + DBL_EPSILON`. Both hold natively.
+
+**Fixed** by modelling `nextafterl` arithmetically, not on the bit pattern.
+ESBMC encodes a 128-bit `long double` as binary128 even where
+`LDBL_MANT_DIG` is the x87 format's 64 (see `frexp.c`), so a step on the
+encoding would use binary128's spacing. The model takes the exponent from
+`frexpl` and adds or subtracts `2^(e - LDBL_MANT_DIG)`, clamped to
+`LDBL_TRUE_MIN` below the normal range and halved below a power of two.
+Every such step lands on a value both encodings represent, so the sum is
+exact. `nexttoward` and `nexttowardf` call `nextafter` towards the infinity
+on `y`'s side (C11 7.12.11.4), and `nexttowardl` is `nextafterl`.
+
+`nextafterl_model` checks steps in both directions, below a power of two,
+from zero, below `LDBL_MIN`, from the least subnormal and from an infinity,
+the overflow to an infinity, NaN, `x == y`, and the three `nexttoward`
+functions; master fails it, and it passes natively. `nextafterl_model_fail`
+runs under `--multi-property` and pins four wrong results as FAILED. Dropping
+the halving, the clamp, the sign of the step from zero, or swapping the
+direction of `nexttoward` fails `nextafterl_model`, under the default solver
+(Bitwuzla), `--z3` and `--k-induction`. These runs used macOS on AArch64,
+where `long double` is binary64; the x87 case is checked only by the Linux
+CI run.
+
+Not fixed: `nextafterl` and `frexpl` have no model on 32-bit x86, where
+`long double` is 12 bytes. The floating-point exception flags have no model:
+`fetestexcept` returns a nondet value after any `feraiseexcept`.
 
 ---
 

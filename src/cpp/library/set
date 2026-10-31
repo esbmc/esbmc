@@ -619,24 +619,18 @@ public:
 
   size_type erase(const key_type &x)
   {
-    int k;
-    for (k = 0; k != _size; k++)
-      if (buf[k] == x)
-        break;
-
-    if (k == _size)
+    size_type n = 0;
+    for (size_t i = 0; i < _size; i++)
     {
-      return 0; // Element not found, nothing erased
+      if (buf[i] == x)
+        n++;
+      else
+        buf[i - n] = buf[i];
     }
-
-    // Element found, erase it
-    for (int i = k + 1; i < _size; i++)
-    {
-      buf[i - 1] = buf[i];
-    }
-    _size--;
-    buf[_size] = Key();
-    return 1; // One element erased
+    for (size_t i = _size - n; i < _size; i++)
+      buf[i] = Key();
+    _size -= n;
+    return n;
   }
 
   void erase(iterator first, iterator last)
