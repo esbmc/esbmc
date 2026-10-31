@@ -1,0 +1,7 @@
+regression/python/github_9480
+regression/python/github_9480_fail
+regression/python/github_9480_mixed
+regression/python/github_9480_mixed_fail
+regression/python/github_9480_int
+regression/python/github_9480_nested_target
+regression/python/github_9480_append_after

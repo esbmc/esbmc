@@ -386,6 +386,11 @@ public:
   // A runtime guard emitted into current_block runs once, unconditionally,
   // ahead of the enclosing statement; that is wrong for an expression Python
   // evaluates conditionally or repeatedly (an and/or tail, a while test).
+  bool unpack_record_in_force() const
+  {
+    return unpack_record_trusted_;
+  }
+
   bool in_type_probe() const
   {
     return in_rhs_type_probe_;
