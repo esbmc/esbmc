@@ -758,6 +758,27 @@ class LoopMixin:
             ast.fix_missing_locations(stmt)
         return unrolled
 
+    def _with_manager_class(self, func_name):
+        """The class a `with func_name(...)` manager is annotated with: the
+        class a module function is annotated to return, else the callee."""
+        return getattr(self, "factory_classes", {}).get(func_name, func_name)
+
+    @staticmethod
+    def _scan_factory_classes(module, class_names):
+        """Per module function annotated to return a class of this module,
+        that class."""
+        factories = {}
+        for stmt in module.body:
+            if not isinstance(stmt, ast.FunctionDef) or stmt.name in class_names:
+                continue
+            ret = stmt.returns
+            if isinstance(ret, ast.Name) and ret.id in class_names:
+                factories[stmt.name] = ret.id
+            elif (isinstance(ret, ast.Constant) and isinstance(ret.value, str)
+                  and ret.value in class_names):
+                factories[stmt.name] = ret.value
+        return factories
+
     def visit_With(self, node):  # pylint: disable=too-many-locals
         """Desugar 'with EXPR as VAR: BODY' into __enter__/__exit__ calls.
 
@@ -781,7 +802,7 @@ class LoopMixin:
             ctx_expr = item.context_expr
 
             if isinstance(ctx_expr, ast.Call) and isinstance(ctx_expr.func, ast.Name):
-                class_name = ctx_expr.func.id
+                class_name = self._with_manager_class(ctx_expr.func.id)
                 type_ann = ast.Name(id=class_name, ctx=ast.Load())
                 mgr_assign = ast.AnnAssign(
                     target=ast.Name(id=mgr_name, ctx=ast.Store()),
@@ -849,7 +870,8 @@ class LoopMixin:
         # (e.g. `open(...)`) fall back to today's unwrapped lowering.
         wrap = (hasattr(self, "_classes_with_exit") and len(node.items) > 0 and all(
             isinstance(item.context_expr, ast.Call) and isinstance(item.context_expr.func, ast.Name)
-            and item.context_expr.func.id in self._classes_with_exit for item in node.items))
+            and self._with_manager_class(item.context_expr.func.id) in self._classes_with_exit
+            for item in node.items))
 
         if wrap:
             handler_body = [

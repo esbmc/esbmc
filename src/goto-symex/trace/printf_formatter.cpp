@@ -36,6 +36,7 @@ void printf_formattert::print(std::ostream &out)
   max_outlen = 0;
   bounded = true;
   exact = true;
+  percent_n.clear();
 
   try
   {
@@ -270,6 +271,17 @@ type2tc printf_int_type(bool is_signed, const std::string &mod)
     {"t", length_modt::T}};
   const auto it = mods.find(mod);
   return it == mods.end() ? type2tc() : pick_int_type(is_signed, it->second);
+}
+
+// %n prints nothing; its pointer receives the length so far.
+void printf_formattert::record_percent_n()
+{
+  if (next_operand == operands.end())
+  {
+    bounded = false;
+    return;
+  }
+  percent_n.push_back({*(next_operand++), min_outlen, max_outlen, bounded});
 }
 
 void printf_formattert::process_format(std::ostream &out)
@@ -538,6 +550,10 @@ void printf_formattert::process_format(std::ostream &out)
     emit(pad_field("", "0x" + std::string(hex_chars, '0'), conv, false));
     break;
   }
+
+  case 'n':
+    record_percent_n();
+    break;
 
   default:
     exact = false;
