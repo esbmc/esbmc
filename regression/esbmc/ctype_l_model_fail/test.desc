@@ -1,0 +1,6 @@
+CORE
+main.c
+--multi-property
+^VERIFICATION FAILED$
+^  FAILED .*assertion tolower_l\('A', c\) == 'A'$
+^  FAILED .*assertion isdigit_l\('a', c\)$
