@@ -433,6 +433,20 @@ public:
            is_numpy_string_array(type.subtype());
   }
 
+  /// @p integer as a numeric NumPy element. An 8-bit one would otherwise equal
+  /// char_type(), and the array would read as a string.
+  static typet numpy_integer_type(typet integer)
+  {
+    integer.set("numpy_numeric", "1");
+    return integer;
+  }
+
+  /// An element tagged by numpy_integer_type.
+  static bool is_numpy_numeric_element(const typet &type)
+  {
+    return !type.get("numpy_numeric").empty();
+  }
+
   /// The scalar type at the leaves of the (possibly nested) array @p type.
   static typet array_scalar_type(const typet &type)
   {

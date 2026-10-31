@@ -3122,6 +3122,8 @@ static bool is_numeric_scalar_type(const typet &type)
 // Characters are 8-bit integers, as in the frontend's string arrays.
 static bool is_char_element(const typet &type)
 {
+  if (type_utils::is_numpy_numeric_element(type))
+    return false;
   return (type.is_signedbv() && to_signedbv_type(type).get_width() == 8) ||
          (type.is_unsignedbv() && to_unsignedbv_type(type).get_width() == 8);
 }
@@ -3510,6 +3512,8 @@ exprt python_converter::handle_array_operations(
     if (!t.is_array())
       return false;
     const typet &elt = t.subtype();
+    if (type_utils::is_numpy_numeric_element(elt))
+      return false;
     return elt == char_type() ||
            (elt.is_signedbv() && to_signedbv_type(elt).get_width() == 8) ||
            (elt.is_unsignedbv() && to_unsignedbv_type(elt).get_width() == 8);
