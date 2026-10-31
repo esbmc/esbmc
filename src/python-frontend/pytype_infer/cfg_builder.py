@@ -23,14 +23,16 @@ class LoopContext:
     break_target: int
     continue_target: int
 
+
 @dataclass
 class FinallyContext:
-    body:list[ast.stmt]
-    outer: "FinallyContext | None " = None    
+    body: list[ast.stmt]
+    outer: "FinallyContext | None " = None
 
 
 class UnsupportedCFGError(RuntimeError):
     pass
+
 
 #look for the set, append etc methods fro dataflow
 def add_edge(cfg: CFG, src_idx: int | None, dst_idx: int | None):
@@ -51,7 +53,14 @@ def build_cfg_for_function(func_node: ast.FunctionDef | ast.AsyncFunctionDef) ->
     entry_idx = new_block(cfg)
     exit_idx = new_block(cfg)
 
-    tail = build_statements(func_node.body, cfg, entry_idx, None, exit_idx, None,)
+    tail = build_statements(
+        func_node.body,
+        cfg,
+        entry_idx,
+        None,
+        exit_idx,
+        None,
+    )
 
     if tail is not None:
         add_edge(cfg, tail, exit_idx)
@@ -164,7 +173,12 @@ def build_for(cfg: CFG, stmt: ast.For, current_idx: int, outer_loop: LoopContext
     return exit_idx
 
 
-def build_statements(statements, cfg, current_idx: int, loop_ctx: LoopContext | None = None, function_exit_idx: int | None = None, finally_ctx = None):
+def build_statements(statements,
+                     cfg,
+                     current_idx: int,
+                     loop_ctx: LoopContext | None = None,
+                     function_exit_idx: int | None = None,
+                     finally_ctx=None):
     current = current_idx
 
     for stmt in statements:
@@ -180,23 +194,23 @@ def build_statements(statements, cfg, current_idx: int, loop_ctx: LoopContext | 
             if loop_ctx is None:
                 raise RuntimeError("break outside loop")
             #add_edge(cfg, current, loop_ctx.break_target)
-            route_control_transfer(cfg, current, loop_ctx.break_target, loop_ctx, function_exit_idx, finally_ctx)
+            route_control_transfer(cfg, current, loop_ctx.break_target, loop_ctx, function_exit_idx,
+                                   finally_ctx)
             current = None
             continue
         elif isinstance(stmt, ast.Continue):
             if loop_ctx is None:
                 raise RuntimeError("continue outside loop")
-            
-            route_control_transfer(cfg, current, loop_ctx.continue_target, loop_ctx, function_exit_idx, finally_ctx)
+
+            route_control_transfer(cfg, current, loop_ctx.continue_target, loop_ctx,
+                                   function_exit_idx, finally_ctx)
             #add_edge(cfg, current, loop_ctx.continue_target)
             current = None
             continue
             #return None
         elif isinstance(stmt, ast.Return):
             if function_exit_idx is None:
-                raise UnsupportedCFGError(
-                    "return without function exit"
-                )
+                raise UnsupportedCFGError("return without function exit")
 
             # Keep Return in the block so the solver
             # can still infer its return type.
@@ -211,23 +225,31 @@ def build_statements(statements, cfg, current_idx: int, loop_ctx: LoopContext | 
                 finally_ctx,
             )
 
-            current = None       
+            current = None
 
         elif isinstance(stmt, ast.Raise):
             cfg.blocks[current].stmts.append(stmt)
-            current = None    
+            current = None
 
         elif isinstance(stmt, ast.With):
             current = build_with(cfg, stmt, current, loop_ctx, function_exit_idx, finally_ctx)
         elif isinstance(stmt, ast.Try):
-            current = build_try_statement(stmt, cfg, current, loop_ctx, function_exit_idx, finally_ctx)
+            current = build_try_statement(stmt, cfg, current, loop_ctx, function_exit_idx,
+                                          finally_ctx)
         #else:
-         #   cfg.blocks[current].stmts.append(stmt)
+        #   cfg.blocks[current].stmts.append(stmt)
         elif isinstance(stmt, ast.AsyncFor):
-            current = build_async_for(cfg, stmt, current, loop_ctx, function_exit_idx, finally_ctx,)
+            current = build_async_for(
+                cfg,
+                stmt,
+                current,
+                loop_ctx,
+                function_exit_idx,
+                finally_ctx,
+            )
 
         elif isinstance(
-            stmt,
+                stmt,
             (
                 ast.Assign,
                 ast.AnnAssign,
@@ -240,14 +262,18 @@ def build_statements(statements, cfg, current_idx: int, loop_ctx: LoopContext | 
             cfg.blocks[current].stmts.append(stmt)
 
         else:
-            raise UnsupportedCFGError(
-                "unsupported statement in CFG: "
-                f"{type(stmt).__name__}"
-            )
+            raise UnsupportedCFGError("unsupported statement in CFG: "
+                                      f"{type(stmt).__name__}")
 
     return current
 
-def route_control_transfer(cfg, current_idx, target_idx, loop_ctx, function_exit_idx,
+
+def route_control_transfer(
+    cfg,
+    current_idx,
+    target_idx,
+    loop_ctx,
+    function_exit_idx,
     finally_ctx,
 ):
     if finally_ctx is None:
@@ -286,7 +312,12 @@ def route_control_transfer(cfg, current_idx, target_idx, loop_ctx, function_exit
         )
 
 
-def build_try_statement(stmt, cfg, current_idx, outer_loop, function_exit_idx=None, outer_finally=None):
+def build_try_statement(stmt,
+                        cfg,
+                        current_idx,
+                        outer_loop,
+                        function_exit_idx=None,
+                        outer_finally=None):
     """
     Build the CFG for:
 
@@ -310,9 +341,13 @@ def build_try_statement(stmt, cfg, current_idx, outer_loop, function_exit_idx=No
     active_finally = outer_finally
 
     if stmt.finalbody:
-        active_finally = FinallyContext(stmt.finalbody, outer_finally,)
+        active_finally = FinallyContext(
+            stmt.finalbody,
+            outer_finally,
+        )
 
-    try_tail = build_statements(stmt.body, cfg, try_entry, outer_loop, function_exit_idx, active_finally)
+    try_tail = build_statements(stmt.body, cfg, try_entry, outer_loop, function_exit_idx,
+                                active_finally)
 
     # Normal completion of try -> try_end.
     #cfg.blocks[try_tail_idx].succ.append(try_end_idx)
@@ -362,7 +397,8 @@ def build_try_statement(stmt, cfg, current_idx, outer_loop, function_exit_idx=No
         else_entry = new_block(cfg)
         add_edge(cfg, try_tail, else_entry)
 
-        normal_tail = build_statements(stmt.orelse, cfg, else_entry, outer_loop, function_exit_idx, active_finally)
+        normal_tail = build_statements(stmt.orelse, cfg, else_entry, outer_loop, function_exit_idx,
+                                       active_finally)
 
         if stmt.finalbody:
             finally_entry = new_block(cfg)
@@ -371,7 +407,7 @@ def build_try_statement(stmt, cfg, current_idx, outer_loop, function_exit_idx=No
                 add_edge(cfg, normal_tail, finally_entry)
 
             for handler_tail in handler_tails:
-                 add_edge(cfg, handler_tail, finally_entry)
+                add_edge(cfg, handler_tail, finally_entry)
 
             final_tail = build_statements(
                 stmt.finalbody,
@@ -405,7 +441,7 @@ def build_try_statement(stmt, cfg, current_idx, outer_loop, function_exit_idx=No
                 )
 
         if not cfg.blocks[after_try].pred:
-            return None     
+            return None
 
     return after_try
 
@@ -414,7 +450,11 @@ def is_terminal_statement(stmt):
     return isinstance(stmt, (ast.Return, ast.Raise))
 
 
-def build_if(stmt: ast.If, cfg: CFG, current_idx: int, loop_ctx: LoopContext | None = None,
+def build_if(
+    stmt: ast.If,
+    cfg: CFG,
+    current_idx: int,
+    loop_ctx: LoopContext | None = None,
     function_exit_idx: int | None = None,
     finally_ctx=None,
 ) -> int | None:
@@ -427,9 +467,7 @@ def build_if(stmt: ast.If, cfg: CFG, current_idx: int, loop_ctx: LoopContext | N
         condition_idx = new_block(cfg)
         add_edge(cfg, current_idx, condition_idx)
 
-    cfg.blocks[condition_idx].stmts.append(
-        ("cond", stmt.test)
-    )
+    cfg.blocks[condition_idx].stmts.append(("cond", stmt.test))
 
     then_idx = new_block(cfg)
     else_idx = new_block(cfg)
@@ -476,7 +514,7 @@ def build_with(
     current_idx: int,
     loop_ctx: LoopContext | None = None,
     function_exit_idx: int | None = None,
-    finally_ctx = None,
+    finally_ctx=None,
 ) -> int | None:
 
     header_idx = new_block(cfg)
@@ -499,6 +537,7 @@ def build_with(
 
     return exit_idx
 
+
 def build_async_for(
     cfg: CFG,
     stmt: ast.AsyncFor,
@@ -518,13 +557,11 @@ def build_async_for(
         header_idx,
     )
 
-    cfg.blocks[header_idx].stmts.append(
-        (
-            "async_for",
-            stmt.target,
-            stmt.iter,
-        )
-    )
+    cfg.blocks[header_idx].stmts.append((
+        "async_for",
+        stmt.target,
+        stmt.iter,
+    ))
 
     add_edge(
         cfg,
@@ -592,4 +629,3 @@ def build_async_for(
         return None
 
     return exit_idx
-

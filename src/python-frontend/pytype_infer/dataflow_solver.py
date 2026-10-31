@@ -156,6 +156,7 @@ def infer_return_type(stmt, env, context):
     )
     return current_type
 
+
 def propagate_for_marker(
     block,
     env,
@@ -167,10 +168,8 @@ def propagate_for_marker(
     iterable = marker[2]
 
     if len(block.succ) < 2:
-        raise UnsupportedCFGError(
-            "for block requires body "
-            "and exhaustion successors"
-        )
+        raise UnsupportedCFGError("for block requires body "
+                                  "and exhaustion successors")
 
     body_env = env.copy()
 
@@ -197,6 +196,7 @@ def propagate_for_marker(
         env,
         in_envs,
     )
+
 
 def propagate_block(
     block,
@@ -252,9 +252,8 @@ def propagate_block(
         )
         return
 
-    raise UnsupportedCFGError(
-        f"unsupported CFG marker: {marker[0]}"
-    )
+    raise UnsupportedCFGError(f"unsupported CFG marker: {marker[0]}")
+
 
 def propagate_async_for_marker(
     block,
@@ -267,10 +266,8 @@ def propagate_async_for_marker(
     iterable = marker[2]
 
     if len(block.succ) < 2:
-        raise UnsupportedCFGError(
-            "async for block requires body "
-            "and exhaustion successors"
-        )
+        raise UnsupportedCFGError("async for block requires body "
+                                  "and exhaustion successors")
 
     body_env = env.copy()
 
@@ -298,6 +295,7 @@ def propagate_async_for_marker(
         in_envs,
     )
 
+
 def infer_async_for_element_type(
     iterable,
     env,
@@ -315,8 +313,8 @@ def infer_async_for_element_type(
     )
 
     if not isinstance(
-        element_type,
-        Unknown,
+            element_type,
+            Unknown,
     ):
         return element_type
 
@@ -326,14 +324,13 @@ def infer_async_for_element_type(
         context,
     )
 
-def is_range_call(expr):
-    return (
-        isinstance(expr, ast.Call)
-        and isinstance(expr.func, ast.Name)
-        and expr.func.id == "range" 
-    )
 
-def infer_iterable_element_type(iterable_type,):
+def is_range_call(expr):
+    return (isinstance(expr, ast.Call) and isinstance(expr.func, ast.Name)
+            and expr.func.id == "range")
+
+
+def infer_iterable_element_type(iterable_type, ):
 
     if isinstance(iterable_type, ListType):
         return iterable_type.elem
@@ -348,9 +345,10 @@ def infer_iterable_element_type(iterable_type,):
         return StrType()
 
     if isinstance(iterable_type, TupleType):
-        return infer_tuple_element_type(iterable_type,)
+        return infer_tuple_element_type(iterable_type, )
 
     return Unknown()
+
 
 def infer_tuple_element_type(tuple_type):
     if not tuple_type.elems:
@@ -362,6 +360,7 @@ def infer_tuple_element_type(tuple_type):
         element_type = element_type.join(current_type)
 
     return element_type
+
 
 def infer_for_element_type(
     iterable,
@@ -377,14 +376,13 @@ def infer_for_element_type(
         context,
     )
 
-    element_type = infer_iterable_element_type(
-        iterable_type,
-    )
+    element_type = infer_iterable_element_type(iterable_type, )
 
     if isinstance(element_type, Unknown):
         return TopType()
 
     return element_type
+
 
 def infer_async_for_element_type_from_calls(
     iterable,
@@ -418,14 +416,18 @@ def infer_async_for_element_type_from_calls(
     )
 
     if isinstance(
-        element_type,
-        Unknown,
+            element_type,
+            Unknown,
     ):
         return TopType()
 
     return element_type
 
-def infer_method_type(method_node, known_classes,):
+
+def infer_method_type(
+    method_node,
+    known_classes,
+):
     param_types = []
 
     args = method_node.args.args
@@ -434,12 +436,10 @@ def infer_method_type(method_node, known_classes,):
         if arg.annotation is None:
             param_types.append(Unknown())
         else:
-            param_types.append(
-                infer_annotation_type_with_classes(
-                    arg.annotation,
-                    known_classes,
-                )
-            )
+            param_types.append(infer_annotation_type_with_classes(
+                arg.annotation,
+                known_classes,
+            ))
 
     if method_node.returns is None:
         return_type = Unknown()
@@ -454,30 +454,34 @@ def infer_method_type(method_node, known_classes,):
         return_type,
     )
 
-def infer_annotation_type_with_classes(annotation, known_classes,):
+
+def infer_annotation_type_with_classes(
+    annotation,
+    known_classes,
+):
 
     if isinstance(annotation, ast.Name):
         if annotation.id in known_classes:
             return InstanceType(annotation.id)
 
-    if (isinstance(annotation, ast.Constant) and isinstance(annotation, ast.Constant) and isinstance(annotation.value, str) and annotation.value in known_classes):
+    if (isinstance(annotation, ast.Constant) and isinstance(annotation, ast.Constant)
+            and isinstance(annotation.value, str) and annotation.value in known_classes):
         return InstanceType(annotation.value)
 
-    return infer_annotation_type(annotation)    
+    return infer_annotation_type(annotation)
+
 
 def infer_async_iterable_element_type(
     iterable_type,
     context,
 ):
     if not isinstance(
-        iterable_type,
-        InstanceType,
+            iterable_type,
+            InstanceType,
     ):
         return Unknown()
 
-    class_info = context.known_classes.get(
-        iterable_type.class_name
-    )
+    class_info = context.known_classes.get(iterable_type.class_name)
 
     if class_info is None:
         return Unknown()
@@ -488,25 +492,23 @@ def infer_async_iterable_element_type(
     )
 
     if isinstance(
-        async_iter_type,
-        CallableType,
+            async_iter_type,
+            CallableType,
     ):
         iterator_type = async_iter_type.ret
 
         if isinstance(
-            iterator_type,
-            InstanceType,
+                iterator_type,
+                InstanceType,
         ):
-            element_type = (
-                infer_async_instance_element_type(
-                    iterator_type,
-                    context,
-                )
-            )
+            element_type = (infer_async_instance_element_type(
+                iterator_type,
+                context,
+            ))
 
             if not isinstance(
-                element_type,
-                Unknown,
+                    element_type,
+                    Unknown,
             ):
                 return element_type
 
@@ -515,13 +517,12 @@ def infer_async_iterable_element_type(
         context,
     )
 
+
 def infer_async_instance_element_type(
     iterable_type,
     context,
 ):
-    class_info = context.known_classes.get(
-        iterable_type.class_name
-    )
+    class_info = context.known_classes.get(iterable_type.class_name)
 
     if class_info is None:
         return Unknown()
@@ -532,8 +533,8 @@ def infer_async_instance_element_type(
     )
 
     if isinstance(
-        async_next_type,
-        CallableType,
+            async_next_type,
+            CallableType,
     ):
         return async_next_type.ret
 
@@ -653,6 +654,7 @@ def initialize_environments(func_node, cfg, context):
 
     return in_envs, out_envs
 
+
 def merge_into_environment(target, source):
     for name, typ in source.items():
         if name in target:
@@ -660,24 +662,23 @@ def merge_into_environment(target, source):
         else:
             target[name] = typ
 
+
 def is_with_marker(stmt):
     return (isinstance(stmt, tuple) and len(stmt) == 2 and stmt[0] == "with")
+
 
 def is_for_marker(stmt):
     return (isinstance(stmt, tuple) and len(stmt) >= 3 and stmt[0] == "for")
 
+
 def is_async_for_marker(stmt):
-    return (
-        isinstance(stmt, tuple)
-        and len(stmt) >= 3
-        and stmt[0] == "async_for"
-    )
+    return (isinstance(stmt, tuple) and len(stmt) >= 3 and stmt[0] == "async_for")
+
 
 def is_block_marker(stmt):
-    return (is_condition_marker(stmt) 
-            or is_for_marker(stmt) 
-            or is_with_marker(stmt)
+    return (is_condition_marker(stmt) or is_for_marker(stmt) or is_with_marker(stmt)
             or is_async_for_marker(stmt))
+
 
 def prepare_block(
     block,
@@ -693,13 +694,14 @@ def prepare_block(
         stmts = block.stmts[1:]
     else:
         marker = None
-        stmts = block.stmts    
+        stmts = block.stmts
 
     return env, marker, stmts
 
 
 def is_condition_marker(stmt):
     return (isinstance(stmt, tuple) and len(stmt) >= 2 and stmt[0] == "cond")
+
 
 def propagate_with_marker(
     block,
@@ -722,6 +724,7 @@ def propagate_with_marker(
         body_env,
         in_envs,
     )
+
 
 def transfer_with_items(
     items,
@@ -753,6 +756,7 @@ def transfer_with_items(
 
     return env
 
+
 def infer_with_enter_type(
     context_expr,
     env,
@@ -779,24 +783,43 @@ def infer_with_enter_type(
 
     return result
 
-def bind_target_type(target,typ, env,):
+
+def bind_target_type(
+    target,
+    typ,
+    env,
+):
 
     if isinstance(target, ast.Name):
         env[target.id] = typ
         return
 
     if isinstance(target, (ast.Tuple, ast.List)):
-        bind_sequence_target(target, typ, env, )
+        bind_sequence_target(
+            target,
+            typ,
+            env,
+        )
         return
 
+
 def bind_sequence_target(target, typ, env):
-    if(isinstance(typ, TupleType) and len(typ.elems) == len(target.elts)):
+    if (isinstance(typ, TupleType) and len(typ.elems) == len(target.elts)):
         for element, element_type in zip(target.elts, typ.elems):
-            bind_target_type(element, element_type, env,)
+            bind_target_type(
+                element,
+                element_type,
+                env,
+            )
         return
 
     for element in target.elts:
-        bind_target_type(element, TopType(), env,)        
+        bind_target_type(
+            element,
+            TopType(),
+            env,
+        )
+
 
 def transfer_statement(stmt, env, context):
     if isinstance(stmt, ast.Assign):
@@ -806,7 +829,11 @@ def transfer_statement(stmt, env, context):
         return transfer_annassign(stmt, env)
 
     if isinstance(stmt, ast.AugAssign):
-        return transfer_augassign(stmt, env, context, )
+        return transfer_augassign(
+            stmt,
+            env,
+            context,
+        )
 
     if isinstance(stmt, ast.Expr):
         return transfer_expr(stmt, env, context)
@@ -816,11 +843,14 @@ def transfer_statement(stmt, env, context):
 
     return env
 
-def transfer_augassign(stmt, env, context,):
+
+def transfer_augassign(
+    stmt,
+    env,
+    context,
+):
     if not isinstance(stmt.target, ast.Name):
-        raise UnsupportedCFGError(
-            "augmented assignment requires a simple name"
-        )
+        raise UnsupportedCFGError("augmented assignment requires a simple name")
     name = stmt.target.id
 
     left = ast.Name(
@@ -841,6 +871,7 @@ def transfer_augassign(stmt, env, context,):
     )
 
     return env
+
 
 def transfer_return(stmt, env, context):
     if stmt.value is None:
@@ -898,10 +929,15 @@ def assign_subscript(target, value, env, context):
     )
 
 
-def update_subscript_assignment(container, key_type, value_type, env, is_slice=False,):
+def update_subscript_assignment(
+    container,
+    key_type,
+    value_type,
+    env,
+    is_slice=False,
+):
     current = env.get(container, Unknown())
 
-    
     if isinstance(current, DictType):
         env[container] = DictType(
             current.key_t.join(key_type),
@@ -910,8 +946,14 @@ def update_subscript_assignment(container, key_type, value_type, env, is_slice=F
         return
 
     if isinstance(current, ListType):
-       # env[container] = ListType(current.elem.join(value_type))
-        update_list_subscript_assignment(container, current, value_type, env, is_slice=is_slice,)
+        # env[container] = ListType(current.elem.join(value_type))
+        update_list_subscript_assignment(
+            container,
+            current,
+            value_type,
+            env,
+            is_slice=is_slice,
+        )
         return
 
     if isinstance(current, Unknown):
@@ -920,16 +962,24 @@ def update_subscript_assignment(container, key_type, value_type, env, is_slice=F
 
     env[container] = Unknown()
 
-def update_list_subscript_assignment(container, current, value_type, env, is_slice,):
+
+def update_list_subscript_assignment(
+    container,
+    current,
+    value_type,
+    env,
+    is_slice,
+):
     if not is_slice:
         env[container] = ListType(current.elem.join(value_type))
         return
 
-    if isinstance(value_type, ListType): 
+    if isinstance(value_type, ListType):
         env[container] = ListType(current.elem.join(value_type.elem))
         return
 
     env[container] = TopType()
+
 
 def infer_subscript_container(key_type, value_type):
     if isinstance(key_type, StrType):
