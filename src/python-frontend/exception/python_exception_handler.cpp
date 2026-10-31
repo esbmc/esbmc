@@ -587,6 +587,27 @@ exprt python_exception_handler::build_builtin_exception(
   return raise;
 }
 
+/// Whether `node` is the call `name(...)`.
+static bool calls_name(const nlohmann::json &node, const char *name)
+{
+  return node.is_object() && node.value("_type", "") == "Call" &&
+         node.contains("func") && node["func"].is_object() &&
+         node["func"].value("id", "") == name;
+}
+
+/// Marks each str(type(x)) in a raised expression: its text is only a message.
+static void mark_type_messages(nlohmann::json &node)
+{
+  if (!node.is_structured())
+    return;
+  if (
+    calls_name(node, "str") && node.contains("args") &&
+    node["args"].size() == 1 && calls_name(node["args"][0], "type"))
+    node["esbmc_raise_message"] = true;
+  for (auto &child : node)
+    mark_type_messages(child);
+}
+
 void python_exception_handler::get_raise_statement(
   const nlohmann::json &element,
   codet &block)
@@ -608,12 +629,14 @@ void python_exception_handler::get_raise_statement(
   }
 
   const std::string exc_name = raised_class_name(element["exc"], element);
+  nlohmann::json exc = element["exc"];
+  mark_type_messages(exc);
 
   typet type;
   exprt raise;
   if (raises_instance_variable(element["exc"], exc_name))
   {
-    raise = converter_.get_expr(element["exc"]);
+    raise = converter_.get_expr(exc);
     // A class instance is held by pointer; except clauses match the class.
     if (raise.type().is_pointer())
       raise = build_dereference(raise, raise.type().subtype());
@@ -622,7 +645,7 @@ void python_exception_handler::get_raise_statement(
   else if (type_utils::is_python_exceptions(exc_name))
   {
     type = type_handler_.get_typet(exc_name);
-    raise = build_builtin_exception(element["exc"], type);
+    raise = build_builtin_exception(exc, type);
   }
   else
   {
@@ -631,7 +654,7 @@ void python_exception_handler::get_raise_statement(
     // DECL MyException return_value;
     // FUNCTION_CALL:  MyException(&return_value, &"message");
     // Throw MyException return_value;
-    raise = converter_.get_expr(element["exc"]);
+    raise = converter_.get_expr(exc);
 
     // get_function_call() returns the `_init_undefined` sentinel when the
     // raised class (and its bases) define no __init__. Constructors emit

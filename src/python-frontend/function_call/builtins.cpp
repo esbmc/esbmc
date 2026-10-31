@@ -1360,7 +1360,11 @@ bool function_call_expr::is_str_of_type_call() const
 
 exprt function_call_expr::handle_str_of_type_call() const
 {
+  const auto saved_compared = converter_.type_compared_operands_;
+  if (call_.value("esbmc_raise_message", false))
+    converter_.type_compared_operands_ = {&call_["args"][0], nullptr};
   exprt cls = converter_.get_expr(call_["args"][0]);
+  converter_.type_compared_operands_ = saved_compared;
   if (type_handler::is_class_value_type(cls.type()))
     throw std::runtime_error(
       "Unsupported: str() of a class that is only known at run time");
