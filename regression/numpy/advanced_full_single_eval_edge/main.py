@@ -15,3 +15,7 @@ c = Counter()
 a = np.full(3, c.next())
 assert c.n == 1
 assert a[0] == 7 and a[2] == 7
+
+narrow = np.full(2, c.next() + 0.5, dtype=np.int16)
+assert c.n == 2
+assert narrow[1] == 7 and narrow.itemsize == 2
