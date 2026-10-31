@@ -1481,14 +1481,22 @@ exprt function_call_expr::build_constant_from_arg() const
 
   else if (func_name == "float" && is_string_arg(arg))
   {
-    std::string str_val = arg["value"].get<std::string>();
+    const std::string raw_val = arg["value"].get<std::string>();
 
-    // Convert to lowercase for case-insensitive comparison
+    // float() strips leading and trailing whitespace only; str.isspace() also
+    // counts \x1c-\x1f.
+    auto is_space = [](unsigned char c) {
+      return std::isspace(c) || (c >= 0x1c && c <= 0x1f);
+    };
+    const auto first =
+      std::find_if_not(raw_val.begin(), raw_val.end(), is_space);
+    const auto last =
+      std::find_if_not(raw_val.rbegin(), raw_val.rend(), is_space).base();
+    const std::string trimmed =
+      first < last ? std::string(first, last) : std::string();
+
+    std::string str_val = trimmed;
     std::transform(str_val.begin(), str_val.end(), str_val.begin(), ::tolower);
-
-    // Remove whitespace
-    str_val.erase(
-      std::remove_if(str_val.begin(), str_val.end(), ::isspace), str_val.end());
 
     // Handle special float string values
     if (const auto special = nonfinite_float_from_spelling(str_val))
@@ -1496,11 +1504,11 @@ exprt function_call_expr::build_constant_from_arg() const
     {
       // Try to parse as regular float
       {
-        const std::string raw_val = arg["value"].get<std::string>();
         // strtod does not know PEP 515, so drop the separators first (#7558).
         std::string digits;
         const bool separators_ok =
-          type_utils::strip_pep515_underscores(raw_val, digits);
+          !trimmed.empty() &&
+          type_utils::strip_pep515_underscores(trimmed, digits);
         char *end = nullptr;
         double dval = separators_ok ? std::strtod(digits.c_str(), &end) : 0.0;
         if (!separators_ok || !end || end != digits.c_str() + digits.size())
