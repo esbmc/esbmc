@@ -1,0 +1,5 @@
+CORE
+main.c
+--std c11 --volatile-check --k-induction
+
+^VERIFICATION SUCCESSFUL$
