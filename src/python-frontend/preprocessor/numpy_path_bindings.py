@@ -168,11 +168,15 @@ def _binds_otherwise(node, name, sites):
     return isinstance(node, (ast.Global, ast.Nonlocal)) and name in node.names
 
 
-def _has_own_binding(function, name):
-    """Whether `function` has its own `name`, so that it does not read the module's."""
+def _is_param(function, name):
     args = function.args
     params = args.posonlyargs + args.args + args.kwonlyargs + [args.vararg, args.kwarg]
-    return any(p and p.arg == name for p in params) or any(
+    return any(p and p.arg == name for p in params)
+
+
+def _has_own_binding(function, name):
+    """Whether `function` has its own `name`, so that it does not read the module's."""
+    return _is_param(function, name) or any(
         isinstance(n, ast.Name) and n.id == name and not isinstance(n.ctx, ast.Load)
         for n in _walk_scope(function.body))
 
@@ -297,6 +301,9 @@ class _Rewriter:
             return stmt
         if not self.reads_in_functions or not isinstance(stmt, _FUNCTIONS):
             raise _Unsupported()
+        # A default or a decorator runs where the function is defined, outside its body.
+        if any(_reads(n, self.name) for n in ast.iter_child_nodes(stmt) if n not in stmt.body):
+            raise _Unsupported()
         if not _has_own_binding(stmt, self.name):
             stmt.body, _ = self.lower(stmt.body, None)
         return stmt
@@ -366,6 +373,9 @@ def _needs_rewrite(scope, sites, name):
 
 
 def _lower_name(scope, name, aliases):
+    # A parameter is a binding the rewrite has no constructor for.
+    if isinstance(scope, _FUNCTIONS) and _is_param(scope, name):
+        return
     sites = _sites(scope.body, name, aliases)
     if not sites or not _needs_rewrite(scope, sites, name):
         return
