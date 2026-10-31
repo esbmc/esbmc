@@ -838,10 +838,50 @@ void clang_c_adjust::adjust_expr_rel(exprt &expr)
 
   expr.type() = bool_type();
 
+  if (lower_complex_equality(expr))
+    return;
+
   exprt &op0 = expr.op0();
   exprt &op1 = expr.op1();
 
   gen_typecast_arithmetic(ns, op0, op1);
+}
+
+// C17 6.5.9p4: complex values are equal iff their real parts and their
+// imaginary parts are equal, each compared as a real (so +0 == -0 and a NaN
+// part is unequal), not by representation.
+bool clang_c_adjust::lower_complex_equality(exprt &expr)
+{
+  if (
+    (expr.id() != "=" && expr.id() != "notequal") ||
+    (expr.op0().type().id() != "complex" &&
+     expr.op1().type().id() != "complex"))
+    return false;
+
+  code_blockt bind_block;
+  bind_sideeffect_operands(expr, bind_block);
+
+  auto part = [this](const exprt &e, const irep_idt &name) -> exprt {
+    if (e.type().id() == "complex")
+      return member_exprt(e, name, to_complex_type(e.type()).base_type());
+    if (name == "imag")
+      return gen_zero(e.type());
+    return e;
+  };
+
+  auto part_equal = [&](const irep_idt &name) {
+    exprt eq("=", bool_type());
+    eq.copy_to_operands(part(expr.op0(), name), part(expr.op1(), name));
+    gen_typecast_arithmetic(ns, eq.op0(), eq.op1());
+    return eq;
+  };
+
+  exprt result = and_exprt(part_equal("real"), part_equal("imag"));
+  if (expr.id() == "notequal")
+    result = not_exprt(result);
+
+  finish_complex_lowering(expr, result, bind_block);
+  return true;
 }
 
 void clang_c_adjust::adjust_float_arith(exprt &expr)
