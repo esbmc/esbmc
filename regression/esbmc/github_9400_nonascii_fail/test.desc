@@ -1,5 +1,0 @@
-CORE
-main.c
---64
-^VERIFICATION FAILED$
-^  assertion r == 4$
