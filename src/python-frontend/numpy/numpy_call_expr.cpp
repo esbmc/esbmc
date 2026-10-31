@@ -5004,6 +5004,30 @@ static auto create_binary_op(
   return bin_op;
 }
 
+// A `U<n>` spelling as its name; `V` and `S` have no model and reject.
+static std::optional<std::string> sized_numpy_dtype(const std::string &name)
+{
+  const bool sized =
+    name.size() > 1 &&
+    std::all_of(name.begin() + 1, name.end(), [](unsigned char c) {
+      return std::isdigit(c) != 0;
+    });
+  if (name[0] == 'V' && (sized || name.size() == 1))
+    throw std::runtime_error("TypeError: numpy void dtypes are not supported");
+  if (name[0] == 'S' && (sized || name.size() == 1))
+    throw std::runtime_error("TypeError: numpy bytes dtypes are not supported");
+  if (name[0] != 'U' || !sized)
+    return std::nullopt;
+  constexpr std::size_t max_numpy_string_width = 1024;
+  const std::string digits = name.substr(1);
+  if (
+    digits.size() > 4 || std::stoul(digits) == 0 ||
+    std::stoul(digits) > max_numpy_string_width)
+    throw std::runtime_error(
+      "TypeError: numpy string width " + digits + " is not supported");
+  return name;
+}
+
 // Reduces a dtype spelling to its canonical name; a spelling it does not know
 // is returned as written. A code or width NumPy accepts but the model does not
 // is rejected specifically, never read as another dtype.
@@ -5079,26 +5103,8 @@ static std::string normalize_numpy_dtype_name(const std::string &dtype)
       "TypeError: a non-native numpy byte order is not supported");
   if (name.empty())
     return name;
-  const bool sized =
-    name.size() > 1 &&
-    std::all_of(name.begin() + 1, name.end(), [](unsigned char c) {
-      return std::isdigit(c) != 0;
-    });
-  if (name[0] == 'V' && (sized || name.size() == 1))
-    throw std::runtime_error("TypeError: numpy void dtypes are not supported");
-  if (name[0] == 'S' && (sized || name.size() == 1))
-    throw std::runtime_error("TypeError: numpy bytes dtypes are not supported");
-  if (name[0] == 'U' && sized)
-  {
-    constexpr std::size_t max_numpy_string_width = 1024;
-    const std::string digits = name.substr(1);
-    if (
-      digits.size() > 4 || std::stoul(digits) == 0 ||
-      std::stoul(digits) > max_numpy_string_width)
-      throw std::runtime_error(
-        "TypeError: numpy string width " + digits + " is not supported");
-    return name;
-  }
+  if (std::optional<std::string> sized = sized_numpy_dtype(name))
+    return *sized;
   const auto alias = aliases.find(name);
   return alias == aliases.end() ? name : alias->second;
 }
@@ -5159,6 +5165,17 @@ literal_shape_dims(const nlohmann::json &elts, const std::string &function)
   return dims;
 }
 
+static bool assigns_name(
+  const nlohmann::json &node,
+  const std::string &kind,
+  const std::string &name)
+{
+  if (kind == "AnnAssign")
+    return node["target"].value("id", "") == name;
+  return kind == "Assign" && node["targets"].size() == 1 &&
+         node["targets"][0].value("id", "") == name;
+}
+
 static void count_name_bindings(
   const nlohmann::json &node,
   const std::string &name,
@@ -5174,10 +5191,7 @@ static void count_name_bindings(
       kind == "Name" && node.value("id", "") == name && node.contains("ctx") &&
       node["ctx"].value("_type", "") != "Load")
       ++bindings;
-    if (
-      (kind == "Assign" && node["targets"].size() == 1 &&
-       node["targets"][0].value("id", "") == name) ||
-      (kind == "AnnAssign" && node["target"].value("id", "") == name))
+    if (assigns_name(node, kind, name))
       value = &node["value"];
   }
   if (node.is_object() || node.is_array())
@@ -5198,6 +5212,17 @@ stable_dtype_binding(const nlohmann::json &ast, const std::string &name)
   const std::string kind = value->value("_type", "");
   return kind == "Name" || kind == "Attribute" || kind == "Constant" ? value
                                                                      : nullptr;
+}
+
+static std::string
+dtype_of_name(const std::string &id, const nlohmann::json &ast)
+{
+  const std::string name = normalize_numpy_dtype_name(id);
+  if (is_named_numpy_dtype(name))
+    return name;
+  if (const nlohmann::json *bound = stable_dtype_binding(ast, id))
+    return extract_numpy_dtype_name(*bound, ast);
+  throw std::runtime_error("Unsupported dtype value: " + name);
 }
 
 // The single normalization of a dtype= argument: a scalar type named by a
@@ -5228,12 +5253,7 @@ std::string extract_numpy_dtype_name(
   if (node_type != "Name")
     throw std::runtime_error(
       "TypeError: numpy dtype= must name a scalar type literally");
-  const std::string name = normalize_numpy_dtype_name(dtype_node["id"]);
-  if (is_named_numpy_dtype(name))
-    return name;
-  if (const nlohmann::json *bound = stable_dtype_binding(ast, dtype_node["id"]))
-    return extract_numpy_dtype_name(*bound, ast);
-  throw std::runtime_error("Unsupported dtype value: " + name);
+  return dtype_of_name(dtype_node["id"], ast);
 }
 
 static bool is_numpy_integer_dtype(const std::string &dtype)
@@ -5531,6 +5551,34 @@ static nlohmann::json broadcast_full_fill(
   return broadcast_fill_axis(dims, 0, fill_shape, fill);
 }
 
+std::optional<numpy_dtypet> numpy_call_expr::runtime_fill_dtype() const
+{
+  const auto dtype = numpy_dtype_from_name(get_dtype());
+  if (
+    dtype && (dtype->kind == numpy_dtypet::kindt::complex ||
+              dtype->kind == numpy_dtypet::kindt::string))
+    throw std::runtime_error(
+      "TypeError: numpy.full() with a complex or string dtype= and a "
+      "non-literal fill value is not supported");
+  return dtype;
+}
+
+exprt numpy_call_expr::full_of_literal_array(
+  const std::vector<std::size_t> &dims,
+  const nlohmann::json &fill)
+{
+  const auto fill_shape = literal_fill_shape(fill);
+  if (!fill_shape)
+    throw std::runtime_error(
+      "TypeError: numpy.full() with an array fill value is not supported");
+  const nlohmann::json list = broadcast_full_fill(dims, *fill_shape, fill);
+  const bool any_float = list.dump().find('.') != std::string::npos;
+  return literal_constructor_expr(apply_constructor_dtype(
+    get_dtype().empty() && any_float
+      ? cast_numpy_literal_to_dtype(list, "float64")
+      : list));
+}
+
 // np.full with a fill that is not one literal number: a literal array is
 // broadcast over the shape, and a fill computed at run time is evaluated once,
 // into a temporary every element then holds, cast to dtype=.
@@ -5539,26 +5587,8 @@ exprt numpy_call_expr::full_of_runtime_fill(
 {
   const nlohmann::json &fill_node = call_["args"][1];
   if (is_sequence_literal(fill_node))
-  {
-    const auto fill_shape = literal_fill_shape(fill_node);
-    if (!fill_shape)
-      throw std::runtime_error(
-        "TypeError: numpy.full() with an array fill value is not supported");
-    const nlohmann::json list =
-      broadcast_full_fill(dims, *fill_shape, fill_node);
-    const bool any_float = list.dump().find('.') != std::string::npos;
-    return literal_constructor_expr(apply_constructor_dtype(
-      get_dtype().empty() && any_float
-        ? cast_numpy_literal_to_dtype(list, "float64")
-        : list));
-  }
-  const auto dtype = numpy_dtype_from_name(get_dtype());
-  if (
-    dtype && (dtype->kind == numpy_dtypet::kindt::complex ||
-              dtype->kind == numpy_dtypet::kindt::string))
-    throw std::runtime_error(
-      "TypeError: numpy.full() with a complex or string dtype= and a "
-      "non-literal fill value is not supported");
+    return full_of_literal_array(dims, fill_node);
+  const auto dtype = runtime_fill_dtype();
   const exprt fill = converter_.get_expr(fill_node);
   const typet type = fill.type();
   if (
@@ -7171,28 +7201,32 @@ complex_literal_leaves(const nlohmann::json &list)
 // Numbers keep the literal's 64-bit storage: an int8 array would read as a
 // string, and NumPy compares a float32 element with a Python float in
 // float32, which a narrower storage alone would not reproduce.
+// A string literal's element: an explicit `U<n>` fixes the width, and
+// np.full(n, 123, dtype=str) stores in `<U1`, as NumPy takes the width from the
+// empty descriptor rather than the converted fill.
+typet numpy_call_expr::string_element_type(std::size_t literal_width) const
+{
+  const auto parsed = numpy_dtype_from_name(get_dtype());
+  const bool is_string = parsed && parsed->kind == numpy_dtypet::kindt::string;
+  if (is_string && parsed->bits)
+    return type_handler_.build_array(char_type(), parsed->bits / 32 + 1);
+  const bool number_fill =
+    is_string && call_["func"].value("attr", "") == "full" &&
+    call_["args"].size() > 1 && !is_numpy_string_literal(call_["args"][1]);
+  return type_handler_.build_array(
+    char_type(), number_fill ? 2 : literal_width + 1);
+}
+
 typet numpy_call_expr::constructor_element_type(
   const nlohmann::json &list) const
 {
   if (std::optional<std::size_t> width = numpy_string_width(list))
-  {
-    // An explicit `U<n>` fixes the width; as_numpy_element truncates to it.
-    const auto parsed = numpy_dtype_from_name(get_dtype());
-    const bool is_string =
-      parsed && parsed->kind == numpy_dtypet::kindt::string;
-    if (is_string && parsed->bits)
-      return type_handler_.build_array(char_type(), parsed->bits / 32 + 1);
-    // np.full(n, 123, dtype=str) stores in `<U1`: NumPy takes the width from
-    // the empty descriptor rather than the converted fill.
-    const bool number_fill =
-      is_string && call_["func"].value("attr", "") == "full" &&
-      call_["args"].size() > 1 && !is_numpy_string_literal(call_["args"][1]);
-    return type_handler_.build_array(char_type(), number_fill ? 2 : *width + 1);
-  }
-  if (has_complex_leaf(list))
-    return get_complex_struct_type();
-  // int64, float64 and bool are what the literal already converts to.
+    return string_element_type(*width);
   const std::string dtype = get_dtype();
+  if (has_complex_leaf(list) || is_numpy_complex_dtype(dtype))
+    return dtype == "complex64" ? typet(get_complex64_struct_type())
+                                : typet(get_complex_struct_type());
+  // int64, float64 and bool are what the literal already converts to.
   if (
     dtype.empty() || dtype == "int64" || dtype == "float64" || dtype == "bool")
     return typet();
@@ -11477,6 +11511,16 @@ numpy_call_expr::try_narrow_operand_call(const std::string &function)
     "reshape",     "transpose",    "swapaxes",     "moveaxis",   "squeeze",
     "expand_dims", "broadcast_to", "tolist",       "nditer",     "shape",
     "size",        "ndim",         "astype",       "trace"};
+  const auto &args = call_.value("args", nlohmann::json::array());
+  const bool complex_array =
+    std::any_of(args.begin(), args.end(), [this](const nlohmann::json &arg) {
+      if (arg.value("_type", "") == "Call")
+        return false;
+      const auto dtype = converter_.numpy_array_dtype(arg);
+      return dtype && dtype->kind == numpy_dtypet::kindt::complex;
+    });
+  if (complex_array)
+    return narrow_ufunc_as_operator(function);
   if (!has_narrow_operand())
     return std::nullopt;
   if (std::optional<exprt> binop = narrow_ufunc_as_operator(function))

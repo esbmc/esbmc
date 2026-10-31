@@ -68,6 +68,18 @@ std::optional<exprt> python_converter::try_get_numpy_storage_attr(
   const exprt itemsize = from_integer(dtype->itemsize(), int_type());
   if (attr == "itemsize")
     return itemsize;
+  const typet storage = ns.follow(numpy_param_as_array(get_expr(base)).type());
+  if (storage.is_array())
+  {
+    std::size_t total = dtype->itemsize();
+    for (const std::size_t extent : type_handler_.get_array_type_shape(storage))
+      total *= extent;
+    if (dtype->kind == numpy_dtypet::kindt::string)
+      total /= to_array_type(storage).subtype().is_array()
+                 ? type_handler_.get_array_type_shape(storage).back()
+                 : 1;
+    return from_integer(total, int_type());
+  }
   nlohmann::json size = {
     {"_type", "Attribute"}, {"value", base}, {"attr", "size"}};
   const exprt count = typecast_exprt(get_expr(size), int_type());
@@ -124,6 +136,15 @@ void python_converter::bind_numpy_scalar_name(
   exprt &lhs,
   const exprt &rhs)
 {
+  // The annotator reads `1j * a` or `-a` as a scalar from its literal operand.
+  if (
+    symbol && target.value("_type", "") == "Name" &&
+    type_utils::is_numpy_complex_array(rhs.type()) && !lhs.type().is_array())
+  {
+    lhs.type() = rhs.type();
+    symbol->set_type(rhs.type());
+    return;
+  }
   if (
     !symbol || target.value("_type", "") != "Name" ||
     !type_utils::is_numpy_scalar_type(rhs.type()) || lhs.type() == rhs.type())
@@ -154,9 +175,10 @@ exprt python_converter::numpy_narrow_unary(
   const typet leaf = type_utils::array_scalar_type(operand.type());
   const auto dtype = numpy_dtype_of_element(leaf);
   if (
-    (op != "USub" && op != "Invert") ||
-    !type_utils::is_numpy_scalar_type(leaf) || !dtype ||
-    (op == "Invert" && !dtype->is_integer()))
+    (op != "USub" && op != "Invert") || !dtype ||
+    (op == "Invert" && !dtype->is_integer()) ||
+    (!type_utils::is_numpy_scalar_type(leaf) &&
+     !type_utils::is_numpy_complex_array(operand.type())))
     return nil_exprt();
   const exprt minus_one = from_integer(-1, long_long_int_type());
   return numpy_elementwise(
