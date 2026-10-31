@@ -1102,40 +1102,50 @@ private:
   }
 
   /// Whether @p node reads @p name only as `isinstance(name, ...)`, which
-  /// symex answers from the type the value had before its cast to `void *`.
-  static bool
-  read_only_by_isinstance(const nlohmann::json &node, const std::string &name)
+  /// symex answers from the type the value had before its cast to `void *`,
+  /// or, when @p may_return, as `return name`, which hands the caller the
+  /// value it passed.
+  static bool read_only_opaquely(
+    const nlohmann::json &node,
+    const std::string &name,
+    bool may_return)
   {
     if (node.is_array())
       return std::all_of(node.begin(), node.end(), [&](const auto &elem) {
-        return read_only_by_isinstance(elem, name);
+        return read_only_opaquely(elem, name, may_return);
       });
     if (!node.is_object())
       return true;
     if (is_node(node, "Name"))
       return node["id"] != name;
+    if (
+      may_return && is_node(node, "Return") && is_node(node["value"], "Name") &&
+      node["value"]["id"] == name)
+      return true;
     const bool tests_name =
       is_node(node, "Call") && callee_name(node["func"]) == "isinstance" &&
       node["args"].size() == 2 && is_node(node["args"][0], "Name") &&
       node["args"][0]["id"] == name;
     if (tests_name)
-      return read_only_by_isinstance(node["args"][1], name);
+      return read_only_opaquely(node["args"][1], name, may_return);
     return std::all_of(node.begin(), node.end(), [&](const auto &child) {
-      return read_only_by_isinstance(child, name);
+      return read_only_opaquely(child, name, may_return);
     });
   }
 
   /// A parameter passed values of different types stays untyped and is read
-  /// through `void *`, which truncates a float (#9284).
-  static void refuse_float_among_kinds(
+  /// through `void *`, which truncates a float and makes a str operation
+  /// dereference an int as a pointer (#9284).
+  static void refuse_mixed_kinds(
     const std::string &function,
     const nlohmann::json &def,
     const std::string &param,
     const std::set<std::string> &kinds)
   {
+    const bool has_float = kinds.count("float") != 0;
     if (
-      kinds.size() < 2 || !kinds.count("float") ||
-      read_only_by_isinstance(def["body"], param))
+      kinds.size() < 2 || (!has_float && !kinds.count("str")) ||
+      read_only_opaquely(def["body"], param, !has_float))
       return;
     std::string spelled;
     for (const std::string &kind : kinds)
@@ -1163,7 +1173,7 @@ private:
       nlohmann::json &arg = def["args"]["args"][param];
       if (!entry.type)
       {
-        refuse_float_among_kinds(key_name, def, arg["arg"], entry.kinds);
+        refuse_mixed_kinds(key_name, def, arg["arg"], entry.kinds);
         continue;
       }
       nlohmann::json annotation{{"_type", "Name"}, {"id", *entry.type}};

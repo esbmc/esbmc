@@ -104,7 +104,35 @@ void clang_c_maint::add_exit_code(codet &dest, const locationt &location)
     atexit_call.function() = symbol_exprt("c:@F@__ESBMC_atexit_handler");
     dest.move_to_operands(atexit_call);
   }
-  static_lifetime_destroy(dest);
+
+  // exit() in the C library model calls this too.
+  code_blockt destructors;
+  static_lifetime_destroy(destructors);
+  const bool any = destructors.has_operands();
+
+  symbolt *existing = context.find_symbol(static_destructors_id);
+  if (existing != nullptr)
+    existing->set_value(std::move(destructors));
+  else
+  {
+    symbolt fn;
+    fn.id = static_destructors_id;
+    fn.name = "__ESBMC_static_destructors";
+    fn.location = location;
+    code_typet type;
+    type.return_type() = empty_typet();
+    fn.set_type(migrate_type(type));
+    fn.set_value(std::move(destructors));
+    context.move(fn);
+  }
+
+  if (any)
+  {
+    code_function_callt call;
+    call.location() = location;
+    call.function() = symbol_exprt(static_destructors_id, code_typet());
+    dest.move_to_operands(call);
+  }
 }
 
 bool clang_c_maint::clang_main()
