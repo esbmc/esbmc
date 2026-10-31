@@ -415,6 +415,7 @@ private:
     const Json &element,
     const std::string &inferred_type);
   std::string optional_scalar_of(const std::string &name, const Json &scope);
+  bool is_missing_method_call(const Json &value);
   std::string returned_optional_scalar(const Json &function, const Json &body);
   void collect_name_stores(
     const std::string &name,
