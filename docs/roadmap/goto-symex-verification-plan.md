@@ -12412,6 +12412,93 @@ the fix is reverted, and dropping `vsnprintf` from the bounded kinds fails
 Not fixed: a conversion that reads the `va_list` still leaves the destination
 unchanged, as does any output `sprintf` would not store.
 
+### M9 (R147) — 2026-10-31, the static arrays R142 did not destroy
+
+R142's entry left open that an array of class type with static storage
+duration is never destroyed. `static_lifetime_destroy` asked `get_destructor`
+for the object's type, which matches a class and not an array of one, so after
+`main` returned no element's destructor ran: a global `Owner owned[2]` whose
+elements free memory was reported as two forgotten-memory leaks under
+`--memory-leak-check`, and an assertion in an element's destructor was never
+checked.
+
+**Fixed** by destroying each element, the last one first ([class.dtor]/13),
+recursing through a multi-dimensional array, with a function-local static
+array still guarded by its `$init_guard`. A destructor whose body is empty is
+no longer called, since the call has no effect and a static array of 20000
+trivially destructible objects would otherwise inline 20000 of them. A
+destructor with no symbol is skipped too: the OM's thread-local
+`__ESBMC_exception_slots[256]` has a destructor component but no function, and
+calling it made GOTO conversion abort.
+
+`static_array_destructors` checks the order across a local static array, a
+two-dimensional global array and a global declared before them, that a local
+static array whose function never ran is not destroyed, and that arrays of a
+class with a user destructor and of a class whose implicit destructor destroys
+a member both free their memory; master reports the leaks and fails the order
+assertion. `static_array_destructors_fail` pins an assertion in the destructor
+of a global array's element and of a local static array's element, and is
+SUCCESSFUL on master. Destroying elements in index order fails the passing
+test, as does skipping a destructor whose body has one statement. Both under
+the default solver (Bitwuzla), `--z3` and `--k-induction`.
+
+Not fixed: `exit()` does not destroy static objects (R145's PR), local
+statics are destroyed in reverse definition order rather than in reverse order
+of construction, and thread-local objects are destroyed with the static ones
+after `main` rather than when their thread exits.
+### M9 (R148) — 2026-10-31, the `<csetjmp>` with nothing in `std`
+
+R130's entry left open that `<csetjmp>` does not parse in C++ mode. The header
+parses; the operational model's `<csetjmp>` only included `<setjmp.h>`, so
+`std::jmp_buf` and `std::longjmp` were undeclared and any program that names
+them stopped with a parsing error. Probing the rest of the stale residuals
+first: the `__sync_*` return through a signed temporary,
+`__builtin_rotateleft32`, `__builtin_clrsb`, `i /= 3.5` under Z3, a struct
+read back with `va_arg` and the comma operator's temporaries, all open in
+earlier entries, now agree with the native program on master.
+
+**Fixed** by declaring `jmp_buf` and `longjmp` in `std` ([csetjmp.syn]), as
+libc++ does; `setjmp` stays a macro.
+
+`csetjmp_std` jumps out of a called function with `std::longjmp` into a
+`std::jmp_buf` and checks the value `setjmp` returns and that the callee ran
+once; `csetjmp_std_fail` pins the wrong value. Both are parsing errors on
+master, agree with the native program, and give the same verdict under the
+default solver (Bitwuzla), `--z3` and `--k-induction`, and in C++98, 11, 17
+and 20.
+
+Not fixed: `strcasecmp_l` and `strncasecmp_l` still have no model (R134), and
+`log(M_E) == 1.0` is still FAILED (R133).
+### M9 (R145) — 2026-10-30, the destructors `exit()` skipped
+
+R142's entry left open that `exit()` runs the atexit handlers but not the
+destructors of objects with static storage duration ([basic.start.term]/1,
+[support.start.term]). With `G a(1), b(2);`, `~G` asserting `order != 21`
+and `main` calling `exit(0)`, the program aborts natively and was SUCCESSFUL.
+
+**Fixed** by moving R142's destructor calls into a generated function,
+`__ESBMC_static_destructors`, which the `exit` model calls after the atexit
+handlers and `__ESBMC_main` calls after `main` returns. The frontend fills in
+the body of the declaration the C library brings in, and creates the function
+under `--no-library`. `__ESBMC_main` calls it only when it has a body, so
+programs without such destructors keep R142's exploration. Objects with
+automatic storage duration are still not destroyed by `exit()`.
+
+`exit_static_destructors_fail` is the program above, SUCCESSFUL on master.
+`exit_static_destructors` calls `exit` from a nested function under
+`--memory-leak-check` and checks the order across two globals, a
+function-local static and an atexit handler registered after it, that a
+static whose function never ran is not destroyed, that a local of the
+exiting function is not destroyed, and that the owning global frees its
+memory; master reports the leak.
+`static_storage_exit_destructors_no_library_fail` runs R142's fail test under
+`--no-library`. Removing the call from the `exit` model flips both
+`exit_static_destructors` tests, and not creating the function makes the
+`--no-library` test an error, under the default solver (Bitwuzla), `--z3` and
+`--k-induction`. R142's tests keep their verdicts.
+
+Not fixed: the R142 residuals other than this one. Under `exit()` the leak
+check still runs only when an atexit handler was registered.
 ### M9 (R143) — 2026-10-30, the jumps R130 did not lower
 
 R130's entry left `sigsetjmp`, `siglongjmp` and `_longjmp` without a model.
@@ -12492,6 +12579,33 @@ default solver (Bitwuzla), `--z3` and `--k-induction`.
 
 Not fixed: the other `_l` functions (`tolower_l`, `strcoll_l`, `strxfrm_l`)
 still have no model, and `log(M_E) == 1.0` is still FAILED (R133).
+### M9 (R149) — 2026-10-31, the warning that stopped R130's armv8 build
+
+Since R130 landed, the Monday `Weekly` run's `static armv8 DebugOpt` job no
+longer compiles (on 10-05 it built and failed four regression tests,
+`char_walk_arrays` and `github_8048_huge_vla` with their `_fail` twins; from
+10-12 a build failure hides its tests). It builds with GCC 14 and `-Werror`,
+and GCC reports writing 8 bytes "into a region of size 0"
+(`-Wstringop-overflow`) in `lower_longjmp.cpp`. `build_dispatch` read
+`slot->type` and `to_symbol2t(slot)` through a non-const `expr2tc`, whose
+`operator->` detaches the node and, without `NDEBUG`, calls `mark_writer`; GCC
+could not rule out a null node on that path. Every use of `slot` only reads,
+so it is now `const`.
+
+The same warning reproduces with Homebrew's GCC 15 at `-O2 -Werror` and goes
+away with the change; making `slot` const alone is enough, and the reads of
+`count` in `new_slot` do not trigger it. With the change, every C++ object
+compiles under GCC 15 DebugOpt with `-Werror` (Homebrew's fmt 12 needs
+`-Wno-error=deprecated-declarations`, which CI's bundled fmt does not). No
+regression test: the change does not alter the GOTO program, and the
+`longjmp` tests give the same verdicts. The Linux GCC 14 build is checked only
+by the next Monday run.
+
+Not fixed: those four armv8 tests, unchecked since 10-05, and the other
+Monday failures, whose jobs also failed on 10-05: `Simplifier equivalence` (`github_8660_object_size_offset`, `overflow_10_fir`,
+`overflow_16_fir_new`), Windows DebugOpt (`k-induction_cpp_stack_empty_bug`
+and three `goto-transcoder` tests), and the macOS build's
+`github_9081_optional_dict_value_fail`.
 
 ---
 
