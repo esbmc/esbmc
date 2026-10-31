@@ -42,3 +42,14 @@ std::optional<numpy_dtypet> numpy_dtype_from_name(const std::string &name);
 
 /// The dtype of a storage element; nullopt when @p element is not one.
 std::optional<numpy_dtypet> numpy_dtype_of_element(const typet &element);
+
+/// An operand of a NumPy operation. A Python number is weak (NEP 50): it takes
+/// the other operand's dtype instead of taking part by its own width.
+struct numpy_operandt
+{
+  numpy_dtypet dtype;
+  bool weak;
+};
+
+/// The result dtype of an operation over @p a and @p b.
+numpy_dtypet numpy_promote(const numpy_operandt &a, const numpy_operandt &b);

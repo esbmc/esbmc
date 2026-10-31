@@ -2528,6 +2528,17 @@ exprt python_converter::get_binary_operator_expr(
       left, args, mapping, percent_arg_types(right, rhs));
   }
 
+  cast_weak_float_compare(op, lhs, rhs, left, right);
+  if (
+    type_utils::is_numpy_scalar_type(lhs.type()) ||
+    type_utils::is_numpy_scalar_type(rhs.type()))
+  {
+    const exprt scalar = numpy_array_arithmetic(
+      op, lhs, rhs, left, right, get_location_from_decl(element));
+    if (!scalar.is_nil())
+      return scalar;
+  }
+
   // Handle array/string operations
   if (lhs.type().is_array() || rhs.type().is_array())
   {
@@ -3165,19 +3176,23 @@ static typet shaped_type(const typet &leaf, const std::vector<long long> &shape)
   return type;
 }
 
-// NumPy's result dtype: true division and any float operand give float64,
-// otherwise the array's integer type.
+// The operation's result element, by the table numpy_promote applies; true
+// division of integers gives float64.
 static typet elementwise_result_type(
   const std::string &op,
-  const typet &array_elem,
-  const typet &lhs_elem,
-  const typet &rhs_elem)
+  const numpy_operandt &lhs,
+  const numpy_operandt &rhs)
 {
-  if (op == "Div")
+  const numpy_dtypet result = numpy_promote(lhs, rhs);
+  if (op == "Div" && result.kind != numpy_dtypet::kindt::floating)
     return double_type();
-  if (lhs_elem.is_floatbv())
-    return lhs_elem;
-  return rhs_elem.is_floatbv() ? rhs_elem : array_elem;
+  if (result.kind == numpy_dtypet::kindt::floating && result.bits == 64)
+    return double_type();
+  if (
+    result.is_integer() && result.bits == 64 &&
+    result.kind == numpy_dtypet::kindt::signed_integer)
+    return long_long_int_type();
+  return result.element_type();
 }
 
 static const std::set<std::string> &bitwise_ops()
@@ -3237,9 +3252,11 @@ elementwise_shapes(const std::string &op, const exprt &lhs, const exprt &rhs)
 {
   const auto lhs_shape = operand_shape(lhs.type());
   const auto rhs_shape = operand_shape(rhs.type());
+  const bool numpy_scalar = type_utils::is_numpy_scalar_type(lhs.type()) ||
+                            type_utils::is_numpy_scalar_type(rhs.type());
   if (
     !is_elementwise_op(op) || !lhs_shape || !rhs_shape ||
-    (lhs_shape->empty() && rhs_shape->empty()))
+    (lhs_shape->empty() && rhs_shape->empty() && !numpy_scalar))
     return std::nullopt;
   return std::make_pair(*lhs_shape, *rhs_shape);
 }
@@ -3400,6 +3417,106 @@ void python_converter::guard_negative_exponents(
     location);
 }
 
+// Whether a 64-bit scalar @p node came out of NumPy, its value bound to a name
+// at most through Python arithmetic.
+bool python_converter::is_numpy_valued_node(const nlohmann::json &node) const
+{
+  const std::string kind = node.value("_type", "");
+  if (kind == "Subscript")
+  {
+    const nlohmann::json &base = node["value"];
+    return base.value("_type", "") == "Name" &&
+           numpy_array_symbols_.count(
+             resolve_name_symbol_id(base.value("id", ""))) != 0;
+  }
+  if (kind == "Call")
+  {
+    const nlohmann::json &func = node["func"];
+    return func.value("_type", "") == "Attribute" &&
+           func["value"].value("_type", "") == "Name" &&
+           is_imported_numpy_module_alias(
+             *ast_json, func["value"].value("id", ""));
+  }
+  if (kind == "BinOp")
+    return is_numpy_valued_node(node["left"]) ||
+           is_numpy_valued_node(node["right"]);
+  if (kind != "Name")
+    return false;
+  const nlohmann::json decl = json_utils::find_var_decl(
+    node.value("id", ""), current_function_name(), *ast_json);
+  return decl.contains("value") && decl["value"].is_object() &&
+         decl["value"].value("id", "") != node.value("id", "") &&
+         is_numpy_valued_node(decl["value"]);
+}
+
+bool python_converter::is_weak_numpy_operand(
+  const nlohmann::json &node,
+  const typet &type) const
+{
+  return !type.is_array() && !type_utils::is_numpy_scalar_type(type) &&
+         !is_numpy_valued_node(node);
+}
+
+// NumPy raises OverflowError for a Python integer the integer result cannot
+// hold (NEP 50). Nil when the value fits or the check runs at run time.
+exprt python_converter::raise_if_outside_numpy_integer(
+  const exprt &value,
+  const typet &element,
+  const typet &result_type,
+  const locationt &location)
+{
+  const auto dtype = numpy_dtype_of_element(element);
+  if (!dtype || !dtype->is_integer() || dtype->bits == 64)
+    return nil_exprt();
+  const bool is_signed = dtype->kind == numpy_dtypet::kindt::signed_integer;
+  const BigInt span =
+    power(BigInt(2), is_signed ? dtype->bits - 1 : dtype->bits);
+  const BigInt low = is_signed ? -span : BigInt(0);
+  const std::string message =
+    "Python integer out of bounds for " + dtype->name();
+  BigInt constant;
+  if (!to_integer(value, constant))
+    return constant < low || constant >= span
+             ? raise_in_expression("OverflowError", message, result_type)
+             : exprt(nil_exprt());
+  if (!can_emit_runtime_guard())
+    throw std::runtime_error(
+      "TypeError: a Python integer operand of a narrow numpy integer is only "
+      "supported where its range check can run");
+  const typet wide = long_long_int_type();
+  const exprt wide_value = cast_to(value, wide);
+  emit_guarded_raise(
+    or_exprt(
+      binary_relation_exprt(wide_value, "<", from_integer(low, wide)),
+      binary_relation_exprt(wide_value, ">=", from_integer(span, wide))),
+    "OverflowError",
+    message,
+    location);
+  return nil_exprt();
+}
+
+// NumPy compares a narrow float with a Python float in the narrow type.
+void python_converter::cast_weak_float_compare(
+  const std::string &op,
+  exprt &lhs,
+  exprt &rhs,
+  const nlohmann::json &left,
+  const nlohmann::json &right) const
+{
+  static const std::set<std::string> comparisons = {
+    "Eq", "NotEq", "Lt", "LtE", "Gt", "GtE"};
+  if (comparisons.count(op) == 0)
+    return;
+  if (
+    lhs.type().is_floatbv() && type_utils::is_numpy_scalar_type(lhs.type()) &&
+    rhs.type().is_floatbv() && is_weak_numpy_operand(right, rhs.type()))
+    rhs = cast_to(rhs, lhs.type());
+  else if (
+    rhs.type().is_floatbv() && type_utils::is_numpy_scalar_type(rhs.type()) &&
+    lhs.type().is_floatbv() && is_weak_numpy_operand(left, lhs.type()))
+    lhs = cast_to(lhs, rhs.type());
+}
+
 // Element-wise arithmetic, `%`, `**` and bitwise operators between numeric
 // NumPy arrays and numbers, broadcast as NumPy does. Nil for any other
 // operand pair.
@@ -3407,6 +3524,8 @@ exprt python_converter::numpy_array_arithmetic(
   const std::string &op,
   const exprt &lhs,
   const exprt &rhs,
+  const nlohmann::json &left,
+  const nlohmann::json &right,
   const locationt &location)
 {
   const auto shapes = elementwise_shapes(op, lhs, rhs);
@@ -3422,9 +3541,24 @@ exprt python_converter::numpy_array_arithmetic(
       lhs.type().is_array() ? lhs.type() : rhs.type());
   const typet &lhs_leaf = leaf_type(lhs.type());
   const typet &rhs_leaf = leaf_type(rhs.type());
-  const typet result_leaf = elementwise_result_type(
-    op, lhs.type().is_array() ? lhs_leaf : rhs_leaf, lhs_leaf, rhs_leaf);
+  const numpy_operandt lhs_operand{
+    *numpy_dtype_of_element(lhs_leaf), is_weak_numpy_operand(left, lhs.type())};
+  const numpy_operandt rhs_operand{
+    *numpy_dtype_of_element(rhs_leaf),
+    is_weak_numpy_operand(right, rhs.type())};
+  const typet result_leaf =
+    elementwise_result_type(op, lhs_operand, rhs_operand);
   const typet result_type = shaped_type(result_leaf, *shape);
+  for (const auto *weak : {&lhs_operand, &rhs_operand})
+  {
+    const exprt &value = weak == &lhs_operand ? lhs : rhs;
+    if (!weak->weak || !weak->dtype.is_integer())
+      continue;
+    const exprt raised =
+      raise_if_outside_numpy_integer(value, result_leaf, result_type, location);
+    if (!raised.is_nil())
+      return raised;
+  }
   if (op == "Pow" && !result_leaf.is_floatbv())
     guard_negative_exponents(rhs, location);
   if (bitwise_ops().count(op) && result_leaf.is_floatbv())
@@ -3545,8 +3679,8 @@ exprt python_converter::handle_array_operations(
     return false;
   };
 
-  const exprt elementwise =
-    numpy_array_arithmetic(op, lhs, rhs, get_location_from_decl(element));
+  const exprt elementwise = numpy_array_arithmetic(
+    op, lhs, rhs, left, right, get_location_from_decl(element));
   if (!elementwise.is_nil())
     return elementwise;
 

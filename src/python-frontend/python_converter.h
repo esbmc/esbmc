@@ -3176,7 +3176,23 @@ private:
     const std::string &op,
     const exprt &lhs,
     const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right,
     const locationt &location);
+  bool is_numpy_valued_node(const nlohmann::json &node) const;
+  bool
+  is_weak_numpy_operand(const nlohmann::json &node, const typet &type) const;
+  exprt raise_if_outside_numpy_integer(
+    const exprt &value,
+    const typet &element,
+    const typet &result_type,
+    const locationt &location);
+  void cast_weak_float_compare(
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right) const;
   void
   guard_negative_exponents(const exprt &exponents, const locationt &location);
   exprt numpy_elementwise(

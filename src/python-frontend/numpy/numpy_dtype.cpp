@@ -5,6 +5,7 @@
 #include <util/lang/c_types.h>
 #include <util/irep/std_types.h>
 
+#include <algorithm>
 #include <map>
 
 std::string numpy_dtypet::name() const
@@ -93,4 +94,96 @@ std::optional<numpy_dtypet> numpy_dtype_of_element(const typet &element)
   if (is_complex_type(element))
     return numpy_dtypet{kindt::complex, 128};
   return std::nullopt;
+}
+
+static const numpy_dtypet numpy_int64{numpy_dtypet::kindt::signed_integer, 64};
+static const numpy_dtypet numpy_float64{numpy_dtypet::kindt::floating, 64};
+
+// np.result_type of two integers: a mixed pair needs a signed type above the
+// unsigned one, and nothing signed holds uint64.
+static numpy_dtypet
+promote_integers(const numpy_dtypet &a, const numpy_dtypet &b)
+{
+  if (a.kind == b.kind)
+    return a.bits >= b.bits ? a : b;
+  const numpy_dtypet &signed_side =
+    a.kind == numpy_dtypet::kindt::signed_integer ? a : b;
+  const numpy_dtypet &unsigned_side =
+    a.kind == numpy_dtypet::kindt::signed_integer ? b : a;
+  if (unsigned_side.bits == 64)
+    return numpy_float64;
+  return {
+    numpy_dtypet::kindt::signed_integer,
+    std::max(signed_side.bits, unsigned_side.bits * 2)};
+}
+
+// The smallest float that holds every value of an integer dtype, as NumPy's
+// promotion table has it: int8 fits float16, int16 float32, wider float64.
+static unsigned float_bits_holding(const numpy_dtypet &integer)
+{
+  return integer.bits <= 8 ? 16 : integer.bits == 16 ? 32 : 64;
+}
+
+static numpy_dtypet
+promote_complex(const numpy_dtypet &a, const numpy_dtypet &b)
+{
+  using kindt = numpy_dtypet::kindt;
+  const numpy_dtypet &other = a.kind == kindt::complex ? b : a;
+  const numpy_dtypet &complex_side = a.kind == kindt::complex ? a : b;
+  const bool single = complex_side.bits == 64 &&
+                      (other.kind == kindt::boolean ||
+                       (other.kind == kindt::complex && other.bits == 64) ||
+                       (other.kind == kindt::floating && other.bits <= 32) ||
+                       (other.is_integer() && float_bits_holding(other) <= 32));
+  return {kindt::complex, single ? 64u : 128u};
+}
+
+static numpy_dtypet promote_strong(const numpy_dtypet &a, const numpy_dtypet &b)
+{
+  using kindt = numpy_dtypet::kindt;
+  if (a.kind == kindt::boolean)
+    return b;
+  if (b.kind == kindt::boolean)
+    return a;
+  if (a.kind == kindt::complex || b.kind == kindt::complex)
+    return promote_complex(a, b);
+  if (a.is_integer() && b.is_integer())
+    return promote_integers(a, b);
+  if (a.kind == kindt::floating && b.kind == kindt::floating)
+    return a.bits >= b.bits ? a : b;
+  const numpy_dtypet &real = a.kind == kindt::floating ? a : b;
+  const numpy_dtypet &integer = a.kind == kindt::floating ? b : a;
+  return {kindt::floating, std::max(real.bits, float_bits_holding(integer))};
+}
+
+// NEP 50: the weak number keeps the strong operand's dtype while its kind does
+// not exceed that dtype's, and otherwise gives the kind's default.
+static numpy_dtypet
+promote_weak(const numpy_dtypet &weak, const numpy_dtypet &strong)
+{
+  using kindt = numpy_dtypet::kindt;
+  switch (weak.kind)
+  {
+  case kindt::complex:
+    if (strong.kind == kindt::complex)
+      return strong;
+    return {
+      kindt::complex,
+      strong.kind == kindt::floating && strong.bits <= 32 ? 64u : 128u};
+  case kindt::floating:
+    return strong.kind == kindt::floating || strong.kind == kindt::complex
+             ? strong
+             : numpy_float64;
+  default:
+    return strong.kind == kindt::boolean ? numpy_int64 : strong;
+  }
+}
+
+numpy_dtypet numpy_promote(const numpy_operandt &a, const numpy_operandt &b)
+{
+  if (a.weak && !b.weak)
+    return promote_weak(a.dtype, b.dtype);
+  if (b.weak && !a.weak)
+    return promote_weak(b.dtype, a.dtype);
+  return promote_strong(a.dtype, b.dtype);
 }

@@ -447,6 +447,15 @@ public:
     return type.cpp_type() == "numpy_numeric";
   }
 
+  /// A scalar a NumPy operation reads at its dtype: a tagged integer, or a
+  /// float narrower than a Python float.
+  static bool is_numpy_scalar_type(const typet &type)
+  {
+    if (type.is_floatbv())
+      return to_floatbv_type(type).get_width() < 64;
+    return is_numpy_numeric_element(type);
+  }
+
   /// A character of a string's storage, which a numeric 8-bit element is not.
   static bool is_char_storage(const typet &type)
   {
