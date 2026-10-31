@@ -63,8 +63,7 @@ def _is_literal(node, aliases):
 def _is_constructor(node, aliases):
     return (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
             and isinstance(node.func.value, ast.Name) and node.func.value.id in aliases
-            and node.func.attr in _CONSTRUCTORS
-            and all(_is_literal(a, aliases) for a in node.args)
+            and node.func.attr in _CONSTRUCTORS and all(_is_literal(a, aliases) for a in node.args)
             and all(k.arg and _is_literal(k.value, aliases) for k in node.keywords))
 
 
@@ -214,10 +213,9 @@ class _Rewriter:
 
     def _unbound_error(self, at):
         message = f"cannot access local variable '{self.name}'"
-        error = ast.Call(
-            func=ast.Name(id="UnboundLocalError", ctx=ast.Load()),
-            args=[ast.Constant(message)],
-            keywords=[])
+        error = ast.Call(func=ast.Name(id="UnboundLocalError", ctx=ast.Load()),
+                         args=[ast.Constant(message)],
+                         keywords=[])
         return ast.fix_missing_locations(ast.copy_location(ast.Raise(exc=error), at))
 
     def _reject_array_binding(self, stmt):
@@ -243,10 +241,9 @@ class _Rewriter:
             if not chain and index == last:
                 chain = body
                 continue
-            test = ast.Compare(
-                left=ast.Name(id=self.tag, ctx=ast.Load()),
-                ops=[ast.Eq()],
-                comparators=[ast.Constant(index)])
+            test = ast.Compare(left=ast.Name(id=self.tag, ctx=ast.Load()),
+                               ops=[ast.Eq()],
+                               comparators=[ast.Constant(index)])
             chain = [ast.If(test=test, body=body, orelse=chain)]
         ast.fix_missing_locations(ast.copy_location(chain[0], stmt))
         return chain
@@ -343,8 +340,9 @@ def _sites(scope_body, name, aliases):
         return None
     if any(_binds_otherwise(n, name, sites) for n in _walk_scope(scope_body)):
         return None
-    if any(isinstance(n, (ast.Global, ast.Nonlocal)) and name in n.names
-           for stmt in scope_body for n in ast.walk(stmt)):
+    if any(
+            isinstance(n, (ast.Global, ast.Nonlocal)) and name in n.names for stmt in scope_body
+            for n in ast.walk(stmt)):
         return None
     sites.sort(key=lambda s: (s.lineno, s.col_offset))
     return sites
@@ -379,8 +377,8 @@ def _lower_name(scope, name, aliases):
     sites = _sites(scope.body, name, aliases)
     if not sites or not _needs_rewrite(scope, sites, name):
         return
-    first = next(
-        i for i, stmt in enumerate(scope.body) if any(n is sites[0] for n in ast.walk(stmt)))
+    first = next(i for i, stmt in enumerate(scope.body)
+                 if any(n is sites[0] for n in ast.walk(stmt)))
     rewriter = _Rewriter(name, sites, isinstance(scope, ast.Module))
     preamble = rewriter.preamble(scope.body[first])
     # A failed rewrite must leave the scope as it was: only the copy is touched.
@@ -397,8 +395,11 @@ def _lower_name(scope, name, aliases):
 
 
 def _candidate_names(scope_body):
-    names = {s.targets[0].id for s in _walk_scope(scope_body) if isinstance(s, ast.Assign)
-             and len(s.targets) == 1 and isinstance(s.targets[0], ast.Name)}
+    names = {
+        s.targets[0].id
+        for s in _walk_scope(scope_body)
+        if isinstance(s, ast.Assign) and len(s.targets) == 1 and isinstance(s.targets[0], ast.Name)
+    }
     return sorted(names)
 
 
