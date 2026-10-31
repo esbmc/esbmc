@@ -1,0 +1,6 @@
+CORE
+main.py
+
+^  file .*main\.py line 17 column 11 function inc$
+^VERIFICATION FAILED$
+Unsupported: arithmetic on a value whose type was lost$

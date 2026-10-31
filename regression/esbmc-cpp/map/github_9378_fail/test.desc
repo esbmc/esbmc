@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--std c++17 --unwind 12
+^  assertion m.count\(3\) == 0$
+^VERIFICATION FAILED$
