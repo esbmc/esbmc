@@ -53,14 +53,38 @@ python_converter::numpy_array_dtype(const nlohmann::json &base)
 
 // `.itemsize` and `.nbytes` of an array or view; nbytes follows the logical
 // shape, so a view reports its own bytes.
+// A method of a string or complex array with no model would read its storage
+// as numbers.
+void python_converter::reject_unmodelled_array_method(
+  const nlohmann::json &call)
+{
+  const nlohmann::json &func = call["func"];
+  if (
+    func.value("_type", "") != "Attribute" ||
+    func["value"].value("_type", "") != "Name" ||
+    !numpy_array_symbols_.count(
+      resolve_name_symbol_id(func["value"].value("id", ""))))
+    return;
+  const std::string method = func.value("attr", "");
+  const auto dtype = numpy_array_dtype(func["value"]);
+  if (dtype && !numpy_consumer_is_modelled(dtype->kind, method))
+    throw std::runtime_error(
+      "TypeError: ." + method + "() of a numpy " +
+      numpy_kind_name(dtype->kind) + " array is not supported");
+}
+
 std::optional<exprt> python_converter::try_get_numpy_storage_attr(
   const nlohmann::json &base,
   const std::string &attr)
 {
-  if (attr != "itemsize" && attr != "nbytes" && attr != "dtype")
-    return std::nullopt;
   const auto dtype = numpy_array_dtype(base);
   if (!dtype)
+    return std::nullopt;
+  if (!numpy_consumer_is_modelled(dtype->kind, attr))
+    throw std::runtime_error(
+      "TypeError: ." + attr + " of a numpy " + numpy_kind_name(dtype->kind) +
+      " array is not supported");
+  if (attr != "itemsize" && attr != "nbytes" && attr != "dtype")
     return std::nullopt;
   if (attr == "dtype")
     throw std::runtime_error(

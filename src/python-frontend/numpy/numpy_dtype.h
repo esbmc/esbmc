@@ -37,6 +37,16 @@ struct numpy_dtypet
   std::size_t itemsize() const;
 };
 
+/// Whether the consumer @p name, a numpy function or an array attribute, is
+/// modelled over elements of @p kind. Numbers are; a string or complex element
+/// reads as nothing else, so anything not listed for it must reject.
+bool numpy_consumer_is_modelled(
+  numpy_dtypet::kindt kind,
+  const std::string &name);
+
+/// "string" or "complex": what a rejection calls an array of @p kind.
+std::string numpy_kind_name(numpy_dtypet::kindt kind);
+
 /// The dtype a normalized scalar name denotes.
 std::optional<numpy_dtypet> numpy_dtype_from_name(const std::string &name);
 

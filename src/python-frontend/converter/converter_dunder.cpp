@@ -386,6 +386,13 @@ exprt python_converter::dispatch_unary_dunder_operator(
   exprt &operand,
   const locationt &loc)
 {
+  const bool strings = type_utils::is_numpy_string_array(operand.type());
+  if (
+    strings ||
+    (type_utils::is_numpy_complex_array(operand.type()) && op != "USub"))
+    throw std::runtime_error(
+      "TypeError: numpy unary '" + op + "' over a " +
+      (strings ? "string" : "complex") + " array is not supported");
   const exprt narrow = numpy_narrow_unary(op, operand);
   if (!narrow.is_nil())
     return narrow;

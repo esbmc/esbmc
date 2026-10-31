@@ -7162,6 +7162,23 @@ static std::optional<std::size_t> numpy_string_width(const nlohmann::json &list)
              : std::nullopt;
 }
 
+static bool has_string_leaf(const nlohmann::json &list)
+{
+  const auto &elts = list.value("elts", nlohmann::json::array());
+  return std::any_of(elts.begin(), elts.end(), [](const nlohmann::json &elt) {
+    return elt.value("_type", std::string()) == "List"
+             ? has_string_leaf(elt)
+             : is_numpy_string_literal(elt);
+  });
+}
+
+std::optional<std::size_t>
+numpy_literal_string_width(const nlohmann::json &call)
+{
+  return call["args"].empty() ? std::nullopt
+                              : numpy_string_width(call["args"][0]);
+}
+
 static bool has_complex_leaf(const nlohmann::json &list)
 {
   for (const auto &elt : list.value("elts", nlohmann::json::array()))
@@ -7229,6 +7246,9 @@ typet numpy_call_expr::constructor_element_type(
 {
   if (std::optional<std::size_t> width = numpy_string_width(list))
     return string_element_type(*width);
+  if (has_string_leaf(list))
+    throw std::runtime_error(
+      "TypeError: a numpy array mixing strings with numbers is not supported");
   const std::string dtype = get_dtype();
   if (has_complex_leaf(list) || is_numpy_complex_dtype(dtype))
     return dtype == "complex64" ? typet(get_complex64_struct_type())
@@ -11120,10 +11140,11 @@ std::optional<exprt> numpy_call_expr::try_hoist_array_arg()
 
 // Complex arrays are stored, indexed and copied; the reducers read their
 // elements as real numbers.
-void numpy_call_expr::reject_complex_array_operands(
+void numpy_call_expr::reject_unmodelled_operands(
   const std::string &function) const
 {
-  static const std::set<std::string> reducers = {
+  using kindt = numpy_dtypet::kindt;
+  static const std::set<std::string> over_complex_numbers = {
     "min",
     "max",
     "argmin",
@@ -11135,13 +11156,55 @@ void numpy_call_expr::reject_complex_array_operands(
     "cumprod",
     "sort",
     "argsort"};
-  if (!reducers.count(function))
-    return;
+  const auto reject = [&function](kindt kind) {
+    throw std::runtime_error(
+      "TypeError: numpy." + function + "() over a " + numpy_kind_name(kind) +
+      " array is not supported");
+  };
   for (const auto &arg : call_.value("args", nlohmann::json::array()))
-    if (is_complex_operand(arg))
-      throw std::runtime_error(
-        "TypeError: numpy." + function +
-        "() over a complex array is not supported");
+  {
+    const std::string type = arg.value("_type", "");
+    const bool array =
+      type == "Name" || type == "List" || type == "Call" || type == "Subscript";
+    if (
+      is_string_operand(arg) &&
+      (!numpy_consumer_is_modelled(kindt::string, function) ||
+       (function == "array" && type != "List")))
+      reject(kindt::string);
+    if (
+      is_complex_operand(arg) &&
+      (array ? !numpy_consumer_is_modelled(kindt::complex, function)
+             : over_complex_numbers.count(function) != 0))
+      reject(kindt::complex);
+  }
+}
+
+// Whether the operand @p arg holds strings; see is_complex_operand.
+bool numpy_call_expr::is_string_operand(const nlohmann::json &arg) const
+{
+  const std::string type = arg.value("_type", std::string());
+  if (type == "Subscript")
+    return is_string_operand(arg["value"]);
+  if (type == "List")
+    return numpy_string_width(arg).has_value();
+  if (type == "Call")
+  {
+    const auto &args = arg.value("args", nlohmann::json::array());
+    const auto dtype =
+      numpy_dtype_from_name(constructor_dtype_name(arg, converter_.ast()));
+    return (dtype && dtype->kind == numpy_dtypet::kindt::string) ||
+           (arg["func"].value("attr", "") == "full" && args.size() > 1 &&
+            is_numpy_string_literal(args[1])) ||
+           std::any_of(
+             args.begin(), args.end(), [this](const nlohmann::json &a) {
+               return is_string_operand(a);
+             });
+  }
+  if (type != "Name")
+    return false;
+  const symbolt *symbol = converter_.find_symbol(
+    converter_.resolve_name_symbol_id(arg["id"].get<std::string>()));
+  return symbol && type_utils::is_numpy_string_array(symbol->get_type());
 }
 
 // Whether the operand @p arg holds complex numbers: a name bound to a complex
@@ -11671,7 +11734,7 @@ numpy_call_expr::try_narrow_operand_call(const std::string &function)
 exprt numpy_call_expr::get()
 {
   const std::string &function = canonical_function();
-  reject_complex_array_operands(function);
+  reject_unmodelled_operands(function);
 
   if (std::optional<exprt> permuted = try_build_axis_permutation_view())
     return *permuted;

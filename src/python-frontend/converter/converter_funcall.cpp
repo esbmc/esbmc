@@ -1346,6 +1346,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   // every other expression context (assert, nested expressions, call
   // arguments, ...), which otherwise fall through to an unrelated builtin
   // or class-method lookup for the same method name.
+  reject_unmodelled_array_method(element);
   if (
     std::optional<nlohmann::json> rewritten =
       rewrite_numpy_method_call_node(element))

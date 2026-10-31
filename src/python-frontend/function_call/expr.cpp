@@ -5363,13 +5363,17 @@ std::optional<exprt> function_call_expr::try_builtin_sum_over_numpy_scalars()
 std::optional<exprt> function_call_expr::try_int_of_numpy_scalar()
 {
   const auto &args = call_["args"];
+  const std::string &function = function_id_.get_function();
   if (
-    function_id_.get_function() != "int" || args.size() != 1 ||
+    (function != "int" && function != "float") || args.size() != 1 ||
     args[0].value("_type", "") != "Subscript" ||
     json_utils::ast_contains_call(args[0]))
     return std::nullopt;
   const exprt value = converter_.get_expr(args[0]);
-  if (!type_utils::is_numpy_numeric_element(value.type()))
+  if (is_complex_type(converter_.ns.follow(value.type())))
+    throw std::runtime_error(
+      "TypeError: " + function + "() of a complex number is not supported");
+  if (function != "int" || !type_utils::is_numpy_numeric_element(value.type()))
     return std::nullopt;
   return typecast_exprt(value, long_long_int_type());
 }

@@ -3658,6 +3658,25 @@ exprt python_converter::raise_in_expression(
   return value;
 }
 
+// A string array has no arithmetic, and a comparison of two arrays is element
+// by element, which the scalar comparison below would not read.
+static void reject_unmodelled_array_operator(
+  const std::string &op,
+  const typet &lhs,
+  const typet &rhs)
+{
+  static const std::set<std::string> comparisons = {
+    "Eq", "NotEq", "Lt", "LtE", "Gt", "GtE"};
+  const bool strings = type_utils::is_numpy_string_array(lhs) ||
+                       type_utils::is_numpy_string_array(rhs);
+  const bool complex = type_utils::is_numpy_complex_array(lhs) ||
+                       type_utils::is_numpy_complex_array(rhs);
+  if (strings || (complex && comparisons.count(op)))
+    throw std::runtime_error(
+      "TypeError: numpy element-wise '" + op + "' over a " +
+      (strings ? "string" : "complex") + " array is not supported");
+}
+
 exprt python_converter::numpy_or_array_operation(
   const std::string &op,
   exprt &lhs,
@@ -3667,6 +3686,7 @@ exprt python_converter::numpy_or_array_operation(
   const nlohmann::json &element)
 {
   cast_weak_float_compare(op, lhs, rhs, left, right);
+  reject_unmodelled_array_operator(op, lhs.type(), rhs.type());
   if (
     type_utils::is_numpy_scalar_type(lhs.type()) ||
     type_utils::is_numpy_scalar_type(rhs.type()))

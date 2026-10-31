@@ -2475,7 +2475,7 @@ private:
   bool takes_numpy_view_argument(const nlohmann::json &call, std::size_t index);
   bool is_rank1_numpy_view(const nlohmann::json &node) const;
   bool is_rank1_numpy_array_name(const nlohmann::json &node) const;
-  void reject_builtin_over_complex_array(const nlohmann::json &node) const;
+  void reject_builtin_over_opaque_array(const nlohmann::json &node);
   bool is_foldable_constant_index(const exprt &expr) const;
   bool adapt_numpy_view_builtin_arguments(nlohmann::json &node);
   std::optional<nlohmann::json>
@@ -3982,6 +3982,7 @@ private:
   std::set<std::string> base_ctor_called;
   bool build_static_lists = false;
   std::optional<numpy_dtypet> numpy_array_dtype(const nlohmann::json &base);
+  void reject_unmodelled_array_method(const nlohmann::json &call);
   std::optional<numpy_dtypet>
   constructor_keyword_dtype(const nlohmann::json &call) const;
   typet literal_call_array_type(

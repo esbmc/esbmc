@@ -405,26 +405,23 @@ bool python_converter::is_rank1_numpy_array_name(
 }
 
 // The builtins read the elements of a numpy array as real numbers.
-void python_converter::reject_builtin_over_complex_array(
-  const nlohmann::json &node) const
+void python_converter::reject_builtin_over_opaque_array(
+  const nlohmann::json &node)
 {
+  if (!is_builtin_over_numpy_view(node))
+    return;
+  const std::string builtin = node["func"].value("id", "");
+  const auto dtype = numpy_array_dtype(node["args"][0]);
+  if (!dtype)
+    return;
+  const bool is_string = dtype->kind == numpy_dtypet::kindt::string;
+  const bool is_complex = dtype->kind == numpy_dtypet::kindt::complex;
   if (
-    !is_builtin_over_numpy_view(node) ||
-    node["func"].value("id", "") == "list" ||
-    node["func"].value("id", "") == "sum")
-    return;
-  const nlohmann::json &arg = node["args"][0];
-  const std::string id = arg.value("_type", "") == "Name"
-                           ? resolve_name_symbol_id(arg.value("id", ""))
-                           : std::string();
-  const symbolt *symbol = id.empty() ? nullptr : symbol_table_.find_symbol(id);
-  if (symbol == nullptr)
-    return;
-  const typet type = ns.follow(symbol->get_type());
-  if (type.is_array() && is_complex_type(ns.follow(type.subtype())))
+    (is_string && builtin != "list" && builtin != "tuple") ||
+    (is_complex && builtin != "list" && builtin != "sum"))
     throw std::runtime_error(
-      "TypeError: passing a numpy complex array to " +
-      node["func"]["id"].get<std::string>() + "() is not supported");
+      "TypeError: passing a numpy " + numpy_kind_name(dtype->kind) +
+      " array to " + builtin + "() is not supported");
 }
 
 // sum() of a narrow array wraps at its width, so it reads the elements.
@@ -448,7 +445,7 @@ bool python_converter::is_narrow_builtin_sum(const nlohmann::json &node)
 // list-consuming builtin by the list of its elements.
 bool python_converter::adapt_numpy_view_builtin_arguments(nlohmann::json &node)
 {
-  reject_builtin_over_complex_array(node);
+  reject_builtin_over_opaque_array(node);
   if (!node.is_object() && !node.is_array())
     return false;
   bool changed = false;
