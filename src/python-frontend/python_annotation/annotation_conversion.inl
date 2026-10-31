@@ -166,6 +166,13 @@ bool python_annotation<Json>::extract_type_info(
   return false;
 }
 
+/// A bare `Optional` or `Union` head cannot hold None, so the read keeps the
+/// type of the dict it comes from instead.
+inline std::string dict_value_head_type(const std::string &head)
+{
+  return head == "Optional" || head == "Union" ? "Any" : head;
+}
+
 template <class Json>
 std::string python_annotation<Json>::infer_dict_value_type(const Json &var_node)
 {
@@ -187,7 +194,8 @@ std::string python_annotation<Json>::infer_dict_value_type(const Json &var_node)
     {
       const Json &val_type = func_def["returns"]["slice"]["elts"][1];
       if (val_type["_type"] == "Subscript" && val_type["value"].contains("id"))
-        return val_type["value"]["id"].template get<std::string>();
+        return dict_value_head_type(
+          val_type["value"]["id"].template get<std::string>());
     }
   }
 
@@ -1668,6 +1676,9 @@ template <class Json>
 std::string python_annotation<Json>::list_concat_type(const Json &binop)
 {
   const Json &rhs = binop["right"];
+  // Repeating a list keeps its element type (`[0] * n`).
+  if (binop["op"]["_type"] == "Mult")
+    return get_list_type_from_literal(binop["left"]);
   if (binop["op"]["_type"] != "Add")
     return "list";
   const std::string callee =
@@ -1753,7 +1764,9 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
     if (
       (op == "Add" || op == "Mult") && lhs["_type"] != "List" &&
       (rhs["_type"] == "List" || rhs["_type"] == "ListComp"))
-      return "list";
+      return op == "Mult" && rhs["_type"] == "List"
+               ? get_list_type_from_literal(rhs)
+               : "list";
   }
 
   if (lhs["_type"] == "BinOp")
@@ -1920,8 +1933,9 @@ bool python_annotation<Json>::is_array_operand(
     name, body.contains("body") ? body["body"] : ast_["body"]);
   if (decl.empty())
     decl = find_annotated_assign(name, ast_["body"]);
-  return !decl.empty() && decl.contains("annotation") &&
-         decl["annotation"].value("id", std::string()) == "list";
+  if (decl.empty() && body.contains("args"))
+    decl = find_annotated_assign(name, body["args"]["args"]);
+  return operand_annotation_type(decl) == "list";
 }
 
 /// True division of an int or bool yields a float, and so does other
@@ -2562,8 +2576,21 @@ std::string python_annotation<Json>::get_type_from_rhs_variable(
   {
     return rhs_node["annotation"]["id"];
   }
-  else
-    return "Any"; // Default for cases where annotation is missing or null
+
+  // `list[int]` is a Subscript with no id, and still names a list.
+  if (
+    rhs_node.contains("annotation") && rhs_node["annotation"].is_object() &&
+    rhs_node["annotation"].value("_type", "") == "Subscript" &&
+    rhs_node["annotation"]["value"].value("id", "") == "list")
+    return "list";
+
+  return "Any"; // Default for cases where annotation is missing or null
+}
+
+template <class Json>
+static bool binds_name_in(const Json *scope, const std::string &name)
+{
+  return scope != nullptr && json_utils::count_name_bindings(*scope, name) > 0;
 }
 
 /// Whether `name` is a variable that may hold a function or a callable
@@ -2593,9 +2620,9 @@ bool python_annotation<Json>::holds_callable_value(
         body, stmt["annotation"].value("id", ""), "__call__"))
       return true;
   }
-  // A local such as a loop variable over callable instances (#8351)
-  return current_func != nullptr &&
-         json_utils::count_name_bindings(*current_func, name) > 0;
+  // A local such as a loop variable over callable instances (#8351), or a
+  // parameter of the enclosing function that a nested one calls
+  return binds_name_in(current_func, name) || binds_name_in(parent_func, name);
 }
 
 template <class Json>
@@ -3411,7 +3438,9 @@ std::string python_annotation<Json>::get_type_from_method(const Json &call)
               return ret["value"]["id"].template get<std::string>();
           }
           std::string inferred_type = infer_method_return_type(member, obj);
-          if (!inferred_type.empty())
+          // A static method returning its parameter has no type until the
+          // converter sees the arguments (#9343).
+          if (!inferred_type.empty() || json_utils::is_staticmethod_def(member))
             return inferred_type;
         }
       }

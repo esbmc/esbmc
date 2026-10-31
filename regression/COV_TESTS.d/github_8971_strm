@@ -1,0 +1,8 @@
+regression/python/github_8971_strm_assign
+regression/python/github_8971_strm_assign_fail
+regression/python/github_8971_strm_endswith
+regression/python/github_8971_strm_lazy
+regression/python/github_8971_strm_lower_fail
+regression/python/github_8971_strm_nondet
+regression/python/github_8971_strm_unnarrowed
+regression/python/github_8971_strm_untagged

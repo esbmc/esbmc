@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^VERIFICATION FAILED$
+FAILED\s+\[global\.assertion\.2\]\s+line\s+8\s+Unsupported: 'is' between two dynamically-typed values

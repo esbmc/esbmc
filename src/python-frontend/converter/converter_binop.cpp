@@ -1649,14 +1649,25 @@ exprt python_converter::handle_membership_operator(
 // inside a clause, which is a specification rather than code. A lambda body
 // is converted while the enclosing block is current, so its guard goes into a
 // statement expression evaluated with the division (#8889).
-bool python_converter::needs_zero_division_guard(
+//
+// A negative shift count raises a catchable ValueError the same way.
+static bool is_shift_op(const std::string &op)
+{
+  return op == "LShift" || op == "RShift";
+}
+
+bool python_converter::needs_operand_guard(
   const std::string &op,
   const exprt &rhs) const
 {
-  if (op != "Div" && op != "FloorDiv" && op != "Mod")
+  if (is_shift_op(op))
+  {
+    if (!rhs.type().is_signedbv())
+      return false;
+  }
+  else if (op != "Div" && op != "FloorDiv" && op != "Mod")
     return false;
-
-  if (
+  else if (
     !rhs.type().is_signedbv() && !rhs.type().is_unsignedbv() &&
     !rhs.type().is_floatbv())
     return false;
@@ -1664,29 +1675,60 @@ bool python_converter::needs_zero_division_guard(
   return !in_rhs_type_probe_ && !in_contract_clause_;
 }
 
+/// `is` between two tagged values holds when their payloads are one object.
+/// A differing payload proves nothing, since CPython may share an int or str
+/// between two objects, so that path reports an unsupported property, which
+/// the SV-COMP wrapper reads as unknown. The assertion is neither an assume
+/// nor a False answer.
+exprt python_converter::tagged_identity_by_payload(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &element)
+{
+  if (!can_emit_runtime_guard())
+    return nil_exprt();
+  const typet payload = pointer_typet(empty_typet());
+  code_assertt check(
+    python_expr::build_equal(
+      python_expr::build_member(lhs, "value", payload),
+      python_expr::build_member(rhs, "value", payload)));
+  check.location() = get_location_from_decl(element);
+  check.location().user_provided(true);
+  check.location().comment(
+    "Unsupported: 'is' between two dynamically-typed values that are not "
+    "known to be one object");
+  current_block->copy_to_operands(check);
+  return migrate_expr_back(op == "Is" ? gen_true_expr() : gen_false_expr());
+}
+
 /// `is` between a tagged value and a name whose identity the tag cannot
 /// affect. A tag holds only a number or a str, so it is never a class or a def,
-/// and a name is identical to itself. Between two other values `is` on numbers
-/// or strs is up to CPython's interning, so those stay unfolded.
+/// and a name is identical to itself. Between two tags it follows the payload.
 exprt python_converter::fold_tagged_identity(
   const std::string &op,
   const exprt &lhs,
   const exprt &rhs,
   const nlohmann::json &left,
-  const nlohmann::json &right)
+  const nlohmann::json &right,
+  const nlohmann::json &element)
 {
   const bool lhs_tagged = type_handler_.is_tagged_scalar_type(lhs.type());
+  const bool both_tagged =
+    lhs_tagged && type_handler_.is_tagged_scalar_type(rhs.type());
+  const bool same_name = left.value("_type", "") == "Name" &&
+                         right.value("_type", "") == "Name" &&
+                         left["id"] == right["id"];
+  if (both_tagged && !same_name)
+    return tagged_identity_by_payload(op, lhs, rhs, element);
+
   const nlohmann::json &other = lhs_tagged ? right : left;
   if (other.value("_type", "") != "Name")
     return nil_exprt();
 
   bool same = false;
-  if (lhs_tagged && type_handler_.is_tagged_scalar_type(rhs.type()))
-  {
-    if (left.value("_type", "") != "Name" || left["id"] != right["id"])
-      return nil_exprt();
+  if (both_tagged)
     same = true;
-  }
   else
   {
     const std::string name = other["id"].get<std::string>();
@@ -1734,7 +1776,7 @@ exprt python_converter::handle_tagged_scalar_binop(
   if (op == "Is" || op == "IsNot")
   {
     if (
-      exprt folded = fold_tagged_identity(op, lhs, rhs, left, right);
+      exprt folded = fold_tagged_identity(op, lhs, rhs, left, right, element);
       folded.is_not_nil())
       return folded;
     const auto &other =
@@ -2092,7 +2134,7 @@ exprt python_converter::checked_erased_int(
   // Only a value that can come from sources of different known kinds can be
   // anything but the int the cast below assumes.
   value_kinds kinds(*ast_json);
-  if (!kinds.diverges(node, kinds.scope_of(current_func_name_)))
+  if (!kinds.may_be_non_number(node, kinds.scope_of(current_func_name_)))
     return operand;
 
   const locationt location = get_location_from_decl(element);
@@ -2638,8 +2680,8 @@ exprt python_converter::get_binary_operator_expr(
     if (is_any_ptr(lhs) && is_any_ptr(rhs))
     {
       const typet int_type = type_handler_.get_typet("int", 0);
-      lhs = typecast_exprt(lhs, int_type);
-      rhs = typecast_exprt(rhs, int_type);
+      lhs = typecast_exprt(checked_erased_int(lhs, left, element), int_type);
+      rhs = typecast_exprt(checked_erased_int(rhs, right, element), int_type);
     }
     else if (is_any_ptr(lhs) && is_integer(rhs))
       lhs = typecast_exprt(checked_erased_int(lhs, left, element), rhs.type());
@@ -2722,9 +2764,6 @@ exprt python_converter::get_binary_operator_expr(
   if (op == "Pow" || op == "power")
     return math_handler_.handle_power(lhs, once_bound_exponent(right, rhs));
 
-  if (op == "Mod" && (lhs.type().is_floatbv() || rhs.type().is_floatbv()))
-    return math_handler_.handle_modulo(lhs, rhs, element);
-
   if (type_utils::is_relational_op(op))
   {
     const locationt loc = get_location_from_decl(element);
@@ -2743,16 +2782,16 @@ exprt python_converter::get_binary_operator_expr(
       return fallback;
   }
 
-  return build_division_guarded_binop(op, lhs, rhs, element);
+  return build_guarded_binop(op, lhs, rhs, element);
 }
 
-exprt python_converter::build_division_guarded_binop(
+exprt python_converter::build_guarded_binop(
   const std::string &op,
   exprt lhs,
   exprt rhs,
   const nlohmann::json &element)
 {
-  if (!needs_zero_division_guard(op, rhs))
+  if (!needs_operand_guard(op, rhs))
     return build_arithmetic_binop(op, lhs, rhs, element);
 
   // An and/or tail, a chained-comparison tail or a while test is evaluated
@@ -2775,13 +2814,26 @@ exprt python_converter::build_division_guarded_binop(
   lhs = hoist_side_effecting_operand(lhs, element, "$div_lhs$");
   rhs = hoist_side_effecting_operand(rhs, element, "$div_rhs$");
 
-  exprt is_zero("=", bool_type());
-  is_zero.copy_to_operands(rhs, gen_zero(rhs.type()));
-  emit_guarded_raise(
-    is_zero,
-    "ZeroDivisionError",
-    "division by zero",
-    get_location_from_decl(element));
+  if (is_shift_op(op))
+  {
+    exprt is_negative("<", bool_type());
+    is_negative.copy_to_operands(rhs, gen_zero(rhs.type()));
+    emit_guarded_raise(
+      is_negative,
+      "ValueError",
+      "negative shift count",
+      get_location_from_decl(element));
+  }
+  else
+  {
+    exprt is_zero("=", bool_type());
+    is_zero.copy_to_operands(rhs, gen_zero(rhs.type()));
+    emit_guarded_raise(
+      is_zero,
+      "ZeroDivisionError",
+      "division by zero",
+      get_location_from_decl(element));
+  }
   current_block = saved_block;
 
   exprt result = build_arithmetic_binop(op, lhs, rhs, element);
@@ -2804,6 +2856,9 @@ exprt python_converter::build_arithmetic_binop(
   exprt rhs,
   const nlohmann::json &element)
 {
+  if (op == "Mod" && (lhs.type().is_floatbv() || rhs.type().is_floatbv()))
+    return math_handler_.handle_modulo(lhs, rhs, element);
+
   // Build the binary expression
   exprt bin_expr = build_binary_expression(op, lhs, rhs);
 
@@ -2817,7 +2872,7 @@ exprt python_converter::build_arithmetic_binop(
 
   // Python integer modulo `%` is floored (result takes the sign of the
   // divisor), unlike C's truncated remainder. Correct it for integer operands;
-  // float `%` was already handled above via handle_modulo.
+  // float `%` was already handled above.
   if (
     op == "Mod" && (lhs.type().is_signedbv() || lhs.type().is_unsignedbv()) &&
     (rhs.type().is_signedbv() || rhs.type().is_unsignedbv()))

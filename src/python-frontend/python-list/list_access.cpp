@@ -4743,6 +4743,21 @@ static void reject_unresolved_call_elements(
     throw std::runtime_error("Invalid type");
 }
 
+// The element type a variable's own annotation declares, when \p elem_type is
+// still unknown after following `alias = list_var` to the declaration. Kept
+// out of handle_index_access so the lookup adds no decision point to it.
+static typet declared_elem_type_or(
+  const typet &elem_type,
+  const nlohmann::json &list_node,
+  const type_handler &th)
+{
+  if (
+    elem_type != typet() || list_node.is_null() ||
+    list_node.value("_type", "") != "AnnAssign")
+    return elem_type;
+  return get_elem_type_from_annotation(list_node, th);
+}
+
 // True when `list_node` is a variable declaration whose initializer is a
 // literal List AST node, giving a compile-time element count to normalize a
 // negative index against. Split out of normalize_index_access_position to
@@ -5033,6 +5048,9 @@ exprt python_list::handle_index_access(
             break;
           }
         }
+
+        elem_type = declared_elem_type_or(
+          elem_type, list_node, converter_.get_type_handler());
 
         if (!list_node.is_null() && list_node["_type"] == "arg")
         {

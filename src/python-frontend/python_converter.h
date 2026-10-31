@@ -187,6 +187,13 @@ public:
   typet get_type_from_annotation(
     const nlohmann::json &annotation_node,
     const nlohmann::json &element);
+  /// The V of a `dict[K, V]` annotation, or an empty type.
+  typet dict_annotation_value_type(const nlohmann::json &annotation);
+
+  typet named_annotation_type(
+    const nlohmann::json &annotation_node,
+    const std::string &name,
+    size_t type_size = 0);
 
   /// The type of `Optional[<slice>]`, or an empty typet when the slice is not
   /// handled.
@@ -365,7 +372,7 @@ public:
   // True where a side-effecting statement (e.g. a hoisted temporary
   // assignment) is safe to plant into current_block without being evaluated
   // an extra time or leaking into a specification -- the same guard
-  // needs_zero_division_guard applies before hoisting a side-effecting
+  // needs_operand_guard applies before hoisting a side-effecting
   // divisor: not a lambda body at its definition (operands still unbound),
   // not the discarded type-probe pass of an assignment RHS (which runs the
   // real conversion again right after), and not inside a contract clause
@@ -379,6 +386,11 @@ public:
   // A runtime guard emitted into current_block runs once, unconditionally,
   // ahead of the enclosing statement; that is wrong for an expression Python
   // evaluates conditionally or repeatedly (an and/or tail, a while test).
+  bool in_type_probe() const
+  {
+    return in_rhs_type_probe_;
+  }
+
   bool can_emit_runtime_guard() const
   {
     return current_block && safe_to_emit_side_effecting_statement() &&
@@ -472,6 +484,9 @@ public:
   /// import binds, as `mk` after `from helper import mk` and `helper.mk`
   /// after `import helper`.
   nlohmann::json callable_function_stubs() const;
+  /// The stubs followed by the current module's own statements, which a name
+  /// read off the module is resolved against.
+  nlohmann::json kind_module_body() const;
   /// Whether a straight-line retype moved @p id's value to another symbol.
   bool is_retyped(const irep_idt &id) const
   {
@@ -516,6 +531,17 @@ public:
     const nlohmann::json &receiver,
     const nlohmann::json &use) const;
   std::string current_module_name() const;
+
+  /// The file of the module named @p module_name, looked up by its own name:
+  /// unlike get_imported_module_path, an alias bound in another module cannot
+  /// stand in for it. Empty when the module was not collected.
+  std::string module_file(const std::string &module_name) const
+  {
+    const auto pooled = module_ast_pool_.find(module_name);
+    return pooled == module_ast_pool_.end()
+             ? std::string()
+             : pooled->second.value("filename", std::string());
+  }
 
   const std::string
   get_imported_module_path(const std::string &module_name) const
@@ -797,7 +823,7 @@ private:
     const nlohmann::json &element,
     const nlohmann::json &right,
     const exprt &lhs);
-  exprt build_division_guarded_binop(
+  exprt build_guarded_binop(
     const std::string &op,
     exprt lhs,
     exprt rhs,
@@ -1378,6 +1404,15 @@ private:
     const std::string &param_name,
     size_t param_index) const;
 
+  /// try_infer_dynamic_param_type, also true when a call site forwards a
+  /// parameter of its own enclosing function that is itself tagged.
+  /// @p visiting holds the `callee#index` pairs being decided.
+  bool infer_dynamic_param_forwarded(
+    const std::string &callee,
+    const std::string &param_name,
+    size_t param_index,
+    std::set<std::string> &visiting) const;
+
   typet ctor_param_attr_type(
     const std::vector<const nlohmann::json *> &module_bodies,
     const std::string &class_name,
@@ -1523,6 +1558,13 @@ private:
    */
   typet infer_tuple_struct_from_value(
     const nlohmann::json &value_node,
+    const std::unordered_map<std::string, nlohmann::json> &param_annotations);
+
+  /// infer_tuple_struct_from_value over every value that can reach `value` in
+  /// `method`, or empty_typet when their shapes differ.
+  typet shared_tuple_struct(
+    const nlohmann::json &value,
+    const nlohmann::json &method,
     const std::unordered_map<std::string, nlohmann::json> &param_annotations);
 
   exprt get_return_from_func(const char *func_symbol_id);
@@ -1738,6 +1780,9 @@ private:
   /// base's @p name.
   bool class_binds_name(const std::string &class_name, const std::string &name)
     const;
+  /// Whether the program and every module it imports bind @p name once only,
+  /// at any depth, by a class statement.
+  bool is_sole_class_binding(const std::string &name) const;
 
   symbolt *find_imported_symbol(const std::string &symbol_id) const;
   /// The symbol @p sym_id names in the module whose file it names, or through
@@ -2434,6 +2479,7 @@ private:
   void reject_numpy_view_method_call(const nlohmann::json &func) const;
   void reject_numpy_view_callee(const nlohmann::json &call);
   void reject_inline_runtime_numpy_slice(const nlohmann::json &call) const;
+  void reject_unmodelled_class_call(const nlohmann::json &call) const;
   void reject_numpy_view_container_store(const nlohmann::json &ast_node);
   bool is_numpy_view_syntax(
     const nlohmann::json &value,
@@ -3311,10 +3357,24 @@ private:
     const exprt &lhs,
     const exprt &rhs,
     const nlohmann::json &left,
-    const nlohmann::json &right);
+    const nlohmann::json &right,
+    const nlohmann::json &element);
+
+  /// `is` between two tagged values: True when the payload is one object,
+  /// otherwise an unsupported property. Nil where no guard can be emitted.
+  exprt tagged_identity_by_payload(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &element);
 
   /// Python truthiness of a tagged value, a call on its address.
   exprt tagged_truthiness(exprt value, const nlohmann::json &node);
+
+  /// A subscript whose base is a tagged value, read as the str it holds;
+  /// nullopt for any other base.
+  std::optional<exprt>
+  try_index_tagged_str(exprt array, const nlohmann::json &element);
 
   /// A unary operator on a tagged operand: `-` and `not` are modelled.
   exprt handle_tagged_unary_operator(
@@ -3384,8 +3444,12 @@ private:
   namespacet ns;
   typet current_element_type;
   typet current_func_return_type_;
+  /// The V of the current function's `-> dict[K, V]` annotation (#9306).
+  typet current_func_dict_value_type_;
   /// Whether the program annotates the current function `-> int`.
   bool current_func_annotated_int_ = false;
+  /// Whether the current function has one `return` statement (#9074).
+  bool current_func_single_return_ = false;
   /// The target of a ternary that is itself a return value; see
   /// optional_ternary_type.
   typet ternary_return_target_;
@@ -3451,7 +3515,7 @@ private:
   // lower_short_circuit_boolop.
   const nlohmann::json *asserted_test_ = nullptr;
 
-  bool needs_zero_division_guard(const std::string &op, const exprt &rhs) const;
+  bool needs_operand_guard(const std::string &op, const exprt &rhs) const;
   // Set by resolve_any_subscript_array_type when it adopts an array type for
   // an Any-annotated `row = a[i]`-style assignment. The RHS in that case is a
   // raw index/slice expression rather than an already-materialized array

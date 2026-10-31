@@ -1228,16 +1228,45 @@ inline istream &operator>>(istream &is, basic_string<CharT, Traits, Alloc>)
   return is;
 }
 
+/* compare() as one loop over the common prefix, the shape the operators had
+ * before they honoured embedded NULs (#9413): it costs far less to unwind than
+ * __esbmc_string_compare's fixed-capacity loop. */
+static int
+__esbmc_string_order(const char *s1, size_t n1, const char *s2, size_t n2)
+{
+__ESBMC_HIDE:
+  size_t m = n1 < n2 ? n1 : n2;
+  size_t i;
+  for (i = 0; i < m && s1[i] == s2[i]; i++)
+    ;
+  if (i < m)
+    return (unsigned char)s1[i] < (unsigned char)s2[i] ? -1 : 1;
+  return n1 < n2 ? -1 : n1 > n2 ? 1 : 0;
+}
+
+// The same, indexing the two strings' own buffers: reading through a char
+// pointer would resolve its pointee on every byte.
+template <typename CharT, typename Traits, typename Alloc>
+static int __esbmc_string_order(
+  const basic_string<CharT, Traits, Alloc> &a,
+  const basic_string<CharT, Traits, Alloc> &b)
+{
+__ESBMC_HIDE:
+  int m = a._size < b._size ? a._size : b._size;
+  int i;
+  for (i = 0; i < m && a.str[i] == b.str[i]; i++)
+    ;
+  if (i < m)
+    return (unsigned char)a.str[i] < (unsigned char)b.str[i] ? -1 : 1;
+  return a._size < b._size ? -1 : a._size > b._size ? 1 : 0;
+}
+
 template <typename CharT, typename Traits, typename Alloc>
 bool basic_string<CharT, Traits, Alloc>::operator>(
   basic_string<CharT, Traits, Alloc> &a)
 {
 __ESBMC_HIDE:
-  __ESBMC_assert(a.str != NULL, "The parameter must be different than NULL");
-  int i;
-  for (i = 0; this->str[i] != '\0' && this->str[i] == a.str[i]; i++)
-    ;
-  return (unsigned char)this->str[i] > (unsigned char)a.str[i];
+  return __esbmc_string_order(*this, a) > 0;
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1246,14 +1275,7 @@ bool operator>(
   const basic_string<CharT, Traits, Alloc> &rhs)
 {
 __ESBMC_HIDE:
-  __ESBMC_assert(
-    lhs.str != NULL, "The first parameter must be different than NULL");
-  __ESBMC_assert(
-    rhs.str != NULL, "The second parameter must be different than NULL");
-  int i;
-  for (i = 0; lhs.str[i] != '\0' && lhs.str[i] == rhs.str[i]; i++)
-    ;
-  return (unsigned char)lhs.str[i] > (unsigned char)rhs.str[i];
+  return __esbmc_string_order(lhs, rhs) > 0;
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1262,14 +1284,7 @@ bool operator<(
   const basic_string<CharT, Traits, Alloc> &rhs)
 {
 __ESBMC_HIDE:
-  __ESBMC_assert(
-    lhs.str != NULL, "The first parameter must be different than NULL");
-  __ESBMC_assert(
-    rhs.str != NULL, "The second parameter must be different than NULL");
-  int i;
-  for (i = 0; lhs.str[i] != '\0' && lhs.str[i] == rhs.str[i]; i++)
-    ;
-  return (unsigned char)lhs.str[i] < (unsigned char)rhs.str[i];
+  return __esbmc_string_order(lhs, rhs) < 0;
 }
 
 // [string.cmp]: all six comparisons are non-member and take const&. The <= and
@@ -1282,11 +1297,7 @@ bool operator<=(
   const basic_string<CharT, Traits, Alloc> &rhs)
 {
 __ESBMC_HIDE:
-  __ESBMC_assert(
-    lhs.str != NULL, "The first parameter must be different than NULL");
-  __ESBMC_assert(
-    rhs.str != NULL, "The second parameter must be different than NULL");
-  return strcmp(lhs.str, rhs.str) <= 0;
+  return __esbmc_string_order(lhs, rhs) <= 0;
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1295,39 +1306,21 @@ bool operator>=(
   const basic_string<CharT, Traits, Alloc> &rhs)
 {
 __ESBMC_HIDE:
-  __ESBMC_assert(
-    lhs.str != NULL, "The first parameter must be different than NULL");
-  __ESBMC_assert(
-    rhs.str != NULL, "The second parameter must be different than NULL");
-  return strcmp(lhs.str, rhs.str) >= 0;
+  return __esbmc_string_order(lhs, rhs) >= 0;
 }
 
 template <typename CharT, typename Traits, typename Alloc>
 bool operator>(const char *lhs, basic_string<CharT, Traits, Alloc> &rhs)
 {
 __ESBMC_HIDE:
-  __ESBMC_assert(
-    lhs != NULL, "The first parameter must be different than NULL");
-  __ESBMC_assert(
-    rhs.str != NULL, "The second parameter must be different than NULL");
-  int i;
-  for (i = 0; lhs[i] != '\0' && lhs[i] == rhs.str[i]; i++)
-    ;
-  return (unsigned char)lhs[i] > (unsigned char)rhs.str[i];
+  return __esbmc_string_order(lhs, strlen(lhs), rhs.str, rhs._size) > 0;
 }
 
 template <typename CharT, typename Traits, typename Alloc>
 bool operator>(basic_string<CharT, Traits, Alloc> &lhs, const char *rhs)
 {
 __ESBMC_HIDE:
-  __ESBMC_assert(
-    lhs.str != NULL, "The first parameter must be different than NULL");
-  __ESBMC_assert(
-    rhs != NULL, "The second parameter must be different than NULL");
-  int i;
-  for (i = 0; lhs.str[i] != '\0' && lhs.str[i] == rhs[i]; i++)
-    ;
-  return (unsigned char)lhs.str[i] > (unsigned char)rhs[i];
+  return __esbmc_string_order(lhs.str, lhs._size, rhs, strlen(rhs)) > 0;
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1335,39 +1328,21 @@ bool basic_string<CharT, Traits, Alloc>::operator<(
   basic_string<CharT, Traits, Alloc> &a)
 {
 __ESBMC_HIDE:
-  __ESBMC_assert(a.str != NULL, "The parameter must be different than NULL");
-  int i;
-  for (i = 0; this->str[i] != '\0' && this->str[i] == a.str[i]; i++)
-    ;
-  return (unsigned char)this->str[i] < (unsigned char)a.str[i];
+  return __esbmc_string_order(*this, a) < 0;
 }
 
 template <typename CharT, typename Traits, typename Alloc>
 bool operator<(const char *lhs, basic_string<CharT, Traits, Alloc> &rhs)
 {
 __ESBMC_HIDE:
-  __ESBMC_assert(
-    lhs != NULL, "The first parameter must be different than NULL");
-  __ESBMC_assert(
-    rhs.str != NULL, "The second parameter must be different than NULL");
-  int i;
-  for (i = 0; lhs[i] != '\0' && lhs[i] == rhs.str[i]; i++)
-    ;
-  return (unsigned char)lhs[i] < (unsigned char)rhs.str[i];
+  return __esbmc_string_order(lhs, strlen(lhs), rhs.str, rhs._size) < 0;
 }
 
 template <typename CharT, typename Traits, typename Alloc>
 bool operator<(basic_string<CharT, Traits, Alloc> &lhs, const char *rhs)
 {
 __ESBMC_HIDE:
-  __ESBMC_assert(
-    lhs.str != NULL, "The first parameter must be different than NULL");
-  __ESBMC_assert(
-    rhs != NULL, "The second parameter must be different than NULL");
-  int i;
-  for (i = 0; lhs.str[i] != '\0' && lhs.str[i] == rhs[i]; i++)
-    ;
-  return (unsigned char)lhs.str[i] < (unsigned char)rhs[i];
+  return __esbmc_string_order(lhs.str, lhs._size, rhs, strlen(rhs)) < 0;
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1375,32 +1350,14 @@ bool basic_string<CharT, Traits, Alloc>::operator>=(
   basic_string<CharT, Traits, Alloc> &a)
 {
 __ESBMC_HIDE:
-  __ESBMC_assert(a.str != NULL, "The parameter must be different than NULL");
-  int tmp = strcmp(this->str, a.str);
-  if (tmp > 0 || tmp == 0)
-  {
-    return true;
-  }
-  else
-  {
-    return false;
-  }
+  return __esbmc_string_order(*this, a) >= 0;
 }
 
 template <typename CharT, typename Traits, typename Alloc>
 bool basic_string<CharT, Traits, Alloc>::operator>=(const char *lhs) const
 {
 __ESBMC_HIDE:
-  __ESBMC_assert(lhs != NULL, "The parameter must be different than NULL");
-  int tmp = strcmp(this->str, lhs);
-  if (tmp > 0 || tmp == 0)
-  {
-    return true;
-  }
-  else
-  {
-    return false;
-  }
+  return __esbmc_string_order(this->str, this->_size, lhs, strlen(lhs)) >= 0;
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -1408,32 +1365,14 @@ bool basic_string<CharT, Traits, Alloc>::operator<=(
   basic_string<CharT, Traits, Alloc> &a)
 {
 __ESBMC_HIDE:
-  __ESBMC_assert(a.str != NULL, "The parameter must be different than NULL");
-  int tmp = strcmp(this->str, a.str);
-  if (tmp < 0 || tmp == 0)
-  {
-    return true;
-  }
-  else
-  {
-    return false;
-  }
+  return __esbmc_string_order(*this, a) <= 0;
 }
 
 template <typename CharT, typename Traits, typename Alloc>
 bool basic_string<CharT, Traits, Alloc>::operator<=(const char *lhs) const
 {
 __ESBMC_HIDE:
-  __ESBMC_assert(lhs != NULL, "The parameter must be different than NULL");
-  int tmp = strcmp(this->str, lhs);
-  if (tmp < 0 || tmp == 0)
-  {
-    return true;
-  }
-  else
-  {
-    return false;
-  }
+  return __esbmc_string_order(this->str, this->_size, lhs, strlen(lhs)) <= 0;
 }
 
 // Free const char*-on-the-left overloads, so "lit" >= s / "lit" <= s resolve
@@ -1442,22 +1381,14 @@ template <typename CharT, typename Traits, typename Alloc>
 bool operator>=(const char *lhs, const basic_string<CharT, Traits, Alloc> &rhs)
 {
 __ESBMC_HIDE:
-  __ESBMC_assert(
-    lhs != NULL, "The first parameter must be different than NULL");
-  __ESBMC_assert(
-    rhs.str != NULL, "The second parameter must be different than NULL");
-  return strcmp(lhs, rhs.str) >= 0;
+  return __esbmc_string_order(lhs, strlen(lhs), rhs.str, rhs._size) >= 0;
 }
 
 template <typename CharT, typename Traits, typename Alloc>
 bool operator<=(const char *lhs, const basic_string<CharT, Traits, Alloc> &rhs)
 {
 __ESBMC_HIDE:
-  __ESBMC_assert(
-    lhs != NULL, "The first parameter must be different than NULL");
-  __ESBMC_assert(
-    rhs.str != NULL, "The second parameter must be different than NULL");
-  return strcmp(lhs, rhs.str) <= 0;
+  return __esbmc_string_order(lhs, strlen(lhs), rhs.str, rhs._size) <= 0;
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -2102,7 +2033,8 @@ basic_string<CharT, Traits, Alloc> &basic_string<CharT, Traits, Alloc>::insert(
 {
 __ESBMC_HIDE:
   int len = this->length(), i, k;
-  __ESBMC_assert((pos1 >= 0) && (pos1 < len), "basic_string overflow");
+  if (pos1 > len)
+    throw std::out_of_range();
   __ESBMC_assert(s.str != NULL, "The parameter must be different than NULL");
   int lenOne = pos1 + 1;
   char one[STRING_CAPACITY];
@@ -2145,7 +2077,8 @@ basic_string<CharT, Traits, Alloc> &basic_string<CharT, Traits, Alloc>::insert(
 __ESBMC_HIDE:
   int len = this->length(), i, k;
   int sLen = s.length();
-  __ESBMC_assert((pos1 >= 0) && (pos1 < len), "basic_string overflow");
+  if (pos1 > len)
+    throw std::out_of_range();
   __ESBMC_assert(
     (pos2 >= 0) && (pos2 < s.length()) && ((pos2 + n) < sLen) && (n > 0),
     "basic_string overflow");
@@ -2190,7 +2123,8 @@ __ESBMC_HIDE:
   int len = this->length(), i, k;
   int lim = n;
   int sLen = strlen(s);
-  __ESBMC_assert((pos1 >= 0) && (pos1 < len), "basic_string overflow");
+  if (pos1 > len)
+    throw std::out_of_range();
   __ESBMC_assert(n > 0, "basic_string overflow");
   __ESBMC_assert(s != NULL, "The parameter must be different than NULL");
   __ESBMC_assert(lim < sLen, "basic_string overflow");
@@ -2231,7 +2165,8 @@ basic_string<CharT, Traits, Alloc>::insert(size_t pos1, const char *s)
 {
 __ESBMC_HIDE:
   int len = this->length(), i, k;
-  __ESBMC_assert(pos1 >= 0, "basic_string overflow");
+  if (pos1 > len)
+    throw std::out_of_range();
   __ESBMC_assert(s != NULL, "The parameter must be different than NULL");
   int sLen = strlen(s);
   int lenOne = pos1 + 1;
@@ -2272,9 +2207,9 @@ basic_string<CharT, Traits, Alloc>::insert(size_t pos1, size_t n, char c)
 __ESBMC_HIDE:
   int len = this->length(), i, k;
   int sLen = n;
-  __ESBMC_assert(
-    (pos1 >= 0) && (pos1 < len) && ((pos1 + n) < len) && (n > 0),
-    "basic_string overflow");
+  if (pos1 > len)
+    throw std::out_of_range();
+  __ESBMC_assert(((pos1 + n) < len) && (n > 0), "basic_string overflow");
   char s[STRING_CAPACITY];
   for (i = 0; i < n; i++)
   {
@@ -3256,66 +3191,23 @@ bool operator==(
   const basic_string<CharT, Traits, Alloc> &b)
 {
 __ESBMC_HIDE:
-  __ESBMC_assert(
-    a.str != NULL, "The first parameter must be different than NULL");
-  __ESBMC_assert(
-    b.str != NULL, "The second parameter must be different than NULL");
-  if (a._size != b._size)
-    return false;
-  int aux;
-  aux = strcmp(b.c_str(), a.c_str());
-  if (aux == 0)
-  {
-    return true;
-  }
-  else
-  {
-    return false;
-  }
+  return a._size == b._size && __esbmc_string_order(a, b) == 0;
 }
 
 template <typename CharT, typename Traits, typename Alloc>
 bool operator==(const char *lhs, const basic_string<CharT, Traits, Alloc> &rhs)
 {
 __ESBMC_HIDE:
-  __ESBMC_assert(
-    lhs != NULL, "The first parameter must be different than NULL");
-  __ESBMC_assert(
-    rhs.str != NULL, "The second parameter must be different than NULL");
-  if (strlen(lhs) != rhs._size)
-    return false;
-  int aux;
-  aux = strcmp((char *)lhs, rhs.c_str());
-  if (aux == 0)
-  {
-    return true;
-  }
-  else
-  {
-    return false;
-  }
+  return strlen(lhs) == rhs._size &&
+         __esbmc_string_order(lhs, rhs._size, rhs.str, rhs._size) == 0;
 }
 
 template <typename CharT, typename Traits, typename Alloc>
 bool operator==(const basic_string<CharT, Traits, Alloc> &lhs, const char *rhs)
 {
 __ESBMC_HIDE:
-  __ESBMC_assert(
-    lhs.str != NULL, "The first parameter must be different than NULL");
-  __ESBMC_assert(
-    rhs != NULL, "The second parameter must be different than NULL");
-  if (lhs._size != strlen(rhs))
-    return false;
-  int aux;
-  aux = strcmp(lhs.c_str(), (char *)rhs);
-  if (aux == 0)
-  {
-    return true;
-  }
-  else
-  {
-    return false;
-  }
+  return lhs._size == strlen(rhs) &&
+         __esbmc_string_order(lhs.str, lhs._size, rhs, lhs._size) == 0;
 }
 template <typename CharT, typename Traits, typename Alloc>
 bool operator!=(
@@ -3323,64 +3215,23 @@ bool operator!=(
   const basic_string<CharT, Traits, Alloc> &b)
 {
 __ESBMC_HIDE:
-  __ESBMC_assert(a.str != NULL, "The parameter must be different than NULL");
-  __ESBMC_assert(b.str != NULL, "The parameter must be different than NULL");
-  if (a._size != b._size)
-    return true;
-  int aux;
-  aux = strcmp(a.c_str(), b.c_str());
-  if (aux == 0)
-  {
-    return false;
-  }
-  else
-  {
-    return true;
-  }
+  return !(a == b);
 }
 
 template <typename CharT, typename Traits, typename Alloc>
 bool operator!=(const CharT *lhs, const basic_string<CharT, Traits, Alloc> &rhs)
 {
 __ESBMC_HIDE:
-  __ESBMC_assert(
-    lhs != NULL, "The first parameter must be different than NULL");
-  __ESBMC_assert(
-    rhs.str != NULL, "The second parameter must be different than NULL");
-  if (strlen(lhs) != rhs._size)
-    return true;
-  int aux;
-  aux = strcmp((char *)lhs, rhs.c_str());
-  if (aux == 0)
-  {
-    return false;
-  }
-  else
-  {
-    return true;
-  }
+  return strlen(lhs) != rhs._size ||
+         __esbmc_string_order(lhs, rhs._size, rhs.str, rhs._size) != 0;
 }
 
 template <typename CharT, typename Traits, typename Alloc>
 bool operator!=(const basic_string<CharT, Traits, Alloc> &lhs, const CharT *rhs)
 {
 __ESBMC_HIDE:
-  __ESBMC_assert(
-    lhs.str != NULL, "The first parameter must be different than NULL");
-  __ESBMC_assert(
-    rhs != NULL, "The second parameter must be different than NULL");
-  if (lhs._size != strlen(rhs))
-    return true;
-  int aux;
-  aux = strcmp(lhs.c_str(), (char *)rhs);
-  if (aux == 0)
-  {
-    return false;
-  }
-  else
-  {
-    return true;
-  }
+  return lhs._size != strlen(rhs) ||
+         __esbmc_string_order(lhs.str, lhs._size, rhs, lhs._size) != 0;
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -3389,46 +3240,53 @@ getline(istream &is, basic_string<CharT, Traits, Alloc> &str, char delim);
 template <typename CharT, typename Traits, typename Alloc>
 istream &getline(istream &is, basic_string<CharT, Traits, Alloc> &str);
 
-std::string to_string(int value)
+// N4659 [string.conversions]/7: the value printed as by sprintf with the
+// overload's own length modifier, so no overload narrows through int.
+static std::string
+__esbmc_integer_to_string(unsigned long long magnitude, bool negative)
 {
-  char buffer[50];
-  itoa(value, buffer, 10);
-  return string(buffer);
-}
-
-std::string to_string(long value)
-{
-  char buffer[50];
-  itoa(value, buffer, 10);
-  return string(buffer);
+  char buffer[22];
+  int i = sizeof(buffer) - 1;
+  buffer[i] = '\0';
+  do
+  {
+    buffer[--i] = '0' + magnitude % 10;
+    magnitude /= 10;
+  } while (magnitude != 0);
+  if (negative)
+    buffer[--i] = '-';
+  return string(&buffer[i]);
 }
 
 std::string to_string(long long value)
 {
-  char buffer[50];
-  itoa(value, buffer, 10);
-  return string(buffer);
+  return __esbmc_integer_to_string(
+    value < 0 ? 0ULL - (unsigned long long)value : value, value < 0);
 }
 
-std::string to_string(unsigned value)
+std::string to_string(int value)
 {
-  char buffer[50];
-  itoa(value, buffer, 10);
-  return string(buffer);
+  return to_string((long long)value);
 }
 
-std::string to_string(unsigned long value)
+std::string to_string(long value)
 {
-  char buffer[50];
-  itoa(value, buffer, 10);
-  return string(buffer);
+  return to_string((long long)value);
 }
 
 std::string to_string(unsigned long long value)
 {
-  char buffer[50];
-  itoa(value, buffer, 10);
-  return string(buffer);
+  return __esbmc_integer_to_string(value, false);
+}
+
+std::string to_string(unsigned value)
+{
+  return to_string((unsigned long long)value);
+}
+
+std::string to_string(unsigned long value)
+{
+  return to_string((unsigned long long)value);
 }
 
 std::string to_string(float value)

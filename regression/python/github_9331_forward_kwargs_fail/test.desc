@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^VERIFICATION FAILED$
+FAILED +\[global.assertion.3\] +line +16 +assertion return_value\$_outer__esbmc_va0_kw_1v\$[0-9]+ == \(void \*\)3

@@ -25,13 +25,17 @@ function_value_types refuses the call as before.
 
 import ast
 import copy
+import itertools
 import re
 
+from preprocessor.function_value_lift import lift_nested_defs
 from preprocessor.function_value_types import _Analysis, _differ, _own_nodes
 
 # The most copies of the rest of the module that one module may need.
 _CAP = 32
 _PREFIX = "_esbmc_fv"
+_HOISTED = "_esbmc_hc"
+_INLINED = "_esbmc_in"
 # Marks left on nodes between checking a use and rewriting it.
 _SITE = "esbmc_fv_site"
 _CODE = "esbmc_fv_code"
@@ -58,6 +62,207 @@ class _Refused(Exception):
     """A condition for the rewrite does not hold."""
 
 
+def _simple_callee(func):
+    """A callee that is a module-level name, a call of one, or a conditional of names."""
+    if isinstance(func, ast.Name):
+        return True
+    if isinstance(func, ast.Call):
+        return _simple_callee(func.func)
+    return isinstance(func, ast.IfExp) and all(
+        isinstance(arm, ast.Name) for arm in (func.body, func.orelse))
+
+
+def _whole_call(stmt):
+    """The call that is all of `stmt`, an expression or an assignment to names; else None."""
+    if isinstance(stmt, ast.Expr):
+        value = stmt.value
+    elif isinstance(stmt, ast.Assign) and all(isinstance(t, ast.Name) for t in stmt.targets):
+        value = stmt.value
+    else:
+        return None
+    return value if isinstance(value, ast.Call) and _simple_callee(value.func) else None
+
+
+def _hoist_callee(call, names):
+    """Bind the callee of `call`, when it is not a name, to a temporary; the statements, in order.
+
+    Python evaluates a callee, arguments included, before the arguments of the call it
+    is the callee of, so the temporaries keep the order when `call` is a whole statement.
+    """
+    before = _hoist_callee(call.func, names) if isinstance(call.func, ast.Call) else []
+    if isinstance(call.func, ast.Name):
+        return before
+    temp = ast.Name(f"{_HOISTED}{next(names)}", ast.Store())
+    ast.copy_location(temp, call)
+    bind = ast.copy_location(ast.Assign([temp], call.func, None), call)
+    call.func = ast.copy_location(ast.Name(temp.id, ast.Load()), call)
+    return before + [bind]
+
+
+def _has_no_params(fn):
+    """Whether `fn` takes no argument of any kind."""
+    args = fn.args
+    return not (args.args or args.posonlyargs or args.kwonlyargs or args.vararg or args.kwarg)
+
+
+def _returns_name(fn):
+    """The name `fn` returns when its body is just `return name`, else None."""
+    if len(fn.body) == 1 and isinstance(fn.body[0], ast.Return) and isinstance(
+            fn.body[0].value, ast.Name):
+        return fn.body[0].value.id
+    return None
+
+
+def _constant_returners(module):
+    """The module-level defs `def r(): return t` that only return another such def `t`."""
+    defs = {s.name: s for s in module.body if isinstance(s, ast.FunctionDef)}
+
+    def sole(name):
+        return name in defs and not defs[name].decorator_list and sum(
+            _binds_name(s, name) for s in module.body) == 1
+
+    found = {}
+    for name, fn in defs.items():
+        target = _returns_name(fn)
+        if target is not None and _has_no_params(fn) and sole(name) and sole(target):
+            found[name] = target
+    return found
+
+
+def _resolve_constant(call, constants):
+    """Replace a callee `r()` by `t` where `def r(): return t`, which has no effect to keep."""
+    inner = call.func
+    if not isinstance(inner, ast.Call):
+        return
+    _resolve_constant(inner, constants)
+    inner = call.func
+    if isinstance(inner.func, ast.Name) and inner.func.id in constants and not inner.args \
+            and not inner.keywords:
+        call.func = ast.copy_location(ast.Name(constants[inner.func.id], ast.Load()), inner)
+
+
+def _hoist_callees(module, wanted=None):
+    """Give every callee that is a call or a conditional its own statement, at module level.
+
+    With `wanted`, only a statement one of whose temporaries is in it is changed; the
+    temporaries are numbered the same either way.
+    """
+    if any(name.startswith(_HOISTED) for name in _bound_names(module.body)):
+        raise _Refused
+    names = itertools.count()
+    constants = _constant_returners(module)
+    body = []
+    for stmt in module.body:
+        call = _whole_call(stmt)
+        if call is not None:
+            _resolve_constant(call, constants)
+        if call is not None and not isinstance(call.func, ast.Name):
+            trial = copy.deepcopy(stmt)
+            hoisted = _hoist_callee(_whole_call(trial), names)
+            if wanted is None or {h.targets[0].id for h in hoisted} & wanted:
+                body.extend(hoisted)
+                stmt = trial
+        body.append(stmt)
+    module.body = [
+        stmt for stmt in body if not (isinstance(stmt, ast.FunctionDef) and stmt.name in constants
+                                      and not _reads_outside(body, stmt))
+    ]
+
+
+def _reads_outside(body, fn):
+    """Whether a statement of `body` other than `fn` mentions the name of `fn`."""
+    return any(
+        isinstance(n, ast.Name) and n.id == fn.name for stmt in body if stmt is not fn
+        for n in ast.walk(stmt))
+
+
+def _is_straight_line(fn):
+    """A no-argument def of plain assignments to names and a final `return value`."""
+    args = fn.args
+    if args.args or args.posonlyargs or args.kwonlyargs or args.vararg or args.kwarg:
+        return False
+    if fn.decorator_list or len(fn.body) < 2:
+        return False
+    *steps, last = fn.body
+    if not (isinstance(last, ast.Return) and last.value is not None):
+        return False
+    return all(
+        isinstance(st, ast.Assign) and all(isinstance(t, ast.Name) for t in st.targets)
+        for st in steps)
+
+
+def _has_own_scope(fn):
+    """Whether the body of `fn` has a nested scope, a scope declaration or a suspension point."""
+    kinds = _NESTED + (ast.Global, ast.Nonlocal, ast.Yield, ast.YieldFrom, ast.Await, ast.NamedExpr)
+    return any(isinstance(n, kinds) for st in fn.body for n in ast.walk(st))
+
+
+def _whole_call_of(module, name):
+    """The module-level statements `name()` and `x = name()`."""
+    return [
+        st for st in module.body
+        if isinstance(st, (ast.Assign, ast.Expr)) and isinstance(st.value, ast.Call)
+        and isinstance(st.value.func, ast.Name) and st.value.func.id == name and not st.value.args
+        and not st.value.keywords and (isinstance(st, ast.Expr) or all(
+            isinstance(t, ast.Name) for t in st.targets))
+    ]
+
+
+def _inline_candidate(fn, module):
+    """The one top-level call of the no-argument def `fn` when it can be inlined there, else None.
+
+    `fn` is straight-line code ending in a `return`, is never rebound or read except for that
+    call, and has no scope of its own inside it.
+    """
+    if not _is_straight_line(fn) or _has_own_scope(fn):
+        return None
+    if sum(_binds_name(s, fn.name) for s in module.body) != 1:
+        return None
+    uses = [n for n in ast.walk(module) if isinstance(n, ast.Name) and n.id == fn.name]
+    calls = _whole_call_of(module, fn.name)
+    return calls[0] if len(uses) == 1 and len(calls) == 1 else None
+
+
+def _reads_before_store(steps, last, local):
+    """Whether some statement reads a local before an earlier statement stores it."""
+    stored = set()
+    for st in steps + [last]:
+        value = st.value
+        if any(
+                isinstance(n, ast.Name) and n.id in local and n.id not in stored
+                for n in ast.walk(value)):
+            return True
+        if isinstance(st, ast.Assign):
+            stored |= {t.id for t in st.targets}
+    return False
+
+
+def _inline_once_defs(module):
+    """Replace the single call of a straight-line no-argument def by its body, locals renamed."""
+    counter = itertools.count()
+    for fn in [s for s in module.body if isinstance(s, ast.FunctionDef)]:
+        call = _inline_candidate(fn, module)
+        if call is None:
+            continue
+        *steps, last = fn.body
+        local = {t.id for st in steps for t in st.targets}
+        if _reads_before_store(steps, last, local):
+            continue
+        index = next(counter)
+        body = copy.deepcopy(fn.body)
+        for st in body:
+            for n in ast.walk(st):
+                if isinstance(n, ast.Name) and n.id in local:
+                    n.id = f"{_INLINED}{index}_{n.id}"
+        *new_steps, new_last = body
+        call.value = new_last.value
+        position = module.body.index(call)
+        module.body[position:position] = new_steps
+        module.body.remove(fn)
+        for node in new_steps + [call]:
+            ast.copy_location(node, call)
+
+
 def _mixed_groups(analysis):
     """The groups that a call goes through and whose functions disagree on return type."""
     roots = []
@@ -69,6 +274,34 @@ def _mixed_groups(analysis):
         if any(_differ(a, b) for a in kinds for b in kinds):
             roots.append(root)
     return roots
+
+
+def _dispatch_groups(analysis):
+    """The mixed groups, and the groups of the defs that return into them.
+
+    `func()()` goes through two groups: the defs `func` may return, which return the functions
+    of a mixed group, and those functions. The first group needs codes too, for a call through
+    one of its values to be a value of the second.
+    """
+    roots = _mixed_groups(analysis)
+    for root in list(roots):
+        returners = {
+            key[1]
+            for key in analysis.parent if key[0] == "result" and analysis.find(key) == root
+        }
+        for other, members in analysis.members.items():
+            if other not in roots and any(id(m[0]) in returners for m in members.values()):
+                roots.append(other)
+    return roots
+
+
+def _nested_members(module, analysis, roots):
+    """The `(outer, inner)` names of the functions in `roots`' groups that a def nests."""
+    return {(outer.name, member[0].name)
+            for root in roots
+            for member in analysis.members[root].values()
+            for outer in module.body
+            if isinstance(outer, ast.FunctionDef) and any(member[0] is s for s in outer.body)}
 
 
 def _parents(module):
@@ -120,6 +353,78 @@ def _bound_names(nodes):
     return names
 
 
+def _scope_locals(scope):
+    """The names a def, lambda or class binds for itself: parameters and its own bindings."""
+    args = getattr(scope, "args", None)
+    names = set()
+    if args is not None:
+        names.update(a.arg for a in args.posonlyargs + args.args + args.kwonlyargs)
+        names.update(a.arg for a in (args.vararg, args.kwarg) if a is not None)
+    declared = set()
+    for node in _own_nodes(scope):
+        if isinstance(node, (ast.Global, ast.Nonlocal)):
+            declared.update(node.names)
+        elif isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Load):
+            names.add(node.id)
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.add(node.name)
+        elif isinstance(node, ast.alias):
+            names.add((node.asname or node.name).split(".")[0])
+    return names - declared
+
+
+_DEFINING = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
+
+
+class _VisibleNames:
+    """The names that nodes read or bind where the module can see them.
+
+    A parameter or a local of a nested def is its own variable, so it does not count; a name
+    that such a def declares `global` or `nonlocal`, or reads without binding, does.
+    """
+
+    def __init__(self):
+        self.names = set()
+
+    def visit(self, node, local):
+        if isinstance(node, _DEFINING):
+            self._definition(node, local)
+            return
+        self._own(node, local)
+        for child in ast.iter_child_nodes(node):
+            self.visit(child, local)
+
+    def _definition(self, node, local):
+        """A def, lambda or class: its decorators and defaults belong to the enclosing scope."""
+        lam = isinstance(node, ast.Lambda)
+        if not lam and node.name not in local:
+            self.names.add(node.name)
+        outside = [] if lam else list(node.decorator_list)
+        if not isinstance(node, ast.ClassDef):
+            outside += node.args.defaults + [d for d in node.args.kw_defaults if d is not None]
+        for child in outside:
+            self.visit(child, local)
+        for child in [node.body] if lam else node.body:
+            self.visit(child, local | _scope_locals(node))
+
+    def _own(self, node, local):
+        if isinstance(node, ast.Name) and node.id not in local:
+            self.names.add(node.id)
+        elif isinstance(node, (ast.Global, ast.Nonlocal)):
+            self.names.update(node.names)
+        elif isinstance(node, ast.alias):
+            self.names.add((node.asname or node.name).split(".")[0])
+        elif isinstance(node, ast.ExceptHandler) and node.name and node.name not in local:
+            self.names.add(node.name)
+
+
+def _visible_names(nodes):
+    visible = _VisibleNames()
+    for node in nodes:
+        visible.visit(node, frozenset())
+    return visible.names
+
+
 def _sole_def(fn, defs, module, analysis):
     """Whether `fn` is the module's only, undecorated def of its name, or the one that a
     single top-level `from m import name` binds there, and is never rebound."""
@@ -165,6 +470,49 @@ def _takes_positional(fn, count):
                 or args.posonlyargs) and len(args.args) == count
 
 
+_INDEX_OPS = (ast.Add, ast.Sub, ast.Mult, ast.FloorDiv, ast.Mod)
+
+
+def _is_pure_index(index):
+    """An index whose evaluation has no effect: names and ints combined by arithmetic.
+
+    `abs(x)` and `len(x)` count too. Division by zero still raises, and the index is evaluated
+    again in each test of a dispatch, which gives the same value or the same exception.
+    """
+    if isinstance(index, (ast.Name, ast.Constant)):
+        return True
+    if isinstance(index, ast.UnaryOp):
+        return isinstance(index.op, (ast.USub, ast.UAdd)) and _is_pure_index(index.operand)
+    if isinstance(index, ast.BinOp):
+        return isinstance(index.op, _INDEX_OPS) and _is_pure_index(index.left) and _is_pure_index(
+            index.right)
+    return isinstance(index, ast.Call) and isinstance(index.func, ast.Name) \
+        and index.func.id in ("abs", "len") and len(index.args) == 1 and not index.keywords \
+        and _is_pure_index(index.args[0])
+
+
+def _is_pure_slice(sl):
+    return isinstance(sl, ast.Slice) and all(part is None or _is_pure_index(part)
+                                             for part in (sl.lower, sl.upper, sl.step))
+
+
+def _always_returns(block):
+    """Whether every path through `block` ends in a `return` or a `raise`."""
+    if not block:
+        return False
+    last = block[-1]
+    if isinstance(last, (ast.Return, ast.Raise)):
+        return True
+    return isinstance(last, ast.If) and _always_returns(last.body) and _always_returns(last.orelse)
+
+
+def _fixed_arity(fn):
+    """Whether `fn` takes only plain positional parameters, so a wrong count is a TypeError."""
+    args = fn.args
+    return not (args.vararg or args.kwarg or args.kwonlyargs or args.defaults or args.posonlyargs
+                or fn.decorator_list)
+
+
 def _is_callee(parent, node):
     return isinstance(parent, ast.Call) and parent.func is node
 
@@ -199,13 +547,15 @@ def _chain(arms, callee, origin):
 class _Plan:
     """Check that every use of the groups' names can be rewritten, and mark them."""
 
-    def __init__(self, module, analysis, roots):
+    def __init__(self, module, analysis, roots, lifted=frozenset()):
         self.module = module
         self.parents = _parents(module)
         self.functions = {}
         self.groups = []
         self.holders = {}
         self.param_holders = {}
+        self.returners = {}
+        self.returned_names = set()
         self.local_fns = set()
         self.imported = set()
         defs = {stmt.name: stmt for stmt in module.body if isinstance(stmt, ast.FunctionDef)}
@@ -222,6 +572,7 @@ class _Plan:
             for code, fn in enumerate(fns):
                 self.functions[fn.name] = (group, code)
             self._add_holders(analysis, root, group, defs)
+        self.lifted_groups = {self.functions[name][0] for name in lifted if name in self.functions}
         self.callable_names = set(self.functions) | set(self.param_holders)
         self.kinds = {}
         self.values = {}
@@ -233,7 +584,10 @@ class _Plan:
         """Record the module names and parameters in `root`'s group; refuse any other value."""
         by_id = {id(fn): fn for fn in defs.values()}
         for key in [k for k in analysis.parent if analysis.find(k) == root]:
-            if key[0] == "elements":
+            if key[0] in ("elements", "call"):
+                continue
+            if key[0] == "result":
+                self._add_returner(by_id.get(key[1]), group)
                 continue
             if key[0] == "name" and key[1] in by_id:
                 self._add_param_holder(analysis, by_id[key[1]], key[2], group)
@@ -242,6 +596,12 @@ class _Plan:
                 raise _Refused
             if key[2] not in self.functions:
                 self.holders[key[2]] = group
+
+    def _add_returner(self, fn, group):
+        """Record a module-level def whose every return is a function of `group`."""
+        if fn is None or fn.name in self.returners:
+            raise _Refused
+        self.returners[fn.name] = group
 
     def _add_param_holder(self, analysis, fn, param, group):
         """Record a parameter or local of a module-level def, which the def may dispatch on."""
@@ -299,6 +659,10 @@ class _Plan:
             depth = self._value_kind(expr.value, seen)
             if depth > 0:
                 return depth - 1
+        elif self._is_returner_call(expr):
+            return 0
+        elif self._is_holder_slice(expr):
+            return self._value_kind(expr.value, seen)
         raise _Refused
 
     def _literal_kind(self, literal, seen):
@@ -310,6 +674,29 @@ class _Plan:
             raise _Refused
         return kinds.pop() + 1
 
+    def _call_result_group(self, expr):
+        """The group of the functions that call `expr` returns, or None.
+
+        `expr` calls a returner, or a holder all of whose functions are returners into one group.
+        """
+        if not (isinstance(expr, ast.Call) and isinstance(expr.func, ast.Name)):
+            return None
+        name = expr.func.id
+        if name in self.returners:
+            return self.returners[name]
+        if name not in self.holders or self.kinds.get(name, 0) != 0:
+            return None
+        groups = {self.returners.get(fn.name) for fn in self.groups[self.holders[name]]}
+        return groups.pop() if len(groups) == 1 else None
+
+    def _is_holder_slice(self, expr):
+        """`xs[a:b]` of a list or dict-free holder: a copy that holds the same codes."""
+        return isinstance(expr, ast.Subscript) and isinstance(expr.value, ast.Name) \
+            and expr.value.id in self.holders and _is_pure_slice(expr.slice)
+
+    def _is_returner_call(self, expr):
+        return self._call_result_group(expr) is not None
+
     @classmethod
     def _is_element(cls, expr):
         """`xs[i]`, possibly nested, with a name or literal index, whose evaluation has no effects."""
@@ -317,10 +704,7 @@ class _Plan:
             return False
         if not (isinstance(expr.value, ast.Name) or cls._is_element(expr.value)):
             return False
-        index = expr.slice
-        if isinstance(index, ast.UnaryOp) and isinstance(index.op, ast.USub):
-            index = index.operand
-        return isinstance(index, (ast.Name, ast.Constant))
+        return _is_pure_index(expr.slice)
 
     def _element_kind(self, expr):
         """How deep the value of the element `expr` nests functions, or None."""
@@ -333,7 +717,12 @@ class _Plan:
     # uses
     def check_uses(self):
         names = set(self.functions) | set(self.holders) | set(self.param_holders)
+        names |= set(self.returners)
+        for name in self.returners:
+            self._check_returner(self.defs[name], self.returners[name])
         bound = _bound_names([self.module])
+        if _rebinds(self.module, "abs") or _rebinds(self.module, "len"):
+            raise _Refused
         if bound & _REFLECTIVE or any(n.startswith(_PREFIX) for n in bound):
             raise _Refused
         for node in ast.walk(self.module):
@@ -361,11 +750,52 @@ class _Plan:
             parent = self.parents.get(id(parent))
         return False
 
+    def _is_dispatched_param(self, fn, expr, group):
+        """Whether `expr` names a parameter or local of `fn` that `fn` dispatches on, in `group`."""
+        return isinstance(expr, ast.Name) and self.param_holders.get(fn.name, {}).get(
+            expr.id) == group
+
+    def _check_returner(self, fn, group):
+        """`fn` has no nested scope and returns a function of `group` on every path."""
+        body = ast.Module(fn.body, [])
+        if fn.decorator_list or not _always_returns(fn.body) or any(
+                isinstance(
+                    n, _NESTED + (ast.Yield, ast.YieldFrom, ast.Await, ast.Global, ast.Nonlocal))
+                for n in ast.walk(body)):
+            raise _Refused
+        for node in ast.walk(body):
+            if isinstance(node, ast.Return):
+                self._check_returned_function(node.value, group, fn)
+
+    def _check_returned_function(self, expr, group, fn):
+        if isinstance(expr, ast.IfExp):
+            self._check_returned_function(expr.body, group, fn)
+            self._check_returned_function(expr.orelse, group, fn)
+        elif self._is_dispatched_param(fn, expr, group):
+            self.returned_names.add(id(expr))
+        elif isinstance(expr, ast.Name) and self.functions.get(expr.id, (None, ))[0] == group:
+            setattr(expr, _CODE, self.functions[expr.id][1])
+            self.returned_names.add(id(expr))
+        else:
+            raise _Refused
+
+    def _check_returner_use(self, node, parent):
+        """A returner is only called, at module level, for a value that a code can stand for."""
+        if not (_is_callee(parent, node) and not self._nested(node)):
+            raise _Refused
+        self._check_value(parent)
+
     def _check_use(self, node):
         parent = self.parents[id(node)]
+        if id(node) in self.returned_names:
+            return
+        if node.id in self.returners and (node.id not in self.functions
+                                          or _is_callee(parent, node)):
+            self._check_returner_use(node, parent)
+            return
         if _is_callee(parent, node) and node.id in self.callable_names:
             return
-        if self._nested(node) or node.id in self.param_holders:
+        if self._nested(node) or self._takes_dispatched_parameter(node.id):
             if not self._is_returned_read(node):
                 raise _Refused
             return
@@ -381,6 +811,16 @@ class _Plan:
         else:
             self._check_container_holder(node, parent)
 
+    def _takes_dispatched_parameter(self, name):
+        """Whether the def `name` dispatches on one of its parameters, not only on a local."""
+        fn = self.defs.get(name)
+        if fn is None or name not in self.param_holders:
+            return False
+        args = fn.args
+        params = {a.arg for a in args.posonlyargs + args.args + args.kwonlyargs}
+        params |= {a.arg for a in (args.vararg, args.kwarg) if a is not None}
+        return bool(params & set(self.param_holders[name]))
+
     def _is_returned_read(self, node):
         """A module holder read in a flat module-level def only as the callee of its `return`."""
         fn = self._enclosing_def(node)
@@ -395,7 +835,7 @@ class _Plan:
         call = self.parents[id(top)]
         if not self._is_returned_callee(top, call, node):
             return False
-        self._check_arguments(call, self.holders[self._site_holder(call)])
+        self._check_arguments(call, self.holders[self._site_holder(call)], returned=True)
         setattr(self.parents[id(call)], _RETURN, self.holders[node.id])
         return True
 
@@ -429,7 +869,7 @@ class _Plan:
 
     def check_param_holders(self):
         """Each def with a dispatched parameter or local uses it only where it can be a code."""
-        names = set(self.functions) | set(self.holders)
+        names = set(self.functions)
         for name, variables in self.param_holders.items():
             fn = self.defs[name]
             nodes = list(ast.walk(ast.Module(fn.body, [])))
@@ -453,6 +893,8 @@ class _Plan:
 
     def _check_variable_use(self, use, group, is_param):
         """A load is a returned call or an argument to dispatch on; a store assigns a function."""
+        if id(use) in self.returned_names:
+            return
         parent = self.parents[id(use)]
         if isinstance(use.ctx, ast.Load):
             if not self._is_dispatched_argument(parent, use):
@@ -497,7 +939,7 @@ class _Plan:
         ret = self.parents[id(call)]
         if not (_is_callee(call, use) and isinstance(ret, ast.Return) and ret.value is call):
             raise _Refused
-        self._check_arguments(call, group)
+        self._check_arguments(call, group, returned=True)
         setattr(ret, _RETURN, group)
 
     def _check_store(self, node):
@@ -507,11 +949,16 @@ class _Plan:
     def _check_function_holder(self, node, parent):
         if _is_callee(parent, node):
             self._check_site(parent)
+            if self._is_returner_call(parent):
+                self._check_value(parent)
         else:
             self._check_value(node)
 
     def _check_container_holder(self, node, parent):
-        if isinstance(parent, ast.Subscript) and parent.value is node:
+        if self._is_holder_slice(parent) and parent.value is node:
+            if not self._is_plain_value(self.parents[id(parent)], parent):
+                raise _Refused
+        elif isinstance(parent, ast.Subscript) and parent.value is node:
             self._check_element(parent)
         elif not (_is_builtin_call(parent, "len", node) or self._is_plain_value(parent, node)
                   or self._is_membership(parent, node) or self._is_update(parent, node)):
@@ -628,9 +1075,22 @@ class _Plan:
         if len(compare.ops) != 1 or not isinstance(compare.ops[0],
                                                    (ast.Is, ast.IsNot, ast.Eq, ast.NotEq)):
             raise _Refused
-        if not all(self._is_code(side) for side in (compare.left, compare.comparators[0])):
+        sides = (compare.left, compare.comparators[0])
+        if not all(self._is_code(side) for side in sides):
+            raise _Refused
+        if any(self._code_group(side) in self.lifted_groups for side in sides):
             raise _Refused
         setattr(compare, _IDENTITY, True)
+
+    def _code_group(self, expr):
+        """The group of the functions `expr` may be, which a lifted function is one of."""
+        if self._is_returner_call(expr):
+            return self._call_result_group(expr)
+        while isinstance(expr, ast.Subscript):
+            expr = expr.value
+        if expr.id in self.functions:
+            return self.functions[expr.id][0]
+        return self.holders.get(expr.id)
 
     @staticmethod
     def _is_dict_value(parent, expr):
@@ -652,6 +1112,8 @@ class _Plan:
     def _is_code(self, expr):
         if isinstance(expr, ast.Name):
             return expr.id in self.functions or self.kinds.get(expr.id) == 0
+        if self._is_returner_call(expr):
+            return True
         return self._is_element(expr) and self._element_kind(expr) == 0
 
     def _check_site(self, call):
@@ -661,12 +1123,21 @@ class _Plan:
         self._check_always_evaluated(call)
         setattr(call, _SITE, group)
 
-    def _check_arguments(self, call, group):
-        """Every function of `group` takes exactly the positional arguments of `call`."""
+    def _check_arguments(self, call, group, returned=False):
+        """Every function of `group` takes exactly the positional arguments of `call`.
+
+        In a `return h(args)` a function that cannot take them, and takes no default, variadic
+        or keyword-only parameter, makes CPython raise TypeError, which that arm raises too. Its
+        arguments are constants, so skipping them changes nothing.
+        """
         if call.keywords or any(isinstance(a, ast.Starred) for a in call.args):
             raise _Refused
-        if not all(_takes_positional(fn, len(call.args)) for fn in self.groups[group]):
-            raise _Refused
+        for fn in self.groups[group]:
+            if _takes_positional(fn, len(call.args)):
+                continue
+            if not (returned and _fixed_arity(fn)
+                    and all(isinstance(a, ast.Constant) for a in call.args)):
+                raise _Refused
 
     def _site_holder(self, call):
         """The holder `call` goes through, refusing an index another scope may rebind."""
@@ -674,10 +1145,12 @@ class _Plan:
             return call.func.id
         node = call.func
         while isinstance(node, ast.Subscript):
-            index = node.slice
-            if isinstance(index, ast.Name) and any(
-                    isinstance(n, (ast.Global, ast.Nonlocal)) and index.id in n.names
-                    for n in ast.walk(self.module)):
+            shared = {
+                n
+                for g in ast.walk(self.module) if isinstance(g, (ast.Global, ast.Nonlocal))
+                for n in g.names
+            }
+            if any(isinstance(n, ast.Name) and n.id in shared for n in ast.walk(node.slice)):
                 raise _Refused
             node = node.value
         return node.id
@@ -730,9 +1203,18 @@ class _Returns(ast.NodeTransformer):
         if group is None:
             return node
         call = node.value
-        arms = [[ast.Return(ast.Call(ast.Name(fn.name, ast.Load()), copy.deepcopy(call.args), []))]
-                for fn in self.groups[group]]
+        arms = [self._arm(fn, call) for fn in self.groups[group]]
         return _chain(arms, call.func, node)
+
+    @staticmethod
+    def _arm(fn, call):
+        """`return fn(args)`, or the TypeError CPython raises when `fn` takes another count."""
+        if _takes_positional(fn, len(call.args)):
+            return [
+                ast.Return(ast.Call(ast.Name(fn.name, ast.Load()), copy.deepcopy(call.args), []))
+            ]
+        message = f"{fn.name}() takes {len(fn.args.args)} positional arguments but {len(call.args)} were given"
+        return [ast.Raise(ast.Call(ast.Name("TypeError", ast.Load()), [ast.Constant(message)], []))]
 
 
 class _Dispatch:
@@ -768,7 +1250,7 @@ class _Dispatch:
     def _branch(self, stmts, i, before):
         """Copy the end of `stmts` into each branch of the `if` at `i`, so a call can split."""
         stmt = stmts[i]
-        before = before | _bound_names(stmts[:i] + [stmt.test])
+        before = before | _visible_names(stmts[:i] + [stmt.test])
         branches, total = [], 0
         for branch in (stmt.body, stmt.orelse):
             body, leaves = self.statements(branch + copy.deepcopy(stmts[i + 1:]), before)
@@ -807,7 +1289,7 @@ class _Dispatch:
             for s in rest
             for n in ast.walk(s) if isinstance(n, ast.Name) and not isinstance(n.ctx, ast.Load)
         } - self.holders
-        if stored & (before | _bound_names(stmts[:i])):
+        if stored & (before | _visible_names(stmts[:i])):
             raise _Refused
         return stored
 
@@ -820,20 +1302,48 @@ class _Dispatch:
                     node.id = f"{_PREFIX}{self.arms}_{base}"
 
 
+def _hoisted_in_groups(module, path):
+    """The temporaries of `_hoist_callees` that a mixed group holds."""
+    candidate = copy.deepcopy(module)
+    _hoist_callees(candidate)
+    analysis = _propagated(candidate, path)
+    roots = set(_dispatch_groups(analysis))
+    return {
+        key[2]
+        for key in analysis.parent
+        if key[0] == "name" and key[2].startswith(_HOISTED) and analysis.find(key) in roots
+    }
+
+
+def _check_hoisted_dispatched(module):
+    """A temporary is called only through a dispatch, which calls the function directly."""
+    for node in ast.walk(module):
+        if isinstance(node, ast.Call) and isinstance(node.func,
+                                                     ast.Name) and _HOISTED in node.func.id:
+            raise _Refused
+
+
 def dispatch_mixed_function_values(module, path):
     """Rewrite calls through mixed function values into dispatches, when every use allows it."""
-    if not _mixed_groups(_propagated(module, path)):
+    original = _propagated(module, path)
+    if not _mixed_groups(original):
         return
     candidate = copy.deepcopy(module)
-    analysis = _propagated(candidate, path)
     try:
-        plan = _Plan(candidate, analysis, _mixed_groups(analysis))
+        _inline_once_defs(candidate)
+        original = _propagated(candidate, path)
+        lifted = lift_nested_defs(candidate,
+                                  _nested_members(candidate, original, _dispatch_groups(original)))
+        _hoist_callees(candidate, _hoisted_in_groups(candidate, path))
+        analysis = _propagated(candidate, path)
+        plan = _Plan(candidate, analysis, _dispatch_groups(analysis), lifted)
         plan.check_uses()
         plan.check_param_holders()
         plan.check_imported()
         _Codes().visit(candidate)
         _Returns(plan.groups).visit(candidate)
         candidate.body, _ = _Dispatch(plan.groups, plan.holders).statements(candidate.body)
+        _check_hoisted_dispatched(candidate)
     except _Refused:
         return
     for node in ast.walk(candidate):

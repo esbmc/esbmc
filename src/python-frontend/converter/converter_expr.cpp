@@ -2063,6 +2063,68 @@ exprt python_converter::materialize_numpy_arithmetic(
   return symbol_expr(tmp);
 }
 
+/// `tagged[i]`: the character of the str the tag holds, with CPython's
+/// negative index and IndexError. Where the tag holds anything else CPython
+/// raises TypeError, reported as an unsupported property, which the SV-COMP
+/// wrapper reads as unknown. A slice, or a place where no guard can run
+/// ahead of the statement, stays refused.
+std::optional<exprt> python_converter::try_index_tagged_str(
+  exprt array,
+  const nlohmann::json &element)
+{
+  if (!type_handler_.is_tagged_scalar_type(array.type()))
+    return std::nullopt;
+  if (
+    !can_emit_runtime_guard() || element["slice"].value("_type", "") == "Slice")
+    throw std::runtime_error(
+      "slicing a dynamically-typed variable, or indexing it where it may not "
+      "run, is not yet supported");
+
+  const locationt location = get_location_from_decl(element);
+  array =
+    tuple_handler_->prepare_rhs_for_unpacking(element, array, *current_block);
+  code_assertt check(
+    dynamic_type_handler_.build_isinstance_check(array, "str", false));
+  check.location() = location;
+  check.location().user_provided(true);
+  check.location().comment(
+    "Unsupported: indexing a dynamically-typed value that is not a str");
+  current_block->copy_to_operands(check);
+
+  const typet int_type = type_handler::python_int_typet();
+  const exprt zero = from_integer(0, int_type);
+  const exprt index =
+    python_expr::build_typecast(get_expr(element["slice"]), int_type);
+  const exprt length = python_expr::build_sub(
+    python_expr::build_typecast(
+      python_expr::build_member(array, "size", size_type()), int_type),
+    from_integer(1, int_type),
+    int_type);
+  const exprt position = python_expr::build_if(
+    python_expr::build_less_than(index, zero),
+    python_expr::build_add(index, length, int_type),
+    index);
+  emit_guarded_raise(
+    python_expr::build_or(
+      python_expr::build_less_than(position, zero),
+      python_expr::build_greater_equal(position, length)),
+    "IndexError",
+    "string index out of range",
+    location);
+
+  const typet chars = pointer_typet(char_type());
+  typet element_type = char_type();
+  type_utils::set_cpp_type(element_type, "char");
+  return python_expr::build_dereference(
+    python_expr::build_add(
+      python_expr::build_typecast(
+        python_expr::build_member(array, "value", pointer_typet(empty_typet())),
+        chars),
+      position,
+      chars),
+    element_type);
+}
+
 exprt python_converter::handle_subscript_expr(const nlohmann::json &element)
 {
   // a.flat[i] (read): see try_build_flat_index_read's own comment for why
@@ -2086,6 +2148,8 @@ exprt python_converter::handle_subscript_expr(const nlohmann::json &element)
   if (std::optional<exprt> early = resolve_subscript_base(element, array))
     return *early;
   array = materialize_numpy_arithmetic(element["value"], array);
+  if (std::optional<exprt> tagged = try_index_tagged_str(array, element))
+    return *tagged;
 
   // Indexing char(*)[0] would select a whole array per step.
   if (type_utils::is_optional_str_pointer(array.type()))
