@@ -6,3 +6,17 @@ b = a.astype(int)
 assert b[0] == 1
 assert b[1] == 2
 assert b[2] == -1
+
+n = np.array([300, -1])
+w = n.astype(np.int8)
+assert w[0] == 44 and w[1] == -1
+assert w.dtype == np.int8 and w.itemsize == 1 and w.nbytes == 2
+u = n.astype("u1")
+assert u[1] == 255 and u.dtype == "uint8"
+s = np.array([0.1]).astype("f4")
+assert float(s[0]) != 0.1 and s.itemsize == 4
+h = w.astype(np.int16)
+h[0] += 1000
+assert h[0] == 1044 and h.itemsize == 2
+v = w[1:]
+assert v[0] == -1 and v.nbytes == 1 and v.dtype == np.int8
