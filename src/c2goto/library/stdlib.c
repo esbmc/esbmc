@@ -531,11 +531,13 @@ __ESBMC_HIDE:;
   return __ESBMC_aligned_malloc(memptr, align, size);
 }
 
+/* C17 7.22.3.1 (DR 460) dropped C11's requirement that size be a multiple
+ * of the alignment. */
 void *aligned_alloc(size_t align, size_t size)
 {
 __ESBMC_HIDE:;
   void *r = NULL;
-  if (!align || (align & (align - 1)) || (size & (align - 1)))
+  if (!align || (align & (align - 1)))
     errno = EINVAL;
   else
     errno = __ESBMC_aligned_malloc(&r, align, size);
