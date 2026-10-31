@@ -81,21 +81,6 @@ find_method_def(const nlohmann::json &class_node, const std::string &method)
   return nullptr;
 }
 
-/// Whether \p method_def carries the @staticmethod decorator. The decorator
-/// decides this, not the first parameter's name, which Python does not fix.
-bool is_staticmethod_def(const nlohmann::json &method_def)
-{
-  if (!method_def.contains("decorator_list"))
-    return false;
-
-  for (const auto &d : method_def["decorator_list"])
-    if (
-      node_type_of(d) == "Name" && d.contains("id") &&
-      d["id"] == "staticmethod")
-      return true;
-  return false;
-}
-
 /// An explicit `Base.__init__(self, ...)` call invokes the named base class's
 /// constructor with self passed explicitly; it is not an object construction.
 /// Letting it fall through to the ClassMethod classification allocates no fresh
@@ -294,7 +279,7 @@ bool function_call_expr::resolves_to_staticmethod(
     pending.pop_front();
 
     if (const nlohmann::json *def = find_method_def(cls, method))
-      return is_staticmethod_def(*def);
+      return json_utils::is_staticmethod_def(*def);
 
     if (!cls.contains("bases") || !cls["bases"].is_array())
       continue;
@@ -7795,13 +7780,8 @@ typet function_call_expr::dict_param_value_type(const symbolt *func, size_t idx)
     converter_.ast()["body"], func->name.as_string());
   if (fn.empty() || idx >= fn["args"]["args"].size())
     return typet();
-  const nlohmann::json &ann =
-    fn["args"]["args"][idx].value("annotation", nlohmann::json());
-  if (
-    !ann.is_object() || ann.value("_type", "") != "Subscript" ||
-    !ann["slice"].contains("elts") || ann["slice"]["elts"].size() != 2)
-    return typet();
-  return converter_.get_type_from_annotation(ann["slice"]["elts"][1], ann);
+  return converter_.dict_annotation_value_type(
+    fn["args"]["args"][idx].value("annotation", nlohmann::json()));
 }
 
 // A numpy string or complex array is read only element by element; a callee
@@ -8303,34 +8283,39 @@ void function_call_expr::reject_numpy_layout_mismatch(
       "the one inferred for its parameter is not supported");
 }
 
-exprt function_call_expr::finalize_call(
+/// Forward keyword arguments to their parameter slots so the callee
+/// receives the supplied value. The validation loop in finalize_call only
+/// fills in default values for *missing* params, so kwargs would otherwise be
+/// marked "provided" yet never actually passed. Subsumes the min/max-default
+/// specific path: with the *_default models exposing a named `default`
+/// parameter, the generic forwarding lands the value in the right slot for
+/// free.
+void function_call_expr::forward_keyword_arguments(
   code_function_callt &call,
-  size_t param_offset,
+  const code_typet::argumentst &params,
   const locationt &location,
-  const symbolt *func_symbol,
-  symbolt *obj_symbol)
+  const symbolt &func_symbol)
 {
-  const auto &params = to_code_type(func_symbol->get_type()).arguments();
-  // Forward keyword arguments to their parameter slots so the callee
-  // receives the supplied value. The validation loop below only fills in
-  // default values for *missing* params, so kwargs would otherwise be
-  // marked "provided" yet never actually passed. Subsumes the
-  // min/max-default specific path: with the *_default models exposing a
-  // named `default` parameter, the generic forwarding lands the value in
-  // the right slot for free.
   if (call_.contains("keywords") && call_["keywords"].is_array())
   {
     for (const auto &kw : call_["keywords"])
     {
       if (!kw.contains("arg") || kw["arg"].is_null())
-        continue; // skip **kwargs unpacking
+      {
+        // The preprocessor spells out a splat whose keys it knows (#9329).
+        const auto &value = kw["value"];
+        if (value["_type"] == "Dict" && value["keys"].empty())
+          continue;
+        throw std::runtime_error(
+          "unsupported: a ** argument whose keys are not known statically");
+      }
       const std::string kw_name = kw["arg"].get<std::string>();
       for (size_t i = 0; i < params.size(); ++i)
       {
         if (params[i].get_base_name().as_string() == kw_name)
         {
           exprt kw_val = converter_.get_expr(kw["value"]);
-          refuse_float_to_int_argument(kw_val, params[i].type(), *func_symbol);
+          refuse_float_to_int_argument(kw_val, params[i].type(), func_symbol);
           kw_val = coerce_tagged_argument(kw_val, params[i].type(), location);
           if (call.arguments().size() <= i)
             call.arguments().resize(i + 1);
@@ -8340,6 +8325,17 @@ exprt function_call_expr::finalize_call(
       }
     }
   }
+}
+
+exprt function_call_expr::finalize_call(
+  code_function_callt &call,
+  size_t param_offset,
+  const locationt &location,
+  const symbolt *func_symbol,
+  symbolt *obj_symbol)
+{
+  const auto &params = to_code_type(func_symbol->get_type()).arguments();
+  forward_keyword_arguments(call, params, location, *func_symbol);
 
   // Add default arguments for missing parameters
   size_t num_provided_args = call_["args"].size();

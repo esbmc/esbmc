@@ -966,7 +966,8 @@ expr2tc execution_statet::resolve_pointer_target(
   const namespacet &ns,
   const expr2tc &ptr,
   bool &to_global,
-  bool through_deref)
+  bool through_deref,
+  std::vector<expr2tc> *all_shared)
 {
   expr2tc tmp = ptr;
   /* Rename it so that it can be dereferenced in current state */
@@ -982,7 +983,7 @@ expr2tc execution_statet::resolve_pointer_target(
   value_setst::valuest dest;
   cur_state->value_set.get_reference_set(deref, dest);
 
-  expr2tc found;
+  expr2tc found, first_shared;
   for (const auto &obj : dest)
   {
     if (
@@ -998,8 +999,9 @@ expr2tc execution_statet::resolve_pointer_target(
     if (is_esbmc_internal_symbol(n))
       continue;
 
-    to_global = through_deref ? art1->is_shared_storage(*s)
-                              : reachability_treet::has_shared_lifetime(*s);
+    const bool shared = through_deref
+                          ? art1->is_shared_storage(*s)
+                          : reachability_treet::has_shared_lifetime(*s);
     found = to_object_descriptor2t(obj).object;
     /* Distinguish the elements of a lock array. Both `&m[0]` and `&m[1]`
      * resolve to the base symbol `m`, which makes MPOR treat every lock in the
@@ -1018,11 +1020,18 @@ expr2tc execution_statet::resolve_pointer_target(
         found =
           mpor_lock_array_key(found, to_constant_int2t(off).value / esize);
     }
-    /* Stop when the global symbol is found */
-    if (to_global)
+    if (!shared)
+      continue;
+    if (is_nil_expr(first_shared))
+      first_shared = found;
+    /* A pointer may reach several shared objects; keying it by one of them
+     * lets MPOR call it independent of an access to another. */
+    if (!all_shared)
       break;
+    all_shared->push_back(found);
   }
-  return found;
+  to_global = !is_nil_expr(first_shared);
+  return to_global ? first_shared : found;
 }
 
 void execution_statet::record_access_key(
@@ -1121,12 +1130,13 @@ void execution_statet::record_aggregate_held_target(
     return;
 
   bool to_global = false;
-  expr2tc target = resolve_pointer_target(ns, ptr, to_global, true);
-  if (is_nil_expr(target) || !to_global)
-    return;
-
-  cur_state->top().level1.rename(target);
-  record_access_key(target, globals_list, kind);
+  std::vector<expr2tc> targets;
+  resolve_pointer_target(ns, ptr, to_global, true, &targets);
+  for (expr2tc target : targets)
+  {
+    cur_state->top().level1.rename(target);
+    record_access_key(target, globals_list, kind);
+  }
 }
 
 void execution_statet::get_expr_globals(
@@ -1172,9 +1182,14 @@ void execution_statet::get_expr_globals(
     std::vector<expr2tc> deeper_targets;
     if (symbol->get_type().is_pointer() && symbol->name != "invalid_object")
     {
-      p = resolve_pointer_target(ns, expr, point_to_global, under_deref);
+      std::vector<expr2tc> others;
+      p =
+        resolve_pointer_target(ns, expr, point_to_global, under_deref, &others);
       if (is_nil_expr(p))
         p = expr;
+      for (const expr2tc &other : others)
+        if (other != p)
+          deeper_targets.push_back(other);
 
       // Follow the rest of the chain. Resolving a single level records the
       // *intermediate* pointer for an access spelled `*(*pp)`, so a thread
@@ -1189,13 +1204,15 @@ void execution_statet::get_expr_globals(
              seen.insert(to_symbol2t(cursor).thename.as_string()).second)
       {
         bool deeper_is_global = false;
-        expr2tc next =
-          resolve_pointer_target(ns, cursor, deeper_is_global, under_deref);
+        std::vector<expr2tc> shared_next;
+        expr2tc next = resolve_pointer_target(
+          ns, cursor, deeper_is_global, under_deref, &shared_next);
         if (is_nil_expr(next))
           break;
         if (deeper_is_global)
         {
-          deeper_targets.push_back(next);
+          deeper_targets.insert(
+            deeper_targets.end(), shared_next.begin(), shared_next.end());
           point_to_global = true;
         }
         cursor = next;

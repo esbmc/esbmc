@@ -4,6 +4,7 @@
 // Post-C++03 header: inert in older modes, matching libstdc++/libc++ (#3387).
 #if __cplusplus >= 201103L
 
+#include <initializer_list>
 #include <utility>
 #include <memory> /* std::allocator, for the Allocator parameter */
 
@@ -145,6 +146,10 @@ public:
     ~unordered_set() { size_ = 0; }
 
     explicit unordered_set(size_type /*bucket_count*/) : size_(0) {}
+
+    unordered_set(std::initializer_list<value_type> init) : size_(0) {
+        insert(init.begin(), init.end());
+    }
     
     // Iterator range constructor
     template<typename InputIterator>
@@ -464,6 +469,10 @@ public:
     ~unordered_multiset() { size_ = 0; }
 
     explicit unordered_multiset(size_type /*bucket_count*/) : size_(0) {}
+
+    unordered_multiset(std::initializer_list<value_type> init) : size_(0) {
+        insert(init.begin(), init.end());
+    }
 
     template<typename InputIterator>
     unordered_multiset(InputIterator first, InputIterator last) : size_(0) {

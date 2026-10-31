@@ -2,11 +2,13 @@ import ast
 import copy
 from collections import Counter
 
+from preprocessor.binding_sites import binding_sites
 from preprocessor.bound_method_dispatch import dispatch_rebound_methods
 from preprocessor.bound_method_values import lower_method_values
 from preprocessor.check_type_lowering import lower_check_type
 from preprocessor.dotted_imports import alias_dotted_imports
 from preprocessor.decorator_lowering import lower_user_decorators
+from preprocessor.dict_splat import spell_out_dict_splats
 from preprocessor.itertools_lowering import lower_itertools
 from preprocessor.coroutine_lowering import lower_coroutines
 from preprocessor.match_lowering import lower_match_statements
@@ -501,24 +503,7 @@ class ModuleRewriteMixin:
             return names
         return None
 
-    @staticmethod
-    def _binding_sites(module_node):
-        """How many places anywhere in *module_node* bind or declare each name."""
-        sites = Counter()
-        for n in ast.walk(module_node):
-            if isinstance(n, ast.Name) and not isinstance(n.ctx, ast.Load):
-                sites[n.id] += 1
-            elif isinstance(n, ast.alias):
-                sites[n.asname or n.name.split(".")[0]] += 1
-            elif isinstance(n, ast.arg):
-                sites[n.arg] += 1
-            elif isinstance(n, (ast.Global, ast.Nonlocal)):
-                sites.update(n.names)
-            elif isinstance(getattr(n, "name", None), str):
-                sites[n.name] += 1
-            elif isinstance(n, ast.MatchMapping) and n.rest:
-                sites[n.rest] += 1
-        return sites
+    _binding_sites = staticmethod(binding_sites)
 
     @staticmethod
     def _appears_before(module_node, name, stmt):
@@ -560,6 +545,7 @@ class ModuleRewriteMixin:
         lower_check_type(node, self.module_name)
         _rename_shadowed_classes(node)
         alias_dotted_imports(node)
+        spell_out_dict_splats(node)
         inline_zip_names(node)
         lower_iter_next(node)
         lower_zip_builds(node)
