@@ -193,14 +193,6 @@ expr2tc smt_tuple_node_flattener::tuple_get(const type2tc &, smt_astt sym)
   return tuple_get_rec(to_tuple_node_ast(sym));
 }
 
-/* Unlike the symbol flattener, a tuple node is read from its AST, so a member
- * of complex type in a counterexample needs no symbol name. */
-expr2tc smt_tuple_node_flattener::tuple_get(const expr2tc &expr)
-{
-  tuple_node_smt_astt a = to_tuple_node_ast(ctx->convert_ast(expr));
-  return tuple_get_rec(a);
-}
-
 expr2tc smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
 {
   // XXX - what's the correct type to return here.

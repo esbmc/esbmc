@@ -1,0 +1,5 @@
+CORE
+../counterexample_init_multidimensional/main.c
+--tuple-node-flattener
+^VERIFICATION FAILED$
+(?s)^  obj = \{\s*\{ 1, 2 \},\s*\{ 3, 4 \}\s*\}$
