@@ -528,6 +528,42 @@ exprt python_converter::get_lambda_expr(
   return result;
 }
 
+exprt python_converter::get_lambda_body_expr(
+  const nlohmann::json &body,
+  code_blockt &block)
+{
+  code_blockt *saved_block = current_block;
+  const bool saved_lambda = converting_lambda_body_;
+  const bool saved_lazy = in_lazy_operand_;
+  const bool saved_own_block = in_operand_effects_block_;
+  const unsigned saved_conditional = conditional_expr_depth_;
+  current_block = &block;
+  converting_lambda_body_ = false;
+  in_lazy_operand_ = false;
+  in_operand_effects_block_ = false;
+  conditional_expr_depth_ = 0;
+  exprt result = get_expr(body);
+  // goto_convert does not lower a call that is a return's operand.
+  if (result.is_function_call() && !result.type().is_empty())
+  {
+    code_function_callt call = to_code_function_call(to_code(result));
+    symbolt &tmp =
+      create_tmp_symbol(body, "$lambda_call$", call.type(), exprt());
+    code_declt decl(symbol_expr(tmp));
+    decl.location() = get_location_from_decl(body);
+    block.copy_to_operands(decl);
+    call.lhs() = symbol_expr(tmp);
+    block.copy_to_operands(call);
+    result = symbol_expr(tmp);
+  }
+  current_block = saved_block;
+  converting_lambda_body_ = saved_lambda;
+  in_lazy_operand_ = saved_lazy;
+  in_operand_effects_block_ = saved_own_block;
+  conditional_expr_depth_ = saved_conditional;
+  return result;
+}
+
 exprt python_converter::get_named_expr(const nlohmann::json &element)
 {
   // PEP 572 walrus `(target := value)`: assign value to target, then evaluate
