@@ -700,6 +700,11 @@ private:
     const std::string &prefix,
     const std::function<void(const expr2tc &, const locationt &)> &emit_guards);
 
+  // Functions whose return type is a guess from their return statements (an
+  // expression counts as a double).
+  std::set<std::string> guessed_return_functions_;
+  void note_guessed_return(const nlohmann::json &function_node);
+
   friend class bounded_math;
   friend class complex_handler;
   friend class function_call_expr;

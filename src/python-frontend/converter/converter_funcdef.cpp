@@ -6222,6 +6222,29 @@ exprt python_converter::get_function_body_or_unsupported(
   }
 }
 
+/// Records a function whose return statements give an arithmetic result,
+/// which infer_types_from_returns takes for a double whatever the operands are.
+void python_converter::note_guessed_return(const nlohmann::json &function_node)
+{
+  std::function<bool(const nlohmann::json &)> arithmetic =
+    [&](const nlohmann::json &body) {
+      return std::any_of(body.begin(), body.end(), [&](const auto &stmt) {
+        const std::string kind = stmt["_type"];
+        const bool returns_expression = kind == "Return" &&
+                                        !stmt["value"].is_null() &&
+                                        (stmt["value"]["_type"] == "BinOp" ||
+                                         stmt["value"]["_type"] == "UnaryOp");
+        return returns_expression ||
+               (stmt.contains("body") && stmt["body"].is_array() &&
+                arithmetic(stmt["body"])) ||
+               (stmt.contains("orelse") && stmt["orelse"].is_array() &&
+                arithmetic(stmt["orelse"]));
+      });
+    };
+  if (arithmetic(function_node["body"]))
+    guessed_return_functions_.insert(function_node["name"].get<std::string>());
+}
+
 void python_converter::get_function_definition(
   const nlohmann::json &function_node)
 {
@@ -6260,6 +6283,7 @@ void python_converter::get_function_definition(
 
     if (return_type == "Any")
     {
+      note_guessed_return(function_node);
       // Infer type from return statements
       TypeFlags flags = infer_types_from_returns(function_node["body"]);
 
