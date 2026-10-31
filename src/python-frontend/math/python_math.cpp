@@ -1056,6 +1056,25 @@ exprt python_math::handle_divmod(
     dividend = typecast_exprt(dividend, int_like(divisor));
   if (is_any_ptr(divisor))
     divisor = typecast_exprt(divisor, int_like(dividend));
+
+  // A zero divisor raises a catchable ZeroDivisionError, as `//` and `%` do.
+  if (
+    converter.can_emit_runtime_guard() &&
+    (divisor.type().is_signedbv() || divisor.type().is_unsignedbv() ||
+     divisor.type().is_floatbv()))
+  {
+    dividend =
+      converter.hoist_side_effecting_operand(dividend, element, "$divmod_lhs$");
+    divisor =
+      converter.hoist_side_effecting_operand(divisor, element, "$divmod_rhs$");
+    exprt is_zero("=", bool_type());
+    is_zero.copy_to_operands(divisor, gen_zero(divisor.type()));
+    converter.emit_guarded_raise(
+      is_zero,
+      "ZeroDivisionError",
+      "division by zero",
+      converter.get_location_from_decl(element));
+  }
   return handle_numeric_divmod(
     std::move(dividend), std::move(divisor), element);
 }
