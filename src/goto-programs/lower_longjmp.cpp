@@ -133,7 +133,7 @@ private:
     for (auto site : sites)
     {
       // Zeroed on entry so a site this frame has not reached matches nothing.
-      expr2tc slot = new_slot(fn, site);
+      const expr2tc slot = new_slot(fn, site);
       auto decl = insert(body, first, first);
       decl->make_decl();
       decl->code = code_decl2tc(slot->type, to_symbol2t(slot).thename);
