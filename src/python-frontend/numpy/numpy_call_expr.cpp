@@ -133,11 +133,17 @@ static exprt filled_array(const typet &shape, const exprt &value)
   return array;
 }
 
-// Broadcasting an array fill over the shape is not modelled.
+static bool is_sequence_literal(const nlohmann::json &node)
+{
+  const std::string type = node.value("_type", std::string());
+  return type == "List" || type == "Tuple";
+}
+
+// Broadcasting an array fill over a shape known only at run time, or where the
+// result is read as a literal, is not modelled.
 static void reject_array_full_fill(const nlohmann::json &fill)
 {
-  const std::string type = fill.value("_type", std::string());
-  if (type == "List" || type == "Tuple")
+  if (is_sequence_literal(fill))
     throw std::runtime_error(
       "TypeError: numpy.full() with an array fill value is not supported");
 }
@@ -5442,16 +5448,112 @@ make_numpy_linspace_constant(double value, const std::string &dtype)
   return out;
 }
 
-// np.full with a fill computed at run time: the fill is evaluated once, into
-// a temporary every element then holds.
+// The extents of a literal fill, outermost first; nullopt unless every leaf is
+// a literal number, which reading once per element cannot evaluate twice.
+static std::optional<std::vector<std::size_t>>
+literal_fill_shape(const nlohmann::json &fill)
+{
+  if (!is_sequence_literal(fill))
+  {
+    scalar_value value;
+    return try_extract_scalar_constant(fill, value)
+             ? std::optional<std::vector<std::size_t>>(
+                 std::vector<std::size_t>())
+             : std::nullopt;
+  }
+  std::optional<std::vector<std::size_t>> inner;
+  for (const auto &element : fill["elts"])
+  {
+    auto shape = literal_fill_shape(element);
+    if (!shape || (inner && *inner != *shape))
+      return std::nullopt;
+    inner = std::move(shape);
+  }
+  std::vector<std::size_t> result = inner.value_or(std::vector<std::size_t>());
+  result.insert(result.begin(), fill["elts"].size());
+  return result;
+}
+
+// The element of the broadcast fill on the trailing axes from @p axis of
+// @p dims: NumPy aligns the fill's shape with the last axes, an extent of 1
+// repeating along its axis.
+static nlohmann::json broadcast_fill_axis(
+  const std::vector<std::size_t> &dims,
+  std::size_t axis,
+  const std::vector<std::size_t> &fill_shape,
+  const nlohmann::json &fill)
+{
+  if (axis == dims.size())
+    return fill;
+  const std::size_t remaining = dims.size() - axis;
+  const bool fill_has_axis = fill_shape.size() >= remaining;
+  nlohmann::json list = {{"_type", "List"}, {"elts", nlohmann::json::array()}};
+  for (std::size_t i = 0; i < dims[axis]; ++i)
+  {
+    const bool repeats = !fill_has_axis || fill["elts"].size() == 1;
+    const nlohmann::json &row =
+      !fill_has_axis ? fill : fill["elts"][repeats ? 0 : i];
+    std::vector<std::size_t> row_shape = fill_shape;
+    if (fill_has_axis)
+      row_shape.erase(row_shape.begin());
+    list["elts"].push_back(broadcast_fill_axis(dims, axis + 1, row_shape, row));
+  }
+  return list;
+}
+
+static nlohmann::json broadcast_full_fill(
+  const std::vector<std::size_t> &dims,
+  const std::vector<std::size_t> &fill_shape,
+  const nlohmann::json &fill)
+{
+  const std::string shape_text = [&] {
+    std::string text;
+    for (std::size_t extent : fill_shape)
+      text += std::to_string(extent) + ",";
+    return text;
+  }();
+  bool compatible = fill_shape.size() <= dims.size();
+  for (std::size_t i = 1; compatible && i <= fill_shape.size(); ++i)
+  {
+    const std::size_t extent = fill_shape[fill_shape.size() - i];
+    compatible = extent == 1 || extent == dims[dims.size() - i];
+  }
+  if (!compatible)
+    throw std::runtime_error(
+      "ValueError: could not broadcast numpy.full() fill of shape (" +
+      shape_text + ") into the array shape");
+  return broadcast_fill_axis(dims, 0, fill_shape, fill);
+}
+
+// np.full with a fill that is not one literal number: a literal array is
+// broadcast over the shape, and a fill computed at run time is evaluated once,
+// into a temporary every element then holds, cast to dtype=.
 exprt numpy_call_expr::full_of_runtime_fill(
   const std::vector<std::size_t> &dims)
 {
-  if (!get_dtype().empty())
+  const nlohmann::json &fill_node = call_["args"][1];
+  if (is_sequence_literal(fill_node))
+  {
+    const auto fill_shape = literal_fill_shape(fill_node);
+    if (!fill_shape)
+      throw std::runtime_error(
+        "TypeError: numpy.full() with an array fill value is not supported");
+    const nlohmann::json list =
+      broadcast_full_fill(dims, *fill_shape, fill_node);
+    const bool any_float = list.dump().find('.') != std::string::npos;
+    return literal_constructor_expr(apply_constructor_dtype(
+      get_dtype().empty() && any_float
+        ? cast_numpy_literal_to_dtype(list, "float64")
+        : list));
+  }
+  const auto dtype = numpy_dtype_from_name(get_dtype());
+  if (
+    dtype && (dtype->kind == numpy_dtypet::kindt::complex ||
+              dtype->kind == numpy_dtypet::kindt::string))
     throw std::runtime_error(
-      "TypeError: numpy.full() with dtype= and a non-literal fill value is "
-      "not supported");
-  const exprt fill = converter_.get_expr(call_["args"][1]);
+      "TypeError: numpy.full() with a complex or string dtype= and a "
+      "non-literal fill value is not supported");
+  const exprt fill = converter_.get_expr(fill_node);
   const typet type = fill.type();
   if (
     !type.is_signedbv() && !type.is_unsignedbv() && !type.is_floatbv() &&
@@ -5477,10 +5579,16 @@ exprt numpy_call_expr::full_of_runtime_fill(
     assign.location() = location;
     converter_.current_block->copy_to_operands(assign);
   }
-  typet shape = type;
+  const typet element = dtype ? dtype->element_type() : type;
+  typet shape = element;
   for (auto dim = dims.rbegin(); dim != dims.rend(); ++dim)
     shape = type_handler_.build_array(shape, *dim);
-  const exprt value = filled_array(shape, symbol_expr(tmp));
+  if (type.is_signedbv() && dtype)
+    converter_.raise_if_outside_numpy_integer(
+      symbol_expr(tmp), element, shape, location);
+  const exprt read = symbol_expr(tmp);
+  const exprt value = filled_array(
+    shape, element == type ? read : exprt(typecast_exprt(read, element)));
   symbolt &literal =
     converter_.create_tmp_symbol(call_, "$compound-literal$", shape, value);
   code_declt literal_decl(symbol_expr(literal));
@@ -11866,10 +11974,10 @@ exprt numpy_call_expr::get()
     {
       auto shape = get_arg(0);
       auto fill = get_arg(1);
-      reject_array_full_fill(fill);
       auto dims = parse_shape(shape);
       if (!dims.empty() && !is_literal_full_fill(fill))
         return full_of_runtime_fill(dims);
+      reject_array_full_fill(fill);
       if (dims.empty())
       {
         // Try symbolic 1-D shape: evaluate the size expression at runtime.

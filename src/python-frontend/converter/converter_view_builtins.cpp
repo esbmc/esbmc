@@ -430,7 +430,10 @@ bool python_converter::is_narrow_builtin_sum(const nlohmann::json &node)
     !is_rank1_numpy_array_name(node["args"][0]))
     return false;
   const auto dtype = numpy_array_dtype(node["args"][0]);
-  return dtype && type_utils::is_numpy_scalar_type(dtype->element_type());
+  return dtype &&
+         (dtype->is_integer() ||
+          dtype->kind == numpy_dtypet::kindt::floating) &&
+         dtype->bits < 64;
 }
 
 // Replaces, in the expressions of `node`, each view argument of a
