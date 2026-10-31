@@ -287,22 +287,68 @@ void printf_formattert::process_format(std::ostream &out)
     ch = next();
   }
 
-  while (isdigit(ch)) // width
+  // A '*' width or precision is read from the next int argument (C11
+  // 7.21.6.1p5). A non-constant one leaves the output length unknown, and so
+  // does a large one, rather than rendering a field of up to 2^31 characters.
+  auto star_operand = [&]() -> std::optional<int64_t> {
+    if (next_operand == operands.end())
+    {
+      bounded = false;
+      return std::nullopt;
+    }
+    const expr2tc arg = make_type(*(next_operand++), int_type2());
+    if (!is_constant_int2t(arg))
+    {
+      bounded = false;
+      return std::nullopt;
+    }
+    const int64_t value = to_constant_int2t(arg).value.to_int64();
+    if (value > 4096 || value < -4096)
+    {
+      bounded = false;
+      return std::nullopt;
+    }
+    return value;
+  };
+
+  if (ch == '*')
   {
-    conv.width = conv.width * 10 + (ch - '0');
+    // A negative width is a '-' flag followed by a positive width.
+    if (const auto width = star_operand())
+    {
+      conv.left |= *width < 0;
+      conv.width = *width < 0 ? -*width : *width;
+    }
     ch = next();
   }
+  else
+    while (isdigit(ch)) // width
+    {
+      conv.width = conv.width * 10 + (ch - '0');
+      ch = next();
+    }
 
   if (ch == '.') // precision
   {
     conv.precision = 0;
     ch = next();
 
-    while (isdigit(ch))
+    if (ch == '*')
     {
-      *conv.precision = *conv.precision * 10 + (ch - '0');
+      // A negative precision is taken as if it were omitted.
+      const auto precision = star_operand();
+      if (precision && *precision >= 0)
+        conv.precision = *precision;
+      else
+        conv.precision.reset();
       ch = next();
     }
+    else
+      while (isdigit(ch))
+      {
+        *conv.precision = *conv.precision * 10 + (ch - '0');
+        ch = next();
+      }
   }
 
   format_constantt format_constant;
