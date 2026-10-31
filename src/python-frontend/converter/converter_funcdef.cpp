@@ -609,6 +609,23 @@ bool python_converter::function_is_generator(
   return scan(function_node["body"]);
 }
 
+/// Whether @p value is `|`, `&`, `^`, `<<` or `>>`, which Python defines for
+/// ints and not for floats.
+static bool is_bitwise_binop(const nlohmann::json &value)
+{
+  static const std::set<std::string> bitwise{
+    "BitOr", "BitAnd", "BitXor", "LShift", "RShift"};
+  return value["_type"] == "BinOp" &&
+         bitwise.count(value["op"].value("_type", "")) != 0;
+}
+
+/// An arithmetic return is taken for a double, a bit operation for an int.
+static void
+note_expression_return(TypeFlags &flags, const nlohmann::json &value)
+{
+  (is_bitwise_binop(value) ? flags.has_int : flags.has_float) = true;
+}
+
 TypeFlags
 python_converter::infer_types_from_returns(const nlohmann::json &function_body)
 {
@@ -665,7 +682,7 @@ python_converter::infer_types_from_returns(const nlohmann::json &function_body)
         }
         else if (val["_type"] == "BinOp" || val["_type"] == "UnaryOp")
         {
-          flags.has_float = true; // Default for expressions
+          note_expression_return(flags, val);
         }
         else if (val["_type"] == "Call")
         {
@@ -6232,7 +6249,8 @@ void python_converter::note_guessed_return(const nlohmann::json &function_node)
         const std::string kind = stmt["_type"];
         const bool returns_expression = kind == "Return" &&
                                         !stmt["value"].is_null() &&
-                                        (stmt["value"]["_type"] == "BinOp" ||
+                                        ((stmt["value"]["_type"] == "BinOp" &&
+                                          !is_bitwise_binop(stmt["value"])) ||
                                          stmt["value"]["_type"] == "UnaryOp");
         return returns_expression ||
                (stmt.contains("body") && stmt["body"].is_array() &&
