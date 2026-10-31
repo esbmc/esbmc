@@ -82,12 +82,14 @@ public:
    * @param elem_type  IRep2 type of @p fill_value, recorded in the registry.
    * @param index_base When non-null, each element is @p index_base plus the
    *        loop index rather than @p fill_value, which is what a range needs.
+   * @param index_step When non-null, the loop index is scaled by it first.
    */
   exprt build_symbolic_fill_list(
     const exprt &size,
     const exprt &fill_value,
     const typet &elem_type,
-    const exprt *index_base = nullptr);
+    const exprt *index_base = nullptr,
+    const exprt *index_step = nullptr);
 
   exprt index(const exprt &array, const nlohmann::json &slice_node);
 

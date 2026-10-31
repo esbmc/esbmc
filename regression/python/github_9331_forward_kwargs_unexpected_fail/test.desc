@@ -1,4 +1,5 @@
 CORE
 main.py
 
-^ERROR: Unknown keyword argument: w in function inner$
+^VERIFICATION FAILED$
+uncaught exception: TypeError$

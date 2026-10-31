@@ -30,6 +30,7 @@ class PreprocessorStateMixin:
         self._vararg_alias_stmts = []
         self._redefined_names = set()
         self.functionVarargs = set()
+        self.functionAnyKeywords = set()
         self._vararg_func_defs = {}
         self._vararg_module_defs = set()
         self._vararg_callee_defs = {}
