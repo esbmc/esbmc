@@ -18,6 +18,7 @@ add_library(pythonfrontend STATIC
             converter/converter_compare.cpp
             converter/converter_dunder.cpp
             converter/converter_expr.cpp
+            converter/converter_numpy_dtype.cpp
             converter/value_kinds.cpp
             converter/converter_funcall.cpp
             converter/converter_funcdef.cpp

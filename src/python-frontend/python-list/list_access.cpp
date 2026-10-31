@@ -3394,7 +3394,7 @@ std::optional<exprt> python_list::try_build_numpy_param_slice_view(
 {
   if (
     !array.is_symbol() || !resolved_array_type.is_pointer() ||
-    resolved_array_type.subtype() == char_type())
+    type_utils::is_char_storage(resolved_array_type.subtype()))
     return std::nullopt;
   const std::string id = array.identifier().as_string();
   if (
@@ -3436,10 +3436,11 @@ exprt python_list::handle_range_slice(
   // Handle regular array/string slicing (not list slicing)
   // String parameters come as pointer-to-char, so handle both arrays and char
   // pointers
-  bool is_string_slice = (resolved_array_type != resolved_list_type &&
-                          resolved_array_type.is_array()) ||
-                         (resolved_array_type.is_pointer() &&
-                          resolved_array_type.subtype() == char_type());
+  bool is_string_slice =
+    (resolved_array_type != resolved_list_type &&
+     resolved_array_type.is_array()) ||
+    (resolved_array_type.is_pointer() &&
+     type_utils::is_char_storage(resolved_array_type.subtype()));
 
   // Determine step value (default 1).
   const slice_step_info step_info = get_slice_step_info(slice_node);
@@ -3473,7 +3474,7 @@ exprt python_list::handle_range_slice(
     // which uses __ESBMC_alloca and survives function returns.
     if (
       resolved_array_type.is_pointer() &&
-      resolved_array_type.subtype() == char_type())
+      type_utils::is_char_storage(resolved_array_type.subtype()))
     {
       const symbolt &slice_func_ref = get_str_slice_sym();
 
@@ -4823,7 +4824,7 @@ void python_list::normalize_index_access_position(
       BigInt s = binary2integer(t.size().value().c_str(), true);
 
       // For char arrays (strings), exclude null terminator from logical length
-      if (t.subtype() == char_type())
+      if (type_utils::is_char_storage(t.subtype()))
         s -= 1;
 
       v += s;
@@ -4903,10 +4904,12 @@ exprt python_list::handle_index_access(
     array, slice_node, list_node, pos_expr, index);
 
   // Handle different array types
-  const bool is_char_array = resolved_array_type.is_array() &&
-                             resolved_array_type.subtype() == char_type();
-  const bool is_char_ptr = resolved_array_type.is_pointer() &&
-                           resolved_array_type.subtype() == char_type();
+  const bool is_char_array =
+    resolved_array_type.is_array() &&
+    type_utils::is_char_storage(resolved_array_type.subtype());
+  const bool is_char_ptr =
+    resolved_array_type.is_pointer() &&
+    type_utils::is_char_storage(resolved_array_type.subtype());
 
   if (
     (array.type().is_symbol() || array.type().subtype().is_symbol()) &&
@@ -5741,7 +5744,8 @@ exprt python_list::extract_pyobject_value(
   // value. For all other types, the void* contains a pointer to the value.
   if (
     elem_type.is_pointer() &&
-    (elem_type.subtype() == char_type() || elem_type.subtype() == bool_type()))
+    (type_utils::is_char_storage(elem_type.subtype()) ||
+     elem_type.subtype() == bool_type()))
   {
     // String and None case: cast void* directly to the pointer type (no
     // dereference needed)
