@@ -3419,6 +3419,10 @@ private:
   /// Throws on a tagged operand of an `and`/`or` whose value is used.
   void refuse_tagged_boolop_operand(const exprt &operand) const;
 
+  /// The truthiness of a str and/or operand: false for None or "", else true.
+  /// Any other value comes back unchanged.
+  exprt boolop_string_truthiness(const exprt &value, const locationt &location);
+
   /// Rewrite a string @p str into `strlen(str) != 0`, its truthiness; any
   /// other value comes back unchanged.
   exprt apply_string_truthiness(const exprt &str, const locationt &location);
