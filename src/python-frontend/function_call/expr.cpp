@@ -1602,6 +1602,13 @@ exprt function_call_expr::build_constant_from_arg() const
 
   else if (func_name == "str")
   {
+    // str(None) is repr(None): NoneType inherits object.__str__. With an
+    // encoding, CPython raises TypeError instead.
+    if (
+      call_["args"].size() == 1 && arg["_type"] == "Constant" &&
+      arg["value"].is_null())
+      arg["value"] = "None";
+
     // Try __str__ dispatch for custom objects with __str__ defined.
     exprt value_expr = converter_.get_expr(arg);
     // convert_to_string folds a call statement it cannot type to a constant,
