@@ -398,7 +398,10 @@ bool python_converter::is_rank1_numpy_array_name(
   if (symbol == nullptr || numpy_array_symbols_.count(id) == 0)
     return false;
   const typet type = ns.follow(symbol->get_type());
-  return type.is_array() && !ns.follow(type.subtype()).is_array();
+  if (!type.is_array())
+    return false;
+  const typet element = ns.follow(type.subtype());
+  return !element.is_array() || type_utils::is_char_storage(element.subtype());
 }
 
 // The builtins read the elements of a numpy array as real numbers.

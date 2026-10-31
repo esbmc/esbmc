@@ -396,6 +396,14 @@ exprt numpy_random::read_population(const nlohmann::json &arg)
     reject_population();
   if (literal && contains_call(arg))
     return materialize_population(arg["elts"]);
+  // np.array() copies a string array character by character, past each string's
+  // end; a choice only reads it, so the fixed-width storage is used directly.
+  if (kind == "Name")
+  {
+    const exprt strings = converter_.get_expr(arg);
+    if (type_utils::is_numpy_string_array(strings.type()))
+      return strings;
+  }
   nlohmann::json elements = arg;
   if (kind == "Tuple")
     elements["_type"] = "List";

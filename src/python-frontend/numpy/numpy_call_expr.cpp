@@ -5296,12 +5296,18 @@ static nlohmann::json make_numpy_typed_constant(
   if (normalized.empty())
     return {{"_type", "Constant"}, {"value", value.value.real()}};
 
-  if (
-    numpy_dtype_from_name(normalized) &&
-    numpy_dtype_from_name(normalized)->kind == numpy_dtypet::kindt::string)
-    throw std::runtime_error(
-      "TypeError: converting numbers to a numpy string dtype is not "
-      "supported");
+  const auto parsed_target = numpy_dtype_from_name(normalized);
+  if (parsed_target && parsed_target->kind == numpy_dtypet::kindt::string)
+  {
+    // Only an integer has one decimal spelling a bound can be put on.
+    if (!integral)
+      throw std::runtime_error(
+        "TypeError: converting numbers to a numpy string dtype is not "
+        "supported");
+    return {
+      {"_type", "Constant"},
+      {"value", std::to_string(static_cast<long long>(value.value.real()))}};
+  }
 
   if (normalized == "bool")
   {
@@ -7172,9 +7178,16 @@ typet numpy_call_expr::constructor_element_type(
   {
     // An explicit `U<n>` fixes the width; as_numpy_element truncates to it.
     const auto parsed = numpy_dtype_from_name(get_dtype());
-    if (parsed && parsed->kind == numpy_dtypet::kindt::string && parsed->bits)
+    const bool is_string =
+      parsed && parsed->kind == numpy_dtypet::kindt::string;
+    if (is_string && parsed->bits)
       return type_handler_.build_array(char_type(), parsed->bits / 32 + 1);
-    return type_handler_.build_array(char_type(), *width + 1);
+    // np.full(n, 123, dtype=str) stores in `<U1`: NumPy takes the width from
+    // the empty descriptor rather than the converted fill.
+    const bool number_fill =
+      is_string && call_["func"].value("attr", "") == "full" &&
+      call_["args"].size() > 1 && !is_numpy_string_literal(call_["args"][1]);
+    return type_handler_.build_array(char_type(), number_fill ? 2 : *width + 1);
   }
   if (has_complex_leaf(list))
     return get_complex_struct_type();

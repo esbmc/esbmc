@@ -1,3 +1,4 @@
+#include <python-frontend/numpy/numpy_reducer_shared.h>
 #include "python_list_internal.h"
 #include <python-frontend/python-dict/python_dict_handler.h>
 #include <algorithm>
@@ -249,13 +250,84 @@ exprt python_list::bind_list_element(const exprt &list_at_call)
   return build_symbol(elem_obj);
 }
 
+// The bound of a string slice, read as a literal; @p fallback when absent.
+static long long string_slice_bound(
+  const nlohmann::json &bound,
+  long long fallback,
+  bool &literal)
+{
+  if (bound.is_null())
+    return fallback;
+  numeric_value value;
+  if (!try_extract_numeric_constant(bound, value) || !value.is_int)
+  {
+    literal = false;
+    return fallback;
+  }
+  return value.int_value;
+}
+
+// A slice of a fixed-width string array, as a copy of its elements. The caller
+// registers the copy against its source, so a write through either rejects
+// instead of diverging from NumPy's shared storage (ADR-NP-003, step 1).
+exprt python_list::numpy_string_slice_copy(
+  const exprt &array,
+  const nlohmann::json &slice_node)
+{
+  BigInt extent;
+  if (to_integer(to_array_type(array.type()).size(), extent))
+    throw std::runtime_error(
+      "TypeError: slicing a numpy string array of run-time length is not "
+      "supported");
+  const long long n = extent.to_int64();
+  bool literal = true;
+  const long long step = string_slice_bound(slice_node["step"], 1, literal);
+  if (step == 0)
+    throw std::runtime_error("ValueError: slice step cannot be zero");
+  long long lo =
+    string_slice_bound(slice_node["lower"], step > 0 ? 0 : n - 1, literal);
+  long long hi =
+    string_slice_bound(slice_node["upper"], step > 0 ? n : -n - 1, literal);
+  if (!literal)
+    throw std::runtime_error(
+      "TypeError: slicing a numpy string array with run-time bounds is not "
+      "supported");
+  const auto clamp = [&](long long bound) {
+    if (bound < 0)
+      bound += n;
+    const long long low = step > 0 ? 0 : -1;
+    const long long high = step > 0 ? n : n - 1;
+    return bound < low ? low : (bound > high ? high : bound);
+  };
+  lo = clamp(lo);
+  hi = clamp(hi);
+  std::vector<exprt> elements;
+  for (long long i = lo; step > 0 ? i < hi : i > hi; i += step)
+    elements.push_back(
+      index_exprt(array, from_integer(i, size_type()), array.type().subtype()));
+  const typet type = converter_.get_type_handler().build_array(
+    array.type().subtype(), elements.size());
+  exprt copy = gen_zero(type);
+  copy.operands() = exprt::operandst(elements.begin(), elements.end());
+  symbolt &tmp = converter_.create_tmp_symbol(
+    list_value_, "$numpy_string_slice$", type, copy);
+  code_declt decl(build_symbol(tmp));
+  decl.operands().push_back(copy);
+  converter_.add_instruction(decl);
+  if (converter_.current_lhs)
+  {
+    converter_.current_lhs->type() = type;
+    converter_.update_symbol(*converter_.current_lhs);
+  }
+  return build_symbol(tmp);
+}
+
 exprt python_list::index(const exprt &array, const nlohmann::json &slice_node)
 {
   if (slice_node["_type"] == "Slice") // arr[lower:upper]
   {
     if (type_utils::is_numpy_string_array(array.type()))
-      throw std::runtime_error(
-        "TypeError: slicing a numpy string array is not supported");
+      return numpy_string_slice_copy(array, slice_node);
     return handle_range_slice(array, slice_node);
   }
   else

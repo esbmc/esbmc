@@ -162,3 +162,47 @@ exprt python_converter::numpy_narrow_unary(
   return numpy_elementwise(
     op == "USub" ? "Mult" : "BitXor", operand, minus_one, operand.type());
 }
+
+// `x in a` over a numpy string array, as equality with each element in turn.
+std::optional<exprt>
+python_converter::try_numpy_string_membership(const nlohmann::json &element)
+{
+  if (element.value("_type", "") != "Compare" || element["ops"].size() != 1)
+    return std::nullopt;
+  const std::string op = element["ops"][0].value("_type", "");
+  if (op != "In" && op != "NotIn")
+    return std::nullopt;
+  const nlohmann::json &array = element["comparators"][0];
+  const nlohmann::json &root =
+    array.value("_type", "") == "Subscript" ? array["value"] : array;
+  const std::string id = root.value("_type", "") == "Name"
+                           ? resolve_name_symbol_id(root.value("id", ""))
+                           : std::string();
+  if (
+    numpy_array_symbols_.count(id) == 0 &&
+    numpy_param_array_types_.count(id) == 0)
+    return std::nullopt;
+  const auto dtype = numpy_array_dtype(array);
+  if (!dtype || dtype->kind != numpy_dtypet::kindt::string)
+    return std::nullopt;
+  if (json_utils::ast_contains_call(element["left"]))
+    throw std::runtime_error(
+      "TypeError: membership of a call's value in a numpy string array is not "
+      "supported");
+  const exprt storage = numpy_param_as_array(get_expr(array));
+  BigInt length;
+  to_integer(to_array_type(ns.follow(storage.type())).size(), length);
+  exprt found = false_exprt();
+  for (long long i = 0; i < length.to_int64(); ++i)
+  {
+    nlohmann::json item = {
+      {"_type", "Subscript"},
+      {"value", array},
+      {"slice", {{"_type", "Constant"}, {"value", i}}}};
+    nlohmann::json equal = element;
+    equal["ops"][0]["_type"] = "Eq";
+    equal["comparators"][0] = item;
+    found = or_exprt(found, typecast_exprt(get_expr(equal), bool_type()));
+  }
+  return op == "In" ? found : exprt(not_exprt(found));
+}
