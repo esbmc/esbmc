@@ -1144,6 +1144,28 @@ exprt function_call_expr::str_of_object(exprt &value, const nlohmann::json &arg)
   return converter_.get_string_builder().build_string_literal(text);
 }
 
+// float() ignores outer whitespace: str.isspace(), which also counts \x1c-\x1f.
+static std::string strip_py_space(const std::string &s)
+{
+  auto is_space = [](unsigned char c) {
+    return std::isspace(c) || (c >= 0x1c && c <= 0x1f);
+  };
+  const auto first = std::find_if_not(s.begin(), s.end(), is_space);
+  const auto last = std::find_if_not(s.rbegin(), s.rend(), is_space).base();
+  return first < last ? std::string(first, last) : std::string();
+}
+
+// strtod does not know PEP 515, so drop the separators first (#7558).
+static bool parse_py_float(const std::string &s, double &out)
+{
+  std::string digits;
+  if (s.empty() || !type_utils::strip_pep515_underscores(s, digits))
+    return false;
+  char *end = nullptr;
+  out = std::strtod(digits.c_str(), &end);
+  return end == digits.c_str() + digits.size();
+}
+
 exprt function_call_expr::build_constant_from_arg() const
 {
   const std::string &func_name = function_id_.get_function();
@@ -1482,18 +1504,7 @@ exprt function_call_expr::build_constant_from_arg() const
   else if (func_name == "float" && is_string_arg(arg))
   {
     const std::string raw_val = arg["value"].get<std::string>();
-
-    // float() strips leading and trailing whitespace only; str.isspace() also
-    // counts \x1c-\x1f.
-    auto is_space = [](unsigned char c) {
-      return std::isspace(c) || (c >= 0x1c && c <= 0x1f);
-    };
-    const auto first =
-      std::find_if_not(raw_val.begin(), raw_val.end(), is_space);
-    const auto last =
-      std::find_if_not(raw_val.rbegin(), raw_val.rend(), is_space).base();
-    const std::string trimmed =
-      first < last ? std::string(first, last) : std::string();
+    const std::string trimmed = strip_py_space(raw_val);
 
     std::string str_val = trimmed;
     std::transform(str_val.begin(), str_val.end(), str_val.begin(), ::tolower);
@@ -1504,14 +1515,8 @@ exprt function_call_expr::build_constant_from_arg() const
     {
       // Try to parse as regular float
       {
-        // strtod does not know PEP 515, so drop the separators first (#7558).
-        std::string digits;
-        const bool separators_ok =
-          !trimmed.empty() &&
-          type_utils::strip_pep515_underscores(trimmed, digits);
-        char *end = nullptr;
-        double dval = separators_ok ? std::strtod(digits.c_str(), &end) : 0.0;
-        if (!separators_ok || !end || end != digits.c_str() + digits.size())
+        double dval;
+        if (!parse_py_float(trimmed, dval))
         {
           std::string m =
             "could not convert string to float : '" + raw_val + "'";
