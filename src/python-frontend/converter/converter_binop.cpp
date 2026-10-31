@@ -2753,9 +2753,6 @@ exprt python_converter::get_binary_operator_expr(
   if (op == "Pow" || op == "power")
     return math_handler_.handle_power(lhs, once_bound_exponent(right, rhs));
 
-  if (op == "Mod" && (lhs.type().is_floatbv() || rhs.type().is_floatbv()))
-    return math_handler_.handle_modulo(lhs, rhs, element);
-
   if (type_utils::is_relational_op(op))
   {
     const locationt loc = get_location_from_decl(element);
@@ -2835,6 +2832,9 @@ exprt python_converter::build_arithmetic_binop(
   exprt rhs,
   const nlohmann::json &element)
 {
+  if (op == "Mod" && (lhs.type().is_floatbv() || rhs.type().is_floatbv()))
+    return math_handler_.handle_modulo(lhs, rhs, element);
+
   // Build the binary expression
   exprt bin_expr = build_binary_expression(op, lhs, rhs);
 
@@ -2848,7 +2848,7 @@ exprt python_converter::build_arithmetic_binop(
 
   // Python integer modulo `%` is floored (result takes the sign of the
   // divisor), unlike C's truncated remainder. Correct it for integer operands;
-  // float `%` was already handled above via handle_modulo.
+  // float `%` was already handled above.
   if (
     op == "Mod" && (lhs.type().is_signedbv() || lhs.type().is_unsignedbv()) &&
     (rhs.type().is_signedbv() || rhs.type().is_unsignedbv()))

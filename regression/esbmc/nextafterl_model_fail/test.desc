@@ -1,0 +1,8 @@
+CORE
+main.c
+--multi-property
+^VERIFICATION FAILED$
+nextafterl\(1.0L, 2.0L\) == 1.0L$
+nextafterl\(1.0L, 0.0L\) == 1.0L - LDBL_EPSILON$
+nexttoward\(1.0, 0.0L\) == 1.0 - DBL_EPSILON$
+nexttowardf\(1.0f, 2.0L\) == 1.0f$

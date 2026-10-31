@@ -12439,6 +12439,37 @@ path, and the assertions after it are never checked.
 
 Not fixed: the R130 residuals other than these names, and `sigsetjmp`'s
 `savemask`.
+### M9 (R144) — 2026-10-30, the steps R141 left without a model
+
+R141's entry left `nextafterl`, `nexttoward`, `nexttowardf` and `nexttowardl`
+without a model, so each returned a nondet value: `nextafterl(1.0L, 2.0L)`
+was not `1.0L + LDBL_EPSILON`, and `nexttoward(1.0, 2.0L)` was not
+`1.0 + DBL_EPSILON`. Both hold natively.
+
+**Fixed** by modelling `nextafterl` arithmetically, not on the bit pattern.
+ESBMC encodes a 128-bit `long double` as binary128 even where
+`LDBL_MANT_DIG` is the x87 format's 64 (see `frexp.c`), so a step on the
+encoding would use binary128's spacing. The model takes the exponent from
+`frexpl` and adds or subtracts `2^(e - LDBL_MANT_DIG)`, clamped to
+`LDBL_TRUE_MIN` below the normal range and halved below a power of two.
+Every such step lands on a value both encodings represent, so the sum is
+exact. `nexttoward` and `nexttowardf` call `nextafter` towards the infinity
+on `y`'s side (C11 7.12.11.4), and `nexttowardl` is `nextafterl`.
+
+`nextafterl_model` checks steps in both directions, below a power of two,
+from zero, below `LDBL_MIN`, from the least subnormal and from an infinity,
+the overflow to an infinity, NaN, `x == y`, and the three `nexttoward`
+functions; master fails it, and it passes natively. `nextafterl_model_fail`
+runs under `--multi-property` and pins four wrong results as FAILED. Dropping
+the halving, the clamp, the sign of the step from zero, or swapping the
+direction of `nexttoward` fails `nextafterl_model`, under the default solver
+(Bitwuzla), `--z3` and `--k-induction`. These runs used macOS on AArch64,
+where `long double` is binary64; the x87 case is checked only by the Linux
+CI run.
+
+Not fixed: `nextafterl` and `frexpl` have no model on 32-bit x86, where
+`long double` is 12 bytes. The floating-point exception flags have no model:
+`fetestexcept` returns a nondet value after any `feraiseexcept`.
 
 ---
 
