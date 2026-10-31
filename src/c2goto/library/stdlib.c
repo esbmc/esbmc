@@ -508,30 +508,32 @@ __ESBMC_HIDE:;
   return (dlen + (s - src)); /* count does not include NUL */
 }
 
+/* C17 7.22.3.1 (DR 460) dropped C11's requirement that size be a multiple
+ * of the alignment. */
+void *aligned_alloc(size_t align, size_t size)
+{
+__ESBMC_HIDE:;
+  if (!align || (align & (align - 1)))
+    return NULL;
+  void *r = malloc(size);
+  __ESBMC_assume(!((uintptr_t)r & (align - 1)));
+  return r;
+}
+
+/* POSIX.1-2024: EINVAL only when the alignment is not a power of two multiple
+ * of sizeof(void *); the size is unconstrained. */
 int posix_memalign(void **memptr, size_t align, size_t size)
 {
 __ESBMC_HIDE:;
-  if (
-    !align || (align & (align - 1)) || /* alignment must be a power of 2 */
-    (size & (align - 1)) /* size must be a multiple of alignment */
-  )
+  if (!align || (align & (align - 1)) || align % sizeof(void *))
     return EINVAL;
   int save = errno;
-  void *r = malloc(size);
+  void *r = aligned_alloc(align, size);
   errno = save;
-  __ESBMC_assume(!((uintptr_t)r & (align - 1)));
   if (size && !r)
     return ENOMEM;
   *memptr = r;
   return 0;
-}
-
-void *aligned_alloc(size_t align, size_t size)
-{
-__ESBMC_HIDE:;
-  void *r = NULL;
-  errno = posix_memalign(&r, align, size);
-  return r;
 }
 
 static void __ESBMC_swap_elements(char *x, char *y, size_t size)
