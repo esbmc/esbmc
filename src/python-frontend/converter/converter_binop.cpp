@@ -861,6 +861,23 @@ void python_converter::refuse_tagged_boolop_operand(const exprt &operand) const
       "used is not yet supported");
 }
 
+exprt python_converter::boolop_string_truthiness(
+  const exprt &value,
+  const locationt &location)
+{
+  exprt cond = apply_string_truthiness(value, location);
+  // A str parameter may hold None, which is false; strlen must not read it.
+  if (!cond.is_boolean() || !value.type().is_pointer())
+    return cond;
+  expr2tc value2, cond2;
+  migrate_expr(value, value2);
+  migrate_expr(cond, cond2);
+  exprt guarded = migrate_expr_back(
+    and2tc(notequal2tc(value2, gen_zero(value2->type)), cond2));
+  guarded.location() = location;
+  return guarded;
+}
+
 exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
 {
   // `and`/`or` short-circuit: a later operand may not execute. get_named_expr
@@ -904,18 +921,8 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
       return cond;
     }
 
-    exprt cond =
-      apply_string_truthiness(value_expr, get_location_from_decl(element));
-    // A str parameter may hold None, which is false; strlen must not read it.
-    if (!cond.is_boolean() || !value_expr.type().is_pointer())
-      return cond;
-    expr2tc value2, cond2;
-    migrate_expr(value_expr, value2);
-    migrate_expr(cond, cond2);
-    exprt guarded = migrate_expr_back(
-      and2tc(notequal2tc(value2, gen_zero(value2->type)), cond2));
-    guarded.location() = cond.location();
-    return guarded;
+    return boolop_string_truthiness(
+      value_expr, get_location_from_decl(element));
   };
 
   // Mark that we're processing operands in an expression context
