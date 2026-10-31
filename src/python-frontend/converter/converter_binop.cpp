@@ -347,6 +347,10 @@ std::string py_percent_format(
         body = a["value"].get<bool>() ? "True" : "False";
       else if (
         a.value("_type", "") == "Constant" && a.contains("value") &&
+        a["value"].is_null())
+        body = "None";
+      else if (
+        a.value("_type", "") == "Constant" && a.contains("value") &&
         a["value"].is_string())
         body = a["value"].get<std::string>();
       else if (py_const_int(a, v))
@@ -2209,7 +2213,10 @@ exprt python_converter::get_binary_operator_expr(
 
   guard_none_typed_container(op, rhs, element);
 
-  if (lhs.type() == none_type() || rhs.type() == none_type())
+  // `str % None` is formatting, handled below, not arithmetic on None.
+  if (
+    (lhs.type() == none_type() || rhs.type() == none_type()) &&
+    !(op == "Mod" && type_utils::is_string_type(lhs.type())))
   {
     // A direct call like `f() is None` arrives as code_function_callt — a
     // statement, not a value. Promote to side_effect_expr_function_callt so
