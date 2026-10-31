@@ -209,13 +209,30 @@ __ESBMC_HIDE:;
   return __VERIFIER_nondet_time_t();
 }
 
+/* C17 7.27.3.1: the result has the form "Sun Sep 16 01:03:52 1973\n\0";
+ * a year outside 1000-9999 is undefined behaviour, so it is always 25
+ * characters long. */
+static char *__esbmc_fill_asctime(char *buf)
+{
+__ESBMC_HIDE:;
+  for (int i = 0; i < 24; i++)
+  {
+    buf[i] = nondet_char();
+    __ESBMC_assume(buf[i] != '\0');
+  }
+  buf[3] = buf[7] = buf[10] = buf[19] = ' ';
+  buf[13] = buf[16] = ':';
+  buf[24] = '\n';
+  buf[25] = '\0';
+  return buf;
+}
+
 /* ── asctime ── */
 char *asctime(const struct tm *timeptr)
 {
 __ESBMC_HIDE:;
   __ESBMC_assert(timeptr != NULL, "asctime argument must not be NULL");
-  __esbmc_asctime_buf[25] = '\0';
-  return __esbmc_asctime_buf;
+  return __esbmc_fill_asctime(__esbmc_asctime_buf);
 }
 
 /* ── ctime ── */
@@ -223,8 +240,7 @@ char *ctime(const time_t *timer)
 {
 __ESBMC_HIDE:;
   __ESBMC_assert(timer != NULL, "ctime argument must not be NULL");
-  __esbmc_ctime_buf[25] = '\0';
-  return __esbmc_ctime_buf;
+  return __esbmc_fill_asctime(__esbmc_ctime_buf);
 }
 
 /* ── strftime ── */
@@ -266,8 +282,7 @@ char *asctime_r(const struct tm *timeptr, char *buf)
 __ESBMC_HIDE:;
   __ESBMC_assert(timeptr != NULL, "asctime_r timeptr must not be NULL");
   __ESBMC_assert(buf != NULL, "asctime_r buf must not be NULL");
-  buf[25] = '\0';
-  return buf;
+  return __esbmc_fill_asctime(buf);
 }
 
 /* ── ctime_r (POSIX reentrant) ── */
@@ -276,8 +291,7 @@ char *ctime_r(const time_t *timer, char *buf)
 __ESBMC_HIDE:;
   __ESBMC_assert(timer != NULL, "ctime_r timer must not be NULL");
   __ESBMC_assert(buf != NULL, "ctime_r buf must not be NULL");
-  buf[25] = '\0';
-  return buf;
+  return __esbmc_fill_asctime(buf);
 }
 
 /* ── strptime (POSIX string parsing) ── */
