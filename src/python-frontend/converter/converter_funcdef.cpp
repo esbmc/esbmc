@@ -2532,7 +2532,7 @@ python_converter::bind_numpy_constructor_argument(const nlohmann::json &arg)
   if (!can_emit_operand_statement())
     throw std::runtime_error(
       "TypeError: a numpy constructor called as an argument where nothing can "
-      "be bound first, such as a contract, is not supported");
+      "be bound first, such as a loop condition, is not supported");
   return bind_to_fresh_name(arg, "ESBMC_constructor_arg_");
 }
 
