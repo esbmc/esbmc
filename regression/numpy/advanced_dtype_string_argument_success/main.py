@@ -22,3 +22,11 @@ assert list(a)[1] == "c"
 assert len(tuple(a)) == 2
 overwrite(a)
 assert a[0] == "zz"
+
+
+def second(x):
+    return x[1]
+
+
+letters = np.array(["b", "a"])
+assert second(letters) == "a"
