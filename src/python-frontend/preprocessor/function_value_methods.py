@@ -24,9 +24,30 @@ def _module_classes(module):
     return {s.name: s for s in module.body if isinstance(s, ast.ClassDef)}
 
 
+def _is_local_to(fn, name):
+    """Whether `name` is a parameter or an assigned name of `fn` that no `global` declaration lifts."""
+    declared = any(
+        isinstance(n, (ast.Global, ast.Nonlocal)) and name in n.names for n in _own_nodes(fn))
+    params = [a.arg for a in ast.walk(fn.args) if isinstance(a, ast.arg)]
+    stored = any(
+        isinstance(n, ast.Name) and n.id == name and not isinstance(n.ctx, ast.Load)
+        for n in _own_nodes(fn))
+    return not declared and (name in params or stored)
+
+
+def _module_scope_walk(node, name):
+    """The nodes of `node` outside the functions in which `name` is a local of its own."""
+    yield node
+    if isinstance(node,
+                  (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)) and _is_local_to(node, name):
+        return
+    for child in ast.iter_child_nodes(node):
+        yield from _module_scope_walk(child, name)
+
+
 def _binding_count(module, name):
     count = 0
-    for node in ast.walk(module):
+    for node in _module_scope_walk(module, name):
         if isinstance(node, ast.Name) and node.id == name and not isinstance(node.ctx, ast.Load):
             count += 1
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
@@ -133,7 +154,7 @@ def _receiver_uses_are_attributes(module, name):
             parents[id(child)] = node
     return all(
         isinstance(parents.get(id(n)), ast.Attribute) and parents[id(n)].value is n
-        for n in ast.walk(module)
+        for n in _module_scope_walk(module, name)
         if isinstance(n, ast.Name) and n.id == name and isinstance(n.ctx, ast.Load))
 
 
@@ -151,7 +172,7 @@ def _calls_of(module, receiver, method):
         for child in ast.iter_child_nodes(node):
             parents[id(child)] = node
     calls = []
-    for node in ast.walk(module):
+    for node in _module_scope_walk(module, receiver):
         if isinstance(node, ast.Attribute) and node.attr == method and isinstance(
                 node.value, ast.Name) and node.value.id == receiver:
             call = parents.get(id(node))
@@ -186,21 +207,25 @@ def _wrapper(receiver, method, anchor):
     return ast.copy_location(fn, anchor)
 
 
-class _BoundNames(ast.NodeTransformer):
-    """Read `self` as the receiver and the returned `self.m` as the lifted function."""
+class _ReadSelf(ast.NodeTransformer):
+    """Read `self` as the receiver."""
 
     def __init__(self, receiver):
         self.receiver = receiver
-
-    def visit_Return(self, node):
-        value = node.value
-        return ast.copy_location(
-            ast.Return(ast.Name(f"{BOUND}{self.receiver}_{value.attr}", ast.Load())), node)
 
     def visit_Name(self, node):
         if node.id == "self":
             return ast.copy_location(ast.Name(self.receiver, node.ctx), node)
         return node
+
+
+class _BoundNames(_ReadSelf):
+    """Also read the returned `self.m` as the lifted function."""
+
+    def visit_Return(self, node):
+        value = node.value
+        return ast.copy_location(
+            ast.Return(ast.Name(f"{BOUND}{self.receiver}_{value.attr}", ast.Load())), node)
 
 
 def _lift_returner(module, receiver, method, fn, table, anchor):
@@ -222,8 +247,147 @@ def _lift_returner(module, receiver, method, fn, table, anchor):
     return ast.copy_location(lifted, anchor), sorted(set(names))
 
 
+def _bound_names(expr, receiver, table):
+    """The method names of `expr` when it is `receiver.m` or a conditional of such, else None."""
+    if isinstance(expr, ast.Attribute):
+        ok = isinstance(expr.value, ast.Name) and expr.value.id == receiver and expr.attr in table
+        return [expr.attr] if ok else None
+    if isinstance(expr, ast.IfExp):
+        body = _bound_names(expr.body, receiver, table)
+        orelse = _bound_names(expr.orelse, receiver, table)
+        return body + orelse if body and orelse else None
+    return None
+
+
+def _method_value_nodes(expr):
+    if isinstance(expr, ast.IfExp):
+        return _method_value_nodes(expr.body) + _method_value_nodes(expr.orelse)
+    return [expr]
+
+
+def _locals_of(fn):
+    names = {a.arg for a in fn.args.args}
+    names |= {
+        n.id
+        for n in ast.walk(fn) if isinstance(n, ast.Name) and not isinstance(n.ctx, ast.Load)
+    }
+    return names
+
+
+def _has_plain_signature(fn):
+    args = fn.args
+    return not (fn.decorator_list or args.vararg or args.kwarg or args.kwonlyargs
+                or args.posonlyargs or args.defaults)
+
+
+def _takes_self_and(fn, arity):
+    return len(fn.args.args) == arity + 1 and fn.args.args[0].arg == "self"
+
+
+def _has_scope_or_flow_node(fn):
+    flow = _SCOPES + (ast.Global, ast.Nonlocal, ast.Yield, ast.YieldFrom, ast.Await)
+    return any(isinstance(n, flow) for n in _own_nodes(fn))
+
+
+def _is_liftable(receiver, fn, arity):
+    if not (_has_plain_signature(fn) and _takes_self_and(fn, arity)):
+        return False
+    if _has_scope_or_flow_node(fn) or not _self_is_contained(fn):
+        return False
+    uses_self = any(isinstance(n, ast.Name) and n.id == "self" for n in ast.walk(fn))
+    return not (uses_self and receiver in _locals_of(fn))
+
+
+def _lift_method(receiver, fn, arity, anchor):
+    """`fn` as a module-level function with `self` read as `receiver`, or None."""
+    import copy
+    if not _is_liftable(receiver, fn, arity):
+        return None
+    args = fn.args
+    lifted = ast.FunctionDef(name=f"{BOUND}{receiver}_{fn.name}",
+                             args=ast.arguments([], [ast.arg(a.arg) for a in args.args[1:]], None,
+                                                [], [], None, []),
+                             body=[_ReadSelf(receiver).visit(copy.deepcopy(s)) for s in fn.body],
+                             decorator_list=[],
+                             returns=None,
+                             type_comment=None,
+                             type_params=[])
+    setattr(lifted, KIND_ATTRIBUTE, f"method:{receiver}.{fn.name}")
+    return ast.copy_location(lifted, anchor)
+
+
+def _method_value_function(receiver, fn, anchor):
+    if len(fn.args.args) == 1:
+        return _wrapper(receiver, fn.name, anchor) if _method_is_plain(fn) else None
+    return _lift_method(receiver, fn, len(fn.args.args) - 1, anchor)
+
+
+def _argument_calls(module, receiver, table):
+    """The `receiver.m(...)` calls with a bound method of `receiver` among their arguments."""
+    calls = []
+    for node in _module_scope_walk(module, receiver):
+        func = getattr(node, "func", None)
+        if not (isinstance(node, ast.Call) and isinstance(func, ast.Attribute)
+                and isinstance(func.value, ast.Name) and func.value.id == receiver
+                and func.attr in table and not node.keywords):
+            continue
+        if any(_bound_names(a, receiver, table) for a in node.args):
+            calls.append(node)
+    return calls
+
+
+def _lift_argument_calls(module, receiver, table, anchor):
+    """Lift `receiver.m(..., receiver.f, ...)` to a call of module-level functions."""
+    definitions, rewrites = {}, []
+    for call in _argument_calls(module, receiver, table):
+        callee = _lift_method(receiver, table[call.func.attr], len(call.args), anchor)
+        names = {n for a in call.args for n in _bound_names(a, receiver, table) or []}
+        values = {n: _method_value_function(receiver, table[n], anchor) for n in sorted(names)}
+        if callee is None or None in values.values():
+            continue
+        definitions[callee.name] = callee
+        definitions.update({v.name: v for v in values.values()})
+        rewrites.append((call, callee.name))
+    if not rewrites or any(_defined(module, name) for name in definitions):
+        return []
+    for call, name in rewrites:
+        call.func = ast.copy_location(ast.Name(name, ast.Load()), call.func)
+        call.args = [_rewrite_value(a, receiver, table) for a in call.args]
+    return list(definitions.values())
+
+
+def _rewrite_value(expr, receiver, table):
+    if not _bound_names(expr, receiver, table):
+        return expr
+    if isinstance(expr, ast.IfExp):
+        expr.body = _rewrite_value(expr.body, receiver, table)
+        expr.orelse = _rewrite_value(expr.orelse, receiver, table)
+        return expr
+    return ast.copy_location(ast.Name(f"{BOUND}{receiver}_{expr.attr}", ast.Load()), expr)
+
+
+def _defined(module, name):
+    return any(isinstance(n, ast.FunctionDef) and n.name == name for n in ast.walk(module))
+
+
+def _lift_returners(module, receiver, assign, table):
+    returners = {m for m, fn in table.items() if _returned_methods(fn, table)}
+    new = []
+    for method in sorted(returners):
+        calls = _calls_of(module, receiver, method)
+        lifted = calls and _lift_returner(module, receiver, method, table[method], table, assign)
+        if lifted:
+            new.append((lifted[0], lifted[1], calls))
+    needed = {m for _, flowing, _ in new for m in flowing}
+    definitions = [_wrapper(receiver, m, assign) for m in sorted(needed)] + [fn for fn, _, _ in new]
+    for fn, _, calls in new:
+        for call in calls:
+            call.func = ast.copy_location(ast.Name(fn.name, ast.Load()), call.func)
+    return definitions
+
+
 def lift_bound_methods(module):
-    """Lift in place the bound methods that a method of a module-level instance returns."""
+    """Lift in place the bound methods that a module-level instance returns or is passed."""
     names = {n.id for n in ast.walk(module) if isinstance(n, ast.Name)}
     if names & _DYNAMIC or any(
             isinstance(n, ast.Attribute) and n.attr in ("__dict__", "__class__")
@@ -233,31 +397,14 @@ def lift_bound_methods(module):
     changed = False
     for receiver, (assign, cls) in _instances(module, classes).items():
         table = _method_table(cls, classes)
-        if table is None or not _receiver_uses_are_attributes(module, receiver):
+        if (table is None or not _receiver_uses_are_attributes(module, receiver)
+                or _stores_a_method_name(module, set(table))):
             continue
-        returners = {m for m, fn in table.items() if _returned_methods(fn, table)}
-        if not returners or _stores_a_method_name(module, set(table)):
-            continue
-        new, redirect = [], []
-        for method in sorted(returners):
-            calls = _calls_of(module, receiver, method)
-            if not calls:
-                continue
-            lifted = _lift_returner(module, receiver, method, table[method], table, assign)
-            if lifted is None:
-                continue
-            fn, flowing = lifted
-            new.append((fn, flowing, calls))
-        if not new:
-            continue
-        needed = {m for _, flowing, _ in new for m in flowing}
-        wrappers = [_wrapper(receiver, m, assign) for m in sorted(needed)]
+        definitions = _lift_returners(module, receiver, assign, table)
+        definitions += _lift_argument_calls(module, receiver, table, assign)
         position = module.body.index(assign) + 1
-        module.body[position:position] = wrappers + [fn for fn, _, _ in new]
-        for fn, _, calls in new:
-            for call in calls:
-                call.func = ast.copy_location(ast.Name(fn.name, ast.Load()), call.func)
-        changed = True
+        module.body[position:position] = definitions
+        changed = changed or bool(definitions)
     if changed:
         ast.fix_missing_locations(module)
     return changed
