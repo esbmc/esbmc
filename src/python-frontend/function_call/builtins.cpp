@@ -2345,7 +2345,7 @@ exprt function_call_expr::handle_complex() const
         {
           const typet &elem_type = symbol_type.subtype();
           const bool is_textual_char_array =
-            elem_type == char_type() ||
+            type_utils::is_char_storage(elem_type) ||
             (elem_type.is_signedbv() &&
              to_signedbv_type(elem_type).get_width() == 8) ||
             (elem_type.is_unsignedbv() &&

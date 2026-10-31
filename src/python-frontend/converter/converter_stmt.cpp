@@ -2714,7 +2714,13 @@ std::optional<exprt> python_converter::build_numpy_descriptor_materialized_list(
     return std::nullopt;
 
   const std::vector<std::size_t> &shape = materialized->first;
-  const std::vector<exprt> &elems = materialized->second;
+  // tolist() gives Python numbers, whatever the array's dtype.
+  std::vector<exprt> elems = materialized->second;
+  for (exprt &element : elems)
+    if (type_utils::is_numpy_scalar_type(element.type()))
+      element = typecast_exprt(
+        element,
+        element.type().is_floatbv() ? double_type() : long_long_int_type());
 
   nlohmann::json list_node{
     {"_type", "List"}, {"elts", nlohmann::json::array()}};
@@ -7943,6 +7949,7 @@ void python_converter::get_var_assign(
     rhs = handle_string_literal_rhs(effective_ast_node, lhs_type, rhs);
     fit_numpy_string_store(lhs, rhs);
     rhs = fit_numpy_integer_store(lhs, rhs, effective_ast_node["value"]);
+    bind_numpy_scalar_name(target, lhs_symbol, lhs, rhs);
   }
 
   if (converted_value && rhs != exprt("_init_undefined"))

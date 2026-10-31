@@ -1,3 +1,4 @@
+#include <python-frontend/numpy/numpy_dtype.h>
 #include <python-frontend/numpy/numpy_random.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/numpy/numpy_call_expr.h>
@@ -539,7 +540,7 @@ void numpy_random::check_shape()
 exprt numpy_random::sample_array()
 {
   element_type_ = name_ == "choice"           ? population_.type().subtype()
-                  : is_integral_result(name_) ? long_long_int_type()
+                  : is_integral_result(name_) ? integer_sample_type()
                                               : double_type();
   typet type = element_type_;
   for (auto it = shape_.rbegin(); it != shape_.rend(); ++it)
@@ -867,6 +868,15 @@ exprt numpy_random::sample_real()
   return x;
 }
 
+// randint samples in its dtype; validate_randint has checked the range fits.
+typet numpy_random::integer_sample_type() const
+{
+  const auto dtype = numpy_dtype_from_name(dtype_);
+  return name_ == "randint" && dtype && dtype->is_integer() && dtype->bits != 64
+           ? dtype->element_type()
+           : long_long_int_type();
+}
+
 exprt numpy_random::sample_integer()
 {
   const typet &type = long_long_int_type();
@@ -878,7 +888,8 @@ exprt numpy_random::sample_integer()
     assume(and_exprt(
       rel(k, ">=", has_high ? value("low") : zero),
       rel(k, "<", has_high ? value("high") : value("low"))));
-    return k;
+    const typet stored = integer_sample_type();
+    return stored == type ? k : exprt(typecast_exprt(k, stored));
   }
   if (name_ == "poisson")
   {

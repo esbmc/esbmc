@@ -3412,7 +3412,7 @@ bool python_list::is_runtime_numpy_slice(
   const typet &elem_type,
   const nlohmann::json &slice_node) const
 {
-  if (elem_type == char_type())
+  if (type_utils::is_char_storage(elem_type))
     return false;
   if (!get_slice_step_info(slice_node).literal)
     return true;
@@ -3555,7 +3555,7 @@ exprt python_list::handle_range_slice(
       elem_type = src_type.subtype();
       array_len = to_size_expr(src_type.size());
       // For char arrays (strings), exclude null terminator from logical length
-      logical_len = (elem_type == char_type())
+      logical_len = (type_utils::is_char_storage(elem_type))
                       ? size_sub(array_len, gen_one(size_type()))
                       : array_len;
     }
@@ -3615,7 +3615,7 @@ exprt python_list::handle_range_slice(
     // arrays (e.g. bytes, modelled as wide-int arrays) must NOT carry a phantom
     // null element: len() counts elements there, so an extra slot would
     // over-count. Size the result accordingly.
-    const bool needs_null_term = (elem_type == char_type());
+    const bool needs_null_term = (type_utils::is_char_storage(elem_type));
     exprt result_size = slice_len;
     if (step_info.literal)
     {

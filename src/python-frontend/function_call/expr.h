@@ -629,6 +629,9 @@ private:
   exprt handle_list_count() const;
   exprt handle_list_index() const;
 
+  std::optional<exprt> try_builtin_sum_over_numpy_scalars();
+  std::optional<exprt> try_int_of_numpy_scalar();
+
   // numpy ndarray.astype(dtype): runtime element-wise dtype cast.
   bool is_numpy_astype_call() const;
   exprt handle_numpy_astype() const;

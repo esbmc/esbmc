@@ -219,7 +219,7 @@ std::string type_handler::type_to_string(const typet &t) const
 
     const typet &elem_type = arr_type.subtype();
 
-    if (elem_type == char_type())
+    if (type_utils::is_char_storage(elem_type))
       return "str";
 
     if (elem_type == int_type())
@@ -920,7 +920,7 @@ type_handler::scalar_array_element_type(const nlohmann::json &elem) const
     !subtype.is_signedbv() && !subtype.is_unsignedbv() &&
     !subtype.is_floatbv() && !subtype.is_bool())
     return std::nullopt;
-  if (subtype == char_type())
+  if (type_utils::is_char_storage(subtype))
     return std::nullopt;
   return subtype;
 }

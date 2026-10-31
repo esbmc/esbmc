@@ -386,6 +386,10 @@ exprt python_converter::dispatch_unary_dunder_operator(
   exprt &operand,
   const locationt &loc)
 {
+  const exprt narrow = numpy_narrow_unary(op, operand);
+  if (!narrow.is_nil())
+    return narrow;
+
   // Resolve the operand to its (pointee) struct. Under the object-model
   // migration (#3067/#4773) a class instance is a `Class*` pointer, so follow
   // it to the struct exactly as the binary dispatch does — otherwise str(obj),

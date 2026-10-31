@@ -4672,6 +4672,9 @@ std::optional<exprt> numpy_call_expr::try_argmin_argmax_axis_result(
 std::optional<exprt>
 numpy_call_expr::try_early_result(const std::string &function)
 {
+  if (std::optional<exprt> narrow = try_narrow_operand_call(function))
+    return narrow;
+
   static const std::set<std::string> model_only = {
     "remainder", "nextafter", "isclose"};
   if (std::optional<exprt> math = try_runtime_math(function))
@@ -11084,6 +11087,149 @@ const std::string &numpy_call_expr::canonical_function()
   if (alias != aliases.end())
     function_id_.set_function(alias->second);
   return function_id_.get_function();
+}
+
+// The dtype= of an inline `np.array(..., dtype=...)` or the like, read without
+// converting the call.
+static std::optional<numpy_dtypet>
+inline_constructor_dtype(const nlohmann::json &arg, const nlohmann::json &ast)
+{
+  if (arg.value("_type", "") != "Call")
+    return std::nullopt;
+  for (const auto &kw : arg.value("keywords", nlohmann::json::array()))
+    if (kw.value("arg", "") == "dtype")
+      return numpy_dtype_from_name(extract_numpy_dtype_name(kw["value"], ast));
+  return std::nullopt;
+}
+
+// Stored narrower than the 64 bits the operational models and the list-based
+// folds read; uint64 too, which they read as signed.
+bool numpy_call_expr::is_narrow_operand(const nlohmann::json &arg) const
+{
+  auto dtype = inline_constructor_dtype(arg, converter_.ast());
+  if (!dtype && arg.value("_type", "") != "Call")
+    dtype = converter_.numpy_array_dtype(arg);
+  if (
+    !dtype ||
+    (!dtype->is_integer() && dtype->kind != numpy_dtypet::kindt::floating))
+    return false;
+  return dtype->bits < 64 ||
+         dtype->kind == numpy_dtypet::kindt::unsigned_integer;
+}
+
+bool numpy_call_expr::has_narrow_operand() const
+{
+  const auto &args = call_.value("args", nlohmann::json::array());
+  const auto narrow = [this](const nlohmann::json &arg) {
+    return is_narrow_operand(arg);
+  };
+  if (std::any_of(args.begin(), args.end(), narrow))
+    return true;
+  const nlohmann::json &func = call_["func"];
+  return func.value("_type", "") == "Attribute" &&
+         func["value"].value("_type", "") != "Call" &&
+         !is_imported_numpy_module_alias(
+           converter_.ast(), func["value"].value("id", "")) &&
+         is_narrow_operand(func["value"]);
+}
+
+// A binary ufunc over a narrow operand, as its operator.
+std::optional<exprt>
+numpy_call_expr::narrow_ufunc_as_operator(const std::string &function)
+{
+  static const std::map<std::string, std::string> operators = {
+    {"add", "Add"},
+    {"subtract", "Sub"},
+    {"multiply", "Mult"},
+    {"divide", "Div"},
+    {"true_divide", "Div"},
+    {"floor_divide", "FloorDiv"},
+    {"mod", "Mod"},
+    {"remainder", "Mod"},
+    {"power", "Pow"},
+    {"bitwise_and", "BitAnd"},
+    {"bitwise_or", "BitOr"},
+    {"bitwise_xor", "BitXor"},
+    {"left_shift", "LShift"},
+    {"right_shift", "RShift"}};
+  const auto op = operators.find(function);
+  const auto &args = call_.value("args", nlohmann::json::array());
+  if (
+    op == operators.end() || args.size() != 2 ||
+    !call_.value("keywords", nlohmann::json::array()).empty())
+    return std::nullopt;
+  nlohmann::json binop = call_;
+  binop["_type"] = "BinOp";
+  binop["left"] = args[0];
+  binop["right"] = args[1];
+  binop["op"] = {{"_type", op->second}};
+  exprt result = converter_.get_expr(binop);
+  if (converter_.current_lhs)
+  {
+    converter_.current_lhs->type() = result.type();
+    converter_.update_symbol(*converter_.current_lhs);
+  }
+  return result;
+}
+
+// The literal folds read an inline constructor without its dtype, so a call
+// yielding an array binds it to a name first; a reducer's value is unaffected.
+std::optional<exprt> numpy_call_expr::call_with_narrow_constructors_bound(
+  const std::string &function)
+{
+  static const std::set<std::string> yields_scalar = {
+    "sum",
+    "prod",
+    "mean",
+    "min",
+    "max",
+    "any",
+    "all",
+    "argmin",
+    "argmax",
+    "searchsorted",
+    "trace"};
+  if (yields_scalar.count(function) || converter_.in_rhs_type_probe_)
+    return std::nullopt;
+  nlohmann::json bound = call_;
+  bool rebound = false;
+  for (auto &arg : bound["args"])
+    if (arg.value("_type", "") == "Call" && is_narrow_operand(arg))
+    {
+      if (!converter_.can_emit_operand_statement())
+        throw std::runtime_error(
+          "TypeError: a narrow numpy constructor called as an argument where "
+          "nothing can be bound first is not supported");
+      arg = converter_.bind_to_fresh_name(arg, "ESBMC_constructor_arg_");
+      rebound = true;
+    }
+  if (!rebound)
+    return std::nullopt;
+  return converter_.get_expr(bound);
+}
+
+// A call over a narrow operand: a function not known to read the element type
+// rejects rather than misreading the storage.
+std::optional<exprt>
+numpy_call_expr::try_narrow_operand_call(const std::string &function)
+{
+  static const std::set<std::string> reads_element_type = {
+    "array",       "asarray",      "copy",         "zeros_like", "ones_like",
+    "empty_like",  "full_like",    "sum",          "prod",       "mean",
+    "min",         "max",          "any",          "all",        "argmin",
+    "argmax",      "sort",         "searchsorted", "ravel",      "flatten",
+    "reshape",     "transpose",    "swapaxes",     "moveaxis",   "squeeze",
+    "expand_dims", "broadcast_to", "tolist",       "nditer",     "shape",
+    "size",        "ndim",         "astype",       "trace"};
+  if (!has_narrow_operand())
+    return std::nullopt;
+  if (std::optional<exprt> binop = narrow_ufunc_as_operator(function))
+    return binop;
+  if (reads_element_type.count(function) == 0)
+    throw std::runtime_error(
+      "TypeError: numpy." + function +
+      "() over a dtype narrower than 64 bits is not supported");
+  return call_with_narrow_constructors_bound(function);
 }
 
 exprt numpy_call_expr::get()

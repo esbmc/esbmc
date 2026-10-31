@@ -2336,9 +2336,9 @@ private:
   nlohmann::json
   bind_to_fresh_name(const nlohmann::json &value, const std::string &prefix);
   std::optional<exprt> try_lowered_compare(const nlohmann::json &element);
-  std::optional<numpy_dtypet> numpy_array_dtype(const nlohmann::json &base);
-  std::optional<exprt>
-  try_get_numpy_storage_attr(const nlohmann::json &element);
+  std::optional<exprt> try_get_numpy_storage_attr(
+    const nlohmann::json &base,
+    const std::string &attr);
   std::optional<exprt> try_numpy_dtype_compare(const nlohmann::json &element);
   std::optional<exprt>
   try_chained_compare_with_call(const nlohmann::json &element);
@@ -3187,6 +3187,13 @@ private:
     const typet &element,
     const typet &result_type,
     const locationt &location);
+  exprt numpy_or_array_operation(
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right,
+    const nlohmann::json &element);
   void cast_weak_float_compare(
     const std::string &op,
     exprt &lhs,
@@ -3969,6 +3976,17 @@ private:
   /// an argument adds its class too.
   std::set<std::string> base_ctor_called;
   bool build_static_lists = false;
+  std::optional<numpy_dtypet> numpy_array_dtype(const nlohmann::json &base);
+  std::optional<numpy_dtypet>
+  constructor_keyword_dtype(const nlohmann::json &call) const;
+  bool is_narrow_builtin_sum(const nlohmann::json &node);
+  /// `b = a[0]` keeps the scalar's dtype; rebinding such a name rejects.
+  void bind_numpy_scalar_name(
+    const nlohmann::json &target,
+    symbolt *symbol,
+    exprt &lhs,
+    const exprt &rhs);
+  exprt numpy_narrow_unary(const std::string &op, const exprt &operand);
   /// The element type a numpy constructor's dtype= gives the static array
   /// get_static_array builds; empty when the literal's own type is used.
   typet numpy_element_type;

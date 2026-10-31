@@ -5311,6 +5311,8 @@ exprt function_call_expr::get()
 {
   if (std::optional<exprt> raise = check_explicit_super())
     return *raise;
+  if (std::optional<exprt> number = try_int_of_numpy_scalar())
+    return *number;
 
   // Use dispatch table to handle special function types
   auto dispatch_table = get_dispatch_table();
@@ -5336,6 +5338,63 @@ function_call_expr::find_receiver_symbol(symbol_id &obj_symbol_id) const
   obj_symbol_id.set_object(caller);
   return converter_.follow_retype_alias(
     converter_.find_symbol(obj_symbol_id.to_string()));
+}
+
+// `sum(a)` over a narrow array: Python adds the elements to 0, a weak int, so
+// the running total stays at the element's width rather than the reducer's.
+std::optional<exprt> function_call_expr::try_builtin_sum_over_numpy_scalars()
+{
+  const auto &args = call_["args"];
+  if (
+    function_id_.get_function() != "sum" || args.size() != 1 ||
+    args[0].value("_type", "") != "Name" ||
+    !try_find_function(converter_.ast()["body"], "sum").empty())
+    return std::nullopt;
+  const std::string id =
+    converter_.resolve_name_symbol_id(args[0].value("id", ""));
+  const symbolt *symbol = converter_.symbol_table().find_symbol(id);
+  const typet type =
+    symbol ? converter_.ns.follow(symbol->get_type()) : typet();
+  if (
+    !type.is_array() ||
+    !type_utils::is_numpy_scalar_type(type_utils::array_scalar_type(type)))
+    return std::nullopt;
+  BigInt length;
+  if (to_integer(to_array_type(type).size(), length))
+    return std::nullopt;
+  nlohmann::json total = {{"_type", "Constant"}, {"value", 0}};
+  converter_.copy_location_fields_from_decl(call_, total);
+  for (long long i = 0; i < length.to_int64(); ++i)
+  {
+    nlohmann::json index = {{"_type", "Constant"}, {"value", i}};
+    nlohmann::json item = {
+      {"_type", "Subscript"}, {"value", args[0]}, {"slice", index}};
+    nlohmann::json sum = {
+      {"_type", "BinOp"},
+      {"left", total},
+      {"op", {{"_type", "Add"}}},
+      {"right", item}};
+    converter_.copy_location_fields_from_decl(call_, index);
+    converter_.copy_location_fields_from_decl(call_, item);
+    converter_.copy_location_fields_from_decl(call_, sum);
+    total = std::move(sum);
+  }
+  return converter_.get_expr(total);
+}
+
+// int(x) of a narrow scalar is a Python int, no longer wrapping at the width.
+std::optional<exprt> function_call_expr::try_int_of_numpy_scalar()
+{
+  const auto &args = call_["args"];
+  if (
+    function_id_.get_function() != "int" || args.size() != 1 ||
+    args[0].value("_type", "") != "Subscript" ||
+    json_utils::ast_contains_call(args[0]))
+    return std::nullopt;
+  const exprt value = converter_.get_expr(args[0]);
+  if (!type_utils::is_numpy_numeric_element(value.type()))
+    return std::nullopt;
+  return typecast_exprt(value, long_long_int_type());
 }
 
 exprt function_call_expr::handle_general_function_call()
@@ -5859,6 +5918,8 @@ std::optional<exprt> function_call_expr::try_numpy_tolist_or_inplace_sort()
 {
   if (std::optional<exprt> materialized = try_materialize_numpy_tolist())
     return materialized;
+  if (std::optional<exprt> summed = try_builtin_sum_over_numpy_scalars())
+    return summed;
   return try_numpy_inplace_sort();
 }
 

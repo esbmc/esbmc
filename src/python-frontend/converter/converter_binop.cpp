@@ -2528,24 +2528,11 @@ exprt python_converter::get_binary_operator_expr(
       left, args, mapping, percent_arg_types(right, rhs));
   }
 
-  cast_weak_float_compare(op, lhs, rhs, left, right);
-  if (
-    type_utils::is_numpy_scalar_type(lhs.type()) ||
-    type_utils::is_numpy_scalar_type(rhs.type()))
-  {
-    const exprt scalar = numpy_array_arithmetic(
-      op, lhs, rhs, left, right, get_location_from_decl(element));
-    if (!scalar.is_nil())
-      return scalar;
-  }
-
-  // Handle array/string operations
-  if (lhs.type().is_array() || rhs.type().is_array())
-  {
-    exprt result = handle_array_operations(op, lhs, rhs, left, right, element);
-    if (!result.is_nil())
-      return result;
-  }
+  // Handle numpy scalar and array/string operations
+  const exprt array_result =
+    numpy_or_array_operation(op, lhs, rhs, left, right, element);
+  if (!array_result.is_nil())
+    return array_result;
 
   // Handle dictionary comparison
   if (
@@ -3586,6 +3573,29 @@ exprt python_converter::raise_in_expression(
   return value;
 }
 
+exprt python_converter::numpy_or_array_operation(
+  const std::string &op,
+  exprt &lhs,
+  exprt &rhs,
+  const nlohmann::json &left,
+  const nlohmann::json &right,
+  const nlohmann::json &element)
+{
+  cast_weak_float_compare(op, lhs, rhs, left, right);
+  if (
+    type_utils::is_numpy_scalar_type(lhs.type()) ||
+    type_utils::is_numpy_scalar_type(rhs.type()))
+  {
+    const exprt scalar = numpy_array_arithmetic(
+      op, lhs, rhs, left, right, get_location_from_decl(element));
+    if (!scalar.is_nil())
+      return scalar;
+  }
+  if (lhs.type().is_array() || rhs.type().is_array())
+    return handle_array_operations(op, lhs, rhs, left, right, element);
+  return nil_exprt();
+}
+
 // An element-wise operator between a numeric array and an operand
 // numpy_array_arithmetic does not model is rejected rather than lowered as
 // scalar arithmetic.
@@ -3661,14 +3671,7 @@ exprt python_converter::handle_array_operations(
   };
 
   auto is_char_array = [](const typet &t) {
-    if (!t.is_array())
-      return false;
-    const typet &elt = t.subtype();
-    if (type_utils::is_numpy_numeric_element(elt))
-      return false;
-    return elt == char_type() ||
-           (elt.is_signedbv() && to_signedbv_type(elt).get_width() == 8) ||
-           (elt.is_unsignedbv() && to_unsignedbv_type(elt).get_width() == 8);
+    return t.is_array() && is_char_element(t.subtype());
   };
   auto is_list_model_type = [this](const typet &t) {
     const typet list_type = type_handler_.get_list_type();
