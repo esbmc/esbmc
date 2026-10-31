@@ -9,6 +9,8 @@
 #include <python-frontend/math/python_int_overflow.h>
 #include <python-frontend/math/python_math.h>
 #include <python-frontend/numpy/numpy_reducer_shared.h>
+#include <python-frontend/numpy/numpy_call_expr.h>
+#include <python-frontend/numpy/numpy_dtype.h>
 #include <util/base/host_rounding_mode.h>
 #include <python-frontend/exception/python_exception_handler.h>
 #include <python-frontend/python-list/python_list.h>
@@ -3720,72 +3722,34 @@ bool function_call_expr::is_numpy_astype_call() const
   return function_id_.get_function() == "astype";
 }
 
-// Resolve the dtype argument to a target typet. Accepts np.float64-style
-// attribute access, bare type names (float/int/bool), and string literals
-// ("float64"); mirrors the dtype vocabulary already used for np.array(...,
-// dtype=...) and np.zeros(..., dtype=...) (see numpy_call_expr.cpp), but
-// kept local since astype's dtype is a positional arg, not a kwarg.
-static typet resolve_astype_target_type(const nlohmann::json &dtype_node)
+// The target element type, by the same normalization as a constructor's dtype=.
+static typet resolve_astype_target_type(
+  const nlohmann::json &dtype_node,
+  const nlohmann::json &ast)
 {
-  std::string name;
-  if (
-    dtype_node.value("_type", std::string()) == "Attribute" &&
-    dtype_node.contains("attr"))
-    name = dtype_node["attr"].get<std::string>();
-  else if (
-    dtype_node.value("_type", std::string()) == "Name" &&
-    dtype_node.contains("id"))
-    name = dtype_node["id"].get<std::string>();
-  else if (
-    dtype_node.value("_type", std::string()) == "Constant" &&
-    dtype_node.contains("value") && dtype_node["value"].is_string())
-    name = dtype_node["value"].get<std::string>();
-  else
+  const std::string kind = dtype_node.value("_type", std::string());
+  const bool spelled = kind == "Attribute" || kind == "Name" ||
+                       (kind == "Constant" && dtype_node.contains("value") &&
+                        dtype_node["value"].is_string());
+  if (!spelled)
     throw std::runtime_error(
       "TypeError: astype() requires a dtype argument (e.g. np.float64, "
       "float, int, bool)");
-
-  static const std::unordered_map<std::string, std::string> aliases = {
-    {"bool_", "bool"},
-    {"int_", "int64"},
-    {"int", "int64"},
-    {"uint_", "uint64"},
-    {"uint", "uint64"},
-    {"float_", "float64"},
-    {"float", "float64"}};
-  auto alias_it = aliases.find(name);
-  if (alias_it != aliases.end())
-    name = alias_it->second;
-
-  if (name == "bool")
-    return bool_type();
-  if (name == "int8")
-    return signedbv_typet(8);
-  if (name == "int16")
-    return signedbv_typet(16);
-  if (name == "int32")
-    return signedbv_typet(32);
-  if (name == "int64")
-    return signedbv_typet(64);
-  if (name == "uint8")
-    return unsignedbv_typet(8);
-  if (name == "uint16")
-    return unsignedbv_typet(16);
-  if (name == "uint32")
-    return unsignedbv_typet(32);
-  if (name == "uint64")
-    return unsignedbv_typet(64);
-  if (name == "float32")
-    return build_float_type(32);
-  if (name == "float64")
-    return build_float_type(64);
-
-  if (name == "complex64" || name == "complex128" || name == "complex")
+  std::string name = kind == "Name" ? dtype_node.value("id", "") : "";
+  try
+  {
+    name = extract_numpy_dtype_name(dtype_node, ast);
+  }
+  catch (const std::runtime_error &)
+  {
+    if (kind != "Name")
+      throw;
+  }
+  const auto dtype = numpy_dtype_from_name(name);
+  if (!dtype || dtype->kind == numpy_dtypet::kindt::string)
     throw std::runtime_error(
-      "TypeError: astype() to a complex dtype is not supported");
-
-  throw std::runtime_error(
-    "TypeError: astype() target dtype '" + name + "' is not supported");
+      "TypeError: astype() target dtype '" + name + "' is not supported");
+  return dtype->element_type();
 }
 
 exprt function_call_expr::handle_numpy_astype() const
@@ -3810,7 +3774,12 @@ exprt function_call_expr::handle_numpy_astype() const
       "TypeError: astype() on a multi-dimensional array is not supported "
       "yet; cast the innermost rows individually");
 
-  const typet target_type = resolve_astype_target_type(call_["args"][0]);
+  const typet target_type =
+    resolve_astype_target_type(call_["args"][0], converter_.ast());
+  if (is_complex_type(src_array.subtype()) && !is_complex_type(target_type))
+    throw std::runtime_error(
+      "TypeError: astype() from a complex dtype to a real one is not "
+      "supported");
   const locationt location = converter_.get_location_from_decl(call_);
 
   array_typet result_type(target_type, src_array.size());
@@ -3834,7 +3803,9 @@ exprt function_call_expr::handle_numpy_astype() const
 
   exprt src_elem =
     build_index(arr_expr, build_symbol(index_var), src_array.subtype());
-  exprt casted_elem = build_typecast(src_elem, target_type);
+  exprt casted_elem = is_complex_type(target_type)
+                        ? promote_to_complex(src_elem)
+                        : build_typecast(src_elem, target_type);
   exprt dest_elem =
     build_index(build_symbol(result_sym), build_symbol(index_var), target_type);
 
@@ -3857,6 +3828,11 @@ exprt function_call_expr::handle_numpy_astype() const
   while_stmt.location() = location;
   converter_.add_instruction(while_stmt);
 
+  if (converter_.current_lhs)
+  {
+    converter_.current_lhs->type() = result_type;
+    converter_.update_symbol(*converter_.current_lhs);
+  }
   return build_symbol(result_sym);
 }
 
