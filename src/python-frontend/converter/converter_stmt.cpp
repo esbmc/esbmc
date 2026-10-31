@@ -5085,6 +5085,23 @@ exprt python_converter::tuple_member_list_source(const exprt &value) const
   return source;
 }
 
+// `p = t[i]` takes the element types of the list the tuple was built with, as
+// `r, p = t` does. The registry is flow-insensitive, so only an unconditional
+// binding may replace them.
+void python_converter::bind_tuple_member_list_types(
+  const nlohmann::json &ast_node,
+  const exprt &lhs,
+  const exprt &rhs)
+{
+  const exprt source = tuple_member_list_source(rhs);
+  if (
+    source.is_not_nil() && lhs.is_symbol() &&
+    block_nesting_ == function_body_depth_ + 1 &&
+    unpack_record_is_trusted(ast_node["value"]))
+    element_type_registry_.assign_from(
+      source.identifier().as_string(), lhs.identifier().as_string());
+}
+
 // A list read from a tuple variable is held in a temporary that takes the
 // element types recorded for the list the tuple was assigned.
 exprt python_converter::hold_tuple_member_list(
@@ -8232,16 +8249,7 @@ void python_converter::get_var_assign(
       !assignment_target_is_subscript(ast_node))
     {
       propagate_list_type_info(lhs, rhs, lhs_symbol);
-      // `p = t[i]` takes the element types of the list the tuple was built
-      // with, as `r, p = t` does. The registry is flow-insensitive, so only
-      // an unconditional binding may replace them.
-      const exprt source = tuple_member_list_source(rhs);
-      if (
-        source.is_not_nil() && lhs.is_symbol() &&
-        block_nesting_ == function_body_depth_ + 1 &&
-        unpack_record_is_trusted(ast_node["value"]))
-        element_type_registry_.assign_from(
-          source.identifier().as_string(), lhs.identifier().as_string());
+      bind_tuple_member_list_types(ast_node, lhs, rhs);
     }
     else if (
       rhs.type() != lhs.type() && lhs.type().is_array() &&
