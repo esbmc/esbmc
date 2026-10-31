@@ -5,7 +5,9 @@
 #include <util/lang/c_types.h>
 #include <util/config/config.h>
 #include <irep2/irep2_utils.h>
+#include <util/arith/arith_tools.h>
 #include <util/arith/format_constant.h>
+#include <util/arith/ieee_float.h>
 #include <util/expr/type_byte_size.h>
 
 const expr2tc
@@ -212,6 +214,86 @@ std::optional<size_t> string_length_bound(const expr2tc &object)
   if (nbytes <= 0)
     return std::nullopt;
   return (nbytes - 1).to_uint64();
+}
+
+// The digits of |v| rounded half-to-even to `n` significant digits, and the
+// decimal exponent of the first digit: 0 and n zeros for a zero.
+std::pair<std::string, int64_t>
+significant_digits(const ieee_floatt &v, unsigned n)
+{
+  BigInt fraction, exponent;
+  v.extract_base10(fraction, exponent);
+  if (fraction.is_zero())
+    return {std::string(n, '0'), 0};
+  int64_t count = integer2string(fraction).size();
+  int64_t lead = exponent.to_int64() + count - 1;
+  if (count > n)
+  {
+    const BigInt p = power(10, count - n);
+    const BigInt remainder = fraction % p;
+    fraction /= p;
+    if (remainder * 2 > p || (remainder * 2 == p && fraction.is_odd()))
+      ++fraction;
+    if (integer2string(fraction).size() > n)
+    {
+      fraction /= 10;
+      ++lead;
+    }
+  }
+  else
+    fraction *= power(10, n - count);
+  return {integer2string(fraction), lead};
+}
+
+// %e, %E, %g or %G of a constant (C11 7.21.6.1p8), without sign or padding.
+std::string
+format_exponent_float(const ieee_floatt &v, char spec, const conversiont &conv)
+{
+  const bool upper = spec == 'E' || spec == 'G';
+  if (v.is_NaN() || v.is_infinity())
+    return upper ? (v.is_NaN() ? "NAN" : "INF") : (v.is_NaN() ? "nan" : "inf");
+
+  const bool general = spec == 'g' || spec == 'G';
+  unsigned precision = conv.precision.value_or(6);
+  if (general && precision == 0)
+    precision = 1;
+  const unsigned significant = general ? precision : precision + 1;
+  auto [digits, lead] = significant_digits(v, significant);
+
+  const bool fixed = general && lead >= -4 && lead < int64_t(precision);
+  std::string integer, fraction;
+  if (!fixed)
+  {
+    integer = digits.substr(0, 1);
+    fraction = digits.substr(1);
+  }
+  else if (lead >= 0)
+  {
+    integer = digits.substr(0, lead + 1);
+    fraction = digits.substr(lead + 1);
+  }
+  else
+  {
+    integer = "0";
+    fraction = std::string(-lead - 1, '0') + digits;
+  }
+
+  if (general && !conv.alt)
+    fraction.erase(fraction.find_last_not_of('0') + 1);
+
+  std::string out = integer;
+  if (!fraction.empty() || conv.alt)
+    out += '.' + fraction;
+  if (fixed)
+    return out;
+
+  const std::string exp_digits =
+    integer2string(BigInt(lead < 0 ? -lead : lead));
+  out += upper ? 'E' : 'e';
+  out += lead < 0 ? '-' : '+';
+  if (exp_digits.size() < 2)
+    out += '0';
+  return out + exp_digits;
 }
 
 // Pick the integer cast target for a given signedness and length modifier.
@@ -472,9 +554,30 @@ void printf_formattert::process_format(std::ostream &out)
       bounded = false;
       return;
     }
-    const std::string s = format_constant(farg);
-    const bool negative = s[0] == '-';
-    const std::string body = negative ? s.substr(1) : s;
+    // Only a floatbv is rendered for %e and %g, and a literal precision may
+    // have wrapped around in parse_precision.
+    const bool exponent_style = style != format_spect::stylet::DECIMAL;
+    if (
+      (exponent_style && !is_constant_floatbv2t(farg)) ||
+      conv.precision.value_or(0) > 4096)
+    {
+      bounded = false;
+      return;
+    }
+    bool negative;
+    std::string body;
+    if (exponent_style)
+    {
+      const ieee_floatt &v = to_constant_floatbv2t(farg).value;
+      negative = v.get_sign();
+      body = format_exponent_float(v, ch, conv);
+    }
+    else
+    {
+      const std::string s = format_constant(farg);
+      negative = s[0] == '-';
+      body = negative ? s.substr(1) : s;
+    }
     emit(pad_field(
       sign_prefix(negative, true, conv),
       body,
