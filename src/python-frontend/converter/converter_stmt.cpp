@@ -1955,7 +1955,11 @@ exprt python_converter::get_rhs_with_dict_resolution(
     return get_expr(ast_node["value"]);
 
   return dict_handler_->handle_dict_subscript(
-    dict_expr, ast_node["value"]["slice"], target_type);
+    dict_expr,
+    ast_node["value"]["slice"],
+    target_type,
+    target_type != list_type && !dict_handler_->is_dict_type(target_type) &&
+      is_call_bound_dict(ast_node["value"]["value"]));
 }
 
 std::string

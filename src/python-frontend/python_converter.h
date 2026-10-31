@@ -919,6 +919,8 @@ private:
 
   std::optional<typet> call_dict_value_type(const nlohmann::json &call);
 
+  bool is_call_bound_dict(const nlohmann::json &name);
+
   symbolt create_return_temp_variable(
     const typet &return_type,
     const locationt &location,
