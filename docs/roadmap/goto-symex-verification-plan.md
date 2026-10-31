@@ -12558,6 +12558,34 @@ Not fixed: `nextafterl` and `frexpl` have no model on 32-bit x86, where
 `long double` is 12 bytes. The floating-point exception flags have no model:
 `fetestexcept` returns a nondet value after any `feraiseexcept`.
 
+### M9 (R146) — 2026-10-31, the `va_list` R137 did not read
+
+R137's entry left open that a `vsprintf` or `vsnprintf` conversion that reads
+the `va_list` leaves the destination unchanged. The return value already came
+from `recover_va_list_args`, but `format_printf_output` and
+`printf_output_length` never saw the recovered arguments. After
+`fmt("x%dy", 42)`, where `fmt` passes its `va_list` to `vsprintf(b, f, ap)`,
+the result was 4 and `b[4]` still held its old character, so
+`assert(b[4] == '\0')` was FAILED; and `fmt("%d", 123456)` into `char b[4]`
+was SUCCESSFUL, although it writes seven bytes.
+
+**Fixed** by `printf_args`, which gives both functions the arguments a call
+formats: its operands after the format, or for `vsprintf` and `vsnprintf` the
+arguments `recover_va_list_args` recovers. When they cannot be recovered the
+list is empty and a conversion that needs one stays unbounded, as before.
+
+`vsprintf_va_list_args` checks the text, NUL and untouched tail of a
+`vsprintf` with an integer argument, a truncating `vsnprintf` with a string
+and an integer, and the length of a `%x` of a nondet value below 10; master
+fails it. `vsprintf_va_list_args_fail` pins the bounds violation of the
+seven-byte write and is SUCCESSFUL on master. Removing the recovery fails
+both; removing it from `printf_output_length` alone fails the passing test.
+Both under the default solver (Bitwuzla), `--z3` and `--k-induction`.
+
+Not fixed: recovery is limited to targets where `va_list` is a pointer
+(AArch64), to a `va_list` that is a local of the variadic function itself,
+and to calls before any `va_arg`, so on x86-64 these calls still leave the
+destination unchanged.
 ### M9 (R150) — 2026-10-31, the case-insensitive compare with a locale
 
 R134's entry left `strcasecmp_l` and `strncasecmp_l` without a model, so each
