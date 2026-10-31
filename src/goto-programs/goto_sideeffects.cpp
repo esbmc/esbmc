@@ -2092,6 +2092,32 @@ static bool is_bool_bitfield(const typet &type)
   return type.is_unsignedbv() && type.cpp_type() == "bool";
 }
 
+// `rhs = (_Bool)((int)op + 1)`, or `- 1` by rhs's id, stored back into op's
+// type.
+static void make_bool_step(exprt &rhs, const exprt &op, const typet &op_type)
+{
+  rhs.copy_to_operands(op, gen_one(int_type()));
+  rhs.op0().make_typecast(int_type());
+  rhs.type() = int_type();
+  rhs.make_typecast(bool_type());
+  if (is_bool_bitfield(op_type))
+    rhs.make_typecast(op_type);
+}
+
+// The C adjuster promotes E1 of `E1 op= E2` in place, so the lvalue may be a
+// typecast of the bit-field.
+static void convert_bool_bitfield_store(const exprt &lhs, exprt &rhs)
+{
+  const exprt *object = &lhs;
+  while (object->is_typecast())
+    object = &object->op0();
+  if (!is_bool_bitfield(object->type()))
+    return;
+  const typet rhs_type = rhs.type();
+  rhs.make_typecast(bool_type());
+  rhs.make_typecast(rhs_type);
+}
+
 void goto_convertt::remove_assignment(
   exprt &expr,
   goto_programt &dest,
@@ -2148,16 +2174,7 @@ void goto_convertt::remove_assignment(
       rhs.make_typecast(expr.op0().type());
     }
 
-    // The C adjuster promotes E1 in place, so the lvalue may be a typecast.
-    const exprt *object = &expr.op0();
-    while (object->is_typecast())
-      object = &object->op0();
-    if (is_bool_bitfield(object->type()))
-    {
-      const typet rhs_type = rhs.type();
-      rhs.make_typecast(bool_type());
-      rhs.make_typecast(rhs_type);
-    }
+    convert_bool_bitfield_store(expr.op0(), rhs);
 
     exprt lhs(expr.op0());
 
@@ -2242,14 +2259,7 @@ void goto_convertt::remove_pre(
   const typet &op_type = ns.follow(expr.op0().type());
 
   if (op_type.is_bool() || is_bool_bitfield(op_type))
-  {
-    rhs.copy_to_operands(expr.op0(), gen_one(int_type()));
-    rhs.op0().make_typecast(int_type());
-    rhs.type() = int_type();
-    rhs.make_typecast(bool_type());
-    if (is_bool_bitfield(op_type))
-      rhs.make_typecast(op_type);
-  }
+    make_bool_step(rhs, expr.op0(), op_type);
   else if (
     op_type.id() == "c_enum" || op_type.id() == "incomplete_c_enum" ||
     is_promoted_to_int(op_type))
@@ -2330,14 +2340,7 @@ void goto_convertt::remove_post(
   const typet &op_type = ns.follow(expr.op0().type());
 
   if (op_type.is_bool() || is_bool_bitfield(op_type))
-  {
-    rhs.copy_to_operands(expr.op0(), gen_one(int_type()));
-    rhs.op0().make_typecast(int_type());
-    rhs.type() = int_type();
-    rhs.make_typecast(bool_type());
-    if (is_bool_bitfield(op_type))
-      rhs.make_typecast(op_type);
-  }
+    make_bool_step(rhs, expr.op0(), op_type);
   else if (
     op_type.id() == "c_enum" || op_type.id() == "incomplete_c_enum" ||
     is_promoted_to_int(op_type))
