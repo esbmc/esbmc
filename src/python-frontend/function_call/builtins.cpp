@@ -1943,6 +1943,22 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
   return abs_expr;
 }
 
+// A negative ndigits literal such as -2 is a UnaryOp(USub, Constant(2)), not
+// a plain Constant, so unwrap the minus to recover the integer.
+static std::optional<int> literal_ndigits(const nlohmann::json &ndigits_arg)
+{
+  const bool negated = ndigits_arg.value("_type", "") == "UnaryOp" &&
+                       ndigits_arg.contains("op") &&
+                       ndigits_arg["op"].value("_type", "") == "USub" &&
+                       ndigits_arg.contains("operand");
+  const nlohmann::json &literal =
+    negated ? ndigits_arg["operand"] : ndigits_arg;
+  if (!literal.contains("value") || !literal["value"].is_number_integer())
+    return std::nullopt;
+  const int n = literal["value"].get<int>();
+  return negated ? -n : n;
+}
+
 exprt function_call_expr::handle_round(nlohmann::json &arg) const
 {
   const auto &args = call_["args"];
@@ -1967,28 +1983,8 @@ exprt function_call_expr::handle_round(nlohmann::json &arg) const
     }
   }
 
-  // A negative ndigits literal such as -2 is a UnaryOp(USub, Constant(2)), not
-  // a plain Constant, so unwrap the minus to recover the integer.
-  std::optional<int> ndigits;
-  if (has_ndigits)
-  {
-    auto ndigits_arg = args[1];
-    bool ndigits_negated = false;
-    if (
-      ndigits_arg.contains("_type") && ndigits_arg["_type"] == "UnaryOp" &&
-      ndigits_arg.contains("op") && ndigits_arg["op"]["_type"] == "USub" &&
-      ndigits_arg.contains("operand"))
-    {
-      ndigits_arg = ndigits_arg["operand"];
-      ndigits_negated = true;
-    }
-    if (
-      ndigits_arg.contains("value") && ndigits_arg["value"].is_number_integer())
-    {
-      const int n = ndigits_arg["value"].get<int>();
-      ndigits = ndigits_negated ? -n : n;
-    }
-  }
+  const std::optional<int> ndigits =
+    has_ndigits ? literal_ndigits(args[1]) : std::nullopt;
 
   // Compile-time evaluation for numeric literals
   if (arg.contains("value") && arg["value"].is_number())
