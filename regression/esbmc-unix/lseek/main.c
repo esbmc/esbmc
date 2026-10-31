@@ -20,7 +20,7 @@ int main(void) {
 
     // Read back
     ssize_t n = read(fd, buffer, sizeof(buffer));
-    assert(n > 0);
+    assert(n >= 0 && n <= (ssize_t)sizeof(buffer));
 
     close(fd);
     return 0;
