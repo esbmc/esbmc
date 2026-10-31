@@ -619,10 +619,12 @@ public:
 
   size_type erase(const key_type &x)
   {
+    // x may refer to an element that the compaction overwrites.
+    const key_type k = x;
     size_type n = 0;
     for (size_t i = 0; i < _size; i++)
     {
-      if (buf[i] == x)
+      if (buf[i] == k)
         n++;
       else
         buf[i - n] = buf[i];
