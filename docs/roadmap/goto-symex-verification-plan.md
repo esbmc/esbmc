@@ -12412,6 +12412,37 @@ the fix is reverted, and dropping `vsnprintf` from the bounded kinds fails
 Not fixed: a conversion that reads the `va_list` still leaves the destination
 unchanged, as does any output `sprintf` would not store.
 
+### M9 (R145) — 2026-10-30, the destructors `exit()` skipped
+
+R142's entry left open that `exit()` runs the atexit handlers but not the
+destructors of objects with static storage duration ([basic.start.term]/1,
+[support.start.term]). With `G a(1), b(2);`, `~G` asserting `order != 21`
+and `main` calling `exit(0)`, the program aborts natively and was SUCCESSFUL.
+
+**Fixed** by moving R142's destructor calls into a generated function,
+`__ESBMC_static_destructors`, which the `exit` model calls after the atexit
+handlers and `__ESBMC_main` calls after `main` returns. The frontend fills in
+the body of the declaration the C library brings in, and creates the function
+under `--no-library`. `__ESBMC_main` calls it only when it has a body, so
+programs without such destructors keep R142's exploration. Objects with
+automatic storage duration are still not destroyed by `exit()`.
+
+`exit_static_destructors_fail` is the program above, SUCCESSFUL on master.
+`exit_static_destructors` calls `exit` from a nested function under
+`--memory-leak-check` and checks the order across two globals, a
+function-local static and an atexit handler registered after it, that a
+static whose function never ran is not destroyed, that a local of the
+exiting function is not destroyed, and that the owning global frees its
+memory; master reports the leak.
+`static_storage_exit_destructors_no_library_fail` runs R142's fail test under
+`--no-library`. Removing the call from the `exit` model flips both
+`exit_static_destructors` tests, and not creating the function makes the
+`--no-library` test an error, under the default solver (Bitwuzla), `--z3` and
+`--k-induction`. R142's tests keep their verdicts.
+
+Not fixed: the R142 residuals other than this one. Under `exit()` the leak
+check still runs only when an atexit handler was registered.
+
 ---
 
 ## Appendix A — Methodological basis
