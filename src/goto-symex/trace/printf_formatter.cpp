@@ -214,6 +214,30 @@ std::optional<size_t> string_length_bound(const expr2tc &object)
   return (nbytes - 1).to_uint64();
 }
 
+// C11 7.21.6.1p8: %ls converts each wide character as if by wcrtomb. Below
+// 0x80 that is the same single byte in the C and UTF-8 locales. Nullopt
+// unless `arg` points to the start of a wide literal of such characters.
+std::optional<std::string> wide_literal_as_ascii(const expr2tc &arg)
+{
+  const expr2tc base = get_base_object(arg);
+  if (
+    !is_literal_string_start(arg) || !is_constant_string2t(base) ||
+    to_constant_string2t(base).kind != constant_string2t::kindt::WIDE)
+    return std::nullopt;
+  const constant_string2t &wide = to_constant_string2t(base);
+  std::string str;
+  for (size_t i = 0; i < wide.array_size(); i++)
+  {
+    const BigInt c = to_constant_int2t(wide.at(i)).value;
+    if (c.is_zero())
+      break;
+    if (c.is_negative() || c >= 0x80)
+      return std::nullopt;
+    str += static_cast<char>(c.to_uint64());
+  }
+  return str;
+}
+
 // Pick the integer cast target for a given signedness and length modifier.
 type2tc pick_int_type(bool is_signed, length_modt mod)
 {
@@ -460,13 +484,21 @@ void printf_formattert::process_format(std::ostream &out)
       bounded = false;
       break;
     }
-    const expr2tc symbol2 = get_base_object(*(next_operand++));
+    const expr2tc &arg = *(next_operand++);
+    const expr2tc symbol2 = get_base_object(arg);
+    std::optional<std::string> text;
+    if (length_mod == length_modt::L)
+      text = wide_literal_as_ascii(arg);
     exprt char_array = migrate_expr_back(symbol2);
-    if (char_array.id() == "string-constant")
+    if (!text && char_array.id() == "string-constant")
+      text = char_array.value().as_string();
+    if (text)
     {
-      const std::string str = char_array.value().as_string();
       emit(pad_field(
-        "", str.substr(0, conv.precision.value_or(str.size())), conv, false));
+        "",
+        text->substr(0, conv.precision.value_or(text->size())),
+        conv,
+        false));
       break;
     }
     std::optional<size_t> max_len =
@@ -578,4 +610,19 @@ void printf_formattert::process_char(std::ostream &out)
     min_outlen++;
     max_outlen++;
   }
+}
+
+bool is_literal_string_start(const expr2tc &e)
+{
+  if (is_typecast2t(e))
+    return is_literal_string_start(to_typecast2t(e).from);
+  if (!is_address_of2t(e))
+    return false;
+  const expr2tc &obj = to_address_of2t(e).ptr_obj;
+  if (is_constant_string2t(obj))
+    return true;
+  return is_index2t(obj) &&
+         is_constant_string2t(to_index2t(obj).source_value) &&
+         is_constant_int2t(to_index2t(obj).index) &&
+         to_constant_int2t(to_index2t(obj).index).value.is_zero();
 }

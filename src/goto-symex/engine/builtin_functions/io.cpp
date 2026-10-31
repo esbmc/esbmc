@@ -195,21 +195,6 @@ bool goto_symext::recover_va_list_args(
   return true;
 }
 
-static bool is_literal_string_start(const expr2tc &e)
-{
-  if (is_typecast2t(e))
-    return is_literal_string_start(to_typecast2t(e).from);
-  if (!is_address_of2t(e))
-    return false;
-  const expr2tc &obj = to_address_of2t(e).ptr_obj;
-  if (is_constant_string2t(obj))
-    return true;
-  return is_index2t(obj) &&
-         is_constant_string2t(to_index2t(obj).source_value) &&
-         is_constant_int2t(to_index2t(obj).index) &&
-         to_constant_int2t(to_index2t(obj).index).value.is_zero();
-}
-
 // One past a printf-family call's last argument operand. A v* call's arguments
 // sit behind its va_list, its last operand; leaving it out makes any
 // conversion that needs an argument unbounded.
