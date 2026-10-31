@@ -372,7 +372,7 @@ public:
   // True where a side-effecting statement (e.g. a hoisted temporary
   // assignment) is safe to plant into current_block without being evaluated
   // an extra time or leaking into a specification -- the same guard
-  // needs_zero_division_guard applies before hoisting a side-effecting
+  // needs_operand_guard applies before hoisting a side-effecting
   // divisor: not a lambda body at its definition (operands still unbound),
   // not the discarded type-probe pass of an assignment RHS (which runs the
   // real conversion again right after), and not inside a contract clause
@@ -823,7 +823,7 @@ private:
     const nlohmann::json &element,
     const nlohmann::json &right,
     const exprt &lhs);
-  exprt build_division_guarded_binop(
+  exprt build_guarded_binop(
     const std::string &op,
     exprt lhs,
     exprt rhs,
@@ -3515,7 +3515,7 @@ private:
   // lower_short_circuit_boolop.
   const nlohmann::json *asserted_test_ = nullptr;
 
-  bool needs_zero_division_guard(const std::string &op, const exprt &rhs) const;
+  bool needs_operand_guard(const std::string &op, const exprt &rhs) const;
   // Set by resolve_any_subscript_array_type when it adopts an array type for
   // an Any-annotated `row = a[i]`-style assignment. The RHS in that case is a
   // raw index/slice expression rather than an already-materialized array

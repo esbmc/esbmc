@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--no-library
+^VERIFICATION FAILED$
+^  assertion order != 21$
