@@ -1274,47 +1274,6 @@ expr2tc z3_convt::tuple_get(const type2tc &type, smt_astt sym)
   return constant_struct2tc(type, std::move(outmem));
 }
 
-expr2tc z3_convt::tuple_get(const expr2tc &expr)
-{
-  const type2tc &t = is_pointer_type(expr->type) ? pointer_struct : expr->type;
-  const std::vector<type2tc> &members = struct_union_members(t);
-  const std::vector<irep_idt> &mnames = struct_union_member_names(t);
-
-  if (is_pointer_type(expr->type))
-  {
-    // Pointer have two fields, a base address and an offset, so we just
-    // need to get the two numbers and call the pointer API
-
-    smt_astt sym = convert_ast(expr);
-
-    smt_astt object = new_ast(
-      mk_tuple_select(to_solver_smt_ast<z3_smt_ast>(sym)->a, 0),
-      convert_sort(members[0]));
-
-    smt_astt offset = new_ast(
-      mk_tuple_select(to_solver_smt_ast<z3_smt_ast>(sym)->a, 1),
-      convert_sort(members[1]));
-
-    unsigned int num = get_bv(object, is_signedbv_type(members[0])).to_uint64();
-    unsigned int offs =
-      get_bv(offset, is_signedbv_type(members[1])).to_uint64();
-    pointer_logict::pointert p(num, BigInt(offs));
-    return pointer_logic.back().pointer_expr(p, expr->type);
-  }
-
-  // Otherwise, run through all fields and dispatch to 'get' again.
-  std::vector<expr2tc> outmem;
-  unsigned int i = 0;
-  for (auto const &it : members)
-  {
-    expr2tc memb = member2tc(it, expr, mnames[i]);
-    outmem.push_back(get(memb));
-    i++;
-  }
-
-  return constant_struct2tc(expr->type, std::move(outmem));
-}
-
 // ***************************** 'get' api *******************************
 
 tvt z3_convt::get_bool(smt_astt a)

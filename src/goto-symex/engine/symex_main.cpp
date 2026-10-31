@@ -1011,6 +1011,10 @@ void goto_symext::run_intrinsic(
     expr2tc deref = dereference2tc(get_empty_type(), arg0);
     dereference(deref, dereferencet::INTERNAL);
 
+    const auto next_source = cur_state->source;
+    // Intrinsic dispatch advances the PC before entering run_intrinsic.
+    --cur_state->source.pc;
+
     for (const auto &item : internal_deref_items)
     {
       assert(
@@ -1044,6 +1048,8 @@ void goto_symext::run_intrinsic(
 
       symex_assign(code_assign2tc(item.object, val), false, cur_state->guard);
     }
+
+    cur_state->source = next_source;
 
     return;
   }

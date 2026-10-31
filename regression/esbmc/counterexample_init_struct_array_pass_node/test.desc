@@ -1,0 +1,4 @@
+CORE
+main.c
+--tuple-node-flattener
+^VERIFICATION SUCCESSFUL$
