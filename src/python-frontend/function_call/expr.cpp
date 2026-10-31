@@ -994,6 +994,17 @@ exact_class_of(const nlohmann::json &arg, const nlohmann::json &ast)
   return "";
 }
 
+/// Rewrite the None literal of `str(None)` to "None", which is repr(None):
+/// NoneType inherits object.__str__. With an encoding, CPython raises
+/// TypeError instead, so only a lone argument is rewritten.
+static void fold_str_of_none(const nlohmann::json &call, nlohmann::json &arg)
+{
+  if (
+    call["args"].size() == 1 && arg["_type"] == "Constant" &&
+    arg["value"].is_null())
+    arg["value"] = "None";
+}
+
 /// Whether @p name is a builtin class that the module never rebinds.
 static bool is_builtin_class(const std::string &name, const nlohmann::json &ast)
 {
@@ -1602,6 +1613,8 @@ exprt function_call_expr::build_constant_from_arg() const
 
   else if (func_name == "str")
   {
+    fold_str_of_none(call_, arg);
+
     // Try __str__ dispatch for custom objects with __str__ defined.
     exprt value_expr = converter_.get_expr(arg);
     // convert_to_string folds a call statement it cannot type to a constant,
