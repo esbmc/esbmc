@@ -6,3 +6,8 @@ import numpy as np
 i = np.searchsorted(np.full((3,), 5.7, dtype=int), 5.7)
 
 assert i == 3
+
+n = np.array([1, 2, 3], dtype=np.int8)
+n[2] += 127
+assert np.searchsorted(np.array([1, 2, 3], dtype=np.int8), 2) == 1
+assert n[2] == -126
