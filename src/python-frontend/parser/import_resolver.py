@@ -387,8 +387,8 @@ def _unmodelled_import_bindings(stmts: list[ast.stmt]) -> dict[str, object]:
 
 
 def _mark_unmodelled_classes(tree: ast.Module) -> None:
-    """Mark each class base, and each parameter annotation of a top-level
-    function or method, that CPython resolves to a class of a module with no
+    """Mark each class base, and each annotation of a top-level function,
+    method or variable, that CPython resolves to a class of a module with no
     model. The converter has no such class to derive from and skips it
     (#9161), which is sound only once CPython would create the class: it
     evaluates the bases when the definition runs."""
@@ -406,9 +406,17 @@ def _mark_unmodelled_classes(tree: ast.Module) -> None:
         return None
 
     def mark_annotations(stmts: list[ast.stmt], objects: dict[str, object]) -> None:
-        for annotation, expr in _param_annotations(stmts):
+        for annotation, expr in _annotations(stmts):
             if isinstance(resolve(expr, objects), type):
                 annotation.unmodelled_class = True
+
+    def mark_calls(objects: dict[str, object]) -> None:
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and isinstance(resolve(node.func, objects), type):
+                node.unmodelled_class = True
+
+    # Refusing a call is sound whatever the name is bound to when it runs.
+    mark_calls(_unmodelled_import_bindings(tree.body))
 
     # A top-level definition only, after the imports: CPython raises NameError
     # for a name read before its import has run, and a star import may rebind
@@ -432,24 +440,31 @@ def _mark_unmodelled_classes(tree: ast.Module) -> None:
                 base.unmodelled_class = True
 
 
-def _param_annotations(stmts: list[ast.stmt]) -> list[tuple[ast.expr, ast.expr]]:
-    """Each parameter annotation of a function in `stmts` spelled as a name,
-    with the expression it spells. A string annotation is never evaluated."""
-    found = []
-    for func in stmts:
-        if not isinstance(func, (ast.FunctionDef, ast.AsyncFunctionDef)):
+def _annotations(stmts: list[ast.stmt]) -> list[tuple[ast.expr, ast.expr]]:
+    """Each parameter, return and variable annotation of `stmts` spelled as a
+    name, with the expression it spells. A string annotation is never
+    evaluated."""
+    annotations = []
+    for stmt in stmts:
+        if isinstance(stmt, ast.AnnAssign):
+            annotations.append(stmt.annotation)
+        if not isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
-        args = func.args
+        args = stmt.args
         params = args.posonlyargs + args.args + args.kwonlyargs + [args.vararg, args.kwarg]
-        for annotation in (param.annotation for param in params if param is not None):
-            expr = annotation
-            if isinstance(annotation, ast.Constant) and isinstance(annotation.value, str):
-                try:
-                    expr = ast.parse(annotation.value.strip(), mode="eval").body
-                except SyntaxError:
-                    continue
-            if isinstance(expr, (ast.Name, ast.Attribute)):
-                found.append((annotation, expr))
+        annotations += [param.annotation for param in params if param is not None]
+        annotations.append(stmt.returns)
+        annotations += [n.annotation for n in ast.walk(stmt) if isinstance(n, ast.AnnAssign)]
+    found = []
+    for annotation in filter(None, annotations):
+        expr = annotation
+        if isinstance(annotation, ast.Constant) and isinstance(annotation.value, str):
+            try:
+                expr = ast.parse(annotation.value.strip(), mode="eval").body
+            except SyntaxError:
+                continue
+        if isinstance(expr, (ast.Name, ast.Attribute)):
+            found.append((annotation, expr))
     return found
 
 
@@ -483,7 +498,10 @@ def _is_submodule_import(package_name: str, name: str) -> bool:
     # CPython reads the package attribute first; only a missing one, or the
     # submodule itself, falls through to importing `package_name.name`.
     attr = getattr(package, name, None)
-    if attr is not None and getattr(attr, "__name__", None) != qualname:
+    # type(), not getattr or isinstance: a proxy object may raise on any
+    # attribute read (#9311).
+    is_submodule = issubclass(type(attr), ModuleType) and attr.__name__ == qualname
+    if attr is not None and not is_submodule:
         return False
     try:
         spec = importlib.util.find_spec(qualname)

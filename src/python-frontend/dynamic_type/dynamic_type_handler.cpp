@@ -13,18 +13,26 @@
 #include <util/irep/std_code.h>
 #include <util/irep/std_expr.h>
 #include <util/lang/c_types.h>
+#include <util/lang/python_types.h>
+#include <algorithm>
+#include <cctype>
 
 using namespace python_expr;
 
 namespace
 {
+using dynamic_type_detail::assigned_value_at;
 using dynamic_type_detail::collect_branch_literal_kinds;
+using dynamic_type_detail::count_bindings;
+using dynamic_type_detail::single_assigned_value;
 
 using param_kinds_t = std::unordered_map<std::string, std::string>;
 
 // Kinds of the parameters annotated (or inferred from call sites) as int,
-// bool or str, so `return x` counts like a literal of that kind (#8523).
-param_kinds_t collect_param_kinds(const nlohmann::json &function_node)
+// bool, float or str, so `return x` counts like a literal of that kind
+// (#8523). With @p optional, also those annotated `Optional` of one (#9285).
+param_kinds_t
+collect_param_kinds(const nlohmann::json &function_node, bool optional = false)
 {
   param_kinds_t kinds;
   if (!function_node.contains("args") || !function_node["args"].is_object())
@@ -32,11 +40,13 @@ param_kinds_t collect_param_kinds(const nlohmann::json &function_node)
   for (const auto &arg : function_node["args"].value("args", nlohmann::json()))
   {
     const auto &ann = arg.value("annotation", nlohmann::json());
-    const std::string type = ann.is_object() ? ann.value("id", "") : "";
+    std::string type = optional ? type_utils::optional_inner_name(ann) : "";
+    if (type.empty() && ann.is_object())
+      type = ann.value("id", "");
     if (type == "int" || type == "bool")
       kinds[arg["arg"].get<std::string>()] = "num";
-    else if (type == "str")
-      kinds[arg["arg"].get<std::string>()] = "str";
+    else if (type == "str" || type == "float")
+      kinds[arg["arg"].get<std::string>()] = type;
   }
   return kinds;
 }
@@ -52,7 +62,10 @@ nlohmann::json body_with_param_kinds(const nlohmann::json &function_node)
        {"targets", {{{"_type", "Name"}, {"id", name}}}},
        {"value",
         {{"_type", "Constant"},
-         {"value", kind == "str" ? nlohmann::json("") : nlohmann::json(0)}}}});
+         {"value",
+          kind == "str"     ? nlohmann::json("")
+          : kind == "float" ? nlohmann::json(0.0)
+                            : nlohmann::json(0)}}}});
   for (const auto &stmt : function_node["body"])
     body.push_back(stmt);
   return body;
@@ -260,11 +273,11 @@ param_kinds_t return_param_kinds(
   const nlohmann::json &function_node,
   const nlohmann::json &module_body)
 {
-  param_kinds_t kinds = collect_param_kinds(function_node);
+  param_kinds_t kinds = collect_param_kinds(function_node, true);
   if (!returns_free_name(function_node["body"], function_node))
     return kinds;
   if (const nlohmann::json *outer = enclosing_def(module_body, function_node))
-    kinds.merge(collect_param_kinds(*outer));
+    kinds.merge(collect_param_kinds(*outer, true));
   return kinds;
 }
 
@@ -288,71 +301,6 @@ struct argument_kinds
   size_t tagged = 0;
   size_t other = 0;
 };
-
-bool field_is(
-  const nlohmann::json &node,
-  const char *field,
-  const std::string &name)
-{
-  return node.contains(field) && node[field].is_string() &&
-         node[field].get<std::string>() == name;
-}
-
-std::string context_of(const nlohmann::json &node)
-{
-  if (!node.contains("ctx") || !node["ctx"].is_object())
-    return "";
-  return node["ctx"].value("_type", "");
-}
-
-bool lists_name(const nlohmann::json &node, const std::string &name)
-{
-  if (!node.contains("names") || !node["names"].is_array())
-    return false;
-  for (const auto &listed : node["names"])
-    if (listed.is_string() && listed.get<std::string>() == name)
-      return true;
-  return false;
-}
-
-// `node` binds `name` by assignment, parameter, def, class, import, pattern,
-// `global`, `nonlocal`, `except`, `del` or any other target.
-bool binds_name_at(const nlohmann::json &node, const std::string &name)
-{
-  const std::string type = node.value("_type", "");
-  if (type == "Name")
-    return field_is(node, "id", name) && context_of(node) != "Load";
-  if (type == "arg")
-    return field_is(node, "arg", name);
-  return field_is(node, "name", name) || field_is(node, "asname", name) ||
-         field_is(node, "rest", name) || lists_name(node, name);
-}
-
-size_t count_bindings(const nlohmann::json &node, const std::string &name)
-{
-  if (!node.is_structured())
-    return 0;
-  size_t count = node.is_object() && binds_name_at(node, name);
-  for (const auto &child : node)
-    count += count_bindings(child, name);
-  return count;
-}
-
-// The value a module-level `name = value` binds, when that is the only
-// binding of `name` anywhere in the module.
-const nlohmann::json *single_assigned_value(
-  const nlohmann::json &module_body,
-  const std::string &name)
-{
-  if (count_bindings(module_body, name) != 1)
-    return nullptr;
-  for (const auto &stmt : module_body)
-    if (
-      stmt.value("_type", "") == "Assign" && stmt["targets"].size() == 1 &&
-      stmt["targets"][0].value("id", "") == name)
-      return &stmt["value"];
-  return nullptr;
-}
 
 // Counts the leaves of `arg` that name a def returning a dynamic value and
 // those that are anything else.
@@ -582,6 +530,39 @@ std::string scalar_kind(const typet &type)
     return "float";
   return type_utils::is_string_type(type) ? "str" : "";
 }
+
+// The text of `node` when it is a str literal that CPython interns, i.e. one
+// spelled as an identifier: every occurrence of it is one object. Decided on
+// the source, since the converter folds computed strings into the same
+// constant a literal gives.
+std::optional<std::string> interned_str_text(const nlohmann::json &node)
+{
+  if (
+    node.value("_type", "") != "Constant" || !node["value"].is_string() ||
+    node.contains("encoded_bytes"))
+    return std::nullopt;
+  const std::string text = node["value"];
+
+  auto is_word = [](unsigned char c) { return std::isalnum(c) || c == '_'; };
+  if (
+    text.empty() || std::isdigit(static_cast<unsigned char>(text[0])) ||
+    !std::all_of(text.begin(), text.end(), is_word))
+    return std::nullopt;
+  return text;
+}
+
+// `name` has one binding in the whole module, a top-level assignment, so it
+// names one object for the whole run.
+bool bound_once_at_top_level(
+  const nlohmann::json &module_body,
+  const std::string &name)
+{
+  return count_bindings(module_body, name) == 1 &&
+         std::any_of(
+           module_body.begin(), module_body.end(), [&](const auto &stmt) {
+             return assigned_value_at(stmt, name) != nullptr;
+           });
+}
 } // namespace
 
 dynamic_type_handler::dynamic_type_handler(
@@ -616,7 +597,7 @@ std::unordered_set<std::string> dynamic_type_handler::detect_dynamic_type_names(
     }
   }
 
-  const nlohmann::json callables = converter_.callable_function_stubs();
+  const nlohmann::json callables = converter_.kind_module_body();
   auto collect = [&](const nlohmann::json &block) {
     return collect_branch_literal_kinds(
       block, kinds, leaf_count, leaf_total, *scope_body, callables);
@@ -644,8 +625,10 @@ bool dynamic_type_handler::joins_divergent_kinds(
 {
   const symbolt *existing =
     converter_.symbol_table().find_symbol(bound_symbol_id(name).to_string());
+  const bool declared_any = existing && existing->get_type() == any_type();
   if (
-    existing && !type_handler_.is_numeric_scalar_type(existing->get_type()) &&
+    existing && !declared_any &&
+    !type_handler_.is_numeric_scalar_type(existing->get_type()) &&
     !type_handler_.is_string_type(existing->get_type()))
     return false;
   // `C.v` is tagged only at module level, where its store is a global one.
@@ -657,7 +640,9 @@ bool dynamic_type_handler::joins_divergent_kinds(
   // The value bound before the `if` is the one a path that skips every
   // assignment keeps. An already tagged name keeps its slot, and a retyped
   // one holds its value in a symbol other than `existing`.
-  if (existing && !is_tagged(name) && !converter_.is_retyped(existing->id))
+  if (
+    existing && !declared_any && !is_tagged(name) &&
+    !converter_.is_retyped(existing->id))
     kinds.insert(scalar_kind(existing->get_type()));
   else if (keeps_value)
     return false;
@@ -718,6 +703,9 @@ void dynamic_type_handler::declare_dynamic_type_names(
 
       // Initialize from the pre-existing value, in case something reads the
       // alias before a branch's assign() runs.
+      // A name declared Any holds no scalar to copy, and both arms assign it.
+      if (existing_symbol->get_type() == any_type())
+        continue;
       exprt existing_value = build_symbol(*existing_symbol);
       for (const codet &instr : build_tag_field_assigns(
              *alias_symbol_ptr, existing_value, alias_location))
@@ -793,13 +781,82 @@ bool dynamic_type_handler::tagged_binop_result_may_be_tagged(
   return op == "Add";
 }
 
-std::vector<codet> dynamic_type_handler::build_tag_field_assigns(
-  symbolt &tag_symbol,
+exprt dynamic_type_handler::interned_str_payload(
+  const std::string &text,
   const exprt &rhs,
-  const locationt &location)
+  exprt &elem_size)
 {
-  std::vector<codet> instructions;
+  elem_size = from_integer(text.size() + 1, size_type());
+  const std::string id = "py:@interned_str@" + text;
+  if (!converter_.symbol_table().find_symbol(id))
+  {
+    symbolt sym;
+    sym.id = id;
+    sym.name = "interned_str$" + text;
+    sym.set_type(migrate_type(rhs.type()));
+    sym.set_value(migrate_expr(rhs));
+    sym.static_lifetime = true;
+    sym.is_extern = false;
+    converter_.symbol_table().add(sym);
+  }
+  const symbolt *sym = converter_.symbol_table().find_symbol(id);
+  return build_typecast(
+    converter_.get_string_handler().get_array_base_address(build_symbol(*sym)),
+    pointer_typet(empty_typet()));
+}
 
+exprt dynamic_type_handler::module_name_payload(
+  const exprt &rhs,
+  const locationt &location,
+  std::vector<codet> &instructions,
+  exprt &elem_size)
+{
+  if (
+    !rhs.is_symbol() ||
+    (!type_utils::is_integer_type(rhs.type()) && !rhs.type().is_floatbv()))
+    return nil_exprt();
+  const symbolt *source =
+    converter_.symbol_table().find_symbol(to_symbol_expr(rhs).get_identifier());
+  if (!source)
+    return nil_exprt();
+  const std::string name = source->name.as_string();
+  symbol_id sid = converter_.create_symbol_id();
+  sid.set_object(name);
+  if (
+    sid.global_to_string() != source->id.as_string() ||
+    !bound_once_at_top_level(converter_.ast()["body"], name))
+    return nil_exprt();
+
+  const std::string object_id = source->id.as_string() + "$object";
+  if (!converter_.symbol_table().find_symbol(object_id))
+  {
+    symbolt object;
+    object.id = object_id;
+    object.name = name + "$object";
+    object.set_type(migrate_type(rhs.type()));
+    object.lvalue = true;
+    object.static_lifetime = true;
+    object.is_extern = false;
+    converter_.symbol_table().add(object);
+  }
+  const symbolt *object = converter_.symbol_table().find_symbol(object_id);
+
+  // The name is never rebound, so every store writes the same value.
+  code_assignt store(build_symbol(*object), rhs);
+  store.location() = location;
+  instructions.push_back(store);
+
+  elem_size = type_handler_.tagged_scalar_byte_size(rhs);
+  return build_typecast(
+    build_address_of(build_symbol(*object)), pointer_typet(empty_typet()));
+}
+
+exprt dynamic_type_handler::build_scalar_payload(
+  const exprt &rhs,
+  const locationt &location,
+  std::vector<codet> &instructions,
+  exprt &elem_size)
+{
   exprt value_to_store = rhs;
   if (rhs.type() == bool_type())
     value_to_store =
@@ -814,7 +871,6 @@ std::vector<codet> dynamic_type_handler::build_tag_field_assigns(
 
   // A runtime string has no statically known length -- measure it with
   // the bounded-length helper, +1 for the trailing NUL.
-  exprt elem_size;
   if (
     value_to_store.type().is_pointer() &&
     value_to_store.type().subtype() == char_type())
@@ -835,20 +891,38 @@ std::vector<codet> dynamic_type_handler::build_tag_field_assigns(
   // A pointer `backing` already refers to non-expiring storage, so use it
   // as `.value` directly. Anything else lives in `backing`'s own stack
   // storage, which goes DEAD at branch exit, so it needs an explicit copy.
-  exprt tag_value;
   if (value_to_store.type().is_pointer())
-    tag_value =
-      build_typecast(build_symbol(backing), pointer_typet(empty_typet()));
+    return build_typecast(build_symbol(backing), pointer_typet(empty_typet()));
+
+  const symbolt *copy_func =
+    converter_.symbol_table().find_symbol("c:@F@__python_scalar_tag_copy");
+  assert(copy_func && "__python_scalar_tag_copy not found in symbol table");
+  exprt backing_addr = build_typecast(
+    build_address_of(build_symbol(backing)), pointer_typet(empty_typet()));
+  return build_call_expr(
+    *copy_func, pointer_typet(empty_typet()), {backing_addr, elem_size});
+}
+
+std::vector<codet> dynamic_type_handler::build_tag_field_assigns(
+  symbolt &tag_symbol,
+  const exprt &rhs,
+  const locationt &location,
+  const std::optional<std::string> &interned_text)
+{
+  std::vector<codet> instructions;
+
+  // Tags built from one object share it as their payload, so `is` between
+  // them holds (#9348).
+  exprt elem_size;
+  exprt tag_value;
+  if (
+    interned_text && rhs.type().is_array() &&
+    rhs.type().subtype() == char_type())
+    tag_value = interned_str_payload(*interned_text, rhs, elem_size);
   else
-  {
-    const symbolt *copy_func =
-      converter_.symbol_table().find_symbol("c:@F@__python_scalar_tag_copy");
-    assert(copy_func && "__python_scalar_tag_copy not found in symbol table");
-    exprt backing_addr = build_typecast(
-      build_address_of(build_symbol(backing)), pointer_typet(empty_typet()));
-    tag_value = build_call_expr(
-      *copy_func, pointer_typet(empty_typet()), {backing_addr, elem_size});
-  }
+    tag_value = module_name_payload(rhs, location, instructions, elem_size);
+  if (tag_value.is_nil())
+    tag_value = build_scalar_payload(rhs, location, instructions, elem_size);
 
   // Normalise to the canonical str type before hashing, so type_id
   // doesn't vary with length or array-vs-pointer shape. A bool keeps its
@@ -899,11 +973,13 @@ void dynamic_type_handler::assign(
   const exprt &rhs,
   const locationt &location,
   const std::string &name,
-  codet &target_block)
+  codet &target_block,
+  const nlohmann::json &value_node)
 {
   symbolt *tag_symbol = find_tag_symbol(name);
 
-  for (const codet &instr : build_tag_field_assigns(*tag_symbol, rhs, location))
+  for (const codet &instr : build_tag_field_assigns(
+         *tag_symbol, rhs, location, interned_str_text(value_node)))
     target_block.copy_to_operands(instr);
 }
 

@@ -22,10 +22,10 @@ public:
 	  circunference = 2*3.14*r;
 	}
 	
-	bool operator<(Ball b){
+	bool operator<(const Ball &b) const {
 		return (circunference < b.circunference);
 	}
-	bool operator==(Ball b){
+	bool operator==(const Ball &b) const {
 		return (circunference == b.circunference);
 	}
 	Ball operator=(Ball b){

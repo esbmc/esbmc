@@ -1,0 +1,9 @@
+regression/python/github_9330
+regression/python/github_9330_fail
+regression/python/github_9330_copy
+regression/python/github_9330_copy_fail
+regression/python/github_9330_func_fail
+regression/python/github_9330_outside_base_unsupported
+regression/python/github_9330_param_shadow_unsupported
+regression/python/github_9330_alias_fail
+regression/python/github_9330_alias_unsupported

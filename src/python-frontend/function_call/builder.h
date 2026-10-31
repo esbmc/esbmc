@@ -51,7 +51,9 @@ public:
    * len() of an operand that lowered to a bitvector: length 1 for a single
    * character, TypeError for a number, which defines no __len__ (#6261).
    */
-  exprt len_of_bitvector_operand(const nlohmann::json &arg) const;
+  exprt len_of_bitvector_operand(
+    const nlohmann::json &arg,
+    const typet &lowered_type) const;
 
   /*
    * Checks if a NumPy function is being invoked.

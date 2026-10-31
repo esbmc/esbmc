@@ -25,6 +25,9 @@ std::string extract_numpy_dtype_name(
 nlohmann::json
 numpy_literal_with_dtype(const nlohmann::json &call, const nlohmann::json &ast);
 
+enum class norm_order;
+struct norm_value;
+
 class numpy_call_expr : public function_call_expr
 {
 public:
@@ -282,8 +285,43 @@ private:
   linalg_matrix(const std::function<void(nlohmann::json &)> &unwrap);
   exprt nondet_bool();
   exprt eigenvalues(const std::vector<std::vector<double>> &m);
+  exprt eigen_decomposition(const std::vector<std::vector<double>> &m);
+  std::vector<exprt> in_any_order(const std::vector<exprt> &values);
+  void eigen_pair_2x2(
+    const std::vector<std::vector<double>> &m,
+    std::vector<exprt> &values,
+    std::vector<std::vector<exprt>> &columns);
+  std::vector<exprt>
+  signed_column(const std::vector<double> &exact, double radius);
+  exprt linalg_tuple(const std::vector<exprt> &parts);
   std::vector<exprt> eigenvalue_pair(const std::vector<std::vector<double>> &m);
   exprt singular_values(const std::vector<std::vector<double>> &m);
+  bool svd_values_only() const;
+  exprt linalg_decomposition(
+    const std::string &function,
+    const std::vector<std::vector<double>> &m);
+  void assume_singular_order(const std::vector<exprt> &sigmas);
+  exprt linalg_inverse(const std::vector<std::vector<double>> &m);
+  exprt bounded_inverse(const std::vector<std::vector<double>> &m);
+  void raise_singular_matrix();
+  exprt bounded_solve(
+    const std::string &function,
+    const std::vector<std::vector<double>> &m,
+    const std::vector<double> &b);
+  void unwrap_linalg_operand(nlohmann::json &arg) const;
+  std::vector<std::vector<exprt>>
+  runtime_entries(const nlohmann::json &arg, std::size_t &rank);
+  exprt within_radius(const exprt &value, const exprt &radius);
+  exprt symbolic_det(const nlohmann::json &arg, bool strings);
+  exprt symbolic_norm(const nlohmann::json &arg, norm_order order);
+  exprt linalg_norm(const std::function<void(nlohmann::json &)> &unwrap);
+  exprt norm_array(const std::vector<std::vector<exprt>> &rows, bool as_matrix);
+  exprt bounded_norm(const norm_value &norm);
+  exprt linalg_solve(
+    const std::string &function,
+    const std::vector<std::vector<double>> &m,
+    const std::vector<double> &b);
+  exprt svd_factors(const std::vector<std::vector<double>> &m);
   exprt lapack_vector(const std::vector<double> &exact, double radius);
   exprt
   lapack_matrix(const std::vector<std::vector<double>> &exact, double radius);

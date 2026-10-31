@@ -1,13 +1,16 @@
+// github #9368: posix_memalign accepts any size and rejects an alignment
+// that is not a multiple of sizeof(void *).
+#include <assert.h>
+#include <errno.h>
 #include <stdlib.h>
 
-/* #9368: posix_memalign(16, 24) is valid, so the write one past the 24-byte
- * object must be reported. */
 int main(void)
 {
-  char *p;
-  if (posix_memalign((void **)&p, 16, 24) != 0)
-    return 0;
-  p[24] = 1;
+  void *p = 0, *q = 0;
+  int r = posix_memalign(&p, 16, 24);
+  assert(r == 0 || r == ENOMEM);
+  int s = posix_memalign(&q, 4, 8);
+  assert(s == EINVAL);
   free(p);
   return 0;
 }

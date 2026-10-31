@@ -1,4 +1,4 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR: TypeError: numpy.linalg.det requires a square 2D matrix$
+^ERROR: ValueError: numpy.linalg.det: the matrix rows have different lengths$

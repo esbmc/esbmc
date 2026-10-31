@@ -12412,6 +12412,118 @@ the fix is reverted, and dropping `vsnprintf` from the bounded kinds fails
 Not fixed: a conversion that reads the `va_list` still leaves the destination
 unchanged, as does any output `sprintf` would not store.
 
+### M9 (R148) — 2026-10-31, the `<csetjmp>` with nothing in `std`
+
+R130's entry left open that `<csetjmp>` does not parse in C++ mode. The header
+parses; the operational model's `<csetjmp>` only included `<setjmp.h>`, so
+`std::jmp_buf` and `std::longjmp` were undeclared and any program that names
+them stopped with a parsing error. Probing the rest of the stale residuals
+first: the `__sync_*` return through a signed temporary,
+`__builtin_rotateleft32`, `__builtin_clrsb`, `i /= 3.5` under Z3, a struct
+read back with `va_arg` and the comma operator's temporaries, all open in
+earlier entries, now agree with the native program on master.
+
+**Fixed** by declaring `jmp_buf` and `longjmp` in `std` ([csetjmp.syn]), as
+libc++ does; `setjmp` stays a macro.
+
+`csetjmp_std` jumps out of a called function with `std::longjmp` into a
+`std::jmp_buf` and checks the value `setjmp` returns and that the callee ran
+once; `csetjmp_std_fail` pins the wrong value. Both are parsing errors on
+master, agree with the native program, and give the same verdict under the
+default solver (Bitwuzla), `--z3` and `--k-induction`, and in C++98, 11, 17
+and 20.
+
+Not fixed: `strcasecmp_l` and `strncasecmp_l` still have no model (R134), and
+`log(M_E) == 1.0` is still FAILED (R133).
+### M9 (R145) — 2026-10-30, the destructors `exit()` skipped
+
+R142's entry left open that `exit()` runs the atexit handlers but not the
+destructors of objects with static storage duration ([basic.start.term]/1,
+[support.start.term]). With `G a(1), b(2);`, `~G` asserting `order != 21`
+and `main` calling `exit(0)`, the program aborts natively and was SUCCESSFUL.
+
+**Fixed** by moving R142's destructor calls into a generated function,
+`__ESBMC_static_destructors`, which the `exit` model calls after the atexit
+handlers and `__ESBMC_main` calls after `main` returns. The frontend fills in
+the body of the declaration the C library brings in, and creates the function
+under `--no-library`. `__ESBMC_main` calls it only when it has a body, so
+programs without such destructors keep R142's exploration. Objects with
+automatic storage duration are still not destroyed by `exit()`.
+
+`exit_static_destructors_fail` is the program above, SUCCESSFUL on master.
+`exit_static_destructors` calls `exit` from a nested function under
+`--memory-leak-check` and checks the order across two globals, a
+function-local static and an atexit handler registered after it, that a
+static whose function never ran is not destroyed, that a local of the
+exiting function is not destroyed, and that the owning global frees its
+memory; master reports the leak.
+`static_storage_exit_destructors_no_library_fail` runs R142's fail test under
+`--no-library`. Removing the call from the `exit` model flips both
+`exit_static_destructors` tests, and not creating the function makes the
+`--no-library` test an error, under the default solver (Bitwuzla), `--z3` and
+`--k-induction`. R142's tests keep their verdicts.
+
+Not fixed: the R142 residuals other than this one. Under `exit()` the leak
+check still runs only when an atexit handler was registered.
+### M9 (R143) — 2026-10-30, the jumps R130 did not lower
+
+R130's entry left `sigsetjmp`, `siglongjmp` and `_longjmp` without a model.
+Their calls returned nondet values or fell through, so with `f` doing
+`g = 1; siglongjmp(b, 2);`, the program
+`if (sigsetjmp(b, 0) == 0) f(); else assert(g == 0);` aborts natively and was
+SUCCESSFUL, and the same held for `_setjmp` and `_longjmp`.
+
+**Fixed** by modelling `sigsetjmp`, `__sigsetjmp` (glibc's `sigsetjmp` is a
+macro for it) and `_longjmp` and `siglongjmp` as calls to `setjmp` and
+`longjmp`, and treating their call sites as R130's. The signal mask is not
+modelled. `program_calls_longjmp` skips the bodies of the `_longjmp` and
+`siglongjmp` models: they are linked whenever `<setjmp.h>` is included, and
+their calls to `longjmp` would otherwise lower every such program.
+
+`siglongjmp_frames` repeats `longjmp_frames` with `sigsetjmp` and
+`siglongjmp` for the jump out of three frames and `_setjmp` and `_longjmp`
+for the recursive one; master fails it. `siglongjmp_frames_fail` runs under
+`--multi-property` and pins one jump through `sigsetjmp` and one through
+`__sigsetjmp`; `underscore_longjmp_fail` pins `_longjmp`. Both are SUCCESSFUL
+on master. Dropping any of the four names from the lowering changes the
+verdict of a fail test, under the default solver (Bitwuzla), `--z3` and
+`--k-induction`. A passing test cannot pin these: a jump that escapes ends the
+path, and the assertions after it are never checked.
+
+Not fixed: the R130 residuals other than these names, and `sigsetjmp`'s
+`savemask`.
+### M9 (R144) — 2026-10-30, the steps R141 left without a model
+
+R141's entry left `nextafterl`, `nexttoward`, `nexttowardf` and `nexttowardl`
+without a model, so each returned a nondet value: `nextafterl(1.0L, 2.0L)`
+was not `1.0L + LDBL_EPSILON`, and `nexttoward(1.0, 2.0L)` was not
+`1.0 + DBL_EPSILON`. Both hold natively.
+
+**Fixed** by modelling `nextafterl` arithmetically, not on the bit pattern.
+ESBMC encodes a 128-bit `long double` as binary128 even where
+`LDBL_MANT_DIG` is the x87 format's 64 (see `frexp.c`), so a step on the
+encoding would use binary128's spacing. The model takes the exponent from
+`frexpl` and adds or subtracts `2^(e - LDBL_MANT_DIG)`, clamped to
+`LDBL_TRUE_MIN` below the normal range and halved below a power of two.
+Every such step lands on a value both encodings represent, so the sum is
+exact. `nexttoward` and `nexttowardf` call `nextafter` towards the infinity
+on `y`'s side (C11 7.12.11.4), and `nexttowardl` is `nextafterl`.
+
+`nextafterl_model` checks steps in both directions, below a power of two,
+from zero, below `LDBL_MIN`, from the least subnormal and from an infinity,
+the overflow to an infinity, NaN, `x == y`, and the three `nexttoward`
+functions; master fails it, and it passes natively. `nextafterl_model_fail`
+runs under `--multi-property` and pins four wrong results as FAILED. Dropping
+the halving, the clamp, the sign of the step from zero, or swapping the
+direction of `nexttoward` fails `nextafterl_model`, under the default solver
+(Bitwuzla), `--z3` and `--k-induction`. These runs used macOS on AArch64,
+where `long double` is binary64; the x87 case is checked only by the Linux
+CI run.
+
+Not fixed: `nextafterl` and `frexpl` have no model on 32-bit x86, where
+`long double` is 12 bytes. The floating-point exception flags have no model:
+`fetestexcept` returns a nondet value after any `feraiseexcept`.
+
 ---
 
 ## Appendix A — Methodological basis

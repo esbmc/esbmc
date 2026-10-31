@@ -317,6 +317,14 @@ nlohmann::json python_converter::callable_function_stubs() const
   return stubs;
 }
 
+nlohmann::json python_converter::kind_module_body() const
+{
+  nlohmann::json body = callable_function_stubs();
+  for (const auto &stmt : (*ast_json)["body"])
+    body.push_back(stmt);
+  return body;
+}
+
 /// The source file of the AST emitted for @p module, or "" when there is none.
 std::string python_converter::module_source_file(
   const std::string &module,
@@ -676,19 +684,6 @@ static std::string receiver_named_parameter(const nlohmann::json &node)
   return "";
 }
 
-/// Whether \p node carries the builtin @staticmethod decorator. A dotted
-/// spelling names some other object, so only a bare Name counts.
-static bool is_staticmethod(const nlohmann::json &node)
-{
-  if (!node.contains("decorator_list"))
-    return false;
-
-  for (const auto &decorator : node["decorator_list"])
-    if (decorator["_type"] == "Name" && decorator["id"] == "staticmethod")
-      return true;
-  return false;
-}
-
 void python_converter::find_entry_function(
   const std::string &target,
   nlohmann::json &node,
@@ -731,7 +726,7 @@ void python_converter::find_entry_function(
   // no constructor built would verify against a nondet pointer rather than an
   // instance, so refuse instead (#6938 P4.5). The decorator decides this, not
   // the receiver's name, which Python does not fix.
-  if (!is_staticmethod(node))
+  if (!json_utils::is_staticmethod_def(node))
     throw std::runtime_error(
       "--function: '" + target +
       "' is not a @staticmethod, and its receiver is a class instance the "
