@@ -2143,8 +2143,10 @@ void goto_convertt::remove_assignment(
 
     // C11 compound assignments on _Atomic are RMW: the read and write must
     // happen in a single indivisible atomic section (no context-switch window
-    // between the load and the store, unlike plain "x = x op y").
-    if (is_atomic_symbol(lhs, ns))
+    // between the load and the store, unlike plain "x = x op y"). E1 narrower
+    // than int arrives promoted, as (int)x.
+    const exprt &lhs_object = lhs.is_typecast() ? lhs.op0() : lhs;
+    if (is_atomic_symbol(lhs_object, ns))
       convert_assign_rmw_atomic(lhs, rhs, expr.location(), dest);
     else
     {
