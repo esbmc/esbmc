@@ -2542,17 +2542,35 @@ python_converter::constructor_keyword_dtype(const nlohmann::json &call) const
   return std::nullopt;
 }
 
+// A literal's type from its nesting alone: its leaves, which may be strings or
+// complex numbers, say nothing about the storage of one element.
+static typet literal_list_type(
+  const nlohmann::json &list,
+  const typet &element,
+  const type_handler &types)
+{
+  if (list.value("_type", "") != "List" || list["elts"].empty())
+    return element;
+  return types.build_array(
+    literal_list_type(list["elts"][0], element, types), list["elts"].size());
+}
+
 typet python_converter::literal_call_array_type(
   const nlohmann::json &call,
   const std::optional<numpy_dtypet> &dtype) const
 {
-  const typet shape =
-    type_handler_.get_typet(numpy_literal_with_dtype(call, *ast_json));
+  const nlohmann::json &list = call["args"][0];
   if (dtype && dtype->kind == numpy_dtypet::kindt::complex)
-    return with_element_type(shape, dtype->element_type());
+    return literal_list_type(list, dtype->element_type(), type_handler_);
   if (numpy_literal_call_is_complex(call))
-    return with_element_type(shape, get_complex_struct_type());
-  return in_real_dtype(shape, dtype);
+    return literal_list_type(list, get_complex_struct_type(), type_handler_);
+  if (
+    const auto width = numpy_literal_string_width(call);
+    width && (!dtype || !dtype->bits))
+    return literal_list_type(
+      list, type_handler_.build_array(char_type(), *width + 1), type_handler_);
+  return in_real_dtype(
+    type_handler_.get_typet(numpy_literal_with_dtype(call, *ast_json)), dtype);
 }
 
 std::optional<typet>

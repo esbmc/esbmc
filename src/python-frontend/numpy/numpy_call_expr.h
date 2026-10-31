@@ -24,6 +24,8 @@ std::string extract_numpy_dtype_name(
 
 /// Whether the literal of `np.array(literal)` holds a complex number.
 bool numpy_literal_call_is_complex(const nlohmann::json &call);
+std::optional<std::size_t>
+numpy_literal_string_width(const nlohmann::json &call);
 
 /// The literal `np.array(literal, dtype=...)` stores, cast to its dtype.
 nlohmann::json
@@ -121,7 +123,8 @@ private:
   // The element type of the array built from the literal @p list: a fixed-width
   // string, or empty for the literal's own.
   typet constructor_element_type(const nlohmann::json &list) const;
-  void reject_complex_array_operands(const std::string &function) const;
+  void reject_unmodelled_operands(const std::string &function) const;
+  bool is_string_operand(const nlohmann::json &arg) const;
   bool is_complex_operand(const nlohmann::json &arg) const;
   // @p build run with constructor_element_type(@p list) at the leaves of
   // the static arrays it builds.

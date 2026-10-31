@@ -1,5 +1,7 @@
 #include <python-frontend/numpy/numpy_dtype.h>
 
+#include <set>
+
 #include <python-frontend/type/type_handler.h>
 #include <python-frontend/type/type_utils.h>
 #include <util/lang/c_types.h>
@@ -192,4 +194,36 @@ numpy_dtypet numpy_promote(const numpy_operandt &a, const numpy_operandt &b)
   if (b.weak && !a.weak)
     return promote_weak(b.dtype, a.dtype);
   return promote_strong(a.dtype, b.dtype);
+}
+
+bool numpy_consumer_is_modelled(
+  numpy_dtypet::kindt kind,
+  const std::string &name)
+{
+  static const std::set<std::string> over_strings = {
+    "array",
+    "copy",
+    "full",
+    "tolist",
+    "shape",
+    "size",
+    "ndim",
+    "itemsize",
+    "nbytes",
+    "dtype",
+    "choice"};
+  static const std::set<std::string> over_complex = {
+    "array",  "copy",        "full",     "tolist",  "shape",       "size",
+    "ndim",   "itemsize",    "nbytes",   "dtype",   "sum",         "prod",
+    "mean",   "any",         "all",      "add",     "subtract",    "multiply",
+    "divide", "true_divide", "negative", "astype",  "transpose",   "reshape",
+    "ravel",  "swapaxes",    "moveaxis", "squeeze", "expand_dims", "T"};
+  if (kind == numpy_dtypet::kindt::string)
+    return over_strings.count(name) != 0;
+  return kind != numpy_dtypet::kindt::complex || over_complex.count(name) != 0;
+}
+
+std::string numpy_kind_name(numpy_dtypet::kindt kind)
+{
+  return kind == numpy_dtypet::kindt::string ? "string" : "complex";
 }
