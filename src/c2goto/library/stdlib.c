@@ -115,14 +115,9 @@ __ESBMC_HIDE:;
   if (!nmemb || !size)
     return malloc(0);
 
-  // Detect size_t multiplication overflow (e.g. nmemb=2^30, size=4 on
-  // 32-bit wraps total_size to 0).  Real implementations (glibc, musl)
-  // detect this and return NULL; without --pointer-check ESBMC would
-  // then model the caller's NULL dereference as nondet, yielding a
-  // false alarm on the unreach-call property.  We constrain the model
-  // to valid-size paths: when nmemb*size would overflow the caller would
-  // crash (NULL deref / UB) before any reachability property fires.
-  __ESBMC_assume(nmemb <= SIZE_MAX / size);
+  // C23 7.24.3.2: a product that wraps size_t gives a null pointer.
+  if (nmemb > SIZE_MAX / size)
+    return NULL;
 
   size_t total_size = nmemb * size;
   void *res = malloc(total_size);
@@ -513,14 +508,9 @@ __ESBMC_HIDE:;
   return (dlen + (s - src)); /* count does not include NUL */
 }
 
-int posix_memalign(void **memptr, size_t align, size_t size)
+static int __ESBMC_aligned_malloc(void **memptr, size_t align, size_t size)
 {
 __ESBMC_HIDE:;
-  if (
-    !align || (align & (align - 1)) || /* alignment must be a power of 2 */
-    (size & (align - 1)) /* size must be a multiple of alignment */
-  )
-    return EINVAL;
   int save = errno;
   void *r = malloc(size);
   errno = save;
@@ -531,11 +521,24 @@ __ESBMC_HIDE:;
   return 0;
 }
 
+int posix_memalign(void **memptr, size_t align, size_t size)
+{
+__ESBMC_HIDE:;
+  /* POSIX: alignment must be a power of two multiple of sizeof(void *);
+   * there is no condition on size. */
+  if (!align || (align & (align - 1)) || align % sizeof(void *))
+    return EINVAL;
+  return __ESBMC_aligned_malloc(memptr, align, size);
+}
+
 void *aligned_alloc(size_t align, size_t size)
 {
 __ESBMC_HIDE:;
   void *r = NULL;
-  errno = posix_memalign(&r, align, size);
+  if (!align || (align & (align - 1)) || (size & (align - 1)))
+    errno = EINVAL;
+  else
+    errno = __ESBMC_aligned_malloc(&r, align, size);
   return r;
 }
 
