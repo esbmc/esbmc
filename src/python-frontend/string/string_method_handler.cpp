@@ -808,13 +808,14 @@ std::optional<exprt> dispatch_no_arg_string_methods(
 {
   using no_arg_handler_t =
     exprt (string_handler::*)(const exprt &, const locationt &);
-  static constexpr std::array<std::pair<const char *, no_arg_handler_t>, 13>
+  static constexpr std::array<std::pair<const char *, no_arg_handler_t>, 14>
     no_arg_handlers = {{
       {"capitalize", &string_handler::handle_string_capitalize},
       {"title", &string_handler::handle_string_title},
       {"swapcase", &string_handler::handle_string_swapcase},
       {"casefold", &string_handler::handle_string_casefold},
       {"isdigit", &string_handler::handle_string_isdigit},
+      {"isascii", &string_handler::handle_string_isascii},
       {"isalnum", &string_handler::handle_string_isalnum},
       {"isupper", &string_handler::handle_string_isupper},
       {"isnumeric", &string_handler::handle_string_isnumeric},
@@ -1747,6 +1748,33 @@ exprt string_handler::handle_string_isdigit(
   isdigit_call.location() = location;
 
   return isdigit_call;
+}
+
+exprt string_handler::handle_string_isascii(
+  const exprt &string_obj,
+  const locationt &location)
+{
+  if (string_obj.type().is_unsignedbv() || string_obj.type().is_signedbv())
+  {
+    exprt byte = typecast_exprt(string_obj, unsignedbv_typet(8));
+    exprt result("<", bool_type());
+    result.copy_to_operands(byte, from_integer(0x80, unsignedbv_typet(8)));
+    result.location() = location;
+    return result;
+  }
+
+  exprt string_copy = string_obj;
+  exprt str_addr =
+    get_array_base_address(ensure_null_terminated_string(string_copy));
+  symbolt *isascii_symbol =
+    find_cached_c_function_symbol("c:@F@__python_str_isascii");
+  if (!isascii_symbol)
+    throw std::runtime_error(
+      "__python_str_isascii function not found in symbol table");
+
+  exprt call = build_call_expr(*isascii_symbol, bool_type(), {str_addr});
+  call.location() = location;
+  return call;
 }
 
 exprt string_handler::handle_string_isalpha(
