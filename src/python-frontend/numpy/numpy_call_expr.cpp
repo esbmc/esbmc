@@ -3,6 +3,7 @@
 #include <python-frontend/math/bounded_math.h>
 #include <python-frontend/numpy/ndarray_shape.h>
 #include <python-frontend/numpy/numpy_call_expr.h>
+#include <python-frontend/numpy/numpy_dtype.h>
 #include <python-frontend/numpy/numpy_nditer.h>
 #include <python-frontend/numpy/numpy_random.h>
 #include <python-frontend/numpy/numpy_reducer_shared.h>
@@ -5175,12 +5176,14 @@ std::string extract_numpy_dtype_name(
 
 static bool is_numpy_integer_dtype(const std::string &dtype)
 {
-  return dtype.find("int") != std::string::npos;
+  const auto parsed = numpy_dtype_from_name(dtype);
+  return parsed && parsed->is_integer();
 }
 
 static bool is_numpy_float_dtype(const std::string &dtype)
 {
-  return dtype.find("float") != std::string::npos;
+  const auto parsed = numpy_dtype_from_name(dtype);
+  return parsed && parsed->kind == numpy_dtypet::kindt::floating;
 }
 
 static bool is_numpy_complex_dtype(const std::string &dtype)
@@ -5192,8 +5195,10 @@ static bool is_numpy_complex_dtype(const std::string &dtype)
 static bool
 numpy_integer_dtype_holds(long double value, const std::string &dtype)
 {
-  const int bits = std::stoi(dtype.substr(dtype.find("int") + 3));
-  const bool is_unsigned = dtype[0] == 'u';
+  const numpy_dtypet parsed = *numpy_dtype_from_name(dtype);
+  const int bits = parsed.bits;
+  const bool is_unsigned =
+    parsed.kind == numpy_dtypet::kindt::unsigned_integer;
   const long double low = is_unsigned ? 0.0L : -std::ldexp(1.0L, bits - 1);
   const long double high = std::ldexp(1.0L, is_unsigned ? bits : bits - 1);
   return value >= low && value < high;
@@ -5488,31 +5493,13 @@ std::string numpy_call_expr::get_dtype() const
 
 size_t numpy_call_expr::get_dtype_size() const
 {
-  static const std::unordered_map<std::string, size_t> dtype_sizes = {
-    {"int8", sizeof(int8_t)},
-    {"uint8", sizeof(uint8_t)},
-    {"int16", sizeof(int16_t)},
-    {"uint16", sizeof(uint16_t)},
-    {"int32", sizeof(int32_t)},
-    {"uint32", sizeof(uint32_t)},
-    {"int64", sizeof(int64_t)},
-    {"uint64", sizeof(uint64_t)},
-    {"float16", 2},
-    {"float32", sizeof(float)},
-    {"float64", sizeof(double)}};
-
   const std::string dtype = get_dtype();
-  if (dtype == "bool" || is_numpy_complex_dtype(dtype))
+  if (dtype.empty() || dtype == "bool" || is_numpy_complex_dtype(dtype))
     return 0;
-
-  if (!dtype.empty())
-  {
-    auto it = dtype_sizes.find(dtype);
-    if (it != dtype_sizes.end())
-      return it->second * 8;
+  const auto parsed = numpy_dtype_from_name(dtype);
+  if (!parsed || parsed->kind == numpy_dtypet::kindt::string)
     throw std::runtime_error("Unsupported dtype value: " + dtype);
-  }
-  return 0;
+  return parsed->bits;
 }
 
 size_t count_effective_bits(const std::string &binary)
@@ -6938,23 +6925,8 @@ exprt numpy_call_expr::numpy_math_list(
 
 typet numpy_call_expr::get_typet_from_dtype() const
 {
-  std::string dtype = get_dtype();
-  if (dtype == "bool")
-    return bool_type();
-  if (dtype.find("int") != std::string::npos)
-  {
-    if (dtype[0] == 'u')
-      return unsignedbv_typet(get_dtype_size());
-    return signedbv_typet(get_dtype_size());
-  }
-  if (dtype.find("float") != std::string::npos)
-    return build_float_type(get_dtype_size());
-  if (dtype == "complex64")
-    return get_complex_struct_type();
-  if (dtype == "complex128" || dtype == "complex")
-    return get_complex_struct_type();
-
-  return {};
+  const auto parsed = numpy_dtype_from_name(get_dtype());
+  return parsed ? parsed->element_type() : typet();
 }
 
 // The longest string at the leaves of @p list, at least 1, which NumPy
@@ -11080,7 +11052,7 @@ std::optional<exprt> numpy_call_expr::fold_scalar_binary(
   const std::string dtype = get_dtype();
   const std::size_t bits = get_dtype_size();
   const bool is_unsigned = !dtype.empty() && dtype[0] == 'u';
-  if (dtype.find("int") != std::string::npos)
+  if (is_numpy_integer_dtype(dtype))
   {
     const std::optional<BigInt> exact =
       lhs.is_int && rhs.is_int
