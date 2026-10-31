@@ -12558,6 +12558,55 @@ Not fixed: `nextafterl` and `frexpl` have no model on 32-bit x86, where
 `long double` is 12 bytes. The floating-point exception flags have no model:
 `fetestexcept` returns a nondet value after any `feraiseexcept`.
 
+### M9 (R150) — 2026-10-31, the case-insensitive compare with a locale
+
+R134's entry left `strcasecmp_l` and `strncasecmp_l` without a model, so each
+returned a nondet value: `strcasecmp_l("AbC", "abc", c) == 0` was FAILED
+for `c` from `newlocale(LC_ALL_MASK, "C", 0)`, as was any assertion on the
+result.
+
+**Fixed** by modelling both on the POSIX targets as `strncasecmp` with the
+locale ignored. Only the C locale is modelled, as for `tolower`, so the
+results are those of the C or POSIX locale; a locale that folds a letter
+differently (Turkish dotted I) is not modelled.
+
+`strcasecmp_l_model` checks equality across case, the sign for a smaller and
+a longer string, a prefix shorter than the difference, a prefix covering it,
+and `n == 0`; master fails it, and it passes natively. `strcasecmp_l_model_fail`
+runs under `--multi-property` and pins a wrong sign and a wrong equality.
+Making `strncasecmp_l` ignore `n` fails the passing test. Both under the
+default solver (Bitwuzla), `--z3` and `--k-induction`.
+
+Not fixed: the other `_l` functions (`tolower_l`, `strcoll_l`, `strxfrm_l`)
+still have no model, and `log(M_E) == 1.0` is still FAILED (R133).
+### M9 (R149) — 2026-10-31, the warning that stopped R130's armv8 build
+
+Since R130 landed, the Monday `Weekly` run's `static armv8 DebugOpt` job no
+longer compiles (on 10-05 it built and failed four regression tests,
+`char_walk_arrays` and `github_8048_huge_vla` with their `_fail` twins; from
+10-12 a build failure hides its tests). It builds with GCC 14 and `-Werror`,
+and GCC reports writing 8 bytes "into a region of size 0"
+(`-Wstringop-overflow`) in `lower_longjmp.cpp`. `build_dispatch` read
+`slot->type` and `to_symbol2t(slot)` through a non-const `expr2tc`, whose
+`operator->` detaches the node and, without `NDEBUG`, calls `mark_writer`; GCC
+could not rule out a null node on that path. Every use of `slot` only reads,
+so it is now `const`.
+
+The same warning reproduces with Homebrew's GCC 15 at `-O2 -Werror` and goes
+away with the change; making `slot` const alone is enough, and the reads of
+`count` in `new_slot` do not trigger it. With the change, every C++ object
+compiles under GCC 15 DebugOpt with `-Werror` (Homebrew's fmt 12 needs
+`-Wno-error=deprecated-declarations`, which CI's bundled fmt does not). No
+regression test: the change does not alter the GOTO program, and the
+`longjmp` tests give the same verdicts. The Linux GCC 14 build is checked only
+by the next Monday run.
+
+Not fixed: those four armv8 tests, unchecked since 10-05, and the other
+Monday failures, whose jobs also failed on 10-05: `Simplifier equivalence` (`github_8660_object_size_offset`, `overflow_10_fir`,
+`overflow_16_fir_new`), Windows DebugOpt (`k-induction_cpp_stack_empty_bug`
+and three `goto-transcoder` tests), and the macOS build's
+`github_9081_optional_dict_value_fail`.
+
 ---
 
 ## Appendix A — Methodological basis

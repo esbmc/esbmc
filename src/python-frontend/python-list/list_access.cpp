@@ -5465,23 +5465,35 @@ exprt python_list::handle_index_access(
   // Handle static string indexing with IndexError on out-of-bounds
   if (is_char_array)
   {
-    exprt idx = pos_expr;
-    if (idx.type() != size_type())
-      idx = build_typecast(idx, size_type());
+    const typet ll_type = signedbv_typet(64);
+    const locationt loc = converter_.get_location_from_decl(list_value_);
 
     // Logical string length excludes the null terminator
-    exprt array_size = to_array_type(resolved_array_type).size();
-    if (array_size.type() != size_type())
-      array_size = build_typecast(array_size, size_type());
-    // str_len = array_size - 1. array_size is typecast to size_type above, so
-    // both operands share width; build the subtraction in IREP2 (V.3).
-    exprt str_len =
-      build_sub(array_size, from_integer(1, size_type()), size_type());
+    const exprt str_len = build_sub(
+      build_typecast(to_array_type(resolved_array_type).size(), ll_type),
+      from_integer(1, ll_type),
+      ll_type);
 
-    // Emit: if (idx >= str_len) throw IndexError("string index out of range")
-    // (idx is typecast to size_type above; str_len is a size_type subtraction —
-    // both operands share width.)
-    exprt oob_cond = build_greater_equal(idx, str_len);
+    symbolt &idx_sym = converter_.create_tmp_symbol(
+      list_value_, "$str_idx$", ll_type, gen_zero(ll_type));
+    const exprt idx = build_symbol(idx_sym);
+    code_declt idx_decl(idx);
+    idx_decl.location() = loc;
+    converter_.add_instruction(idx_decl);
+    code_assignt idx_init(idx, build_typecast(pos_expr, ll_type));
+    idx_init.location() = loc;
+    converter_.add_instruction(idx_init);
+
+    // A negative index counts from the end: idx += len(s)
+    const exprt is_negative = build_less_than(idx, from_integer(0, ll_type));
+    code_assignt normalize(idx, build_add(idx, str_len, ll_type));
+    normalize.location() = loc;
+    code_ifthenelset norm_guard;
+    norm_guard.cond() = is_negative;
+    norm_guard.then_case() = normalize;
+    norm_guard.location() = loc;
+    norm_guard.location().property("skipped");
+    converter_.add_instruction(norm_guard);
 
     exprt raise = converter_.get_exception_handler().gen_exception_raise(
       "IndexError", "string index out of range");
@@ -5489,7 +5501,7 @@ exprt python_list::handle_index_access(
     throw_code.operands().push_back(raise);
 
     code_ifthenelset guard;
-    guard.cond() = oob_cond;
+    guard.cond() = build_or(is_negative, build_greater_equal(idx, str_len));
     guard.then_case() = throw_code;
     converter_.add_instruction(guard);
 
@@ -5499,7 +5511,7 @@ exprt python_list::handle_index_access(
     // resorting to a fragile width-only heuristic.
     typet char_t = char_type();
     type_utils::set_cpp_type(char_t, "char");
-    return build_index(array, idx, char_t);
+    return build_index(array, build_typecast(idx, size_type()), char_t);
   }
 
   // For char* (string function parameter), implement Python single-index
@@ -5560,6 +5572,7 @@ exprt python_list::handle_index_access(
     norm_guard.cond() = idx_lt_zero;
     norm_guard.then_case() = normalize;
     norm_guard.location() = loc;
+    norm_guard.location().property("skipped");
     norm_guard.location().property("skipped");
     converter_.add_instruction(norm_guard);
 

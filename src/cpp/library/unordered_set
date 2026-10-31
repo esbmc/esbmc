@@ -250,11 +250,7 @@ public:
             return std::make_pair(iterator(data_, idx, size_), false);
         }
         
-        if (size_ >= MAX_SIZE) {
-            // Array full
-            return std::make_pair(end(), false);
-        }
-        
+        __ESBMC_assert(size_ < MAX_SIZE, "unordered_set capacity exceeded");
         // Insert new element
         data_[size_] = key;
         iterator result(data_, size_, size_ + 1);
