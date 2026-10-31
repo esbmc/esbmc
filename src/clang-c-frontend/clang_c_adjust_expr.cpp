@@ -625,19 +625,6 @@ bool clang_c_adjust::lower_complex_binary_arithmetic(exprt &expr)
       op0.type().id() == "complex" ? op0.type() : op1.type();
     const typet &elem_t = to_complex_type(complex_t).base_type();
 
-    // Promote non-complex operand to {val, 0}
-    auto promote = [&](exprt &e) {
-      if (e.type().id() != "complex")
-      {
-        struct_exprt promoted(complex_t);
-        promoted.operands().push_back(e);
-        promoted.operands().push_back(gen_zero(elem_t));
-        e = promoted;
-      }
-    };
-    promote(op0);
-    promote(op1);
-
     // Build a component-level binary expr, mapping to ieee ops for floatbv
     auto make_op = [&](const irep_idt &id, const exprt &lhs, const exprt &rhs) {
       irep_idt actual_id = id;
@@ -657,45 +644,79 @@ bool clang_c_adjust::lower_complex_binary_arithmetic(exprt &expr)
       return e;
     };
 
-    exprt ar = member_exprt(op0, "real", elem_t);
-    exprt ai = member_exprt(op0, "imag", elem_t);
-    exprt br = member_exprt(op1, "real", elem_t);
-    exprt bi = member_exprt(op1, "imag", elem_t);
-
     exprt new_real, new_imag;
     const irep_idt &op = expr.id();
-
-    if (op == "+")
-    {
-      new_real = make_op("+", ar, br);
-      new_imag = make_op("+", ai, bi);
-    }
-    else if (op == "-")
-    {
-      new_real = make_op("-", ar, br);
-      new_imag = make_op("-", ai, bi);
-    }
-    else if (op == "*")
-    {
-      // (ar*br - ai*bi) + (ar*bi + ai*br)i
-      new_real = make_op("-", make_op("*", ar, br), make_op("*", ai, bi));
-      new_imag = make_op("+", make_op("*", ar, bi), make_op("*", ai, br));
-    }
-    else if (op == "/")
-    {
-      // denom = br^2 + bi^2
-      exprt denom = make_op("+", make_op("*", br, br), make_op("*", bi, bi));
-      // real = (ar*br + ai*bi) / denom
-      new_real = make_op(
-        "/", make_op("+", make_op("*", ar, br), make_op("*", ai, bi)), denom);
-      // imag = (ai*br - ar*bi) / denom
-      new_imag = make_op(
-        "/", make_op("-", make_op("*", ai, br), make_op("*", ar, bi)), denom);
-    }
-    else
+    const bool real0 = op0.type().id() != "complex";
+    const bool real1 = op1.type().id() != "complex";
+    const bool supported = op == "+" || op == "-" || op == "*" || op == "/";
+    if (!supported)
     {
       log_error("unsupported complex arithmetic operator: {}", op);
       abort();
+    }
+
+    // C17 G.5.1p2-3 and G.5.2p2: a real operand applies to each part of the
+    // complex one; only x / (u + iv) takes the complex formula.
+    if ((real0 || real1) && !(real0 && op == "/"))
+    {
+      const exprt &x = real0 ? op0 : op1;
+      const exprt &z = real0 ? op1 : op0;
+      const exprt zr = member_exprt(z, "real", elem_t);
+      const exprt zi = member_exprt(z, "imag", elem_t);
+      new_real = real0 ? make_op(op, x, zr) : make_op(op, zr, x);
+      if (op == "*" || op == "/")
+        new_imag = real0 ? make_op(op, x, zi) : make_op(op, zi, x);
+      else if (real0 && op == "-")
+      {
+        new_imag = exprt("unary-", elem_t);
+        new_imag.copy_to_operands(zi);
+      }
+      else
+        new_imag = zi;
+    }
+    else
+    {
+      if (real0)
+      {
+        // x / (u + iv) divides {x, 0} by the complex divisor.
+        struct_exprt promoted(complex_t);
+        promoted.operands().push_back(op0);
+        promoted.operands().push_back(gen_zero(elem_t));
+        op0 = promoted;
+      }
+
+      exprt ar = member_exprt(op0, "real", elem_t);
+      exprt ai = member_exprt(op0, "imag", elem_t);
+      exprt br = member_exprt(op1, "real", elem_t);
+      exprt bi = member_exprt(op1, "imag", elem_t);
+
+      if (op == "+")
+      {
+        new_real = make_op("+", ar, br);
+        new_imag = make_op("+", ai, bi);
+      }
+      else if (op == "-")
+      {
+        new_real = make_op("-", ar, br);
+        new_imag = make_op("-", ai, bi);
+      }
+      else if (op == "*")
+      {
+        // (ar*br - ai*bi) + (ar*bi + ai*br)i
+        new_real = make_op("-", make_op("*", ar, br), make_op("*", ai, bi));
+        new_imag = make_op("+", make_op("*", ar, bi), make_op("*", ai, br));
+      }
+      else
+      {
+        // denom = br^2 + bi^2
+        exprt denom = make_op("+", make_op("*", br, br), make_op("*", bi, bi));
+        // real = (ar*br + ai*bi) / denom
+        new_real = make_op(
+          "/", make_op("+", make_op("*", ar, br), make_op("*", ai, bi)), denom);
+        // imag = (ai*br - ar*bi) / denom
+        new_imag = make_op(
+          "/", make_op("-", make_op("*", ai, br), make_op("*", ar, bi)), denom);
+      }
     }
 
     struct_exprt result(complex_t);
