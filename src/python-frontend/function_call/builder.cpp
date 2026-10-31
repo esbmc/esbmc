@@ -1578,16 +1578,32 @@ symbol_id function_call_builder::build_function_id() const
   return function_id;
 }
 
-// A receiver bound by `from m import obj` has its class defined in m, so its
-// methods live under m's file, not this one (#8375).
+static bool defines_class(const nlohmann::json &node, const std::string &name)
+{
+  if (
+    node.is_object() && node.value("_type", "") == "ClassDef" &&
+    node.value("name", "") == name)
+    return true;
+  return node.is_structured() &&
+         std::any_of(node.begin(), node.end(), [&](const nlohmann::json &c) {
+           return defines_class(c, name);
+         });
+}
+
+// A receiver bound by `from m import obj` (#8375), or returned by a function
+// of m (#9314), has its class defined in m, so its methods live under m's
+// file, not this one. A local receiver may also hold an instance of a class
+// nested in one of this file's functions, which shadows m's.
 void function_call_builder::use_imported_class_file(
   symbol_id &function_id,
   const symbolt &receiver,
   const std::string &class_name) const
 {
+  const nlohmann::json &ast = converter_.ast();
   if (
-    receiver.module == converter_.python_file() ||
-    !json_utils::find_class(converter_.ast()["body"], class_name).empty())
+    !json_utils::find_class(ast["body"], class_name).empty() ||
+    (receiver.module == converter_.python_file() &&
+     defines_class(ast, class_name)))
     return;
   const std::string module_path =
     converter_.find_imported_class_module(class_name).second;
