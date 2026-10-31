@@ -1626,11 +1626,26 @@ std::optional<exprt> python_converter::try_dispatch_dict_subscript(
     expected_type = *returned;
     check_type = !type_handler_.type_to_string(expected_type).empty();
   }
+  else if (is_call_bound_dict(base))
+    check_type = !type_handler_.type_to_string(expected_type).empty();
 
   // Pass the expected type to the dict handler
   // If empty, the handler will use its default heuristics
   return dict_handler_->handle_dict_subscript(
     array, element["slice"], expected_type, check_type);
+}
+
+/// Whether @p name is bound to the dict a user function's call returns, as in
+/// `r = f()`. A read of `r[k]` is typed by the callee's dict, whose value a
+/// later store, in the callee or here, may have given another type.
+bool python_converter::is_call_bound_dict(const nlohmann::json &name)
+{
+  if (name.value("_type", "") != "Name")
+    return false;
+  const nlohmann::json decl = json_utils::find_var_decl(
+    name["id"].get<std::string>(), current_func_name_, *ast_json);
+  return decl.contains("value") && decl["value"].is_object() &&
+         call_dict_value_type(decl["value"]);
 }
 
 /// The value type of the dict that @p call returns: the callee's `dict[K, V]`
