@@ -12412,6 +12412,40 @@ the fix is reverted, and dropping `vsnprintf` from the bounded kinds fails
 Not fixed: a conversion that reads the `va_list` still leaves the destination
 unchanged, as does any output `sprintf` would not store.
 
+### M9 (R147) — 2026-10-31, the static arrays R142 did not destroy
+
+R142's entry left open that an array of class type with static storage
+duration is never destroyed. `static_lifetime_destroy` asked `get_destructor`
+for the object's type, which matches a class and not an array of one, so after
+`main` returned no element's destructor ran: a global `Owner owned[2]` whose
+elements free memory was reported as two forgotten-memory leaks under
+`--memory-leak-check`, and an assertion in an element's destructor was never
+checked.
+
+**Fixed** by destroying each element, the last one first ([class.dtor]/13),
+recursing through a multi-dimensional array, with a function-local static
+array still guarded by its `$init_guard`. A destructor whose body is empty is
+no longer called, since the call has no effect and a static array of 20000
+trivially destructible objects would otherwise inline 20000 of them. A
+destructor with no symbol is skipped too: the OM's thread-local
+`__ESBMC_exception_slots[256]` has a destructor component but no function, and
+calling it made GOTO conversion abort.
+
+`static_array_destructors` checks the order across a local static array, a
+two-dimensional global array and a global declared before them, that a local
+static array whose function never ran is not destroyed, and that arrays of a
+class with a user destructor and of a class whose implicit destructor destroys
+a member both free their memory; master reports the leaks and fails the order
+assertion. `static_array_destructors_fail` pins an assertion in the destructor
+of a global array's element and of a local static array's element, and is
+SUCCESSFUL on master. Destroying elements in index order fails the passing
+test, as does skipping a destructor whose body has one statement. Both under
+the default solver (Bitwuzla), `--z3` and `--k-induction`.
+
+Not fixed: `exit()` does not destroy static objects (R145's PR), local
+statics are destroyed in reverse definition order rather than in reverse order
+of construction, and thread-local objects are destroyed with the static ones
+after `main` rather than when their thread exits.
 ### M9 (R148) — 2026-10-31, the `<csetjmp>` with nothing in `std`
 
 R130's entry left open that `<csetjmp>` does not parse in C++ mode. The header
@@ -12552,6 +12586,54 @@ Not fixed: recovery is limited to targets where `va_list` is a pointer
 (AArch64), to a `va_list` that is a local of the variadic function itself,
 and to calls before any `va_arg`, so on x86-64 these calls still leave the
 destination unchanged.
+### M9 (R150) — 2026-10-31, the case-insensitive compare with a locale
+
+R134's entry left `strcasecmp_l` and `strncasecmp_l` without a model, so each
+returned a nondet value: `strcasecmp_l("AbC", "abc", c) == 0` was FAILED
+for `c` from `newlocale(LC_ALL_MASK, "C", 0)`, as was any assertion on the
+result.
+
+**Fixed** by modelling both on the POSIX targets as `strncasecmp` with the
+locale ignored. Only the C locale is modelled, as for `tolower`, so the
+results are those of the C or POSIX locale; a locale that folds a letter
+differently (Turkish dotted I) is not modelled.
+
+`strcasecmp_l_model` checks equality across case, the sign for a smaller and
+a longer string, a prefix shorter than the difference, a prefix covering it,
+and `n == 0`; master fails it, and it passes natively. `strcasecmp_l_model_fail`
+runs under `--multi-property` and pins a wrong sign and a wrong equality.
+Making `strncasecmp_l` ignore `n` fails the passing test. Both under the
+default solver (Bitwuzla), `--z3` and `--k-induction`.
+
+Not fixed: the other `_l` functions (`tolower_l`, `strcoll_l`, `strxfrm_l`)
+still have no model, and `log(M_E) == 1.0` is still FAILED (R133).
+### M9 (R149) — 2026-10-31, the warning that stopped R130's armv8 build
+
+Since R130 landed, the Monday `Weekly` run's `static armv8 DebugOpt` job no
+longer compiles (on 10-05 it built and failed four regression tests,
+`char_walk_arrays` and `github_8048_huge_vla` with their `_fail` twins; from
+10-12 a build failure hides its tests). It builds with GCC 14 and `-Werror`,
+and GCC reports writing 8 bytes "into a region of size 0"
+(`-Wstringop-overflow`) in `lower_longjmp.cpp`. `build_dispatch` read
+`slot->type` and `to_symbol2t(slot)` through a non-const `expr2tc`, whose
+`operator->` detaches the node and, without `NDEBUG`, calls `mark_writer`; GCC
+could not rule out a null node on that path. Every use of `slot` only reads,
+so it is now `const`.
+
+The same warning reproduces with Homebrew's GCC 15 at `-O2 -Werror` and goes
+away with the change; making `slot` const alone is enough, and the reads of
+`count` in `new_slot` do not trigger it. With the change, every C++ object
+compiles under GCC 15 DebugOpt with `-Werror` (Homebrew's fmt 12 needs
+`-Wno-error=deprecated-declarations`, which CI's bundled fmt does not). No
+regression test: the change does not alter the GOTO program, and the
+`longjmp` tests give the same verdicts. The Linux GCC 14 build is checked only
+by the next Monday run.
+
+Not fixed: those four armv8 tests, unchecked since 10-05, and the other
+Monday failures, whose jobs also failed on 10-05: `Simplifier equivalence` (`github_8660_object_size_offset`, `overflow_10_fir`,
+`overflow_16_fir_new`), Windows DebugOpt (`k-induction_cpp_stack_empty_bug`
+and three `goto-transcoder` tests), and the macOS build's
+`github_9081_optional_dict_value_fail`.
 
 ---
 
