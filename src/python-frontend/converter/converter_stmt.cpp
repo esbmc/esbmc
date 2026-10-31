@@ -1089,7 +1089,7 @@ python_converter::extract_type_info(const nlohmann::json &var_node)
     else if (names_builtin(var_type_str, "list", "List", *ast_json))
       var_typet = type_handler_.get_list_type();
     else
-      var_typet = type_handler_.get_typet(var_type_str, type_size);
+      var_typet = named_annotation_type(ann, var_type_str, type_size);
   }
 
   return {var_type_str, var_typet};

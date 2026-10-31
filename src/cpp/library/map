@@ -935,9 +935,8 @@ public:
   void insert(iterator first, iterator last)
   {
     for (iterator it = first; it.it_pos != last.it_pos; it++)
-    {
-      (*this)[it.it_key[it.it_pos]] = it.it_value[it.it_pos];
-    }
+      if (count(it.it_key[it.it_pos]) == 0)
+        (*this)[it.it_key[it.it_pos]] = it.it_value[it.it_pos];
   }
 
   size_type erase(const key_type &k)
@@ -991,26 +990,18 @@ public:
 
   void erase(iterator first, iterator last)
   {
-    if (this->_size != 0)
+    int n = last.it_pos - first.it_pos;
+    for (int j = first.it_pos; j + n < this->_size; j++)
     {
-      unsigned int s = this->_size;
-      for (int i = 0; i < s; i++)
-      {
-        if (this->_key[i] == first.it_key[first.it_pos])
-        {
-          this->_size = this->_size - (last.it_pos - first.it_pos);
-          int j;
-          for (j = i; j < s; j++)
-          {
-            this->_key[j] = this->_key[j + last.it_pos];
-            this->_value[j] = this->_value[j + last.it_pos];
-          }
-          this->_key[j - 1] = Key();
-          this->_value[j - 1] = T();
-          return;
-        }
-      }
+      this->_key[j] = this->_key[j + n];
+      this->_value[j] = this->_value[j + n];
     }
+    for (int j = this->_size - n; j < this->_size; j++)
+    {
+      this->_key[j] = Key();
+      this->_value[j] = T();
+    }
+    this->_size -= n;
   }
 
   size_type count(const key_type &x) const
