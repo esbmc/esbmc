@@ -199,9 +199,8 @@ inline std::string annotated_return_kind(
 
 // The kind `self.<name>()` returns: every class defining `name` must agree on
 // one scalar return annotation, as `self` may be an instance of any of them.
-inline std::string method_return_kind(
-  const std::string &name,
-  const nlohmann::json &module_body)
+inline std::string
+method_return_kind(const std::string &name, const nlohmann::json &module_body)
 {
   std::string agreed;
   if (!module_body.is_array())
