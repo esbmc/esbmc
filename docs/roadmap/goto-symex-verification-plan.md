@@ -12412,6 +12412,41 @@ the fix is reverted, and dropping `vsnprintf` from the bounded kinds fails
 Not fixed: a conversion that reads the `va_list` still leaves the destination
 unchanged, as does any output `sprintf` would not store.
 
+### M9 (R147) — 2026-10-31, the static arrays R142 did not destroy
+
+R142's entry left open that an array of class type with static storage
+duration is never destroyed. `static_lifetime_destroy` asked `get_destructor`
+for the object's type, which matches a class and not an array of one, so after
+`main` returned no element's destructor ran: a global `Owner owned[2]` whose
+elements free memory was reported as two forgotten-memory leaks under
+`--memory-leak-check`, and an assertion in an element's destructor was never
+checked.
+
+**Fixed** by destroying each element, the last one first ([class.dtor]/13),
+recursing through a multi-dimensional array, with a function-local static
+array still guarded by its `$init_guard`. A destructor whose body is empty is
+no longer called, since the call has no effect and a static array of 20000
+trivially destructible objects would otherwise inline 20000 of them. A
+destructor with no symbol is skipped too: the OM's thread-local
+`__ESBMC_exception_slots[256]` has a destructor component but no function, and
+calling it made GOTO conversion abort.
+
+`static_array_destructors` checks the order across a local static array, a
+two-dimensional global array and a global declared before them, that a local
+static array whose function never ran is not destroyed, and that arrays of a
+class with a user destructor and of a class whose implicit destructor destroys
+a member both free their memory; master reports the leaks and fails the order
+assertion. `static_array_destructors_fail` pins an assertion in the destructor
+of a global array's element and of a local static array's element, and is
+SUCCESSFUL on master. Destroying elements in index order fails the passing
+test, as does skipping a destructor whose body has one statement. Both under
+the default solver (Bitwuzla), `--z3` and `--k-induction`.
+
+Not fixed: `exit()` does not destroy static objects (R145's PR), local
+statics are destroyed in reverse definition order rather than in reverse order
+of construction, and thread-local objects are destroyed with the static ones
+after `main` rather than when their thread exits.
+
 ---
 
 ## Appendix A — Methodological basis
