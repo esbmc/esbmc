@@ -904,7 +904,7 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
       return cond;
     }
 
-    return value_expr;
+    return apply_string_truthiness(value_expr, get_location_from_decl(element));
   };
 
   // Mark that we're processing operands in an expression context
