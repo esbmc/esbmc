@@ -3980,6 +3980,9 @@ private:
   std::optional<numpy_dtypet>
   constructor_keyword_dtype(const nlohmann::json &call) const;
   bool is_narrow_builtin_sum(const nlohmann::json &node);
+  bool returns_numpy_string_element(const nlohmann::json &function_node) const;
+  std::optional<exprt>
+  try_numpy_string_membership(const nlohmann::json &element);
   /// `b = a[0]` keeps the scalar's dtype; rebinding such a name rejects.
   void bind_numpy_scalar_name(
     const nlohmann::json &target,

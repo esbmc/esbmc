@@ -7139,7 +7139,8 @@ bool python_converter::try_dedicated_assign(
 static void fit_numpy_string_store(const exprt &lhs, exprt &rhs)
 {
   if (
-    lhs.id() != "index" || !lhs.type().is_array() || !rhs.type().is_array() ||
+    (lhs.id() != "index" && lhs.id() != "dereference") ||
+    !lhs.type().is_array() || !rhs.type().is_array() ||
     !type_utils::is_char_storage(lhs.type().subtype()) ||
     !type_utils::is_char_storage(rhs.type().subtype()) ||
     lhs.type() == rhs.type())
@@ -7485,7 +7486,12 @@ void python_converter::get_var_assign(
     exprt container_expr = get_expr(target["value"]);
     typet container_type = container_expr.type();
 
-    if (reject_immutable_item_assignment(container_type, target_block))
+    // A numpy string array parameter is a pointer to its fixed-width elements,
+    // which is mutable, unlike the pointer to chars of a str.
+    if (
+      numpy_param_as_array(container_expr).type().is_array() ==
+        container_type.is_array() &&
+      reject_immutable_item_assignment(container_type, target_block))
       return;
 
     // Handle object subscript assignment via __setitem__:

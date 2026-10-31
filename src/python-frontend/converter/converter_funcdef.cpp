@@ -5867,6 +5867,37 @@ void python_converter::reject_incompatible_numpy_local_return_branches(
 // function_node["returns"] otherwise. Split out so the ternary it needs
 // doesn't add a decision point to get_function_definition itself, which is
 // already far over the complexity gate.
+// `return x[i]` as the last statement, `x` a parameter a call site passes a
+// numpy string array for: the element is a str.
+bool python_converter::returns_numpy_string_element(
+  const nlohmann::json &function_node) const
+{
+  const nlohmann::json &body = function_node["body"];
+  if (
+    is_loading_models || body.empty() ||
+    body.back().value("_type", "") != "Return")
+    return false;
+  const nlohmann::json &value = body.back()["value"];
+  if (
+    !value.is_object() || value.value("_type", "") != "Subscript" ||
+    value["value"].value("_type", "") != "Name" ||
+    value["slice"].value("_type", "") == "Slice")
+    return false;
+  const nlohmann::json &params = function_node["args"]["args"];
+  for (std::size_t i = 0; i < params.size(); ++i)
+  {
+    typet type;
+    std::set<std::string> visiting;
+    if (
+      params[i].value("arg", "") == value["value"].value("id", "") &&
+      try_infer_numpy_param_type(
+        function_node.value("name", ""), i, type, visiting) &&
+      type_utils::is_numpy_string_array(type))
+      return true;
+  }
+  return false;
+}
+
 const nlohmann::json &python_converter::resolve_return_annotation_node(
   const nlohmann::json &function_node) const
 {
@@ -5883,6 +5914,10 @@ const nlohmann::json &python_converter::resolve_return_annotation_node(
   // shape. A synthesized one also gives way to a tagged return (#8890).
   bool is_synthesized =
     returns.is_null() || returns.value("_inferred_annotation", false);
+  static const nlohmann::json str_annotation = {
+    {"_type", "Name"}, {"id", "str"}};
+  if (is_synthesized && returns_numpy_string_element(function_node))
+    return str_annotation;
   if (
     is_synthesized &&
     (local_var_numpy_array_return(function_node) ||

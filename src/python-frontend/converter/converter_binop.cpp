@@ -1907,16 +1907,6 @@ exprt python_converter::get_right_operand_expr(
                                                  : get_expr(right);
 }
 
-static void
-reject_numpy_string_membership(const std::string &op, const exprt &rhs)
-{
-  if (
-    (op == "In" || op == "NotIn") &&
-    type_utils::is_numpy_string_array(rhs.type()))
-    throw std::runtime_error(
-      "TypeError: membership in a numpy string array is not supported");
-}
-
 // An exponent named by a variable bound once to a small int constant is that
 // constant, so `2 ** n` is an int as `2 ** 3` is (#8944). A larger one would
 // overflow an int anyway and keeps the pow() path.
@@ -2073,6 +2063,8 @@ std::optional<exprt>
 python_converter::try_lowered_compare(const nlohmann::json &element)
 {
   std::optional<exprt> bound = try_numpy_dtype_compare(element);
+  if (!bound)
+    bound = try_numpy_string_membership(element);
   if (!bound)
     bound = try_bound_method_compare(element);
   return bound ? bound : try_chained_compare_with_call(element);
@@ -2457,7 +2449,6 @@ exprt python_converter::get_binary_operator_expr(
     return dict_result;
 
   // Handle membership operators
-  reject_numpy_string_membership(op, rhs);
   if (op == "In")
     return handle_membership_operator(lhs, rhs, element, false);
   if (op == "NotIn")

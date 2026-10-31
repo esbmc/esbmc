@@ -7851,14 +7851,10 @@ typet function_call_expr::dict_param_value_type(const symbolt *func, size_t idx)
     fn["args"]["args"][idx].value("annotation", nlohmann::json()));
 }
 
-// A numpy string or complex array is read only element by element; a callee
-// would read its storage as numbers.
+// A numpy complex array is read only element by element; a callee would read
+// its storage as numbers.
 static void reject_unmodelled_numpy_array_argument(const typet &type)
 {
-  if (type_utils::is_numpy_string_array(type))
-    throw std::runtime_error(
-      "TypeError: passing a numpy string array to a function is not "
-      "supported");
   if (type_utils::is_numpy_complex_array(type))
     throw std::runtime_error(
       "TypeError: passing a numpy complex array to a function is not "
