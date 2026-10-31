@@ -1234,8 +1234,8 @@ exprt function_call_expr::build_constant_from_arg() const
     // (char-element) operand: a bytes literal serialises to an identical
     // Constant JSON, but tuple(b"ab") is (97, 98) in CPython — its operand type
     // is an int array (not char), so it correctly falls through to the error.
-    const bool is_string_operand =
-      (et.is_array() || et.is_pointer()) && et.subtype() == char_type();
+    const bool is_string_operand = (et.is_array() || et.is_pointer()) &&
+                                   type_utils::is_char_storage(et.subtype());
     std::string str_val;
     if (
       is_string_operand &&
@@ -3950,7 +3950,7 @@ exprt function_call_expr::handle_list_append() const
   // generic array path; build_push_list_call then takes their address.
   if (
     !value_to_append.is_constant() && value_to_append.type().is_array() &&
-    value_to_append.type().subtype() == char_type())
+    type_utils::is_char_storage(value_to_append.type().subtype()))
   {
     const array_typet &array_type = to_array_type(value_to_append.type());
     if (array_type.size().is_constant())
@@ -6697,8 +6697,10 @@ std::optional<exprt> function_call_expr::apply_builtin_dispatch(
       if (elem_type.is_floatbv())
         actual_func_name += "_float";
       else if (
-        (elem_type.is_pointer() && elem_type.subtype() == char_type()) ||
-        (elem_type.is_array() && elem_type.subtype() == char_type()))
+        (elem_type.is_pointer() &&
+         type_utils::is_char_storage(elem_type.subtype())) ||
+        (elem_type.is_array() &&
+         type_utils::is_char_storage(elem_type.subtype())))
         actual_func_name += "_str";
       // Integer types use base name without suffix
     }
@@ -7882,7 +7884,8 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
 
       // Handle character-to-string-pointer conversion
       if (
-        param_type.is_pointer() && param_type.subtype() == char_type() &&
+        param_type.is_pointer() &&
+        type_utils::is_char_storage(param_type.subtype()) &&
         (arg.type().is_signedbv() || arg.type().is_unsignedbv()) &&
         arg.type() == char_type())
       {
@@ -7947,7 +7950,7 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
       typet arg_followed_type = converter_.ns.follow(arg.type());
       if (
         param_type.is_pointer() && param_type.subtype().is_array() &&
-        param_type.subtype().subtype() == char_type() &&
+        type_utils::is_char_storage(param_type.subtype().subtype()) &&
         arg_followed_type.is_struct())
       {
         if (!arg.is_symbol())
@@ -8194,8 +8197,8 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
       // bug (no regression relied on this, since it never worked). Reject it
       // explicitly rather than emit an unsound cast.
       if (
-        arg.type().subtype() != char_type() && param_idx < params.size() &&
-        params[param_idx].type().is_pointer())
+        !type_utils::is_char_storage(arg.type().subtype()) &&
+        param_idx < params.size() && params[param_idx].type().is_pointer())
       {
         const typet &target =
           converter_.ns.follow(params[param_idx].type().subtype());
@@ -8478,7 +8481,7 @@ exprt function_call_expr::finalize_call(
         // Check if default value is a string array type
         if (
           default_val.type().is_array() &&
-          default_val.type().subtype() == char_type())
+          type_utils::is_char_storage(default_val.type().subtype()))
         {
           // For constant string arrays, convert to string_constantt to ensure
           // proper initialization

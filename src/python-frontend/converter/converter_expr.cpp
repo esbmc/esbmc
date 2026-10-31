@@ -2610,6 +2610,11 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     break;
   case ExpressionType::VARIABLE_REF:
   {
+    if (std::optional<exprt> attr = try_get_numpy_storage_attr(element))
+    {
+      expr = *attr;
+      break;
+    }
     std::string var_name;
     bool is_class_attr = false;
     if (element["_type"] == "Name")
@@ -3189,7 +3194,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
                                    : symbol->get_type();
 
       // Handle union types
-      if (symbol_type.is_array() && symbol_type.subtype() == char_type())
+      if (
+        symbol_type.is_array() &&
+        type_utils::is_char_storage(symbol_type.subtype()))
       {
         // For union types, we need to infer which concrete type to use.
         // Strategy: Look for isinstance checks in the current scope to

@@ -1268,7 +1268,7 @@ void python_converter::retype_resized_str(
   exprt &rhs)
 {
   auto is_char_array = [](const typet &t) {
-    return t.is_array() && t.subtype() == char_type();
+    return t.is_array() && type_utils::is_char_storage(t.subtype());
   };
   const bool may_join = block_nesting_ != function_body_depth_ + 1 ||
                         !symbol.get_value().is_constant();
@@ -4581,7 +4581,7 @@ std::string python_converter::infer_type_from_any_annotation(
     // annotated with a scalar type (e.g. y: int = f() where f() -> str),
     // use the actual return type so comparisons like y == "x" work correctly.
     bool ret_is_charptr =
-      ret_type.is_pointer() && ret_type.subtype() == char_type();
+      ret_type.is_pointer() && type_utils::is_char_storage(ret_type.subtype());
     bool lhs_is_scalar =
       !current_element_type.is_pointer() && !current_element_type.is_array() &&
       !current_element_type.is_struct() && !current_element_type.id().empty();
@@ -7134,8 +7134,9 @@ static void fit_numpy_string_store(const exprt &lhs, exprt &rhs)
 {
   if (
     lhs.id() != "index" || !lhs.type().is_array() || !rhs.type().is_array() ||
-    lhs.type().subtype() != char_type() ||
-    rhs.type().subtype() != char_type() || lhs.type() == rhs.type())
+    !type_utils::is_char_storage(lhs.type().subtype()) ||
+    !type_utils::is_char_storage(rhs.type().subtype()) ||
+    lhs.type() == rhs.type())
     return;
   if (!rhs.is_constant())
     throw std::runtime_error(
@@ -7155,11 +7156,19 @@ exprt python_converter::fit_numpy_integer_store(
   const exprt &rhs,
   const nlohmann::json &value)
 {
-  if (
-    lhs.id() != "index" || !lhs.op0().type().is_array() ||
-    lhs.type() != long_long_int_type() || !rhs.type().is_floatbv())
+  if (lhs.id() != "index" || !lhs.op0().type().is_array())
     return rhs;
-  return typecast_exprt(guard_nonfinite_float_to_int(rhs, value), lhs.type());
+  const typet &element = lhs.type();
+  const bool integer = element.is_signedbv() || element.is_unsignedbv();
+  if (integer && rhs.type().is_floatbv())
+    return typecast_exprt(guard_nonfinite_float_to_int(rhs, value), element);
+  // A wider result is cast once, at the store, to the array's own width.
+  const bool numeric_rhs = rhs.type().is_signedbv() ||
+                           rhs.type().is_unsignedbv() ||
+                           rhs.type().is_floatbv();
+  if ((integer || element.is_floatbv()) && numeric_rhs && rhs.type() != element)
+    return typecast_exprt(rhs, element);
+  return rhs;
 }
 
 // `it = np.nditer(...)`, and the names bound to what an iterator yields; a
@@ -7630,7 +7639,7 @@ void python_converter::get_var_assign(
     // is_pointer() is false, so no extra nil guard is needed.
     if (
       current_element_type == any_type() && rhs.type().is_pointer() &&
-      rhs.type().subtype() == char_type())
+      type_utils::is_char_storage(rhs.type().subtype()))
     {
       current_element_type = rhs.type();
     }
@@ -8547,17 +8556,19 @@ void python_converter::get_compound_assign(
   {
     // Standard array-based string concatenation
     if (
-      (lhs.type().is_array() && lhs.type().subtype() == char_type()) ||
+      (lhs.type().is_array() &&
+       type_utils::is_char_storage(lhs.type().subtype())) ||
       (current_element_type.is_array() &&
-       current_element_type.subtype() == char_type()))
+       type_utils::is_char_storage(current_element_type.subtype())))
     {
       is_string_concat = true;
     }
     // Pointer-based string
     else if (
-      (lhs.type().is_pointer() && lhs.type().subtype() == char_type()) ||
+      (lhs.type().is_pointer() &&
+       type_utils::is_char_storage(lhs.type().subtype())) ||
       (current_element_type.is_pointer() &&
-       current_element_type.subtype() == char_type()))
+       type_utils::is_char_storage(current_element_type.subtype())))
     {
       is_string_concat = true;
     }
@@ -8589,9 +8600,10 @@ void python_converter::get_compound_assign(
     // Update the variable's type to match the concatenated result
     // Handle both array and pointer results
     if (
-      !var_name.empty() && (concatenated.type().is_array() ||
-                            (concatenated.type().is_pointer() &&
-                             concatenated.type().subtype() == char_type())))
+      !var_name.empty() &&
+      (concatenated.type().is_array() ||
+       (concatenated.type().is_pointer() &&
+        type_utils::is_char_storage(concatenated.type().subtype()))))
     {
       symbol_id sid = create_symbol_id();
       sid.set_object(var_name);
@@ -8691,12 +8703,14 @@ typet resolve_ternary_type(
 
   // String handling: use pointer type for consistency
   // Handles: array+array, array+pointer, pointer+array
-  bool then_is_string =
-    (then_type.is_array() && then_type.subtype() == char_type()) ||
-    (then_type.is_pointer() && then_type.subtype() == char_type());
-  bool else_is_string =
-    (else_type.is_array() && else_type.subtype() == char_type()) ||
-    (else_type.is_pointer() && else_type.subtype() == char_type());
+  bool then_is_string = (then_type.is_array() &&
+                         type_utils::is_char_storage(then_type.subtype())) ||
+                        (then_type.is_pointer() &&
+                         type_utils::is_char_storage(then_type.subtype()));
+  bool else_is_string = (else_type.is_array() &&
+                         type_utils::is_char_storage(else_type.subtype())) ||
+                        (else_type.is_pointer() &&
+                         type_utils::is_char_storage(else_type.subtype()));
 
   if (then_is_string && else_is_string)
     return gen_pointer_type(char_type());

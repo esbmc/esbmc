@@ -2512,8 +2512,21 @@ static nlohmann::json zero_literal(
 std::optional<typet>
 python_converter::literal_numpy_array_type(const nlohmann::json &call) const
 {
+  std::string dtype;
+  for (const auto &kw : call.value("keywords", nlohmann::json::array()))
+    if (kw.value("arg", "") == "dtype")
+      dtype = extract_numpy_dtype_name(kw["value"], *ast_json);
+  const auto parsed = numpy_dtype_from_name(dtype);
+  const auto in_dtype = [&](const typet &type) -> typet {
+    return parsed && !parsed->element_type().is_nil() &&
+               !parsed->element_type().id().empty() &&
+               parsed->kind != numpy_dtypet::kindt::complex
+             ? with_element_type(type, parsed->element_type())
+             : type;
+  };
   if (is_numpy_array_literal_call(call))
-    return type_handler_.get_typet(numpy_literal_with_dtype(call, *ast_json));
+    return in_dtype(
+      type_handler_.get_typet(numpy_literal_with_dtype(call, *ast_json)));
   auto layout = literal_constructor_layout(call);
   if (!layout || layout->first.empty())
     return std::nullopt;
@@ -2521,22 +2534,15 @@ python_converter::literal_numpy_array_type(const nlohmann::json &call) const
     if (dim <= 0)
       return std::nullopt;
   for (const auto &kw : call.value("keywords", nlohmann::json::array()))
-  {
-    const std::string dtype =
-      kw.value("arg", "") == "dtype"
-        ? extract_numpy_dtype_name(kw["value"], *ast_json)
-        : "";
-    if (dtype == "bool")
-      layout->second = "bool";
-    else if (dtype.find("int") != std::string::npos)
-      layout->second = "int";
-    else if (dtype.find("float") != std::string::npos)
-      layout->second = "float";
-    else if (!dtype.empty() || kw.value("arg", "") != "dtype")
+    if (kw.value("arg", "") != "dtype")
       return std::nullopt;
-  }
-  return type_handler_.get_typet(
-    zero_literal(layout->first, 0, layout->second));
+  if (
+    !dtype.empty() &&
+    (!parsed || parsed->kind == numpy_dtypet::kindt::complex ||
+     parsed->kind == numpy_dtypet::kindt::string))
+    return std::nullopt;
+  return in_dtype(
+    type_handler_.get_typet(zero_literal(layout->first, 0, layout->second)));
 }
 
 // `f(np.eye(2))`: a constructor written as an argument is bound to a name
@@ -2619,8 +2625,7 @@ std::optional<typet> python_converter::try_infer_numpy_array_arg_type(
   if (!numpy_array_literal_return(*callee_def, literal_call, type_handler_))
     return numpy_elementwise_return_type(*callee_def);
 
-  return type_handler_.get_typet(
-    numpy_literal_with_dtype(literal_call, *ast_json));
+  return literal_numpy_array_type(literal_call);
 }
 
 // True when `node` (or, recursively, any of its descendants) reads one of

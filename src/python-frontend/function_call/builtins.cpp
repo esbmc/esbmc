@@ -721,12 +721,14 @@ exprt function_call_expr::handle_isinstance() const
     // char-pointer (a Python str), short-circuit to true here.
     if (
       expected_type.is_array() &&
-      to_array_type(expected_type).subtype() == char_type())
+      type_utils::is_char_storage(to_array_type(expected_type).subtype()))
     {
       const typet &obj_type = obj_expr.type();
       if (
-        (obj_type.is_array() && obj_type.subtype() == char_type()) ||
-        (obj_type.is_pointer() && obj_type.subtype() == char_type()))
+        (obj_type.is_array() &&
+         type_utils::is_char_storage(obj_type.subtype())) ||
+        (obj_type.is_pointer() &&
+         type_utils::is_char_storage(obj_type.subtype())))
         return type_name == "type" ? isinstance_str_as_type(obj_expr)
                                    : true_exprt();
     }

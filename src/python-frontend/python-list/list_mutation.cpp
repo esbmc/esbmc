@@ -218,7 +218,7 @@ list_elem_info python_list::get_list_element_info(
   // rather than falling to the generic else branch which calls width().
   else if (
     elem_symbol.get_type().is_pointer() &&
-    elem_symbol.get_type().subtype() != char_type() &&
+    !type_utils::is_char_storage(elem_symbol.get_type().subtype()) &&
     elem_symbol.get_type().subtype() != bool_type())
   {
     const size_t pointer_size_bytes = config.ansi_c.pointer_width() / 8;
@@ -227,7 +227,7 @@ list_elem_info python_list::get_list_element_info(
   // For string pointers (char*), calculate length at runtime using strlen
   else if (
     elem_symbol.get_type().is_pointer() &&
-    elem_symbol.get_type().subtype() == char_type())
+    type_utils::is_char_storage(elem_symbol.get_type().subtype()))
   {
     // Call strlen to get actual string length
     const symbolt *strlen_symbol =
@@ -429,7 +429,8 @@ bool python_list::has_shared_payload(const typet &type) const
   if (converter_.get_type_handler().is_tagged_scalar_type(type))
     return false;
   if (type.is_pointer())
-    return type.subtype() != char_type() && !type.subtype().is_code();
+    return !type_utils::is_char_storage(type.subtype()) &&
+           !type.subtype().is_code();
   return type.is_struct() || type.id() == "symbol";
 }
 
@@ -623,7 +624,7 @@ exprt python_list::build_push_list_call(
   }
   else if (
     elem_info.elem_symbol->get_type().is_pointer() &&
-    elem_info.elem_symbol->get_type().subtype() == char_type())
+    type_utils::is_char_storage(elem_info.elem_symbol->get_type().subtype()))
   {
     // For string type (char*), we must pass the pointer value itself
     element_arg = build_symbol(*elem_info.elem_symbol);
@@ -756,7 +757,9 @@ store_kind kind_of(const typet &type, python_converter &converter)
     return store_kind::integer;
   if (type.is_floatbv())
     return store_kind::floating;
-  if ((type.is_array() || type.is_pointer()) && type.subtype() == char_type())
+  if (
+    (type.is_array() || type.is_pointer()) &&
+    type_utils::is_char_storage(type.subtype()))
     return store_kind::string;
   if (converter.get_tuple_handler().is_tuple_type(type))
     return store_kind::tuple;
@@ -848,7 +851,7 @@ std::optional<exprt> python_list::build_element_replacement(
   const list_elem_info info = get_list_element_info(op, rhs);
   const typet &value_type = info.elem_symbol->get_type();
   const exprt value_arg =
-    value_type.is_pointer() && value_type.subtype() == char_type()
+    value_type.is_pointer() && type_utils::is_char_storage(value_type.subtype())
       ? build_symbol(*info.elem_symbol)
       : build_address_of(build_symbol(*info.elem_symbol));
   const exprt float_type_id =
@@ -1557,9 +1560,9 @@ exprt python_list::build_extend_list_call(
   // Check if other_list is a string (array or pointer to char)
   if (
     (other_list.type().is_array() &&
-     other_list.type().subtype() == char_type()) ||
+     type_utils::is_char_storage(other_list.type().subtype())) ||
     (other_list.type().is_pointer() &&
-     other_list.type().subtype() == char_type()))
+     type_utils::is_char_storage(other_list.type().subtype())))
   {
     // Convert string to list of single-character strings
     symbolt &temp_list = create_list();
@@ -2050,7 +2053,7 @@ exprt python_list::build_remove_list_call(
   exprt element_arg;
   if (
     elem_info.elem_symbol->get_type().is_pointer() &&
-    elem_info.elem_symbol->get_type().subtype() == char_type())
+    type_utils::is_char_storage(elem_info.elem_symbol->get_type().subtype()))
     element_arg = build_symbol(*elem_info.elem_symbol);
   else if (elem_info.elem_symbol->get_type().is_struct())
     element_arg = build_address_of(build_symbol(*elem_info.elem_symbol));

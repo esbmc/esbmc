@@ -2072,7 +2072,9 @@ bool python_converter::may_rebind_left(
 std::optional<exprt>
 python_converter::try_lowered_compare(const nlohmann::json &element)
 {
-  std::optional<exprt> bound = try_bound_method_compare(element);
+  std::optional<exprt> bound = try_numpy_dtype_compare(element);
+  if (!bound)
+    bound = try_bound_method_compare(element);
   return bound ? bound : try_chained_compare_with_call(element);
 }
 
@@ -2716,7 +2718,8 @@ exprt python_converter::get_binary_operator_expr(
       return t.is_pointer() && t.subtype().id() == "empty";
     };
     auto is_string_like = [](const typet &t) {
-      return (t.is_array() || t.is_pointer()) && t.subtype() == char_type();
+      return (t.is_array() || t.is_pointer()) &&
+             type_utils::is_char_storage(t.subtype());
     };
     const bool lhs_void = is_void_ptr(lhs.type());
     const bool rhs_void = is_void_ptr(rhs.type());
@@ -3315,7 +3318,22 @@ exprt python_converter::numpy_elementwise(
   const typet &type)
 {
   if (!type.is_array())
-    return numpy_element_op(op, cast_to(lhs, type), cast_to(rhs, type), type);
+  {
+    // Narrow integers are computed at 64 bits and wrapped by the cast back, as
+    // the operators would otherwise promote them to `int` under the array.
+    const bool narrow =
+      (type.is_signedbv() || type.is_unsignedbv()) && bv_width(type) < 64;
+    if (!narrow)
+      return numpy_element_op(op, cast_to(lhs, type), cast_to(rhs, type), type);
+    const typet wide = long_long_int_type();
+    return typecast_exprt(
+      numpy_element_op(
+        op,
+        cast_to(cast_to(lhs, type), wide),
+        cast_to(cast_to(rhs, type), wide),
+        wide),
+      type);
+  }
   BigInt length;
   to_integer(to_array_type(type).size(), length);
   const typet index_type = size_type();

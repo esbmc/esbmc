@@ -1,5 +1,6 @@
 #pragma once
 
+#include <python-frontend/numpy/numpy_dtype.h>
 #include <array>
 #include <deque>
 #include <functional>
@@ -2335,6 +2336,10 @@ private:
   nlohmann::json
   bind_to_fresh_name(const nlohmann::json &value, const std::string &prefix);
   std::optional<exprt> try_lowered_compare(const nlohmann::json &element);
+  std::optional<numpy_dtypet> numpy_array_dtype(const nlohmann::json &base);
+  std::optional<exprt>
+  try_get_numpy_storage_attr(const nlohmann::json &element);
+  std::optional<exprt> try_numpy_dtype_compare(const nlohmann::json &element);
   std::optional<exprt>
   try_chained_compare_with_call(const nlohmann::json &element);
   nlohmann::json chained_compare_as_pairs(const nlohmann::json &element);

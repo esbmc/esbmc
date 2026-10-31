@@ -5197,8 +5197,7 @@ numpy_integer_dtype_holds(long double value, const std::string &dtype)
 {
   const numpy_dtypet parsed = *numpy_dtype_from_name(dtype);
   const int bits = parsed.bits;
-  const bool is_unsigned =
-    parsed.kind == numpy_dtypet::kindt::unsigned_integer;
+  const bool is_unsigned = parsed.kind == numpy_dtypet::kindt::unsigned_integer;
   const long double low = is_unsigned ? 0.0L : -std::ldexp(1.0L, bits - 1);
   const long double high = std::ldexp(1.0L, is_unsigned ? bits : bits - 1);
   return value >= low && value < high;
@@ -7005,7 +7004,12 @@ typet numpy_call_expr::constructor_element_type(
     return type_handler_.build_array(char_type(), *width + 1);
   if (has_complex_leaf(list))
     return get_complex_struct_type();
-  return typet();
+  // int64, float64 and bool are what the literal already converts to.
+  const std::string dtype = get_dtype();
+  if (
+    dtype.empty() || dtype == "int64" || dtype == "float64" || dtype == "bool")
+    return typet();
+  return get_typet_from_dtype();
 }
 
 exprt numpy_call_expr::with_element_type(

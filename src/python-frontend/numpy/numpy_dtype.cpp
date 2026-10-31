@@ -89,8 +89,7 @@ std::optional<numpy_dtypet> numpy_dtype_of_element(const typet &element)
     return numpy_dtypet{
       kindt::unsigned_integer, to_unsignedbv_type(element).get_width()};
   if (element.is_floatbv())
-    return numpy_dtypet{
-      kindt::floating, to_floatbv_type(element).get_width()};
+    return numpy_dtypet{kindt::floating, to_floatbv_type(element).get_width()};
   if (is_complex_type(element))
     return numpy_dtypet{kindt::complex, 128};
   return std::nullopt;

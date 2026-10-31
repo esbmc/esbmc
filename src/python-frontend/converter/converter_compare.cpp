@@ -139,8 +139,8 @@ exprt python_converter::compare_constants_internal(
   {
     // Check if both are char arrays (strings)
     if (
-      lhs.type().subtype() == char_type() &&
-      rhs.type().subtype() == char_type())
+      type_utils::is_char_storage(lhs.type().subtype()) &&
+      type_utils::is_char_storage(rhs.type().subtype()))
     {
       if (is_class_object(lhs) || is_class_object(rhs))
         return compare_class_objects(op, lhs, rhs);
@@ -262,12 +262,14 @@ exprt python_converter::handle_type_mismatches(
     return nil_exprt();
 
   // Check if both are string types (either array or pointer to char)
-  bool lhs_is_string =
-    (lhs.type().is_array() && lhs.type().subtype() == char_type()) ||
-    (lhs.type().is_pointer() && lhs.type().subtype() == char_type());
-  bool rhs_is_string =
-    (rhs.type().is_array() && rhs.type().subtype() == char_type()) ||
-    (rhs.type().is_pointer() && rhs.type().subtype() == char_type());
+  bool lhs_is_string = (lhs.type().is_array() &&
+                        type_utils::is_char_storage(lhs.type().subtype())) ||
+                       (lhs.type().is_pointer() &&
+                        type_utils::is_char_storage(lhs.type().subtype()));
+  bool rhs_is_string = (rhs.type().is_array() &&
+                        type_utils::is_char_storage(rhs.type().subtype())) ||
+                       (rhs.type().is_pointer() &&
+                        type_utils::is_char_storage(rhs.type().subtype()));
 
   // If both are strings (regardless of array vs pointer), let strcmp handle it
   if (lhs_is_string && rhs_is_string)
@@ -281,8 +283,10 @@ exprt python_converter::handle_type_mismatches(
   if (lhs.type().is_array() && rhs.type().is_array())
   {
     // Check if these are different semantic types (list vs string)
-    bool lhs_is_string_array = (lhs.type().subtype() == char_type());
-    bool rhs_is_string_array = (rhs.type().subtype() == char_type());
+    bool lhs_is_string_array =
+      (type_utils::is_char_storage(lhs.type().subtype()));
+    bool rhs_is_string_array =
+      (type_utils::is_char_storage(rhs.type().subtype()));
 
     // If one is a string array and the other is not, they're different types
     if (lhs_is_string_array != rhs_is_string_array)
@@ -319,7 +323,7 @@ static bool either_is_string(const exprt &lhs, const exprt &rhs)
 static bool is_constant_char_array(const exprt &expr)
 {
   return expr.is_constant() && expr.type().is_array() &&
-         expr.type().subtype() == char_type();
+         type_utils::is_char_storage(expr.type().subtype());
 }
 
 // A pointer to the characters of `expr`, reading an Any (void *) operand as
@@ -1299,7 +1303,8 @@ static bool may_hold_class(const exprt &expr)
 {
   const typet &t = expr.type();
   return (t.is_array() || t.is_pointer()) &&
-         (t.subtype() == char_type() || t.subtype().id() == "empty");
+         (type_utils::is_char_storage(t.subtype()) ||
+          t.subtype().id() == "empty");
 }
 
 /// Whether an operand the fold could not resolve to a class may still be
@@ -1329,7 +1334,7 @@ static void refuse_possible_class(
   const std::string kind = node.value("_type", "");
   if (
     !resolved && (type.is_array() || type.is_pointer()) &&
-    type.subtype() == char_type() && kind != "Constant" &&
+    type_utils::is_char_storage(type.subtype()) && kind != "Constant" &&
     kind != "JoinedStr" && !is_type_call(node))
     throw std::runtime_error(
       "Unsupported: 'is' between a class and a value that may hold one");
