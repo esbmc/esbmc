@@ -513,14 +513,9 @@ __ESBMC_HIDE:;
   return (dlen + (s - src)); /* count does not include NUL */
 }
 
-int posix_memalign(void **memptr, size_t align, size_t size)
+static int __ESBMC_aligned_malloc(void **memptr, size_t align, size_t size)
 {
 __ESBMC_HIDE:;
-  if (
-    !align || (align & (align - 1)) || /* alignment must be a power of 2 */
-    (size & (align - 1)) /* size must be a multiple of alignment */
-  )
-    return EINVAL;
   int save = errno;
   void *r = malloc(size);
   errno = save;
@@ -531,11 +526,24 @@ __ESBMC_HIDE:;
   return 0;
 }
 
+int posix_memalign(void **memptr, size_t align, size_t size)
+{
+__ESBMC_HIDE:;
+  /* POSIX: alignment must be a power of two multiple of sizeof(void *);
+   * there is no condition on size. */
+  if (!align || (align & (align - 1)) || align % sizeof(void *))
+    return EINVAL;
+  return __ESBMC_aligned_malloc(memptr, align, size);
+}
+
 void *aligned_alloc(size_t align, size_t size)
 {
 __ESBMC_HIDE:;
   void *r = NULL;
-  errno = posix_memalign(&r, align, size);
+  if (!align || (align & (align - 1)) || (size & (align - 1)))
+    errno = EINVAL;
+  else
+    errno = __ESBMC_aligned_malloc(&r, align, size);
   return r;
 }
 
