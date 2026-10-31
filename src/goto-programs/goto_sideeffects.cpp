@@ -2083,6 +2083,15 @@ void goto_convertt::guard_arm_destructors(
   cond = flag_expr;
 }
 
+// A _Bool bit-field has the semantics of a _Bool (C11 6.7.2.1p10), but
+// get_bitfield_type gives it an unsignedbv[N] type, and only its #cpp_type
+// survives the IREP2 round trip. A store must convert the value to _Bool
+// first (6.3.1.2p1) rather than keep its low bits.
+static bool is_bool_bitfield(const typet &type)
+{
+  return type.is_unsignedbv() && type.cpp_type() == "bool";
+}
+
 void goto_convertt::remove_assignment(
   exprt &expr,
   goto_programt &dest,
@@ -2137,6 +2146,17 @@ void goto_convertt::remove_assignment(
       rhs.op0().make_typecast(computation_type);
       rhs.type() = computation_type;
       rhs.make_typecast(expr.op0().type());
+    }
+
+    // The C adjuster promotes E1 in place, so the lvalue may be a typecast.
+    const exprt *object = &expr.op0();
+    while (object->is_typecast())
+      object = &object->op0();
+    if (is_bool_bitfield(object->type()))
+    {
+      const typet rhs_type = rhs.type();
+      rhs.make_typecast(bool_type());
+      rhs.make_typecast(rhs_type);
     }
 
     exprt lhs(expr.op0());
@@ -2221,12 +2241,14 @@ void goto_convertt::remove_pre(
 
   const typet &op_type = ns.follow(expr.op0().type());
 
-  if (op_type.is_bool())
+  if (op_type.is_bool() || is_bool_bitfield(op_type))
   {
     rhs.copy_to_operands(expr.op0(), gen_one(int_type()));
     rhs.op0().make_typecast(int_type());
     rhs.type() = int_type();
     rhs.make_typecast(bool_type());
+    if (is_bool_bitfield(op_type))
+      rhs.make_typecast(op_type);
   }
   else if (
     op_type.id() == "c_enum" || op_type.id() == "incomplete_c_enum" ||
@@ -2307,12 +2329,14 @@ void goto_convertt::remove_post(
 
   const typet &op_type = ns.follow(expr.op0().type());
 
-  if (op_type.is_bool())
+  if (op_type.is_bool() || is_bool_bitfield(op_type))
   {
     rhs.copy_to_operands(expr.op0(), gen_one(int_type()));
     rhs.op0().make_typecast(int_type());
     rhs.type() = int_type();
     rhs.make_typecast(bool_type());
+    if (is_bool_bitfield(op_type))
+      rhs.make_typecast(op_type);
   }
   else if (
     op_type.id() == "c_enum" || op_type.id() == "incomplete_c_enum" ||
