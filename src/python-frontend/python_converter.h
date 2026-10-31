@@ -2863,6 +2863,8 @@ private:
     const exprt &value,
     codet &target_block);
 
+  exprt tuple_member_list_source(const exprt &value) const;
+
   exprt hold_tuple_member_list(
     const nlohmann::json &ast_node,
     const exprt &value,
