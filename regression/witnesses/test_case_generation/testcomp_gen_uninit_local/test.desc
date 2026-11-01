@@ -1,0 +1,5 @@
+CORE
+main.c
+--generate-testcase
+^VERIFICATION FAILED$
+CHECK_FILE testcase.xml contains <testcase coversError="true">\n<input>42</input>\n<input>7</input>\n</testcase>

@@ -41,6 +41,9 @@ bool mark_decl_as_non_det::runOnFunction(
       insert_pos++;
       auto t = F.second.body.instructions.insert(insert_pos, ASSIGN);
       t->location = it->location;
+      // Tag this assignment: it models an uninitialised local, not a call to
+      // __VERIFIER_nondet_*(), so it must not become a test-case input.
+      t->location.set("#decl_nondet", true);
       t->code = new_value;
       t->function = it->function;
     }
