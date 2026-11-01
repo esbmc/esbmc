@@ -5998,19 +5998,10 @@ struct Signbittor
   }
 };
 
+// No fold of signbit(neg(x)) or signbit(abs(x)): under --fixedbv and --ir
+// neither flips or clears the sign the way IEEE 754 does.
 expr2tc signbit2t::do_simplify() const
 {
-  // signbit(abs(x)) = false. IEEE 754 absoluteValue clears the sign bit
-  // unconditionally, including for NaN payloads.
-  if (is_abs2t(operand))
-    return gen_false_expr();
-
-  // signbit(neg(x)) = !signbit(x). IEEE 754 negate flips the sign bit
-  // unconditionally — same caveat for NaN, but the bit flip is
-  // architecture-independent at the IR level.
-  if (is_neg2t(operand))
-    return not2tc(signbit2tc(to_neg2t(operand).value));
-
   return simplify_floatbv_1op<Signbittor, signbit2t>(type, operand);
 }
 
