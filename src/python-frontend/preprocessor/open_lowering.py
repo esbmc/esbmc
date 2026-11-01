@@ -178,11 +178,15 @@ while True:
         return [ast.copy_location(stmt, node) for stmt in prelude + [loop]]
 
 
+def _is_module_header(stmt):
+    if isinstance(stmt, ast.Expr):
+        return _str_constant(stmt.value)
+    return isinstance(stmt, ast.ImportFrom) and stmt.module == "__future__"
+
+
 def _import_index(body):
     index = 0
-    while index < len(body) and (
-        (isinstance(body[index], ast.Expr) and _str_constant(body[index].value)) or
-        (isinstance(body[index], ast.ImportFrom) and body[index].module == "__future__")):
+    while index < len(body) and _is_module_header(body[index]):
         index += 1
     return index
 
