@@ -7,14 +7,12 @@ class A:
 
 
 def f(A):
-    x = A()
-    y = A(1)
+    return None
 
 
 z = f(A)
 x = A()
 y = A(1)
-_sv_verifier.check_type(A, type)
 _sv_verifier.check_type(x, A)
 _sv_verifier.check_type(y, A)
 _sv_verifier.check_type(z, type(None))
