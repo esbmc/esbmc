@@ -1,0 +1,5 @@
+CORE
+main.py
+
+^\s+FAILED\s+\[global\.assertion\.1\]\s+line\s+8\s+assertion return_value\$_strcmp
+^VERIFICATION FAILED$
