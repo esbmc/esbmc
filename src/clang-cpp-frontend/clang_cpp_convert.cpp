@@ -783,29 +783,12 @@ static bool zero_initialises(const clang::Expr &init)
   return false;
 }
 
-/// A trivial destructor does nothing; a delete of such a type runs none.
-static bool runs_destructor(const clang::QualType &type)
-{
-  const clang::CXXRecordDecl *rec = type->getAsCXXRecordDecl();
-  return rec && !rec->hasTrivialDestructor();
-}
-
 /// Attach a new-expression's initializer, and for an array its braced list's
 /// filler: a run-time element count can reach past the list.
 bool clang_cpp_convertert::get_new_initializer(
   const clang::CXXNewExpr &ne,
   exprt &new_expr)
 {
-  // A trivial default constructor does nothing, and for `new T[n]` running it
-  // per element is a loop symbolic n leaves unbounded.
-  const auto *trivial_ctor =
-    llvm::dyn_cast<clang::CXXConstructExpr>(ne.getInitializer());
-  if (
-    ne.isArray() && trivial_ctor &&
-    trivial_ctor->getConstructor()->isTrivial() &&
-    !new_expr.get_bool("zero_initialized"))
-    return false;
-
   exprt init;
   if (get_expr(*ne.getInitializer(), init))
     return true;
@@ -1285,7 +1268,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     // `delete[]` of a `T (*)[m]` destroys T elements ([expr.delete]/6).
     const clang::QualType destroyed =
       ASTContext->getBaseElementType(de.getDestroyedType());
-    if (runs_destructor(destroyed))
+    if (destroyed->getAsCXXRecordDecl())
     {
       typet destt;
       if (get_type(destroyed, destt))
