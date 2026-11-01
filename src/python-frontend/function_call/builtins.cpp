@@ -497,6 +497,13 @@ exprt function_call_expr::isinstance_without_type_name(
   if (std::any_of(types.begin(), types.end(), is_any))
     return converter_.get_exception_handler().gen_exception_raise(
       "TypeError", "typing.Any cannot be used with isinstance()");
+  // Every value is an instance of object.
+  const auto is_object = [&](const nlohmann::json &t) {
+    return t["_type"] == "Name" && t["id"] == "object" &&
+           !json_utils::is_class("object", converter_.ast());
+  };
+  if (std::any_of(types.begin(), types.end(), is_object))
+    return true_exprt();
   return nil_exprt();
 }
 
