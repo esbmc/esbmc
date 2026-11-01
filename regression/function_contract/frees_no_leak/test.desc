@@ -1,0 +1,4 @@
+CORE
+main.c
+--replace-call-with-contract g --memory-leak-check --force-malloc-success
+^VERIFICATION SUCCESSFUL$

@@ -1,0 +1,6 @@
+CORE
+main.cpp
+--contract-operational-models --multi-property --unwind 3
+^  PASSED       \[main\.assertion\.[0-9]+\]\s+line\s+\d+\s+assertion m\.size\(\) == 1 - r$
+^  FAILED       \[main\.assertion\.[0-9]+\]\s+line\s+\d+\s+assertion k == 1 \|\| m\.count\(1\) == 1$
+^VERIFICATION FAILED$

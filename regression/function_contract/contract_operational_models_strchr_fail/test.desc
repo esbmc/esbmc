@@ -1,0 +1,8 @@
+CORE
+main.c
+--contract-operational-models --force-malloc-success --multi-property
+^  FAILED\s+\[main\.assertion\.\d+\]\s+line\s+12\s+bad$
+^  PASSED\s+\[main\.assertion\.\d+\]\s+line\s+8\s+dot$
+^  PASSED\s+\[main\.assertion\.\d+\]\s+line\s+9\s+first$
+^  PASSED\s+\[main\.assertion\.\d+\]\s+line\s+10\s+nul$
+^VERIFICATION FAILED$

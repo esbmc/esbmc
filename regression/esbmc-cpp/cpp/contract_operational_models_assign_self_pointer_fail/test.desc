@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--contract-operational-models --force-malloc-success
+false: the copy points at s
+^VERIFICATION FAILED$

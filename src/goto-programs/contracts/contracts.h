@@ -245,6 +245,11 @@ public:
   std::string
   diagnose_contract_target(const std::string &function_name, bool for_replace);
 
+  /// \brief Find function symbol
+  /// \param function_name Function name (can be full ID or simple name)
+  /// \return Pointer to function symbol, or nullptr if not found
+  symbolt *find_function_symbol(const std::string &function_name);
+
 private:
   goto_functionst &goto_functions;
   contextt &context;
@@ -266,10 +271,6 @@ private:
   /// recorded extent whenever one exists.
   static constexpr size_t WITNESS_IDX_FALLBACK_ELEMS = 100;
 
-  /// \brief Find function symbol
-  /// \param function_name Function name (can be full ID or simple name)
-  /// \return Pointer to function symbol, or nullptr if not found
-  symbolt *find_function_symbol(const std::string &function_name);
 
   /// \brief Rename function
   /// \param old_id Original function ID
@@ -310,6 +311,7 @@ private:
   expr2tc declare_call_result(
     const symbolt &function_symbol,
     const expr2tc &ret_val,
+    const std::vector<expr2tc> &actual_args,
     const locationt &call_location,
     goto_programt &replacement) const;
 
@@ -323,6 +325,33 @@ private:
     const goto_programt &function_body,
     goto_programt::targett call_instruction,
     goto_programt &caller_body);
+
+  /// Declare and set a variable per __ESBMC_frees(p) target of the replaced
+  /// call, holding p's pre-call value.
+  std::vector<expr2tc> capture_frees(
+    const symbolt &function_symbol,
+    const goto_programt &function_body,
+    const std::vector<expr2tc> &actual_args,
+    const locationt &call_location,
+    goto_programt &replacement);
+
+  /// Havoc the assigns target \p target_expr of a replaced call.
+  void havoc_assigns_target(
+    const expr2tc &target_expr,
+    const symbolt &function_symbol,
+    const std::vector<expr2tc> &actual_args,
+    const locationt &call_location,
+    goto_programt &replacement);
+
+  /// Allocate the framed places an ensures-side is_fresh names, and return
+  /// \p ensures_guard with those is_fresh temps resolved.
+  expr2tc allocate_ensured_fresh(
+    const expr2tc &ensures_guard,
+    const symbolt &function_symbol,
+    const goto_programt &function_body,
+    const std::vector<expr2tc> &actual_args,
+    const locationt &call_location,
+    goto_programt &replacement);
 
   /// \brief Extract requires clause from contract symbol
   /// \param contract_symbol Contract symbol

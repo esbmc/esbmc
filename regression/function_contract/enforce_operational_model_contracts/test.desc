@@ -1,0 +1,5 @@
+CORE
+main.c
+--enforce-operational-model-contracts --force-malloc-success --unwind 10
+^Enforced contract for function c:@F@strlen$
+^VERIFICATION SUCCESSFUL$
