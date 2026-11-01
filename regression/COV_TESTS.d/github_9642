@@ -1,0 +1,6 @@
+regression/python/github_9642
+regression/python/github_9642_called
+regression/python/github_9642_init
+regression/python/github_9642_init_fail
+regression/python/github_9642_other_class_fail
+regression/python/github_9642_uncaught_fail
