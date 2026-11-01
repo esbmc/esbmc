@@ -1907,7 +1907,7 @@ std::string string_handler::extract_string_from_array_operands(
         binary2integer(op.value().as_string(), op.type().is_signedbv());
       if (val == 0)
         break;
-      result += static_cast<char>(val.to_uint64());
+      result += static_cast<char>(val.to_int64());
     }
   }
   return result;
