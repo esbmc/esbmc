@@ -326,6 +326,33 @@ private:
     goto_programt::targett call_instruction,
     goto_programt &caller_body);
 
+  /// Declare and set a variable per __ESBMC_frees(p) target of the replaced
+  /// call, holding p's pre-call value.
+  std::vector<expr2tc> capture_frees(
+    const symbolt &function_symbol,
+    const goto_programt &function_body,
+    const std::vector<expr2tc> &actual_args,
+    const locationt &call_location,
+    goto_programt &replacement);
+
+  /// Havoc the assigns target \p target_expr of a replaced call.
+  void havoc_assigns_target(
+    const expr2tc &target_expr,
+    const symbolt &function_symbol,
+    const std::vector<expr2tc> &actual_args,
+    const locationt &call_location,
+    goto_programt &replacement);
+
+  /// Allocate the framed places an ensures-side is_fresh names, and return
+  /// \p ensures_guard with those is_fresh temps resolved.
+  expr2tc allocate_ensured_fresh(
+    const expr2tc &ensures_guard,
+    const symbolt &function_symbol,
+    const goto_programt &function_body,
+    const std::vector<expr2tc> &actual_args,
+    const locationt &call_location,
+    goto_programt &replacement);
+
   /// \brief Extract requires clause from contract symbol
   /// \param contract_symbol Contract symbol
   /// \return Requires expression, or true_exprt() if not present

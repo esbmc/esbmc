@@ -1587,6 +1587,16 @@ void goto_convertt::rewrite_short_circuit_as_ternary(exprt &expr)
   expr.location() = tmp.location();
 }
 
+static bool is_contract_clause_call(const std::string &name)
+{
+  static const std::set<std::string> clauses = {
+    "__ESBMC_requires",
+    "__ESBMC_ensures",
+    "__ESBMC_assigns_impl",
+    "__ESBMC_frees"};
+  return clauses.count(name) > 0;
+}
+
 void goto_convertt::remove_sideeffects(
   exprt &expr,
   goto_programt &dest,
@@ -1815,10 +1825,7 @@ void goto_convertt::remove_sideeffects(
       // the unconditional intrinsics section so annotated files still compile.
       if (fsym && !options.contracts_enabled())
       {
-        const std::string &fname = id2string(fsym->name);
-        if (
-          fname == "__ESBMC_requires" || fname == "__ESBMC_ensures" ||
-          fname == "__ESBMC_assigns_impl" || fname == "__ESBMC_frees")
+        if (is_contract_clause_call(id2string(fsym->name)))
         {
           expr.make_nil();
           return;

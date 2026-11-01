@@ -1409,6 +1409,20 @@ static bool is_frees_call(const goto_programt::instructiont &i)
            "c:@F@__ESBMC_frees";
 }
 
+// shortcut: no check that the body frees only what is listed; add one before
+// enforcing a contract that uses __ESBMC_frees.
+static void
+refuse_enforced_frees(const goto_programt &body, const std::string &name)
+{
+  for (const auto &i : body.instructions)
+    if (is_frees_call(i))
+    {
+      log_error(
+        "{}: enforcing a contract with __ESBMC_frees is not supported", name);
+      abort();
+    }
+}
+
 static bool is_clause_assume(const goto_programt::instructiont &i)
 {
   if (!i.is_assume())
@@ -1513,17 +1527,6 @@ std::set<std::string> code_contractst::enforce_contracts(
 
     // Find the function in goto_functions
     auto func_it = goto_functions.function_map.find(func_sym->id);
-    if (func_it != goto_functions.function_map.end())
-      for (const auto &i : func_it->second.body.instructions)
-        if (is_frees_call(i))
-        {
-          // shortcut: no check that the body frees only what is listed;
-          // add one before enforcing a contract that uses __ESBMC_frees.
-          log_error(
-            "{}: enforcing a contract with __ESBMC_frees is not supported",
-            function_name);
-          abort();
-        }
     if (
       func_it == goto_functions.function_map.end() ||
       !func_it->second.body_available)
@@ -1531,6 +1534,7 @@ std::set<std::string> code_contractst::enforce_contracts(
       log_warning("Function body for {} not available", function_name);
       continue;
     }
+    refuse_enforced_frees(func_it->second.body, function_name);
 
     // Quick check: skip if function has no contracts and no annotation
     // Functions can have contracts via:
@@ -2412,6 +2416,36 @@ goto_programt code_contractst::generate_checking_wrapper(
   return wrapper;
 }
 
+/// A clause's own spelling of the return value. Strict: call temps such as old
+/// snapshots are also named return_value$N.
+static bool names_return_value(const std::string &name)
+{
+  return name.find("__ESBMC_return_value") != std::string::npos ||
+         name == "return_value";
+}
+
+/// __ESBMC_return_value is declared int, so a pointer result reaches a clause
+/// as (T)(int)rv; the int cast would truncate the pointer, so keep only T. Nil
+/// unless \p expr is such a cast.
+static expr2tc pointer_return_value(
+  const expr2tc &expr,
+  const expr2tc &ret_val,
+  const namespacet &ns)
+{
+  if (!is_typecast2t(expr) || !is_pointer_type(ret_val->type))
+    return expr2tc();
+  expr2tc inner = expr;
+  while (is_typecast2t(inner))
+    inner = to_typecast2t(inner).from;
+  if (
+    !is_symbol2t(inner) ||
+    !names_return_value(id2string(to_symbol2t(inner).get_symbol_name())))
+    return expr2tc();
+  return base_type_eq(expr->type, ret_val->type, ns)
+           ? ret_val
+           : typecast2tc(expr->type, ret_val);
+}
+
 expr2tc code_contractst::replace_return_value_in_expr(
   const expr2tc &expr,
   const expr2tc &ret_val) const
@@ -2419,26 +2453,8 @@ expr2tc code_contractst::replace_return_value_in_expr(
   if (is_nil_expr(expr))
     return expr;
 
-  // __ESBMC_return_value is declared int, so a pointer result reaches here as
-  // (T)(int)rv; the int cast would truncate the pointer, so keep only T.
-  if (is_typecast2t(expr) && is_pointer_type(ret_val->type))
-  {
-    expr2tc inner = expr;
-    while (is_typecast2t(inner))
-      inner = to_typecast2t(inner).from;
-    const std::string name =
-      is_symbol2t(inner)
-        ? id2string(to_symbol2t(inner).get_symbol_name())
-        : std::string();
-    // Strict match, as below: call temps such as old snapshots are also
-    // named return_value$N.
-    if (
-      name.find("__ESBMC_return_value") != std::string::npos ||
-      name == "return_value")
-      return base_type_eq(expr->type, ret_val->type, ns)
-               ? ret_val
-               : typecast2tc(expr->type, ret_val);
-  }
+  if (const expr2tc r = pointer_return_value(expr, ret_val, ns))
+    return r;
 
   // Handle address_of(index(symbol(__ESBMC_return_value))) pattern
   // This is how __ESBMC_return_value appears in GOTO programs when declared as
@@ -2458,9 +2474,7 @@ expr2tc code_contractst::replace_return_value_in_expr(
         const symbol2t &sym = to_symbol2t(index_source);
         std::string sym_name = id2string(sym.get_symbol_name());
 
-        if (
-          sym_name.find("__ESBMC_return_value") != std::string::npos ||
-          sym_name == "return_value")
+        if (names_return_value(sym_name))
         {
           // Replace &__ESBMC_return_value[0] with ret_val
           // The original expr is address_of, so its type is pointer
@@ -2480,9 +2494,7 @@ expr2tc code_contractst::replace_return_value_in_expr(
 
     // Check if symbol name contains __ESBMC_return_value (may have prefix)
     // Also check for "return_value" which is how it appears in GOTO programs
-    if (
-      sym_name.find("__ESBMC_return_value") != std::string::npos ||
-      sym_name == "return_value")
+    if (names_return_value(sym_name))
     {
       return ret_val;
     }
@@ -2532,9 +2544,7 @@ expr2tc code_contractst::replace_return_value_in_expr(
           const symbol2t &sym = to_symbol2t(final_symbol);
           std::string sym_name = id2string(sym.get_symbol_name());
 
-          if (
-            sym_name.find("__ESBMC_return_value") != std::string::npos ||
-            sym_name == "return_value")
+          if (names_return_value(sym_name))
           {
             // Replace the entire pattern:
             // ((Type*)(&__ESBMC_return_value))->member with: ret_val.member
@@ -2576,9 +2586,7 @@ expr2tc code_contractst::replace_return_value_in_expr(
           const symbol2t &sym = to_symbol2t(inner);
           std::string sym_name = id2string(sym.get_symbol_name());
 
-          if (
-            sym_name.find("__ESBMC_return_value") != std::string::npos ||
-            sym_name == "return_value")
+          if (names_return_value(sym_name))
           {
             // ret_val holds the actual return value; for pointer-return
             // functions it has type T*. Generate: (*ret_val).member
@@ -5733,7 +5741,6 @@ expr2tc code_contractst::lower_is_fresh_in_requires(
   return requires_clause;
 }
 
-
 // An array frame target reached through a pointer cannot be assigned in one go:
 // dereference refuses to build an array-typed lvalue (dereference.cpp:1103).
 // Write the elements instead -- same post-state, more instructions. Returns
@@ -5890,6 +5897,173 @@ void code_contractst::drop_unread_region_snapshots(
   });
 }
 
+static void emit_frees(
+  const std::vector<expr2tc> &freed,
+  const locationt &location,
+  goto_programt &dest)
+{
+  for (const expr2tc &v : freed)
+  {
+    goto_programt::targett f = dest.add_instruction(OTHER);
+    f->code = code_free2tc(v);
+    f->location = location;
+    f->location.comment("contract frees");
+  }
+}
+
+std::vector<expr2tc> code_contractst::capture_frees(
+  const symbolt &function_symbol,
+  const goto_programt &function_body,
+  const std::vector<expr2tc> &actual_args,
+  const locationt &call_location,
+  goto_programt &replacement)
+{
+  std::vector<expr2tc> freed;
+  forall_goto_program_instructions (c, function_body)
+  {
+    if (!is_frees_call(*c))
+      continue;
+    for (expr2tc p : to_code_function_call2t(c->code).operands)
+    {
+      while (is_typecast2t(p))
+        p = to_typecast2t(p).from;
+      bool unused = false;
+      p = instantiate_assigns_target(p, function_symbol, actual_args, unused);
+      expr2tc v = declare_local_symbol(
+        "__ESBMC_frees_" + id2string(function_symbol.name) + "_" +
+          std::to_string(freed.size()),
+        p->type);
+      goto_programt::targett d = replacement.add_instruction(DECL);
+      d->code = code_decl2tc(p->type, to_symbol2t(v).thename);
+      d->location = call_location;
+      goto_programt::targett a = replacement.add_instruction(ASSIGN);
+      a->code = code_assign2tc(v, p);
+      a->location = call_location;
+      freed.push_back(v);
+    }
+  }
+  return freed;
+}
+
+void code_contractst::havoc_assigns_target(
+  const expr2tc &target_expr,
+  const symbolt &function_symbol,
+  const std::vector<expr2tc> &actual_args,
+  const locationt &call_location,
+  goto_programt &replacement)
+{
+  bool target_is_pointer_param = false;
+  expr2tc instantiated_target = instantiate_assigns_target(
+    target_expr, function_symbol, actual_args, target_is_pointer_param);
+
+  // `__ESBMC_object(p)` frames the whole object p points into, e.g. a
+  // heap buffer of symbolic length that no lvalue can name.
+  if (const expr2tc whole = whole_object_target(instantiated_target, ns))
+  {
+    goto_programt::targett h = replacement.add_instruction(FUNCTION_CALL);
+    h->code = code_function_call2tc(
+      expr2tc(), havoc_object_function(), std::vector<expr2tc>{whole});
+    h->location = call_location;
+    h->location.comment("contract havoc assigns object");
+    return;
+  }
+
+  // `&x` names the place already, and havoc_place resolves it to x.
+  // Following the pointer as well would write through x rather than to it,
+  // which for an `int **pp` argument means havocking `*x` -- a dereference
+  // of whatever the caller's pointer happens to hold.
+  const bool names_place_directly = is_address_of2t(instantiated_target);
+  instantiated_target = havoc_place(instantiated_target);
+
+  if (target_is_pointer_param && !names_place_directly)
+  {
+    instantiated_target = havoc_through_pointer(instantiated_target, ns);
+    if (is_nil_expr(instantiated_target))
+    {
+      // The frame the contract named cannot be written, so say so: a
+      // dropped target reads exactly like one that was havocked.
+      log_warning(
+        "__ESBMC_assigns: nothing can be written through the pointer "
+        "parameter named at {}; the caller keeps its pre-call value",
+        call_location.as_string());
+      return;
+    }
+  }
+
+  // Skip pointer havoc in value-set mode (consistent with loop invariant).
+  // Tested on the place actually written, after widening and after
+  // following a pointer parameter: the skip is about assigning a pointer,
+  // not about writing through one, and a target the contract named should
+  // not vanish because it was reached through a pointer variable.
+  if (
+    config.options.get_bool_option("add-symex-value-sets") &&
+    is_pointer_type(instantiated_target))
+    return;
+
+  if (havoc_pointed_to_array(instantiated_target, call_location, replacement))
+    return;
+
+  // One nondet of the target's own type, arrays included. ARRAY_OF ties
+  // every element to a single nondet, so a callee that leaves its elements
+  // holding different values has no post-state the havoc can express and
+  // the ensures ASSUME kills the path (#7010). This is what the loop
+  // invariant havoc has always done.
+  expr2tc rhs = gen_nondet(instantiated_target->type);
+
+  goto_programt::targett t = replacement.add_instruction(ASSIGN);
+  t->code = code_assign2tc(instantiated_target, rhs);
+  t->location = call_location;
+  t->location.comment("contract havoc assigns");
+
+  log_debug("contracts", "Havoc'd assigns target expression");
+}
+
+expr2tc code_contractst::allocate_ensured_fresh(
+  const expr2tc &ensures_guard,
+  const symbolt &function_symbol,
+  const goto_programt &function_body,
+  const std::vector<expr2tc> &actual_args,
+  const locationt &call_location,
+  goto_programt &replacement)
+{
+  std::set<irep_idt> ensured;
+  collect_symbol_names(ensures_guard, ensured);
+  std::vector<is_fresh_mapping_t> fresh;
+  forall_goto_program_instructions (c, function_body)
+  {
+    if (!c->is_function_call() || !is_code_function_call2t(c->code))
+      continue;
+    const code_function_call2t &call = to_code_function_call2t(c->code);
+    if (
+      !is_symbol2t(call.function) ||
+      !is_fresh_function(to_symbol2t(call.function).thename.as_string()) ||
+      call.operands.size() < 2 || !is_symbol2t(call.ret) ||
+      !ensured.count(to_symbol2t(call.ret).thename))
+      continue;
+    expr2tc p = call.operands[0];
+    while (is_typecast2t(p))
+      p = to_typecast2t(p).from;
+    bool unused = false;
+    p = instantiate_assigns_target(p, function_symbol, actual_args, unused);
+    if (is_symbol2t(p) && is_return_value_symbol(to_symbol2t(p)))
+      continue;
+    goto_programt::targett a = replacement.add_instruction(ASSIGN);
+    a->code = code_assign2tc(
+      p,
+      byte_malloc(instantiate_assigns_target(
+        call.operands[1], function_symbol, actual_args, unused)));
+    a->location = call_location;
+    a->location.comment("contract ensures is_fresh allocation");
+    is_fresh_mapping_t m;
+    m.temp_var_name = to_symbol2t(call.ret).thename;
+    m.ptr_expr = p;
+    fresh.push_back(m);
+  }
+  return fresh.empty() ? ensures_guard
+                       : replace_is_fresh_temps(
+                           ensures_guard, fresh, /*require_dynamic=*/true);
+}
+
 void code_contractst::generate_replacement_at_call(
   const symbolt &function_symbol,
   const goto_programt &function_body,
@@ -6044,30 +6218,8 @@ void code_contractst::generate_replacement_at_call(
   // __ESBMC_frees(p): the removed body released p's object. Take p's value
   // before the havoc and free it after the ensures, which may still read the
   // old object through an __ESBMC_old snapshot.
-  std::vector<expr2tc> freed;
-  forall_goto_program_instructions (c, function_body)
-  {
-    if (!is_frees_call(*c))
-      continue;
-    for (expr2tc p : to_code_function_call2t(c->code).operands)
-    {
-      while (is_typecast2t(p))
-        p = to_typecast2t(p).from;
-      bool unused = false;
-      p = instantiate_assigns_target(p, function_symbol, actual_args, unused);
-      expr2tc v = declare_local_symbol(
-        "__ESBMC_frees_" + id2string(function_symbol.name) + "_" +
-          std::to_string(freed.size()),
-        p->type);
-      goto_programt::targett d = replacement.add_instruction(DECL);
-      d->code = code_decl2tc(p->type, to_symbol2t(v).thename);
-      d->location = call_location;
-      goto_programt::targett a = replacement.add_instruction(ASSIGN);
-      a->code = code_assign2tc(v, p);
-      a->location = call_location;
-      freed.push_back(v);
-    }
-  }
+  const std::vector<expr2tc> freed = capture_frees(
+    function_symbol, function_body, actual_args, call_location, replacement);
 
   // 2. Havoc all potentially modified locations
   // In replace_calls mode, we must havoc everything the function might modify,
@@ -6081,73 +6233,8 @@ void code_contractst::generate_replacement_at_call(
     // This implements the key feature for eliminating false counterexamples
     // Now assigns targets are expression trees that need parameter substitution
     for (const expr2tc &target_expr : assigns_target_exprs)
-    {
-      bool target_is_pointer_param = false;
-      expr2tc instantiated_target = instantiate_assigns_target(
-        target_expr, function_symbol, actual_args, target_is_pointer_param);
-
-      // `__ESBMC_object(p)` frames the whole object p points into, e.g. a
-      // heap buffer of symbolic length that no lvalue can name.
-      if (const expr2tc whole = whole_object_target(instantiated_target, ns))
-      {
-        goto_programt::targett h = replacement.add_instruction(FUNCTION_CALL);
-        h->code = code_function_call2tc(
-          expr2tc(), havoc_object_function(), std::vector<expr2tc>{whole});
-        h->location = call_location;
-        h->location.comment("contract havoc assigns object");
-        continue;
-      }
-
-      // `&x` names the place already, and havoc_place resolves it to x.
-      // Following the pointer as well would write through x rather than to it,
-      // which for an `int **pp` argument means havocking `*x` -- a dereference
-      // of whatever the caller's pointer happens to hold.
-      const bool names_place_directly = is_address_of2t(instantiated_target);
-      instantiated_target = havoc_place(instantiated_target);
-
-      if (target_is_pointer_param && !names_place_directly)
-      {
-        instantiated_target = havoc_through_pointer(instantiated_target, ns);
-        if (is_nil_expr(instantiated_target))
-        {
-          // The frame the contract named cannot be written, so say so: a
-          // dropped target reads exactly like one that was havocked.
-          log_warning(
-            "__ESBMC_assigns: nothing can be written through the pointer "
-            "parameter named at {}; the caller keeps its pre-call value",
-            call_location.as_string());
-          continue;
-        }
-      }
-
-      // Skip pointer havoc in value-set mode (consistent with loop invariant).
-      // Tested on the place actually written, after widening and after
-      // following a pointer parameter: the skip is about assigning a pointer,
-      // not about writing through one, and a target the contract named should
-      // not vanish because it was reached through a pointer variable.
-      if (
-        config.options.get_bool_option("add-symex-value-sets") &&
-        is_pointer_type(instantiated_target))
-        continue;
-
-      if (
-        havoc_pointed_to_array(instantiated_target, call_location, replacement))
-        continue;
-
-      // One nondet of the target's own type, arrays included. ARRAY_OF ties
-      // every element to a single nondet, so a callee that leaves its elements
-      // holding different values has no post-state the havoc can express and
-      // the ensures ASSUME kills the path (#7010). This is what the loop
-      // invariant havoc has always done.
-      expr2tc rhs = gen_nondet(instantiated_target->type);
-
-      goto_programt::targett t = replacement.add_instruction(ASSIGN);
-      t->code = code_assign2tc(instantiated_target, rhs);
-      t->location = call_location;
-      t->location.comment("contract havoc assigns");
-
-      log_debug("contracts", "Havoc'd assigns target expression");
-    }
+      havoc_assigns_target(
+        target_expr, function_symbol, actual_args, call_location, replacement);
 
     log_debug(
       "contracts",
@@ -6234,9 +6321,8 @@ void code_contractst::generate_replacement_at_call(
   }
 
   // 2.5. Name the value the removed body would have returned.
-  expr2tc call_result =
-    declare_call_result(
-      function_symbol, ret_val, actual_args, call_location, replacement);
+  expr2tc call_result = declare_call_result(
+    function_symbol, ret_val, actual_args, call_location, replacement);
 
   // 3. Normalize ensures guard: replace return_value, fix types, normalize
   // floating-point
@@ -6278,44 +6364,13 @@ void code_contractst::generate_replacement_at_call(
 
   // 3.c An ensures-side is_fresh(p, n) on a framed place (not the return
   // value): the removed body handed back fresh storage, so allocate it here.
-  {
-    std::set<irep_idt> ensured;
-    collect_symbol_names(ensures_guard, ensured);
-    std::vector<is_fresh_mapping_t> fresh;
-    forall_goto_program_instructions (c, function_body)
-    {
-      if (!c->is_function_call() || !is_code_function_call2t(c->code))
-        continue;
-      const code_function_call2t &call = to_code_function_call2t(c->code);
-      if (
-        !is_symbol2t(call.function) ||
-        !is_fresh_function(to_symbol2t(call.function).thename.as_string()) ||
-        call.operands.size() < 2 || !is_symbol2t(call.ret) ||
-        !ensured.count(to_symbol2t(call.ret).thename))
-        continue;
-      expr2tc p = call.operands[0];
-      while (is_typecast2t(p))
-        p = to_typecast2t(p).from;
-      bool unused = false;
-      p = instantiate_assigns_target(p, function_symbol, actual_args, unused);
-      if (is_symbol2t(p) && is_return_value_symbol(to_symbol2t(p)))
-        continue;
-      goto_programt::targett a = replacement.add_instruction(ASSIGN);
-      a->code = code_assign2tc(
-        p,
-        byte_malloc(instantiate_assigns_target(
-          call.operands[1], function_symbol, actual_args, unused)));
-      a->location = call_location;
-      a->location.comment("contract ensures is_fresh allocation");
-      is_fresh_mapping_t m;
-      m.temp_var_name = to_symbol2t(call.ret).thename;
-      m.ptr_expr = p;
-      fresh.push_back(m);
-    }
-    if (!fresh.empty())
-      ensures_guard =
-        replace_is_fresh_temps(ensures_guard, fresh, /*require_dynamic=*/true);
-  }
+  ensures_guard = allocate_ensured_fresh(
+    ensures_guard,
+    function_symbol,
+    function_body,
+    actual_args,
+    call_location,
+    replacement);
 
   reissue_clause_calls(
     function_body, ensures_guard, instantiate, replacement, call_location);
@@ -6323,13 +6378,7 @@ void code_contractst::generate_replacement_at_call(
   add_contract_clause(
     ensures_guard, ASSUME, "contract ensures", "contract ensures");
 
-  for (const expr2tc &v : freed)
-  {
-    goto_programt::targett f = replacement.add_instruction(OTHER);
-    f->code = code_free2tc(v);
-    f->location = call_location;
-    f->location.comment("contract frees");
-  }
+  emit_frees(freed, call_location, replacement);
 
   // 4.b The caller's place takes the result only now.
   write_back_call_result(ret_val, call_result, call_location, replacement);

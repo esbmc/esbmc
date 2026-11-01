@@ -613,27 +613,8 @@ bool esbmc_parseoptionst::process_goto_program(
     if (options.get_bool_option("atomicity-check"))
       goto_atomicity_check(goto_functions, ns, context);
 
-    // Process function contracts if enabled
-    bool has_enforce = cmdline.isset("enforce-contract");
-    bool has_replace = cmdline.isset("replace-call-with-contract");
-    bool has_enforce_all = cmdline.isset("enforce-all-contracts");
-    bool has_replace_all = cmdline.isset("replace-all-contracts");
-    bool has_om = cmdline.isset("contract-operational-models") ||
-                  cmdline.isset("enforce-operational-model-contracts");
-    if (
-      has_enforce || has_replace || has_enforce_all || has_replace_all ||
-      has_om)
-    {
-      if (
-        process_function_contracts(
-          goto_functions,
-          has_replace,
-          has_enforce,
-          has_enforce_all,
-          has_replace_all,
-          has_om))
-        return true;
-    }
+    if (contract_pass_requested() && process_function_contracts(goto_functions))
+      return true;
 
     // add re-evaluations of monitored properties
     add_property_monitors(goto_functions, ns);

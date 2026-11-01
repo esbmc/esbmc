@@ -9,7 +9,6 @@
 #include <set>
 #include <string>
 
-// Process function contracts if enabled
 // Operational models are the functions ESBMC serves from its VFS.
 static bool is_operational_model(contextt &ctx, const irep_idt &id)
 {
@@ -18,14 +17,102 @@ static bool is_operational_model(contextt &ctx, const irep_idt &id)
          id2string(sym->location.get_file()).rfind(clang_vfs_root(), 0) == 0;
 }
 
-bool esbmc_parseoptionst::process_function_contracts(
-  goto_functionst &goto_functions,
-  bool has_replace,
-  bool has_enforce,
-  bool has_enforce_all,
-  bool has_replace_all,
-  bool has_om)
+// Model contracts are acted on only by the operational-model flags.
+static bool user_pass_skips(
+  const code_contractst &contracts,
+  contextt &ctx,
+  const irep_idt &id)
 {
+  return contracts.is_compiler_generated(id2string(id)) ||
+         is_operational_model(ctx, id);
+}
+
+static std::set<std::string> contracted_models(
+  const goto_functionst &goto_functions,
+  contextt &ctx,
+  const code_contractst &contracts)
+{
+  std::set<std::string> models;
+  forall_goto_functions (it, goto_functions)
+    if (
+      it->second.body_available && is_operational_model(ctx, it->first) &&
+      contracts.has_contracts(it->second.body))
+      models.insert(id2string(it->first));
+  return models;
+}
+
+// Model contracts are checked once, by --enforce-operational-model-contracts,
+// not by every user enforce run.
+static void drop_models(
+  std::set<std::string> &to_enforce,
+  code_contractst &contracts,
+  contextt &ctx)
+{
+  for (auto it = to_enforce.begin(); it != to_enforce.end();)
+  {
+    const symbolt *sym = contracts.find_function_symbol(*it);
+    if (sym && is_operational_model(ctx, sym->id))
+    {
+      log_warning(
+        "--enforce-contract: skipping operational model '{}'; use "
+        "--enforce-operational-model-contracts",
+        *it);
+      it = to_enforce.erase(it);
+    }
+    else
+      ++it;
+  }
+}
+
+static void act_on_models(
+  const goto_functionst &goto_functions,
+  contextt &ctx,
+  code_contractst &contracts,
+  const std::string &entry_function,
+  bool enforce,
+  bool replace)
+{
+  if (enforce)
+    log_status(
+      "Enforcing {} operational-model contract(s)",
+      contracts
+        .enforce_contracts(
+          contracted_models(goto_functions, ctx, contracts),
+          entry_function,
+          true)
+        .size());
+  if (replace)
+  {
+    const std::set<std::string> models =
+      contracted_models(goto_functions, ctx, contracts);
+    log_status(
+      "Replacing {} operational model(s) with contracts", models.size());
+    contracts.replace_calls(models);
+  }
+}
+
+bool esbmc_parseoptionst::contract_pass_requested() const
+{
+  for (const char *flag :
+       {"enforce-contract",
+        "replace-call-with-contract",
+        "enforce-all-contracts",
+        "replace-all-contracts",
+        "contract-operational-models",
+        "enforce-operational-model-contracts"})
+    if (cmdline.isset(flag))
+      return true;
+  return false;
+}
+
+// Process function contracts if enabled
+bool esbmc_parseoptionst::process_function_contracts(
+  goto_functionst &goto_functions)
+{
+  const bool has_enforce = cmdline.isset("enforce-contract");
+  const bool has_replace = cmdline.isset("replace-call-with-contract");
+  const bool has_enforce_all = cmdline.isset("enforce-all-contracts");
+  const bool has_replace_all = cmdline.isset("replace-all-contracts");
   namespacet ns(context);
   code_contractst contracts(goto_functions, context, ns);
 
@@ -50,10 +137,7 @@ bool esbmc_parseoptionst::process_function_contracts(
         // Use is_compiler_generated (which correctly handles C++ USR IDs like
         // "c:@F@fst#*1I#") instead of a raw '#' string filter, which would
         // incorrectly skip all C++ functions with parameters.
-        if (contracts.is_compiler_generated(func_name))
-          continue;
-        // Model contracts are acted on only by --contract-operational-models.
-        if (is_operational_model(ctx, it->first))
+        if (user_pass_skips(contracts, ctx, it->first))
           continue;
 
         // Check for explicit contract clauses in function body
@@ -160,22 +244,7 @@ bool esbmc_parseoptionst::process_function_contracts(
 
   if (has_enforce)
     to_enforce = process_function_list(cmdline.get_values("enforce-contract"));
-  // Model contracts are checked once, by
-  // --enforce-operational-model-contracts, not by every user enforce run.
-  for (auto it = to_enforce.begin(); it != to_enforce.end();)
-  {
-    const symbolt *sym = contracts.find_function_symbol(*it);
-    if (sym && is_operational_model(ctx, sym->id))
-    {
-      log_warning(
-        "--enforce-contract: skipping operational model '{}'; use "
-        "--enforce-operational-model-contracts",
-        *it);
-      it = to_enforce.erase(it);
-    }
-    else
-      ++it;
-  }
+  drop_models(to_enforce, contracts, ctx);
   if (has_replace)
     to_replace =
       process_function_list(cmdline.get_values("replace-call-with-contract"));
@@ -224,30 +293,13 @@ bool esbmc_parseoptionst::process_function_contracts(
   if (has_replace_all)
     contracts.replace_calls(annotated);
 
-  auto contracted_models = [&]() {
-    std::set<std::string> models;
-    forall_goto_functions (it, goto_functions)
-      if (
-        it->second.body_available && is_operational_model(ctx, it->first) &&
-        contracts.has_contracts(it->second.body))
-        models.insert(id2string(it->first));
-    return models;
-  };
-
-  if (cmdline.isset("enforce-operational-model-contracts"))
-    log_status(
-      "Enforcing {} operational-model contract(s)",
-      contracts
-        .enforce_contracts(contracted_models(), entry_function, true)
-        .size());
-
-  if (cmdline.isset("contract-operational-models"))
-  {
-    const std::set<std::string> models = contracted_models();
-    log_status(
-      "Replacing {} operational model(s) with contracts", models.size());
-    contracts.replace_calls(models);
-  }
+  act_on_models(
+    goto_functions,
+    ctx,
+    contracts,
+    entry_function,
+    cmdline.isset("enforce-operational-model-contracts"),
+    cmdline.isset("contract-operational-models"));
 
   contracts.remove_inactive_clauses();
   return false;

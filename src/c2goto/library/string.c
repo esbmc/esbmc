@@ -103,8 +103,7 @@ __ESBMC_HIDE:;
     s[__ESBMC_return_value] == 0);
   __ESBMC_ensures(__ESBMC_forall(
     &__ESBMC_strlen_qv,
-    !(__ESBMC_strlen_qv < __ESBMC_return_value) ||
-      s[__ESBMC_strlen_qv] != 0));
+    !(__ESBMC_strlen_qv < __ESBMC_return_value) || s[__ESBMC_strlen_qv] != 0));
   size_t len = 0;
   while (s[len] != 0)
     len++;

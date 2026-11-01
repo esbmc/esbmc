@@ -73,22 +73,13 @@ protected:
   virtual bool
   output_goto_program(optionst &options, goto_functionst &goto_functions);
 
-  /// \brief Process function contracts if enabled
+  /// \brief Whether any contract pass flag is set
+  bool contract_pass_requested() const;
+
+  /// \brief Run the contract passes the command line selects
   /// \param goto_functions GOTO functions
-  /// \param has_replace Whether to replace calls with contracts
-  /// \param has_enforce Whether to enforce contracts
-  /// \param has_enforce_all Whether to enforce contracts for all annotated
-  /// functions
-  /// \param has_replace_all Whether to replace calls for all annotated
-  /// functions
   /// \return True on a usage error, e.g. a named function that nothing acted on
-  bool process_function_contracts(
-    goto_functionst &goto_functions,
-    bool has_replace,
-    bool has_enforce,
-    bool has_enforce_all,
-    bool has_replace_all,
-    bool has_om);
+  bool process_function_contracts(goto_functionst &goto_functions);
 
   int do_bmc_strategy(optionst &options, goto_functionst &goto_functions);
 
