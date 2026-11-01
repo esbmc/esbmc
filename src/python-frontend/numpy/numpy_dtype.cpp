@@ -1,5 +1,7 @@
 #include <python-frontend/numpy/numpy_dtype.h>
 
+#include <algorithm>
+#include <cctype>
 #include <set>
 
 #include <python-frontend/type/type_handler.h>
@@ -79,7 +81,11 @@ std::optional<numpy_dtypet> numpy_dtype_from_name(const std::string &name)
   if (it != dtypes.end())
     return it->second;
   // `U<n>`: four bytes a character, as `.itemsize` reports them.
-  if (name.size() > 1 && name[0] == 'U')
+  if (
+    name.size() > 1 && name[0] == 'U' &&
+    std::all_of(name.begin() + 1, name.end(), [](unsigned char c) {
+      return std::isdigit(c);
+    }))
     return numpy_dtypet{
       kindt::string, static_cast<unsigned>(std::stoul(name.substr(1))) * 32};
   return std::nullopt;

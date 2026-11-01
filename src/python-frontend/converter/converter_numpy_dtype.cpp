@@ -13,6 +13,17 @@ static bool is_dtype_attribute(const nlohmann::json &node)
          node.value("attr", "") == "dtype";
 }
 
+// A probe of an operand: with the assignment's target in place, converting a
+// slice would retype that target to a view.
+exprt python_converter::get_expr_without_lhs(const nlohmann::json &node)
+{
+  exprt *const saved = current_lhs;
+  current_lhs = nullptr;
+  const exprt value = get_expr(node);
+  current_lhs = saved;
+  return value;
+}
+
 // The dtype of the array or view @p base denotes. Only a name or a subscript is
 // read, since reading it twice must not repeat a call.
 std::optional<numpy_dtypet>
@@ -23,7 +34,7 @@ python_converter::numpy_array_dtype(const nlohmann::json &base)
     (kind != "Name" && kind != "Subscript") ||
     json_utils::ast_contains_call(base))
     return std::nullopt;
-  const exprt array = numpy_param_as_array(get_expr(base));
+  const exprt array = numpy_param_as_array(get_expr_without_lhs(base));
   const typet type = ns.follow(array.type());
   const bool is_view =
     type.is_pointer() && array.is_symbol() &&
@@ -53,20 +64,231 @@ python_converter::numpy_array_dtype(const nlohmann::json &base)
 
 // `.itemsize` and `.nbytes` of an array or view; nbytes follows the logical
 // shape, so a view reports its own bytes.
+// A variable, parameter, attribute or container holds a Python number, so a
+// narrow scalar leaving its array would stop wrapping at its width.
+void python_converter::reject_numpy_scalar_crossing(
+  const typet &type,
+  const std::string &action) const
+{
+  if (type_utils::is_numpy_scalar_type(type))
+    throw std::runtime_error(
+      "TypeError: " + action +
+      " a numpy scalar of a narrow dtype is not supported");
+}
+
+static const nlohmann::json &subscript_root(const nlohmann::json &node)
+{
+  const nlohmann::json *root = &node;
+  while (root->value("_type", "") == "Subscript")
+    root = &(*root)["value"];
+  return *root;
+}
+
+// Whether the program may reach a string slice's source or copy other than by
+// reading an element: a store, an alias, a parameter or a call argument.
+static bool
+names_one_of(const nlohmann::json &node, const std::set<std::string> &names)
+{
+  return node.value("_type", "") == "Name" &&
+         names.count(node.value("id", "")) != 0;
+}
+
+static bool stores_or_aliases(
+  const nlohmann::json &assign,
+  const std::set<std::string> &names)
+{
+  const nlohmann::json targets = assign.value("_type", "") == "Assign"
+                                   ? assign["targets"]
+                                   : nlohmann::json::array({assign["target"]});
+  for (const auto &target : targets)
+    if (
+      target.value("_type", "") == "Subscript" &&
+      names_one_of(subscript_root(target), names))
+      return true;
+  return assign.contains("value") && names_one_of(assign["value"], names);
+}
+
+static bool
+passes_to_callee(const nlohmann::json &call, const std::set<std::string> &names)
+{
+  static const std::set<std::string> readers = {
+    "len", "list", "tuple", "print"};
+  const auto &args = call.value("args", nlohmann::json::array());
+  return readers.count(call["func"].value("id", "")) == 0 &&
+         call["func"].value("attr", "") != "choice" &&
+         std::any_of(
+           args.begin(), args.end(), [&names](const nlohmann::json &arg) {
+             return names_one_of(arg, names);
+           });
+}
+
+static bool string_slice_may_diverge(
+  const nlohmann::json &node,
+  const std::set<std::string> &names)
+{
+  if (!node.is_object() && !node.is_array())
+    return false;
+  const std::string kind = node.is_object() ? node.value("_type", "") : "";
+  if (
+    ((kind == "Assign" || kind == "AugAssign" || kind == "AnnAssign") &&
+     stores_or_aliases(node, names)) ||
+    (kind == "arg" && names.count(node.value("arg", "")) != 0) ||
+    (kind == "Call" && passes_to_callee(node, names)))
+    return true;
+  return std::any_of(
+    node.begin(), node.end(), [&names](const nlohmann::json &child) {
+      return string_slice_may_diverge(child, names);
+    });
+}
+
+static bool calls_len_of(const nlohmann::json &node, const std::string &name)
+{
+  if (!node.is_object() && !node.is_array())
+    return false;
+  if (
+    node.is_object() && node.value("_type", "") == "Call" &&
+    node["func"].value("id", "") == "len" && !node["args"].empty() &&
+    node["args"][0].value("id", "") == name)
+    return true;
+  for (const auto &child : node)
+    if (calls_len_of(child, name))
+      return true;
+  return false;
+}
+
+static void collect_slice_holders(
+  const nlohmann::json &node,
+  const std::string &source,
+  std::set<std::string> &holders)
+{
+  if (!node.is_object() && !node.is_array())
+    return;
+  const std::string kind = node.is_object() ? node.value("_type", "") : "";
+  if (
+    (kind == "Assign" || kind == "AnnAssign") && node.contains("value") &&
+    node["value"].is_object() &&
+    node["value"].value("_type", "") == "Subscript" &&
+    node["value"]["slice"].value("_type", "") == "Slice" &&
+    subscript_root(node["value"]).value("id", "") == source)
+  {
+    const nlohmann::json targets = kind == "Assign"
+                                     ? node["targets"]
+                                     : nlohmann::json::array({node["target"]});
+    for (const auto &target : targets)
+      if (target.value("_type", "") == "Name")
+        holders.insert(target.value("id", ""));
+  }
+  for (const auto &child : node)
+    collect_slice_holders(child, source, holders);
+}
+
+// NumPy's string slice shares storage; ours is a copy (ADR-NP-003 stage 1), so
+// it is only sound when neither side can change.
+void python_converter::reject_unsafe_numpy_string_slice(
+  const nlohmann::json &array) const
+{
+  const std::string id = subscript_root(array).value("id", "");
+  std::set<std::string> names = {id};
+  collect_slice_holders(*ast_json, id, names);
+  if (id.empty() || string_slice_may_diverge(*ast_json, names))
+    throw std::runtime_error(
+      "TypeError: a slice of a numpy string array that is written, aliased or "
+      "passed to a function is not supported");
+}
+
+// `s = a[0]`: the name keeps the array's width and shares its storage, so only
+// reads that see neither are sound.
+void python_converter::reject_unsafe_numpy_string_binding(
+  const nlohmann::json &value,
+  const exprt &lhs)
+{
+  if (
+    !lhs.is_symbol() || value.value("_type", "") != "Subscript" ||
+    value["slice"].value("_type", "") == "Slice" ||
+    json_utils::ast_contains_call(value))
+    return;
+  const auto dtype = numpy_array_dtype(value["value"]);
+  if (!dtype || dtype->kind != numpy_dtypet::kindt::string)
+    return;
+  const std::string id = lhs.identifier().as_string();
+  const std::string root = subscript_root(value).value("id", "");
+  if (
+    string_slice_may_diverge(*ast_json, {root}) ||
+    calls_len_of(*ast_json, id.substr(id.rfind('@') + 1)))
+    throw std::runtime_error(
+      "TypeError: binding an element of a numpy string array that is written "
+      "or measured with len() is not supported");
+}
+
+void python_converter::reject_numpy_scalars_in_container(
+  const nlohmann::json &assign)
+{
+  if (!assign.contains("value") || !assign["value"].is_object())
+    return;
+  for (const char *field : {"values", "elts"})
+    for (const auto &item :
+         assign["value"].value(field, nlohmann::json::array()))
+      if (item.is_object())
+        reject_numpy_scalar_read(item, "storing in a container");
+}
+
+void python_converter::reject_numpy_scalar_return(const nlohmann::json &value)
+{
+  if (value.is_object())
+    reject_numpy_scalar_read(value, "returning");
+}
+
+void python_converter::reject_numpy_scalar_read(
+  const nlohmann::json &value,
+  const std::string &action)
+{
+  if (
+    value.value("_type", "") == "Subscript" &&
+    !json_utils::ast_contains_call(value))
+    reject_numpy_scalar_crossing(get_expr_without_lhs(value).type(), action);
+}
+
+void python_converter::reject_numpy_scalar_in_attribute(
+  const exprt &lhs,
+  const exprt &rhs) const
+{
+  if (lhs.id() == "member")
+    reject_numpy_scalar_crossing(rhs.type(), "storing in an attribute");
+}
+
+void python_converter::reject_subscript_of_unmodelled_method(
+  const nlohmann::json &element)
+{
+  if (
+    element.value("_type", "") == "Subscript" &&
+    element["value"].value("_type", "") == "Call")
+    reject_unmodelled_array_method(element["value"]);
+}
+
 // A method of a string or complex array with no model would read its storage
 // as numbers.
 void python_converter::reject_unmodelled_array_method(
   const nlohmann::json &call)
 {
   const nlohmann::json &func = call["func"];
+  if (func.value("_type", "") != "Attribute")
+    return;
+  const nlohmann::json &root = subscript_root(func["value"]);
   if (
-    func.value("_type", "") != "Attribute" ||
-    func["value"].value("_type", "") != "Name" ||
-    !numpy_array_symbols_.count(
-      resolve_name_symbol_id(func["value"].value("id", ""))))
+    root.value("_type", "") != "Name" ||
+    json_utils::ast_contains_call(func["value"]) ||
+    !numpy_array_symbols_.count(resolve_name_symbol_id(root.value("id", ""))))
     return;
   const std::string method = func.value("attr", "");
+  if (func["value"].value("_type", "") == "Subscript")
+    reject_numpy_scalar_crossing(
+      get_expr_without_lhs(func["value"]).type(), "." + method + "() of");
   const auto dtype = numpy_array_dtype(func["value"]);
+  if (
+    dtype && method == "tolist" &&
+    dtype->kind == numpy_dtypet::kindt::unsigned_integer && dtype->bits == 64)
+    throw std::runtime_error(
+      "TypeError: .tolist() of a numpy uint64 array is not supported");
   if (dtype && !numpy_consumer_is_modelled(dtype->kind, method))
     throw std::runtime_error(
       "TypeError: ." + method + "() of a numpy " +
@@ -131,6 +353,10 @@ python_converter::try_numpy_dtype_compare(const nlohmann::json &element)
     if (!dtype)
       throw std::runtime_error(
         "TypeError: .dtype of this value is not supported");
+    if (dtype->kind == numpy_dtypet::kindt::string)
+      throw std::runtime_error(
+        "TypeError: comparing the dtype of a numpy string array is not "
+        "supported");
     return dtype->name();
   };
   if (!is_dtype_attribute(left) && !is_dtype_attribute(right))
@@ -231,6 +457,14 @@ python_converter::try_numpy_string_membership(const nlohmann::json &element)
   const auto dtype = numpy_array_dtype(array);
   if (!dtype || dtype->kind != numpy_dtypet::kindt::string)
     return std::nullopt;
+  if (
+    ns.follow(numpy_param_as_array(get_expr(array)).type())
+      .subtype()
+      .subtype()
+      .is_array())
+    throw std::runtime_error(
+      "TypeError: membership in a numpy string array of rank above 1 is not "
+      "supported");
   if (json_utils::ast_contains_call(element["left"]))
     throw std::runtime_error(
       "TypeError: membership of a call's value in a numpy string array is not "

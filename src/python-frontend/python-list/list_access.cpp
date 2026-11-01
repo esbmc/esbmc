@@ -326,8 +326,18 @@ exprt python_list::index(const exprt &array, const nlohmann::json &slice_node)
 {
   if (slice_node["_type"] == "Slice") // arr[lower:upper]
   {
+    if (
+      array.type().is_pointer() && array.type().subtype().is_array() &&
+      type_utils::is_char_storage(
+        type_utils::array_scalar_type(array.type().subtype())))
+      throw std::runtime_error(
+        "TypeError: a slice of a numpy string array parameter is not "
+        "supported");
     if (type_utils::is_numpy_string_array(array.type()))
+    {
+      converter_.reject_unsafe_numpy_string_slice(list_value_["value"]);
       return numpy_string_slice_copy(array, slice_node);
+    }
     return handle_range_slice(array, slice_node);
   }
   else

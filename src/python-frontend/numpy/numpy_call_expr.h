@@ -124,6 +124,10 @@ private:
   // string, or empty for the literal's own.
   typet constructor_element_type(const nlohmann::json &list) const;
   void reject_unmodelled_operands(const std::string &function) const;
+  void reject_array_copy_with_dtype(const std::string &function) const;
+  void reject_narrow_float_mean(
+    const std::string &function,
+    const nlohmann::json &arg) const;
   bool is_string_operand(const nlohmann::json &arg) const;
   bool is_complex_operand(const nlohmann::json &arg) const;
   // @p build run with constructor_element_type(@p list) at the leaves of

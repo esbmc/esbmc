@@ -5218,7 +5218,11 @@ static std::string
 dtype_of_name(const std::string &id, const nlohmann::json &ast)
 {
   const std::string name = normalize_numpy_dtype_name(id);
-  if (is_named_numpy_dtype(name))
+  // A program's own binding shadows a dtype code: `f = np.int8` is not float32.
+  std::size_t bindings = 0;
+  const nlohmann::json *value = nullptr;
+  count_name_bindings(ast, id, bindings, value);
+  if (bindings == 0 && is_named_numpy_dtype(name))
     return name;
   if (const nlohmann::json *bound = stable_dtype_binding(ast, id))
     return extract_numpy_dtype_name(*bound, ast);
@@ -7152,7 +7156,16 @@ static std::optional<std::size_t> numpy_string_width(const nlohmann::json &list)
     if (elt.value("_type", std::string()) == "List")
       leaf = numpy_string_width(elt);
     else if (is_numpy_string_literal(elt))
-      leaf = elt["value"].get<std::string>().size();
+    {
+      const std::string text = elt["value"].get<std::string>();
+      if (std::any_of(text.begin(), text.end(), [](unsigned char c) {
+            return c == 0 || c > 127;
+          }))
+        throw std::runtime_error(
+          "TypeError: a numpy string array of non-ASCII or NUL characters is "
+          "not supported");
+      leaf = text.size();
+    }
     if (!leaf)
       return std::nullopt;
     width = std::max(width, *leaf);
@@ -7160,6 +7173,20 @@ static std::optional<std::size_t> numpy_string_width(const nlohmann::json &list)
   }
   return any ? std::optional<std::size_t>(std::max<std::size_t>(width, 1))
              : std::nullopt;
+}
+
+// `float("nan") + 1j`: a complex leaf with no constant value.
+static bool has_computed_complex_leaf(const nlohmann::json &list)
+{
+  const auto &elts = list.value("elts", nlohmann::json::array());
+  return std::any_of(elts.begin(), elts.end(), [](const nlohmann::json &elt) {
+    scalar_value value;
+    if (elt.value("_type", std::string()) == "List")
+      return has_computed_complex_leaf(elt);
+    return elt.value("_type", std::string()) == "BinOp" &&
+           json_utils::ast_contains_call(elt) &&
+           !try_extract_scalar_constant(elt, value);
+  });
 }
 
 static bool has_string_leaf(const nlohmann::json &list)
@@ -7246,6 +7273,9 @@ typet numpy_call_expr::constructor_element_type(
 {
   if (std::optional<std::size_t> width = numpy_string_width(list))
     return string_element_type(*width);
+  if (has_computed_complex_leaf(list))
+    throw std::runtime_error(
+      "TypeError: a numpy array of computed complex elements is not supported");
   if (has_string_leaf(list))
     throw std::runtime_error(
       "TypeError: a numpy array mixing strings with numbers is not supported");
@@ -11140,6 +11170,36 @@ std::optional<exprt> numpy_call_expr::try_hoist_array_arg()
 
 // Complex arrays are stored, indexed and copied; the reducers read their
 // elements as real numbers.
+void numpy_call_expr::reject_array_copy_with_dtype(
+  const std::string &function) const
+{
+  const auto &args = call_.value("args", nlohmann::json::array());
+  if (
+    function == "array" && !args.empty() &&
+    args[0].value("_type", "") == "Name" &&
+    !constructor_dtype_name(call_, converter_.ast()).empty() &&
+    converter_.numpy_array_symbols_.count(
+      converter_.resolve_name_symbol_id(args[0].value("id", ""))) != 0)
+    throw std::runtime_error(
+      "TypeError: numpy.array() of an array with dtype= is not supported");
+}
+
+// NumPy accumulates a float32 mean in float32; the model does not.
+void numpy_call_expr::reject_narrow_float_mean(
+  const std::string &function,
+  const nlohmann::json &arg) const
+{
+  if (function != "mean")
+    return;
+  const auto dtype =
+    arg.value("_type", "") == "Call"
+      ? numpy_dtype_from_name(constructor_dtype_name(arg, converter_.ast()))
+      : converter_.numpy_array_dtype(arg);
+  if (dtype && dtype->kind == numpy_dtypet::kindt::floating && dtype->bits < 64)
+    throw std::runtime_error(
+      "TypeError: numpy.mean() over a narrow float dtype is not supported");
+}
+
 void numpy_call_expr::reject_unmodelled_operands(
   const std::string &function) const
 {
@@ -11156,6 +11216,7 @@ void numpy_call_expr::reject_unmodelled_operands(
     "cumprod",
     "sort",
     "argsort"};
+  reject_array_copy_with_dtype(function);
   const auto reject = [&function](kindt kind) {
     throw std::runtime_error(
       "TypeError: numpy." + function + "() over a " + numpy_kind_name(kind) +
@@ -11164,6 +11225,7 @@ void numpy_call_expr::reject_unmodelled_operands(
   for (const auto &arg : call_.value("args", nlohmann::json::array()))
   {
     const std::string type = arg.value("_type", "");
+    reject_narrow_float_mean(function, arg);
     const bool array =
       type == "Name" || type == "List" || type == "Call" || type == "Subscript";
     if (
@@ -11703,13 +11765,13 @@ numpy_call_expr::try_narrow_operand_call(const std::string &function)
   if (std::optional<exprt> reduced = try_complex_reducer(function))
     return reduced;
   static const std::set<std::string> reads_element_type = {
-    "array",       "asarray",      "copy",         "zeros_like", "ones_like",
-    "empty_like",  "full_like",    "sum",          "prod",       "mean",
-    "min",         "max",          "any",          "all",        "argmin",
-    "argmax",      "sort",         "searchsorted", "ravel",      "flatten",
-    "reshape",     "transpose",    "swapaxes",     "moveaxis",   "squeeze",
-    "expand_dims", "broadcast_to", "tolist",       "nditer",     "shape",
-    "size",        "ndim",         "astype",       "trace"};
+    "array",        "asarray",      "copy",     "zeros_like", "ones_like",
+    "empty_like",   "sum",          "prod",     "mean",       "min",
+    "max",          "any",          "all",      "argmin",     "argmax",
+    "sort",         "searchsorted", "ravel",    "flatten",    "reshape",
+    "transpose",    "swapaxes",     "moveaxis", "squeeze",    "expand_dims",
+    "broadcast_to", "tolist",       "nditer",   "shape",      "size",
+    "ndim",         "astype",       "trace"};
   const auto &args = call_.value("args", nlohmann::json::array());
   const bool complex_array =
     std::any_of(args.begin(), args.end(), [this](const nlohmann::json &arg) {
