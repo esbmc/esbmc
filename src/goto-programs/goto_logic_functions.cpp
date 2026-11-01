@@ -25,14 +25,14 @@ bool is_logic(const namespacet &ns, const irep_idt &id)
   return s != nullptr && s->get_type().get_bool("#logic_function");
 }
 
-const code_function_call2t *logic_call(
-  const goto_programt::instructiont &i,
-  const namespacet &ns)
+const code_function_call2t *
+logic_call(const goto_programt::instructiont &i, const namespacet &ns)
 {
   if (!i.is_function_call() || !is_code_function_call2t(i.code))
     return nullptr;
   const code_function_call2t &c = to_code_function_call2t(i.code);
-  if (!is_symbol2t(c.function) || !is_logic(ns, to_symbol2t(c.function).thename))
+  if (
+    !is_symbol2t(c.function) || !is_logic(ns, to_symbol2t(c.function).thename))
     return nullptr;
   return &c;
 }
@@ -95,10 +95,32 @@ void check_reads(
       if (!params.count(n))
         refuse(
           f,
-          "dereferences " + id2string(n) + ", which is not a pointer parameter");
+          "dereferences " + id2string(n) +
+            ", which is not a pointer parameter");
   }
   e->foreach_operand(
     [&](const expr2tc &op) { check_reads(f, op, params, locals); });
+}
+
+/// The logic callee of the call \p i in the definition of \p f, refusing
+/// any other callee or a result stored outside a local.
+irep_idt check_call(
+  const irep_idt &f,
+  const goto_programt::instructiont &i,
+  const namespacet &ns,
+  const std::set<irep_idt> &params,
+  const std::set<irep_idt> &locals)
+{
+  const code_function_call2t *c = logic_call(i, ns);
+  if (c == nullptr)
+    refuse(f, "calls a function that is not __ESBMC_logic");
+  if (
+    !is_nil_expr(c->ret) &&
+    (!is_symbol2t(c->ret) || !locals.count(to_symbol2t(c->ret).thename)))
+    refuse(f, "stores a call result outside a local");
+  for (const expr2tc &a : c->operands)
+    check_reads(f, a, params, locals);
+  return to_symbol2t(c->function).thename;
 }
 
 void check_body(
@@ -134,19 +156,8 @@ void check_body(
       break;
     }
     case FUNCTION_CALL:
-    {
-      const code_function_call2t *c = logic_call(*it, ns);
-      if (c == nullptr)
-        refuse(f, "calls a function that is not __ESBMC_logic");
-      if (
-        !is_nil_expr(c->ret) && (!is_symbol2t(c->ret) ||
-                                 !locals.count(to_symbol2t(c->ret).thename)))
-        refuse(f, "stores a call result outside a local");
-      for (const expr2tc &a : c->operands)
-        check_reads(f, a, params, locals);
-      callees.insert(to_symbol2t(c->function).thename);
+      callees.insert(check_call(f, *it, ns, params, locals));
       break;
-    }
     case GOTO:
       for (const auto &t : it->targets)
         if (index.at(&*t) <= index.at(&*it))
@@ -170,11 +181,10 @@ void check_body(
     }
   }
 
-  if (callees.count(f))
-  {
-    if (ct.arguments.empty() || !is_bv_type(ct.arguments.back()))
-      refuse(f, "recurses without an integer last argument to decrease");
-  }
+  if (
+    callees.count(f) &&
+    (ct.arguments.empty() || !is_bv_type(ct.arguments.back())))
+    refuse(f, "recurses without an integer last argument to decrease");
 }
 
 /// Mutual recursion would need a measure across functions; only self
@@ -217,8 +227,8 @@ std::string layout(const type2tc &t, const namespacet &ns, unsigned depth = 0)
   const type2tc f = ns.follow(t);
   if (depth > 8 || (!is_struct_type(f) && !is_union_type(f)))
     return f->pretty(0);
-  const auto &members = is_struct_type(f) ? to_struct_type(f).members
-                                           : to_union_type(f).members;
+  const auto &members =
+    is_struct_type(f) ? to_struct_type(f).members : to_union_type(f).members;
   const auto &names = is_struct_type(f) ? to_struct_type(f).member_names
                                         : to_union_type(f).member_names;
   std::string out = is_struct_type(f) ? "struct{" : "union{";
@@ -227,7 +237,7 @@ std::string layout(const type2tc &t, const namespacet &ns, unsigned depth = 0)
     // An anonymous member's name embeds its source location.
     const std::string &n = id2string(names[i]);
     out += (n.find("(anonymous") != std::string::npos ? "#" + std::to_string(i)
-                                                       : n) +
+                                                      : n) +
            ":" + layout(members[i], ns, depth + 1) + ";";
   }
   return out + "}";
@@ -236,7 +246,8 @@ std::string layout(const type2tc &t, const namespacet &ns, unsigned depth = 0)
 /// \p text with every struct/union tag replaced by that type's layout.
 std::string by_layout(const std::string &text, const namespacet &ns)
 {
-  static const std::regex tag(R"(symbol_name : (tag-(struct|union|class) [^\n]*))");
+  static const std::regex tag(
+    R"(symbol_name : (tag-(struct|union|class) [^\n]*))");
   std::string out;
   auto begin = std::sregex_iterator(text.begin(), text.end(), tag);
   size_t last = 0;
@@ -244,8 +255,9 @@ std::string by_layout(const std::string &text, const namespacet &ns)
   {
     out += text.substr(last, m->position() - last);
     const symbolt *sym = ns.lookup((*m)[1].str());
-    out += sym == nullptr ? m->str()
-                          : "layout : " + layout(migrate_type(sym->get_type()), ns);
+    out += sym == nullptr
+             ? m->str()
+             : "layout : " + layout(migrate_type(sym->get_type()), ns);
     last = m->position() + m->length();
   }
   out += text.substr(last);
@@ -254,7 +266,22 @@ std::string by_layout(const std::string &text, const namespacet &ns)
   // An anonymous member's name embeds its source location; its own members
   // are injected into the enclosing scope, so they alone identify a field.
   static const std::regex anon(R"([\w:]*\(anonymous[^)]*\))");
-  return std::regex_replace(std::regex_replace(out, name, ""), anon, "(anonymous)");
+  return std::regex_replace(
+    std::regex_replace(out, name, ""), anon, "(anonymous)");
+}
+
+/// \p code as text, with a DECL/DEAD's local by its position name: it carries
+/// the name as a field, not an operand.
+std::string
+code_text(const expr2tc &code, std::map<irep_idt, std::string> &names)
+{
+  if (is_nil_expr(code))
+    return "";
+  if (is_code_decl2t(code))
+    return names[to_code_decl2t(code).value] + code->type->pretty(0);
+  if (is_code_dead2t(code))
+    return names[to_code_dead2t(code).value];
+  return code->pretty(0);
 }
 
 /// The definition with parameters and locals named by position and logic
@@ -312,16 +339,7 @@ std::string canonical(
     expr2tc code = it->code, guard = it->guard;
     rename(code);
     rename(guard);
-    out += "\n" + std::to_string(it->type);
-    // A DECL/DEAD carries its local's name as a field, not an operand.
-    if (is_nil_expr(code))
-      ;
-    else if (is_code_decl2t(code))
-      out += names[to_code_decl2t(code).value] + code->type->pretty(0);
-    else if (is_code_dead2t(code))
-      out += names[to_code_dead2t(code).value];
-    else
-      out += code->pretty(0);
+    out += "\n" + std::to_string(it->type) + code_text(code, names);
     if (!is_nil_expr(guard))
       out += guard->pretty(0);
     for (const auto &t : it->targets)
@@ -336,8 +354,7 @@ expr2tc app_symbol(const code_function_call2t &c)
   auto rep = representative.find(f);
   return symbol2tc(
     c.function->type,
-    kLogicAppPrefix +
-      id2string(rep == representative.end() ? f : rep->second));
+    kLogicAppPrefix + id2string(rep == representative.end() ? f : rep->second));
 }
 
 const char *const kUnfoldSuffix = "$logic_unfold";
@@ -362,8 +379,7 @@ goto_programt::instructiont unfold_call(
   const goto_programt::instructiont &at,
   const namespacet &ns)
 {
-  const symbolt *usym =
-    ns.lookup(unfold_name(to_symbol2t(c.function).thename));
+  const symbolt *usym = ns.lookup(unfold_name(to_symbol2t(c.function).thename));
   std::vector<expr2tc> args = c.operands;
   args.push_back(c.ret);
   goto_programt::instructiont unfold(FUNCTION_CALL);
@@ -374,7 +390,10 @@ goto_programt::instructiont unfold_call(
   return unfold;
 }
 
-void declare_unfold(const irep_idt &f, const goto_functiont &gf, contextt &context)
+void declare_unfold(
+  const irep_idt &f,
+  const goto_functiont &gf,
+  contextt &context)
 {
   const irep_idt name = unfold_name(f);
   const code_type2t &ct = to_code_type(gf.type);

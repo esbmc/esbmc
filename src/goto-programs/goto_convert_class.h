@@ -129,6 +129,8 @@ protected:
     bool every,
     goto_programt &dest);
   void hoist_logic_calls(exprt &expr, goto_programt &dest);
+  void instantiate_clause_foralls(exprt &expr, goto_programt &dest);
+  exprt forall_instance(unsigned depth);
   bool program_has_logic();
   std::optional<bool> has_logic;
   // Rewrite __ESBMC_forall/__ESBMC_exists intrinsic calls into forall/exists

@@ -609,6 +609,9 @@ protected:
    *  a fresh result, equal to an earlier application's when the arguments are
    *  equal and the memory they reach is the same SSA state. */
   void symex_logic_application(const code_function_call2t &call);
+  /** Append the current SSA term of each object \p ptr may point to onto
+   *  \p memory; false when its value set holds a target no symbol names. */
+  bool reachable_memory(const expr2tc &ptr, std::vector<expr2tc> &memory);
 
   /**
    *  Discover whether recursion bound has been exceeded.

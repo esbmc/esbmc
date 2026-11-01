@@ -880,6 +880,42 @@ static const expr2tc &strip_casts(const expr2tc &e)
   return is_typecast2t(e) ? strip_casts(to_typecast2t(e).from) : e;
 }
 
+static bool is_symbol_named(const expr2tc &e, const irep_idt &id)
+{
+  return is_symbol2t(strip_casts(e)) &&
+         to_symbol2t(strip_casts(e)).thename == id;
+}
+
+static bool address_taken(const goto_programt &body, const irep_idt &id)
+{
+  forall_goto_program_instructions (it, body)
+    if (takes_address_of(it->code, id) || takes_address_of(it->guard, id))
+      return true;
+  return false;
+}
+
+/// Whether \p instr leaves \p id within its object: it assigns \p id
+/// nothing but `id ± e`.
+static bool
+keeps_object(const goto_programt::instructiont &instr, const irep_idt &id)
+{
+  if (instr.is_function_call() && is_code_function_call2t(instr.code))
+  {
+    const expr2tc &ret = to_code_function_call2t(instr.code).ret;
+    return is_nil_expr(ret) || !is_symbol_named(ret, id);
+  }
+  if (!instr.is_assign() || !is_code_assign2t(instr.code))
+    return true;
+  const code_assign2t &a = to_code_assign2t(instr.code);
+  if (!is_symbol_named(a.target, id))
+    return true;
+  const expr2tc &src = strip_casts(a.source);
+  if (is_add2t(src))
+    return is_symbol_named(to_add2t(src).side_1, id) ||
+           is_symbol_named(to_add2t(src).side_2, id);
+  return is_sub2t(src) && is_symbol_named(to_sub2t(src).side_1, id);
+}
+
 /// Pointer arithmetic cannot leave an object, so a pointer the loop itself
 /// only assigns `p ± e` keeps the object it had at loop entry. Nothing else
 /// can assign it when it is a local whose address the function never takes.
@@ -887,46 +923,20 @@ bool goto_loop_invariantt::moves_within_object(
   const loopst &loop,
   const expr2tc &ptr) const
 {
-  if (!is_symbol2t(ptr))
+  if (!is_symbol2t(ptr) || !is_pointer_type(ptr->type))
     return false;
   const irep_idt &id = to_symbol2t(ptr).thename;
   const symbolt *s = context.find_symbol(id);
-  if (s == nullptr || s->static_lifetime)
+  if (
+    s == nullptr || s->static_lifetime || address_taken(goto_function.body, id))
     return false;
-  forall_goto_program_instructions (it, goto_function.body)
-    if (takes_address_of(it->code, id) || takes_address_of(it->guard, id))
-      return false;
-
-  const auto is_ptr = [&id](const expr2tc &e) {
-    return is_symbol2t(strip_casts(e)) &&
-           to_symbol2t(strip_casts(e)).thename == id;
-  };
-  for (goto_programt::const_targett it = loop.get_original_loop_head();;)
+  for (goto_programt::const_targett it = loop.get_original_loop_head();; ++it)
   {
-    if (it->is_function_call() && is_code_function_call2t(it->code))
-    {
-      const expr2tc &ret = to_code_function_call2t(it->code).ret;
-      if (!is_nil_expr(ret) && is_ptr(ret))
-        return false;
-    }
-    if (it->is_assign() && is_code_assign2t(it->code))
-    {
-      const code_assign2t &a = to_code_assign2t(it->code);
-      if (is_ptr(a.target))
-      {
-        const expr2tc &src = strip_casts(a.source);
-        if (
-          !(is_add2t(src) &&
-            (is_ptr(to_add2t(src).side_1) || is_ptr(to_add2t(src).side_2))) &&
-          !(is_sub2t(src) && is_ptr(to_sub2t(src).side_1)))
-          return false;
-      }
-    }
+    if (!keeps_object(*it, id))
+      return false;
     if (it == loop.get_original_loop_exit())
-      break;
-    ++it;
+      return true;
   }
-  return true;
 }
 
 /// Storage a loop writes through a pointer has no named symbol, so havoc the
@@ -1098,7 +1108,8 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
 
     // Create an assignment instruction for the nondeterministic value
     goto_programt::targett t = dest.add_instruction(ASSIGN);
-    t->code = code_assign2tc(lhs, havoc_value(lhs, moves_within_object(loop, lhs)));
+    t->code =
+      code_assign2tc(lhs, havoc_value(lhs, moves_within_object(loop, lhs)));
     t->location = loop_head->location;
     t->location.comment("loop invariant havoc");
     t->loop_invariant_havoc = true;

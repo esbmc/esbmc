@@ -6468,12 +6468,7 @@ void code_contractst::generate_replacement_at_call(
     replacement);
 
   reissue_clause_calls(
-    function_body,
-    ensures_guard,
-    instantiate,
-    replacement,
-    call_location,
-    ns);
+    function_body, ensures_guard, instantiate, replacement, call_location, ns);
   // 4. Assume ensures clause (assume postcondition at call site)
   add_contract_clause(
     ensures_guard, ASSUME, "contract ensures", "contract ensures");
