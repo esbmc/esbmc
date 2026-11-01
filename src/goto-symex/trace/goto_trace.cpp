@@ -446,6 +446,11 @@ void violation_graphml_goto_trace(
         (step.pc->is_other() && is_nil_expr(step.lhs)) ||
         step.pc->is_function_call())
       {
+        /* The argv setup in __ESBMC_main has no line; an edge for it would
+           carry startline 0 (#9677). */
+        if (step.pc->location.get_line().empty())
+          break;
+
         std::string assignment = get_formated_assignment(ns, step, false);
 
         graph.check_create_new_thread(step.thread_nr, prev_node);
