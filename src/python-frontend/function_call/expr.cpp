@@ -1169,6 +1169,41 @@ exprt function_call_expr::repr_of_object(exprt &value) const
     repr);
 }
 
+exprt function_call_expr::handle_repr_call()
+{
+  const auto &arg = call_["args"][0];
+  double real_val = 0.0, imag_val = 0.0;
+  if (
+    try_extract_complex_parts_from_json(
+      arg,
+      converter_.ast(),
+      converter_.current_function_name(),
+      real_val,
+      imag_val))
+  {
+    return converter_.get_string_builder().build_string_literal(
+      format_complex_string(real_val, imag_val));
+  }
+  exprt value_expr = converter_.get_expr(arg);
+  if (!value_expr.is_nil() && value_expr.statement() != "cpp-throw")
+  {
+    if (is_complex_type(value_expr.type()))
+      return handle_complex_to_str();
+    exprt object_value = value_expr;
+    converter_.convert_function_call_to_side_effect(object_value);
+    exprt object_repr = repr_of_object(object_value);
+    if (object_repr.is_not_nil())
+      return object_repr;
+    // Types without a repr model keep the general-call fallback: a clean
+    // error, never a wrong fold.
+    exprt repr = converter_.get_string_handler().build_repr(
+      value_expr, converter_.get_location_from_decl(call_));
+    if (repr.is_not_nil())
+      return repr;
+  }
+  return handle_general_function_call();
+}
+
 // float() ignores outer whitespace: str.isspace(), which also counts \x1c-\x1f.
 static std::string strip_py_space(const std::string &s)
 {
@@ -5194,39 +5229,7 @@ function_call_expr::get_dispatch_table()
     {[this]() {
        return function_id_.get_function() == "repr" && !call_["args"].empty();
      },
-     [this]() {
-       const auto &arg = call_["args"][0];
-       double real_val = 0.0, imag_val = 0.0;
-       if (
-         try_extract_complex_parts_from_json(
-           arg,
-           converter_.ast(),
-           converter_.current_function_name(),
-           real_val,
-           imag_val))
-       {
-         return converter_.get_string_builder().build_string_literal(
-           format_complex_string(real_val, imag_val));
-       }
-       exprt value_expr = converter_.get_expr(arg);
-       if (!value_expr.is_nil() && value_expr.statement() != "cpp-throw")
-       {
-         if (is_complex_type(value_expr.type()))
-           return handle_complex_to_str();
-         exprt object_value = value_expr;
-         converter_.convert_function_call_to_side_effect(object_value);
-         exprt object_repr = repr_of_object(object_value);
-         if (object_repr.is_not_nil())
-           return object_repr;
-         // Types without a repr model keep the general-call fallback: a clean
-         // error, never a wrong fold.
-         exprt repr = converter_.get_string_handler().build_repr(
-           value_expr, converter_.get_location_from_decl(call_));
-         if (repr.is_not_nil())
-           return repr;
-       }
-       return handle_general_function_call();
-     },
+     [this]() { return handle_repr_call(); },
      "repr()"},
 
     // bytes.fromhex("..") classmethod — fold a constant hex string to bytes

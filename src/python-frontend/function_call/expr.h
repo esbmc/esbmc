@@ -208,6 +208,10 @@ private:
   /// when its runtime class is its static class; nil otherwise.
   exprt repr_of_object(exprt &value) const;
 
+  /// repr(x): complex, instance, or modelled str/number repr; otherwise the
+  /// general call.
+  exprt handle_repr_call();
+
   /*
    * object(): a pointer to a fresh heap object, so each call has its own
    * identity and is never None.
