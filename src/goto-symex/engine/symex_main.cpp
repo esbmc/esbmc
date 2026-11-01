@@ -1510,6 +1510,96 @@ void add_content_edges(
   }
 }
 
+/* The pointer-typed parts of the global `root` that a value-set entry's
+ * suffix names, or none when they cannot be enumerated. */
+std::vector<expr2tc>
+leak_root_pointers(const expr2tc &root, const std::string &suffix)
+{
+  std::vector<expr2tc> sub_exprs = {root};
+  std::string rest = suffix;
+  while (!rest.empty())
+  {
+    /* The suffix consists of a sequence of components, which are either
+     * "[]" or ".name" where name is the name of some member of a
+     * structure type. */
+    if (rest[0] == '.')
+    {
+      const type2tc type = sub_exprs[0]->type;
+      assert(is_structure_type(type));
+      const std::vector<irep_idt> names = struct_union_member_names(type);
+      const auto comp = match_leading_component(names, rest.substr(1));
+      if (!comp)
+      {
+        /* The suffix names a member of a different definition of this
+         * struct: linking a program's own `struct tm` against the libc
+         * model's leaves the model's buffers typed by one and their
+         * value-set entries by the other. Ignore the root, as for an
+         * array of no size below. */
+        return {};
+      }
+      const auto [n, len] = *comp;
+      const type2tc member_type = struct_union_members(type)[n];
+      for (expr2tc &p : sub_exprs)
+        p = member2tc(member_type, p, names[n]);
+      rest.erase(0, 1 + len);
+      continue;
+    }
+
+    assert(has_prefix(rest, "[]"));
+    rest.erase(0, 2);
+    const type2tc &type = sub_exprs[0]->type;
+    assert(is_array_type(type));
+    const array_type2t &array_type = to_array_type(type);
+    const expr2tc &size = array_type.array_size;
+    if (!size)
+    {
+      /* The user is doing evil things like pointing to infinite-size
+       * arrays. Bad user. Those arrays are not "global symbols" in the
+       * sense of --no-reachable-memory-leak; ignore those. */
+      return {};
+    }
+
+    if (is_constant_int2t(size))
+    {
+      /* This could be huge. TODO: switch to the case below. */
+      uint64_t n = to_constant_int2t(size).value.to_uint64();
+      std::vector<expr2tc> new_sub_exprs;
+      new_sub_exprs.reserve(n * sub_exprs.size());
+      for (const expr2tc &p : sub_exprs)
+        for (uint64_t i = 0; i < n; i++)
+          new_sub_exprs.emplace_back(
+            index2tc(array_type.subtype, p, gen_long(size->type, i)));
+      sub_exprs = std::move(new_sub_exprs);
+      continue;
+    }
+
+    /* TODO: Missing implementation.
+     *
+     * We cannot just use a new symbol for the index since this
+     * expression is used in a negated context. I.e. we will need to
+     * encode a condition whose negation is true if and only if the
+     * target 'adr' is *not* reachable from this array.
+     * Exists index, s.t. "array[index] is the same object as 'adr'"
+     * does not satisfy this requirement: solvers are free to choose an
+     * 'index' where the same-object condition is false. Instead, the
+     * counter-example needs to include a witness that 'adr' is *not*
+     * reachable from the array.
+     *
+     * XXX fbrausse: Can we use the inductive counting construction from
+     *   Immerman and Szelepcsényi proving co-NL = NL here?
+     *   Alternatively, we might be able to use Savitch's theorem to
+     *   construct a deterministic expression for reachability and
+     *   negate that. Might even be faster since the expression
+     *   constructed in DSPACE(log^2(n)) should be handled faster than
+     *   the time it takes to solve a formula constructed in DTIME(n^2).
+     */
+
+    // this is a workaround because there is no implementation, yet
+    return {};
+  }
+  return sub_exprs;
+}
+
 } // namespace
 
 void goto_symext::add_memory_leak_checks()
@@ -1791,81 +1881,8 @@ void goto_symext::add_memory_leak_checks()
        * symbol based on the suffix so that we catch all the pointers. If
        * the suffix is empty, sym_expr2 already has pointer type. Otherwise
        * the symbol has a compound type. */
-      std::vector<expr2tc> sub_exprs = {sym_expr2};
-      std::string rest = e.suffix;
-      while (!rest.empty())
-      {
-        /* The suffix consists of a sequence of components, which are either
-         * "[]" or ".name" where name is the name of some member of a
-         * structure type. */
-        if (rest[0] == '.')
-        {
-          const type2tc type = sub_exprs[0]->type;
-          assert(is_structure_type(type));
-          const std::vector<irep_idt> names = struct_union_member_names(type);
-          const auto [n, len] =
-            match_leading_component(names, rest.substr(1)).value();
-          const type2tc member_type = struct_union_members(type)[n];
-          for (expr2tc &p : sub_exprs)
-            p = member2tc(member_type, p, names[n]);
-          rest.erase(0, 1 + len);
-          continue;
-        }
-
-        assert(has_prefix(rest, "[]"));
-        rest.erase(0, 2);
-        const type2tc &type = sub_exprs[0]->type;
-        assert(is_array_type(type));
-        const array_type2t &array_type = to_array_type(type);
-        const expr2tc &size = array_type.array_size;
-        if (!size)
-        {
-          /* The user is doing evil things like pointing to infinite-size
-           * arrays. Bad user. Those arrays are not "global symbols" in the
-           * sense of --no-reachable-memory-leak; ignore those. */
-          sub_exprs.clear();
-          break;
-        }
-
-        if (is_constant_int2t(size))
-        {
-          /* This could be huge. TODO: switch to the case below. */
-          uint64_t n = to_constant_int2t(size).value.to_uint64();
-          std::vector<expr2tc> new_sub_exprs;
-          new_sub_exprs.reserve(n * sub_exprs.size());
-          for (const expr2tc &p : sub_exprs)
-            for (uint64_t i = 0; i < n; i++)
-              new_sub_exprs.emplace_back(
-                index2tc(array_type.subtype, p, gen_long(size->type, i)));
-          sub_exprs = std::move(new_sub_exprs);
-          continue;
-        }
-
-        /* TODO: Missing implementation.
-         *
-         * We cannot just use a new symbol for the index since this
-         * expression is used in a negated context. I.e. we will need to
-         * encode a condition whose negation is true if and only if the
-         * target 'adr' is *not* reachable from this array.
-         * Exists index, s.t. "array[index] is the same object as 'adr'"
-         * does not satisfy this requirement: solvers are free to choose an
-         * 'index' where the same-object condition is false. Instead, the
-         * counter-example needs to include a witness that 'adr' is *not*
-         * reachable from the array.
-         *
-         * XXX fbrausse: Can we use the inductive counting construction from
-         *   Immerman and Szelepcsényi proving co-NL = NL here?
-         *   Alternatively, we might be able to use Savitch's theorem to
-         *   construct a deterministic expression for reachability and
-         *   negate that. Might even be faster since the expression
-         *   constructed in DSPACE(log^2(n)) should be handled faster than
-         *   the time it takes to solve a formula constructed in DTIME(n^2).
-         */
-
-        // this is a workaround because there is no implementation, yet
-        sub_exprs.clear();
-        break;
-      }
+      const std::vector<expr2tc> sub_exprs =
+        leak_root_pointers(sym_expr2, e.suffix);
       if (sub_exprs.empty()) /* this target is not to be handled */
         continue;
 
