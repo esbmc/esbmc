@@ -29,6 +29,8 @@ import itertools
 import re
 
 from preprocessor.function_value_lift import lift_nested_defs
+from preprocessor.function_value_methods import lift_bound_methods
+from preprocessor.function_value_params import specialise_function_parameters
 from preprocessor.function_value_types import _Analysis, _differ, _own_nodes
 
 # The most copies of the rest of the module that one module may need.
@@ -174,6 +176,15 @@ def _reads_outside(body, fn):
     return any(
         isinstance(n, ast.Name) and n.id == fn.name for stmt in body if stmt is not fn
         for n in ast.walk(stmt))
+
+
+def _may_lift_methods(module):
+    """Whether a method returns `self.name` or a call is passed an attribute, which the method lift may turn into a function."""
+    return any(
+        (isinstance(n, ast.Return) and isinstance(n.value, ast.Attribute)
+         and isinstance(n.value.value, ast.Name) and n.value.value.id == "self") or
+        (isinstance(n, ast.Call) and any(isinstance(a, (ast.Attribute, ast.IfExp)) for a in n.args))
+        for n in ast.walk(module))
 
 
 def _is_straight_line(fn):
@@ -1325,10 +1336,13 @@ def _check_hoisted_dispatched(module):
 
 def dispatch_mixed_function_values(module, path):
     """Rewrite calls through mixed function values into dispatches, when every use allows it."""
-    original = _propagated(module, path)
+    candidate = copy.deepcopy(module)
+    lifted_methods = _may_lift_methods(module) and lift_bound_methods(candidate)
+    lifted_methods = specialise_function_parameters(candidate) or lifted_methods
+    base = candidate if lifted_methods else module
+    original = _propagated(base, path)
     if not _mixed_groups(original):
         return
-    candidate = copy.deepcopy(module)
     try:
         _inline_once_defs(candidate)
         original = _propagated(candidate, path)

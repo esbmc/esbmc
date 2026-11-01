@@ -227,6 +227,104 @@ method_return_kind(const std::string &name, const nlohmann::json &module_body)
   return agreed;
 }
 
+// Whether some `global` statement declares `name`.
+inline bool declares_global(const nlohmann::json &node, const std::string &name)
+{
+  if (!node.is_structured())
+    return false;
+  if (node.is_object() && node.value("_type", "") == "Global")
+    for (const auto &declared : node["names"])
+      if (declared == name)
+        return true;
+  for (const auto &child : node)
+    if (declares_global(child, name))
+      return true;
+  return false;
+}
+
+// The value of the one module-level `name = value`, where no function can
+// rebind `name`; a parameter or local of the same name elsewhere is another
+// variable.
+inline const nlohmann::json *module_instance_value(
+  const nlohmann::json &module_body,
+  const std::string &name)
+{
+  if (!module_body.is_array() || declares_global(module_body, name))
+    return nullptr;
+  const nlohmann::json *bound = nullptr;
+  for (const auto &stmt : module_body)
+  {
+    if (!stmt.is_object())
+      continue;
+    const std::string type = stmt.value("_type", "");
+    if (
+      (type == "FunctionDef" || type == "ClassDef") &&
+      stmt.value("name", "") == name)
+      return nullptr;
+    if (const nlohmann::json *value = assigned_value_at(stmt, name))
+    {
+      if (bound)
+        return nullptr;
+      bound = value;
+    }
+  }
+  return bound;
+}
+
+// Whether `callee` spells `self.<leaf>` or `<name>.<leaf>` for a module-level
+// `name = Class(...)` of a class defined in the module.
+inline bool is_instance_call(
+  const std::string &callee,
+  const std::string &leaf,
+  const nlohmann::json &module_body)
+{
+  if (callee.size() <= leaf.size() + 1)
+    return false;
+  const std::string receiver =
+    callee.substr(0, callee.size() - leaf.size() - 1);
+  if (receiver == "self")
+    return true;
+  const nlohmann::json *bound = module_instance_value(module_body, receiver);
+  if (
+    !bound || !bound->is_object() || bound->value("_type", "") != "Call" ||
+    !bound->contains("func") || (*bound)["func"].value("_type", "") != "Name")
+    return false;
+  const std::string cls = (*bound)["func"].value("id", "");
+  for (const auto &stmt : module_body)
+    if (
+      stmt.is_object() && stmt.value("_type", "") == "ClassDef" &&
+      stmt.value("name", "") == cls)
+      return true;
+  return false;
+}
+
+// The kind of an unannotated module-level def whose body is one `return`.
+inline std::string forwarded_return_kind(
+  const std::string &callee,
+  const nlohmann::json &module_body,
+  unsigned depth)
+{
+  if (!module_body.is_array())
+    return "";
+  for (const auto &stmt : module_body)
+  {
+    if (
+      !stmt.is_object() || stmt.value("_type", "") != "FunctionDef" ||
+      stmt.value("name", "") != callee)
+      continue;
+    const auto body = stmt.find("body");
+    if (body == stmt.end() || !body->is_array() || body->size() != 1)
+      return "";
+    const nlohmann::json &ret = body->front();
+    if (
+      !ret.is_object() || ret.value("_type", "") != "Return" ||
+      !ret.contains("value") || !ret["value"].is_object())
+      return "";
+    return classify_literal_value_kind(ret["value"], module_body, depth + 1);
+  }
+  return "";
+}
+
 // The kind of a call: a nondet_<type> function, a builtin conversion, abs of
 // a number, or a function with a scalar return annotation.
 inline std::string classify_call_kind(
@@ -251,9 +349,13 @@ inline std::string classify_call_kind(
   }
 
   const std::string kind = annotated_return_kind(callee, module_body);
-  return kind.empty() && callee == "self." + leaf
-           ? method_return_kind(leaf, module_body)
-           : kind;
+  if (!kind.empty())
+    return kind;
+  const std::string method_kind = is_instance_call(callee, leaf, module_body)
+                                    ? method_return_kind(leaf, module_body)
+                                    : "";
+  return method_kind.empty() ? forwarded_return_kind(callee, module_body, depth)
+                             : method_kind;
 }
 
 inline std::string classify_literal_value_kind(

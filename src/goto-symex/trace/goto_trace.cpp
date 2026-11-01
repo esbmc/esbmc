@@ -563,8 +563,16 @@ void violation_yaml_goto_trace(
       if (step.pc->is_goto())
       {
         /* A validator cannot match a follow waypoint against a file it was
-           not given; dropping one only weakens guidance. */
-        if (!input_file_check(step.pc->location))
+           not given; dropping one only weakens guidance. witnesslint also
+           rejects line 0, e.g. the argv setup in __ESBMC_main (#9650). */
+        if (
+          !input_file_check(step.pc->location) ||
+          step.pc->location.get_line().empty())
+          break;
+
+        /* Generated branches, such as the argv set-up of main(argc, argv),
+           have no line, and witnesslint rejects line 0. */
+        if (step.pc->location.get_line().empty())
           break;
 
         waypoint wp =
@@ -592,6 +600,21 @@ void violation_yaml_goto_trace(
       continue;
     }
   }
+}
+
+void non_termination_yaml_goto_trace(optionst &options, const locationt &loc)
+{
+  yamlt yml(yamlt::VIOLATION);
+  yml.verified_file = options.get_option("input-file");
+  log_progress(
+    "Generating Non-Termination Yaml Witness for: {}", yml.verified_file);
+
+  waypoint wp = witness_waypoint(loc, yml.verified_file, options);
+  wp.type = waypoint::assumption;
+  wp.action = waypoint::cycle;
+  wp.value = "1";
+  yml.segments.push_back(wp);
+  yml.generate_yaml(options);
 }
 
 void correctness_graphml_goto_trace(
@@ -653,6 +676,21 @@ void correctness_yaml_goto_trace(
     "Generating Correctness Yaml Witness for: {}", yml.verified_file);
 
   yml.generate_yaml(options);
+}
+
+void write_correctness_witnesses(
+  optionst &options,
+  const namespacet &ns,
+  const goto_tracet &goto_trace)
+{
+  if (options.get_bool_option("result-only"))
+    return;
+
+  if (!options.get_option("witness-output-graphml").empty())
+    correctness_graphml_goto_trace(options, ns, goto_trace);
+
+  if (!options.get_option("witness-output-yaml").empty())
+    correctness_yaml_goto_trace(options, ns, goto_trace);
 }
 
 void appendInfo(
