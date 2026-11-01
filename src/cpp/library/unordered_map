@@ -326,15 +326,9 @@ public:
             return data_[idx].second;
         }
         
-        // Insert with default value if not found and space available
-        if (size_ < MAX_SIZE) {
-            data_[size_] = std::make_pair(key, Value());
-            return data_[size_++].second;
-        }
-        
-        // Array full - return reference to static default
-        static Value default_value = Value();
-        return default_value;
+        __ESBMC_assert(size_ < MAX_SIZE, "unordered_map capacity exceeded");
+        data_[size_] = std::make_pair(key, Value());
+        return data_[size_++].second;
     }
 
     // Modifiers
@@ -347,11 +341,7 @@ public:
             return std::make_pair(iterator(data_, idx, size_), false);
         }
         
-        if (size_ >= MAX_SIZE) {
-            // Array full
-            return std::make_pair(end(), false);
-        }
-        
+        __ESBMC_assert(size_ < MAX_SIZE, "unordered_map capacity exceeded");
         // Insert new element
         data_[size_] = pair;
         iterator result(data_, size_, size_ + 1);
@@ -401,11 +391,7 @@ public:
             return std::make_pair(iterator(data_, idx, size_), false);
         }
         
-        if (size_ >= MAX_SIZE) {
-            // Array full
-            return std::make_pair(end(), false);
-        }
-        
+        __ESBMC_assert(size_ < MAX_SIZE, "unordered_map capacity exceeded");
         // Construct new element
         data_[size_] = std::make_pair(key, Value(args...));
         iterator result(data_, size_, size_ + 1);
@@ -678,10 +664,12 @@ public:
 
     // [unord.multimap] erase(k) removes every equivalent key.
     size_type erase(const key_type& key) {
+        // key may refer to an element that the compaction overwrites.
+        const key_type k = key;
         size_type removed = 0;
         size_type out = 0;
         for (size_type i = 0; i < size_; ++i) {
-            if (equal_function_(data_[i].first, key)) {
+            if (equal_function_(data_[i].first, k)) {
                 ++removed;
             } else {
                 data_[out] = data_[i];

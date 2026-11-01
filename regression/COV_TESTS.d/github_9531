@@ -2,5 +2,3 @@ regression/python/github_9531_fail
 regression/python/github_9531_noir_fail
 regression/python/github_9531_nonnegative
 regression/python/github_9531_plain_fail
-regression/esbmc/github_9531_ir_cast
-regression/esbmc/github_9531_ir_cast_small

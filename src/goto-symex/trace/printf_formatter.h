@@ -2,6 +2,7 @@
 #define CPROVER_PRINTF_FORMATTER
 
 #include <irep2/irep2_expr.h>
+#include <optional>
 #include <vector>
 
 /** The type a %d or %i (`is_signed`) or %u conversion converts its argument
@@ -78,6 +79,9 @@ protected:
 
   void process_char(std::ostream &out);
   void process_format(std::ostream &out);
+  std::optional<int64_t> star_operand();
+  char parse_width(char ch, unsigned &width, bool &left);
+  char parse_precision(char ch, std::optional<unsigned> &precision);
   void record_percent_n();
 
   const expr2tc make_type(const expr2tc &src, const type2tc &dest);

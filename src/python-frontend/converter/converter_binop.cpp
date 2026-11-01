@@ -152,6 +152,22 @@ std::string apply_sign_flags(const std::string &s, bool plus, bool space)
   return s;
 }
 
+// str() of a bool, None or str constant, as %s renders it.
+std::optional<std::string> py_const_str(const nlohmann::json &a)
+{
+  if (a.value("_type", "") != "Constant" || !a.contains("value"))
+    return std::nullopt;
+  const nlohmann::json &v = a["value"];
+  // CPython renders bool via str(): "True"/"False", not "1"/"0".
+  if (v.is_boolean())
+    return v.get<bool>() ? "True" : "False";
+  if (v.is_null())
+    return "None";
+  if (v.is_string())
+    return v.get<std::string>();
+  return std::nullopt;
+}
+
 // Constant-fold a printf-style ``str % args`` formatting, matching CPython for
 // the supported conversions. Throws std::runtime_error for any unsupported
 // conversion, flag/width/precision, or non-constant argument, so the caller
@@ -340,15 +356,8 @@ std::string py_percent_format(
     {
       const nlohmann::json &a = next_arg();
       long long v;
-      if (
-        a.value("_type", "") == "Constant" && a.contains("value") &&
-        a["value"].is_boolean())
-        // CPython renders bool via str(): "True"/"False", not "1"/"0".
-        body = a["value"].get<bool>() ? "True" : "False";
-      else if (
-        a.value("_type", "") == "Constant" && a.contains("value") &&
-        a["value"].is_string())
-        body = a["value"].get<std::string>();
+      if (const auto str = py_const_str(a))
+        body = *str;
       else if (py_const_int(a, v))
         body = std::to_string(v);
       else
@@ -861,15 +870,41 @@ void python_converter::refuse_tagged_boolop_operand(const exprt &operand) const
       "used is not yet supported");
 }
 
+exprt python_converter::boolop_string_truthiness(
+  const exprt &value,
+  const locationt &location)
+{
+  exprt cond = apply_string_truthiness(value, location);
+  // A str parameter may hold None, which is false; strlen must not read it.
+  if (!cond.is_boolean() || !value.type().is_pointer())
+    return cond;
+  expr2tc value2, cond2;
+  migrate_expr(value, value2);
+  migrate_expr(cond, cond2);
+  exprt guarded = migrate_expr_back(
+    and2tc(notequal2tc(value2, gen_zero(value2->type)), cond2));
+  guarded.location() = location;
+  return guarded;
+}
+
+// A chained comparison's own bindings are planted in each operand's block.
+void python_converter::reject_walrus_in_boolop(const nlohmann::json &element)
+{
+  const bool own_bindings = std::exchange(lowering_chained_compare_, false);
+  if (
+    !own_bindings && element.contains("values") &&
+    contains_named_expr(element["values"]))
+    throw std::runtime_error(
+      "Walrus operator ':=' in a boolean (and/or) operand is not supported");
+}
+
 exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
 {
   // `and`/`or` short-circuit: a later operand may not execute. get_named_expr
   // emits a walrus binding unconditionally, so a walrus inside any operand
   // would bind even when Python would skip it. Refuse with a clean diagnostic
   // rather than return an unsound verdict.
-  if (element.contains("values") && contains_named_expr(element["values"]))
-    throw std::runtime_error(
-      "Walrus operator ':=' in a boolean (and/or) operand is not supported");
+  reject_walrus_in_boolop(element);
 
   std::string op(element["op"]["_type"].get<std::string>());
   exprt logical_expr(
@@ -904,7 +939,8 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
       return cond;
     }
 
-    return value_expr;
+    return boolop_string_truthiness(
+      value_expr, get_location_from_decl(element));
   };
 
   // Mark that we're processing operands in an expression context
@@ -1903,7 +1939,7 @@ exprt python_converter::once_bound_exponent(
 
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
-  if (std::optional<exprt> bound = try_bound_method_compare(element))
+  if (std::optional<exprt> bound = try_lowered_compare(element))
     return *bound;
 
   // Extract left and right operands from AST
@@ -2033,6 +2069,83 @@ bool python_converter::may_rebind_left(
   return left.value("_type", "") == "Name" && calls_user_code(right);
 }
 
+std::optional<exprt>
+python_converter::try_lowered_compare(const nlohmann::json &element)
+{
+  std::optional<exprt> bound = try_bound_method_compare(element);
+  return bound ? bound : try_chained_compare_with_call(element);
+}
+
+// A call inside a larger comparator: the pairs convert the term separately, and
+// only a term that is itself a call is bound for both of them.
+static bool has_call_in_expression(const nlohmann::json &comparator)
+{
+  return comparator.value("_type", "") != "Call" && contains_call(comparator);
+}
+
+// `a < g + bump() < c` as `a < (t := g + bump()) and t < c`: each term runs
+// once, in order, and only if the pairs before it held. An and/or operand
+// plants the binding in its own block, which keeps that short-circuit.
+std::optional<exprt>
+python_converter::try_chained_compare_with_call(const nlohmann::json &element)
+{
+  if (
+    element.value("_type", "") != "Compare" ||
+    element["comparators"].size() < 2 || in_rhs_type_probe_ ||
+    contains_named_expr(element) ||
+    std::none_of(
+      element["comparators"].begin(),
+      element["comparators"].end(),
+      has_call_in_expression))
+    return std::nullopt;
+  if (!can_emit_operand_statement() || conditional_expr_depth_ != 0)
+    throw std::runtime_error(
+      "TypeError: a call inside a term of a chained comparison where nothing "
+      "can be bound first, such as a loop condition, is not supported");
+  const nlohmann::json pairs = chained_compare_as_pairs(element);
+  lowering_chained_compare_ = true;
+  return get_expr(pairs);
+}
+
+nlohmann::json
+python_converter::chained_compare_as_pairs(const nlohmann::json &element)
+{
+  const nlohmann::json &comparators = element["comparators"];
+  nlohmann::json previous =
+    element["left"].value("_type", "") == "Constant"
+      ? element["left"]
+      : bind_to_fresh_name(element["left"], "ESBMC_chained_");
+  nlohmann::json pairs = nlohmann::json::array();
+  for (std::size_t i = 0; i < comparators.size(); ++i)
+  {
+    nlohmann::json term = comparators[i];
+    nlohmann::json next = term;
+    if (term.value("_type", "") != "Constant")
+    {
+      next = {
+        {"_type", "Name"},
+        {"id", "ESBMC_chained_" + std::to_string(++nditer_counter_)},
+        {"ctx", {{"_type", "Store"}}}};
+      copy_location_fields_from_decl(comparators[i], next);
+      term = {{"_type", "NamedExpr"}, {"target", next}, {"value", term}};
+      copy_location_fields_from_decl(comparators[i], term);
+      next["ctx"] = {{"_type", "Load"}};
+    }
+    nlohmann::json pair = {
+      {"_type", "Compare"},
+      {"left", previous},
+      {"ops", nlohmann::json::array({element["ops"][i]})},
+      {"comparators", nlohmann::json::array({term})}};
+    copy_location_fields_from_decl(element, pair);
+    pairs.push_back(pair);
+    previous = next;
+  }
+  nlohmann::json all = {
+    {"_type", "BoolOp"}, {"op", {{"_type", "And"}}}, {"values", pairs}};
+  copy_location_fields_from_decl(element, all);
+  return all;
+}
+
 // Python reads the left operand before it runs a call in the right one,
 // which may rebind what the left operand reads (`g + bump()`).
 exprt python_converter::snapshot_left_operand(
@@ -2045,14 +2158,9 @@ exprt python_converter::snapshot_left_operand(
   // that cannot fail is taken out of it.
   const bool safe = lhs.is_symbol() || is_in_bounds_constant_index(lhs) ||
                     conditional_expr_depth_ == 0;
-  // An and/or operand after the first plants its statements in a block of its
-  // own, which runs only where the operand is evaluated.
-  const bool can_emit =
-    can_emit_runtime_guard() || (in_operand_effects_block_ && current_block &&
-                                 safe_to_emit_side_effecting_statement());
   if (
-    !can_emit || !is_read_ahead_type(type) || !safe || lhs.is_constant() ||
-    !may_rebind_left(left, lhs, right))
+    !can_emit_operand_statement() || !is_read_ahead_type(type) || !safe ||
+    lhs.is_constant() || !may_rebind_left(left, lhs, right))
     return lhs;
   exprt value = lhs;
   if (value.is_function_call())
@@ -2166,6 +2274,14 @@ exprt python_converter::checked_erased_int(
   return operand;
 }
 
+// A None operand outside `str % None`, which is formatting, not arithmetic.
+static bool
+is_none_arithmetic(const std::string &op, const exprt &lhs, const exprt &rhs)
+{
+  return (lhs.type() == none_type() || rhs.type() == none_type()) &&
+         !(op == "Mod" && type_utils::is_string_type(lhs.type()));
+}
+
 exprt python_converter::get_binary_operator_expr(
   const nlohmann::json &element,
   const nlohmann::json &left,
@@ -2209,7 +2325,7 @@ exprt python_converter::get_binary_operator_expr(
 
   guard_none_typed_container(op, rhs, element);
 
-  if (lhs.type() == none_type() || rhs.type() == none_type())
+  if (is_none_arithmetic(op, lhs, rhs))
   {
     // A direct call like `f() is None` arrives as code_function_callt — a
     // statement, not a value. Promote to side_effect_expr_function_callt so

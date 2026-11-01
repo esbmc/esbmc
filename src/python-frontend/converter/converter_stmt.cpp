@@ -1955,7 +1955,11 @@ exprt python_converter::get_rhs_with_dict_resolution(
     return get_expr(ast_node["value"]);
 
   return dict_handler_->handle_dict_subscript(
-    dict_expr, ast_node["value"]["slice"], target_type);
+    dict_expr,
+    ast_node["value"]["slice"],
+    target_type,
+    target_type != list_type && !dict_handler_->is_dict_type(target_type) &&
+      is_call_bound_dict(ast_node["value"]["value"]));
 }
 
 std::string
@@ -4240,6 +4244,7 @@ void python_converter::update_numpy_array_binding(
     return;
 
   clear_numpy_array_storage_aliases_for(lhs_id);
+  const auto shape_before = numpy_param_shape(lhs_id);
   numpy_param_shapes_.erase(lhs_id);
   if (unconditional_assignment)
     numpy_ambiguous_shape_symbols_.erase(lhs_id);
@@ -4276,6 +4281,24 @@ void python_converter::update_numpy_array_binding(
 
   record_numpy_constructor_binding(
     lhs, lhs_id, rhs_node, unconditional_assignment);
+  keep_numpy_shape_across_paths(
+    lhs_id, rhs_node, unconditional_assignment, shape_before);
+}
+
+// A shape the name already has on the other path is not ambiguous.
+void python_converter::keep_numpy_shape_across_paths(
+  const std::string &lhs_id,
+  const nlohmann::json &rhs_node,
+  bool unconditional_assignment,
+  const std::optional<std::vector<std::size_t>> &shape_before)
+{
+  if (
+    !unconditional_assignment && shape_before &&
+    shape_before == get_numpy_constructor_shape(rhs_node))
+  {
+    numpy_ambiguous_shape_symbols_.erase(lhs_id);
+    numpy_param_shapes_[lhs_id] = *shape_before;
+  }
 }
 
 void python_converter::record_numpy_constructor_binding(

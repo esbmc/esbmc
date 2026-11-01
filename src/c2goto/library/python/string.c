@@ -129,6 +129,21 @@ __ESBMC_HIDE:;
   return 1;
 }
 
+// Python string isascii - true iff every byte is below 0x80. A UTF-8 byte at
+// or above 0x80 belongs to a non-ASCII code point, so this matches CPython's
+// per-code-point check. True on the empty string.
+_Bool __python_str_isascii(const char *s)
+{
+__ESBMC_HIDE:;
+  while (*s)
+  {
+    if ((unsigned char)*s >= 0x80)
+      return 0;
+    s++;
+  }
+  return 1;
+}
+
 // Python string isalnum - true iff the string is non-empty and every
 // character is a letter (ASCII A-Z / a-z) or a digit (0-9). Matches
 // Python's CPython behaviour on the ASCII subset; broader Unicode

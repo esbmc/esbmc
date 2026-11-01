@@ -2670,6 +2670,24 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
           integer2string(result.Val.getInt().getZExtValue()),
           size_type()));
 
+      // C17 6.5.3.4p2: an operand of variable length array type is evaluated.
+      // Only a side-effecting one is kept, and only its address, as clang's
+      // codegen does: the array itself is never read, so `sizeof *p` checks
+      // no dereference of p.
+      if (
+        !unary.isArgumentType() &&
+        unary.getTypeOfArgument()->isVariableArrayType() &&
+        unary.getArgumentExpr()->HasSideEffects(*ASTContext))
+      {
+        exprt operand;
+        if (get_expr(*unary.getArgumentExpr(), operand))
+          return true;
+
+        new_expr = exprt("comma", sizeof_expr.type());
+        new_expr.copy_to_operands(address_of_exprt(operand), sizeof_expr);
+        break;
+      }
+
       new_expr = sizeof_expr;
       break;
     }
@@ -4409,6 +4427,18 @@ bool clang_c_convertert::get_cast_expr(
 
     if (routed)
     {
+      // [conv.ptr]/3: a null pointer converts to a null pointer, not to the
+      // base subobject's offset from null. CK_UncheckedDerivedToBase only
+      // feeds member access, which is UB on null. A side-effecting operand is
+      // left unguarded rather than evaluated twice, as in
+      // clang_c_adjust::adjust_derived_to_base.
+      if (
+        ptr_mode && cast.getCastKind() == clang::CK_DerivedToBase &&
+        !cast.getSubExpr()->HasSideEffects(*ASTContext))
+        cur = if_exprt(
+          equality_exprt(expr, gen_zero(expr.type())),
+          gen_zero(cur.type()),
+          cur);
       expr = cur;
       break;
     }

@@ -1754,8 +1754,8 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
     };
     if (operand_is_complex(lhs) || operand_is_complex(rhs))
       return "complex";
-    // A number on the left of an array (`2 * a`) gives an array.
-    if (!is_array_operand(lhs, body) && is_array_operand(rhs, body))
+    // An array on either side (`2 * a`, `a / 2`) gives an array.
+    if (is_array_operand(lhs, body) || is_array_operand(rhs, body))
       return "list";
     // Only a list concatenates or repeats with a list (`a + [x]`, `n * [x]`);
     // a list literal on the left keeps its element type below.
@@ -1912,6 +1912,21 @@ std::string python_annotation<Json>::operand_annotation_type(const Json &decl)
   return base_name == "list" || base_name == "tuple" ? base_name : "";
 }
 
+template <class Json>
+static std::size_t name_store_count(const Json &node, const std::string &name)
+{
+  if (!node.is_structured())
+    return 0;
+  std::size_t stores = node.is_object() &&
+                       node.value("_type", std::string()) == "Name" &&
+                       node.value("id", std::string()) == name &&
+                       node.contains("ctx") &&
+                       node["ctx"].value("_type", std::string()) != "Load";
+  for (const Json &child : node)
+    stores += name_store_count(child, name);
+  return stores;
+}
+
 /// Whether `operand` is a NumPy array: a constructor or sized random call, or
 /// a name annotated as the list such a call is.
 template <class Json>
@@ -1935,6 +1950,13 @@ bool python_annotation<Json>::is_array_operand(
     decl = find_annotated_assign(name, ast_["body"]);
   if (decl.empty() && body.contains("args"))
     decl = find_annotated_assign(name, body["args"]["args"]);
+  // The annotation of a constructor's result names its element type. Another
+  // binding of the name could give it another shape.
+  if (
+    decl.contains("value") && decl["value"].is_object() &&
+    is_numpy_array_ctor_call(decl["value"]) && body.contains("body") &&
+    name_store_count(body, name) == 1)
+    return true;
   return operand_annotation_type(decl) == "list";
 }
 
