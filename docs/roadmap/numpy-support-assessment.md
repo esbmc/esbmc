@@ -110,8 +110,10 @@ and its stages, ADR-NP-004 the SMT-array scalability decision, and "principle
     NumPy build using fused multiply-add can return an infinity.
 
 12. **Some NumPy forms still report a false alarm instead of rejecting.**
-    `m.trace()` raises `AttributeError`, and `range(a[0])[1]` reports an invalid
-    pointer.
+    `m.trace()` raises `AttributeError`, `range(a[0])[1]` reports an invalid
+    pointer, and `len()` of `np.array([], dtype="U2") == "ab"` reads the wrong
+    length. `len(f())` with `f` returning a narrow array, and `a[0] = 1` on a
+    string array, stop on an internal assertion.
 
 ---
 
