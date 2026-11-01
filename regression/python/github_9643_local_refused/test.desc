@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: .*check_type with the hint .A., which is neither a class
