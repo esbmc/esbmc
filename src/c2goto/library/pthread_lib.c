@@ -576,6 +576,8 @@ __ESBMC_HIDE:;
   _Bool denied = __ESBMC_mutex_unlock_denied(mutex);
   if (!denied)
     __ESBMC_mutex_release(mutex);
+  /* Release must be a switch point: sync-typed fields are not (#9653). */
+  __ESBMC_yield();
   __ESBMC_atomic_end();
   return denied ? EPERM : 0;
 }
@@ -589,6 +591,8 @@ __ESBMC_HIDE:;
     denied || __ESBMC_mutex_lock_field(*mutex), "must hold lock upon unlock");
   if (!denied)
     __ESBMC_mutex_release(mutex);
+  /* Release must be a switch point: sync-typed fields are not (#9653). */
+  __ESBMC_yield();
   __ESBMC_atomic_end();
   return denied ? EPERM : 0;
 }
@@ -648,6 +652,8 @@ __ESBMC_HIDE:;
     __ESBMC_release_blocked_threads(__ESBMC_mutex_waiters(*mutex));
     __ESBMC_mutex_waiters(*mutex) = 0;
   }
+  /* Release must be a switch point: sync-typed fields are not (#9653). */
+  __ESBMC_yield();
   __ESBMC_atomic_end();
   return denied ? EPERM : 0;
 }
@@ -815,6 +821,8 @@ __ESBMC_HIDE:;
     __ESBMC_release_blocked_threads(__ESBMC_rwlock_waiters(lock));
     __ESBMC_rwlock_waiters(lock) = 0;
   }
+  /* Release must be a switch point: sync-typed fields are not (#9653). */
+  __ESBMC_yield();
   __ESBMC_atomic_end();
   return 0;
 }
@@ -1023,6 +1031,8 @@ __ESBMC_HIDE:;
   __ESBMC_spin_lock_field(lock) = 0;
   __ESBMC_release_blocked_threads(__ESBMC_spin_waiters(lock));
   __ESBMC_spin_waiters(lock) = 0;
+  /* Release must be a switch point: sync-typed fields are not (#9653). */
+  __ESBMC_yield();
   __ESBMC_atomic_end();
   return 0;
 }
