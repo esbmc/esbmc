@@ -1029,6 +1029,76 @@ bool python_list::literal_still_describes_list(
   return recorded == 0 || recorded == literal_elem_count;
 }
 
+/// A variable list repeated by a count that is not a constant, or whose
+/// elements are not recorded, has its elements known only at run time: copy it
+/// once per repetition (#9536). Empty when the operands are another shape.
+std::optional<exprt> python_list::repeat_variable_list(
+  const nlohmann::json &left_node,
+  const nlohmann::json &right_node,
+  const exprt &lhs,
+  const exprt &rhs)
+{
+  const typet list_type = converter_.get_type_handler().get_list_type();
+  const bool count_on_left = lhs.type() != list_type;
+  if (count_on_left == (rhs.type() != list_type))
+    return std::nullopt;
+  const exprt &source = count_on_left ? rhs : lhs;
+  const exprt &count = count_on_left ? lhs : rhs;
+  const nlohmann::json &list_node = count_on_left ? right_node : left_node;
+  if (list_node.contains("elts") || !source.is_symbol())
+    return std::nullopt;
+  const std::string id = source.identifier().as_string();
+  const typet recorded = elem_types().element_type(id, 0);
+  const bool known = !elem_types().element_id(id, 0).empty() ||
+                     (!recorded.is_nil() && !recorded.is_empty());
+  bool constant_count = count.is_constant();
+  if (!constant_count && count.is_symbol())
+  {
+    const symbolt *bound =
+      converter_.find_symbol(count.identifier().as_string());
+    constant_count = bound && bound->get_value().is_constant();
+  }
+  if (constant_count && known)
+    return std::nullopt;
+  return repeat_at_runtime(source, count);
+}
+
+exprt python_list::repeat_at_runtime(const exprt &source, const exprt &count)
+{
+  const locationt location = converter_.get_location_from_decl(list_value_);
+  symbolt &result = create_list();
+  symbolt &bound = converter_.create_tmp_symbol(
+    list_value_, "$list_rep_count$", int_type(), exprt());
+  converter_.add_instruction(code_declt(build_symbol(bound)));
+  converter_.add_instruction(code_assignt(
+    build_symbol(bound),
+    count.type() == int_type() ? count : build_typecast(count, int_type())));
+  symbolt &counter = converter_.create_tmp_symbol(
+    list_value_, "counter", int_type(), gen_zero(int_type()));
+  converter_.add_instruction(
+    code_assignt(build_symbol(counter), gen_zero(int_type())));
+
+  code_blockt body;
+  code_blockt *const outer = converter_.current_block;
+  converter_.current_block = &body;
+  emit_list_copy(source, result, list_value_);
+  converter_.current_block = outer;
+  body.copy_to_operands(code_assignt(
+    build_symbol(counter),
+    build_add(build_symbol(counter), gen_one(int_type()), int_type())));
+
+  codet loop;
+  loop.set_statement("while");
+  loop.copy_to_operands(
+    build_less_than(build_symbol(counter), build_symbol(bound)), body);
+  loop.location() = location;
+  converter_.add_instruction(loop);
+
+  elem_types().assign_from(
+    source.identifier().as_string(), result.id.as_string());
+  return build_symbol(result);
+}
+
 exprt python_list::list_repetition(
   const nlohmann::json &left_node,
   const nlohmann::json &right_node,
@@ -1081,6 +1151,10 @@ exprt python_list::list_repetition(
 
     return parse_size_from_symbol(size_var, out);
   };
+
+  if (
+    const auto runtime = repeat_variable_list(left_node, right_node, lhs, rhs))
+    return *runtime;
 
   if (lhs.type() == list_type && rhs.type() != list_type)
   {
@@ -1217,8 +1291,6 @@ exprt python_list::list_repetition(
     {
       // rhs is a variable list — get element from the registry
       list_elem = elem_from_type_map(rhs.identifier().as_string());
-      if (list_elem.is_nil())
-        return build_symbol(create_list());
       is_variable_list = true;
     }
 
@@ -1245,8 +1317,6 @@ exprt python_list::list_repetition(
     {
       // lhs is a variable list — get element from the registry
       list_elem = elem_from_type_map(lhs.identifier().as_string());
-      if (list_elem.is_nil())
-        return build_symbol(create_list());
       is_variable_list = true;
     }
 

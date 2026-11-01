@@ -415,6 +415,8 @@ private:
     const Json &element,
     const std::string &inferred_type);
   std::string optional_scalar_of(const std::string &name, const Json &scope);
+  bool is_missing_method_call(const Json &value);
+  bool stores_call_on_unannotated_param(const Json &element);
   std::string returned_optional_scalar(const Json &function, const Json &body);
   void collect_name_stores(
     const std::string &name,
@@ -457,6 +459,8 @@ private:
     size_t param_index;
     std::vector<std::string> class_types;
   };
+  // Functions whose None stores wait for a parameter class (#9338).
+  std::set<std::string> deferred_none_functions_;
   std::vector<pending_specializationt> pending_specializations_;
   void retype_builtin_copy(
     Json &fn,

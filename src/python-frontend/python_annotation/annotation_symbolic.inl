@@ -306,6 +306,23 @@ void python_annotation<Json>::apply_pending_specializations()
 
     rewrite_specialized_calls(
       func_name, param_index, specialized_names, ast_);
+
+    if (deferred_none_functions_.count(func_name) != 0)
+      for (Json &node : ast_["body"])
+      {
+        const std::string name = node.value("name", "");
+        const bool is_copy = std::any_of(
+          specialized_names.begin(),
+          specialized_names.end(),
+          [&](const auto &entry) { return entry.second == name; });
+        if (
+          node.value("_type", "") == "FunctionDef" &&
+          (name == func_name || is_copy))
+        {
+          node["returns"] = nullptr;
+          annotate_function(node);
+        }
+      }
   }
 
   pending_specializations_.clear();
