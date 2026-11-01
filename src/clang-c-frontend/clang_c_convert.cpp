@@ -4307,6 +4307,16 @@ void clang_c_convertert::rewrite_builtin_ref(
   }
 }
 
+/// The type reading \p expr yields. __ESBMC_return_value takes the enclosing
+/// function's return type, which clang, seeing its `int` declaration, does not
+/// know: converting it to clang's type would truncate a double result.
+static const typet &rvalue_type(const exprt &expr, const typet &clang_type)
+{
+  return expr.is_symbol() && expr.name() == "__ESBMC_return_value"
+           ? expr.type()
+           : clang_type;
+}
+
 bool clang_c_convertert::get_cast_expr(
   const clang::CastExpr &cast,
   exprt &new_expr)
@@ -4357,7 +4367,7 @@ bool clang_c_convertert::get_cast_expr(
       read.location() = location;
       expr = read;
     }
-    gen_typecast(ns, expr, type);
+    gen_typecast(ns, expr, rvalue_type(expr, type));
     break;
   }
 

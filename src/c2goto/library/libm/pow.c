@@ -56,6 +56,7 @@ double pow(double x, double y)
 __ESBMC_HIDE:;
   // Deterministic but otherwise unknown: enough to compare two programs
   // that call pow on the same arguments. NaN results compare by NaN-ness.
+  __ESBMC_assigns();
   __ESBMC_ensures(
     (__ESBMC_return_value == __ESBMC_uninterpreted_pow(x, y)) |
     ((__ESBMC_return_value != __ESBMC_return_value) &
