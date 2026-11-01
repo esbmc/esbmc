@@ -1,0 +1,5 @@
+CORE
+main.c
+--deadlock-check
+^  FAILED .*assertion 0$
+^VERIFICATION FAILED$
