@@ -2083,6 +2083,13 @@ void goto_convertt::guard_arm_destructors(
   cond = flag_expr;
 }
 
+/// clang_c_adjust promotes E1 of a compound assignment narrower than int, so
+/// it arrives as (int)x.
+static const exprt &skip_promotion(const exprt &lhs)
+{
+  return lhs.is_typecast() ? lhs.op0() : lhs;
+}
+
 // A _Bool bit-field has the semantics of a _Bool (C11 6.7.2.1p10), but
 // get_bitfield_type gives it an unsignedbv[N] type, and only its #cpp_type
 // survives the IREP2 round trip. A store must convert the value to _Bool
@@ -2181,7 +2188,7 @@ void goto_convertt::remove_assignment(
     // C11 compound assignments on _Atomic are RMW: the read and write must
     // happen in a single indivisible atomic section (no context-switch window
     // between the load and the store, unlike plain "x = x op y").
-    if (is_atomic_symbol(lhs, ns))
+    if (is_atomic_symbol(skip_promotion(lhs), ns))
       convert_assign_rmw_atomic(lhs, rhs, expr.location(), dest);
     else
     {
