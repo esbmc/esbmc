@@ -186,8 +186,7 @@ protected:
   std::unordered_set<std::string> raced_variables;
 
   /// Whether an assignment is a dependency or a write to a raced variable
-  bool
-  assignment_needed(const symex_target_equationt::SSA_stept &SSA_step);
+  bool assignment_needed(const symex_target_equationt::SSA_stept &SSA_step);
 
   /**
    * Collect every symbol of \expr into #depends (mutating "reverse-taint"
