@@ -28,3 +28,20 @@ twice = first + first
 assert twice == 112
 minus = -m
 assert minus[0][1] == -27 and minus.itemsize == 1
+
+base = np.array([127, 5], dtype=np.int8)
+window = base[0:1]
+sum_view = window + 1
+assert sum_view[0] == -128 and sum_view.itemsize == 1
+window += 1
+assert base[0] == -128
+plain = np.array([1, 5])
+plain_first = plain[0:1]
+assert (plain_first + 1)[0] == 2 and (plain_first + plain_first)[0] == 2
+grid = np.array([[1, 2], [3, 4]])
+flipped = grid.T
+bumped = flipped + 1
+assert bumped[0][1] == 4
+flipped += 1
+assert grid[0][1] == 3
+assert (base + base).itemsize == 1

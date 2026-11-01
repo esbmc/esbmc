@@ -217,6 +217,7 @@ bool numpy_consumer_is_modelled(
     "itemsize",
     "nbytes",
     "dtype",
+    "astype",
     "choice"};
   static const std::set<std::string> over_complex = {
     "array",  "copy",        "full",     "tolist",  "shape",       "size",

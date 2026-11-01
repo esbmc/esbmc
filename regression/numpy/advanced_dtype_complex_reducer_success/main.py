@@ -51,3 +51,15 @@ imaginary = np.array([1j, 2j])
 assert second(imaginary) == 2j
 held = second(imaginary)
 assert held == 2j
+
+values = np.array([1 + 1j, 2j])
+part = values[0:2]
+assert part.sum() == 1 + 3j
+assert values[0:2].prod() == -2 + 2j
+assert part.mean() == 0.5 + 1.5j
+assert (part + part)[1] == 4j
+same = +values
+same[0] = 0j
+assert same[0] == 0j and values[0] == 1 + 1j
+endless = np.array([complex(float("inf"), 0)])
+assert (-endless)[0].real == -float("inf")

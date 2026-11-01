@@ -1,4 +1,4 @@
 import numpy as np
 
-a = np.zeros(2, dtype="S4")
-assert len(a) == 2
+a = np.array([b"ab"], dtype="S2")
+assert a.itemsize == 2

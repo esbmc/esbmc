@@ -5,4 +5,4 @@ def f(x):
 
 
 a = np.array([127], dtype=np.int8)
-assert f(a[0]) == -128
+assert f(a[0]) == 128
