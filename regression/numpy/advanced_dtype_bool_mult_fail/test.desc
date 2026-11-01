@@ -1,4 +1,0 @@
-CORE
-main.py
---incremental-bmc
-^ERROR: TypeError: numpy element-wise 'Mult' over two bool arrays is not supported$

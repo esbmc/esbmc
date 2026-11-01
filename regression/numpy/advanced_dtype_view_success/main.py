@@ -45,3 +45,42 @@ assert bumped[0][1] == 4
 flipped += 1
 assert grid[0][1] == 3
 assert (base + base).itemsize == 1
+
+a_m1 = np.array([-2.7], dtype=int)
+b_m1 = np.array([-2.7], dtype=np.int64)
+c_m1 = np.array([-2.7], dtype="int64")
+d_m1 = np.array([-2.7], dtype=np.int_)
+assert a_m1[0] == -2
+assert a_m1[0] == b_m1[0] and b_m1[0] == c_m1[0] and c_m1[0] == d_m1[0]
+
+m_m1 = np.array([0.5], dtype=np.bool_)
+assert m_m1[0] != 0.5 and m_m1[0] == 1
+
+e_m1 = np.array([1, 2], dtype="i1")
+f_m1 = np.zeros(2, dtype="u2")
+g_m1 = np.ones(2, dtype="f4")
+h_m1 = np.array([1], dtype="<i4")
+i_m1 = np.array([1], dtype="=i2")
+j_m1 = np.array([255], dtype="B")
+k_m1 = np.array([1.5], dtype="e")
+assert e_m1.dtype == np.int8 and e_m1.itemsize == 1
+assert f_m1.dtype == "uint16" and f_m1.itemsize == 2
+assert g_m1.dtype == np.float32 and g_m1.nbytes == 8
+assert h_m1.dtype == "i4" and h_m1.itemsize == 4
+assert i_m1.dtype == np.int16
+assert j_m1.dtype == np.uint8 and j_m1[0] == 255
+assert k_m1.dtype == np.float16 and k_m1.itemsize == 2
+
+s_m1 = np.array(["abcd", "e"], dtype="U2")
+assert s_m1[0] == "ab" and s_m1[1] == "e"
+assert s_m1.itemsize == 8 and s_m1.nbytes == 16
+
+narrow_m1 = np.int16
+n_m1 = np.zeros(2, dtype=narrow_m1)
+assert n_m1.itemsize == 2
+code_m1 = "f4"
+o_m1 = np.ones(1, dtype=code_m1)
+assert o_m1.itemsize == 4
+builtin_m1 = int
+p_m1 = np.zeros(1, dtype=builtin_m1)
+assert p_m1.itemsize == 8

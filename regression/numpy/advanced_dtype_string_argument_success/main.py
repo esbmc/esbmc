@@ -1,6 +1,5 @@
 import numpy as np
 
-
 def first(x):
     return x[0]
 
@@ -71,3 +70,29 @@ raw = np.array([b"abcd", b"x"], dtype="S3")
 raw[1] = b"zzzz"
 assert raw[0] == b"abc" and raw[1] == b"zzz" and raw[0] != "abc"
 assert len(raw) == 2
+
+a_m1 = np.array(["ab", "c", ""])
+assert a_m1[0] == "ab" and a_m1[1] == "c" and a_m1[2] == ""
+assert len(a_m1[0]) == 2 and len(a_m1) == 3
+a_m1[1] = "xyz"
+assert a_m1[1] == "xy"
+
+s_m1 = np.array(["ab", "c", "def"])
+tail_m1 = s_m1[1:]
+assert len(tail_m1) == 2 and tail_m1[0] == "c" and tail_m1[1] == "def"
+assert tail_m1.itemsize == 12 and tail_m1.nbytes == 24
+every_m1 = s_m1[::2]
+assert every_m1[1] == "def"
+
+a_m2=np.array(['ab','cd','ef'])
+b_m2=a_m2[-2:]
+assert b_m2[0]=='cd'
+assert a_m2[1:][-1]=='ef'
+x_m2=a_m2[0] if len(a_m2)==3 else a_m2[1]
+assert x_m2=='ab'
+
+
+a_m4=np.array([b'ab'],dtype='S2')
+assert a_m4.size==1
+assert a_m4.shape[0]==1
+assert a_m4.ndim==1

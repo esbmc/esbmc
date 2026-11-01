@@ -34,3 +34,16 @@ assert twice[0] == -56
 wide = np.array([28, 100])
 strong = narrow + wide.min()
 assert strong[0] == 128
+
+a_m1 = np.linspace(0, 3, 4, dtype=int)
+assert np.sum(a_m1) == 6
+assert max(a_m1) == 3
+assert a_m1.mean() == 1.5
+
+b_m1 = np.array([100, 100], dtype=np.int8)
+assert np.sum(b_m1) == 200
+assert np.prod(b_m1) == 10000
+assert np.mean(b_m1) == 100.0
+assert sum(b_m1) == -56
+c_m1 = np.add(b_m1, b_m1)
+assert c_m1[0] == -56 and c_m1.itemsize == 1
