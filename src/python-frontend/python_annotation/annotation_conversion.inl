@@ -1696,6 +1696,60 @@ std::string python_annotation<Json>::list_concat_type(const Json &binop)
   return left == right ? left : "list";
 }
 
+/// The annotation of the variable @p name as the function body sees it: a
+/// local, a parameter, or a global. Empty if none.
+template <class Json>
+Json python_annotation<Json>::annotated_declaration(
+  const std::string &name,
+  const Json &body)
+{
+  Json decl = find_annotated_assign(name, body["body"]);
+  if (decl.empty() && body.contains("args"))
+    decl = find_annotated_assign(name, body["args"]["args"]);
+  if (
+    decl.empty() && current_func != nullptr && (*current_func).contains("args"))
+    decl = find_annotated_assign(name, (*current_func)["args"]["args"]);
+  if (decl.empty())
+    decl = find_annotated_assign(name, ast_["body"]);
+  return decl;
+}
+
+/// The type of an arithmetic expression with a list operand: `xs * n` and
+/// `n * xs` repeat an annotated `xs: list[T]`, so they keep its element type.
+/// Any other combination is a list of unknown elements.
+template <class Json>
+std::string python_annotation<Json>::array_operand_result_type(
+  const Json &stmt,
+  const Json &lhs,
+  const Json &rhs,
+  const Json &body)
+{
+  const Json &expr = stmt.contains("value") ? stmt["value"] : stmt;
+  if (expr["op"].value("_type", "") != "Mult")
+    return "list";
+  for (const Json *operands : {&lhs, &rhs})
+  {
+    const Json &list_side = *operands;
+    const Json &count = &list_side == &lhs ? rhs : lhs;
+    if (
+      list_side.value("_type", "") != "Name" ||
+      get_argument_type(count) != "int")
+      continue;
+    const Json decl =
+      annotated_declaration(list_side["id"].template get<std::string>(), body);
+    if (decl.empty() || !decl.contains("annotation"))
+      continue;
+    const Json &annotation = decl["annotation"];
+    const std::string spelled =
+      annotation.contains("id") && annotation["id"].is_string()
+        ? annotation["id"].template get<std::string>()
+        : json_utils::render_annotation_type(annotation);
+    if (spelled.rfind("list[", 0) == 0)
+      return spelled;
+  }
+  return "list";
+}
+
 template <class Json>
 std::string python_annotation<Json>::get_type_from_binary_expr(
   const Json &stmt,
@@ -1756,7 +1810,7 @@ std::string python_annotation<Json>::get_type_from_binary_expr(
       return "complex";
     // An array on either side (`2 * a`, `a / 2`) gives an array.
     if (is_array_operand(lhs, body) || is_array_operand(rhs, body))
-      return "list";
+      return array_operand_result_type(stmt, lhs, rhs, body);
     // Only a list concatenates or repeats with a list (`a + [x]`, `n * [x]`);
     // a list literal on the left keeps its element type below.
     const Json &value = stmt.contains("value") ? stmt["value"] : stmt;

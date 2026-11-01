@@ -212,6 +212,12 @@ private:
   std::string list_copy_type(const std::string &func_name, const Json &call);
   std::string dict_view_list_type(const Json &call);
   std::string get_type_from_binary_expr(const Json &stmt, const Json &body);
+  Json annotated_declaration(const std::string &name, const Json &body);
+  std::string array_operand_result_type(
+    const Json &stmt,
+    const Json &lhs,
+    const Json &rhs,
+    const Json &body);
   bool is_array_operand(const Json &operand, const Json &body);
   std::string operand_annotation_type(const Json &decl);
   std::string get_type_from_rhs_variable(const Json &element, const Json &body);
