@@ -1322,6 +1322,20 @@ void python_converter::handle_assignment_type_adjustments(
 
   rhs = wrap_stored_if_optional(rhs, lhs.type());
 
+  // Indexing a str yields a bare char; a variable holding its string as a char
+  // array takes it as the one-character string (#9446).
+  if (
+    lhs.type().is_array() && lhs.type().subtype() == char_type() &&
+    rhs.type() == char_type())
+  {
+    exprt str = gen_zero(lhs.type());
+    if (str.operands().size() >= 2)
+    {
+      str.operands()[0] = rhs;
+      rhs = str;
+    }
+  }
+
   // Assigning to a struct member (self.attr = value): an unannotated parameter
   // is typed as the any-type carrier (void*, i.e. a pointer whose subtype is
   // empty) but holds an integer value round-tripped as (int*)n. Writing that
