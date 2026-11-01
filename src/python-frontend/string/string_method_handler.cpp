@@ -1523,7 +1523,7 @@ exprt string_handler::build_affix_tuple_match(
         binary2integer(it->value().as_string(), it->type().is_signedbv());
       if (val == 0)
         return true;
-      out += static_cast<char>(val.to_uint64());
+      out += static_cast<char>(val.to_int64());
     }
     return true;
   };
@@ -1906,7 +1906,7 @@ exprt string_handler::handle_string_lstrip(
         auto is_whitespace = [](const exprt &ch) -> bool {
           BigInt char_val =
             binary2integer(ch.value().as_string(), ch.type().is_signedbv());
-          char c = static_cast<char>(char_val.to_uint64());
+          char c = static_cast<char>(char_val.to_int64());
           return c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' ||
                  c == '\r';
         };
@@ -1936,12 +1936,12 @@ exprt string_handler::handle_string_lstrip(
         auto is_in_strip_set = [&strip_set](const exprt &ch) -> bool {
           BigInt cv =
             binary2integer(ch.value().as_string(), ch.type().is_signedbv());
-          char c = static_cast<char>(cv.to_uint64());
+          char c = static_cast<char>(cv.to_int64());
           for (const auto &sc : strip_set)
           {
             BigInt sv =
               binary2integer(sc.value().as_string(), sc.type().is_signedbv());
-            if (c == static_cast<char>(sv.to_uint64()))
+            if (c == static_cast<char>(sv.to_int64()))
               return true;
           }
           return false;
@@ -2081,7 +2081,7 @@ exprt string_handler::handle_string_strip(
         auto is_whitespace = [](const exprt &ch) -> bool {
           BigInt char_val =
             binary2integer(ch.value().as_string(), ch.type().is_signedbv());
-          char c = static_cast<char>(char_val.to_uint64());
+          char c = static_cast<char>(char_val.to_int64());
           return c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' ||
                  c == '\r';
         };
@@ -2114,12 +2114,12 @@ exprt string_handler::handle_string_strip(
         auto is_in_strip_set = [&strip_set](const exprt &ch) -> bool {
           BigInt cv =
             binary2integer(ch.value().as_string(), ch.type().is_signedbv());
-          char c = static_cast<char>(cv.to_uint64());
+          char c = static_cast<char>(cv.to_int64());
           for (const auto &sc : strip_set)
           {
             BigInt sv =
               binary2integer(sc.value().as_string(), sc.type().is_signedbv());
-            if (c == static_cast<char>(sv.to_uint64()))
+            if (c == static_cast<char>(sv.to_int64()))
               return true;
           }
           return false;
@@ -2238,7 +2238,7 @@ exprt string_handler::handle_string_rstrip(
         auto is_whitespace = [](const exprt &ch) -> bool {
           BigInt char_val =
             binary2integer(ch.value().as_string(), ch.type().is_signedbv());
-          char c = static_cast<char>(char_val.to_uint64());
+          char c = static_cast<char>(char_val.to_int64());
           return c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' ||
                  c == '\r';
         };
@@ -2268,12 +2268,12 @@ exprt string_handler::handle_string_rstrip(
         auto is_in_strip_set = [&strip_set](const exprt &ch) -> bool {
           BigInt cv =
             binary2integer(ch.value().as_string(), ch.type().is_signedbv());
-          char c = static_cast<char>(cv.to_uint64());
+          char c = static_cast<char>(cv.to_int64());
           for (const auto &sc : strip_set)
           {
             BigInt sv =
               binary2integer(sc.value().as_string(), sc.type().is_signedbv());
-            if (c == static_cast<char>(sv.to_uint64()))
+            if (c == static_cast<char>(sv.to_int64()))
               return true;
           }
           return false;
