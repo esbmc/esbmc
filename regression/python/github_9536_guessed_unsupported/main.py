@@ -1,9 +1,9 @@
-def f4(x, y):
+def h(x, y):
     u = x["string"] + y
     v = y + 3
-    return u | v
+    return u + v
 
 
 w = 1
-d = f4({"string": w}, 1)
+d = h({"string": w}, 1)
 assert isinstance(d, int)
