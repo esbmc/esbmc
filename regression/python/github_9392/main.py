@@ -60,3 +60,22 @@ try:
 except OverflowError:
     tanh_raised = True
 assert not tanh_raised
+
+
+# A short-circuited call must not raise.
+def guarded(c: bool) -> bool:
+    return (c and math.expm1(1000.0) > 0.0) or (c and math.exp(1000.0) > 0.0) or (
+        c and math.ldexp(1.0, 5000) > 0.0)
+
+
+assert not guarded(False)
+
+
+def taken(c: bool) -> bool:
+    try:
+        return c and math.cosh(-1000.0) > 0.0
+    except OverflowError:
+        return False
+
+
+assert not taken(True)

@@ -195,6 +195,12 @@ def sqrt(x: float) -> float:
     return __ESBMC_sqrt(x)
 
 
+def _range_checked(x: float, r: float) -> float:
+    if __ESBMC_isinf(r) and not __ESBMC_isinf(x):
+        raise OverflowError("math range error")
+    return r
+
+
 def exp(x: float) -> float:
     """
     Calculate e raised to the power of x
@@ -205,7 +211,7 @@ def exp(x: float) -> float:
     Returns:
         e^x
     """
-    return __ESBMC_exp(x)
+    return _range_checked(x, __ESBMC_exp(x))
 
 
 def log(x: float) -> float:
@@ -331,7 +337,7 @@ def isclose(a: float, b: float, rel_tol: float = 1e-09, abs_tol: float = 0.0) ->
 
 
 def expm1(x: float) -> float:
-    return __ESBMC_expm1(x)
+    return _range_checked(x, __ESBMC_expm1(x))
 
 
 def log1p(x: float) -> float:
@@ -341,7 +347,7 @@ def log1p(x: float) -> float:
 
 
 def exp2(x: float) -> float:
-    return __ESBMC_exp2(x)
+    return _range_checked(x, __ESBMC_exp2(x))
 
 
 def asin(x: float) -> float:
@@ -477,14 +483,14 @@ def sinh(x: float) -> float:
     """
     Calculate hyperbolic sine of x
     """
-    return __ESBMC_sinh(x)
+    return _range_checked(x, __ESBMC_sinh(x))
 
 
 def cosh(x: float) -> float:
     """
     Calculate hyperbolic cosine of x
     """
-    return __ESBMC_cosh(x)
+    return _range_checked(x, __ESBMC_cosh(x))
 
 
 def tanh(x: float) -> float:
@@ -659,7 +665,7 @@ def ldexp(x: float, i: int) -> float:
     """
     if not isinstance(i, int):
         raise TypeError("i must be an integer")
-    return __ESBMC_ldexp(x, i)
+    return _range_checked(x, __ESBMC_ldexp(x, i))
 
 
 def lgamma(x: float) -> float:
