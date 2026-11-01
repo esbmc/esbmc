@@ -541,6 +541,9 @@ def confirmed_by_integer_encoding(esbmc_command_line, the_output, prop, elapsed)
 
 
 def verify(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, witness_path, validate_mode):
+  if witness_path and validate_mode == "violation":
+    strat = "incr"
+
   esbmc_command_line = get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci, validate=bool(witness_path))
 
   if witness_path:

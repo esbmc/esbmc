@@ -605,6 +605,10 @@ private:
   bool receiver_is_tracked_numpy_view(const std::string &recv_type) const;
   bool receiver_is_binop_or_list_symbol() const;
   bool receiver_class_defines_method(const std::string &method_name) const;
+
+  /// The callee's symbol. An instance method of no known class has none: it
+  /// must not bind to a module function of the same name (#9658).
+  const symbolt *find_callee_symbol(const std::string &func_symbol_id);
   void reject_unresolved_user_method(const std::string &method_name) const;
   bool is_list_method_call() const;
   exprt handle_list_method() const;
