@@ -447,6 +447,35 @@ static expr2tc overflow_expr(const expr2tc &expr)
   return overflow2tc(expr);
 }
 
+// C++11 to C++17 [expr.shift]/2 (CWG 1457): for a non-negative E1 the shift is
+// defined when E1 * 2^E2 fits the corresponding unsigned type, so only
+// shifting a bit past the top overflows; `1 << 31` does not. A negative E1 or
+// an out-of-range E2 is the undefined-shift check's. Any other `expr` keeps
+// its `overflow`.
+static expr2tc cpp11_shl_overflow(const expr2tc &expr, const expr2tc &overflow)
+{
+  if (
+    !is_shl2t(expr) || !is_signedbv_type(*expr->get_sub_expr(0)) ||
+    config.language.cpp_std < cxx_stdt::cpp11)
+    return overflow;
+  const expr2tc &e1 = to_shl2t(expr).side_1;
+  const expr2tc &e2 = to_shl2t(expr).side_2;
+  const type2tc u = get_uint_type(e1->type->get_width());
+  const expr2tc width =
+    constant_int2tc(e2->type, BigInt(e1->type->get_width()));
+  return or2tc(
+    or2tc(
+      lessthan2tc(e1, gen_zero(e1->type)),
+      or2tc(
+        lessthan2tc(e2, gen_zero(e2->type)), greaterthanequal2tc(e2, width))),
+    lessthanequal2tc(
+      typecast2tc(u, e1),
+      lshr2tc(
+        u,
+        constant_int2tc(u, power(2, e1->type->get_width()) - 1),
+        typecast2tc(u, e2))));
+}
+
 void goto_checkt::overflow_check(
   const expr2tc &expr,
   const guard2tc &guard,
@@ -492,6 +521,8 @@ void goto_checkt::overflow_check(
   // add overflow subgoal
   expr2tc overflow = overflow_expr(expr);
   make_not(overflow);
+
+  overflow = cpp11_shl_overflow(expr, overflow);
 
   add_guarded_claim(
     overflow,
