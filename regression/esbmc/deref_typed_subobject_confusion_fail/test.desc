@@ -1,0 +1,5 @@
+CORE
+main.c
+--no-align-check
+^VERIFICATION FAILED$
+struct pointer addresses no object of its type

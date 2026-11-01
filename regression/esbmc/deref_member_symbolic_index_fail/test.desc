@@ -1,0 +1,5 @@
+CORE
+main.c
+
+Access to object out of bounds
+^VERIFICATION FAILED$

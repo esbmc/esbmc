@@ -1,0 +1,5 @@
+CORE
+main.c
+--no-bounds-check
+false: p->a\[2\] is o.y
+^VERIFICATION FAILED$
