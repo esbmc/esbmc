@@ -7064,7 +7064,7 @@ std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
         // (x:MyClass) in python_converter::get_var_assign().
         return exprt("_init_undefined");
       }
-      converter_.base_ctor_called = true;
+      converter_.base_ctor_called.insert(function_id_.get_class());
     }
     else if (function_type_ == FunctionType::InstanceMethod)
     {

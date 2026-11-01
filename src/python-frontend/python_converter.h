@@ -3931,7 +3931,10 @@ private:
   std::unordered_set<std::string> numpy_view_param_symbols_;
   bool is_loading_models = false;
   bool is_importing_module = false;
-  bool base_ctor_called = false;
+  /// The classes whose constructor was found in a base class by the call
+  /// being converted, until its assignment reads them. A constructor call in
+  /// an argument adds its class too.
+  std::set<std::string> base_ctor_called;
   bool build_static_lists = false;
   /// The element type a numpy constructor's dtype= gives the static array
   /// get_static_array builds; empty when the literal's own type is used.
