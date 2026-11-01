@@ -4,6 +4,7 @@
 #include <util/message/message.h>
 #include <functional>
 #include <map>
+#include <regex>
 #include <set>
 
 // An __ESBMC_logic function is a definition, never executed. Each call outside
@@ -209,6 +210,53 @@ void check_acyclic(const std::map<irep_idt, std::set<irep_idt>> &calls)
 /// (a version-isolated copy of one) are congruent: they are one function.
 std::map<irep_idt, irep_idt> representative;
 
+/// Member names and types, following struct tags, so a struct and its
+/// version-isolated copy (same members, another tag) spell the same.
+std::string layout(const type2tc &t, const namespacet &ns, unsigned depth = 0)
+{
+  const type2tc f = ns.follow(t);
+  if (depth > 8 || (!is_struct_type(f) && !is_union_type(f)))
+    return f->pretty(0);
+  const auto &members = is_struct_type(f) ? to_struct_type(f).members
+                                           : to_union_type(f).members;
+  const auto &names = is_struct_type(f) ? to_struct_type(f).member_names
+                                        : to_union_type(f).member_names;
+  std::string out = is_struct_type(f) ? "struct{" : "union{";
+  for (size_t i = 0; i < members.size(); i++)
+  {
+    // An anonymous member's name embeds its source location.
+    const std::string &n = id2string(names[i]);
+    out += (n.find("(anonymous") != std::string::npos ? "#" + std::to_string(i)
+                                                       : n) +
+           ":" + layout(members[i], ns, depth + 1) + ";";
+  }
+  return out + "}";
+}
+
+/// \p text with every struct/union tag replaced by that type's layout.
+std::string by_layout(const std::string &text, const namespacet &ns)
+{
+  static const std::regex tag(R"(symbol_name : (tag-(struct|union|class) [^\n]*))");
+  std::string out;
+  auto begin = std::sregex_iterator(text.begin(), text.end(), tag);
+  size_t last = 0;
+  for (auto m = begin; m != std::sregex_iterator(); ++m)
+  {
+    out += text.substr(last, m->position() - last);
+    const symbolt *sym = ns.lookup((*m)[1].str());
+    out += sym == nullptr ? m->str()
+                          : "layout : " + layout(migrate_type(sym->get_type()), ns);
+    last = m->position() + m->length();
+  }
+  out += text.substr(last);
+  // An expanded struct type carries its tag too; its members follow it.
+  static const std::regex name(R"(\* typename : (struct|union|class) [^\n]*)");
+  // An anonymous member's name embeds its source location; its own members
+  // are injected into the enclosing scope, so they alone identify a field.
+  static const std::regex anon(R"([\w:]*\(anonymous[^)]*\))");
+  return std::regex_replace(std::regex_replace(out, name, ""), anon, "(anonymous)");
+}
+
 /// The definition with parameters and locals named by position and logic
 /// callees by their own canonical form; equal strings mean equal functions.
 std::string canonical(
@@ -279,7 +327,7 @@ std::string canonical(
     for (const auto &t : it->targets)
       out += " ->" + std::to_string(index.at(&*t));
   }
-  return memo[f] = out;
+  return memo[f] = by_layout(out, ns);
 }
 
 expr2tc app_symbol(const code_function_call2t &c)
@@ -406,6 +454,16 @@ void build_unfold(
       it->guard = implies2tc(ok, equality2tc(result, value));
       it->code = expr2tc();
       it->location.comment("logic function definition");
+      // A RETURN jumps to the end by itself; the ASSUME would fall through
+      // into the next return's and make the path, and every claim on it,
+      // vacuous.
+      goto_programt::instructiont leave(GOTO);
+      leave.guard = gen_true_expr();
+      leave.targets.push_back(std::prev(uf.body.instructions.end()));
+      leave.location = it->location;
+      leave.function = it->function;
+      it = uf.body.insert(std::next(it));
+      *it = leave;
       continue;
     }
     const code_function_call2t *c = logic_call(*it, ns);
