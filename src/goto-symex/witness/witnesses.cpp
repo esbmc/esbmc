@@ -201,7 +201,7 @@ void create_waypoint(const waypoint &wp, YAML::Emitter &waypoint)
              << "branching";
 
   waypoint << YAML::Key << "action" << YAML::Value << YAML::DoubleQuoted
-           << "follow";
+           << (wp.action == waypoint::cycle ? "cycle" : "follow");
 
   if (wp.type == waypoint::assumption)
   {
@@ -738,6 +738,8 @@ void _create_graph_node(
   }
   else if (options.get_bool_option("data-races-check"))
     pDataSpecification.put_value("CHECK( init(main()), LTL(G ! data-race) )");
+  else if (options.get_bool_option("termination"))
+    pDataSpecification.put_value("CHECK( init(main()), LTL(F end) )");
   else
     pDataSpecification.put_value(
       "CHECK( init(main()), LTL(G ! call(__VERIFIER_error())) )");
@@ -758,6 +760,28 @@ void _create_graph_node(
     timestr.insert(timestr.size() - 2, ":");
   p_creationTime.put_value(timestr);
   graphnode.add_child("data", p_creationTime);
+}
+
+static std::string yaml_specification(const optionst &options)
+{
+  std::string spec;
+  if (options.get_bool_option("overflow-check"))
+    spec = "G ! overflow";
+  else if (options.get_bool_option("memory-leak-check"))
+  {
+    if (options.get_bool_option("no-reachable-memory-leak"))
+      spec = "G valid-free|valid-deref|valid-memtrack";
+    else
+      spec = "G valid-memcleanup";
+  }
+  else if (options.get_bool_option("data-races-check"))
+    spec = "G ! data-race";
+  else if (options.get_bool_option("termination"))
+    spec = "F end";
+  else
+    spec = "G ! call(reach_error())";
+
+  return spec;
 }
 
 void _create_yaml_metadata_emitter(
@@ -830,20 +854,7 @@ void _create_yaml_metadata_emitter(
   }
   metadata << YAML::EndMap;
 
-  std::string spec;
-  if (options.get_bool_option("overflow-check"))
-    spec = "G ! overflow";
-  else if (options.get_bool_option("memory-leak-check"))
-  {
-    if (options.get_bool_option("no-reachable-memory-leak"))
-      spec = "G valid-free|valid-deref|valid-memtrack";
-    else
-      spec = "G valid-memcleanup";
-  }
-  else if (options.get_bool_option("data-races-check"))
-    spec = "G ! data-race";
-  else
-    spec = "G ! call(reach_error())";
+  const std::string spec = yaml_specification(options);
 
   metadata << YAML::Key << "specification" << YAML::Value << YAML::DoubleQuoted
            << spec;
