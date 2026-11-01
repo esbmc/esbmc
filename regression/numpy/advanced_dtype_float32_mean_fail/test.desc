@@ -1,4 +1,4 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR: TypeError: numpy\.mean\(\) over 8 or more elements of a narrow float dtype is not supported$
+^ERROR: TypeError: numpy\.mean\(\) over float16, or over 8 or more float32 elements, is not supported$
