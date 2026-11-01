@@ -101,7 +101,8 @@ public:
     : slice_assumes(options.get_bool_option("slice-assumes")),
       slice_nondet(
         !options.get_bool_option("generate-testcase") &&
-        !options.get_bool_option("generate-ctest-testcase"))
+        !options.get_bool_option("generate-ctest-testcase")),
+      keep_race_writes(options.get_bool_option("data-races-check"))
   {
   }
 
@@ -179,6 +180,14 @@ protected:
   const bool slice_assumes;
   /// Whether we should slice nondet symbols
   const bool slice_nondet;
+  /// Keep writes to a raced variable so a witness can name both accesses
+  const bool keep_race_writes;
+  /// Variables named by the data race assertions seen so far
+  std::unordered_set<std::string> raced_variables;
+
+  /// Whether an assignment is a dependency or a write to a raced variable
+  bool
+  assignment_needed(const symex_target_equationt::SSA_stept &SSA_step);
 
   /**
    * Collect every symbol of \expr into #depends (mutating "reverse-taint"

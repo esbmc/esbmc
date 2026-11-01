@@ -169,6 +169,13 @@ bool symex_slicet::depends_on_tracked(const expr2tc &expr)
 
 void symex_slicet::run_on_assert(symex_target_equationt::SSA_stept &SSA_step)
 {
+  if (keep_race_writes)
+  {
+    const std::string comment = SSA_step.comment.as_string();
+    const size_t on = comment.rfind(" data race on ");
+    if (on != std::string::npos)
+      raced_variables.insert(comment.substr(on + 14));
+  }
   scan_array_uses(SSA_step.guard);
   scan_array_uses(SSA_step.cond);
   collect_dependencies(SSA_step.guard);
@@ -209,6 +216,13 @@ void symex_slicet::run_on_assume(symex_target_equationt::SSA_stept &SSA_step)
   }
 }
 
+bool symex_slicet::assignment_needed(
+  const symex_target_equationt::SSA_stept &SSA_step)
+{
+  return depends_on_tracked(SSA_step.lhs) ||
+         raced_variables.count(to_symbol2t(SSA_step.lhs).thename.as_string());
+}
+
 void symex_slicet::run_on_assignment(
   symex_target_equationt::SSA_stept &SSA_step)
 {
@@ -220,7 +234,7 @@ void symex_slicet::run_on_assignment(
   // branch below. Eligibility uses the monotone #index_reads /
   // #array_disqualified maps populated by #scan_array_uses; dropping a store to
   // an unread index is sound (a dead store) and keeps #depends monotone.
-  if (!depends_on_tracked(SSA_step.lhs))
+  if (!assignment_needed(SSA_step))
   {
     // Should we add nondet to the dependency list (mostly for test cases)?
     if (!slice_nondet)
