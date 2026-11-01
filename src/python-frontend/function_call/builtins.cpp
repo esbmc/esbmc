@@ -1979,6 +1979,22 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
   return abs_expr;
 }
 
+// A negative ndigits literal such as -2 is a UnaryOp(USub, Constant(2)), not
+// a plain Constant, so unwrap the minus to recover the integer.
+static std::optional<int> literal_ndigits(const nlohmann::json &ndigits_arg)
+{
+  const bool negated = ndigits_arg.value("_type", "") == "UnaryOp" &&
+                       ndigits_arg.contains("op") &&
+                       ndigits_arg["op"].value("_type", "") == "USub" &&
+                       ndigits_arg.contains("operand");
+  const nlohmann::json &literal =
+    negated ? ndigits_arg["operand"] : ndigits_arg;
+  if (!literal.contains("value") || !literal["value"].is_number_integer())
+    return std::nullopt;
+  const int n = literal["value"].get<int>();
+  return negated ? -n : n;
+}
+
 exprt function_call_expr::handle_round(nlohmann::json &arg) const
 {
   const auto &args = call_["args"];
@@ -2002,6 +2018,9 @@ exprt function_call_expr::handle_round(nlohmann::json &arg) const
       is_negated = true;
     }
   }
+
+  const std::optional<int> ndigits =
+    has_ndigits ? literal_ndigits(args[1]) : std::nullopt;
 
   // Compile-time evaluation for numeric literals
   if (arg.contains("value") && arg["value"].is_number())
@@ -2031,41 +2050,17 @@ exprt function_call_expr::handle_round(nlohmann::json &arg) const
       expr.type() = t;
       return expr;
     }
-    else
+    else if (ndigits)
     {
-      // round(x, n) -> float rounded to n decimals. A negative ndigits literal
-      // such as -2 is a UnaryOp(USub, Constant(2)) — not a plain Constant — so
-      // unwrap the minus to recover the integer; otherwise the constant fold is
-      // skipped and the (much more expensive) symbolic path is taken, which
-      // times out for round(int, -n).
-      auto ndigits_arg = args[1];
-      bool ndigits_negated = false;
-      if (
-        ndigits_arg.contains("_type") && ndigits_arg["_type"] == "UnaryOp" &&
-        ndigits_arg.contains("op") && ndigits_arg["op"]["_type"] == "USub" &&
-        ndigits_arg.contains("operand"))
-      {
-        ndigits_arg = ndigits_arg["operand"];
-        ndigits_negated = true;
-      }
-      if (
-        ndigits_arg.contains("value") &&
-        ndigits_arg["value"].is_number_integer())
-      {
-        int n = ndigits_arg["value"].get<int>();
-        if (ndigits_negated)
-          n = -n;
-        double val = arg["value"].get<double>();
-        if (is_negated)
-          val = -val;
-        double rounded = round_to_ndigits_ties_even(val, n);
-        arg["value"] = rounded;
-        arg["type"] = "float";
-        typet t = type_handler_.get_typet("float", 0);
-        exprt expr = converter_.get_expr(arg);
-        expr.type() = t;
-        return expr;
-      }
+      double val = arg["value"].get<double>();
+      if (is_negated)
+        val = -val;
+      arg["value"] = round_to_ndigits_ties_even(val, *ndigits);
+      arg["type"] = "float";
+      typet t = type_handler_.get_typet("float", 0);
+      exprt expr = converter_.get_expr(arg);
+      expr.type() = t;
+      return expr;
     }
   }
 
@@ -2084,8 +2079,23 @@ exprt function_call_expr::handle_round(nlohmann::json &arg) const
     return build_typecast(nearbyint_expr, int_type);
   }
 
-  log_warning("round() with symbolic arguments not fully supported");
-  return nil_exprt();
+  exprt operand_expr = converter_.get_expr(arg);
+  // round(int, n) with n >= 0 returns the int unchanged.
+  if (
+    operand_expr.type() == type_handler_.get_typet("int", 0) && ndigits &&
+    *ndigits >= 0)
+    return operand_expr;
+
+  const std::string message =
+    "Unsupported: round() with ndigits of a value that is not a constant int";
+  if (!converter_.can_emit_runtime_guard())
+    throw std::runtime_error(message);
+  code_assertt check{false_exprt()};
+  check.location() = converter_.get_location_from_decl(call_);
+  check.location().user_provided(true);
+  check.location().comment(message);
+  converter_.current_block->copy_to_operands(check);
+  return side_effect_expr_nondett(operand_expr.type());
 }
 
 exprt function_call_expr::handle_complex() const
