@@ -229,6 +229,7 @@ goto_symext &goto_symext::operator=(const goto_symext &sym)
   dynamic_memory = sym.dynamic_memory;
   dynamic_object_sizes = sym.dynamic_object_sizes;
   uf_applications = sym.uf_applications;
+  logic_applications = sym.logic_applications;
   va_started = sym.va_started;
   va_copied_from = sym.va_copied_from;
   interval_domain_state = sym.interval_domain_state;

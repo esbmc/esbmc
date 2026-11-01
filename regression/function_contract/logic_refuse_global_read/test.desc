@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^ERROR: __ESBMC_logic function .*: reads .*, which is not a parameter$
+\A(?!(.|\n)*VERIFICATION)

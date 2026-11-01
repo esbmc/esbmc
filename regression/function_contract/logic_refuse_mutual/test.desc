@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^ERROR: __ESBMC_logic function .*: is mutually recursive$
+\A(?!(.|\n)*VERIFICATION)

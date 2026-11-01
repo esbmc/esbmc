@@ -1,0 +1,4 @@
+CORE
+main.c
+--enforce-contract f --function f --loop-invariant-check
+^VERIFICATION FAILED$

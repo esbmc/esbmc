@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^ERROR: __ESBMC_logic function .*: calls a function that is not __ESBMC_logic$
+\A(?!(.|\n)*VERIFICATION)

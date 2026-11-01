@@ -123,6 +123,16 @@ protected:
     const exprt &expr,
     const std::set<irep_idt> &bound_vars);
   void skolemize_asserted_foralls(exprt &expr, goto_programt &dest);
+  void instantiate_logic_foralls(
+    exprt &expr,
+    unsigned depth,
+    bool every,
+    goto_programt &dest);
+  void hoist_logic_calls(exprt &expr, goto_programt &dest);
+  void instantiate_clause_foralls(exprt &expr, goto_programt &dest);
+  exprt forall_instance(unsigned depth);
+  bool program_has_logic();
+  std::optional<bool> has_logic;
   // Rewrite __ESBMC_forall/__ESBMC_exists intrinsic calls into forall/exists
   // expressions, summarizing calls in the body first, before any hoisting can
   // freeze the bound variable.  Bodies that cannot be made side-effect-free are

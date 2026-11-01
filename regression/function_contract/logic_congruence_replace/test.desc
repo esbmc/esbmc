@@ -1,0 +1,4 @@
+CORE
+main.c
+--replace-call-with-contract f_old --replace-call-with-contract f_new --force-malloc-success
+^VERIFICATION SUCCESSFUL$

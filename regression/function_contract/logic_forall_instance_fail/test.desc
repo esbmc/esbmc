@@ -1,0 +1,6 @@
+CORE
+main.c
+--loop-invariant-check --force-malloc-success --no-bounds-check --no-pointer-check --no-align-check --multi-property
+^  PASSED\s+\[main\.assertion\.\d+\]\s+line\s+13\s+loop invariant inductive step$
+^  UNKNOWN\s+\[main\.assertion\.\d+\]\s+line\s+15\s+post \(loop invariant too weak
+^VERIFICATION UNKNOWN$

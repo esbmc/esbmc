@@ -4,6 +4,7 @@
 #include <unordered_set>
 #include <goto-symex/scheduler/execution_state.h>
 #include <goto-symex/engine/goto_symex.h>
+#include <goto-programs/goto_logic_functions.h>
 #include <langapi/language_util.h>
 #include <util/arith/arith_tools.h>
 #include <util/expr/base_type.h>
@@ -443,6 +444,12 @@ bool goto_symext::symex_uninterpreted_function(
   // body). Both namespaces are reserved, so no legitimate program relies on
   // such a body executing.
   const std::string &mangled = identifier.as_string();
+  // A logic application also keys its congruence on the memory it reaches.
+  if (has_prefix(mangled, kLogicAppPrefix))
+  {
+    symex_logic_application(call);
+    return true;
+  }
   std::string name = mangled.substr(mangled.rfind('@') + 1);
   if (
     !has_prefix(name, "__ESBMC_uninterpreted_") &&
@@ -513,6 +520,98 @@ bool goto_symext::symex_uninterpreted_function(
   return true;
 }
 
+static expr2tc
+equal_arguments(const std::vector<expr2tc> &a, const std::vector<expr2tc> &b)
+{
+  expr2tc same = gen_true_expr();
+  for (size_t i = 0; i < a.size(); i++)
+    same = and2tc(same, equality2tc(a[i], b[i]));
+  return same;
+}
+
+static expr2tc enclosing_object(expr2tc obj)
+{
+  while (is_member2t(obj) || is_index2t(obj) || is_typecast2t(obj))
+    obj = is_member2t(obj)  ? to_member2t(obj).source_value
+          : is_index2t(obj) ? to_index2t(obj).source_value
+                            : to_typecast2t(obj).from;
+  return obj;
+}
+
+bool goto_symext::reachable_memory(
+  const expr2tc &ptr,
+  std::vector<expr2tc> &memory)
+{
+  expr2tc l1 = ptr;
+  cur_state->top().level1.rename(l1);
+  value_setst::valuest targets;
+  cur_state->value_set.get_value_set(l1, targets);
+  bool named = true;
+  for (const expr2tc &t : targets)
+  {
+    expr2tc obj = is_object_descriptor2t(t)
+                    ? enclosing_object(to_object_descriptor2t(t).object)
+                    : expr2tc();
+    if (!is_nil_expr(obj) && is_null_object2t(obj))
+      continue;
+    if (is_nil_expr(obj) || !is_symbol2t(obj))
+    {
+      named = false;
+      continue;
+    }
+    cur_state->rename(obj);
+    memory.push_back(obj);
+  }
+  return named;
+}
+
+void goto_symext::symex_logic_application(const code_function_call2t &call)
+{
+  if (cur_state->guard.is_false() || is_nil_expr(call.ret))
+    return;
+  const irep_idt &id = to_symbol2t(call.function).thename;
+
+  // The memory a pointer argument may reach, as the current SSA term of each
+  // object in its value set. Equal terms mean unchanged contents; a target the
+  // value set cannot name rules congruence out for this application.
+  std::vector<expr2tc> memory;
+  bool keyed = true;
+  for (const expr2tc &arg : call.operands)
+    if (is_pointer_type(arg->type))
+      keyed &= reachable_memory(arg, memory);
+  expr2tc rounding = symbol2tc(get_int32_type(), "c:@__ESBMC_rounding_mode");
+  cur_state->rename(rounding);
+  memory.push_back(rounding);
+  std::sort(memory.begin(), memory.end());
+
+  std::vector<expr2tc> arguments = call.operands;
+  for (auto &argument : arguments)
+  {
+    cur_state->rename(argument);
+    do_simplify(argument);
+  }
+
+  expr2tc result = sideeffect2tc(
+    call.ret->type,
+    expr2tc(),
+    expr2tc(),
+    std::vector<expr2tc>(),
+    type2tc(),
+    sideeffect2t::allockind::nondet);
+  replace_nondet(result);
+
+  if (keyed)
+  {
+    for (const logic_applicationt &prev : logic_applications[id])
+      if (prev.memory == memory && prev.arguments.size() == arguments.size())
+        assume(implies2tc(
+          equal_arguments(arguments, prev.arguments),
+          equality2tc(result, prev.result)));
+    logic_applications[id].push_back({arguments, memory, result});
+  }
+  symex_assign(code_assign2tc(call.ret, result));
+}
+
 // A local lives from entry to its block (C11 6.2.4p6), and a jump past its
 // declaration must not leave it naming the caller's instance or a global.
 // Its DECL may be gone as unreachable, as in `switch (k) { int y; ... }`.
@@ -543,7 +642,6 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
     cur_state->source.pc++;
     return;
   }
-
   // find code in function map
   goto_functionst::function_mapt::const_iterator it =
     goto_functions.function_map.find(identifier);

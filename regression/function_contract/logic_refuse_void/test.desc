@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^ERROR: __ESBMC_logic function .*: returns void$
+\A(?!(.|\n)*VERIFICATION)

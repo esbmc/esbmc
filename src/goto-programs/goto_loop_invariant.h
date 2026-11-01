@@ -140,6 +140,10 @@ protected:
   /// leaves the loop to the unwinder.
   bool pointees_havocable(const loopst &loop) const;
 
+  /// Whether the loop moves the pointer \p ptr only within the object it
+  /// addresses at loop entry.
+  bool moves_within_object(const loopst &loop, const expr2tc &ptr) const;
+
   // Insert HAVOC and ASSUME at \p loop_head, which must be the loop head's own
   // instruction, so that everything the guard evaluates runs after the havoc
   // (inserts side_effects between the HAVOC block and the ASSUME).

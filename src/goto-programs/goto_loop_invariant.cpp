@@ -861,6 +861,84 @@ bool goto_loop_invariantt::pointees_havocable(const loopst &loop) const
   });
 }
 
+static bool takes_address_of(const expr2tc &e, const irep_idt &id)
+{
+  if (is_nil_expr(e))
+    return false;
+  if (
+    is_address_of2t(e) && is_symbol2t(to_address_of2t(e).ptr_obj) &&
+    to_symbol2t(to_address_of2t(e).ptr_obj).thename == id)
+    return true;
+  bool found = false;
+  e->foreach_operand(
+    [&](const expr2tc &op) { found = found || takes_address_of(op, id); });
+  return found;
+}
+
+static const expr2tc &strip_casts(const expr2tc &e)
+{
+  return is_typecast2t(e) ? strip_casts(to_typecast2t(e).from) : e;
+}
+
+static bool is_symbol_named(const expr2tc &e, const irep_idt &id)
+{
+  return is_symbol2t(strip_casts(e)) &&
+         to_symbol2t(strip_casts(e)).thename == id;
+}
+
+static bool address_taken(const goto_programt &body, const irep_idt &id)
+{
+  forall_goto_program_instructions (it, body)
+    if (takes_address_of(it->code, id) || takes_address_of(it->guard, id))
+      return true;
+  return false;
+}
+
+/// Whether \p instr leaves \p id within its object: it assigns \p id
+/// nothing but `id ± e`.
+static bool
+keeps_object(const goto_programt::instructiont &instr, const irep_idt &id)
+{
+  if (instr.is_function_call() && is_code_function_call2t(instr.code))
+  {
+    const expr2tc &ret = to_code_function_call2t(instr.code).ret;
+    return is_nil_expr(ret) || !is_symbol_named(ret, id);
+  }
+  if (!instr.is_assign() || !is_code_assign2t(instr.code))
+    return true;
+  const code_assign2t &a = to_code_assign2t(instr.code);
+  if (!is_symbol_named(a.target, id))
+    return true;
+  const expr2tc &src = strip_casts(a.source);
+  if (is_add2t(src))
+    return is_symbol_named(to_add2t(src).side_1, id) ||
+           is_symbol_named(to_add2t(src).side_2, id);
+  return is_sub2t(src) && is_symbol_named(to_sub2t(src).side_1, id);
+}
+
+/// Pointer arithmetic cannot leave an object, so a pointer the loop itself
+/// only assigns `p ± e` keeps the object it had at loop entry. Nothing else
+/// can assign it when it is a local whose address the function never takes.
+bool goto_loop_invariantt::moves_within_object(
+  const loopst &loop,
+  const expr2tc &ptr) const
+{
+  if (!is_symbol2t(ptr) || !is_pointer_type(ptr->type))
+    return false;
+  const irep_idt &id = to_symbol2t(ptr).thename;
+  const symbolt *s = context.find_symbol(id);
+  if (
+    s == nullptr || s->static_lifetime || address_taken(goto_function.body, id))
+    return false;
+  for (goto_programt::const_targett it = loop.get_original_loop_head();; ++it)
+  {
+    if (!keeps_object(*it, id))
+      return false;
+    if (it == loop.get_original_loop_exit())
+      return true;
+  }
+}
+
 /// Storage a loop writes through a pointer has no named symbol, so havoc the
 /// pointed-to object through the pointer itself and let symex resolve it
 /// against its own value set. Without this the pointee keeps its pre-loop value
@@ -950,20 +1028,20 @@ uses_side_effect(const expr2tc &conjunct, const std::set<irep_idt> &defs)
 
 /// A nondet value for the loop variable \p lhs. A bare nondet pointer has an
 /// empty value set, so the body could not dereference it; also let it land
-/// anywhere in the object it addressed at loop entry.
-static expr2tc havoc_value(const expr2tc &lhs)
+/// anywhere in the object it addressed at loop entry. A pointer the loop only
+/// moves (\p stays) stays in that object, and keeping its value set lets a
+/// logic application on it be keyed.
+static expr2tc havoc_value(const expr2tc &lhs, bool stays)
 {
   const expr2tc rhs = gen_nondet(lhs->type);
   if (!is_pointer_type(lhs->type))
     return rhs;
   const type2tc bytes = pointer_type2tc(get_uint8_type());
-  return if2tc(
+  const expr2tc moved = typecast2tc(
     lhs->type,
-    gen_nondet(get_bool_type()),
-    typecast2tc(
-      lhs->type,
-      add2tc(bytes, typecast2tc(bytes, lhs), gen_nondet(get_int64_type()))),
-    rhs);
+    add2tc(bytes, typecast2tc(bytes, lhs), gen_nondet(get_int64_type())));
+  return stays ? moved
+               : if2tc(lhs->type, gen_nondet(get_bool_type()), moved, rhs);
 }
 
 void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
@@ -1030,7 +1108,8 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
 
     // Create an assignment instruction for the nondeterministic value
     goto_programt::targett t = dest.add_instruction(ASSIGN);
-    t->code = code_assign2tc(lhs, havoc_value(lhs));
+    t->code =
+      code_assign2tc(lhs, havoc_value(lhs, moves_within_object(loop, lhs)));
     t->location = loop_head->location;
     t->location.comment("loop invariant havoc");
     t->loop_invariant_havoc = true;
