@@ -1648,18 +1648,6 @@ exprt function_call_expr::build_constant_from_arg() const
         type_utils::is_string_type(vt) ||
         type_handler_.is_tagged_scalar_type(vt))
         return converter_.get_string_handler().convert_to_string(value_expr);
-
-      // Element of a list whose element type could not be statically resolved
-      // (e.g. iterating an empty/untyped list) is typed as the generic list
-      // pointer. Treat it as the documented list[int] default so str() lowers
-      // through the integer model instead of aborting the whole run; the loop
-      // body is dead for the empty list, mirroring the arithmetic coercion in
-      // get_binary_operator_expr. Other unresolved pointers (e.g. an
-      // unannotated void* parameter) fall through to the sound nondet-string
-      // fallback below rather than being guessed as int.
-      if (vt == type_handler_.get_list_type())
-        return converter_.get_string_handler().convert_to_string(
-          build_typecast(value_expr, type_handler_.get_typet("int", 0)));
     }
 
     // A string literal argument folds to its length below.
