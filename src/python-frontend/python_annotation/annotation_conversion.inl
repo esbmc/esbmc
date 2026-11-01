@@ -5937,6 +5937,135 @@ void python_annotation<Json>::retype_methods_called_on_receivers()
   }
 }
 
+/// The type of call argument @p arg in method @p caller: that of a parameter
+/// the method never rebinds, else "".
+template <class Json>
+std::string
+python_annotation<Json>::self_call_arg_type(const Json &arg, const Json &caller)
+{
+  if (arg.value("_type", "") != "Name")
+    return "";
+  const std::string name = arg["id"].template get<std::string>();
+  std::function<bool(const Json &)> stores = [&](const Json &node) {
+    if (
+      node.is_object() && node.value("_type", "") == "Name" &&
+      node.value("id", "") == name &&
+      node.value("ctx", Json()).value("_type", "") == "Store")
+      return true;
+    if (node.is_structured())
+      for (const auto &child : node)
+        if (stores(child))
+          return true;
+    return false;
+  };
+  if (stores(caller["body"]))
+    return "";
+  for (const Json &param : caller["args"]["args"])
+    if (param.value("arg", "") == name)
+      return operand_annotation_type(param);
+  return "";
+}
+
+/// Types the unannotated parameters of a method from the `self.m(args)` calls
+/// the other methods of its class make, each argument resolved in its caller's
+/// scope, when nothing else calls the method and every such call passes one
+/// type. Run again as the callers' parameters get typed (#9637).
+template <class Json>
+bool python_annotation<Json>::preprocess_self_method_calls()
+{
+  const auto is_self_call = [](const Json &node) {
+    const Json &func = node.value("func", Json());
+    return node.value("_type", "") == "Call" &&
+           func.value("_type", "") == "Attribute" &&
+           func["value"].value("_type", "") == "Name" &&
+           func["value"].value("id", "") == "self";
+  };
+
+  std::set<std::string> called_elsewhere;
+  std::function<void(const Json &)> scan = [&](const Json &node) {
+    if (node.is_array())
+    {
+      for (const Json &item : node)
+        scan(item);
+      return;
+    }
+    if (!node.is_object())
+      return;
+    if (node.value("_type", "") == "Call" && !is_self_call(node))
+      if (node["func"].value("_type", "") == "Attribute")
+        called_elsewhere.insert(
+          node["func"]["attr"].template get<std::string>());
+    for (const auto &kv : node.items())
+      if (kv.value().is_structured())
+        scan(kv.value());
+  };
+  scan(ast_["body"]);
+
+  std::map<std::pair<Json *, size_t>, std::set<std::string>> seen;
+  for (Json &cls : ast_["body"])
+  {
+    if (cls.value("_type", "") != "ClassDef")
+      continue;
+    const std::string cls_name = cls["name"].template get<std::string>();
+    for (const Json &caller : cls["body"])
+    {
+      if (caller.value("_type", "") != "FunctionDef")
+        continue;
+      std::function<void(const Json &)> walk = [&](const Json &node) {
+        if (node.is_array())
+        {
+          for (const Json &item : node)
+            walk(item);
+          return;
+        }
+        if (!node.is_object())
+          return;
+        const std::string kind = node.value("_type", "");
+        if (kind == "FunctionDef" || kind == "ClassDef" || kind == "Lambda")
+          return;
+        Json *method =
+          is_self_call(node)
+            ? class_method(
+                cls_name, node["func"]["attr"].template get<std::string>())
+            : nullptr;
+        if (
+          method != nullptr &&
+          called_elsewhere.count(method->value("name", "")) == 0 &&
+          (*method)["decorator_list"].empty())
+        {
+          const Json &params = (*method)["args"]["args"];
+          for (size_t i = 1; i < params.size(); ++i)
+          {
+            const std::string type =
+              i - 1 < node["args"].size() && node["keywords"].empty()
+                ? self_call_arg_type(node["args"][i - 1], caller)
+                : std::string();
+            seen[{method, i}].insert(is_unresolved_arg_type(type) ? "" : type);
+          }
+        }
+        for (const auto &kv : node.items())
+          if (kv.value().is_structured())
+            walk(kv.value());
+      };
+      walk(caller["body"]);
+    }
+  }
+
+  bool annotated = false;
+  for (const auto &[key, types] : seen)
+  {
+    Json &param = (*key.first)["args"]["args"][key.second];
+    if (
+      types.size() == 1 && !types.begin()->empty() &&
+      param.value("annotation", Json()).is_null())
+    {
+      add_parameter_annotation(param, *types.begin());
+      annotated = true;
+    }
+  }
+  return annotated;
+}
+
 /// Infer unannotated parameter types of top-level functions from the
 /// argument types at every plain `f(arg1, arg2)` call site (i.e.
 /// `Call.func._type == "Name"`). Method calls on instances and class
@@ -6161,7 +6290,8 @@ void python_annotation<Json>::add_type_annotation()
   // parameters this pass types stays Any after a single round (GitHub #7254).
   // Terminates because a round returns true only after annotating a parameter
   // that had none, and annotated parameters are never revisited.
-  while (preprocess_function_calls(ast_) | preprocess_constructor_calls(ast_))
+  while (preprocess_function_calls(ast_) | preprocess_constructor_calls(ast_) |
+         preprocess_self_method_calls())
     ;
 
   // Second pass: add type annotations to global scope variables

@@ -72,6 +72,8 @@ public:
   std::vector<std::pair<std::string, std::string>>
   preprocess_receiver_method_calls(bool inside_functions = false);
   void retype_methods_called_on_receivers();
+  bool preprocess_self_method_calls();
+  std::string self_call_arg_type(const Json &arg, const Json &caller);
   bool is_instance_call(const Json &func) const;
   Json *class_method(const std::string &cls, const Json &method);
   /// Sentinel recorded for a call-site argument this pass cannot type; never
