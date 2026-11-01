@@ -35,3 +35,8 @@ assert t.itemsize == 8 and t.dtype == "c8"
 u = s + np.array([1j])
 assert u.itemsize == 16
 assert float(s[0].real) != 0.1
+widened = np.array([1, 2, 3]).astype(np.complex128)
+assert widened[1] == 2 + 0j
+assert widened.dtype == np.complex128 and widened.itemsize == 16 and widened.nbytes == 48
+from_text = np.array([1.5]).astype("c16")
+assert from_text[0].real == 1.5 and from_text[0].imag == 0.0

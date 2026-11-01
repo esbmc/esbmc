@@ -712,6 +712,36 @@ void lower_bytes_array_uses(nlohmann::json &node, const std::string &name)
     lower_bytes_array_uses(child, name);
 }
 
+bool holds_bytes_constant(const nlohmann::json &node)
+{
+  if (node.value("_type", "") != "List")
+    return is_bytes_constant(node);
+  return std::any_of(
+    node["elts"].begin(), node["elts"].end(), holds_bytes_constant);
+}
+
+// Only an explicit `S<n>` dtype has a lowering; NumPy's inference has none.
+void reject_untyped_bytes_array(
+  const nlohmann::json &ast,
+  const nlohmann::json &call)
+{
+  const nlohmann::json &func = call["func"];
+  if (
+    func.value("_type", "") != "Attribute" ||
+    func.value("attr", "") != "array" ||
+    func["value"].value("_type", "") != "Name" ||
+    !is_imported_numpy_module_alias(ast, func["value"].value("id", "")) ||
+    call["args"].empty() || !holds_bytes_constant(call["args"][0]))
+    return;
+  for (const auto &keyword : call["keywords"])
+    if (
+      keyword.value("arg", "") == "dtype" &&
+      bytes_dtype_as_text(keyword["value"]))
+      return;
+  throw std::runtime_error(
+    "TypeError: numpy.array() of bytes without an S<n> dtype is not supported");
+}
+
 void lower_bytes_arrays(nlohmann::json &ast)
 {
   std::map<std::string, std::size_t> bindings;
@@ -726,6 +756,8 @@ void lower_bytes_arrays(nlohmann::json &ast)
       if (!node.is_object())
         return;
       const std::string kind = node.value("_type", "");
+      if (kind == "Call")
+        reject_untyped_bytes_array(ast, node);
       const nlohmann::json *target = nullptr;
       if (kind == "AnnAssign")
         target = &node["target"];
