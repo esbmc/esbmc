@@ -308,13 +308,19 @@ static expr2tc integer_length(
   return digits_length(typecast2tc(target, v), base, max_len);
 }
 
-// Skip the '-' and '0' flags and read the field width of the conversion at
-// `i`, false when the width is past what a sprintf call stores. The flags
-// only choose the padding (C11 7.21.6.1p4).
-static bool parse_field_width(const std::string &f, size_t &i, size_t &width)
+// Read the '-' and '0' flags and the field width of the conversion at `i`,
+// false when the width is past what a sprintf call stores. The flags only
+// choose the padding (C11 7.21.6.1p4).
+static bool parse_field_width(
+  const std::string &f,
+  size_t &i,
+  size_t &width,
+  bool &left,
+  bool &zero)
 {
+  left = zero = false;
   while (i < f.size() && (f[i] == '-' || f[i] == '0'))
-    i++;
+    (f[i++] == '-' ? left : zero) = true;
   width = 0;
   while (i < f.size() && std::isdigit((unsigned char)f[i]))
     if ((width = width * 10 + (f[i++] - '0')) > max_stored_output)
@@ -338,7 +344,164 @@ static expr2tc pad_to_width(
   return if2tc(len->type, lessthan2tc(len, min_len), min_len, len);
 }
 
-expr2tc goto_symext::string_length(const expr2tc &ptr, size_t &max_len)
+// The character an output field prints at a position below its length, as
+// an int; empty when only the field's length is known.
+using printf_charst = std::function<expr2tc(const expr2tc &)>;
+
+static expr2tc select_char(
+  const expr2tc &pos,
+  const std::vector<expr2tc> &by_pos,
+  const expr2tc &otherwise)
+{
+  expr2tc out = otherwise;
+  for (size_t k = by_pos.size(); k-- > 0;)
+    out = if2tc(
+      out->type,
+      equality2tc(pos, constant_int2tc(pos->type, BigInt(k))),
+      by_pos[k],
+      out);
+  return out;
+}
+
+static printf_charst text_chars(const std::string &text)
+{
+  std::vector<expr2tc> by_pos;
+  for (const char c : text)
+    by_pos.push_back(constant_int2tc(int_type2(), BigInt((unsigned char)c)));
+  return [by_pos](const expr2tc &pos) {
+    return select_char(pos, by_pos, gen_zero(int_type2()));
+  };
+}
+
+// The digit characters of the unsigned `mag` in `base`, least significant
+// first, `count` of them.
+static std::vector<expr2tc>
+digit_chars(const expr2tc &mag, unsigned base, char conv, size_t count)
+{
+  const type2tc pos_type = int_type2();
+  const type2tc &utype = mag->type;
+  const unsigned shift = base == 8 ? 3 : base == 16 ? 4 : 0;
+  std::vector<expr2tc> digits;
+  BigInt place = 1;
+  for (size_t k = 0; k < count; k++, place *= base)
+  {
+    expr2tc d = shift
+                  ? bitand2tc(
+                      utype,
+                      lshr2tc(utype, mag, constant_int2tc(utype, k * shift)),
+                      constant_int2tc(utype, BigInt(base - 1)))
+                  : modulus2tc(
+                      utype,
+                      div2tc(utype, mag, constant_int2tc(utype, place)),
+                      constant_int2tc(utype, BigInt(base)));
+    d = typecast2tc(pos_type, d);
+    expr2tc c = add2tc(pos_type, d, constant_int2tc(pos_type, BigInt('0')));
+    if (base == 16)
+      c = if2tc(
+        pos_type,
+        lessthan2tc(d, constant_int2tc(pos_type, BigInt(10))),
+        c,
+        add2tc(
+          pos_type,
+          d,
+          constant_int2tc(pos_type, BigInt((conv == 'X' ? 'A' : 'a') - 10))));
+    digits.push_back(c);
+  }
+  return digits;
+}
+
+// What an integer conversion prints for `v`, already converted to the
+// conversion's type, padded to `width` with spaces on the left, zeros after
+// the sign (`zero`) or spaces on the right (`left`) (C11 7.21.6.1p6, p8).
+static printf_charst
+integer_chars(expr2tc v, char conv, bool left, bool zero, size_t width)
+{
+  if (v->type->get_width() < int_type2()->get_width())
+    v = typecast2tc(int_type2(), v);
+  const type2tc pos_type = int_type2();
+  const type2tc utype = get_uint_type(v->type->get_width());
+  const unsigned base = conv == 'o' ? 8 : conv == 'x' || conv == 'X' ? 16 : 10;
+  const expr2tc neg =
+    is_signedbv_type(v) ? lessthan2tc(v, gen_zero(v->type)) : gen_false_expr();
+  const expr2tc as_unsigned = typecast2tc(utype, v);
+  const expr2tc mag =
+    if2tc(utype, neg, neg2tc(utype, as_unsigned), as_unsigned);
+  size_t max_digits = 0;
+  const expr2tc digits_len = digits_length(mag, base, max_digits);
+  const std::vector<expr2tc> digits = digit_chars(mag, base, conv, max_digits);
+
+  const expr2tc one = gen_one(pos_type), nought = gen_zero(pos_type);
+  const expr2tc sign = if2tc(pos_type, neg, one, nought);
+  const expr2tc core = add2tc(pos_type, sign, digits_len);
+  const expr2tc w = constant_int2tc(pos_type, BigInt(width));
+  const expr2tc pad =
+    if2tc(pos_type, lessthan2tc(core, w), sub2tc(pos_type, w, core), nought);
+  const bool zeros = zero && !left;
+  const expr2tc sign_at = left || zeros ? nought : pad;
+  const expr2tc first = left ? sign : add2tc(pos_type, pad, sign);
+  const expr2tc filler = constant_int2tc(pos_type, BigInt(zeros ? '0' : ' '));
+  return [=](const expr2tc &pos) {
+    const expr2tc after_first = sub2tc(pos_type, pos, first);
+    const expr2tc place_of =
+      sub2tc(pos_type, sub2tc(pos_type, digits_len, one), after_first);
+    const expr2tc in_digits = and2tc(
+      greaterthanequal2tc(after_first, nought),
+      lessthan2tc(after_first, digits_len));
+    return if2tc(
+      pos_type,
+      and2tc(neg, equality2tc(pos, sign_at)),
+      constant_int2tc(pos_type, BigInt('-')),
+      if2tc(
+        pos_type, in_digits, select_char(place_of, digits, filler), filler));
+  };
+}
+
+// The most output characters stored as exact values rather than unknown
+// nonzero ones; each costs a selection over every field.
+static const size_t max_exact_output = 64;
+
+// The `max_len` characters of `char_type` the fields print one after another,
+// or none unless each field's characters are known.
+static std::vector<expr2tc> output_chars(
+  const std::vector<std::pair<expr2tc, printf_charst>> &fields,
+  size_t max_len,
+  const type2tc &char_type)
+{
+  std::vector<expr2tc> chars;
+  if (
+    max_len > max_exact_output ||
+    !std::all_of(fields.begin(), fields.end(), [](const auto &field) {
+      return bool(field.second);
+    }))
+    return chars;
+  const type2tc pos_type = int_type2();
+  for (size_t i = 0; i < max_len; i++)
+  {
+    const expr2tc pos = constant_int2tc(pos_type, BigInt(i));
+    std::vector<std::pair<expr2tc, expr2tc>> cases;
+    expr2tc start = gen_zero(pos_type);
+    for (const auto &[field_len, field_chars] : fields)
+    {
+      const expr2tc rel = sub2tc(pos_type, pos, start);
+      cases.emplace_back(
+        and2tc(
+          greaterthanequal2tc(rel, gen_zero(pos_type)),
+          lessthan2tc(rel, field_len)),
+        field_chars(rel));
+      start = add2tc(pos_type, start, field_len);
+    }
+    expr2tc c = gen_zero(pos_type);
+    for (size_t k = cases.size(); k-- > 0;)
+      c = if2tc(pos_type, cases[k].first, cases[k].second, c);
+    chars.push_back(typecast2tc(char_type, c));
+  }
+  return chars;
+}
+
+expr2tc goto_symext::string_length(
+  const expr2tc &ptr,
+  size_t &max_len,
+  std::function<expr2tc(const expr2tc &)> *chars)
 {
   expr2tc object;
   uint64_t offset, avail;
@@ -371,14 +534,68 @@ expr2tc goto_symext::string_length(const expr2tc &ptr, size_t &max_len)
       constant_int2tc(len_type, BigInt(k)),
       len);
   max_len += avail - 1;
+  if (chars && is_true(points_here))
+    *chars = [object, offset, elem](const expr2tc &pos) {
+      return typecast2tc(
+        int_type2(),
+        index2tc(
+          elem,
+          object,
+          add2tc(
+            size_type2(), gen_ulong(offset), typecast2tc(size_type2(), pos))));
+    };
   return is_true(points_here) ? len
                               : if2tc(len_type, points_here, len, unknown);
+}
+
+expr2tc goto_symext::printf_field_length(
+  const std::string &f,
+  size_t &i,
+  const std::vector<expr2tc> &args,
+  size_t &arg,
+  size_t &max_len,
+  std::function<expr2tc(const expr2tc &)> &chars)
+{
+  const size_t spec = i;
+  size_t width;
+  bool left, zero;
+  if (!parse_field_width(f, i, width, left, zero))
+    return expr2tc();
+  const size_t conv = i;
+  while (i < f.size() && std::string("jlzt").find(f[i]) != std::string::npos)
+    i++;
+  if (i == f.size() || arg == args.size())
+    return expr2tc();
+  expr2tc v = args[arg++];
+  expr2tc len;
+  const size_t max_before = max_len;
+  // A length modifier on %s makes it a wide string.
+  if (f[i] == 's' && i == spec)
+    len = string_length(v, max_len, &chars);
+  else if (std::string("diuoxX").find(f[i]) != std::string::npos)
+  {
+    cur_state->rename(v);
+    const std::string mod = f.substr(conv, i - conv);
+    len = integer_length(v, f[i], mod, max_len);
+    if (!is_nil_expr(len))
+      chars = integer_chars(
+        typecast2tc(printf_int_type(f[i] == 'd' || f[i] == 'i', mod), v),
+        f[i],
+        left,
+        zero,
+        width);
+  }
+  if (is_nil_expr(len))
+    return expr2tc();
+  return pad_to_width(len, width, max_before, max_len);
 }
 
 expr2tc goto_symext::printf_output_length(
   const code_printf2t &call,
   size_t fmt_idx,
-  size_t &max_len)
+  size_t &max_len,
+  const type2tc &char_type,
+  std::vector<expr2tc> *chars)
 {
   expr2tc fmt = call.operands[fmt_idx];
   cur_state->rename(fmt);
@@ -387,51 +604,45 @@ expr2tc goto_symext::printf_output_length(
     return expr2tc();
   const std::string f = to_constant_string2t(fmt_str).value.as_string();
 
-  size_t text = 0;
+  // Each field's length, and the characters it prints when known.
+  std::vector<std::pair<expr2tc, printf_charst>> fields;
+  std::string text;
+  size_t text_len = 0;
+  const auto end_text = [&]() {
+    if (!text.empty())
+      fields.emplace_back(
+        constant_int2tc(int_type2(), BigInt(text.size())), text_chars(text));
+    text.clear();
+  };
   max_len = 0;
-  expr2tc len = gen_zero(int_type2());
   const std::vector<expr2tc> args = printf_args(call, fmt_idx);
   size_t arg = 0;
   for (size_t i = 0; i < f.size(); i++)
   {
-    if (f[i] != '%')
+    if (f[i] != '%' || (++i < f.size() && f[i] == '%'))
     {
-      text++;
+      text += f[i];
+      text_len++;
       continue;
     }
-    if (++i < f.size() && f[i] == '%')
-    {
-      text++;
-      continue;
-    }
-    const size_t spec = i;
-    size_t width;
-    if (!parse_field_width(f, i, width))
-      return expr2tc();
-    const size_t conv = i;
-    while (i < f.size() && std::string("jlzt").find(f[i]) != std::string::npos)
-      i++;
-    if (i == f.size() || arg == args.size())
-      return expr2tc();
-    expr2tc v = args[arg++];
-    expr2tc conv_len;
-    const size_t max_before = max_len;
-    // A length modifier on %s makes it a wide string.
-    if (f[i] == 's' && i == spec)
-      conv_len = string_length(v, max_len);
-    else if (std::string("diuoxX").find(f[i]) != std::string::npos)
-    {
-      cur_state->rename(v);
-      conv_len = integer_length(v, f[i], f.substr(conv, i - conv), max_len);
-    }
+    end_text();
+    printf_charst conv_chars;
+    const expr2tc conv_len =
+      printf_field_length(f, i, args, arg, max_len, conv_chars);
     if (is_nil_expr(conv_len))
       return expr2tc();
-    len = add2tc(
-      len->type, len, pad_to_width(conv_len, width, max_before, max_len));
+    fields.emplace_back(conv_len, conv_chars);
   }
-  max_len += text;
-  len = add2tc(len->type, len, constant_int2tc(len->type, BigInt(text)));
+  end_text();
+  max_len += text_len;
+
+  expr2tc len = gen_zero(int_type2());
+  for (const auto &field : fields)
+    len = add2tc(len->type, len, field.first);
   do_simplify(len);
+  if (chars)
+    for (expr2tc &c : *chars = output_chars(fields, max_len, char_type))
+      do_simplify(c);
   return len;
 }
 
@@ -457,10 +668,12 @@ expr2tc goto_symext::sprintf_output(
     return constant_int2tc(int_type2(), BigInt(out.size()));
   }
 
-  // Text and integer conversions print no NUL, so each character is only
-  // known to be nonzero.
+  // Text, %s and integer conversions print no NUL, so a character not known
+  // exactly is known to be nonzero.
   size_t max_len;
-  expr2tc len = printf_output_length(call, fmt_idx, max_len);
+  expr2tc len = printf_output_length(call, fmt_idx, max_len, char_type, &chars);
+  if (!is_nil_expr(len) && !chars.empty())
+    return len;
   if (!is_nil_expr(len))
   {
     for (size_t i = 0; i < max_len; i++)
