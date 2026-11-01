@@ -1,4 +1,4 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR: TypeError: numpy bytes dtypes are not supported$
+^ERROR: TypeError: this use of a numpy bytes array is not supported$

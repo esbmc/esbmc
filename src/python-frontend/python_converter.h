@@ -50,6 +50,10 @@ class get_expr_depth_guard;
 // Defined in converter_stmt.cpp; shared with numpy_call_expr.cpp so both can
 // verify a Name/Attribute receiver actually resolves to the imported numpy
 // module before treating a call as a numpy constructor/method.
+/// Replaces stable names for slices and rows of literal numpy string arrays by
+/// their source, whose storage they share.
+void alias_numpy_string_views(nlohmann::json &ast);
+
 bool is_imported_numpy_module_alias(
   const nlohmann::json &ast,
   const std::string &name);
@@ -1332,6 +1336,18 @@ private:
   // A numpy array parameter decays to a pointer; element-wise arithmetic
   // reads it back through its pre-decay array type.
   exprt numpy_param_as_array(const exprt &operand) const;
+  exprt
+  numpy_view_operand_as_array(const nlohmann::json &node, const exprt &operand);
+  std::optional<exprt> numpy_string_elementwise_compare(
+    const nlohmann::json &element,
+    const exprt &lhs,
+    const exprt &rhs);
+  bool store_through_numpy_view(
+    const nlohmann::json &target,
+    const exprt &lhs,
+    const exprt &rhs,
+    const locationt &location,
+    codet &target_block);
   exprt snapshot_left_operand(
     const nlohmann::json &left,
     const exprt &lhs,
@@ -1417,6 +1433,19 @@ private:
   // case, to keep that function's own decision count down.
   std::optional<typet>
   numpy_elementwise_return_type(const nlohmann::json &func_def) const;
+  std::optional<typet> numpy_narrow_read_type(
+    const nlohmann::json &arg,
+    const std::string &enclosing) const;
+  std::optional<typet> numpy_scalar_param_type(
+    const std::string &func_name,
+    std::size_t param_index) const;
+  std::optional<typet> numpy_scalar_of_returned(
+    const nlohmann::json &function_node,
+    const nlohmann::json &value) const;
+  std::optional<typet>
+  numpy_scalar_return_type(const nlohmann::json &function_node) const;
+  // Functions whose every return is one narrow element.
+  std::map<std::string, typet> numpy_scalar_returns_;
   std::optional<typet> try_infer_numpy_array_arg_type(
     const nlohmann::json &arg,
     const nlohmann::json &module_body) const;

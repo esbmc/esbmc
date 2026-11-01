@@ -151,6 +151,12 @@ private:
   typet get_typet_from_dtype() const;
   std::optional<numpy_dtypet> runtime_fill_dtype() const;
   typet string_element_type(std::size_t literal_width) const;
+  std::optional<exprt> full_of_array_fill(
+    const std::vector<std::size_t> &dims,
+    const nlohmann::json &fill_node);
+  std::optional<std::vector<nlohmann::json>>
+  narrow_float_mean_nodes(const nlohmann::json &operand) const;
+  std::optional<exprt> try_narrow_float_mean();
   exprt full_of_literal_array(
     const std::vector<std::size_t> &dims,
     const nlohmann::json &fill);

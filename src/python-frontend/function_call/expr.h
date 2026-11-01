@@ -918,6 +918,11 @@ private:
    */
   std::optional<exprt> try_fold_identity_array_return();
 
+  exprt numpy_astype_to_string(
+    const nlohmann::json &receiver,
+    const exprt &source,
+    std::size_t width) const;
+
   /**
    * Suffix selecting the models/random.py variant that matches a sequence
    * argument's type: "_float" or "_str" for a list of those, "_chars" for a

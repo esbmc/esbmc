@@ -282,6 +282,7 @@ bool python_languaget::typecheck(contextt &context, const std::string &)
   try
   {
     // Generate symbol table
+    alias_numpy_string_views(ast);
     python_converter converter(context, &ast, global_scope_, &extra_asts);
     converter.convert();
   }

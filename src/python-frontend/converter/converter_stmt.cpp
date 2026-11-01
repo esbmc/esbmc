@@ -8709,6 +8709,9 @@ void python_converter::get_compound_assign(
   // Reset RHS flag
   is_converting_rhs = false;
 
+  if (store_through_numpy_view(ast_node["target"], lhs, rhs, loc, target_block))
+    return;
+
   // P27: Promote real RHS to complex when LHS is complex (AugAssign path).
   // adjust_statement_types() is NOT called on this path, so without this
   // check, `z += 1.0` / `z *= 2` produce a struct/scalar type mismatch in IR.

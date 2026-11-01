@@ -4394,6 +4394,19 @@ std::optional<exprt> numpy_call_expr::try_materialize_descriptor_copy_call()
   if (call_["args"].empty())
     throw std::runtime_error("TypeError: numpy.copy() requires an array");
 
+  if (is_string_operand(call_["args"][0]))
+  {
+    const exprt source = converter_.get_expr(call_["args"][0]);
+    symbolt &copy = converter_.create_tmp_symbol(
+      call_, "$numpy_string_copy$", source.type(), exprt());
+    code_declt decl(symbol_expr(copy));
+    decl.operands().push_back(source);
+    decl.location() = converter_.get_location_from_decl(call_);
+    converter_.current_block->copy_to_operands(decl);
+    converter_.numpy_result_is_fresh_copy_ = true;
+    return symbol_expr(copy);
+  }
+
   return converter_.build_numpy_descriptor_materialized_array(call_["args"][0]);
 }
 
@@ -5574,6 +5587,68 @@ std::optional<numpy_dtypet> numpy_call_expr::runtime_fill_dtype() const
   return dtype;
 }
 
+// A fill computed as an array: bound once, then each cell of the shape reads
+// the element broadcasting gives it, cast to dtype=.
+std::optional<exprt> numpy_call_expr::full_of_array_fill(
+  const std::vector<std::size_t> &dims,
+  const nlohmann::json &fill_node)
+{
+  const std::string kind = fill_node.value("_type", "");
+  const bool constructed =
+    kind == "Call" && fill_node["func"].value("attr", "") == "array";
+  if (kind != "Name" && !constructed)
+    return std::nullopt;
+  const nlohmann::json fill =
+    constructed ? converter_.bind_to_fresh_name(fill_node, "ESBMC_full_fill_")
+                : fill_node;
+  const typet type = converter_.ns.follow(converter_.get_expr(fill).type());
+  const typet leaf = type_utils::array_scalar_type(type);
+  if (!type.is_array() || type_utils::is_char_storage(leaf))
+    return std::nullopt;
+  const auto extents = type_handler_.get_array_type_shape(type);
+  const std::vector<std::size_t> shape(extents.begin(), extents.end());
+  if (shape.size() > dims.size())
+    throw std::runtime_error(
+      "ValueError: could not broadcast numpy.full() fill into the array shape");
+  const std::size_t skipped = dims.size() - shape.size();
+  for (std::size_t axis = 0; axis < shape.size(); ++axis)
+    if (shape[axis] != 1 && shape[axis] != dims[skipped + axis])
+      throw std::runtime_error(
+        "ValueError: could not broadcast numpy.full() fill into the array "
+        "shape");
+  const auto dtype = numpy_dtype_from_name(get_dtype());
+  if (
+    dtype && (dtype->kind == numpy_dtypet::kindt::string ||
+              (dtype->kind == numpy_dtypet::kindt::complex)))
+    throw std::runtime_error(
+      "TypeError: numpy.full() of an array fill with a string or complex "
+      "dtype= is not supported");
+  const typet element = dtype ? dtype->element_type() : leaf;
+  std::vector<exprt> cells;
+  std::vector<std::size_t> index(dims.size(), 0);
+  std::size_t count = 1;
+  for (const std::size_t extent : dims)
+    count *= extent;
+  for (; count > 0; --count)
+  {
+    exprt read = converter_.get_expr(fill);
+    for (std::size_t axis = 0; axis < shape.size(); ++axis)
+      read = index_exprt(
+        read,
+        from_integer(shape[axis] == 1 ? 0 : index[skipped + axis], size_type()),
+        read.type().subtype());
+    cells.push_back(
+      read.type() == element ? read : typecast_exprt(read, element));
+    for (std::size_t axis = index.size(); axis-- > 0;)
+    {
+      if (++index[axis] < dims[axis])
+        break;
+      index[axis] = 0;
+    }
+  }
+  return converter_.materialize_numpy_elements(call_, dims, cells, element);
+}
+
 exprt numpy_call_expr::full_of_literal_array(
   const std::vector<std::size_t> &dims,
   const nlohmann::json &fill)
@@ -5599,6 +5674,8 @@ exprt numpy_call_expr::full_of_runtime_fill(
   const nlohmann::json &fill_node = call_["args"][1];
   if (is_sequence_literal(fill_node))
     return full_of_literal_array(dims, fill_node);
+  if (const auto array = full_of_array_fill(dims, fill_node))
+    return *array;
   const auto dtype = runtime_fill_dtype();
   const exprt fill = converter_.get_expr(fill_node);
   const typet type = fill.type();
@@ -7253,19 +7330,18 @@ complex_literal_leaves(const nlohmann::json &list)
 // string, and NumPy compares a float32 element with a Python float in
 // float32, which a narrower storage alone would not reproduce.
 // A string literal's element: an explicit `U<n>` fixes the width, and
-// np.full(n, 123, dtype=str) stores in `<U1`, as NumPy takes the width from the
-// empty descriptor rather than the converted fill.
+// np.full(n, fill, dtype=str) stores in `<U1`, as NumPy takes the width from
+// the empty descriptor rather than the fill.
 typet numpy_call_expr::string_element_type(std::size_t literal_width) const
 {
   const auto parsed = numpy_dtype_from_name(get_dtype());
   const bool is_string = parsed && parsed->kind == numpy_dtypet::kindt::string;
   if (is_string && parsed->bits)
     return type_handler_.build_array(char_type(), parsed->bits / 32 + 1);
-  const bool number_fill =
-    is_string && call_["func"].value("attr", "") == "full" &&
-    call_["args"].size() > 1 && !is_numpy_string_literal(call_["args"][1]);
+  const bool full_without_width =
+    is_string && call_["func"].value("attr", "") == "full";
   return type_handler_.build_array(
-    char_type(), number_fill ? 2 : literal_width + 1);
+    char_type(), full_without_width ? 2 : literal_width + 1);
 }
 
 typet numpy_call_expr::constructor_element_type(
@@ -11195,9 +11271,46 @@ void numpy_call_expr::reject_narrow_float_mean(
     arg.value("_type", "") == "Call"
       ? numpy_dtype_from_name(constructor_dtype_name(arg, converter_.ast()))
       : converter_.numpy_array_dtype(arg);
-  if (dtype && dtype->kind == numpy_dtypet::kindt::floating && dtype->bits < 64)
-    throw std::runtime_error(
-      "TypeError: numpy.mean() over a narrow float dtype is not supported");
+  if (
+    !dtype || dtype->kind != numpy_dtypet::kindt::floating ||
+    dtype->bits == 64 || narrow_float_mean_nodes(arg))
+    return;
+  throw std::runtime_error(
+    "TypeError: numpy.mean() over 8 or more elements of a narrow float dtype "
+    "is not supported");
+}
+
+// Below 8 elements NumPy accumulates in order, at the dtype's width; above, its
+// pairwise summation groups them differently.
+std::optional<std::vector<nlohmann::json>>
+numpy_call_expr::narrow_float_mean_nodes(const nlohmann::json &operand) const
+{
+  if (operand.value("_type", "") != "Name")
+    return std::nullopt;
+  auto nodes =
+    const_cast<numpy_call_expr *>(this)->complex_element_nodes(operand);
+  if (!nodes || nodes->empty() || nodes->size() >= 8)
+    return std::nullopt;
+  return nodes;
+}
+
+std::optional<exprt> numpy_call_expr::try_narrow_float_mean()
+{
+  const auto &args = call_.value("args", nlohmann::json::array());
+  const nlohmann::json &func = call_["func"];
+  if (args.empty() && func.value("_type", "") != "Attribute")
+    return std::nullopt;
+  const nlohmann::json &operand = args.empty() ? func["value"] : args[0];
+  if (operand.value("_type", "") != "Name")
+    return std::nullopt;
+  const auto dtype = converter_.numpy_array_dtype(operand);
+  if (
+    !dtype || dtype->kind != numpy_dtypet::kindt::floating || dtype->bits == 64)
+    return std::nullopt;
+  reject_narrow_float_mean("mean", operand);
+  if (converter_.in_rhs_type_probe_)
+    return gen_zero(dtype->element_type());
+  return complex_value_reduce("mean", *narrow_float_mean_nodes(operand));
 }
 
 void numpy_call_expr::reject_unmodelled_operands(
@@ -11295,7 +11408,13 @@ bool numpy_call_expr::is_complex_operand(const nlohmann::json &arg) const
     return try_extract_scalar_constant(arg, scalar) && scalar.is_complex;
   const symbolt *symbol = converter_.find_symbol(
     converter_.resolve_name_symbol_id(arg["id"].get<std::string>()));
-  return symbol && type_utils::is_numpy_complex_array(symbol->get_type());
+  if (!symbol)
+    return false;
+  const typet &storage = symbol->get_type();
+  return type_utils::is_numpy_complex_array(storage) ||
+         (storage.is_pointer() &&
+          converter_.find_numpy_pointer_view_info(arg.value("id", "")) &&
+          is_complex_type(type_utils::array_scalar_type(storage.subtype())));
 }
 
 // numpy.round(x, decimals): round half to even, for decimals zero or
@@ -11698,10 +11817,9 @@ exprt numpy_call_expr::complex_value_reduce(
          {"op", {{"_type", op}}},
          {"right", std::move(right)}});
     };
-  nlohmann::json total =
-    located({{"_type", "Constant"}, {"value", function == "prod" ? 1 : 0}});
-  for (const nlohmann::json &node : nodes)
-    total = binary(function == "prod" ? "Mult" : "Add", total, node);
+  nlohmann::json total = nodes.front();
+  for (std::size_t i = 1; i < nodes.size(); ++i)
+    total = binary(function == "prod" ? "Mult" : "Add", total, nodes[i]);
   if (function == "mean")
     total = binary(
       "Div", total, located({{"_type", "Constant"}, {"value", nodes.size()}}));
@@ -11764,6 +11882,9 @@ numpy_call_expr::try_narrow_operand_call(const std::string &function)
 {
   if (std::optional<exprt> reduced = try_complex_reducer(function))
     return reduced;
+  if (function == "mean")
+    if (std::optional<exprt> mean = try_narrow_float_mean())
+      return mean;
   static const std::set<std::string> reads_element_type = {
     "array",        "asarray",      "copy",     "zeros_like", "ones_like",
     "empty_like",   "sum",          "prod",     "mean",       "min",

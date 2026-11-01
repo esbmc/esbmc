@@ -1,4 +1,5 @@
 CORE
 main.py
 --incremental-bmc
-^ERROR: TypeError: returning a numpy scalar of a narrow dtype is not supported$
+^VERIFICATION FAILED$
+^  assertion

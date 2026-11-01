@@ -1209,6 +1209,31 @@ exprt python_converter::numpy_param_as_array(const exprt &operand) const
   return dereference_exprt(typecast_exprt(operand, pointer), pointer);
 }
 
+// An arithmetic operand naming a view reads its elements: the view's pointer
+// would otherwise add as an address.
+exprt python_converter::numpy_view_operand_as_array(
+  const nlohmann::json &node,
+  const exprt &operand)
+{
+  if (
+    node.value("_type", "") != "Name" || !operand.is_symbol() ||
+    !operand.type().is_pointer() ||
+    numpy_pointer_view_info_.count(operand.identifier().as_string()) == 0)
+    return operand;
+  const auto materialized = build_numpy_descriptor_materialized_elements(
+    node, "TypeError: arithmetic over this numpy view is not supported");
+  if (!materialized || materialized->second.empty())
+    return operand;
+  const bool was_fresh_copy = numpy_result_is_fresh_copy_;
+  const exprt array = materialize_numpy_elements(
+    node,
+    materialized->first,
+    materialized->second,
+    materialized->second.front().type());
+  numpy_result_is_fresh_copy_ = was_fresh_copy;
+  return array;
+}
+
 std::optional<std::vector<std::size_t>>
 python_converter::numpy_shape_from_indexed_decl(const std::string &name) const
 {
@@ -2756,6 +2781,13 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       // Handle nested attribute chain (e.g., self.b.a)
       if (element["value"]["_type"] == "Attribute")
       {
+        if (
+          std::optional<exprt> storage = try_get_numpy_storage_attr(
+            element["value"], element["attr"].get<std::string>()))
+        {
+          expr = *storage;
+          break;
+        }
         exprt base_expr = get_expr(element["value"]);
         const std::string &attr_name = element["attr"].get<std::string>();
 
@@ -2869,6 +2901,17 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         // a name: `d[key].attr`, `C().attr`, `(a + b).attr`, `(-a).attr`. A
         // named instance (`c = a + b; c.attr`) already works; this covers the
         // unnamed case for every receiver we can convert to an object.
+        // The operation runs once, and its array answers like any other.
+        if (
+          element["value"].value("_type", "") == "BinOp" &&
+          is_numpy_valued_node(element["value"]))
+        {
+          nlohmann::json attribute = element;
+          attribute["value"] =
+            bind_to_fresh_name(element["value"], "ESBMC_numpy_operand_");
+          expr = get_expr(attribute);
+          break;
+        }
         exprt base_expr = get_expr(element["value"]);
         const std::string &attr_name = element["attr"].get<std::string>();
 

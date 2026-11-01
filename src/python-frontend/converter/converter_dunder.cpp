@@ -392,7 +392,8 @@ exprt python_converter::dispatch_unary_dunder_operator(
     is_complex_type(type_utils::array_scalar_type(operand.type().subtype()));
   if (
     strings || complex_view ||
-    (type_utils::is_numpy_complex_array(operand.type()) && op != "USub"))
+    (type_utils::is_numpy_complex_array(operand.type()) && op != "USub" &&
+     op != "UAdd"))
     throw std::runtime_error(
       "TypeError: numpy unary '" + op + "' over a " +
       (strings ? "string" : "complex") + " array is not supported");

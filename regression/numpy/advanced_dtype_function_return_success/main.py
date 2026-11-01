@@ -23,3 +23,23 @@ d = doubled(b)
 assert d[0] == -56
 bump(b)
 assert b[0] == -56
+
+def plus_one(x):
+    return x + 1
+
+
+def head(x):
+    return x[0]
+
+
+wrapping = np.array([127], dtype=np.int8)
+assert plus_one(wrapping[0]) == -128
+assert head(wrapping) + 1 == -128
+
+
+def same(x):
+    return x
+
+
+passed = same(wrapping)
+assert passed[0] == 127

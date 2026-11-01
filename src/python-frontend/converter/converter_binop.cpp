@@ -1966,6 +1966,13 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     lhs = numpy_param_as_array(lhs);
     rhs = numpy_param_as_array(rhs);
   }
+  if (
+    element.value("_type", "") == "BinOp" ||
+    element.value("_type", "") == "AugAssign")
+  {
+    lhs = numpy_view_operand_as_array(left, lhs);
+    rhs = numpy_view_operand_as_array(right, rhs);
+  }
 
   // Resolve dictionary subscript types for proper comparison
   dict_handler_->resolve_dict_subscript_types(left, right, lhs, rhs);
@@ -2346,7 +2353,14 @@ exprt python_converter::get_binary_operator_expr(
   attach_symbol_location(rhs, symbol_table());
   type_untyped_nondet_operand(op, lhs, rhs);
   if (op == "Eq" || op == "NotEq")
+  {
+    if (element.value("numpy_array_result", false))
+      if (
+        const auto compared =
+          numpy_string_elementwise_compare(element, lhs, rhs))
+        return *compared;
     reject_opaque_array_operator(op, lhs.type(), rhs.type());
+  }
 
   // Python rule: cross-type `==`/`!=` returns False/True without coercion,
   // except within the numeric tower (bool/int/float/complex). Fold here, before
@@ -2479,7 +2493,15 @@ exprt python_converter::get_binary_operator_expr(
   // Intercept complex arithmetic/comparison before generic binary expression
   // building, which cannot operate directly on struct operands.
   if (is_complex_type(lhs.type()) || is_complex_type(rhs.type()))
+  {
+    // A read through a view stays out of the component-wise structure the
+    // handler builds, which symex would not dereference inside an assertion.
+    if (lhs.id() == "dereference")
+      lhs = hoist_numpy_element(lhs);
+    if (rhs.id() == "dereference")
+      rhs = hoist_numpy_element(rhs);
     return complex_handler_.handle_binary_op(op, lhs, rhs, element);
+  }
 
   // Python ``str % args`` is string formatting, not numeric modulo. The generic
   // arithmetic path builds ``str_ptr % int``, mistypes the result, and crashes
@@ -3386,6 +3408,12 @@ exprt python_converter::numpy_complex_element_op(
   const auto real_op = [&](const char *name, const exprt &a, const exprt &b) {
     return numpy_element_op(name, cast_to(a, dt), cast_to(b, dt), dt);
   };
+  // Negation is by component: a product with -1 would turn an infinity to NaN.
+  if (op == "USub" || op == "UAdd")
+    return complex_as_element(
+      real_part(complex_handler_.handle_unary_op(op, x)),
+      imag_part(complex_handler_.handle_unary_op(op, x)),
+      type);
   exprt result;
   if (op == "Div")
     result = numpy_complex_quotient(x, y, dt);
@@ -3778,8 +3806,7 @@ static void reject_unsafe_in_place_cast(
   };
   if (
     element.value("_type", "") == "AugAssign" && lhs.is_array() &&
-    rank(leaf_of(rhs)) > rank(leaf_of(lhs)) &&
-    (rhs.is_array() || is_complex_type(rhs)))
+    rank(leaf_of(rhs)) > rank(leaf_of(lhs)))
     throw std::runtime_error(
       "TypeError: an in-place numpy operation that cannot cast its result to "
       "the array's dtype is not supported");

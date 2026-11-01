@@ -3752,6 +3752,149 @@ static typet resolve_astype_target_type(
   return dtype->element_type();
 }
 
+// The dtype a target spelled as a string dtype gives over elements of @p
+// source: a bare `str` holds what NumPy reserves for any value of the source's
+// dtype.
+static std::optional<std::size_t> astype_string_width(
+  const nlohmann::json &dtype_node,
+  const nlohmann::json &ast,
+  const typet &source)
+{
+  std::string name;
+  try
+  {
+    name = extract_numpy_dtype_name(dtype_node, ast);
+  }
+  catch (const std::runtime_error &)
+  {
+    name = dtype_node.value("id", "");
+  }
+  const auto dtype = numpy_dtype_from_name(name);
+  if (!dtype || dtype->kind != numpy_dtypet::kindt::string)
+    return std::nullopt;
+  if (dtype->bits)
+    return dtype->bits / 32;
+  if (source.is_bool())
+    return 5;
+  if (source.is_array())
+  {
+    BigInt capacity;
+    to_integer(to_array_type(source).size(), capacity);
+    return capacity.to_uint64() - 1;
+  }
+  if (source.is_signedbv() || source.is_unsignedbv())
+  {
+    static const std::map<std::size_t, std::size_t> digits = {
+      {8, 4}, {16, 6}, {32, 11}, {64, 21}};
+    return digits.at(bv_width(source)) - (source.is_unsignedbv() ? 1 : 0);
+  }
+  throw std::runtime_error(
+    "TypeError: astype(str) of this numpy dtype is not supported");
+}
+
+// `a.astype(str)`: each cell holds the first characters of str(element), up to
+// the terminator str() wrote.
+exprt function_call_expr::numpy_astype_to_string(
+  const nlohmann::json &receiver,
+  const exprt &source,
+  std::size_t width) const
+{
+  const locationt location = converter_.get_location_from_decl(call_);
+  const auto &array = to_array_type(source.type());
+  BigInt length;
+  if (to_integer(array.size(), length))
+    throw std::runtime_error(
+      "TypeError: astype(str) of an array of run-time length is not supported");
+  const typet cell = type_handler_.build_array(char_type(), width + 1);
+  const typet result_type = type_handler_.build_array(cell, length.to_uint64());
+  symbolt &result = converter_.create_tmp_symbol(
+    call_, "$astype_str$", result_type, gen_zero(result_type));
+  code_declt decl(build_symbol(result));
+  decl.operands().push_back(gen_zero(result_type));
+  decl.location() = location;
+  converter_.add_instruction(decl);
+  const bool integer =
+    array.subtype().is_signedbv() || array.subtype().is_unsignedbv();
+  for (long long i = 0; i < length.to_int64(); ++i)
+  {
+    nlohmann::json read = {
+      {"_type", "Subscript"},
+      {"value", receiver},
+      {"slice", {{"_type", "Constant"}, {"value", i}}}};
+    converter_.copy_location_fields_from_decl(call_, read);
+    converter_.copy_location_fields_from_decl(call_, read["slice"]);
+    const auto builtin = [&](const char *name, const nlohmann::json &argument) {
+      nlohmann::json applied = {
+        {"_type", "Call"},
+        {"func",
+         {{"_type", "Name"}, {"id", name}, {"ctx", {{"_type", "Load"}}}}},
+        {"args", nlohmann::json::array({argument})},
+        {"keywords", nlohmann::json::array()}};
+      converter_.copy_location_fields_from_decl(call_, applied);
+      converter_.copy_location_fields_from_decl(call_, applied["func"]);
+      return applied;
+    };
+    const exprt text = converter_.get_expr(
+      array.subtype().is_array()
+        ? read
+        : builtin("str", integer ? builtin("int", read) : read));
+    const typet text_type =
+      text.type().is_array() ? pointer_typet(char_type()) : text.type();
+    symbolt &chars =
+      converter_.create_tmp_symbol(call_, "$astype_text$", text_type, exprt());
+    code_declt chars_decl(build_symbol(chars));
+    chars_decl.location() = location;
+    converter_.add_instruction(chars_decl);
+    if (text.id() == "code" && text.get("statement") == "function_call")
+    {
+      code_function_callt bound = to_code_function_call(to_code(text));
+      bound.lhs() = build_symbol(chars);
+      converter_.add_instruction(bound);
+    }
+    else
+    {
+      code_assignt bound(
+        build_symbol(chars),
+        text.type().is_array() ? address_of_exprt(index_exprt(
+                                   text, gen_zero(size_type()), char_type()))
+                               : text);
+      bound.location() = location;
+      converter_.add_instruction(bound);
+    }
+    symbolt &ended = converter_.create_tmp_symbol(
+      call_, "$astype_ended$", bool_type(), gen_boolean(false));
+    code_declt ended_decl(build_symbol(ended));
+    ended_decl.operands().push_back(gen_boolean(false));
+    ended_decl.location() = location;
+    converter_.add_instruction(ended_decl);
+    const exprt target_cell =
+      index_exprt(build_symbol(result), from_integer(i, size_type()), cell);
+    for (std::size_t j = 0; j < width; ++j)
+    {
+      const exprt character = dereference_exprt(
+        build_add(build_symbol(chars), from_integer(j, size_type()), text_type),
+        char_type());
+      code_blockt copy;
+      code_assignt stop(
+        build_symbol(ended), equality_exprt(character, gen_zero(char_type())));
+      stop.location() = location;
+      copy.copy_to_operands(stop);
+      code_assignt store(
+        index_exprt(target_cell, from_integer(j, size_type()), char_type()),
+        character);
+      store.location() = location;
+      copy.copy_to_operands(store);
+      code_ifthenelset unfinished;
+      unfinished.cond() = not_exprt(build_symbol(ended));
+      unfinished.then_case() = copy;
+      unfinished.location() = location;
+      converter_.add_instruction(unfinished);
+    }
+  }
+  converter_.numpy_result_is_fresh_copy_ = true;
+  return build_symbol(result);
+}
+
 exprt function_call_expr::handle_numpy_astype() const
 {
   if (call_["args"].size() != 1)
@@ -3769,10 +3912,32 @@ exprt function_call_expr::handle_numpy_astype() const
       "TypeError: astype() is only supported on numpy arrays");
 
   const array_typet &src_array = static_cast<const array_typet &>(arr_type);
+  if (type_utils::is_numpy_string_array(arr_type))
+  {
+    const auto width = astype_string_width(
+      call_["args"][0], converter_.ast(), src_array.subtype());
+    if (
+      !width || src_array.subtype().subtype().is_array() ||
+      call_["func"]["value"].value("_type", "") != "Name")
+      throw std::runtime_error(
+        "TypeError: astype() of a numpy string array to this dtype is not "
+        "supported");
+    return numpy_astype_to_string(call_["func"]["value"], arr_expr, *width);
+  }
   if (ns.follow(src_array.subtype()).is_array())
     throw std::runtime_error(
       "TypeError: astype() on a multi-dimensional array is not supported "
       "yet; cast the innermost rows individually");
+
+  if (
+    const auto width = astype_string_width(
+      call_["args"][0], converter_.ast(), src_array.subtype()))
+  {
+    if (call_["func"]["value"].value("_type", "") != "Name")
+      throw std::runtime_error(
+        "TypeError: astype(str) of an unnamed array is not supported");
+    return numpy_astype_to_string(call_["func"]["value"], arr_expr, *width);
+  }
 
   const typet target_type =
     resolve_astype_target_type(call_["args"][0], converter_.ast());
@@ -6424,7 +6589,9 @@ std::optional<exprt> function_call_expr::try_fold_identity_array_return()
   typet innermost = converter_.ns.follow(element_candidate);
   while (innermost.is_array())
     innermost = converter_.ns.follow(to_array_type(innermost).subtype());
-  if (innermost == char_type())
+  if (
+    type_utils::is_char_storage(innermost) &&
+    !type_utils::is_numpy_string_array(element_candidate))
     return std::nullopt;
 
   return ret_expr;
@@ -8220,7 +8387,8 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
     }
 
     reject_list_for_numpy_parameter(arg.type(), params, param_idx);
-    converter_.reject_numpy_scalar_crossing(arg.type(), "passing");
+    if (param_idx >= params.size() || params[param_idx].type() != arg.type())
+      converter_.reject_numpy_scalar_crossing(arg.type(), "passing");
 
     // All array function arguments (e.g. bytes type) are handled as pointers.
     if (arg.type().is_array())
