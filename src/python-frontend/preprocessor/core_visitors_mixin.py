@@ -1885,6 +1885,31 @@ class CoreVisitorsMixin:
         ast.fix_missing_locations(rewritten)
         return self.visit(rewritten)
 
+    def _maybe_rewrite_list_over_instance(self, node):
+        """list(x) of a user-class instance -> [v for v in x].
+
+        The generic call builder reinterprets the instance struct as a list,
+        so list() of a non-iterable instance verified where CPython raises
+        TypeError. The comprehension iterates through the class's own protocol.
+        """
+        if not (isinstance(node.func, ast.Name) and node.func.id == "list" and len(node.args) == 1
+                and not node.keywords):
+            return None
+        plain_classes = getattr(self, "plain_user_classes", ())
+        if self._element_instance_class(node.args[0]) not in plain_classes:
+            return None
+        elem = f"__esbmc_list_elem_{node.lineno}_{node.col_offset}"
+        listcomp = ast.ListComp(elt=self._load_name(elem),
+                                generators=[
+                                    ast.comprehension(target=self._load_name(elem, ast.Store()),
+                                                      iter=node.args[0],
+                                                      ifs=[],
+                                                      is_async=0)
+                                ])
+        ast.copy_location(listcomp, node)
+        ast.fix_missing_locations(listcomp)
+        return self.visit(listcomp)
+
     _OPERATOR_DUNDERS = {"__getitem__": 1, "__len__": 0, "__contains__": 1}
 
     def _maybe_rewrite_operator_dunder_call(self, node):
@@ -1930,6 +1955,9 @@ class CoreVisitorsMixin:
         rewritten_iter_list = self._maybe_rewrite_list_over_iterator(node)
         if rewritten_iter_list is not None:
             return rewritten_iter_list
+        rewritten_instance_list = self._maybe_rewrite_list_over_instance(node)
+        if rewritten_instance_list is not None:
+            return rewritten_instance_list
         rewritten_newtype = self._maybe_rewrite_newtype_call(node)
         if rewritten_newtype is not None:
             return rewritten_newtype
