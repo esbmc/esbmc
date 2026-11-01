@@ -31,6 +31,7 @@
 #include <util/expr/string_constant.h>
 #include <irep2/irep2_utils.h>
 #include <util/irep/migrate.h>
+#include <goto-programs/remove_exceptions.h>
 
 #include <algorithm>
 #include <cctype>
@@ -399,6 +400,17 @@ void function_call_expr::refuse_isinstance_on_guessed_return(
       return id == "int" || id == "float" || id == "bool";
     });
   if (!asks_number || converter_.guessed_return_functions_.empty())
+    return;
+  // Only a run that reports TypeError can be misled by the guess.
+  const std::vector<irep_idt> checked =
+    python_checked_exceptions(config.options);
+  const auto covers_type_error = [](const irep_idt &name) {
+    return name == "TypeError" || name == "Exception" ||
+           name == "BaseException";
+  };
+  if (
+    !checked.empty() &&
+    std::none_of(checked.begin(), checked.end(), covers_type_error))
     return;
   const nlohmann::json call =
     obj_arg.value("_type", "") == "Name" ? bound_value(obj_arg) : obj_arg;
