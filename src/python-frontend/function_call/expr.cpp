@@ -3512,6 +3512,16 @@ bool function_call_expr::receiver_is_binop_or_list_symbol() const
   return sym != nullptr && sym->get_type() == type_handler_.get_list_type();
 }
 
+const symbolt *
+function_call_expr::find_callee_symbol(const std::string &func_symbol_id)
+{
+  if (
+    function_type_ == FunctionType::InstanceMethod &&
+    function_id_.get_class().empty())
+    return nullptr;
+  return cached_find_symbol(func_symbol_id);
+}
+
 bool function_call_expr::receiver_class_defines_method(
   const std::string &method_name) const
 {
@@ -5400,7 +5410,7 @@ exprt function_call_expr::handle_general_function_call()
   assert(!func_symbol_id.empty());
 
   // Find function symbol (O1: use per-call cache to avoid redundant lookups)
-  const symbolt *func_symbol = cached_find_symbol(func_symbol_id);
+  const symbolt *func_symbol = find_callee_symbol(func_symbol_id);
 
   if (func_symbol == nullptr)
   {
@@ -7056,7 +7066,7 @@ std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
         // (x:MyClass) in python_converter::get_var_assign().
         return exprt("_init_undefined");
       }
-      converter_.base_ctor_called = true;
+      converter_.base_ctor_called.insert(function_id_.get_class());
     }
     else if (function_type_ == FunctionType::InstanceMethod)
     {

@@ -5051,6 +5051,13 @@ std::string python_converter::numpy_view_callee_of(const nlohmann::json &call)
   return func.value("_type", "") == "Name" ? func.value("id", "") : "";
 }
 
+/// `self` and `cls` name the receiver only inside a class (#9660).
+static bool
+names_class_receiver(const std::string &arg_name, const std::string &class_name)
+{
+  return (arg_name == "self" || arg_name == "cls") && !class_name.empty();
+}
+
 size_t python_converter::register_function_argument(
   const nlohmann::json &element,
   code_typet &type,
@@ -5066,7 +5073,7 @@ size_t python_converter::register_function_argument(
   std::string arg_name = element["arg"].get<std::string>();
   typet arg_type;
 
-  if (arg_name == "self" || arg_name == "cls")
+  if (names_class_receiver(arg_name, current_class_name_))
     arg_type = gen_pointer_type(type_handler_.get_typet(current_class_name_));
   else
   {
