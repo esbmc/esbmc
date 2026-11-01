@@ -70,7 +70,10 @@ void python_converter::reject_numpy_scalar_crossing(
   const typet &type,
   const std::string &action) const
 {
-  if (type_utils::is_numpy_scalar_type(type))
+  // A signed 64-bit element has the model of a Python integer.
+  const bool python_integer_width =
+    type.is_signedbv() && to_signedbv_type(type).get_width() == 64;
+  if (type_utils::is_numpy_scalar_type(type) && !python_integer_width)
     throw std::runtime_error(
       "TypeError: " + action +
       " a numpy scalar of a narrow dtype is not supported");
