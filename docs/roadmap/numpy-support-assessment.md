@@ -1,6 +1,6 @@
 # ESBMC NumPy — Remaining Work
 
-**Updated:** 2026-10-31.
+**Updated:** 2026-11-01.
 
 This file tracks only what is **not yet implemented, broken, risky, or queued
 as backlog** in the NumPy module. If an item is not listed here as a gap, TODO,
@@ -29,7 +29,7 @@ and its stages, ADR-NP-004 the SMT-array scalability decision, and "principle
 
 | Category | Missing items |
 |---|---|
-| Array creation | `object`, void, bytes (`"S4"`), non-native byte order, structured/record dtypes and `np.dtype(...)` objects reject explicitly, as does a dtype in a name bound more than once. Integer and float arrays are stored at the dtype's width. A function over a narrow operand outside the set that reads the element type (`dot`, `cumsum`, `abs`, `sqrt`, ...) rejects, and so does rebinding a name that holds a narrow scalar. A narrow scalar rejects when passed to a function, returned, stored in an attribute or container, or read with `.item()`; arithmetic over a view or a method's array result of a narrow dtype rejects; a `float32` `mean`, `full_like` over a narrow dtype and `np.array(array, dtype=...)` reject. uint64 rejects shifts, mixing with anything but a non-negative constant, `int()` and `tolist()`. Two bool arrays reject `- % // << >> **`. An in-place operator that NumPy's same_kind rule refuses rejects. `complex64` keeps its components in double storage but computes and compares them in `float32`. `astype` to a string, of a view, or from complex to real rejects. String arrays are fixed-width: element reads and writes, comparison of elements, `len`, `in`, `list`, `tuple`, iteration, `copy`, `tolist`, calls and returns are modelled; a slice is a copy with literal bounds whose writes reject. Any other function, method, attribute, builtin or operator over one rejects (also `sort`, `min`, `max` and comparison of whole arrays, which NumPy provides), and so does a literal mixing strings with numbers, or with non-ASCII or NUL characters. Only an integer converts to a string dtype. A slice, or an element bound to a name, rejects when the array is written, aliased or passed to a function, because neither shares NumPy's storage; a slice of a parameter rejects, and so does `len()` of a bound element. Complex arrays support element reads and writes, element comparison, `.real`/`.imag` of an element, copies, slices, iteration, `+ - * /`, unary minus, `sum`, `prod`, `mean`, `any`, `all`, builtin `sum`, `list`, calls and returns, and the reshaping functions. Any other consumer rejects, including `.real`/`.imag` of an array, `abs`, `dot`, `conj`, `where`, `concatenate`, `flatten`, `*_like`, ordering and comparison of whole arrays. `np.linspace` with `axis=`/`device=`, `retstep=True` not unpacked into two names, or a non-constant `start`/`stop`/`num`, and `arange`/`linspace` above 10000 elements reject. A constructor imported by name (`from numpy import full`) is not recognised. Broad constructor parity beyond `zeros`/`ones`/`full`/`array`/`eye`/`identity`/`linspace`/`arange`. |
+| Array creation | `object`, void, non-native byte order, structured/record dtypes and `np.dtype(...)` objects reject explicitly, as does a dtype in a name bound more than once. Integer and float arrays are stored at the dtype's width, and `complex64` as two `float32` components. Views, copies and calls keep the dtype. A function over a narrow operand outside the set that reads the element type (`dot`, `cumsum`, `abs`, `sqrt`, ...) rejects, and so does rebinding a name that holds a narrow scalar. A narrow scalar rejects when stored in an attribute or container, read with `.item()` or passed to `str`/`repr`. A `mean` over `float16`, or over 8 or more `float32` elements (NumPy's pairwise summation), `full_like` over a narrow dtype and `np.array(array, dtype=...)` reject. uint64 rejects shifts, mixing with anything but a non-negative constant, `int()` and `tolist()`. Two bool arrays reject `- % // << >> **`. An in-place operator that NumPy's same_kind rule refuses rejects, or raises `TypeError` for a real scalar. `astype` to a string converts integers, bools and strings; floats and complex reject, and so does complex to real. String arrays are fixed-width: element reads and writes, `==`/`!=` of elements and of whole arrays, `len`, `in`, `list`, `tuple`, iteration, `copy`, `tolist`, `np.random.choice`, calls and returns are modelled. A slice or row with literal bounds over a literal array reads and writes its source; run-time bounds reject, and so does a slice that is aliased or passed to a function, and an element bound to a name when the array is written or the element measured with `len()`. Any other function, method, attribute, builtin or operator over a string array rejects (also `sort`, `min`, `max`, which NumPy provides), and so does a literal mixing strings with numbers, or with non-ASCII or NUL characters. Only an integer converts to a string dtype. Bytes arrays need an explicit `S<n>` dtype and a literal source, and support element comparison, element store and shape; `itemsize`, iteration, `np.zeros` with `S<n>` and any other use reject. Complex arrays support element reads and writes, element comparison, `.real`/`.imag` of an element, `abs` of an element, copies, slices, iteration, `+ - * /`, unary plus and minus, `sum`, `prod`, `mean`, `any`, `all`, builtin `sum`, `list`, calls and returns, and the reshaping functions. Any other consumer rejects, including `.real`/`.imag` of an array, `dot`, `conj`, `where`, `concatenate`, `flatten`, `*_like`, ordering and comparison of whole arrays. An attribute of an unnamed call result (`a.astype(str).itemsize`) rejects. `np.linspace` with `axis=`/`device=`, `retstep=True` not unpacked into two names, or a non-constant `start`/`stop`/`num`, and `arange`/`linspace` above 10000 elements reject. A constructor imported by name (`from numpy import full`) is not recognised. Broad constructor parity beyond `zeros`/`ones`/`full`/`array`/`eye`/`identity`/`linspace`/`arange`. |
 | Element-wise operators | `+ - * / // ** % & \| ^ << >>` follow NumPy's broadcasting between numeric arrays of concrete shapes and numbers, with NumPy's result dtype; `%` takes the divisor's sign for floats as well, from `fmod` as NumPy's `divmod` does, an integer array raised to a negative integer power raises NumPy's `ValueError`, and a bitwise operator with a float operand raises its `TypeError`. Incompatible shapes raise NumPy's broadcasting `ValueError` when the operator runs, so it can be caught; the functional forms (`np.add` and the like) still reject them during conversion. Any operator over a string array rejects; over a complex array `** % //` and the comparisons of whole arrays reject. |
 | Sorting / searching | Symbolic array shapes and symbolic `sorter=` operands for `searchsorted` reject explicitly. Genuine 2-D array input is also rejected, matching NumPy's `ValueError: object too deep for desired array`; 1-D row/column views remain supported. |
 | Direct constructor chaining | Supported for the current concrete constructor subset and direct literal `np.array(...)` receivers across the pinned reducers/views (`sum`, `mean`, `min`, `max`, `argsort`, `searchsorted`, `flatten`, `ravel`, `transpose`, `.T`, `reshape`, `argmin`, `argmax`, `diagonal`, `prod`, `std`, and `var`). Remaining gaps are method forms tied to unsupported constructors, symbolic constructor payloads, or broader unsupported APIs. |
@@ -88,7 +88,7 @@ and its stages, ADR-NP-004 the SMT-array scalability decision, and "principle
    its terms, and concrete norms are bounded unless exact in every IEEE
    implementation.
 8. **The suite's cost is in its slow tests, not its count.**
-   `regression/numpy` has 2397 tests; six linear algebra tests that repeated
+   `regression/numpy` has 2398 tests; six linear algebra tests that repeated
    another test's contract were removed, each listed with its replacement in
    the commit that removes them. Shortening the CI run needs per-test CI
    timings to merge the expensive programs.
@@ -99,8 +99,6 @@ and its stages, ADR-NP-004 the SMT-array scalability decision, and "principle
    catches the exception. Whole-array division and complex64 scalars follow
    NumPy.
 
----
-
 10. **A default-dtype scalar that left its array reads as a Python number.**
     `l = [a[0]]`, then `c + l[0]` with an `int8` array `c`, applies the weak
     scalar rule where NumPy promotes to `int64`, so the verdict can be wrong.
@@ -110,6 +108,12 @@ and its stages, ADR-NP-004 the SMT-array scalability decision, and "principle
     an integer dtype's range under `astype` is undefined in C, and complex64
     multiplication that overflows follows the plain formula (NaN), where a
     NumPy build using fused multiply-add can return an infinity.
+
+12. **Some NumPy forms still report a false alarm instead of rejecting.**
+    `m.trace()` raises `AttributeError`, and `range(a[0])[1]` reports an invalid
+    pointer.
+
+---
 
 ## Community testing readiness
 
@@ -122,7 +126,8 @@ surface" should reject explicitly; any known false alarm must be listed as a
 separate gap instead of treated as supported behavior.
 
 The known wrong successes are item 1 (`math.*` functions outside the bounded
-set) and item 9 (a zero divisor in a scalar `except`). Every other remaining
+set), item 9 (a zero divisor in a scalar `except`), item 10 (a scalar read back
+from a container) and item 11 (platform-defined results). Every other remaining
 item is documented backlog.
 
 `regression/numpy` pins one `KNOWNBUG` test (2026-10-25):
