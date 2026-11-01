@@ -14,4 +14,7 @@ extern const char *const kLogicAppPrefix;
 /// invariants, which re-issue such calls where their clauses are evaluated.
 void goto_logic_functions(goto_functionst &goto_functions, contextt &context);
 
+/// Whether \p function is the unfolding of a logic function's definition.
+bool is_logic_unfold(const irep_idt &function);
+
 #endif

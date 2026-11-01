@@ -89,9 +89,12 @@ void check_reads(
       refuse(f, "dereferences a pointer read from memory");
     std::set<irep_idt> names;
     collect_names(ptr, names);
+    names.erase("c:@__ESBMC_rounding_mode");
     for (const irep_idt &n : names)
       if (!params.count(n))
-        refuse(f, "dereferences a pointer that is not a parameter");
+        refuse(
+          f,
+          "dereferences " + id2string(n) + ", which is not a pointer parameter");
   }
   e->foreach_operand(
     [&](const expr2tc &op) { check_reads(f, op, params, locals); });
@@ -289,9 +292,11 @@ expr2tc app_symbol(const code_function_call2t &c)
       id2string(rep == representative.end() ? f : rep->second));
 }
 
+const char *const kUnfoldSuffix = "$logic_unfold";
+
 irep_idt unfold_name(const irep_idt &f)
 {
-  return id2string(f) + "$logic_unfold";
+  return id2string(f) + kUnfoldSuffix;
 }
 
 type2tc unfold_type(const code_type2t &ct, const irep_idt &name)
@@ -520,4 +525,12 @@ void goto_logic_functions(goto_functionst &goto_functions, contextt &context)
       lower_calls(gf.body, ns);
 
   goto_functions.update();
+}
+
+bool is_logic_unfold(const irep_idt &function)
+{
+  const std::string &s = id2string(function);
+  const std::string suffix = kUnfoldSuffix;
+  return s.size() > suffix.size() &&
+         s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0;
 }

@@ -1,3 +1,4 @@
+#include <goto-programs/goto_logic_functions.h>
 #include <goto-symex/engine/goto_symex.h>
 #include <goto-symex/scheduler/reachability_tree.h>
 #include <langapi/language_util.h>
@@ -10,6 +11,10 @@ void symex_dereference_statet::dereference_failure(
   const std::string &msg,
   const guard2tc &guard)
 {
+  // A logic definition is not executed: a read it cannot make leaves the
+  // value free rather than failing a property.
+  if (is_logic_unfold(state.top().function_identifier))
+    return;
   expr2tc g = guard.as_expr();
   goto_symex.replace_dynamic_allocation(g);
   goto_symex.simplify_python_builtins(g);
