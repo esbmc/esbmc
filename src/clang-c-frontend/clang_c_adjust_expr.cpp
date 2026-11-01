@@ -564,13 +564,20 @@ static bool contains_sideeffect(const exprt &expr)
 // temporary; finish_complex_lowering then wraps the lowered result and the
 // bindings in a statement expression, whose goto conversion
 // (remove_statement_expression) evaluates the block exactly once and declares
-// the temporaries per frame (so recursion is safe too).
-void clang_c_adjust::bind_sideeffect_operands(exprt &expr, code_blockt &block)
+// the temporaries per frame (so recursion is safe too). With `bind_compound`,
+// every operand but a symbol or a constant is bound too: the Annex G recovery
+// of * and / copies each operand some thirty times, so a chain of them would
+// otherwise grow exponentially.
+void clang_c_adjust::bind_sideeffect_operands(
+  exprt &expr,
+  code_blockt &block,
+  bool bind_compound)
 {
   Forall_operands (it, expr)
   {
     exprt &op = *it;
-    if (!contains_sideeffect(op))
+    const bool compound = bind_compound && !op.is_symbol() && !op.is_constant();
+    if (!compound && !contains_sideeffect(op))
       continue;
     // Embed file:line in the name and mark the symbol file_local with a
     // module, like the compound-literal symbols (clang_c_convert.cpp): each
@@ -692,11 +699,9 @@ static void recover_complex_infinities(
     negated.copy_to_operands(magnitude);
     return if_exprt(is_negative(sign), negated, magnitude);
   };
-  // copysign(isinf(v) ? 1 : 0, v)
   auto box = [&](const exprt &v) {
     return copysign(if_exprt(pred("isinf", v), constant(1), constant(0)), v);
   };
-  // isnan(v) ? copysign(0, v) : v
   auto nan_to_zero = [&](const exprt &v) {
     return if_exprt(pred("isnan", v), copysign(constant(0), v), v);
   };
@@ -761,7 +766,8 @@ static void recover_complex_infinities(
     make_op("*", signed_inf, b));
 }
 
-// (ar + ai i) op (br + bi i) by the usual formulas.
+// (ar + ai i) op (br + bi i) by the usual formulas, with the Annex G
+// recovery for floating parts.
 static std::pair<exprt, exprt> lower_complex_complex(
   const irep_idt &op,
   const exprt &a,
@@ -817,7 +823,7 @@ bool clang_c_adjust::lower_complex_binary_arithmetic(exprt &expr)
   }
 
   code_blockt bind_block;
-  bind_sideeffect_operands(expr, bind_block);
+  bind_sideeffect_operands(expr, bind_block, op == "*" || op == "/");
 
   const typet &complex_t = real0 ? op1.type() : op0.type();
   const typet &elem_t = to_complex_type(complex_t).base_type();

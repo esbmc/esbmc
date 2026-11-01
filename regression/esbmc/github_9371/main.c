@@ -33,6 +33,15 @@ int main(void)
   r = two_three / inf_inf;
   assert(__real__ r == 0 && __imag__ r == 0);
 
+  /* A product that overflows with a NaN part is an infinity (_Cmultd). */
+  double _Complex big_nan, big;
+  __real__ big_nan = 1e308;
+  __imag__ big_nan = NAN;
+  __real__ big = 1e308;
+  __imag__ big = 0.0;
+  r = big_nan * big;
+  assert(isinf(__real__ r) || isinf(__imag__ r));
+
   /* Finite operands keep the usual formulas. */
   r = two_three * two_three;
   assert(__real__ r == -5.0 && __imag__ r == 12.0);

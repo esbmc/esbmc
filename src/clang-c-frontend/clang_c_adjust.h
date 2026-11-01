@@ -95,7 +95,10 @@ protected:
   bool lower_complex_compound_assignment(exprt &expr);
   bool lower_complex_equality(exprt &expr);
   void adjust_expr_unary_complex(exprt &expr);
-  void bind_sideeffect_operands(exprt &expr, code_blockt &block);
+  void bind_sideeffect_operands(
+    exprt &expr,
+    code_blockt &block,
+    bool bind_compound = false);
   void finish_complex_lowering(exprt &expr, exprt &result, code_blockt &block);
   void adjust_expr_shifts(exprt &expr);
   void adjust_expr_unary_boolean(exprt &expr);
