@@ -180,6 +180,12 @@ VERIFICATION FAILED
 """
 
 
+PRUNED_SUCCESS = """
+Schedule reduction: peak_threads 4, schedules_explored 3529, pruned_by_mpor 0, pruned_by_hash 0, pruned_by_sleep 0, pruned_by_cs_bound 258298
+VERIFICATION SUCCESSFUL
+"""
+
+
 class ParseResultTest(unittest.TestCase):
     def verdict(self, output, prop):
         return wrapper.get_result_string(wrapper.parse_result(output, prop))
@@ -215,6 +221,19 @@ class ParseResultTest(unittest.TestCase):
             self.verdict("** 0 of 3 properties failed, 3 passed\n"
                          "VERIFICATION SUCCESSFUL\n", wrapper.Property.reach),
             "TRUE")
+
+
+    def test_success_with_schedules_pruned_by_context_bound_is_unknown(self):
+        # Issues #8180, #8220: --context-bound 3 hid a race that needs four
+        # switches and the run still printed VERIFICATION SUCCESSFUL.
+        self.assertEqual(
+            self.verdict(PRUNED_SUCCESS, wrapper.Property.datarace), "Unknown")
+
+    def test_success_with_no_schedule_pruned_is_true(self):
+        self.assertEqual(
+            self.verdict(PRUNED_SUCCESS.replace("pruned_by_cs_bound 258298",
+                                                "pruned_by_cs_bound 0"),
+                         wrapper.Property.datarace), "TRUE")
 
 
 # The scalar model's own TypeError on `r + 1`, where `r` is an int on one path

@@ -314,6 +314,10 @@ def parse_result(the_output, prop):
       return decided
 
   if "VERIFICATION SUCCESSFUL" in the_output:
+    # --context-bound cuts schedules yet still prints SUCCESSFUL, so a run that
+    # pruned any of them proves nothing (issues #8180, #8220).
+    if re.search(r"pruned_by_cs_bound [1-9]", the_output):
+      return Result.unknown
     return Result.success
 
   return Result.unknown
@@ -451,7 +455,7 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci,
     # it separately, and do not drop the guard without re-measuring.
     command_line += " --smt-symex-guard --bitwuzla --cswitch-skip-readonly-globals "
     # Unlike --max-context-bound, a truncated schedule space still reports
-    # SUCCESSFUL, so this trades soundness of "true" verdicts for coverage.
+    # SUCCESSFUL; parse_result() maps such a run to Unknown.
     command_line += "--context-bound 3 "
     #command_line += "--no-slice " # TODO: Witness validation is only working without slicing
 
