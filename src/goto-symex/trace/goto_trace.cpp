@@ -534,8 +534,11 @@ void violation_yaml_goto_trace(
       if (step.pc->is_goto())
       {
         /* A validator cannot match a follow waypoint against a file it was
-           not given; dropping one only weakens guidance. */
-        if (!input_file_check(step.pc->location))
+           not given; dropping one only weakens guidance. witnesslint also
+           rejects line 0, e.g. the argv setup in __ESBMC_main (#9650). */
+        if (
+          !input_file_check(step.pc->location) ||
+          step.pc->location.get_line().empty())
           break;
 
         /* Generated branches, such as the argv set-up of main(argc, argv),
