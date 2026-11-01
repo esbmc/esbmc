@@ -951,6 +951,7 @@ exprt python_converter::extract_type_from_boolean_op(const exprt &bool_op)
   typet found_type = empty_typet();
   assert(found_type.is_empty());
 
+  bool has_bool = false, has_str = false;
   for (exprt e : bool_op.operands())
   {
     // First, try to solve the underlying type...
@@ -958,12 +959,17 @@ exprt python_converter::extract_type_from_boolean_op(const exprt &bool_op)
       e = extract_type_from_boolean_op(e);
 
     typet operand_type = e.type();
+    has_bool |= operand_type.is_bool();
     if (operand_type.is_empty() || operand_type.is_bool())
       continue;
 
-    // Arrays are special, they have a length property which we don't care about
-    // right now
-    if (operand_type.is_array())
+    // str operands of any length decay to a char pointer, as in an IfExp.
+    if (operand_type.is_array() && type_utils::is_string_type(operand_type))
+    {
+      has_str = true;
+      operand_type = pointer_typet(operand_type.subtype());
+    }
+    else if (operand_type.is_array())
       return gen_zero(any_type());
 
     if (found_type.is_empty())
@@ -977,5 +983,8 @@ exprt python_converter::extract_type_from_boolean_op(const exprt &bool_op)
     }
   }
 
-  return found_type.is_empty() ? gen_zero(any_type()) : gen_zero(found_type);
+  // A bool operand can be the result, and a bool is not a char pointer.
+  if (found_type.is_empty() || (has_str && has_bool))
+    return gen_zero(any_type());
+  return gen_zero(found_type);
 }
