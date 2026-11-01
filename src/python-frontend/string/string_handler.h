@@ -376,6 +376,9 @@ public:
   exprt
   handle_string_isdigit(const exprt &string_obj, const locationt &location);
 
+  exprt
+  handle_string_isascii(const exprt &string_obj, const locationt &location);
+
   /**
    * @brief Handle str.isalpha() method
    * @param string_obj String object (can be string or single char)

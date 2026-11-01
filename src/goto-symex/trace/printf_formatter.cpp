@@ -5,7 +5,9 @@
 #include <util/lang/c_types.h>
 #include <util/config/config.h>
 #include <irep2/irep2_utils.h>
+#include <util/arith/arith_tools.h>
 #include <util/arith/format_constant.h>
+#include <util/arith/ieee_float.h>
 #include <util/expr/type_byte_size.h>
 
 const expr2tc
@@ -214,6 +216,109 @@ std::optional<size_t> string_length_bound(const expr2tc &object)
   return (nbytes - 1).to_uint64();
 }
 
+// The digits of |v| rounded half-to-even to `n` significant digits, and the
+// decimal exponent of the first digit: 0 and n zeros for a zero.
+std::pair<std::string, int64_t>
+significant_digits(const ieee_floatt &v, unsigned n)
+{
+  BigInt fraction, exponent;
+  v.extract_base10(fraction, exponent);
+  if (fraction.is_zero())
+    return {std::string(n, '0'), 0};
+  int64_t count = integer2string(fraction).size();
+  int64_t lead = exponent.to_int64() + count - 1;
+  if (count > n)
+  {
+    const BigInt p = power(10, count - n);
+    const BigInt remainder = fraction % p;
+    fraction /= p;
+    if (remainder * 2 > p || (remainder * 2 == p && fraction.is_odd()))
+      ++fraction;
+    if (integer2string(fraction).size() > n)
+    {
+      fraction /= 10;
+      ++lead;
+    }
+  }
+  else
+    fraction *= power(10, n - count);
+  return {integer2string(fraction), lead};
+}
+
+// The integer and fraction digits of `digits`, whose first digit has decimal
+// exponent `lead`, in %f style (`fixed`) or %e style.
+std::pair<std::string, std::string>
+split_at_point(const std::string &digits, int64_t lead, bool fixed)
+{
+  if (!fixed)
+    return {digits.substr(0, 1), digits.substr(1)};
+  if (lead >= 0)
+    return {digits.substr(0, lead + 1), digits.substr(lead + 1)};
+  return {"0", std::string(-lead - 1, '0') + digits};
+}
+
+// The exponent of %e: at least two digits (C11 7.21.6.1p8).
+std::string exponent_suffix(int64_t lead, bool upper)
+{
+  std::string digits = integer2string(BigInt(lead < 0 ? -lead : lead));
+  if (digits.size() < 2)
+    digits.insert(0, "0");
+  return std::string(1, upper ? 'E' : 'e') + (lead < 0 ? '-' : '+') + digits;
+}
+
+// %e, %E, %g or %G of a constant (C11 7.21.6.1p8), without sign or padding.
+std::string
+format_exponent_float(const ieee_floatt &v, char spec, const conversiont &conv)
+{
+  const bool upper = spec == 'E' || spec == 'G';
+  if (v.is_NaN())
+    return upper ? "NAN" : "nan";
+  if (v.is_infinity())
+    return upper ? "INF" : "inf";
+
+  const bool general = spec == 'g' || spec == 'G';
+  const unsigned precision =
+    std::max(conv.precision.value_or(6), unsigned(general));
+  auto [digits, lead] =
+    significant_digits(v, general ? precision : precision + 1);
+
+  const bool fixed = general && lead >= -4 && lead < int64_t(precision);
+  auto [integer, fraction] = split_at_point(digits, lead, fixed);
+  if (general && !conv.alt)
+    fraction.erase(fraction.find_last_not_of('0') + 1);
+
+  std::string out = integer;
+  if (!fraction.empty() || conv.alt)
+    out += '.' + fraction;
+  return fixed ? out : out + exponent_suffix(lead, upper);
+}
+
+// The text of a constant float conversion, nothing when its length is not
+// known.
+std::optional<std::string> float_text(
+  const expr2tc &farg,
+  char spec,
+  const conversiont &conv,
+  format_constantt &format_constant)
+{
+  // A literal precision may have wrapped around in parse_precision.
+  if (conv.precision.value_or(0) > 4096)
+    return std::nullopt;
+  if (format_constant.style == format_spect::stylet::DECIMAL)
+  {
+    if (
+      !is_constant_floatbv2t(farg) && !is_constant_fixedbv2t(farg) &&
+      !is_constant_int2t(farg))
+      return std::nullopt;
+    return format_constant(farg);
+  }
+  // Only a floatbv is rendered for %e and %g.
+  if (!is_constant_floatbv2t(farg))
+    return std::nullopt;
+  const ieee_floatt &v = to_constant_floatbv2t(farg).value;
+  return (v.get_sign() ? "-" : "") + format_exponent_float(v, spec, conv);
+}
+
 // Pick the integer cast target for a given signedness and length modifier.
 type2tc pick_int_type(bool is_signed, length_modt mod)
 {
@@ -273,6 +378,74 @@ type2tc printf_int_type(bool is_signed, const std::string &mod)
   return it == mods.end() ? type2tc() : pick_int_type(is_signed, it->second);
 }
 
+// A '*' width or precision is read from the next int argument (C11
+// 7.21.6.1p5). A non-constant one leaves the output length unknown, and so
+// does a large one, rather than rendering a field of up to 2^31 characters.
+std::optional<int64_t> printf_formattert::star_operand()
+{
+  if (next_operand == operands.end())
+  {
+    bounded = false;
+    return std::nullopt;
+  }
+  const expr2tc arg = make_type(*(next_operand++), int_type2());
+  if (!is_constant_int2t(arg))
+  {
+    bounded = false;
+    return std::nullopt;
+  }
+  const int64_t value = to_constant_int2t(arg).value.to_int64();
+  if (value > 4096 || value < -4096)
+  {
+    bounded = false;
+    return std::nullopt;
+  }
+  return value;
+}
+
+char printf_formattert::parse_width(char ch, unsigned &width, bool &left)
+{
+  if (ch != '*')
+  {
+    while (isdigit(ch))
+    {
+      width = width * 10 + (ch - '0');
+      ch = next();
+    }
+    return ch;
+  }
+  // A negative width is a '-' flag followed by a positive width.
+  if (const auto w = star_operand())
+  {
+    left |= *w < 0;
+    width = *w < 0 ? -*w : *w;
+  }
+  return next();
+}
+
+char printf_formattert::parse_precision(
+  char ch,
+  std::optional<unsigned> &precision)
+{
+  precision = 0;
+  if (ch != '*')
+  {
+    while (isdigit(ch))
+    {
+      *precision = *precision * 10 + (ch - '0');
+      ch = next();
+    }
+    return ch;
+  }
+  // A negative precision is taken as if it were omitted.
+  const auto p = star_operand();
+  if (p && *p >= 0)
+    precision = *p;
+  else
+    precision.reset();
+  return next();
+}
+
 // %n prints nothing; its pointer receives the length so far.
 void printf_formattert::record_percent_n()
 {
@@ -299,23 +472,9 @@ void printf_formattert::process_format(std::ostream &out)
     ch = next();
   }
 
-  while (isdigit(ch)) // width
-  {
-    conv.width = conv.width * 10 + (ch - '0');
-    ch = next();
-  }
-
+  ch = parse_width(ch, conv.width, conv.left);
   if (ch == '.') // precision
-  {
-    conv.precision = 0;
-    ch = next();
-
-    while (isdigit(ch))
-    {
-      *conv.precision = *conv.precision * 10 + (ch - '0');
-      ch = next();
-    }
-  }
+    ch = parse_precision(next(), conv.precision);
 
   format_constantt format_constant;
   format_constant.precision = conv.precision.value_or(6);
@@ -410,17 +569,15 @@ void printf_formattert::process_format(std::ostream &out)
       bounded = false;
       return;
     }
-    const expr2tc farg = make_type(*(next_operand++), double_type2());
-    if (
-      !is_constant_floatbv2t(farg) && !is_constant_fixedbv2t(farg) &&
-      !is_constant_int2t(farg))
+    const std::optional<std::string> s = float_text(
+      make_type(*(next_operand++), double_type2()), ch, conv, format_constant);
+    if (!s)
     {
       bounded = false;
       return;
     }
-    const std::string s = format_constant(farg);
-    const bool negative = s[0] == '-';
-    const std::string body = negative ? s.substr(1) : s;
+    const bool negative = (*s)[0] == '-';
+    const std::string body = negative ? s->substr(1) : *s;
     emit(pad_field(
       sign_prefix(negative, true, conv),
       body,
@@ -446,8 +603,6 @@ void printf_formattert::process_format(std::ostream &out)
 
   case 'g':
   case 'G':
-    if (format_constant.precision == 0)
-      format_constant.precision = 1;
     emit_float(format_spect::stylet::AUTOMATIC);
     break;
 

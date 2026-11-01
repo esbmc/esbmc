@@ -1,0 +1,5 @@
+CORE
+string.py
+
+\[global\.assertion\.1\]\s+line 3\s+assertion
+^VERIFICATION FAILED$

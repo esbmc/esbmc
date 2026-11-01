@@ -429,6 +429,8 @@ class _Analysis:
         """The type `fn` returns, or None when the source does not tell."""
         if id(fn) in self.kinds:
             return self.kinds[id(fn)]
+        if getattr(fn, "esbmc_kind", None) is not None:
+            return fn.esbmc_kind
         if fn.returns is not None:
             kind = ast.unparse(fn.returns)
         elif id(fn) in self.kind_stack:

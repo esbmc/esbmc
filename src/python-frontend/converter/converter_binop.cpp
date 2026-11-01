@@ -152,6 +152,22 @@ std::string apply_sign_flags(const std::string &s, bool plus, bool space)
   return s;
 }
 
+// str() of a bool, None or str constant, as %s renders it.
+std::optional<std::string> py_const_str(const nlohmann::json &a)
+{
+  if (a.value("_type", "") != "Constant" || !a.contains("value"))
+    return std::nullopt;
+  const nlohmann::json &v = a["value"];
+  // CPython renders bool via str(): "True"/"False", not "1"/"0".
+  if (v.is_boolean())
+    return v.get<bool>() ? "True" : "False";
+  if (v.is_null())
+    return "None";
+  if (v.is_string())
+    return v.get<std::string>();
+  return std::nullopt;
+}
+
 // Constant-fold a printf-style ``str % args`` formatting, matching CPython for
 // the supported conversions. Throws std::runtime_error for any unsupported
 // conversion, flag/width/precision, or non-constant argument, so the caller
@@ -340,15 +356,8 @@ std::string py_percent_format(
     {
       const nlohmann::json &a = next_arg();
       long long v;
-      if (
-        a.value("_type", "") == "Constant" && a.contains("value") &&
-        a["value"].is_boolean())
-        // CPython renders bool via str(): "True"/"False", not "1"/"0".
-        body = a["value"].get<bool>() ? "True" : "False";
-      else if (
-        a.value("_type", "") == "Constant" && a.contains("value") &&
-        a["value"].is_string())
-        body = a["value"].get<std::string>();
+      if (const auto str = py_const_str(a))
+        body = *str;
       else if (py_const_int(a, v))
         body = std::to_string(v);
       else
@@ -861,6 +870,23 @@ void python_converter::refuse_tagged_boolop_operand(const exprt &operand) const
       "used is not yet supported");
 }
 
+exprt python_converter::boolop_string_truthiness(
+  const exprt &value,
+  const locationt &location)
+{
+  exprt cond = apply_string_truthiness(value, location);
+  // A str parameter may hold None, which is false; strlen must not read it.
+  if (!cond.is_boolean() || !value.type().is_pointer())
+    return cond;
+  expr2tc value2, cond2;
+  migrate_expr(value, value2);
+  migrate_expr(cond, cond2);
+  exprt guarded = migrate_expr_back(
+    and2tc(notequal2tc(value2, gen_zero(value2->type)), cond2));
+  guarded.location() = location;
+  return guarded;
+}
+
 // A chained comparison's own bindings are planted in each operand's block.
 void python_converter::reject_walrus_in_boolop(const nlohmann::json &element)
 {
@@ -913,7 +939,8 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
       return cond;
     }
 
-    return value_expr;
+    return boolop_string_truthiness(
+      value_expr, get_location_from_decl(element));
   };
 
   // Mark that we're processing operands in an expression context
@@ -2247,6 +2274,14 @@ exprt python_converter::checked_erased_int(
   return operand;
 }
 
+// A None operand outside `str % None`, which is formatting, not arithmetic.
+static bool
+is_none_arithmetic(const std::string &op, const exprt &lhs, const exprt &rhs)
+{
+  return (lhs.type() == none_type() || rhs.type() == none_type()) &&
+         !(op == "Mod" && type_utils::is_string_type(lhs.type()));
+}
+
 exprt python_converter::get_binary_operator_expr(
   const nlohmann::json &element,
   const nlohmann::json &left,
@@ -2290,7 +2325,7 @@ exprt python_converter::get_binary_operator_expr(
 
   guard_none_typed_container(op, rhs, element);
 
-  if (lhs.type() == none_type() || rhs.type() == none_type())
+  if (is_none_arithmetic(op, lhs, rhs))
   {
     // A direct call like `f() is None` arrives as code_function_callt — a
     // statement, not a value. Promote to side_effect_expr_function_callt so

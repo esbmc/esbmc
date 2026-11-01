@@ -1,0 +1,16 @@
+regression/esbmc-unix/github_9680_rdlock
+regression/esbmc-unix/github_9680_rdlock_deadlock_check
+regression/esbmc-unix/github_9680_rdlock_deadlock_check_fail
+regression/esbmc-unix/github_9680_rdlock_fail
+regression/esbmc-unix/github_9680_tryrdlock
+regression/esbmc-unix/github_9680_tryrdlock_fail
+regression/esbmc-unix/github_9680_tryrdlock_race
+regression/esbmc-unix/github_9680_tryrdlock_race_fail
+regression/esbmc-unix/github_9680_trywrlock
+regression/esbmc-unix/github_9680_trywrlock_fail
+regression/esbmc-unix/github_9680_trywrlock_race
+regression/esbmc-unix/github_9680_trywrlock_race_fail
+regression/esbmc-unix/github_9680_wrlock
+regression/esbmc-unix/github_9680_wrlock_deadlock_check
+regression/esbmc-unix/github_9680_wrlock_deadlock_check_fail
+regression/esbmc-unix/github_9680_wrlock_fail

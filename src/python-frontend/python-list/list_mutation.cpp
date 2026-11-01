@@ -16,10 +16,20 @@ list_elem_info python_list::get_tagged_element_info(
 {
   const locationt location = converter_.get_location_from_decl(op);
 
+  // type_id, value and size are three reads, so a call such as ops.pop() is
+  // bound first or each read would run it again (#8913).
+  exprt tagged;
+  const exprt binding = converter_.bind_operand_read_twice(elem, op, tagged);
+  if (binding.is_nil())
+    throw std::runtime_error(
+      "appending the result of a call to a list is not supported here");
+  if (binding != tagged)
+    converter_.add_instruction(code_expressiont(binding));
+
   symbolt &elem_type_sym =
     converter_.create_tmp_symbol(op, "$list_elem_type$", size_type(), exprt());
   code_assignt type_id_assign(
-    build_symbol(elem_type_sym), build_member(elem, "type_id", size_type()));
+    build_symbol(elem_type_sym), build_member(tagged, "type_id", size_type()));
   type_id_assign.location() = location;
   converter_.add_instruction(type_id_assign);
 
@@ -29,7 +39,7 @@ list_elem_info python_list::get_tagged_element_info(
   code_assignt value_assign(
     build_symbol(elem_symbol),
     build_typecast(
-      build_member(elem, "value", pointer_typet(empty_typet())),
+      build_member(tagged, "value", pointer_typet(empty_typet())),
       char_ptr_type));
   value_assign.location() = location;
   converter_.add_instruction(value_assign);
@@ -37,7 +47,7 @@ list_elem_info python_list::get_tagged_element_info(
   list_elem_info tagged_info;
   tagged_info.elem_type_sym = &elem_type_sym;
   tagged_info.elem_symbol = &elem_symbol;
-  tagged_info.elem_size = build_member(elem, "size", size_type());
+  tagged_info.elem_size = build_member(tagged, "size", size_type());
   tagged_info.location = location;
   return tagged_info;
 }
@@ -517,6 +527,25 @@ exprt python_list::as_object_reference(
     gen_pointer_type(elem.type()));
 }
 
+/// The element to forward as a tagged object: @p elem itself when it is one,
+/// or the object a pop() read an element of erased type from. Erased, the
+/// element would be read as a pointer and overrun a short str payload (#8913).
+static exprt tagged_element_source(const type_handler &th, const exprt &elem)
+{
+  if (th.is_tagged_scalar_type(elem.type()))
+    return elem;
+  if (elem.type() != any_type() || elem.id() != "dereference")
+    return nil_exprt();
+  const exprt &cast = elem.op0();
+  if (cast.id() != "typecast" || cast.op0().id() != "member")
+    return nil_exprt();
+  const exprt &value = cast.op0();
+  if (value.component_name() != "value" || value.op0().id() != "dereference")
+    return nil_exprt();
+  const exprt &object = value.op0().op0();
+  return build_dereference(object, object.type().subtype());
+}
+
 exprt python_list::build_push_list_call(
   const symbolt &list,
   const nlohmann::json &op,
@@ -525,9 +554,11 @@ exprt python_list::build_push_list_call(
 {
   const exprt elem = as_object_reference(op, elem_in);
 
-  if (converter_.get_type_handler().is_tagged_scalar_type(elem.type()))
+  const exprt tagged =
+    tagged_element_source(converter_.get_type_handler(), elem);
+  if (tagged.is_not_nil())
   {
-    const list_elem_info elem_info = get_tagged_element_info(op, elem);
+    const list_elem_info elem_info = get_tagged_element_info(op, tagged);
     const symbolt *push_tagged_sym =
       converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_push_tagged");
     if (!push_tagged_sym)
@@ -650,9 +681,11 @@ exprt python_list::build_insert_list_call(
   const nlohmann::json &op,
   const exprt &elem)
 {
-  if (converter_.get_type_handler().is_tagged_scalar_type(elem.type()))
+  const exprt tagged =
+    tagged_element_source(converter_.get_type_handler(), elem);
+  if (tagged.is_not_nil())
   {
-    const list_elem_info elem_info = get_tagged_element_info(op, elem);
+    const list_elem_info elem_info = get_tagged_element_info(op, tagged);
     const symbolt *insert_tagged_sym =
       converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_insert_tagged");
     if (!insert_tagged_sym)
@@ -1029,6 +1062,76 @@ bool python_list::literal_still_describes_list(
   return recorded == 0 || recorded == literal_elem_count;
 }
 
+/// A variable list repeated by a count that is not a constant, or whose
+/// elements are not recorded, has its elements known only at run time: copy it
+/// once per repetition (#9536). Empty when the operands are another shape.
+std::optional<exprt> python_list::repeat_variable_list(
+  const nlohmann::json &left_node,
+  const nlohmann::json &right_node,
+  const exprt &lhs,
+  const exprt &rhs)
+{
+  const typet list_type = converter_.get_type_handler().get_list_type();
+  const bool count_on_left = lhs.type() != list_type;
+  if (count_on_left == (rhs.type() != list_type))
+    return std::nullopt;
+  const exprt &source = count_on_left ? rhs : lhs;
+  const exprt &count = count_on_left ? lhs : rhs;
+  const nlohmann::json &list_node = count_on_left ? right_node : left_node;
+  if (list_node.contains("elts") || !source.is_symbol())
+    return std::nullopt;
+  const std::string id = source.identifier().as_string();
+  const typet recorded = elem_types().element_type(id, 0);
+  const bool known = !elem_types().element_id(id, 0).empty() ||
+                     (!recorded.is_nil() && !recorded.is_empty());
+  bool constant_count = count.is_constant();
+  if (!constant_count && count.is_symbol())
+  {
+    const symbolt *bound =
+      converter_.find_symbol(count.identifier().as_string());
+    constant_count = bound && bound->get_value().is_constant();
+  }
+  if (constant_count && known)
+    return std::nullopt;
+  return repeat_at_runtime(source, count);
+}
+
+exprt python_list::repeat_at_runtime(const exprt &source, const exprt &count)
+{
+  const locationt location = converter_.get_location_from_decl(list_value_);
+  symbolt &result = create_list();
+  symbolt &bound = converter_.create_tmp_symbol(
+    list_value_, "$list_rep_count$", int_type(), exprt());
+  converter_.add_instruction(code_declt(build_symbol(bound)));
+  converter_.add_instruction(code_assignt(
+    build_symbol(bound),
+    count.type() == int_type() ? count : build_typecast(count, int_type())));
+  symbolt &counter = converter_.create_tmp_symbol(
+    list_value_, "counter", int_type(), gen_zero(int_type()));
+  converter_.add_instruction(
+    code_assignt(build_symbol(counter), gen_zero(int_type())));
+
+  code_blockt body;
+  code_blockt *const outer = converter_.current_block;
+  converter_.current_block = &body;
+  emit_list_copy(source, result, list_value_);
+  converter_.current_block = outer;
+  body.copy_to_operands(code_assignt(
+    build_symbol(counter),
+    build_add(build_symbol(counter), gen_one(int_type()), int_type())));
+
+  codet loop;
+  loop.set_statement("while");
+  loop.copy_to_operands(
+    build_less_than(build_symbol(counter), build_symbol(bound)), body);
+  loop.location() = location;
+  converter_.add_instruction(loop);
+
+  elem_types().assign_from(
+    source.identifier().as_string(), result.id.as_string());
+  return build_symbol(result);
+}
+
 exprt python_list::list_repetition(
   const nlohmann::json &left_node,
   const nlohmann::json &right_node,
@@ -1081,6 +1184,10 @@ exprt python_list::list_repetition(
 
     return parse_size_from_symbol(size_var, out);
   };
+
+  if (
+    const auto runtime = repeat_variable_list(left_node, right_node, lhs, rhs))
+    return *runtime;
 
   if (lhs.type() == list_type && rhs.type() != list_type)
   {
@@ -1217,8 +1324,6 @@ exprt python_list::list_repetition(
     {
       // rhs is a variable list — get element from the registry
       list_elem = elem_from_type_map(rhs.identifier().as_string());
-      if (list_elem.is_nil())
-        return build_symbol(create_list());
       is_variable_list = true;
     }
 
@@ -1245,8 +1350,6 @@ exprt python_list::list_repetition(
     {
       // lhs is a variable list — get element from the registry
       list_elem = elem_from_type_map(lhs.identifier().as_string());
-      if (list_elem.is_nil())
-        return build_symbol(create_list());
       is_variable_list = true;
     }
 

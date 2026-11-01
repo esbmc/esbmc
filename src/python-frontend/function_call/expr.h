@@ -204,6 +204,14 @@ private:
   /// has a __str__; nil otherwise.
   exprt str_of_object(exprt &value, const nlohmann::json &arg) const;
 
+  /// repr() of the instance @p value through __repr__ or object's default,
+  /// when its runtime class is its static class; nil otherwise.
+  exprt repr_of_object(exprt &value) const;
+
+  /// repr(x): complex, instance, or modelled str/number repr; otherwise the
+  /// general call.
+  exprt handle_repr_call();
+
   /*
    * object(): a pointer to a fresh heap object, so each call has its own
    * identity and is never None.
@@ -328,9 +336,18 @@ private:
    */
   const symbolt *lookup_python_symbol(const std::string &var_name) const;
 
+  void refuse_isinstance_on_guessed_return(
+    const nlohmann::json &obj_arg,
+    const std::vector<nlohmann::json> &types) const;
   void refuse_isinstance_on_path_dependent_number(
     const nlohmann::json &obj_arg,
     const std::vector<nlohmann::json> &types) const;
+  void plant_unsupported(const std::string &message) const;
+  nlohmann::json bound_value(const nlohmann::json &name) const;
+  bool is_symbolic_int_power(const nlohmann::json &node) const;
+  void refuse_type_of_symbolic_int_power(
+    const nlohmann::json &arg,
+    const exprt &value) const;
   exprt handle_isinstance() const;
 
   /// Binds a call operand of isinstance to a temporary, so it runs exactly
@@ -596,6 +613,10 @@ private:
   bool receiver_is_tracked_numpy_view(const std::string &recv_type) const;
   bool receiver_is_binop_or_list_symbol() const;
   bool receiver_class_defines_method(const std::string &method_name) const;
+
+  /// The callee's symbol. An instance method of no known class has none: it
+  /// must not bind to a module function of the same name (#9658).
+  const symbolt *find_callee_symbol(const std::string &func_symbol_id);
   void reject_unresolved_user_method(const std::string &method_name) const;
   bool is_list_method_call() const;
   exprt handle_list_method() const;
@@ -754,6 +775,8 @@ private:
   bool is_math_function_dispatch_call() const;
   exprt dispatch_math_call();
   exprt handle_math_function_dispatch();
+  bool calls_overflow_model(const std::string &f) const;
+  bool may_overflow(const std::string &f, const exprt &result) const;
   std::optional<std::string> bounded_math_import() const;
   bool takes_bounded_math(const std::string &function) const;
   std::optional<exprt> try_bounded_math_call(const std::string &func_name);

@@ -1125,6 +1125,12 @@ void clang_c_adjust_irep2::adjust_relational(expr2tc &expr)
   if (is_nil_expr(op0) || is_nil_expr(op1))
     return;
 
+  if (is_complex_type(op0->type) || is_complex_type(op1->type))
+  {
+    adjust_complex_equality(expr);
+    return;
+  }
+
   const expr2tc before0 = op0, before1 = op1;
   c_implicit_typecast_arithmetic(op0, op1, ns);
 
@@ -1661,6 +1667,34 @@ void clang_c_adjust_irep2::adjust_complex_arith(expr2tc &expr)
   }
 
   expr = constant_struct2tc(ct, std::vector<expr2tc>{re, im});
+}
+
+/// IREP2 form of clang_c_adjust::lower_complex_equality (C17 6.5.9p4).
+void clang_c_adjust_irep2::adjust_complex_equality(expr2tc &expr)
+{
+  const expr2tc op0 = *expr->get_sub_expr(0);
+  const expr2tc op1 = *expr->get_sub_expr(1);
+
+  // Same double-evaluation decline as adjust_complex_arith (§88.2).
+  if (
+    (!is_equality2t(expr) && !is_notequal2t(expr)) ||
+    contains_sideeffect(op0) || contains_sideeffect(op1))
+    return;
+
+  auto part = [](const expr2tc &e, const irep_idt &name) -> expr2tc {
+    if (is_complex_type(e->type))
+      return member2tc(to_complex_type(e->type).subtype, e, name);
+    return name == "imag" ? gen_zero(e->type) : e;
+  };
+
+  auto part_equal = [&](const irep_idt &name) -> expr2tc {
+    expr2tc l = part(op0, name), r = part(op1, name);
+    c_implicit_typecast_arithmetic(l, r, ns);
+    return equality2tc(l, r);
+  };
+
+  const expr2tc eq = and2tc(part_equal("real"), part_equal("imag"));
+  expr = is_notequal2t(expr) ? expr2tc(not2tc(eq)) : eq;
 }
 
 /// C11 6.5.3.3: the operand of unary `-` and `~` undergoes integer promotion,
