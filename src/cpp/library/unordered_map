@@ -664,10 +664,12 @@ public:
 
     // [unord.multimap] erase(k) removes every equivalent key.
     size_type erase(const key_type& key) {
+        // key may refer to an element that the compaction overwrites.
+        const key_type k = key;
         size_type removed = 0;
         size_type out = 0;
         for (size_type i = 0; i < size_; ++i) {
-            if (equal_function_(data_[i].first, key)) {
+            if (equal_function_(data_[i].first, k)) {
                 ++removed;
             } else {
                 data_[out] = data_[i];

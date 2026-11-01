@@ -319,6 +319,19 @@ void function_call_expr::refuse_isinstance_on_path_dependent_number(
       "supported");
 }
 
+/// Plants an assertion that the SV-COMP wrapper reads as Unknown, or stops the
+/// conversion where no statement can be planted.
+void function_call_expr::plant_unsupported(const std::string &message) const
+{
+  if (!converter_.can_emit_runtime_guard())
+    throw std::runtime_error(message);
+  code_assertt check{false_exprt()};
+  check.location() = converter_.get_location_from_decl(call_);
+  check.location().user_provided(true);
+  check.location().comment(message);
+  converter_.current_block->copy_to_operands(check);
+}
+
 /// The value a name is bound to, or an empty object.
 nlohmann::json function_call_expr::bound_value(const nlohmann::json &name) const
 {
@@ -370,13 +383,35 @@ void function_call_expr::refuse_type_of_symbolic_int_power(
   const std::string message =
     "Unsupported: the type of an int raised to a power that is not a "
     "constant, which is an int or a float depending on its sign";
-  if (!converter_.can_emit_runtime_guard())
-    throw std::runtime_error(message);
-  code_assertt check{false_exprt()};
-  check.location() = converter_.get_location_from_decl(call_);
-  check.location().user_provided(true);
-  check.location().comment(message);
-  converter_.current_block->copy_to_operands(check);
+  plant_unsupported(message);
+}
+
+/// A function whose return type is guessed from its return statements types
+/// an arithmetic result as a double, so isinstance(result, int) would read that
+/// guess (typpete_functions).
+void function_call_expr::refuse_isinstance_on_guessed_return(
+  const nlohmann::json &obj_arg,
+  const std::vector<nlohmann::json> &types) const
+{
+  const bool asks_number =
+    std::any_of(types.begin(), types.end(), [](const nlohmann::json &t) {
+      const std::string id = t.value("id", "");
+      return id == "int" || id == "float" || id == "bool";
+    });
+  if (!asks_number || converter_.guessed_return_functions_.empty())
+    return;
+  const nlohmann::json call =
+    obj_arg.value("_type", "") == "Name" ? bound_value(obj_arg) : obj_arg;
+  if (
+    call.value("_type", "") != "Call" ||
+    call["func"].value("_type", "") != "Name" ||
+    converter_.guessed_return_functions_.count(
+      call["func"]["id"].get<std::string>()) == 0)
+    return;
+  const std::string message =
+    "Unsupported: the type of a value returned by a function whose return "
+    "type could not be inferred";
+  plant_unsupported(message);
 }
 
 /// isinstance(obj, list) or isinstance(obj, tuple) when either answer comes
@@ -585,6 +620,7 @@ exprt function_call_expr::handle_isinstance() const
   std::vector<nlohmann::json> types;
   collect_classinfo(args[1], types);
   refuse_isinstance_on_path_dependent_number(obj_arg, types);
+  refuse_isinstance_on_guessed_return(obj_arg, types);
   refuse_type_of_symbolic_int_power(obj_arg, obj_expr);
 
   const exprt decided = isinstance_without_type_name(obj_arg, obj_expr, types);
@@ -1943,6 +1979,22 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
   return abs_expr;
 }
 
+// A negative ndigits literal such as -2 is a UnaryOp(USub, Constant(2)), not
+// a plain Constant, so unwrap the minus to recover the integer.
+static std::optional<int> literal_ndigits(const nlohmann::json &ndigits_arg)
+{
+  const bool negated = ndigits_arg.value("_type", "") == "UnaryOp" &&
+                       ndigits_arg.contains("op") &&
+                       ndigits_arg["op"].value("_type", "") == "USub" &&
+                       ndigits_arg.contains("operand");
+  const nlohmann::json &literal =
+    negated ? ndigits_arg["operand"] : ndigits_arg;
+  if (!literal.contains("value") || !literal["value"].is_number_integer())
+    return std::nullopt;
+  const int n = literal["value"].get<int>();
+  return negated ? -n : n;
+}
+
 exprt function_call_expr::handle_round(nlohmann::json &arg) const
 {
   const auto &args = call_["args"];
@@ -1966,6 +2018,9 @@ exprt function_call_expr::handle_round(nlohmann::json &arg) const
       is_negated = true;
     }
   }
+
+  const std::optional<int> ndigits =
+    has_ndigits ? literal_ndigits(args[1]) : std::nullopt;
 
   // Compile-time evaluation for numeric literals
   if (arg.contains("value") && arg["value"].is_number())
@@ -1995,41 +2050,17 @@ exprt function_call_expr::handle_round(nlohmann::json &arg) const
       expr.type() = t;
       return expr;
     }
-    else
+    else if (ndigits)
     {
-      // round(x, n) -> float rounded to n decimals. A negative ndigits literal
-      // such as -2 is a UnaryOp(USub, Constant(2)) — not a plain Constant — so
-      // unwrap the minus to recover the integer; otherwise the constant fold is
-      // skipped and the (much more expensive) symbolic path is taken, which
-      // times out for round(int, -n).
-      auto ndigits_arg = args[1];
-      bool ndigits_negated = false;
-      if (
-        ndigits_arg.contains("_type") && ndigits_arg["_type"] == "UnaryOp" &&
-        ndigits_arg.contains("op") && ndigits_arg["op"]["_type"] == "USub" &&
-        ndigits_arg.contains("operand"))
-      {
-        ndigits_arg = ndigits_arg["operand"];
-        ndigits_negated = true;
-      }
-      if (
-        ndigits_arg.contains("value") &&
-        ndigits_arg["value"].is_number_integer())
-      {
-        int n = ndigits_arg["value"].get<int>();
-        if (ndigits_negated)
-          n = -n;
-        double val = arg["value"].get<double>();
-        if (is_negated)
-          val = -val;
-        double rounded = round_to_ndigits_ties_even(val, n);
-        arg["value"] = rounded;
-        arg["type"] = "float";
-        typet t = type_handler_.get_typet("float", 0);
-        exprt expr = converter_.get_expr(arg);
-        expr.type() = t;
-        return expr;
-      }
+      double val = arg["value"].get<double>();
+      if (is_negated)
+        val = -val;
+      arg["value"] = round_to_ndigits_ties_even(val, *ndigits);
+      arg["type"] = "float";
+      typet t = type_handler_.get_typet("float", 0);
+      exprt expr = converter_.get_expr(arg);
+      expr.type() = t;
+      return expr;
     }
   }
 
@@ -2048,8 +2079,23 @@ exprt function_call_expr::handle_round(nlohmann::json &arg) const
     return build_typecast(nearbyint_expr, int_type);
   }
 
-  log_warning("round() with symbolic arguments not fully supported");
-  return nil_exprt();
+  exprt operand_expr = converter_.get_expr(arg);
+  // round(int, n) with n >= 0 returns the int unchanged.
+  if (
+    operand_expr.type() == type_handler_.get_typet("int", 0) && ndigits &&
+    *ndigits >= 0)
+    return operand_expr;
+
+  const std::string message =
+    "Unsupported: round() with ndigits of a value that is not a constant int";
+  if (!converter_.can_emit_runtime_guard())
+    throw std::runtime_error(message);
+  code_assertt check{false_exprt()};
+  check.location() = converter_.get_location_from_decl(call_);
+  check.location().user_provided(true);
+  check.location().comment(message);
+  converter_.current_block->copy_to_operands(check);
+  return side_effect_expr_nondett(operand_expr.type());
 }
 
 exprt function_call_expr::handle_complex() const

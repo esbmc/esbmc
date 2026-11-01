@@ -870,6 +870,23 @@ void python_converter::refuse_tagged_boolop_operand(const exprt &operand) const
       "used is not yet supported");
 }
 
+exprt python_converter::boolop_string_truthiness(
+  const exprt &value,
+  const locationt &location)
+{
+  exprt cond = apply_string_truthiness(value, location);
+  // A str parameter may hold None, which is false; strlen must not read it.
+  if (!cond.is_boolean() || !value.type().is_pointer())
+    return cond;
+  expr2tc value2, cond2;
+  migrate_expr(value, value2);
+  migrate_expr(cond, cond2);
+  exprt guarded = migrate_expr_back(
+    and2tc(notequal2tc(value2, gen_zero(value2->type)), cond2));
+  guarded.location() = location;
+  return guarded;
+}
+
 // A chained comparison's own bindings are planted in each operand's block.
 void python_converter::reject_walrus_in_boolop(const nlohmann::json &element)
 {
@@ -922,7 +939,8 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
       return cond;
     }
 
-    return value_expr;
+    return boolop_string_truthiness(
+      value_expr, get_location_from_decl(element));
   };
 
   // Mark that we're processing operands in an expression context
