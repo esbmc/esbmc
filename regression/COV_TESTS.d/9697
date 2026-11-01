@@ -1,0 +1,2 @@
+regression/esbmc/sprintf_symbolic_digits
+regression/esbmc/sprintf_symbolic_digits_fail

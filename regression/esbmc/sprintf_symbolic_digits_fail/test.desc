@@ -1,4 +1,5 @@
 CORE
 main.c
 
+false: c<8 prints one digit
 ^VERIFICATION FAILED$
