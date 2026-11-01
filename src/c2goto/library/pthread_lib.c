@@ -937,6 +937,8 @@ __ESBMC_HIDE:;
   }
   else
   {
+    // Barrier fields are sync-typed, so no switch point occurs here (#9648).
+    __ESBMC_yield();
     __ESBMC_barrier_waiters(barrier)++;
     __ESBMC_blocked_threads_count++;
     if (deadlock_check)
