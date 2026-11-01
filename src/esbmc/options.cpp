@@ -509,7 +509,11 @@ const struct group_opt_templ all_cmd_options[] = {
      "Enforce contracts for all functions marked with __ESBMC_contract"},
     {"replace-all-contracts",
      nullptr,
-     "Replace calls to all functions marked with __ESBMC_contract"}}},
+     "Replace calls to all functions marked with __ESBMC_contract"},
+    {"contract-operational-models",
+     nullptr,
+     "Replace calls to ESBMC's operational models that carry a contract with "
+     "that contract"}}},
   {"BMC",
    {{"unwind",
      boost::program_options::value<int>()->value_name("nr"),

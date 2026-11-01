@@ -87,7 +87,8 @@ protected:
     bool has_replace,
     bool has_enforce,
     bool has_enforce_all,
-    bool has_replace_all);
+    bool has_replace_all,
+    bool has_om);
 
   int do_bmc_strategy(optionst &options, goto_functionst &goto_functions);
 

@@ -23,6 +23,9 @@
 
 #define VECTOR_CAPACITY 500
 
+/* Bound variable of the contract quantifiers below. */
+static unsigned long __ESBMC_vector_qv;
+
 namespace std
 {
 template <class T, class Allocator = std::allocator<T> >
@@ -464,6 +467,15 @@ public:
 
   void assign(size_type n, const T &u)
   {
+    // Elements compared byte-wise, so T needs no operator==.
+    __ESBMC_assigns(this->_size, this->_capacity, this->buf);
+    __ESBMC_ensures(this->_size == n && this->_capacity == n);
+    __ESBMC_ensures(__ESBMC_is_fresh(this->buf, n * sizeof(T)));
+    __ESBMC_ensures(__ESBMC_forall(
+      &__ESBMC_vector_qv,
+      !(__ESBMC_vector_qv < n * sizeof(T)) ||
+        ((const char *)this->buf)[__ESBMC_vector_qv] ==
+          ((const char *)&u)[__ESBMC_vector_qv % sizeof(T)]));
     // realloc preserves the existing objects, so [0, min(_size, n)) stays live.
     size_type live_end = _size < n ? _size : n;
     _size = n;

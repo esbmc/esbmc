@@ -1,6 +1,7 @@
 #include <ac_config.h>
 
 #include <esbmc/esbmc_parseoptions.h>
+#include <clang-c-frontend/AST/vfs_paths.h>
 #include <goto-programs/contracts/contracts.h>
 #include <util/irep/irep.h>
 #include <util/symtab/symbol.h>
@@ -14,7 +15,8 @@ bool esbmc_parseoptionst::process_function_contracts(
   bool has_replace,
   bool has_enforce,
   bool has_enforce_all,
-  bool has_replace_all)
+  bool has_replace_all,
+  bool has_om)
 {
   namespacet ns(context);
   code_contractst contracts(goto_functions, context, ns);
@@ -194,6 +196,24 @@ bool esbmc_parseoptionst::process_function_contracts(
 
   if (has_replace_all)
     contracts.replace_calls(annotated);
+
+  if (has_om)
+  {
+    // Operational models are the functions ESBMC serves from its VFS.
+    std::set<std::string> models;
+    forall_goto_functions (it, goto_functions)
+    {
+      const symbolt *sym = ctx.find_symbol(it->first);
+      if (
+        it->second.body_available && sym &&
+        id2string(sym->location.get_file()).rfind(clang_vfs_root(), 0) == 0 &&
+        contracts.has_contracts(it->second.body))
+        models.insert(id2string(it->first));
+    }
+    log_status(
+      "Replacing {} operational model(s) with contracts", models.size());
+    contracts.replace_calls(models);
+  }
 
   contracts.remove_inactive_clauses();
   return false;

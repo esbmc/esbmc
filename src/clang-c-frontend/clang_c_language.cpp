@@ -243,7 +243,6 @@ void clang_c_languaget::build_compiler_args(
   for (auto const &inc : config.ansi_c.warnings)
     compiler_args.push_back("-W" + inc);
 
-
   // Lets a source tree tell an ESBMC run from an ordinary compile, and gates
   // include/esbmc.h so including it anywhere else is an error rather than a
   // pile of undefined intrinsics (#4610).
@@ -800,6 +799,8 @@ void __ESBMC_assigns_impl(const void *, ...);
 #define __ESBMC_assigns_6(a,b,c,d,e,f) __ESBMC_assigns_impl(&(a),&(b),&(c),&(d),&(e),&(f))
 #define __ESBMC_assigns_N(_0,_1,_2,_3,_4,_5,_6,N,...) __ESBMC_assigns_##N
 #define __ESBMC_assigns(...) __ESBMC_assigns_N(~,##__VA_ARGS__,6,5,4,3,2,1,0)(__VA_ARGS__)
+struct __ESBMC_object_t { char __byte; };
+#define __ESBMC_object(p) (*(struct __ESBMC_object_t *)(p))
     )";
 
   if (config.ansi_c.cheri)

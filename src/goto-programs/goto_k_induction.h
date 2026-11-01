@@ -20,6 +20,9 @@
 /// @p continue_past_failed_assertions is set when claims past a violation are
 /// still checked (--multi-property, coverage), so that a path through a failed
 /// assertion still counts as entering the loop (#7900).
+/// The `__ESBMC_havoc_object(void *)` intrinsic symex dispatches by name.
+expr2tc havoc_object_function();
+
 bool goto_k_induction(
   goto_functionst &goto_functions,
   const namespacet &ns,

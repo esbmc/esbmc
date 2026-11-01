@@ -21,6 +21,18 @@
 #include <unordered_map>
 #include <unordered_set>
 
+/// The intrinsic symex runs to havoc whole every object a pointer may reach.
+expr2tc havoc_object_function()
+{
+  return symbol2tc(
+    code_type2tc(
+      std::vector<type2tc>{pointer_type2tc(get_empty_type())},
+      get_empty_type(),
+      std::vector<irep_idt>{"ptr"},
+      false),
+    "c:@F@__ESBMC_havoc_object");
+}
+
 namespace
 {
 using instructiont = goto_programt::instructiont;
@@ -200,18 +212,6 @@ struct havocst
   /// the objects it may point to (see pin_havoced_pointers).
   pinst pins;
 };
-
-/// The intrinsic symex runs to havoc whole every object a pointer may reach.
-expr2tc havoc_object_function()
-{
-  return symbol2tc(
-    code_type2tc(
-      std::vector<type2tc>{pointer_type2tc(get_empty_type())},
-      get_empty_type(),
-      std::vector<irep_idt>{"ptr"},
-      false),
-    "c:@F@__ESBMC_havoc_object");
-}
 
 void add_havoc_assigns(
   goto_programt &dest,

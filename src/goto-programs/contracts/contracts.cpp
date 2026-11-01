@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <map>
 #include <goto-programs/contracts/contracts.h>
+#include <goto-programs/goto_k_induction.h>
 #include <util/expr/type_byte_size.h>
 #include <goto-programs/remove_no_op.h>
 #include <util/expr/base_type.h>
@@ -5588,6 +5589,22 @@ expr2tc code_contractst::lower_is_fresh_in_requires(
   return requires_clause;
 }
 
+/// The pointer p of an `__ESBMC_object(p)` assigns target, else nil.
+static expr2tc whole_object_target(const expr2tc &target, const namespacet &ns)
+{
+  const type2tc t = ns.follow(target->type);
+  if (
+    !is_struct_type(t) || to_struct_type(t).name.as_string().find(
+                            "__ESBMC_object_t") == std::string::npos)
+    return expr2tc();
+  if (!is_dereference2t(target))
+    return expr2tc();
+  expr2tc p = to_dereference2t(target).value;
+  while (is_typecast2t(p))
+    p = to_typecast2t(p).from;
+  return p;
+}
+
 // An array frame target reached through a pointer cannot be assigned in one go:
 // dereference refuses to build an array-typed lvalue (dereference.cpp:1103).
 // Write the elements instead -- same post-state, more instructions. Returns
@@ -5888,6 +5905,18 @@ void code_contractst::generate_replacement_at_call(
       expr2tc instantiated_target = instantiate_assigns_target(
         target_expr, function_symbol, actual_args, target_is_pointer_param);
 
+      // `__ESBMC_object(p)` frames the whole object p points into, e.g. a
+      // heap buffer of symbolic length that no lvalue can name.
+      if (const expr2tc whole = whole_object_target(instantiated_target, ns))
+      {
+        goto_programt::targett h = replacement.add_instruction(FUNCTION_CALL);
+        h->code = code_function_call2tc(
+          expr2tc(), havoc_object_function(), std::vector<expr2tc>{whole});
+        h->location = call_location;
+        h->location.comment("contract havoc assigns object");
+        continue;
+      }
+
       // `&x` names the place already, and havoc_place resolves it to x.
       // Following the pointer as well would write through x rather than to it,
       // which for an `int **pp` argument means havocking `*x` -- a dereference
@@ -6064,6 +6093,47 @@ void code_contractst::generate_replacement_at_call(
     [](const expr2tc &ghost) { return gen_nondet(ghost->type); },
     call_location,
     "contract stack-used havoc");
+
+  // 3.c An ensures-side is_fresh(p, n) on a framed place (not the return
+  // value): the removed body handed back fresh storage, so allocate it here.
+  {
+    std::set<irep_idt> ensured;
+    collect_symbol_names(ensures_guard, ensured);
+    std::vector<is_fresh_mapping_t> fresh;
+    forall_goto_program_instructions (c, function_body)
+    {
+      if (!c->is_function_call() || !is_code_function_call2t(c->code))
+        continue;
+      const code_function_call2t &call = to_code_function_call2t(c->code);
+      if (
+        !is_symbol2t(call.function) ||
+        !is_fresh_function(to_symbol2t(call.function).thename.as_string()) ||
+        call.operands.size() < 2 || !is_symbol2t(call.ret) ||
+        !ensured.count(to_symbol2t(call.ret).thename))
+        continue;
+      expr2tc p = call.operands[0];
+      while (is_typecast2t(p))
+        p = to_typecast2t(p).from;
+      bool unused = false;
+      p = instantiate_assigns_target(p, function_symbol, actual_args, unused);
+      if (is_symbol2t(p) && is_return_value_symbol(to_symbol2t(p)))
+        continue;
+      goto_programt::targett a = replacement.add_instruction(ASSIGN);
+      a->code = code_assign2tc(
+        p,
+        byte_malloc(instantiate_assigns_target(
+          call.operands[1], function_symbol, actual_args, unused)));
+      a->location = call_location;
+      a->location.comment("contract ensures is_fresh allocation");
+      is_fresh_mapping_t m;
+      m.temp_var_name = to_symbol2t(call.ret).thename;
+      m.ptr_expr = p;
+      fresh.push_back(m);
+    }
+    if (!fresh.empty())
+      ensures_guard =
+        replace_is_fresh_temps(ensures_guard, fresh, /*require_dynamic=*/true);
+  }
 
   // 4. Assume ensures clause (assume postcondition at call site)
   add_contract_clause(
