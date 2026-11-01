@@ -587,6 +587,22 @@ exprt python_exception_handler::build_builtin_exception(
   return raise;
 }
 
+/// `raise C` raises C(): a class name is called with no arguments.
+static nlohmann::json called_class(const nlohmann::json &exc)
+{
+  if (exc.value("_type", "") != "Name")
+    return exc;
+  return {
+    {"_type", "Call"},
+    {"func", exc},
+    {"args", nlohmann::json::array()},
+    {"keywords", nlohmann::json::array()},
+    {"lineno", exc.value("lineno", 0)},
+    {"col_offset", exc.value("col_offset", 0)},
+    {"end_lineno", exc.value("end_lineno", 0)},
+    {"end_col_offset", exc.value("end_col_offset", 0)}};
+}
+
 void python_exception_handler::get_raise_statement(
   const nlohmann::json &element,
   codet &block)
@@ -631,19 +647,7 @@ void python_exception_handler::get_raise_statement(
     // DECL MyException return_value;
     // FUNCTION_CALL:  MyException(&return_value, &"message");
     // Throw MyException return_value;
-    nlohmann::json exc_node = element["exc"];
-    // `raise C` raises C(): the class is called with no arguments.
-    if (exc_node.value("_type", "") == "Name")
-      exc_node = {
-        {"_type", "Call"},
-        {"func", element["exc"]},
-        {"args", nlohmann::json::array()},
-        {"keywords", nlohmann::json::array()},
-        {"lineno", element["exc"].value("lineno", 0)},
-        {"col_offset", element["exc"].value("col_offset", 0)},
-        {"end_lineno", element["exc"].value("end_lineno", 0)},
-        {"end_col_offset", element["exc"].value("end_col_offset", 0)}};
-    raise = converter_.get_expr(exc_node);
+    raise = converter_.get_expr(called_class(element["exc"]));
 
     // get_function_call() returns the `_init_undefined` sentinel when the
     // raised class (and its bases) define no __init__. Constructors emit
