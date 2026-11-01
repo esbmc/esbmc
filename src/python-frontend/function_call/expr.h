@@ -759,6 +759,8 @@ private:
   bool is_math_function_dispatch_call() const;
   exprt dispatch_math_call();
   exprt handle_math_function_dispatch();
+  bool calls_overflow_model(const std::string &f) const;
+  bool may_overflow(const std::string &f, const exprt &result) const;
   std::optional<std::string> bounded_math_import() const;
   bool takes_bounded_math(const std::string &function) const;
   std::optional<exprt> try_bounded_math_call(const std::string &func_name);
