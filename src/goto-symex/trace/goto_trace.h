@@ -155,6 +155,12 @@ void correctness_yaml_goto_trace(
   const namespacet &ns,
   const goto_tracet &goto_trace);
 
+/// Write the correctness witnesses (GraphML and/or YAML) the options request.
+void write_correctness_witnesses(
+  optionst &options,
+  const namespacet &ns,
+  const goto_tracet &goto_trace);
+
 void generate_goto_trace_in_correctness_graphml_format(
   std::string &witness_output,
   bool is_detailed_mode,

@@ -401,6 +401,8 @@ int esbmc_parseoptionst::do_bmc_strategy(
       // report success immediately without unwinding.
       if (options.get_bool_option("termination-ranking-proved"))
       {
+        write_correctness_witnesses(
+          options, namespacet(context), goto_tracet());
         log_success(
           "\nRanking function shows all executions terminate\n"
           "VERIFICATION SUCCESSFUL");
