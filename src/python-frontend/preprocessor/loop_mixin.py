@@ -758,10 +758,15 @@ class LoopMixin:
             ast.fix_missing_locations(stmt)
         return unrolled
 
-    def _with_manager_class(self, func_name):
-        """The class a `with func_name(...)` manager is annotated with: the
-        class a module function is annotated to return, else the callee."""
-        return getattr(self, "factory_classes", {}).get(func_name, func_name)
+    def _with_manager_class(self, ctx_expr):
+        """The class of this module that a `with NAME(...)` manager is: NAME
+        itself, or the class a module function NAME is annotated to return.
+        None otherwise, e.g. for a function imported from another module."""
+        if not (isinstance(ctx_expr, ast.Call) and isinstance(ctx_expr.func, ast.Name)):
+            return None
+        name = ctx_expr.func.id
+        name = getattr(self, "factory_classes", {}).get(name, name)
+        return name if name in getattr(self, "module_class_names", set()) else None
 
     @staticmethod
     def _scan_factory_classes(module, class_names):
@@ -801,8 +806,8 @@ class LoopMixin:
             self._with_counter += 1
             ctx_expr = item.context_expr
 
-            if isinstance(ctx_expr, ast.Call) and isinstance(ctx_expr.func, ast.Name):
-                class_name = self._with_manager_class(ctx_expr.func.id)
+            class_name = self._with_manager_class(ctx_expr)
+            if class_name is not None:
                 type_ann = ast.Name(id=class_name, ctx=ast.Load())
                 mgr_assign = ast.AnnAssign(
                     target=ast.Name(id=mgr_name, ctx=ast.Store()),
@@ -869,8 +874,7 @@ class LoopMixin:
         # falsy re-raises via bare `raise`.  Managers without a tracked class
         # (e.g. `open(...)`) fall back to today's unwrapped lowering.
         wrap = (hasattr(self, "_classes_with_exit") and len(node.items) > 0 and all(
-            isinstance(item.context_expr, ast.Call) and isinstance(item.context_expr.func, ast.Name)
-            and self._with_manager_class(item.context_expr.func.id) in self._classes_with_exit
+            self._with_manager_class(item.context_expr) in self._classes_with_exit
             for item in node.items))
 
         if wrap:

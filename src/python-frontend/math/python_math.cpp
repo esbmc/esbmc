@@ -1363,13 +1363,14 @@ exprt python_math::handle_trunc(exprt operand, const nlohmann::json &element)
     const double ll_max =
       static_cast<double>(std::numeric_limits<long long>::max());
     if (truncated >= ll_min && truncated <= ll_max)
-      return from_integer(static_cast<long long>(truncated), int_type());
+      return from_integer(
+        static_cast<long long>(truncated), long_long_int_type());
   }
 
   operand = converter.guard_nonfinite_float_to_int(std::move(operand), element);
   exprt trunc_call =
     build_unary_c_math_call("c:@F@trunc", "trunc", std::move(operand), element);
-  exprt to_int("typecast", int_type());
+  exprt to_int("typecast", long_long_int_type());
   to_int.copy_to_operands(trunc_call);
   return to_int;
 }

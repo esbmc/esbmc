@@ -921,15 +921,19 @@ exprt function_call_expr::handle_bool_call(
   if (is_complex_type(value_expr.type()))
     return complex_to_bool_expr(value_expr);
 
-  // A container is true when non-empty; relabelling its pointer as a bool
-  // leaves a term the solver rejects. A str keeps the path below: strlen stops
-  // at an embedded NUL, which bool("\x00") must not.
-  if (!type_utils::is_string_type(value_expr.type()))
+  if (type_utils::is_string_type(value_expr.type()))
   {
-    const exprt is_empty = converter_.build_emptiness_check(value_expr, call_);
-    if (is_empty.is_not_nil())
-      return not_exprt(is_empty);
+    const locationt location = converter_.get_location_from_decl(call_);
+    if (value_expr.is_function_call())
+      value_expr = converter_.store_call_result(value_expr, location, "bool");
+    return converter_.apply_string_truthiness(value_expr, location);
   }
+
+  // A container is true when non-empty; relabelling its pointer as a bool
+  // leaves a term the solver rejects.
+  const exprt is_empty = converter_.build_emptiness_check(value_expr, call_);
+  if (is_empty.is_not_nil())
+    return not_exprt(is_empty);
 
   const typet bool_t = type_handler_.get_typet("bool", arg_size);
   return retype_or_typecast(value_expr, bool_t);
@@ -1648,18 +1652,6 @@ exprt function_call_expr::build_constant_from_arg() const
         type_utils::is_string_type(vt) ||
         type_handler_.is_tagged_scalar_type(vt))
         return converter_.get_string_handler().convert_to_string(value_expr);
-
-      // Element of a list whose element type could not be statically resolved
-      // (e.g. iterating an empty/untyped list) is typed as the generic list
-      // pointer. Treat it as the documented list[int] default so str() lowers
-      // through the integer model instead of aborting the whole run; the loop
-      // body is dead for the empty list, mirroring the arithmetic coercion in
-      // get_binary_operator_expr. Other unresolved pointers (e.g. an
-      // unannotated void* parameter) fall through to the sound nondet-string
-      // fallback below rather than being guessed as int.
-      if (vt == type_handler_.get_list_type())
-        return converter_.get_string_handler().convert_to_string(
-          build_typecast(value_expr, type_handler_.get_typet("int", 0)));
     }
 
     // A string literal argument folds to its length below.
@@ -3518,6 +3510,16 @@ bool function_call_expr::receiver_is_binop_or_list_symbol() const
   std::string dummy;
   const symbolt *sym = get_object_list_symbol(dummy);
   return sym != nullptr && sym->get_type() == type_handler_.get_list_type();
+}
+
+const symbolt *
+function_call_expr::find_callee_symbol(const std::string &func_symbol_id)
+{
+  if (
+    function_type_ == FunctionType::InstanceMethod &&
+    function_id_.get_class().empty())
+    return nullptr;
+  return cached_find_symbol(func_symbol_id);
 }
 
 bool function_call_expr::receiver_class_defines_method(
@@ -5472,7 +5474,7 @@ exprt function_call_expr::handle_general_function_call()
   assert(!func_symbol_id.empty());
 
   // Find function symbol (O1: use per-call cache to avoid redundant lookups)
-  const symbolt *func_symbol = cached_find_symbol(func_symbol_id);
+  const symbolt *func_symbol = find_callee_symbol(func_symbol_id);
 
   if (func_symbol == nullptr)
   {
@@ -7128,7 +7130,7 @@ std::optional<exprt> function_call_expr::resolve_missing_function_symbol(
         // (x:MyClass) in python_converter::get_var_assign().
         return exprt("_init_undefined");
       }
-      converter_.base_ctor_called = true;
+      converter_.base_ctor_called.insert(function_id_.get_class());
     }
     else if (function_type_ == FunctionType::InstanceMethod)
     {

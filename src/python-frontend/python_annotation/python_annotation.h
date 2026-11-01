@@ -69,7 +69,9 @@ public:
   // Entry points exercised by callers outside python_annotation.h.
   bool preprocess_constructor_calls(Json &node);
   void preprocess_method_calls(const Json &node);
-  void preprocess_receiver_method_calls();
+  std::vector<std::pair<std::string, std::string>>
+  preprocess_receiver_method_calls(bool inside_functions = false);
+  void retype_methods_called_on_receivers();
   bool is_instance_call(const Json &func) const;
   Json *class_method(const std::string &cls, const Json &method);
   /// Sentinel recorded for a call-site argument this pass cannot type; never
@@ -415,6 +417,8 @@ private:
     const Json &element,
     const std::string &inferred_type);
   std::string optional_scalar_of(const std::string &name, const Json &scope);
+  bool is_missing_method_call(const Json &value);
+  bool stores_call_on_unannotated_param(const Json &element);
   std::string returned_optional_scalar(const Json &function, const Json &body);
   void collect_name_stores(
     const std::string &name,
@@ -457,6 +461,8 @@ private:
     size_t param_index;
     std::vector<std::string> class_types;
   };
+  // Functions whose None stores wait for a parameter class (#9338).
+  std::set<std::string> deferred_none_functions_;
   std::vector<pending_specializationt> pending_specializations_;
   void retype_builtin_copy(
     Json &fn,

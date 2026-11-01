@@ -5343,8 +5343,13 @@ void python_annotation<Json>::infer_parameter_types(Json &function_element)
       : ast_["body"];          // Search in global body
 
   // Find all calls to this function in the AST
+  // A bare-name call never reaches a method, so a module function of the
+  // same name must not type its parameters (#9623).
+  const bool is_method =
+    current_func_name_context_ == current_class_name_ + "@C@" + func_name;
   std::vector<Json> function_calls =
-    find_function_calls(func_name, search_context);
+    is_method ? std::vector<Json>{}
+              : find_function_calls(func_name, search_context);
 
   // Determine the call-site context for resolving argument names.
   // For top-level functions, use global scope (empty context).
@@ -5751,24 +5756,46 @@ bool python_annotation<Json>::is_instance_call(const Json &func) const
 
 /// Types the unannotated parameters of a method from its `obj.m(args)` calls
 /// at module level, where `obj` is a name bound once to an instance of a
-/// module class, when every such call passes one type (#8923). Calls inside a
-/// def are skipped: this pass has no scope to resolve their receiver in.
+/// module class, when every such call passes one type (#8923). With
+/// @p inside_functions the calls in top-level defs count too, their receivers
+/// resolved in the def's scope (#9661). Returns the (class, method) pairs it
+/// typed.
 template <class Json>
-void python_annotation<Json>::preprocess_receiver_method_calls()
+std::vector<std::pair<std::string, std::string>>
+python_annotation<Json>::preprocess_receiver_method_calls(bool inside_functions)
 {
   std::map<std::pair<Json *, size_t>, std::set<std::string>> seen;
-  std::function<void(const Json &)> walk = [&](const Json &node) {
+  std::map<Json *, std::pair<std::string, std::string>> owner;
+  std::function<void(Json &)> walk = [&](Json &node) {
     if (node.is_array())
     {
-      for (const Json &item : node)
+      for (Json &item : node)
         walk(item);
       return;
     }
     if (!node.is_object())
       return;
     const std::string kind = node.value("_type", "");
-    if (kind == "FunctionDef" || kind == "ClassDef" || kind == "Lambda")
+    if (kind == "ClassDef" || kind == "Lambda")
       return;
+    if (kind == "FunctionDef")
+    {
+      if (!inside_functions || !current_class_name_.empty())
+        return;
+      const std::string saved_context = current_func_name_context_;
+      Json *saved_current = current_func;
+      Json *saved_parent = parent_func;
+      const std::string name = node["name"].template get<std::string>();
+      current_func_name_context_ =
+        saved_context.empty() ? name : saved_context + "@F@" + name;
+      parent_func = saved_current;
+      current_func = &node;
+      walk(node["body"]);
+      current_func_name_context_ = saved_context;
+      current_func = saved_current;
+      parent_func = saved_parent;
+      return;
+    }
     const Json &func = node.value("func", Json());
     // `obj(args)` on a callable instance calls `obj.__call__(args)` (#9070).
     const bool instance_call = kind == "Call" && is_instance_call(func);
@@ -5791,6 +5818,7 @@ void python_annotation<Json>::preprocess_receiver_method_calls()
           if (!(*method)["decorator_list"].empty())
             break;
           const Json &params = (*method)["args"]["args"];
+          owner[method] = {cls, attr};
           for (size_t i = 1; i < params.size(); ++i)
             seen[{method, i}].insert(
               i - 1 < node["args"].size() &&
@@ -5800,19 +5828,58 @@ void python_annotation<Json>::preprocess_receiver_method_calls()
           break;
         }
     }
-    for (const auto &kv : node.items())
+    for (auto &kv : node.items())
       if (kv.value().is_structured())
         walk(kv.value());
   };
   walk(ast_["body"]);
 
+  std::vector<std::pair<std::string, std::string>> typed;
   for (const auto &[key, types] : seen)
   {
     Json &param = (*key.first)["args"]["args"][key.second];
     if (
       types.size() == 1 && !types.begin()->empty() &&
       param.value("annotation", Json()).is_null())
+    {
       add_parameter_annotation(param, *types.begin());
+      typed.push_back(owner[key.first]);
+    }
+  }
+  return typed;
+}
+
+/// Types the methods called on a receiver that only the specialised copies
+/// of a def resolve, then infers again what depended on those parameters
+/// (#9661).
+template <class Json>
+void python_annotation<Json>::retype_methods_called_on_receivers()
+{
+  if (preprocess_receiver_method_calls(true).empty())
+    return;
+  const auto forget_inferred_return = [](Json &def) {
+    if (
+      def["returns"].is_object() &&
+      def["returns"].value("_inferred_annotation", false))
+      def["returns"] = nullptr;
+  };
+  for (Json &element : ast_["body"])
+  {
+    if (element["_type"] == "ClassDef")
+      for (Json &member : element["body"])
+      {
+        if (member["_type"] == "FunctionDef")
+          forget_inferred_return(member);
+      }
+    else if (element["_type"] == "FunctionDef")
+      forget_inferred_return(element);
+  }
+  for (Json &element : ast_["body"])
+  {
+    if (element["_type"] == "ClassDef")
+      annotate_class(element);
+    else if (element["_type"] == "FunctionDef")
+      annotate_function(element);
   }
 }
 
@@ -6059,6 +6126,7 @@ void python_annotation<Json>::add_type_annotation()
   }
 
   apply_pending_specializations();
+  retype_methods_called_on_receivers();
 }
 
 template <class Json>
@@ -6639,7 +6707,17 @@ void python_annotation<Json>::add_annotation(Json &body)
     }
 
     if (infer_type(element, body, inferred_type) == InferResult::UNKNOWN)
+    {
+      // The first store of an Optional name must declare it as one, even when
+      // a method its receiver's class lacks leaves that store untyped (#9338).
+      if (is_missing_method_call(element["value"]))
+      {
+        const std::string optional = widen_to_optional_scalar(element, "");
+        if (!optional.empty())
+          update_assignment_node(element, optional);
+      }
       continue;
+    }
 
     const auto &rhs = element["value"];
 
@@ -6648,6 +6726,15 @@ void python_annotation<Json>::add_annotation(Json &body)
       (rhs["_type"] == "NameConstant" && rhs["value"].is_null()) ||
       (rhs["_type"] == "Name" && rhs.contains("id") && rhs["id"] == "None"))
       inferred_type = "NoneType";
+
+    // The classes of a parameter that is specialised are not known yet, so
+    // the None store waits for the copy that knows them (#9338).
+    if (
+      inferred_type == "NoneType" && stores_call_on_unannotated_param(element))
+    {
+      deferred_none_functions_.insert(current_func_name_context_);
+      continue;
+    }
 
     if (inferred_type.empty())
     {
@@ -6688,6 +6775,61 @@ std::string python_annotation<Json>::widen_to_optional_scalar(
   return it->second.empty() ? inferred_type : it->second;
 }
 
+/// Whether `element`, a `name = None`, shares its name with a store that calls
+/// a method on a parameter of the current function that has no annotation yet.
+template <class Json>
+bool python_annotation<Json>::stores_call_on_unannotated_param(
+  const Json &element)
+{
+  const Json &target = element["targets"][0];
+  if (current_func == nullptr || target["_type"] != "Name")
+    return false;
+  std::vector<const Json *> stores;
+  collect_name_stores(
+    target["id"].template get<std::string>(), (*current_func)["body"], stores);
+  for (const Json *store : stores)
+  {
+    const Json &value = (*store)["value"];
+    if (
+      value.value("_type", "") != "Call" || !value.contains("func") ||
+      value["func"].value("_type", "") != "Attribute" ||
+      value["func"]["value"].value("_type", "") != "Name")
+      continue;
+    const std::string receiver =
+      value["func"]["value"]["id"].template get<std::string>();
+    for (const Json &param : (*current_func)["args"]["args"])
+      if (param.value("arg", "") == receiver && !has_annotation(param))
+        return true;
+  }
+  return false;
+}
+
+/// Whether `value` calls a method that the user class of its receiver does not
+/// define, as `x.f()` does for a parameter that the call sites type as a class
+/// without `f`. Such a call raises AttributeError and stores nothing.
+template <class Json>
+bool python_annotation<Json>::is_missing_method_call(const Json &value)
+{
+  if (
+    value.value("_type", "") != "Call" || !value.contains("func") ||
+    value["func"].value("_type", "") != "Attribute" ||
+    value["func"]["value"].value("_type", "") != "Name")
+    return false;
+  const Json receiver = find_var_node_for_inference(
+    value["func"]["value"]["id"].template get<std::string>());
+  if (!has_annotation(receiver) || !receiver["annotation"].contains("id"))
+    return false;
+  const Json cls = json_utils::find_class(
+    ast_["body"], receiver["annotation"]["id"].template get<std::string>());
+  if (cls.empty() || !cls["bases"].empty())
+    return false;
+  const std::string method = value["func"]["attr"].template get<std::string>();
+  for (const Json &member : cls["body"])
+    if (member.value("name", "") == method)
+      return false;
+  return true;
+}
+
 /// "Optional[T]" when every binding of `name` in `scope` is a plain
 /// `name = value` storing None or a value of one scalar type T, with at least
 /// one of each; "" otherwise.
@@ -6713,8 +6855,10 @@ std::string python_annotation<Json>::optional_scalar_of(
     std::string type;
     if (stores_none(store))
       type = "NoneType";
-    else
+    else if (!is_missing_method_call((*store)["value"]))
       infer_type(*store, scope, type);
+    else
+      continue;
     types.insert(type);
   }
   if (types.erase("NoneType") == 0 || types.size() != 1)
