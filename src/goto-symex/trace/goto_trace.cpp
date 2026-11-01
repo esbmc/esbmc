@@ -626,6 +626,18 @@ void correctness_yaml_goto_trace(
   yml.generate_yaml(options);
 }
 
+void write_correctness_witnesses(
+  optionst &options,
+  const namespacet &ns,
+  const goto_tracet &goto_trace)
+{
+  if (!options.get_option("witness-output-graphml").empty())
+    correctness_graphml_goto_trace(options, ns, goto_trace);
+
+  if (!options.get_option("witness-output-yaml").empty())
+    correctness_yaml_goto_trace(options, ns, goto_trace);
+}
+
 void appendInfo(
   std::string &dest,
   const std::string &label,
