@@ -733,6 +733,12 @@ public:
     const exprt &string_obj,
     [[maybe_unused]] const locationt &location);
 
+  exprt
+  handle_string_isdecimal(const exprt &string_obj, const locationt &location);
+
+  exprt
+  handle_string_istitle(const exprt &string_obj, const locationt &location);
+
   /**
    * @brief Handle str.isidentifier() method
    */

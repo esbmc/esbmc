@@ -808,7 +808,7 @@ std::optional<exprt> dispatch_no_arg_string_methods(
 {
   using no_arg_handler_t =
     exprt (string_handler::*)(const exprt &, const locationt &);
-  static constexpr std::array<std::pair<const char *, no_arg_handler_t>, 14>
+  static constexpr std::array<std::pair<const char *, no_arg_handler_t>, 16>
     no_arg_handlers = {{
       {"capitalize", &string_handler::handle_string_capitalize},
       {"title", &string_handler::handle_string_title},
@@ -819,6 +819,8 @@ std::optional<exprt> dispatch_no_arg_string_methods(
       {"isalnum", &string_handler::handle_string_isalnum},
       {"isupper", &string_handler::handle_string_isupper},
       {"isnumeric", &string_handler::handle_string_isnumeric},
+      {"isdecimal", &string_handler::handle_string_isdecimal},
+      {"istitle", &string_handler::handle_string_istitle},
       {"isidentifier", &string_handler::handle_string_isidentifier},
       {"islower", &string_handler::handle_string_islower},
       {"lower", &string_handler::handle_string_lower},
@@ -3610,6 +3612,58 @@ exprt string_handler::handle_string_isnumeric(
       return from_integer(0, bool_type());
   }
   return from_integer(1, bool_type());
+}
+
+// A non-ASCII receiver is left nondet: its bytes are UTF-8, and CPython
+// classifies code points, so e.g. Arabic-Indic digits are decimal.
+static bool is_ascii(const std::string &s)
+{
+  return std::all_of(s.begin(), s.end(), [](char c) {
+    return static_cast<unsigned char>(c) < 0x80;
+  });
+}
+
+static exprt nondet_bool_at(const locationt &location)
+{
+  side_effect_expr_nondett nondet(bool_type());
+  nondet.location() = location;
+  return nondet;
+}
+
+exprt string_handler::handle_string_isdecimal(
+  const exprt &string_obj,
+  const locationt &location)
+{
+  std::string input;
+  if (!try_extract_const_string_expr(string_obj, input) || !is_ascii(input))
+    return nondet_bool_at(location);
+  const bool all_digits =
+    !input.empty() && std::all_of(input.begin(), input.end(), [](char c) {
+      return c >= '0' && c <= '9';
+    });
+  return from_integer(all_digits ? 1 : 0, bool_type());
+}
+
+exprt string_handler::handle_string_istitle(
+  const exprt &string_obj,
+  const locationt &location)
+{
+  std::string input;
+  if (!try_extract_const_string_expr(string_obj, input) || !is_ascii(input))
+    return nondet_bool_at(location);
+  bool cased = false;
+  bool prev_cased = false;
+  for (char ch : input)
+  {
+    const unsigned char uch = static_cast<unsigned char>(ch);
+    const bool upper = std::isupper(uch);
+    const bool lower = std::islower(uch);
+    if ((upper && prev_cased) || (lower && !prev_cased))
+      return from_integer(0, bool_type());
+    prev_cased = upper || lower;
+    cased = cased || prev_cased;
+  }
+  return from_integer(cased ? 1 : 0, bool_type());
 }
 
 exprt string_handler::handle_string_isidentifier(
