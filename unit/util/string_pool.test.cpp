@@ -398,6 +398,23 @@ TEST_CASE("stress: many unique strings", "[stress]")
   }
 }
 
+TEST_CASE("stress: more strings than 2048 chunks hold", "[stress]")
+{
+  // The cap was 2048 chunks of 4096 strings; one past it wrote out of bounds
+  // (#9666).
+  string_pool container;
+  const unsigned old_cap = 2048 * 4096;
+
+  unsigned misnumbered = 0;
+  for (unsigned i = 1; i <= old_cap; ++i)
+    misnumbered += container["s" + std::to_string(i)] != i;
+
+  REQUIRE(misnumbered == 0);
+  REQUIRE(container.c_str(1) == std::string("s1"));
+  REQUIRE(container.c_str(old_cap) == "s" + std::to_string(old_cap));
+  REQUIRE(container["s1"] == 1);
+}
+
 TEST_CASE("stress: repeated lookups", "[stress]")
 {
   string_pool container;
