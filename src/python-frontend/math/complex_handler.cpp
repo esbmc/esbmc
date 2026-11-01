@@ -341,12 +341,47 @@ static std::string op_symbol(const std::string &op_name)
 
 // A complex number with an array, or a complex64 element, follows NumPy. Nil
 // for a pair of Python numbers.
+// NEP 50: a Python number compared with a complex64 scalar is complex64 too.
+exprt complex_handler::compare_complex64_with_number(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &element) const
+{
+  if (
+    element.value("_type", "") != "Compare" ||
+    is_complex64_type(lhs.type()) == is_complex64_type(rhs.type()))
+    return nil_exprt();
+  const bool left_narrow = is_complex64_type(lhs.type());
+  const exprt &other = left_narrow ? rhs : lhs;
+  const nlohmann::json &other_node =
+    left_narrow ? element["comparators"][0] : element["left"];
+  if (!converter_.is_weak_numpy_operand(other_node, other.type()))
+    return nil_exprt();
+  const exprt wide = promote_to_complex(other);
+  const exprt rounded = complex_as_element(
+    member_exprt(wide, "real", double_type()),
+    member_exprt(wide, "imag", double_type()),
+    left_narrow ? lhs.type() : rhs.type());
+  return handle_binary_op(
+    op, left_narrow ? lhs : rounded, left_narrow ? rounded : rhs, element);
+}
+
 exprt complex_handler::numpy_complex_operation(
   const std::string &op,
   const exprt &lhs,
   const exprt &rhs,
   const nlohmann::json &element) const
 {
+  const exprt compared = compare_complex64_with_number(op, lhs, rhs, element);
+  if (!compared.is_nil())
+    return compared;
+  if (
+    element.value("_type", "") == "AugAssign" && lhs.type().is_array() &&
+    !type_utils::is_numpy_complex_array(lhs.type()))
+    throw std::runtime_error(
+      "TypeError: an in-place numpy operation that cannot cast its result to "
+      "the array's dtype is not supported");
   if (
     element.value("_type", "") != "BinOp" ||
     (!lhs.type().is_array() && !rhs.type().is_array() &&
@@ -725,7 +760,11 @@ exprt complex_handler::handle_attribute_access(
     base = std::move(deref);
   }
 
-  return complex_member(base, attr, cached_double_type());
+  const exprt part = complex_member(base, attr, cached_double_type());
+  // A complex64 component is a float32, which NEP 50 compares in float32.
+  return is_complex64_type(base.type())
+           ? exprt(typecast_exprt(part, float_type()))
+           : part;
 }
 
 // -----------------------------------------------------------------------

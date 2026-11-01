@@ -3191,7 +3191,7 @@ private:
     const exprt &x,
     const exprt &y,
     const typet &type);
-  exprt numpy_complex_quotient(const exprt &x, const exprt &y);
+  exprt numpy_complex_quotient(const exprt &x, const exprt &y, const typet &dt);
   exprt numpy_or_array_operation(
     const std::string &op,
     exprt &lhs,
@@ -3981,8 +3981,34 @@ private:
   /// an argument adds its class too.
   std::set<std::string> base_ctor_called;
   bool build_static_lists = false;
+  exprt get_expr_without_lhs(const nlohmann::json &node);
   std::optional<numpy_dtypet> numpy_array_dtype(const nlohmann::json &base);
   void reject_unmodelled_array_method(const nlohmann::json &call);
+  void reject_numpy_scalar_crossing(
+    const typet &type,
+    const std::string &action) const;
+  void reject_unsafe_numpy_string_slice(const nlohmann::json &array) const;
+  void reject_unsafe_numpy_string_binding(
+    const nlohmann::json &value,
+    const exprt &lhs);
+  void reject_numpy_scalars_in_container(const nlohmann::json &assign);
+  void reject_numpy_scalar_return(const nlohmann::json &value);
+  void reject_numpy_scalar_read(
+    const nlohmann::json &value,
+    const std::string &action);
+  void
+  reject_numpy_scalar_in_attribute(const exprt &lhs, const exprt &rhs) const;
+  void reject_subscript_of_unmodelled_method(const nlohmann::json &element);
+  void reject_narrow_method_result_operands(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
+  exprt raise_if_weak_store_outside(
+    const exprt &rhs,
+    const typet &element,
+    const nlohmann::json &value);
   std::optional<numpy_dtypet>
   constructor_keyword_dtype(const nlohmann::json &call) const;
   typet literal_call_array_type(

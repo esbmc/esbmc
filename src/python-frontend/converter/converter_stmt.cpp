@@ -7147,8 +7147,15 @@ static void fit_numpy_string_store(const exprt &lhs, exprt &rhs)
 {
   if (
     (lhs.id() != "index" && lhs.id() != "dereference") ||
-    !lhs.type().is_array() || !rhs.type().is_array() ||
-    !type_utils::is_char_storage(lhs.type().subtype()) ||
+    !lhs.type().is_array() ||
+    !type_utils::is_char_storage(lhs.type().subtype()))
+    return;
+  if (rhs.type().is_pointer())
+    throw std::runtime_error(
+      "TypeError: storing a string of unknown width into a numpy string array "
+      "is not supported");
+  if (
+    !rhs.type().is_array() ||
     !type_utils::is_char_storage(rhs.type().subtype()) ||
     lhs.type() == rhs.type())
     return;
@@ -7165,6 +7172,34 @@ static void fit_numpy_string_store(const exprt &lhs, exprt &rhs)
 
 // NumPy truncates a float stored into an integer array, raising for NaN and
 // infinity as int() does.
+static bool is_real_number_type(const typet &type)
+{
+  return type.is_signedbv() || type.is_unsignedbv() || type.is_floatbv();
+}
+
+static exprt fit_numpy_complex_store(const exprt &rhs, const typet &element)
+{
+  const exprt complex_rhs = promote_to_complex(rhs);
+  return complex_as_element(
+    member_exprt(complex_rhs, "real", double_type()),
+    member_exprt(complex_rhs, "imag", double_type()),
+    element);
+}
+
+// NEP 50: a Python integer out of the dtype's range raises at the store.
+exprt python_converter::raise_if_weak_store_outside(
+  const exprt &rhs,
+  const typet &element,
+  const nlohmann::json &value)
+{
+  if (
+    (!rhs.type().is_signedbv() && !rhs.type().is_unsignedbv()) ||
+    !is_weak_numpy_operand(value, rhs.type()))
+    return nil_exprt();
+  return raise_if_outside_numpy_integer(
+    rhs, element, element, get_location_from_decl(value));
+}
+
 exprt python_converter::fit_numpy_integer_store(
   const exprt &lhs,
   const exprt &rhs,
@@ -7174,21 +7209,17 @@ exprt python_converter::fit_numpy_integer_store(
     return rhs;
   const typet &element = lhs.type();
   if (is_complex_type(element))
-  {
-    const exprt complex_rhs = promote_to_complex(rhs);
-    return complex_as_element(
-      member_exprt(complex_rhs, "real", double_type()),
-      member_exprt(complex_rhs, "imag", double_type()),
-      element);
-  }
+    return fit_numpy_complex_store(rhs, element);
   const bool integer = element.is_signedbv() || element.is_unsignedbv();
   if (integer && rhs.type().is_floatbv())
     return typecast_exprt(guard_nonfinite_float_to_int(rhs, value), element);
+  const exprt raised = raise_if_weak_store_outside(rhs, element, value);
+  if (!raised.is_nil())
+    return raised;
   // A wider result is cast once, at the store, to the array's own width.
-  const bool numeric_rhs = rhs.type().is_signedbv() ||
-                           rhs.type().is_unsignedbv() ||
-                           rhs.type().is_floatbv();
-  if ((integer || element.is_floatbv()) && numeric_rhs && rhs.type() != element)
+  if (
+    (integer || element.is_floatbv()) && is_real_number_type(rhs.type()) &&
+    rhs.type() != element)
     return typecast_exprt(rhs, element);
   return rhs;
 }
@@ -7293,6 +7324,8 @@ void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
 {
+  reject_numpy_scalars_in_container(ast_node);
+
   if (try_dedicated_assign(ast_node, target_block))
     return;
 
@@ -7961,9 +7994,12 @@ void python_converter::get_var_assign(
 
     converted_value = true;
 
+    reject_unsafe_numpy_string_binding(effective_ast_node["value"], lhs);
+
     // Handle string literal conversion
     rhs = handle_string_literal_rhs(effective_ast_node, lhs_type, rhs);
     fit_numpy_string_store(lhs, rhs);
+    reject_numpy_scalar_in_attribute(lhs, rhs);
     rhs = fit_numpy_integer_store(lhs, rhs, effective_ast_node["value"]);
     bind_numpy_scalar_name(target, lhs_symbol, lhs, rhs);
   }
@@ -9907,6 +9943,7 @@ void python_converter::get_return_statements(
   const nlohmann::json &ast_node,
   codet &target_block)
 {
+  reject_numpy_scalar_return(ast_node["value"]);
   if (ast_node["value"].is_null())
   {
     // Handle bare return statement (return with no value)

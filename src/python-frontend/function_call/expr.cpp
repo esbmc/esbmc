@@ -5375,6 +5375,9 @@ std::optional<exprt> function_call_expr::try_int_of_numpy_scalar()
       "TypeError: " + function + "() of a complex number is not supported");
   if (function != "int" || !type_utils::is_numpy_numeric_element(value.type()))
     return std::nullopt;
+  if (value.type().is_unsignedbv() && bv_width(value.type()) == 64)
+    throw std::runtime_error(
+      "TypeError: int() of a numpy uint64 scalar is not supported");
   return typecast_exprt(value, long_long_int_type());
 }
 
@@ -8211,6 +8214,7 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
     }
 
     reject_list_for_numpy_parameter(arg.type(), params, param_idx);
+    converter_.reject_numpy_scalar_crossing(arg.type(), "passing");
 
     // All array function arguments (e.g. bytes type) are handled as pointers.
     if (arg.type().is_array())

@@ -2533,6 +2533,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 {
   get_expr_depth_guard depth_guard(*this);
 
+  reject_subscript_of_unmodelled_method(element);
+
   // Walrus operator `(target := value)` — assign as a side effect, evaluate to
   // the bound value. Handled before the type switch since NamedExpr is not in
   // the expression-type map.

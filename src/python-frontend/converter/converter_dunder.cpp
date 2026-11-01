@@ -393,6 +393,13 @@ exprt python_converter::dispatch_unary_dunder_operator(
     throw std::runtime_error(
       "TypeError: numpy unary '" + op + "' over a " +
       (strings ? "string" : "complex") + " array is not supported");
+  if (
+    op == "abs" && operand.type().is_array() &&
+    type_utils::is_numpy_scalar_type(
+      type_utils::array_scalar_type(operand.type())))
+    throw std::runtime_error(
+      "TypeError: numpy.abs() over a dtype narrower than 64 bits is not "
+      "supported");
   const exprt narrow = numpy_narrow_unary(op, operand);
   if (!narrow.is_nil())
     return narrow;

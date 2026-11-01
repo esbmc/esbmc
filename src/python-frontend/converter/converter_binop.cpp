@@ -3324,15 +3324,17 @@ static exprt imag_part(const exprt &value)
 
 // NumPy's complex division (Smith's algorithm), whose zero divisor gives
 // infinities and NaNs in IEEE arithmetic rather than Python's exception.
-exprt python_converter::numpy_complex_quotient(const exprt &x, const exprt &y)
+exprt python_converter::numpy_complex_quotient(
+  const exprt &x,
+  const exprt &y,
+  const typet &dt)
 {
-  const typet dt = double_type();
   const nlohmann::json no_node;
   const auto op = [&](const char *name, const exprt &a, const exprt &b) {
     return numpy_element_op(name, a, b, dt);
   };
-  const exprt a = real_part(x), b = imag_part(x);
-  const exprt c = real_part(y), d = imag_part(y);
+  const exprt a = cast_to(real_part(x), dt), b = cast_to(imag_part(x), dt);
+  const exprt c = cast_to(real_part(y), dt), d = cast_to(imag_part(y), dt);
   const exprt abs_c = cast_to(math_handler_.handle_fabs(c, no_node), dt);
   const exprt abs_d = cast_to(math_handler_.handle_fabs(d, no_node), dt);
   const exprt one = from_double(1.0, dt);
@@ -3367,15 +3369,18 @@ exprt python_converter::numpy_complex_element_op(
   const exprt &rhs,
   const typet &type)
 {
-  const typet dt = double_type();
+  // complex64 computes at its component width: a double result would overflow
+  // and round where NumPy's does not.
+  const typet dt =
+    is_complex64_type(type) ? typet(float_type()) : typet(double_type());
   const exprt x = promote_to_complex(lhs);
   const exprt y = promote_to_complex(rhs);
   const auto real_op = [&](const char *name, const exprt &a, const exprt &b) {
-    return numpy_element_op(name, a, b, dt);
+    return numpy_element_op(name, cast_to(a, dt), cast_to(b, dt), dt);
   };
   exprt result;
   if (op == "Div")
-    result = numpy_complex_quotient(x, y);
+    result = numpy_complex_quotient(x, y, dt);
   else if (op == "Mult")
     result = make_complex(
       real_op(
@@ -3493,18 +3498,23 @@ bool python_converter::is_numpy_valued_node(const nlohmann::json &node) const
   const std::string kind = node.value("_type", "");
   if (kind == "Subscript")
   {
-    const nlohmann::json &base = node["value"];
-    return base.value("_type", "") == "Name" &&
+    const nlohmann::json *base = &node["value"];
+    while (base->value("_type", "") == "Subscript")
+      base = &(*base)["value"];
+    return base->value("_type", "") == "Name" &&
            numpy_array_symbols_.count(
-             resolve_name_symbol_id(base.value("id", ""))) != 0;
+             resolve_name_symbol_id(base->value("id", ""))) != 0;
   }
   if (kind == "Call")
   {
     const nlohmann::json &func = node["func"];
     return func.value("_type", "") == "Attribute" &&
-           func["value"].value("_type", "") == "Name" &&
-           is_imported_numpy_module_alias(
-             *ast_json, func["value"].value("id", ""));
+           (is_numpy_valued_node(func["value"]) ||
+            (func["value"].value("_type", "") == "Name" &&
+             (is_imported_numpy_module_alias(
+                *ast_json, func["value"].value("id", "")) ||
+              numpy_array_symbols_.count(
+                resolve_name_symbol_id(func["value"].value("id", ""))) != 0)));
   }
   if (kind == "BinOp")
     return is_numpy_valued_node(node["left"]) ||
@@ -3658,9 +3668,17 @@ exprt python_converter::raise_in_expression(
   return value;
 }
 
-// A string array has no arithmetic, and a comparison of two arrays is element
-// by element, which the scalar comparison below would not read.
-static void reject_unmodelled_array_operator(
+static const typet &leaf_of(const typet &type)
+{
+  const typet *leaf = &type;
+  while (leaf->is_array() || leaf->is_pointer())
+    leaf = &leaf->subtype();
+  return *leaf;
+}
+
+// A string array has no arithmetic, and a comparison of two complex arrays is
+// element by element, which the scalar comparison below would not read.
+static void reject_opaque_array_operator(
   const std::string &op,
   const typet &lhs,
   const typet &rhs)
@@ -3677,6 +3695,114 @@ static void reject_unmodelled_array_operator(
       (strings ? "string" : "complex") + " array is not supported");
 }
 
+static void reject_narrow_view_operand(const std::string &op, const typet &type)
+{
+  if (type.is_pointer() && type_utils::is_numpy_scalar_type(leaf_of(type)))
+    throw std::runtime_error(
+      "TypeError: numpy element-wise '" + op +
+      "' over a view of a narrow dtype is not supported");
+}
+
+static bool is_numpy_uint64(const typet &type)
+{
+  return type.is_unsignedbv() && type_utils::is_numpy_numeric_element(type) &&
+         bv_width(type) == 64;
+}
+
+static bool is_non_negative_constant(const exprt &value)
+{
+  BigInt constant;
+  return !to_integer(value, constant) && constant >= 0;
+}
+
+// uint64 is stored as such but computed like int64 once it meets anything else.
+static void reject_uint64_operator(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs)
+{
+  const bool left = is_numpy_uint64(leaf_of(lhs.type()));
+  const bool right = is_numpy_uint64(leaf_of(rhs.type()));
+  if (!left && !right)
+    return;
+  if (
+    op == "LShift" || op == "RShift" ||
+    (!(left && right) && !is_non_negative_constant(lhs) &&
+     !is_non_negative_constant(rhs)))
+    throw std::runtime_error(
+      "TypeError: numpy element-wise '" + op +
+      "' mixing uint64 with another type or shifting it is not supported");
+}
+
+// Operand pairs whose NumPy semantics the 64-bit lowering does not give.
+static void reject_unmodelled_numeric_operator(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs)
+{
+  reject_narrow_view_operand(op, lhs.type());
+  reject_narrow_view_operand(op, rhs.type());
+  static const std::set<std::string> no_bool_form = {
+    "Sub", "Mod", "FloorDiv", "LShift", "RShift", "Pow"};
+  if (
+    leaf_of(lhs.type()).is_bool() && leaf_of(rhs.type()).is_bool() &&
+    no_bool_form.count(op) && (lhs.type().is_array() || rhs.type().is_array()))
+    throw std::runtime_error(
+      "TypeError: numpy element-wise '" + op +
+      "' over two bool arrays is not supported");
+  reject_uint64_operator(op, lhs, rhs);
+}
+
+// `a += b` keeps a's dtype and raises unless NumPy's same_kind rule allows it.
+static void reject_unsafe_in_place_cast(
+  const nlohmann::json &element,
+  const typet &lhs,
+  const typet &rhs)
+{
+  const auto rank = [](const typet &leaf) {
+    if (is_complex_type(leaf))
+      return 4;
+    if (leaf.is_floatbv())
+      return 3;
+    if (leaf.is_signedbv())
+      return 2;
+    return leaf.is_unsignedbv() ? 1 : 0;
+  };
+  if (
+    element.value("_type", "") == "AugAssign" && lhs.is_array() &&
+    rank(leaf_of(rhs)) > rank(leaf_of(lhs)) &&
+    (rhs.is_array() || is_complex_type(rhs)))
+    throw std::runtime_error(
+      "TypeError: an in-place numpy operation that cannot cast its result to "
+      "the array's dtype is not supported");
+}
+
+// An array a method returns does not carry the receiver's element type.
+void python_converter::reject_narrow_method_result_operands(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &left,
+  const nlohmann::json &right)
+{
+  for (const nlohmann::json *operand : {&left, &right})
+  {
+    const exprt &value = operand == &left ? lhs : rhs;
+    if (
+      !value.type().is_array() || operand->value("_type", "") != "Call" ||
+      (*operand)["func"].value("_type", "") != "Attribute" ||
+      (*operand)["func"]["value"].value("_type", "") != "Name" ||
+      !numpy_array_symbols_.count(
+        resolve_name_symbol_id((*operand)["func"]["value"].value("id", ""))))
+      continue;
+    const auto dtype = numpy_array_dtype((*operand)["func"]["value"]);
+    if (dtype && dtype->is_integer() && dtype->bits < 64)
+      throw std::runtime_error(
+        "TypeError: numpy element-wise '" + op +
+        "' over a method call on a narrow dtype is not supported");
+  }
+}
+
 exprt python_converter::numpy_or_array_operation(
   const std::string &op,
   exprt &lhs,
@@ -3686,7 +3812,10 @@ exprt python_converter::numpy_or_array_operation(
   const nlohmann::json &element)
 {
   cast_weak_float_compare(op, lhs, rhs, left, right);
-  reject_unmodelled_array_operator(op, lhs.type(), rhs.type());
+  reject_opaque_array_operator(op, lhs.type(), rhs.type());
+  reject_narrow_method_result_operands(op, lhs, rhs, left, right);
+  reject_unmodelled_numeric_operator(op, lhs, rhs);
+  reject_unsafe_in_place_cast(element, lhs.type(), rhs.type());
   if (
     type_utils::is_numpy_scalar_type(lhs.type()) ||
     type_utils::is_numpy_scalar_type(rhs.type()))
