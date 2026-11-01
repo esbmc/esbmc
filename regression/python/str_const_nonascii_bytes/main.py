@@ -1,7 +1,9 @@
 # The negative chars of a UTF-8 literal used to be read back as their
-# magnitude: 'é' (C3 A9) became "=W", and the E0 lead byte a space.
+# magnitude: 'é' (C3 A9) became "=W", the E0 lead byte a space and the
+# BF continuation byte 'A'.
 d = "é"
 assert not d.isupper()
-s = "ࠀx"
-assert s.lstrip() == s
-assert s.strip() == s
+assert "ࠀx".lstrip() == "ࠀx"
+assert "ࠀx".strip() == "ࠀx"
+assert "ࠀx".lstrip(" ") == "ࠀx"
+assert "xÿ".rstrip("A") == "xÿ"
