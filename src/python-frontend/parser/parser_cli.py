@@ -140,17 +140,24 @@ def select_threading_model(output_dir: str, deadlock_check: bool) -> None:
 
 def _emit_model_jsons(
     output_dir: str,
+    entry_filename: str,
     *,
     import_resolver: ImportResolverLike,
     generate_ast_json_fn: GenerateAstJsonFn,
 ) -> None:
     """Generate AST JSON for each memory-model module in ``output_dir/models``."""
     models_dir = os.path.join(output_dir, "models")
+    # The entry script's JSON is named after its module, so a model of the same
+    # name would overwrite the program with the model (#9355).
+    entry_module = os.path.splitext(os.path.basename(entry_filename))[0]
     for python_file in glob.glob(os.path.join(models_dir, "*.py")):
         filename = os.path.basename(python_file)
         module_name = filename[:-3]
 
         if module_name == "threading_deadlock":
+            continue
+
+        if module_name == entry_module:
             continue
 
         if import_resolver.is_imported_model(module_name) and module_name != "typing":
@@ -252,5 +259,6 @@ def main(*, deps: CliDeps) -> int | None:
 
     deps.generate_ast_json_fn(tree, filename, None, output_dir)
     _emit_model_jsons(output_dir,
+                      filename,
                       import_resolver=import_resolver,
                       generate_ast_json_fn=deps.generate_ast_json_fn)
