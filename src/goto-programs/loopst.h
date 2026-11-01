@@ -2,6 +2,7 @@
 #define GOTO_PROGRAMS_LOOPST_H_
 
 #include <goto-programs/goto_functions.h>
+#include <map>
 #include <unordered_set>
 
 class loopst
@@ -56,6 +57,18 @@ public:
   const loop_varst &get_pointer_array_write_ptrs() const
   {
     return pointer_array_write_ptrs_;
+  }
+
+  /// A member write through a pointer (`p->f = ...`), with that pointer. If
+  /// the loop never reassigns the pointer, only that member changes.
+  void add_pointer_member_write(const expr2tc &lvalue, const expr2tc &ptr)
+  {
+    pointer_member_writes_.emplace(lvalue, ptr);
+  }
+
+  const std::map<expr2tc, expr2tc> &get_pointer_member_writes() const
+  {
+    return pointer_member_writes_;
   }
 
   /// Record a write that havocking through the recorded pointers cannot
@@ -147,6 +160,7 @@ protected:
   bool pointer_array_write_unresolvable_ = false;
   bool writes_through_pointer_ = false;
   loop_varst pointer_array_write_ptrs_;
+  std::map<expr2tc, expr2tc> pointer_member_writes_;
   loop_varst written_pointers_;
   loop_varst written_pointees_;
   bool unnamed_pointer_write_ = false;

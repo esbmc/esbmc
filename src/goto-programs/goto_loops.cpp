@@ -651,6 +651,20 @@ void goto_loopst::add_loop_var(
     add_loop_var(loop, to_dereference2t(expr).value, false);
     return;
   }
+  if (is_modified && is_member2t(expr))
+  {
+    expr2tc base = expr;
+    while (is_member2t(base))
+      base = to_member2t(base).source_value;
+    expr2tc ptr =
+      is_dereference2t(base) ? extract_queried_pointer(base) : expr2tc();
+    if (!is_nil_expr(ptr) && is_symbol2t(ptr))
+    {
+      loop.add_pointer_member_write(expr, ptr);
+      add_loop_var(loop, to_dereference2t(base).value, false);
+      return;
+    }
+  }
   if (is_modified && is_index2t(expr))
   {
     const index2t &idx = to_index2t(expr);

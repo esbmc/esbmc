@@ -792,9 +792,28 @@ void goto_loop_invariantt::havoc_pointees(
 {
   const namespacet ns(context);
 
+  // `p->f = ...` with p fixed across the loop changes that member only;
+  // havocking more would also lose the rest of the object's value set.
+  // A p the loop reassigns can reach other objects: havoc the whole one.
+  std::set<expr2tc> whole(
+    loop.get_pointer_array_write_ptrs().begin(),
+    loop.get_pointer_array_write_ptrs().end());
+  for (const auto &[lvalue, ptr] : loop.get_pointer_member_writes())
+  {
+    if (loop.get_modified_loop_vars().count(ptr))
+    {
+      whole.insert(ptr);
+      continue;
+    }
+    goto_programt::targett t = dest.add_instruction(ASSIGN);
+    t->code = code_assign2tc(lvalue, gen_nondet(lvalue->type));
+    t->location = loc;
+    t->location.comment("loop invariant havoc");
+  }
+
   // The whole object: `p[i] = ...` reaches every element of p's object over
   // the iterations, not only the one *p names at loop entry.
-  for (const expr2tc &ptr : loop.get_pointer_array_write_ptrs())
+  for (const expr2tc &ptr : whole)
   {
     goto_programt::targett t = dest.add_instruction(FUNCTION_CALL);
     t->code = code_function_call2tc(
