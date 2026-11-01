@@ -1,5 +1,7 @@
 #include "python_list_internal.h"
 
+#include <python-frontend/set/python_set.h>
+
 using namespace python_expr;
 using namespace python_list_detail;
 
@@ -152,6 +154,29 @@ size_t python_list::eq_float_type_id(
            : 0;
 }
 
+/// `a < b`, `a <= b`, `a > b` and `a >= b` on sets: a subset test, and for the
+/// strict forms also that the converse does not hold.
+static exprt set_ordering(
+  python_converter &converter,
+  const nlohmann::json &element,
+  const symbolt &lhs,
+  const symbolt &rhs,
+  const std::string &op)
+{
+  python_set sets(converter, element);
+  const auto subset = [&](const symbolt &small, const symbolt &large) {
+    return sets.build_set_relation_call(
+      build_symbol(small), build_symbol(large), element, "issubset");
+  };
+  const bool left_in_right = op == "Lt" || op == "LtE";
+  const symbolt &small = left_in_right ? lhs : rhs;
+  const symbolt &large = left_in_right ? rhs : lhs;
+  const exprt contained = subset(small, large);
+  if (op == "LtE" || op == "GtE")
+    return contained;
+  return and_exprt(contained, not_exprt(subset(large, small)));
+}
+
 exprt python_list::compare(
   const exprt &l1,
   const exprt &l2,
@@ -205,13 +230,9 @@ exprt python_list::compare(
     if (!(lhs_is_set && rhs_is_set))
       return gen_boolean(op == "NotEq");
 
-    // Python set ordering (< strict subset, <= subset-or-equal, and the > / >=
-    // supersets) requires proper subset checking, which is not yet modelled.
-    // Reject it explicitly rather than silently returning the Eq/NotEq result,
-    // which would be wrong for these operators.
     if (op == "Lt" || op == "LtE" || op == "Gt" || op == "GtE")
-      throw std::runtime_error(
-        "set ordering (<, <=, >, >=) is not yet supported");
+      return set_ordering(
+        converter_, list_value_, *lhs_symbol, *rhs_symbol, op);
 
     symbolt *set_eq_func =
       converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_set_eq");
