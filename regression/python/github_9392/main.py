@@ -65,8 +65,10 @@ assert not tanh_raised
 
 # A short-circuited call must not raise.
 def guarded(c: bool) -> bool:
-    return (c and math.expm1(1000.0) > 0.0) or (c and math.exp(1000.0) > 0.0) or (
-        c and math.ldexp(1.0, 5000) > 0.0)
+    a = c and math.expm1(1000.0) > 0.0
+    b = c and math.exp(1000.0) > 0.0
+    d = c and math.ldexp(1.0, 5000) > 0.0
+    return a or b or d
 
 
 assert not guarded(False)
