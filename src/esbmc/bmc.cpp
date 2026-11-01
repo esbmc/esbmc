@@ -292,16 +292,8 @@ void bmct::successful_trace(const symex_target_equationt &eq [[maybe_unused]])
   if (options.get_bool_option("result-only"))
     return;
 
-  std::string witness_graphml_output =
-    options.get_option("witness-output-graphml");
-  std::string witness_yaml_output = options.get_option("witness-output-yaml");
-
   goto_tracet goto_trace;
-  if (witness_graphml_output != "")
-    correctness_graphml_goto_trace(options, ns, goto_trace);
-
-  if (witness_yaml_output != "")
-    correctness_yaml_goto_trace(options, ns, goto_trace);
+  write_correctness_witnesses(options, ns, goto_trace);
 
   // On a successful verification there is no error trace, but dead-store
   // advisories (CWE-563) are still valid and must reach SARIF. Emit an
