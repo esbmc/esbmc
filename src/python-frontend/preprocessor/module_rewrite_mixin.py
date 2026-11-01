@@ -13,6 +13,7 @@ from preprocessor.itertools_lowering import lower_itertools
 from preprocessor.coroutine_lowering import lower_coroutines
 from preprocessor.match_lowering import lower_match_statements
 from preprocessor.namedtuple_lowering import lower_namedtuples
+from preprocessor.open_lowering import lower_builtin_open
 from preprocessor.function_value_dispatch import dispatch_mixed_function_values
 from preprocessor.function_value_types import reject_mixed_function_values
 from preprocessor.iter_next_lowering import lower_iter_next
@@ -543,6 +544,7 @@ class ModuleRewriteMixin:
         module imports."""
         lower_coroutines(node, self.module_name)
         lower_check_type(node, self.module_name)
+        lower_builtin_open(node, self.module_name)
         _rename_shadowed_classes(node)
         alias_dotted_imports(node)
         spell_out_dict_splats(node)
