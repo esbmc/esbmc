@@ -119,6 +119,7 @@ protected:
   void add_unmodified_var(loopst &loop, const expr2tc &expr);
 
   void add_loop_var(loopst &loop, const expr2tc &expr, bool is_modified);
+  bool add_pointer_member_write(loopst &loop, const expr2tc &expr);
 
 public:
   goto_loopst(

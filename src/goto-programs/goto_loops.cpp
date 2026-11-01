@@ -69,8 +69,8 @@ bool check_var_name(const expr2tc &expr, bool dollar_in_name_only)
   // dollar_in_name_only, only the name itself: a C++ function's USR, which
   // prefixes its locals, has a '$' for a class-reference parameter
   // (`f#&$@S@T#@i`), and a loop invariant must havoc those locals.
-  found = identifier.find(
-    '$', dollar_in_name_only ? identifier.rfind('@') + 1 : 0);
+  found =
+    identifier.find('$', dollar_in_name_only ? identifier.rfind('@') + 1 : 0);
   if (found != std::string::npos)
     return false;
 
@@ -628,6 +628,25 @@ void goto_loopst::get_modified_variables(
   }
 }
 
+/// `p->f = ...` through a pointer symbol p: record the member write and read
+/// p. False for any other write.
+bool goto_loopst::add_pointer_member_write(loopst &loop, const expr2tc &expr)
+{
+  if (!is_member2t(expr))
+    return false;
+  expr2tc base = expr;
+  while (is_member2t(base))
+    base = to_member2t(base).source_value;
+  if (!is_dereference2t(base))
+    return false;
+  const expr2tc ptr = extract_queried_pointer(base);
+  if (is_nil_expr(ptr) || !is_symbol2t(ptr))
+    return false;
+  loop.add_pointer_member_write(expr, ptr);
+  add_loop_var(loop, to_dereference2t(base).value, false);
+  return true;
+}
+
 void goto_loopst::add_loop_var(
   loopst &loop,
   const expr2tc &expr,
@@ -657,20 +676,8 @@ void goto_loopst::add_loop_var(
     add_loop_var(loop, to_dereference2t(expr).value, false);
     return;
   }
-  if (is_modified && is_member2t(expr))
-  {
-    expr2tc base = expr;
-    while (is_member2t(base))
-      base = to_member2t(base).source_value;
-    expr2tc ptr =
-      is_dereference2t(base) ? extract_queried_pointer(base) : expr2tc();
-    if (!is_nil_expr(ptr) && is_symbol2t(ptr))
-    {
-      loop.add_pointer_member_write(expr, ptr);
-      add_loop_var(loop, to_dereference2t(base).value, false);
-      return;
-    }
-  }
+  if (is_modified && add_pointer_member_write(loop, expr))
+    return;
   if (is_modified && is_index2t(expr))
   {
     const index2t &idx = to_index2t(expr);

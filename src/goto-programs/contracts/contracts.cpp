@@ -4341,8 +4341,7 @@ expr2tc snapshot_object_from(
     symbol.name = symbol.id = name + tag;
     set_symbol_type(symbol, type);
     symbol.lvalue = true;
-    expr2tc s =
-      symbol2tc(type, context.move_symbol_to_context(symbol)->id);
+    expr2tc s = symbol2tc(type, context.move_symbol_to_context(symbol)->id);
     goto_programt::targett d = dest.add_instruction(DECL);
     d->code = code_decl2tc(type, to_symbol2t(s).thename);
     d->location = location;
