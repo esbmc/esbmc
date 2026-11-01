@@ -1304,6 +1304,21 @@ bool python_converter::store_optional_str(
   return true;
 }
 
+// Indexing a str yields a bare char; a variable holding its string as a char
+// array takes it as the one-character string (#9446).
+static exprt char_as_string(const exprt &rhs, const typet &target)
+{
+  if (
+    !target.is_array() || target.subtype() != char_type() ||
+    rhs.type() != char_type())
+    return rhs;
+  exprt str = gen_zero(target);
+  if (str.operands().size() < 2)
+    return rhs;
+  str.operands()[0] = rhs;
+  return str;
+}
+
 void python_converter::handle_assignment_type_adjustments(
   symbolt *lhs_symbol,
   exprt &lhs,
@@ -1322,19 +1337,7 @@ void python_converter::handle_assignment_type_adjustments(
 
   rhs = wrap_stored_if_optional(rhs, lhs.type());
 
-  // Indexing a str yields a bare char; a variable holding its string as a char
-  // array takes it as the one-character string (#9446).
-  if (
-    lhs.type().is_array() && lhs.type().subtype() == char_type() &&
-    rhs.type() == char_type())
-  {
-    exprt str = gen_zero(lhs.type());
-    if (str.operands().size() >= 2)
-    {
-      str.operands()[0] = rhs;
-      rhs = str;
-    }
-  }
+  rhs = char_as_string(rhs, lhs.type());
 
   // Assigning to a struct member (self.attr = value): an unannotated parameter
   // is typed as the any-type carrier (void*, i.e. a pointer whose subtype is
