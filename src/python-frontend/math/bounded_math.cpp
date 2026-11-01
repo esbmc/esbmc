@@ -188,10 +188,15 @@ exprt bounded_math::fresh(const std::string &name, const exprt &value)
   return symbol;
 }
 
+exprt bounded_math::stored(const exprt &value)
+{
+  return value.is_symbol() || value.is_constant() ? value
+                                                  : fresh("$math_arg$", value);
+}
+
 exprt bounded_math::read_once(const exprt &x)
 {
-  const exprt value =
-    x.is_symbol() || x.is_constant() ? x : fresh("$math_arg$", x);
+  const exprt value = stored(x);
   if (value.type() == double_type())
     return value;
   return typecast_exprt(value, double_type());
@@ -210,11 +215,23 @@ void bounded_math::raise_math_errors(
   const exprt &value)
 {
   raise_if(domain_error(function, x), "ValueError", "math domain error");
+  raise_overflow(x, value);
+}
+
+void bounded_math::raise_overflow(const exprt &x, const exprt &value)
+{
   raise_if(
     and_exprt(
       not_exprt(or_exprt(is_nan(x), is_infinite(x))), is_infinite(value)),
     "OverflowError",
     "math range error");
+}
+
+exprt bounded_math::raise_on_overflow(const exprt &x, const exprt &value)
+{
+  const exprt result = fresh("$math$", value);
+  raise_overflow(x, result);
+  return result;
 }
 
 void bounded_math::raise_if(

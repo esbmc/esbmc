@@ -34,6 +34,13 @@ public:
   /// The result for a number known only at run time, which is read once.
   exprt
   runtime(const std::string &function, const exprt &x, math_module module);
+  /// @p value of math.*(@p x), raising OverflowError where a finite @p x
+  /// gives an infinity.
+  exprt raise_on_overflow(const exprt &x, const exprt &value);
+  /// @p x, as a double, in a temporary unless it is a symbol or constant.
+  exprt read_once(const exprt &x);
+  /// @p value in a temporary unless it is a symbol or constant.
+  exprt stored(const exprt &value);
 
 private:
   python_converter &converter_;
@@ -47,8 +54,8 @@ private:
     const std::string &function,
     const exprt &x,
     const exprt &value);
+  void raise_overflow(const exprt &x, const exprt &value);
   exprt fresh(const std::string &name, const exprt &value);
-  exprt read_once(const exprt &x);
   exprt within(double low, double high);
   void raise_if(
     const exprt &condition,

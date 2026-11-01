@@ -4519,6 +4519,11 @@ bool function_call_expr::takes_bounded_math(const std::string &function) const
            converter_.current_function_name());
 }
 
+static bool is_math_number(const typet &t)
+{
+  return t.is_floatbv() || t.is_signedbv() || t.is_unsignedbv() || t.is_bool();
+}
+
 // math.exp(x) in the program, of a number known only at run time: the model
 // numpy.exp(x) uses, with math's ValueError and OverflowError. Calls inside
 // the models keep the C library models their own algorithms are tuned to.
@@ -4532,8 +4537,7 @@ function_call_expr::try_bounded_math_call(const std::string &func_name)
   const exprt x = converter_.get_expr(arg);
   if (is_cpp_throw_expr(x))
     return x;
-  const typet &t = x.type();
-  if (!t.is_floatbv() && !t.is_signedbv() && !t.is_unsignedbv() && !t.is_bool())
+  if (!is_math_number(x.type()))
   {
     if (!json_utils::ast_contains_call(arg))
       return std::nullopt;
@@ -4563,6 +4567,10 @@ exprt function_call_expr::dispatch_math_call()
 exprt function_call_expr::handle_math_function_dispatch()
 {
   const std::string func_name = math_function_name(function_id_.get_function());
+  // math.* raises OverflowError, but other models (cmath.tanh) build on it
+  // where CPython's own implementation does not overflow.
+  const bool math_semantics = !converter_.is_model_file(call_) ||
+                              function_id_.get_function() != func_name;
   const auto &args = call_["args"];
   auto raise_math_real_type_error = [this]() -> exprt {
     return complex_utils::raise_math_real_type_error_expr(converter_);
@@ -4617,10 +4625,19 @@ exprt function_call_expr::handle_math_function_dispatch()
 
       return *type_error;
 
+    const bool overflows =
+      math_semantics &&
+      (func_name == "exp" || func_name == "exp2" || func_name == "expm1" ||
+       func_name == "sinh" || func_name == "cosh") &&
+      is_math_number(arg_expr.type());
+    bounded_math bounded(converter_, call_);
+    if (overflows)
+      arg_expr = bounded.read_once(arg_expr);
     exprt dispatched =
       converter_.get_math_handler().handle(func_name, arg_expr, call_);
     if (!dispatched.is_nil())
-      return dispatched;
+      return overflows ? bounded.raise_on_overflow(arg_expr, dispatched)
+                       : dispatched;
   }
 
   if (args.size() == 2)
@@ -4632,10 +4649,21 @@ exprt function_call_expr::handle_math_function_dispatch()
 
       return *type_error;
 
+    const bool overflows = math_semantics && func_name == "ldexp" &&
+                           is_math_number(lhs_expr.type()) &&
+                           !rhs_expr.type().is_floatbv() &&
+                           is_math_number(rhs_expr.type());
+    bounded_math bounded(converter_, call_);
+    if (overflows)
+    {
+      lhs_expr = bounded.read_once(lhs_expr);
+      rhs_expr = bounded.stored(rhs_expr);
+    }
     exprt dispatched = converter_.get_math_handler().handle(
       func_name, lhs_expr, rhs_expr, call_);
     if (!dispatched.is_nil())
-      return dispatched;
+      return overflows ? bounded.raise_on_overflow(lhs_expr, dispatched)
+                       : dispatched;
   }
 
   // Enforce canonical arity/error behavior for handled names even when

@@ -28,6 +28,10 @@ def __ESBMC_exp2(x: float) -> float:
     ...
 
 
+def __ESBMC_ldexp(x: float, i: int) -> float:
+    ...
+
+
 def __ESBMC_asinh(x: float) -> float:
     ...
 
@@ -655,7 +659,7 @@ def ldexp(x: float, i: int) -> float:
     """
     if not isinstance(i, int):
         raise TypeError("i must be an integer")
-    return x * pow(2.0, float(i))
+    return __ESBMC_ldexp(x, i)
 
 
 def lgamma(x: float) -> float:

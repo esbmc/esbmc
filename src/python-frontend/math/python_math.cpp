@@ -304,6 +304,8 @@ exprt python_math::handle(
     return handle_copysign(std::move(lhs), std::move(rhs), element);
   if (func_name == "hypot")
     return handle_hypot(std::move(lhs), std::move(rhs), element);
+  if (func_name == "ldexp")
+    return handle_ldexp(std::move(lhs), rhs, element);
 
   return nil_exprt();
 }
@@ -1394,6 +1396,32 @@ exprt python_math::handle_fmod(
   fmod_call.location() = converter.get_location_from_decl(element);
 
   return fmod_call;
+}
+
+exprt python_math::handle_ldexp(
+  exprt x,
+  const exprt &i,
+  const nlohmann::json &element)
+{
+  if (!type_utils::is_integer_type(i.type()) && !i.type().is_bool())
+    return nil_exprt();
+  // C's ldexp takes an int. Past 2200 every finite nonzero x has already
+  // overflowed or underflowed (2^-1074 to 2^1024 spans 2098), so clamp.
+  const typet wide = long_long_int_type();
+  const exprt n = typecast_exprt(i, wide);
+  const exprt high = from_integer(2200, wide);
+  const exprt low = from_integer(-2200, wide);
+  const exprt clamped = if_exprt(
+    binary_relation_exprt(n, ">", high),
+    high,
+    if_exprt(binary_relation_exprt(n, "<", low), low, n));
+  exprt call = build_c_math_call_expr(
+    get_c_math_symbol_cached("c:@F@ldexp", "ldexp"),
+    double_type(),
+    {promote_to_double_if_needed(std::move(x)),
+     typecast_exprt(clamped, int_type())});
+  call.location() = converter.get_location_from_decl(element);
+  return call;
 }
 
 exprt python_math::handle_copysign(
