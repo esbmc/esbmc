@@ -968,6 +968,22 @@ public:
 
   iterator erase(iterator position)
   {
+    // Elements compared byte-wise, so T needs no operator==.
+    __ESBMC_requires(
+      __ESBMC_same_object(position, this->buf) && position >= this->buf &&
+      position < this->buf + this->_size);
+    __ESBMC_assigns(this->_size, __ESBMC_object(this->buf));
+    __ESBMC_ensures(this->_size == __ESBMC_old(this->_size) - 1);
+    __ESBMC_ensures((T *)__ESBMC_return_value == position);
+    __ESBMC_ensures(__ESBMC_forall(
+      &__ESBMC_vector_qv,
+      !(__ESBMC_vector_qv < this->_size * sizeof(T)) ||
+        ((const char *)this->buf)[__ESBMC_vector_qv] ==
+          __ESBMC_old(((const char *)this->buf)
+                        [__ESBMC_vector_qv +
+                         (__ESBMC_vector_qv >= (position - this->buf) * sizeof(T)
+                            ? sizeof(T)
+                            : 0)])));
     size_type at = position - buf;
     for (int i = at; i < _size - 1; i++)
     {
