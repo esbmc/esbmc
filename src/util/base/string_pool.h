@@ -75,8 +75,9 @@ protected:
   static constexpr size_t CHUNK_SHIFT = 12;
   static constexpr size_t CHUNK_SIZE = size_t{1} << CHUNK_SHIFT; // 4096
   static constexpr size_t CHUNK_MASK = CHUNK_SIZE - 1;
-  // 2048 chunks * 4096 strings = 8M unique strings ceiling.
-  static constexpr size_t MAX_CHUNKS = 2048;
+  // 65536 chunks * 4096 strings = 256M unique strings, more than fit in
+  // memory: 8M was reached by long concurrent runs (#9666).
+  static constexpr size_t MAX_CHUNKS = size_t{1} << 16;
 
   struct chunk_t
   {
