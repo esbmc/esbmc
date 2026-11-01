@@ -652,6 +652,12 @@ public:
     const exprt &lhs,
     const exprt &rhs);
 
+  exprt int_float_comparison(
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &element);
+
   bool scalar_order(
     exprt a,
     exprt b,

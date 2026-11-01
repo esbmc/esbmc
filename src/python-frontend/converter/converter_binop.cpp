@@ -4207,19 +4207,10 @@ exprt python_converter::handle_tuple_operations(
         else
           migrate_expr(equality, eq2);
       }
-      else if (expr2tc exact = exact_int_float_relation("Eq", li, ri); exact)
-        eq2 = exact;
       else if (is_num(li.type()) && is_num(ri.type()))
       {
-        if (li.type() != ri.type())
-        {
-          li = typecast_exprt(li, double_type());
-          ri = typecast_exprt(ri, double_type());
-        }
-        expr2tc l2, r2;
-        migrate_expr(li, l2);
-        migrate_expr(ri, r2);
-        eq2 = equality2tc(l2, r2);
+        expr2tc lt2;
+        scalar_order(li, ri, element, lt2, eq2);
       }
       else if (li.type() == ri.type())
       {
@@ -4432,6 +4423,18 @@ exprt python_converter::handle_relational_type_mismatches(
     return handle_float_vs_string(binary_expr, op);
   }
 
+  return int_float_comparison(op, lhs, rhs, element);
+}
+
+/// A comparison of an int with a float, by exact value. For and/or the int is
+/// promoted to the float type instead and nil is returned, as for any other
+/// pair of operands.
+exprt python_converter::int_float_comparison(
+  const std::string &op,
+  exprt &lhs,
+  exprt &rhs,
+  const nlohmann::json &element)
+{
   if (const expr2tc exact = exact_int_float_relation(op, lhs, rhs); exact)
   {
     exprt result = migrate_expr_back(exact);
@@ -4440,10 +4443,12 @@ exprt python_converter::handle_relational_type_mismatches(
     return result;
   }
 
-  if (lhs_is_float && (rhs.type().is_signedbv() || rhs.type().is_unsignedbv()))
+  auto is_int = [](const typet &t) {
+    return t.is_signedbv() || t.is_unsignedbv();
+  };
+  if (lhs.type().is_floatbv() && is_int(rhs.type()))
     rhs = typecast_exprt(rhs, lhs.type());
-  else if (
-    rhs_is_float && (lhs.type().is_signedbv() || lhs.type().is_unsignedbv()))
+  else if (rhs.type().is_floatbv() && is_int(lhs.type()))
     lhs = typecast_exprt(lhs, rhs.type());
 
   return nil_exprt();
