@@ -538,6 +538,11 @@ void violation_yaml_goto_trace(
         if (!input_file_check(step.pc->location))
           break;
 
+        /* Generated branches, such as the argv set-up of main(argc, argv),
+           have no line, and witnesslint rejects line 0. */
+        if (step.pc->location.get_line().empty())
+          break;
+
         waypoint wp =
           witness_waypoint(step.pc->location, yml.verified_file, options);
         wp.type = waypoint::branching;
