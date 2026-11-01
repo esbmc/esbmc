@@ -173,6 +173,13 @@ exprt python_converter::handle_tagged_unary_operator(
     "' on a dynamically-typed variable is not yet supported");
 }
 
+static void reject_complex_truth_value(const typet &type)
+{
+  if (is_complex_type(type))
+    throw std::runtime_error(
+      "TypeError: the truth value of a complex number is not supported");
+}
+
 exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
 {
   typet type = current_element_type;
@@ -226,9 +233,7 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
   type = unary_numeric_type(op, unary_sub.type(), type);
   if (op == "Not")
   {
-    if (is_complex_type(ns.follow(unary_sub.type())))
-      throw std::runtime_error(
-        "TypeError: the truth value of a complex number is not supported");
+    reject_complex_truth_value(ns.follow(unary_sub.type()));
     // An optional's value is zero when it is None, and `not None` is True.
     unary_sub = unwrap_optional_if_needed(unary_sub, element);
     exprt is_empty = build_emptiness_check(unary_sub, element);

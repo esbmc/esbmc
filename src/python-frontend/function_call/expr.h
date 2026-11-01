@@ -1100,6 +1100,10 @@ private:
     const symbolt &callee,
     size_t param_idx,
     bool is_bytes_literal) const;
+  void reject_scalar_crossing_into_parameter(
+    const typet &arg_type,
+    const code_typet::argumentst &params,
+    std::size_t param_idx) const;
   void reject_list_for_numpy_parameter(
     const typet &arg_type,
     const code_typet::argumentst &params,

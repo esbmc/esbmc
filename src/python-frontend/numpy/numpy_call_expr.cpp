@@ -5589,6 +5589,41 @@ std::optional<numpy_dtypet> numpy_call_expr::runtime_fill_dtype() const
   return dtype;
 }
 
+static void reject_unbroadcastable_fill(
+  const std::vector<std::size_t> &shape,
+  const std::vector<std::size_t> &dims)
+{
+  bool fits = shape.size() <= dims.size();
+  for (std::size_t axis = 0; fits && axis < shape.size(); ++axis)
+    fits = shape[axis] == 1 ||
+           shape[axis] == dims[dims.size() - shape.size() + axis];
+  if (!fits)
+    throw std::runtime_error(
+      "ValueError: could not broadcast numpy.full() fill into the array shape");
+}
+
+static void reject_array_fill_dtype(const std::optional<numpy_dtypet> &dtype)
+{
+  if (
+    dtype && (dtype->kind == numpy_dtypet::kindt::string ||
+              dtype->kind == numpy_dtypet::kindt::complex))
+    throw std::runtime_error(
+      "TypeError: numpy.full() of an array fill with a string or complex "
+      "dtype= is not supported");
+}
+
+static void advance_row_major_index(
+  std::vector<std::size_t> &index,
+  const std::vector<std::size_t> &dims)
+{
+  for (std::size_t axis = index.size(); axis-- > 0;)
+  {
+    if (++index[axis] < dims[axis])
+      break;
+    index[axis] = 0;
+  }
+}
+
 // A fill computed as an array: bound once, then each cell of the shape reads
 // the element broadcasting gives it, cast to dtype=.
 std::optional<exprt> numpy_call_expr::full_of_array_fill(
@@ -5609,22 +5644,10 @@ std::optional<exprt> numpy_call_expr::full_of_array_fill(
     return std::nullopt;
   const auto extents = type_handler_.get_array_type_shape(type);
   const std::vector<std::size_t> shape(extents.begin(), extents.end());
-  if (shape.size() > dims.size())
-    throw std::runtime_error(
-      "ValueError: could not broadcast numpy.full() fill into the array shape");
+  reject_unbroadcastable_fill(shape, dims);
   const std::size_t skipped = dims.size() - shape.size();
-  for (std::size_t axis = 0; axis < shape.size(); ++axis)
-    if (shape[axis] != 1 && shape[axis] != dims[skipped + axis])
-      throw std::runtime_error(
-        "ValueError: could not broadcast numpy.full() fill into the array "
-        "shape");
   const auto dtype = numpy_dtype_from_name(get_dtype());
-  if (
-    dtype && (dtype->kind == numpy_dtypet::kindt::string ||
-              (dtype->kind == numpy_dtypet::kindt::complex)))
-    throw std::runtime_error(
-      "TypeError: numpy.full() of an array fill with a string or complex "
-      "dtype= is not supported");
+  reject_array_fill_dtype(dtype);
   const typet element = dtype ? dtype->element_type() : leaf;
   std::vector<exprt> cells;
   std::vector<std::size_t> index(dims.size(), 0);
@@ -5641,12 +5664,7 @@ std::optional<exprt> numpy_call_expr::full_of_array_fill(
         read.type().subtype());
     cells.push_back(
       read.type() == element ? read : typecast_exprt(read, element));
-    for (std::size_t axis = index.size(); axis-- > 0;)
-    {
-      if (++index[axis] < dims[axis])
-        break;
-      index[axis] = 0;
-    }
+    advance_row_major_index(index, dims);
   }
   return converter_.materialize_numpy_elements(call_, dims, cells, element);
 }

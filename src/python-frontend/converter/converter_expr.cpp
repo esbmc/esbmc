@@ -1211,6 +1211,20 @@ exprt python_converter::numpy_param_as_array(const exprt &operand) const
 
 // An arithmetic operand naming a view reads its elements: the view's pointer
 // would otherwise add as an address.
+void python_converter::numpy_view_operands_as_arrays(
+  const nlohmann::json &element,
+  const nlohmann::json &left,
+  const nlohmann::json &right,
+  exprt &lhs,
+  exprt &rhs)
+{
+  const std::string kind = element.value("_type", "");
+  if (kind != "BinOp" && kind != "AugAssign")
+    return;
+  lhs = numpy_view_operand_as_array(left, lhs);
+  rhs = numpy_view_operand_as_array(right, rhs);
+}
+
 exprt python_converter::numpy_view_operand_as_array(
   const nlohmann::json &node,
   const exprt &operand)
@@ -2418,6 +2432,22 @@ void python_converter::reject_attribute_added_on_some_paths(
 // referenced from synthesized source; and reads through an np.nditer (an
 // attribute or operand of the iterator, a name bound to what it yields).
 std::optional<exprt>
+python_converter::try_numpy_attribute_expr(const nlohmann::json &element)
+{
+  const nlohmann::json &value = element["value"];
+  const std::string kind = value.value("_type", "");
+  if (kind == "Attribute")
+    return try_get_numpy_storage_attr(
+      value, element["attr"].get<std::string>());
+  if (kind != "BinOp" || !is_numpy_valued_node(value))
+    return std::nullopt;
+  // The operation runs once, and its array answers like any other.
+  nlohmann::json attribute = element;
+  attribute["value"] = bind_to_fresh_name(value, "ESBMC_numpy_operand_");
+  return get_expr(attribute);
+}
+
+std::optional<exprt>
 python_converter::get_intercepted_expr(const nlohmann::json &element)
 {
   if (!element.is_object())
@@ -2427,6 +2457,9 @@ python_converter::get_intercepted_expr(const nlohmann::json &element)
     return get_named_expr(element);
   if (type == "EsbmcExpr")
     return prebuilt_exprs_.at(element["slot"].get<std::size_t>());
+  if (type == "Attribute")
+    if (auto attribute = try_numpy_attribute_expr(element))
+      return attribute;
   if (numpy_nditers_.empty())
     return std::nullopt;
   numpy_nditer nditer(*this);
@@ -2781,13 +2814,6 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       // Handle nested attribute chain (e.g., self.b.a)
       if (element["value"]["_type"] == "Attribute")
       {
-        if (
-          std::optional<exprt> storage = try_get_numpy_storage_attr(
-            element["value"], element["attr"].get<std::string>()))
-        {
-          expr = *storage;
-          break;
-        }
         exprt base_expr = get_expr(element["value"]);
         const std::string &attr_name = element["attr"].get<std::string>();
 
@@ -2901,17 +2927,6 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         // a name: `d[key].attr`, `C().attr`, `(a + b).attr`, `(-a).attr`. A
         // named instance (`c = a + b; c.attr`) already works; this covers the
         // unnamed case for every receiver we can convert to an object.
-        // The operation runs once, and its array answers like any other.
-        if (
-          element["value"].value("_type", "") == "BinOp" &&
-          is_numpy_valued_node(element["value"]))
-        {
-          nlohmann::json attribute = element;
-          attribute["value"] =
-            bind_to_fresh_name(element["value"], "ESBMC_numpy_operand_");
-          expr = get_expr(attribute);
-          break;
-        }
         exprt base_expr = get_expr(element["value"]);
         const std::string &attr_name = element["attr"].get<std::string>();
 
