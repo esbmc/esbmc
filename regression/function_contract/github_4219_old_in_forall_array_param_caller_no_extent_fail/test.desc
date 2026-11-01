@@ -1,0 +1,5 @@
+CORE
+main.c
+--enforce-contract nofresh --unwind 8
+^  contract ensures$
+^VERIFICATION FAILED$

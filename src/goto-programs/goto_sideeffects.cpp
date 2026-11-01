@@ -162,9 +162,13 @@ static const exprt *bound_ptr_param_offset(
   const exprt &offset = target.op0();
   if (offset.id() != "+" || offset.operands().size() != 2)
     return nullptr;
+  const exprt *lv = &offset.op0();
+  while (lv->id() == exprt::typecast && lv->operands().size() == 1)
+    lv = &lv->op0();
   if (
     !mentions_symbol(offset.op1(), bound_vars) ||
-    offset.op0().type().id() != "pointer" || offset.op0().id() != "symbol")
+    lv->type().id() != "pointer" ||
+    (lv->id() != "symbol" && lv->id() != exprt::member))
     return nullptr;
   return &offset;
 }
@@ -220,8 +224,12 @@ static void lift_old_over_bound_index(
     // dereference into here, only a pointer, so the whole-object wrapping
     // the array case uses below (dereference outside, index outside that)
     // cannot be built. #7057.
+    // ((char *)p)[j]: snapshot p itself and re-apply the cast to its value.
+    exprt lv = base;
+    while (lv.id() == exprt::typecast && lv.operands().size() == 1)
+      lv = lv.op0();
     exprt whole_snapshot = *call;
-    whole_snapshot.op1().operands()[0] = address_of_exprt(base);
+    whole_snapshot.op1().operands()[0] = address_of_exprt(lv);
 
     // target->type() is the *pointer* type here (target is the "+" node,
     // not an index_exprt) -- its subtype is the element type. A struct
@@ -237,9 +245,6 @@ static void lift_old_over_bound_index(
     typet elem_ptr_type("pointer");
     elem_ptr_type.subtype() = elem_type; // T*
 
-    typet elem_ptr_ptr_type("pointer");
-    elem_ptr_ptr_type.subtype() = elem_ptr_type; // T**
-
     // whole_snapshot's argument is &base (base = the pointer parameter
     // itself), matching what a bare __ESBMC_old(base) already does -- the
     // macro's own *(T*)old_raw(&x) shape, with x = base and T = base's own
@@ -248,9 +253,14 @@ static void lift_old_over_bound_index(
     // any arithmetic on it -- casting straight to T* and dereferencing
     // directly (as if base's own storage held the array) reads past base's
     // few bytes instead of the region it points to.
-    exprt snapshot_ptr_cast = typecast_exprt(whole_snapshot, elem_ptr_ptr_type);
-    exprt snapshotted_ptr("dereference", elem_ptr_type);
-    snapshotted_ptr.copy_to_operands(snapshot_ptr_cast);
+    typet lv_ptr_ptr_type("pointer");
+    lv_ptr_ptr_type.subtype() = lv.type();
+    exprt snapshot_ptr_cast = typecast_exprt(whole_snapshot, lv_ptr_ptr_type);
+    exprt lv_value("dereference", lv.type());
+    lv_value.copy_to_operands(snapshot_ptr_cast);
+    exprt snapshotted_ptr = lv.type() == elem_ptr_type
+                              ? lv_value
+                              : typecast_exprt(lv_value, elem_ptr_type);
 
     plus_exprt offset_ptr(snapshotted_ptr, index);
     offset_ptr.type() = elem_ptr_type;

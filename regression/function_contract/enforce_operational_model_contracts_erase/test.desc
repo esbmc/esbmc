@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--enforce-operational-model-contracts --unwind 6
+^VERIFICATION SUCCESSFUL$

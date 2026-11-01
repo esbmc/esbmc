@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--contract-operational-models --force-malloc-success
+^VERIFICATION SUCCESSFUL$
