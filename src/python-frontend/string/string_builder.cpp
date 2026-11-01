@@ -221,7 +221,7 @@ exprt string_builder::ensure_null_terminated_string(exprt &e)
 
     std::vector<exprt> chars;
     chars.push_back(
-      make_char_constant(static_cast<unsigned char>(char_val.to_int64())));
+      make_char_constant(static_cast<unsigned char>(char_val.to_uint64())));
     return build_null_terminated_string(chars);
   }
 

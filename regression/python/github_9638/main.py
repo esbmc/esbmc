@@ -20,3 +20,7 @@ u = "Hello world"
 assert not u.istitle()
 v = "HELLO"
 assert not v.istitle()
+y = u.istitle()
+assert not y
+r = "abc".encode("ascii").decode("ascii")
+assert r == "abc"
