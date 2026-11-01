@@ -6639,7 +6639,17 @@ void python_annotation<Json>::add_annotation(Json &body)
     }
 
     if (infer_type(element, body, inferred_type) == InferResult::UNKNOWN)
+    {
+      // The first store of an Optional name must declare it as one, even when
+      // a method its receiver's class lacks leaves that store untyped (#9338).
+      if (is_missing_method_call(element["value"]))
+      {
+        const std::string optional = widen_to_optional_scalar(element, "");
+        if (!optional.empty())
+          update_assignment_node(element, optional);
+      }
       continue;
+    }
 
     const auto &rhs = element["value"];
 
@@ -6648,6 +6658,15 @@ void python_annotation<Json>::add_annotation(Json &body)
       (rhs["_type"] == "NameConstant" && rhs["value"].is_null()) ||
       (rhs["_type"] == "Name" && rhs.contains("id") && rhs["id"] == "None"))
       inferred_type = "NoneType";
+
+    // The classes of a parameter that is specialised are not known yet, so
+    // the None store waits for the copy that knows them (#9338).
+    if (
+      inferred_type == "NoneType" && stores_call_on_unannotated_param(element))
+    {
+      deferred_none_functions_.insert(current_func_name_context_);
+      continue;
+    }
 
     if (inferred_type.empty())
     {
@@ -6688,6 +6707,61 @@ std::string python_annotation<Json>::widen_to_optional_scalar(
   return it->second.empty() ? inferred_type : it->second;
 }
 
+/// Whether `element`, a `name = None`, shares its name with a store that calls
+/// a method on a parameter of the current function that has no annotation yet.
+template <class Json>
+bool python_annotation<Json>::stores_call_on_unannotated_param(
+  const Json &element)
+{
+  const Json &target = element["targets"][0];
+  if (current_func == nullptr || target["_type"] != "Name")
+    return false;
+  std::vector<const Json *> stores;
+  collect_name_stores(
+    target["id"].template get<std::string>(), (*current_func)["body"], stores);
+  for (const Json *store : stores)
+  {
+    const Json &value = (*store)["value"];
+    if (
+      value.value("_type", "") != "Call" || !value.contains("func") ||
+      value["func"].value("_type", "") != "Attribute" ||
+      value["func"]["value"].value("_type", "") != "Name")
+      continue;
+    const std::string receiver =
+      value["func"]["value"]["id"].template get<std::string>();
+    for (const Json &param : (*current_func)["args"]["args"])
+      if (param.value("arg", "") == receiver && !has_annotation(param))
+        return true;
+  }
+  return false;
+}
+
+/// Whether `value` calls a method that the user class of its receiver does not
+/// define, as `x.f()` does for a parameter that the call sites type as a class
+/// without `f`. Such a call raises AttributeError and stores nothing.
+template <class Json>
+bool python_annotation<Json>::is_missing_method_call(const Json &value)
+{
+  if (
+    value.value("_type", "") != "Call" || !value.contains("func") ||
+    value["func"].value("_type", "") != "Attribute" ||
+    value["func"]["value"].value("_type", "") != "Name")
+    return false;
+  const Json receiver = find_var_node_for_inference(
+    value["func"]["value"]["id"].template get<std::string>());
+  if (!has_annotation(receiver) || !receiver["annotation"].contains("id"))
+    return false;
+  const Json cls = json_utils::find_class(
+    ast_["body"], receiver["annotation"]["id"].template get<std::string>());
+  if (cls.empty() || !cls["bases"].empty())
+    return false;
+  const std::string method = value["func"]["attr"].template get<std::string>();
+  for (const Json &member : cls["body"])
+    if (member.value("name", "") == method)
+      return false;
+  return true;
+}
+
 /// "Optional[T]" when every binding of `name` in `scope` is a plain
 /// `name = value` storing None or a value of one scalar type T, with at least
 /// one of each; "" otherwise.
@@ -6713,8 +6787,10 @@ std::string python_annotation<Json>::optional_scalar_of(
     std::string type;
     if (stores_none(store))
       type = "NoneType";
-    else
+    else if (!is_missing_method_call((*store)["value"]))
       infer_type(*store, scope, type);
+    else
+      continue;
     types.insert(type);
   }
   if (types.erase("NoneType") == 0 || types.size() != 1)
