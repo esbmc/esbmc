@@ -1,6 +1,6 @@
 # ESBMC NumPy — Remaining Work
 
-**Updated:** 2026-10-28.
+**Updated:** 2026-10-31.
 
 This file tracks only what is **not yet implemented, broken, risky, or queued
 as backlog** in the NumPy module. If an item is not listed here as a gap, TODO,
@@ -29,14 +29,14 @@ and its stages, ADR-NP-004 the SMT-array scalability decision, and "principle
 
 | Category | Missing items |
 |---|---|
-| Array creation | `object`, structured/record and custom dtype objects (`np.dtype(...)`), dtype strings with a width or a type code (`"U3"`, `"i4"`, `"V8"`) and a dtype held in a variable reject explicitly. Integer and float dtypes narrower than 64 bits are applied as the constructor's cast (truncation, `OverflowError` for an out-of-range integer, NumPy's `arange` wraparound) but stored at 64 bits, so later arithmetic does not wrap or round at the dtype's width (an `int8` array would read as a string, and NumPy compares a `float32` element with a Python float in `float32`). String arrays are fixed-width: element reads, writes (truncated to the width), comparison, `len`, copies and iteration are modelled; slicing, `in` and passing them to a function reject. Complex arrays support element reads, writes, comparison, `.real`/`.imag`, copies, slices and iteration; reducers, arithmetic, builtins and passing them to a function reject. `np.full` with an array fill (broadcasting) or with `dtype=` and a non-literal fill, a number converted to a string dtype, `np.linspace` with `axis=`/`device=`, `retstep=True` not unpacked into two names, or a non-constant `start`/`stop`/`num`, and `arange`/`linspace` above 10000 elements reject. A constructor imported by name (`from numpy import full`) is not recognised. Broad constructor parity beyond `zeros`/`ones`/`full`/`array`/`eye`/`identity`/`linspace`/`arange`. |
-| Element-wise operators | `+ - * / // ** % & \| ^ << >>` follow NumPy's broadcasting between numeric arrays of concrete shapes and numbers, with NumPy's result dtype; `%` takes the divisor's sign for floats as well, from `fmod` as NumPy's `divmod` does, an integer array raised to a negative integer power raises NumPy's `ValueError`, and a bitwise operator with a float operand raises its `TypeError`. Incompatible shapes raise NumPy's broadcasting `ValueError` when the operator runs, so it can be caught; the functional forms (`np.add` and the like) still reject them during conversion. Element-wise arithmetic on string or complex arrays rejects. |
+| Array creation | `object`, void, bytes (`"S4"`), non-native byte order, structured/record dtypes and `np.dtype(...)` objects reject explicitly, as does a dtype in a name bound more than once. Integer and float arrays are stored at the dtype's width. A function over a narrow operand outside the set that reads the element type (`dot`, `cumsum`, `abs`, `sqrt`, ...) rejects, and so does rebinding a name that holds a narrow scalar. A narrow scalar rejects when passed to a function, returned, stored in an attribute or container, or read with `.item()`; arithmetic over a view or a method's array result of a narrow dtype rejects; a `float32` `mean`, `full_like` over a narrow dtype and `np.array(array, dtype=...)` reject. uint64 rejects shifts, mixing with anything but a non-negative constant, `int()` and `tolist()`. Two bool arrays reject `- % // << >> **`. An in-place operator that NumPy's same_kind rule refuses rejects. `complex64` keeps its components in double storage but computes and compares them in `float32`. `astype` to a string, of a view, or from complex to real rejects. String arrays are fixed-width: element reads and writes, comparison of elements, `len`, `in`, `list`, `tuple`, iteration, `copy`, `tolist`, calls and returns are modelled; a slice is a copy with literal bounds whose writes reject. Any other function, method, attribute, builtin or operator over one rejects (also `sort`, `min`, `max` and comparison of whole arrays, which NumPy provides), and so does a literal mixing strings with numbers, or with non-ASCII or NUL characters. Only an integer converts to a string dtype. A slice, or an element bound to a name, rejects when the array is written, aliased or passed to a function, because neither shares NumPy's storage; a slice of a parameter rejects, and so does `len()` of a bound element. Complex arrays support element reads and writes, element comparison, `.real`/`.imag` of an element, copies, slices, iteration, `+ - * /`, unary minus, `sum`, `prod`, `mean`, `any`, `all`, builtin `sum`, `list`, calls and returns, and the reshaping functions. Any other consumer rejects, including `.real`/`.imag` of an array, `abs`, `dot`, `conj`, `where`, `concatenate`, `flatten`, `*_like`, ordering and comparison of whole arrays. `np.linspace` with `axis=`/`device=`, `retstep=True` not unpacked into two names, or a non-constant `start`/`stop`/`num`, and `arange`/`linspace` above 10000 elements reject. A constructor imported by name (`from numpy import full`) is not recognised. Broad constructor parity beyond `zeros`/`ones`/`full`/`array`/`eye`/`identity`/`linspace`/`arange`. |
+| Element-wise operators | `+ - * / // ** % & \| ^ << >>` follow NumPy's broadcasting between numeric arrays of concrete shapes and numbers, with NumPy's result dtype; `%` takes the divisor's sign for floats as well, from `fmod` as NumPy's `divmod` does, an integer array raised to a negative integer power raises NumPy's `ValueError`, and a bitwise operator with a float operand raises its `TypeError`. Incompatible shapes raise NumPy's broadcasting `ValueError` when the operator runs, so it can be caught; the functional forms (`np.add` and the like) still reject them during conversion. Any operator over a string array rejects; over a complex array `** % //` and the comparisons of whole arrays reject. |
 | Sorting / searching | Symbolic array shapes and symbolic `sorter=` operands for `searchsorted` reject explicitly. Genuine 2-D array input is also rejected, matching NumPy's `ValueError: object too deep for desired array`; 1-D row/column views remain supported. |
 | Direct constructor chaining | Supported for the current concrete constructor subset and direct literal `np.array(...)` receivers across the pinned reducers/views (`sum`, `mean`, `min`, `max`, `argsort`, `searchsorted`, `flatten`, `ravel`, `transpose`, `.T`, `reshape`, `argmin`, `argmax`, `diagonal`, `prod`, `std`, and `var`). Remaining gaps are method forms tied to unsupported constructors, symbolic constructor payloads, or broader unsupported APIs. |
 | Statistics | `a.sum()`/`a.mean()`/`a.min()`/`a.max()`/`a.any()`/`a.all()`/`a.argmin()`/`a.argmax()` method forms and their `axis=0/1` variants are supported over concrete 1-D/2-D ndarrays (including function-returned arrays), sharing the same reducer/comparison policy as the functional forms. Still missing: axis/keepdims/out/overwrite/nan-policy style variants beyond concrete flattened/literal `median` and `percentile`, and reducer axes outside 2-D concrete `axis=0/1`. |
 | Linear algebra | Constant matrices: `det` up to 6x6, `inv` and `solve` up to 6x6, `eig` (eigenvalues and unit eigenvectors) of 2x2 matrices with distinct real eigenvalues and of diagonal ones, `eigvals` of 2x2, diagonal and triangular matrices up to 6x6, `svd` values of 2x2 matrices and its `U`, `S`, `Vh` factors of 2x2 and diagonal ones, and `norm` of vectors (orders 1, 2, inf, -inf) and matrices (fro, 1, -1, inf, -inf, and 2 for a 2x2 matrix) with `axis` and `keepdims`. Matrices with run-time entries: `det` up to 3x3 and the vector and Frobenius norms. Results are bounded around the exact value, eigenvectors and singular vectors with either sign and eigenvalues in either order; a result every IEEE implementation computes exactly keeps its value, and a bound that overflows leaves the result unconstrained. Keywords bind as in CPython, constructor arrays (`np.eye(3)`) and views are read, and a singular matrix raises a `LinAlgError` the program can catch. Missing: `eig`/`svd` of larger dense or non-square matrices, complex eigenvalues in `eig`, a repeated eigenvalue or singular value of a non-diagonal matrix, complex matrices, run-time entries for `inv`/`solve`/`eig`/`eigvals`/`svd` and for `det` past 3x3, `norm` orders `nuc`/-2/p, matrices past 6x6; a non-square or 0-d operand rejects during conversion instead of raising a catchable `LinAlgError`. |
 | Math functions | `exp`, `log`, `log2`, `log10`, `sqrt`, `sin`, `cos`, `tan`, `arcsin`/`asin`, `arccos`/`acos`, `arctan`/`atan`, `sinh`, `cosh` and `tanh` of run-time numbers, and of arrays and views of constant shape element by element, are bounded, and `math.*` shares the model with Python's `ValueError`/`OverflowError`. Missing: the other transcendental functions (`expm1`, `log1p`, `exp2`, `arcsinh`/`asinh`, `arccosh`, `arctanh`, `cbrt`, `hypot`, `arctan2`) reject in NumPy while their `math.*` forms still use the C library models (item 1); `np.isnan`/`np.isinf`/`np.isfinite` and the constants `np.inf`/`np.nan` are not recognised; complex arguments, string arrays and views of run-time shape reject; keywords other than `out=None` and `dtype=float` take the older paths. |
-| Random | Generator state and objects (`seed`, `get_state`, `set_state`, `default_rng`, `Generator`, `RandomState`) and every unmodelled `np.random` function (`shuffle`, `permutation`, `multivariate_normal`, `laplace`, `logistic`, ...) raise `TypeError`; `choice(p=...)` does too, since a probability vector has no encoding that keeps ADR-NP-002's over-approximation. Parameters must be scalars (no broadcasting of array parameters). `size` must be integer literals, at most 1024 samples (each sample is unrolled); a `size` read at run time rejects. `choice` takes a 1-D literal sequence, ndarray or view, not an integer `a` or a slice of a string array. `randint` rejects `dtype=bool` and `uint64`, and narrow integer dtypes are stored at 64 bit as for the constructors. |
+| Random | Generator state and objects (`seed`, `get_state`, `set_state`, `default_rng`, `Generator`, `RandomState`) and every unmodelled `np.random` function (`shuffle`, `permutation`, `multivariate_normal`, `laplace`, `logistic`, ...) raise `TypeError`; `choice(p=...)` does too, since a probability vector has no encoding that keeps ADR-NP-002's over-approximation. Parameters must be scalars (no broadcasting of array parameters). `size` must be integer literals, at most 1024 samples (each sample is unrolled); a `size` read at run time rejects. `choice` takes a 1-D literal sequence, ndarray or view, not an integer `a`. `randint` rejects `dtype=bool` and `uint64`. |
 | Structured arrays | Record dtypes. |
 | Views / strides | Views passed to lambdas used as callbacks, through `**kwargs` or to other modules' functions; views passed to multi-statement functions outside the subset whose layout is read from the call sites (see the shared-buffer view model row); views stored by mutation, in attributes or globals; `reshape`/`ravel` of N-D views with a run-time stride; arrays whose shape has no static upper bound (`np.zeros(n)` with `n` unconstrained). |
 | Iteration | `np.nditer` supports the flags `multi_index`, `c_index`, `f_index`, `external_loop`, `buffered`, `grow_inner`, `zerosize_ok` and `refs_ok`; several operands with broadcasting; per-operand `readonly`/`readwrite`/`writeonly`; `op_dtypes` with `casting`; `op_axes`; the orders C, F, A and K; the protocol (`next`, `iternext`, `iter(it)` in a loop, `value`, `finished`, `iterindex`, `index`, `multi_index`, `shape`, `ndim`, `itersize`, `nop`, `operands`, `reset`, `close` and `with`); and buffered write-back through a cast at exhaustion or close. Missing, each rejected: an iterator used as a value (passed to a function, `list(it)`, `iter(it) is it`); the flags `ranged`, `reduce_ok`, `common_dtype`, `copy_if_overlap` and `delay_bufalloc`; a buffered cast write over more than 64 elements or a layout known only at run time; `reset` with buffered writes pending; `shape`/`ndim` of an iterator tracking an index without a multi-index; rebinding an operand's source inside a branch or loop while the iterator is alive. |
@@ -88,10 +88,16 @@ and its stages, ADR-NP-004 the SMT-array scalability decision, and "principle
    its terms, and concrete norms are bounded unless exact in every IEEE
    implementation.
 8. **The suite's cost is in its slow tests, not its count.**
-   `regression/numpy` has 2396 tests; six linear algebra tests that repeated
+   `regression/numpy` has 2397 tests; six linear algebra tests that repeated
    another test's contract were removed, each listed with its replacement in
    the commit that removes them. Shortening the CI run needs per-test CI
    timings to merge the expensive programs.
+
+9. **A scalar read from an array divides like a Python number.** `a[0] / 0`
+   with a real or complex128 element raises `ZeroDivisionError`, where NumPy
+   returns inf or nan: a false alarm, and a wrong success when the program
+   catches the exception. Whole-array division and complex64 scalars follow
+   NumPy.
 
 ---
 
@@ -105,8 +111,9 @@ verdict. Gaps in "Missing indexing / slicing" and "Missing API
 surface" should reject explicitly; any known false alarm must be listed as a
 separate gap instead of treated as supported behavior.
 
-The known wrong success is item 1 (`math.*` functions outside the bounded
-set). Every other remaining item is documented backlog.
+The known wrong successes are item 1 (`math.*` functions outside the bounded
+set) and item 9 (a zero divisor in a scalar `except`). Every other remaining
+item is documented backlog.
 
 `regression/numpy` pins one `KNOWNBUG` test (2026-10-25):
 
@@ -144,15 +151,12 @@ reject, each pinned by a `CORE` test:
 
 ## Prioritised next steps
 
-1. **Dtype width and non-numeric arrays** — storage and arithmetic in the
-   dtype's own width (NEP 50 promotion), and the string/complex array
-   consumers that reject today; `object`/structured/custom dtypes stay out.
-2. **Random generator state** — `Generator`/`default_rng`, `seed` and
+1. **Random generator state** — `Generator`/`default_rng`, `seed` and
    probability-vector `choice`; each needs its own ADR-NP-002 decision first.
-3. **Remaining math functions** — bound `expm1`, `log1p`, `exp2`, the
+2. **Remaining math functions** — bound `expm1`, `log1p`, `exp2`, the
    inverse hyperbolic functions, `cbrt`, `hypot` and `arctan2` (NumPy and
    `math.*`, item 1) and recognise `np.isnan`/`np.isinf`/`np.inf`/`np.nan`.
-4. **Linear algebra remainder** — `eig`/`svd` of larger dense matrices,
+3. **Linear algebra remainder** — `eig`/`svd` of larger dense matrices,
    run-time entries beyond `det` and `norm`, and the shape errors as
    catchable `LinAlgError`s.
 
@@ -164,15 +168,13 @@ view model; they stay rejected.
 
 ## Suggested next PRs
 
-The backlog closes in four PRs:
+The backlog closes in three PRs:
 
-1. **Dtype width and non-numeric arrays** — narrow-width storage and
-   arithmetic, string/complex array consumers; the largest of the four.
-2. **Random generator state** — after the ADR decision on state and
+1. **Random generator state** — after the ADR decision on state and
    probabilities.
-3. **Remaining math functions** — step 3, on the bounded model of
-   `util/arith/transcendental.h`; the smallest of the four.
-4. **Linear algebra remainder** — step 4, on the bounds and checks the
+2. **Remaining math functions** — step 2, on the bounded model of
+   `util/arith/transcendental.h`; the smallest of the three.
+3. **Linear algebra remainder** — step 3, on the bounds and checks the
    current `numpy.linalg` support shares.
 
 ---
