@@ -8811,6 +8811,16 @@ exprt python_converter::apply_string_truthiness(
     notequal2tc(strlen_call2, gen_zero(migrate_type(size_type()))));
   cond.location() = location;
   cond.op0().location() = location;
+  // An Optional[str] holding None is a null pointer, which strlen must not
+  // read. Only a symbol is guarded: copying a call would evaluate it twice.
+  if (is_pointer_type(strlen_arg2) && is_symbol2t(strlen_arg2))
+  {
+    cond = if_exprt(
+      migrate_expr_back(notequal2tc(strlen_arg2, gen_zero(strlen_arg2->type))),
+      cond,
+      false_exprt());
+    cond.location() = location;
+  }
   return cond;
 }
 
