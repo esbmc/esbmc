@@ -1,0 +1,7 @@
+CORE
+main.cpp
+--verbosity 9
+Applying #pragma unroll 2 to loop
+^\[Counterexample\]$
+unwinding assertion loop
+^VERIFICATION FAILED$
