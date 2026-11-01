@@ -70,6 +70,8 @@ public:
   bool preprocess_constructor_calls(Json &node);
   void preprocess_method_calls(const Json &node);
   void preprocess_receiver_method_calls();
+  bool preprocess_self_method_calls();
+  std::string self_call_arg_type(const Json &arg, const Json &caller);
   bool is_instance_call(const Json &func) const;
   Json *class_method(const std::string &cls, const Json &method);
   /// Sentinel recorded for a call-site argument this pass cannot type; never
