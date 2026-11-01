@@ -204,6 +204,14 @@ private:
   /// has a __str__; nil otherwise.
   exprt str_of_object(exprt &value, const nlohmann::json &arg) const;
 
+  /// repr() of the instance @p value through __repr__ or object's default,
+  /// when its runtime class is its static class; nil otherwise.
+  exprt repr_of_object(exprt &value) const;
+
+  /// repr(x): complex, instance, or modelled str/number repr; otherwise the
+  /// general call.
+  exprt handle_repr_call();
+
   /*
    * object(): a pointer to a fresh heap object, so each call has its own
    * identity and is never None.
