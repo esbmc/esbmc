@@ -4354,10 +4354,10 @@ expr2tc code_contractst::materialize_ptr_object_old_snapshot(
     std::vector<expr2tc>{ptr, gen_zero(get_int32_type())});
   call->location = location;
 
-  const expr2tc n = div2tc(
-    size_type2(), bytes, constant_int2tc(size_type2(), elem_sz));
-  const expr2tc snap = local(
-    "__ESBMC_old_object_snapshot_", array_type2tc(elem_type, n, false));
+  const expr2tc n =
+    div2tc(size_type2(), bytes, constant_int2tc(size_type2(), elem_sz));
+  const expr2tc snap =
+    local("__ESBMC_old_object_snapshot_", array_type2tc(elem_type, n, false));
   const expr2tc i = local("__ESBMC_old_object_i_", size_type2());
 
   const type2tc elem_ptr = pointer_type2tc(elem_type);
