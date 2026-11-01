@@ -1290,8 +1290,10 @@ static expr2tc zero_fill_aggregate(
 }
 
 // Shared nondet collection logic (used by both TestComp and CTest)
-std::vector<collected_nondet_value>
-collect_nondet_values(const symex_target_equationt &target, smt_convt &smt_conv)
+std::vector<collected_nondet_value> collect_nondet_values(
+  const symex_target_equationt &target,
+  smt_convt &smt_conv,
+  bool harness_inputs_only)
 {
   std::vector<collected_nondet_value> results;
   std::unordered_set<std::string> seen_nondets;
@@ -1315,7 +1317,9 @@ collect_nondet_values(const symex_target_equationt &target, smt_convt &smt_conv)
       // mark_decl_as_non_det) is not a program input: the test harness only
       // feeds values to __VERIFIER_nondet_*() calls, so emitting it would
       // shift every following input.
-      if (SSA_step.source.pc->location.get_bool("#decl_nondet"))
+      if (
+        harness_inputs_only &&
+        SSA_step.source.pc->location.get_bool("#decl_nondet"))
         continue;
 
       // Skip system library nondets (stdin, stdout, stderr, etc.)
@@ -1436,7 +1440,7 @@ void generate_testcase(
             << "\n";
 
   // Use the SHARED collection logic
-  auto collected_values = collect_nondet_values(target, smt_conv);
+  auto collected_values = collect_nondet_values(target, smt_conv, true);
 
   // Output collected values to XML
   for (const auto &val : collected_values)
