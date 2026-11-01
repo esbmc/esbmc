@@ -5756,24 +5756,46 @@ bool python_annotation<Json>::is_instance_call(const Json &func) const
 
 /// Types the unannotated parameters of a method from its `obj.m(args)` calls
 /// at module level, where `obj` is a name bound once to an instance of a
-/// module class, when every such call passes one type (#8923). Calls inside a
-/// def are skipped: this pass has no scope to resolve their receiver in.
+/// module class, when every such call passes one type (#8923). With
+/// @p inside_functions the calls in top-level defs count too, their receivers
+/// resolved in the def's scope (#9661). Returns the (class, method) pairs it
+/// typed.
 template <class Json>
-void python_annotation<Json>::preprocess_receiver_method_calls()
+std::vector<std::pair<std::string, std::string>>
+python_annotation<Json>::preprocess_receiver_method_calls(bool inside_functions)
 {
   std::map<std::pair<Json *, size_t>, std::set<std::string>> seen;
-  std::function<void(const Json &)> walk = [&](const Json &node) {
+  std::map<Json *, std::pair<std::string, std::string>> owner;
+  std::function<void(Json &)> walk = [&](Json &node) {
     if (node.is_array())
     {
-      for (const Json &item : node)
+      for (Json &item : node)
         walk(item);
       return;
     }
     if (!node.is_object())
       return;
     const std::string kind = node.value("_type", "");
-    if (kind == "FunctionDef" || kind == "ClassDef" || kind == "Lambda")
+    if (kind == "ClassDef" || kind == "Lambda")
       return;
+    if (kind == "FunctionDef")
+    {
+      if (!inside_functions || !current_class_name_.empty())
+        return;
+      const std::string saved_context = current_func_name_context_;
+      Json *saved_current = current_func;
+      Json *saved_parent = parent_func;
+      const std::string name = node["name"].template get<std::string>();
+      current_func_name_context_ =
+        saved_context.empty() ? name : saved_context + "@F@" + name;
+      parent_func = saved_current;
+      current_func = &node;
+      walk(node["body"]);
+      current_func_name_context_ = saved_context;
+      current_func = saved_current;
+      parent_func = saved_parent;
+      return;
+    }
     const Json &func = node.value("func", Json());
     // `obj(args)` on a callable instance calls `obj.__call__(args)` (#9070).
     const bool instance_call = kind == "Call" && is_instance_call(func);
@@ -5796,6 +5818,7 @@ void python_annotation<Json>::preprocess_receiver_method_calls()
           if (!(*method)["decorator_list"].empty())
             break;
           const Json &params = (*method)["args"]["args"];
+          owner[method] = {cls, attr};
           for (size_t i = 1; i < params.size(); ++i)
             seen[{method, i}].insert(
               i - 1 < node["args"].size() &&
@@ -5805,19 +5828,58 @@ void python_annotation<Json>::preprocess_receiver_method_calls()
           break;
         }
     }
-    for (const auto &kv : node.items())
+    for (auto &kv : node.items())
       if (kv.value().is_structured())
         walk(kv.value());
   };
   walk(ast_["body"]);
 
+  std::vector<std::pair<std::string, std::string>> typed;
   for (const auto &[key, types] : seen)
   {
     Json &param = (*key.first)["args"]["args"][key.second];
     if (
       types.size() == 1 && !types.begin()->empty() &&
       param.value("annotation", Json()).is_null())
+    {
       add_parameter_annotation(param, *types.begin());
+      typed.push_back(owner[key.first]);
+    }
+  }
+  return typed;
+}
+
+/// Types the methods called on a receiver that only the specialised copies
+/// of a def resolve, then infers again what depended on those parameters
+/// (#9661).
+template <class Json>
+void python_annotation<Json>::retype_methods_called_on_receivers()
+{
+  if (preprocess_receiver_method_calls(true).empty())
+    return;
+  const auto forget_inferred_return = [](Json &def) {
+    if (
+      def["returns"].is_object() &&
+      def["returns"].value("_inferred_annotation", false))
+      def["returns"] = nullptr;
+  };
+  for (Json &element : ast_["body"])
+  {
+    if (element["_type"] == "ClassDef")
+      for (Json &member : element["body"])
+      {
+        if (member["_type"] == "FunctionDef")
+          forget_inferred_return(member);
+      }
+    else if (element["_type"] == "FunctionDef")
+      forget_inferred_return(element);
+  }
+  for (Json &element : ast_["body"])
+  {
+    if (element["_type"] == "ClassDef")
+      annotate_class(element);
+    else if (element["_type"] == "FunctionDef")
+      annotate_function(element);
   }
 }
 
@@ -6064,6 +6126,7 @@ void python_annotation<Json>::add_type_annotation()
   }
 
   apply_pending_specializations();
+  retype_methods_called_on_receivers();
 }
 
 template <class Json>
