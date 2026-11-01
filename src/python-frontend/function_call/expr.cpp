@@ -4498,6 +4498,12 @@ bool function_call_expr::is_math_function_dispatch_call() const
          bounded_math_import().has_value();
 }
 
+static bool overflows(const std::string &f)
+{
+  return f == "exp" || f == "exp2" || f == "expm1" || f == "sinh" ||
+         f == "cosh";
+}
+
 static bool is_finite_constant(const exprt &e)
 {
   return e.is_constant() && e.type().is_floatbv() &&
@@ -4566,6 +4572,14 @@ exprt function_call_expr::dispatch_math_call()
   return handle_math_function_dispatch();
 }
 
+// exp/sinh/cosh of a run-time number take bounded_math, which raises too.
+static bool
+calls_overflow_model(const std::string &f, const nlohmann::json &args)
+{
+  return f == "ldexp" || ((f == "expm1" || f == "exp2") && args.size() == 1 &&
+                          !is_number_literal(args[0]));
+}
+
 exprt function_call_expr::handle_math_function_dispatch()
 {
   const std::string func_name = math_function_name(function_id_.get_function());
@@ -4588,11 +4602,7 @@ exprt function_call_expr::handle_math_function_dispatch()
   // argument is folded below instead.
   const bool in_program = !converter_.is_model_file(call_);
   if (
-    in_program &&
-    (func_name == "ldexp" ||
-     ((func_name == "expm1" || func_name == "exp2") && args.size() == 1 &&
-      !is_number_literal(args[0]))) &&
-    !call_has_complex())
+    in_program && calls_overflow_model(func_name, args) && !call_has_complex())
     return handle_general_function_call();
 
   auto require_one_arg = [&]() -> exprt {
@@ -4638,11 +4648,7 @@ exprt function_call_expr::handle_math_function_dispatch()
     exprt dispatched =
       converter_.get_math_handler().handle(func_name, arg_expr, call_);
     // Only a finite folded result is known not to overflow.
-    if (
-      in_program &&
-      (func_name == "exp" || func_name == "exp2" || func_name == "expm1" ||
-       func_name == "sinh" || func_name == "cosh") &&
-      !is_finite_constant(dispatched))
+    if (in_program && overflows(func_name) && !is_finite_constant(dispatched))
       return handle_general_function_call();
     if (!dispatched.is_nil())
       return dispatched;
