@@ -1,0 +1,10 @@
+# Issue #9359: above 2**53 only the even ints are floats.
+n = nondet_int()
+__ESBMC_assume(n > 9007199254740992 and n < 18014398509481984)
+f = float(n)
+assert (n == f) == (n % 2 == 0)
+assert (n <= f) == (n == f or n < f)
+assert n < float("inf")
+assert not (n == float("nan"))
+assert n != float("nan")
+assert not (n < float("nan"))

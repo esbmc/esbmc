@@ -66,8 +66,8 @@ std::optional<expr2tc> python_list::fast_elem_equality(
   const bool lhs_tuple = tuples.is_tuple_type(lhs_type);
   const bool rhs_tuple = tuples.is_tuple_type(rhs_type);
 
-  // Same-type numeric/bool compares directly; mixed numeric promotes both
-  // sides to double first. A tuple compares directly only against the
+  // Same-type numeric/bool compares directly; int against float by exact
+  // value, others as doubles. A tuple compares directly only against the
   // identical tuple type: two tuples whose string members were padded to
   // different widths are different struct sorts, which an equality would not
   // relate. Against a number or a bool a tuple is never equal; the runtime
@@ -78,6 +78,10 @@ std::optional<expr2tc> python_list::fast_elem_equality(
     (is_numeric(lhs_type) || lhs_type == bool_type() || lhs_tuple))
   {
   }
+  else if (
+    expr2tc exact =
+      python_converter::exact_int_float_relation("Eq", lhs_val, rhs_val))
+    return exact;
   else if (is_numeric(lhs_type) && is_numeric(rhs_type))
   {
     lhs_val = build_typecast(lhs_val, double_type());
