@@ -1,0 +1,6 @@
+regression/esbmc-cpp/cpp/cpp17_shl_into_sign_bit_defined
+regression/esbmc-cpp/cpp/shl_into_sign_bit_cpp98
+regression/esbmc-cpp/cpp/shl_into_sign_bit_cpp11
+regression/esbmc-cpp/cpp/shl_into_sign_bit_cpp17
+regression/esbmc-cpp/cpp/shl_past_unsigned_cpp17_fail
+regression/esbmc-cpp/cpp/cpp98_shl_legacy_kept_check_fail
