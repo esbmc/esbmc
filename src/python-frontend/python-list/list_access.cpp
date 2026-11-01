@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <optional>
 
+#include <iostream>
+
 using namespace python_expr;
 using namespace python_list_detail;
 
@@ -4571,6 +4573,7 @@ std::optional<exprt> python_list::resolve_nested_list_element(
         // that symbol so deeper subscripts (Q[i][j]) still resolve
         // int/float.  For parameter-annotation-only entries (elem_id
         // empty) fall through to the dynamic __ESBMC_list_at path below.
+        
         if (!elem_id.empty())
         {
           exprt list_at_call = build_list_at_call(array, pos_expr, list_value_);
@@ -4588,6 +4591,7 @@ std::optional<exprt> python_list::resolve_nested_list_element(
 
           symbolt &inner_sym = converter_.create_tmp_symbol(
             list_value_, "$nested_list$", elem_type, exprt());
+
           code_declt inner_decl(build_symbol(inner_sym));
           inner_decl.location() = loc;
           converter_.add_instruction(inner_decl);
