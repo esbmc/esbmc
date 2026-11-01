@@ -3487,6 +3487,7 @@ exprt python_list::handle_range_slice(
         if (bound["_type"] == "UnaryOp" && bound["op"]["_type"] == "USub")
         {
           exprt abs_value = converter_.get_expr(bound["operand"]);
+          abs_value = remove_function_calls_recursive(abs_value, slice_node);
           // 0 - (int64)abs_value: both operands are signedbv64 (same width).
           return build_sub(
             from_integer(0, signedbv_typet(64)),
