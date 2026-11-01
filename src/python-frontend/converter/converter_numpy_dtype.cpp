@@ -995,6 +995,7 @@ void python_converter::bind_numpy_scalar_name(
     (is_complex_type(rhs_leaf) || rhs_leaf.is_floatbv() ||
      rhs_leaf.is_signedbv() || rhs_leaf.is_unsignedbv() ||
      rhs_leaf.is_bool()) &&
+    !type_utils::is_char_storage(rhs.type().subtype()) &&
     !type_utils::is_bytes_array(rhs.type()))
   {
     lhs.type() = rhs.type();
