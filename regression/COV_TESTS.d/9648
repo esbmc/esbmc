@@ -1,0 +1,5 @@
+regression/esbmc-unix/github_9648
+regression/esbmc-unix/github_9648_fail
+regression/esbmc-unix/github_9648-spinlock
+regression/esbmc-unix/github_9648-spinlock_fail
+regression/esbmc-unix/github_9648-deadlock_fail
