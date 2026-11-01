@@ -5,9 +5,13 @@ class A:
     pass
 
 
+class B:
+    pass
+
+
 def f(A):
-    x = A
+    x = A()
     _sv_verifier.check_type(x, A)
 
 
-f(3)
+f(B)

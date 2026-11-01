@@ -5,10 +5,15 @@ class A:
     pass
 
 
+class B:
+    pass
+
+
 def g():
     global A
-    A = 3
+    A = B
 
 
-x = A()
+g()
+x = B()
 _sv_verifier.check_type(x, A)
