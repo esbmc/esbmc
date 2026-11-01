@@ -631,6 +631,9 @@ void write_correctness_witnesses(
   const namespacet &ns,
   const goto_tracet &goto_trace)
 {
+  if (options.get_bool_option("result-only"))
+    return;
+
   if (!options.get_option("witness-output-graphml").empty())
     correctness_graphml_goto_trace(options, ns, goto_trace);
 
