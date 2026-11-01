@@ -16,8 +16,9 @@ class goto_loopst
 {
 protected:
   irep_idt function_name;
-  // See check_var_name; set by the loop-invariant pass.
-  bool dollar_in_name_only = false;
+  // Set by the loop-invariant pass, whose havoc covers a whole object; see
+  // check_var_name and apply_callee_summary.
+  bool invariant_mode = false;
   goto_functionst &goto_functions;
   goto_functiont &goto_function;
 
@@ -97,7 +98,7 @@ protected:
     function_summaryt &local,
     std::vector<expr2tc> &written_ptrs);
 
-  static void apply_callee_summary(
+  void apply_callee_summary(
     loopst &loop,
     const function_summaryt &summary,
     const code_function_call2t &call);
@@ -124,9 +125,9 @@ public:
     const irep_idt &_function_name,
     goto_functionst &_goto_functions,
     goto_functiont &_goto_function,
-    bool _dollar_in_name_only = false)
+    bool _invariant_mode = false)
     : function_name(_function_name),
-      dollar_in_name_only(_dollar_in_name_only),
+      invariant_mode(_invariant_mode),
       goto_functions(_goto_functions),
       goto_function(_goto_function)
   {

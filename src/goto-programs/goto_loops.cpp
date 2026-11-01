@@ -325,7 +325,7 @@ void goto_loopst::collect_loop_symbols(
   expr->foreach_operand(
     [this, &out](const expr2tc &e) { collect_loop_symbols(e, out); });
 
-  if (is_symbol2t(expr) && check_var_name(expr, dollar_in_name_only))
+  if (is_symbol2t(expr) && check_var_name(expr, invariant_mode))
     out.insert(expr);
 }
 
@@ -359,7 +359,7 @@ void goto_loopst::collect_lhs_symbols(
   expr->foreach_operand(
     [this, &out](const expr2tc &e) { collect_lhs_symbols(e, out); });
 
-  if (is_symbol2t(expr) && check_var_name(expr, dollar_in_name_only))
+  if (is_symbol2t(expr) && check_var_name(expr, invariant_mode))
     out.modified.insert(expr);
 }
 
@@ -556,8 +556,10 @@ void goto_loopst::apply_callee_summary(
   if (summary.unnamed_write)
     loop.set_unnamed_pointer_write();
   // Havocking through the call's arguments cannot cover an element the
-  // callee writes past them (#5230).
-  if (summary.modifies_pointer_array)
+  // callee writes past them (#5230), unless the havoc takes the whole object
+  // an argument points into: pointer arithmetic cannot leave it. A pointer the
+  // callee did not get as an argument is pointer_write_unresolvable above.
+  if (summary.modifies_pointer_array && !invariant_mode)
     loop.set_pointer_array_write_unresolvable();
 }
 
@@ -692,7 +694,7 @@ void goto_loopst::add_loop_var(
     add_loop_var(loop, e, is_modified);
   });
 
-  if (is_symbol2t(expr) && check_var_name(expr, dollar_in_name_only))
+  if (is_symbol2t(expr) && check_var_name(expr, invariant_mode))
   {
     if (is_modified)
       loop.add_modified_var_to_loop(expr);

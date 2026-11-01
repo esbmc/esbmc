@@ -1,7 +1,7 @@
-/* The invariant spells its operand behind a `?:`, so the frontend puts a join
- * label between count_to's call and the marker. The extractor still hoists that
- * call, so the dependency scan has to see it too: it takes every call ahead of
- * a marker in the function rather than re-deriving the extractor's rule. */
+/* The invariant spells its operand behind a `?:`, so the frontend computes it
+ * under a jump between count_to's call and the marker. That value cannot be
+ * replayed after the havoc in order, so the invariant is refused rather than
+ * assumed from its stale pre-loop value. */
 static unsigned int count_to(unsigned int n)
 {
   unsigned int i = 0;
