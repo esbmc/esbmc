@@ -5364,12 +5364,18 @@ std::optional<exprt> function_call_expr::try_int_of_numpy_scalar()
 {
   const auto &args = call_["args"];
   const std::string &function = function_id_.get_function();
+  const bool text = function == "str" || function == "repr";
   if (
-    (function != "int" && function != "float") || args.size() != 1 ||
+    (function != "int" && function != "float" && !text) || args.size() != 1 ||
     args[0].value("_type", "") != "Subscript" ||
     json_utils::ast_contains_call(args[0]))
     return std::nullopt;
   const exprt value = converter_.get_expr(args[0]);
+  if (text)
+  {
+    converter_.reject_numpy_scalar_crossing(value.type(), function + "() of");
+    return std::nullopt;
+  }
   if (is_complex_type(converter_.ns.follow(value.type())))
     throw std::runtime_error(
       "TypeError: " + function + "() of a complex number is not supported");

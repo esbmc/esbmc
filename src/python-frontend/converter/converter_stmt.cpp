@@ -7154,10 +7154,22 @@ static void fit_numpy_string_store(const exprt &lhs, exprt &rhs)
     throw std::runtime_error(
       "TypeError: storing a string of unknown width into a numpy string array "
       "is not supported");
-  if (
-    !rhs.type().is_array() ||
-    !type_utils::is_char_storage(rhs.type().subtype()) ||
-    lhs.type() == rhs.type())
+  if (!rhs.type().is_array())
+    return;
+  // Storage holds one byte per character, so a non-ASCII or bytes value would
+  // read back with another length.
+  const bool storable =
+    type_utils::is_char_storage(rhs.type().subtype()) &&
+    std::none_of(
+      rhs.operands().begin(), rhs.operands().end(), [](const exprt &c) {
+        BigInt code;
+        return c.is_constant() && !to_integer(c, code) && code < 0;
+      });
+  if (!storable)
+    throw std::runtime_error(
+      "TypeError: storing a bytes or non-ASCII value into a numpy string "
+      "array is not supported");
+  if (lhs.type() == rhs.type())
     return;
   if (!rhs.is_constant())
     throw std::runtime_error(

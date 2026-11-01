@@ -2276,6 +2276,11 @@ is_none_arithmetic(const std::string &op, const exprt &lhs, const exprt &rhs)
          !(op == "Mod" && type_utils::is_string_type(lhs.type()));
 }
 
+static void reject_opaque_array_operator(
+  const std::string &op,
+  const typet &lhs,
+  const typet &rhs);
+
 exprt python_converter::get_binary_operator_expr(
   const nlohmann::json &element,
   const nlohmann::json &left,
@@ -2340,6 +2345,8 @@ exprt python_converter::get_binary_operator_expr(
   attach_symbol_location(lhs, symbol_table());
   attach_symbol_location(rhs, symbol_table());
   type_untyped_nondet_operand(op, lhs, rhs);
+  if (op == "Eq" || op == "NotEq")
+    reject_opaque_array_operator(op, lhs.type(), rhs.type());
 
   // Python rule: cross-type `==`/`!=` returns False/True without coercion,
   // except within the numeric tower (bool/int/float/complex). Fold here, before
@@ -3743,7 +3750,7 @@ static void reject_unmodelled_numeric_operator(
   reject_narrow_view_operand(op, lhs.type());
   reject_narrow_view_operand(op, rhs.type());
   static const std::set<std::string> no_bool_form = {
-    "Sub", "Mod", "FloorDiv", "LShift", "RShift", "Pow"};
+    "Sub", "Mult", "Mod", "FloorDiv", "LShift", "RShift", "Pow"};
   if (
     leaf_of(lhs.type()).is_bool() && leaf_of(rhs.type()).is_bool() &&
     no_bool_form.count(op) && (lhs.type().is_array() || rhs.type().is_array()))
