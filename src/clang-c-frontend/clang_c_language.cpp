@@ -370,6 +370,10 @@ static void adopt_target_layout(const clang::TargetInfo &target)
   if (&target.getLongDoubleFormat() == &llvm::APFloat::IEEEdouble())
     config.ansi_c.long_double_width = target.getLongDoubleWidth();
   config.ansi_c.bitint_max_align = bitint_max_align(target) / 8;
+  // Mirrors clang's Itanium record layout; Windows targets may lay records
+  // out as ms_struct, where the bit-field's type does count.
+  config.ansi_c.unnamed_bitfield_aligns =
+    target.useZeroLengthBitfieldAlignment() || target.getTriple().isOSWindows();
 }
 
 bool clang_c_languaget::parse(const std::string &path)

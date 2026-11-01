@@ -190,6 +190,8 @@ static void add_padding(struct_typet &type, const namespacet &ns)
   {
     const typet it_type = it->type();
     BigInt a = 1;
+    const bool raises_alignment =
+      !it->get_is_unnamed_bitfield() || config.ansi_c.unnamed_bitfield_aligns;
 
     if (it_type.get_bool("#bitfield"))
     {
@@ -204,7 +206,7 @@ static void add_padding(struct_typet &type, const namespacet &ns)
         // Otherwise, ANSI-C says that bit-fields do not get padded!
         // We consider the type for max_alignment, however.
         a = capped_alignment(it_type, type, ns);
-        if (max_alignment < a)
+        if (raises_alignment && max_alignment < a)
           max_alignment = a;
 
         std::size_t w = string2integer(it_type.width().as_string()).to_uint64();
@@ -241,7 +243,7 @@ static void add_padding(struct_typet &type, const namespacet &ns)
     assert(bit_field_bits == 0);
     assert(a > 0);
 
-    if (max_alignment < a)
+    if (raises_alignment && max_alignment < a)
       max_alignment = a;
 
     if (a != 1)

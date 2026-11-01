@@ -704,7 +704,13 @@ BigInt alignment(const typet &type, const namespacet &ns)
     // get the max
     // (should really be the smallest common denominator)
     for (const auto &c : to_struct_union_type(type).components())
-      result = std::max(result, alignment(c.type(), ns));
+    {
+      // Padding members carry no alignment demand of their own (padding.cpp).
+      if (c.get_is_padding())
+        continue;
+      if (!c.get_is_unnamed_bitfield() || config.ansi_c.unnamed_bitfield_aligns)
+        result = std::max(result, alignment(c.type(), ns));
+    }
   }
   else if (type.get_bool("#bitfield"))
   {
