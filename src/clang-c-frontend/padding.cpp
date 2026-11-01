@@ -90,6 +90,15 @@ capped_alignment(const typet &member, const typet &record, const namespacet &ns)
   return std::min(a, string2integer(cap));
 }
 
+static void raise_record_alignment(
+  BigInt &max_alignment,
+  const struct_typet::componentt &member,
+  const BigInt &a)
+{
+  if (raises_record_alignment(member) && max_alignment < a)
+    max_alignment = a;
+}
+
 /* Read the constant's value, not its `#cformat` text. constant_exprt stores the
  * value in `value` and a decimal rendering in `#cformat`; the latter is a
  * presentation attribute that a node built any other way need not carry, and
@@ -190,8 +199,6 @@ static void add_padding(struct_typet &type, const namespacet &ns)
   {
     const typet it_type = it->type();
     BigInt a = 1;
-    const bool raises_alignment =
-      !it->get_is_unnamed_bitfield() || config.ansi_c.unnamed_bitfield_aligns;
 
     if (it_type.get_bool("#bitfield"))
     {
@@ -206,8 +213,7 @@ static void add_padding(struct_typet &type, const namespacet &ns)
         // Otherwise, ANSI-C says that bit-fields do not get padded!
         // We consider the type for max_alignment, however.
         a = capped_alignment(it_type, type, ns);
-        if (raises_alignment && max_alignment < a)
-          max_alignment = a;
+        raise_record_alignment(max_alignment, *it, a);
 
         std::size_t w = string2integer(it_type.width().as_string()).to_uint64();
         bit_field_bits += w;
@@ -243,8 +249,7 @@ static void add_padding(struct_typet &type, const namespacet &ns)
     assert(bit_field_bits == 0);
     assert(a > 0);
 
-    if (raises_alignment && max_alignment < a)
-      max_alignment = a;
+    raise_record_alignment(max_alignment, *it, a);
 
     if (a != 1)
     {
