@@ -1064,7 +1064,10 @@ symbol_id function_call_builder::build_function_id() const
           if (base_type.is_pointer())
             base_type = base_type.subtype();
           if (base_type.id() == "symbol")
+          {
+            converter_.build_forward_class(base_type);
             base_type = converter_.ns.follow(base_type);
+          }
 
           // Look up the member in the struct
           if (base_type.is_struct())
@@ -1091,6 +1094,9 @@ symbol_id function_call_builder::build_function_id() const
 
       if (!obj_type.id().empty())
       {
+        converter_.build_forward_class(
+          obj_type.is_pointer() ? obj_type.subtype() : obj_type);
+
         // If the resolved type is a list (e.g. class-level mutable_attr = []),
         // map directly to the "list" builtin name.
         if (is_pylist_object_type(obj_type, converter_.ns))
