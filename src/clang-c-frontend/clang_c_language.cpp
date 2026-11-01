@@ -112,6 +112,9 @@ void clang_c_languaget::build_compiler_args(
       "-Dpthread_rwlock_rdlock=pthread_rwlock_rdlock_check");
     compiler_args.emplace_back(
       "-Dpthread_rwlock_wrlock=pthread_rwlock_wrlock_check");
+    compiler_args.emplace_back(
+      "-Dpthread_barrier_wait=pthread_barrier_wait_check");
+    compiler_args.emplace_back("-Dpthread_spin_lock=pthread_spin_lock_check");
   }
   else if (config.options.get_bool_option("lock-order-check"))
   {

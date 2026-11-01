@@ -312,6 +312,8 @@ int configure_and_run_cpp(
     record_define("pthread_join=pthread_join_switch");
     record_define("pthread_rwlock_rdlock=pthread_rwlock_rdlock_check");
     record_define("pthread_rwlock_wrlock=pthread_rwlock_wrlock_check");
+    record_define("pthread_barrier_wait=pthread_barrier_wait_check");
+    record_define("pthread_spin_lock=pthread_spin_lock_check");
   }
   else if (config.options.get_bool_option("lock-order-check"))
   {

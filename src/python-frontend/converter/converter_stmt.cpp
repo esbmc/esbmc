@@ -5579,12 +5579,12 @@ void python_converter::handle_function_call_rhs(
   {
     std::string func_name = ast_node_name(ast_node["value"]["func"]);
 
-    if (base_ctor_called)
+    if (base_ctor_called.count(func_name))
     {
       auto class_node = json_utils::find_class((*ast_json)["body"], func_name);
       func_name = ast_node_name(class_node["bases"][0], func_name);
-      base_ctor_called = false;
     }
+    base_ctor_called.clear();
 
     update_instance_from_self(func_name, func_name, lhs_symbol->id.as_string());
   }

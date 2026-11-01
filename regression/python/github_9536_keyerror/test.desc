@@ -1,0 +1,5 @@
+CORE
+main.py
+--python-check-exceptions KeyError,IndexError --incremental-bmc
+^VERIFICATION FAILED$
+FAILED .*line +28 +uncaught exception: KeyError
