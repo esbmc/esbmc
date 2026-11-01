@@ -54,6 +54,8 @@ exprt np_member(const exprt &base, const irep_idt &name, const typet &t)
 {
   expr2tc base2;
   migrate_expr(base, base2);
+  if (is_complex64_type(base.type()))
+    return migrate_expr_back(complex_part(base2, name));
   return migrate_expr_back(member2tc(migrate_type(t), base2, name));
 }
 

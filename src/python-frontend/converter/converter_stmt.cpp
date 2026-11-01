@@ -2717,7 +2717,10 @@ std::optional<exprt> python_converter::build_numpy_descriptor_materialized_list(
   // tolist() gives Python numbers, whatever the array's dtype.
   std::vector<exprt> elems = materialized->second;
   for (exprt &element : elems)
-    if (type_utils::is_numpy_scalar_type(element.type()))
+    if (is_complex64_type(element.type()))
+      element = make_complex(
+        complex_part(element, "real"), complex_part(element, "imag"));
+    else if (type_utils::is_numpy_scalar_type(element.type()))
       element = typecast_exprt(
         element,
         element.type().is_floatbv() ? double_type() : long_long_int_type());
@@ -7193,8 +7196,8 @@ static exprt fit_numpy_complex_store(const exprt &rhs, const typet &element)
 {
   const exprt complex_rhs = promote_to_complex(rhs);
   return complex_as_element(
-    member_exprt(complex_rhs, "real", double_type()),
-    member_exprt(complex_rhs, "imag", double_type()),
+    complex_part(complex_rhs, "real"),
+    complex_part(complex_rhs, "imag"),
     element);
 }
 
@@ -10713,9 +10716,7 @@ static exprt as_numpy_element(const exprt &value, const typet &element)
   {
     const exprt promoted = promote_to_complex(value);
     return complex_as_element(
-      member_exprt(promoted, "real", double_type()),
-      member_exprt(promoted, "imag", double_type()),
-      element);
+      complex_part(promoted, "real"), complex_part(promoted, "imag"), element);
   }
   if (value.type() == element || !element.is_array())
     return value.type() == element ? value : typecast_exprt(value, element);

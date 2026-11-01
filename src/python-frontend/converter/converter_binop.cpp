@@ -3343,12 +3343,12 @@ exprt python_converter::numpy_element_op(
 
 static exprt real_part(const exprt &value)
 {
-  return member_exprt(value, "real", double_type());
+  return complex_part(value, "real");
 }
 
 static exprt imag_part(const exprt &value)
 {
-  return member_exprt(value, "imag", double_type());
+  return complex_part(value, "imag");
 }
 
 // NumPy's complex division (Smith's algorithm), whose zero divisor gives

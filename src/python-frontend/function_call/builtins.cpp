@@ -2587,10 +2587,10 @@ exprt function_call_expr::handle_complex() const
   real_arg = promote_to_complex(real_arg);
   imag_arg = promote_to_complex(imag_arg);
 
-  exprt a = build_member(real_arg, "real", double_type());
-  exprt b = build_member(real_arg, "imag", double_type());
-  exprt c = build_member(imag_arg, "real", double_type());
-  exprt d = build_member(imag_arg, "imag", double_type());
+  exprt a = complex_part(real_arg, "real");
+  exprt b = complex_part(real_arg, "imag");
+  exprt c = complex_part(imag_arg, "real");
+  exprt d = complex_part(imag_arg, "imag");
 
   exprt real_part("ieee_sub", double_type());
   real_part.copy_to_operands(a, d);

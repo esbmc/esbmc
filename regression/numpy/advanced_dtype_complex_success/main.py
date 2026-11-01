@@ -30,3 +30,10 @@ assert shifted.real == 0.2
 quotient = np.array([1 + 2j], dtype=np.complex64) / np.array([3 + 4j], dtype=np.complex64)
 assert quotient[0].real == 0.44
 assert quotient[0].imag == 0.08
+single = np.array([0.5 + 1j, 1j], dtype=np.complex64)
+assert single.itemsize == 8
+assert single.astype(complex)[1] == 1j
+assert np.array([1, 2]).astype(np.complex64)[1] == 2
+held = list(single)
+assert held[1] == 1j
+assert single.tolist()[0] == 0.5 + 1j

@@ -27,6 +27,8 @@ exprt complex_member(const exprt &base, const irep_idt &name, const typet &t)
 {
   expr2tc base2;
   migrate_expr(base, base2);
+  if (is_complex64_type(base.type()))
+    return migrate_expr_back(complex_part(base2, name));
   return migrate_expr_back(member2tc(migrate_type(t), base2, name));
 }
 
@@ -96,7 +98,7 @@ exprt complex_handler::complex_mul(const exprt &x, const exprt &y) const
   migrate_expr(y, y2);
 
   auto mem = [&](const expr2tc &b, const irep_idt &n) {
-    return member2tc(dt2, b, n);
+    return complex_part(b, n);
   };
   expr2tc xr = mem(x2, "real"), xi = mem(x2, "imag");
   expr2tc yr = mem(y2, "real"), yi = mem(y2, "imag");
@@ -130,10 +132,10 @@ exprt complex_handler::complex_div(
   migrate_expr(x, x2);
   migrate_expr(y, y2);
   migrate_expr(from_double(0.0, cached_double_type()), zero);
-  const expr2tc xr = member2tc(dt2, x2, "real");
-  const expr2tc xi = member2tc(dt2, x2, "imag");
-  const expr2tc yr = member2tc(dt2, y2, "real");
-  const expr2tc yi = member2tc(dt2, y2, "imag");
+  const expr2tc xr = complex_part(x2, "real");
+  const expr2tc xi = complex_part(x2, "imag");
+  const expr2tc yr = complex_part(y2, "real");
+  const expr2tc yi = complex_part(y2, "imag");
 
   auto ieee_mul = [&](const expr2tc &a, const expr2tc &b) {
     return ieee_mul2tc(dt2, a, b, rm);
@@ -360,8 +362,8 @@ exprt complex_handler::compare_complex64_with_number(
     return nil_exprt();
   const exprt wide = promote_to_complex(other);
   const exprt rounded = complex_as_element(
-    member_exprt(wide, "real", double_type()),
-    member_exprt(wide, "imag", double_type()),
+    complex_part(wide, "real"),
+    complex_part(wide, "imag"),
     left_narrow ? lhs.type() : rhs.type());
   return handle_binary_op(
     op, left_narrow ? lhs : rounded, left_narrow ? rounded : rhs, element);
@@ -630,10 +632,10 @@ exprt complex_handler::handle_binary_op(
     expr2tc lhs2, rhs2;
     migrate_expr(lhs_complex, lhs2);
     migrate_expr(rhs_complex, rhs2);
-    const expr2tc a = member2tc(dt2, lhs2, "real");
-    const expr2tc b = member2tc(dt2, lhs2, "imag");
-    const expr2tc c = member2tc(dt2, rhs2, "real");
-    const expr2tc d = member2tc(dt2, rhs2, "imag");
+    const expr2tc a = complex_part(lhs2, "real");
+    const expr2tc b = complex_part(lhs2, "imag");
+    const expr2tc c = complex_part(rhs2, "real");
+    const expr2tc d = complex_part(rhs2, "imag");
 
     if (op == "Eq" || op == "NotEq")
     {
@@ -692,8 +694,8 @@ exprt complex_handler::handle_unary_op(
   expr2tc operand2, zero;
   migrate_expr(operand, operand2);
   migrate_expr(from_double(0.0, cached_double_type()), zero);
-  const expr2tc real = member2tc(dt2, operand2, "real");
-  const expr2tc imag = member2tc(dt2, operand2, "imag");
+  const expr2tc real = complex_part(operand2, "real");
+  const expr2tc imag = complex_part(operand2, "imag");
 
   const expr2tc neg_real = ieee_sub2tc(dt2, zero, real, rm);
   const expr2tc neg_imag = ieee_sub2tc(dt2, zero, imag, rm);

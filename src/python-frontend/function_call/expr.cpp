@@ -3968,8 +3968,12 @@ exprt function_call_expr::handle_numpy_astype() const
 
   exprt src_elem =
     build_index(arr_expr, build_symbol(index_var), src_array.subtype());
+  const exprt complex_elem = promote_to_complex(src_elem);
   exprt casted_elem = is_complex_type(target_type)
-                        ? promote_to_complex(src_elem)
+                        ? complex_as_element(
+                            complex_part(complex_elem, "real"),
+                            complex_part(complex_elem, "imag"),
+                            target_type)
                         : build_typecast(src_elem, target_type);
   exprt dest_elem =
     build_index(build_symbol(result_sym), build_symbol(index_var), target_type);
@@ -4494,8 +4498,8 @@ exprt function_call_expr::handle_cmath_inverse_fast_path()
   model_call.location() = converter_.get_location_from_decl(call_);
 
   python_math &math = converter_.get_math_handler();
-  exprt zr = build_member(z, "real", double_type());
-  exprt zi = build_member(z, "imag", double_type());
+  exprt zr = complex_part(z, "real");
+  exprt zi = complex_part(z, "imag");
   exprt zero = from_double(0.0, double_type());
   // V.3: build the pure-imaginary guard (zr == 0) in IREP2.
   expr2tc zr2, zero2;
