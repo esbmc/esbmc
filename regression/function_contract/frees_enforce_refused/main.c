@@ -11,10 +11,6 @@ void g(int **pp)
 int main()
 {
   int *p = malloc(sizeof(int));
-  int *q = p;
   g(&p);
-#ifdef UAF
-  int r = *q;
-#endif
   free(p);
 }
