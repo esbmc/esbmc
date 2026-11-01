@@ -5343,8 +5343,13 @@ void python_annotation<Json>::infer_parameter_types(Json &function_element)
       : ast_["body"];          // Search in global body
 
   // Find all calls to this function in the AST
+  // A bare-name call never reaches a method, so a module function of the
+  // same name must not type its parameters (#9623).
+  const bool is_method =
+    current_func_name_context_ == current_class_name_ + "@C@" + func_name;
   std::vector<Json> function_calls =
-    find_function_calls(func_name, search_context);
+    is_method ? std::vector<Json>{}
+              : find_function_calls(func_name, search_context);
 
   // Determine the call-site context for resolving argument names.
   // For top-level functions, use global scope (empty context).
