@@ -2720,39 +2720,54 @@ std::optional<typet> python_converter::numpy_scalar_param_type(
   return resolved;
 }
 
+static std::optional<std::size_t>
+parameter_index(const nlohmann::json &function_node, const std::string &name)
+{
+  const nlohmann::json &params = function_node["args"]["args"];
+  std::optional<std::size_t> found;
+  for (std::size_t i = 0; i < params.size(); ++i)
+    if (params[i].value("arg", "") == name)
+      found = i;
+  return found;
+}
+
 std::optional<typet> python_converter::numpy_scalar_of_returned(
   const nlohmann::json &function_node,
   const nlohmann::json &value) const
 {
   const std::string kind = value.value("_type", "");
-  const nlohmann::json &params = function_node["args"]["args"];
-  const std::string function = function_node.value("name", "");
-  const auto param_index = [&](const std::string &name) {
-    std::optional<std::size_t> found;
-    for (std::size_t i = 0; i < params.size(); ++i)
-      if (params[i].value("arg", "") == name)
-        found = i;
-    return found;
-  };
   if (kind == "Name")
   {
-    const auto index = param_index(value.value("id", ""));
-    return index ? numpy_scalar_param_type(function, *index) : std::nullopt;
+    const auto index = parameter_index(function_node, value.value("id", ""));
+    return index
+             ? numpy_scalar_param_type(function_node.value("name", ""), *index)
+             : std::nullopt;
   }
   if (kind == "BinOp" && value["op"].value("_type", "") != "Div")
-  {
-    const auto left = numpy_scalar_of_returned(function_node, value["left"]);
-    const auto right = numpy_scalar_of_returned(function_node, value["right"]);
-    if (left && right)
-      return *left == *right ? left : std::nullopt;
-    if (left && is_number_literal(value["right"]))
-      return left;
-    if (right && is_number_literal(value["left"]))
-      return right;
-    return std::nullopt;
-  }
-  if (kind != "Subscript")
-    return std::nullopt;
+    return numpy_scalar_of_binop(function_node, value);
+  return kind == "Subscript" ? numpy_scalar_of_element(function_node, value)
+                             : std::nullopt;
+}
+
+std::optional<typet> python_converter::numpy_scalar_of_binop(
+  const nlohmann::json &function_node,
+  const nlohmann::json &value) const
+{
+  const auto left = numpy_scalar_of_returned(function_node, value["left"]);
+  const auto right = numpy_scalar_of_returned(function_node, value["right"]);
+  if (left && right)
+    return *left == *right ? left : std::nullopt;
+  if (left && is_number_literal(value["right"]))
+    return left;
+  if (right && is_number_literal(value["left"]))
+    return right;
+  return std::nullopt;
+}
+
+std::optional<typet> python_converter::numpy_scalar_of_element(
+  const nlohmann::json &function_node,
+  const nlohmann::json &value) const
+{
   std::size_t depth = 0;
   const nlohmann::json *root = &value;
   while (root->value("_type", "") == "Subscript")
@@ -2762,12 +2777,42 @@ std::optional<typet> python_converter::numpy_scalar_of_returned(
     ++depth;
     root = &(*root)["value"];
   }
-  const auto index = param_index(root->value("id", ""));
+  const auto index = parameter_index(function_node, root->value("id", ""));
   typet array;
   std::set<std::string> visiting;
-  if (!index || !try_infer_numpy_param_type(function, *index, array, visiting))
+  if (
+    !index || !try_infer_numpy_param_type(
+                function_node.value("name", ""), *index, array, visiting))
     return std::nullopt;
   return narrow_element_at_depth(array, depth);
+}
+
+void python_converter::record_numpy_scalar_return(
+  const nlohmann::json &function_node,
+  code_typet &type,
+  symbolt &function)
+{
+  if (!returns_are_synthesized(function_node))
+    return;
+  const auto scalar = numpy_scalar_return_type(function_node);
+  if (!scalar)
+    return;
+  type.return_type() = *scalar;
+  python_expr::set_function_type(function, type);
+  numpy_scalar_returns_[function_node.value("name", "")] = *scalar;
+}
+
+void python_converter::apply_numpy_scalar_param_type(
+  const std::string &arg_name,
+  bool numpy_array_param,
+  const std::string &function,
+  std::size_t index,
+  typet &arg_type) const
+{
+  if (arg_name == "self" || arg_name == "cls" || numpy_array_param)
+    return;
+  if (const auto scalar = numpy_scalar_param_type(function, index))
+    arg_type = *scalar;
 }
 
 std::optional<typet> python_converter::numpy_scalar_return_type(
@@ -5344,11 +5389,12 @@ size_t python_converter::register_function_argument(
       numpy_array_param = true;
     }
   }
-  if (arg_name != "self" && arg_name != "cls" && !numpy_array_param)
-    if (
-      const auto scalar =
-        numpy_scalar_param_type(id.get_function(), type.arguments().size()))
-      arg_type = *scalar;
+  apply_numpy_scalar_param_type(
+    arg_name,
+    numpy_array_param,
+    id.get_function(),
+    type.arguments().size(),
+    arg_type);
   reject_if_symbolic_shape_param(
     numpy_array_param,
     arg_type,
@@ -6787,13 +6833,7 @@ void python_converter::get_function_definition(
     }
   }
 
-  if (returns_are_synthesized(function_node))
-    if (const auto scalar = numpy_scalar_return_type(function_node))
-    {
-      type.return_type() = *scalar;
-      python_expr::set_function_type(*added_symbol, type);
-      numpy_scalar_returns_[function_node.value("name", "")] = *scalar;
-    }
+  record_numpy_scalar_return(function_node, type, *added_symbol);
 
   // Save function return type for use in get_return_statements
   typet saved_func_return_type = current_func_return_type_;

@@ -8536,6 +8536,12 @@ python_converter::find_symbol_in_enclosing_scopes(const std::string &name)
   return nullptr;
 }
 
+static bool is_char_sequence(const typet &type)
+{
+  return (type.is_array() || type.is_pointer()) &&
+         type_utils::is_char_storage(type.subtype());
+}
+
 void python_converter::get_compound_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -8628,21 +8634,8 @@ void python_converter::get_compound_assign(
   bool is_string_concat = false;
   if (op == "Add")
   {
-    // Standard array-based string concatenation
-    if (
-      (lhs.type().is_array() &&
-       type_utils::is_char_storage(lhs.type().subtype())) ||
-      (current_element_type.is_array() &&
-       type_utils::is_char_storage(current_element_type.subtype())))
-    {
-      is_string_concat = true;
-    }
-    // Pointer-based string
-    else if (
-      (lhs.type().is_pointer() &&
-       type_utils::is_char_storage(lhs.type().subtype())) ||
-      (current_element_type.is_pointer() &&
-       type_utils::is_char_storage(current_element_type.subtype())))
+    // Array- or pointer-based string concatenation
+    if (is_char_sequence(lhs.type()) || is_char_sequence(current_element_type))
     {
       is_string_concat = true;
     }

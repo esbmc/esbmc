@@ -1966,13 +1966,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     lhs = numpy_param_as_array(lhs);
     rhs = numpy_param_as_array(rhs);
   }
-  if (
-    element.value("_type", "") == "BinOp" ||
-    element.value("_type", "") == "AugAssign")
-  {
-    lhs = numpy_view_operand_as_array(left, lhs);
-    rhs = numpy_view_operand_as_array(right, rhs);
-  }
+  numpy_view_operands_as_arrays(element, left, right, lhs, rhs);
 
   // Resolve dictionary subscript types for proper comparison
   dict_handler_->resolve_dict_subscript_types(left, right, lhs, rhs);
@@ -2352,15 +2346,8 @@ exprt python_converter::get_binary_operator_expr(
   attach_symbol_location(lhs, symbol_table());
   attach_symbol_location(rhs, symbol_table());
   type_untyped_nondet_operand(op, lhs, rhs);
-  if (op == "Eq" || op == "NotEq")
-  {
-    if (element.value("numpy_array_result", false))
-      if (
-        const auto compared =
-          numpy_string_elementwise_compare(element, lhs, rhs))
-        return *compared;
-    reject_opaque_array_operator(op, lhs.type(), rhs.type());
-  }
+  if (const auto compared = numpy_equality_result(op, element, lhs, rhs))
+    return *compared;
 
   // Python rule: cross-type `==`/`!=` returns False/True without coercion,
   // except within the numeric tower (bool/int/float/complex). Fold here, before
@@ -2494,12 +2481,7 @@ exprt python_converter::get_binary_operator_expr(
   // building, which cannot operate directly on struct operands.
   if (is_complex_type(lhs.type()) || is_complex_type(rhs.type()))
   {
-    // A read through a view stays out of the component-wise structure the
-    // handler builds, which symex would not dereference inside an assertion.
-    if (lhs.id() == "dereference")
-      lhs = hoist_numpy_element(lhs);
-    if (rhs.id() == "dereference")
-      rhs = hoist_numpy_element(rhs);
+    hoist_complex_view_reads(lhs, rhs);
     return complex_handler_.handle_binary_op(op, lhs, rhs, element);
   }
 
@@ -3837,6 +3819,32 @@ void python_converter::reject_narrow_method_result_operands(
         "TypeError: numpy element-wise '" + op +
         "' over a method call on a narrow dtype is not supported");
   }
+}
+
+std::optional<exprt> python_converter::numpy_equality_result(
+  const std::string &op,
+  const nlohmann::json &element,
+  const exprt &lhs,
+  const exprt &rhs)
+{
+  if (op != "Eq" && op != "NotEq")
+    return std::nullopt;
+  if (element.value("numpy_array_result", false))
+    if (
+      const auto compared = numpy_string_elementwise_compare(element, lhs, rhs))
+      return compared;
+  reject_opaque_array_operator(op, lhs.type(), rhs.type());
+  return std::nullopt;
+}
+
+// A read through a view stays out of the component-wise structure the complex
+// handler builds, which symex would not dereference inside an assertion.
+void python_converter::hoist_complex_view_reads(exprt &lhs, exprt &rhs)
+{
+  if (lhs.id() == "dereference")
+    lhs = hoist_numpy_element(lhs);
+  if (rhs.id() == "dereference")
+    rhs = hoist_numpy_element(rhs);
 }
 
 exprt python_converter::numpy_or_array_operation(

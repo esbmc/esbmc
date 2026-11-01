@@ -1338,10 +1338,23 @@ private:
   exprt numpy_param_as_array(const exprt &operand) const;
   exprt
   numpy_view_operand_as_array(const nlohmann::json &node, const exprt &operand);
+  void numpy_view_operands_as_arrays(
+    const nlohmann::json &element,
+    const nlohmann::json &left,
+    const nlohmann::json &right,
+    exprt &lhs,
+    exprt &rhs);
   std::optional<exprt> numpy_string_elementwise_compare(
     const nlohmann::json &element,
     const exprt &lhs,
     const exprt &rhs);
+  std::optional<exprt> numpy_equality_result(
+    const std::string &op,
+    const nlohmann::json &element,
+    const exprt &lhs,
+    const exprt &rhs);
+  void hoist_complex_view_reads(exprt &lhs, exprt &rhs);
+  std::optional<exprt> try_numpy_attribute_expr(const nlohmann::json &element);
   bool store_through_numpy_view(
     const nlohmann::json &target,
     const exprt &lhs,
@@ -1439,6 +1452,22 @@ private:
   std::optional<typet> numpy_scalar_param_type(
     const std::string &func_name,
     std::size_t param_index) const;
+  std::optional<typet> numpy_scalar_of_binop(
+    const nlohmann::json &function_node,
+    const nlohmann::json &value) const;
+  std::optional<typet> numpy_scalar_of_element(
+    const nlohmann::json &function_node,
+    const nlohmann::json &value) const;
+  void record_numpy_scalar_return(
+    const nlohmann::json &function_node,
+    code_typet &type,
+    symbolt &function);
+  void apply_numpy_scalar_param_type(
+    const std::string &arg_name,
+    bool numpy_array_param,
+    const std::string &function,
+    std::size_t index,
+    typet &arg_type) const;
   std::optional<typet> numpy_scalar_of_returned(
     const nlohmann::json &function_node,
     const nlohmann::json &value) const;

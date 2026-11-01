@@ -342,6 +342,11 @@ struct string_view_aliast
   std::optional<std::vector<long long>> indices;
 };
 
+bool replace_string_view_read(
+  nlohmann::json &node,
+  const std::string &name,
+  const string_view_aliast &alias);
+
 // Reads and writes through the name become reads and writes of its source.
 void replace_string_view(
   nlohmann::json &node,
@@ -352,28 +357,9 @@ void replace_string_view(
     return;
   if (
     node.is_object() && node.value("_type", "") == "Subscript" &&
-    node["value"].value("_type", "") == "Name" &&
-    node["value"].value("id", "") == name)
-  {
-    const auto index = literal_index(node["slice"]);
-    if (!alias.indices)
-    {
-      replace_string_view(node["slice"], name, alias);
-      nlohmann::json source = alias.value;
-      source["ctx"] = {{"_type", "Load"}};
-      node["value"] = std::move(source);
-      return;
-    }
-    const long long length = alias.indices->size();
-    const long long at =
-      index && *index < 0 ? *index + length : index.value_or(-1);
-    if (index && at >= 0 && at < length)
-    {
-      node["value"] = alias.value["value"];
-      node["slice"] = located_index((*alias.indices)[at], node["slice"]);
-      return;
-    }
-  }
+    node["value"].value("id", "") == name &&
+    replace_string_view_read(node, name, alias))
+    return;
   if (
     node.is_object() && node.value("_type", "") == "Name" &&
     node.value("id", "") == name)
@@ -384,6 +370,50 @@ void replace_string_view(
   }
   for (auto &child : node)
     replace_string_view(child, name, alias);
+}
+
+bool replace_string_view_read(
+  nlohmann::json &node,
+  const std::string &name,
+  const string_view_aliast &alias)
+{
+  if (node["value"].value("_type", "") != "Name")
+    return false;
+  if (!alias.indices)
+  {
+    replace_string_view(node["slice"], name, alias);
+    nlohmann::json source = alias.value;
+    source["ctx"] = {{"_type", "Load"}};
+    node["value"] = std::move(source);
+    return true;
+  }
+  const auto index = literal_index(node["slice"]);
+  const long long length = alias.indices->size();
+  const long long at =
+    index && *index < 0 ? *index + length : index.value_or(-1);
+  if (!index || at < 0 || at >= length)
+    return false;
+  node["value"] = alias.value["value"];
+  node["slice"] = located_index((*alias.indices)[at], node["slice"]);
+  return true;
+}
+
+const nlohmann::json *single_assign_target(const nlohmann::json &statement)
+{
+  const std::string kind = statement.value("_type", "");
+  if (kind == "AnnAssign")
+    return &statement["target"];
+  if (kind == "Assign" && statement["targets"].size() == 1)
+    return &statement["targets"][0];
+  return nullptr;
+}
+
+void copy_statement_location(const nlohmann::json &from, nlohmann::json &to)
+{
+  for (const char *key :
+       {"lineno", "col_offset", "end_lineno", "end_col_offset"})
+    if (from.contains(key))
+      to[key] = from[key];
 }
 
 bool is_literal_string_array_call(
@@ -407,12 +437,7 @@ const nlohmann::json *sole_string_array(
 {
   for (const auto &statement : body)
   {
-    const std::string kind = statement.value("_type", "");
-    const nlohmann::json *target = nullptr;
-    if (kind == "AnnAssign")
-      target = &statement["target"];
-    else if (kind == "Assign" && statement["targets"].size() == 1)
-      target = &statement["targets"][0];
+    const nlohmann::json *target = single_assign_target(statement);
     if (
       target && target->value("id", "") == source &&
       statement["value"].is_object() &&
@@ -474,6 +499,47 @@ void read_through_chained_slices(
   node["value"] = source;
 }
 
+// The alias of `value`, a read of @p array, when it selects a known slice or
+// row.
+std::optional<string_view_aliast>
+string_view_alias_of(const nlohmann::json &value, const nlohmann::json &array)
+{
+  string_view_aliast alias{value, std::nullopt};
+  const auto &elements = array["args"][0]["elts"];
+  if (value["slice"].value("_type", "") == "Slice")
+  {
+    alias.indices = literal_slice_indices(value["slice"], elements.size());
+    return alias.indices ? std::optional(alias) : std::nullopt;
+  }
+  if (
+    !literal_index(value["slice"]) || elements.empty() ||
+    elements[0].value("_type", "") != "List")
+    return std::nullopt;
+  return alias;
+}
+
+bool is_name_bound_to_subscript(const nlohmann::json &statement)
+{
+  const nlohmann::json *target = single_assign_target(statement);
+  return target && target->value("_type", "") == "Name" &&
+         statement["value"].is_object() &&
+         statement["value"].value("_type", "") == "Subscript" &&
+         statement["value"]["value"].value("_type", "") == "Name";
+}
+
+void replace_string_view_uses(
+  nlohmann::json &body,
+  std::size_t binding,
+  const std::string &name,
+  const string_view_aliast &alias)
+{
+  for (std::size_t later = binding + 1; later < body.size(); ++later)
+    replace_string_view(body[later], name, alias);
+  for (std::size_t earlier = 0; earlier < binding; ++earlier)
+    if (body[earlier].value("_type", "") == "FunctionDef")
+      replace_string_view(body[earlier], name, alias);
+}
+
 void alias_string_views_in(const nlohmann::json &ast, nlohmann::json &body)
 {
   read_through_chained_slices(body, ast, body);
@@ -482,52 +548,23 @@ void alias_string_views_in(const nlohmann::json &ast, nlohmann::json &body)
   for (std::size_t i = 0; i < body.size(); ++i)
   {
     nlohmann::json &statement = body[i];
-    const std::string kind = statement.value("_type", "");
-    const nlohmann::json *target = nullptr;
-    if (kind == "AnnAssign")
-      target = &statement["target"];
-    else if (kind == "Assign" && statement["targets"].size() == 1)
-      target = &statement["targets"][0];
-    if (
-      !target || target->value("_type", "") != "Name" ||
-      !statement["value"].is_object() ||
-      statement["value"].value("_type", "") != "Subscript" ||
-      statement["value"]["value"].value("_type", "") != "Name")
+    if (!is_name_bound_to_subscript(statement))
       continue;
     const nlohmann::json &value = statement["value"];
-    const std::string name = target->value("id", "");
+    const std::string name = single_assign_target(statement)->value("id", "");
     const std::string source = value["value"].value("id", "");
     const nlohmann::json *array = sole_string_array(ast, body, source);
     if (
       !array || bindings[name] != 1 || bindings[source] != 1 ||
       binds_name_elsewhere(body, source))
       continue;
-    string_view_aliast alias{value, std::nullopt};
-    const auto &elements = (*array)["args"][0]["elts"];
-    if (value["slice"].value("_type", "") == "Slice")
-    {
-      alias.indices = literal_slice_indices(value["slice"], elements.size());
-      if (!alias.indices)
-        continue;
-    }
-    else
-    {
-      const auto index = literal_index(value["slice"]);
-      if (
-        !index || elements.empty() || elements[0].value("_type", "") != "List")
-        continue;
-    }
+    const auto alias = string_view_alias_of(value, *array);
+    if (!alias)
+      continue;
     nlohmann::json evaluated = {{"_type", "Expr"}, {"value", value}};
-    for (const char *key :
-         {"lineno", "col_offset", "end_lineno", "end_col_offset"})
-      if (statement.contains(key))
-        evaluated[key] = statement[key];
+    copy_statement_location(statement, evaluated);
     statement = std::move(evaluated);
-    for (std::size_t later = i + 1; later < body.size(); ++later)
-      replace_string_view(body[later], name, alias);
-    for (std::size_t earlier = 0; earlier < i; ++earlier)
-      if (body[earlier].value("_type", "") == "FunctionDef")
-        replace_string_view(body[earlier], name, alias);
+    replace_string_view_uses(body, i, name, *alias);
   }
 }
 
@@ -639,6 +676,63 @@ bool reads_element_of(const nlohmann::json &node, const std::string &name)
 // The uses a bytes array has a model for: an element compared with a literal or
 // stored from one, and its shape. A str never equals bytes, which the storage
 // alone would not show.
+bool lower_bytes_compare(nlohmann::json &node, const std::string &name)
+{
+  if (node.value("_type", "") != "Compare" || node["ops"].size() != 1)
+    return false;
+  const std::string op = node["ops"][0].value("_type", "");
+  nlohmann::json &left = node["left"];
+  nlohmann::json &right = node["comparators"][0];
+  const bool left_read = reads_element_of(left, name);
+  if (
+    (op != "Eq" && op != "NotEq") ||
+    (!left_read && !reads_element_of(right, name)))
+    return false;
+  nlohmann::json &literal = left_read ? right : left;
+  if (is_bytes_constant(literal))
+  {
+    bytes_literal_to_text(literal);
+    return true;
+  }
+  if (!is_text_constant(literal))
+    return false;
+  nlohmann::json folded = {{"_type", "Constant"}, {"value", op == "NotEq"}};
+  copy_statement_location(node, folded);
+  node = std::move(folded);
+  return true;
+}
+
+bool lower_bytes_store(nlohmann::json &node, const std::string &name)
+{
+  const nlohmann::json *target = single_assign_target(node);
+  if (!target)
+    return false;
+  if (target->value("id", "") == name)
+    return true;
+  if (!reads_element_of(*target, name))
+    return false;
+  bytes_literal_to_text(node["value"]);
+  if (!is_text_constant(node["value"]))
+    throw std::runtime_error(
+      "TypeError: storing a non-literal into a numpy bytes array is not "
+      "supported");
+  return true;
+}
+
+bool reads_bytes_array_shape(
+  const nlohmann::json &node,
+  const std::string &name)
+{
+  const std::string kind = node.value("_type", "");
+  if (kind == "Call")
+    return node["func"].value("id", "") == "len" && node["args"].size() == 1 &&
+           node["args"][0].value("id", "") == name;
+  if (kind != "Attribute" || node["value"].value("id", "") != name)
+    return false;
+  const std::string attr = node.value("attr", "");
+  return attr == "shape" || attr == "size" || attr == "ndim";
+}
+
 void lower_bytes_array_uses(nlohmann::json &node, const std::string &name)
 {
   if (!node.is_object() && !node.is_array())
@@ -650,60 +744,9 @@ void lower_bytes_array_uses(nlohmann::json &node, const std::string &name)
     return;
   }
   const std::string kind = node.value("_type", "");
-  if (kind == "Compare" && node["ops"].size() == 1)
-  {
-    const std::string op = node["ops"][0].value("_type", "");
-    nlohmann::json &left = node["left"];
-    nlohmann::json &right = node["comparators"][0];
-    const bool left_read = reads_element_of(left, name);
-    if (
-      (op == "Eq" || op == "NotEq") &&
-      (left_read || reads_element_of(right, name)))
-    {
-      nlohmann::json &literal = left_read ? right : left;
-      if (is_text_constant(literal))
-      {
-        nlohmann::json folded = {
-          {"_type", "Constant"}, {"value", op == "NotEq"}};
-        for (const char *key :
-             {"lineno", "col_offset", "end_lineno", "end_col_offset"})
-          if (node.contains(key))
-            folded[key] = node[key];
-        node = std::move(folded);
-        return;
-      }
-      if (is_bytes_constant(literal))
-      {
-        bytes_literal_to_text(literal);
-        return;
-      }
-    }
-  }
-  if (kind == "Assign" || kind == "AnnAssign")
-  {
-    const nlohmann::json targets = kind == "Assign"
-                                     ? node["targets"]
-                                     : nlohmann::json::array({node["target"]});
-    if (targets.size() == 1 && reads_element_of(targets[0], name))
-    {
-      bytes_literal_to_text(node["value"]);
-      if (!is_text_constant(node["value"]))
-        throw std::runtime_error(
-          "TypeError: storing a non-literal into a numpy bytes array is not "
-          "supported");
-      return;
-    }
-    if (targets.size() == 1 && targets[0].value("id", "") == name)
-      return;
-  }
   if (
-    kind == "Call" && node["func"].value("id", "") == "len" &&
-    node["args"].size() == 1 && node["args"][0].value("id", "") == name)
-    return;
-  if (
-    kind == "Attribute" && node["value"].value("id", "") == name &&
-    (node.value("attr", "") == "shape" || node.value("attr", "") == "size" ||
-     node.value("attr", "") == "ndim"))
+    lower_bytes_compare(node, name) || lower_bytes_store(node, name) ||
+    reads_bytes_array_shape(node, name))
     return;
   if (kind == "Name" && node.value("id", "") == name)
     throw std::runtime_error(
@@ -742,6 +785,41 @@ void reject_untyped_bytes_array(
     "TypeError: numpy.array() of bytes without an S<n> dtype is not supported");
 }
 
+bool is_numpy_module_call(
+  const nlohmann::json &ast,
+  const nlohmann::json &value)
+{
+  return value.is_object() && value.value("_type", "") == "Call" &&
+         value["func"].value("_type", "") == "Attribute" &&
+         value["func"]["value"].value("_type", "") == "Name" &&
+         is_imported_numpy_module_alias(
+           ast, value["func"]["value"].value("id", ""));
+}
+
+// Lowers `name = np.f(..., dtype="S<n>")`, recording a name bound only there.
+void lower_bytes_binding(
+  const nlohmann::json &ast,
+  nlohmann::json &statement,
+  std::map<std::string, std::size_t> &bindings,
+  std::vector<std::string> &names)
+{
+  const nlohmann::json *target = single_assign_target(statement);
+  if (!target || !is_numpy_module_call(ast, statement["value"]))
+    return;
+  const std::string name = target->value("id", "");
+  for (auto &keyword : statement["value"]["keywords"])
+  {
+    const auto text = keyword.value("arg", "") == "dtype"
+                        ? bytes_dtype_as_text(keyword["value"])
+                        : std::nullopt;
+    if (!text || bindings[name] != 1)
+      continue;
+    keyword["value"]["value"] = *text;
+    texts_of_bytes_elements(statement["value"]["args"]);
+    names.push_back(name);
+  }
+}
+
 void lower_bytes_arrays(nlohmann::json &ast)
 {
   std::map<std::string, std::size_t> bindings;
@@ -755,34 +833,9 @@ void lower_bytes_arrays(nlohmann::json &ast)
         visit(child);
       if (!node.is_object())
         return;
-      const std::string kind = node.value("_type", "");
-      if (kind == "Call")
+      if (node.value("_type", "") == "Call")
         reject_untyped_bytes_array(ast, node);
-      const nlohmann::json *target = nullptr;
-      if (kind == "AnnAssign")
-        target = &node["target"];
-      else if (kind == "Assign" && node["targets"].size() == 1)
-        target = &node["targets"][0];
-      if (
-        !target || !node["value"].is_object() ||
-        node["value"].value("_type", "") != "Call" ||
-        node["value"]["func"].value("_type", "") != "Attribute" ||
-        node["value"]["func"]["value"].value("_type", "") != "Name" ||
-        !is_imported_numpy_module_alias(
-          ast, node["value"]["func"]["value"].value("id", "")))
-        return;
-      const std::string name = target->value("id", "");
-      for (auto &keyword : node["value"]["keywords"])
-      {
-        const auto text = keyword.value("arg", "") == "dtype"
-                            ? bytes_dtype_as_text(keyword["value"])
-                            : std::nullopt;
-        if (!text || bindings[name] != 1)
-          continue;
-        keyword["value"]["value"] = *text;
-        texts_of_bytes_elements(node["value"]["args"]);
-        names.push_back(name);
-      }
+      lower_bytes_binding(ast, node, bindings, names);
     };
   visit(ast["body"]);
   for (const std::string &name : names)
@@ -980,31 +1033,37 @@ stores_to(const nlohmann::json &node, const std::string &name)
   return stores;
 }
 
+// A str is a 1-D char array, and is no numpy array.
+static bool is_retyped_numpy_array(const typet &type)
+{
+  if (
+    !type.is_array() || type_utils::is_char_storage(type.subtype()) ||
+    type_utils::is_bytes_array(type))
+    return false;
+  const typet leaf = type_utils::array_scalar_type(type);
+  return is_complex_type(leaf) || leaf.is_floatbv() || leaf.is_signedbv() ||
+         leaf.is_unsignedbv() || leaf.is_bool();
+}
+
 void python_converter::bind_numpy_scalar_name(
   const nlohmann::json &target,
   symbolt *symbol,
   exprt &lhs,
   const exprt &rhs)
 {
+  if (!symbol || target.value("_type", "") != "Name")
+    return;
   // The annotator reads `1j * a` or `-a` as a scalar from its literal operand,
   // and has no type for an operation over a view of rank above 1.
-  const typet rhs_leaf = type_utils::array_scalar_type(rhs.type());
   if (
-    symbol && target.value("_type", "") == "Name" && rhs.type().is_array() &&
-    !lhs.type().is_array() && !symbol->is_parameter &&
-    (is_complex_type(rhs_leaf) || rhs_leaf.is_floatbv() ||
-     rhs_leaf.is_signedbv() || rhs_leaf.is_unsignedbv() ||
-     rhs_leaf.is_bool()) &&
-    !type_utils::is_char_storage(rhs.type().subtype()) &&
-    !type_utils::is_bytes_array(rhs.type()))
+    !symbol->is_parameter && !lhs.type().is_array() &&
+    is_retyped_numpy_array(rhs.type()))
   {
     lhs.type() = rhs.type();
     symbol->set_type(rhs.type());
     return;
   }
-  if (
-    !symbol || target.value("_type", "") != "Name" ||
-    !type_utils::is_numpy_scalar_type(rhs.type()) || lhs.type() == rhs.type())
+  if (!type_utils::is_numpy_scalar_type(rhs.type()) || lhs.type() == rhs.type())
     return;
   const std::string name = target.value("id", "");
   const std::string function = current_function_name();

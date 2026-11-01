@@ -8391,8 +8391,7 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
     }
 
     reject_list_for_numpy_parameter(arg.type(), params, param_idx);
-    if (param_idx >= params.size() || params[param_idx].type() != arg.type())
-      converter_.reject_numpy_scalar_crossing(arg.type(), "passing");
+    reject_scalar_crossing_into_parameter(arg.type(), params, param_idx);
 
     // All array function arguments (e.g. bytes type) are handled as pointers.
     if (arg.type().is_array())
@@ -8461,6 +8460,15 @@ std::optional<exprt> function_call_expr::build_positional_arguments(
 
 // A list where a numpy array parameter is expected would be read as the
 // array's elements.
+void function_call_expr::reject_scalar_crossing_into_parameter(
+  const typet &arg_type,
+  const code_typet::argumentst &params,
+  std::size_t param_idx) const
+{
+  if (param_idx >= params.size() || params[param_idx].type() != arg_type)
+    converter_.reject_numpy_scalar_crossing(arg_type, "passing");
+}
+
 void function_call_expr::reject_list_for_numpy_parameter(
   const typet &arg_type,
   const code_typet::argumentst &params,
