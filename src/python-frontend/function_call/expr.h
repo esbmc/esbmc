@@ -204,6 +204,14 @@ private:
   /// has a __str__; nil otherwise.
   exprt str_of_object(exprt &value, const nlohmann::json &arg) const;
 
+  /// repr() of the instance @p value through __repr__ or object's default,
+  /// when its runtime class is its static class; nil otherwise.
+  exprt repr_of_object(exprt &value) const;
+
+  /// repr(x): complex, instance, or modelled str/number repr; otherwise the
+  /// general call.
+  exprt handle_repr_call();
+
   /*
    * object(): a pointer to a fresh heap object, so each call has its own
    * identity and is never None.
@@ -767,6 +775,8 @@ private:
   bool is_math_function_dispatch_call() const;
   exprt dispatch_math_call();
   exprt handle_math_function_dispatch();
+  bool calls_overflow_model(const std::string &f) const;
+  bool may_overflow(const std::string &f, const exprt &result) const;
   std::optional<std::string> bounded_math_import() const;
   bool takes_bounded_math(const std::string &function) const;
   std::optional<exprt> try_bounded_math_call(const std::string &func_name);

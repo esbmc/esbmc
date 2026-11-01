@@ -723,6 +723,9 @@ int pthread_rwlock_destroy(pthread_rwlock_t *lock)
 
 /************************ rwlock mainpulation routines ************************/
 
+/* Lock fields are sync-typed and no switch point, so every acquire yields
+ * (#9680). */
+
 int pthread_rwlock_init(
   pthread_rwlock_t *lock,
   const pthread_rwlockattr_t *attr)
@@ -743,6 +746,7 @@ __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_assume(!__ESBMC_rwlock_writer(lock));
   __ESBMC_rwlock_readers(lock)++;
+  __ESBMC_yield();
   __ESBMC_atomic_end();
   return 0;
 }
@@ -757,6 +761,7 @@ __ESBMC_HIDE:;
   if (acquired)
   {
     __ESBMC_rwlock_readers(lock)++;
+    __ESBMC_yield();
   }
   else
   {
@@ -779,30 +784,30 @@ int pthread_rwlock_tryrdlock(pthread_rwlock_t *lock)
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
 
-  if (__ESBMC_rwlock_writer(lock) != 0)
+  int res = EBUSY;
+  if (!__ESBMC_rwlock_writer(lock))
   {
-    __ESBMC_atomic_end();
-    return EBUSY;
-  }
-  else
     __ESBMC_rwlock_readers(lock)++;
+    __ESBMC_yield();
+    res = 0;
+  }
   __ESBMC_atomic_end();
-
-  return 0;
+  return res;
 }
 
 int pthread_rwlock_trywrlock(pthread_rwlock_t *lock)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
-  if (__ESBMC_rwlock_writer(lock) != 0 || __ESBMC_rwlock_readers(lock) != 0)
+  int res = EBUSY;
+  if (!(__ESBMC_rwlock_writer(lock) || __ESBMC_rwlock_readers(lock)))
   {
-    __ESBMC_atomic_end();
-    return EBUSY;
+    __ESBMC_rwlock_writer(lock) = 1;
+    __ESBMC_yield();
+    res = 0;
   }
-  __ESBMC_rwlock_writer(lock) = 1;
   __ESBMC_atomic_end();
-  return 0;
+  return res;
 }
 
 int pthread_rwlock_unlock(pthread_rwlock_t *lock)
@@ -834,6 +839,7 @@ __ESBMC_HIDE:;
   __ESBMC_assume(
     !(__ESBMC_rwlock_writer(lock) || __ESBMC_rwlock_readers(lock)));
   __ESBMC_rwlock_writer(lock) = 1;
+  __ESBMC_yield();
   __ESBMC_atomic_end();
   return 0;
 }
@@ -849,6 +855,7 @@ __ESBMC_HIDE:;
   if (acquired)
   {
     __ESBMC_rwlock_writer(lock) = 1;
+    __ESBMC_yield();
   }
   else
   {
@@ -945,6 +952,8 @@ __ESBMC_HIDE:;
   }
   else
   {
+    // Barrier fields are sync-typed, so no switch point occurs here (#9648).
+    __ESBMC_yield();
     __ESBMC_barrier_waiters(barrier)++;
     __ESBMC_blocked_threads_count++;
     if (deadlock_check)
