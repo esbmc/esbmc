@@ -167,9 +167,42 @@ __ESBMC_HIDE:;
   return 0;
 }
 
+#define __ESBMC_STR_LEFT(s)                                                    \
+  (__ESBMC_get_object_size(s) - __ESBMC_POINTER_OFFSET(s))
+#define __ESBMC_STRCHR_RV ((char *)__ESBMC_return_value)
+#define __ESBMC_STRCHR_AT                                                      \
+  ((size_t)(__ESBMC_POINTER_OFFSET(__ESBMC_STRCHR_RV) -                        \
+            __ESBMC_POINTER_OFFSET(s)))
+static size_t __ESBMC_strchr_r;
+
 char *strchr(const char *s, int ch)
 {
 __ESBMC_HIDE:;
+  __ESBMC_requires(__ESBMC_exists(
+    &__ESBMC_strlen_qv,
+    __ESBMC_strlen_qv < __ESBMC_STR_LEFT(s) && s[__ESBMC_strlen_qv] == 0));
+  __ESBMC_assigns();
+  // Found: the first ch at or before the terminator.
+  __ESBMC_ensures(
+    __ESBMC_STRCHR_RV == NULL ||
+    (__ESBMC_same_object(__ESBMC_STRCHR_RV, s) &&
+     __ESBMC_POINTER_OFFSET(__ESBMC_STRCHR_RV) >= __ESBMC_POINTER_OFFSET(s) &&
+     __ESBMC_STRCHR_AT < __ESBMC_STR_LEFT(s) &&
+     s[__ESBMC_STRCHR_AT] == (char)ch &&
+     __ESBMC_forall(
+       &__ESBMC_strlen_qv,
+       !(__ESBMC_strlen_qv < __ESBMC_STRCHR_AT) ||
+         (s[__ESBMC_strlen_qv] != (char)ch && s[__ESBMC_strlen_qv] != 0))));
+  // Not found: every ch in the object lies past a terminator.
+  __ESBMC_ensures(
+    __ESBMC_STRCHR_RV != NULL ||
+    __ESBMC_forall(
+      &__ESBMC_strlen_qv,
+      !(__ESBMC_strlen_qv < __ESBMC_STR_LEFT(s) &&
+        s[__ESBMC_strlen_qv] == (char)ch) ||
+        __ESBMC_exists(
+          &__ESBMC_strchr_r,
+          __ESBMC_strchr_r < __ESBMC_strlen_qv && s[__ESBMC_strchr_r] == 0)));
   while (*s && *s != (char)ch)
     s++;
   if (*s == (char)ch)

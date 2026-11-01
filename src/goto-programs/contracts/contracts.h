@@ -311,6 +311,7 @@ private:
   expr2tc declare_call_result(
     const symbolt &function_symbol,
     const expr2tc &ret_val,
+    const std::vector<expr2tc> &actual_args,
     const locationt &call_location,
     goto_programt &replacement) const;
 

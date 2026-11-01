@@ -1241,7 +1241,15 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       zero_initialises(*ne.getInitializer()))
       new_expr.set("zero_initialized", true);
 
-    if (ne.hasInitializer() && get_new_initializer(ne, new_expr))
+    // A trivial default constructor does nothing, and for `new T[n]` running
+    // it per element is a loop symbolic n leaves unbounded.
+    const auto *trivial_ctor =
+      llvm::dyn_cast_or_null<clang::CXXConstructExpr>(ne.getInitializer());
+    const bool skip_init = ne.isArray() && trivial_ctor &&
+                           trivial_ctor->getConstructor()->isTrivial() &&
+                           !new_expr.get_bool("zero_initialized");
+    if (
+      ne.hasInitializer() && !skip_init && get_new_initializer(ne, new_expr))
       return true;
 
     break;
@@ -1268,7 +1276,10 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     // `delete[]` of a `T (*)[m]` destroys T elements ([expr.delete]/6).
     const clang::QualType destroyed =
       ASTContext->getBaseElementType(de.getDestroyedType());
-    if (destroyed->getAsCXXRecordDecl())
+    // A trivial destructor does nothing; leave the type unset so none is run.
+    if (
+      const clang::CXXRecordDecl *rec = destroyed->getAsCXXRecordDecl();
+      rec && !rec->hasTrivialDestructor())
     {
       typet destt;
       if (get_type(destroyed, destt))

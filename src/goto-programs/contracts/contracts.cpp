@@ -440,6 +440,15 @@ static std::set<irep_idt> declared_in(const goto_programt &body)
   return decls;
 }
 
+/// Clause calls whose value is a function of their operands and the state:
+/// symex intrinsics, and uninterpreted functions.
+static bool is_reissued_clause_call(const irep_idt &id)
+{
+  const std::string &s = id2string(id);
+  return s == "c:@F@__ESBMC_get_object_size" ||
+         s.rfind("c:@F@__ESBMC_uninterpreted_", 0) == 0;
+}
+
 /// Name of the first non-intrinsic call whose result a clause in \p body
 /// still depends on, empty when there is none.
 ///
@@ -477,8 +486,8 @@ std::string code_contractst::clause_call_callee(const goto_programt &body) const
       continue;
     const irep_idt &callee =
       to_symbol2t(to_code_function_call2t(it->code).function).thename;
-    // generate_replacement_at_call re-issues this one at the call site.
-    if (callee != "c:@F@__ESBMC_get_object_size")
+    // reissue_clause_calls re-issues these where the clause is evaluated.
+    if (!is_reissued_clause_call(callee))
       return id2string(callee);
   }
 
@@ -1359,10 +1368,10 @@ static void assign_stack_used(
   t->location.comment(comment);
 }
 
-/// A clause's __ESBMC_get_object_size(p) is a symex intrinsic call whose
-/// result temp the clause reads; re-issue the call into \p dest, in the state
-/// the clause is evaluated in, so the temp is defined there.
-static void reissue_object_size(
+/// A clause call is_reissued_clause_call accepts leaves only its result temp
+/// in the clause; re-issue the call into \p dest, in the state the clause is
+/// evaluated in, so the temp is defined there.
+static void reissue_clause_calls(
   const goto_programt &body,
   const expr2tc &clause,
   const std::function<expr2tc(const expr2tc &)> &instantiate,
@@ -1378,14 +1387,14 @@ static void reissue_object_size(
     const code_function_call2t &call = to_code_function_call2t(c->code);
     if (
       !is_symbol2t(call.function) ||
-      to_symbol2t(call.function).thename != "c:@F@__ESBMC_get_object_size" ||
+      !is_reissued_clause_call(to_symbol2t(call.function).thename) ||
       !is_symbol2t(call.ret) || !used.count(to_symbol2t(call.ret).thename))
       continue;
+    std::vector<expr2tc> args;
+    for (const expr2tc &op : call.operands)
+      args.push_back(instantiate(op));
     goto_programt::targett r = dest.add_instruction(FUNCTION_CALL);
-    r->code = code_function_call2tc(
-      call.ret,
-      call.function,
-      std::vector<expr2tc>{instantiate(call.operands[0])});
+    r->code = code_function_call2tc(call.ret, call.function, args);
     r->location = location;
     r->location.comment("contract clause object size");
   }
@@ -2031,7 +2040,7 @@ goto_programt code_contractst::generate_checking_wrapper(
   // case keeps the original order.
   const bool requires_reads_old = reads_old(requires_clause);
   const auto same = [](const expr2tc &e) { return e; };
-  reissue_object_size(original_body, requires_clause, same, wrapper, location);
+  reissue_clause_calls(original_body, requires_clause, same, wrapper, location);
 
   if (!requires_reads_old)
     add_contract_clause(requires_clause, ASSUME, "contract requires");
@@ -2362,7 +2371,7 @@ goto_programt code_contractst::generate_checking_wrapper(
   // transformations
   ensures_guard =
     normalize_ensures_guard_for_return_value(ensures_guard, ret_val);
-  reissue_object_size(original_body, ensures_guard, same, wrapper, location);
+  reissue_clause_calls(original_body, ensures_guard, same, wrapper, location);
 
   // Add ASSERT instruction for ensures clause with property
   if (should_add_clause_instruction(ensures_guard, ASSERT))
@@ -2416,7 +2425,15 @@ expr2tc code_contractst::replace_return_value_in_expr(
     expr2tc inner = expr;
     while (is_typecast2t(inner))
       inner = to_typecast2t(inner).from;
-    if (is_symbol2t(inner) && is_return_value_symbol(to_symbol2t(inner)))
+    const std::string name =
+      is_symbol2t(inner)
+        ? id2string(to_symbol2t(inner).get_symbol_name())
+        : std::string();
+    // Strict match, as below: call temps such as old snapshots are also
+    // named return_value$N.
+    if (
+      name.find("__ESBMC_return_value") != std::string::npos ||
+      name == "return_value")
       return base_type_eq(expr->type, ret_val->type, ns)
                ? ret_val
                : typecast2tc(expr->type, ret_val);
@@ -3844,6 +3861,22 @@ code_contractst::materialize_ptr_deref_snapshots(
   return result;
 }
 
+/// The pointer p of an `__ESBMC_object(p)` assigns target, else nil.
+static expr2tc whole_object_target(const expr2tc &target, const namespacet &ns)
+{
+  const type2tc t = ns.follow(target->type);
+  if (
+    !is_struct_type(t) || to_struct_type(t).name.as_string().find(
+                            "__ESBMC_object_t") == std::string::npos)
+    return expr2tc();
+  if (!is_dereference2t(target))
+    return expr2tc();
+  expr2tc p = to_dereference2t(target).value;
+  while (is_typecast2t(p))
+    p = to_typecast2t(p).from;
+  return p;
+}
+
 /// \brief Mark snapshots whose location an assigns target may also name.
 ///
 /// Pointer parameters may alias (see emit_pointer_param_aliasing), so a
@@ -3901,9 +3934,32 @@ void code_contractst::attach_alias_exemptions(
     return snapshot;
   };
 
+  // __ESBMC_object(p) frames the whole object p addresses (pre-state p).
+  std::map<size_t, expr2tc> object_snapshots;
+  for (size_t k = 0; k < assigns_targets.size(); ++k)
+  {
+    const expr2tc p = whole_object_target(assigns_targets[k], ns);
+    if (is_nil_expr(p))
+      continue;
+    const expr2tc v = declare_local_symbol(
+      "__ESBMC_frame_object_" + func_name + "_" + std::to_string(k), p->type);
+    auto d = wrapper.add_instruction(DECL);
+    d->code = code_decl2tc(p->type, to_symbol2t(v).thename);
+    d->location = location;
+    auto a = wrapper.add_instruction(ASSIGN);
+    a->code = code_assign2tc(v, p);
+    a->location = location;
+    object_snapshots.emplace(k, v);
+  }
+
   for (auto &snap : result)
   {
     expr2tc exemption;
+    for (const auto &[k, v] : object_snapshots)
+    {
+      expr2tc same = same_object2tc(snap.ptr_sym, v);
+      exemption = is_nil_expr(exemption) ? same : or2tc(exemption, same);
+    }
     for (const expr2tc &target : assigns_targets)
     {
       expr2tc base = assigns_target_base(target, snap.field_name);
@@ -5664,21 +5720,6 @@ expr2tc code_contractst::lower_is_fresh_in_requires(
   return requires_clause;
 }
 
-/// The pointer p of an `__ESBMC_object(p)` assigns target, else nil.
-static expr2tc whole_object_target(const expr2tc &target, const namespacet &ns)
-{
-  const type2tc t = ns.follow(target->type);
-  if (
-    !is_struct_type(t) || to_struct_type(t).name.as_string().find(
-                            "__ESBMC_object_t") == std::string::npos)
-    return expr2tc();
-  if (!is_dereference2t(target))
-    return expr2tc();
-  expr2tc p = to_dereference2t(target).value;
-  while (is_typecast2t(p))
-    p = to_typecast2t(p).from;
-  return p;
-}
 
 // An array frame target reached through a pointer cannot be assigned in one go:
 // dereference refuses to build an array-typed lvalue (dereference.cpp:1103).
@@ -5737,6 +5778,7 @@ static bool havoc_pointed_to_array(
 expr2tc code_contractst::declare_call_result(
   const symbolt &function_symbol,
   const expr2tc &ret_val,
+  const std::vector<expr2tc> &actual_args,
   const locationt &call_location,
   goto_programt &replacement) const
 {
@@ -5754,9 +5796,7 @@ expr2tc code_contractst::declare_call_result(
   // Unlike the three havoc sites, this one does not skip a pointer under
   // --add-symex-value-sets. They leave existing state alone; this one is the
   // result's only definition, and omitting it puts the ensures back over the
-  // caller's stale value. A pointer result therefore carries no value set; a
-  // write through it reaches an object only when an ensures pins the result to
-  // it (github_7009_pointer_result).
+  // caller's stale value.
   static size_t counter = 0;
   expr2tc result = declare_local_symbol(
     "__ESBMC_return_value$" + std::to_string(counter++), result_type);
@@ -5766,8 +5806,27 @@ expr2tc code_contractst::declare_call_result(
   decl->location = call_location;
   decl->location.comment("contract call result declaration");
 
+  // A bare nondet pointer has an empty value set, so a dereference of it
+  // reads no object. Also let it point anywhere into a pointer argument's
+  // object, which the ensures then narrows (e.g. strchr's result into s).
+  expr2tc value = gen_nondet(result_type);
+  if (is_pointer_type(result_type))
+  {
+    const type2tc bytes = pointer_type2tc(get_uint8_type());
+    for (const expr2tc &arg : actual_args)
+      if (!is_nil_expr(arg) && is_pointer_type(arg->type))
+        value = if2tc(
+          result_type,
+          gen_nondet(get_bool_type()),
+          typecast2tc(
+            result_type,
+            add2tc(
+              bytes, typecast2tc(bytes, arg), gen_nondet(get_int64_type()))),
+          value);
+  }
+
   goto_programt::targett assign = replacement.add_instruction(ASSIGN);
-  assign->code = code_assign2tc(result, gen_nondet(result_type));
+  assign->code = code_assign2tc(result, value);
   assign->location = call_location;
   assign->location.comment("contract call result");
 
@@ -5964,7 +6023,7 @@ void code_contractst::generate_replacement_at_call(
     bool unused = false;
     return instantiate_assigns_target(e, function_symbol, actual_args, unused);
   };
-  reissue_object_size(
+  reissue_clause_calls(
     function_body, requires_clause, instantiate, replacement, call_location);
   add_contract_clause(
     requires_clause, ASSERT, "contract requires", "contract requires");
@@ -6163,7 +6222,8 @@ void code_contractst::generate_replacement_at_call(
 
   // 2.5. Name the value the removed body would have returned.
   expr2tc call_result =
-    declare_call_result(function_symbol, ret_val, call_location, replacement);
+    declare_call_result(
+      function_symbol, ret_val, actual_args, call_location, replacement);
 
   // 3. Normalize ensures guard: replace return_value, fix types, normalize
   // floating-point
@@ -6244,7 +6304,7 @@ void code_contractst::generate_replacement_at_call(
         replace_is_fresh_temps(ensures_guard, fresh, /*require_dynamic=*/true);
   }
 
-  reissue_object_size(
+  reissue_clause_calls(
     function_body, ensures_guard, instantiate, replacement, call_location);
   // 4. Assume ensures clause (assume postcondition at call site)
   add_contract_clause(
