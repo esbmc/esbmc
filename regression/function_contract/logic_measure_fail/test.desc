@@ -1,4 +1,5 @@
 CORE
 main.c
 --conv-assert-to-assume
+^  logic function recursion measure$
 ^VERIFICATION FAILED$

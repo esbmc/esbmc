@@ -2,6 +2,7 @@
 #include <irep2/irep2_utils.h>
 #include <util/irep/migrate.h>
 #include <util/message/message.h>
+#include <algorithm>
 #include <functional>
 #include <map>
 #include <regex>
@@ -52,11 +53,13 @@ void collect_names(const expr2tc &e, std::set<irep_idt> &out)
   e->foreach_operand([&out](const expr2tc &op) { collect_names(op, out); });
 }
 
+/// Whether \p e reads memory: a dereference, or a member, whose object symex
+/// does not key an application on even when it is a parameter.
 bool has_deref(const expr2tc &e)
 {
   if (is_nil_expr(e))
     return false;
-  if (is_dereference2t(e))
+  if (is_dereference2t(e) || is_member2t(e))
     return true;
   bool found = false;
   e->foreach_operand([&found](const expr2tc &op) { found |= has_deref(op); });
@@ -218,7 +221,7 @@ void check_acyclic(const std::map<irep_idt, std::set<irep_idt>> &calls)
 /// Logic function -> the first one with a structurally identical definition.
 /// Applications are named after it, so equal definitions under different names
 /// (a version-isolated copy of one) are congruent: they are one function.
-std::map<irep_idt, irep_idt> representative;
+using representativest = std::map<irep_idt, irep_idt>;
 
 /// Member names and types, following struct tags, so a struct and its
 /// version-isolated copy (same members, another tag) spell the same.
@@ -348,7 +351,8 @@ std::string canonical(
   return memo[f] = by_layout(out, ns);
 }
 
-expr2tc app_symbol(const code_function_call2t &c)
+expr2tc
+app_symbol(const code_function_call2t &c, const representativest &representative)
 {
   const irep_idt &f = to_symbol2t(c.function).thename;
   auto rep = representative.find(f);
@@ -424,7 +428,8 @@ void build_unfold(
   const irep_idt &f,
   const goto_functiont &gf,
   goto_functionst &goto_functions,
-  const namespacet &ns)
+  const namespacet &ns,
+  const representativest &representative)
 {
   const irep_idt name = unfold_name(f);
   const code_type2t &ct = to_code_type(gf.type);
@@ -489,7 +494,7 @@ void build_unfold(
     if (c == nullptr)
       continue;
     code_function_call2t call = *c;
-    call.function = app_symbol(*c);
+    call.function = app_symbol(*c, representative);
     if (to_symbol2t(c->function).thename == f)
     {
       expr2tc arg = call.operands.back();
@@ -530,14 +535,47 @@ void build_unfold(
   uf.update_instructions_function(name, true);
 }
 
+/// Whether nothing reads the result \p ret of a call: there is no target, or
+/// it is a local named only by the call. An element, a member, a dereference
+/// or a global may be read anywhere.
+bool result_unread(
+  const expr2tc &ret,
+  const std::set<irep_idt> &locals,
+  std::map<irep_idt, unsigned> &uses)
+{
+  if (is_nil_expr(ret))
+    return true;
+  if (!is_symbol2t(ret))
+    return false;
+  const irep_idt &n = to_symbol2t(ret).thename;
+  return locals.count(n) && uses[n] <= 1;
+}
+
+bool shares_name(const expr2tc &a, const std::vector<expr2tc> &bs)
+{
+  std::set<irep_idt> in_a, in_bs;
+  collect_names(a, in_a);
+  for (const expr2tc &b : bs)
+    collect_names(b, in_bs);
+  return std::any_of(in_a.begin(), in_a.end(), [&in_bs](const irep_idt &n) {
+    return in_bs.count(n) > 0;
+  });
+}
+
 /// Each call in an ordinary body becomes an application followed by an
 /// unfolding. A call whose result nothing reads (a clause dropped as inactive)
 /// is removed rather than unfolded at a state it was never meant for.
-void lower_calls(goto_programt &body, const namespacet &ns)
+void lower_calls(
+  goto_programt &body,
+  const namespacet &ns,
+  const representativest &representative)
 {
   std::map<irep_idt, unsigned> uses;
+  std::set<irep_idt> locals;
   forall_goto_program_instructions (it, body)
   {
+    if (it->is_decl())
+      locals.insert(to_code_decl2t(it->code).value);
     std::set<irep_idt> names;
     collect_names(it->code, names);
     collect_names(it->guard, names);
@@ -551,20 +589,17 @@ void lower_calls(goto_programt &body, const namespacet &ns)
     if (c == nullptr)
       continue;
     const irep_idt f = to_symbol2t(c->function).thename;
-    if (!is_symbol2t(c->ret) || uses[to_symbol2t(c->ret).thename] <= 1)
+    if (result_unread(c->ret, locals, uses))
     {
       it->make_skip();
       continue;
     }
-    std::set<irep_idt> in_args;
-    for (const expr2tc &a : c->operands)
-      collect_names(a, in_args);
-    if (in_args.count(to_symbol2t(c->ret).thename))
+    if (shares_name(c->ret, c->operands))
       refuse(f, "is called with its own result as an argument");
 
     goto_programt::instructiont unfold = unfold_call(*c, *it, ns);
     code_function_call2t call = *c;
-    call.function = app_symbol(*c);
+    call.function = app_symbol(*c, representative);
     it->code = code_function_call2tc(call);
     it = body.insert(std::next(it));
     *it = unfold;
@@ -583,7 +618,7 @@ void goto_logic_functions(goto_functionst &goto_functions, contextt &context)
     return;
   check_acyclic(calls);
 
-  representative.clear();
+  representativest representative;
   std::map<irep_idt, std::string> memo;
   std::map<std::string, irep_idt> first;
   for (const auto &[id, callees] : calls)
@@ -593,13 +628,14 @@ void goto_logic_functions(goto_functionst &goto_functions, contextt &context)
   for (const auto &[id, callees] : calls)
     declare_unfold(id, goto_functions.function_map.at(id), context);
   for (const auto &[id, callees] : calls)
-    build_unfold(id, goto_functions.function_map.at(id), goto_functions, ns);
+    build_unfold(
+      id, goto_functions.function_map.at(id), goto_functions, ns, representative);
 
   for (auto &[id, gf] : goto_functions.function_map)
     if (
       gf.body_available && !calls.count(id) &&
       !calls.count(id2string(id).substr(0, id2string(id).rfind('$'))))
-      lower_calls(gf.body, ns);
+      lower_calls(gf.body, ns, representative);
 
   goto_functions.update();
 }

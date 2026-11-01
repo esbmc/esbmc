@@ -1,0 +1,5 @@
+CORE
+main.c
+
+false: g is 9
+^VERIFICATION FAILED$

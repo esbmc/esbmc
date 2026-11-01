@@ -1,0 +1,5 @@
+CORE
+main.c
+
+^ERROR: __ESBMC_logic function .*: dereferences a pointer read from memory$
+\A(?!(.|\n)*VERIFICATION)
