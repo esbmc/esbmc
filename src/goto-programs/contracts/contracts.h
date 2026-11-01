@@ -696,12 +696,15 @@ private:
   /// \param location Source location for generated instructions
   /// \param param_extents Byte extent of each is_fresh'd pointer parameter,
   ///   needed only for region snapshots
+  /// \param entry_harness Whether pointer parameters come from the entry
+  ///   harness rather than a caller
   void materialize_old_snapshots_at_wrapper(
     std::vector<old_snapshot_t> &old_snapshots,
     goto_programt &wrapper,
     const std::string &func_name,
     const locationt &location,
-    const std::map<irep_idt, param_extentt> &param_extents) const;
+    const std::map<irep_idt, param_extentt> &param_extents,
+    bool entry_harness) const;
 
   /// \brief Materialize old snapshots at call site (replace-call mode)
   /// Creates DECL and ASSIGN instructions for snapshot variables at call

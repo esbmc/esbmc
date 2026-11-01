@@ -1,6 +1,7 @@
 // __ESBMC_old(r[j]) needs the region's byte extent, which the contracts
 // pass reads from an unconditional, direct __ESBMC_is_fresh(r, N) clause.
-// With none stated at all, this must hit a specific diagnostic rather than
+// With none stated for the entry function, whose argument addresses no
+// object, this must hit a specific diagnostic rather than
 // silently materialize an unbounded or garbage-sized snapshot (#7057).
 #define N 4
 

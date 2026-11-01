@@ -2055,7 +2055,8 @@ goto_programt code_contractst::generate_checking_wrapper(
     wrapper,
     id2string(original_func.name),
     location,
-    param_extents);
+    param_extents,
+    alloc_ptr_params);
 
   if (requires_reads_old)
     add_contract_clause(
@@ -4507,7 +4508,8 @@ void code_contractst::materialize_old_snapshots_at_wrapper(
   goto_programt &wrapper,
   const std::string &func_name,
   const locationt &location,
-  const std::map<irep_idt, param_extentt> &param_extents) const
+  const std::map<irep_idt, param_extentt> &param_extents,
+  bool entry_harness) const
 {
   // Generate snapshot assignments in the wrapper BEFORE calling the original
   // function We'll update old_snapshots to contain new wrapper snapshot
@@ -4543,55 +4545,45 @@ void code_contractst::materialize_old_snapshots_at_wrapper(
     {
       const size_t snap_idx = unique_snapshot_count++;
 
-      if (old_snapshots[i].is_ptr_region && !is_symbol2t(original_expr))
-        new_snapshot_var = materialize_ptr_object_old_snapshot(
-          original_expr,
-          old_snapshots[i].region_elem_type,
-          wrapper,
-          func_name,
-          location,
-          snap_idx);
-      else if (old_snapshots[i].is_ptr_region)
+      if (old_snapshots[i].is_ptr_region)
       {
-        // Wrapper mode: original_expr is always the callee's own parameter
-        // symbol (never an array-decay expression, since this path never
-        // substitutes a caller's actual argument), so param_extents' lookup
-        // key and the extent's own validation both belong here, before
-        // calling into the now mode-agnostic materializer (#7057).
-        if (!is_symbol2t(original_expr))
+        // A parameter whose extent the contract states with an unconditional,
+        // direct __ESBMC_is_fresh snapshots that extent. from_is_fresh, not
+        // just justified: justified is also true for the one-element backing
+        // of a C++ `this` (#7057). Otherwise a caller's argument addresses a
+        // real object, so snapshot the rest of it as at a call site; an entry
+        // harness's nil argument addresses none, so there it must be stated.
+        const auto extent_it =
+          is_symbol2t(original_expr)
+            ? param_extents.find(to_symbol2t(original_expr).thename)
+            : param_extents.end();
+        const bool stated = extent_it != param_extents.end() &&
+                            extent_it->second.from_is_fresh;
+        if (!stated && entry_harness)
         {
           log_error(
-            "{}: __ESBMC_old(...[...]) region snapshot expected a bare "
-            "pointer parameter symbol (#7057)",
+            "{}: __ESBMC_old(...[...]) on a pointer parameter of the entry "
+            "function needs its extent stated by an unconditional, direct "
+            "__ESBMC_is_fresh; none found (#7057)",
             func_name);
           abort();
         }
-        const irep_idt &ptr_thename = to_symbol2t(original_expr).thename;
-        auto extent_it = param_extents.find(ptr_thename);
-        // from_is_fresh, not just justified: justified is also true for the
-        // one-element backing of a C++ `this`, which is real memory but not
-        // an extent the contract itself stated (#7057).
-        if (
-          extent_it == param_extents.end() || !extent_it->second.from_is_fresh)
-        {
-          log_error(
-            "{}: __ESBMC_old({}[...]) needs its pointer parameter's extent "
-            "stated by an unconditional, direct __ESBMC_is_fresh({}, N); "
-            "none found (#7057)",
-            func_name,
-            id2string(ptr_thename),
-            id2string(ptr_thename));
-          abort();
-        }
-
-        new_snapshot_var = materialize_ptr_region_old_snapshot(
-          original_expr,
-          old_snapshots[i].region_elem_type,
-          wrapper,
-          func_name,
-          location,
-          extent_it->second.bytes,
-          snap_idx);
+        new_snapshot_var =
+          stated ? materialize_ptr_region_old_snapshot(
+                     original_expr,
+                     old_snapshots[i].region_elem_type,
+                     wrapper,
+                     func_name,
+                     location,
+                     extent_it->second.bytes,
+                     snap_idx)
+                 : materialize_ptr_object_old_snapshot(
+                     original_expr,
+                     old_snapshots[i].region_elem_type,
+                     wrapper,
+                     func_name,
+                     location,
+                     snap_idx);
       }
       else
       {
@@ -4671,15 +4663,7 @@ code_contractst::materialize_old_snapshots_at_callsite(
 
     expr2tc snapshot_var;
 
-    if (old_snapshots[i].is_ptr_region && !is_symbol2t(raw_ptr_param))
-      snapshot_var = materialize_ptr_object_old_snapshot(
-        original_expr,
-        old_snapshots[i].region_elem_type,
-        replacement,
-        id2string(function_symbol.name) + "_call",
-        call_location,
-        i);
-    else if (old_snapshots[i].is_ptr_region)
+    if (old_snapshots[i].is_ptr_region)
     {
       // __ESBMC_old(ptr[j]), ptr a pointer parameter: no named object to
       // snapshot at the call site either, same as the

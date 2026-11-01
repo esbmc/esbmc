@@ -1,4 +1,6 @@
 CORE
 main.cpp
---contract-operational-models --force-malloc-success
+--contract-operational-models --force-malloc-success --multi-property
+^  PASSED\s+\[main\.assertion\.\d+\]\s+line\s+8\s+erased$
+^  FAILED\s+\[main\.assertion\.\d+\]\s+line\s+10\s+bad$
 ^VERIFICATION FAILED$

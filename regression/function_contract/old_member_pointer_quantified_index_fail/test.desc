@@ -1,4 +1,6 @@
 CORE
 main.c
---replace-call-with-contract drop_front --force-malloc-success
+--replace-call-with-contract drop_front --force-malloc-success --multi-property
+^  PASSED\s+\[main\.assertion\.\d+\]\s+line\s+21\s+shifted$
+^  FAILED\s+\[main\.assertion\.\d+\]\s+line\s+23\s+bad$
 ^VERIFICATION FAILED$
