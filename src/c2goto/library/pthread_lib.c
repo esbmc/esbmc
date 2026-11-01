@@ -915,7 +915,7 @@ __ESBMC_HIDE:;
   return 0;
 }
 
-int pthread_barrier_wait(pthread_barrier_t *barrier)
+static int do_pthread_barrier_wait(pthread_barrier_t *barrier, _Bool assrt)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
@@ -938,17 +938,34 @@ __ESBMC_HIDE:;
   {
     __ESBMC_barrier_waiters(barrier)++;
     __ESBMC_blocked_threads_count++;
-    __ESBMC_assert(
-      __ESBMC_blocked_threads_count != __ESBMC_num_threads_running,
-      "Deadlocked state in pthread_barrier_wait");
+    if (assrt)
+      __ESBMC_assert(
+        __ESBMC_blocked_threads_count != __ESBMC_num_threads_running,
+        "Deadlocked state in pthread_barrier_wait");
   }
 
   __ESBMC_atomic_end();
+
+  // The barrier fields are not context-switch points (is_pthread_sync_type),
+  // so yield to let the other participants arrive before the check below.
+  __ESBMC_yield();
 
   // Only schedules in which this thread's round has since completed continue.
   __ESBMC_assume(__ESBMC_barrier_generation(barrier) != generation);
 
   return res;
+}
+
+int pthread_barrier_wait(pthread_barrier_t *barrier)
+{
+__ESBMC_HIDE:;
+  return do_pthread_barrier_wait(barrier, 0);
+}
+
+int pthread_barrier_wait_check(pthread_barrier_t *barrier)
+{
+__ESBMC_HIDE:;
+  return do_pthread_barrier_wait(barrier, 1);
 }
 
 /*********************** spinlock mainpulation routines ***********************/
@@ -969,7 +986,7 @@ int pthread_spin_destroy(pthread_spinlock_t *lock)
   return 0;
 }
 
-int pthread_spin_lock(pthread_spinlock_t *lock)
+static int do_pthread_spin_lock(pthread_spinlock_t *lock, _Bool assrt)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
@@ -986,9 +1003,10 @@ __ESBMC_HIDE:;
     // deadlock exactly as it is for a blocking mutex.
     __ESBMC_spin_waiters(lock)++;
     __ESBMC_blocked_threads_count++;
-    __ESBMC_assert(
-      __ESBMC_blocked_threads_count != __ESBMC_num_threads_running,
-      "Deadlocked state in pthread_spin_lock");
+    if (assrt)
+      __ESBMC_assert(
+        __ESBMC_blocked_threads_count != __ESBMC_num_threads_running,
+        "Deadlocked state in pthread_spin_lock");
   }
 
   __ESBMC_atomic_end();
@@ -996,6 +1014,18 @@ __ESBMC_HIDE:;
   __ESBMC_assume(acquired);
 
   return 0;
+}
+
+int pthread_spin_lock(pthread_spinlock_t *lock)
+{
+__ESBMC_HIDE:;
+  return do_pthread_spin_lock(lock, 0);
+}
+
+int pthread_spin_lock_check(pthread_spinlock_t *lock)
+{
+__ESBMC_HIDE:;
+  return do_pthread_spin_lock(lock, 1);
 }
 
 int pthread_spin_trylock(pthread_spinlock_t *lock)
