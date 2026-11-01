@@ -1,0 +1,5 @@
+CORE
+main.c
+--termination --k-step 2 --max-inductive-step 3 --no-pointer-check --no-bounds-check --no-assertions --32 --witness-output witness --max-k-step 6
+^VERIFICATION FAILED$
+^Inductive step shows a non-terminating execution.*$

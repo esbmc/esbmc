@@ -1,0 +1,7 @@
+CORE
+main.c
+--termination --k-step 2 --max-inductive-step 3 --no-pointer-check --no-bounds-check --no-assertions --32 --witness-output witness
+REQUIRES arch32
+^Generating Correctness Yaml Witness for:
+^Ranking function shows all executions terminate$
+^VERIFICATION SUCCESSFUL$
