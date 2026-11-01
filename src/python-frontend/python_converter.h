@@ -705,6 +705,11 @@ private:
     const std::string &prefix,
     const std::function<void(const expr2tc &, const locationt &)> &emit_guards);
 
+  // Functions whose return type is a guess from their return statements (an
+  // expression counts as a double).
+  std::set<std::string> guessed_return_functions_;
+  void note_guessed_return(const nlohmann::json &function_node);
+
   friend class bounded_math;
   friend class complex_handler;
   friend class function_call_expr;
@@ -2863,6 +2868,13 @@ private:
     const exprt &value,
     codet &target_block);
 
+  exprt tuple_member_list_source(const exprt &value) const;
+
+  void bind_tuple_member_list_types(
+    const nlohmann::json &ast_node,
+    const exprt &lhs,
+    const exprt &rhs);
+
   exprt hold_tuple_member_list(
     const nlohmann::json &ast_node,
     const exprt &value,
@@ -3931,7 +3943,10 @@ private:
   std::unordered_set<std::string> numpy_view_param_symbols_;
   bool is_loading_models = false;
   bool is_importing_module = false;
-  bool base_ctor_called = false;
+  /// The classes whose constructor was found in a base class by the call
+  /// being converted, until its assignment reads them. A constructor call in
+  /// an argument adds its class too.
+  std::set<std::string> base_ctor_called;
   bool build_static_lists = false;
   /// The element type a numpy constructor's dtype= gives the static array
   /// get_static_array builds; empty when the literal's own type is used.

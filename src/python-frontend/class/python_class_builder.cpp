@@ -87,7 +87,7 @@ bool python_class_builder::is_unmodelled_base(const std::string &base) const
   return false;
 }
 
-bool python_class_builder::get_bases(struct_typet &st)
+bool python_class_builder::get_bases(struct_typet &st, codet &out)
 {
   bool has_ud = false;
   auto &ids = st.add("bases").get_sub();
@@ -105,6 +105,13 @@ bool python_class_builder::get_bases(struct_typet &st)
 
     has_ud = true;
     auto *bsym = conv_.symbol_table_.find_symbol("tag-" + base);
+    if (!bsym && !is_unmodelled_base(bfull))
+    {
+      // This class was reached before its base was built, through a type that
+      // refers to it (#9634).
+      conv_.process_forward_reference({{"_type", "Name"}, {"id", base}}, out);
+      bsym = conv_.symbol_table_.find_symbol("tag-" + base);
+    }
     if (!bsym && is_unmodelled_base(bfull))
     {
       conv_.unmodelled_base_classes_.emplace(pc_.name(), bfull);
@@ -444,7 +451,7 @@ void python_class_builder::build(codet &out)
   st.tag(conv_.current_class_name_);
 
   // Collect inheritance and instance attributes
-  const bool has_ud_base = get_bases(st);
+  const bool has_ud_base = get_bases(st, out);
   add_self_attrs(st);
 
   // Partial commit allows nested lookups while building members

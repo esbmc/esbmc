@@ -5059,32 +5059,60 @@ bool python_converter::unpack_record_is_trusted(
   return true;
 }
 
-// A list read from a tuple variable, `t.element_i`, is held in a temporary
-// that takes the element types recorded for the list the tuple was assigned.
-// The symbol's value is that assignment's literal; under a trusted record the
-// tuple is bound once and read only here, so it is still current.
-exprt python_converter::hold_tuple_member_list(
-  const nlohmann::json &ast_node,
-  const exprt &value,
-  codet &target_block)
+// The list a tuple variable's member @p value, `t.element_i`, was built from:
+// the operand of the literal the tuple was assigned, or nil. The symbol's value
+// is that literal; under a trusted record the tuple is bound once and read only
+// at @p value, so it is still current.
+exprt python_converter::tuple_member_list_source(const exprt &value) const
 {
   if (
-    !unpack_record_trusted_ || value.id() != "member" ||
-    !value.op0().is_symbol() ||
-    value.type() != get_type_handler().get_list_type())
-    return value;
+    value.id() != "member" || !value.op0().is_symbol() ||
+    value.type() != type_handler_.get_list_type())
+    return nil_exprt();
   const symbolt *tuple = find_symbol(value.op0().identifier().as_string());
   const typet tuple_type = ns.follow(value.op0().type());
   if (
     !tuple || tuple->get_value().id() != "struct" ||
     !tuple_handler_->is_tuple_type(tuple_type))
-    return value;
+    return nil_exprt();
   const std::size_t i =
     to_struct_type(tuple_type).component_number(value.get("component_name"));
   const exprt &source = tuple->get_value().operands().at(i);
   if (
     !source.is_symbol() ||
     !element_type_registry_.find(source.identifier().as_string()))
+    return nil_exprt();
+  return source;
+}
+
+// `p = t[i]` takes the element types of the list the tuple was built with, as
+// `r, p = t` does. The registry is flow-insensitive, so only an unconditional
+// binding may replace them.
+void python_converter::bind_tuple_member_list_types(
+  const nlohmann::json &ast_node,
+  const exprt &lhs,
+  const exprt &rhs)
+{
+  const exprt source = tuple_member_list_source(rhs);
+  if (
+    source.is_not_nil() && lhs.is_symbol() &&
+    block_nesting_ == function_body_depth_ + 1 &&
+    unpack_record_is_trusted(ast_node["value"]))
+    element_type_registry_.assign_from(
+      source.identifier().as_string(), lhs.identifier().as_string());
+}
+
+// A list read from a tuple variable is held in a temporary that takes the
+// element types recorded for the list the tuple was assigned.
+exprt python_converter::hold_tuple_member_list(
+  const nlohmann::json &ast_node,
+  const exprt &value,
+  codet &target_block)
+{
+  if (!unpack_record_trusted_)
+    return value;
+  const exprt source = tuple_member_list_source(value);
+  if (source.is_nil())
     return value;
 
   symbolt &held =
@@ -5551,12 +5579,12 @@ void python_converter::handle_function_call_rhs(
   {
     std::string func_name = ast_node_name(ast_node["value"]["func"]);
 
-    if (base_ctor_called)
+    if (base_ctor_called.count(func_name))
     {
       auto class_node = json_utils::find_class((*ast_json)["body"], func_name);
       func_name = ast_node_name(class_node["bases"][0], func_name);
-      base_ctor_called = false;
     }
+    base_ctor_called.clear();
 
     update_instance_from_self(func_name, func_name, lhs_symbol->id.as_string());
   }
@@ -8219,7 +8247,10 @@ void python_converter::get_var_assign(
     if (
       lhs.type() == rhs.type() && lhs.type() == type_handler_.get_list_type() &&
       !assignment_target_is_subscript(ast_node))
+    {
       propagate_list_type_info(lhs, rhs, lhs_symbol);
+      bind_tuple_member_list_types(ast_node, lhs, rhs);
+    }
     else if (
       rhs.type() != lhs.type() && lhs.type().is_array() &&
       !rhs.type().is_code())
@@ -8780,6 +8811,16 @@ exprt python_converter::apply_string_truthiness(
     notequal2tc(strlen_call2, gen_zero(migrate_type(size_type()))));
   cond.location() = location;
   cond.op0().location() = location;
+  // An Optional[str] holding None is a null pointer, which strlen must not
+  // read. Only a symbol is guarded: copying a call would evaluate it twice.
+  if (is_pointer_type(strlen_arg2) && is_symbol2t(strlen_arg2))
+  {
+    cond = if_exprt(
+      migrate_expr_back(notequal2tc(strlen_arg2, gen_zero(strlen_arg2->type))),
+      cond,
+      false_exprt());
+    cond.location() = location;
+  }
   return cond;
 }
 

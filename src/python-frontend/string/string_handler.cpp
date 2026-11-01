@@ -2669,7 +2669,7 @@ exprt string_handler::handle_int_conversion(
   // If argument is a float, truncate to integer
   if (arg.type().is_floatbv())
   {
-    return build_typecast(arg, int_type());
+    return build_typecast(arg, long_long_int_type());
   }
 
   // If argument is a boolean, convert to 0 or 1

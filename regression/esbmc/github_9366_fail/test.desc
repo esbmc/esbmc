@@ -1,0 +1,5 @@
+CORE
+main.c
+--64
+^VERIFICATION FAILED$
+^  assertion isnan\(__real__ r\)$
