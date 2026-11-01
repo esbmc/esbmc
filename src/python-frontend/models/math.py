@@ -201,6 +201,13 @@ def _range_checked(x: float, r: float) -> float:
     return r
 
 
+# The C models of exp, sinh and cosh can overflow before CPython does, so
+# compare the argument with the largest one CPython keeps finite.
+def _check_below(x: float, limit: float) -> None:
+    if x > limit and not __ESBMC_isinf(x):
+        raise OverflowError("math range error")
+
+
 def exp(x: float) -> float:
     """
     Calculate e raised to the power of x
@@ -211,7 +218,8 @@ def exp(x: float) -> float:
     Returns:
         e^x
     """
-    return _range_checked(x, __ESBMC_exp(x))
+    _check_below(x, 709.782712893384)
+    return __ESBMC_exp(x)
 
 
 def log(x: float) -> float:
@@ -337,7 +345,8 @@ def isclose(a: float, b: float, rel_tol: float = 1e-09, abs_tol: float = 0.0) ->
 
 
 def expm1(x: float) -> float:
-    return _range_checked(x, __ESBMC_expm1(x))
+    _check_below(x, 709.782712893384)
+    return __ESBMC_expm1(x)
 
 
 def log1p(x: float) -> float:
@@ -347,7 +356,8 @@ def log1p(x: float) -> float:
 
 
 def exp2(x: float) -> float:
-    return _range_checked(x, __ESBMC_exp2(x))
+    _check_below(x, 1023.9999999999999)
+    return __ESBMC_exp2(x)
 
 
 def asin(x: float) -> float:
@@ -483,14 +493,16 @@ def sinh(x: float) -> float:
     """
     Calculate hyperbolic sine of x
     """
-    return _range_checked(x, __ESBMC_sinh(x))
+    _check_below(__ESBMC_fabs(x), 710.4758600739439)
+    return __ESBMC_sinh(x)
 
 
 def cosh(x: float) -> float:
     """
     Calculate hyperbolic cosine of x
     """
-    return _range_checked(x, __ESBMC_cosh(x))
+    _check_below(__ESBMC_fabs(x), 710.4758600739439)
+    return __ESBMC_cosh(x)
 
 
 def tanh(x: float) -> float:

@@ -1,4 +1,4 @@
-# Each overflow below raises OverflowError, so every assertion fails (#9392).
+# Each overflow below raises OverflowError, so every branch fails (#9392).
 import math
 from math import expm1
 
@@ -23,7 +23,12 @@ try:
     math.exp(1000.0)
 except OverflowError:
     r4 = True
-assert not r1
-assert not r2
-assert not r3
-assert not r4
+k = nondet_int()
+if k == 1:
+    assert not r1
+elif k == 2:
+    assert not r2
+elif k == 3:
+    assert not r3
+else:
+    assert not r4

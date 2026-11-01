@@ -4498,6 +4498,11 @@ bool function_call_expr::is_math_function_dispatch_call() const
          bounded_math_import().has_value();
 }
 
+static bool is_math_number(const typet &t)
+{
+  return t.is_floatbv() || t.is_signedbv() || t.is_unsignedbv() || t.is_bool();
+}
+
 static bool overflows(const std::string &f)
 {
   return f == "exp" || f == "exp2" || f == "expm1" || f == "sinh" ||
@@ -4544,8 +4549,7 @@ function_call_expr::try_bounded_math_call(const std::string &func_name)
   const exprt x = converter_.get_expr(arg);
   if (is_cpp_throw_expr(x))
     return x;
-  const typet &t = x.type();
-  if (!t.is_floatbv() && !t.is_signedbv() && !t.is_unsignedbv() && !t.is_bool())
+  if (!is_math_number(x.type()))
   {
     if (!json_utils::ast_contains_call(arg))
       return std::nullopt;
@@ -4601,8 +4605,17 @@ exprt function_call_expr::handle_math_function_dispatch()
   // short-circuit evaluation of the expression around them. A literal
   // argument is folded below instead.
   const bool in_program = !converter_.is_model_file(call_);
+  // A call in an argument is converted once, by the model call; any other
+  // argument must be a number, as the models compare it with floats.
+  auto numeric_args = [&]() {
+    return std::all_of(args.begin(), args.end(), [&](const nlohmann::json &a) {
+      return json_utils::ast_contains_call(a) ||
+             is_math_number(converter_.get_expr(a).type());
+    });
+  };
   if (
-    in_program && calls_overflow_model(func_name, args) && !call_has_complex())
+    in_program && calls_overflow_model(func_name, args) &&
+    !call_has_complex() && numeric_args())
     return handle_general_function_call();
 
   auto require_one_arg = [&]() -> exprt {
@@ -4648,7 +4661,9 @@ exprt function_call_expr::handle_math_function_dispatch()
     exprt dispatched =
       converter_.get_math_handler().handle(func_name, arg_expr, call_);
     // Only a finite folded result is known not to overflow.
-    if (in_program && overflows(func_name) && !is_finite_constant(dispatched))
+    if (
+      in_program && overflows(func_name) && is_math_number(arg_expr.type()) &&
+      !is_finite_constant(dispatched))
       return handle_general_function_call();
     if (!dispatched.is_nil())
       return dispatched;

@@ -46,6 +46,7 @@ assert raised == 9
 inf = float("inf")
 assert math.expm1(-1000.0) == -1.0
 assert math.exp(inf) == inf
+assert math.expm1(inf) == inf
 assert math.ldexp(0.0, 2000) == 0.0
 assert ldexp(1.0, -2000) == 0.0
 assert math.ldexp(inf, 5) == inf
@@ -79,3 +80,14 @@ def taken(c: bool) -> bool:
 
 
 assert not taken(True)
+
+# CPython keeps these finite; the C models of sinh and cosh overflow earlier.
+near = False
+try:
+    math.sinh(-710.0)
+    math.cosh(-710.4758600739439)
+    math.expm1(709.782712893384)
+    math.exp2(1023.9)
+except OverflowError:
+    near = True
+assert not near
