@@ -27,3 +27,6 @@ assert tenth[0] == 0.1 + 0.1j
 pure = np.array([0.1 + 0j], dtype=np.complex64)
 shifted = pure[0] + 0.1
 assert shifted.real == 0.2
+quotient = np.array([1 + 2j], dtype=np.complex64) / np.array([3 + 4j], dtype=np.complex64)
+assert quotient[0].real == 0.44
+assert quotient[0].imag == 0.08

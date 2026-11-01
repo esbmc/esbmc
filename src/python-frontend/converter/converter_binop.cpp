@@ -3344,7 +3344,8 @@ exprt python_converter::numpy_complex_quotient(
   const exprt c = cast_to(real_part(y), dt), d = cast_to(imag_part(y), dt);
   const exprt abs_c = cast_to(math_handler_.handle_fabs(c, no_node), dt);
   const exprt abs_d = cast_to(math_handler_.handle_fabs(d, no_node), dt);
-  const exprt one = from_double(1.0, dt);
+  // from_double keeps double precision whatever the type it is given.
+  const exprt one = cast_to(from_double(1.0, double_type()), dt);
   const exprt ratio_c = op("Div", d, c);
   const exprt scale_c = op("Div", one, op("Add", c, op("Mult", d, ratio_c)));
   const exprt ratio_d = op("Div", c, d);
