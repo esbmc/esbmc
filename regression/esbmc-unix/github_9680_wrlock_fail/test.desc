@@ -1,5 +1,5 @@
 CORE
 main.c
 
-^  FAILED .*assertion 0$
 ^VERIFICATION FAILED$
+^  assertion 0$

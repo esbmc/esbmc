@@ -717,8 +717,8 @@ int pthread_rwlock_destroy(pthread_rwlock_t *lock)
 
 /************************ rwlock mainpulation routines ************************/
 
-/* Each acquire yields: the lock fields are sync-typed, which is no context
- * switch point, so no other thread could see a freshly taken lock (#9680). */
+/* Lock fields are sync-typed and no switch point, so every acquire yields
+ * (#9680). */
 
 int pthread_rwlock_init(
   pthread_rwlock_t *lock,
@@ -778,31 +778,30 @@ int pthread_rwlock_tryrdlock(pthread_rwlock_t *lock)
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
 
-  if (__ESBMC_rwlock_writer(lock) != 0)
+  int res = EBUSY;
+  if (!__ESBMC_rwlock_writer(lock))
   {
-    __ESBMC_atomic_end();
-    return EBUSY;
+    __ESBMC_rwlock_readers(lock)++;
+    __ESBMC_yield();
+    res = 0;
   }
-  __ESBMC_rwlock_readers(lock)++;
-  __ESBMC_yield();
   __ESBMC_atomic_end();
-
-  return 0;
+  return res;
 }
 
 int pthread_rwlock_trywrlock(pthread_rwlock_t *lock)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
-  if (__ESBMC_rwlock_writer(lock) != 0 || __ESBMC_rwlock_readers(lock) != 0)
+  int res = EBUSY;
+  if (!(__ESBMC_rwlock_writer(lock) || __ESBMC_rwlock_readers(lock)))
   {
-    __ESBMC_atomic_end();
-    return EBUSY;
+    __ESBMC_rwlock_writer(lock) = 1;
+    __ESBMC_yield();
+    res = 0;
   }
-  __ESBMC_rwlock_writer(lock) = 1;
-  __ESBMC_yield();
   __ESBMC_atomic_end();
-  return 0;
+  return res;
 }
 
 int pthread_rwlock_unlock(pthread_rwlock_t *lock)

@@ -1,4 +1,4 @@
-/* #9680: the other thread must be able to run between wrlock and x = 1. */
+/* The other thread must run while main holds the lock, before x = 1 (#9680). */
 #include <assert.h>
 #include <pthread.h>
 pthread_rwlock_t l;
