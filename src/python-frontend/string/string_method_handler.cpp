@@ -99,6 +99,13 @@ static bool extract_constant_bytes(
   return true;
 }
 
+static bool is_ascii(const std::string &s)
+{
+  return std::all_of(s.begin(), s.end(), [](char c) {
+    return static_cast<unsigned char>(c) < 0x80;
+  });
+}
+
 static char to_lower_char(char c)
 {
   return static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
@@ -1210,9 +1217,7 @@ std::optional<exprt> dispatch_decode_join_method(
           if (
             !string_handler::extract_constant_string(
               receiver_json["func"]["value"], converter, inner) ||
-            !std::all_of(inner.begin(), inner.end(), [](char c) {
-              return static_cast<unsigned char>(c) < 0x80;
-            }))
+            !is_ascii(inner))
             return nil_exprt();
         }
         return converter.get_expr(receiver_json["func"]["value"]);
@@ -1257,9 +1262,7 @@ std::optional<exprt> dispatch_decode_join_method(
       encode_utf8 &&
       string_handler::extract_constant_string(receiver_json, converter, s))
     {
-      if (std::all_of(s.begin(), s.end(), [](char c) {
-            return static_cast<unsigned char>(c) < 0x80;
-          }))
+      if (is_ascii(s))
         return converter.get_string_builder().build_raw_byte_array(
           std::vector<uint8_t>(s.begin(), s.end()));
     }
@@ -3614,15 +3617,6 @@ exprt string_handler::handle_string_isnumeric(
   return from_integer(1, bool_type());
 }
 
-// A non-ASCII receiver is left nondet: its bytes are UTF-8, and CPython
-// classifies code points, so e.g. Arabic-Indic digits are decimal.
-static bool is_ascii(const std::string &s)
-{
-  return std::all_of(s.begin(), s.end(), [](char c) {
-    return static_cast<unsigned char>(c) < 0x80;
-  });
-}
-
 static exprt nondet_bool_at(const locationt &location)
 {
   side_effect_expr_nondett nondet(bool_type());
@@ -3630,6 +3624,8 @@ static exprt nondet_bool_at(const locationt &location)
   return nondet;
 }
 
+// A non-ASCII receiver is left nondet: its bytes are UTF-8, and CPython
+// classifies code points, so e.g. Arabic-Indic digits are decimal.
 exprt string_handler::handle_string_isdecimal(
   const exprt &string_obj,
   const locationt &location)

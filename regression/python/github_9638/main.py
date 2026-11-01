@@ -7,6 +7,12 @@ assert b.isdecimal()
 e = ""
 assert not e.isdecimal()
 assert not e.istitle()
+f = "1.5"
+assert not f.isdecimal()
+g = "-1"
+assert not g.isdecimal()
+h = " 1"
+assert not h.isdecimal()
 t = "It'S A 3D Movie"
 x = t.istitle()
 assert x
