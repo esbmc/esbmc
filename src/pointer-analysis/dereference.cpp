@@ -851,10 +851,28 @@ static bool split_member_path(
   return true;
 }
 
+/// Whether \p type holds an array of bytes, which may store an object of any
+/// type (C11 6.5p7).
+static bool has_byte_array(const type2tc &type, const namespacet &ns)
+{
+  const type2tc &t = ns.follow(type);
+  if (is_array_type(t))
+  {
+    const type2tc &sub = ns.follow(to_array_type(t).subtype);
+    return (is_bv_type(sub) && sub->get_width() == 8) || has_byte_array(sub, ns);
+  }
+  if (!is_struct_type(t))
+    return false;
+  for (const type2tc &m : to_struct_type(t).members)
+    if (has_byte_array(m, ns))
+      return true;
+  return false;
+}
+
 /// The subobject of type \p target that the bit offset \p at addresses in
 /// \p value, when all of them lie on one path through at most one array of
-/// constant size and no union; nil otherwise. \p lands receives whether \p at
-/// addresses one.
+/// constant size and no union, and no byte array could store one elsewhere;
+/// nil otherwise. \p lands receives whether \p at addresses one.
 static expr2tc typed_subobject(
   const expr2tc &value,
   const expr2tc &at,
@@ -862,7 +880,9 @@ static expr2tc typed_subobject(
   const namespacet &ns,
   expr2tc &lands)
 {
-  if (!is_struct_type(value) || base_type_eq(value->type, target, ns))
+  if (
+    !is_struct_type(value) || base_type_eq(value->type, target, ns) ||
+    has_byte_array(value->type, ns))
     return expr2tc();
   const std::vector<std::string> paths =
     member_paths_of_type(value->type, target, ns);
@@ -914,9 +934,14 @@ void dereferencet::narrow_to_subobject(
   const expr2tc &lexical_offset,
   const guard2tc &guard)
 {
-  if (!is_pointer_type(deref_expr))
+  // Without bounds checks an index past a member's array reaches the rest of
+  // the enclosing object, so the access must stay on the whole object.
+  if (!is_pointer_type(deref_expr) || options.get_bool_option("no-bounds-check"))
     return;
   const type2tc &pointee = to_pointer_type(deref_expr->type).subtype;
+  // The unknown-offset narrowing is sound only with its claim emitted.
+  const bool claims =
+    !options.get_bool_option("no-pointer-check") && !block_assertions;
   expr2tc sub;
   // A pointer to a member subobject reached through a member or index path
   // at a symbolic offset: the path stays inside that subobject, as an index
@@ -935,7 +960,7 @@ void dereferencet::narrow_to_subobject(
   // that path at the element the offset selects, and claim the offset
   // selects one: a pointer of that type anywhere else is a type confusion
   // the byte-level read would have hidden.
-  else if (is_struct_type(ns.follow(pointee)))
+  else if (claims && is_struct_type(ns.follow(pointee)))
   {
     expr2tc lands;
     sub = typed_subobject(value, pointer_bits, ns.follow(pointee), ns, lands);
