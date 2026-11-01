@@ -145,6 +145,10 @@ void violation_yaml_goto_trace(
   const goto_tracet &goto_trace,
   const std::string &output_path_override = "");
 
+/// Write a YAML violation witness for a non-terminating execution: one cycle
+/// waypoint at the loop that the termination marker @p loc belongs to.
+void non_termination_yaml_goto_trace(optionst &options, const locationt &loc);
+
 void correctness_graphml_goto_trace(
   optionst &options,
   const namespacet &ns,

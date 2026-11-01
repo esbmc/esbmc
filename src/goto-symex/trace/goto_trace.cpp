@@ -573,6 +573,21 @@ void violation_yaml_goto_trace(
   }
 }
 
+void non_termination_yaml_goto_trace(optionst &options, const locationt &loc)
+{
+  yamlt yml(yamlt::VIOLATION);
+  yml.verified_file = options.get_option("input-file");
+  log_progress(
+    "Generating Non-Termination Yaml Witness for: {}", yml.verified_file);
+
+  waypoint wp = witness_waypoint(loc, yml.verified_file, options);
+  wp.type = waypoint::assumption;
+  wp.action = waypoint::cycle;
+  wp.value = "1";
+  yml.segments.push_back(wp);
+  yml.generate_yaml(options);
+}
+
 void correctness_graphml_goto_trace(
   optionst &options,
   const namespacet &ns,
